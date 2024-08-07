@@ -25,6 +25,21 @@ EOptionalFlag GetOptionalFlagValue(const TMaybe<TType>& flag) {
     return EOptionalFlag::Disabled;
 }
 
+
+ui64 ParseEnableSpillingNodes(const TString &v) {
+    ui64 res = 0;
+    TVector<TString> vec;
+    StringSplitter(v).SplitBySet(",;| ").AddTo(&vec);
+    for (auto& s: vec) {
+        if (s.empty()) {
+            throw yexception() << "Empty value item";
+        }
+        auto value = FromString<NYql::TDqSettings::EEnabledSpillingNodes>(s);
+        res |= ui64(value);
+    }
+    return res;
+}
+
 static inline bool GetFlagValue(const TMaybe<bool>& flag) {
     return flag ? flag.GetRef() : false;
 }
@@ -73,20 +88,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
     REGISTER_SETTING(*this, CostBasedOptimizationLevel);
     REGISTER_SETTING(*this, EnableSpillingNodes)
-        .Parser([](const TString& v) {
-            ui64 res = 0;
-            TVector<TString> vec;
-            StringSplitter(v).SplitBySet(",;| ").AddTo(&vec);
-            for (auto& s: vec) {
-                if (s.empty()) {
-                    throw yexception() << "Empty value item";
-                }
-                auto value = FromStringWithDefault<NYql::TDqSettings::EEnabledSpillingNodes>(
-                    s, NYql::TDqSettings::EEnabledSpillingNodes::None);
-                res |= ui64(value);
-            }
-            return res;
-        });
+        .Parser([](const TString& v) { return ParseEnableSpillingNodes(v); });
 
     REGISTER_SETTING(*this, MaxDPccpDPTableSize);
 
@@ -143,11 +145,6 @@ bool TKikimrSettings::HasOptUseFinalizeByKey() const {
     return GetOptionalFlagValue(OptUseFinalizeByKey.Get()) != EOptionalFlag::Disabled;
 }
 
-ui64 TKikimrSettings::GetEnabledSpillingNodes() const {
-    return EnableSpillingNodes.Get().GetOrElse(0);
-}
-
-
 EOptionalFlag TKikimrSettings::GetOptPredicateExtract() const {
     return GetOptionalFlagValue(OptEnablePredicateExtract.Get());
 }
@@ -167,6 +164,14 @@ NDq::EHashJoinMode TKikimrSettings::GetHashJoinMode() const {
 
 TKikimrSettings::TConstPtr TKikimrConfiguration::Snapshot() const {
     return std::make_shared<const TKikimrSettings>(*this);
+}
+
+void TKikimrConfiguration::SetDefaultEnabledSpillingNodes(const TString& node) {
+    DefaultEnableSpillingNodes = ParseEnableSpillingNodes(node);
+}
+
+ui64 TKikimrConfiguration::GetEnabledSpillingNodes() const {
+    return EnableSpillingNodes.Get().GetOrElse(DefaultEnableSpillingNodes);
 }
 
 }

@@ -280,6 +280,18 @@ namespace {
         };
     }
 
+    TAnalyzeSettings ParseAnalyzeSettings(const TKiAnalyzeTable& analyze) {
+        TVector<TString> columns;
+        for (const auto& column: analyze.Columns()) {
+            columns.push_back(TString(column.Ptr()->Content()));
+        }
+
+        return TAnalyzeSettings{
+            .TablePath = TString(analyze.Table()),
+            .Columns = std::move(columns)
+        };
+    }
+
     TAlterColumnTableSettings ParseAlterColumnTableSettings(TKiAlterTable alter) {
         return TAlterColumnTableSettings{
             .Table = TString(alter.Table())
@@ -429,8 +441,8 @@ namespace {
                 request->mutable_partitioning_settings()->set_min_active_partitions(
                         FromString<ui32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
                 );
-            } else if (name == "setPartitionsLimit") {
-                request->mutable_partitioning_settings()->set_partition_count_limit(
+            } else if (name == "setMaxPartitions") {
+                request->mutable_partitioning_settings()->set_max_active_partitions(
                         FromString<ui32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
                 );
             } else if (name == "setRetentionPeriod") {
@@ -460,8 +472,29 @@ namespace {
                 );
                 auto* protoCodecs = request->mutable_supported_codecs();
                 for (auto codec : codecs) {
-                    protoCodecs->add_codecs(codec);
+                        protoCodecs->add_codecs(codec);
                 }
+            } else if (name == "setAutoPartitioningStabilizationWindow") {
+                auto microValue = FromString<ui64>(setting.Value().Cast<TCoInterval>().Literal().Value());
+                request->mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->mutable_stabilization_window()->set_seconds(
+                        static_cast<ui64>(microValue / 1'000'000)
+                );
+            } else if (name == "setAutoPartitioningUpUtilizationPercent") {
+                request->mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_up_utilization_percent(
+                        FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
+                );
+            } else if (name == "setAutoPartitioningDownUtilizationPercent") {
+                request->mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_down_utilization_percent(
+                        FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
+                );
+            } else if (name == "setAutoPartitioningStrategy") {
+                Ydb::Topic::AutoPartitioningStrategy strategy;
+                auto result = GetTopicAutoPartitioningStrategyFromString(
+                        TString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()),
+                        strategy
+                );
+                YQL_ENSURE(result);
+                request->mutable_partitioning_settings()->mutable_auto_partitioning_settings()->set_strategy(strategy);
             }
         }
     }
@@ -474,7 +507,7 @@ namespace {
                 request->mutable_alter_partitioning_settings()->set_set_min_active_partitions(
                         FromString<ui32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
                 );
-            } else if (name == "setPartitionsLimit") {
+            } else if (name == "setMaxPartitions") {
                 request->mutable_alter_partitioning_settings()->set_set_partition_count_limit(
                         FromString<ui32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
                 );
@@ -507,6 +540,27 @@ namespace {
                 for (auto codec : codecs) {
                     protoCodecs->add_codecs(codec);
                 }
+            } else if (name == "setAutoPartitioningStabilizationWindow") {
+                auto microValue = FromString<ui64>(setting.Value().Cast<TCoInterval>().Literal().Value());
+                request->mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->mutable_set_partition_write_speed()->mutable_set_stabilization_window()->set_seconds(
+                        static_cast<ui64>(microValue / 1'000'000)
+                );
+            } else if (name == "setAutoPartitioningUpUtilizationPercent") {
+                request->mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->mutable_set_partition_write_speed()->set_set_up_utilization_percent(
+                        FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
+                );
+            } else if (name == "setAutoPartitioningDownUtilizationPercent") {
+                request->mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->mutable_set_partition_write_speed()->set_set_down_utilization_percent(
+                        FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
+                );
+            } else if (name == "setAutoPartitioningStrategy") {
+                Ydb::Topic::AutoPartitioningStrategy strategy;
+                auto result = GetTopicAutoPartitioningStrategyFromString(
+                        TString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()),
+                        strategy
+                );
+                YQL_ENSURE(result);
+                request->mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->set_set_strategy(strategy);
             }
         }
     }
@@ -651,25 +705,25 @@ namespace {
 
         if (dstSettings.ConnectionString && (dstSettings.Endpoint || dstSettings.Database)) {
             ctx.AddError(TIssue(ctx.GetPosition(pos),
-                TStringBuilder() << "Connection string and Endpoint/Database are mutually exclusive"));
+                "CONNECTION_STRING and ENDPOINT/DATABASE are mutually exclusive"));
             return false;
         }
 
         if (dstSettings.OAuthToken && dstSettings.StaticCredentials) {
             ctx.AddError(TIssue(ctx.GetPosition(pos),
-                TStringBuilder() << "Token and User/Password are mutually exclusive"));
+                "TOKEN and USER/PASSWORD are mutually exclusive"));
             return false;
         }
 
         if (const auto& x = dstSettings.OAuthToken; x && x->Token && x->TokenSecretName) {
             ctx.AddError(TIssue(ctx.GetPosition(pos),
-                TStringBuilder() << "TOKEN and TOKEN_SECRET_NAME are mutually exclusive"));
+                "TOKEN and TOKEN_SECRET_NAME are mutually exclusive"));
             return false;
         }
 
         if (const auto& x = dstSettings.StaticCredentials; x && x->Password && x->PasswordSecretName) {
             ctx.AddError(TIssue(ctx.GetPosition(pos),
-                TStringBuilder() << "PASSWORD and PASSWORD_SECRET_NAME are mutually exclusive"));
+                "PASSWORD and PASSWORD_SECRET_NAME are mutually exclusive"));
             return false;
         }
 
@@ -2097,21 +2151,21 @@ public:
                 return SyncError();
             }
 
-            if (!settings.Settings.ConnectionString && !settings.Settings.Endpoint) {
+            if (!settings.Settings.ConnectionString && (!settings.Settings.Endpoint || !settings.Settings.Database)) {
                 ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
-                    TStringBuilder() << "Neither Connection string nor Endpoint/Database are provided"));
+                    "Neither CONNECTION_STRING nor ENDPOINT/DATABASE are provided"));
                 return SyncError();
             }
 
-            if (!settings.Settings.OAuthToken && !settings.Settings.StaticCredentials) {
+            if (const auto& x = settings.Settings.StaticCredentials; x && !x->UserName) {
                 ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
-                    TStringBuilder() << "Neither Token nor User/Password are provided"));
+                    "USER is not provided"));
                 return SyncError();
             }
 
-            if (const auto& x = settings.Settings.StaticCredentials; x && (!x->UserName && x->Password || !x->UserName && x->PasswordSecretName)) {
+            if (const auto& x = settings.Settings.StaticCredentials; x && (!x->Password || !x->PasswordSecretName)) {
                 ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
-                    TStringBuilder() << "USER for PASSWORD or PASSWORD_SECRET_NAME are not provided"));
+                    "PASSWORD or PASSWORD_SECRET_NAME are not provided"));
                 return SyncError();
             }
 
@@ -2364,6 +2418,21 @@ public:
                                     TStringBuilder() << "Unknown PgDrop operation: " << type));
                 return SyncError();
             }
+        }
+
+        if (auto maybeAnalyze = TMaybeNode<TKiAnalyzeTable>(input)) {
+            auto cluster = TString(maybeAnalyze.Cast().DataSink().Cluster());
+
+            TAnalyzeSettings analyzeSettings = ParseAnalyzeSettings(maybeAnalyze.Cast());
+
+            auto future = Gateway->Analyze(cluster, analyzeSettings);
+            
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing ANALYZE");
         }
 
         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()

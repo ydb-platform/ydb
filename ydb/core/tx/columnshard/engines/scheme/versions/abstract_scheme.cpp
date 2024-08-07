@@ -29,26 +29,32 @@ std::set<ui32> ISnapshotSchema::GetPkColumnsIds() const {
 
 TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::NormalizeBatch(
     const ISnapshotSchema& dataSchema, const std::shared_ptr<NArrow::TGeneralContainer>& batch, const std::set<ui32>& restoreColumnIds) const {
+    AFL_VERIFY(dataSchema.GetSnapshot() <= GetSnapshot());
     if (dataSchema.GetSnapshot() == GetSnapshot()) {
-        return batch;
+        if (batch->GetColumnsCount() == GetColumnsCount()) {
+            return batch;
+        }
     }
-    AFL_VERIFY(dataSchema.GetSnapshot() < GetSnapshot());
     const std::shared_ptr<arrow::Schema>& resultArrowSchema = GetSchema();
 
-    std::shared_ptr<NArrow::TGeneralContainer> result = std::make_shared<NArrow::TGeneralContainer>();
+    std::shared_ptr<NArrow::TGeneralContainer> result = std::make_shared<NArrow::TGeneralContainer>(batch->GetRecordsCount());
     for (size_t i = 0; i < resultArrowSchema->fields().size(); ++i) {
         auto& resultField = resultArrowSchema->fields()[i];
         auto columnId = GetIndexInfo().GetColumnId(resultField->name());
         auto oldField = dataSchema.GetFieldByColumnIdOptional(columnId);
         if (oldField) {
-            auto conclusion = result->AddField(resultField, batch->GetAccessorByNameVerified(oldField->name()));
-            if (conclusion.IsFail()) {
-                return conclusion;
+            auto fAccessor = batch->GetAccessorByNameOptional(oldField->name());
+            if (fAccessor) {
+                auto conclusion = result->AddField(resultField, fAccessor);
+                if (conclusion.IsFail()) {
+                    return conclusion;
+                }
+                continue;
             }
-        } else if (restoreColumnIds.contains(columnId)) {
-            result->AddField(resultField,
-                    NArrow::TThreadSimpleArraysCache::Get(resultField->type(), GetExternalDefaultValueVerified(columnId), batch->num_rows()))
-                .Validate();
+        }
+        if (restoreColumnIds.contains(columnId)) {
+            AFL_VERIFY(!!GetExternalDefaultValueVerified(columnId) || GetIndexInfo().IsNullableVerified(columnId));
+            result->AddField(resultField, GetColumnLoaderVerified(columnId)->BuildDefaultAccessor(batch->num_rows())).Validate();
         }
     }
     return result;
@@ -78,7 +84,8 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
     for (auto&& i : batch->schema()->fields()) {
         AFL_VERIFY(GetIndexInfo().HasColumnName(i->name()));
         if (!dstSchema->GetFieldByName(i->name())->Equals(i)) {
-            return TConclusionStatus::Fail("not equal field types for column '" + i->name() + "'");
+            return TConclusionStatus::Fail("not equal field types for column '" + i->name() + "': " + i->ToString() + " vs " +
+                                           dstSchema->GetFieldByName(i->name())->ToString());
         }
         if (GetIndexInfo().IsNullableVerified(i->name())) {
             continue;
@@ -144,19 +151,19 @@ std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByColumnIdVerified(const 
     return result;
 }
 
-std::shared_ptr<NKikimr::NOlap::TColumnLoader> ISnapshotSchema::GetColumnLoaderVerified(const ui32 columnId) const {
+std::shared_ptr<NArrow::NAccessor::TColumnLoader> ISnapshotSchema::GetColumnLoaderVerified(const ui32 columnId) const {
     auto result = GetColumnLoaderOptional(columnId);
     AFL_VERIFY(result);
     return result;
 }
 
-std::shared_ptr<NKikimr::NOlap::TColumnLoader> ISnapshotSchema::GetColumnLoaderVerified(const std::string& columnName) const {
+std::shared_ptr<NArrow::NAccessor::TColumnLoader> ISnapshotSchema::GetColumnLoaderVerified(const std::string& columnName) const {
     auto result = GetColumnLoaderOptional(columnName);
     AFL_VERIFY(result);
     return result;
 }
 
-std::shared_ptr<NKikimr::NOlap::TColumnLoader> ISnapshotSchema::GetColumnLoaderOptional(const std::string& columnName) const {
+std::shared_ptr<NArrow::NAccessor::TColumnLoader> ISnapshotSchema::GetColumnLoaderOptional(const std::string& columnName) const {
     const std::optional<ui32> id = GetColumnIdOptional(columnName);
     if (id) {
         return GetColumnLoaderOptional(*id);

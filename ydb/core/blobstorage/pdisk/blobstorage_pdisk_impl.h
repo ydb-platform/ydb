@@ -377,9 +377,11 @@ public:
     void HandleNextWriteMetadata();
     void ProcessWriteMetadataResult(TWriteMetadataResult& request);
 
+    void DropAllMetadataRequests();
+
     TRcBuf CreateMetadataPayload(TRcBuf& metadata, size_t offset, size_t payloadSize, ui32 sectorSize, bool encryption,
         const TKey& key, ui64 sequenceNumber, ui32 recordIndex, ui32 totalRecords);
-    bool WriteMetadataSync(TRcBuf&& metadata);
+    bool WriteMetadataSync(TRcBuf&& metadata, const TDiskFormat& format);
 
     static std::optional<TMetadataFormatSector> CheckMetadataFormatSector(const ui8 *data, size_t len, const TMainKey& mainKey);
     static void MakeMetadataFormatSector(ui8 *data, const TMainKey& mainKey, const TMetadataFormatSector& format);

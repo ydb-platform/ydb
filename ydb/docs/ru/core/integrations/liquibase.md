@@ -331,7 +331,7 @@ id,bool,bigint,smallint,tinyint,float,double,decimal,uint8,uint16,uint32,uint64,
   ```bash
   # $(which liquibase)
   cd ./internal/lib/
-  
+
   # you may need to sudo
   # set actual versions of .jar files
   curl -L -o ydb-jdbc-driver.jar https://repo.maven.apache.org/maven2/tech/ydb/jdbc/ydb-jdbc-driver-shaded/2.0.7/ydb-jdbc-driver-shaded-2.0.7.jar
@@ -554,10 +554,10 @@ liquibase changelog-sync --changelog-file=dbchangelog.xml
 
 Существуют различные варианты настройки аутентификации через параметр URL:
 
-* Docker контейнер (anonymous authentication):<br>`jdbc:ydb:grpc://localhost:2136/local`
-* Self-hosted кластер:<br>`jdbc:ydb:grpcs://<host>:2135/Root/testdb?secureConnectionCertificate=file:~/myca.cer`
-* Подключение с использованием токена:<br>`jdbc:ydb:grpcs://<host>:2135/path/to/database?token=file:~/my_token`
-* Подключение с использованием сервисного аккаунта:<br>`jdbc:ydb:grpcs://<host>:2135/path/to/database?saFile=file:~/sa_key.json`
+* Docker контейнер (anonymous authentication):<br/>`jdbc:ydb:grpc://localhost:2136/local`
+* Self-hosted кластер:<br/>`jdbc:ydb:grpcs://<host>:2135/Root/testdb?secureConnectionCertificate=file:~/myca.cer`
+* Подключение с использованием токена:<br/>`jdbc:ydb:grpcs://<host>:2135/path/to/database?token=file:~/my_token`
+* Подключение с использованием сервисного аккаунта:<br/>`jdbc:ydb:grpcs://<host>:2135/path/to/database?saFile=file:~/sa_key.json`
 
 Если ваш кластер настроен с использованием логина и пароля, процесс аутентификации происходит через параметры Liquibase.
 

@@ -1,6 +1,8 @@
 #pragma once
-
+#include <queue>
 #include <util/generic/algorithm.h>
+#include <util/generic/string.h>
+#include <util/generic/vector.h>
 
 namespace NKikimr::NViewer {
 

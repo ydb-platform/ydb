@@ -66,6 +66,7 @@ const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::TracingConfigItem,
     (ui32)NKikimrConsole::TConfigItem::BlobStorageConfigItem,
     (ui32)NKikimrConsole::TConfigItem::MetadataCacheConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::MemoryControllerConfigItem,
 });
 
 const THashSet<ui32> NON_YAML_KINDS({

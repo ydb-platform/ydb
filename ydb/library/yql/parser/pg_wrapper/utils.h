@@ -149,4 +149,23 @@ inline bool PrepareVariadicArray(FunctionCallInfoBaseData& callInfo, const NPg::
     return true;
 }
 
+bool GetPgFuncAddr(ui32 procOid, FmgrInfo& finfo);
+
+class TExtensionsRegistry {
+class TImpl;
+public:
+    static TExtensionsRegistry& Instance();
+    void InitThread();
+    void CleanupThread();
+    void Load(ui32 extensionIndex, const TString& name, const TString& path);
+    PGFunction GetFuncAddr(ui32 extensionIndex, const TString& funcName);
+
+    TExtensionsRegistry();
+
+private:
+    std::unique_ptr<TImpl> Impl_;
+};
+
+void RebuildSysCache();
+
 }

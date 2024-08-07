@@ -808,8 +808,15 @@ ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPat
     if (checks) {
         if (!tablePath.IsInsideTableIndexPath()) {
             checks.IsCommonSensePath();
-        } else if (!tablePath.Parent().IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobal)) {
-            return CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot add changefeed to index table");
+        } else {
+            if (!tablePath.Parent().IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobal)) {
+                return CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
+                    "Cannot add changefeed to index table");
+            }
+            if (!AppData()->FeatureFlags.GetEnableChangefeedsOnIndexTables()) {
+                return CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
+                    "Changefeed on index table is not supported yet");
+            }
         }
     }
 

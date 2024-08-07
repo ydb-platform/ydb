@@ -167,6 +167,12 @@ void Serialize(IInputStream& input, IYsonConsumer* consumer)
     Serialize(TYsonInput(&input), consumer);
 }
 
+// TStatisticPath.
+void Serialize(const NStatisticPath::TStatisticPath& path, IYsonConsumer* consumer)
+{
+    consumer->OnStringScalar(path.Path());
+}
+
 // Subtypes of google::protobuf::Message
 void SerializeProtobufMessage(
     const Message& message,
@@ -340,6 +346,12 @@ void Deserialize(TInstant& value, INodePtr node)
 void Deserialize(TGuid& value, INodePtr node)
 {
     value = TGuid::FromString(node->AsString()->GetValue());
+}
+
+// TStatisticPath.
+void Deserialize(NStatisticPath::TStatisticPath& value, INodePtr node)
+{
+    value = NStatisticPath::ParseStatisticPath(node->AsString()->GetValue()).ValueOrThrow();
 }
 
 // Subtypes of google::protobuf::Message

@@ -121,9 +121,9 @@ public:
         YT_UNIMPLEMENTED();
     }
 
-    IMemoryUsageTrackerPtr GetChannelMemoryTracker() override
+    const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override
     {
-        return GetNullMemoryUsageTracker();
+        return MemoryUsageTracker_;
     }
 
 private:
@@ -133,6 +133,8 @@ private:
     const TString EndpointAddress_;
     const IAttributeDictionaryPtr EndpointAttributes_;
     const NConcurrency::IPollerPtr Poller_;
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_ = GetNullMemoryUsageTracker();
+
     bool IsHttps_;
     NHttps::TClientCredentialsConfigPtr Credentials_;
 

@@ -33,6 +33,7 @@ SRCS(
     comp_factory.cpp
     type_cache.cpp
     pg_aggs.cpp
+    GLOBAL read_table.cpp
     recovery.cpp
     superuser.cpp
     config.cpp

@@ -211,15 +211,16 @@ public:
         SendRequest();
     }
     void ReplyWith(NHttp::THttpOutgoingResponsePtr response) {
-        TString url(Event->Get()->Request->URL.Before('?'));
-        TString status(response->Status);
-        NMonitoring::THistogramPtr ResponseTimeHgram = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "utils")
-            ->GetSubgroup("subsystem", "mon")
-            ->GetSubgroup("url", url)
-            ->GetSubgroup("status", status)
-            ->GetHistogram("ResponseTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1));
-        ResponseTimeHgram->Collect(Event->Get()->Request->Timer.Passed() * 1000);
-
+        if (response->Status.StartsWith("2")) {
+            TString url(Event->Get()->Request->URL.Before('?'));
+            TString status(response->Status);
+            NMonitoring::THistogramPtr ResponseTimeHgram = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "utils")
+                ->GetSubgroup("subsystem", "mon")
+                ->GetSubgroup("url", url)
+                ->GetSubgroup("status", status)
+                ->GetHistogram("ResponseTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+            ResponseTimeHgram->Collect(Event->Get()->Request->Timer.Passed() * 1000);
+        }
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }
 
@@ -551,9 +552,36 @@ public:
         }
     }
 
+    TString RewriteLocationWithNode(const TString& response) {
+        NHttp::THttpParser<NHttp::THttpResponse, NHttp::TSocketBuffer> parser(response);
+
+        NHttp::THeadersBuilder headers(parser.Headers);
+        headers.Set("Location", TStringBuilder() << "/node/" << TActivationContext::ActorSystem()->NodeId << headers["Location"]);
+
+        NHttp::THttpRenderer<NHttp::THttpResponse, NHttp::TSocketBuffer> renderer;
+        renderer.InitResponse(parser.Protocol, parser.Version, parser.Status, parser.Message);
+        renderer.Set(headers);
+        if (parser.HaveBody()) {
+            renderer.SetBody(parser.Body); // it shouldn't be here, 30x with a body is a bad idea
+        }
+        renderer.Finish();
+        return renderer.AsString();
+    }
+
     void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse::TPtr& ev) {
+        TString httpResponse = ev->Get()->Response->AsString();
+        switch (FromStringWithDefault<int>(ev->Get()->Response->Status)) {
+            case 301:
+            case 303:
+            case 307:
+            case 308:
+                if (!NHttp::THeaders(ev->Get()->Response->Headers).Get("Location").starts_with("/node/")) {
+                    httpResponse = RewriteLocationWithNode(httpResponse);
+                }
+                break;
+        }
         auto response = std::make_unique<TEvMon::TEvMonitoringResponse>();
-        response->Record.SetHttpResponse(ev->Get()->Response->AsString());
+        response->Record.SetHttpResponse(httpResponse);
         Send(Event->Sender, response.release(), 0, Event->Cookie);
         PassAway();
     }

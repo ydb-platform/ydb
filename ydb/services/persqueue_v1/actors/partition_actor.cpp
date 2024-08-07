@@ -149,11 +149,10 @@ void TPartitionActor::MakeCommit(const TActorContext& ctx) {
 TPartitionActor::~TPartitionActor() = default;
 
 
-void TPartitionActor::Bootstrap(const TActorContext&) {
-
+void TPartitionActor::Bootstrap(const TActorContext& ctx) {
     Become(&TThis::StateFunc);
+    ctx.Schedule(PREWAIT_DATA, new TEvents::TEvWakeup());
 }
-
 
 void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TActorContext& ctx) {
     NKikimrClient::TPersQueueRequest request;
@@ -998,6 +997,10 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
         return;
     }
 
+    if (ReadingFinishedSent) {
+        return;
+    }
+
     Y_ABORT_UNLESS(InitDone);
     Y_ABORT_UNLESS(PipeClient);
     Y_ABORT_UNLESS(ReadOffset >= EndOffset);
@@ -1010,11 +1013,11 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     event->Record.SetDeadline(deadline);
     event->Record.SetClientId(ClientId);
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition << " wait data in partition inited, cookie " << WaitDataCookie);
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY,
+            PQ_LOG_PREFIX << " " << Partition << " wait data in partition inited, cookie " << WaitDataCookie << " from offset" << ReadOffset);
 
     NTabletPipe::SendData(ctx, PipeClient, event.Release());
 
-    ctx.Schedule(PREWAIT_DATA, new TEvents::TEvWakeup());
     ctx.Schedule(WAIT_DATA, new TEvPQProxy::TEvDeadlineExceeded(WaitDataCookie));
 
     WaitDataInfly.insert(WaitDataCookie);
@@ -1046,7 +1049,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
                     << " wait for data done: " << " readOffset " << ReadOffset << " EndOffset " << EndOffset << " newEndOffset "
                     << record.GetEndOffset() << " commitOffset " << CommittedOffset << " clientCommitOffset " << ClientCommitOffset
-                    << " cookie " << ev->Get()->Record.GetCookie());
+                    << " cookie " << ev->Get()->Record.GetCookie() << " readingFinished " << record.GetReadingFinished() << " firstRead " << FirstRead);
 
     EndOffset = record.GetEndOffset();
     SizeLag = record.GetSizeLag();
@@ -1071,7 +1074,6 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
             childPartitionIds.reserve(record.GetChildPartitionIds().size());
             childPartitionIds.insert(childPartitionIds.end(), record.GetChildPartitionIds().begin(), record.GetChildPartitionIds().end());
 
-            // TODO Tx
             ctx.Send(ParentId, new TEvPQProxy::TEvReadingFinished(Topic->GetInternalName(), Partition.Partition, FirstRead,
                      std::move(adjacentPartitionIds), std::move(childPartitionIds)));
         } else if (FirstRead) {
@@ -1213,13 +1215,20 @@ void TPartitionActor::HandlePoison(TEvents::TEvPoisonPill::TPtr&, const TActorCo
 }
 
 void TPartitionActor::Handle(TEvPQProxy::TEvDeadlineExceeded::TPtr& ev, const TActorContext& ctx) {
-    WaitDataInfly.erase(ev->Get()->Cookie);
-    HandleWakeup(ctx);
+    if (WaitDataInfly.erase(ev->Get()->Cookie)) {
+        DoWakeup(ctx);
+    }
 }
 
 void TPartitionActor::HandleWakeup(const TActorContext& ctx) {
-    if (ReadOffset >= EndOffset && WaitDataInfly.size() <= 1 && PipeClient) { //send one more
-        Y_ABORT_UNLESS(WaitForData);
+    DoWakeup(ctx);
+    if (!ReadingFinishedSent) {
+        ctx.Schedule(PREWAIT_DATA, new TEvents::TEvWakeup());
+    }
+}
+
+void TPartitionActor::DoWakeup(const TActorContext& ctx) {
+    if (WaitForData && ReadOffset >= EndOffset && WaitDataInfly.size() <= 1 && PipeClient) { //send one more
         WaitDataInPartition(ctx);
     }
 }

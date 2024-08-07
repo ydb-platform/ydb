@@ -10,7 +10,6 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.*
 ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDataSourceMetadata
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.*
 ydb/core/kqp/ut/olap KqpOlapStatistics.StatsUsageWithTTL
-ydb/core/kqp/ut/olap KqpOlapAggregations.Aggregation_ResultCountAll_FilterL
 ydb/core/kqp/ut/pg KqpPg.CreateIndex
 ydb/core/kqp/ut/query KqpLimits.QueryReplySize
 ydb/core/kqp/ut/query KqpQuery.QueryTimeout
@@ -41,7 +40,6 @@ ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.ReadingAfterSplitTest_Prefere
 ydb/core/persqueue/ut/ut_with_sdk [*/*]*
 ydb/core/tx/coordinator/ut Coordinator.RestoreTenantConfiguration
 ydb/core/tx/datashard/ut_change_exchange Cdc.InitialScanDebezium
-ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.BackupRestore
 ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables
 ydb/core/tx/schemeshard/ut_split_merge TSchemeShardSplitBySizeTest.Merge1KShards
 ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideAndAlterDomainAndTable-AlterDatabaseCreateHiveFirst*
@@ -52,7 +50,6 @@ ydb/core/viewer/ut Viewer.TabletMergingPacked
 ydb/library/actors/http/ut HttpProxy.TooLongHeader
 ydb/library/actors/http/ut sole*
 ydb/library/yql/providers/generic/connector/tests/datasource/ydb* *
-ydb/public/lib/ydb_cli/topic/ut TTopicReaderTests.TestRun_ReadOneMessage
 ydb/public/sdk/cpp/client/ydb_persqueue_core/ut RetryPolicy.TWriteSession_TestBrokenPolicy
 ydb/public/sdk/cpp/client/ydb_persqueue_core/ut [*/*]
 ydb/public/sdk/cpp/client/ydb_persqueue_public/ut RetryPolicy.TWriteSession_TestBrokenPolicy
@@ -72,7 +69,6 @@ ydb/services/fq/ut_integration Yq_1.*
 ydb/services/keyvalue/ut KeyValueGRPCService.*
 ydb/services/keyvalue/ut sole*
 ydb/services/persqueue_v1/ut TPersQueueTest.CheckACLForGrpcWrite
-ydb/services/persqueue_v1/ut TPersQueueTest.SetupLockSession
 ydb/services/persqueue_v1/ut TPQCompatTest.BadTopics
 ydb/services/persqueue_v1/ut TPersQueueTest.DirectRead*Cache*
 ydb/services/persqueue_v1/ut [*/*]*
@@ -103,3 +99,4 @@ ydb/tests/functional/ydb_cli test_ydb_impex.py.TestImpex.test_big_dataset*
 ydb/tests/tools/pq_read/test test_timeout.py.TestTimeout.test_timeout
 ydb/tests/functional/rename [test_rename.py */*] chunk chunk
 ydb/tests/fq/yt/kqp_yt_file/part18 test.py.test[pg-join_brackets2-default.txt]
+ydb/tests/functional/suite_tests test_postgres.py.TestPGSQL.test_sql_suite[plan-jointest/join2.test]

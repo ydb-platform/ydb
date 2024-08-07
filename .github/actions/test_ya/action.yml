@@ -261,12 +261,6 @@ runs:
 
         for RETRY in $(seq 1 $TEST_RETRY_COUNT)
         do
-          if [ $RETRY = $TEST_RETRY_COUNT ]; then
-            IS_LAST_RETRY=1
-          else
-            IS_LAST_RETRY=0
-          fi
-
           if [ $RETRY != 1 ]; then
             IS_RETRY=1
           else
@@ -275,7 +269,7 @@ runs:
 
           if [ ${{ inputs.testman_token }} ]; then
             # inititalize testmo session
-            TESTMO_RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID_$RETRY"
+            TESTMO_RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
             TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-link --name build --url "$TESTMO_RUN_URL" --resources testmo.json
             TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-field --name git-sha --type string --value "${GITHUB_SHA:0:7}" --resources testmo.json
             TESTMO_RUN_ID=$(
@@ -301,7 +295,6 @@ runs:
             RERUN_FAILED_OPT="-X"
           fi
 
-          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
           echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
           CURRENT_PUBLIC_DIR_RELATIVE=try_$RETRY
@@ -313,7 +306,7 @@ runs:
           (./ya make ${{ inputs.build_target }} "${params[@]}" \
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.log"  \
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
-            --junit "$CURRENT_JUNIT_XML_PATH" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& tee -a $YA_MAKE_OUTPUT
+            --junit "$CURRENT_JUNIT_XML_PATH" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
           set -ex
           RC=`cat exit_code`
 
@@ -343,6 +336,24 @@ runs:
             --test_stuff_out "$CURRENT_PUBLIC_DIR_RELATIVE/test_artifacts/" \
             "$CURRENT_JUNIT_XML_PATH"
           cp $CURRENT_JUNIT_XML_PATH $LAST_JUNIT_REPORT_XML
+
+          TESTS_RESULT=0
+          .github/scripts/tests/fail-checker.py "$CURRENT_JUNIT_XML_PATH" --output_path $CURRENT_PUBLIC_DIR/failed_count.txt || TESTS_RESULT=$?
+          FAILED_TESTS_COUNT=$(cat $CURRENT_PUBLIC_DIR/failed_count.txt)
+
+          IS_LAST_RETRY=0
+
+          if [ $TESTS_RESULT = 0 ] || [ $RETRY = $TEST_RETRY_COUNT ]; then
+            IS_LAST_RETRY=1
+          fi
+
+          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
+
+          if [ $FAILED_TESTS_COUNT -gt 500 ]; then 
+            IS_LAST_RETRY=1
+            TOO_MANY_FAILED="Too many tests failed, NOT going to retry"
+            echo $TOO_MANY_FAILED | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --fail
+          fi
 
           if [ "${{ inputs.run_tests }}" = "true" ]; then
             GITHUB_TOKEN=${{ github.token }} .github/scripts/tests/generate-summary.py \
@@ -395,18 +406,7 @@ runs:
             echo "runid=" >> $GITHUB_OUTPUT
           fi
 
-          TESTS_RESULT=0
-          .github/scripts/tests/fail-checker.py "$CURRENT_JUNIT_XML_PATH" --output_path $CURRENT_PUBLIC_DIR/failed_count.txt || TESTS_RESULT=$?
-
-          FAILED_TESTS_COUNT=$(cat $CURRENT_PUBLIC_DIR/failed_count.txt)
-
-          if [ $FAILED_TESTS_COUNT -gt 500 ]; then 
-            TOO_MANY_FAILED="Too many tests failed, NOT going to retry"
-            echo $TOO_MANY_FAILED | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --fail
-            break
-          fi
-
-          if [ $TESTS_RESULT = 0 ]; then
+          if [ $IS_LAST_RETRY = 1 ]; then
             break
           fi
         done;

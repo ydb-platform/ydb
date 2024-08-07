@@ -437,7 +437,7 @@ public:
                     }
                     return nullptr;
                 },
-                new TCookieType(this, TlsActivationContext->ActorSystem(), SelfId(), ev->Get()->Metadata)));
+                new TCookieType(this, TlsActivationContext->ActorSystem(), SelfId(), std::move(ev->Get()->Metadata))));
 
         FormattingThread->Start();
     }
@@ -928,6 +928,20 @@ public:
     } MetadataHandlingState = EMetadataHandlingState::WAITING_FOR_STARTUP;
     bool NeedToStopOnPoison = false;
 
+    void DropMetadata() {
+        for (auto& ev : std::exchange(PendingMetadata, {})) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvReadMetadata::EventType:
+                    Send(ev->Sender, new TEvReadMetadataResult(EPDiskMetadataOutcome::ERROR, std::nullopt));
+                    break;
+
+                case TEvWriteMetadata::EventType:
+                    Send(ev->Sender, new TEvWriteMetadataResult(EPDiskMetadataOutcome::ERROR, std::nullopt));
+                    break;
+            }
+        }
+    }
+
     void StartHandlingMetadata(bool error) {
         MetadataHandlingState = error
             ? EMetadataHandlingState::ERROR
@@ -972,6 +986,11 @@ public:
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // All states
+
+    void PassAway() override {
+        DropMetadata();
+        TActorBootstrapped::PassAway();
+    }
 
     void HandlePoison() {
         if (NeedToStopOnPoison && PDisk) {

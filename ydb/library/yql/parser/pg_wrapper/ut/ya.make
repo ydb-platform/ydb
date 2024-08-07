@@ -11,6 +11,7 @@ SRCS(
     error_ut.cpp
     memory_ut.cpp
     parser_ut.cpp
+    proc_ut.cpp
     sort_ut.cpp
     type_cache_ut.cpp
     ../../../minikql/comp_nodes/ut/mkql_test_factory.cpp

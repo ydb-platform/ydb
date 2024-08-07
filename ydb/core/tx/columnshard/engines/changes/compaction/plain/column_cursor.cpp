@@ -5,17 +5,17 @@ namespace NKikimr::NOlap::NCompaction {
 
 bool TPortionColumnCursor::Fetch(TMergedColumn& column) {
     Y_ABORT_UNLESS(RecordIndexStart);
-    if (CurrentChunk && CurrentChunk->GetStartPosition() <= *RecordIndexStart && *RecordIndexStart < CurrentChunk->GetFinishPosition()) {
+    if (CurrentChunk && CurrentChunk->GetAddress().Contains(*RecordIndexStart)) {
         
     } else {
         CurrentChunk = BlobChunks->GetChunk(CurrentChunk, *RecordIndexStart);
     }
 
     ui32 currentStart = *RecordIndexStart;
-    while (RecordIndexFinish >= CurrentChunk->GetFinishPosition()) {
-        column.AppendSlice(
-            CurrentChunk->GetArray(), currentStart - CurrentChunk->GetStartPosition(), CurrentChunk->GetFinishPosition() - currentStart);
-        currentStart = CurrentChunk->GetFinishPosition();
+    while (CurrentChunk->GetAddress().GetGlobalFinishPosition() <= RecordIndexFinish) {
+        column.AppendSlice(CurrentChunk->GetArray(), CurrentChunk->GetAddress().GetLocalIndex(currentStart),
+            CurrentChunk->GetAddress().GetGlobalFinishPosition() - currentStart);
+        currentStart = CurrentChunk->GetAddress().GetGlobalFinishPosition();
         if (currentStart < BlobChunks->GetRecordsCount()) {
             CurrentChunk = BlobChunks->GetChunk(CurrentChunk, currentStart);
         } else {
@@ -26,8 +26,9 @@ bool TPortionColumnCursor::Fetch(TMergedColumn& column) {
 
     if (currentStart < RecordIndexFinish) {
         AFL_VERIFY(CurrentChunk);
-        Y_ABORT_UNLESS(RecordIndexFinish < CurrentChunk->GetFinishPosition());
-        column.AppendSlice(CurrentChunk->GetArray(), currentStart - CurrentChunk->GetStartPosition(), RecordIndexFinish - currentStart);
+        Y_ABORT_UNLESS(RecordIndexFinish < CurrentChunk->GetAddress().GetGlobalFinishPosition());
+        column.AppendSlice(
+            CurrentChunk->GetArray(), CurrentChunk->GetAddress().GetLocalIndex(currentStart), RecordIndexFinish - currentStart);
     }
 
     RecordIndexStart.reset();

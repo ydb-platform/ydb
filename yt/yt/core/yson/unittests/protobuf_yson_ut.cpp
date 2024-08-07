@@ -1822,6 +1822,7 @@ TEST(TProtobufToYsonTest, Casing)
     message.set_somefield(1);
     message.set_anotherfield123(2);
     message.set_crazy_field(3);
+    message.set_enumfield(NYT::NYson::NProto::TCamelCaseStyleMessage::VALUE_FIRST);
 
     TEST_PROLOGUE()
     Y_PROTOBUF_SUPPRESS_NODISCARD message.SerializeToCodedStream(&codedStream);
@@ -1833,6 +1834,7 @@ TEST(TProtobufToYsonTest, Casing)
             .Item("some_field").Value(1)
             .Item("another_field123").Value(2)
             .Item("crazy_field").Value(3)
+            .Item("enum_field").Value("value_first")
         .EndMap();
     EXPECT_TRUE(AreNodesEqual(writtenNode, expectedNode));
 }

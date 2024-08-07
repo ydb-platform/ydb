@@ -4,6 +4,7 @@
 "pg_total_relation_size",
 "row_to_json",
 "version",
+"pow",
 
 "set_config",//pgadmin
 "pg_is_in_recovery",//pgadmin
@@ -18,3 +19,5 @@
 "pg_get_function_arguments",//psql
 "pg_table_is_visible",//psql
 
+// postgis
+"postgis_lib_version",

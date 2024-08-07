@@ -1171,7 +1171,6 @@ void TPersQueue::InitializeMeteringSink(const TActorContext& ctx) {
         return result;
     };
 
-
     MeteringSink.Create(ctx.Now(), {
             .FlushInterval  = TDuration::Seconds(pqConfig.GetBillingMeteringConfig().GetFlushIntervalSec()),
             .TabletId       = ToString(TabletID()),
@@ -1180,7 +1179,7 @@ void TPersQueue::InitializeMeteringSink(const TActorContext& ctx) {
             .YdbDatabaseId  = Config.GetYdbDatabaseId(),
             .StreamName     = streamName,
             .ResourceId     = streamPath,
-            .PartitionsSize = Config.PartitionsSize(),
+            .PartitionsSize = CountActivePartitions(Config.GetPartitions()),
             .WriteQuota     = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(),
             .ReservedSpace  = storageLimitBytes,
             .ConsumersCount = countReadRulesWithPricing(ctx, Config),
@@ -4553,17 +4552,17 @@ void TPersQueue::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const T
 {
     auto& record = ev->Get()->Record;
     auto it = Partitions.find(TPartitionId(TPartitionId(record.GetPartition())));
-    if (it == Partitions.end()) {
+    if (InitCompleted && it == Partitions.end()) {
         LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Unknown partition " << record.GetPartition());
 
-        auto response = THolder<TEvPQ::TEvCheckPartitionStatusResponse>();
+        auto response = MakeHolder<TEvPQ::TEvCheckPartitionStatusResponse>();
         response->Record.SetStatus(NKikimrPQ::ETopicPartitionStatus::Deleted);
         Send(ev->Sender, response.Release());
 
         return;
     }
 
-    if (it->second.InitDone) {
+    if (it != Partitions.end() && it->second.InitDone) {
         Forward(ev, it->second.Actor);
     } else {
         CheckPartitionStatusRequests[record.GetPartition()].push_back(ev);
@@ -4637,6 +4636,19 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const T
     }
 }
 
+void TPersQueue::DeletePartition(const TPartitionId& partitionId, const TActorContext& ctx)
+{
+    auto p = Partitions.find(partitionId);
+    if (p == Partitions.end()) {
+        return;
+    }
+
+    const TPartitionInfo& partition = p->second;
+    ctx.Send(partition.Actor, new TEvents::TEvPoisonPill());
+
+    Partitions.erase(partitionId);
+}
+
 void TPersQueue::Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorContext& ctx)
 {
     PQ_LOG_D("Handle TEvPQ::TEvDeletePartitionDone " << ev->Get()->PartitionId);
@@ -4652,7 +4664,7 @@ void TPersQueue::Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorCon
     Y_ABORT_UNLESS(partitionId.IsSupportivePartition());
     Y_ABORT_UNLESS(Partitions.contains(partitionId));
 
-    Partitions.erase(partitionId);
+    DeletePartition(partitionId, ctx);
 
     writeInfo.Partitions.erase(partitionId.OriginalPartitionId);
     if (writeInfo.Partitions.empty()) {

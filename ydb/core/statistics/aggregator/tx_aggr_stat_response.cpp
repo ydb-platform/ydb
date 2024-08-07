@@ -1,6 +1,6 @@
 #include "aggregator_impl.h"
 
-#include <ydb/core/statistics/stat_service.h>
+#include <ydb/core/statistics/service/service.h>
 
 namespace NKikimr::NStat {
 
@@ -58,17 +58,21 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
         }
 
         std::unordered_map<ui32, std::vector<ui64>> nonLocalTablets;
-
         Self->TabletsForReqDistribution.clear();
+
         for (auto& tablet : Record.GetFailedTablets()) {
             auto error = tablet.GetError();
             switch (error) {
-            case NKikimrStat::TEvAggregateStatisticsResponse::UnavailableNode:
+            case NKikimrStat::TEvAggregateStatisticsResponse::TYPE_UNSPECIFIED:
+                SA_LOG_CRIT("[" << Self->TabletID() << "] Unspecified TEvAggregateStatisticsResponse status");
+                return false;
+
+            case NKikimrStat::TEvAggregateStatisticsResponse::TYPE_UNAVAILABLE_NODE:
                 Self->TabletsForReqDistribution.insert(tablet.GetTabletId());
                 Action = EAction::SendReqDistribution;
                 break;
 
-            case NKikimrStat::TEvAggregateStatisticsResponse::NonLocalTablet:
+            case NKikimrStat::TEvAggregateStatisticsResponse::TYPE_NON_LOCAL_TABLET:
                 auto nodeId = tablet.GetNodeId();
                 if (nodeId == 0) {
                     // we cannot reach this tablet
@@ -78,6 +82,7 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
                 } else if (Action != EAction::SendReqDistribution) {
                     nonLocalTablets[nodeId].push_back(tablet.GetTabletId());
                 }
+                break;
             }
         }
 

@@ -82,7 +82,6 @@ private:
     void StartOidcProcess(const NActors::TActorContext& ctx) override {
         NHttp::THeaders headers(Request->Headers);
         TStringBuf cookie = headers.Get("cookie");
-        IsAjaxRequest = DetectAjaxRequest(headers);
         yandex::cloud::priv::oauth::v1::CheckSessionRequest request;
         request.Setcookie_header(TString(cookie));
 

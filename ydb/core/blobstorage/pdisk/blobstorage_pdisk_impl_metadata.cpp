@@ -70,18 +70,20 @@ namespace NKikimr::NPDisk {
                 Release(actorSystem);
             }
 
-            void Release(TActorSystem *actorSystem) override {
+            void Release(TActorSystem * /*actorSystem*/) override {
                 delete this;
             }
         };
 
         class TCompletionWriteMetadata : public TCompletionAction {
             TPDisk* const PDisk;
+            const TActorId Sender;
             std::deque<std::tuple<NMeta::TSlotKey, TRcBuf>> WriteQueue;
 
         public:
-            TCompletionWriteMetadata(TPDisk *pdisk)
+            TCompletionWriteMetadata(TPDisk *pdisk, TActorId sender)
                 : PDisk(pdisk)
+                , Sender(sender)
             {}
 
             bool CanHandleResult() const override { return true; }
@@ -90,35 +92,37 @@ namespace NKikimr::NPDisk {
                 WriteQueue.emplace_back(key, std::move(buffer));
             }
 
-            void IssueQuery() {
+            void IssueQuery(TActorSystem *actorSystem) {
                 Y_ABORT_UNLESS(!WriteQueue.empty());
                 auto& [key, buffer] = WriteQueue.front();
                 const ui64 writeOffset = PDisk->Format.Offset(key.ChunkIdx, key.OffsetInSectors);
-                LOG_DEBUG_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PDiskId
+                LOG_DEBUG_S(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PDiskId
                     << " TCompletionWriteMetadata::IssueQuery"
                     << " Buffer.size# " << buffer.size()
                     << " WriteOffset# " << writeOffset
                     << " ChunkIdx# " << key.ChunkIdx
                     << " OffsetInSectors# " << key.OffsetInSectors);
                 PDisk->BlockDevice->PwriteAsync(buffer.data(), buffer.size(), writeOffset, this, {}, nullptr);
-                WriteQueue.pop_front();
             }
 
             void Exec(TActorSystem *actorSystem) override {
-                LOG_DEBUG_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PDiskId
+                LOG_DEBUG_S(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PDiskId
                     << " TCompletionWriteMetadata::Exec"
                     << " Result# " << Result);
+                Y_ABORT_UNLESS(!WriteQueue.empty());
+                WriteQueue.pop_front();
                 if (Result != EIoResult::Ok) {
-                    PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TWriteMetadataResult>(false));
+                    PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TWriteMetadataResult>(false, Sender));
                 } else if (WriteQueue.empty()) {
-                    PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TWriteMetadataResult>(true));
+                    PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TWriteMetadataResult>(true, Sender));
                 } else {
-                    return IssueQuery();
+                    return IssueQuery(actorSystem);
                 }
-                Release(actorSystem);
+                delete this;
             }
 
-            void Release(TActorSystem* /*actorSystem*/) override {
+            void Release(TActorSystem *actorSystem) override {
+                actorSystem->Send(Sender, new TEvWriteMetadataResult(EPDiskMetadataOutcome::ERROR, std::nullopt));
                 delete this;
             }
         };
@@ -188,6 +192,7 @@ namespace NKikimr::NPDisk {
 
         class TCompletionWriteUnformattedMetadata : public TCompletionAction {
             TPDisk* const PDisk;
+            const TActorId Sender;
             const TMetadataFormatSector Format;
             TRcBuf Payload;
             const TMainKey MainKey;
@@ -195,9 +200,10 @@ namespace NKikimr::NPDisk {
             ui32 BadSectors = 0;
 
         public:
-            TCompletionWriteUnformattedMetadata(TPDisk *pdisk, const TMetadataFormatSector& format, TRcBuf&& payload,
-                    const TMainKey& mainKey)
+            TCompletionWriteUnformattedMetadata(TPDisk *pdisk, TActorId sender, const TMetadataFormatSector& format,
+                    TRcBuf&& payload, const TMainKey& mainKey)
                 : PDisk(pdisk)
+                , Sender(sender)
                 , Format(format)
                 , Payload(std::move(payload))
                 , MainKey(mainKey)
@@ -225,7 +231,7 @@ namespace NKikimr::NPDisk {
 
             bool CanHandleResult() const override { return true; }
 
-            void Exec(TActorSystem *actorSystem) override {
+            void Exec(TActorSystem * /*actorSystem*/) override {
                 LOG_DEBUG_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PDiskId
                     << " TCompletionWriteUnformattedMetadata::Exec"
                     << " Result# " << Result
@@ -246,12 +252,13 @@ namespace NKikimr::NPDisk {
                 }
             }
 
-            void Release(TActorSystem* /*actorSystem*/) override {
+            void Release(TActorSystem *actorSystem) override {
+                actorSystem->Send(Sender, new TEvWriteMetadataResult(EPDiskMetadataOutcome::ERROR, std::nullopt));
                 delete this;
             }
 
             void Finish(bool success) {
-                PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TWriteMetadataResult>(success));
+                PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TWriteMetadataResult>(success, Sender));
                 delete this;
             }
         };
@@ -267,8 +274,7 @@ namespace NKikimr::NPDisk {
         with_lock (StateMutex) {
             // collect all existing metadata chunks
             for (size_t chunkIdx = 0; chunkIdx < ChunkState.size(); ++chunkIdx) {
-                TChunkState& state = ChunkState[chunkIdx];
-                if (state.OwnerId == OwnerMetadata) {
+                if (TChunkState& state = ChunkState[chunkIdx]; state.OwnerId == OwnerMetadata) {
                     metadataChunks.push_back(chunkIdx);
                 }
             }
@@ -281,8 +287,7 @@ namespace NKikimr::NPDisk {
             // allocate more metadata chunks to satisfy config requirements
             size_t chunkIdx = ChunkState.size();
             while (chunkIdx > 0 && metadataBytes < requiredBytes) {
-                TChunkState& state = ChunkState[--chunkIdx];
-                if (state.OwnerId == OwnerUnallocated) {
+                if (TChunkState& state = ChunkState[--chunkIdx]; !IsOwnerAllocated(state.OwnerId)) {
                     state.OwnerId = OwnerMetadata;
                     state.CommitState = TChunkState::DATA_RESERVED;
                     metadataChunks.push_back(chunkIdx);
@@ -585,7 +590,7 @@ namespace NKikimr::NPDisk {
                 }
 
                 // generate write queue
-                auto completion = std::make_unique<TCompletionWriteMetadata>(this);
+                auto completion = std::make_unique<TCompletionWriteMetadata>(this, write.Sender);
                 size_t offset = 0;
                 for (ui32 i = 0; i < numSlotsRequired; ++i, offset += slotSize) {
                     const NMeta::TSlotKey key = freeSlotKeys[i];
@@ -603,7 +608,7 @@ namespace NKikimr::NPDisk {
                     it->second = NMeta::ESlotState::BEING_WRITTEN;
                 }
 
-                completion.release()->IssueQuery();
+                completion.release()->IssueQuery(ActorSystem);
             },
             [&](NMeta::TUnformatted& unformatted) {
                 TMetadataFormatSector& fmt = unformatted.FormatInFlight;
@@ -641,7 +646,8 @@ namespace NKikimr::NPDisk {
                 fmt.Length = bytesToWrite;
                 fmt.SequenceNumber = Meta.NextSequenceNumber;
 
-                auto *completion = new TCompletionWriteUnformattedMetadata(this, fmt, std::move(payload), write.MainKey);
+                auto *completion = new TCompletionWriteUnformattedMetadata(this, write.Sender, fmt, std::move(payload),
+                    write.MainKey);
                 completion->IssueQuery();
             },
         }, Meta.State);
@@ -698,6 +704,12 @@ namespace NKikimr::NPDisk {
         ProcessMetadataRequestQueue();
     }
 
+    void TPDisk::DropAllMetadataRequests() {
+        for (auto& item : std::exchange(Meta.Requests, {})) {
+            TRequestBase::AbortDelete(item.release(), ActorSystem);
+        }
+    }
+
     TRcBuf TPDisk::CreateMetadataPayload(TRcBuf& metadata, size_t offset, size_t payloadSize, ui32 sectorSize,
             bool encryption, const TKey& key, ui64 sequenceNumber, ui32 recordIndex, ui32 totalRecords) {
         Y_ABORT_UNLESS(offset + payloadSize <= metadata.size());
@@ -737,15 +749,15 @@ namespace NKikimr::NPDisk {
         return buffer;
     }
 
-    bool TPDisk::WriteMetadataSync(TRcBuf&& metadata) {
+    bool TPDisk::WriteMetadataSync(TRcBuf&& metadata, const TDiskFormat& format) {
         LOG_DEBUG_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
             << " WriteMetadataSync: transferring metadata"
             << " Metadata.size# " << metadata.size());
 
         // calculate number of slots required to store provided meta
         const ui64 metadataSize = metadata.size();
-        const ui32 half = Format.ChunkSize / (2 * Format.SectorSize);
-        const ui32 slotSize = half * Format.SectorSize - sizeof(TMetadataHeader);
+        const ui32 half = format.ChunkSize / (2 * format.SectorSize);
+        const ui32 slotSize = half * format.SectorSize - sizeof(TMetadataHeader);
         const ui32 numSlotsRequired = Max<ui32>(1, (metadataSize + slotSize - 1) / slotSize);
 
         // find free slots to store metadata
@@ -772,9 +784,9 @@ namespace NKikimr::NPDisk {
         for (ui32 i = 0; i < numSlotsRequired; ++i, offset += slotSize) {
             const NMeta::TSlotKey key = freeSlotKeys[i];
             const size_t payloadSize = Min<size_t>(slotSize, metadataSize - offset);
-            TRcBuf payload = CreateMetadataPayload(metadata, offset, payloadSize, Format.SectorSize,
-                Cfg->EnableSectorEncryption, Format.ChunkKey, 1, i, numSlotsRequired);
-            BlockDevice->PwriteSync(payload.data(), payload.size(), Format.Offset(key.ChunkIdx, key.OffsetInSectors), {}, nullptr);
+            TRcBuf payload = CreateMetadataPayload(metadata, offset, payloadSize, format.SectorSize,
+                Cfg->EnableSectorEncryption, format.ChunkKey, 1, i, numSlotsRequired);
+            BlockDevice->PwriteSync(payload.data(), payload.size(), format.Offset(key.ChunkIdx, key.OffsetInSectors), {}, nullptr);
         }
 
         return true;

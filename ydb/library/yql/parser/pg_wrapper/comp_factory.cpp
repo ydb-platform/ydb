@@ -109,7 +109,7 @@ extern Size MkqlGetChunkSpace(void *pointer);
 extern bool MkqlIsEmpty(MemoryContext context);
 extern void MkqlStats(MemoryContext context,
 						  MemoryStatsPrintFunc printfunc, void *passthru,
-						  MemoryContextCounters *totals,
+						      MemoryContextCounters *totals,
 						  bool print_to_stderr);
 #ifdef MEMORY_CONTEXT_CHECKING
 extern void MkqlCheck(MemoryContext context);
@@ -245,7 +245,7 @@ public:
         }
 
         Y_ENSURE(inFuncId);
-        fmgr_info(inFuncId, &FInfo);
+        GetPgFuncAddr(inFuncId, FInfo);
         Y_ENSURE(!FInfo.fn_retset);
         Y_ENSURE(FInfo.fn_addr);
         Y_ENSURE(FInfo.fn_nargs >=1 && FInfo.fn_nargs <= 3);
@@ -1197,7 +1197,7 @@ public:
     {
         Zero(FInfo);
         Y_ENSURE(Id);
-        fmgr_info(Id, &FInfo);
+        GetPgFuncAddr(Id, FInfo);
         Y_ENSURE(FInfo.fn_retset == isList);
         Y_ENSURE(FInfo.fn_addr);
         Y_ENSURE(ArgNodes.size() <= FUNC_MAX_ARGS);
@@ -1724,7 +1724,7 @@ public:
             const auto& cast = NPg::LookupCast(TargetElemDesc.TypeId, TargetElemDesc.TypeId);
 
             Y_ENSURE(cast.FunctionId);
-            fmgr_info(cast.FunctionId, &FInfo1);
+            GetPgFuncAddr(cast.FunctionId, FInfo1);
             Y_ENSURE(!FInfo1.fn_retset);
             Y_ENSURE(FInfo1.fn_addr);
             Y_ENSURE(FInfo1.fn_nargs >= 2 && FInfo1.fn_nargs <= 3);
@@ -1775,7 +1775,7 @@ public:
         }
 
         Y_ENSURE(funcId);
-        fmgr_info(funcId, &FInfo1);
+        GetPgFuncAddr(funcId, FInfo1);
         Y_ENSURE(!FInfo1.fn_retset);
         Y_ENSURE(FInfo1.fn_addr);
         Y_ENSURE(FInfo1.fn_nargs >= 1 && FInfo1.fn_nargs <= 3);
@@ -1787,7 +1787,7 @@ public:
 
         if (funcId2) {
             Y_ENSURE(funcId2);
-            fmgr_info(funcId2, &FInfo2);
+            GetPgFuncAddr(funcId2, FInfo2);
             Y_ENSURE(!FInfo2.fn_retset);
             Y_ENSURE(FInfo2.fn_addr);
             Y_ENSURE(FInfo2.fn_nargs == 1);
@@ -2116,7 +2116,10 @@ NUdf::TUnboxedValuePod ConvertToPgValue(NUdf::TUnboxedValuePod value, TMaybe<NUd
     }
     case NUdf::EDataSlot::TzDate:
     case NUdf::EDataSlot::TzDatetime:
-    case NUdf::EDataSlot::TzTimestamp: {
+    case NUdf::EDataSlot::TzTimestamp: 
+    case NUdf::EDataSlot::TzDate32:
+    case NUdf::EDataSlot::TzDatetime64:
+    case NUdf::EDataSlot::TzTimestamp64: {
         NUdf::TUnboxedValue str = ValueToString(Slot, value);
         return PointerDatumToPod(PointerGetDatum(MakeVar(str.AsStringRef())));
     }
@@ -3138,7 +3141,7 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakePgKernel(TVector<TType*> argTy
     kernel->init = [procId, pgArgTypes](arrow::compute::KernelContext*, const arrow::compute::KernelInitArgs&) {
         auto state = std::make_unique<TPgKernelState>();
         Zero(state->flinfo);
-        fmgr_info(procId, &state->flinfo);
+        GetPgFuncAddr(procId, state->flinfo);
         YQL_ENSURE(state->flinfo.fn_addr);
         state->resultinfo = nullptr;
         state->context = nullptr;
@@ -3391,6 +3394,12 @@ TComputationNodeFactory GetPgFactory() {
                     return new TToPg<NUdf::EDataSlot::Timestamp64>(ctx.Mutables, arg, dataType);
                 case NUdf::EDataSlot::Interval64:
                     return new TToPg<NUdf::EDataSlot::Interval64>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::TzDate32:
+                    return new TToPg<NUdf::EDataSlot::TzDate32>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::TzDatetime64:
+                    return new TToPg<NUdf::EDataSlot::TzDatetime64>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::TzTimestamp64:
+                    return new TToPg<NUdf::EDataSlot::TzTimestamp64>(ctx.Mutables, arg, dataType);
                 case NUdf::EDataSlot::Uuid:
                     return new TToPg<NUdf::EDataSlot::Uuid>(ctx.Mutables, arg, dataType);
                 case NUdf::EDataSlot::Yson:
@@ -3482,7 +3491,7 @@ TString PgValueToNativeText(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId) 
         FmgrInfo finfo;
         Zero(finfo);
         Y_ENSURE(outFuncId);
-        fmgr_info(outFuncId, &finfo);
+        GetPgFuncAddr(outFuncId, finfo);
         Y_ENSURE(!finfo.fn_retset);
         Y_ENSURE(finfo.fn_addr);
         Y_ENSURE(finfo.fn_nargs == 1);
@@ -3530,7 +3539,7 @@ void PgValueToNativeBinaryImpl(const NUdf::TUnboxedValuePod& value, ui32 pgTypeI
         FmgrInfo finfo;
         Zero(finfo);
         Y_ENSURE(sendFuncId);
-        fmgr_info(sendFuncId, &finfo);
+        GetPgFuncAddr(sendFuncId, finfo);
         Y_ENSURE(!finfo.fn_retset);
         Y_ENSURE(finfo.fn_addr);
         Y_ENSURE(finfo.fn_nargs == 1);
@@ -3757,7 +3766,7 @@ NUdf::TUnboxedValue PgValueFromNativeBinary(const TStringBuf binary, ui32 pgType
         FmgrInfo finfo;
         Zero(finfo);
         Y_ENSURE(receiveFuncId);
-        fmgr_info(receiveFuncId, &finfo);
+        GetPgFuncAddr(receiveFuncId, finfo);
         Y_ENSURE(!finfo.fn_retset);
         Y_ENSURE(finfo.fn_addr);
         Y_ENSURE(finfo.fn_nargs >= 1 && finfo.fn_nargs <= 3);
@@ -3797,7 +3806,7 @@ NUdf::TUnboxedValue PgValueFromNativeText(const TStringBuf text, ui32 pgTypeId) 
         FmgrInfo finfo;
         Zero(finfo);
         Y_ENSURE(inFuncId);
-        fmgr_info(inFuncId, &finfo);
+        GetPgFuncAddr(inFuncId, finfo);
         Y_ENSURE(!finfo.fn_retset);
         Y_ENSURE(finfo.fn_addr);
         Y_ENSURE(finfo.fn_nargs >= 1 && finfo.fn_nargs <= 3);
@@ -4545,7 +4554,7 @@ public:
 
         Y_ENSURE(hashProcId);;
         Zero(FInfoHash);
-        fmgr_info(hashProcId, &FInfoHash);
+        GetPgFuncAddr(hashProcId, FInfoHash);
         Y_ENSURE(!FInfoHash.fn_retset);
         Y_ENSURE(FInfoHash.fn_addr);
         Y_ENSURE(FInfoHash.fn_nargs == 1);
@@ -4657,19 +4666,19 @@ public:
             Y_ENSURE(lessProcId);
             Y_ENSURE(equalProcId);
 
-            fmgr_info(lessProcId, &FInfoLess);
+            GetPgFuncAddr(lessProcId, FInfoLess);
             Y_ENSURE(!FInfoLess.fn_retset);
             Y_ENSURE(FInfoLess.fn_addr);
             Y_ENSURE(FInfoLess.fn_nargs == 2);
 
-            fmgr_info(equalProcId, &FInfoEquals);
+            GetPgFuncAddr(equalProcId, FInfoEquals);
             Y_ENSURE(!FInfoEquals.fn_retset);
             Y_ENSURE(FInfoEquals.fn_addr);
             Y_ENSURE(FInfoEquals.fn_nargs == 2);
         }
 
         Y_ENSURE(compareProcId);
-        fmgr_info(compareProcId, &FInfoCompare);
+        GetPgFuncAddr(compareProcId, FInfoCompare);
         Y_ENSURE(!FInfoCompare.fn_retset);
         Y_ENSURE(FInfoCompare.fn_addr);
         Y_ENSURE(FInfoCompare.fn_nargs == 2);
@@ -4871,7 +4880,7 @@ public:
         Y_ENSURE(equalProcId);
 
         Zero(FInfoEquate);
-        fmgr_info(equalProcId, &FInfoEquate);
+        GetPgFuncAddr(equalProcId, FInfoEquate);
         Y_ENSURE(!FInfoEquate.fn_retset);
         Y_ENSURE(FInfoEquate.fn_addr);
         Y_ENSURE(FInfoEquate.fn_nargs == 2);
@@ -4957,6 +4966,7 @@ void PgDestroyMainContext(void* ctx) {
 void PgAcquireThreadContext(void* ctx) {
     if (ctx) {
         pg_thread_init();
+        TExtensionsRegistry::Instance().InitThread();
         auto main = (TMainContext*)ctx;
         main->PrevCurrentMemoryContext = CurrentMemoryContext;
         main->PrevErrorContext = ErrorContext;
@@ -4986,6 +4996,18 @@ void PgReleaseThreadContext(void* ctx) {
         yql_error_report_active = false;
         MyDatabaseId = PG_POSTGRES_DATABASE_ID;
     }
+}
+
+class TExtensionLoader : public NYql::NPg::IExtensionLoader {
+public:
+    void Load(ui32 extensionIndex, const TString& name, const TString& path) final {
+        RebuildSysCache();
+        TExtensionsRegistry::Instance().Load(extensionIndex, name, path);
+    }
+};
+
+std::unique_ptr<NYql::NPg::IExtensionLoader> CreateExtensionLoader() {
+    return std::make_unique<TExtensionLoader>();
 }
 
 void PgSetGUCSettings(void* ctx, const TGUCSettings::TPtr& GUCSettings) {
@@ -5636,7 +5658,7 @@ private:
     static inline void InitFunc(ui32 funcId, FmgrInfo* info, ui32 argCountMin, ui32 argCountMax) {
         Zero(*info);
         Y_ENSURE(funcId);
-        fmgr_info(funcId, info);
+        NYql::GetPgFuncAddr(funcId, *info);
         Y_ENSURE(info->fn_addr);
         Y_ENSURE(info->fn_nargs >= argCountMin && info->fn_nargs <= argCountMax);
     }

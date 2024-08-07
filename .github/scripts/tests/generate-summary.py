@@ -2,10 +2,11 @@
 import argparse
 import dataclasses
 import datetime
+import json
 import os
 import re
-import json
 import sys
+import traceback
 from github import Github, Auth as GithubAuth
 from github.PullRequest import PullRequest
 from enum import Enum
@@ -14,6 +15,7 @@ from typing import List, Optional, Dict
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from junit_utils import get_property_value, iter_xml_files
 from gh_status import update_pr_comment_text
+from get_test_history import get_test_history
 
 
 class TestStatus(Enum):
@@ -38,6 +40,7 @@ class TestResult:
     status: TestStatus
     log_urls: Dict[str, str]
     elapsed: float
+    count_of_passed: int
 
     @property
     def status_display(self):
@@ -97,7 +100,7 @@ class TestResult:
             elapsed = 0
             print(f"Unable to cast elapsed time for {classname}::{name}  value={elapsed!r}")
 
-        return cls(classname, name, status, log_urls, elapsed)
+        return cls(classname, name, status, log_urls, elapsed, 0)
 
 
 class TestSummaryLine:
@@ -151,10 +154,6 @@ class TestSummary:
     def add_line(self, line: TestSummaryLine):
         self.is_failed |= line.is_failed
         self.lines.append(line)
-
-    @property
-    def is_empty(self):
-        return len(self.lines) == 0
 
     def render_line(self, items):
         return f"| {' | '.join(items)} |"
@@ -226,12 +225,13 @@ def render_pm(value, url, diff=None):
     return text
 
 
-def render_testlist_html(rows, fn):
+def render_testlist_html(rows, fn, build_preset):
     TEMPLATES_PATH = os.path.join(os.path.dirname(__file__), "templates")
 
     env = Environment(loader=FileSystemLoader(TEMPLATES_PATH), undefined=StrictUndefined)
 
     status_test = {}
+    last_n_runs = 5
     has_any_log = set()
 
     for t in rows:
@@ -247,8 +247,44 @@ def render_testlist_html(rows, fn):
     # remove status group without tests
     status_order = [s for s in status_order if s in status_test]
 
+    # statuses for history
+    status_for_history = [TestStatus.FAIL, TestStatus.MUTE]
+    status_for_history = [s for s in status_for_history if s in status_test]
+    
+    tests_names_for_history = []
+    history= {}
+    tests_in_statuses = [test for status in status_for_history for test in status_test.get(status)]
+    
+    # get tests for history
+    for test in tests_in_statuses:
+        tests_names_for_history.append(test.full_name)
+
+    try:
+        history = get_test_history(tests_names_for_history, last_n_runs, build_preset)
+    except Exception:
+        print(traceback.format_exc())
+   
+    #geting count of passed tests in history for sorting
+    for test in tests_in_statuses:
+        if test.full_name in history:
+            test.count_of_passed = len(
+                [
+                    history[test.full_name][x]
+                    for x in history[test.full_name]
+                    if history[test.full_name][x]["status"] == "passed"
+                ]
+            )
+    # sorting, 
+    # at first - show tests with passed resuts in history
+    # at second - sorted by test name
+    for current_status in status_for_history:
+        status_test.get(current_status,[]).sort(key=lambda val: (-val.count_of_passed, val.full_name))
+
     content = env.get_template("summary.html").render(
-        status_order=status_order, tests=status_test, has_any_log=has_any_log
+        status_order=status_order,
+        tests=status_test,
+        has_any_log=has_any_log,
+        history=history,
     )
 
     with open(fn, "w") as fp:
@@ -262,11 +298,8 @@ def write_summary(summary: TestSummary):
     else:
         fp = sys.stdout
 
-    if summary.is_empty:
-        fp.write(f"Test run completed, no test results found")
-    else:
-        for line in summary.render(add_footnote=True):
-            fp.write(f"{line}\n")
+    for line in summary.render(add_footnote=True):
+        fp.write(f"{line}\n")
 
     fp.write("\n")
 
@@ -274,7 +307,7 @@ def write_summary(summary: TestSummary):
         fp.close()
 
 
-def gen_summary(public_dir, public_dir_url, paths, is_retry: bool):
+def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset):
     summary = TestSummary(is_retry=is_retry)
 
     for title, html_fn, path in paths:
@@ -283,15 +316,12 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool):
         for fn, suite, case in iter_xml_files(path):
             test_result = TestResult.from_junit(case)
             summary_line.add(test_result)
-
-        if not summary_line.tests:
-            continue
         
         if os.path.isabs(html_fn):
             html_fn = os.path.relpath(html_fn, public_dir)
         report_url = f"{public_dir_url}/{html_fn}"
 
-        render_testlist_html(summary_line.tests, os.path.join(public_dir, html_fn))
+        render_testlist_html(summary_line.tests, os.path.join(public_dir, html_fn),build_preset)
         summary_line.add_report(html_fn, report_url)
         summary.add_line(summary_line)
 
@@ -300,12 +330,7 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool):
 
 def get_comment_text(pr: PullRequest, summary: TestSummary, summary_links: str, is_last_retry: bool)->tuple[str, list[str]]:
     color = "red"
-    if summary.is_empty:
-        color = "green"
-        return color, [
-            f"Test run completed, no test results found for commit {pr.head.sha}. "
-        ]
-    elif summary.is_failed:
+    if summary.is_failed:
         color = "red" if is_last_retry else "yellow"
         result = f"Some tests failed, follow the links below."
         if not is_last_retry:
@@ -364,7 +389,7 @@ def main():
     paths = iter(args.args)
     title_path = list(zip(paths, paths, paths))
 
-    summary = gen_summary(args.public_dir, args.public_dir_url, title_path, is_retry=bool(args.is_retry))
+    summary = gen_summary(args.public_dir, args.public_dir_url, title_path, is_retry=bool(args.is_retry),build_preset=args.build_preset)
     write_summary(summary)
 
     if summary.is_failed:

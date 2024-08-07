@@ -1018,6 +1018,10 @@ public:
     ERequestType GetType() const override {
         return ERequestType::RequestReadMetadata;
     }
+
+    void Abort(TActorSystem *actorSystem) override {
+        actorSystem->Send(Sender, new TEvReadMetadataResult(EPDiskMetadataOutcome::ERROR, std::nullopt));
+    }
 };
 
 class TInitialReadMetadataResult : public TRequestBase {
@@ -1051,19 +1055,27 @@ public:
     ERequestType GetType() const override {
         return ERequestType::RequestWriteMetadata;
     }
+
+    void Abort(TActorSystem *actorSystem) override {
+        actorSystem->Send(Sender, new TEvWriteMetadataResult(EPDiskMetadataOutcome::ERROR, std::nullopt));
+    }
 };
 
 class TWriteMetadataResult : public TRequestBase {
 public:
     const bool Success;
 
-    TWriteMetadataResult(bool success, TAtomicBase reqIdx)
-        : TRequestBase({}, TReqId(TReqId::WriteMetadataResult, reqIdx), OwnerSystem, 0, NPriInternal::Other)
+    TWriteMetadataResult(bool success, TActorId sender, TAtomicBase reqIdx)
+        : TRequestBase(sender, TReqId(TReqId::WriteMetadataResult, reqIdx), OwnerSystem, 0, NPriInternal::Other)
         , Success(success)
     {}
 
     ERequestType GetType() const override {
         return ERequestType::RequestWriteMetadataResult;
+    }
+
+    void Abort(TActorSystem *actorSystem) override {
+        actorSystem->Send(Sender, new TEvWriteMetadataResult(EPDiskMetadataOutcome::ERROR, std::nullopt));
     }
 };
 

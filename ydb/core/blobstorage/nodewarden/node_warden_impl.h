@@ -108,6 +108,7 @@ namespace NKikimr::NStorage {
             std::optional<NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk> Pending; // pending
         };
         THashMap<TString, TPDiskByPathInfo> PDiskByPath;
+        THashSet<ui32> PDisksWaitingToStart;
 
         ui64 LastScrubCookie = RandomNumber<ui64>();
 
@@ -154,6 +155,7 @@ namespace NKikimr::NStorage {
         TControlWrapper EnableSyncLogChunkCompressionSSD;
         TControlWrapper MaxSyncLogChunksInFlightHDD;
         TControlWrapper MaxSyncLogChunksInFlightSSD;
+        TControlWrapper DefaultHugeGarbagePerMille;
 
         TReplQuoter::TPtr ReplNodeRequestQuoter;
         TReplQuoter::TPtr ReplNodeResponseQuoter;
@@ -179,6 +181,7 @@ namespace NKikimr::NStorage {
             , EnableSyncLogChunkCompressionSSD(0, 0, 1)
             , MaxSyncLogChunksInFlightHDD(10, 1, 1024)
             , MaxSyncLogChunksInFlightSSD(10, 1, 1024)
+            , DefaultHugeGarbagePerMille(300, 1, 1000)
             , CostMetricsParametersByMedia({
                 TCostMetricsParameters{200},
                 TCostMetricsParameters{50},

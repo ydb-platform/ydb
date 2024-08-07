@@ -274,7 +274,7 @@ private:
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
 
         KqpHost = CreateKqpHost(Gateway, QueryId.Cluster, QueryId.Database, Config, ModuleResolverState->ModuleResolver,
-            FederatedQuerySetup, UserToken, GUCSettings, ApplicationName, AppData(ctx)->FunctionRegistry,
+            FederatedQuerySetup, UserToken, GUCSettings, QueryServiceConfig, ApplicationName, AppData(ctx)->FunctionRegistry,
             false, false, std::move(TempTablesState), nullptr, SplitCtx);
 
         IKqpHost::TPrepareSettings prepareSettings;
@@ -608,6 +608,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnableSpillingGenericQuery = serviceConfig.GetEnableQueryServiceSpilling();
     kqpConfig.DefaultCostBasedOptimizationLevel = serviceConfig.GetDefaultCostBasedOptimizationLevel();
     kqpConfig.EnableConstantFolding = serviceConfig.GetEnableConstantFolding();
+    kqpConfig.SetDefaultEnabledSpillingNodes(serviceConfig.GetEnableSpillingNodes());
 
     if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
         kqpConfig._KqpYqlCombinerMemoryLimit = std::max(1_GB, limit - (limit >> 2U));

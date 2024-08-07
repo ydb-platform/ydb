@@ -155,6 +155,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
 
     pqGroupInfo->TotalGroupCount = partitionCount;
     pqGroupInfo->TotalPartitionCount = partitionCount;
+    pqGroupInfo->ActivePartitionCount = partitionCount;
 
     ui32 tabletCount = pqGroupInfo->ExpectedShardCount();
     if (tabletCount > TSchemeShard::MaxPQGroupTabletsCount) {

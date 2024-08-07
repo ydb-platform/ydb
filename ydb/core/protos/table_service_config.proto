@@ -274,7 +274,7 @@ message TTableServiceConfig {
 
     optional uint64 ExtractPredicateRangesLimit = 54 [default = 10000];
 
-    optional bool EnableOlapSink = 55 [default = true];
+    optional bool EnableOlapSink = 55 [default = false];
 
     optional bool EnablePerStatementQueryExecution = 56 [default = false];
     optional bool EnableCreateTableAs = 57 [default = true];
@@ -300,4 +300,21 @@ message TTableServiceConfig {
     optional bool EnableConstantFolding = 65 [ default = true ];
 
     optional bool EnableImplicitQueryParameterTypes = 66 [ default = true ];
+
+    optional string EnableSpillingNodes = 67 [ default = "All" ];
+
+    message TSubPoolsConfiguration {
+        repeated TComputePoolConfiguration SubPools = 1;
+    };
+
+    message TComputePoolConfiguration {
+        optional double MaxCpuShare = 1;
+        oneof ResourceConfiguration {
+            string Name = 2;
+            TSubPoolsConfiguration SubPoolsConfiguration = 3;
+        }
+    };
+    optional TComputePoolConfiguration PoolsConfiguration = 68;
+    
+    optional bool EnableRowsDuplicationCheck = 69 [ default = false ];
 };

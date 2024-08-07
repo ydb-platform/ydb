@@ -134,6 +134,8 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(jt != LocalPDisks.end());
             TPDiskRecord& record = jt->second;
             if (record.Temporary) { // this is temporary PDisk spinning, have to wait for it to finish
+                Y_ABORT_UNLESS(!temporary);
+                PDisksWaitingToStart.insert(pdisk.GetPDiskID());
                 it->second.Pending = pdisk;
             } else { // incorrect configuration: we are trying to start two different PDisks with the same path
                 STLOG(PRI_ERROR, BS_NODE, NW48, "starting two PDisks with the same path", (Path, path),
@@ -215,6 +217,7 @@ namespace NKikimr::NStorage {
                     jt->second.RunningPDiskId == it->first) {
                 pending = std::move(jt->second.Pending);
                 PDiskByPath.erase(jt);
+                PDisksWaitingToStart.erase(pending->GetPDiskID());
             } else {
                 Y_DEBUG_ABORT("missing entry in PDiskByPath");
             }
@@ -230,6 +233,16 @@ namespace NKikimr::NStorage {
 
         if (pending) {
             StartLocalPDisk(*pending, false);
+
+            // start VDisks over this one waiting for their turn
+            const ui32 actualPDiskId = pending->GetPDiskID();
+            const TVSlotId from(LocalNodeId, actualPDiskId, 0);
+            const TVSlotId to(LocalNodeId, actualPDiskId, Max<ui32>());
+            for (auto it = LocalVDisks.lower_bound(from); it != LocalVDisks.end() && it->first <= to; ++it) {
+                auto& [key, value] = *it;
+                Y_ABORT_UNLESS(!value.RuntimeData); // they can't be working
+                StartLocalVDiskActor(value);
+            }
         }
     }
 
@@ -300,7 +313,7 @@ namespace NKikimr::NStorage {
         } else {
             for (auto it = LocalVDisks.lower_bound(from); it != LocalVDisks.end() && it->first <= to; ++it) {
                 auto& [key, value] = *it;
-                if (!value.RuntimeData && !SlayInFlight.contains(key)) {
+                if (!value.RuntimeData) {
                     StartLocalVDiskActor(value);
                 }
             }
@@ -442,6 +455,7 @@ namespace NKikimr::NStorage {
         }
         for (const TString& path : pathsToResetPending) {
             if (const auto it = PDiskByPath.find(path); it != PDiskByPath.end()) {
+                PDisksWaitingToStart.erase(it->second.Pending->GetPDiskID());
                 it->second.Pending.reset();
             }
         }
@@ -452,13 +466,15 @@ namespace NKikimr::NStorage {
         std::unique_ptr<IEventHandle> OriginalEv;
         std::unique_ptr<IEventBase> ConvertedEv;
         TActorId ParentId;
+        const char* const EventType;
 
     public:
         TPDiskMetadataInteractionActor(TPDiskKey pdiskKey, TAutoPtr<IEventHandle> originalEv,
-                std::unique_ptr<IEventBase> convertedEv)
+                std::unique_ptr<IEventBase> convertedEv, const char *eventType)
             : PDiskKey(pdiskKey)
             , OriginalEv(originalEv.Release())
             , ConvertedEv(std::move(convertedEv))
+            , EventType(eventType)
         {}
 
         void Bootstrap(TActorId parentId) {
@@ -466,10 +482,10 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(PDiskKey.NodeId == SelfId().NodeId());
             Send(MakeBlobStoragePDiskID(PDiskKey.NodeId, PDiskKey.PDiskId), ConvertedEv.release(),
                 IEventHandle::FlagTrackDelivery);
-            Become(&TThis::StateFunc);
+            Become(&TThis::StateFunc, TDuration::Seconds(10), new TEvents::TEvWakeup);
         }
 
-        void Handle(TEvents::TEvUndelivered::TPtr ev) {
+        void Handle(TEvents::TEvUndelivered::TPtr /*ev*/) {
             // send this event again, this may be a race with PDisk destruction
             TActivationContext::Send(OriginalEv.release());
             PassAway();
@@ -506,10 +522,16 @@ namespace NKikimr::NStorage {
             TActorBootstrapped::PassAway();
         }
 
+        void HandleWakeup() {
+            Y_DEBUG_ABORT("Event# %s took too long to process", EventType);
+            STLOG(PRI_CRIT, BS_NODE, NW61, "TPDiskMetadataInteractionActor::Wakeup", (EventType, EventType));
+        }
+
         STRICT_STFUNC(StateFunc,
             hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(NPDisk::TEvReadMetadataResult, Handle);
             hFunc(NPDisk::TEvWriteMetadataResult, Handle);
+            cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
         )
     };
 
@@ -517,7 +539,7 @@ namespace NKikimr::NStorage {
         const TString& path = ev->Get()->Path;
         STLOG(PRI_DEBUG, BS_NODE, NW56, "TEvNodeWardenReadMetadata", (Path, path));
         Register(new TPDiskMetadataInteractionActor(GetPDiskForMetadata(path), ev.Release(),
-            std::make_unique<NPDisk::TEvReadMetadata>()));
+            std::make_unique<NPDisk::TEvReadMetadata>(), "TEvNodeWardenReadMetadata"));
     }
 
     void TNodeWarden::Handle(TEvNodeWardenWriteMetadata::TPtr ev) {
@@ -528,7 +550,7 @@ namespace NKikimr::NStorage {
         const TString& path = msg->Path;
         STLOG(PRI_DEBUG, BS_NODE, NW57, "TEvNodeWardenWriteMetadata", (Path, path), (Metadata.size, data.size()));
         Register(new TPDiskMetadataInteractionActor(GetPDiskForMetadata(path), ev.Release(),
-            std::make_unique<NPDisk::TEvWriteMetadata>(TRcBuf(std::move(data)))));
+            std::make_unique<NPDisk::TEvWriteMetadata>(TRcBuf(std::move(data))), "TEvNodeWardenWriteMetadata"));
     }
 
     TPDiskKey TNodeWarden::GetPDiskForMetadata(const TString& path) {

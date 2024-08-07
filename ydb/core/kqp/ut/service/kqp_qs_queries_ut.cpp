@@ -2,6 +2,8 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/core/testlib/common_helper.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
@@ -2313,6 +2315,10 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 ALTER TABLE TestDdlDml2 DROP COLUMN Value2;
                 UPSERT INTO TestDdlDml2 (Key, Value1) VALUES (2, "2");
                 SELECT * FROM TestDdlDml2;
+                CREATE TABLE TestDdlDml33 (
+                    Key Uint64,
+                    PRIMARY KEY (Key)
+                );
             )", TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 2);
@@ -2326,6 +2332,13 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
             CompareYson(R"([[[1u];["1"]];[[2u];["2"]]])", FormatResultSetYson(result.GetResultSet(0)));
+
+            result = db.ExecuteQuery(R"(
+                SELECT * FROM TestDdlDml33;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
 
             result = db.ExecuteQuery(R"(
                 CREATE TABLE TestDdlDml4 (
@@ -2618,6 +2631,177 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             CompareYson(R"([[[2u];["2"];["2"]]])", FormatResultSetYson(result.GetResultSet(1)));
             // Also empty now(
             CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(2)));
+        }
+    }
+
+    Y_UNIT_TEST(CheckIsolationLevelFroPerStatementMode) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        appConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        {
+            // 1 ddl statement
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE Test1 (
+                    Key Uint64,
+                    Value1 String,
+                    Value2 String,
+                    PRIMARY KEY (Key)
+                );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 0);
+            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
+
+            NYdb::NTable::TDescribeTableResult describe = session.DescribeTable("/Root/Test1").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            // 2 ddl statements
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE Test2 (
+                    Key Uint64,
+                    Value1 String,
+                    Value2 String,
+                    PRIMARY KEY (Key)
+                );
+                CREATE TABLE Test3 (
+                    Key Uint64,
+                    Value1 String,
+                    Value2 String,
+                    PRIMARY KEY (Key)
+                );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 0);
+            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
+
+            NYdb::NTable::TDescribeTableResult describe1 = session.DescribeTable("/Root/Test2").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe1.GetStatus(), EStatus::SUCCESS);
+            NYdb::NTable::TDescribeTableResult describe2 = session.DescribeTable("/Root/Test3").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe2.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            // 1 dml statement
+            auto result = db.ExecuteQuery(R"(
+                SELECT * FROM Test1;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
+        }
+
+        {
+            // 2 dml statements
+            auto result = db.ExecuteQuery(R"(
+                SELECT * FROM Test2;
+                SELECT * FROM Test3;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 2);
+            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
+        }
+
+        {
+            // 1 ddl 1 dml statements
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE Test4 (
+                    Key Uint64,
+                    Value1 String,
+                    Value2 String,
+                    PRIMARY KEY (Key)
+                );
+                SELECT * FROM Test4;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
+            NYdb::NTable::TDescribeTableResult describe = session.DescribeTable("/Root/Test4").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            // 1 dml 1 ddl statements
+            auto result = db.ExecuteQuery(R"(
+                SELECT * FROM Test4;
+                CREATE TABLE Test5 (
+                    Key Uint64,
+                    Value1 String,
+                    Value2 String,
+                    PRIMARY KEY (Key)
+                );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
+            NYdb::NTable::TDescribeTableResult describe = session.DescribeTable("/Root/Test5").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            // 1 ddl 1 dml 1 ddl 1 dml statements
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE Test6 (
+                    Key Uint64,
+                    Value1 String,
+                    Value2 String,
+                    PRIMARY KEY (Key)
+                );
+                SELECT * FROM Test6;
+                CREATE TABLE Test7 (
+                    Key Uint64,
+                    Value1 String,
+                    Value2 String,
+                    PRIMARY KEY (Key)
+                );
+                SELECT * FROM Test7;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 2);
+            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
+            NYdb::NTable::TDescribeTableResult describe1 = session.DescribeTable("/Root/Test6").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe1.GetStatus(), EStatus::SUCCESS);
+            NYdb::NTable::TDescribeTableResult describe2 = session.DescribeTable("/Root/Test7").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe2.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            // 1 dml 1 ddl 1 dml 1 ddl statements
+            auto result = db.ExecuteQuery(R"(
+                SELECT * FROM Test7;
+                CREATE TABLE Test8 (
+                    Key Uint64,
+                    Value1 String,
+                    Value2 String,
+                    PRIMARY KEY (Key)
+                );
+                SELECT * FROM Test8;
+                CREATE TABLE Test9 (
+                    Key Uint64,
+                    Value1 String,
+                    Value2 String,
+                    PRIMARY KEY (Key)
+                );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 2);
+            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
+            NYdb::NTable::TDescribeTableResult describe1 = session.DescribeTable("/Root/Test8").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe1.GetStatus(), EStatus::SUCCESS);
+            NYdb::NTable::TDescribeTableResult describe2 = session.DescribeTable("/Root/Test9").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe2.GetStatus(), EStatus::SUCCESS);
         }
     }
 
@@ -3038,6 +3222,11 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
             auto session = Kikimr->GetTableClient().CreateSession().GetValueSync().GetSession();
 
+            auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+            csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+            csController->SetLagForCompactionBeforeTierings(TDuration::Seconds(1));
+            csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
+
             const TString query = Sprintf(R"(
                 CREATE TABLE `/Root/DataShard` (
                     Col1 Uint64 NOT NULL,
@@ -3053,6 +3242,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
             DoExecute();
+            csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
+            csController->WaitIndexation(TDuration::Seconds(5));
         }
 
     };

@@ -36,6 +36,12 @@ bool SplitMergeEnabled(const NKikimrPQ::TPQTabletConfig& config) {
     return config.has_partitionstrategy() && config.partitionstrategy().has_partitionstrategytype() && config.partitionstrategy().partitionstrategytype() != ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED;
 }
 
+size_t CountActivePartitions(const ::google::protobuf::RepeatedPtrField< ::NKikimrPQ::TPQTabletConfig_TPartition >& partitions) {
+    return std::count_if(partitions.begin(), partitions.end(), [](const auto& p) {
+        return p.GetStatus() == ::NKikimrPQ::ETopicPartitionStatus::Active;
+    });
+}
+
 static constexpr ui64 PUT_UNIT_SIZE = 40960u; // 40Kb
 
 ui64 PutUnitsSize(const ui64 size) {
@@ -290,6 +296,33 @@ TPartitionGraph MakePartitionGraph(const NKikimrPQ::TUpdateBalancerConfig& confi
 
 TPartitionGraph MakePartitionGraph(const NKikimrSchemeOp::TPersQueueGroupDescription& config) {
     return TPartitionGraph(BuildGraph<NKikimrSchemeOp::TPersQueueGroupDescription::TPartition>(config.GetPartitions()));
+}
+
+void TLastCounter::Use(const TString& value, const TInstant& now) {
+    const auto full = MaxValueCount == Values.size();
+    if (!Values.empty() && Values[0].Value == value) {
+        auto& v0 = Values[0];
+        if (v0.LastUseTime < now) {
+            v0.LastUseTime = now;
+            if (full && Values[1].LastUseTime != now) {
+                Values.push_back(std::move(v0));
+                Values.pop_front();
+            }
+        }
+    } else if (full && Values[1].Value == value) {
+        Values[1].LastUseTime = now;
+    } else if (!full || Values[0].LastUseTime < now) {
+        if (full) {
+            Values.pop_front();
+        }
+        Values.push_back(Data{now, value});
+    }
+}
+
+size_t TLastCounter::Count(const TInstant& expirationTime) {
+    return std::count_if(Values.begin(), Values.end(), [&](const auto& i) {
+        return i.LastUseTime >= expirationTime;
+    });
 }
 
 } // NKikimr::NPQ

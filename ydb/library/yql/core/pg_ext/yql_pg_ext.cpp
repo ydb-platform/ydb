@@ -15,6 +15,7 @@ void PgExtensionsFromProto(const NYql::NProto::TPgExtensions& proto,
         
         desc.LibraryPath = e.GetLibraryPath();
         desc.TypesOnly = e.GetTypesOnly();
+        desc.LibraryMD5 = e.GetLibraryMD5();
         extensions.emplace_back(desc);
     }
 }

@@ -3282,6 +3282,20 @@ ui32 TPgExprType::GetFlags(ui32 typeId) {
     return ret;
 }
 
+ui64 TPgExprType::GetPgExtensionsMask(ui32 typeId) {
+    auto descPtr = &NPg::LookupType(typeId);
+    return MakePgExtensionMask(descPtr->ExtensionIndex);
+}
+
+ui64 MakePgExtensionMask(ui32 extensionIndex) {
+    if (!extensionIndex) {
+        return 0;
+    }
+    
+    YQL_ENSURE(extensionIndex <= 64);
+    return 1ull << (extensionIndex - 1);
+}
+
 TExprContext::TExprContext(ui64 nextUniqueId)
     : StringPool(4096)
     , NextUniqueId(nextUniqueId)

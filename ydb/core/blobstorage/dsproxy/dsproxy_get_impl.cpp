@@ -159,29 +159,28 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
 }
 
 
-ui64 TGetImpl::GetTimeToAccelerateNs(TLogContext &logCtx, NKikimrBlobStorage::EVDiskQueueId queueId, ui32 nthWorst) {
+ui64 TGetImpl::GetTimeToAccelerateNs(TLogContext &logCtx, NKikimrBlobStorage::EVDiskQueueId queueId) {
     Y_UNUSED(logCtx);
     // Find the slowest disk
     TDiskDelayPredictions worstDisks;
     if (Blackboard.BlobStates.size() == 1) {
         Blackboard.BlobStates.begin()->second.GetWorstPredictedDelaysNs(
-                *Info, *Blackboard.GroupQueues, queueId, nthWorst, &worstDisks);
+                *Info, *Blackboard.GroupQueues, queueId, &worstDisks,
+                AccelerationParams.PredictedDelayMultiplier);
     } else {
         Blackboard.GetWorstPredictedDelaysNs(
-                *Info, *Blackboard.GroupQueues, queueId, nthWorst, &worstDisks);
+                *Info, *Blackboard.GroupQueues, queueId, &worstDisks,
+                AccelerationParams.PredictedDelayMultiplier);
     }
-    nthWorst = std::min(nthWorst, (ui32)worstDisks.size() - 1);
-    return worstDisks[nthWorst].PredictedNs;
+    return worstDisks[std::min(3u, (ui32)worstDisks.size() - 1)].PredictedNs;
 }
 
-ui64 TGetImpl::GetTimeToAccelerateGetNs(TLogContext &logCtx, ui32 acceleratesSent) {
-    Y_DEBUG_ABORT_UNLESS(acceleratesSent < 2);
-    return GetTimeToAccelerateNs(logCtx, HandleClassToQueueId(Blackboard.GetHandleClass), 2 - acceleratesSent);
+ui64 TGetImpl::GetTimeToAccelerateGetNs(TLogContext &logCtx) {
+    return GetTimeToAccelerateNs(logCtx, HandleClassToQueueId(Blackboard.GetHandleClass));
 }
 
-ui64 TGetImpl::GetTimeToAcceleratePutNs(TLogContext &logCtx, ui32 acceleratesSent) {
-    Y_DEBUG_ABORT_UNLESS(acceleratesSent < 2);
-    return GetTimeToAccelerateNs(logCtx, HandleClassToQueueId(Blackboard.PutHandleClass), 2 - acceleratesSent);
+ui64 TGetImpl::GetTimeToAcceleratePutNs(TLogContext &logCtx) {
+    return GetTimeToAccelerateNs(logCtx, HandleClassToQueueId(Blackboard.PutHandleClass));
 }
 
 TString TGetImpl::DumpFullState() const {
@@ -328,13 +327,13 @@ EStrategyOutcome TGetImpl::RunBoldStrategy(TLogContext &logCtx) {
     if (MustRestoreFirst) {
         strategies.push_back(&s2);
     }
-    return Blackboard.RunStrategies(logCtx, strategies, SlowDiskThreshold);
+    return Blackboard.RunStrategies(logCtx, strategies, AccelerationParams);
 }
 
 EStrategyOutcome TGetImpl::RunMirror3dcStrategy(TLogContext &logCtx) {
     return MustRestoreFirst
-        ? Blackboard.RunStrategy(logCtx, TMirror3dcGetWithRestoreStrategy(), SlowDiskThreshold)
-        : Blackboard.RunStrategy(logCtx, TMirror3dcBasicGetStrategy(NodeLayout, PhantomCheck), SlowDiskThreshold);
+        ? Blackboard.RunStrategy(logCtx, TMirror3dcGetWithRestoreStrategy(), AccelerationParams)
+        : Blackboard.RunStrategy(logCtx, TMirror3dcBasicGetStrategy(NodeLayout, PhantomCheck), AccelerationParams);
 }
 
 EStrategyOutcome TGetImpl::RunMirror3of4Strategy(TLogContext &logCtx) {
@@ -345,7 +344,7 @@ EStrategyOutcome TGetImpl::RunMirror3of4Strategy(TLogContext &logCtx) {
     if (MustRestoreFirst) {
         strategies.push_back(&s2);
     }
-    return Blackboard.RunStrategies(logCtx, strategies, SlowDiskThreshold);
+    return Blackboard.RunStrategies(logCtx, strategies, AccelerationParams);
 }
 
 EStrategyOutcome TGetImpl::RunStrategies(TLogContext &logCtx) {
@@ -356,9 +355,9 @@ EStrategyOutcome TGetImpl::RunStrategies(TLogContext &logCtx) {
     } else if (MustRestoreFirst || PhantomCheck) {
         return RunBoldStrategy(logCtx);
     } else if (Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock) {
-        return Blackboard.RunStrategy(logCtx, TMinIopsBlockStrategy(), SlowDiskThreshold);
+        return Blackboard.RunStrategy(logCtx, TMinIopsBlockStrategy(), AccelerationParams);
     } else if (Info->Type.ErasureFamily() == TErasureType::ErasureMirror) {
-        return Blackboard.RunStrategy(logCtx, TMinIopsMirrorStrategy(), SlowDiskThreshold);
+        return Blackboard.RunStrategy(logCtx, TMinIopsMirrorStrategy(), AccelerationParams);
     } else {
         return RunBoldStrategy(logCtx);
     }

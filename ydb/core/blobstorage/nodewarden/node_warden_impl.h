@@ -165,6 +165,7 @@ namespace NKikimr::NStorage {
         class TPDiskMetadataInteractionActor;
 
         TControlWrapper SlowDiskThreshold;
+        TControlWrapper PredictedDelayMultiplier;
 
     public:
         struct TGroupRecord;
@@ -190,6 +191,7 @@ namespace NKikimr::NStorage {
                 TCostMetricsParameters{32},
             })
             , SlowDiskThreshold(2000, 1, 1000000)
+            , PredictedDelayMultiplier(1000, 1, 1000)
         {
             Y_ABORT_UNLESS(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
             AvailDomainId = 1;

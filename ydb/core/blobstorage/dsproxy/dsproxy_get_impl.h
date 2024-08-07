@@ -49,12 +49,12 @@ class TGetImpl {
 
     std::unordered_map<TLogoBlobID, std::tuple<bool, bool>> BlobFlags; // keep, doNotKeep per blob
 
-    const float SlowDiskThreshold = 2;
+    TAccelerationParams AccelerationParams;
 
 public:
     TGetImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &groupQueues,
-            TEvBlobStorage::TEvGet *ev, TNodeLayoutInfoPtr&& nodeLayout, float slowDiskThreshold,
-            const TString& requestPrefix = {})
+            TEvBlobStorage::TEvGet *ev, TNodeLayoutInfoPtr&& nodeLayout,
+            const TAccelerationParams& accelerationParams, const TString& requestPrefix = {})
         : Deadline(ev->Deadline)
         , Info(info)
         , Queries(ev->Queries.Release())
@@ -71,7 +71,7 @@ public:
         , PhantomCheck(ev->PhantomCheck)
         , Decommission(ev->Decommission)
         , ReaderTabletData(ev->ReaderTabletData)
-        , SlowDiskThreshold(slowDiskThreshold)
+        , AccelerationParams(accelerationParams)
     {
         Y_ABORT_UNLESS(QuerySize > 0);
     }
@@ -279,8 +279,8 @@ public:
         AccelerateGet(logCtx, slowDisksMask, outVGets, outVPuts);
     }
 
-    ui64 GetTimeToAccelerateGetNs(TLogContext &logCtx, ui32 acceleratesSent);
-    ui64 GetTimeToAcceleratePutNs(TLogContext &logCtx, ui32 acceleratesSent);
+    ui64 GetTimeToAccelerateGetNs(TLogContext &logCtx);
+    ui64 GetTimeToAcceleratePutNs(TLogContext &logCtx);
 
     TString DumpFullState() const;
 
@@ -317,7 +317,7 @@ protected:
     void PrepareVPuts(TLogContext &logCtx,
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> &outVPuts);
 
-    ui64 GetTimeToAccelerateNs(TLogContext &logCtx, NKikimrBlobStorage::EVDiskQueueId queueId, ui32 nthWorst);
+    ui64 GetTimeToAccelerateNs(TLogContext &logCtx, NKikimrBlobStorage::EVDiskQueueId queueId);
 }; //TGetImpl
 
 }//NKikimr

@@ -194,7 +194,8 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_NVME].DiskTimeAvailableScale,
                 "VDiskControls.DiskTimeAvailableScaleNVME");
 
-        icb->RegisterLocalControl(SlowDiskThreshold, "DSProxyControls.SlowDiskThreshold");
+        icb->RegisterSharedControl(SlowDiskThreshold, "DSProxyControls.SlowDiskThreshold");
+        icb->RegisterSharedControl(PredictedDelayMultiplier, "DSProxyControls.PredictedDelayMultiplier");
     }
 
     // start replication broker

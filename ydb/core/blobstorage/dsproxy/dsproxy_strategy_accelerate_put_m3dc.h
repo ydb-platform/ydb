@@ -30,26 +30,25 @@ public:
     }
 
     EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
-            TBlackboard& /*blackboard*/, TGroupDiskRequests &groupDiskRequests, float slowDiskThreshold) override {
-        Y_UNUSED(slowDiskThreshold);
-        // Find the unput part and disk
-        i32 badDiskIdx = -1;
+            TBlackboard& /*blackboard*/, TGroupDiskRequests &groupDiskRequests,
+            const TAccelerationParams& accelerationParams) override {
+        Y_UNUSED(accelerationParams);
+        // Find the unput parts and disks
+        ui32 badDiskMask = 0;
         for (size_t diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {
             TBlobState::TDisk &disk = state.Disks[diskIdx];
             for (size_t partIdx = 0; partIdx < disk.DiskParts.size(); ++partIdx) {
                 TBlobState::TDiskPart &diskPart = disk.DiskParts[partIdx];
                 if (diskPart.Situation == TBlobState::ESituation::Sent) {
-                    badDiskIdx = diskIdx;
+                    badDiskMask |= (1 << diskIdx);
                 }
             }
         }
-
-        if (badDiskIdx >= 0) {
+        if (badDiskMask > 0) {
             // Mark the 'bad' disk as the single slow disk
             for (size_t diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {
-                state.Disks[diskIdx].IsSlow = false;
+                state.Disks[diskIdx].IsSlow = badDiskMask & (1 << diskIdx);
             }
-            state.Disks[badDiskIdx].IsSlow = true;
 
             // Prepare part placement if possible
             TBlobStorageGroupType::TPartPlacement partPlacement;

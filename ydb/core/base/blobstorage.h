@@ -492,6 +492,8 @@ struct TEvBlobStorage {
         EvInplacePatch,
         EvAssimilate,
 
+        EvGetQueuesInfo,     // for debugging purposes
+
         //
         EvPutResult = EvPut + 512,                              /// 268 632 576
         EvGetResult,
@@ -505,6 +507,8 @@ struct TEvBlobStorage {
         EvPatchResult,
         EvInplacePatchResult,
         EvAssimilateResult,
+
+        EvQueuesInfo,  // for debugging purposes
 
         // proxy <-> vdisk interface
         EvVPut = EvPut + 2 * 512,                               /// 268 633 088

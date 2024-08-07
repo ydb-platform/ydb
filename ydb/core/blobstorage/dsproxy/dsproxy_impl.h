@@ -66,6 +66,7 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     ui64 UnconfiguredBufferSize = 0;
     const bool IsEjected;
     bool ForceWaitAllDrives;
+    bool UseActorSystemTimeInBSQueue;
     bool IsLimitedKeyless = false;
     bool IsFullMonitoring = false; // current state of monitoring
     ui32 MinREALHugeBlobInBytes = 0;
@@ -119,7 +120,9 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     void ProcessInitQueue();
 
     TMemorizableControlWrapper SlowDiskThreshold;
-    float GetSlowDiskThreshold();
+    TMemorizableControlWrapper PredictedDelayMultiplier;
+
+    TAccelerationParams GetAccelerationParams();
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Enable monitoring
@@ -267,6 +270,7 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     void HandleNormal(TEvBlobStorage::TEvAssimilate::TPtr &ev);
     void Handle(TEvBlobStorage::TEvBunchOfEvents::TPtr ev);
     void Handle(TEvDeathNote::TPtr ev);
+    void Handle(TEvGetQueuesInfo::TPtr ev);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Error state
@@ -315,13 +319,15 @@ public:
     }
 
     TBlobStorageGroupProxy(TIntrusivePtr<TBlobStorageGroupInfo>&& info, bool forceWaitAllDrives,
-            TIntrusivePtr<TDsProxyNodeMon> &nodeMon, TIntrusivePtr<TStoragePoolCounters>&& storagePoolCounters,
-            const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch,
-            const TControlWrapper &slowDiskThreshold);
+            bool useActorSystemTimeInBSQueue, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
+            TIntrusivePtr<TStoragePoolCounters>&& storagePoolCounters, const TControlWrapper &enablePutBatching,
+            const TControlWrapper &enableVPatch, const TControlWrapper &slowDiskThreshold,
+            const TControlWrapper &predictedDelayMultiplier);
 
-    TBlobStorageGroupProxy(ui32 groupId, bool isEjected, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
-            const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch,
-            const TControlWrapper &slowDiskThreshold);
+    TBlobStorageGroupProxy(ui32 groupId, bool isEjected, bool useActorSystemTimeInBSQueue,
+            TIntrusivePtr<TDsProxyNodeMon> &nodeMon, const TControlWrapper &enablePutBatching,
+            const TControlWrapper &enableVPatch, const TControlWrapper &slowDiskThreshold,
+            const TControlWrapper &predictedDelayMultiplier);
 
     void Bootstrap();
 
@@ -365,6 +371,7 @@ public:
         IgnoreFunc(TEvEstablishingSessionTimeout);
         fFunc(Ev5min, Handle5min);
         cFunc(EvCheckDeadlines, CheckDeadlines);
+        hFunc(TEvGetQueuesInfo, Handle);
     )
 
 #define HANDLE_EVENTS(HANDLER) \

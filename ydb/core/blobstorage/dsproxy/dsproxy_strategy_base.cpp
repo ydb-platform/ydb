@@ -389,7 +389,7 @@ void TStrategyBase::Prepare3dcPartPlacement(const TBlobState &state,
 }
 
 ui32 TStrategyBase::MakeSlowSubgroupDiskMask(TBlobState &state, const TBlobStorageGroupInfo &info, TBlackboard &blackboard,
-        bool isPut, float slowDiskThreshold) {
+        bool isPut, const TAccelerationParams& accelerationParams) {
     if (info.GetTotalVDisksNum() == 1) {
         // when there is only one disk, we consider it not slow
         return 0;
@@ -400,12 +400,13 @@ ui32 TStrategyBase::MakeSlowSubgroupDiskMask(TBlobState &state, const TBlobStora
             TDiskDelayPredictions worstDisks;
             state.GetWorstPredictedDelaysNs(info, *blackboard.GroupQueues,
                     (isPut ? HandleClassToQueueId(blackboard.PutHandleClass) :
-                            HandleClassToQueueId(blackboard.GetHandleClass)), 1,
-                    &worstDisks);
+                            HandleClassToQueueId(blackboard.GetHandleClass)),
+                    &worstDisks, accelerationParams.PredictedDelayMultiplier);
 
             // Check if the slowest disk exceptionally slow, or just not very fast
             ui32 slowDiskSubgroupMask = 0;
-            if (worstDisks[1].PredictedNs > 0 && worstDisks[0].PredictedNs > worstDisks[1].PredictedNs * slowDiskThreshold) {
+            if (worstDisks[1].PredictedNs > 0 && worstDisks[0].PredictedNs > worstDisks[1].PredictedNs *
+                    accelerationParams.SlowDiskThreshold) {
                 slowDiskSubgroupMask = 1 << worstDisks[0].DiskIdx;
             }
 

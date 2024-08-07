@@ -15,8 +15,9 @@ public:
     {}
 
     EStrategyOutcome Process(TLogContext& /*logCtx*/, TBlobState& state, const TBlobStorageGroupInfo& info,
-            TBlackboard& /*blackboard*/, TGroupDiskRequests& groupDiskRequests, float slowDiskThreshold) override {
-        Y_UNUSED(slowDiskThreshold);
+            TBlackboard& /*blackboard*/, TGroupDiskRequests& groupDiskRequests,
+            const TAccelerationParams& accelerationParams) override {
+        Y_UNUSED(accelerationParams);
         if (!CheckFailModel(state, info)) {
             state.WholeSituation = TBlobState::ESituation::Error;
             return EStrategyOutcome::Error("failure model exceeded");

@@ -1316,6 +1316,11 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000000,
             DefaultValue: 2000 }];
+        optional uint64 PredictedDelayMultiplier = 2 [(ControlOptions) = {
+            Description: "Predicted time of VDisk's response is multiplied by this value divided by 1000",
+            MinValue: 0,
+            MaxValue: 1000000,
+            DefaultValue: 1000 }];
     }
 
     optional TDataShardControls DataShardControls = 1;

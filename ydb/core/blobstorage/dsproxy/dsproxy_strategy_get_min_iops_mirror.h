@@ -18,8 +18,9 @@ public:
     }
 
     EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
-            TBlackboard& /*blackboard*/, TGroupDiskRequests &groupDiskRequests, float slowDiskThreshold) override {
-        Y_UNUSED(slowDiskThreshold);
+            TBlackboard& /*blackboard*/, TGroupDiskRequests &groupDiskRequests,
+            const TAccelerationParams& accelerationParams) override {
+        Y_UNUSED(accelerationParams);
         if (auto res = RestoreWholeFromDataParts(logCtx, state, info)) {
             return *res;
         }

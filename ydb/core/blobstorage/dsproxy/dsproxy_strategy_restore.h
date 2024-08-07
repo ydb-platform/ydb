@@ -80,7 +80,8 @@ public:
     }
 
     EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
-            TBlackboard &blackboard, TGroupDiskRequests &groupDiskRequests, float slowDiskThreshold) override {
+            TBlackboard &blackboard, TGroupDiskRequests &groupDiskRequests,
+            const TAccelerationParams& accelerationParams) override {
         // Check if the work is already done.
         if (state.WholeSituation == TBlobState::ESituation::Absent) {
             return EStrategyOutcome::DONE; // nothing to restore
@@ -130,11 +131,12 @@ public:
             // Find the slowest disk, if there are more than 1
             TDiskDelayPredictions worstDisks;
             state.GetWorstPredictedDelaysNs(info, *blackboard.GroupQueues,
-                    HandleClassToQueueId(blackboard.PutHandleClass), 1,
-                    &worstDisks);
+                    HandleClassToQueueId(blackboard.PutHandleClass),
+                    &worstDisks, accelerationParams.PredictedDelayMultiplier);
 
             // Check if the slowest disk exceptionally slow, or just not very fast
-            if (worstDisks[1].PredictedNs > 0 && worstDisks[0].PredictedNs > worstDisks[1].PredictedNs * slowDiskThreshold) {
+            if (worstDisks[1].PredictedNs > 0 && worstDisks[0].PredictedNs > worstDisks[1].PredictedNs *
+                    accelerationParams.SlowDiskThreshold) {
                 slowDiskSubgroupIdxs.push_back(worstDisks[0].DiskIdx);
             }
         }

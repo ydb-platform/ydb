@@ -31,11 +31,12 @@ public:
     }
 
     EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
-            TBlackboard& blackboard, TGroupDiskRequests &groupDiskRequests, float slowDiskThreshold) override {
+            TBlackboard& blackboard, TGroupDiskRequests &groupDiskRequests,
+            const TAccelerationParams& accelerationParams) override {
         TBlobStorageGroupType::TPartPlacement partPlacement;
         bool degraded = false;
         bool isDone = false;
-        ui32 slowDiskSubgroupMask = MakeSlowSubgroupDiskMask(state, info, blackboard, true, slowDiskThreshold);
+        ui32 slowDiskSubgroupMask = MakeSlowSubgroupDiskMask(state, info, blackboard, true, accelerationParams);
         do {
             if (slowDiskSubgroupMask == 0) {
                 break; // ignore this case

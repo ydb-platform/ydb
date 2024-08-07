@@ -54,6 +54,7 @@ struct TKikimrServerForTestNodeRegistration : TBasicKikimrWithGrpcAndRootSchema<
 
     struct TServerInitialization {
         bool EnforceUserToken = false;
+        bool EnforceCheckUserToken = false; // Takes effect when EnforceUserToken = false
         bool EnableDynamicNodeAuth = false;
         bool EnableWrongIdentity = false;
         bool SetNodeAuthValues = false;
@@ -71,6 +72,9 @@ private:
         auto& securityConfig = *config.MutableDomainsConfig()->MutableSecurityConfig();
         if (serverInitialization.EnforceUserToken) {
             securityConfig.SetEnforceUserTokenRequirement(true);
+        }
+        if (serverInitialization.EnforceCheckUserToken) {
+            securityConfig.SetEnforceUserTokenCheckRequirement(true);
         }
         if (serverInitialization.EnableDynamicNodeAuth) {
             config.MutableClientCertificateAuthorization()->SetRequestClientCertificate(true);
@@ -882,6 +886,47 @@ Y_UNIT_TEST(ServerWithoutCertVerification_ClientDoesNotProvideClientCerts) {
         CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
         CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
     }
+}
+
+Y_UNIT_TEST(ServerWithCertVerification_AuthNotRequired) {
+    // Scenario when we want to turn on secure node registration, but to check it in safe way
+    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    TProps props = TProps::AsClientServer();
+    const TCertAndKey clientServerCert = GenerateSignedCert(caCert, props);
+
+    props.Organization = "Enemy Org";
+    const TCertAndKey clientServerEnemyCert = GenerateSignedCert(caCert, props);
+
+    TKikimrServerForTestNodeRegistration server({
+        .EnforceUserToken = false, // still allow not secure way
+        .EnforceCheckUserToken = true, // when attempt to register with cert arrives, check it as if EnforceUserToken was switched on
+        .EnableDynamicNodeAuth = true,
+        .SetNodeAuthValues = true,
+        .RegisterNodeAllowedSids = {"DefaultClientAuth@cert"}
+    });
+    ui16 grpc = server.GetPort();
+    TString location = TStringBuilder() << "localhost:" << grpc;
+
+    SetLogPriority(server);
+
+    TDriverConfig secureConnectionConfig;
+    secureConnectionConfig.UseSecureConnection(caCert.Certificate.c_str())
+        .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
+        .SetEndpoint(location);
+
+    TDriverConfig insecureConnectionConfig;
+    insecureConnectionConfig.UseSecureConnection(caCert.Certificate.c_str())
+        .SetEndpoint(location);
+
+    TDriverConfig enemyConnectionConfig;
+    enemyConnectionConfig.UseSecureConnection(caCert.Certificate.c_str())
+        .UseClientCertificate(clientServerEnemyCert.Certificate.c_str(),clientServerEnemyCert.PrivateKey.c_str())
+        .SetEndpoint(location);
+
+    CheckGood(RegisterNode(secureConnectionConfig));
+    CheckGood(RegisterNode(insecureConnectionConfig)); // without token and cert // EnforceUserToken = false
+    CheckAccessDenied(RegisterNode(insecureConnectionConfig.SetAuthToken("invalid token")), "Unknown token");
+    CheckAccessDeniedRegisterNode(RegisterNode(enemyConnectionConfig), "Client certificate failed verification");
 }
 
 }

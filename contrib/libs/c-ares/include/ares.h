@@ -30,18 +30,43 @@
 
 #include "ares_version.h" /* c-ares version defines   */
 #include "ares_build.h"   /* c-ares build definitions */
-#include "ares_rules.h"   /* c-ares rules enforcement */
 
-/*
- * Define WIN32 when build target is Win32 API
- */
-
-#if (defined(_WIN32) || defined(__WIN32__)) && !defined(WIN32) && \
-  !defined(__SYMBIAN32__)
-#  define WIN32
+#if defined(_WIN32)
+#  ifndef WIN32_LEAN_AND_MEAN
+#    define WIN32_LEAN_AND_MEAN
+#  endif
 #endif
 
-#include <sys/types.h>
+#ifdef CARES_HAVE_SYS_TYPES_H
+#  include <sys/types.h>
+#endif
+
+#ifdef CARES_HAVE_SYS_SOCKET_H
+#  include <sys/socket.h>
+#endif
+
+#ifdef CARES_HAVE_SYS_SELECT_H
+#  include <sys/select.h>
+#endif
+
+#ifdef CARES_HAVE_WINSOCK2_H
+#  include <winsock2.h>
+/* To aid with linking against a static c-ares build, lets tell the microsoft
+ * compiler to pull in needed dependencies */
+#  ifdef _MSC_VER
+#    pragma comment(lib, "ws2_32")
+#    pragma comment(lib, "advapi32")
+#    pragma comment(lib, "iphlpapi")
+#  endif
+#endif
+
+#ifdef CARES_HAVE_WS2TCPIP_H
+#  include <ws2tcpip.h>
+#endif
+
+#ifdef CARES_HAVE_WINDOWS_H
+#  include <windows.h>
+#endif
 
 /* HP-UX systems version 9, 10 and 11 lack sys/select.h and so does oldish
    libc5-based Linux systems. Only include it on system that are known to
@@ -52,42 +77,25 @@
   defined(__QNXNTO__) || defined(__MVS__) || defined(__HAIKU__)
 #  include <sys/select.h>
 #endif
+
 #if (defined(NETWARE) && !defined(__NOVELL_LIBC__))
 #  include <sys/bsdskt.h>
 #endif
 
-#if defined(WATT32)
+#if !defined(_WIN32)
 #  include <netinet/in.h>
-#  include <sys/socket.h>
+#endif
+
+#ifdef WATT32
 #  include <tcp.h>
-#elif defined(_WIN32_WCE)
-#  ifndef WIN32_LEAN_AND_MEAN
-#    define WIN32_LEAN_AND_MEAN
-#  endif
-#  include <windows.h>
-#  include <winsock.h>
-#elif defined(WIN32)
-#  ifndef WIN32_LEAN_AND_MEAN
-#    define WIN32_LEAN_AND_MEAN
-#  endif
-#  include <windows.h>
-#  include <winsock2.h>
-#  include <ws2tcpip.h>
-/* To aid with linking against a static c-ares build, lets tell the microsoft
- * compiler to pull in needed dependencies */
-#  ifdef _MSC_VER
-#    pragma comment(lib, "ws2_32")
-#    pragma comment(lib, "advapi32")
-#    pragma comment(lib, "iphlpapi")
-#  endif
-#else
-#  include <sys/socket.h>
-#  include <netinet/in.h>
 #endif
 
 #if defined(ANDROID) || defined(__ANDROID__)
 #  include <jni.h>
 #endif
+
+typedef CARES_TYPEOF_ARES_SOCKLEN_T ares_socklen_t;
+typedef CARES_TYPEOF_ARES_SSIZE_T   ares_ssize_t;
 
 #ifdef __cplusplus
 extern "C" {
@@ -230,6 +238,7 @@ typedef enum {
 #define ARES_FLAG_NOCHECKRESP (1 << 7)
 #define ARES_FLAG_EDNS        (1 << 8)
 #define ARES_FLAG_NO_DFLT_SVR (1 << 9)
+#define ARES_FLAG_DNS0x20     (1 << 10)
 
 /* Option mask values */
 #define ARES_OPT_FLAGS           (1 << 0)
@@ -306,13 +315,16 @@ typedef enum {
 #define ARES_LIB_INIT_WIN32 (1 << 0)
 #define ARES_LIB_INIT_ALL   (ARES_LIB_INIT_WIN32)
 
+/* Server state callback flag values */
+#define ARES_SERV_STATE_UDP (1 << 0) /* Query used UDP */
+#define ARES_SERV_STATE_TCP (1 << 1) /* Query used TCP */
 
 /*
  * Typedef our socket type
  */
 
 #ifndef ares_socket_typedef
-#  ifdef WIN32
+#  if defined(_WIN32) && !defined(WATT32)
 typedef SOCKET ares_socket_t;
 #    define ARES_SOCKET_BAD INVALID_SOCKET
 #  else
@@ -444,6 +456,10 @@ typedef int (*ares_sock_config_callback)(ares_socket_t socket_fd, int type,
 typedef void (*ares_addrinfo_callback)(void *arg, int status, int timeouts,
                                        struct ares_addrinfo *res);
 
+typedef void (*ares_server_state_callback)(const char *server_string,
+                                           ares_bool_t success, int flags,
+                                           void *data);
+
 CARES_EXTERN int ares_library_init(int flags);
 
 CARES_EXTERN int ares_library_init_mem(int flags, void *(*amalloc)(size_t size),
@@ -466,16 +482,16 @@ CARES_EXTERN const char *ares_version(int *version);
 CARES_EXTERN             CARES_DEPRECATED_FOR(ares_init_options) int ares_init(
   ares_channel_t **channelptr);
 
-CARES_EXTERN int           ares_init_options(ares_channel_t           **channelptr,
-                                             const struct ares_options *options,
-                                             int                        optmask);
+CARES_EXTERN int  ares_init_options(ares_channel_t           **channelptr,
+                                    const struct ares_options *options,
+                                    int                        optmask);
 
-CARES_EXTERN int           ares_save_options(ares_channel_t      *channel,
-                                             struct ares_options *options, int *optmask);
+CARES_EXTERN int  ares_save_options(const ares_channel_t *channel,
+                                    struct ares_options *options, int *optmask);
 
-CARES_EXTERN void          ares_destroy_options(struct ares_options *options);
+CARES_EXTERN void ares_destroy_options(struct ares_options *options);
 
-CARES_EXTERN int           ares_dup(ares_channel_t **dest, ares_channel_t *src);
+CARES_EXTERN int  ares_dup(ares_channel_t **dest, const ares_channel_t *src);
 
 CARES_EXTERN ares_status_t ares_reinit(ares_channel_t *channel);
 
@@ -504,6 +520,11 @@ CARES_EXTERN void          ares_set_socket_callback(ares_channel_t           *ch
 
 CARES_EXTERN void          ares_set_socket_configure_callback(
            ares_channel_t *channel, ares_sock_config_callback callback, void *user_data);
+
+CARES_EXTERN void
+                  ares_set_server_state_callback(ares_channel_t            *channel,
+                                                 ares_server_state_callback callback,
+                                                 void                      *user_data);
 
 CARES_EXTERN int  ares_set_sortlist(ares_channel_t *channel,
                                     const char     *sortstr);
@@ -622,17 +643,17 @@ CARES_EXTERN void ares_getnameinfo(ares_channel_t        *channel,
 
 CARES_EXTERN      CARES_DEPRECATED_FOR(
   ARES_OPT_EVENT_THREAD or
-  ARES_OPT_SOCK_STATE_CB) int ares_fds(ares_channel_t *channel,
+  ARES_OPT_SOCK_STATE_CB) int ares_fds(const ares_channel_t *channel,
                                             fd_set *read_fds, fd_set *write_fds);
 
 CARES_EXTERN CARES_DEPRECATED_FOR(
   ARES_OPT_EVENT_THREAD or
-  ARES_OPT_SOCK_STATE_CB) int ares_getsock(ares_channel_t *channel,
+  ARES_OPT_SOCK_STATE_CB) int ares_getsock(const ares_channel_t *channel,
                                            ares_socket_t *socks, int numsocks);
 
-CARES_EXTERN struct timeval *ares_timeout(ares_channel_t *channel,
-                                          struct timeval *maxtv,
-                                          struct timeval *tv);
+CARES_EXTERN struct timeval *ares_timeout(const ares_channel_t *channel,
+                                          struct timeval       *maxtv,
+                                          struct timeval       *tv);
 
 CARES_EXTERN CARES_DEPRECATED_FOR(ares_process_fd) void ares_process(
   ares_channel_t *channel, fd_set *read_fds, fd_set *write_fds);
@@ -856,22 +877,24 @@ CARES_EXTERN CARES_DEPRECATED_FOR(ares_set_servers_csv) int ares_set_servers(
   ares_channel_t *channel, const struct ares_addr_node *servers);
 
 CARES_EXTERN
-  CARES_DEPRECATED_FOR(ares_set_servers_ports_csv) int ares_set_servers_ports(
-    ares_channel_t *channel, const struct ares_addr_port_node *servers);
+CARES_DEPRECATED_FOR(ares_set_servers_ports_csv)
+int                ares_set_servers_ports(ares_channel_t                   *channel,
+                                          const struct ares_addr_port_node *servers);
 
 /* Incoming string format: host[:port][,host[:port]]... */
 CARES_EXTERN int   ares_set_servers_csv(ares_channel_t *channel,
                                         const char     *servers);
 CARES_EXTERN int   ares_set_servers_ports_csv(ares_channel_t *channel,
                                               const char     *servers);
-CARES_EXTERN char *ares_get_servers_csv(ares_channel_t *channel);
+CARES_EXTERN char *ares_get_servers_csv(const ares_channel_t *channel);
 
 CARES_EXTERN CARES_DEPRECATED_FOR(ares_get_servers_csv) int ares_get_servers(
-  ares_channel_t *channel, struct ares_addr_node **servers);
+  const ares_channel_t *channel, struct ares_addr_node **servers);
 
 CARES_EXTERN
-  CARES_DEPRECATED_FOR(ares_get_servers_ports_csv) int ares_get_servers_ports(
-    ares_channel_t *channel, struct ares_addr_port_node **servers);
+CARES_DEPRECATED_FOR(ares_get_servers_csv)
+int                        ares_get_servers_ports(const ares_channel_t        *channel,
+                                                  struct ares_addr_port_node **servers);
 
 CARES_EXTERN const char   *ares_inet_ntop(int af, const void *src, char *dst,
                                           ares_socklen_t size);
@@ -905,7 +928,7 @@ CARES_EXTERN ares_status_t ares_queue_wait_empty(ares_channel_t *channel,
  *  \param[in] channel Initialized ares channel
  *  \return Number of active queries to servers
  */
-CARES_EXTERN size_t        ares_queue_active_queries(ares_channel_t *channel);
+CARES_EXTERN size_t ares_queue_active_queries(const ares_channel_t *channel);
 
 #ifdef __cplusplus
 }

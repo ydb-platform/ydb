@@ -87,4 +87,8 @@
 | [Flyway](https://documentation.red-gate.com/fd/) | [Инструкция](flyway.md) |
 | [Hibernate](https://hibernate.org/orm/) | [Инструкция](hibernate.md) |
 
+## Смотрите также
 
+* [{#T}](../reference/ydb-sdk/index.md)
+* [{#T}](../postgresql/intro.md)
+* [{#T}](../reference/kafka-api/index.md)

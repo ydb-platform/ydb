@@ -144,14 +144,15 @@ message TEvUpdateConfigResult {
 
 message TEvLogin {
     optional string User = 1;
-    optional string Password = 2;
+    optional string Password = 2 [(Ydb.sensitive) = true];
     optional string ExternalAuth = 3;
     optional uint64 ExpiresAfterMs = 4;
+    optional string PeerName = 5;  // IP address actually, same as TEvModifySchemeTransaction.PeerName
 }
 
 message TEvLoginResult {
     optional string Error = 1;
-    optional string Token = 2;
+    optional string Token = 2;  // signed jwt token
 }
 
 // Sending actor registers itself to be notified when tx completes

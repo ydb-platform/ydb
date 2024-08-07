@@ -1344,6 +1344,186 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx.Pos(), objectId, "RESOURCE_POOL", false, {}, context));
             break;
         }
+        case TRule_sql_stmt_core::kAltSqlStmtCore48: {
+            // create_backup_collection_stmt: CREATE BACKUP COLLECTION name WITH (k=v,...);
+            auto& node = core.GetAlt_sql_stmt_core48().GetRule_create_backup_collection_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_backup_collection2().GetRule_object_ref3().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_backup_collection2().GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1(),
+                                 false,
+                                 context.ServiceId,
+                                 context.Cluster)) {
+                    return false;
+                }
+            }
+
+            std::map<TString, TDeferredAtom> kv;
+            if (!ParseBackupCollectionSettings(kv, node.GetRule_backup_collection_settings5())) {
+                 return false;
+            }
+
+            const TString& objectId = Id(node.GetRule_backup_collection2().GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
+            constexpr const char* typeId = "BACKUP_COLLECTION";
+            AddStatementToBlocks(blocks,
+                                 BuildCreateObjectOperation(Ctx.Pos(),
+                                                            BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                                                            typeId,
+                                                            false,
+                                                            false,
+                                                            std::move(kv),
+                                                            context));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore49: {
+            // alter_backup_collection_stmt: ALTER BACKUP COLLECTION name alter_backup_collection_action (COMMA alter_backup_collection_action)*;
+            auto& node = core.GetAlt_sql_stmt_core49().GetRule_alter_backup_collection_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_backup_collection2().GetRule_object_ref3().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_backup_collection2().GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1(),
+                                 false,
+                                 context.ServiceId,
+                                 context.Cluster)) {
+                    return false;
+                }
+            }
+
+            std::map<TString, TDeferredAtom> kv;
+            std::set<TString> toReset;
+            if (!ParseBackupCollectionSettings(kv, toReset, node.GetRule_alter_backup_collection_actions3())) {
+                return false;
+            }
+
+            const TString& objectId = Id(node.GetRule_backup_collection2().GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
+            constexpr const char* typeId = "BACKUP_COLLECTION";
+            AddStatementToBlocks(blocks,
+                                 BuildAlterObjectOperation(Ctx.Pos(),
+                                                           BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                                                           typeId,
+                                                           std::move(kv),
+                                                           std::move(toReset),
+                                                           context));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore50: {
+            // drop_backup_collection_stmt: DROP BACKUP COLLECTION name;
+            auto& node = core.GetAlt_sql_stmt_core50().GetRule_drop_backup_collection_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_backup_collection2().GetRule_object_ref3().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_backup_collection2().GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1(),
+                                 false,
+                                 context.ServiceId,
+                                 context.Cluster)) {
+                    return false;
+                }
+            }
+
+            const TString& objectId = Id(node.GetRule_backup_collection2().GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
+            constexpr const char* typeId = "BACKUP_COLLECTION";
+            AddStatementToBlocks(blocks,
+                                 BuildDropObjectOperation(Ctx.Pos(),
+                                                          BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                                                          typeId,
+                                                          false,
+                                                          {},
+                                                          context));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore51: {
+            // analyze_stmt: ANALYZE table_ref
+            Ctx.BodyPart();
+            const auto& rule = core.GetAlt_sql_stmt_core51().GetRule_analyze_stmt1();
+
+            if (!rule.GetRule_analyze_table_list2().GetBlock2().empty()) {
+                Error() << "ANALYZE with multitables hasn't been implemented yet";
+                return false;
+            }
+            auto analyzeTable = rule.GetRule_analyze_table_list2().GetRule_analyze_table1();
+
+            TVector<TString> columns;
+            if (analyzeTable.HasBlock2()) {
+                auto columnsNode = 
+                    analyzeTable.GetBlock2().GetRule_column_list2();
+
+                if (columnsNode.HasRule_column_name1()) {
+                    columns.push_back(Id(columnsNode.GetRule_column_name1().GetRule_an_id2(), *this));
+                    for (const auto& columnNode: columnsNode.GetBlock2()) {
+                        columns.push_back(Id(columnNode.GetRule_column_name2().GetRule_an_id2(), *this));
+                    }
+                }
+            }
+
+            TTableRef tr;
+            if (!SimpleTableRefImpl(rule.GetRule_analyze_table_list2().GetRule_analyze_table1().GetRule_simple_table_ref1(), tr)) {
+                return false;
+            }
+
+            auto params = TAnalyzeParams{.Table = std::make_shared<TTableRef>(tr), .Columns = std::move(columns)};
+            AddStatementToBlocks(blocks, BuildAnalyze(Ctx.Pos(), tr.Service, tr.Cluster, params, Ctx.Scoped));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore52: {
+            // create_resource_pool_classifier_stmt: CREATE RESOURCE POOL CLASSIFIER name WITH (k=v,...);
+            auto& node = core.GetAlt_sql_stmt_core52().GetRule_create_resource_pool_classifier_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_object_ref5().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_object_ref5().GetBlock1().GetRule_cluster_expr1(),
+                    false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            const TString& objectId = Id(node.GetRule_object_ref5().GetRule_id_or_at2(), *this).second;
+            std::map<TString, TDeferredAtom> kv;
+            if (!ParseResourcePoolClassifierSettings(kv, node.GetRule_with_table_settings6())) {
+                return false;
+            }
+
+            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx.Pos(), objectId, "RESOURCE_POOL_CLASSIFIER", false, false, std::move(kv), context));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore53: {
+            // alter_resource_pool_classifier_stmt: ALTER RESOURCE POOL CLASSIFIER object_ref alter_resource_pool_classifier_action (COMMA alter_resource_pool_classifier_action)*
+            Ctx.BodyPart();
+            const auto& node = core.GetAlt_sql_stmt_core53().GetRule_alter_resource_pool_classifier_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_object_ref5().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_object_ref5().GetBlock1().GetRule_cluster_expr1(),
+                    false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            const TString& objectId = Id(node.GetRule_object_ref5().GetRule_id_or_at2(), *this).second;
+            std::map<TString, TDeferredAtom> kv;
+            std::set<TString> toReset;
+            if (!ParseResourcePoolClassifierSettings(kv, toReset, node.GetRule_alter_resource_pool_classifier_action6())) {
+                return false;
+            }
+
+            for (const auto& action : node.GetBlock7()) {
+                if (!ParseResourcePoolClassifierSettings(kv, toReset, action.GetRule_alter_resource_pool_classifier_action2())) {
+                    return false;
+                }
+            }
+
+            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx.Pos(), objectId, "RESOURCE_POOL_CLASSIFIER", std::move(kv), std::move(toReset), context));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore54: {
+            // drop_resource_pool_classifier_stmt: DROP RESOURCE POOL CLASSIFIER name;
+            auto& node = core.GetAlt_sql_stmt_core54().GetRule_drop_resource_pool_classifier_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_object_ref5().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_object_ref5().GetBlock1().GetRule_cluster_expr1(),
+                    false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            const TString& objectId = Id(node.GetRule_object_ref5().GetRule_id_or_at2(), *this).second;
+            AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx.Pos(), objectId, "RESOURCE_POOL_CLASSIFIER", false, {}, context));
+            break;
+        }
         case TRule_sql_stmt_core::ALT_NOT_SET:
             Ctx.IncrementMonCounter("sql_errors", "UnknownStatement" + internalStatementName);
             AltNotImplemented("sql_stmt_core", core);

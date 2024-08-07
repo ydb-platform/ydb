@@ -20,6 +20,9 @@ namespace NKikimr::NColumnShard {
         }
         virtual void DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
         }
+        virtual TString DoGetOpType() const override {
+            return "EvWrite";
+        }
         virtual bool DoIsAsync() const override {
             return false;
         }

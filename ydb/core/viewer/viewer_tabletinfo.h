@@ -84,6 +84,19 @@ public:
     void Bootstrap() override {
         BLOG_TRACE("Bootstrap()");
         const auto& params(Event->Get()->Request.GetParams());
+        TBase::RequestSettings.Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
+        TString database = params.Get("database");
+        if (database) {
+            RegisterWithSameMailbox(CreateBoardLookupActor(MakeEndpointsBoardPath(database), TBase::SelfId(), EBoardLookupMode::Second));
+            Become(&TThis::StateRequestedLookup, TDuration::MilliSeconds(TBase::RequestSettings.Timeout), new TEvents::TEvWakeup());
+            return;
+        }
+        CheckPath();
+    }
+
+    void CheckPath() {
+        BLOG_TRACE("CheckPath()");
+        const auto& params(Event->Get()->Request.GetParams());
         ReplyWithDeadTabletsInfo = params.Has("path");
         if (params.Has("path")) {
             TBase::RequestSettings.Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
@@ -94,23 +107,31 @@ public:
             }
             NKikimrSchemeOp::TDescribePath* record = request->Record.MutableDescribePath();
             record->SetPath(params.Get("path"));
-
-            TActorId txproxy = MakeTxProxyID();
-            TBase::Send(txproxy, request.Release());
-            UnsafeBecome(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(TBase::RequestSettings.Timeout), new TEvents::TEvWakeup());
+            TBase::Send(MakeTxProxyID(), request.Release());
+            Become(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(TBase::RequestSettings.Timeout), new TEvents::TEvWakeup());
         } else {
             TBase::Bootstrap();
-            if (!TBase::RequestSettings.FilterFields.empty()) {
-                if (IsMatchesWildcard(TBase::RequestSettings.FilterFields, "(TabletId=*)")) {
-                    TString strTabletId(TBase::RequestSettings.FilterFields.substr(10, TBase::RequestSettings.FilterFields.size() - 11));
-                    TTabletId uiTabletId(FromStringWithDefault<TTabletId>(strTabletId, {}));
-                    if (uiTabletId) {
-                        Tablets[uiTabletId] = NKikimrTabletBase::TTabletTypes::Unknown;
-                        Request->Record.AddFilterTabletId(uiTabletId);
-                    }
+        }
+    }
+
+    THolder<TEvWhiteboard::TEvTabletStateRequest> BuildRequest() override {
+        THolder<TEvWhiteboard::TEvTabletStateRequest> request = TBase::BuildRequest();
+        if (!TBase::RequestSettings.FilterFields.empty()) {
+            if (IsMatchesWildcard(TBase::RequestSettings.FilterFields, "(TabletId=*)")) {
+                TString strTabletId(TBase::RequestSettings.FilterFields.substr(10, TBase::RequestSettings.FilterFields.size() - 11));
+                TTabletId uiTabletId(FromStringWithDefault<TTabletId>(strTabletId, {}));
+                if (uiTabletId) {
+                    Tablets[uiTabletId] = NKikimrTabletBase::TTabletTypes::Unknown;
+                    Request->Record.AddFilterTabletId(uiTabletId);
                 }
             }
         }
+        return request;
+    }
+
+    void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
+        TBase::RequestSettings.FilterNodeIds = TBase::GetNodesFromBoardReply(ev);
+        CheckPath();
     }
 
     TString GetColumnValue(const TCell& cell, const NKikimrSchemeOp::TColumnDescription& type) {
@@ -341,6 +362,13 @@ public:
             info.SetOverall(GetWhiteboardFlag(GetFlagFromTabletState(info.GetState())));
         }
         TBase::FilterResponse(response);
+    }
+
+    STATEFN(StateRequestedLookup) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvStateStorage::TEvBoardInfo, Handle);
+            cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+        }
     }
 
     STATEFN(StateRequestedDescribe) {

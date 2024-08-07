@@ -2,8 +2,9 @@
 import argparse
 import json
 import os
-import shutil
 import sys
+
+from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 THRESHHOLD_TO_SHOW_ON_TREE_VIEW = 1024*10 
 
@@ -210,16 +211,27 @@ def main():
         with open(output_prefix + ".by_count.txt","w") as f:
             for p in sorted(items, key=lambda p: p[1][1], reverse=True):
                 print_stat(f, p)
-    
+
     if options.html_template_bloat:
         output_dir = options.html_template_bloat
         current_script_dir = os.path.dirname(os.path.realpath(__file__))
-        html_dir = os.path.join(current_script_dir, "html_template_bloat")
+        html_dir = os.path.join(current_script_dir, "html")
 
         tree = build_tree(items)
 
-        shutil.copytree(html_dir, output_dir, dirs_exist_ok=True)
+        env = Environment(loader=FileSystemLoader(html_dir), undefined=StrictUndefined)
+        types = [
+            ("namespace", "Namespace", "#66C2A5"),
+            ("function", "Function", "#FC8D62"),
+        ]
+        file_names = os.listdir(html_dir)
+        os.makedirs(output_dir, exist_ok=True)
+        for file_name in file_names:
+            data = env.get_template(file_name).render(types=types)
 
+            dst_path = os.path.join(output_dir, file_name)
+            with open(dst_path, "w") as f:
+                f.write(data)
 
         with open(os.path.join(output_dir, "bloat.json"), "w") as f:
             f.write("kTree = ")

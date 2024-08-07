@@ -14,8 +14,21 @@ namespace NKikimr::NExternalSource::NObjectStorage::NInference {
 
 namespace {
 
-bool ArrowToYdbType(Ydb::Type& optionalType, const arrow::DataType& type) {
-    auto& resType = *optionalType.mutable_optional_type()->mutable_item();
+bool ShouldBeOptional(const arrow::DataType& type) {
+    switch (type.id()) {
+    case arrow::Type::NA:
+    case arrow::Type::STRING:
+    case arrow::Type::BINARY:
+    case arrow::Type::LARGE_BINARY:
+    case arrow::Type::FIXED_SIZE_BINARY:
+        return false;
+    default:
+        return true;
+    }
+}
+
+bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type) {
+    auto& resType = ShouldBeOptional(type) ? *maybeOptionalType.mutable_optional_type()->mutable_item() : maybeOptionalType;
     switch (type.id()) {
     case arrow::Type::NA:
         resType.set_type_id(Ydb::Type::UTF8);

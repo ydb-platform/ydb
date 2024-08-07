@@ -41,7 +41,7 @@ NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSettings(const TString 
     return subdomain;
 }
 
-TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools) {
+TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools, bool useRealThreads) {
     auto mbusPort = PortManager.GetPort();
     auto grpcPort = PortManager.GetPort();
 
@@ -49,7 +49,7 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools) {
     Settings->SetDomainName("Root");
     Settings->SetNodeCount(staticNodes);
     Settings->SetDynamicNodeCount(dynamicNodes);
-    Settings->SetUseRealThreads(false);
+    Settings->SetUseRealThreads(useRealThreads);
 
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableStatistics(true);
@@ -76,6 +76,9 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools) {
     Driver = MakeHolder<NYdb::TDriver>(DriverConfig);
 
     Server->GetRuntime()->SetLogPriority(NKikimrServices::STATISTICS, NActors::NLog::PRI_DEBUG);
+        Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_DEBUG);
+        // Server->GetRuntime()->SetLogPriority(NKikimrServices::K, NActors::NLog::PRI_DEBUG);
+
 }
 
 TTestEnv::~TTestEnv() {
@@ -263,12 +266,12 @@ void DropTable(TTestEnv& env, const TString& databaseName, const TString& tableN
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, TPathId pathId) {
+std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, TPathId pathId, ui64 columnTag) {
     auto statServiceId = NStat::MakeStatServiceID(runtime.GetNodeId(1));
 
     NStat::TRequest req;
     req.PathId = pathId;
-    req.ColumnTag = 1;
+    req.ColumnTag = columnTag;
 
     auto evGet = std::make_unique<TEvStatistics::TEvGetStatistics>();
     evGet->StatType = NStat::EStatType::COUNT_MIN_SKETCH;

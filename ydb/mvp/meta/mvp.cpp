@@ -185,8 +185,7 @@ void TMVP::TryGetGenericOptionsFromConfig(
     TString& caCertificateFile,
     TString& sslCertificateFile,
     bool& useStderr,
-    bool& mlock,
-    NMvp::EAccessServiceType& /*accessServiceType*/
+    bool& mlock
 ) {
     if (!config["generic"]) {
         return;
@@ -238,8 +237,6 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
     TString defaultMetaDatabase = "/Root";
     TString defaultMetaApiEndpoint = "grpc://meta.ydb.yandex.net:2135";
 
-    NMvp::EAccessServiceType accessServiceType = NMvp::EAccessServiceType::yandex_v2;
-
     opts.AddLongOption("stderr", "Redirect log to stderr").NoArgument().SetFlag(&useStderr);
     opts.AddLongOption("mlock", "Lock resident memory").NoArgument().SetFlag(&mlock);
 
@@ -262,8 +259,7 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
                 caCertificateFile,
                 sslCertificateFile,
                 useStderr,
-                mlock,
-                accessServiceType
+                mlock
             );
         } catch (const YAML::Exception& e) {
             std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;

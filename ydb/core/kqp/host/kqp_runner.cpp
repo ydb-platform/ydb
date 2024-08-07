@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/opt/logical/kqp_opt_log.h>
 #include <ydb/core/kqp/opt/kqp_statistics_transformer.h>
+#include <ydb/core/kqp/opt/kqp_columns_getter_transformer.h>
 #include <ydb/core/kqp/opt/kqp_constant_folding_transformer.h>
 #include <ydb/core/kqp/opt/logical/kqp_opt_cbo.h>
 
@@ -297,6 +298,7 @@ private:
             .AddPostTypeAnnotation(/* forSubgraph */ true)
             .AddCommonOptimization()
             .Add(CreateKqpConstantFoldingTransformer(OptimizeCtx, *typesCtx, Config), "ConstantFolding")
+            .Add(CreateKqpColumnsGetterTransformer(Config), "ColumnGetter")
             .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
             .Add(CreateKqpLogOptTransformer(OptimizeCtx, *typesCtx, Config), "LogicalOptimize")
             .Add(CreateLogicalDataProposalsInspector(*typesCtx), "ProvidersLogicalOptimize")
@@ -331,6 +333,7 @@ private:
             .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
             .AddPostTypeAnnotation()
             .Add(CreateKqpBuildPhysicalQueryTransformer(OptimizeCtx, BuildQueryCtx), "BuildPhysicalQuery")
+            .Add(CreateKqpColumnsGetterTransformer(Config), "ColumnGetter")
             .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
             .Build(false);
 

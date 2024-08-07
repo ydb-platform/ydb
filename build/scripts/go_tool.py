@@ -497,9 +497,14 @@ def do_link_exe(args):
     if args.buildmode:
         cmd.append('-buildmode={}'.format(args.buildmode))
     elif args.mode in ('exe', 'test'):
-        cmd.append('-buildmode=exe')
+        mode = '-buildmode=exe'
         if 'ld.lld' in str(args):
-            extldflags.append('-Wl,-no-pie')
+            if '-fPIE' in str(args) or '-fPIC' in str(args):
+                # support explicit PIE
+                mode = '-buildmode=pie'
+            else:
+                extldflags.append('-Wl,-no-pie')
+        cmd.append(mode)
     elif args.mode == 'dll':
         cmd.append('-buildmode=c-shared')
     else:

@@ -666,12 +666,12 @@ private:
         TDiscoverySessionPtr session;
         {
             auto guard = ReaderGuard(SpinLock_);
-
-            YT_VERIFY(CurrentDiscoverySession_);
             session = CurrentDiscoverySession_;
         }
 
-        session->Run();
+        if (session) {
+            session->Run();
+        }
     }
 
     void OnDiscoverySessionFinished(const TError& globalDiscoveryError)
@@ -680,8 +680,6 @@ private:
         auto guard = WriterGuard(SpinLock_);
 
         LastGlobalDiscoveryError_ = globalDiscoveryError;
-
-        YT_VERIFY(CurrentDiscoverySession_);
         CurrentDiscoverySession_.Reset();
 
         TDelayedExecutor::CancelAndClear(RediscoveryCookie_);

@@ -920,6 +920,7 @@ TKeyRef ToKeyRef(TUnversionedRow row, int prefixLength);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void FormatValue(TStringBuilderBase* builder, TUnversionedValueRange values, TStringBuf format);
 void FormatValue(TStringBuilderBase* builder, TUnversionedRow row, TStringBuf format);
 void FormatValue(TStringBuilderBase* builder, TMutableUnversionedRow row, TStringBuf format);
 void FormatValue(TStringBuilderBase* builder, const TUnversionedOwningRow& row, TStringBuf format);
@@ -994,6 +995,15 @@ struct THash<NYT::NTableClient::TUnversionedRow>
 
 template <class T>
     requires std::derived_from<std::remove_cvref_t<T>, NYT::NTableClient::TUnversionedRow>
+struct NYT::TFormatArg<T>
+    : public NYT::TFormatArgBase
+{
+    static constexpr auto FlagSpecifiers
+        = TFormatArgBase::ExtendFlags</*Hot*/ true, 1, std::array{'k'}>();
+};
+
+template <class T>
+    requires std::derived_from<std::remove_cvref_t<T>, NYT::NTableClient::TUnversionedValueRange>
 struct NYT::TFormatArg<T>
     : public NYT::TFormatArgBase
 {

@@ -42,6 +42,52 @@ public:
         , ColumnTablesCounters(std::make_shared<TColumnTablesCounters>())
         , SubscribeCounters(std::make_shared<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>()) {
     }
+
+    void OnWriteOverloadDisk() const {
+        TabletCounters->IncCounter(COUNTER_OUT_OF_SPACE);
+    }
+
+    void OnWriteOverloadInsertTable(const ui64 size) const {
+        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
+        CSCounters.OnWriteOverloadInsertTable(size);
+    }
+
+    void OnWriteOverloadMetadata(const ui64 size) const {
+        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
+        CSCounters.OnWriteOverloadMetadata(size);
+    }
+
+    void OnWriteOverloadShardTx(const ui64 size) const {
+        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
+        CSCounters.OnWriteOverloadShardTx(size);
+    }
+
+    void OnWriteOverloadShardWrites(const ui64 size) const {
+        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
+        CSCounters.OnWriteOverloadShardWrites(size);
+    }
+
+    void OnWriteOverloadShardWritesSize(const ui64 size) const {
+        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
+        CSCounters.OnWriteOverloadShardWritesSize(size);
+    }
+
+    void FillTableStats(ui64 pathId, ::NKikimrTableStats::TTableStats& tableStats) {
+        ColumnTablesCounters->GetPathIdCounter(pathId)->FillStats(tableStats);
+        BackgroundControllerCounters->FillStats(pathId, tableStats);
+    }
+
+    void FillTotalTableStats(::NKikimrTableStats::TTableStats& tableStats) {
+        ColumnTablesCounters->FillStats(tableStats);
+        TabletCounters->FillStats(tableStats);
+        BackgroundControllerCounters->FillTotalStats(tableStats);
+        ScanCounters.FillStats(tableStats);
+    }
+
+    void OnWritePutBlobsSuccess(const TDuration d, const ui64 rowsWritten) const {
+        TabletCounters->OnWritePutBlobsSuccess(rowsWritten);
+        CSCounters.OnWritePutBlobsSuccess(d);
+    }
 };
 
 } // namespace NKikimr::NColumnShard

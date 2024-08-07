@@ -462,10 +462,10 @@ There are many components inside {{ ydb-short-name }} [database nodes](../../con
 
 Examples of components managed by the memory controller:
 
-- [Shared cache](../../concepts/glossary.md#shared-cache): stores recently accessed data pages read from Blob Storage to reduce disk I/O and accelerate data retrieval.
-- [MemTable](../../concepts/glossary.md#memtable): holds data that has not yet been flushed to SST.
+- [Shared cache](../../concepts/glossary.md#shared-cache): stores recently accessed data pages read from [distributed storage](../../concepts/glossary.md#distributed-storage) to reduce disk I/O and accelerate data retrieval.
+- [MemTable](../../concepts/glossary.md#memtable): holds data that has not yet been flushed to [SST](../../concepts/glossary.md#sst).
 - [KQP](../../concepts/glossary.md#kqp): stores intermediate query results.
-- Allocator Caches: keeps memory blocks which have been released but not yet returned to the operating system.
+- Allocator caches: keep memory blocks that have been released but not yet returned to the operating system.
 
 Memory limits can be configured to control overall memory usage, ensuring the database operates efficiently within the available resources.
 
@@ -488,9 +488,9 @@ memory_controller_config:
 
 ### Soft memory limit {#soft-memory-limit}
 
-The soft memory limit specifies a dangerous threshold that should not be exceeded under normal conditions.
+The soft memory limit specifies a dangerous threshold that should not be exceeded under normal circumstances.
 
-If the soft limit is exceeded, {{ ydb-short-name }} starts to reduce the shared cache size to zero. Therefore, more database nodes should be added to the cluster as soon as possible or per-component memory limits should be reduced.
+If the soft limit is exceeded, {{ ydb-short-name }} starts to reduce the shared cache size to zero. Therefore, more database nodes should be added to the cluster as soon as possible, or per-component memory limits should be reduced.
 
 ### Target memory utilization {#target-memory-utilization}
 
@@ -498,7 +498,7 @@ The target memory utilization specifies a threshold for memory usage that is con
 
 Flexible cache sizes are calculated according to their limit thresholds to keep process consumption around this value.
 
-For example, in a database that consumes a little memory on query execution, caches consume memory around this threshold and other memory stays free. And if query execution consumes more memory, caches start to reduce their limits to their minimum threshold.
+For example, in a database that consumes a little memory on query execution, caches consume memory around this threshold, and other memory stays free. If query execution consumes more memory, caches start to reduce their limits to their minimum threshold.
 
 ### Per-component memory limits
 
@@ -511,13 +511,13 @@ These components are:
 - Shared cache
 - MemTable
 
-Each of these components' limits is dynamically recalculated every second so that each component consumes memory proportionally to its limit threshold and the total consumed memory stays around the target memory utilization.
+Each of these components' limits is dynamically recalculated every second so that each component consumes memory proportionally to its limit threshold, and the total consumed memory stays around the target memory utilization.
 
-The minimum memory limit threshold for these components isn't reserved and remains free until consumed.
+These components' minimum memory limit threshold isn't reserved and remains free until consumed.
 
 Memory limits can be configured either in absolute bytes or as a percentage relative to the [hard memory limit](#hard-memory-limit). Using percentages is advantageous for managing clusters with nodes of varying capacities. If both absolute byte and percentage limits are specified, the memory controller uses a combination of both (maximum for lower limits and minimum for upper limits).
 
-Both the minimum and maximum thresholds should be overridden if needed; otherwise, a missing threshold will have a default value.
+If needed, both the minimum and maximum thresholds should be overridden; otherwise, a missing threshold will have a default value.
 
 Example of the `memory_controller_config` section with specified shared cache limits:
 
@@ -529,13 +529,13 @@ memory_controller_config:
 
 #### Non-flexible memory limits
 
-Other {{ ydb-short-name }} components have only one memory limit for their consumption.
+Other {{ ydb-short-name }} components have only fixed memory limit without minimum and maximum thresholds for their memory consumption.
 
 These components are:
 
 - KQP
 
-The memory limit for these components indicates the amount of memory a component may try to consume, but consumption can be rejected if a database node exceeds the soft memory limit. Therefore, the sum of these limits may exceed the soft memory limit, but each individual limit is expected to be less than the soft memory limit.
+The memory limit for these components indicates the amount of memory a component may try to consume. Still, consumption can be rejected if a database node exceeds the soft memory limit. Therefore, the sum of these limits may exceed the soft memory limit, but each individual limit is expected to be less than the soft memory limit.
 
 Example of the `memory_controller_config` section with a specified KQP limit:
 

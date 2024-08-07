@@ -7,7 +7,6 @@ class TSerializedChunkAccessor {
 private:
     const std::vector<TDeserializeChunkedArray::TChunk>& Chunks;
     const std::shared_ptr<TColumnLoader>& Loader;
-    TDeserializeChunkedArray::TChunkCacheInfo* CachedDataOwner;
     std::optional<IChunkedArray::TLocalChunkedArrayAddress>& Result;
 
 public:

@@ -54,7 +54,8 @@ inline NYql::TAstParseResult SqlToYql(const TString& query, size_t maxErrors = 1
     return SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, maxErrors, provider, debug);
 }
 
-inline NYql::TAstParseResult SqlToYqlWithSettings(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
+inline NYql::TAstParseResult 
+SqlToYqlWithSettings(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
     return SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
 }
 

@@ -104,7 +104,7 @@ ParserFile(file, parser, namedActions, contextSuperClass) ::= <<
 
 #include "<file.parser.name>.h"
 #include \<ydb/library/yql/parser/proto_ast/proto_ast.h>
-#include \<@PROTOBUF_HEADER_PATH@/<file.parser.name>@PROTOBUF_SUFFIX_PATH@>
+#include \<@PROTOBUF_HEADER_PATH@/SQLv1Parser@PROTOBUF_SUFFIX_PATH@>
 
 <namedActions.postinclude>
 

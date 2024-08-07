@@ -42,10 +42,10 @@ google::protobuf::Message* SqlAST(const TString& query, const TString& queryName
         NProtoAST::TProtoASTBuilder<NALPDefault::SQLv1Parser, NALPDefault::SQLv1Lexer> builder(query, queryName, arena);
         return builder.BuildAST(collector);
     } else if (ansiLexer && anlr4Parser) {
-        NProtoAST::TProtoASTBuilder<NALPAnsi::SQLv1Antlr4Parser, NALPAnsi::SQLv1Antlr4Lexer> builder(query, queryName, arena);
+        NProtoAST::TProtoASTBuilder<NALPAnsiAntlr4::SQLv1Antlr4Parser, NALPAnsiAntlr4::SQLv1Antlr4Lexer> builder(query, queryName, arena);
         return builder.BuildAST(collector);
     } else {
-        NProtoAST::TProtoASTBuilder<NALPDefault::SQLv1Antlr4Parser, NALPDefault::SQLv1Antlr4Lexer> builder(query, queryName, arena);
+        NProtoAST::TProtoASTBuilder<NALPDefaultAntlr4::SQLv1Antlr4Parser, NALPDefaultAntlr4::SQLv1Antlr4Lexer> builder(query, queryName, arena);
         return builder.BuildAST(collector);
     }
 }
@@ -62,10 +62,10 @@ google::protobuf::Message* SqlAST(const TString& query, const TString& queryName
         NProtoAST::TProtoASTBuilder<NALPDefault::SQLv1Parser, NALPDefault::SQLv1Lexer> builder(query, queryName, arena);
         return builder.BuildAST(err);
     } else if (ansiLexer && anlr4Parser) {
-        NProtoAST::TProtoASTBuilder<NALPAnsi::SQLv1Antlr4Parser, NALPAnsi::SQLv1Antlr4Lexer> builder(query, queryName, arena);
+        NProtoAST::TProtoASTBuilder<NALPAnsiAntlr4::SQLv1Antlr4Parser, NALPAnsiAntlr4::SQLv1Antlr4Lexer> builder(query, queryName, arena);
         return builder.BuildAST(err);
     } else {
-        NProtoAST::TProtoASTBuilder<NALPDefault::SQLv1Antlr4Parser, NALPDefault::SQLv1Antlr4Lexer> builder(query, queryName, arena);
+        NProtoAST::TProtoASTBuilder<NALPDefaultAntlr4::SQLv1Antlr4Parser, NALPDefaultAntlr4::SQLv1Antlr4Lexer> builder(query, queryName, arena);
         return builder.BuildAST(err);
     }
 }

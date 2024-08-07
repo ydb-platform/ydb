@@ -27,7 +27,7 @@
 
     ![](./_assets/dbeaver-driver-create-new-driver-set-name_ru.png)
 
-1. Перейдите в раздел **Библиотеки**, нажмите кнопку **Добавить файл**, укажите путь к скачанному ранее JDBC-драйверу {{ ydb-short-name }} и нажмите кнопку **OK**:
+1. Перейдите в раздел **Библиотеки**, нажмите кнопку **Добавить файл**, укажите путь к скачанному ранее JDBC-драйверу {{ ydb-short-name }} (файлу `ydb-jdbc-driver-shaded-<driver-version>.jar`) и нажмите кнопку **OK**:
 
     ![](./_assets/dbeaver-driver-management-driver_ru.png)
 

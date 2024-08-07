@@ -379,7 +379,7 @@ the command line help.
 
 You may directly download automatically generated single-header files:
 
-https://github.com/fastfloat/fast_float/releases/download/v6.1.2/fast_float.h
+https://github.com/fastfloat/fast_float/releases/download/v6.1.3/fast_float.h
 
 ## RFC 7159
 

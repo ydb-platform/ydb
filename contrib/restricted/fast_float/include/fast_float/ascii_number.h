@@ -349,7 +349,7 @@ parsed_number_string_t<UC> parse_number_string(UC const *p, UC const * pend, par
       ++p;
     }
     if ((p == pend) || !is_integer(*p)) {
-      if(!(fmt & chars_format::fixed) || (fmt & FASTFLOAT_JSONFMT)) {
+      if(!(fmt & chars_format::fixed)) {
         // We are in error.
         return answer;
       }

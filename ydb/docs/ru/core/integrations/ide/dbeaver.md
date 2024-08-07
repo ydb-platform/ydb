@@ -8,7 +8,7 @@
 
 [DBeaver](https://dbeaver.com) — бесплатный кроссплатформенный инструмент управления базами данных с открытым исходным кодом, обеспечивающий удобный интерфейс для подключения к различным базам данных и выполнения SQL-запросов. Он поддерживает множество баз данных, включая MySQL, PostgreSQL, Oracle, SQLite и другие.
 
-### Подключение JDBC-драйвера {{ydb-name}} к DBeaver {#dbeaver_ydb}
+### Подключение JDBC-драйвера {{ ydb-name }} к DBeaver {#dbeaver_ydb}
 
 Для подключения к {{ ydb-name }} из DBeaver понадобится JDBC-драйвер. Для загрузки JDBC-драйвера выполните следующие шаги:
 1. Перейдите в [репозиторий ydb-jdbc-driver](https://github.com/ydb-platform/ydb-jdbc-driver/releases).

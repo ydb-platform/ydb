@@ -60,6 +60,11 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
     }
 }
 
+TString TDistributedTransaction::LogPrefix() const
+{
+    return TStringBuilder() << "[TxId: " << TxId << "] ";
+}
+
 void TDistributedTransaction::InitDataTransaction(const NKikimrPQ::TTransaction& tx)
 {
     InitPartitions(tx.GetOperations());
@@ -208,12 +213,16 @@ void TDistributedTransaction::OnPlanStep(ui64 step)
 
 void TDistributedTransaction::OnTxCalcPredicateResult(const TEvPQ::TEvTxCalcPredicateResult& event)
 {
+    PQ_LOG_D("Handle TEvTxCalcPredicateResult");
+
     OnPartitionResult(event,
                       event.Predicate ? NKikimrTx::TReadSetData::DECISION_COMMIT : NKikimrTx::TReadSetData::DECISION_ABORT);
 }
 
 void TDistributedTransaction::OnProposePartitionConfigResult(const TEvPQ::TEvProposePartitionConfigResult& event)
 {
+    PQ_LOG_D("Handle TEvProposePartitionConfigResult");
+
     OnPartitionResult(event,
                       NKikimrTx::TReadSetData::DECISION_COMMIT);
 }
@@ -229,12 +238,16 @@ void TDistributedTransaction::OnPartitionResult(const E& event, EDecision decisi
     SetDecision(SelfDecision, decision);
 
     ++PartitionRepliesCount;
+
+    PQ_LOG_D("Partition responses " << PartitionRepliesCount << "/" << PartitionRepliesExpected);
 }
 
 void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
                                         const TActorId& sender,
                                         std::unique_ptr<TEvTxProcessing::TEvReadSetAck> ack)
 {
+    PQ_LOG_D("Handle TEvReadSet");
+
     Y_ABORT_UNLESS((Step == Max<ui64>()) || (event.HasStep() && (Step == event.GetStep())));
     Y_ABORT_UNLESS(event.HasTxId() && (TxId == event.GetTxId()));
 
@@ -249,6 +262,8 @@ void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
         if (!p.HasPredicate()) {
             p.SetPredicate(data.GetDecision() == NKikimrTx::TReadSetData::DECISION_COMMIT);
             ++ReadSetCount;
+
+            PQ_LOG_D("Predicates " << ReadSetCount << "/" << PredicatesReceived.size());
         }
     } else {
         Y_DEBUG_ABORT("unknown sender tablet %" PRIu64, event.GetTabletProducer());
@@ -257,12 +272,16 @@ void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
 
 void TDistributedTransaction::OnReadSetAck(const NKikimrTx::TEvReadSetAck& event)
 {
+    PQ_LOG_D("Handle TEvReadSetAck");
+
     Y_ABORT_UNLESS(event.HasStep() && (Step == event.GetStep()));
     Y_ABORT_UNLESS(event.HasTxId() && (TxId == event.GetTxId()));
 
     if (PredicateRecipients.contains(event.GetTabletConsumer())) {
         PredicateRecipients[event.GetTabletConsumer()] = true;
         ++PredicateAcksCount;
+
+        PQ_LOG_D("Predicate acks " << PredicateAcksCount << "/" << PredicateRecipients.size());
     }
 }
 

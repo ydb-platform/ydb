@@ -2,7 +2,7 @@
 
 {% include [./_includes/alert.md](./_includes/alert_preview.md) %}
 
-Поддержка исполнения запросов в {{ydb-name}} на синтаксисе PostgreSQL реализована с помощью слоя совместимости:
+Поддержка исполнения запросов в {{ydb-name}} в синтаксисе PostgreSQL реализована с помощью слоя совместимости:
 1. Программа отправляет запросы в {{ ydb-short-name }}, где их обрабатывает компонент под названием `pgwire`. Pgwire реализует [сетевой протокол](https://www.postgresql.org/docs/16/protocol.html) PostgreSQL и передает команды в query processor.
 2. Query processor транслирует PostgreSQL запросы в YQL AST.
 3. После обработки запросов результаты собираются и отправляются обратно в программу, отправившую запрос, по сетевому протоколу PostgreSQL. При обработке запроса он может распараллеливаться и исполняться на произвольном количестве узлов {{ydb-name}}.
@@ -52,7 +52,7 @@
     ```sql
     INSERT INTO test_table(col) VALUES(1)
     ```
-1. Прочитаем эти данные с помощью PostgreSQL-синтаксиса. YQL-тип данных `INT` был автоматически переведен в тип `pgint4`, над которым была выполнена операция инкремента.
+1. Прочитаем эти данные с помощью PostgreSQL-синтаксиса. YQL-тип данных `INT` был автоматически переведен в PostgreSQL-тип `int4`, над которым была выполнена операция инкремента.
     ```
     psql -c "SELECT col+1 AS col FROM test_table"
     col
@@ -61,42 +61,90 @@
     (1 row)
     ```
 
- Таблица соответствия типов данных YQL, при их использовании в PostgreSQL запросах:
+Так как все вычисления выполняются внутри YDB, то для для каждого PostgreSQL типа создан "зеркальный тип" в YDB. Например, тип `text` из PostgreSQL при обработке внутри YDB будет иметь тип `pgtext`. Это сделано, чтобы обеспечить точную семантику работы типов PostgreSQL внутри YDB. При преобразовании типа из PostgreSQL в YDB применяется правило, что для каждого такого типа добавляется префикс `pg`, после чего используется оригинальное имя типа из PostgreSQL.
+
+Таблица соответствия типов данных YQL, при их использовании в PostgreSQL запросах:
 
 {% include [topg](../yql/reference/udf/list/_includes/topg.md) %}
 
 
 ### Использование данных таблиц, созданных в PostgreSQL синтаксисе, в синтаксисе YQL {#frompg}
 
-Для использования данных таблиц, созданных в PostgreSQL синтаксисе, необходимо явное преобразование типов с помощью функции [`FromPg`](../yql/reference/udf/list/postgres.md#frompg).
+При использовании данных из таблиц, созданных в PostgreSQL синтаксисе, YQL интерпретирует данные в этих колонках, как специальные типы из семейства `pg*`.
 
 Пример:
 1. Создадим таблицу {{ydb-name}} с помощью PostgreSQL-синтаксиса
     ```sql
-    CREATE TABLE test_table_pg(col INT, PRIMARY KEY(col));
+    CREATE TABLE test_table_pg(numeric INT, PRIMARY KEY(col));
     ```
 1. Добавим туда тестовые данные
     ```sql
     INSERT INTO test_table_pg(col) VALUES(10)
     ```
-1. Прочитаем эти данные с помощью YQL-синтаксиса. Для чтения данных, созданных с помощью PostgreSQL синтаксиса, необходимо явное преобразование c помощью функции [`FromPg`](../yql/reference/udf/list/postgres.md#frompg).
+1. Прочитаем эти данные с помощью YQL-синтаксиса
     ```
-    ydb sql -s "SELECT FromPg(col)+1 AS col FROM test_table_pg"
+    ydb sql -s "SELECT col+1 AS col FROM test_table_pg"
     col
     ---
-    11
+    "11" -- pgnumeric
     (1 row)
     ```
 
-Таблица соответствия типов данных PostgreSQL, при их использовании в запросах на YQL-синтаксисе:
+Правила преобразования типов PostgreSQL в типы YQL приведены в таблице:
 
-{% include [frompg](../yql/reference/udf/list/_includes/frompg.md) %}
+|PostgreSQL | YQL|
+|---|---|
+| `bool` |`pgbool` |
+| `int2` |`pgint2` |
+| `int4` |`pgint4` |
+| `int8` |`pgint8` |
+|`numeric` |`pgnumeric` |
+| `float4` |`pgfloat4` |
+| `float8` |`pgfloat8` |
+| `bytea` |`pgbytea` |
+| `text` |`pgtext` |
+| `bytea` |`pgbytea` |
+| `json` |`pgjson` |
+| `uuid` |`pguuid` |
+| `jsonb` |`pgjsonb` |
+| `date` |`pgdate` |
+| `timestamp` |`pgtimestamp` |
+| `interval` | `pginterval` |
+| `text` |`pgtext` |
+| `date` | `pgdate`|
+| `timestamp` |`pgtimestamp` |
+| `interval` |`pginterval` |
+| `numeric` |`pgnumeric` |
 
-Поддерживаются только преобразования типов приведенное выше.
+Встроенные функции YQL ориентированы на работу с собственными типами данных, например, `Ip::FromString` получает на вход типы данных `Utf8` или `String`. Поэтому встроенные функции YQL не могут работать с типами данных PostgreSQL. Для решения задачи конвертации типов существует функция [`FromPg`](../yql/reference/udf/list/postgres.md#frompg), выполняющая преобразование данных из типов PostgreSQL в типы YQL.
 
-Если необходимо выполнить преобразование типов данных, не указанных в таблице выше, то можно использовать промежуточное преобразование через тип `text`.
-
-Например, выполним преобразование типа данных PostgreSQL - `money`:
-```sql
-SELECT FromPg(PgCast(PgConst("{1234}", _PgMoney), pgtext))
-```
+Пример:
+1. Создадим таблицу {{ydb-name}} с помощью PostgreSQL-синтаксиса
+    ```sql
+    CREATE TABLE test_table_pg_ip(col text, PRIMARY KEY(col));
+    ```
+1. Добавим туда тестовые данные
+    ```sql
+    INSERT INTO test_table_pg_ip(col) VALUES('::ffff:77.75.155.3')
+    ```
+1. Прочитаем эти данные с помощью YQL-синтаксиса:
+    ```
+    ydb sql -s "SELECT Ip::ToString(Ip::GetSubnet(Ip::FromString(col))) AS subnet
+        FROM test_table_pg_ip"
+    Status: GENERIC_ERROR
+    Issues:
+    <main>: Error: Type annotation, code: 1030
+        <main>:1:1: Error: At function: RemovePrefixMembers, At function: PersistableRepr, At function: SqlProject, At function: SqlProjectItem
+            <main>:1:12: Error: At function: Apply, Callable is produced by Udf: Ip.FromString
+                <main>:1:23: Error: Mismatch type argument #1, type diff: String!=pgtext
+    ```
+1. Для работы функции `Ip::FromString` необходимо предварительно выполнить преобразование типов данных с помощью функции `PgFrom`:
+    ```
+    ydb sql -s "SELECT Ip::ToString(Ip::GetSubnet(Ip::FromString(FromPg(col))) AS subnet
+        FROM test_table_pg_ip"
+    ┌────────┐
+    │ subnet │
+    ├────────┤
+    │ "::"   │
+    └────────┘
+    ```

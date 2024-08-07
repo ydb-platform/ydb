@@ -1,5 +1,5 @@
 {% note warning %}
 
-Совместимость YDB с PostgreSQL находится в стадии **Preview**.
+Поддержка синтаксиса PostgreSQL в {{ ydb-name }} находится в стадии **Preview**.
 
 {% endnote %}

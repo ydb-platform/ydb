@@ -324,12 +324,13 @@ public:
                 const auto& modifyScheme = schemeOp.GetDropTopic();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
-              
+            }
+            
             case NKqpProto::TKqpSchemeOperation::kAnalyzeTable: {
                 const auto& analyzeOperation = schemeOp.GetAnalyzeTable();
-                
+
                 auto analyzePromise = NewPromise<IKqpGateway::TGenericResult>();
-                
+
                 TVector<TString> columns{analyzeOperation.columns().begin(), analyzeOperation.columns().end()};
                 IActor* analyzeActor = new TAnalyzeActor(analyzeOperation.GetTablePath(), columns, analyzePromise);
 
@@ -343,7 +344,7 @@ public:
 
                     actorSystem->Send(selfId, ev.Release());
                 });
-                
+
                 Become(&TKqpSchemeExecuter::ExecuteState);
                 return;
 

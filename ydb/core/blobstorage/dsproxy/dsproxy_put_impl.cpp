@@ -37,7 +37,7 @@ void TPutImpl::RunStrategy(TLogContext &logCtx, const IStrategy& strategy, TPutR
         const TBlobStorageGroupInfo::TGroupVDisks& expired) {
     Y_VERIFY_S(Blackboard.BlobStates.size(), "State# " << DumpFullState());
     TBatchedVec<TBlackboard::TFinishedBlob> finished;
-    const EStrategyOutcome outcome = Blackboard.RunStrategy(logCtx, strategy, SlowDiskThreshold, &finished, &expired);
+    const EStrategyOutcome outcome = Blackboard.RunStrategy(logCtx, strategy, AccelerationParams, &finished, &expired);
     for (const TBlackboard::TFinishedBlob& item : finished) {
         Y_ABORT_UNLESS(item.BlobIdx < Blobs.size());
         Y_ABORT_UNLESS(!IsDone[item.BlobIdx]);
@@ -82,7 +82,7 @@ void TPutImpl::PrepareReply(NKikimrProto::EReplyStatus status, TLogContext &logC
     }
 }
 
-ui64 TPutImpl::GetTimeToAccelerateNs(TLogContext &logCtx, ui32 nthWorst) {
+ui64 TPutImpl::GetTimeToAccelerateNs(TLogContext &logCtx) {
     Y_UNUSED(logCtx);
     Y_ABORT_UNLESS(!Blackboard.BlobStates.empty());
     TBatchedVec<ui64> nthWorstPredictedNsVec(Blackboard.BlobStates.size());
@@ -90,9 +90,9 @@ ui64 TPutImpl::GetTimeToAccelerateNs(TLogContext &logCtx, ui32 nthWorst) {
     for (auto &[_, state] : Blackboard.BlobStates) {
         // Find the n'th slowest disk
         TDiskDelayPredictions worstDisks;
-        state.GetWorstPredictedDelaysNs(*Info, *Blackboard.GroupQueues, HandleClassToQueueId(Blackboard.PutHandleClass), nthWorst,
-                &worstDisks);
-        nthWorstPredictedNsVec[idx++] = worstDisks[nthWorst].PredictedNs;
+        state.GetWorstPredictedDelaysNs(*Info, *Blackboard.GroupQueues, HandleClassToQueueId(Blackboard.PutHandleClass),
+                &worstDisks, AccelerationParams.PredictedDelayMultiplier);
+        nthWorstPredictedNsVec[idx++] = worstDisks[2].PredictedNs;
     }
     return *MaxElement(nthWorstPredictedNsVec.begin(), nthWorstPredictedNsVec.end());
 }

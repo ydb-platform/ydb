@@ -150,7 +150,8 @@ namespace NKikimr {
                 }
             } else { // this is the first time configuration arrives -- no queues are created yet
                 EnsureMonitoring(false);
-                Sessions = MakeIntrusive<TGroupSessions>(Info, BSProxyCtx, MonActor, SelfId());
+                Sessions = MakeIntrusive<TGroupSessions>(Info, BSProxyCtx, MonActor, SelfId(),
+                        UseActorSystemTimeInBSQueue);
                 NumUnconnectedDisks = Sessions->GetNumUnconnectedDisks();
                 NodeMon->IncNumUnconnected(NumUnconnectedDisks);
             }
@@ -322,8 +323,11 @@ namespace NKikimr {
         Send(ev->Sender, new TEvProxySessionsState(Sessions ? Sessions->GroupQueues : nullptr));
     }
 
-    float TBlobStorageGroupProxy::GetSlowDiskThreshold() {
-        return 0.001f * SlowDiskThreshold.Update(TActivationContext::Now());
+    TAccelerationParams TBlobStorageGroupProxy::GetAccelerationParams() {
+        return TAccelerationParams{
+            .SlowDiskThreshold = .001f * SlowDiskThreshold.Update(TActivationContext::Now()),
+            .PredictedDelayMultiplier = .001f * PredictedDelayMultiplier.Update(TActivationContext::Now()),
+        };
     }
 
 } // NKikimr

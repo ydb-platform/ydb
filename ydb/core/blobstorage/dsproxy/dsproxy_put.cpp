@@ -47,6 +47,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
 
     ui64 RequestsSent = 0;
     ui64 ResponsesReceived = 0;
+    ui32 RequestsPendingBeforeAcceleration = 0;
     ui64 MaxSaneRequests = 0;
     ui64 ResponsesSent = 0;
 
@@ -67,6 +68,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
 
     TDiskResponsivenessTracker::TPerDiskStatsPtr Stats;
 
+    TAccelerationParams AccelerationParams;
     ui32 AccelerateRequestsSent = 0;
     bool IsAccelerateScheduled = false;
 
@@ -134,6 +136,9 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         for (auto& ev : events) {
             std::visit([&](auto& ev) { SendToQueue(std::move(ev), 0, TimeStatsEnabled); }, ev);
             ++RequestsSent;
+            if (AccelerateRequestsSent == 0) {
+                RequestsPendingBeforeAcceleration++;
+            }
         }
 
         return false;
@@ -233,6 +238,10 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
 
         ProcessReplyFromQueue(ev->Get());
         ResponsesReceived++;
+        if (!AccelerateRequestsSent) {
+            Y_DEBUG_ABORT_UNLESS(RequestsPendingBeforeAcceleration > 0);
+            RequestsPendingBeforeAcceleration--;
+        }
 
         const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
         ev->Get()->Record.MutableTimestamps()->SetReceivedByDSProxyUs(GetCycleCountFast() / cyclesPerUs);
@@ -292,6 +301,10 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
     void Handle(TEvBlobStorage::TEvVMultiPutResult::TPtr &ev) {
         ProcessReplyFromQueue(ev->Get());
         ResponsesReceived++;
+        if (!AccelerateRequestsSent) {
+            Y_DEBUG_ABORT_UNLESS(RequestsPendingBeforeAcceleration > 0);
+            RequestsPendingBeforeAcceleration--;
+        }
 
         const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
         ev->Get()->Record.MutableTimestamps()->SetReceivedByDSProxyUs(GetCycleCountFast() / cyclesPerUs);
@@ -381,12 +394,17 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
     void TryToScheduleNextAcceleration() {
         if (!IsAccelerateScheduled && AccelerateRequestsSent < 2) {
             if (WaitingVDiskCount > 0 && WaitingVDiskCount <= 2 && RequestsSent > 1) {
-                ui64 timeToAccelerateUs = Max<ui64>(1, PutImpl.GetTimeToAccelerateNs(LogCtx, 2 - AccelerateRequestsSent) / 1000);
-                TDuration timeSinceStart = TActivationContext::Monotonic() - StartTime;
-                if (timeSinceStart.MicroSeconds() < timeToAccelerateUs) {
+                ui64 timeToAccelerateUs = Max<ui64>(1, PutImpl.GetTimeToAccelerateNs(LogCtx) / 1000);
+                if (RequestsPendingBeforeAcceleration == 1 && AccelerateRequestsSent == 1) {
+                    // if there is only one request pending, but first accelerate is unsuccessful, make a pause
+                    timeToAccelerateUs *= 2;
+                }
+                TDuration timeToAccelerate = TDuration::MicroSeconds(timeToAccelerateUs);
+                TMonotonic now = TActivationContext::Monotonic();
+                TMonotonic nextAcceleration = StartTime + timeToAccelerate;
+                if (nextAcceleration > now) {
                     ui64 causeIdx = RootCauseTrack.RegisterAccelerate();
-                    Schedule(TDuration::MicroSeconds(timeToAccelerateUs - timeSinceStart.MicroSeconds()),
-                            new TEvAccelerate(causeIdx));
+                    Schedule(nextAcceleration - now, new TEvAccelerate(causeIdx));
                     IsAccelerateScheduled = true;
                 } else {
                     Accelerate();
@@ -510,19 +528,20 @@ public:
             TDiskResponsivenessTracker::TPerDiskStatsPtr stats,
             TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now,
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters,
-            bool enableRequestMod3x3ForMinLatecy, float slowDiskThreshold)
+            bool enableRequestMod3x3ForMinLatecy, const TAccelerationParams& accelerationParams)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
                 NKikimrServices::BS_PROXY_PUT, false, latencyQueueKind, now, storagePoolCounters,
                 ev->RestartCounter, std::move(traceId), "DSProxy.Put", ev, nullptr,
                 NKikimrServices::TActivity::BS_PROXY_PUT_ACTOR)
         , PutImpl(info, state, ev, mon, enableRequestMod3x3ForMinLatecy, source, cookie, Span.GetTraceId(),
-                slowDiskThreshold)
+                accelerationParams)
         , WaitingVDiskResponseCount(info->GetTotalVDisksNum())
         , HandleClass(ev->HandleClass)
         , ReportedBytes(0)
         , TimeStatsEnabled(timeStatsEnabled)
         , Tactic(ev->Tactic)
         , Stats(std::move(stats))
+        , AccelerationParams(accelerationParams)
         , IncarnationRecords(info->GetTotalVDisksNum())
         , ExpiredVDiskSet(&info->GetTopology())
     {
@@ -551,12 +570,12 @@ public:
             TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now,
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters,
             NKikimrBlobStorage::EPutHandleClass handleClass, TEvBlobStorage::TEvPut::ETactic tactic,
-            bool enableRequestMod3x3ForMinLatecy, float slowDiskThreshold)
+            bool enableRequestMod3x3ForMinLatecy, const TAccelerationParams& accelerationParams)
         : TBlobStorageGroupRequestActor(info, state, mon, TActorId(), 0,
                 NKikimrServices::BS_PROXY_PUT, false, latencyQueueKind, now, storagePoolCounters,
                 MaxRestartCounter(events), {}, nullptr, static_cast<TEvBlobStorage::TEvPut*>(nullptr), nullptr,
                 NKikimrServices::TActivity::BS_PROXY_PUT_ACTOR)
-        , PutImpl(info, state, events, mon, handleClass, tactic, enableRequestMod3x3ForMinLatecy, slowDiskThreshold)
+        , PutImpl(info, state, events, mon, handleClass, tactic, enableRequestMod3x3ForMinLatecy, accelerationParams)
         , WaitingVDiskResponseCount(info->GetTotalVDisksNum())
         , IsManyPuts(true)
         , HandleClass(handleClass)
@@ -564,6 +583,7 @@ public:
         , TimeStatsEnabled(timeStatsEnabled)
         , Tactic(tactic)
         , Stats(std::move(stats))
+        , AccelerationParams(accelerationParams)
         , IncarnationRecords(info->GetTotalVDisksNum())
         , ExpiredVDiskSet(&info->GetTopology())
     {
@@ -764,10 +784,10 @@ IActor* CreateBlobStorageGroupPutRequest(const TIntrusivePtr<TBlobStorageGroupIn
         TDiskResponsivenessTracker::TPerDiskStatsPtr stats,
         TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now,
         TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters,
-        bool enableRequestMod3x3ForMinLatecy, float slowDiskThreshold) {
+        bool enableRequestMod3x3ForMinLatecy, const TAccelerationParams& accelerationParams) {
     return new TBlobStorageGroupPutRequest(info, state, source, mon, ev, cookie, std::move(traceId), timeStatsEnabled,
             std::move(stats), latencyQueueKind, now, storagePoolCounters, enableRequestMod3x3ForMinLatecy,
-            slowDiskThreshold);
+            accelerationParams);
 }
 
 IActor* CreateBlobStorageGroupPutRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
@@ -778,10 +798,10 @@ IActor* CreateBlobStorageGroupPutRequest(const TIntrusivePtr<TBlobStorageGroupIn
         TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now,
         TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters,
         NKikimrBlobStorage::EPutHandleClass handleClass, TEvBlobStorage::TEvPut::ETactic tactic,
-        bool enableRequestMod3x3ForMinLatecy, float slowDiskThreshold) {
+        bool enableRequestMod3x3ForMinLatecy, const TAccelerationParams& accelerationParams) {
     return new TBlobStorageGroupPutRequest(info, state, mon, ev, timeStatsEnabled,
             std::move(stats), latencyQueueKind, now, storagePoolCounters, handleClass, tactic,
-            enableRequestMod3x3ForMinLatecy, slowDiskThreshold);
+            enableRequestMod3x3ForMinLatecy, accelerationParams);
 }
 
 }//NKikimr

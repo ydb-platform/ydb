@@ -258,7 +258,8 @@ namespace NKikimr {
                             VCtx->Top->GetOrderNumber(VCtx->ShortSelfVDisk));
                 CreateQueuesForVDisks(VPatchCtx->AsyncBlobQueues, SelfId(), GInfo, VCtx, GInfo->GetVDisks(), patchGroup,
                         patchQueueClientId, NKikimrBlobStorage::EVDiskQueueId::PutAsyncBlob,
-                        "PeerVPatch",  TInterconnectChannels::IC_BLOBSTORAGE_ASYNC_DATA);
+                        "PeerVPatch",  TInterconnectChannels::IC_BLOBSTORAGE_ASYNC_DATA,
+                        Config->UseActorSystemTimeInBSQueue);
             }
         }
 

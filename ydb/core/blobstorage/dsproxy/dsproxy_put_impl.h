@@ -44,7 +44,7 @@ private:
 
     const TEvBlobStorage::TEvPut::ETactic Tactic;
 
-    const float SlowDiskThreshold = 2;
+    const TAccelerationParams AccelerationParams;
 
     struct TBlobInfo {
         TLogoBlobID BlobId;
@@ -106,7 +106,7 @@ public:
     TPutImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &state,
             TEvBlobStorage::TEvPut *ev, const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon,
             bool enableRequestMod3x3ForMinLatecy, TActorId recipient, ui64 cookie, NWilson::TTraceId traceId,
-            float slowDiskThreshold)
+            const TAccelerationParams& accelerationParams)
         : Info(info)
         , Blackboard(info, state, ev->HandleClass, NKikimrBlobStorage::EGetHandleClass::AsyncRead)
         , IsDone(1)
@@ -116,7 +116,7 @@ public:
         , Mon(mon)
         , EnableRequestMod3x3ForMinLatecy(enableRequestMod3x3ForMinLatecy)
         , Tactic(ev->Tactic)
-        , SlowDiskThreshold(slowDiskThreshold)
+        , AccelerationParams(accelerationParams)
     {
         BlobMap.emplace(ev->Id, Blobs.size());
         Blobs.emplace_back(ev->Id, TRope(ev->Buffer), recipient, cookie, std::move(traceId), std::move(ev->Orbit),
@@ -130,7 +130,7 @@ public:
     TPutImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &state,
             TBatchedVec<TEvBlobStorage::TEvPut::TPtr> &events, const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon,
             NKikimrBlobStorage::EPutHandleClass putHandleClass, TEvBlobStorage::TEvPut::ETactic tactic,
-            bool enableRequestMod3x3ForMinLatecy, float slowDiskThreshold)
+            bool enableRequestMod3x3ForMinLatecy, const TAccelerationParams& accelerationParams)
         : Info(info)
         , Blackboard(info, state, putHandleClass, NKikimrBlobStorage::EGetHandleClass::AsyncRead)
         , IsDone(events.size())
@@ -140,7 +140,7 @@ public:
         , Mon(mon)
         , EnableRequestMod3x3ForMinLatecy(enableRequestMod3x3ForMinLatecy)
         , Tactic(tactic)
-        , SlowDiskThreshold(slowDiskThreshold)
+        , AccelerationParams(accelerationParams)
     {
         Y_ABORT_UNLESS(events.size(), "TEvPut vector is empty");
 
@@ -191,7 +191,7 @@ public:
     void PrepareOneReply(NKikimrProto::EReplyStatus status, size_t blobIdx, TLogContext &logCtx,
             TString errorReason, TPutResultVec &outPutResults);
 
-    ui64 GetTimeToAccelerateNs(TLogContext &logCtx, ui32 nthWorst);
+    ui64 GetTimeToAccelerateNs(TLogContext &logCtx);
 
     TString DumpFullState() const;
 

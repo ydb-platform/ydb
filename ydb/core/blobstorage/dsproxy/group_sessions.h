@@ -204,7 +204,7 @@ namespace NKikimr {
         TActorId ProxyActor;
 
         TGroupSessions(const TIntrusivePtr<TBlobStorageGroupInfo>& info, const TBSProxyContextPtr& bspctx,
-            const TActorId& monActor, const TActorId& proxyActor);
+            const TActorId& monActor, const TActorId& proxyActor, bool useActorSystemTimeInBSQueue);
         void Poison();
         bool GoodToGo(const TBlobStorageGroupInfo::TTopology& topology, bool waitForAllVDisks);
         void QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EVDiskQueueId queueId, bool connected,
@@ -222,6 +222,51 @@ namespace NKikimr {
         TEvProxySessionsState(const TIntrusivePtr<TGroupQueues>& groupQueues)
             : GroupQueues(groupQueues)
         {}
+    };
+
+    struct TEvGetQueuesInfo : public TEventLocal<TEvGetQueuesInfo, TEvBlobStorage::EvGetQueuesInfo> {
+        NKikimrBlobStorage::EVDiskQueueId QueueId;
+
+        TEvGetQueuesInfo(NKikimrBlobStorage::EVDiskQueueId queueId)
+            : QueueId(queueId)
+        {}
+    };
+
+    struct TEvQueuesInfo : public TEventLocal<TEvQueuesInfo, TEvBlobStorage::EvQueuesInfo> {
+        struct TQueueInfo {
+            TActorId ActorId;
+            TIntrusivePtr<NBackpressure::TFlowRecord> FlowRecord;
+        };
+
+        TEvQueuesInfo(ui32 groupSize) {
+            Queues.resize(groupSize);
+        }
+
+        void AddInfoForQueue(ui32 orderNumber, TActorId actorId, const TIntrusivePtr<NBackpressure::TFlowRecord>& flowRecord) {
+            Queues[orderNumber].emplace(TQueueInfo{
+                .ActorId = actorId,
+                .FlowRecord = flowRecord
+            });
+        }
+
+        TString ToString() const override {
+            TStringStream str;
+            str << "{ TEvQueuesInfo";
+            str << " Queues [";
+            for (ui32 orderNum = 0; orderNum < Queues.size(); ++orderNum) {
+                const std::optional<TQueueInfo>& queue = Queues[orderNum];
+                if (queue) {
+                    str << " { OrderNumber# " << orderNum
+                        << " ActorId# " << queue->ActorId.ToString() << " },";
+                } else {
+                    str << " {}";
+                }
+            }
+            str << " ] }";
+            return str.Str();
+        }
+
+        TStackVec<std::optional<TQueueInfo>, TypicalDisksInGroup> Queues;
     };
 
 } // NKikimr

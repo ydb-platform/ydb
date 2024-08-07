@@ -80,7 +80,7 @@ namespace NKikimr {
                 Mon->EventGet->Inc();
                 PushRequest(CreateBlobStorageGroupGetRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
                     ev->Get(), ev->Cookie, std::move(ev->TraceId), TNodeLayoutInfoPtr(NodeLayoutInfo),
-                    kind, TActivationContext::Now(), StoragePoolCounters, GetSlowDiskThreshold()), ev->Get()->Deadline);
+                    kind, TActivationContext::Now(), StoragePoolCounters, GetAccelerationParams()), ev->Get()->Deadline);
             } else {
                 Mon->EventMultiGet->Inc();
                 PushRequest(CreateBlobStorageGroupMultiGetRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
@@ -158,7 +158,7 @@ namespace NKikimr {
             PushRequest(CreateBlobStorageGroupPutRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
                 ev->Get(), ev->Cookie, std::move(ev->TraceId), Mon->TimeStats.IsEnabled(),
                 PerDiskStats, kind, TActivationContext::Now(), StoragePoolCounters, enableRequestMod3x3ForMinLatency,
-                GetSlowDiskThreshold()), ev->Get()->Deadline);
+                GetAccelerationParams()), ev->Get()->Deadline);
         }
     }
 
@@ -288,12 +288,12 @@ namespace NKikimr {
                     PushRequest(CreateBlobStorageGroupPutRequest(Info, Sessions->GroupQueues, ev->Sender,
                         Mon, ev->Get(), ev->Cookie, std::move(ev->TraceId), Mon->TimeStats.IsEnabled(), PerDiskStats,
                         kind, TActivationContext::Now(), StoragePoolCounters, enableRequestMod3x3ForMinLatency,
-                        GetSlowDiskThreshold()), ev->Get()->Deadline);
+                        GetAccelerationParams()), ev->Get()->Deadline);
                 } else {
                     PushRequest(CreateBlobStorageGroupPutRequest(Info, Sessions->GroupQueues,
                         Mon, batchedPuts.Queue, Mon->TimeStats.IsEnabled(), PerDiskStats, kind, TActivationContext::Now(),
                         StoragePoolCounters, handleClass, tactic, enableRequestMod3x3ForMinLatency,
-                        GetSlowDiskThreshold()), TInstant::Max());
+                        GetAccelerationParams()), TInstant::Max());
                 }
             } else {
                 for (auto it = batchedPuts.Queue.begin(); it != batchedPuts.Queue.end(); ++it) {
@@ -736,5 +736,20 @@ namespace NKikimr {
         CheckPostponedQueue();
     }
 
+
+    void TBlobStorageGroupProxy::Handle(TEvGetQueuesInfo::TPtr ev) {
+        ui32 groupSize = Info->GetTotalVDisksNum();
+        std::unique_ptr<TEvQueuesInfo> res = std::make_unique<TEvQueuesInfo>(groupSize);
+        if (Sessions && Sessions->GroupQueues) {
+            for (ui32 orderNum = 0; orderNum < groupSize; ++orderNum) {
+                TGroupQueues::TVDisk* vdisk = Sessions->GroupQueues->DisksByOrderNumber[orderNum];
+                if (vdisk) {
+                    const TGroupQueues::TVDisk::TQueues::TQueue& queue = vdisk->Queues.GetQueue(ev->Get()->QueueId);
+                    res->AddInfoForQueue(orderNum, queue.ActorId, queue.FlowRecord);
+                }
+            }
+        }
+        TActivationContext::Send(ev->Sender, std::move(res));
+    }
 
 } // NKikimr

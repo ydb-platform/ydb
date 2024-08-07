@@ -55,7 +55,8 @@ namespace NKikimr {
         }
 
         EStrategyOutcome Process(TLogContext& logCtx, TBlobState& state, const TBlobStorageGroupInfo& info,
-                TBlackboard &blackboard, TGroupDiskRequests& groupDiskRequests, float slowDiskThreshold) override {
+                TBlackboard &blackboard, TGroupDiskRequests& groupDiskRequests,
+                const TAccelerationParams& accelerationParams) override {
             if (state.WholeSituation == TBlobState::ESituation::Present) {
                 return EStrategyOutcome::DONE;
             }
@@ -76,14 +77,14 @@ namespace NKikimr {
                     case TBlackboard::AccelerationModeSkipOneSlowest: {
                         TDiskDelayPredictions worstDisks;
                         state.GetWorstPredictedDelaysNs(info, *blackboard.GroupQueues,
-                                HandleClassToQueueId(blackboard.GetHandleClass), 1,
-                                &worstDisks);
+                                HandleClassToQueueId(blackboard.GetHandleClass),
+                                &worstDisks, accelerationParams.PredictedDelayMultiplier);
 
                         // Check if the slowest disk exceptionally slow, or just not very fast
                         i32 slowDiskSubgroupIdx = -1;
                         if (worstDisks[1].PredictedNs > 0 && worstDisks[0].PredictedNs >
-                                worstDisks[1].PredictedNs * slowDiskThreshold) {
-                            slowDiskSubgroupIdx = worstDisks[1].DiskIdx;
+                                worstDisks[1].PredictedNs * accelerationParams.SlowDiskThreshold) {
+                            slowDiskSubgroupIdx = worstDisks[0].DiskIdx;
                         }
 
                         // Mark single slow disk

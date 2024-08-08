@@ -733,44 +733,6 @@ TString TViewer::GetHTTPFORWARD(const TRequestState& request, const TString& loc
     return res;
 }
 
-void MakeErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const NYdb::TStatus& status) {
-    google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> protoIssues;
-    NYql::IssuesToMessage(status.GetIssues(), &protoIssues);
-
-    message.clear();
-
-    NJson::TJsonValue& jsonIssues = jsonResponse["issues"];
-    for (const auto& queryIssue : protoIssues) {
-        NJson::TJsonValue& issue = jsonIssues.AppendValue({});
-        NProtobufJson::Proto2Json(queryIssue, issue);
-    }
-
-    TString textStatus = TStringBuilder() << status.GetStatus();
-    jsonResponse["status"] = textStatus;
-
-    // find first deepest error
-    std::stable_sort(protoIssues.begin(), protoIssues.end(), [](const Ydb::Issue::IssueMessage& a, const Ydb::Issue::IssueMessage& b) -> bool {
-        return a.severity() < b.severity();
-    });
-
-    const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* protoIssuesPtr = &protoIssues;
-    while (protoIssuesPtr->size() > 0 && protoIssuesPtr->at(0).issuesSize() > 0) {
-        protoIssuesPtr = &protoIssuesPtr->at(0).issues();
-    }
-
-    if (protoIssuesPtr->size() > 0) {
-        const Ydb::Issue::IssueMessage& issue = protoIssuesPtr->at(0);
-        NProtobufJson::Proto2Json(issue, jsonResponse["error"]);
-        message = issue.message();
-    } else {
-        jsonResponse["error"]["message"] = textStatus;
-    }
-
-    if (message.empty()) {
-        message = textStatus;
-    }
-}
-
 NKikimrViewer::EFlag GetFlagFromTabletState(NKikimrWhiteboard::TTabletStateInfo::ETabletState state) {
     NKikimrViewer::EFlag flag = NKikimrViewer::EFlag::Grey;
     switch (state) {

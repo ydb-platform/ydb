@@ -270,7 +270,7 @@ public:
 
     bool CanBuildResult(const TExprNode& node, TSyncMap& syncList) override {
         TString usedCluster;
-        return IsYtCompleteIsolatedLambda(node, syncList, usedCluster, true, false);
+        return IsYtCompleteIsolatedLambda(node, syncList, usedCluster, false);
     }
 
     bool GetExecWorld(const TExprNode::TPtr& node, TExprNode::TPtr& root) override {

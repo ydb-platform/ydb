@@ -341,12 +341,12 @@ protected:
                     t.FinishHandler(),
                 };
                 for (auto lambda : lambdas) {
-                    if (!IsYtCompleteIsolatedLambda(lambda.Ref(), syncList, cluster, true, false)) {
+                    if (!IsYtCompleteIsolatedLambda(lambda.Ref(), syncList, cluster, false)) {
                         return node;
                     }
                 }
             } else if (trait.Ref().IsCallable("AggApply")) {
-                if (!IsYtCompleteIsolatedLambda(*trait.Ref().Child(2), syncList, cluster, true, false)) {
+                if (!IsYtCompleteIsolatedLambda(*trait.Ref().Child(2), syncList, cluster, false)) {
                     return node;
                 }
             }
@@ -1344,7 +1344,7 @@ protected:
         TYtDSource dataSource = GetDataSource(input, ctx);
         TString cluster = TString{dataSource.Cluster().Value()};
         TSyncMap syncList;
-        if (!IsYtCompleteIsolatedLambda(countBase.Count().Ref(), syncList, cluster, true, false)) {
+        if (!IsYtCompleteIsolatedLambda(countBase.Count().Ref(), syncList, cluster, false)) {
             return node;
         }
 

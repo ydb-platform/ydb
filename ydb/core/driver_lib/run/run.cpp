@@ -1653,7 +1653,9 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TGraphServiceInitializer(runConfig));
     }
 
+#ifndef KIKIMR_DISABLE_S3_OPS
     sil->AddServiceInitializer(new TAwsApiInitializer(*this));
+#endif
 
     return sil;
 }

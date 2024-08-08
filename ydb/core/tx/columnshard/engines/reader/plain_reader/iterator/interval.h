@@ -9,7 +9,6 @@ namespace NKikimr::NOlap::NReader::NPlain {
 class TFetchingInterval: public TNonCopyable {
 private:
     std::shared_ptr<TMergingContext> MergingContext;
-    bool AbortedFlag = false;
     TAtomic SourcesFinalized = 0;
     TAtomic PartSendingWait = 0;
     std::unique_ptr<NArrow::NMerger::TMergePartialStream> Merger;
@@ -48,7 +47,6 @@ public:
     }
 
     void Abort() {
-        AbortedFlag = true;
         if (AtomicCas(&SourcesFinalized, 1, 0)) {
             for (auto&& i : Sources) {
                 i.second->Abort();

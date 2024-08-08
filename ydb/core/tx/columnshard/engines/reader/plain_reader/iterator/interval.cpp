@@ -74,7 +74,7 @@ void TFetchingInterval::OnPartSendingComplete() {
     AFL_VERIFY(Merger);
     AFL_VERIFY(AtomicCas(&PartSendingWait, 0, 1));
     AFL_VERIFY(AtomicGet(SourcesFinalized) == 1);
-    if (AbortedFlag) {
+    if (Context->IsAborted()) {
         return;
     }
     IntervalStateGuard.SetStatus(NColumnShard::TScanCounters::EIntervalStatus::WaitMergerContinue);

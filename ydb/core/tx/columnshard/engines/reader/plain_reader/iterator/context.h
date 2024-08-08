@@ -29,6 +29,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TStageFeatures>, FilterStageMemory);
     YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TStageFeatures>, FetchingStageMemory);
 
+    TAtomic AbortFlag = 0;
     NIndexes::TIndexCheckerContainer IndexChecker;
     TReadMetadata::TConstPtr ReadMetadata;
     std::shared_ptr<TColumnsSet> EmptyColumns = std::make_shared<TColumnsSet>();
@@ -52,6 +53,14 @@ public:
 
     const TReadMetadata::TConstPtr& GetReadMetadata() const {
         return ReadMetadata;
+    }
+
+    bool IsAborted() const {
+        return AtomicGet(AbortFlag);
+    }
+
+    void Abort() {
+        AtomicSet(AbortFlag, 1);
     }
 
     ~TSpecialReadContext() {

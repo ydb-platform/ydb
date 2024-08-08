@@ -16,7 +16,6 @@ private:
     std::shared_ptr<TSpecialReadContext> SpecialReadContext;
     std::vector<TPartialReadResult> PartialResults;
     ui32 ReadyResultsCount = 0;
-    bool AbortedFlag = false;
 protected:
     virtual TConclusionStatus DoStart() override {
         return Scanner->Start();
@@ -35,7 +34,7 @@ protected:
     virtual TConclusion<bool> DoReadNextInterval() override;
 
     virtual void DoAbort() override {
-        AbortedFlag = true;
+        SpecialReadContext->Abort();
         Scanner->Abort();
         PartialResults.clear();
         Y_ABORT_UNLESS(IsFinished());
@@ -68,7 +67,7 @@ public:
 
     TPlainReadData(const std::shared_ptr<TReadContext>& context);
     ~TPlainReadData() {
-        if (!AbortedFlag) {
+        if (!SpecialReadContext->IsAborted()) {
             Abort("unexpected on destructor");
         }
     }

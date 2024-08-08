@@ -218,10 +218,13 @@ private:
 
     const std::shared_ptr<TAllocationInfo>& RegisterAllocationImpl(
         const std::shared_ptr<IAllocation>& task, const std::shared_ptr<TStageFeatures>& stage);
-    TAllocationInfo& GetAllocationInfoVerified(const ui64 allocationId) {
+    TAllocationInfo& GetAllocationInfoVerified(const ui64 allocationId) const {
         auto it = AllocationInfo.find(allocationId);
         AFL_VERIFY(it != AllocationInfo.end());
         return *it->second;
+    }
+    bool HasAllocationInfo(const ui64 allocationId) const {
+        return AllocationInfo.contains(allocationId);
     }
 
     std::optional<ui64> GetMinInternalGroupIdOptional() const;
@@ -242,7 +245,8 @@ private:
         for (auto&& usageGroupId : it->second->GetGroupIds()) {
             const bool waitFlag = WaitAllocations.RemoveAllocation(usageGroupId, it->second);
             const bool readyFlag = ReadyAllocations.RemoveAllocation(usageGroupId, it->second);
-            AFL_VERIFY(waitFlag ^ readyFlag)("wait", waitFlag)("ready", readyFlag);
+            AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "allocation_unregister")("group_id", usageGroupId)("wait", waitFlag)(
+                "ready", readyFlag)("allocation_id", allocationId);
         }
         memoryAllocated = it->second->GetAllocatedVolume();
         AllocationInfo.erase(it);

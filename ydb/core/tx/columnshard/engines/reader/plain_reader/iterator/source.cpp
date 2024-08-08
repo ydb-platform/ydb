@@ -21,6 +21,7 @@ void IDataSource::InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetch
 
 void IDataSource::RegisterInterval(TFetchingInterval& interval, const std::shared_ptr<IDataSource>& sourcePtr) {
     AFL_VERIFY(FetchingPlan);
+    AFL_VERIFY(!Context->IsAborted());
     if (!IsReadyFlag) {
         AFL_VERIFY(Intervals.emplace(interval.GetIntervalIdx(), &interval).second);
     }
@@ -30,7 +31,7 @@ void IDataSource::RegisterInterval(TFetchingInterval& interval, const std::share
         StageData = std::make_unique<TFetchedData>(GetExclusiveIntervalOnly() && IsSourceInMemory());
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("InitFetchingPlan", FetchingPlan->DebugString())("source_idx", SourceIdx);
         NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
-        if (IsAborted()) {
+        if (Context->IsAborted()) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "InitFetchingPlanAborted");
             return;
         }
@@ -63,7 +64,7 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
         auto itFilter = cFilter.GetIterator(false, Portion->NumRows(i));
         bool itFinished = false;
         for (auto&& c : columnChunks) {
-            Y_ABORT_UNLESS(!itFinished);
+            AFL_VERIFY(!itFinished);
             if (!itFilter.IsBatchForSkip(c->GetMeta().GetNumRows())) {
                 auto reading =
                     blobsAction.GetReading(Schema->GetIndexInfo().GetColumnStorageId(c->GetColumnId(), Portion->GetMeta().GetTierName()));
@@ -111,7 +112,7 @@ bool TPortionDataSource::DoStartFetchingColumns(
 bool TPortionDataSource::DoStartFetchingIndexes(
     const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step.GetName());
-    Y_ABORT_UNLESS(indexes->GetIndexesCount());
+    AFL_VERIFY(indexes->GetIndexesCount());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step.GetName())("fetching_info", step.DebugString());
 
     TBlobsAction action(GetContext()->GetCommonContext()->GetStoragesManager(), NBlobOperations::EConsumer::SCAN);

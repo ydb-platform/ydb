@@ -180,7 +180,7 @@ private:
         }
 
         auto input = start;
-        for (;;) {
+        for (size_t transformCount = 0; true; ++transformCount) {
             TIssueScopeGuard issueScope(ctx.IssueManager, [this, input, &ctx]() -> TIssuePtr {
                 TStringBuilder str;
                 str << "At ";
@@ -256,6 +256,20 @@ private:
                 return TStatus::Error;
             default:
                 YQL_ENSURE(false, "Unknown state");
+            }
+
+            static const size_t MaxTransformCount = 1000;
+            if (transformCount >= MaxTransformCount) {
+                TConvertToAstSettings settings;
+                settings.AllowFreeArgs = true;
+                auto ast = ConvertToAst(*input, ctx, settings);
+                if (ast.Root) {
+                    TStringStream s;
+                    ast.Root->PrettyPrintTo(s, TAstPrintFlags::ShortQuote | TAstPrintFlags::AdaptArbitraryContent | TAstPrintFlags::PerLine);
+                    YQL_CLOG(INFO, Core) << "Too many transformations for node:\n" << s.Str();
+                }
+                YQL_ENSURE(transformCount < MaxTransformCount,
+                    "Transformation of node with type " << input->Type() << " name " << input->Content() << " took too many iterations");
             }
 
             input->SetState(TExprNode::EState::TypePending);

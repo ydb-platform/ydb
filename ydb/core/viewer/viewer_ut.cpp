@@ -1590,6 +1590,56 @@ Y_UNIT_TEST_SUITE(Viewer) {
         size_t AuthorizeTicketFails = 0;
     };
 
+    Y_UNIT_TEST(FloatPointJsonQuery) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetMonitoringPortOffset(monPort, true);
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        TStringStream responseStream;
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Content-Type"] = "application/json";
+        headers["Authorization"] = "test_ydb_token";
+        TString requestBody = R"json({
+            "query": "SELECT cast('311111111113.222222223' as Double);",
+            "database": "/Root",
+            "action": "execute-script",
+            "syntax": "yql_v1",
+            "stats": "profile"
+        })json";
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/query?timeout=600000&base64=false&schema=modern", requestBody, &responseStream, headers);
+        const TString response = responseStream.ReadAll();
+        UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
+        {
+            NJson::TJsonReaderConfig jsonCfg;
+
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(response, &jsonCfg, &json, /* throwOnError = */ true);
+
+            auto resultSets = json["result"].GetArray();
+            UNIT_ASSERT_EQUAL_C(1, resultSets.size(), response);
+
+            double parsed = resultSets.begin()->GetArray().begin()->GetDouble();
+            double expected = 311111111113.22222;
+            UNIT_ASSERT_DOUBLES_EQUAL(parsed, expected, 0.00001);
+        }
+    }
+
     Y_UNIT_TEST(AuthorizeYdbTokenWithDatabaseAttributes) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);

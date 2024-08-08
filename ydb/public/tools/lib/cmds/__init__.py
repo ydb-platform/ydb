@@ -311,6 +311,15 @@ def pq_client_service_types(arguments):
 def enable_pqcd(arguments):
     return (getattr(arguments, 'enable_pqcd', False) or os.getenv('YDB_ENABLE_PQCD') == 'true')
 
+def merge_two_yaml_configs(main_yaml_config, additioanal_yaml_config):
+    return merge(main_yaml_config, additioanal_yaml_config)
+
+def get_additional_yaml_config(path):
+    with open(os.path.join("/ydb_data", path)) as fh:
+        additional_yaml_config = yaml.load(fh, Loader=yaml.FullLoader)
+
+    return additional_yaml_config
+
 
 def deploy(arguments):
     initialize_working_dir(arguments)
@@ -377,10 +386,8 @@ def deploy(arguments):
     )
 
     if os.getenv("YDB_YAML_CONFIG") is not None:      
-        with open(os.path.join("/ydb_data", os.getenv("YDB_YAML_CONFIG"))) as fh:
-            additional_yaml_config = yaml.load(fh, Loader=yaml.FullLoader)
-
-        configuration.yaml_config = merge(configuration.yaml_config, additional_yaml_config)
+        additional_yaml_config = get_additional_yaml_config(os.getenv("YDB_YAML_CONFIG"))
+        configuration.yaml_config = merge_two_yaml_configs(configuration.yaml_config, additional_yaml_config)
     
     cluster = kikimr_cluster_factory(configuration)
     cluster.start()

@@ -10,7 +10,7 @@ FORK_SUBTESTS()
 TIMEOUT(600)
 
 REQUIREMENTS(
-    cpu:4
+    cpu:1
     ram:32
 )
 SIZE(MEDIUM)

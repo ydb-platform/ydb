@@ -46,7 +46,7 @@ ENDIF()
 
 NO_CHECK_IMPORTS()
 
-REQUIREMENTS(cpu:4 ram:13)
+REQUIREMENTS(cpu:1 ram:13)
 
 END()
 

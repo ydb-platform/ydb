@@ -7,14 +7,14 @@ IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
     REQUIREMENTS(
-        cpu:4
+        cpu:1
         ram:32
     )
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
     REQUIREMENTS(
-        cpu:4
+        cpu:1
         ram:16
     )
 ENDIF()

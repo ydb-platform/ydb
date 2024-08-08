@@ -6,7 +6,7 @@ TEST_SRCS(
 )
 
 REQUIREMENTS(
-    cpu:4
+    cpu:1
     ram:16
 )
 TIMEOUT(600)

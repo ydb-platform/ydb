@@ -8,6 +8,8 @@ import random
 import string
 import typing  # noqa: F401
 import sys
+import yaml
+from mergedeep import merge
 from six.moves.urllib.parse import urlparse
 
 from ydb.library.yql.providers.common.proto.gateways_config_pb2 import TGenericConnectorConfig
@@ -374,6 +376,12 @@ def deploy(arguments):
         **optionals
     )
 
+    if os.getenv("YDB_YAML_CONFIG") is not None:      
+        with open(os.path.join("/ydb_data", os.getenv("YDB_YAML_CONFIG"))) as fh:
+            additional_yaml_config = yaml.load(fh, Loader=yaml.FullLoader)
+
+        configuration.yaml_config = merge(configuration.yaml_config, additional_yaml_config)
+    
     cluster = kikimr_cluster_factory(configuration)
     cluster.start()
 

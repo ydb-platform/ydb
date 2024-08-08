@@ -1,4 +1,5 @@
 #include "with_appended.h"
+
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
@@ -38,7 +39,7 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
         for (auto& portionInfo : AppendedPortions) {
             switch (portionInfo.GetPortionInfo().GetMeta().Produced) {
                 case NOlap::TPortionMeta::EProduced::UNSPECIFIED:
-                    Y_ABORT_UNLESS(false); // unexpected
+                    Y_ABORT_UNLESS(false);   // unexpected
                 case NOlap::TPortionMeta::EProduced::INSERTED:
                     self->IncCounter(NColumnShard::COUNTER_INDEXING_PORTIONS_WRITTEN);
                     break;
@@ -144,4 +145,4 @@ std::vector<TPortionInfoWithBlobs> TChangesWithAppend::MakeAppendedPortions(cons
 void TChangesWithAppend::DoStart(NColumnShard::TColumnShard& /*self*/) {
 }
 
-}
+}   // namespace NKikimr::NOlap

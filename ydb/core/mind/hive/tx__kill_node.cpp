@@ -52,9 +52,8 @@ public:
             }
             node->PipeServers.clear();
             Self->ObjectDistributions.RemoveNode(*node);
-            if (node->CanBeDeleted()) {
+            if (Self->TryToDeleteNode(node)) {
                 db.Table<Schema::Node>().Key(NodeId).Delete();
-                Self->DeleteNode(NodeId);
             } else {
                 db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Local>(TActorId());
             }

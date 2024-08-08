@@ -97,11 +97,13 @@ struct TRequestInfo {
         request.SetPartialPermissionAllowed(Request.GetPartialPermissionAllowed());
         request.SetReason(Request.GetReason());
         request.SetAvailabilityMode(Request.GetAvailabilityMode());
+        request.SetPriority(Priority);
     }
 
     TString RequestId;
     TString Owner;
     ui64 Order = 0;
+    i32 Priority = 0;
     NKikimrCms::TPermissionRequest Request;
 };
 
@@ -203,10 +205,10 @@ public:
     };
 
     struct TScheduledLock : TBaseLock {
-        TScheduledLock(const NKikimrCms::TAction &action, const TString &owner, const TString &requestId, ui64 order)
+        TScheduledLock(const NKikimrCms::TAction &action, const TString &owner, const TString &requestId, i32 priority)
             : TBaseLock(owner, action)
             , RequestId(requestId)
-            , Order(order)
+            , Priority(priority)
         {
         }
 
@@ -217,7 +219,7 @@ public:
         TScheduledLock &operator=(TScheduledLock &&other) = default;
 
         TString RequestId;
-        ui64 Order = 0;
+        i32 Priority = 0;
     };
 
     struct TTemporaryLock : TBaseLock {
@@ -268,7 +270,7 @@ public:
 
     void ScheduleLock(TScheduledLock &&lock) {
         auto pos = LowerBound(ScheduledLocks.begin(), ScheduledLocks.end(), lock, [](auto &l, auto &r) {
-            return l.Order < r.Order;
+            return l.Priority < r.Priority;
         });
         ScheduledLocks.insert(pos, lock);
     }
@@ -278,7 +280,7 @@ public:
 
     void RollbackLocks(ui64 point);
 
-    void DeactivateScheduledLocks(ui64 order);
+    void DeactivateScheduledLocks(i32 priority);
     void ReactivateScheduledLocks();
     void RemoveScheduledLocks(const TString &requestId);
 
@@ -296,7 +298,7 @@ public:
     std::list<TExternalLock> ExternalLocks;
     std::list<TScheduledLock> ScheduledLocks;
     TVector<TTemporaryLock> TempLocks;
-    ui64 DeactivatedLocksOrder = Max<ui64>();
+    i32 DeactivatedLocksPriority = Max<i32>();
     THashSet<NKikimrCms::EMarker> Markers;
 };
 
@@ -667,7 +669,6 @@ public:
     TOperationLogManager LogManager;
     TOperationLogManager ScheduledLogManager;
 
-    void ApplyActionToOperationLog(const NKikimrCms::TAction &action);
     void ApplyActionWithoutLog(const NKikimrCms::TAction &action);
     void ApplyNodeLimits(ui32 clusterLimit, ui32 clusterRatioLimit, ui32 tenantLimit, ui32 tenantRatioLimit);
 
@@ -912,7 +913,7 @@ public:
     ui64 AddTempLocks(const NKikimrCms::TAction &action, const TActorContext *ctx);
     ui64 ScheduleActions(const TRequestInfo &request, const TActorContext *ctx);
     void UnscheduleActions(const TString &requestId);
-    void DeactivateScheduledLocks(ui64 order);
+    void DeactivateScheduledLocks(i32 priority);
     void ReactivateScheduledLocks();
 
     void RollbackLocks(ui64 point);

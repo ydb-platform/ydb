@@ -722,8 +722,23 @@ protected:
             TRACE_CONFIG_CHANGE_INPLACE_T(TenantPoolConfig, UpdateExplicitly);
         }
 
-        if (config.ParseResult->Has("tenant") && InterconnectPort != DefaultInterconnectPort) {
-            AppConfig.MutableMonitoringConfig()->SetHostLabelOverride(HostAndICPort());
+        if (config.ParseResult->Has("tenant")) {
+            if (AppConfig.GetDynamicNodeConfig().GetNodeInfo().HasName()) {
+                const TString& nodeName = AppConfig.GetDynamicNodeConfig().GetNodeInfo().GetName();
+                AppConfig.MutableMonitoringConfig()->SetHostLabelOverride(nodeName);
+                TRACE_CONFIG_CHANGE_INPLACE_T(MonitoringConfig, UpdateExplicitly);
+            } else if (InterconnectPort != DefaultInterconnectPort) {
+                AppConfig.MutableMonitoringConfig()->SetHostLabelOverride(HostAndICPort());
+                TRACE_CONFIG_CHANGE_INPLACE_T(MonitoringConfig, UpdateExplicitly);
+            }
+        }
+
+        if (config.ParseResult->Has("tenant")) {
+            if (InterconnectPort == DefaultInterconnectPort) {
+                AppConfig.MutableMonitoringConfig()->SetProcessLocation(Host());
+            } else {
+                AppConfig.MutableMonitoringConfig()->SetProcessLocation(HostAndICPort());
+            }
             TRACE_CONFIG_CHANGE_INPLACE_T(MonitoringConfig, UpdateExplicitly);
         }
 
@@ -989,11 +1004,18 @@ protected:
         ShuffleRange(addrs);
     }
 
-    TString HostAndICPort() {
+    TString HostAndICPort() const {
+        auto hostname = Host();
+        if (!hostname) {
+            return "";
+        }
+        return TStringBuilder() << hostname << ":" << InterconnectPort;
+    }
+
+    TString Host() const {
         try {
             auto hostname = to_lower(HostName());
-            hostname = hostname.substr(0, hostname.find('.'));
-            return TStringBuilder() << hostname << ":" << InterconnectPort;
+            return hostname.substr(0, hostname.find('.'));
         } catch (TSystemError& error) {
             return "";
         }
@@ -1015,6 +1037,11 @@ protected:
                 result = TryToRegisterDynamicNodeViaDiscoveryService(addr, domainName, NodeHost, NodeAddress, NodeResolveHost, GetSchemePath());
                 if (result.IsSuccess()) {
                     Cout << "Success. Registered via discovery service as " << result.GetNodeId() << Endl;
+                    Cout << "Node name: ";
+                    if (result.HasNodeName()) {
+                        Cout << result.GetNodeName();
+                    }
+                    Cout << Endl;
                     break;
                 }
                 Cerr << "Registration error: " << static_cast<NYdb::TStatus>(result) << Endl;
@@ -1052,6 +1079,9 @@ protected:
                 nodeInfo->SetAddress(node.Address);
                 nodeInfo->SetExpire(node.Expire);
                 CopyNodeLocation(nodeInfo->MutableLocation(), node.Location);
+                if (result.HasNodeName()) {
+                    nodeInfo->SetName(result.GetNodeName());
+                }
             } else {
                 auto &info = *nsConfig.AddNode();
                 info.SetNodeId(node.NodeId);

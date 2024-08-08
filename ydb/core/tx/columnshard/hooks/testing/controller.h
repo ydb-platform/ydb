@@ -1,4 +1,5 @@
 #pragma once
+#include "ro_controller.h"
 #include <ydb/core/tx/columnshard/blobs_action/abstract/blob_set.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
@@ -8,26 +9,9 @@
 
 namespace NKikimr::NYDBTest::NColumnShard {
 
-class TController: public ICSController {
+class TController: public TReadOnlyController {
 private:
-    YDB_READONLY(TAtomicCounter, TTLFinishedCounter, 0);
-    YDB_READONLY(TAtomicCounter, TTLStartedCounter, 0);
-    YDB_READONLY(TAtomicCounter, InsertFinishedCounter, 0);
-    YDB_READONLY(TAtomicCounter, InsertStartedCounter, 0);
-    YDB_READONLY(TAtomicCounter, CompactionFinishedCounter, 0);
-    YDB_READONLY(TAtomicCounter, CompactionStartedCounter, 0);
-
-    YDB_READONLY(TAtomicCounter, FilteredRecordsCount, 0);
-    YDB_READONLY(TAtomicCounter, IndexesSkippingOnSelect, 0);
-    YDB_READONLY(TAtomicCounter, IndexesApprovedOnSelect, 0);
-    YDB_READONLY(TAtomicCounter, IndexesSkippedNoData, 0);
-    YDB_READONLY(TAtomicCounter, TieringUpdates, 0);
-    YDB_READONLY(TAtomicCounter, NeedActualizationCount, 0);
-    
-    YDB_READONLY(TAtomicCounter, ActualizationsCount, 0);
-    YDB_READONLY(TAtomicCounter, ActualizationRefreshSchemeCount, 0);
-    YDB_READONLY(TAtomicCounter, ActualizationRefreshTieringCount, 0);
-    
+    using TBase = TReadOnlyController;
     YDB_ACCESSOR_DEF(std::optional<TDuration>, LagForCompactionBeforeTierings);
     YDB_ACCESSOR(std::optional<TDuration>, GuaranteeIndexationInterval, TDuration::Zero());
     YDB_ACCESSOR(std::optional<TDuration>, PeriodicWakeupActivationPeriod, std::nullopt);
@@ -152,21 +136,10 @@ protected:
         return !DisabledBackgrounds.contains(id);
     }
 
-    virtual void OnPortionActualization(const NOlap::TPortionInfo& /*info*/) override {
-        ActualizationsCount.Inc();
-    }
-    virtual void OnActualizationRefreshScheme() override {
-        ActualizationRefreshSchemeCount.Inc();
-    }
-    virtual void OnActualizationRefreshTiering() override {
-        ActualizationRefreshTieringCount.Inc();
-    }
     virtual void DoOnTabletInitCompleted(const ::NKikimr::NColumnShard::TColumnShard& shard) override;
     virtual void DoOnTabletStopped(const ::NKikimr::NColumnShard::TColumnShard& shard) override;
     virtual void DoOnAfterGCAction(const ::NKikimr::NColumnShard::TColumnShard& shard, const NOlap::IBlobsGCAction& action) override;
 
-    virtual bool DoOnWriteIndexStart(const ui64 tabletId, NOlap::TColumnEngineChanges& change) override;
-    virtual bool DoOnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& batch) override;
     virtual bool DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& changes, const ::NKikimr::NColumnShard::TColumnShard& shard) override;
     virtual TDuration GetGuaranteeIndexationInterval(const TDuration defaultValue) const override {
         return GuaranteeIndexationInterval.value_or(defaultValue);
@@ -188,9 +161,6 @@ protected:
     }
     virtual EOptimizerCompactionWeightControl GetCompactionControl() const override {
         return CompactionControl;
-    }
-    void OnTieringModified(const std::shared_ptr<NKikimr::NColumnShard::TTiersManager>& /*tiers*/) override {
-        TieringUpdates.Inc();
     }
 
     virtual void DoOnDataSharingFinished(const ui64 /*tabletId*/, const TString& sessionId) override {
@@ -226,10 +196,6 @@ public:
         return ShardActuals.size();
     }
 
-    virtual void AddPortionForActualizer(const i32 portionsCount) override {
-        NeedActualizationCount.Add(portionsCount);
-    }
-
     void DisableBackground(const EBackground id) {
         TGuard<TMutex> g(Mutex);
         DisabledBackgrounds.emplace(id);
@@ -238,15 +204,6 @@ public:
     void EnableBackground(const EBackground id) {
         TGuard<TMutex> g(Mutex);
         DisabledBackgrounds.erase(id);
-    }
-
-    void WaitActualization(const TDuration d) const {
-        const TInstant start = TInstant::Now();
-        while (TInstant::Now() - start < d && NeedActualizationCount.Val()) {
-            Cerr << "waiting actualization: " << NeedActualizationCount.Val() << "/" << TInstant::Now() - start << Endl;
-            Sleep(TDuration::Seconds(1));
-        }
-        AFL_VERIFY(!NeedActualizationCount.Val());
     }
 
     std::vector<ui64> GetShardActualIds() const {
@@ -260,15 +217,6 @@ public:
 
     std::vector<ui64> GetPathIds(const ui64 tabletId) const;
 
-    virtual void OnIndexSelectProcessed(const std::optional<bool> result) override {
-        if (!result) {
-            IndexesSkippedNoData.Inc();
-        } else if (*result) {
-            IndexesApprovedOnSelect.Inc();
-        } else {
-            IndexesSkippingOnSelect.Inc();
-        }
-    }
     void SetExpectedShardsCount(const ui32 value) {
         ExpectedShardsCount = value;
     }

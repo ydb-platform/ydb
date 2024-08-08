@@ -129,6 +129,9 @@ message TFeatureFlags {
     optional bool EnableAccessServiceBulkAuthorization = 114 [default = false];
     optional bool EnableAddColumsWithDefaults = 115 [ default = false];
     optional bool EnableReplaceIfExistsForExternalEntities = 116 [ default = false];
+    optional bool EnableCMSRequestPriorities = 117 [default = false];
     optional bool ExtendedVDiskCounters = 120 [default = true];
     optional bool ExtendedPDiskSensors = 121 [default = true];
+    optional bool EnableStableNodeNames = 122 [default = false];
+    optional bool EnableVolatileTransactionArbiters = 124 [default = false];
 }

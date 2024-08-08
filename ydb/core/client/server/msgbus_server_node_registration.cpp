@@ -1,4 +1,5 @@
-#include "msgbus_servicereq.h"
+#include "msgbus_server_request.h"
+#include "msgbus_securereq.h"
 #include "grpc_server.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -19,36 +20,35 @@ using namespace NNodeBroker;
 
 namespace {
 
-class TNodeRegistrationActor : public TActorBootstrapped<TNodeRegistrationActor>, public TMessageBusSessionIdentHolder
+class TNodeRegistrationActor : public TMessageBusSecureRequest<TMessageBusServerRequestBase<TNodeRegistrationActor>>
 {
     using TActorBase = TActorBootstrapped<TNodeRegistrationActor>;
-
-    struct TNodeAuthorizationResult {
-        bool IsAuthorized = false;
-        bool IsCertificateUsed = false;
-
-        operator bool() const {
-            return IsAuthorized;
-        }
-    };
+    using TBase = TMessageBusSecureRequest<TMessageBusServerRequestBase<TNodeRegistrationActor>>;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::MSGBUS_COMMON;
     }
 
-    TNodeRegistrationActor(NKikimrClient::TNodeRegistrationRequest &request, NMsgBusProxy::TBusMessageContext &msg, const NKikimr::TDynamicNodeAuthorizationParams& dynamicNodeAuthorizationParams)
-        : TMessageBusSessionIdentHolder(msg)
+    TNodeRegistrationActor(NKikimrClient::TNodeRegistrationRequest &request, NMsgBusProxy::TBusMessageContext &msg)
+        : TBase(msg)
         , Request(request)
-        , DynamicNodeAuthorizationParams(dynamicNodeAuthorizationParams)
     {
+        const auto& clientCertificates = msg.FindClientCert();
+        if (!clientCertificates.empty()) {
+            TBase::SetSecurityToken(TString(clientCertificates.front()));
+        } else {
+            TBase::SetSecurityToken(BUILTIN_ACL_ROOT); // NBS compatibility
+        }
     }
 
     void Bootstrap(const TActorContext &ctx)
     {
-        const TNodeAuthorizationResult nodeAuthorizationResult = IsNodeAuthorized();
-        if (!nodeAuthorizationResult.IsAuthorized) {
+        if (!CheckAccess()) {
+            Response.MutableStatus()->SetCode(TStatus::UNAUTHORIZED);
+            Response.MutableStatus()->SetReason("Cannot authorize node. Access denied");
             SendReplyAndDie(ctx);
+            return;
         }
 
         auto dinfo = AppData(ctx)->DomainsInfo;
@@ -90,7 +90,7 @@ public:
         if (Request.HasPath()) {
             request->Record.SetPath(Request.GetPath());
         }
-        request->Record.SetAuthorizedByCertificate(nodeAuthorizationResult.IsCertificateUsed);
+        request->Record.SetAuthorizedByCertificate(IsNodeAuthorizedByCertificate);
 
         NTabletPipe::SendData(ctx, NodeBrokerPipe, request.Release());
 
@@ -157,7 +157,7 @@ public:
     void Die(const TActorContext &ctx)
     {
         NTabletPipe::CloseClient(ctx, NodeBrokerPipe);
-        TActorBase::Die(ctx);
+        TBase::Die(ctx);
     }
 
     void SendReplyAndDie(const TActorContext &ctx)
@@ -186,52 +186,34 @@ public:
     }
 
 private:
-    TNodeAuthorizationResult IsNodeAuthorized() {
-        TNodeAuthorizationResult result {.IsAuthorized = false, .IsCertificateUsed = false};
-        auto* appdata = AppData();
-        if (appdata && appdata->FeatureFlags.GetEnableDynamicNodeAuthorization() && DynamicNodeAuthorizationParams) {
-            const auto& nodeAuthValues = FindClientCert();
-            if (nodeAuthValues.empty()) {
-                Response.MutableStatus()->SetCode(TStatus::UNAUTHORIZED);
-                Response.MutableStatus()->SetReason("Cannot authorize node. Node has not provided certificate");
-                return result;
+    bool CheckAccess() {
+        const auto serializedToken = TBase::GetSerializedToken();
+        // Empty serializedToken means token is not required. Checked in secure_request.h
+        if (!serializedToken.empty() && !AppData()->RegisterDynamicNodeAllowedSIDs.empty()) {
+            NACLib::TUserToken token(serializedToken);
+            for (const auto& sid : AppData()->RegisterDynamicNodeAllowedSIDs) {
+                if (token.IsExist(sid)) {
+                    IsNodeAuthorizedByCertificate = true;
+                    return true;
+                }
             }
-            const auto& pemCert = nodeAuthValues.front();
-            TMap<TString, TString> subjectDescription;
-            X509CertificateReader::X509Ptr x509cert = X509CertificateReader::ReadCertAsPEM(pemCert);
-            for(const auto& term: X509CertificateReader::ReadSubjectTerms(x509cert)) {
-                subjectDescription.insert(term);
-            }
-
-            if (!DynamicNodeAuthorizationParams.IsSubjectDescriptionMatched(subjectDescription)) {
-                Response.MutableStatus()->SetCode(TStatus::UNAUTHORIZED);
-                Response.MutableStatus()->SetReason("Cannot authorize node by certificate");
-                return result;
-            }
-            const auto& host = Request.GetHost();
-            if (!DynamicNodeAuthorizationParams.IsHostMatchAttributeCN(host)) {
-                Response.MutableStatus()->SetCode(TStatus::UNAUTHORIZED);
-                Response.MutableStatus()->SetReason("Cannot authorize node with host: " + host);
-                return result;
-            }
-            result.IsCertificateUsed = true;
+            return false;
         }
-        result.IsAuthorized = true;
-        return result;;
+        return true;
     }
 
     NKikimrClient::TNodeRegistrationRequest Request;
     NKikimrClient::TNodeRegistrationResponse Response;
     TActorId NodeBrokerPipe;
-    const TDynamicNodeAuthorizationParams DynamicNodeAuthorizationParams;
+    bool IsNodeAuthorizedByCertificate = false;
 };
 
 } // namespace
 
-IActor *CreateMessageBusRegisterNode(NMsgBusProxy::TBusMessageContext &msg, const NKikimr::TDynamicNodeAuthorizationParams& dynamicNodeAuthorizationParams) {
+IActor *CreateMessageBusRegisterNode(NMsgBusProxy::TBusMessageContext &msg) {
     NKikimrClient::TNodeRegistrationRequest &record
         = static_cast<TBusNodeRegistrationRequest*>(msg.GetMessage())->Record;
-    return new TNodeRegistrationActor(record, msg, dynamicNodeAuthorizationParams);
+    return new TNodeRegistrationActor(record, msg);
 }
 
 } // namespace NMsgBusProxy

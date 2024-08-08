@@ -15,13 +15,13 @@ private:
     std::shared_ptr<TManager> Manager;
     const TConfig Config;
     const TString Name;
-    const TCounters Signals;
+    const std::shared_ptr<TCounters> Signals;
 
 public:
-    TMemoryLimiterActor(const TConfig& config, const TString& name, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& signals)
+    TMemoryLimiterActor(const TConfig& config, const TString& name, const std::shared_ptr<TCounters>& signals)
         : Config(config)
         , Name(name)
-        , Signals(name, signals) {
+        , Signals(signals) {
     }
 
     void Handle(NEvents::TEvExternal::TEvStartTask::TPtr& ev);

@@ -250,7 +250,8 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
     : CommonContext(commonContext) {
     MergeStageMemory = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures("MERGE", 0.15 * TGlobalLimits::ScanMemoryLimit);
     FilterStageMemory = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures("FILTER", 0.70 * TGlobalLimits::ScanMemoryLimit);
-    FetchingStageMemory = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures("FETCHING", 0.15 * TGlobalLimits::ScanMemoryLimit);
+    FetchingStageMemory =
+        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures("FETCHING", 0.15 * TGlobalLimits::ScanMemoryLimit);
     ReadMetadata = dynamic_pointer_cast<const TReadMetadata>(CommonContext->GetReadMetadata());
     Y_ABORT_UNLESS(ReadMetadata);
     Y_ABORT_UNLESS(ReadMetadata->SelectInfo);

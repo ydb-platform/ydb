@@ -16,7 +16,7 @@ class TManager {
 private:
     const TConfig Config;
     const TString Name;
-    const TCounters& Signals;
+    const std::shared_ptr<TCounters> Signals;
     const NActors::TActorId OwnerActorId;
 
     class TAllocationInfo {
@@ -235,7 +235,7 @@ private:
 //        Signals.MemoryWaitingCount->Set(Counters.GetWaitingCount().Val());
 //        Signals.MemoryUsageBytes->Set(Counters.GetAllocatedBytes().Val());
 //        Signals.MemoryWaitingBytes->Set(Counters.GetWaitingBytes().Val());
-        Signals.GroupsCount->Set(ExternalGroupIntoInternalGroup.size());
+        Signals->GroupsCount->Set(ExternalGroupIntoInternalGroup.size());
     }
 
     bool UnregisterAllocationImpl(const ui64 allocationId) {
@@ -254,7 +254,7 @@ private:
     }
 
 public:
-    TManager(const NActors::TActorId& ownerActorId, const TConfig& config, const TString& name, const TCounters& signals)
+    TManager(const NActors::TActorId& ownerActorId, const TConfig& config, const TString& name, const std::shared_ptr<TCounters>& signals)
         : Config(config)
         , Name(name)
         , Signals(signals)

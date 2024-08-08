@@ -3,24 +3,59 @@
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
-class TCounters: public NColumnShard::TCommonCountersOwner {
+class TStageCounters: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
+    NMonitoring::TDynamicCounters::TCounterPtr AllocatedBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr AllocatedChunks;
+    NMonitoring::TDynamicCounters::TCounterPtr WaitingBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr WaitingChunks;
+
 public:
-    const NMonitoring::TDynamicCounters::TCounterPtr MemoryUsageBytes;
-    const NMonitoring::TDynamicCounters::TCounterPtr MemoryWaitingBytes;
-    const NMonitoring::TDynamicCounters::TCounterPtr MemoryUsageCount;
-    const NMonitoring::TDynamicCounters::TCounterPtr MemoryWaitingCount;
-    const NMonitoring::TDynamicCounters::TCounterPtr GroupsCount;
-    TCounters(const TString& limiterName, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals)
-        : TBase(NColumnShard::TCommonCountersOwner("grouped_memory_limiter", baseSignals), "limiter_name", limiterName)
-        , MemoryUsageBytes(TBase::GetValue("Memory/Usage/Bytes"))
-        , MemoryWaitingBytes(TBase::GetValue("Memory/Waiting/Bytes"))
-        , MemoryUsageCount(TBase::GetValue("Memory/Usage/Count"))
-        , MemoryWaitingCount(TBase::GetValue("Memory/Waiting/Count")) 
-        , GroupsCount(TBase::GetValue("Groups/Count")) 
-    {
+    TStageCounters(const TCommonCountersOwner& owner, const TString& name)
+        : TBase(owner, "stage", name)
+        , AllocatedBytes(TBase::GetValue("Allocated/Bytes"))
+        , AllocatedChunks(TBase::GetValue("Allocated/Count"))
+        , WaitingBytes(TBase::GetValue("Waiting/Bytes"))
+        , WaitingChunks(TBase::GetValue("Waiting/Count")) {
+    }
+
+    void Add(const ui64 volume, const bool allocated) {
+        if (allocated) {
+            AllocatedBytes->Add(volume);
+            AllocatedChunks->Add(1);
+        } else {
+            WaitingBytes->Add(volume);
+            WaitingChunks->Add(1);
+        }
+    }
+
+    void Sub(const ui64 volume, const bool allocated) {
+        if (allocated) {
+            AllocatedBytes->Sub(volume);
+            AllocatedChunks->Sub(1);
+        } else {
+            WaitingBytes->Sub(volume);
+            WaitingChunks->Sub(1);
+        }
     }
 };
 
-}
+class TCounters: public NColumnShard::TCommonCountersOwner {
+private:
+    using TBase = NColumnShard::TCommonCountersOwner;
+
+public:
+    const NMonitoring::TDynamicCounters::TCounterPtr GroupsCount;
+    TCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, const TString& name)
+        : TBase("grouped_memory_limiter", counters)
+        , GroupsCount(TBase::GetValue("Groups/Count")) {
+        DeepSubGroup("limiter_name", name);
+    }
+
+    std::shared_ptr<TStageCounters> BuildStageCounters(const TString& stageName) const {
+        return std::make_shared<TStageCounters>(*this, stageName);
+    }
+};
+
+}   // namespace NKikimr::NOlap::NGroupedMemoryManager

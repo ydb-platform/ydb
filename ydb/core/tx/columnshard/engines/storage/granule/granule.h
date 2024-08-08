@@ -196,7 +196,7 @@ public:
         return OptimizerPlanner->SerializeToJsonVisual();
     }
 
-    std::vector<NArrow::NMerger::TSortableBatchPosition> GetBucketPositions() const {
+    NArrow::NMerger::TIntervalPositions GetBucketPositions() const {
         return OptimizerPlanner->GetBucketPositions();
     }
 

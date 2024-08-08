@@ -17,7 +17,8 @@ private:
     const std::shared_ptr<ISnapshotSchema> ActualSchema;
     void ReplyError(const TString& message);
 protected:
-    virtual bool DoExecute() override;
+    virtual TConclusionStatus DoExecute(const std::shared_ptr<ITask>& taskPtr) override;
+
 public:
     virtual TString GetTaskClassIdentifier() const override {
         return "Write::ConstructBlobs::Slices";

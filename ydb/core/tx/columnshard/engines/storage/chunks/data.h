@@ -17,6 +17,7 @@ protected:
         return "";
     }
     virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplit(const TColumnSaver& /*saver*/, const std::shared_ptr<NColumnShard::TSplitterCounters>& /*counters*/, const std::vector<ui64>& /*splitSizes*/) const override {
+        AFL_VERIFY(false);
         return {};
     }
     virtual bool DoIsSplittable() const override {
@@ -24,6 +25,9 @@ protected:
     }
     virtual std::optional<ui32> DoGetRecordsCount() const override {
         return RecordsCount;
+    }
+    virtual std::optional<ui64> DoGetRawBytes() const override {
+        return RawBytes;
     }
     virtual std::shared_ptr<arrow::Scalar> DoGetFirstScalar() const override {
         return nullptr;

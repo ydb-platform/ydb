@@ -12,7 +12,7 @@
 namespace NKikimr::NOlap {
 
 class TVersionedIndex;
-class TWritePortionInfoWithBlobs;
+class TWritePortionInfoWithBlobsResult;
 
 class TReadPortionInfoWithBlobs: public TBasePortionInfoWithBlobs {
 private:
@@ -21,7 +21,6 @@ private:
     void RestoreChunk(const std::shared_ptr<IPortionDataChunk>& chunk);
 
     TPortionInfo PortionInfo;
-    mutable std::optional<std::shared_ptr<arrow::RecordBatch>> CachedBatch;
 
     explicit TReadPortionInfoWithBlobs(TPortionInfo&& portionInfo)
         : PortionInfo(std::move(portionInfo)) {
@@ -39,8 +38,8 @@ public:
     static TReadPortionInfoWithBlobs RestorePortion(const TPortionInfo& portion, NBlobOperations::NRead::TCompositeReadBlobs& blobs,
         const TIndexInfo& indexInfo);
 
-    std::shared_ptr<arrow::RecordBatch> GetBatch(const ISnapshotSchema::TPtr& data, const ISnapshotSchema& result, const std::set<std::string>& columnNames = {}) const;
-    static std::optional<TWritePortionInfoWithBlobs> SyncPortion(TReadPortionInfoWithBlobs&& source,
+    std::shared_ptr<NArrow::TGeneralContainer> RestoreBatch(const ISnapshotSchema& data, const ISnapshotSchema& resultSchema, const std::set<ui32>& seqColumns) const;
+    static std::optional<TWritePortionInfoWithBlobsResult> SyncPortion(TReadPortionInfoWithBlobs&& source,
         const ISnapshotSchema::TPtr& from, const ISnapshotSchema::TPtr& to, const TString& targetTier, const std::shared_ptr<IStoragesManager>& storages,
         std::shared_ptr<NColumnShard::TSplitterCounters> counters);
 

@@ -8,12 +8,10 @@ ydb/core/external_sources *
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.*
 ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDataSourceMetadata
-ydb/core/kqp/ut/olap KqpOlapIndexes.IndexesActualization
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.*
-ydb/core/kqp/ut/olap KqpOlap.ScanQueryOltpAndOlap
 ydb/core/kqp/ut/olap KqpOlapStatistics.StatsUsageWithTTL
-ydb/core/kqp/ut/olap KqpOlap.YqlScriptOltpAndOlap
 ydb/core/kqp/ut/olap KqpOlapAggregations.Aggregation_ResultCountAll_FilterL
+ydb/core/kqp/ut/olap KqpOlapWrite.WriteDeleteCleanGC
 ydb/core/kqp/ut/pg KqpPg.CreateIndex
 ydb/core/kqp/ut/query KqpLimits.QueryReplySize
 ydb/core/kqp/ut/query KqpQuery.QueryTimeout

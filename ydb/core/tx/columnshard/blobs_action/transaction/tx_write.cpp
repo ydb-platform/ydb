@@ -7,7 +7,7 @@ bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const NOlap::TWideSeriali
     meta.SetNumRows(batch->GetRowsCount());
     meta.SetRawBytes(batch->GetRawBytes());
     meta.SetDirtyWriteTimeSeconds(batch.GetStartInstant().Seconds());
-    meta.SetSpecialKeysRawData(batch->GetSpecialKeysSafe().SerializeToString());
+    meta.SetSpecialKeysRawData(batch->GetSpecialKeysSafe());
 
     const auto& blobRange = batch.GetRange();
     Y_ABORT_UNLESS(blobRange.GetBlobId().IsValid());
@@ -16,12 +16,15 @@ bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const NOlap::TWideSeriali
     TBlobGroupSelector dsGroupSelector(Self->Info());
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
 
-    const auto& writeMeta = batch.GetAggregation().GetWriteData()->GetWriteMeta();
+    const auto& writeMeta = batch.GetAggregation().GetWriteMeta();
     meta.SetModificationType(TEnumOperator<NEvWrite::EModificationType>::SerializeToProto(writeMeta.GetModificationType()));
-    auto schemeVersion = batch.GetAggregation().GetWriteData()->GetData()->GetSchemaVersion();
+    *meta.MutableSchemaSubset() = batch.GetAggregation().GetSchemaSubset().SerializeToProto();
+    auto schemeVersion = batch.GetAggregation().GetSchemaVersion();
     auto tableSchema = Self->TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchemaVerified(schemeVersion);
 
-    NOlap::TInsertedData insertData((ui64)writeId, writeMeta.GetTableId(), writeMeta.GetDedupId(), blobRange, meta, tableSchema->GetVersion(), batch->GetData());
+    NOlap::TInsertedData insertData((ui64)writeId, writeMeta.GetTableId(), writeMeta.GetDedupId(), blobRange, 
+        meta, tableSchema->GetVersion(),
+        batch->GetData());
     bool ok = Self->InsertTable->Insert(dbTable, std::move(insertData));
     if (ok) {
         Self->UpdateInsertTableCounters();
@@ -36,7 +39,7 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
     ACFL_DEBUG("event", "start_execute");
     const NOlap::TWritingBuffer& buffer = PutBlobResult->Get()->MutableWritesBuffer();
     for (auto&& aggr : buffer.GetAggregations()) {
-        const auto& writeMeta = aggr->GetWriteData()->GetWriteMeta();
+        const auto& writeMeta = aggr->GetWriteMeta();
         Y_ABORT_UNLESS(Self->TablesManager.IsReadyForWrite(writeMeta.GetTableId()));
         txc.DB.NoMoreReadsForTx();
         TWriteOperation::TPtr operation;
@@ -82,7 +85,7 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
     }
     Results.clear();
     for (auto&& aggr : buffer.GetAggregations()) {
-        const auto& writeMeta = aggr->GetWriteData()->GetWriteMeta();
+        const auto& writeMeta = aggr->GetWriteMeta();
         if (!writeMeta.HasLongTxId()) {
             auto operation = Self->OperationsManager->GetOperation((TWriteId)writeMeta.GetWriteId());
             Y_ABORT_UNLESS(operation);
@@ -136,7 +139,7 @@ void TTxWrite::Complete(const TActorContext& ctx) {
         i.DoSendReply(ctx);
     }
     for (ui32 i = 0; i < buffer.GetAggregations().size(); ++i) {
-        const auto& writeMeta = buffer.GetAggregations()[i]->GetWriteData()->GetWriteMeta();
+        const auto& writeMeta = buffer.GetAggregations()[i]->GetWriteMeta();
         Self->CSCounters.OnWriteTxComplete(now - writeMeta.GetWriteStartInstant());
         Self->CSCounters.OnSuccessWriteResponse();
     }

@@ -65,6 +65,9 @@ public:
     std::shared_ptr<TColumnLoader> Loader;
     std::vector<TChunk> Chunks;
 protected:
+    virtual std::optional<ui64> DoGetRawSize() const override {
+        return {};
+    }
     virtual TCurrentChunkAddress DoGetChunk(const std::optional<TCurrentChunkAddress>& chunkCurrent, const ui64 position) const override;
     virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray() const override {
         AFL_VERIFY(false);
@@ -197,6 +200,16 @@ public:
         SetRemoveSnapshot(TSnapshot(planStep, txId));
     }
 
+    std::vector<TString> GetIndexInplaceDataVerified(const ui32 indexId) const {
+        std::vector<TString> result;
+        for (auto&& i : Indexes) {
+            if (i.GetEntityId() == indexId) {
+                result.emplace_back(i.GetBlobDataVerified());
+            }
+        }
+        return result;
+    }
+
     void InitRuntimeFeature(const ERuntimeFeature feature, const bool activity) {
         if (activity) {
             AddRuntimeFeature(feature);
@@ -239,8 +252,7 @@ public:
 
     void ReorderChunks();
 
-    THashMap<TString, THashMap<TUnifiedBlobId, std::vector<std::shared_ptr<IPortionDataChunk>>>> RestoreEntityChunks(NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const;
-    THashMap<TString, THashMap<TUnifiedBlobId, std::vector<TEntityChunk>>> GetEntityChunks(const TIndexInfo & info) const;
+    THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> RestoreEntityChunks(NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const;
 
     const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
         return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));
@@ -384,20 +396,6 @@ public:
             }
         }
         return nullptr;
-    }
-
-    std::optional<TEntityChunk> GetEntityRecord(const TChunkAddress& address) const {
-        for (auto&& c : GetRecords()) {
-            if (c.GetAddress() == address) {
-                return TEntityChunk(c.GetAddress(), c.GetMeta().GetNumRows(), c.GetMeta().GetRawBytes(), c.GetBlobRange());
-            }
-        }
-        for (auto&& c : GetIndexes()) {
-            if (c.GetAddress() == address) {
-                return TEntityChunk(c.GetAddress(), c.GetRecordsCount(), c.GetRawBytes(), c.GetBlobRange());
-            }
-        }
-        return {};
     }
 
     bool HasEntityAddress(const TChunkAddress& address) const {
@@ -591,7 +589,7 @@ public:
     ui64 GetIndexBlobBytes() const noexcept {
         ui64 sum = 0;
         for (const auto& rec : Indexes) {
-            sum += rec.GetBlobRange().Size;
+            sum += rec.GetDataSize();
         }
         return sum;
     }
@@ -688,6 +686,7 @@ public:
 
         std::shared_ptr<arrow::ChunkedArray> Assemble() const;
         std::shared_ptr<TDeserializeChunkedArray> AssembleForSeqAccess() const;
+        std::shared_ptr<NArrow::NAccessor::IChunkedArray> AssembleAccessor() const;
     };
 
     class TPreparedBatchData {
@@ -752,8 +751,7 @@ public:
             , RowsCount(rowsCount) {
         }
 
-        std::shared_ptr<arrow::RecordBatch> Assemble(const TAssembleOptions& options = {}) const;
-        std::shared_ptr<arrow::Table> AssembleTable(const TAssembleOptions& options = {}) const;
+        std::shared_ptr<NArrow::TGeneralContainer> AssembleToGeneralContainer(const std::set<ui32>& sequentialColumnIds) const;
         std::shared_ptr<NArrow::TGeneralContainer> AssembleForSeqAccess() const;
     };
 
@@ -791,7 +789,7 @@ public:
 
         TPreparedColumn Compile() {
             if (BlobsInfo.empty()) {
-                BlobsInfo.emplace_back(TAssembleBlobInfo(NumRows, DataLoader->GetDefaultValue()));
+                BlobsInfo.emplace_back(TAssembleBlobInfo(NumRows, DataLoader ? DataLoader->GetDefaultValue() : ResultLoader->GetDefaultValue()));
                 return TPreparedColumn(std::move(BlobsInfo), ResultLoader);
             } else {
                 AFL_VERIFY(NumRowsByChunks == NumRows)("by_chunks", NumRowsByChunks)("expected", NumRows);
@@ -803,13 +801,6 @@ public:
 
     TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TString>& blobsData) const;
     TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TAssembleBlobInfo>& blobsData) const;
-
-    std::shared_ptr<arrow::RecordBatch> AssembleInBatch(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
-        THashMap<TChunkAddress, TString>& data) const {
-        auto batch = PrepareForAssemble(dataSchema, resultSchema, data).Assemble();
-        Y_ABORT_UNLESS(batch->Validate().ok());
-        return batch;
-    }
 
     friend IOutputStream& operator << (IOutputStream& out, const TPortionInfo& info) {
         out << info.DebugString();

@@ -206,6 +206,9 @@ protected:
     virtual const TString& DoGetData() const override {
         return Data;
     }
+    virtual ui64 DoGetRawBytesImpl() const override {
+        return ColumnRecord.GetMeta().GetRawBytes();
+    }
     virtual ui32 DoGetRecordsCountImpl() const override {
         return ColumnRecord.GetMeta().GetNumRows();
     }

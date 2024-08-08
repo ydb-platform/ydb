@@ -91,7 +91,7 @@ public:
         return batch;
     }
     [[nodiscard]] static std::shared_ptr<TGeneralContainer> ApplyArrowFilter(const std::shared_ptr<TGeneralContainer>& batch, const std::shared_ptr<arrow::BooleanArray>& filter) {
-        auto table = batch->BuildTable();
+        auto table = batch->BuildTableVerified();
         return std::make_shared<TGeneralContainer>(TDataBuilderPolicy<arrow::Table>::ApplyArrowFilter(table, filter));
     }
     [[nodiscard]] static std::shared_ptr<TGeneralContainer> GetEmptySame(const std::shared_ptr<TGeneralContainer>& batch) {

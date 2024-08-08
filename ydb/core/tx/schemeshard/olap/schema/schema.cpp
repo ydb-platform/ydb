@@ -1,6 +1,5 @@
 #include "schema.h"
 #include <ydb/core/tx/schemeshard/common/validation.h>
-#include <ydb/core/tx/columnshard/engines/scheme/statistics/max/constructor.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -83,14 +82,6 @@ bool TOlapSchema::ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycl
                 errors.AddError("Incorrect ttl column - not found in scheme");
                 return false;
             }
-            if (!Statistics.GetByIdOptional(NOlap::NStatistics::EType::Max, {column->GetId()})) {
-                TOlapStatisticsModification modification;
-                NOlap::NStatistics::TConstructorContainer container(std::make_shared<NOlap::NStatistics::NMax::TConstructor>(column->GetName()));
-                modification.AddUpsert("__TTL_PROVIDER::" + TGUID::CreateTimebased().AsUuidString(), container);
-                if (!Statistics.ApplyUpdate(*this, modification, errors)) {
-                    return false;
-                }
-            }
             return ValidateColumnTableTtl(ttl.GetEnabled(), {}, Columns.GetColumns(), Columns.GetColumnsByName(), errors);
         }
         case TTtlProto::kDisabled:
@@ -107,10 +98,6 @@ bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector&
     }
 
     if (!Indexes.ApplyUpdate(*this, schemaUpdate.GetIndexes(), errors, NextColumnId)) {
-        return false;
-    }
-
-    if (!Statistics.ApplyUpdate(*this, schemaUpdate.GetStatistics(), errors)) {
         return false;
     }
 
@@ -140,7 +127,6 @@ void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& ta
     Columns.Parse(tableSchema);
     Indexes.Parse(tableSchema);
     Options.Parse(tableSchema);
-    Statistics.Parse(tableSchema);
 }
 
 void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchemaExt) const {
@@ -154,7 +140,6 @@ void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchemaExt)
     Columns.Serialize(resultLocal);
     Indexes.Serialize(resultLocal);
     Options.Serialize(resultLocal);
-    Statistics.Serialize(resultLocal);
     std::swap(resultLocal, tableSchemaExt);
 }
 
@@ -168,10 +153,6 @@ bool TOlapSchema::Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, 
     }
 
     if (!Options.Validate(opSchema, errors)) {
-        return false;
-    }
-
-    if (!Statistics.Validate(opSchema, errors)) {
         return false;
     }
 

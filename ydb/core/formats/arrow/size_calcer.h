@@ -74,13 +74,13 @@ private:
     YDB_READONLY_DEF(TString, Data);
     YDB_READONLY(ui32, RowsCount, 0);
     YDB_READONLY(ui32, RawBytes, 0);
-    std::optional<TFirstLastSpecialKeys> SpecialKeys;
+    std::optional<TString> SpecialKeys;
 public:
     size_t GetSize() const {
         return Data.size();
     }
 
-    const TFirstLastSpecialKeys& GetSpecialKeysSafe() const {
+    const TString& GetSpecialKeysSafe() const {
         AFL_VERIFY(SpecialKeys);
         return *SpecialKeys;
     }
@@ -95,7 +95,7 @@ public:
     static TConclusionStatus BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplitttingContext& context, std::optional<TSerializedBatch>& sbL, std::optional<TSerializedBatch>& sbR);
     static TSerializedBatch Build(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplitttingContext& context);
 
-    TSerializedBatch(TString&& schemaData, TString&& data, const ui32 rowsCount, const ui32 rawBytes, const std::optional<TFirstLastSpecialKeys>& specialKeys)
+    TSerializedBatch(TString&& schemaData, TString&& data, const ui32 rowsCount, const ui32 rawBytes, const std::optional<TString>& specialKeys)
         : SchemaData(schemaData)
         , Data(data)
         , RowsCount(rowsCount)

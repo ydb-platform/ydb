@@ -259,18 +259,38 @@ void TColumnShard::LoadLongTxWrite(TWriteId writeId, const ui32 writePartId, con
 }
 
 bool TColumnShard::RemoveLongTxWrite(NIceDb::TNiceDb& db, const TWriteId writeId, const ui64 txId) {
-    auto* lw = LongTxWrites.FindPtr(writeId);
-    AFL_VERIFY(lw)("write_id", (ui64)writeId)("tx_id", txId);
-    const ui64 prepared = lw->PreparedTxId;
-    AFL_VERIFY(!prepared || txId == prepared)("tx", txId)("prepared", prepared);
-    Schema::EraseLongTxWrite(db, writeId);
-    auto& ltxParts = LongTxWritesByUniqueId[lw->LongTxId.UniqueId];
-    ltxParts.erase(lw->WritePartId);
-    if (ltxParts.empty()) {
-        AFL_VERIFY(LongTxWritesByUniqueId.erase(lw->LongTxId.UniqueId));
+    if (auto* lw = LongTxWrites.FindPtr(writeId)) {
+        ui64 prepared = lw->PreparedTxId;
+        if (!prepared || txId == prepared) {
+            Schema::EraseLongTxWrite(db, writeId);
+            auto& ltxParts = LongTxWritesByUniqueId[lw->LongTxId.UniqueId];
+            ltxParts.erase(lw->WritePartId);
+            if (ltxParts.empty()) {
+                LongTxWritesByUniqueId.erase(lw->LongTxId.UniqueId);
+            }
+            LongTxWrites.erase(writeId);
+            return true;
+        }
     }
-    LongTxWrites.erase(writeId);
-    return true;
+    return false;
+}
+
+void TColumnShard::TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTable, THashSet<TWriteId>&& writesToAbort) {
+    std::vector<TWriteId> failedAborts;
+    for (auto& writeId : writesToAbort) {
+        if (!RemoveLongTxWrite(db, writeId, 0)) {
+            failedAborts.push_back(writeId);
+        }
+    }
+    if (failedAborts.size()) {
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "failed_aborts")("count", failedAborts.size())("writes_count", writesToAbort.size());
+    }
+    for (auto& writeId : failedAborts) {
+        writesToAbort.erase(writeId);
+    }
+    if (!writesToAbort.empty()) {
+        InsertTable->Abort(dbTable, writesToAbort);
+    }
 }
 
 void TColumnShard::UpdateSchemaSeqNo(const TMessageSeqNo& seqNo, NTabletFlatExecutor::TTransactionContext& txc) {
@@ -455,7 +475,9 @@ void TColumnShard::RunDropTable(const NKikimrTxColumnShard::TDropTable& dropProt
     // TODO: Allow to read old snapshots after DROP
     TBlobGroupSelector dsGroupSelector(Info());
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
-    InsertTable->DropPath(dbTable, pathId);
+    THashSet<TWriteId> writesToAbort = InsertTable->DropPath(dbTable, pathId);
+
+    TryAbortWrites(db, dbTable, std::move(writesToAbort));
 }
 
 void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto, const NOlap::TSnapshot& version,
@@ -488,7 +510,6 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     StoragesManager->GetOperatorVerified(NOlap::IStoragesManager::DefaultStorageId);
     StoragesManager->GetSharedBlobsManager()->GetStorageManagerVerified(NOlap::IStoragesManager::DefaultStorageId);
     CSCounters.OnStartBackground();
-    SendPeriodicStats();
 
     if (!TablesManager.HasPrimaryIndex()) {
         AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("problem", "Background activities cannot be started: no index at tablet");
@@ -515,7 +536,7 @@ private:
     TString ClassId;
     NOlap::TSnapshot LastCompletedTx;
 protected:
-    virtual bool DoExecute() override {
+    virtual TConclusionStatus DoExecute(const std::shared_ptr<NConveyor::ITask>& /*taskPtr*/) override {
         NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent_id", ParentActorId));
         {
             NOlap::TConstructionContext context(*TxEvent->IndexInfo, Counters, LastCompletedTx);
@@ -525,7 +546,7 @@ protected:
             }
         }
         TActorContext::AsActorContext().Send(ParentActorId, std::move(TxEvent));
-        return true;
+        return TConclusionStatus::Success();
     }
 public:
     virtual TString GetTaskClassIdentifier() const override {
@@ -827,21 +848,22 @@ void TColumnShard::Handle(TEvPrivate::TEvGarbageCollectionFinished::TPtr& ev, co
 }
 
 void TColumnShard::SetupCleanupInsertTable() {
+    auto writeIdsToCleanup = InsertTable->OldWritesToAbort(AppData()->TimeProvider->Now());
+
     if (BackgroundController.IsCleanupInsertTableActive()) {
         ACFL_DEBUG("background", "cleanup_insert_table")("skip_reason", "in_progress");
         return;
     }
 
-    if (!InsertTable->GetAborted().size()) {
+    if (!InsertTable->GetAborted().size() && !writeIdsToCleanup.size()) {
         return;
     }
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "cleanup_started")("aborted", InsertTable->GetAborted().size());
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "cleanup_started")("aborted", InsertTable->GetAborted().size())("to_cleanup", writeIdsToCleanup.size());
     BackgroundController.StartCleanupInsertTable();
-    Execute(new TTxInsertTableCleanup(this), TActorContext::AsActorContext());
+    Execute(new TTxInsertTableCleanup(this, std::move(writeIdsToCleanup)), TActorContext::AsActorContext());
 }
 
 void TColumnShard::Die(const TActorContext& ctx) {
-    // TODO
     CleanupActors(ctx);
     NTabletPipe::CloseAndForgetClient(SelfId(), StatsReportPipe);
     UnregisterMediatorTimeCast();
@@ -1050,9 +1072,13 @@ void TColumnShard::Handle(TAutoPtr<TEventHandle<NOlap::NBackground::TEvExecuteGe
 void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs::TPtr& ev, const TActorContext& ctx) {
     if (SharingSessionsManager->IsSharingInProgress()) {
         ctx.Send(NActors::ActorIdFromProto(ev->Get()->Record.GetSourceActorId()),
-            new NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobsFinished((NOlap::TTabletId)TabletID(),
-                NKikimrColumnShardBlobOperationsProto::TEvDeleteSharedBlobsFinished::DestinationCurrenlyLocked));
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "sharing_in_progress");
+            new NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobsFinished(
+                (NOlap::TTabletId)TabletID(), NKikimrColumnShardBlobOperationsProto::TEvDeleteSharedBlobsFinished::DestinationCurrenlyLocked));
+        for (auto&& i : ev->Get()->Record.GetBlobIds()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS)("event", "sharing_in_progress")("blob_id", i)(
+                "from_tablet", ev->Get()->Record.GetSourceTabletId());
+        }
+
         return;
     }
 

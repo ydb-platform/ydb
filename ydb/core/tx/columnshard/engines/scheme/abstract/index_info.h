@@ -1,6 +1,7 @@
 #pragma once
 #include "loader.h"
 
+#include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 
@@ -61,12 +62,6 @@ public:
         return std::make_shared<arrow::Schema>(std::move(fields));
     }
 
-    void AddSpecialFieldIds(std::vector<ui32>& result) const {
-        result.emplace_back((ui32)ESpecialColumn::PLAN_STEP);
-        result.emplace_back((ui32)ESpecialColumn::TX_ID);
-        result.emplace_back((ui32)ESpecialColumn::DELETE_FLAG);
-    }
-
     static void AddSpecialFields(std::vector<std::shared_ptr<arrow::Field>>& fields) {
         AddSnapshotFields(fields);
         fields.push_back(arrow::field(SPEC_COL_DELETE_FLAG, arrow::boolean()));
@@ -80,6 +75,10 @@ public:
     static void AddSnapshotFields(std::vector<std::shared_ptr<arrow::Field>>& fields) {
         fields.push_back(arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()));
         fields.push_back(arrow::field(SPEC_COL_TX_ID, arrow::uint64()));
+    }
+
+    static void AddDeleteFields(std::vector<std::shared_ptr<arrow::Field>>& fields) {
+        fields.push_back(arrow::field(SPEC_COL_DELETE_FLAG, arrow::boolean()));
     }
 
     static const std::set<ui32>& GetSnapshotColumnIdsSet() {
@@ -97,6 +96,21 @@ public:
         return result;
     }
 
+    [[nodiscard]] static std::vector<ui32> AddSpecialFieldIds(const std::vector<ui32>& baseColumnIds) {
+        std::vector<ui32> result = baseColumnIds;
+        for (auto&& i : GetSystemColumnIds()) {
+            result.emplace_back(i);
+        }
+        return result;
+    }
+
+    [[nodiscard]] static std::vector<ui32> AddSnapshotFieldIds(const std::vector<ui32>& baseColumnIds) {
+        std::vector<ui32> result = baseColumnIds;
+        for (auto&& i : GetSnapshotColumnIds()) {
+            result.emplace_back(i);
+        }
+        return result;
+    }
 
     std::optional<ui32> GetColumnIdOptional(const std::string& name) const;
     TString GetColumnName(ui32 id, bool required) const;
@@ -106,10 +120,10 @@ public:
     virtual std::shared_ptr<TColumnLoader> GetColumnLoaderOptional(const ui32 columnId) const = 0;
     std::shared_ptr<TColumnLoader> GetColumnLoaderVerified(const ui32 columnId) const;
 
-    static std::shared_ptr<arrow::RecordBatch> NormalizeDeletionColumn(const std::shared_ptr<arrow::RecordBatch>& batch);
+    static void NormalizeDeletionColumn(NArrow::TGeneralContainer& batch);
 
-    static std::shared_ptr<arrow::RecordBatch> AddSnapshotColumns(const std::shared_ptr<arrow::RecordBatch>& batch, const TSnapshot& snapshot);
-    static std::shared_ptr<arrow::RecordBatch> AddDeleteFlagsColumn(const std::shared_ptr<arrow::RecordBatch>& batch, const bool isDelete);
+    static void AddSnapshotColumns(NArrow::TGeneralContainer& batch, const TSnapshot& snapshot);
+    static void AddDeleteFlagsColumn(NArrow::TGeneralContainer& batch, const bool isDelete);
 
     static ui64 GetSpecialColumnsRecordSize() {
         return sizeof(ui64) + sizeof(ui64) + sizeof(bool);
@@ -144,6 +158,11 @@ public:
         return fieldId == (ui32)ESpecialColumn::PLAN_STEP
             || fieldId == (ui32)ESpecialColumn::TX_ID
             || fieldId == (ui32)ESpecialColumn::DELETE_FLAG;
+    }
+
+    static bool IsNullableVerified(const ui32 fieldId) {
+        Y_UNUSED(fieldId);
+        return false;
     }
 
     static ui32 GetSpecialColumnByteWidth(const ui32 field) {

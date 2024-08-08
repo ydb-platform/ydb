@@ -1,4 +1,4 @@
-PY3_PROGRAM(olap_stability_test)
+PY3_PROGRAM(olap_workload)
 
 PY_SRCS(
     __main__.py

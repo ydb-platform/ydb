@@ -69,7 +69,7 @@ class Workload(object):
             self.drop_table(table_name)
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="olap stability test", formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(description="olap stability workload", formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--endpoint', default='localhost:2135', help="An endpoint to be used")
     parser.add_argument('--database', default=None, required=True, help='A database to connect')
     parser.add_argument('--duration', default=10 ** 9, type=lambda x: int(x), help='A duration of workload in seconds.')

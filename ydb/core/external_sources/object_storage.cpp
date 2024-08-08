@@ -358,19 +358,18 @@ struct TObjectStorageExternalSource : public IExternalSource {
                 if (std::holds_alternative<NYql::TIssues>(response.Response)) {
                     auto& issues = std::get<NYql::TIssues>(response.Response);
                     metaPromise.SetValue(NYql::NCommon::ResultFromError<TMetadataResult>(issues));
+                    return;
                 }
-                else {
-                    auto& fields = std::get<std::vector<Ydb::Column>>(response.Response);
-                    meta->Changed = true;
-                    meta->Schema.clear_column();
-                    for (const auto& column : fields) {
-                        auto& destColumn = *meta->Schema.add_column();
-                        destColumn = column;
-                    }
-                    result.SetSuccess();
-                    result.Metadata = meta;
-                    metaPromise.SetValue(std::move(result));
+                auto& fields = std::get<std::vector<Ydb::Column>>(response.Response);
+                meta->Changed = true;
+                meta->Schema.clear_column();
+                for (const auto& column : fields) {
+                    auto& destColumn = *meta->Schema.add_column();
+                    destColumn = column;
                 }
+                result.SetSuccess();
+                result.Metadata = meta;
+                metaPromise.SetValue(std::move(result));
             };
             actorSystem->Register(new NKqp::TActorRequestHandler<NObjectStorage::TEvInferFileSchema, NObjectStorage::TEvInferredFileSchema, TMetadataResult>(
                 arrowInferencinatorId,

@@ -138,7 +138,7 @@ void TDurationStat::Add(TDuration duration)
 
 TDuration TDurationStat::GetAverage() const
 {
-    return Total / Values.size();
+    return Total / Max<size_t>(1, Values.size());
 }
 
 bool TTaskQueue::TTaskEarlier::operator()(const TTaskPtr &l,
@@ -284,7 +284,7 @@ void TTaskQueue::UpdateRealResourceUsage(TInstant now)
 
     // Find dominant resource consumption and update usage
     auto dom = GetDominantResourceComponentNormalized(QueueLimit.Used);
-    auto usage = RealResourceUsage + dom * duration.MilliSeconds() / Weight;
+    auto usage = RealResourceUsage + dom * duration.MilliSeconds() / Max(1u, Weight);
     RealResourceUsage = usage;
 
     UsageTimestamp = now;
@@ -305,11 +305,11 @@ void TTaskQueue::UpdatePlannedResourceUsage(TTaskPtr task,
 
     auto dom = GetDominantResourceComponentNormalized(task->RequiredResources);
     if (decrease) {
-        PlannedResourceUsage -= dom * duration.MilliSeconds() / Weight;
+        PlannedResourceUsage -= dom * duration.MilliSeconds() / Max(1u, Weight);
         PlannedResourceUsage = Max(PlannedResourceUsage, RealResourceUsage);
     } else {
         PlannedResourceUsage = Max(PlannedResourceUsage, RealResourceUsage);
-        PlannedResourceUsage += dom * duration.MilliSeconds() / Weight;
+        PlannedResourceUsage += dom * duration.MilliSeconds() / Max(1u, Weight);
     }
 }
 
@@ -317,9 +317,9 @@ double TTaskQueue::GetDominantResourceComponentNormalized(const TResourceValues 
 {
     std::array<double, RESOURCE_COUNT> norm;
     for (size_t i = 0; i < norm.size(); ++i)
-        norm[i] = (double)QueueLimit.Used[i] / (double)TotalLimit->Limit[i];
+        norm[i] = (double)QueueLimit.Used[i] / (double)Max(1lu, TotalLimit->Limit[i]);
     size_t i = MaxElement(norm.begin(), norm.end()) - norm.begin();
-    return (double)values[i] / (double)TotalLimit->Limit[i];
+    return (double)values[i] / (double)Max(1lu, TotalLimit->Limit[i]);
 }
 
 void TTaskQueue::OutputState(IOutputStream &os, const TString &prefix) const
@@ -1177,20 +1177,23 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvNotifyActorDied::TPtr &e
 void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev,
                                   const TActorContext &ctx)
 {
-    auto &rec = ev->Get()->Record;
-    TAutoPtr<TEvResourceBroker::TEvConfigureResult> response
-        = new TEvResourceBroker::TEvConfigureResult;
+    auto &config = ev->Get()->Record;
+    if (ev->Get()->Merge) {
+        LOG_INFO_S(ctx, NKikimrServices::RESOURCE_BROKER, "New config diff: " << config.ShortDebugString());
+        auto copy = Config;
+        MergeConfigUpdates(copy, config);
+        config.Swap(&copy);
+    }
 
-    LOG_DEBUG(ctx, NKikimrServices::RESOURCE_BROKER, "New config: %s",
-              rec.ShortDebugString().data());
+    LOG_INFO_S(ctx, NKikimrServices::RESOURCE_BROKER, "New config: " << config.ShortDebugString());
 
     TSet<TString> queues;
     TSet<TString> tasks;
     bool success = true;
     TString error;
-    for (auto &queue : rec.GetQueues())
+    for (auto &queue : config.GetQueues())
         queues.insert(queue.GetName());
-    for (auto &task : rec.GetTasks()) {
+    for (auto &task : config.GetTasks()) {
         if (!queues.contains(task.GetQueueName())) {
             error = Sprintf("task '%s' uses unknown queue '%s'", task.GetName().data(), task.GetQueueName().data());
             success = false;
@@ -1207,6 +1210,8 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev,
         success = false;
     }
 
+    TAutoPtr<TEvResourceBroker::TEvConfigureResult> response = new TEvResourceBroker::TEvConfigureResult;
+
     if (!success) {
         response->Record.SetSuccess(false);
         response->Record.SetMessage(error);
@@ -1222,8 +1227,7 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev,
         ResourceBroker->Configure(std::move(ev->Get()->Record));
     }
 
-    LOG_DEBUG(ctx, NKikimrServices::RESOURCE_BROKER, "Configure result: %s",
-              response->Record.ShortDebugString().data());
+    LOG_INFO_S(ctx, NKikimrServices::RESOURCE_BROKER, "Configure result: " << response->Record.ShortDebugString());
 
     ctx.Send(ev->Sender, response.Release());
 }

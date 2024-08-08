@@ -11,6 +11,7 @@ IF (SANITIZER_TYPE)
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
     TAG(sb:ttl=2)
 ENDIF()
 
@@ -46,7 +47,7 @@ ENDIF()
 
 NO_CHECK_IMPORTS()
 
-REQUIREMENTS(cpu:4 ram:13)
+REQUIREMENTS(cpu:1 ram:13)
 
 END()
 

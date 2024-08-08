@@ -3,7 +3,7 @@ UNITTEST()
 FORK_SUBTESTS()
 
 REQUIREMENTS(
-    cpu:4
+    cpu:1
     ram:16
 )
 
@@ -13,6 +13,7 @@ IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     TIMEOUT(1800)
 ELSE()
     SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
     TIMEOUT(600)
 ENDIF()
 

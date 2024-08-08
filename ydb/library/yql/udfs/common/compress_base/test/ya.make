@@ -7,5 +7,6 @@ IF (SANITIZER_TYPE == "memory")
 ENDIF()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 END()

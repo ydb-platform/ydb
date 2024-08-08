@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/kqp/workload_service)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     kqp_workload_service_actors_ut.cpp

@@ -17,10 +17,11 @@ IF (SANITIZER_TYPE == "thread")
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 ENDIF()
 
 REQUIREMENTS(
-    cpu:4
+    cpu:1
     ram:32
 )
 

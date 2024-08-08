@@ -4,6 +4,7 @@ FORK_SUBTESTS()
 
 TIMEOUT(600)
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     kqp_scan_spilling_ut.cpp

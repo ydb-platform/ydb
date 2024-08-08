@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/public/lib/idx_test)
 TIMEOUT(600)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 FORK_SUBTESTS()
 

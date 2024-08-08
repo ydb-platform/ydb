@@ -12,7 +12,7 @@ TEST_SRCS(
 
 
 REQUIREMENTS(
-    cpu:4
+    cpu:1
     ram:32
 )
 
@@ -27,6 +27,7 @@ IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 ENDIF()
 
 DEPENDS(

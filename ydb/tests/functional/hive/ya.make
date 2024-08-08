@@ -9,7 +9,7 @@ TEST_SRCS(
 
 
 REQUIREMENTS(
-    cpu:4
+    cpu:1
     ram:16
 )
 
@@ -19,12 +19,13 @@ IF (SANITIZER_TYPE == "thread")
     TAG(ya:fat)
     REQUIREMENTS(
         ram:32
-        cpu:4
+        cpu:1
     )
     SPLIT_FACTOR(20)
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
     SPLIT_FACTOR(20)
 ENDIF()
 

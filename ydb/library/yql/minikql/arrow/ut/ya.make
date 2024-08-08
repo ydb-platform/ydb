@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/library/yql/minikql/arrow)
 
 TIMEOUT(600)
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     mkql_functions_ut.cpp

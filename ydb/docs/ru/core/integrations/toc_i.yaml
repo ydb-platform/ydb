@@ -1,6 +1,4 @@
 items:
-- name: Интеграции
-  href: index.md
 - name: Сбор логов с помощью FluentBit
   href: fluent-bit.md
 - name: Плагин-источник данных Grafana
@@ -17,6 +15,6 @@ items:
   href: hibernate.md
 - name: Импорт из источников JDBC
   href: import-jdbc.md
-- name: Подключение из IDE
+- name: DBeaver
   href: ide/dbeaver.md
 

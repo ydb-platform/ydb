@@ -2,23 +2,11 @@
 
 В данном разделе приведена основная информация про интеграции {{ ydb-name }} со сторонними системами.
 
-## Протоколы доступа {#supported_proto}
-
-|  Протокол | Описание |
-| --- | --- |
-| [Apache Kafka API](https://kafka.apache.org) | [Описание](../reference/kafka-api/index.md) |
-| [PostgreSQL](https://www.postgresql.org) | [Описание](../postgresql/intro.md) |
-
-
 {% note info %}
 
 В дополнение к своему собственному нативному протоколу, {{ ydb-name }} обладает слоем совместимости, что позволяет внешним системам подключаться к базам данных по сетевым протоколам [PostgreSQL](../postgresql/intro.md) или [Apache Kafka](../reference/kafka-api/index.md). Благодаря слою совместимости, множество инструментов, разработанных для работы с этими системами, могут также взаимодействовать с {{ ydb-name }}. Уровень совместимости каждого конкретного приложения необходимо уточнять отдельно.
 
 {% endnote %}
-
-## SDK {#sdk}
-
-{{ydb-name}} содержит [набор SDK](../reference/ydb-sdk/index.md) для различных языков программирования.
 
 
 ## Клиенты с графическим интерфейсом {#gui}
@@ -56,7 +44,7 @@
 
 | Среда | Инструкция |
 | --- | --- |
-| [{{ airflow-name }}](https://airflow.apache.org) |   [Инструкция](airflow.md) |
+| [{{ airflow-name }}](https://airflow.apache.org) | [Инструкция](airflow.md) |
 
 {% endif %}
 
@@ -70,7 +58,7 @@
 | Произвольные [JDBC-источники данных](https://ru.wikipedia.org/wiki/Java_Database_Connectivity) | [Инструкция](import-jdbc.md) |
 
 
-## Потоковый ввод данных {#streaming-ingestion}
+### Потоковая поставка данных {#streaming-ingestion}
 
 | Система поставки | Инструкция |
 | --- | --- |

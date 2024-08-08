@@ -1,4 +1,6 @@
 #pragma once
+#include <ydb/core/tx/limiter/grouped_memory/service/counters.h>
+
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actorid.h>
@@ -65,6 +67,7 @@ private:
     YDB_ACCESSOR_DEF(TPositiveControlInteger, Usage);
     YDB_ACCESSOR_DEF(TPositiveControlInteger, Waiting);
     std::shared_ptr<TStageFeatures> Owner;
+    std::shared_ptr<TStageCounters> Counters;
 
 public:
     TString DebugString() const {
@@ -80,33 +83,46 @@ public:
         return Usage.Val() + Waiting.Val();
     }
 
-    TStageFeatures(const TString& name, const ui64 limit, const std::shared_ptr<TStageFeatures>& owner)
+    TStageFeatures(
+        const TString& name, const ui64 limit, const std::shared_ptr<TStageFeatures>& owner, const std::shared_ptr<TStageCounters>& counters)
         : Name(name)
         , Limit(limit)
-        , Owner(owner) {
+        , Owner(owner)
+        , Counters(counters) {
     }
 
     void Allocate(const ui64 volume) {
         Waiting.Sub(volume);
         Usage.Add(volume);
+        if (Counters) {
+            Counters->Add(volume, true);
+            Counters->Sub(volume, false);
+        }
         if (Owner) {
             Owner->Allocate(volume);
         }
     }
 
     void Free(const ui64 volume, const bool allocated) {
+        if (Counters) {
+            Counters->Sub(volume, allocated);
+        }
         if (allocated) {
             Usage.Sub(volume);
         } else {
             Waiting.Sub(volume);
         }
-        
+
         if (Owner) {
             Owner->Free(volume, allocated);
         }
     }
 
     void UpdateVolume(const ui64 from, const ui64 to, const bool allocated) {
+        if (Counters) {
+            Counters->Sub(from, allocated);
+            Counters->Add(to, allocated);
+        }
         if (allocated) {
             Usage.Sub(from);
             Usage.Add(to);
@@ -131,12 +147,15 @@ public:
     }
 
     void Add(const ui64 volume, const bool allocated) {
+        if (Counters) {
+            Counters->Add(volume, allocated);
+        }
         if (allocated) {
             Usage.Add(volume);
         } else {
             Waiting.Add(volume);
         }
-        
+
         if (Owner) {
             Owner->Add(volume, allocated);
         }
@@ -171,7 +190,8 @@ public:
         return Allocated;
     }
 
-    [[nodiscard]] bool OnAllocated(std::shared_ptr<TAllocationGuard>&& guard, const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation);
+    [[nodiscard]] bool OnAllocated(
+        std::shared_ptr<TAllocationGuard>&& guard, const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation);
 };
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

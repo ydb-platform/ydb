@@ -173,7 +173,7 @@ struct TDecimal {
         const auto a = l + r;
         if (IsNormal(l) && IsNormal(r) && IsNormal(a)) {
             Value = a;
-        } else if (IsNan(l) || IsNan(r)) {
+        } else if (IsNan(l) || IsNan(r) || !a /* inf - inf*/) {
             Value = Nan();
         } else {
             Value = a > 0

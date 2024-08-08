@@ -926,7 +926,6 @@ public:
         auto pqDescr = schemeTx.MutableCreatePersQueueGroup();
         pqDescr->SetName(pathPair.second);
         NKikimr::NGRpcProxy::V1::FillProposeRequestImpl(pathPair.second, request, schemeTx, AppData(ActorSystem), error, pathPair.first);
-        TList<TString> warnings;
 
         if (IsPrepare()) {
             auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
@@ -953,7 +952,6 @@ public:
         if (!NSchemeHelpers::SplitTablePath(request.path(), GetDatabase(), pathPair, error, false)) {
             return MakeFuture(ResultFromError<TGenericResult>(error));
         }
-        TList<TString> warnings;
         auto alterPromise = NewPromise<TGenericResult>();
 
         if (IsPrepare()) {

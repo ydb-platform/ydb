@@ -1025,7 +1025,6 @@ public:
         catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));
         }
-        Y_UNUSED(missingOk);
     }
 
     TFuture<TGenericResult> DropTopic(const TString& cluster, const TString& topic, bool missingOk) override {
@@ -1047,7 +1046,6 @@ public:
         catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));
         }
-        Y_UNUSED(missingOk);
 
     }
 

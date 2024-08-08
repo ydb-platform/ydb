@@ -206,7 +206,7 @@ private:
         bool Deleting = false;
     };
 
-    THashMap<TWriteId, TTxWriteInfo> TxWrites;
+    THashMap<TWriteId, TTxWriteInfo> TxWrites, NewTxWrites;
     bool TxWritesChanged = false;
     ui32 NextSupportivePartitionId = 100'000;
 

@@ -6,6 +6,8 @@ import ydb
 import traceback
 from collections import Counter
 import posixpath
+import datetime
+import time
 
 
 
@@ -23,9 +25,8 @@ DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
 
 
-
-
 def create_tables(pool,  table_path):
+    print(f"> create table: {table_path}")
     def callee(session):
         # Creating Series table
         session.execute_scheme(f"""
@@ -50,7 +51,7 @@ def create_tables(pool,  table_path):
 
 
 def bulk_upsert(table_client, table_path,rows):
-    print("\n> bulk upsert: episodes")
+    print(f"> bulk upsert: {table_path}")
     column_types = (
         ydb.BulkUpsertColumns()
         .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
@@ -64,12 +65,11 @@ def bulk_upsert(table_client, table_path,rows):
         .add_column("fail_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
         .add_column("skip_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
 )
-    #rows = basic_example_data.get_episodes_data_for_bulk_upsert()
     table_client.bulk_upsert(table_path, rows, column_types)
 
    
 def main():
-    print(1)
+
     if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
         print(
             "Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping"
@@ -82,11 +82,6 @@ def main():
         os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ[
             "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
         ]
-
- 
-    
-
-    page_size = 1000
     with ydb.Driver(
         endpoint=DATABASE_ENDPOINT,
         database=DATABASE_PATH,
@@ -96,74 +91,93 @@ def main():
         session = ydb.retry_operation_sync(
             lambda: driver.table_client.session().create()
         )
-        #result = get_records_with_pagination(session,200)
-       
-
-        last_key = '1'
-        
-        # Создание запроса SELECT с фильтрацией по ключам
-        query1=f"""
-
-select full_name,date_base,history_list,dist_hist,suite_folder,test_name  
-  from (
-    select full_name,
-    date_base,
-    AGG_LIST(status) as history_list ,
-    String::JoinFromList( AGG_LIST_DISTINCT(status) ,',') as dist_hist,
-    suite_folder,
-    test_name
-   
-    
+        tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
+        table_client = ydb.TableClient(driver, tc_settings)
+        #settings
+        table_path = 'test_results/test_runs_history'
+        default_start_date = datetime.date(2024,7,1)
+        #geting last date from history
+        last_date_query = f"select max(date_window) as max_date_window from `{table_path}`"
+        query = ydb.ScanQuery(last_date_query, {})
+        it = table_client.scan_query(query)
+        results = []
+        while True:
+            try:
+                result = next(it)
+                results = results + result.result_set.rows
+            except StopIteration:
+                break
+     
+        last_date = results[0].get('max_date_window',default_start_date).strftime('%Y-%m-%d')
+        print(f'last hisotry date: {last_date}')
+        query_get_history = f"""
+    select 
+        full_name,
+        date_base,
+        history_list,
+        dist_hist,
+        suite_folder,
+        test_name  
     from (
-        select * from (
-            select * from (select 
-                distinct suite_folder || test_name as full_name,suite_folder,test_name
-
-                from  `test_results/test_runs_results`
-                where status in ('failure','mute')
-                and job_name in ('Nightly-run', 'Postcommit_relwithdebinfo')
-                and build_type = 'relwithdebinfo'
-            ) as a 
-            cross join
-                (select  DISTINCT 
-                  DateTime::MakeDate(run_timestamp) as date_base
-                from  `test_results/test_runs_results`
-                where status in ('failure','mute')
-                and job_name in ('Nightly-run', 'Postcommit_relwithdebinfo')
-                and build_type = 'relwithdebinfo' 
-                
-                ) as b
-            ) as name
-        left JOIN (
+        select 
+            full_name,
+            date_base,
+            AGG_LIST(status) as history_list ,
+            String::JoinFromList( AGG_LIST_DISTINCT(status) ,',') as dist_hist,
+            suite_folder,
+            test_name
+        from (
             select * from (
-                select 
-                suite_folder || test_name as full_name,
-                run_timestamp,status,
-                ROW_NUMBER() OVER (PARTITION BY test_name ORDER BY run_timestamp DESC) AS rn
-                from  `test_results/test_runs_results`
-                where  
-                --run_timestamp >= run_timestamp -5*Interval("P1D") and
-                
-                 job_name in ('Nightly-run', 'Postcommit_relwithdebinfo')
-                and build_type = 'relwithdebinfo'
-            ) where rn<=20
-        ) as hist
-        ON name.full_name=hist.full_name 
-        where  
-        hist.run_timestamp>= name.date_base -5*Interval("P1D") AND 
-        hist.run_timestamp<= name.date_base 
+                select * from (select 
+                    distinct suite_folder || '/' || test_name as full_name,suite_folder,test_name
 
-    )
- GROUP BY full_name,suite_folder,test_name,date_base
+                    from  `test_results/test_runs_results`
+                    where 
+                        status in ('failure','mute')
+                        and job_name in ('Nightly-run', 'Postcommit_relwithdebinfo')
+                        and build_type = 'relwithdebinfo'
+                ) as tests_with_fails 
+                cross join
+                    (select  DISTINCT 
+                    DateTime::MakeDate(run_timestamp) as date_base
+                    from  `test_results/test_runs_results`
+                    where 
+                        status in ('failure','mute')
+                        and job_name in ('Nightly-run', 'Postcommit_relwithdebinfo')
+                        and build_type = 'relwithdebinfo' 
+                        and run_timestamp>= Date('{last_date}')
+                    ) as date_list
+                ) as test_and_date
+            left JOIN (
+                select * from (
+                    select 
+                    suite_folder || '/' || test_name as full_name,
+                    run_timestamp,status,
+                    ROW_NUMBER() OVER (PARTITION BY test_name ORDER BY run_timestamp DESC) AS rn
+                    from  `test_results/test_runs_results`
+                    where  
+                        run_timestamp >= Date('{last_date}') -5*Interval("P1D") and
+                        job_name in ('Nightly-run', 'Postcommit_relwithdebinfo')
+                        and build_type = 'relwithdebinfo'
+                ) 
+            ) as hist
+            ON test_and_date.full_name=hist.full_name 
+            where  
+                hist.run_timestamp >= test_and_date.date_base -5*Interval("P1D") AND 
+                hist.run_timestamp <= test_and_date.date_base 
+
+        )
+        GROUP BY full_name,suite_folder,test_name,date_base
  
-)
-where dist_hist not in ('mute','failure','skipped','passed')
-
+    )
         """
-        query = ydb.ScanQuery(query1, {})
-
+        query = ydb.ScanQuery(query_get_history, {})
+        # Захватываем время до начала транзакции
+        start_time = time.time()
         it = driver.table_client.scan_query(query)
-        results=[]
+        # Захватываем время после завершения транзакции
+       
+        results = []
         prepared_for_update_rows=[]
         while True:
             try:
@@ -171,6 +185,10 @@ where dist_hist not in ('mute','failure','skipped','passed')
                 results= results + result.result_set.rows
             except StopIteration:
                 break
+        end_time = time.time()
+        print(f'transaction duration: {end_time - start_time}')
+
+        print(f'history data captured, {len(results)} rows')
         for row in results:
             row['count']=dict(zip(list(row['history_list']),[list(row['history_list']).count(i) for i in list(row['history_list'])]))
             prepared_for_update_rows.append({
@@ -184,22 +202,18 @@ where dist_hist not in ('mute','failure','skipped','passed')
                 'mute_count':row['count'].get('mute',0),
                 'fail_count':row['count'].get('failure',0),
                 'skip_count':row['count'].get('skipped',0),
-
-            }
-            )
+            })
+        print('upserting history') 
         with ydb.SessionPool(driver) as pool:
-            table_path='test_results/test_runs_history'
-            table_name='test_runs_history'
-            
+               
             create_tables(pool, table_path)
             full_path = posixpath.join(DATABASE_PATH, table_path)
             bulk_upsert(driver.table_client, full_path,prepared_for_update_rows)
+            bulk_upsert(driver.table_client, full_path,prepared_for_update_rows)
         
 
-        print('done')    
+        print('history updated')    
    
-   
-
 
 if __name__ == "__main__":
     main()

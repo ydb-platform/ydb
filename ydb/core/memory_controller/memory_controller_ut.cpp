@@ -209,6 +209,9 @@ Y_UNIT_TEST(Config_ConsumerLimits) {
     memoryControllerConfig->SetMemTableMinBytes(10_MB);
     memoryControllerConfig->SetMemTableMaxBytes(50_MB);
 
+    memoryControllerConfig->SetQueryExecutionLimitPercent(15);
+    memoryControllerConfig->SetQueryExecutionLimitBytes(30_MB);
+
     auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
     auto& runtime = *server->GetRuntime();
     
@@ -218,6 +221,7 @@ Y_UNIT_TEST(Config_ConsumerLimits) {
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/SharedCache/LimitMax")->Val(), 300_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/LimitMin")->Val(), 50_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/LimitMax")->Val(), 50_MB);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Limit")->Val(), 30_MB);
 
     server->ProcessMemoryInfo->CGroupLimit = 400_MB;
     runtime.SimulateSleep(TDuration::Seconds(2));
@@ -225,6 +229,7 @@ Y_UNIT_TEST(Config_ConsumerLimits) {
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/SharedCache/LimitMax")->Val(), 120_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/LimitMin")->Val(), 40_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/LimitMax")->Val(), 50_MB);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Limit")->Val(), 30_MB);
 
     server->ProcessMemoryInfo->CGroupLimit = 100_MB;
     runtime.SimulateSleep(TDuration::Seconds(2));
@@ -232,6 +237,7 @@ Y_UNIT_TEST(Config_ConsumerLimits) {
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/SharedCache/LimitMax")->Val(), 30_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/LimitMin")->Val(), 10_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/LimitMax")->Val(), 20_MB);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Limit")->Val(), 15_MB);
 }
 
 Y_UNIT_TEST(SharedCache) {
@@ -364,6 +370,25 @@ Y_UNIT_TEST(MemTable) {
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Limit")->Val(), static_cast<i64>(100_KB));
     UNIT_ASSERT_LE(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Consumption")->Val(), static_cast<i64>(100_KB));
     UNIT_ASSERT_GT(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Consumption")->Val(), static_cast<i64>(1_KB));
+}
+
+Y_UNIT_TEST(ResourceBroker) {
+    TPortManager pm;
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root")
+        .SetUseRealThreads(false);
+
+    auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
+    memoryControllerConfig->SetQueryExecutionLimitPercent(40);
+
+    auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
+    server->ProcessMemoryInfo->CGroupLimit = 1000_MB;
+    auto& runtime = *server->GetRuntime();
+    auto sender = runtime.AllocateEdgeActor();
+
+    InitRoot(server, sender);
+    
+    runtime.SimulateSleep(TDuration::Seconds(10));
 }
 
 }

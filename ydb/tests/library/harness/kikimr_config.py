@@ -433,30 +433,6 @@ class KikimrConfigGenerator(object):
             self.yaml_config["feature_flags"]["enable_external_data_sources"] = True
             self.yaml_config["feature_flags"]["enable_script_execution_operations"] = True
             
-        if os.getenv("YDB_YAML_CONFIG") is not None:      
-            with open(os.path.join("/ydb_data", os.getenv("YDB_YAML_CONFIG"))) as fh:
-                self.additional_yaml_config = yaml.load(fh, Loader=yaml.FullLoader)
-
-            self.yaml_config = self.merge_two_dicts(self.yaml_config, self.additional_yaml_config)
-
-    def merge_two_dicts(self, data_1, data_2):
-        if isinstance(data_1, dict) and isinstance(data_2, dict):
-            new_dict = {}
-            d2_keys = list(data_2.keys())
-            for d1k in data_1.keys():
-                if d1k in d2_keys:
-                    d2_keys.remove(d1k)
-                    new_dict[d1k] = self.merge_two_dicts(data_1.get(d1k), data_2.get(d1k))
-                else:
-                    new_dict[d1k] = data_1.get(d1k)
-                    for d2k in d2_keys:
-                        new_dict[d2k] = data_2.get(d2k)
-            return new_dict
-        else:
-            if data_2 == None:
-                return data_1
-            else:
-                return data_2
                 
     @property
     def pdisks_info(self):

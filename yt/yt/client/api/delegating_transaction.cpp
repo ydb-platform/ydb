@@ -302,6 +302,16 @@ DELEGATE_METHOD(TFuture<TPushQueueProducerResult>, PushQueueProducer, (
     const TPushQueueProducerOptions& options),
     (producerPath, queuePath, sessionId, epoch, nameTable, rows, options))
 
+DELEGATE_METHOD(TFuture<TPushQueueProducerResult>, PushQueueProducer, (
+    const NYPath::TRichYPath& producerPath,
+    const NYPath::TRichYPath& queuePath,
+    const NQueueClient::TQueueProducerSessionId& sessionId,
+    NQueueClient::TQueueProducerEpoch epoch,
+    NTableClient::TNameTablePtr nameTable,
+    const std::vector<TSharedRef>& serializedRows,
+    const TPushQueueProducerOptions& options),
+    (producerPath, queuePath, sessionId, epoch, nameTable, serializedRows, options))
+
 #undef DELEGATE_METHOD
 
 ////////////////////////////////////////////////////////////////////////////////

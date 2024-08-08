@@ -93,8 +93,7 @@ public:
     i64 GetSize() const;
     void SetSize(i64 size);
     TError TrySetSize(i64 size);
-    void IncreaseSize(i64 sizeDelta);
-    void DecreaseSize(i64 sizeDelta);
+    void IncrementSize(i64 sizeDelta);
     TMemoryUsageTrackerGuard TransferMemory(i64 size);
 
 private:

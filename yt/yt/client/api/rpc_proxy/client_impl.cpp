@@ -343,7 +343,7 @@ TFuture<void> TClient::ReshardTable(
     for (const auto& pivotKey : pivotKeys) {
         keys.push_back(pivotKey);
     }
-    writer->WriteRowset(MakeRange(keys));
+    writer->WriteRowset(TRange(keys));
     req->Attachments() = writer->Finish();
 
     ToProto(req->mutable_mutating_options(), options);

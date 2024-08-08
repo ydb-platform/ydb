@@ -51,11 +51,16 @@ struct TWaitForPredicateOptions
     int IterationCount = 300;
     TDuration Period = TDuration::MilliSeconds(100);
     bool IgnoreExceptions = false;
+    TString Message = "<no-message>";
 };
 
 void WaitForPredicate(
     std::function<bool()> predicate,
     TWaitForPredicateOptions options);
+
+void WaitForPredicate(
+    std::function<bool()> predicate,
+    const TString& message);
 
 void WaitForPredicate(
     std::function<bool()> predicate,

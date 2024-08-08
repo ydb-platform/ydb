@@ -57,10 +57,6 @@ IF (OS_ANDROID)
     EXTRALIBS(log)
 ENDIF()
 
-IF (FIX_UNUSED_PARAMETR_PLS)
-    GLOBAL_CFLAGS(-DFIX_UNUSED_PARAMETR_PLS=yes)
-ENDIF()
-
 SRCS(
     GLOBAL src/google/protobuf/generated_message_util.cc
     src/google/protobuf/any.cc

@@ -10,6 +10,8 @@
 
 #include <yt/yt/library/undumpable/undumpable.h>
 
+#include <library/cpp/yt/system/exit.h>
+
 #include <library/cpp/yt/assert/assert.h>
 
 #include <library/cpp/yt/string/raw_formatter.h>
@@ -83,7 +85,7 @@ Y_NO_INLINE TStackTrace GetStackTrace(TStackTraceBuffer* buffer)
 #endif
     return NBacktrace::GetBacktrace(
         &cursor,
-        MakeMutableRange(*buffer),
+        TMutableRange(*buffer),
         /*framesToSkip*/ 2);
 }
 
@@ -463,7 +465,7 @@ void DumpSigcontext(void* uc)
 void CrashTimeoutHandler(int /*signal*/)
 {
     WriteToStderr("*** Process hung during crash ***\n");
-    _exit(1);
+    AbortProcess(ToUnderlying(EProcessExitCode::GenericError));
 }
 
 void DumpUndumpableBlocksInfo()
@@ -516,7 +518,7 @@ void CrashSignalHandler(int /*signal*/, siginfo_t* si, void* uc)
     {
         std::array<const void*, 1> frames{NDetail::GetPC(uc)};
         NBacktrace::SymbolizeBacktrace(
-            MakeRange(frames),
+            TRange(frames),
             [] (TStringBuf info) {
                 info.SkipPrefix(" 1. ");
                 WriteToStderr(info);

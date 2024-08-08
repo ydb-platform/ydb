@@ -42,7 +42,7 @@ struct TStartQueryOptions
     bool Draft = false;
     NYTree::IMapNodePtr Annotations;
     std::vector<TQueryFilePtr> Files;
-    std::optional<TString> AccessControlObject; // COMPAT
+    std::optional<TString> AccessControlObject; // COMPAT(mpereskokova)
     std::optional<std::vector<TString>> AccessControlObjects;
 };
 
@@ -103,7 +103,7 @@ struct TQuery
     std::optional<TInstant> FinishTime;
     NYson::TYsonString Settings;
     std::optional<TString> User;
-    std::optional<TString> AccessControlObject; // COMPAT
+    std::optional<TString> AccessControlObject; // COMPAT(mpereskokova)
     std::optional<NYson::TYsonString> AccessControlObjects;
     std::optional<NQueryTrackerClient::EQueryState> State;
     std::optional<i64> ResultCount;
@@ -139,7 +139,7 @@ struct TAlterQueryOptions
     , public TQueryTrackerOptions
 {
     NYTree::IMapNodePtr Annotations;
-    std::optional<TString> AccessControlObject; // COMPAT
+    std::optional<TString> AccessControlObject; // COMPAT(mpereskokova)
     std::optional<std::vector<TString>> AccessControlObjects;
 };
 

@@ -19,4 +19,5 @@ RECURSE(
     mt_ut
     perf
     ut
+    ut_gtest
 )

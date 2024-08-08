@@ -56,6 +56,7 @@ TEST(TAsyncLooperTest, JustWorks)
     }
 
     looper->Stop();
+    queue->Shutdown();
 }
 
 TEST(TAsyncLooperTest, Restart)
@@ -101,6 +102,7 @@ TEST(TAsyncLooperTest, Restart)
     EXPECT_EQ(cleanStarts->load(), 2);
 
     looper->Stop();
+    queue->Shutdown();
 }
 
 TEST(TAsyncLooperTest, CancelAsyncStep)
@@ -133,6 +135,8 @@ TEST(TAsyncLooperTest, CancelAsyncStep)
     looper->Stop();
 
     EXPECT_TRUE(promise.IsCanceled());
+
+    queue->Shutdown();
 }
 
 TEST(TAsyncLooperTest, CancelSyncStep)
@@ -165,6 +169,8 @@ TEST(TAsyncLooperTest, CancelSyncStep)
     looper->Stop();
 
     EXPECT_TRUE(promise.IsCanceled());
+
+    queue->Shutdown();
 }
 
 TEST(TAsyncLooperTest, StopDuringAsyncStep)
@@ -297,6 +303,7 @@ TEST(TAsyncLooperTest, RestartDuringAsyncStep)
     }
 
     looper->Stop();
+    queue->Shutdown();
 }
 
 TEST(TAsyncLooperTest, RestartDuringAsyncStepWaitFor)
@@ -341,6 +348,7 @@ TEST(TAsyncLooperTest, RestartDuringAsyncStepWaitFor)
     }
 
     looper->Stop();
+    queue->Shutdown();
 }
 
 TEST(TAsyncLooperTest, StopDuringAsyncStepPreparation)
@@ -435,6 +443,7 @@ TEST(TAsyncLooperTest, RestartDuringAsyncStepPreparation1)
     }
 
     looper->Stop();
+    queue->Shutdown();
 }
 
 TEST(TAsyncLooperTest, RestartDuringAsyncStepPreparation2)
@@ -495,6 +504,7 @@ TEST(TAsyncLooperTest, RestartDuringAsyncStepPreparation2)
     EXPECT_EQ(syncCleanStarts->load(), 2);
 
     looper->Stop();
+    queue->Shutdown();
 }
 
 TEST(TAsyncLooperTest, StopDuringSyncStep)
@@ -629,6 +639,7 @@ TEST(TAsyncLooperTest, RestartDuringSyncStep)
     }
 
     looper->Stop();
+    queue->Shutdown();
 }
 
 TEST(TAsyncLooperTest, RestartDuringSyncStepWaitFor)
@@ -673,6 +684,7 @@ TEST(TAsyncLooperTest, RestartDuringSyncStepWaitFor)
     }
 
     looper->Stop();
+    queue->Shutdown();
 }
 
 TEST(TAsyncLooperTest, NullFuture)
@@ -716,6 +728,7 @@ TEST(TAsyncLooperTest, NullFuture)
     }
 
     looper->Stop();
+    queue->Shutdown();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

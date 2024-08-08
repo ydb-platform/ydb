@@ -3894,31 +3894,13 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         }
         
         auto query = R"(
-                  upsert into demo_ref1 
-                  select id, id as code, "some r1 for "u || id AS some from (
-                    select column0 as id from (
-                         values ("r1-0"u),("r1-1"u),("r1-2"u),("r1-3"u),("r1-4"u),
-                                ("r1-5"u),("r1-6"u),("r1-7"u),("r1-8"u),("r1-9"u)
-                    ) as q1);
-
-                upsert into demo_ref2 
-                  select id, id as code, "some r2 for "u || id AS some from (
-                    select column0 as id from (
-                         values ("r2-0"u),("r2-1"u),("r2-2"u),("r2-3"u),("r2-4"u),
-                                ("r2-5"u),("r2-6"u),("r2-7"u),("r2-8"u),("r2-9"u)
-                    ) as q1);
-
-                upsert into demo_ba
-                select "ba#"u||cast(num as Utf8) as id,
-                   "some for ba #"u||cast(num as Utf8) as some,
-                   r1id as ref1, r2id as ref2
-                from (
-                select row_number() over w as num,
-                  r1.id as r1id, r2.id as r2id
-                from demo_ref1 as r1
-                cross join demo_ref2 r2
-                window w as (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
-                ) as q1;
+            select ba_0.id, ba_0.some,
+              r_1.id, r_1.some, r_1.code,
+              r_2.id, r_2.some, r_2.code
+            from demo_ba ba_0
+            left join demo_ref1 r_1 on r_1.id=ba_0.ref1
+            left join demo_ref2 r_2 on r_2.code=ba_0.ref2
+            where ba_0.id in ("ba#10"u,"ba#20"u,"ba#30"u,"ba#40"u,"ba#50"u,"ba#60"u,"ba#70"u,"ba#80"u,"ba#90"u,"ba#100"u);
             )";
 
         auto settings = NYdb::NQuery::TExecuteQuerySettings()

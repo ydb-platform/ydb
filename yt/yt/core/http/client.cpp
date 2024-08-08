@@ -94,6 +94,17 @@ public:
         return StartRequest(EMethod::Put, url, headers);
     }
 
+    TFuture<IResponsePtr> Request(
+        EMethod method,
+        const TString& url,
+        const std::optional<TSharedRef>& body,
+        const THeadersPtr& headers) override
+    {
+        return WrapError(url, BIND([=, this, this_ = MakeStrong(this)] {
+            return DoRequest(method, url, body, headers);
+        }));
+    }
+
 private:
     const TClientConfigPtr Config_;
     const IDialerPtr Dialer_;
@@ -293,17 +304,6 @@ private:
         }
 
         return IResponsePtr(response);
-    }
-
-    TFuture<IResponsePtr> Request(
-        EMethod method,
-        const TString& url,
-        const std::optional<TSharedRef>& body,
-        const THeadersPtr& headers)
-    {
-        return WrapError(url, BIND([=, this, this_ = MakeStrong(this)] {
-            return DoRequest(method, url, body, headers);
-        }));
     }
 };
 

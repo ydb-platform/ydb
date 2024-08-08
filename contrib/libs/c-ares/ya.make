@@ -3,6 +3,7 @@
 LIBRARY()
 
 LICENSE(
+    APSL-2.0 AND
     BSD-3-Clause AND
     ISC AND
     MIT AND
@@ -11,9 +12,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.28.1)
+VERSION(1.30.0)
 
-ORIGINAL_SOURCE(https://github.com/c-ares/c-ares/archive/cares-1_28_1.tar.gz)
+ORIGINAL_SOURCE(https://github.com/c-ares/c-ares/archive/v1.30.0.tar.gz)
 
 PEERDIR(
     contrib/libs/libc_compat
@@ -56,6 +57,7 @@ SRCS(
     src/lib/ares__htable_asvp.c
     src/lib/ares__htable_strvp.c
     src/lib/ares__htable_szvp.c
+    src/lib/ares__htable_vpvp.c
     src/lib/ares__iface_ips.c
     src/lib/ares__llist.c
     src/lib/ares__parse_into_addrinfo.c
@@ -74,6 +76,7 @@ SRCS(
     src/lib/ares_dns_parse.c
     src/lib/ares_dns_record.c
     src/lib/ares_dns_write.c
+    src/lib/ares_event_configchg.c
     src/lib/ares_event_epoll.c
     src/lib/ares_event_kqueue.c
     src/lib/ares_event_poll.c
@@ -121,6 +124,7 @@ SRCS(
     src/lib/ares_strsplit.c
     src/lib/ares_sysconfig.c
     src/lib/ares_sysconfig_files.c
+    src/lib/ares_sysconfig_mac.c
     src/lib/ares_timeout.c
     src/lib/ares_update_servers.c
     src/lib/ares_version.c

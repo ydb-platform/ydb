@@ -171,6 +171,10 @@ public:
         NTableClient::TUnversionedValueRange valueRange,
         const NTableClient::TNameTableToSchemaIdMapping* idMapping = nullptr) = 0;
 
+    virtual void WriteSerializedRowset(
+        size_t rowCount,
+        const std::vector<TSharedRef>& serializedRowset) = 0;
+
     virtual void WriteUnversionedRowset(
         TRange<NTableClient::TUnversionedRow> rowset,
         const NTableClient::TNameTableToSchemaIdMapping* idMapping = nullptr) = 0;

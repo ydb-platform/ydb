@@ -18,6 +18,8 @@
 
 #include <library/cpp/yt/misc/tls.h>
 
+#include <library/cpp/yt/system/exit.h>
+
 #include <util/system/sanitizers.h>
 
 namespace NYT::NConcurrency {
@@ -88,7 +90,7 @@ TExecutionStack::TExecutionStack(size_t size)
     auto checkOom = [] {
         if (LastSystemError() == ENOMEM) {
             fprintf(stderr, "Out-of-memory condition detected while allocating execution stack; terminating\n");
-            _exit(9);
+            AbortProcess(ToUnderlying(EProcessExitCode::OutOfMemory));
         }
     };
 

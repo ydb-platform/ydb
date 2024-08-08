@@ -18,6 +18,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <util/generic/string.h>
 
 #include "y_absl/base/config.h"
@@ -84,6 +85,9 @@ void SubstituteAndAppendArray(
 
   // Build the string.
   size_t original_size = output->size();
+  Y_ABSL_INTERNAL_CHECK(
+      size <= std::numeric_limits<size_t>::max() - original_size,
+      "size_t overflow");
   strings_internal::STLStringResizeUninitializedAmortized(output,
                                                           original_size + size);
   char* target = &(*output)[original_size];

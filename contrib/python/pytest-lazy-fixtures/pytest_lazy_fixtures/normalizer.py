@@ -64,14 +64,15 @@ def _normalize_call(callspec, metafunc, used_keys):
     fm = metafunc.config.pluginmanager.get_plugin("funcmanage")
 
     used_keys = used_keys or set()
-    valtype_keys = callspec.params.keys() - used_keys
+    params = callspec.params.copy() if pytest.version_tuple >= (8, 0, 0) else {**callspec.params, **callspec.funcargs}
+    valtype_keys = params.keys() - used_keys
 
     for arg in valtype_keys:
-        value = callspec.params[arg]
+        value = params[arg]
         fixturenames_closure, arg2fixturedefs = _get_fixturenames_closure_and_arg2fixturedefs(fm, metafunc, value)
 
         if fixturenames_closure and arg2fixturedefs:
-            extra_fixturenames = [fname for fname in fixturenames_closure if fname not in callspec.params]
+            extra_fixturenames = [fname for fname in fixturenames_closure if fname not in params]
 
             newmetafunc = _copy_metafunc(metafunc)
             newmetafunc.fixturenames = extra_fixturenames

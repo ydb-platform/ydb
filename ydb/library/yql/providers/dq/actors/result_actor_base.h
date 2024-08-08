@@ -142,7 +142,7 @@ struct TWriteQueue {
                 try {
                     TFailureInjector::Reach("result_actor_base_fail_on_response_write", [] { throw yexception() << "result_actor_base_fail_on_response_write"; });
                     NDq::TDqSerializedBatch dataCopy = WriteQueue.back().Data;
-                    Y_ENSURE(!dataCopy.IsOOB());
+                    dataCopy.ConvertToNoOOB();
                     full = ResultBuilder->WriteYsonData(std::move(dataCopy), [this, &exceedRows](const TString& rawYson) {
                         if (RowsLimit && Rows + 1 > *RowsLimit) {
                             exceedRows = true;

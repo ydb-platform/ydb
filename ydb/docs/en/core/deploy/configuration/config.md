@@ -492,7 +492,7 @@ memory_controller_config:
 
 The soft memory limit specifies a dangerous threshold that should not be exceeded by {{ ydb-short-name }} process under normal circumstances.
 
-If the soft limit is exceeded, {{ ydb-short-name }} starts to reduce the shared cache size to zero. Therefore, more database nodes should be added to the cluster as soon as possible, or per-component memory limits should be reduced.
+If the soft limit is exceeded, {{ ydb-short-name }} gradually reduces the shared cache size to zero. Therefore, more database nodes should be added to the cluster as soon as possible, or per-component memory limits should be reduced.
 
 ### Target memory utilization {#target-memory-utilization}
 
@@ -506,9 +506,11 @@ For example, in a database that consumes a little memory on query execution, cac
 
 There are two different types of components inside {{ ydb-short-name }}.
 
-The first type components, or cache components, acts like caches, storing the last recently used data. Each of cache components has minimum and maximum memory limit thresholds, allowing them to change their capacity dynamically based on current {{ ydb-short-name }} process consumption.
+The first type components, or cache components, acts like caches, for example storing the last recently used data. Each of cache components has minimum and maximum memory limit thresholds, allowing them to change their capacity dynamically based on current {{ ydb-short-name }} process consumption.
 
 The second type components, or activity components, allocate memory for specific activities, such as query execution or the [compaction](../../concepts/glossary.md#compaction) process. Each of activity components has a fixed memory limit. There is also an additional total memory limit for these activities, from which they attempt to consume the needed memory.
+
+Many other auxiliary components and processes operate alongside the {{ ydb-short-name }} process, consuming memory. Currently, these components do not have any memory limits.
 
 #### Cache components memory limits
 
@@ -540,6 +542,8 @@ Activity components are:
 The memory limit for each of the activity components specifies the maximum amount of memory it can attempt to use. However, to prevent {{ ydb-short-name }} process from exceeding the soft memory limit, the total consumption of activity components is further limited by an additional limit, named as the activities memory limit. If the total memory usage of the activity components exceeds this limit, any additional memory requests will be denied.
 
 As a result, while the combined individual limits of the activity components might collectively exceed the activities memory limit, each component's individual limit should be less than this overall cap. Additionally, the sum of the minimum memory limits for the cache components plus the activities memory limit needs to be less than the soft memory limit.
+
+There are some other activity components, currently they do not have any individual memory limits.
 
 Example of the `memory_controller_config` section with a specified KQP limit:
 

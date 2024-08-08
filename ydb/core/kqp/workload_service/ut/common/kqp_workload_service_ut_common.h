@@ -24,7 +24,7 @@ struct TQueryRunnerSettings {
 
     // Query settings
     FLUENT_SETTING_DEFAULT(ui32, NodeIndex, 0);
-    FLUENT_SETTING_DEFAULT(TString, PoolId, "");
+    FLUENT_SETTING_DEFAULT(std::optional<TString>, PoolId, std::nullopt);
     FLUENT_SETTING_DEFAULT(TString, UserSID, "user@" BUILTIN_SYSTEM_DOMAIN);
 
     // Runner settings

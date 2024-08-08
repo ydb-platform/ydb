@@ -30,6 +30,7 @@ struct TEvPrivate {
         EvResignPoolHandler,
         EvStopPoolHandler,
         EvCancelRequest,
+        EvUpdateSchemeBoardSubscription,
 
         EvCpuQuotaRequest,
         EvCpuQuotaResponse,
@@ -75,14 +76,18 @@ struct TEvPrivate {
     };
 
     struct TEvFetchPoolResponse : public NActors::TEventLocal<TEvFetchPoolResponse, EvFetchPoolResponse> {
-        TEvFetchPoolResponse(Ydb::StatusIds::StatusCode status, const NResourcePool::TPoolSettings& poolConfig, TPathId pathId, NYql::TIssues issues)
+        TEvFetchPoolResponse(Ydb::StatusIds::StatusCode status, const TString& database, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, TPathId pathId, NYql::TIssues issues)
             : Status(status)
+            , Database(database)
+            , PoolId(poolId)
             , PoolConfig(poolConfig)
             , PathId(pathId)
             , Issues(std::move(issues))
         {}
 
         const Ydb::StatusIds::StatusCode Status;
+        const TString Database;
+        const TString PoolId;
         const NResourcePool::TPoolSettings PoolConfig;
         const TPathId PathId;
         const NYql::TIssues Issues;
@@ -169,6 +174,14 @@ struct TEvPrivate {
         {}
 
         const TString SessionId;
+    };
+
+    struct TEvUpdateSchemeBoardSubscription : public NActors::TEventLocal<TEvUpdateSchemeBoardSubscription, EvUpdateSchemeBoardSubscription> {
+        explicit TEvUpdateSchemeBoardSubscription(TPathId pathId)
+            : PathId(pathId)
+        {}
+
+        const TPathId PathId;
     };
 
     // Cpu load requests

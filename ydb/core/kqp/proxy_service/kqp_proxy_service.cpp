@@ -234,6 +234,7 @@ public:
             IEventHandle::FlagTrackDelivery);
 
         WhiteBoardService = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
+        ResourcePoolsCache.UpdateFeatureFlags(FeatureFlags, ActorContext());
 
         if (auto& cfg = TableServiceConfig.GetSpillingServiceConfig().GetLocalFileConfig(); cfg.GetEnable()) {
             TString spillingRoot = cfg.GetRoot();
@@ -482,6 +483,8 @@ public:
             Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe);
         });
 
+        ResourcePoolsCache.UnsubscribeFromResourcePoolClassifiers(ActorContext());
+
         return TActor::PassAway();
     }
 
@@ -499,6 +502,7 @@ public:
         UpdateYqlLogLevels();
 
         FeatureFlags.Swap(event.MutableConfig()->MutableFeatureFlags());
+        ResourcePoolsCache.UpdateFeatureFlags(FeatureFlags, ActorContext());
 
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
@@ -1353,6 +1357,8 @@ public:
             hFunc(TEvKqp::TEvListSessionsRequest, Handle);
             hFunc(TEvKqp::TEvListProxyNodesRequest, Handle);
             hFunc(NWorkload::TEvUpdatePoolInfo, Handle);
+            hFunc(NWorkload::TEvUpdateDatabaseInfo, Handle);
+            hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
         default:
             Y_ABORT("TKqpProxyService: unexpected event type: %" PRIx32 " event: %s",
                 ev->GetTypeRewrite(), ev->ToString().data());
@@ -1561,23 +1567,26 @@ private:
     }
 
     bool TryFillPoolInfoFromCache(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 requestId) {
-        if (!FeatureFlags.GetEnableResourcePools()) {
+        ResourcePoolsCache.UpdateFeatureFlags(FeatureFlags, ActorContext());
+
+        const auto& database = ev->Get()->GetDatabase();
+        if (!ResourcePoolsCache.ResourcePoolsEnabled(database)) {
             ev->Get()->SetPoolId("");
             return true;
         }
 
+        const auto& userToken = ev->Get()->GetUserToken();
         if (!ev->Get()->GetPoolId()) {
-            ev->Get()->SetPoolId(NResourcePool::DEFAULT_POOL_ID);
+            ev->Get()->SetPoolId(ResourcePoolsCache.GetPoolId(database, userToken, ActorContext()));
         }
 
         const auto& poolId = ev->Get()->GetPoolId();
-        const auto& poolInfo = ResourcePoolsCache.GetPoolInfo(ev->Get()->GetDatabase(), poolId);
+        const auto& poolInfo = ResourcePoolsCache.GetPoolInfo(database, poolId);
         if (!poolInfo) {
             return true;
         }
 
         const auto& securityObject = poolInfo->SecurityObject;
-        const auto& userToken = ev->Get()->GetUserToken();
         if (securityObject && userToken && !userToken->GetSerializedToken().empty()) {
             if (!securityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *userToken)) {
                 ReplyProcessError(Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Resource pool " << poolId << " not found or you don't have access permissions", requestId);
@@ -1783,7 +1792,15 @@ private:
     }
 
     void Handle(NWorkload::TEvUpdatePoolInfo::TPtr& ev) {
-        ResourcePoolsCache.UpdatePoolInfo(ev->Get()->Database, ev->Get()->PoolId, ev->Get()->Config, ev->Get()->SecurityObject);
+        ResourcePoolsCache.UpdatePoolInfo(ev->Get()->Database, ev->Get()->PoolId, ev->Get()->Config, ev->Get()->SecurityObject, ActorContext());
+    }
+
+    void Handle(NWorkload::TEvUpdateDatabaseInfo::TPtr& ev) {
+        ResourcePoolsCache.UpdateDatabaseInfo(ev->Get()->Database, ev->Get()->Serverless);
+    }
+
+    void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
+        ResourcePoolsCache.UpdateResourcePoolClassifiersInfo(ev->Get()->GetSnapshotAs<TResourcePoolClassifierSnapshot>(), ActorContext());
     }
 
 private:

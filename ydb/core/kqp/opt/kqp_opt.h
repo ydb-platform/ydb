@@ -10,11 +10,13 @@ namespace NKikimr::NKqp::NOpt {
 
 struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     TKqpOptimizeContext(const TString& cluster, const NYql::TKikimrConfiguration::TPtr& config,
-        const TIntrusivePtr<NYql::TKikimrQueryContext> queryCtx, const TIntrusivePtr<NYql::TKikimrTablesData>& tables)
+        const TIntrusivePtr<NYql::TKikimrQueryContext> queryCtx, const TIntrusivePtr<NYql::TKikimrTablesData>& tables,
+        const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext>& userRequestContext)
         : Cluster(cluster)
         , Config(config)
         , QueryCtx(queryCtx)
         , Tables(tables)
+        , UserRequestContext(userRequestContext)
     {
         YQL_ENSURE(QueryCtx);
         YQL_ENSURE(Tables);
@@ -24,6 +26,7 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     const NYql::TKikimrConfiguration::TPtr Config;
     const TIntrusivePtr<NYql::TKikimrQueryContext> QueryCtx;
     const TIntrusivePtr<NYql::TKikimrTablesData> Tables;
+    const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext> UserRequestContext;
     int JoinsCount{};
     int EquiJoinsCount{};
     std::shared_ptr<NJson::TJsonValue> OverrideStatistics{};

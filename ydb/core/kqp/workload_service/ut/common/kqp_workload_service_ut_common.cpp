@@ -480,6 +480,8 @@ private:
     }
 
     std::unique_ptr<TEvKqp::TEvQueryRequest> GetQueryRequest(const TString& query, const TQueryRunnerSettings& settings) const {
+        UNIT_ASSERT_C(settings.PoolId_, "Query pool id is not specified");
+
         auto event = std::make_unique<TEvKqp::TEvQueryRequest>();
         event->Record.SetUserToken(NACLib::TUserToken("", settings.UserSID_, {}).SerializeAsString());
 
@@ -488,7 +490,7 @@ private:
         request->SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
         request->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         request->SetDatabase(Settings_.DomainName_);
-        request->SetPoolId(settings.PoolId_);
+        request->SetPoolId(*settings.PoolId_);
 
         return event;
     }

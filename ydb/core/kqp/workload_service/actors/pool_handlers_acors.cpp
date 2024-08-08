@@ -138,6 +138,7 @@ public:
         sFunc(TEvents::TEvPoison, HandlePoison);
         sFunc(TEvPrivate::TEvStopPoolHandler, HandleStop);
         hFunc(TEvPrivate::TEvResolvePoolResponse, Handle);
+        hFunc(TEvPrivate::TEvUpdateSchemeBoardSubscription, Handle);
 
         // Pool handler events
         hFunc(TEvPrivate::TEvCancelRequest, Handle);
@@ -180,6 +181,8 @@ private:
     }
 
     void Handle(TEvPrivate::TEvResolvePoolResponse::TPtr& ev) {
+        this->Send(MakeKqpWorkloadServiceId(this->SelfId().NodeId()), new TEvPrivate::TEvPlaceRequestIntoPoolResponse(Database, PoolId));
+
         auto event = std::move(ev->Get()->Event);
         const TActorId& workerActorId = event->Sender;
         if (!InFlightLimit) {
@@ -204,8 +207,6 @@ private:
         UpdatePoolConfig(ev->Get()->PoolConfig);
         UpdateSchemeboardSubscription(ev->Get()->PathId);
         OnScheduleRequest(request);
-
-        this->Send(MakeKqpWorkloadServiceId(this->SelfId().NodeId()), new TEvPrivate::TEvPlaceRequestIntoPoolResponse(Database, PoolId));
     }
 
     void Handle(TEvCleanupRequest::TPtr& ev) {
@@ -239,6 +240,10 @@ private:
 
         LOG_D("Cancel request by deadline, worker id: " << request->WorkerActorId << ", session id: " << request->SessionId);
         OnCleanupRequest(request);
+    }
+
+    void Handle(TEvPrivate::TEvUpdateSchemeBoardSubscription::TPtr& ev) {
+        UpdateSchemeboardSubscription(ev->Get()->PathId);
     }
 
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev) {

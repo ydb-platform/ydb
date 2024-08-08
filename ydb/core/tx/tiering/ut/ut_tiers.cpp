@@ -505,68 +505,40 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 
 //#define S3_TEST_USAGE
 #ifdef S3_TEST_USAGE
-    const TString TierConfigProtoStr =
-        R"(
-        Name : "fakeTier"
-        ObjectStorage : {
-            Scheme: HTTP
-            VerifySSL: false
-            Endpoint: "storage.cloud-preprod.yandex.net"
-            Bucket: "tiering-test-01"
-            AccessKey: "SId:secretAccessKey"
-            SecretKey: "USId:root@builtin:secretSecretKey"
-            ProxyHost: "localhost"
-            ProxyPort: 8080
-            ProxyScheme: HTTP
-        }
-    )";
-    const TString UserTierConfigProtoStr =
-        R"(
-        Name : "fakeTier"
-        ObjectStorage : {
-            Scheme: HTTP
-            VerifySSL: false
-            Endpoint: "storage.cloud-preprod.yandex.net"
-            Bucket: "tiering-test-01"
-            AccessKey: "SId:secretAccessKey"
-            SecretKey: "USId:user@builtin:secretSecretKey"
-            ProxyHost: "localhost"
-            ProxyPort: 8080
-            ProxyScheme: HTTP
-        }
-    )";
+    TString GetTierConfigProtoStr()(const TString& ownerId = "root@builtin") {
+        return Sprintf(R"(
+            Name : "fakeTier"
+            ObjectStorage : {
+                Scheme: HTTP
+                VerifySSL: false
+                Endpoint: "storage.cloud-preprod.yandex.net"
+                Bucket: "tiering-test-01"
+                AccessKey: "SId:secretAccessKey"
+                SecretKey: "USId:%s:secretSecretKey"
+                ProxyHost: "localhost"
+                ProxyPort: 8080
+                ProxyScheme: HTTP
+            }
+        )", ownerId.c_str());
+    }
     const TString TierEndpoint = "storage.cloud-preprod.yandex.net";
 #else
-    const TString TierConfigProtoStr =
-        R"(
-        Name : "fakeTier"
-        ObjectStorage : {
-            Endpoint: "fake"
-            Bucket: "fake"
-            SecretableAccessKey: {
-                SecretId: {
-                    Id: "secretAccessKey"
-                    OwnerId: "root@builtin"
+    TString GetTierConfigProtoStr(const TString& ownerId = "root@builtin") {
+        return Sprintf(R"(
+            Name : "fakeTier"
+            ObjectStorage : {
+                Endpoint: "fake"
+                Bucket: "fake"
+                SecretableAccessKey: {
+                    SecretId: {
+                        Id: "secretAccessKey"
+                        OwnerId: "%s"
+                    }
                 }
+                SecretKey: "SId:secretSecretKey"
             }
-            SecretKey: "SId:secretSecretKey"
-        }
-    )";
-    const TString UserTierConfigProtoStr =
-        R"(
-        Name : "fakeTier"
-        ObjectStorage : {
-            Endpoint: "fake"
-            Bucket: "fake"
-            SecretableAccessKey: {
-                SecretId: {
-                    Id: "secretAccessKey"
-                    OwnerId: "user@builtin"
-                }
-            }
-            SecretKey: "SId:secretSecretKey"
-        }
-    )";
+        )", ownerId.c_str());
+    }
     const TString TierEndpoint = "fake";
 #endif
 
@@ -614,9 +586,9 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
 
         lHelper.StartSchemaRequest("CREATE OBJECT tier1 ( "
-            "TYPE TIER) WITH (tierConfig = `" + TierConfigProtoStr + "`)");
+            "TYPE TIER) WITH (tierConfig = `" + GetTierConfigProtoStr() + "`)");
         lHelper.StartSchemaRequest("CREATE OBJECT tier2 ( "
-            "TYPE TIER) WITH (tierConfig = `" + TierConfigProtoStr + "`)");
+            "TYPE TIER) WITH (tierConfig = `" + GetTierConfigProtoStr() + "`)");
 
         lHelper.StartSchemaRequest("CREATE OBJECT tiering1 ("
             "TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" + ConfigTiering1Str + "` )");
@@ -740,9 +712,9 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
 
         lHelper.StartSchemaRequest(
-            "CREATE OBJECT tier1 (TYPE TIER) WITH (tierConfig = `" + UserTierConfigProtoStr + "`)", true, true, "user@builtin");
+            "CREATE OBJECT tier1 (TYPE TIER) WITH (tierConfig = `" + GetTierConfigProtoStr("user@builtin") + "`)", true, true, "user@builtin");
         lHelper.StartSchemaRequest(
-            "CREATE OBJECT tier2 (TYPE TIER) WITH (tierConfig = `" + UserTierConfigProtoStr + "`)", true, true, "user@builtin");
+            "CREATE OBJECT tier2 (TYPE TIER) WITH (tierConfig = `" + GetTierConfigProtoStr("user@builtin") + "`)", true, true, "user@builtin");
 
         lHelper.StartSchemaRequest(
             "CREATE OBJECT tiering1 (TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" + ConfigTiering1Str + "` )", true,

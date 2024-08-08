@@ -193,6 +193,8 @@ struct TDecimal {
         return *this;
     }
 
+    // TODO: implement '-' and '%'
+
     friend TDecimal operator+(TDecimal left, TDecimal right) {
         left += right;
         return left;

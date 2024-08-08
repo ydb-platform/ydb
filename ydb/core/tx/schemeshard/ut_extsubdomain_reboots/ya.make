@@ -10,6 +10,7 @@ IF (NOT WITH_VALGRIND)
     ELSE()
         TIMEOUT(300)
         SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
     ENDIF()
 
     PEERDIR(

@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/cms)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 TIMEOUT(600)
 

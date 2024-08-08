@@ -6,11 +6,12 @@ TEST_SRCS(
 )
 
 REQUIREMENTS(
-    cpu:4
+    cpu:1
     ram:16
 )
 TIMEOUT(600)
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SPLIT_FACTOR(20)
 

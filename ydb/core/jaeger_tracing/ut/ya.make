@@ -5,6 +5,7 @@ FORK_SUBTESTS()
 TIMEOUT(600)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     sampler_ut.cpp

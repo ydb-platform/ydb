@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/library/actors/util)
 IF (WITH_VALGRIND)
     TIMEOUT(600)
     SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 ENDIF()
 
 SRCS(

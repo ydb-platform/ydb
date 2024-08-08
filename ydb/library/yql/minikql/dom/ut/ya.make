@@ -7,6 +7,7 @@ IF (NOT WINDOWS)
     )
 
     SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
     PEERDIR(
         ydb/library/yql/minikql/computation/llvm14

@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/kqp/proxy_service)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     kqp_proxy_ut.cpp

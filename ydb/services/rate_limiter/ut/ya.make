@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/services/rate_limiter)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     rate_limiter_ut.cpp

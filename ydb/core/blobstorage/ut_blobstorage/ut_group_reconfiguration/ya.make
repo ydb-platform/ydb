@@ -5,6 +5,7 @@ FORK_SUBTESTS()
 FORK_SUBTESTS()
 
 #    SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 #    TIMEOUT(600)
 SIZE(LARGE)
 
@@ -21,7 +22,7 @@ PEERDIR(
 )
 
 REQUIREMENTS(
-    cpu:4
+    cpu:1
     ram:32
 )
 

@@ -10,12 +10,13 @@ TEST_SRCS(
 )
 
 REQUIREMENTS(
-    cpu:4
+    cpu:1
     ram:32
 )
 
 TIMEOUT(600)
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 DEPENDS(
     ydb/apps/ydbd

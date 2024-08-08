@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/services/datastreams)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 TIMEOUT(600)
 

@@ -11,11 +11,12 @@ IF (SANITIZER_TYPE OR WITH_VALGRIND)
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
     TAG(sb:ttl=2)
 ENDIF()
 
 REQUIREMENTS(
-    cpu:4
+    cpu:1
     ram:32
 )
 

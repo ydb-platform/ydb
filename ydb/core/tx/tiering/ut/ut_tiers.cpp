@@ -520,6 +520,21 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             ProxyScheme: HTTP
         }
     )";
+    const TString UserTierConfigProtoStr =
+        R"(
+        Name : "fakeTier"
+        ObjectStorage : {
+            Scheme: HTTP
+            VerifySSL: false
+            Endpoint: "storage.cloud-preprod.yandex.net"
+            Bucket: "tiering-test-01"
+            AccessKey: "SId:secretAccessKey"
+            SecretKey: "USId:user@builtin:secretSecretKey"
+            ProxyHost: "localhost"
+            ProxyPort: 8080
+            ProxyScheme: HTTP
+        }
+    )";
     const TString TierEndpoint = "storage.cloud-preprod.yandex.net";
 #else
     const TString TierConfigProtoStr =

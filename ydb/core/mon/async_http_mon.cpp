@@ -254,10 +254,15 @@ public:
         PassAway();
     }
 
+    bool CredentialsProvided() {
+        return Container.GetCookie("ydb_session_id") || Container.GetHeader("Authorization");
+    }
+
     TString YdbToHttpError(Ydb::StatusIds::StatusCode status) {
         switch (status) {
         case Ydb::StatusIds::UNAUTHORIZED:
-            return "403 Forbidden";
+            // YDB status UNAUTHORIZED is used for both access denied case and if no credentials were provided.
+            return CredentialsProvided() ? "403 Forbidden" : "401 Unauthorized";
         case Ydb::StatusIds::INTERNAL_ERROR:
             return "500 Internal Server Error";
         case Ydb::StatusIds::UNAVAILABLE:

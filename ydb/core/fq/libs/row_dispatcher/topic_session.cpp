@@ -66,7 +66,6 @@ private:
     NYql::NDq::TDqAsyncStats IngressStats;
     std::queue<TReadyBatch> ReadyBuffer;
     ui32 BatchCapacity;
-    std::vector<std::tuple<TString, NYql::NDq::TPqMetaExtractor::TPqMetaExtractorLambda>> MetadataFields;
     bool IsStopped = false;
 
     struct ConsumersInfo {
@@ -113,6 +112,7 @@ public:
     void PassAway() override;
 
     TInstant GetMinStartingMessageTimestamp() const;
+    void AddDataToConsumer(ConsumersInfo& consumer, ui64 offset, const TString& json);
 
     std::optional<NYql::TIssues> ProcessDataReceivedEvent(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event);
     std::optional<NYql::TIssues> ProcessSessionClosedEvent(NYdb::NTopic::TSessionClosedEvent& ev);
@@ -164,13 +164,6 @@ TTopicSession::TTopicSession(
     , LogPrefix("TopicSession")
     , Config(config)
 {
-    // LOG_ROW_DISPATCHER_DEBUG("MetadataFieldsSize " << SourceParams.MetadataFieldsSize());
-
-    // MetadataFields.reserve(SourceParams.MetadataFieldsSize());
-    // NYql::NDq::TPqMetaExtractor fieldsExtractor;
-    // for (const auto& fieldName : SourceParams.GetMetadataFields()) {
-    //     MetadataFields.emplace_back(fieldName, fieldsExtractor.FindExtractorLambda(fieldName));
-    // }
 }
 
 void TTopicSession::Bootstrap() {
@@ -194,7 +187,6 @@ void TTopicSession::SubscribeOnNextEvent() {
 
     NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
     ReadSession->WaitEvent().Subscribe([actorSystem, selfId = SelfId()](const auto&){
-       // LOG_ROW_DISPATCHER_DEBUG("send TEvPqEventsReady");
         actorSystem->Send(selfId, new NFq::NTopicSession::TEvPrivate::TEvPqEventsReady());
     });
 }
@@ -205,7 +197,6 @@ NYdb::NTopic::TTopicClientSettings TTopicSession::GetTopicClientSettings(const N
         .DiscoveryEndpoint(sourceParams.GetEndpoint())
         .SslCredentials(NYdb::TSslCredentials(sourceParams.GetUseSsl()))
         .CredentialsProviderFactory(CredentialsProviderFactory);
-
     return opts;
 }
 
@@ -252,6 +243,7 @@ void TTopicSession::CreateTopicSession() {
         InitParser(sourceParams);
         LOG_ROW_DISPATCHER_DEBUG("CreateTopicSession");
         ReadSession = GetTopicClient(sourceParams).CreateReadSession(GetReadSessionSettings(sourceParams));
+        SubscribeOnNextEvent();
     }
 }
 
@@ -291,7 +283,6 @@ void TTopicSession::HandleNewEvents() {
             break;
         }
         std::optional<NYql::TIssues> issues;
-      //  ui32 batchItemsEstimatedCount = 0;
 
         if (auto* e = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
             issues = ProcessDataReceivedEvent(*e);
@@ -301,15 +292,12 @@ void TTopicSession::HandleNewEvents() {
             issues = ProcessStartPartitionSessionEvent(*e);
         } else if (auto* e = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
             issues = ProcessStopPartitionSessionEvent(*e);
-        } else if (auto* e = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
-
+        } else if (auto* e = std::get_if<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent>(&*event)) {
+            LOG_ROW_DISPATCHER_WARN("TEndPartitionSessionEvent");
         }
 
-         // if NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent
-        // auto issues = std::visit(TTopicEventProcessor{*this, batchItemsEstimatedCount, LogPrefix}, event);
         if (issues) {
-            CloseTopicSession();
-            // Callbacks->OnAsyncOutputError(OutputIndex, *issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
+            FatalError(issues->ToOneLineString());
             break;
         }
     }
@@ -330,24 +318,14 @@ std::optional<NYql::TIssues> TTopicSession::ProcessDataReceivedEvent(NYdb::NTopi
     for (const auto& message : event.GetMessages()) {
         const TString& data = message.GetData();
         IngressStats.Bytes += data.size();
-        // LWPROBE(PqReadDataReceived, TString(TStringBuilder() << Self.TxId), Self.SourceParams.GetTopicPath(), data);
         LOG_ROW_DISPATCHER_TRACE("Data received: " << message.DebugString(true));
 
-        // if (message.GetWriteTime() < StartingMessageTimestamp) {
-        //     LOG_ROW_DISPATCHER_DEBUG("Skip data. StartingMessageTimestamp: " << StartingMessageTimestamp << ". Write time: " << message.GetWriteTime());
-        //     continue;
-        // } // TODOt
-
         const TString& item = message.GetData();
-        
         size_t size = item.size();
-
-     //   auto [item, size] = CreateItem(message);
 
         auto& curBatch = GetActiveBatch(/*partitionKey, message.GetWriteTime()*/);
         curBatch.Data.emplace_back(std::make_pair(message.GetOffset(), std::move(item)));
         curBatch.UsedSpace += size;
-      //  curBatch.LastOffset = message.GetOffset() + 1;
     }
     return std::nullopt;
 }
@@ -360,7 +338,6 @@ std::optional<NYql::TIssues> TTopicSession::ProcessSessionClosedEvent(NYdb::NTop
     issues.AddIssue(TStringBuilder() << "Read session to topic \"" << "\" was closed: " << ev.DebugString());
     return issues;
 }
-
 
 std::optional<NYql::TIssues> TTopicSession::ProcessStartPartitionSessionEvent(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event) {
     LOG_ROW_DISPATCHER_DEBUG("StartPartitionSessionEvent received");
@@ -386,44 +363,13 @@ std::optional<NYql::TIssues> TTopicSession::ProcessStopPartitionSessionEvent(NYd
     return std::nullopt;
 }
 
-// std::optional<NYql::TIssues> operator()(NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent& /*event*/) {
-//     LOG_ROW_DISPATCHER_DEBUG("SessionId: " << Self.GetSessionId() << " EndPartitionSessionEvent received");
-//     return std::nullopt;
-// }
-
-// std::optional<NYql::TIssues> operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent&) {
-//     return std::nullopt;
-// }
-
-// std::optional<NYql::TIssues> operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent& /*event*/) {
-//     LOG_ROW_DISPATCHER_DEBUG("SessionId: " << Self.GetSessionId()  << " PartitionSessionClosedEvent received");
-//     return std::nullopt;
-// }
-
 TTopicSession::TReadyBatch& TTopicSession::GetActiveBatch(/*const TPartitionKey& partitionKey, TInstant time*/) {
     if (Y_UNLIKELY(ReadyBuffer.empty() || ReadyBuffer.back().Watermark.Defined())) {
         ReadyBuffer.emplace(Nothing(), BatchCapacity);
     }
 
     TReadyBatch& activeBatch = ReadyBuffer.back();
-     return activeBatch;
-
-    // if (!Self.WatermarkTracker) {
-    //     // Watermark tracker disabled => there is no way more than one batch will be used
-    //     return activeBatch;
-    // }
-
-//     const auto maybeNewWatermark = WatermarkTracker->NotifyNewPartitionTime(
-//         partitionKey,
-//         time,
-//         TInstant::Now());
-//     if (!maybeNewWatermark) {
-//         // Watermark wasn't moved => use current active batch
-//         return activeBatch;
-//     }
-
-//   //  PushWatermarkToReady(*maybeNewWatermark);
-//     return ReadyBuffer.emplace(Nothing(), BatchCapacity); // And open new batch
+    return activeBatch;
 }
 
 std::pair<NYql::NUdf::TUnboxedValuePod, i64> TTopicSession::CreateItem(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
@@ -431,26 +377,8 @@ std::pair<NYql::NUdf::TUnboxedValuePod, i64> TTopicSession::CreateItem(const NYd
 
     i64 usedSpace = 0;
     NYql::NUdf::TUnboxedValuePod item;
-    if (MetadataFields.empty()) {
-        item = NKikimr::NMiniKQL::MakeString(NYql::NUdf::TStringRef(data.Data(), data.Size()));
-        usedSpace += data.Size();
-    } else {
-        // NYql::NUdf::TUnboxedValue* itemPtr;
-
-        // NKikimr::NMiniKQL::TMemoryUsageInfo memInfo("Eval");
-        // NKikimr::NMiniKQL::THolderFactory holderFactory(Alloc.Ref(), memInfo);
-
-        // item = holderFactory.CreateDirectArrayHolder(MetadataFields.size() + 1, itemPtr);
-        // *(itemPtr++) = NKikimr::NMiniKQL::MakeString(NYql::NUdf::TStringRef(data.Data(), data.Size()));
-        // usedSpace += data.Size();
-
-        // for (const auto& [name, extractor] : MetadataFields) {
-        //     auto [ub, size] = extractor(message);
-        //     *(itemPtr++) = std::move(ub);
-        //     usedSpace += size;
-        // }
-    }
-
+    item = NKikimr::NMiniKQL::MakeString(NYql::NUdf::TStringRef(data.Data(), data.Size()));
+    usedSpace += data.Size();
     return std::make_pair(item, usedSpace);
 }
 
@@ -493,6 +421,8 @@ void TTopicSession::DataParsed(ui64 offset, TList<TString>&& value) {
 void TTopicSession::SendData(ConsumersInfo& info) {
     info.DataArrivedSent = false;
     if (info.Buffer.empty()) {
+
+        LOG_ROW_DISPATCHER_DEBUG("Buffer empty");
         return;
     }
 
@@ -508,12 +438,12 @@ void TTopicSession::SendData(ConsumersInfo& info) {
         event->Record.AddMessages()->CopyFrom(message);
         info.Buffer.pop();
     }
-    LOG_ROW_DISPATCHER_DEBUG("SendData to ");
+    LOG_ROW_DISPATCHER_DEBUG("SendData to " << info.ReadActorId << ", batch size " << event->Record.MessagesSize());
     Send(RowDispatcherActorId, event.release());
 }
 
 void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvSessionAddConsumer");
+    LOG_ROW_DISPATCHER_DEBUG("TEvStartSession");
     if (IsStopped) {
         // TODO
         LOG_ROW_DISPATCHER_DEBUG("Session is stopped, event ignored");
@@ -545,24 +475,27 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
                     LOG_ROW_DISPATCHER_ERROR("Wrong consumer"); // TODO
                     return;
                 }
-                auto& consumerInfo = it->second;
-                consumerInfo.Buffer.push(std::make_pair(offset, json));
+                AddDataToConsumer(it->second, offset, json);
                 LOG_ROW_DISPATCHER_TRACE("JsonFilter data: " << json);
                 SendDataArrived();
             });
 
         LOG_ROW_DISPATCHER_DEBUG("Consumers size " << Consumers.size());
-        CreateTopicSession();
+        Schedule(TDuration::Seconds(Config.GetTimeoutBeforeStartSessionSec()), new NFq::NTopicSession::TEvPrivate::TEvCreateSession());
 
-      //  Schedule(TDuration::Seconds(Config.GetTimeoutBeforeStartSessionSec()), new NFq::NTopicSession::TEvPrivate::TEvCreateSession());
-
-        SubscribeOnNextEvent();
     } catch (NYql::NPureCalc::TCompileError& e) {
         LOG_ROW_DISPATCHER_DEBUG("CompileError: sql: " << e.GetYql() << ", error: " << e.GetIssues());
         throw;
     } catch (const yexception &ex) {
         LOG_ROW_DISPATCHER_DEBUG("FormatWhere failed: "  << ex.what());
     }
+}
+
+void TTopicSession::AddDataToConsumer(ConsumersInfo& info, ui64 offset, const TString& json) {
+    if (info.Consumer.HasOffset() && (offset < info.Consumer.GetOffset())) {
+        return;
+    }
+    info.Buffer.push(std::make_pair(offset, json));
 }
 
 void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev) {

@@ -6,8 +6,10 @@ import os
 
 ydb.interceptor.monkey_patch_event_handler()
 
+
 def timestamp():
     return int(1000 * time.time())
+
 
 def table_name_with_timestamp():
     return os.path.join("column_table_" + str(timestamp()))
@@ -31,7 +33,7 @@ class Workload(object):
         with self.pool.checkout() as s:
             try:
                 s.execute_scheme(
-                """
+                    """
                     CREATE TABLE %s (
                     id Int64 NOT NULL,
                     i64Val Int64,
@@ -41,7 +43,8 @@ class Workload(object):
                     WITH (
                         STORE = COLUMN
                     )
-                """ % table_name
+                """
+                    % table_name
                 )
 
                 print("Table %s created" % table_name)
@@ -68,11 +71,14 @@ class Workload(object):
 
             self.drop_table(table_name)
 
+
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="olap stability workload", formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description="olap stability workload", formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument('--endpoint', default='localhost:2135', help="An endpoint to be used")
     parser.add_argument('--database', default=None, required=True, help='A database to connect')
-    parser.add_argument('--duration', default=10 ** 9, type=lambda x: int(x), help='A duration of workload in seconds.')
+    parser.add_argument('--duration', default=10**9, type=lambda x: int(x), help='A duration of workload in seconds.')
     args = parser.parse_args()
     with Workload(args.endpoint, args.database, args.duration) as workload:
         workload.run()

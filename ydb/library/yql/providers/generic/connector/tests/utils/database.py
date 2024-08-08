@@ -19,6 +19,10 @@ class Database:
                 self.name = name[:255]
             case EDataSourceKind.MYSQL:
                 self.name = name[:63]
+            case EDataSourceKind.ORACLE:
+                # Oracle does not is not case sensitive for identifiers until quoted,
+                # so we'd better make it upper case for test convinience
+                self.name = name[:127].upper()  # TODO: is it needed? max length of Oracle table name is 128 bytes/chars
             case EDataSourceKind.YDB:
                 self.name = name
             case _:
@@ -50,6 +54,8 @@ class Database:
                 raise Exception("Fix me first in YQ-3315")
             case EDataSourceKind.MYSQL:
                 return 'Unknown database'
+            case EDataSourceKind.ORACLE:
+                raise Exception("Fix me first in YQ-3413")
             case _:
                 raise Exception(f'invalid data source: {self.kind}')
 
@@ -62,6 +68,8 @@ class Database:
             case EDataSourceKind.YDB:
                 return 'issues = [{\'Path not found\'}])'
             case EDataSourceKind.MYSQL:
+                return 'table does not exist'
+            case EDataSourceKind.ORACLE:
                 return 'table does not exist'
             case _:
                 raise Exception(f'invalid data source: {self.kind}')

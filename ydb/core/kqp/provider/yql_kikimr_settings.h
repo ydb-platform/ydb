@@ -53,6 +53,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<TString, false> OverrideStatistics;
     NCommon::TConfSetting<ui64, false> EnableSpillingNodes;
     NCommon::TConfSetting<TString, false> OverridePlanner;
+    NCommon::TConfSetting<bool, false> UseGraceJoinCoreForMap;
 
     /* Disable optimizer rules */
     NCommon::TConfSetting<bool, false> OptDisableTopSort;

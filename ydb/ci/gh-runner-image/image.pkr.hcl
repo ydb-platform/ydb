@@ -50,6 +50,10 @@ pip3 install conan==1.59 pytest==7.1.3 pytest-timeout pytest-xdist==3.3.1 setpro
     | tar -xJ -C /usr/local/bin/ --strip-components=1 --no-same-owner ccache-$CCACHE_VERSION-linux-$OS_ARCH/ccache
 )
 
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash
+apt-get install -y nodejs
+
+npm install -g @testmo/testmo-cli
 EOF
     destination = "/tmp/install-packages.sh"
   }

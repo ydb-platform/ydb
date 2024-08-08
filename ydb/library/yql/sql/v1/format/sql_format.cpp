@@ -1385,10 +1385,11 @@ private:
         NewLine();
         VisitKeyword(msg.GetToken1());
         VisitKeyword(msg.GetToken2());
-        Visit(msg.GetRule_topic_ref3());
-        if (msg.HasBlock4()) {
+        Visit(msg.GetBlock3());
+        Visit(msg.GetRule_topic_ref4());
+        if (msg.HasBlock5()) {
             PushCurrentIndent();
-            auto& b = msg.GetBlock4().GetRule_create_topic_entries1();
+            auto& b = msg.GetBlock5().GetRule_create_topic_entries1();
             Visit(b.GetToken1());
             NewLine();
             Visit(b.GetRule_create_topic_entry2());
@@ -1401,8 +1402,8 @@ private:
             PopCurrentIndent();
             Visit(b.GetToken4());
         }
-        if (msg.HasBlock5()) {
-            auto& b = msg.GetBlock5().GetRule_with_topic_settings1();
+        if (msg.HasBlock6()) {
+            auto& b = msg.GetBlock6().GetRule_with_topic_settings1();
             VisitKeyword(b.GetToken1());
             VisitKeyword(b.GetToken2());
             PushCurrentIndent();
@@ -1419,11 +1420,12 @@ private:
         NewLine();
         VisitKeyword(msg.GetToken1());
         VisitKeyword(msg.GetToken2());
-        Visit(msg.GetRule_topic_ref3());
+        Visit(msg.GetBlock3());
+        Visit(msg.GetRule_topic_ref4());
         NewLine();
         PushCurrentIndent();
-        Visit(msg.GetRule_alter_topic_action4());
-        for (auto& b : msg.GetBlock5()) {
+        Visit(msg.GetRule_alter_topic_action5());
+        for (auto& b : msg.GetBlock6()) {
             Visit(b.GetToken1());
             NewLine();
             Visit(b.GetRule_alter_topic_action2());

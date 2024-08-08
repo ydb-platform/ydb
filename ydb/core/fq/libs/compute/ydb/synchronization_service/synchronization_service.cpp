@@ -436,6 +436,7 @@ private:
 
             request.Get()->Get()->YDBClient = Client;
             request.Get()->Get()->ComputeDatabase = ComputeDatabase;
+            request.Get()->Get()->Scope = Scope;
 
             Register(NFq::NPrivate::MakeCreateConnectionActor(
                 SelfId(),
@@ -465,6 +466,7 @@ private:
 
             request.Get()->Get()->YDBClient = Client;
             request.Get()->Get()->ComputeDatabase = ComputeDatabase;
+            request.Get()->Get()->Scope = Scope;
 
             auto it = Connections.find(binding.second.content().connection_id());
             if (it == Connections.end()) {

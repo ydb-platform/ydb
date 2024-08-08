@@ -11,6 +11,7 @@ SRCS(
     codegen_ut.cpp
     error_ut.cpp
     memory_ut.cpp
+    pack_ut.cpp
     parser_ut.cpp
     proc_ut.cpp
     sort_ut.cpp

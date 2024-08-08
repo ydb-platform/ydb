@@ -59,8 +59,7 @@ public:
         TString& caCertificateFile,
         TString& sslCertificateFile,
         bool& useStderr,
-        bool& mlock,
-        NMvp::EAccessServiceType& accessServiceType);
+        bool& mlock);
 
     TMVPAppData AppData;
     TIntrusivePtr<NActors::NLog::TSettings> LoggerSettings;

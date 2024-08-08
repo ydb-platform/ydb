@@ -83,7 +83,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptEnableOlapProvideComputeSharding);
     REGISTER_SETTING(*this, OverrideStatistics);
     REGISTER_SETTING(*this, OverridePlanner);
-
+    REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
 
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
     REGISTER_SETTING(*this, CostBasedOptimizationLevel);

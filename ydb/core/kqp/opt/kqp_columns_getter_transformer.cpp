@@ -1,5 +1,7 @@
 #include "kqp_columns_getter_transformer.h"
 
+#include <ydb/library/yql/core/yql_expr_optimize.h>
+
 namespace NKikimr::NKqp {
 
 void TKqpColumnsGetterTransformer::PropagateTableToLambdaArgument(const TExprNode::TPtr& input) {
@@ -95,7 +97,7 @@ bool TKqpColumnsGetterTransformer::AfterLambdas(const TExprNode::TPtr& input) {
                 if (TCoMember::Match(input.Get())) {
                     auto member = TExprBase(input).Cast<TCoMember>();
 
-                    if (TableByExprNode[input.Get()] == nullptr) {
+                    if (!TableByExprNode.contains(input.Get()) || TableByExprNode[input.Get()] == nullptr) {
                         return true;
                     }
                     auto table = TExprBase(TableByExprNode[input.Get()]).Cast<TKqpTable>().Path().StringValue();

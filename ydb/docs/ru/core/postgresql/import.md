@@ -1,5 +1,19 @@
 # Импорт данных из PostgreSQL
 
+Данные из PostgreSQL в {{ydb-name}} можно импортировать различными способами:
+- С помощью [pg-dump](#pg-dump).
+- С помощью импорта данных [из файлов](#file-import).
+- С помощью утилиты [ydb-importer](../integrations/import-jdbc.md).
+
+|Способ импорта|Способ работы|Сценарии использования|
+|--------------|------------------|------------|
+|[pg-dump](#pg-dump)|Создание всей необходимой структуры таблиц и данных|Импорт баз данных PostgreSQL целиком|
+|Импорт данных [из файлов](../reference/ydb-cli/export-import/import-file.md)|Импорт файлов с данными в заранее созданные таблицы базы данных {{ydb-name}}|Импорт данных из баз данных Greenplum или любых других баз данных со сменой структуры хранения данных|
+|[ydb-importer](../integrations/import-jdbc.md)|Импорт данных из другой базы данных в заранее созданные таблицы базы данных {{ydb-name}}|Импорт данных из любых баз данных, поддерживающих [JDBC-протокол](https://ru.wikipedia.org/wiki/Java_Database_Connectivity)|
+
+
+## pg-dump {#pg-dump}
+
 Данные из PostgreSQL в YDB можно перенести c помощью утилит [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html), [psql](https://www.postgresql.org/docs/current/app-psql.html) и [YDB CLI](../reference/ydb-cli/index.md). Утилиты [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) и [psql](https://www.postgresql.org/docs/current/app-psql.html) устанавливаются вместе с PostgreSQL, [YDB CLI](../reference/ydb-cli/index.md) — консольный клиент YDB, который [устанавливается отдельно](../reference/ydb-cli/install.md).
 
 Для этого нужно:

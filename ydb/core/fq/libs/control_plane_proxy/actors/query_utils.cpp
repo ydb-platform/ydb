@@ -7,7 +7,6 @@
 #include <ydb/core/fq/libs/result_formatter/result_formatter.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
-#include <ydb/public/lib/fq/scope.h>
 
 namespace NFq {
 namespace NPrivate {
@@ -96,8 +95,7 @@ TString SignAccountId(const TString& id, const TSigner::TPtr& signer) {
 TMaybe<TString> CreateSecretObjectQuery(const FederatedQuery::ConnectionSetting& setting,
                                 const TString& name,
                                 const TSigner::TPtr& signer,
-                                const TString& scope) {
-    const TString folderId = NYdb::NFq::TScope{scope}.ParseFolder();
+                                const TString& folderId) {
     using namespace fmt::literals;
     TString secretObjects;
     auto serviceAccountId = ExtractServiceAccountId(setting);
@@ -126,9 +124,8 @@ TMaybe<TString> CreateSecretObjectQuery(const FederatedQuery::ConnectionSetting&
 TString CreateAuthParamsQuery(const FederatedQuery::ConnectionSetting& setting,
                               const TString& name,
                               const TSigner::TPtr& signer,
-                              const TString& scope) {
+                              const TString& folderId) {
     using namespace fmt::literals;
-    const TString folderId = NYdb::NFq::TScope{scope}.ParseFolder();
     auto authMethod = GetYdbComputeAuthMethod(setting);
     switch (authMethod) {
         case EYdbComputeAuth::UNKNOWN:
@@ -177,7 +174,7 @@ TString MakeCreateExternalDataSourceQuery(
     const TSigner::TPtr& signer,
     const NConfig::TCommonConfig& common,
     bool replaceIfExists,
-    const TString& scope) {
+    const TString& folderId) {
     using namespace fmt::literals;
 
     TString properties;
@@ -285,11 +282,10 @@ TString MakeCreateExternalDataSourceQuery(
             CreateAuthParamsQuery(connectionContent.setting(),
                                   connectionContent.name(),
                                   signer,
-                                  scope));
+                                  folderId));
 }
 
-TMaybe<TString> DropSecretObjectQuery(const TString& name, const TString& scope) {
-    const TString folderId = NYdb::NFq::TScope{scope}.ParseFolder();
+TMaybe<TString> DropSecretObjectQuery(const TString& name, const TString& folderId) {
     using namespace fmt::literals;
     return fmt::format(
             R"(

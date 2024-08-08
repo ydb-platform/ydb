@@ -782,7 +782,7 @@ void TPersQueue::EndWriteConfig(const NKikimrClient::TResponse& resp, const TAct
         NewConfigShouldBeApplied = true; //when config will be inited with old value new config will be applied
 }
 
-void TPersQueue::HandleConfigReadResponse(const NKikimrClient::TResponse& resp, const TActorContext& ctx)
+void TPersQueue::HandleConfigReadResponse(NKikimrClient::TResponse&& resp, const TActorContext& ctx)
 {
     bool ok =
         (resp.GetStatus() == NMsgBusProxy::MSTATUS_OK) &&
@@ -790,16 +790,68 @@ void TPersQueue::HandleConfigReadResponse(const NKikimrClient::TResponse& resp, 
         (resp.HasSetExecutorFastLogPolicyResult()) &&
         (resp.GetSetExecutorFastLogPolicyResult().GetStatus() == NKikimrProto::OK);
     if (!ok) {
-        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE,
-            "Tablet " << TabletID() << " Config read error: " << resp.DebugString() << " " << ctx.SelfID);
-        ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
+        PQ_LOG_ERROR_AND_DIE("Config read error: " << resp.ShortDebugString());
         return;
     }
 
-    ReadTxInfo(resp.GetReadResult(2), ctx);
-    ReadConfig(resp.GetReadResult(0), resp.GetReadRangeResult(0), ctx);
-    ReadTxWrites(resp.GetReadResult(2), ctx);
-    ReadState(resp.GetReadResult(1), ctx);
+    ConfigReadResponse = std::move(resp);
+
+    BeginInitTransactions();
+    SendTransactionsReadRequest(GetTxKey(Min<ui64>()), true, ctx);
+}
+
+void TPersQueue::SendTransactionsReadRequest(const TString& fromKey, bool includeFrom,
+                                             const TActorContext& ctx)
+{
+    THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
+    request->Record.SetCookie(READ_TXS_COOKIE);
+
+    AddCmdReadTransactionRange(*request, fromKey, includeFrom);
+
+    request->Record.MutableCmdSetExecutorFastLogPolicy()
+                ->SetIsAllowed(AppData(ctx)->PQConfig.GetTactic() == NKikimrClient::TKeyValueRequest::MIN_LATENCY);
+    ctx.Send(ctx.SelfID, request.Release());
+}
+
+TString GetLastKey(const NKikimrClient::TKeyValueResponse::TReadRangeResult& result)
+{
+    if (!result.PairSize()) {
+        return {};
+    }
+
+    return result.GetPair(result.PairSize() - 1).GetKey();
+}
+
+void TPersQueue::HandleTransactionsReadResponse(NKikimrClient::TResponse&& resp, const TActorContext& ctx)
+{
+    bool ok =
+        (resp.GetStatus() == NMsgBusProxy::MSTATUS_OK) &&
+        (resp.ReadRangeResultSize() == 1) &&
+        (resp.HasSetExecutorFastLogPolicyResult()) &&
+        (resp.GetSetExecutorFastLogPolicyResult().GetStatus() == NKikimrProto::OK);
+    const auto& result = resp.GetReadRangeResult(0);
+    auto status = result.GetStatus();
+    if (status != NKikimrProto::OVERRUN &&
+        status != NKikimrProto::OK &&
+        status != NKikimrProto::NODATA) {
+        ok = false;
+    }
+    if (!ok) {
+        PQ_LOG_ERROR_AND_DIE("Transactions read error: " << resp.ShortDebugString());
+        return;
+    }
+
+    TransactionsReadResults.emplace_back(std::move(result));
+
+    if (status == NKikimrProto::OVERRUN) {
+        SendTransactionsReadRequest(GetLastKey(result), false, ctx);
+        return;
+    }
+
+    ReadTxInfo(ConfigReadResponse.GetReadResult(2), ctx);
+    ReadConfig(ConfigReadResponse.GetReadResult(0), TransactionsReadResults, ctx);
+    ReadTxWrites(ConfigReadResponse.GetReadResult(2), ctx);
+    ReadState(ConfigReadResponse.GetReadResult(1), ctx);
 }
 
 void TPersQueue::ReadTxInfo(const NKikimrClient::TKeyValueResponse::TReadResult& read,
@@ -1005,7 +1057,7 @@ void TPersQueue::InitTxWrites(const NKikimrPQ::TTabletTxInfo& info,
 }
 
 void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult& read,
-                            const NKikimrClient::TKeyValueResponse::TReadRangeResult& readRange,
+                            const TVector<NKikimrClient::TKeyValueResponse::TReadRangeResult>& readRanges,
                             const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(read.HasStatus());
@@ -1013,15 +1065,6 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE,
             "Tablet " << TabletID() << " Config read error " << ctx.SelfID <<
             " Error status code " << read.GetStatus());
-        ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
-        return;
-    }
-
-    Y_ABORT_UNLESS(readRange.HasStatus());
-    if (readRange.GetStatus() != NKikimrProto::OK && readRange.GetStatus() != NKikimrProto::NODATA) {
-        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE,
-            "Tablet " << TabletID() << " Transactions read error " << ctx.SelfID <<
-            " Error status code " << readRange.GetStatus());
         ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
         return;
     }
@@ -1064,9 +1107,43 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         return;
     }
 
-    THashMap<ui32, TVector<TTransaction>> partitionTxs;
-    InitTransactions(readRange, partitionTxs);
+    for (const auto& readRange : readRanges) {
+        Y_ABORT_UNLESS(readRange.HasStatus());
+        if (readRange.GetStatus() != NKikimrProto::OK &&
+            readRange.GetStatus() != NKikimrProto::OVERRUN &&
+            readRange.GetStatus() != NKikimrProto::NODATA) {
+            PQ_LOG_ERROR_AND_DIE("Transactions read error: " << readRange.GetStatus());
+            return;
+        }
 
+        for (size_t i = 0; i < readRange.PairSize(); ++i) {
+            const auto& pair = readRange.GetPair(i);
+
+            PQ_LOG_D("ReadRange pair." <<
+                     " Key " << (pair.HasKey() ? pair.GetKey() : "unknown") <<
+                     ", Status " << pair.GetStatus());
+
+            NKikimrPQ::TTransaction tx;
+            Y_ABORT_UNLESS(tx.ParseFromString(pair.GetValue()));
+
+            PQ_LOG_D("Load tx " << tx.ShortDebugString());
+
+            Txs.emplace(tx.GetTxId(), tx);
+
+            if (tx.HasStep()) {
+                if (std::make_pair(tx.GetStep(), tx.GetTxId()) >= std::make_pair(ExecStep, ExecTxId)) {
+                    PlannedTxs.emplace_back(tx.GetStep(), tx.GetTxId());
+                }
+            }
+        }
+    }
+
+    EndInitTransactions();
+    EndReadConfig(ctx);
+}
+
+void TPersQueue::EndReadConfig(const TActorContext& ctx)
+{
     for (const auto& partition : Config.GetPartitions()) { // no partitions will be created with empty config
         const TPartitionId partitionId(partition.GetPartitionId());
         CreateOriginalPartition(Config,
@@ -1254,7 +1331,10 @@ void TPersQueue::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
         break;
     case READ_CONFIG_COOKIE:
         // read is only for config - is signal to create interal actors
-        HandleConfigReadResponse(resp, ctx);
+        HandleConfigReadResponse(std::move(resp), ctx);
+        break;
+    case READ_TXS_COOKIE:
+        HandleTransactionsReadResponse(std::move(resp), ctx);
         break;
     case WRITE_STATE_COOKIE:
         EndWriteTabletState(resp, ctx);
@@ -3103,17 +3183,26 @@ void TPersQueue::Handle(TEvInterconnect::TEvNodeInfo::TPtr& ev, const TActorCont
     request->Record.AddCmdRead()->SetKey(KeyState());
     request->Record.AddCmdRead()->SetKey(KeyTxInfo());
 
-    auto cmd = request->Record.AddCmdReadRange();
-    cmd->MutableRange()->SetFrom(GetTxKey(Min<ui64>()));
-    cmd->MutableRange()->SetIncludeFrom(true);
+    request->Record.MutableCmdSetExecutorFastLogPolicy()
+                ->SetIsAllowed(AppData(ctx)->PQConfig.GetTactic() == NKikimrClient::TKeyValueRequest::MIN_LATENCY);
+    ctx.Send(ctx.SelfID, request.Release());
+
+    ctx.Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup());
+}
+
+void TPersQueue::AddCmdReadTransactionRange(TEvKeyValue::TEvRequest& request,
+                                            const TString& fromKey, bool includeFrom)
+{
+    auto cmd = request.Record.AddCmdReadRange();
+    cmd->MutableRange()->SetFrom(fromKey);
+    cmd->MutableRange()->SetIncludeFrom(includeFrom);
     cmd->MutableRange()->SetTo(GetTxKey(Max<ui64>()));
     cmd->MutableRange()->SetIncludeTo(true);
     cmd->SetIncludeData(true);
 
-    request->Record.MutableCmdSetExecutorFastLogPolicy()
-                ->SetIsAllowed(AppData(ctx)->PQConfig.GetTactic() == NKikimrClient::TKeyValueRequest::MIN_LATENCY);
-    ctx.Send(ctx.SelfID, request.Release());
-    ctx.Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup());
+    PQ_LOG_D("Transactions request." <<
+             " From " << cmd->MutableRange()->GetFrom() <<
+             ", To " << cmd->MutableRange()->GetTo());
 }
 
 void TPersQueue::HandleWakeup(const TActorContext& ctx) {
@@ -4445,41 +4534,26 @@ void TPersQueue::EnsurePartitionsAreNotDeleted(const NKikimrPQ::TPQTabletConfig&
     }
 }
 
-void TPersQueue::InitTransactions(const NKikimrClient::TKeyValueResponse::TReadRangeResult& readRange,
-                                  THashMap<ui32, TVector<TTransaction>>& partitionTxs)
+void TPersQueue::BeginInitTransactions()
 {
     Txs.clear();
     TxQueue.clear();
 
-    std::deque<std::pair<ui64, ui64>> plannedTxs;
+    PlannedTxs.clear();
+}
 
-    for (size_t i = 0; i < readRange.PairSize(); ++i) {
-        auto& pair = readRange.GetPair(i);
+void TPersQueue::EndInitTransactions()
+{
+    PQ_LOG_D("Txs.size=" << Txs.size() << ", PlannedTxs.size=" << PlannedTxs.size());
 
-        NKikimrPQ::TTransaction tx;
-        Y_ABORT_UNLESS(tx.ParseFromString(pair.GetValue()));
-
-        PQ_LOG_D("Load tx " << tx.ShortDebugString());
-
-        Txs.emplace(tx.GetTxId(), tx);
-
-        if (tx.HasStep()) {
-            if (std::make_pair(tx.GetStep(), tx.GetTxId()) >= std::make_pair(ExecStep, ExecTxId)) {
-                plannedTxs.emplace_back(tx.GetStep(), tx.GetTxId());
-            }
-        }
-    }
-
-    std::sort(plannedTxs.begin(), plannedTxs.end());
-    for (auto& item : plannedTxs) {
+    std::sort(PlannedTxs.begin(), PlannedTxs.end());
+    for (auto& item : PlannedTxs) {
         TxQueue.push(item);
     }
 
     if (!TxQueue.empty()) {
         PQ_LOG_D("top tx queue (" << TxQueue.front().first << ", " << TxQueue.front().second << ")");
     }
-
-    Y_UNUSED(partitionTxs);
 }
 
 void TPersQueue::TryStartTransaction(const TActorContext& ctx)

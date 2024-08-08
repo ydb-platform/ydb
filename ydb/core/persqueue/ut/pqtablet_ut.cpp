@@ -177,6 +177,7 @@ protected:
     void SetUp(NUnitTest::TTestContext&) override;
     void TearDown(NUnitTest::TTestContext&) override;
 
+    void ResetPipe();
     void EnsurePipeExist();
     void SendToPipe(const TActorId& sender,
                     IEventBase* event,
@@ -246,6 +247,8 @@ protected:
 void TPQTabletFixture::SetUp(NUnitTest::TTestContext&)
 {
     Ctx.ConstructInPlace();
+    Ctx->EnableDetailedPQLog = true;
+
     Finalizer.ConstructInPlace(*Ctx);
 
     Ctx->Prepare();
@@ -254,8 +257,14 @@ void TPQTabletFixture::SetUp(NUnitTest::TTestContext&)
 
 void TPQTabletFixture::TearDown(NUnitTest::TTestContext&)
 {
+    ResetPipe();
+}
+
+void TPQTabletFixture::ResetPipe()
+{
     if (Pipe != TActorId()) {
         Ctx->Runtime->ClosePipe(Pipe, Ctx->Edge, 0);
+        Pipe = TActorId();
     }
 }
 
@@ -1567,6 +1576,54 @@ Y_UNIT_TEST_F(All_New_Partitions_In_Another_Tablet, TPQTabletFixture)
 
     tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
     WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=mockTabletId, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
+}
+
+Y_UNIT_TEST_F(Huge_ProposeTransacton, TPQTabletFixture)
+{
+    const ui64 mockTabletId = 22222;
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    auto tabletConfig = NHelpers::MakeConfig({.Version=2,
+                                             .Consumers={
+                                             {.Consumer="client-1", .Generation=0},
+                                             {.Consumer="client-3", .Generation=7},
+                                             },
+                                             .Partitions={
+                                             {.Id=0},
+                                             {.Id=1},
+                                             },
+                                             .AllPartitions={
+                                             {.Id=0, .TabletId=Ctx->TabletId, .Children={}, .Parents={2}},
+                                             {.Id=1, .TabletId=Ctx->TabletId, .Children={}, .Parents={2}},
+                                             {.Id=2, .TabletId=mockTabletId,  .Children={0, 1}, .Parents={}}
+                                             },
+                                             .HugeConfig = true});
+
+    const ui64 txId_1 = 67890;
+    SendProposeTransactionRequest({.TxId=txId_1,
+                                  .Configs=NHelpers::TConfigParams{
+                                  .Tablet=tabletConfig,
+                                  .Bootstrap=NHelpers::MakeBootstrapConfig(),
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId_1,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    const ui64 txId_2 = 67891;
+    SendProposeTransactionRequest({.TxId=txId_2,
+                                  .Configs=NHelpers::TConfigParams{
+                                  .Tablet=tabletConfig,
+                                  .Bootstrap=NHelpers::MakeBootstrapConfig(),
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId_2,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    PQTabletRestart(*Ctx);
+    ResetPipe();
+
+    SendPlanStep({.Step=100, .TxIds={txId_1, txId_2}});
+    WaitPlanStepAck({.Step=100, .TxIds={txId_1, txId_2}});
+    WaitPlanStepAccepted({.Step=100});
 }
 
 }

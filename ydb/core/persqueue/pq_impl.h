@@ -35,6 +35,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
         READ_CONFIG_COOKIE  = 3,
         WRITE_STATE_COOKIE  = 4,
         WRITE_TX_COOKIE = 5,
+        READ_TXS_COOKIE = 6,
     };
 
     void CreatedHook(const TActorContext& ctx) override;
@@ -97,7 +98,8 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     //response from KV on READ or WRITE config request
     void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx);
-    void HandleConfigReadResponse(const NKikimrClient::TResponse& resp, const TActorContext& ctx);
+    void HandleConfigReadResponse(NKikimrClient::TResponse&& resp, const TActorContext& ctx);
+    void HandleTransactionsReadResponse(NKikimrClient::TResponse&& resp, const TActorContext& ctx);
     void ApplyNewConfigAndReply(const TActorContext& ctx);
     void ApplyNewConfig(const NKikimrPQ::TPQTabletConfig& newConfig,
                         const TActorContext& ctx);
@@ -108,7 +110,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void ReadTxWrites(const NKikimrClient::TKeyValueResponse::TReadResult& read,
                       const TActorContext& ctx);
     void ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult& read,
-                    const NKikimrClient::TKeyValueResponse::TReadRangeResult& readRange,
+                    const TVector<NKikimrClient::TKeyValueResponse::TReadRangeResult>& readRanges,
                     const TActorContext& ctx);
     void ReadState(const NKikimrClient::TKeyValueResponse::TReadResult& read, const TActorContext& ctx);
 
@@ -506,6 +508,22 @@ private:
 
     void MoveTopTxToCalculating(TDistributedTransaction& tx, const TActorContext& ctx);
     void DeletePartition(const TPartitionId& partitionId, const TActorContext& ctx);
+
+    std::deque<std::pair<ui64, ui64>> PlannedTxs;
+
+    void BeginInitTransactions();
+    void EndInitTransactions();
+
+    void EndReadConfig(const TActorContext& ctx);
+
+    void AddCmdReadTransactionRange(TEvKeyValue::TEvRequest& request,
+                                    const TString& fromKey, bool includeFrom);
+
+    NKikimrClient::TResponse ConfigReadResponse;
+    TVector<NKikimrClient::TKeyValueResponse::TReadRangeResult> TransactionsReadResults;
+
+    void SendTransactionsReadRequest(const TString& fromKey, bool includeFrom,
+                                     const TActorContext& ctx);
 };
 
 

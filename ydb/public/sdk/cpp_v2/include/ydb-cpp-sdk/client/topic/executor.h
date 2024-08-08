@@ -5,6 +5,7 @@
 #include <util/thread/pool.h>
 
 #include <memory>
+#include <mutex>
 
 namespace NYdb::NTopic {
 

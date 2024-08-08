@@ -84,13 +84,13 @@ private:
 
 class TExplainYqlResult : public TStatus {
 public:
-    TExplainYqlResult(TStatus&& status, const ::google::protobuf::Map<std::string, Ydb::Type>&& types, std::string&& plan);
+    TExplainYqlResult(TStatus&& status, const ::google::protobuf::Map<TStringType, Ydb::Type>&& types, std::string&& plan);
 
     std::map<std::string, TType> GetParameterTypes() const;
     const std::string& GetPlan() const;
 
 private:
-    ::google::protobuf::Map<std::string, Ydb::Type> ParameterTypes_;
+    ::google::protobuf::Map<TStringType, Ydb::Type> ParameterTypes_;
     std::string Plan_;
 };
 

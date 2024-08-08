@@ -16,9 +16,9 @@ PEERDIR(
 
     ydb/public/sdk/cpp_v2/src/client/common_client/impl
     ydb/public/sdk/cpp_v2/src/client/types
+    ydb/public/sdk/cpp_v2/src/library/retry
 
     library/cpp/monlib/dynamic_counters
-    library/cpp/retry
 )
 
 END()

@@ -12,14 +12,14 @@ namespace NYdb {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TParams::TParams(::google::protobuf::Map<std::string, Ydb::TypedValue>&& protoMap)
+TParams::TParams(::google::protobuf::Map<TStringType, Ydb::TypedValue>&& protoMap)
     : Impl_(new TImpl(std::move(protoMap))) {}
 
-::google::protobuf::Map<std::string, Ydb::TypedValue>* TParams::GetProtoMapPtr() {
+::google::protobuf::Map<TStringType, Ydb::TypedValue>* TParams::GetProtoMapPtr() {
     return Impl_->GetProtoMapPtr();
 }
 
-const ::google::protobuf::Map<std::string, Ydb::TypedValue>& TParams::GetProtoMap() const {
+const ::google::protobuf::Map<TStringType, Ydb::TypedValue>& TParams::GetProtoMap() const {
     return Impl_->GetProtoMap();
 }
 
@@ -41,7 +41,7 @@ class TParamsBuilder::TImpl {
 public:
     TImpl() = default;
 
-    TImpl(const ::google::protobuf::Map<std::string, Ydb::Type>& typeInfo)
+    TImpl(const ::google::protobuf::Map<TStringType, Ydb::Type>& typeInfo)
         : HasTypeInfo_(true)
     {
         for (const auto& pair : typeInfo) {
@@ -97,7 +97,7 @@ public:
 
         ValueBuildersMap_.clear();
 
-        ::google::protobuf::Map<std::string, Ydb::TypedValue> paramsMap;
+        ::google::protobuf::Map<TStringType, Ydb::TypedValue> paramsMap;
         paramsMap.swap(ParamsMap_);
         return TParams(std::move(paramsMap));
     }
@@ -123,7 +123,7 @@ private:
 
 private:
     bool HasTypeInfo_ = false;
-    ::google::protobuf::Map<std::string, Ydb::TypedValue> ParamsMap_;
+    ::google::protobuf::Map<TStringType, Ydb::TypedValue> ParamsMap_;
     std::map<std::string, TParamValueBuilder> ValueBuildersMap_;
 };
 
@@ -156,7 +156,7 @@ TParamsBuilder::TParamsBuilder()
 TParamsBuilder::TParamsBuilder(const std::map<std::string, TType>& typeInfo)
     : Impl_(new TImpl(typeInfo)) {}
 
-TParamsBuilder::TParamsBuilder(const ::google::protobuf::Map<std::string, Ydb::Type>& typeInfo)
+TParamsBuilder::TParamsBuilder(const ::google::protobuf::Map<TStringType, Ydb::Type>& typeInfo)
     : Impl_(new TImpl(typeInfo)) {}
 
 bool TParamsBuilder::HasTypeInfo() const {

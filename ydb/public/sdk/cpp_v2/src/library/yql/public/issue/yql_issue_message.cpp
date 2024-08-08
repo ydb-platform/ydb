@@ -1,11 +1,15 @@
 #include "yql_issue_message.h"
 
+#include <ydb-cpp-sdk/type_switcher.h>
+
 #include <ydb/public/sdk/cpp_v2/src/library/yql/public/issue/protos/issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
 #include <util/generic/yexception.h>
 #include <util/stream/output.h>
 #include <util/string/join.h>
+
+#include <deque>
 
 #include <google/protobuf/text_format.h>
 
@@ -67,14 +71,14 @@ void IssueToMessage(const TIssue& topIssue, TIssueMessage* issueMessage) {
             auto& position = *message.mutable_position();
             position.set_row(issue.Position.Row);
             position.set_column(issue.Position.Column);
-            position.set_file(issue.Position.File);
+            position.set_file(NYdb::TStringType{issue.Position.File});
         }
         if (issue.EndPosition) {
             auto& endPosition = *message.mutable_end_position();
             endPosition.set_row(issue.EndPosition.Row);
             endPosition.set_column(issue.EndPosition.Column);
         }
-        message.set_message(issue.GetMessage());
+        message.set_message(NYdb::TStringType{issue.GetMessage()});
         message.set_issue_code(issue.GetCode());
         message.set_severity(issue.GetSeverity());
 
@@ -123,16 +127,16 @@ NIssue::NProto::IssueMessage IssueToMessage(const TIssue& topIssue) {
 }
 
 std::string IssueToBinaryMessage(const TIssue& issue) {
-    std::string result;
+    NYdb::TStringType result;
     Ydb::Issue::IssueMessage protobuf;
     IssueToMessage(issue, &protobuf);
-    protobuf.SerializeToString(&result);
+    Y_UNUSED(protobuf.SerializeToString(&result));
     return result;
 }
 
 TIssue IssueFromBinaryMessage(const std::string& binaryMessage) {
     Ydb::Issue::IssueMessage protobuf;
-    if (!protobuf.ParseFromString(binaryMessage)) {
+    if (!protobuf.ParseFromString(NYdb::TStringType{binaryMessage})) {
         ythrow yexception() << "unable to parse binary string as issue protobuf";
     }
     return IssueFromMessage(protobuf);
@@ -145,7 +149,7 @@ Y_DECLARE_OUT_SPEC(, Ydb::Issue::IssueMessage, stream, value) {
     printer.SetSingleLineMode(true);
     printer.SetUseUtf8StringEscaping(true);
 
-    std::string str;
+    NYdb::TStringType str;
     printer.PrintToString(value, &str);
 
     // Copied from text_format.h
@@ -162,7 +166,7 @@ Y_DECLARE_OUT_SPEC(, NYql::NIssue::NProto::IssueMessage, stream, value) {
     printer.SetSingleLineMode(true);
     printer.SetUseUtf8StringEscaping(true);
 
-    std::string str;
+    NYdb::TStringType str;
     printer.PrintToString(value, &str);
 
     // Copied from text_format.h

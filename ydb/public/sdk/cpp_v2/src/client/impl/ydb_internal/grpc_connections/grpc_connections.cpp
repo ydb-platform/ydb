@@ -313,7 +313,7 @@ void TGRpcConnectionsImpl::SetGrpcKeepAlive(NYdbGrpc::TGRpcClientConfig& config,
 
 TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr dbState) {
     Ydb::Discovery::ListEndpointsRequest request;
-    request.set_database(dbState->Database);
+    request.set_database(TStringType{dbState->Database});
 
     auto promise = NThreading::NewPromise<TListEndpointsResult>();
 

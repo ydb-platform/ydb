@@ -13,10 +13,10 @@ PEERDIR(
     library/cpp/http/misc
     library/cpp/http/simple
     library/cpp/json
-    library/cpp/retry
     library/cpp/uri
     ydb/public/sdk/cpp_v2/src/client/types
     ydb/public/sdk/cpp_v2/src/client/types/credentials
+    ydb/public/sdk/cpp_v2/src/library/retry
 )
 
 END()

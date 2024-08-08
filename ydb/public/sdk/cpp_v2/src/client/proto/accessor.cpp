@@ -23,11 +23,11 @@ typename TProtoSettings::Scheme TProtoAccessor::GetProto(ES3Scheme value) {
     }
 }
 
-const ::google::protobuf::Map<std::string, Ydb::TypedValue>& TProtoAccessor::GetProtoMap(const TParams& params) {
+const ::google::protobuf::Map<TStringType, Ydb::TypedValue>& TProtoAccessor::GetProtoMap(const TParams& params) {
     return params.GetProtoMap();
 }
 
-::google::protobuf::Map<std::string, Ydb::TypedValue>* TProtoAccessor::GetProtoMapPtr(TParams& params) {
+::google::protobuf::Map<TStringType, Ydb::TypedValue>* TProtoAccessor::GetProtoMapPtr(TParams& params) {
     return params.GetProtoMapPtr();
 }
 

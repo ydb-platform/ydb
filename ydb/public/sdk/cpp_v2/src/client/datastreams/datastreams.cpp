@@ -20,7 +20,7 @@ namespace NYdb::NDataStreams::V1 {
         auto MakeResultExtractor(NThreading::TPromise <TResultWrapper> promise) {
             return [promise = std::move(promise)]
                     (google::protobuf::Any *any, TPlainStatus status) mutable {
-                std::unique_ptr <TProtoResult> result;
+                std::unique_ptr<TProtoResult> result;
                 if (any) {
                     result.reset(new TProtoResult);
                     any->UnpackTo(result.get());
@@ -73,7 +73,7 @@ namespace NYdb::NDataStreams::V1 {
                     Ydb::DataStreams::V1::CreateStreamResult>(settings,
                         &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncCreateStream,
                         [&](Ydb::DataStreams::V1::CreateStreamRequest& req) {
-                            req.set_stream_name(path);
+                            req.set_stream_name(TStringType{path});
                             req.set_shard_count(settings.ShardCount_);
                             if (settings.RetentionStorageMegabytes_.has_value()) {
                                 req.set_retention_storage_megabytes(*settings.RetentionStorageMegabytes_);
@@ -97,7 +97,7 @@ namespace NYdb::NDataStreams::V1 {
                     Ydb::DataStreams::V1::ListStreamsResponse,
                     Ydb::DataStreams::V1::ListStreamsResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncListStreams,
                                                              [&](Ydb::DataStreams::V1::ListStreamsRequest& req) {
-                                                                 req.set_exclusive_start_stream_name(settings.ExclusiveStartStreamName_);
+                                                                 req.set_exclusive_start_stream_name(TStringType{settings.ExclusiveStartStreamName_});
                                                                  req.set_limit(settings.Limit_);
                                                                  req.set_recurse(settings.Recurse_);
                                                              });
@@ -118,12 +118,12 @@ namespace NYdb::NDataStreams::V1 {
                     Ydb::DataStreams::V1::ListShardsResponse,
                     Ydb::DataStreams::V1::ListShardsResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncListShards,
                     [&](Ydb::DataStreams::V1::ListShardsRequest& req) {
-                        req.set_exclusive_start_shard_id(settings.ExclusiveStartShardId_);
+                        req.set_exclusive_start_shard_id(TStringType{settings.ExclusiveStartShardId_});
                         req.set_max_results(settings.MaxResults_);
-                        req.set_next_token(settings.NextToken_);
+                        req.set_next_token(TStringType{settings.NextToken_});
                         req.mutable_shard_filter()->CopyFrom(shardFilter);
                         req.set_stream_creation_timestamp(settings.StreamCreationTimestamp_);
-                        req.set_stream_name(path);
+                        req.set_stream_name(TStringType{path});
                     });
         }
 
@@ -133,12 +133,12 @@ namespace NYdb::NDataStreams::V1 {
                     Ydb::DataStreams::V1::PutRecordsResponse,
                     Ydb::DataStreams::V1::PutRecordsResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncPutRecords,
                                                             [&](Ydb::DataStreams::V1::PutRecordsRequest& req) {
-                                                                req.set_stream_name(path);
+                                                                req.set_stream_name(TStringType{path});
                                                                 for (const auto& record : records) {
                                                                     auto* protoRecord = req.add_records();
-                                                                    protoRecord->set_partition_key(record.PartitionKey);
-                                                                    protoRecord->set_data(record.Data);
-                                                                    protoRecord->set_explicit_hash_key(record.ExplicitHashDecimal);
+                                                                    protoRecord->set_partition_key(TStringType{record.PartitionKey});
+                                                                    protoRecord->set_data(TStringType{record.Data});
+                                                                    protoRecord->set_explicit_hash_key(TStringType{record.ExplicitHashDecimal});
                                                                 }
                                                             });
         }
@@ -149,7 +149,7 @@ namespace NYdb::NDataStreams::V1 {
                     Ydb::DataStreams::V1::GetRecordsResponse,
                     Ydb::DataStreams::V1::GetRecordsResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncGetRecords,
                         [&](Ydb::DataStreams::V1::GetRecordsRequest& req) {
-                            req.set_shard_iterator(shardIterator);
+                            req.set_shard_iterator(TStringType{shardIterator});
                             req.set_limit(settings.Limit_);
                         });
         }
@@ -162,10 +162,10 @@ namespace NYdb::NDataStreams::V1 {
                     Ydb::DataStreams::V1::GetShardIteratorResponse,
                     Ydb::DataStreams::V1::GetShardIteratorResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncGetShardIterator,
                         [&](Ydb::DataStreams::V1::GetShardIteratorRequest& req) {
-                            req.set_stream_name(path);
-                            req.set_shard_id(shardId);
+                            req.set_stream_name(TStringType{path});
+                            req.set_shard_id(TStringType{shardId});
                             req.set_shard_iterator_type(shardIteratorType);
-                            req.set_starting_sequence_number(settings.StartingSequenceNumber_);
+                            req.set_starting_sequence_number(TStringType{settings.StartingSequenceNumber_});
                             req.set_timestamp(settings.Timestamp_);
                         });
         }
@@ -190,7 +190,7 @@ namespace NYdb::NDataStreams::V1 {
                     Ydb::DataStreams::V1::DescribeStreamSummaryResponse,
                     Ydb::DataStreams::V1::DescribeStreamSummaryResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeStreamSummary,
                                                                        [&](Ydb::DataStreams::V1::DescribeStreamSummaryRequest& req) {
-                                                                           req.set_stream_name(path);
+                                                                           req.set_stream_name(TStringType{path});
                                                                        });
         }
 
@@ -200,7 +200,7 @@ namespace NYdb::NDataStreams::V1 {
                     Ydb::DataStreams::V1::DecreaseStreamRetentionPeriodResponse,
                     Ydb::DataStreams::V1::DecreaseStreamRetentionPeriodResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDecreaseStreamRetentionPeriod,
                                                                                [&](Ydb::DataStreams::V1::DecreaseStreamRetentionPeriodRequest& req) {
-                                                                                   req.set_stream_name(path);
+                                                                                   req.set_stream_name(TStringType{path});
                                                                                    req.set_retention_period_hours(settings.RetentionPeriodHours_);
                                                                                });
 
@@ -212,7 +212,7 @@ namespace NYdb::NDataStreams::V1 {
                     Ydb::DataStreams::V1::IncreaseStreamRetentionPeriodResponse,
                     Ydb::DataStreams::V1::IncreaseStreamRetentionPeriodResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncIncreaseStreamRetentionPeriod,
                                                                   [&](Ydb::DataStreams::V1::IncreaseStreamRetentionPeriodRequest& req) {
-                                                                      req.set_stream_name(path);
+                                                                      req.set_stream_name(TStringType{path});
                                                                       req.set_retention_period_hours(settings.RetentionPeriodHours_);
                                                                   });
 
@@ -224,7 +224,7 @@ namespace NYdb::NDataStreams::V1 {
                     Ydb::DataStreams::V1::UpdateShardCountResponse,
                     Ydb::DataStreams::V1::UpdateShardCountResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncUpdateShardCount,
                                                                   [&](Ydb::DataStreams::V1::UpdateShardCountRequest& req) {
-                                                                      req.set_stream_name(path);
+                                                                      req.set_stream_name(TStringType{path});
                                                                       req.set_target_shard_count(settings.TargetShardCount_);
                                                                   });
         }
@@ -235,7 +235,7 @@ namespace NYdb::NDataStreams::V1 {
                     Ydb::DataStreams::V1::UpdateStreamModeResponse,
                     Ydb::DataStreams::V1::UpdateStreamModeResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncUpdateStreamMode,
                                                                   [&](Ydb::DataStreams::V1::UpdateStreamModeRequest& req) {
-                                                                    req.set_stream_arn(path);
+                                                                    req.set_stream_arn(TStringType{path});
 
                                                                     req.mutable_stream_mode_details()->set_stream_mode(
                                                                         settings.StreamMode_ == ESM_PROVISIONED ? Ydb::DataStreams::V1::StreamMode::PROVISIONED
@@ -249,8 +249,8 @@ namespace NYdb::NDataStreams::V1 {
                     Ydb::DataStreams::V1::RegisterStreamConsumerResponse,
                     Ydb::DataStreams::V1::RegisterStreamConsumerResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncRegisterStreamConsumer,
                     [&](Ydb::DataStreams::V1::RegisterStreamConsumerRequest& req) {
-                        req.set_stream_arn(path);
-                        req.set_consumer_name(consumer_name);
+                        req.set_stream_arn(TStringType{path});
+                        req.set_consumer_name(TStringType{consumer_name});
                     });
         }
 
@@ -260,8 +260,8 @@ namespace NYdb::NDataStreams::V1 {
                     Ydb::DataStreams::V1::DeregisterStreamConsumerResponse,
                     Ydb::DataStreams::V1::DeregisterStreamConsumerResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDeregisterStreamConsumer,
                     [&](Ydb::DataStreams::V1::DeregisterStreamConsumerRequest& req) {
-                        req.set_stream_arn(path);
-                        req.set_consumer_name(consumer_name);
+                        req.set_stream_arn(TStringType{path});
+                        req.set_consumer_name(TStringType{consumer_name});
                     });
         }
 
@@ -277,8 +277,8 @@ namespace NYdb::NDataStreams::V1 {
                     Ydb::DataStreams::V1::ListStreamConsumersRequest,
                     Ydb::DataStreams::V1::ListStreamConsumersResponse,
                     Ydb::DataStreams::V1::ListStreamConsumersResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncListStreamConsumers, [&](Ydb::DataStreams::V1::ListStreamConsumersRequest& req) {
-                        req.set_stream_arn(path);
-                        req.set_next_token(settings.NextToken_);
+                        req.set_stream_arn(TStringType{path});
+                        req.set_next_token(TStringType{settings.NextToken_});
                         req.set_max_results(settings.MaxResults_);
                     });
         }
@@ -358,7 +358,7 @@ namespace NYdb::NDataStreams::V1 {
                     Ydb::DataStreams::V1::UpdateStreamResult>(settings,
                         &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncUpdateStream,
                         [&](Ydb::DataStreams::V1::UpdateStreamRequest& req) {
-                            req.set_stream_name(streamName);
+                            req.set_stream_name(TStringType{streamName});
                             req.set_target_shard_count(settings.TargetShardCount_);
                             if (settings.RetentionPeriodHours_.has_value()) {
                                 req.set_retention_period_hours(*settings.RetentionPeriodHours_);
@@ -382,7 +382,7 @@ namespace NYdb::NDataStreams::V1 {
                     Ydb::DataStreams::V1::DeleteStreamResult>(settings,
                         &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDeleteStream,
                         [&](Ydb::DataStreams::V1::DeleteStreamRequest& req) {
-                            req.set_stream_name(path);
+                            req.set_stream_name(TStringType{path});
                             req.set_enforce_consumer_deletion(settings.EnforceConsumerDeletion_);
                         });
         }
@@ -393,8 +393,8 @@ namespace NYdb::NDataStreams::V1 {
                     Ydb::DataStreams::V1::DescribeStreamResponse,
                     Ydb::DataStreams::V1::DescribeStreamResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeStream,
                                                               [&](Ydb::DataStreams::V1::DescribeStreamRequest& req) {
-                                                                  req.set_stream_name(path);
-                                                                  req.set_exclusive_start_shard_id(settings.ExclusiveStartShardId_);
+                                                                  req.set_stream_name(TStringType{path});
+                                                                  req.set_exclusive_start_shard_id(TStringType{settings.ExclusiveStartShardId_});
                                                                   req.set_limit(settings.Limit_);
                                                               });
         }
@@ -405,10 +405,10 @@ namespace NYdb::NDataStreams::V1 {
                     Ydb::DataStreams::V1::PutRecordResponse,
                     Ydb::DataStreams::V1::PutRecordResult>(settings, &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncPutRecord,
                                                                 [&](Ydb::DataStreams::V1::PutRecordRequest& req) {
-                                                                    req.set_stream_name(path);
-                                                                    req.set_explicit_hash_key(record.ExplicitHashDecimal);
-                                                                    req.set_partition_key(record.PartitionKey);
-                                                                    req.set_data(record.Data);
+                                                                    req.set_stream_name(TStringType{path});
+                                                                    req.set_explicit_hash_key(TStringType{record.ExplicitHashDecimal});
+                                                                    req.set_partition_key(TStringType{record.PartitionKey});
+                                                                    req.set_data(TStringType{record.Data});
                                                                 });
         }
 

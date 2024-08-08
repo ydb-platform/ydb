@@ -153,12 +153,12 @@ void TWriteSessionImpl::DoCdsRequest(TDuration delay) {
 
             Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest req;
             auto* params = req.add_write_sessions();
-            params->set_topic(Settings.Path_);
-            params->set_source_id(Settings.MessageGroupId_);
+            params->set_topic(TStringType{Settings.Path_});
+            params->set_source_id(TStringType{Settings.MessageGroupId_});
             if (Settings.PartitionGroupId_.has_value())
-                params->set_partition_group(*Settings.PartitionGroupId_);
+                params->set_partition_group(Settings.PartitionGroupId_.value());
             if (Settings.PreferredCluster_.has_value())
-                params->set_preferred_cluster_name(*Settings.PreferredCluster_);
+                params->set_preferred_cluster_name(TStringType{Settings.PreferredCluster_.value()});
 
             LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Do schedule cds request after " << delay.MilliSeconds() << " ms\n");
             auto cdsRequestCall = [req_=std::move(req), extr=std::move(extractor), connections = std::shared_ptr<TGRpcConnectionsImpl>(Connections), dbState=DbDriverState, settings=Settings]() mutable {
@@ -572,13 +572,13 @@ void TWriteSessionImpl::InitImpl() {
 
     Ydb::PersQueue::V1::StreamingWriteClientMessage req;
     auto* init = req.mutable_init_request();
-    init->set_topic(Settings.Path_);
-    init->set_message_group_id(Settings.MessageGroupId_);
+    init->set_topic(TStringType{Settings.Path_});
+    init->set_message_group_id(TStringType{Settings.MessageGroupId_});
     if (Settings.PartitionGroupId_) {
         init->set_partition_group_id(*Settings.PartitionGroupId_);
     }
     init->set_max_supported_format_version(0);
-    init->set_preferred_cluster(PreferredClusterByCDS);
+    init->set_preferred_cluster(TStringType{PreferredClusterByCDS});
 
     for (const auto& attr : Settings.Meta_.Fields) {
         (*init->mutable_session_meta())[attr.first] = attr.second;
@@ -1167,7 +1167,7 @@ void TWriteSessionImpl::UpdateTokenIfNeededImpl() {
     if (token == PrevToken)
         return;
     UpdateTokenInProgress = true;
-    updateRequest->set_token(token);
+    updateRequest->set_token(TStringType{token});
     PrevToken = token;
 
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: updating token");
@@ -1206,7 +1206,7 @@ void TWriteSessionImpl::SendImpl() {
             writeRequest->add_blocks_message_counts(block.MessageCount);
             writeRequest->add_blocks_part_numbers(block.PartNumber);
             writeRequest->add_blocks_uncompressed_sizes(block.OriginalSize);
-            writeRequest->add_blocks_headers(block.CodecID);
+            writeRequest->add_blocks_headers(TStringType{block.CodecID});
             if (block.Compressed)
                 writeRequest->add_blocks_data(block.Data.data(), block.Data.size());
             else {

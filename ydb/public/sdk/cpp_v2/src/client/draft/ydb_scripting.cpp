@@ -123,7 +123,7 @@ TAsyncYqlResultPart TYqlResultPartIterator::ReadNext() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TExplainYqlResult::TExplainYqlResult(TStatus&& status, const ::google::protobuf::Map<std::string, Ydb::Type>&& types, std::string&& plan)
+TExplainYqlResult::TExplainYqlResult(TStatus&& status, const ::google::protobuf::Map<TStringType, Ydb::Type>&& types, std::string&& plan)
     : TStatus(std::move(status))
     , ParameterTypes_(std::move(types))
     , Plan_(plan) {}
@@ -154,7 +154,7 @@ public:
         const TExecuteYqlRequestSettings& settings)
     {
         auto request = MakeOperationRequest<Ydb::Scripting::ExecuteYqlRequest>(settings);
-        request.set_script(script);
+        request.set_script(TStringType{script});
         SetParams(params, &request);
         request.set_collect_stats(GetStatsCollectionMode(settings.CollectQueryStats_));
         request.set_syntax(settings.Syntax_);
@@ -200,7 +200,7 @@ public:
         TParamsType params, const TExecuteYqlRequestSettings& settings)
     {
         auto request = MakeOperationRequest<Ydb::Scripting::ExecuteYqlRequest>(settings);
-        request.set_script(script);
+        request.set_script(TStringType{script});
         SetParams(params, &request);
         request.set_collect_stats(GetStatsCollectionMode(settings.CollectQueryStats_));
         request.set_syntax(settings.Syntax_);
@@ -250,7 +250,7 @@ public:
         const TExplainYqlRequestSettings& settings)
     {
             auto request = MakeOperationRequest<Ydb::Scripting::ExplainYqlRequest>(settings);
-            request.set_script(script);
+            request.set_script(TStringType{script});
 
             switch (settings.Mode_) {
                 // KIKIMR-10990
@@ -270,7 +270,7 @@ public:
             auto extractor = [promise]
                 (google::protobuf::Any* any, TPlainStatus status) mutable {
                     std::string plan;
-                    ::google::protobuf::Map<std::string, Ydb::Type> types;
+                    ::google::protobuf::Map<TStringType, Ydb::Type> types;
                     if (any) {
                         Ydb::Scripting::ExplainYqlResult result;
                         any->UnpackTo(&result);
@@ -298,14 +298,14 @@ public:
 
 private:
     template<typename TRequest>
-    static void SetParams(::google::protobuf::Map<std::string, Ydb::TypedValue>* params, TRequest* request) {
+    static void SetParams(::google::protobuf::Map<TStringType, Ydb::TypedValue>* params, TRequest* request) {
         if (params) {
             request->mutable_parameters()->swap(*params);
         }
     }
 
     template<typename TRequest>
-    static void SetParams(const ::google::protobuf::Map<std::string, Ydb::TypedValue>& params, TRequest* request) {
+    static void SetParams(const ::google::protobuf::Map<TStringType, Ydb::TypedValue>& params, TRequest* request) {
         *request->mutable_parameters() = params;
     }
 
@@ -335,7 +335,7 @@ TAsyncExecuteYqlResult TScriptingClient::ExecuteYqlScript(const std::string &que
             nullptr,
             settings);
     } else {
-        using TProtoParamsType = const ::google::protobuf::Map<std::string, Ydb::TypedValue>;
+        using TProtoParamsType = const ::google::protobuf::Map<TStringType, Ydb::TypedValue>;
         return Impl_->ExecuteYqlScript<TProtoParamsType&>(
             query,
             params.GetProtoMap(),
@@ -361,7 +361,7 @@ TAsyncYqlResultPartIterator TScriptingClient::StreamExecuteYqlScript(const std::
     if (params.Empty()) {
         return Impl_->StreamExecuteYqlScript(script, nullptr, settings);
     } else {
-        using TProtoParamsType = const ::google::protobuf::Map<std::string, Ydb::TypedValue>;
+        using TProtoParamsType = const ::google::protobuf::Map<TStringType, Ydb::TypedValue>;
         return Impl_->StreamExecuteYqlScript<TProtoParamsType&>(script, params.GetProtoMap(), settings);
     }
 }

@@ -8,7 +8,7 @@
 
 namespace NYdb {
 
-#ifdef YDB_SDK_OPENSOURCE
+#ifdef YDB_SDK_USE_NEW_JWT
     using TJwtCppStorage = std::vector<picojson::value>;
 #else
     using TJwtCppStorage = std::set<std::string>;

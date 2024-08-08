@@ -15,11 +15,10 @@ PEERDIR(
     ydb/public/sdk/cpp_v2/src/client/proto
     ydb/public/sdk/cpp_v2/src/client/driver
     ydb/public/sdk/cpp_v2/src/client/table
+    ydb/public/sdk/cpp_v2/src/library/retry
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/api/protos
-
-    library/cpp/retry
 )
 
 END()

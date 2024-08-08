@@ -402,7 +402,7 @@ TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessio
 
 TAsyncKeepAliveResult TTableClient::TImpl::KeepAlive(const TSession::TImpl* session, const TKeepAliveSettings& settings) {
     auto request = MakeOperationRequest<Ydb::Table::KeepAliveRequest>(settings);
-    request.set_session_id(session->GetId());
+    request.set_session_id(TStringType{session->GetId()});
 
     auto keepAliveResultPromise = NewPromise<TKeepAliveResult>();
     auto self = shared_from_this();
@@ -472,9 +472,9 @@ TFuture<TStatus> TTableClient::TImpl::CopyTable(const std::string& sessionId, co
     const TCopyTableSettings& settings)
 {
     auto request = MakeOperationRequest<Ydb::Table::CopyTableRequest>(settings);
-    request.set_session_id(sessionId);
-    request.set_source_path(src);
-    request.set_destination_path(dst);
+    request.set_session_id(TStringType{sessionId});
+    request.set_source_path(TStringType{src});
+    request.set_destination_path(TStringType{dst});
 
     return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::CopyTableRequest, Ydb::Table::CopyTableResponse>(
         std::move(request),
@@ -500,8 +500,8 @@ TFuture<TStatus> TTableClient::TImpl::RenameTables(Ydb::Table::RenameTablesReque
 
 TFuture<TStatus> TTableClient::TImpl::DropTable(const std::string& sessionId, const std::string& path, const TDropTableSettings& settings) {
     auto request = MakeOperationRequest<Ydb::Table::DropTableRequest>(settings);
-    request.set_session_id(sessionId);
-    request.set_path(path);
+    request.set_session_id(TStringType{sessionId});
+    request.set_path(TStringType{path});
 
     return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::DropTableRequest, Ydb::Table::DropTableResponse>(
         std::move(request),
@@ -511,8 +511,8 @@ TFuture<TStatus> TTableClient::TImpl::DropTable(const std::string& sessionId, co
 
 TAsyncDescribeTableResult TTableClient::TImpl::DescribeTable(const std::string& sessionId, const std::string& path, const TDescribeTableSettings& settings) {
     auto request = MakeOperationRequest<Ydb::Table::DescribeTableRequest>(settings);
-    request.set_session_id(sessionId);
-    request.set_path(path);
+    request.set_session_id(TStringType{sessionId});
+    request.set_path(TStringType{path});
     if (settings.WithKeyShardBoundary_) {
         request.set_include_shard_key_bounds(true);
     }
@@ -553,8 +553,8 @@ TAsyncPrepareQueryResult TTableClient::TImpl::PrepareDataQuery(const TSession& s
     const TPrepareDataQuerySettings& settings)
 {
     auto request = MakeOperationRequest<Ydb::Table::PrepareDataQueryRequest>(settings);
-    request.set_session_id(session.GetId());
-    request.set_yql_text(query);
+    request.set_session_id(TStringType{session.GetId()});
+    request.set_yql_text(TStringType{query});
 
     auto promise = NewPromise<TPrepareQueryResult>();
 
@@ -569,7 +569,7 @@ TAsyncPrepareQueryResult TTableClient::TImpl::PrepareDataQuery(const TSession& s
                 any->UnpackTo(&result);
 
                 if (status.Ok()) {
-                    dataQuery = TDataQuery(*sessionPtr, query, result.query_id(), result.parameters_types());
+                    dataQuery = TDataQuery(*sessionPtr, query, std::string{result.query_id()}, result.parameters_types());
                     sessionPtr->SessionImpl_->AddQueryToCache(dataQuery);
                 }
             }
@@ -598,8 +598,8 @@ TAsyncStatus TTableClient::TImpl::ExecuteSchemeQuery(const std::string& sessionI
     const TExecSchemeQuerySettings& settings)
 {
     auto request = MakeOperationRequest<Ydb::Table::ExecuteSchemeQueryRequest>(settings);
-    request.set_session_id(sessionId);
-    request.set_yql_text(query);
+    request.set_session_id(TStringType{sessionId});
+    request.set_yql_text(TStringType{query});
 
     return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::ExecuteSchemeQueryRequest, Ydb::Table::ExecuteSchemeQueryResponse>(
         std::move(request),
@@ -611,7 +611,7 @@ TAsyncBeginTransactionResult TTableClient::TImpl::BeginTransaction(const TSessio
     const TBeginTxSettings& settings)
 {
     auto request = MakeOperationRequest<Ydb::Table::BeginTransactionRequest>(settings);
-    request.set_session_id(session.GetId());
+    request.set_session_id(TStringType{session.GetId()});
     SetTxSettings(txSettings, request.mutable_tx_settings());
 
     auto promise = NewPromise<TBeginTransactionResult>();
@@ -646,8 +646,8 @@ TAsyncCommitTransactionResult TTableClient::TImpl::CommitTransaction(const TSess
     const TCommitTxSettings& settings)
 {
     auto request = MakeOperationRequest<Ydb::Table::CommitTransactionRequest>(settings);
-    request.set_session_id(session.GetId());
-    request.set_tx_id(tx.GetId());
+    request.set_session_id(TStringType{session.GetId()});
+    request.set_tx_id(TStringType{tx.GetId()});
     request.set_collect_stats(GetStatsCollectionMode(settings.CollectQueryStats_));
 
     auto promise = NewPromise<TCommitTransactionResult>();
@@ -684,8 +684,8 @@ TAsyncStatus TTableClient::TImpl::RollbackTransaction(const TSession& session, c
     const TRollbackTxSettings& settings)
 {
     auto request = MakeOperationRequest<Ydb::Table::RollbackTransactionRequest>(settings);
-    request.set_session_id(session.GetId());
-    request.set_tx_id(tx.GetId());
+    request.set_session_id(TStringType{session.GetId()});
+    request.set_tx_id(TStringType{tx.GetId()});
 
     return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::RollbackTransactionRequest, Ydb::Table::RollbackTransactionResponse>(
         std::move(request),
@@ -698,8 +698,8 @@ TAsyncExplainDataQueryResult TTableClient::TImpl::ExplainDataQuery(const TSessio
     const TExplainDataQuerySettings& settings)
 {
     auto request = MakeOperationRequest<Ydb::Table::ExplainDataQueryRequest>(settings);
-    request.set_session_id(session.GetId());
-    request.set_yql_text(query);
+    request.set_session_id(TStringType{session.GetId()});
+    request.set_yql_text(TStringType{query});
     request.set_collect_full_diagnostics(settings.WithCollectFullDiagnostics_);
 
     auto promise = NewPromise<TExplainQueryResult>();
@@ -744,14 +744,14 @@ NThreading::TFuture<std::pair<TPlainStatus, TTableClient::TImpl::TReadTableStrea
     const TReadTableSettings& settings)
 {
     auto request = MakeRequest<Ydb::Table::ReadTableRequest>();
-    request.set_session_id(sessionId);
-    request.set_path(path);
+    request.set_session_id(TStringType{sessionId});
+    request.set_path(TStringType{path});
     request.set_ordered(settings.Ordered_);
     if (settings.RowLimit_) {
         request.set_row_limit(settings.RowLimit_.value());
     }
     for (const auto& col : settings.Columns_) {
-        request.add_columns(col);
+        request.add_columns(TStringType{col});
     }
     if (settings.UseSnapshot_) {
         request.set_use_snapshot(
@@ -810,7 +810,7 @@ NThreading::TFuture<std::pair<TPlainStatus, TTableClient::TImpl::TReadTableStrea
 
 TAsyncReadRowsResult TTableClient::TImpl::ReadRows(const std::string& path, TValue&& keys, const std::vector<std::string>& columns, const TReadRowsSettings& settings) {
     auto request = MakeRequest<Ydb::Table::ReadRowsRequest>();
-    request.set_path(path);
+    request.set_path(TStringType{path});
     auto* protoKeys = request.mutable_keys();
     *protoKeys->mutable_type() = TProtoAccessor::GetProto(keys.GetType());
     *protoKeys->mutable_value() = TProtoAccessor::GetProto(keys);
@@ -849,7 +849,7 @@ TAsyncReadRowsResult TTableClient::TImpl::ReadRows(const std::string& path, TVal
 
 TAsyncStatus TTableClient::TImpl::Close(const TKqpSessionCommon* sessionImpl, const TCloseSessionSettings& settings) {
     auto request = MakeOperationRequest<Ydb::Table::DeleteSessionRequest>(settings);
-    request.set_session_id(sessionImpl->GetId());
+    request.set_session_id(TStringType{sessionImpl->GetId()});
     return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::DeleteSessionRequest, Ydb::Table::DeleteSessionResponse>(
         std::move(request),
         &Ydb::Table::V1::TableService::Stub::AsyncDeleteSession,
@@ -928,7 +928,7 @@ void TTableClient::TImpl::SetStatCollector(const NSdkStats::TStatCollector::TCli
 
 TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table, TValue&& rows, const TBulkUpsertSettings& settings) {
     auto request = MakeOperationRequest<Ydb::Table::BulkUpsertRequest>(settings);
-    request.set_table(table);
+    request.set_table(TStringType{table});
     *request.mutable_rows()->mutable_type() = TProtoAccessor::GetProto(rows.GetType());
     *request.mutable_rows()->mutable_value() = rows.GetProto();
 
@@ -956,20 +956,20 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table,
     const std::string& data, const std::string& schema, const TBulkUpsertSettings& settings)
 {
     auto request = MakeOperationRequest<Ydb::Table::BulkUpsertRequest>(settings);
-    request.set_table(table);
+    request.set_table(TStringType{table});
     if (format == EDataFormat::ApacheArrow) {
-        request.mutable_arrow_batch_settings()->set_schema(schema);
+        request.mutable_arrow_batch_settings()->set_schema(TStringType{schema});
     } else if (format == EDataFormat::CSV) {
         auto* csv_settings = request.mutable_csv_settings();
         const auto& format_settings = settings.FormatSettings_;
         if (!format_settings.empty()) {
-            bool ok = csv_settings->ParseFromString(format_settings);
+            bool ok = csv_settings->ParseFromString(TStringType{format_settings});
             if (!ok) {
                 return {};
             }
         }
     }
-    request.set_data(data);
+    request.set_data(TStringType{data});
 
     auto promise = NewPromise<TBulkUpsertResult>();
 
@@ -992,11 +992,11 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table,
 }
 
 TFuture<std::pair<TPlainStatus, TTableClient::TImpl::TScanQueryProcessorPtr>> TTableClient::TImpl::StreamExecuteScanQueryInternal(const std::string& query,
-    const ::google::protobuf::Map<std::string, Ydb::TypedValue>* params,
+    const ::google::protobuf::Map<TStringType, Ydb::TypedValue>* params,
     const TStreamExecScanQuerySettings& settings)
 {
     auto request = MakeRequest<Ydb::Table::ExecuteScanQueryRequest>();
-    request.mutable_query()->set_yql_text(query);
+    request.mutable_query()->set_yql_text(TStringType{query});
 
     if (params) {
         *request.mutable_parameters() = *params;
@@ -1031,7 +1031,7 @@ TFuture<std::pair<TPlainStatus, TTableClient::TImpl::TScanQueryProcessorPtr>> TT
 }
 
 TAsyncScanQueryPartIterator TTableClient::TImpl::StreamExecuteScanQuery(const std::string& query,
-    const ::google::protobuf::Map<std::string, Ydb::TypedValue>* params,
+    const ::google::protobuf::Map<TStringType, Ydb::TypedValue>* params,
     const TStreamExecScanQuerySettings& settings)
 {
     auto promise = NewPromise<TScanQueryPartIterator>();
@@ -1059,7 +1059,7 @@ TAsyncScanQueryPartIterator TTableClient::TImpl::StreamExecuteScanQuery(const st
 
 
 void TTableClient::TImpl::SetParams(
-    ::google::protobuf::Map<std::string, Ydb::TypedValue>* params,
+    ::google::protobuf::Map<TStringType, Ydb::TypedValue>* params,
     Ydb::Table::ExecuteDataQueryRequest* request)
 {
     if (params) {
@@ -1068,14 +1068,14 @@ void TTableClient::TImpl::SetParams(
 }
 
 void TTableClient::TImpl::SetParams(
-    const ::google::protobuf::Map<std::string, Ydb::TypedValue>& params,
+    const ::google::protobuf::Map<TStringType, Ydb::TypedValue>& params,
     Ydb::Table::ExecuteDataQueryRequest* request)
 {
     *request->mutable_parameters() = params;
 }
 
 void TTableClient::TImpl::CollectParams(
-    ::google::protobuf::Map<std::string, Ydb::TypedValue>* params,
+    ::google::protobuf::Map<TStringType, Ydb::TypedValue>* params,
     NSdkStats::TAtomicHistogram<::NMonitoring::THistogram> histgoram)
 {
 
@@ -1089,7 +1089,7 @@ void TTableClient::TImpl::CollectParams(
 }
 
 void TTableClient::TImpl::CollectParams(
-    const ::google::protobuf::Map<std::string, Ydb::TypedValue>& params,
+    const ::google::protobuf::Map<TStringType, Ydb::TypedValue>& params,
     NSdkStats::TAtomicHistogram<::NMonitoring::THistogram> histgoram)
 {
 
@@ -1132,11 +1132,11 @@ void TTableClient::TImpl::SetTxSettings(const TTxSettings& txSettings, Ydb::Tabl
 }
 
 void TTableClient::TImpl::SetQuery(const std::string& queryText, Ydb::Table::Query* query) {
-    query->set_yql_text(queryText);
+    query->set_yql_text(TStringType{queryText});
 }
 
 void TTableClient::TImpl::SetQuery(const TDataQuery& queryData, Ydb::Table::Query* query) {
-    query->set_id(queryData.GetId());
+    query->set_id(TStringType{queryData.GetId()});
 }
 
 void TTableClient::TImpl::SetQueryCachePolicy(const std::string&, const TExecDataQuerySettings& settings,

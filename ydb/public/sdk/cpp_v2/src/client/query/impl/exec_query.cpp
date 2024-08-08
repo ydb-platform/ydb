@@ -206,16 +206,16 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
 
 TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> StreamExecuteQueryImpl(
     const std::shared_ptr<TGRpcConnectionsImpl>& connections, const TDbDriverStatePtr& driverState,
-    const std::string& query, const TTxControl& txControl, const ::google::protobuf::Map<std::string, Ydb::TypedValue>* params,
+    const std::string& query, const TTxControl& txControl, const ::google::protobuf::Map<TStringType, Ydb::TypedValue>* params,
     const TExecuteQuerySettings& settings, const std::optional<TSession>& session)
 {
     auto request = MakeRequest<Ydb::Query::ExecuteQueryRequest>();
     request.set_exec_mode(::Ydb::Query::ExecMode(settings.ExecMode_));
     request.set_stats_mode(::Ydb::Query::StatsMode(settings.StatsMode_));
-    request.mutable_query_content()->set_text(query);
+    request.mutable_query_content()->set_text(TStringType{query});
     request.mutable_query_content()->set_syntax(::Ydb::Query::Syntax(settings.Syntax_));
     if (session.has_value()) {
-        request.set_session_id(session->GetId());
+        request.set_session_id(TStringType{session->GetId()});
     } else if ((txControl.TxSettings_.has_value() && !txControl.CommitTx_) || txControl.TxId_.has_value()) {
         throw TContractViolation("Interactive tx must use explisit session");
     }
@@ -232,7 +232,7 @@ TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> StreamExecuteQueryIm
         auto requestTxControl = request.mutable_tx_control();
         requestTxControl->set_commit_tx(txControl.CommitTx_);
         if (txControl.TxId_) {
-            requestTxControl->set_tx_id(*txControl.TxId_);
+            requestTxControl->set_tx_id(TStringType{txControl.TxId_.value()});
         } else {
             Y_ASSERT(txControl.TxSettings_);
             SetTxSettings(*txControl.TxSettings_, requestTxControl->mutable_begin_tx());

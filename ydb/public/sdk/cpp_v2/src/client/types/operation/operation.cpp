@@ -1,6 +1,7 @@
 #include <ydb-cpp-sdk/client/types/operation/operation.h>
 
 #include <ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb-cpp-sdk/type_switcher.h>
 
 #include <util/stream/str.h>
 
@@ -81,7 +82,7 @@ void TOperation::Out(IOutputStream& o) const {
 std::string TOperation::ToJsonString() const {
     using namespace google::protobuf::util;
 
-    std::string json;
+    TStringType json;
     auto status = MessageToJsonString(GetProto(), &json, JsonPrintOptions());
     Y_ABORT_UNLESS(status.ok());
     return json;

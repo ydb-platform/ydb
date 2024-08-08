@@ -13,7 +13,6 @@ SRCS(
 PEERDIR(
     library/cpp/threading/future
     ydb/public/api/protos
-    ydb/public/sdk/cpp_v2/src/library/operation_id/protos
     ydb/public/sdk/cpp_v2/src/client/impl/ydb_endpoints
     ydb/public/sdk/cpp_v2/src/client/impl/ydb_internal/session_pool
     ydb/public/sdk/cpp_v2/src/client/table/query_stats

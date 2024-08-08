@@ -73,7 +73,7 @@ Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest TReadSession::MakeClus
     Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest req;
     for (const TTopicReadSettings& topic : Settings.Topics_) {
         auto* params = req.add_read_sessions();
-        params->set_topic(topic.Path_);
+        params->set_topic(TStringType{topic.Path_});
         params->mutable_all_original(); // set all_original
     }
     return req;

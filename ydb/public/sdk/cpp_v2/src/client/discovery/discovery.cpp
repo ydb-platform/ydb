@@ -143,7 +143,7 @@ public:
 
     TAsyncListEndpointsResult ListEndpoints(const TListEndpointsSettings& settings) {
         Ydb::Discovery::ListEndpointsRequest request;
-        request.set_database(DbDriverState_->Database);
+        request.set_database(TStringType{DbDriverState_->Database});
 
         auto promise = NThreading::NewPromise<TListEndpointsResult>();
 
@@ -199,30 +199,30 @@ public:
 
     TAsyncNodeRegistrationResult NodeRegistration(const TNodeRegistrationSettings& settings) {
         Ydb::Discovery::NodeRegistrationRequest request;
-        request.set_host(settings.Host_);
+        request.set_host(TStringType{settings.Host_});
         request.set_port(settings.Port_);
-        request.set_resolve_host(settings.ResolveHost_);
-        request.set_address(settings.Address_);
-        request.set_domain_path(settings.DomainPath_);
+        request.set_resolve_host(TStringType{settings.ResolveHost_});
+        request.set_address(TStringType{settings.Address_});
+        request.set_domain_path(TStringType{settings.DomainPath_});
         request.set_fixed_node_id(settings.FixedNodeId_);
         if (!settings.Path_.empty()) {
-            request.set_path(settings.Path_);
+            request.set_path(TStringType{settings.Path_});
         }
 
         auto requestLocation = request.mutable_location();
         const auto& location = settings.Location_;
 
         if (location.DataCenter) {
-            requestLocation->set_data_center(location.DataCenter.value());
+            requestLocation->set_data_center(TStringType{location.DataCenter.value()});
         }
         if (location.Module) {
-            requestLocation->set_module(location.Module.value());
+            requestLocation->set_module(TStringType{location.Module.value()});
         }
         if (location.Rack) {
-            requestLocation->set_rack(location.Rack.value());
+            requestLocation->set_rack(TStringType{location.Rack.value()});
         }
         if (location.Unit) {
-            requestLocation->set_unit(location.Unit.value());
+            requestLocation->set_unit(TStringType{location.Unit.value()});
         }
 
         if (location.DataCenterNum) {

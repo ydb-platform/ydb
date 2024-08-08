@@ -3,7 +3,9 @@
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/resource_quota.h>
 
+#include <ydb-cpp-sdk/type_switcher.h>
 #include <ydb-cpp-sdk/library/grpc/common/constants.h>
+
 #include <util/datetime/base.h>
 #include <unordered_map>
 #include <string>
@@ -40,7 +42,9 @@ struct TGRpcClientConfig {
         , MaxMessageSize(maxMessageSize)
         , MaxInFlight(maxInFlight)
         , EnableSsl(enableSsl)
-        , SslCredentials{.pem_root_certs = caCert, .pem_private_key = clientPrivateKey, .pem_cert_chain = clientCert}
+        , SslCredentials{.pem_root_certs = NYdb::TStringType{caCert},
+                         .pem_private_key = NYdb::TStringType{clientPrivateKey},
+                         .pem_cert_chain = NYdb::TStringType{clientCert}}
         , CompressionAlgoritm(compressionAlgorithm)
     {}
 };
@@ -52,11 +56,11 @@ inline std::shared_ptr<grpc::ChannelInterface> CreateChannelInterface(const TGRp
     args.SetCompressionAlgorithm(config.CompressionAlgoritm);
 
     for (const auto& kvp: config.StringChannelParams) {
-        args.SetString(kvp.first, kvp.second);
+        args.SetString(NYdb::TStringType{kvp.first}, NYdb::TStringType{kvp.second});
     }
 
     for (const auto& kvp: config.IntChannelParams) {
-        args.SetInt(kvp.first, kvp.second);
+        args.SetInt(NYdb::TStringType{kvp.first}, kvp.second);
     }
 
     if (config.MemQuota) {
@@ -68,10 +72,10 @@ inline std::shared_ptr<grpc::ChannelInterface> CreateChannelInterface(const TGRp
         args.SetSocketMutator(mutator);
     }
     if (!config.LoadBalancingPolicy.empty()) {
-        args.SetLoadBalancingPolicyName(config.LoadBalancingPolicy);
+        args.SetLoadBalancingPolicyName(NYdb::TStringType{config.LoadBalancingPolicy});
     }
     if (!config.SslTargetNameOverride.empty()) {
-        args.SetSslTargetNameOverride(config.SslTargetNameOverride);
+        args.SetSslTargetNameOverride(NYdb::TStringType{config.SslTargetNameOverride});
     }
     if (config.EnableSsl || !config.SslCredentials.pem_root_certs.empty()) {
         return grpc::CreateCustomChannel(grpc::string(config.Locator), grpc::SslCredentials(config.SslCredentials), args);

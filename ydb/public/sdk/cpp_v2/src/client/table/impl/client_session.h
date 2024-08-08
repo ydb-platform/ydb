@@ -32,12 +32,12 @@ public:
 public:
     struct TDataQueryInfo {
         std::string QueryId;
-        ::google::protobuf::Map<std::string, Ydb::Type> ParameterTypes;
+        ::google::protobuf::Map<TStringType, Ydb::Type> ParameterTypes;
 
         TDataQueryInfo() {}
 
         TDataQueryInfo(const std::string& queryId,
-            const ::google::protobuf::Map<std::string, Ydb::Type>& parameterTypes)
+            const ::google::protobuf::Map<TStringType, Ydb::Type>& parameterTypes)
             : QueryId(queryId)
             , ParameterTypes(parameterTypes) {}
     };

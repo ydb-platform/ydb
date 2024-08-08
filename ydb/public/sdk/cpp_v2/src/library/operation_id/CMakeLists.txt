@@ -1,13 +1,10 @@
-add_subdirectory(protos)
-
 _ydb_sdk_add_library(library-operation_id)
 
-target_link_libraries(library-operation_id PUBLIC
-  yutil
-  protobuf::libprotobuf
-  cgiparam
-  uri
-  lib-operation_id-protos
+target_link_libraries(library-operation_id
+  PRIVATE
+    yutil
+    cgiparam
+    uri
 )
 
 target_sources(library-operation_id PRIVATE

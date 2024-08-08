@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb-cpp-sdk/type_switcher.h>
 #include <ydb-cpp-sdk/client/value/value.h>
 
 #include <google/protobuf/map.h>
@@ -50,10 +51,10 @@ public:
     std::optional<TValue> GetValue(const std::string& name) const;
 
 private:
-    TParams(::google::protobuf::Map<std::string, Ydb::TypedValue>&& protoMap);
+    TParams(::google::protobuf::Map<TStringType, Ydb::TypedValue>&& protoMap);
 
-    ::google::protobuf::Map<std::string, Ydb::TypedValue>* GetProtoMapPtr();
-    const ::google::protobuf::Map<std::string, Ydb::TypedValue>& GetProtoMap() const;
+    ::google::protobuf::Map<TStringType, Ydb::TypedValue>* GetProtoMapPtr();
+    const ::google::protobuf::Map<TStringType, Ydb::TypedValue>& GetProtoMap() const;
 
     class TImpl;
     std::shared_ptr<TImpl> Impl_;
@@ -89,7 +90,7 @@ public:
     TParams Build();
 
 private:
-    TParamsBuilder(const ::google::protobuf::Map<std::string, Ydb::Type>& typeInfo);
+    TParamsBuilder(const ::google::protobuf::Map<TStringType, Ydb::Type>& typeInfo);
 
     class TImpl;
     std::unique_ptr<TImpl> Impl_;

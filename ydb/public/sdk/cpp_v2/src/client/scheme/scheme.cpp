@@ -127,7 +127,7 @@ public:
 
     TAsyncStatus MakeDirectory(const std::string& path, const TMakeDirectorySettings& settings) {
         auto request = MakeOperationRequest<Ydb::Scheme::MakeDirectoryRequest>(settings);
-        request.set_path(path);
+        request.set_path(TStringType{path});
 
         return RunSimple<Ydb::Scheme::V1::SchemeService, MakeDirectoryRequest, MakeDirectoryResponse>(
             std::move(request),
@@ -137,7 +137,7 @@ public:
 
     TAsyncStatus RemoveDirectory(const std::string& path, const TRemoveDirectorySettings& settings) {
         auto request = MakeOperationRequest<Ydb::Scheme::RemoveDirectoryRequest>(settings);
-        request.set_path(path);
+        request.set_path(TStringType{path});
 
         return RunSimple<Ydb::Scheme::V1::SchemeService, RemoveDirectoryRequest, RemoveDirectoryResponse>(
             std::move(request),
@@ -147,7 +147,7 @@ public:
 
     TAsyncDescribePathResult DescribePath(const std::string& path, const TDescribePathSettings& settings) {
         auto request = MakeOperationRequest<Ydb::Scheme::DescribePathRequest>(settings);
-        request.set_path(path);
+        request.set_path(TStringType{path});
 
         auto promise = NThreading::NewPromise<TDescribePathResult>();
 
@@ -174,7 +174,7 @@ public:
 
     TAsyncListDirectoryResult ListDirectory(const std::string& path, const TListDirectorySettings& settings) {
         auto request = MakeOperationRequest<Ydb::Scheme::ListDirectoryRequest>(settings);
-        request.set_path(path);
+        request.set_path(TStringType{path});
 
         auto promise = NThreading::NewPromise<TListDirectoryResult>();
 
@@ -207,15 +207,15 @@ public:
     }
 
     void PermissionsToRequest(const TPermissions& permissions, Permissions* to) {
-        to->set_subject(permissions.Subject);
+        to->set_subject(TStringType{permissions.Subject});
         for (const auto& perm : permissions.PermissionNames) {
-            to->add_permission_names(perm);
+            to->add_permission_names(TStringType{perm});
         }
     }
 
     TAsyncStatus ModifyPermissions(const std::string& path, const TModifyPermissionsSettings& settings) {
         auto request = MakeOperationRequest<Ydb::Scheme::ModifyPermissionsRequest>(settings);
-        request.set_path(path);
+        request.set_path(TStringType{path});
         if (settings.ClearAcl_) {
             request.set_clear_permissions(true);
         }
@@ -224,7 +224,7 @@ public:
             auto protoAction = request.add_actions();
             switch (action.first) {
                 case EModifyPermissionsAction::Chown: {
-                    protoAction->set_change_owner(action.second.Subject);
+                    protoAction->set_change_owner(TStringType{action.second.Subject});
                 }
                 break;
                 case EModifyPermissionsAction::Grant: {

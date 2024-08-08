@@ -53,6 +53,11 @@ public:
     double Percentile = 99.0;
     TString TopicName;
     ui32 TopicPartitionCount = 1;
+    bool TopicAutoscaling = false;
+    ui32 TopicMaxPartitionCount = 100;
+    ui32 StabilizationWindowSeconds = 15;
+    ui32 UpUtilizationPercent = 90;
+    ui32 DownUtilizationPercent = 30;
     ui32 ProducerThreadCount = 0;
     ui32 ConsumerThreadCount = 0;
     ui32 ConsumerCount = 0;
@@ -76,7 +81,12 @@ protected:
     void CreateTopic(const TString& database,
                      const TString& topic,
                      ui32 partitionCount,
-                     ui32 consumerCount);
+                     ui32 consumerCount,
+                     bool autoscaling = false,
+                     ui32 maxPartitionCount = 100,
+                     ui32 stabilizationWindowSeconds = 15,
+                     ui32 upUtilizationPercent = 90,
+                     ui32 downUtilizationPercent = 30);
     void DropTopic(const TString& database,
                    const TString& topic);
 
@@ -90,7 +100,8 @@ protected:
     void StartProducerThreads(std::vector<std::future<void>>& threads,
                               ui32 partitionCount,
                               ui32 partitionSeed,
-                              const std::vector<TString>& generatedMessages);
+                              const std::vector<TString>& generatedMessages,
+                              const TString& database);
     void JoinThreads(const std::vector<std::future<void>>& threads);
 
     bool AnyErrors() const;
@@ -108,7 +119,12 @@ private:
     void EnsureTopicNotExist(const TString& topic);
     void CreateTopic(const TString& topic,
                      ui32 partitionCount,
-                     ui32 consumerCount);
+                     ui32 consumerCount,
+                     bool autoscaling,
+                     ui32 maxPartitionCount,
+                     ui32 stabilizationWindowSeconds,
+                     ui32 upUtilizationPercent,
+                     ui32 downUtilizationPercent);
 
     static NTable::TSession GetSession(NTable::TTableClient& client);
 

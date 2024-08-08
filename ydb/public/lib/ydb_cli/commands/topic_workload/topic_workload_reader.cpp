@@ -26,6 +26,7 @@ void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params, TInsta
 
     auto describeTopicResult = TCommandWorkloadTopicDescribe::DescribeTopic(params.Database, params.TopicName, params.Driver);
     NYdb::NTopic::TReadSessionSettings settings;
+    settings.AutoPartitioningSupport(true);
 
     if (!params.ReadWithoutConsumer) {
         auto consumerName = TCommandWorkloadTopicDescribe::GenerateConsumerName(params.ConsumerPrefix, params.ConsumerIdx);
@@ -45,8 +46,8 @@ void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params, TInsta
         }
         settings.WithoutConsumer().AppendTopics(topic);
     }
-    
-    
+
+
     if (params.UseTransactions) {
         txSupport.emplace(params.Driver, params.ReadOnlyTableName, params.TableName);
     }
@@ -97,8 +98,8 @@ void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params, TInsta
                         txSupport->AppendRow(message.GetData());
                     }
 
-                    WRITE_LOG(params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "Got message: " << message.GetMessageGroupId() 
-                        << " topic " << message.GetPartitionSession()->GetTopicPath() << " partition " << message.GetPartitionSession()->GetPartitionId() 
+                    WRITE_LOG(params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "Got message: " << message.GetMessageGroupId()
+                        << " topic " << message.GetPartitionSession()->GetTopicPath() << " partition " << message.GetPartitionSession()->GetPartitionId()
                         << " offset " << message.GetOffset() << " seqNo " << message.GetSeqNo()
                         << " createTime " << message.GetCreateTime() << " fullTimeMs " << fullTime);
                 }
@@ -126,6 +127,8 @@ void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params, TInsta
                 WRITE_LOG(params.Log, ELogPriority::TLOG_ERR, TStringBuilder() << "Read session closed: " << closeSessionEvent->DebugString());
                 *params.ErrorFlag = 1;
                 break;
+            } else if (auto* endPartitionStreamEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent>(&event)) {
+                endPartitionStreamEvent->Confirm();
             } else if (auto* partitionStreamStatusEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent>(&event)) {
                 WRITE_LOG(params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << partitionStreamStatusEvent->DebugString())
 

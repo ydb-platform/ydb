@@ -106,14 +106,12 @@ struct TWriteQueue {
             , Truncated(false)
             , FullResultWriterID()
             , ResultBuilder(resultType ? MakeHolder<TProtoBuilder>(resultType, columns) : nullptr)
-            , ResultYson()
-            , ResultYsonOut(new THoldingStream<TCountingOutput>(MakeHolder<TStringOutput>(ResultYson)))
-            , ResultYsonWriter(MakeHolder<NYson::TYsonWriter>(ResultYsonOut.Get(), NYson::EYsonFormat::Binary, ::NYson::EYsonType::Node, true))
+            , ResultSampleDataSize(0)
+            , ResultSampleData()
             , Issues()
             , BlockingActors()
             , QueryResponse()
             , WaitingAckFromFRW(false) {
-            ResultYsonWriter->OnBeginList();
             YQL_CLOG(DEBUG, ProviderDq) << "_AllResultsBytesLimit = " << SizeLimit;
             YQL_CLOG(DEBUG, ProviderDq) << "_RowsLimitPerWrite = " << (RowsLimit.Defined() ? ToString(RowsLimit.GetRef()) : "nothing");
         }
@@ -141,20 +139,21 @@ struct TWriteQueue {
                 bool exceedRows = false;
                 try {
                     TFailureInjector::Reach("result_actor_base_fail_on_response_write", [] { throw yexception() << "result_actor_base_fail_on_response_write"; });
-                    NDq::TDqSerializedBatch dataCopy = WriteQueue.back().Data;
-                    dataCopy.ConvertToNoOOB();
-                    full = ResultBuilder->WriteYsonData(std::move(dataCopy), [this, &exceedRows](const TString& rawYson) {
-                        if (RowsLimit && Rows + 1 > *RowsLimit) {
+                    if (!Truncated) {
+                        NDq::TDqSerializedBatch dataCopy = WriteQueue.back().Data;
+                        dataCopy.ConvertToNoOOB();
+                        Rows += dataCopy.RowCount();
+                        ResultSampleDataSize += dataCopy.Size();
+
+                        if (RowsLimit && Rows > *RowsLimit) {
                             exceedRows = true;
-                            return false;
-                        } else if (ResultYsonOut->Counter() + rawYson.size() > SizeLimit) {
-                            return false;
+                            full = false;
+                        } else if (ResultSampleDataSize > SizeLimit) {
+                            full = false;
                         }
-                        ResultYsonWriter->OnListItem();
-                        ResultYsonWriter->OnRaw(rawYson);
-                        ++Rows;
-                        return true;
-                    });
+
+                        ResultSampleData.emplace_back(std::move(dataCopy.Proto));
+                    }
                 } catch (...) {
                     OnError(NYql::NDqProto::StatusIds::UNSUPPORTED, CurrentExceptionMessage());
                     return;
@@ -365,13 +364,9 @@ struct TWriteQueue {
             YQL_ENSURE(!result.HasResultSet() && result.GetYson().empty());
             FlushCounters(result);
 
-            if (ResultYsonWriter) {
-                ResultYsonWriter->OnEndList();
-                ResultYsonWriter.Destroy();
+            for (auto& x : ResultSampleData) {
+                *result.AddSample() = std::move(x);
             }
-            ResultYsonOut.Destroy();
-
-            *result.MutableYson() = ResultYson;
 
             if (!Issues.Empty()) {
                 NYql::IssuesToMessage(Issues, result.MutableIssues());
@@ -430,9 +425,8 @@ struct TWriteQueue {
         bool Truncated;
         NActors::TActorId FullResultWriterID;
         THolder<TProtoBuilder> ResultBuilder;
-        TString ResultYson;
-        THolder<TCountingOutput> ResultYsonOut;
-        THolder<NYson::TYsonWriter> ResultYsonWriter;
+        ui64 ResultSampleDataSize;
+        TVector<NDqProto::TData> ResultSampleData;
         TIssues Issues;
         THashSet<NActors::TActorId> BlockingActors;
         THolder<TEvQueryResponse> QueryResponse;

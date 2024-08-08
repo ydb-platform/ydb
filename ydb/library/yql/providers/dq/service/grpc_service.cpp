@@ -136,6 +136,7 @@ namespace NYql::NDqs {
                 Yql::DqsProto::ExecuteQueryResult queryResult;
                 queryResult.Mutableresult()->CopyFrom(result.resultset());
                 queryResult.set_yson(result.yson());
+                queryResult.Mutablesample()->CopyFrom(result.sample());
 
                 auto statusCode = result.GetStatusCode();
                 // this code guarantees that query will be considered failed unless the status is SUCCESS

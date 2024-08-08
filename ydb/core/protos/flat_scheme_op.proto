@@ -98,6 +98,7 @@ message TColumnDescription {
     // flag that indicates that column is currently under the build
     // operation.
     optional bool IsBuildInProgress = 11 [default = false];
+    optional bool IsCheckingNotNullInProgress = 13 [default = false];
 }
 
 message TStorageSettings {
@@ -1058,6 +1059,7 @@ message TBuildIndexOutcome {
     message TCancel {
         // Path id of the index whose creation was cancelled
         optional NKikimrProto.TPathID IndexPathId = 1;
+        optional bool CancelByCheckingNotNull = 4;
     }
 
     message TApply {
@@ -1604,6 +1606,7 @@ enum EOperationType {
     ESchemeOpDropExternalDataSource = 90;
     ESchemeOpAlterExternalDataSource = 91;
 
+    // Build Column
     ESchemeOpCreateColumnBuild = 92;
 
     // View
@@ -1627,6 +1630,9 @@ enum EOperationType {
     ESchemeOpAlterResourcePool = 102;
 
     ESchemeOpRestoreIncrementalBackup = 103;
+
+    // Checking values on not-null constraint in column
+    ESchemeOpCheckingNotNull = 104;
 }
 
 message TApplyIf {
@@ -1810,6 +1816,7 @@ message TModifyScheme {
     optional TResourcePoolDescription CreateResourcePool = 72;
 
     optional TRestoreIncrementalBackup RestoreIncrementalBackup = 73;
+    optional NKikimrIndexBuilder.TCheckingNotNullSettings InitiateCheckingNotNull = 74;
 }
 
 message TCopySequence {

@@ -72,6 +72,7 @@ message TKqpPhyColumn {
     // flag that indicates that column is currently under the build
     // operation.
     optional bool IsBuildInProgress = 7;
+    optional bool IsCheckingNotNullInProgress = 8;
 }
 
 enum EKqpPhyTableKind {

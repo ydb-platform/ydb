@@ -21,10 +21,20 @@ message TColumnBuildSettings {
     optional string Table = 2;
 }
 
+message TCheckingNotNullSetting {
+    optional string ColumnName = 1;
+}
+
+message TCheckingNotNullSettings {
+    repeated TCheckingNotNullSetting Columns = 1;
+    optional string Table = 2;
+}
+
 message TIndexBuildSettings {
     optional string source_path = 1;
     optional Ydb.Table.TableIndex index = 2;
     optional TColumnBuildSettings column_build_operation = 7;
+    optional TCheckingNotNullSettings column_check_not_null = 11;
     optional bool pg_mode = 8 [ default = false];
     optional bool if_not_exist = 9 [ default = false];
 

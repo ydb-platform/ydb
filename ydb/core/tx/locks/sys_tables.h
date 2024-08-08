@@ -32,6 +32,7 @@ struct TSysTables {
         Ydb::TypedValue DefaultFromLiteral;
         bool IsBuildInProgress = false;
         bool IsNotNullColumn = false; //maybe move into TTypeInfo?
+        bool IsCheckingNotNullInProgress = false;
 
         TTableColumnInfo() = default;
 
@@ -51,11 +52,19 @@ struct TSysTables {
             return DefaultKind == DEFAULT_LITERAL;
         }
 
-        TTableColumnInfo(TString name, ui32 colId, NScheme::TTypeInfo type,
-            const TString& typeMod = {}, i32 keyOrder = -1,
+        TTableColumnInfo(
+            TString name,
+            ui32 colId,
+            NScheme::TTypeInfo type,
+            const TString& typeMod = {},
+            i32 keyOrder = -1,
             const TString& defaultFromSequence = {},
             EDefaultKind defaultKind = EDefaultKind::DEFAULT_UNDEFINED,
-            const Ydb::TypedValue& defaultFromLiteral = {}, bool isBuildInProgress = false, bool isNotNullColumn = false)
+            const Ydb::TypedValue& defaultFromLiteral = {},
+            bool isBuildInProgress = false,
+            bool isNotNullColumn = false,
+            bool isCheckingNotNullInProgress = false
+        )
             : Name(name)
             , Id(colId)
             , PType(type)
@@ -66,6 +75,7 @@ struct TSysTables {
             , DefaultFromLiteral(defaultFromLiteral)
             , IsBuildInProgress(isBuildInProgress)
             , IsNotNullColumn(isNotNullColumn)
+            , IsCheckingNotNullInProgress(isCheckingNotNullInProgress)
         {}
     };
 

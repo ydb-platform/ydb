@@ -140,6 +140,7 @@ public:
                                << ", stepId: " << step);
 
         TTxState* txState = context.SS->FindTx(OperationId);
+
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxFinalizeBuildIndex);
 
         NIceDb::TNiceDb db(context.GetDB());
@@ -157,21 +158,34 @@ public:
         const TTableInfo::TPtr tableInfo = context.SS->Tables.at(txState->TargetPathId);
         tableInfo->AlterVersion += 1;
 
-        for(auto& column: tableInfo->Columns) {
-            if (column.second.IsDropped())
+        for (auto& [cId, cInfo]: tableInfo->Columns) {
+            if (cInfo.IsDropped()) {
                 continue;
+            }
 
-            if (!column.second.IsBuildInProgress)
-                continue;
+            if (cInfo.IsBuildInProgress) {
+                LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        DebugHint() << " HandleReply ProgressState"
+                                    << " at tablet: " << ssId
+                                    << " terminating build column process at column "
+                                    << cInfo.Name);
 
-            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       DebugHint() << " HandleReply ProgressState"
-                                   << " at tablet: " << ssId
-                                   << " terminating build column process at column "
-                                   << column.second.Name);
+                cInfo.IsBuildInProgress = false;
+                context.SS->PersistTableFinishColumnBuilding(db, txState->TargetPathId, tableInfo, cId);
+            } else if (cInfo.IsCheckingNotNullInProgress) {
+                const auto& outcome = txState->BuildIndexOutcome;
+                bool isError = (outcome && outcome->HasCancel() && outcome->GetCancel().HasCancelByCheckingNotNull() && outcome->GetCancel().GetCancelByCheckingNotNull());
+                LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        DebugHint() << " HandleReply ProgressState"
+                                    << " at tablet: " << ssId
+                                    << " terminating checking not null process at column "
+                                    << cInfo.Name
+                                    << (isError ? "null value was found" : "null values were not found"));
 
-            column.second.IsBuildInProgress = false;
-            context.SS->PersistTableFinishColumnBuilding(db, txState->TargetPathId, tableInfo, column.first);
+                cInfo.IsCheckingNotNullInProgress = false;
+                cInfo.NotNull = !isError;
+                context.SS->PersistTableFinishCheckingNotNull(db, txState->TargetPathId, tableInfo, cId);
+            }
         }
 
         context.SS->PersistTableAlterVersion(db, txState->TargetPathId, tableInfo);

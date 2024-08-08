@@ -6,6 +6,11 @@
 
 namespace NYql {
 
+template<typename TColumn>
+static bool IsNotNull(const TColumn& column) {
+    return column.IsCheckingNotNullInProgress || column.NotNull;
+}
+
 const TStringBuf KqpEffectTag = "KqpEffect";
 
 enum class EPhysicalQueryType {

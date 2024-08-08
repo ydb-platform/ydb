@@ -1750,6 +1750,16 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
 
         break;
     }
+    case TRule_alter_table_action::kAltAlterTableAction18: {
+        // ALTER COLUMN id SET NOT NULL
+        const auto& alterRule = node.GetAlt_alter_table_action18().GetRule_alter_table_alter_column_set_not_null1();
+
+        if (!AlterTableAlterColumnSetNotNull(alterRule, params)) {
+            return false;
+        }
+
+        break;
+    }
 
     case TRule_alter_table_action::ALT_NOT_SET: {
         AltNotImplemented("alter_table_action", node);
@@ -2018,6 +2028,13 @@ bool TSqlQuery::AlterTableAlterColumnDropNotNull(const TRule_alter_table_alter_c
     TString name = Id(node.GetRule_an_id3(), *this);
     const TPosition pos(Context().Pos());
     params.AlterColumns.emplace_back(pos, name, nullptr, false, TVector<TIdentifier>(), false, nullptr, TColumnSchema::ETypeOfChange::DropNotNullConstraint);
+    return true;
+}
+
+bool TSqlQuery::AlterTableAlterColumnSetNotNull(const TRule_alter_table_alter_column_set_not_null& node, TAlterTableParameters& params) {
+    TString name = Id(node.GetRule_an_id3(), *this);
+    const TPosition pos(Context().Pos());
+    params.AlterColumns.emplace_back(pos, name, nullptr, false, TVector<TIdentifier>(), false, nullptr, TColumnSchema::ETypeOfChange::SetNotNullConstraint);
     return true;
 }
 

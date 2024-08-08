@@ -1,6 +1,8 @@
 #include "yql_kikimr_provider_impl.h"
 #include "yql_kikimr_type_ann_pg.h"
 
+#include <ydb/core/kqp/common/kqp_yql.h>
+
 #include <ydb/core/docapi/traits.h>
 
 #include <ydb/library/yql/core/type_ann/type_ann_impl.h>
@@ -319,7 +321,7 @@ namespace {
             }
 
             const bool isNull = IsPgNullExprNode(constrValue) || defaultType->HasNull();
-            if (isNull && columnMeta.NotNull) {
+            if (isNull && IsNotNull(columnMeta)) {
                 ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default expr " << columnName
                     << " is nullable or optional, but column has not null constraint. "));
                 return false;
@@ -557,7 +559,7 @@ private:
         if (op == TYdbOperation::InsertAbort || op == TYdbOperation::InsertRevert ||
             op == TYdbOperation::Upsert || op == TYdbOperation::Replace) {
             for (const auto& [name, meta] : table->Metadata->Columns) {
-                if (meta.NotNull) {
+                if (IsNotNull(meta)) {
                     if (!rowType->FindItem(name) && !meta.IsDefaultKindDefined()) {
                         ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
                             << "Missing not null column in input: " << name
@@ -589,7 +591,7 @@ private:
                 auto column = table->Metadata->Columns.FindPtr(TString(item->GetName()));
                 YQL_ENSURE(column);
                 if (item->GetItemType()->GetKind() != ETypeAnnotationKind::Pg) {
-                    if (column->NotNull && item->HasOptionalOrNull()) {
+                    if (IsNotNull(*column) && item->HasOptionalOrNull()) {
                         ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
                             << "Can't set NULL or optional value to not null column: " << column->Name));
                         return TStatus::Error;
@@ -758,7 +760,7 @@ private:
                 return TStatus::Error;
             }
 
-            if (column->NotNull && item->HasOptionalOrNull()) {
+            if (IsNotNull(*column) && item->HasOptionalOrNull()) {
                 if (item->GetItemType()->GetKind() == ETypeAnnotationKind::Pg) {
                     //no type-level notnull check for pg types.
                     continue;

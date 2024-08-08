@@ -299,7 +299,8 @@ bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTab
             column->SetName(alter.name());
 
             if (alter.Hasnot_null()) {
-                column->SetNotNull(alter.Getnot_null());
+                // always sets false, because in reality there is DROP NOT NULL
+                column->SetNotNull(false);
             }
 
             if (!alter.family().empty()) {

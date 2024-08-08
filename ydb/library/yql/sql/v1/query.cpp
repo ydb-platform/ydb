@@ -1368,7 +1368,13 @@ public:
                     columnDesc = L(columnDesc, Q(Y(Q("changeColumnConstraints"), Q(columnConstraints))));
                     columns = L(columns, Q(columnDesc));
                 } else if (col.TypeOfChange == TColumnSchema::ETypeOfChange::SetNotNullConstraint) {
-                    // todo flown4qqqq
+                    auto columnDesc = Y();
+                    columnDesc = L(columnDesc, BuildQuotedAtom(Pos, col.Name));
+
+                    auto columnConstraints = Y();
+                    columnConstraints = L(columnConstraints, Q(Y(Q("set_not_null"))));
+                    columnDesc = L(columnDesc, Q(Y(Q("changeColumnConstraints"), Q(columnConstraints))));
+                    columns = L(columns, Q(columnDesc));
                 } else if (col.TypeOfChange == TColumnSchema::ETypeOfChange::SetFamily) {
                     auto columnDesc = Y();
                     columnDesc = L(columnDesc, BuildQuotedAtom(Pos, col.Name));

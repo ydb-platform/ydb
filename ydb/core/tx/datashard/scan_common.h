@@ -58,10 +58,18 @@ private:
 using TColumnsTags = THashMap<TString, NTable::TTag>;
 using TTags = TVector<NTable::TTag>;
 using TProtoColumnsCRef = const google::protobuf::RepeatedPtrField<TString>&;
+using TColumnsTypes = THashMap<TString, NScheme::TTypeInfo>;
+using TRows = TVector<std::pair<TSerializedCellVec, TString>>;
 
 TColumnsTags GetAllTags(const TUserTable& tableInfo);
+TColumnsTypes GetAllTypes(const TUserTable& tableInfo);
 
-void AddTags(TTags& tags, const TColumnsTags& allTags, TProtoColumnsCRef columns);
+template<typename TColumns>
+void AddTags(TTags& tags, const TColumnsTags& allTags, const TColumns& columns) {
+    for (const auto& colName : columns) {
+        tags.push_back(allTags.at(colName));
+    }
+}
 
 template <typename... Args>
 TTags BuildTags(const TUserTable& tableInfo, Args&&... columns) {

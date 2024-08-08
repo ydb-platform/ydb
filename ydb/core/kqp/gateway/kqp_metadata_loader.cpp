@@ -194,7 +194,8 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
                 columnDesc.DefaultFromSequence,
                 defaultKind,
                 columnDesc.DefaultFromLiteral,
-                columnDesc.IsBuildInProgress
+                columnDesc.IsBuildInProgress,
+                columnDesc.IsCheckingNotNullInProgress
             )
         );
         if (columnDesc.KeyOrder >= 0) {

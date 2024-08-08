@@ -820,7 +820,7 @@ private:
                                 }
                             }
                             TABLED() {
-                                str << NKikimrTxDataShard::TEvBuildIndexProgressResponse_EStatus_Name(status.Status);
+                                str << NKikimrTxDataShard::EBuildIndexStatus_Name(status.Status);
                             }
                             TABLED() {
                                 str << Ydb::StatusIds::StatusCode_Name(status.UploadStatus);

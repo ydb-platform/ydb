@@ -1394,6 +1394,53 @@ message TEvConditionalEraseRowsResponse {
     optional TStats Stats = 4;
 }
 
+enum EBuildIndexStatus {
+    INVALID = 0;
+    ACCEPTED = 1;
+    INPROGRESS = 2;
+    DONE = 3;
+
+    ABORTED = 4;
+    BUILD_ERROR = 5;
+    BAD_REQUEST = 6;
+
+    CHECKING_NOT_NULL_ERROR = 7;
+};
+
+message TEvCheckConstraintCreateRequest {
+    optional uint64 BuildIndexId = 1;          // unique id of build index proccess
+
+    optional uint64 TabletId = 2;
+    optional uint64 OwnerId = 3;
+    optional uint64 PathId = 4;
+
+    optional string TargetName = 5;
+
+    optional uint64 SnapshotTxId = 6;
+    optional uint64 SnapshotStep = 7;
+
+    optional uint64 SeqNoGeneration = 8;       // monotonically increasing sequence, first part
+    optional uint64 SeqNoRound = 9;            // monotonically increasing sequence, second part
+
+    optional NKikimrIndexBuilder.TCheckingNotNullSettings CheckingNotNullSettings = 10;
+
+    optional NKikimrTx.TKeyRange KeyRange = 11; // key range to transfer in term of source table
+}
+
+message TEvCheckConstraintProgressResponse {
+    optional uint64 BuildIndexId = 1;
+
+    optional uint64 TabletId = 2;
+    optional uint64 OwnerId = 3;
+    optional uint64 PathId = 4;
+
+    optional EBuildIndexStatus Status = 5;
+    repeated Ydb.Issue.IssueMessage Issues = 6;
+
+    optional uint64 RequestSeqNoGeneration = 7;
+    optional uint64 RequestSeqNoRound = 8;
+}
+
 message TEvBuildIndexCreateRequest {
     optional uint64 BuildIndexId = 1;          // unique id of build index proccess
 
@@ -1429,18 +1476,7 @@ message TEvBuildIndexProgressResponse {
     optional uint64 OwnerId = 3;
     optional uint64 PathId = 4;
 
-    enum EStatus {
-        INVALID = 0;
-        ACCEPTED = 1;
-        INPROGRESS = 2;
-        DONE = 3;
-
-        ABORTED = 4;
-        BUILD_ERROR = 5;
-        BAD_REQUEST = 6;
-    }
-
-    optional EStatus Status = 5;
+    optional EBuildIndexStatus Status = 5;
 
     optional Ydb.StatusIds.StatusCode UploadStatus = 6;
     repeated Ydb.Issue.IssueMessage Issues = 7;

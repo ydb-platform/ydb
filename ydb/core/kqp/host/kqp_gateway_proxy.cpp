@@ -669,6 +669,7 @@ public:
         YQL_ENSURE(SessionCtx->Query().PreparingQuery);
         auto promise = NewPromise<TGenericResult>();
         const auto ops = GetAlterOperationKinds(&req);
+
         if (ops.size() != 1) {
             auto code = Ydb::StatusIds::BAD_REQUEST;
             auto error = TStringBuilder() << "Unqualified alter table request.";
@@ -680,6 +681,7 @@ public:
         }
 
         const auto opType = *ops.begin();
+
         auto tablePromise = NewPromise<TGenericResult>();
         if (opType == EAlterOperationKind::AddIndex) {
             auto &phyQuery =
@@ -734,6 +736,9 @@ public:
                 }
 
                 if (buildSettings.has_column_build_operation()) {
+                    buildSettings.MutableAlterMainTablePayload()->PackFrom(modifyScheme);
+                    phyTx.MutableSchemeOperation()->MutableBuildOperation()->CopyFrom(buildSettings);
+                } else if (buildSettings.has_column_check_not_null()) {
                     buildSettings.MutableAlterMainTablePayload()->PackFrom(modifyScheme);
                     phyTx.MutableSchemeOperation()->MutableBuildOperation()->CopyFrom(buildSettings);
                 } else {

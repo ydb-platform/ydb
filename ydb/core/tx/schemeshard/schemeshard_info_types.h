@@ -342,6 +342,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         ETableColumnDefaultKind DefaultKind = ETableColumnDefaultKind::None;
         TString DefaultValue;
         bool IsBuildInProgress = false;
+        bool IsCheckingNotNullInProgress = false;
 
         TColumn(const TString& name, ui32 id, NScheme::TTypeInfo type, const TString& typeMod, bool notNull)
             : NTable::TScheme::TColumn(name, id, type, typeMod, notNull)
@@ -427,7 +428,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     bool IsTemporary = false;
     TActorId OwnerActorId;
 
-    TAlterTableInfo::TPtr AlterData;
+    TAlterDataPtr AlterData;
 
     NKikimrSchemeOp::TTableDescription TableDescription;
 
@@ -2895,18 +2896,24 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         {
         }
 
-        void SerializeToProto(NKikimrIndexBuilder::TColumnBuildSetting* setting) const {
-            setting->SetColumnName(ColumnName);
-            setting->mutable_default_from_literal()->CopyFrom(DefaultFromLiteral);
-            setting->SetNotNull(NotNull);
-            setting->SetFamily(FamilyName);
-        }
+        void SerializeToProto(NKikimrIndexBuilder::TColumnBuildSetting* setting) const;
+    };
+
+    struct TColumnCheckingInfo {
+        TString ColumnName;
+
+        TColumnCheckingInfo(const TString& name)
+            : ColumnName(name)
+        {}
+
+        void SerializeToProto(NKikimrIndexBuilder::TCheckingNotNullSetting* setting) const;
     };
 
     enum class EBuildKind : ui32 {
         BuildKindUnspecified = 0,
         BuildIndex = 10,
-        BuildColumn = 20
+        BuildColumn = 20,
+        CheckingNotNull = 30
     };
 
     TActorId CreateSender;
@@ -2926,6 +2933,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     TVector<TString> DataColumns;
 
     TVector<TColumnBuildInfo> BuildColumns;
+    TVector<TColumnCheckingInfo> CheckingNotNullColumns;
 
     TString ImplTablePath;
     NTableIndex::TTableColumns ImplTableColumns;
@@ -2971,7 +2979,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         TString LastKeyAck;
         ui64 SeqNoRound = 0;
 
-        NKikimrTxDataShard::TEvBuildIndexProgressResponse::EStatus Status = NKikimrTxDataShard::TEvBuildIndexProgressResponse::INVALID;
+        NKikimrTxDataShard::EBuildIndexStatus Status = NKikimrTxDataShard::EBuildIndexStatus::INVALID;
 
         Ydb::StatusIds::StatusCode UploadStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
         TString DebugMessage;
@@ -2989,7 +2997,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             if (shardIdx) {
                 result << " ShardIdx: " << shardIdx;
             }
-            result << " Status: " << NKikimrTxDataShard::TEvBuildIndexProgressResponse::EStatus_Name(Status);
+            result << " Status: " << NKikimrTxDataShard::EBuildIndexStatus_Name(Status);
             result << " UploadStatus: " << Ydb::StatusIds::StatusCode_Name(UploadStatus);
             result << " DebugMessage: " << DebugMessage;
             result << " SeqNoRound: " << SeqNoRound;
@@ -3204,6 +3212,10 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         return BuildKind == EBuildKind::BuildColumn;
     }
 
+    bool IsCheckingNotNull() const {
+        return BuildKind == EBuildKind::CheckingNotNull;
+    }
+
     bool IsDone() const {
         return State == EState::Done;
     }
@@ -3230,6 +3242,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         return 0.0;
     }
 
+    void SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TCheckingNotNullSettings* to) const;
     void SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* to) const;
     void SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndexBuildConfig* to) const;
 

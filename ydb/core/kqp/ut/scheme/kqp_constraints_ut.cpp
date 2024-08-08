@@ -14,6 +14,7 @@
 #include <util/generic/serialized_enum.h>
 #include <util/string/printf.h>
 
+#include <format>
 namespace NKikimr::NKqp {
 
 using namespace NYdb;
@@ -1259,5 +1260,133 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     }
 
+    Y_UNIT_TEST(SetNotNull) {
+        struct TValue {
+        private:
+            int _value = 0;
+            bool _isNull = false;
+        public:
+            TValue(int value) : _value(value) {}
+            TValue() : _isNull(true) {}
+
+            int GetValue() const {
+                assert(!_isNull);
+                return _value;
+            }
+
+            bool IsNull() const {
+                return _isNull;
+            }
+
+            std::string ToString() const {
+                if (IsNull()) {
+                    return "NULL";
+                }
+
+                return std::to_string(GetValue());
+            }
+        };
+
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
+        appConfig.MutableFeatureFlags()->SetEnableChangeNotNullConstraint(true);
+
+        TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false).SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
+        auto querySession = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        {
+            auto createTable = R"sql(
+                --!syntax_v1
+                CREATE TABLE `/Root/SetNotNull` (
+                    myKey Int32 NOT NULL,
+                    myValue Int32 DEFAULT(0),
+                    PRIMARY KEY (myKey)
+                );
+            )sql";
+
+            auto result = kikimr.RunCall([&]{ return session.ExecuteSchemeQuery(createTable).GetValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto insertValues = [&](TValue key, TValue val) -> std::pair<EStatus, TString> {
+            auto query = TString(std::format(R"sql(
+                --!syntax_v1
+                UPSERT INTO `/Root/SetNotNull` (myKey, myValue)
+                VALUES
+                ( {}, {} );
+            )sql", key.ToString(), val.ToString()));
+
+            NYdb::NTable::TExecDataQuerySettings execSettings;
+            execSettings.KeepInQueryCache(true);
+            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+            auto result = kikimr.RunCall([&] {
+                return querySession
+                    .ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(),
+                                      execSettings)
+                    .ExtractValueSync(); } );
+
+            return {result.GetStatus(), result.GetIssues().ToString()};
+        };
+
+        {
+            const int countOfLines = 10;
+            for (int i = 1; i <= countOfLines; i++) {
+                auto key = TValue(i);
+                auto value = (i != countOfLines ? TValue(10 * i) : TValue());
+                auto [status, issue] = insertValues(key, value);
+                UNIT_ASSERT_VALUES_EQUAL_C(status, EStatus::SUCCESS, issue);
+            }
+        }
+
+        auto setNotNull = R"sql(
+            --!syntax_v1
+            ALTER TABLE `/Root/SetNotNull` ALTER COLUMN myValue SET NOT NULL;
+        )sql";
+
+        bool enabledCapture = true;
+        TVector<TAutoPtr<IEventHandle>> delayedCheckingColumns;
+        auto grab = [&delayedCheckingColumns, &enabledCapture](TAutoPtr<IEventHandle>& ev) -> auto {
+            if (enabledCapture && ev->GetTypeRewrite() == TEvDataShard::TEvCheckConstraintCreateRequest::EventType) {
+                delayedCheckingColumns.emplace_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+
+        TDispatchOptions opts;
+        opts.FinalEvents.emplace_back([&delayedCheckingColumns](IEventHandle&) {
+            return delayedCheckingColumns.size() > 0;
+        });
+
+        runtime.SetObserverFunc(grab);
+
+        auto setNotNullFuture = kikimr.RunInThreadPool([&] { return session.ExecuteSchemeQuery(setNotNull).GetValueSync(); });
+
+        runtime.DispatchEvents(opts);
+        Y_VERIFY_S(delayedCheckingColumns.size() > 0, "no upload rows requests");
+
+        {
+            auto key = TValue(201);
+            auto value = TValue();
+            auto [status, issue] = insertValues(key, value);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, EStatus::BAD_REQUEST, issue);
+            UNIT_ASSERT_STRING_CONTAINS(issue, "All not null columns should be initialized");
+        }
+
+        enabledCapture = false;
+        for (const auto& ev: delayedCheckingColumns) {
+            runtime.Send(ev);
+        }
+
+        auto result = runtime.WaitFuture(setNotNullFuture);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+    }
 }
 } // namespace NKikimr::NKqp

@@ -195,10 +195,11 @@ struct Schema : NIceDb::Schema {
         struct DefaultValue :   Column<10, NScheme::NTypeIds::String> {};
         struct NotNull :        Column<11, NScheme::NTypeIds::Bool> {};
         struct IsBuildInProgress :  Column<13, NScheme::NTypeIds::Bool> {};
+        struct IsCheckingNotNullInProgress :  Column<14, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<TabId, ColId>;
         using TColumns = TableColumns<TabId, ColId, ColName, ColType, ColKeyOrder,
-            CreateVersion, DeleteVersion, Family, DefaultKind, DefaultValue, NotNull, ColTypeData, IsBuildInProgress>;
+            CreateVersion, DeleteVersion, Family, DefaultKind, DefaultValue, NotNull, ColTypeData, IsBuildInProgress, IsCheckingNotNullInProgress>;
     };
 
     struct MigratedColumns : Table<55> {
@@ -217,10 +218,11 @@ struct Schema : NIceDb::Schema {
         struct DefaultValue :   Column<11, NScheme::NTypeIds::String> {};
         struct NotNull :        Column<12, NScheme::NTypeIds::Bool> {};
         struct IsBuildInProgress :  Column<14, NScheme::NTypeIds::Bool> {};
+        struct IsCheckingNotNullInProgress :  Column<15, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId, ColId>;
         using TColumns = TableColumns<OwnerPathId, LocalPathId, ColId, ColName, ColType, ColKeyOrder,
-            CreateVersion, DeleteVersion, Family, DefaultKind, DefaultValue, NotNull, ColTypeData, IsBuildInProgress>;
+            CreateVersion, DeleteVersion, Family, DefaultKind, DefaultValue, NotNull, ColTypeData, IsBuildInProgress, IsCheckingNotNullInProgress>;
     };
 
     struct ColumnAlters : Table<13> {
@@ -237,10 +239,11 @@ struct Schema : NIceDb::Schema {
         struct DefaultValue :   Column<10, NScheme::NTypeIds::String> {};
         struct NotNull :        Column<11, NScheme::NTypeIds::Bool> {};
         struct IsBuildInProgress :  Column<13, NScheme::NTypeIds::Bool> {};
+        struct IsCheckingNotNullInProgress :  Column<14, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<TabId, ColId>;
         using TColumns = TableColumns<TabId, ColId, ColName, ColType, ColKeyOrder,
-            CreateVersion, DeleteVersion, Family, DefaultKind, DefaultValue, NotNull, ColTypeData, IsBuildInProgress>;
+            CreateVersion, DeleteVersion, Family, DefaultKind, DefaultValue, NotNull, ColTypeData, IsBuildInProgress, IsCheckingNotNullInProgress>;
     };
 
     struct MigratedColumnAlters : Table<63> {
@@ -259,10 +262,11 @@ struct Schema : NIceDb::Schema {
         struct DefaultValue :   Column<11, NScheme::NTypeIds::String> {};
         struct NotNull :        Column<12, NScheme::NTypeIds::Bool> {};
         struct IsBuildInProgress :  Column<14, NScheme::NTypeIds::Bool> {};
+        struct IsCheckingNotNullInProgress :  Column<15, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId, ColId>;
         using TColumns = TableColumns<OwnerPathId, LocalPathId, ColId, ColName, ColType, ColKeyOrder,
-            CreateVersion, DeleteVersion, Family, DefaultKind, DefaultValue, NotNull, ColTypeData, IsBuildInProgress>;
+            CreateVersion, DeleteVersion, Family, DefaultKind, DefaultValue, NotNull, ColTypeData, IsBuildInProgress, IsCheckingNotNullInProgress>;
     };
 
     struct Shards : Table<7> {
@@ -1412,7 +1416,7 @@ struct Schema : NIceDb::Schema {
         struct Range : Column<4, NScheme::NTypeIds::String> { using Type = NKikimrTx::TKeyRange; };
         struct LastKeyAck : Column<5, NScheme::NTypeIds::String> { using Type = TString; };
 
-        struct Status : Column<6, NScheme::NTypeIds::Uint32> { using Type = NKikimrTxDataShard::TEvBuildIndexProgressResponse::EStatus; };
+        struct Status : Column<6, NScheme::NTypeIds::Uint32> { using Type = NKikimrTxDataShard::EBuildIndexStatus; };
         struct Message : Column<7, NScheme::NTypeIds::Utf8> {};
         struct UploadStatus : Column<8, NScheme::NTypeIds::Uint32> { using Type = Ydb::StatusIds::StatusCode; };
 

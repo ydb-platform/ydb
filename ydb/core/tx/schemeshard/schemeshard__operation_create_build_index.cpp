@@ -10,24 +10,32 @@
 #include <ydb/core/ydb_convert/table_description.h>
 
 namespace NKikimr::NSchemeShard {
-
 using namespace NTableIndex;
 
-TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
-    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild);
+TVector<ISubOperation::TPtr> CreateBuildOrCheckColumn(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
+    const auto& opType = tx.GetOperationType();
+    Y_ABORT_UNLESS(opType == NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild
+                || opType == NKikimrSchemeOp::EOperationType::ESchemeOpCheckingNotNull
+    );
 
-    const auto& op = tx.GetInitiateColumnBuild();
+    std::unique_ptr<TPath> table;
+    if (opType == NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild) {
+        const auto& op = tx.GetInitiateColumnBuild();
+        table = std::make_unique<TPath>(TPath::Resolve(op.GetTable(), context.SS));
+    } else {
+        const auto& op = tx.GetInitiateCheckingNotNull();
+        table = std::make_unique<TPath>(TPath::Resolve(op.GetTable(), context.SS));
+    }
 
-    const auto table = TPath::Resolve(op.GetTable(), context.SS);
     TVector<ISubOperation::TPtr> result;
 
     // altering version of the table.
     {
-        auto outTx = TransactionTemplate(table.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable);
+        auto outTx = TransactionTemplate(table->Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable);
         *outTx.MutableLockGuard() = tx.GetLockGuard();
 
         auto& snapshot = *outTx.MutableInitiateBuildIndexMainTable();
-        snapshot.SetTableName(table.LeafName());
+        snapshot.SetTableName(table->LeafName());
 
         result.push_back(CreateInitializeBuildIndexMainTable(NextPartId(opId, result), outTx));
     }

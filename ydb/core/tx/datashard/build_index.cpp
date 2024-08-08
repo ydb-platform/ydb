@@ -27,19 +27,7 @@ namespace NKikimr::NDataShard {
 #define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
 
-using TColumnsTypes = THashMap<TString, NScheme::TTypeInfo>;
 using TTypes = TVector<std::pair<TString, Ydb::Type>>;
-using TRows = TVector<std::pair<TSerializedCellVec, TString>>;
-
-static TColumnsTypes GetAllTypes(const TUserTable& tableInfo) {
-    TColumnsTypes result;
-
-    for (const auto& it : tableInfo.Columns) {
-        result[it.second.Name] = it.second.Type;
-    }
-
-    return result;
-}
 
 static void ProtoYdbTypeFromTypeInfo(Ydb::Type* type, const NScheme::TTypeInfo typeInfo) {
     if (typeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
@@ -373,14 +361,14 @@ public:
         progress->Record.SetRequestSeqNoRound(SeqNo.Round);
 
         if (abort != EAbort::None) {
-            progress->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::ABORTED);
+            progress->Record.SetStatus(NKikimrTxDataShard::EBuildIndexStatus::ABORTED);
             UploadStatus.Issues.AddIssue(NYql::TIssue("Aborted by scan host env"));
 
             LOG_W(Debug());
         } else if (!UploadStatus.IsSuccess()) {
-            progress->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::BUILD_ERROR);
+            progress->Record.SetStatus(NKikimrTxDataShard::EBuildIndexStatus::BUILD_ERROR);
         } else {
-            progress->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::DONE);
+            progress->Record.SetStatus(NKikimrTxDataShard::EBuildIndexStatus::DONE);
         }
 
         UploadStatusToMessage(progress->Record);
@@ -483,7 +471,7 @@ private:
             progress->Record.SetBytesDelta(WriteBuf.GetBytes());
             WriteBuf.Clear();
 
-            progress->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::INPROGRESS);
+            progress->Record.SetStatus(NKikimrTxDataShard::EBuildIndexStatus::INPROGRESS);
             UploadStatusToMessage(progress->Record);
 
             ctx.Send(ProgressActorId, progress.Release());
@@ -577,10 +565,10 @@ public:
                       ui64 dataShardId,
                       const TActorId& progressActorId,
                       const TSerializedTableRange& range,
-                      const NKikimrIndexBuilder::TColumnBuildSettings& columnBuildSettings,
                       const TUserTable& tableInfo,
-                      TUploadLimits limits)
-        : TBuildScanUpload(buildIndexId, target, seqNo, dataShardId, progressActorId, range, tableInfo, limits)
+                      TUploadLimits limits,
+                      const NKikimrIndexBuilder::TColumnBuildSettings& columnBuildSettings
+    ) : TBuildScanUpload(buildIndexId, target, seqNo, dataShardId, progressActorId, range, tableInfo, limits)
     {
         Y_ABORT_UNLESS(columnBuildSettings.columnSize() > 0);
         UploadColumnsTypes = BuildTypes(tableInfo, columnBuildSettings);
@@ -621,10 +609,13 @@ TAutoPtr<NTable::IScan> CreateBuildIndexScan(
 {
     if (columnsToBuild.columnSize() > 0) {
         return new TBuildColumnsScan(
-            buildIndexId, target, seqNo, dataShardId, progressActorId, range, columnsToBuild, tableInfo, limits);
+            buildIndexId, target, seqNo, dataShardId, progressActorId, range, tableInfo, limits, columnsToBuild
+        );
     }
+
     return new TBuildIndexScan(
-        buildIndexId, target, seqNo, dataShardId, progressActorId, range, targetIndexColumns, targetDataColumns, tableInfo, limits);
+        buildIndexId, target, seqNo, dataShardId, progressActorId, range, targetIndexColumns, targetDataColumns, tableInfo, limits
+    );
 }
 
 class TDataShard::TTxHandleSafeBuildIndexScan: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -666,14 +657,14 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
     auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
     response->Record.SetBuildIndexId(record.GetBuildIndexId());
     response->Record.SetTabletId(TabletID());
-    response->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::ACCEPTED);
+    response->Record.SetStatus(NKikimrTxDataShard::EBuildIndexStatus::ACCEPTED);
 
     TScanRecord::TSeqNo seqNo = {record.GetSeqNoGeneration(), record.GetSeqNoRound()};
     response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
     response->Record.SetRequestSeqNoRound(seqNo.Round);
 
     auto badRequest = [&](const TString& error) {
-        response->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::BAD_REQUEST);
+        response->Record.SetStatus(NKikimrTxDataShard::EBuildIndexStatus::BAD_REQUEST);
         auto issue = response->Record.AddIssues();
         issue->set_severity(NYql::TSeverityIds::S_ERROR);
         issue->set_message(error);

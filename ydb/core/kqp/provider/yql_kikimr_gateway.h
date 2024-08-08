@@ -263,13 +263,14 @@ struct TKikimrColumnMetadata {
     TString DefaultFromSequence;
     Ydb::TypedValue DefaultFromLiteral;
     bool IsBuildInProgress = false;
+    bool IsCheckingNotNullInProgress = false;
 
     TKikimrColumnMetadata() = default;
 
     TKikimrColumnMetadata(const TString& name, ui32 id, const TString& type, bool notNull,
         NKikimr::NScheme::TTypeInfo typeInfo = {}, const TString& typeMod = {}, const TString& defaultFromSequence = {},
         NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED,
-        const Ydb::TypedValue& defaultFromLiteral = {}, bool isBuildInProgress = false)
+        const Ydb::TypedValue& defaultFromLiteral = {}, bool isBuildInProgress = false, bool isCheckingNotNullInProgress = false)
         : Name(name)
         , Id(id)
         , Type(type)
@@ -280,6 +281,7 @@ struct TKikimrColumnMetadata {
         , DefaultFromSequence(defaultFromSequence)
         , DefaultFromLiteral(defaultFromLiteral)
         , IsBuildInProgress(isBuildInProgress)
+        , IsCheckingNotNullInProgress(isCheckingNotNullInProgress)
     {}
 
     explicit TKikimrColumnMetadata(const NKikimrKqp::TKqpColumnMetadataProto* message)
@@ -292,6 +294,7 @@ struct TKikimrColumnMetadata {
         , DefaultFromSequence(message->GetDefaultFromSequence())
         , DefaultFromLiteral(message->GetDefaultFromLiteral())
         , IsBuildInProgress(message->GetIsBuildInProgress())
+        , IsCheckingNotNullInProgress(message->GetIsCheckingNotNullInProgress())
     {
         auto typeInfoMod = NKikimr::NScheme::TypeInfoModFromProtoColumnType(message->GetTypeId(),
             message->HasTypeInfo() ? &message->GetTypeInfo() : nullptr);
@@ -330,6 +333,8 @@ struct TKikimrColumnMetadata {
         message->SetDefaultKind(DefaultKind);
         message->MutableDefaultFromLiteral()->CopyFrom(DefaultFromLiteral);
         message->SetIsBuildInProgress(IsBuildInProgress);
+        message->SetIsCheckingNotNullInProgress(IsCheckingNotNullInProgress);
+
         if (columnType.TypeInfo) {
             *message->MutableTypeInfo() = *columnType.TypeInfo;
         }

@@ -4,7 +4,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
 #include <ydb/library/yql/core/type_ann/type_ann_core.h>
-#include "ydb/library/yql/core/type_ann/type_ann_impl.h"
+#include <ydb/library/yql/core/type_ann/type_ann_impl.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
@@ -691,7 +691,7 @@ TStatus AnnotateUpsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
     }
     if (!upsertSettings.IsUpdate) {
         for (auto& [name, meta] : table.second->Metadata->Columns) {
-            if (meta.NotNull && !rowType->FindItem(name)) {
+            if (NYql::IsNotNull(meta) && !rowType->FindItem(name)) {
                 ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
                     << "Missing not null column in input: " << name
                     << ". All not null columns should be initialized"));
@@ -699,7 +699,7 @@ TStatus AnnotateUpsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
             }
 
 
-            if (meta.NotNull && rowType->FindItemType(name)->HasOptionalOrNull()) {
+            if (NYql::IsNotNull(meta) && rowType->FindItemType(name)->HasOptionalOrNull()) {
                 if (rowType->FindItemType(name)->GetKind() != ETypeAnnotationKind::Pg) {
                     ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
                         << "Can't set optional or NULL value to not null column: " << name
@@ -768,14 +768,14 @@ TStatus AnnotateInsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
     }
 
     for (auto& [name, meta] : table.second->Metadata->Columns) {
-        if (meta.NotNull && !rowType->FindItem(name)) {
+        if (NYql::IsNotNull(meta) && !rowType->FindItem(name)) {
             ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
                 << "Missing not null column in input: " << name
                 << ". All not null columns should be initialized"));
             return TStatus::Error;
         }
 
-        if (meta.NotNull && rowType->FindItemType(name)->HasOptionalOrNull()) {
+        if (NYql::IsNotNull(meta) && rowType->FindItemType(name)->HasOptionalOrNull()) {
             if (rowType->FindItemType(name)->GetKind() != ETypeAnnotationKind::Pg) {
                 ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
                     << "Can't set optional or NULL value to not null column: " << name
@@ -847,7 +847,7 @@ TStatus AnnotateUpdateRows(const TExprNode::TPtr& node, TExprContext& ctx, const
     for (const auto& item : rowType->GetItems()) {
         auto column = table.second->Metadata->Columns.FindPtr(TString(item->GetName()));
         YQL_ENSURE(column);
-        if (column->NotNull && item->HasOptionalOrNull()) {
+        if (NYql::IsNotNull(*column) && item->HasOptionalOrNull()) {
             if (item->GetItemType()->GetKind() != ETypeAnnotationKind::Pg) {
                 ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
                     << "Can't set optional or NULL value to not null column: " << column->Name));

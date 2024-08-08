@@ -690,6 +690,7 @@ alter_table_action:
   | alter_table_rename_index_to
   | alter_table_alter_index
   | alter_table_alter_column_drop_not_null
+  | alter_table_alter_column_set_not_null
 ;
 
 alter_external_table_stmt: ALTER EXTERNAL TABLE simple_table_ref alter_external_table_action (COMMA alter_external_table_action)*;
@@ -712,6 +713,7 @@ alter_table_add_column: ADD COLUMN? column_schema;
 alter_table_drop_column: DROP COLUMN? an_id;
 alter_table_alter_column: ALTER COLUMN an_id SET family_relation;
 alter_table_alter_column_drop_not_null: ALTER COLUMN an_id DROP NOT NULL;
+alter_table_alter_column_set_not_null: ALTER COLUMN an_id SET NOT NULL;
 alter_table_add_column_family: ADD family_entry;
 alter_table_alter_column_family: ALTER FAMILY an_id SET an_id family_setting_value;
 alter_table_set_table_setting_uncompat: SET an_id table_setting_value;

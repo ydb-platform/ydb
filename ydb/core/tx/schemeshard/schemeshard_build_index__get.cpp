@@ -46,7 +46,16 @@ public:
         }
 
         auto& respRecord = Response->Record;
-        respRecord.SetStatus(Ydb::StatusIds::SUCCESS);
+
+        if (indexBuildInfo->State == TIndexBuildInfo::EState::Rejected) {
+            return Reply(
+                Ydb::StatusIds_StatusCode_GENERIC_ERROR,
+                TStringBuilder() << indexBuildInfo->Issue
+            );
+        } else {
+            respRecord.SetStatus(Ydb::StatusIds::SUCCESS);
+        }
+
         Fill(*respRecord.MutableIndexBuild(), indexBuildInfo);
 
         return Reply();

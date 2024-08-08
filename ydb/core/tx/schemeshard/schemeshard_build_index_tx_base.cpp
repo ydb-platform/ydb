@@ -189,7 +189,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         const TShardIdx& shardIdx = item.first;
         const TIndexBuildInfo::TShardStatus& status = item.second;
 
-        if (status.Status != NKikimrTxDataShard::TEvBuildIndexProgressResponse::INPROGRESS) {
+        if (status.Status != NKikimrTxDataShard::EBuildIndexStatus::INPROGRESS) {
             if (status.UploadStatus != Ydb::StatusIds::SUCCESS) {
                 if (status.DebugMessage) {
                     AddIssue(index.MutableIssues(), status.ToString(shardIdx));
@@ -285,6 +285,13 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
             auto* columnProto = settings.mutable_column_build_operation()->add_column();
             columnProto->SetColumnName(column.ColumnName);
             columnProto->mutable_default_from_literal()->CopyFrom(column.DefaultFromLiteral);
+        }
+    }
+
+    if (info->IsCheckingNotNull()) {
+        for(const auto& column : info->CheckingNotNullColumns) {
+            auto* columnProto = settings.mutable_column_check_not_null()->AddColumns();
+            columnProto->SetColumnName(column.ColumnName);
         }
     }
 

@@ -335,8 +335,9 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             }
 
             bool isDropNotNull = col.HasNotNull(); // if has, then always false
+            bool isSetNotNull = col.HasIsCheckingNotNullInProgress();
 
-            if (!isDropNotNull && !columnFamily && !col.HasDefaultFromSequence() && !col.HasEmptyDefault()) {
+            if (!isSetNotNull && !isDropNotNull && !columnFamily && !col.HasDefaultFromSequence() && !col.HasEmptyDefault()) {
                 errStr = Sprintf("Nothing to alter for column '%s'", colName.data());
                 return nullptr;
             }
@@ -413,6 +414,10 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
             if (isDropNotNull) {
                 column.NotNull = false;
+            }
+
+            if (isSetNotNull) {
+                column.IsCheckingNotNullInProgress = true;
             }
 
             if (columnFamily) {
@@ -1464,7 +1469,11 @@ void TTableInfo::FinishAlter() {
             oldCol->Family = cinfo.Family;
             oldCol->DefaultKind = cinfo.DefaultKind;
             oldCol->DefaultValue = cinfo.DefaultValue;
-            oldCol->NotNull = cinfo.NotNull;
+            oldCol->IsCheckingNotNullInProgress = cinfo.IsCheckingNotNullInProgress;
+
+            if (!cinfo.IsCheckingNotNullInProgress) {
+                oldCol->NotNull = cinfo.NotNull;
+            }
         } else {
             Columns[col.first] = cinfo;
             if (cinfo.KeyOrder != (ui32)-1) {
@@ -2139,13 +2148,33 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
     }
 }
 
+void TIndexBuildInfo::TColumnBuildInfo::SerializeToProto(NKikimrIndexBuilder::TColumnBuildSetting* setting) const {
+    setting->SetColumnName(ColumnName);
+    setting->mutable_default_from_literal()->CopyFrom(DefaultFromLiteral);
+    setting->SetNotNull(NotNull);
+    setting->SetFamily(FamilyName);
+}
+
 void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {
     Y_ABORT_UNLESS(IsBuildColumn());
     result->SetTable(TPath::Init(TablePathId, ss).PathString());
-    for(const auto& column : BuildColumns) {
+    for (const auto& column : BuildColumns) {
         column.SerializeToProto(result->add_column());
     }
 }
+
+void TIndexBuildInfo::TColumnCheckingInfo::SerializeToProto(NKikimrIndexBuilder::TCheckingNotNullSetting* setting) const {
+    setting->SetColumnName(ColumnName);
+}
+
+void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TCheckingNotNullSettings* result) const {
+    Y_ABORT_UNLESS(IsCheckingNotNull());
+    result->SetTable(TPath::Init(TablePathId, ss).PathString());
+    for (const auto& column : CheckingNotNullColumns) {
+        column.SerializeToProto(result->AddColumns());
+    }
+}
+
 
 TColumnFamiliesMerger::TColumnFamiliesMerger(NKikimrSchemeOp::TPartitionConfig &container)
     : Container(container)

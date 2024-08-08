@@ -1432,6 +1432,7 @@ public:
                 << " ExecutionType: " << executionType);
 
             auto status = response->GetStatus();
+            TString message = "";
             TIssues issues;
             IssuesFromMessage(response->GetIssues(), issues);
 
@@ -1453,12 +1454,16 @@ public:
                     }
 
                     break;
-
+                case Ydb::StatusIds::GENERIC_ERROR:
+                    for (const auto& issue : response->GetIssues()) {
+                        message += issue.Getmessage();
+                        message += "\n";
+                    }
                 default:
                     break;
             }
 
-            ReplyQueryError(status, "", MessageFromIssues(issues));
+            ReplyQueryError(status, message, MessageFromIssues(issues));
             return;
         }
 

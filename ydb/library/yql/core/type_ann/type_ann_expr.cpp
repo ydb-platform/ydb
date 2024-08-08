@@ -258,8 +258,7 @@ private:
                 YQL_ENSURE(false, "Unknown state");
             }
 
-            static const size_t MaxTransformCount = 1000;
-            if (transformCount >= MaxTransformCount) {
+            if (transformCount >= ctx.TypeAnnNodeRepeatLimit) {
                 TConvertToAstSettings settings;
                 settings.AllowFreeArgs = true;
                 auto ast = ConvertToAst(*input, ctx, settings);
@@ -268,8 +267,11 @@ private:
                     ast.Root->PrettyPrintTo(s, TAstPrintFlags::ShortQuote | TAstPrintFlags::AdaptArbitraryContent | TAstPrintFlags::PerLine);
                     YQL_CLOG(INFO, Core) << "Too many transformations for node:\n" << s.Str();
                 }
-                YQL_ENSURE(transformCount < MaxTransformCount,
-                    "Transformation of node with type " << input->Type() << " name " << input->Content() << " took too many iterations");
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
+                    TStringBuilder() << "YQL: Internal core error! Type annotation of node " << input->Content()
+                        << " with type " << input->Type() << " takes too much iterations: "
+                        << ctx.TypeAnnNodeRepeatLimit << ". You may set TypeAnnNodeRepeatLimit as flags for config provider."));
+                return TStatus::Error;
             }
 
             input->SetState(TExprNode::EState::TypePending);

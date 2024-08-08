@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: clickhouse-connect
-Version: 0.7.16
+Version: 0.7.17
 Summary: ClickHouse Database Core Driver for Python, Pandas, and Superset
 Home-page: https://github.com/ClickHouse/clickhouse-connect
 Author: ClickHouse Inc.

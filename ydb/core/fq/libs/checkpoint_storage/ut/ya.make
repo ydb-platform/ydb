@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/fq/libs/checkpoint_storage)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 FORK_SUBTESTS()
 

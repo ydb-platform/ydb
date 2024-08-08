@@ -37,6 +37,7 @@ IF (OPENSOURCE)
     # which makes it impossible to run them during precommit checks on Github CI. 
     # Next several lines forces these tests to be MEDIUM. To see discussion, visit YDBOPS-8928.
     SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
     SET(TEST_TAGS_VALUE)
     SET(TEST_REQUIREMENTS_VALUE)
     # This requirement forces tests to be launched consequently,

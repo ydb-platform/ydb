@@ -15,6 +15,7 @@ ELSE()
     SPLIT_FACTOR(80)
     TIMEOUT(600)
     SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
     REQUIREMENTS(
         cpu:1
         ram:16

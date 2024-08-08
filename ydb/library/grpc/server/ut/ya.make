@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/library/grpc/server)
 
 TIMEOUT(600)
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     ydb/library/grpc/server

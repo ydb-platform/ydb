@@ -5,6 +5,7 @@ FORK_SUBTESTS()
 TIMEOUT(300)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     converter_ut.cpp

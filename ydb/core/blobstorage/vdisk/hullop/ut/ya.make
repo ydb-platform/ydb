@@ -13,6 +13,7 @@ IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
     REQUIREMENTS(
         cpu:1
         ram:16

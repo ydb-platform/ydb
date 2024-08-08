@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/fq/libs/control_plane_storage/internal)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(utils_ut.cpp)
 

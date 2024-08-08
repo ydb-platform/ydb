@@ -24,6 +24,7 @@ ELSE()
     )
     TIMEOUT(600)
     SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 ENDIF()
 
 DEPENDS(

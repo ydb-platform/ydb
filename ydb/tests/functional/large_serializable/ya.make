@@ -15,6 +15,7 @@ REQUIREMENTS(
 
 TIMEOUT(600)
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 DEPENDS(
     ydb/tests/tools/ydb_serializable

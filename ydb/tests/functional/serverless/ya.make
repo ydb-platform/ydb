@@ -14,6 +14,7 @@ REQUIREMENTS(
     ram:32
 )
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 DEPENDS(

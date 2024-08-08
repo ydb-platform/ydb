@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/library/yql/parser/pg_wrapper)
 
 TIMEOUT(600)
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 INCLUDE(../cflags.inc)
 

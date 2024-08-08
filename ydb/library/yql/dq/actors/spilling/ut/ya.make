@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/library/yql/dq/actors/spilling)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 TIMEOUT(180)
 
 SRCS(

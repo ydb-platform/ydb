@@ -26,6 +26,7 @@ IF (NOT OS_WINDOWS)
         SPLIT_FACTOR(20)
     ELSE()
         SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
         TIMEOUT(600)
     ENDIF()
 

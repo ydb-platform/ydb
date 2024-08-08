@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/kqp)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     view_ut.cpp

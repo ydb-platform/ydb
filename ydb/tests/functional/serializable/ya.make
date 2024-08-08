@@ -10,4 +10,5 @@ TEST_SRCS(test.py)
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 END()

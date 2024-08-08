@@ -56,6 +56,7 @@ IF (SANITIZER_TYPE == "thread" OR SANITIZER_TYPE == "address")
     TAG(ya:fat)
 ELSE()
     SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 ENDIF()
 
 REQUIREMENTS(ram:16)

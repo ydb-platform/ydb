@@ -7,6 +7,7 @@ FORK_SUBTESTS()
 TIMEOUT(150)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     mkql_proto_ut.cpp

@@ -8,6 +8,7 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/protos/memory_controller_config.pb.h>
 #include <ydb/core/protos/memory_stats.pb.h>
+#include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
@@ -22,12 +23,31 @@ ui64 SafeDiff(ui64 a, ui64 b) {
     return a - Min(a, b);
 }
 
+ui64 GetPercent(float percent, ui64 value) {
+    return static_cast<ui64>(static_cast<double>(value) * (percent / 100.0));
+}
+
 }
 
 namespace {
 
 using namespace NActors;
+using namespace NResourceBroker;
 using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
+
+struct TResourceBrokerLimits {
+    ui64 LimitBytes;
+    ui64 QueryExecutionLimitBytes;
+
+    auto operator<=>(const TResourceBrokerLimits&) const = default;
+
+    TString ToString() const noexcept {
+        TStringBuilder result;
+        result << "LimitBytes: " << LimitBytes;
+        result << " QueryExecutionLimitBytes: " << QueryExecutionLimitBytes;
+        return result;
+    }
+};
 
 class TMemoryConsumer : public IMemoryConsumer {
 public:
@@ -52,27 +72,18 @@ private:
     std::atomic<ui64> Consumption = 0;
 };
 
-struct TConsumerConfig {
-    std::optional<float> MinPercent;
-    std::optional<ui64> MinBytes;
-    std::optional<float> MaxPercent;
-    std::optional<ui64> MaxBytes;
-    bool CanZeroLimit = false;
-};
-
 struct TConsumerState {
     const EMemoryConsumerKind Kind;
     const TActorId ActorId;
     const ui64 Consumption;
-    const TConsumerConfig Config;
     ui64 MinBytes = 0;
     ui64 MaxBytes = 0;
+    bool CanZeroLimit = false;
 
-    TConsumerState(const TMemoryConsumer& consumer, TConsumerConfig config)
+    TConsumerState(const TMemoryConsumer& consumer)
         : Kind(consumer.Kind)
         , ActorId(consumer.ActorId)
         , Consumption(consumer.GetConsumption())
-        , Config(config)
     {
     }
 
@@ -147,6 +158,7 @@ private:
         ui64 hardLimitBytes = GetHardLimitBytes(processMemoryInfo, hasMemTotalHardLimit);
         ui64 softLimitBytes = GetSoftLimitBytes(hardLimitBytes);
         ui64 targetUtilizationBytes = GetTargetUtilizationBytes(hardLimitBytes);
+        ui64 activitiesLimitBytes = GetActivitiesLimitBytes(hardLimitBytes);
 
         TVector<TConsumerState> consumers(::Reserve(Consumers.size()));
         ui64 consumersConsumption = 0;
@@ -189,6 +201,7 @@ private:
             << " MemTotal: " << processMemoryInfo.MemTotal << " MemAvailable: " << processMemoryInfo.MemAvailable
             << " AllocatedMemory: " << processMemoryInfo.AllocatedMemory << " AllocatorCachesMemory: " << processMemoryInfo.AllocatorCachesMemory
             << " HardLimit: " << hardLimitBytes << " SoftLimit: " << softLimitBytes << " TargetUtilization: " << targetUtilizationBytes
+            << " ActivitiesLimitBytes: " << activitiesLimitBytes
             << " ConsumersConsumption: " << consumersConsumption << " OtherConsumption: " << otherConsumption << " ExternalConsumption: " << externalConsumption
             << " TargetConsumersConsumption: " << targetConsumersConsumption << " ResultingConsumersConsumption: " << resultingConsumersConsumption
             << " Coefficient: " << coefficient);
@@ -202,6 +215,7 @@ private:
         Counters->GetCounter("Stats/HardLimit")->Set(hardLimitBytes);
         Counters->GetCounter("Stats/SoftLimit")->Set(softLimitBytes);
         Counters->GetCounter("Stats/TargetUtilization")->Set(targetUtilizationBytes);
+        Counters->GetCounter("Stats/ActivitiesLimitBytes")->Set(activitiesLimitBytes);
         Counters->GetCounter("Stats/ConsumersConsumption")->Set(consumersConsumption);
         Counters->GetCounter("Stats/OtherConsumption")->Set(otherConsumption);
         Counters->GetCounter("Stats/ExternalConsumption")->Set(externalConsumption);
@@ -227,7 +241,7 @@ private:
         ui64 consumersLimitBytes = 0;
         for (const auto& consumer : consumers) {
             ui64 limitBytes = consumer.GetLimit(coefficient);
-            if (resultingConsumersConsumption + otherConsumption + externalConsumption > softLimitBytes && consumer.Config.CanZeroLimit) {
+            if (resultingConsumersConsumption + otherConsumption + externalConsumption > softLimitBytes && consumer.CanZeroLimit) {
                 limitBytes = SafeDiff(limitBytes, resultingConsumersConsumption + otherConsumption + externalConsumption - softLimitBytes);
             }
             consumersLimitBytes += limitBytes;
@@ -248,6 +262,9 @@ private:
 
         Counters->GetCounter("Stats/ConsumersLimit")->Set(consumersLimitBytes);
         memoryStats.SetConsumersLimit(consumersLimitBytes);
+
+        // Note: for now ResourceBroker and its queues aren't MemoryController consumers and don't share limits with other caches
+        ApplyResourceBrokerLimits(hardLimitBytes, activitiesLimitBytes);
 
         Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), memoryStatsUpdate);
 
@@ -326,6 +343,26 @@ private:
         }
     }
 
+    void ApplyResourceBrokerLimits(ui64 hardLimitBytes, ui64 activitiesLimitBytes) {
+        ui64 queryExecutionLimitBytes = GetQueryExecutionLimitBytes(hardLimitBytes);
+
+        TResourceBrokerLimits newLimits{
+            activitiesLimitBytes,
+            queryExecutionLimitBytes
+        };
+        
+        if (newLimits == CurrentResourceBrokerLimits) {
+            return;
+        }
+
+        CurrentResourceBrokerLimits = newLimits;
+
+        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::MEMORY_CONTROLLER, "Consumer QueryExecution state:"
+            << " Limit: " << newLimits.QueryExecutionLimitBytes);
+
+        Counters->GetCounter("Consumer/QueryExecution/Limit")->Set(newLimits.QueryExecutionLimitBytes);
+    }
+
     TConsumerCounters& GetConsumerCounters(EMemoryConsumerKind consumer) {
         auto it = ConsumerCounters.FindPtr(consumer);
         if (it) {
@@ -358,83 +395,27 @@ private:
         }
     }
 
-    TConsumerState BuildConsumerState(const TMemoryConsumer& consumer, ui64 availableMemory) const {
-        auto config = GetConsumerConfig(consumer.Kind);
+    TConsumerState BuildConsumerState(const TMemoryConsumer& consumer, ui64 hardLimitBytes) const {
+        TConsumerState result(consumer);
         
-        std::optional<ui64> minBytes;
-        std::optional<ui64> maxBytes;
-
-        if (config.MinPercent.has_value() && config.MinBytes.has_value()) {
-            minBytes = Max(GetPercent(config.MinPercent.value(), availableMemory), config.MinBytes.value());
-        } else if (config.MinPercent.has_value()) {
-            minBytes = GetPercent(config.MinPercent.value(), availableMemory);
-        } else if (config.MinBytes.has_value()) {
-            minBytes = config.MinBytes.value();
-        }
-
-        if (config.MaxPercent.has_value() && config.MaxBytes.has_value()) {
-            maxBytes = Min(GetPercent(config.MaxPercent.value(), availableMemory), config.MaxBytes.value());
-        } else if (config.MaxPercent.has_value()) {
-            maxBytes = GetPercent(config.MaxPercent.value(), availableMemory);
-        } else if (config.MaxBytes.has_value()) {
-            maxBytes = config.MaxBytes.value();
-        }
-
-        if (minBytes.has_value() && !maxBytes.has_value()) {
-            maxBytes = minBytes;
-        }
-        if (!minBytes.has_value() && maxBytes.has_value()) {
-            minBytes = maxBytes;
-        }
-
-        TConsumerState result(std::move(consumer), config);
-
-        result.MinBytes = minBytes.value_or(0);
-        result.MaxBytes = maxBytes.value_or(0);
-        if (result.MinBytes > result.MaxBytes) {
-            result.MinBytes = result.MaxBytes;
-        }
-
-        return result;
-    }
-
-    TConsumerConfig GetConsumerConfig(EMemoryConsumerKind consumer) const {
-        TConsumerConfig result;
-
-        switch (consumer) {
+        switch (consumer.Kind) {
             case EMemoryConsumerKind::MemTable: {
-                if (Config.HasMemTableMinPercent() || Config.GetMemTableMinPercent()) {
-                    result.MinPercent = Config.GetMemTableMinPercent();
-                }
-                if (Config.HasMemTableMinBytes() || Config.GetMemTableMinBytes()) {
-                    result.MinBytes = Config.GetMemTableMinBytes();
-                }
-                if (Config.HasMemTableMaxPercent() || Config.GetMemTableMaxPercent()) {
-                    result.MaxPercent = Config.GetMemTableMaxPercent();
-                }
-                if (Config.HasMemTableMaxBytes() || Config.GetMemTableMaxBytes()) {
-                    result.MaxBytes = Config.GetMemTableMaxBytes();
-                }
+                result.MinBytes = GetMemTableMinBytes(hardLimitBytes);
+                result.MaxBytes = GetMemTableMaxBytes(hardLimitBytes);
                 break;
             }
             case EMemoryConsumerKind::SharedCache: {
-                if (Config.HasSharedCacheMinPercent() || Config.GetSharedCacheMinPercent()) {
-                    result.MinPercent = Config.GetSharedCacheMinPercent();
-                }
-                if (Config.HasSharedCacheMinBytes() || Config.GetSharedCacheMinBytes()) {
-                    result.MinBytes = Config.GetSharedCacheMinBytes();
-                }
-                if (Config.HasSharedCacheMaxPercent() || Config.GetSharedCacheMaxPercent()) {
-                    result.MaxPercent = Config.GetSharedCacheMaxPercent();
-                }
-                if (Config.HasSharedCacheMaxBytes() || Config.GetSharedCacheMaxBytes()) {
-                    result.MaxBytes = Config.GetSharedCacheMaxBytes();
-                }
+                result.MinBytes = GetSharedCacheMinBytes(hardLimitBytes);
+                result.MaxBytes = GetSharedCacheMaxBytes(hardLimitBytes);
                 result.CanZeroLimit = true;
                 break;
             }
             default:
                 Y_ABORT("Unhandled consumer");
+        }
+
+        if (result.MinBytes > result.MaxBytes) {
+            result.MinBytes = result.MaxBytes;
         }
 
         return result;
@@ -478,8 +459,64 @@ private:
         return GetPercent(Config.GetTargetUtilizationPercent(), hardLimitBytes);
     }
 
-    ui64 GetPercent(float percent, ui64 value) const {
-        return static_cast<ui64>(static_cast<double>(value) * (percent / 100.0));
+    ui64 GetActivitiesLimitBytes(ui64 hardLimitBytes) const {
+        if (Config.HasActivitiesLimitPercent() && Config.HasActivitiesLimitBytes()) {
+            return Min(GetPercent(Config.GetActivitiesLimitPercent(), hardLimitBytes), Config.GetActivitiesLimitBytes());
+        }
+        if (Config.HasActivitiesLimitBytes()) {
+            return Config.GetActivitiesLimitBytes();
+        }
+        return GetPercent(Config.GetActivitiesLimitPercent(), hardLimitBytes);
+    }
+    
+    ui64 GetMemTableMinBytes(ui64 hardLimitBytes) const {
+        if (Config.HasMemTableMinPercent() && Config.HasMemTableMinBytes()) {
+            return Max(GetPercent(Config.GetMemTableMinPercent(), hardLimitBytes), Config.GetMemTableMinBytes());
+        }
+        if (Config.HasMemTableMinBytes()) {
+            return Config.GetMemTableMinBytes();
+        }
+        return GetPercent(Config.GetMemTableMinPercent(), hardLimitBytes);
+    }
+
+    ui64 GetMemTableMaxBytes(ui64 hardLimitBytes) const {
+        if (Config.HasMemTableMaxPercent() && Config.HasMemTableMaxBytes()) {
+            return Min(GetPercent(Config.GetMemTableMaxPercent(), hardLimitBytes), Config.GetMemTableMaxBytes());
+        }
+        if (Config.HasMemTableMaxBytes()) {
+            return Config.GetMemTableMaxBytes();
+        }
+        return GetPercent(Config.GetMemTableMaxPercent(), hardLimitBytes);
+    }
+
+    ui64 GetSharedCacheMinBytes(ui64 hardLimitBytes) const {
+        if (Config.HasSharedCacheMinPercent() && Config.HasSharedCacheMinBytes()) {
+            return Max(GetPercent(Config.GetSharedCacheMinPercent(), hardLimitBytes), Config.GetSharedCacheMinBytes());
+        }
+        if (Config.HasSharedCacheMinBytes()) {
+            return Config.GetSharedCacheMinBytes();
+        }
+        return GetPercent(Config.GetSharedCacheMinPercent(), hardLimitBytes);
+    }
+
+    ui64 GetSharedCacheMaxBytes(ui64 hardLimitBytes) const {
+        if (Config.HasSharedCacheMaxPercent() && Config.HasSharedCacheMaxBytes()) {
+            return Min(GetPercent(Config.GetSharedCacheMaxPercent(), hardLimitBytes), Config.GetSharedCacheMaxBytes());
+        }
+        if (Config.HasSharedCacheMaxBytes()) {
+            return Config.GetSharedCacheMaxBytes();
+        }
+        return GetPercent(Config.GetSharedCacheMaxPercent(), hardLimitBytes);
+    }
+
+    ui64 GetQueryExecutionLimitBytes(ui64 hardLimitBytes) const {
+        if (Config.HasQueryExecutionLimitPercent() && Config.HasQueryExecutionLimitBytes()) {
+            return Min(GetPercent(Config.GetQueryExecutionLimitPercent(), hardLimitBytes), Config.GetQueryExecutionLimitBytes());
+        }
+        if (Config.HasQueryExecutionLimitBytes()) {
+            return Config.GetQueryExecutionLimitBytes();
+        }
+        return GetPercent(Config.GetQueryExecutionLimitPercent(), hardLimitBytes);
     }
 
 private:
@@ -490,6 +527,7 @@ private:
     NKikimrConfig::TMemoryControllerConfig Config;
     const TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     TMap<EMemoryConsumerKind, TConsumerCounters> ConsumerCounters;
+    std::optional<TResourceBrokerLimits> CurrentResourceBrokerLimits;
 };
 
 }

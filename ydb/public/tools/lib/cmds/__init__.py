@@ -385,8 +385,8 @@ def deploy(arguments):
         **optionals
     )
 
-    if os.getenv("YDB_YAML_CONFIG") is not None:      
-        additional_yaml_config = get_additional_yaml_config(os.getenv("YDB_YAML_CONFIG"))
+    if os.getenv("YDB_CONFIG_YAML_PATCH") is not None:      
+        additional_yaml_config = get_additional_yaml_config(os.getenv("YDB_CONFIG_YAML_PATCH"))
         configuration.yaml_config = merge_two_yaml_configs(configuration.yaml_config, additional_yaml_config)
     
     cluster = kikimr_cluster_factory(configuration)

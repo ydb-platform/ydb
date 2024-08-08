@@ -354,16 +354,23 @@ struct TObjectStorageExternalSource : public IExternalSource {
         return afterListing.Apply([arrowInferencinatorId, meta, actorSystem = ActorSystem](const NThreading::TFuture<TString>& pathFut) {
             auto promise = NThreading::NewPromise<TMetadataResult>();
             auto schemaToMetadata = [meta](NThreading::TPromise<TMetadataResult> metaPromise, NObjectStorage::TEvInferredFileSchema&& response) {
-                meta->Changed = true;
-                meta->Schema.clear_column();
-                for (const auto& column : response.Fields) {
-                    auto& destColumn = *meta->Schema.add_column();
-                    destColumn = column;
-                }
                 TMetadataResult result;
-                result.SetSuccess();
-                result.Metadata = meta;
-                metaPromise.SetValue(std::move(result));
+                if (std::holds_alternative<NYql::TIssues>(response.Response)) {
+                    auto& issues = std::get<NYql::TIssues>(response.Response);
+                    metaPromise.SetValue(NYql::NCommon::ResultFromError<TMetadataResult>(issues));
+                }
+                else {
+                    auto& fields = std::get<std::vector<Ydb::Column>>(response.Response);
+                    meta->Changed = true;
+                    meta->Schema.clear_column();
+                    for (const auto& column : fields) {
+                        auto& destColumn = *meta->Schema.add_column();
+                        destColumn = column;
+                    }
+                    result.SetSuccess();
+                    result.Metadata = meta;
+                    metaPromise.SetValue(std::move(result));
+                }
             };
             actorSystem->Register(new NKqp::TActorRequestHandler<NObjectStorage::TEvInferFileSchema, NObjectStorage::TEvInferredFileSchema, TMetadataResult>(
                 arrowInferencinatorId,

@@ -128,11 +128,22 @@ struct TEvInferFileSchema : public NActors::TEventLocal<TEvInferFileSchema, EvIn
 struct TEvInferredFileSchema : public NActors::TEventLocal<TEvInferredFileSchema, EvInferredFileSchema> {
     TEvInferredFileSchema(TString path, std::vector<Ydb::Column>&& fields)
         : Path{std::move(path)}
-        , Fields{std::move(fields)}
+        , Response{std::move(fields)}
+    {}
+    TEvInferredFileSchema(TString path, NYql::TIssues&& issues)
+        : Path{std::move(path)}
+        , Response{std::move(issues)}
     {}
 
     TString Path;
-    std::vector<Ydb::Column> Fields;
+    std::variant<std::vector<Ydb::Column>, NYql::TIssues> Response;
 };
+
+inline TEvInferredFileSchema* MakeErrorSchema(TString path, NFq::TIssuesIds::EIssueCode code, TString message) {
+    NYql::TIssues issues;
+    issues.AddIssue(std::move(message));
+    issues.back().SetCode(code, NYql::TSeverityIds::S_ERROR);
+    return new TEvInferredFileSchema{std::move(path), std::move(issues)};
+}
 
 }  // namespace NKikimr::NExternalSource::NObjectStorage

@@ -259,7 +259,7 @@ public:
         auto& file = *ev->Get();
         auto mbArrowFields = InferType(Format_, file.File, *Config_);
         if (std::holds_alternative<TString>(mbArrowFields)) {
-            ctx.Send(RequesterId_, MakeError(file.Path, NFq::TIssuesIds::INTERNAL_ERROR, std::get<TString>(mbArrowFields)));
+            ctx.Send(RequesterId_, MakeErrorSchema(file.Path, NFq::TIssuesIds::INTERNAL_ERROR, std::get<TString>(mbArrowFields)));
             return;
         }
 
@@ -269,7 +269,7 @@ public:
             ydbFields.emplace_back();
             auto& ydbField = ydbFields.back();
             if (!ArrowToYdbType(*ydbField.mutable_type(), *field->type())) {
-                ctx.Send(RequesterId_, MakeError(file.Path, NFq::TIssuesIds::UNSUPPORTED, TStringBuilder{} << "couldn't convert arrow type to ydb: " << field->ToString()));
+                ctx.Send(RequesterId_, MakeErrorSchema(file.Path, NFq::TIssuesIds::UNSUPPORTED, TStringBuilder{} << "couldn't convert arrow type to ydb: " << field->ToString()));
                 return;
             }
             ydbField.mutable_name()->assign(field->name());
@@ -279,7 +279,8 @@ public:
 
     void HandleFileError(TEvFileError::TPtr& ev, const NActors::TActorContext& ctx) {
         Cout << "TArrowInferencinator::HandleFileError" << Endl;
-        ctx.Send(RequesterId_, ev->Release());
+        auto& event = *ev->Release();
+        ctx.Send(RequesterId_, new TEvInferredFileSchema(event.Path, std::move(event.Issues)));
     }
 
 private:

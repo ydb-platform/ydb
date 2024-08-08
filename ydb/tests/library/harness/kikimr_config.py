@@ -432,7 +432,7 @@ class KikimrConfigGenerator(object):
 
             self.yaml_config["feature_flags"]["enable_external_data_sources"] = True
             self.yaml_config["feature_flags"]["enable_script_execution_operations"] = True
-                
+
     @property
     def pdisks_info(self):
         return self._pdisks_info

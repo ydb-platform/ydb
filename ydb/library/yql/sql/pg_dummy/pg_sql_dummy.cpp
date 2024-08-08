@@ -298,6 +298,14 @@ TColumnConverter BuildPgColumnConverter(const std::shared_ptr<arrow::DataType>& 
     return {};
 }
 
+std::unique_ptr<IYsonBlockReader> BuildPgYsonColumnReader(bool, const NUdf::TPgTypeDescription&) {
+    throw yexception() << "PG types are not supported";
+}
+
+std::unique_ptr<ITopLevelBlockReader> BuildPgTopLevelColumnReader(std::unique_ptr<NKikimr::NUdf::IArrayBuilder>&&, const NKikimr::NMiniKQL::TPgType*) {
+    throw yexception() << "PG types are not supported";
+}
+
 ui32 ConvertToPgType(NKikimr::NUdf::EDataSlot slot) {
     Y_UNUSED(slot);
     throw yexception() << "PG types are not supported";

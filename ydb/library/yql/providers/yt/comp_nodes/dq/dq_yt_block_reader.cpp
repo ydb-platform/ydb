@@ -307,6 +307,8 @@ public:
     }
 
     arrow::Status OnRecordBatchDecoded(std::shared_ptr<arrow::RecordBatch> batch) override {
+        NKikimr::NMiniKQL::TScopedAlloc scope(__LOCATION__);
+        TThrowingBindTerminator t;
         YQL_ENSURE(batch);
         MKQL_ADD_STAT(JobStats_, BlockCount, 1);
         std::vector<arrow::Datum> result;

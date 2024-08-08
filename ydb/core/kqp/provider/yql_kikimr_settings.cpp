@@ -142,7 +142,7 @@ bool TKikimrSettings::HasOptEnableOlapProvideComputeSharding() const {
 }
 
 bool TKikimrSettings::HasOptUseFinalizeByKey() const {
-    return GetOptionalFlagValue(OptUseFinalizeByKey.Get()) != EOptionalFlag::Disabled;
+    return GetFlagValue(OptUseFinalizeByKey.Get().GetOrElse(true)) != EOptionalFlag::Disabled;
 }
 
 EOptionalFlag TKikimrSettings::GetOptPredicateExtract() const {

@@ -2618,7 +2618,7 @@ DISubprogramAnnotator::DISubprogramAnnotator(TCodegenContext& ctx, Function* sub
 DISubprogramAnnotator::~DISubprogramAnnotator() {
     Ctx.Annotator = nullptr;
     { // necessary stub annotation of "CallInst"s
-        DIScopeAnnotator stubAnnotate(*this);
+        DIScopeAnnotator stubAnnotate(this);
         for (BasicBlock& block : *Func) {
             for (Instruction& inst : block) {
                 if (CallInst* callInst = dyn_cast_or_null<CallInst>(&inst)) {
@@ -2651,13 +2651,17 @@ DISubprogram* DISubprogramAnnotator::MakeDISubprogram(const StringRef& name, con
     );
 }
 
-DIScopeAnnotator::DIScopeAnnotator(DISubprogramAnnotator& subprogramAnnotator, const TSrcLocation& location)
-    : SubprogramAnnotator(subprogramAnnotator)
-    , Scope(SubprogramAnnotator.DebugBuilder->createLexicalBlock(SubprogramAnnotator.Subprogram, SubprogramAnnotator.MakeDIFile(location), location.line(), location.column()))
-{}
+DIScopeAnnotator::DIScopeAnnotator(DISubprogramAnnotator* subprogramAnnotator, const TSrcLocation& location)
+    : SubprogramAnnotator(nullptr)
+    , Scope(nullptr)
+{
+    Y_ENSURE(subprogramAnnotator != nullptr);
+    SubprogramAnnotator = subprogramAnnotator;
+    Scope = SubprogramAnnotator->DebugBuilder->createLexicalBlock(SubprogramAnnotator->Subprogram, SubprogramAnnotator->MakeDIFile(location), location.line(), location.column());
+}
 
 Instruction* DIScopeAnnotator::operator()(Instruction* inst, const TSrcLocation& location) const {
-    inst->setDebugLoc(DILocation::get(SubprogramAnnotator.Ctx.Codegen.GetContext(), location.line(), location.column(), Scope));
+    inst->setDebugLoc(DILocation::get(SubprogramAnnotator->Ctx.Codegen.GetContext(), location.line(), location.column(), Scope));
     return inst;
 }
 

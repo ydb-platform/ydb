@@ -404,7 +404,7 @@ public:
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
-        DIScopeAnnotator annotate(*ctx.Annotator);
+        DIScopeAnnotator annotate(ctx.Annotator);
 
         const auto valueType = Type::getInt128Ty(context);
         const auto ptrValueType = PointerType::getUnqual(valueType);
@@ -424,7 +424,7 @@ public:
 
         for (auto i = 0U; i < getters.size(); ++i) {
             getters[Indexes[i]] = [i, outs, indexType, valueType, outputPtrType, outputType](const TCodegenContext& ctx, BasicBlock*& block) {
-                DIScopeAnnotator annotate(*ctx.Annotator);
+                DIScopeAnnotator annotate(ctx.Annotator);
                 const auto values = annotate(new LoadInst(outputPtrType, outs, "values", block));
                 const auto pointer = annotate(GetElementPtrInst::CreateInBounds(outputType, values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, (TString("ptr_") += ToString(i)).c_str(), block));
                 return annotate(new LoadInst(valueType, pointer, (TString("load_") += ToString(i)).c_str(), block));
@@ -927,7 +927,7 @@ public:
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
-        DIScopeAnnotator annotate(*ctx.Annotator);
+        DIScopeAnnotator annotate(ctx.Annotator);
 
         const auto valueType = Type::getInt128Ty(context);
         const auto ptrValueType = PointerType::getUnqual(valueType);
@@ -947,7 +947,7 @@ public:
 
         for (auto i = 0U; i < getters.size(); ++i) {
             getters[Indexes[i]] = [i, outs, indexType, valueType, outputPtrType, outputType](const TCodegenContext& ctx, BasicBlock*& block) {
-                DIScopeAnnotator annotate(*ctx.Annotator);
+                DIScopeAnnotator annotate(ctx.Annotator);
                 const auto values = annotate(new LoadInst(outputPtrType, outs, "values", block));
                 const auto pointer = annotate(GetElementPtrInst::CreateInBounds(outputType, values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, (TString("ptr_") += ToString(i)).c_str(), block));
                 return annotate(new LoadInst(valueType, pointer, (TString("load_") += ToString(i)).c_str(), block));

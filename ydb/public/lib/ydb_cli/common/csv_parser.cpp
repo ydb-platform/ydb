@@ -46,7 +46,7 @@ public:
             }
             return static_cast<T>(value);
         } catch (std::exception& e) {
-            throw TMisuseException() << "Expected " << Parser.GetPrimitive() << " value, recieved: \"" << token << "\".";
+            throw TMisuseException() << "Expected " << Parser.GetPrimitive() << " value, received: \"" << token << "\".";
         }
     }
 
@@ -276,7 +276,7 @@ public:
         if (token == "false") {
             return false;
         }
-        throw TMisuseException() << "Expected bool value: \"true\" or \"false\", recieved: \"" << token << "\".";
+        throw TMisuseException() << "Expected bool value: \"true\" or \"false\", received: \"" << token << "\".";
     }
 
     void EnsureNull(TStringBuf token) const {
@@ -284,7 +284,7 @@ public:
             throw TMisuseException() << "Expected null value instead of \"" << token << "\", but null value is not set.";
         }
         if (token != NullValue) {
-            throw TMisuseException() << "Expected null value: \"" << NullValue << "\", recieved: \"" << token << "\".";
+            throw TMisuseException() << "Expected null value: \"" << NullValue << "\", received: \"" << token << "\".";
         }
     }
 

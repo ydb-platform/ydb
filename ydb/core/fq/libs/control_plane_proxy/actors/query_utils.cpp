@@ -11,6 +11,14 @@
 namespace NFq {
 namespace NPrivate {
 
+namespace {
+
+TString MakeSecretKeyName(const TString& prefix, const TString& folderId, const TString& name) {
+    return TStringBuilder{} << prefix << "_" << folderId << "_" << name << Endl;
+}
+
+}
+
 TString MakeCreateExternalDataTableQuery(const FederatedQuery::BindingContent& content,
                                          const TString& connectionName,
                                          bool replaceIfExists) {
@@ -104,7 +112,7 @@ TMaybe<TString> CreateSecretObjectQuery(const FederatedQuery::ConnectionSetting&
             R"(
                     UPSERT OBJECT {sa_secret_name} (TYPE SECRET) WITH value={signature};
                 )",
-            "sa_secret_name"_a = EncloseAndEscapeString(TStringBuilder{} << "f1_" << folderId << name, '`'),
+            "sa_secret_name"_a = EncloseAndEscapeString(MakeSecretKeyName("f1", folderId, name), '`'),
             "signature"_a       = EncloseSecret(EncloseAndEscapeString(SignAccountId(serviceAccountId, signer), '"'))) : std::string{};
     }
 
@@ -114,7 +122,7 @@ TMaybe<TString> CreateSecretObjectQuery(const FederatedQuery::ConnectionSetting&
                 R"(
                     UPSERT OBJECT {password_secret_name} (TYPE SECRET) WITH value={password};
                 )",
-            "password_secret_name"_a = EncloseAndEscapeString(TStringBuilder{} << "f2_" << folderId << name, '`'),
+            "password_secret_name"_a = EncloseAndEscapeString(MakeSecretKeyName("f2", folderId, name), '`'),
             "password"_a = EncloseSecret(EncloseAndEscapeString(*password, '"')));
     }
 
@@ -141,7 +149,7 @@ TString CreateAuthParamsQuery(const FederatedQuery::ConnectionSetting& setting,
                 )",
             "auth_method"_a = ToString(authMethod),
             "service_account_id"_a = EncloseAndEscapeString(ExtractServiceAccountId(setting), '"'),
-            "sa_secret_name"_a = EncloseAndEscapeString(signer ? TStringBuilder{} << "f1_" << folderId << name : TString{}, '"'));
+            "sa_secret_name"_a = EncloseAndEscapeString(signer ? MakeSecretKeyName("f1", folderId, name) : TString{}, '"'));
         case EYdbComputeAuth::BASIC:
             return fmt::format(
                     R"(,
@@ -151,7 +159,7 @@ TString CreateAuthParamsQuery(const FederatedQuery::ConnectionSetting& setting,
                     )",
                 "auth_method"_a = ToString(authMethod),
                 "login"_a = EncloseAndEscapeString(GetLogin(setting).GetOrElse({}), '"'),
-                "password_secret_name"_a = EncloseAndEscapeString(TStringBuilder{} << "f2_" << folderId << name, '"'));
+                "password_secret_name"_a = EncloseAndEscapeString(MakeSecretKeyName("f2", folderId, name), '"'));
         case EYdbComputeAuth::MDB_BASIC:
             return fmt::format(
                 R"(,
@@ -163,9 +171,9 @@ TString CreateAuthParamsQuery(const FederatedQuery::ConnectionSetting& setting,
                     )",
                 "auth_method"_a = ToString(authMethod),
                 "service_account_id"_a = EncloseAndEscapeString(ExtractServiceAccountId(setting), '"'),
-                "sa_secret_name"_a = EncloseAndEscapeString(signer ? TStringBuilder{} << "f1_" << folderId << name : TString{}, '"'),
+                "sa_secret_name"_a = EncloseAndEscapeString(signer ? MakeSecretKeyName("f1", folderId, name) : TString{}, '"'),
                 "login"_a = EncloseAndEscapeString(GetLogin(setting).GetOrElse({}), '"'),
-                "password_secret_name"_a = EncloseAndEscapeString(TStringBuilder{} << "f2_" << folderId << name, '"'));
+                "password_secret_name"_a = EncloseAndEscapeString(MakeSecretKeyName("f2", folderId, name), '"'));
     }
 }
 
@@ -295,8 +303,8 @@ TMaybe<TString> DropSecretObjectQuery(const TString& name, const TString& folder
                 DROP OBJECT {secret_name4} (TYPE SECRET); -- for backward compatibility
                 DROP OBJECT {secret_name5} (TYPE SECRET); -- for backward compatibility
             )",
-        "secret_name1"_a = EncloseAndEscapeString(TStringBuilder{} << "f1_" << folderId << name, '`'),
-        "secret_name2"_a = EncloseAndEscapeString(TStringBuilder{} << "f2_" << folderId << name, '`'),
+        "secret_name1"_a = EncloseAndEscapeString(MakeSecretKeyName("f1", folderId, name), '`'),
+        "secret_name2"_a = EncloseAndEscapeString(MakeSecretKeyName("f2", folderId, name), '`'),
         "secret_name3"_a = EncloseAndEscapeString(TStringBuilder{} << "k1" << name, '`'),
         "secret_name4"_a = EncloseAndEscapeString(TStringBuilder{} << "k2" << name, '`'),
         "secret_name5"_a = EncloseAndEscapeString(name, '`'));

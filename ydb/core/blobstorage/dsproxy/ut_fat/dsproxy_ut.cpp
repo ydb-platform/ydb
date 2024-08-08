@@ -3421,6 +3421,7 @@ class TTestBlobStorageProxyBatchedPutRequestDoesNotContainAHugeBlob : public TTe
                             .HandleClass = HandleClass,
                             .Tactic = Tactic,
                             .EnableRequestMod3x3ForMinLatency = false,
+                            .AccelerationParams = TAccelerationParams{},
                         });
 
                 ctx.Register(reqActor);
@@ -4206,7 +4207,7 @@ public:
         TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = perPoolCounters.GetPoolCounters("pool_name");
         std::unique_ptr<IActor> proxyActor{CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(bsInfo), false,
                 dsProxyNodeMon, TIntrusivePtr(storagePoolCounters), args.EnablePutBatching, DefaultEnableVPatch,
-                DefaultSlowDiskThreshold)};
+                DefaultSlowDiskThreshold, DefaultPredictedDelayMultiplier)};
         TActorSetupCmd bsproxySetup(proxyActor.release(), TMailboxType::Revolving, 3);
         setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(env->ProxyId, std::move(bsproxySetup)));
 

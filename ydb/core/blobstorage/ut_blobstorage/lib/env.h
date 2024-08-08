@@ -1,7 +1,5 @@
 #pragma once
 
-#define USE_VIRTUAL_TIME_IN_BSQUEUE
-
 #include "defs.h"
 
 #include "node_warden_mock.h"

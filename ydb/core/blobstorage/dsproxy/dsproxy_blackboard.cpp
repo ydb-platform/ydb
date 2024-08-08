@@ -174,8 +174,7 @@ void TBlobState::AddNotYetResponse(const TBlobStorageGroupInfo &info, const TLog
 ui64 TBlobState::GetPredictedDelayNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues,
         ui32 diskIdxInSubring, NKikimrBlobStorage::EVDiskQueueId queueId) const {
     Y_UNUSED(info);
-    auto res = groupQueues.GetPredictedDelayNsByOrderNumber(Disks[diskIdxInSubring].OrderNumber, queueId);
-    return res;
+    return groupQueues.GetPredictedDelayNsByOrderNumber(Disks[diskIdxInSubring].OrderNumber, queueId);
 }
 
 void TBlobState::GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues,

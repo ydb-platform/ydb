@@ -169,8 +169,7 @@ arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& poo
         }        
         case NUdf::EDataSlot::Decimal: {
             std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(16, &pool)));
-            auto integer = value.GetInt128();
-            memcpy(buffer->mutable_data(), (void*)&integer, sizeof(integer));
+            *reinterpret_cast<NYql::NDecimal::TInt128*>(buffer->mutable_data()) = value.GetInt128();
             return arrow::Datum(std::make_shared<TPrimitiveDataType<NYql::NDecimal::TInt128>::TScalarResult>(buffer));
         }
         default:

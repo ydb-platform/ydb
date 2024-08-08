@@ -39,11 +39,11 @@ NKikimrConfig::TAppConfig AppCfgLowComputeLimits(double reasonableTreshold, bool
     rm->SetMkqlLightProgramMemoryLimit(100);
     rm->SetMkqlHeavyProgramMemoryLimit(300);
     rm->SetSpillingPercent(reasonableTreshold);
-    appCfg.MutableTableServiceConfig()->SetEnableQueryServiceSpilling(enableSpilling);
+    appCfg.MutableTableServiceConfig()->SetEnableQueryServiceSpilling(true);
 
     auto* spilling = appCfg.MutableTableServiceConfig()->MutableSpillingServiceConfig()->MutableLocalFileConfig();
 
-    spilling->SetEnable(true);
+    spilling->SetEnable(enableSpilling);
     spilling->SetRoot("./spilling/");
 
     return appCfg;

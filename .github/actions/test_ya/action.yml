@@ -360,7 +360,7 @@ runs:
             # finish testme session
 
             # split large junit_report
-            export TESTMO_JUNIT_REPORT_PARTS=$TMP_DIR/junit-split
+            export TESTMO_JUNIT_REPORT_PARTS=$TMP_DIR/try_$RETRY/junit-split
             mkdir -p $TESTMO_JUNIT_REPORT_PARTS
             .github/scripts/tests/split-junit.py -o "$TESTMO_JUNIT_REPORT_PARTS" "$CURRENT_JUNIT_XML_PATH"
             # archive unitest reports (transformed)

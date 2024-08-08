@@ -1762,7 +1762,7 @@ public:
 private:
     TDataQuery(const TSession& session, const std::string& text, const std::string& id);
     TDataQuery(const TSession& session, const std::string& text, const std::string& id,
-        const ::google::protobuf::Map<std::string, Ydb::Type>& types);
+        const ::google::protobuf::Map<TStringType, Ydb::Type>& types);
 
     class TImpl;
     std::shared_ptr<TImpl> Impl_;

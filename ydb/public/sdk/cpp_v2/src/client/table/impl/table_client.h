@@ -139,10 +139,10 @@ public:
         const std::string& data, const std::string& schema, const TBulkUpsertSettings& settings);
 
     TFuture<std::pair<TPlainStatus, TScanQueryProcessorPtr>> StreamExecuteScanQueryInternal(const std::string& query,
-        const ::google::protobuf::Map<std::string, Ydb::TypedValue>* params,
+        const ::google::protobuf::Map<TStringType, Ydb::TypedValue>* params,
         const TStreamExecScanQuerySettings& settings);
     TAsyncScanQueryPartIterator StreamExecuteScanQuery(const std::string& query,
-        const ::google::protobuf::Map<std::string, Ydb::TypedValue>* params,
+        const ::google::protobuf::Map<TStringType, Ydb::TypedValue>* params,
         const TStreamExecScanQuerySettings& settings);
     void CollectRetryStatAsync(EStatus status);
     void CollectRetryStatSync(EStatus status);
@@ -152,19 +152,19 @@ public:
 
 private:
     static void SetParams(
-        ::google::protobuf::Map<std::string, Ydb::TypedValue>* params,
+        ::google::protobuf::Map<TStringType, Ydb::TypedValue>* params,
         Ydb::Table::ExecuteDataQueryRequest* request);
 
     static void SetParams(
-        const ::google::protobuf::Map<std::string, Ydb::TypedValue>& params,
+        const ::google::protobuf::Map<TStringType, Ydb::TypedValue>& params,
         Ydb::Table::ExecuteDataQueryRequest* request);
 
     static void CollectParams(
-        ::google::protobuf::Map<std::string, Ydb::TypedValue>* params,
+        ::google::protobuf::Map<TStringType, Ydb::TypedValue>* params,
         NSdkStats::TAtomicHistogram<::NMonitoring::THistogram> histgoram);
 
     static void CollectParams(
-        const ::google::protobuf::Map<std::string, Ydb::TypedValue>& params,
+        const ::google::protobuf::Map<TStringType, Ydb::TypedValue>& params,
         NSdkStats::TAtomicHistogram<::NMonitoring::THistogram> histgoram);
 
     static void CollectQuerySize(const std::string& query, NSdkStats::TAtomicHistogram<::NMonitoring::THistogram>& querySizeHistogram);
@@ -177,11 +177,11 @@ private:
         const TExecDataQuerySettings& settings, bool fromCache
     ) {
         auto request = MakeOperationRequest<Ydb::Table::ExecuteDataQueryRequest>(settings);
-        request.set_session_id(session.GetId());
+        request.set_session_id(TStringType{session.GetId()});
         auto txControlProto = request.mutable_tx_control();
         txControlProto->set_commit_tx(txControl.CommitTx_);
         if (txControl.TxId_) {
-            txControlProto->set_tx_id(*txControl.TxId_);
+            txControlProto->set_tx_id(TStringType{txControl.TxId_.value()});
         } else {
             SetTxSettings(txControl.BeginTx_, txControlProto->mutable_begin_tx());
         }

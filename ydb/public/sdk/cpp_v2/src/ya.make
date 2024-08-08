@@ -1,50 +1,51 @@
 RECURSE(
-    # client/draft
-    # client/extensions
-    # client/helpers
-    # client/impl/ydb_endpoints
-    # client/impl/ydb_internal/common
-    # client/impl/ydb_internal/db_driver_state
-    # client/impl/ydb_internal/grpc_connections
-    # client/impl/ydb_internal/logger
-    # client/impl/ydb_internal/make_request
-    # client/impl/ydb_internal/plain_status
-    # client/impl/ydb_internal/thread_pool
-    # client/impl/ydb_internal/value_helpers
-    # client/impl/ydb_stats
-    # client/resources
-    # client/common_client
-    # client/common_client/impl
-    # client/coordination
-    # client/datastreams
-    # client/discovery
-    # client/driver
-    # client/export
-    # client/extension_common
+    client/draft
+    client/extensions
+    client/helpers
+    client/impl/ydb_endpoints
+    client/impl/ydb_internal/common
+    client/impl/ydb_internal/db_driver_state
+    client/impl/ydb_internal/grpc_connections
+    client/impl/ydb_internal/logger
+    client/impl/ydb_internal/make_request
+    client/impl/ydb_internal/plain_status
+    client/impl/ydb_internal/thread_pool
+    client/impl/ydb_internal/value_helpers
+    client/impl/ydb_stats
+    client/resources
+    client/common_client
+    client/common_client/impl
+    client/coordination
+    client/datastreams
+    client/discovery
+    client/driver
+    client/export
+    client/extension_common
     # client/federated_topic
     # client/federated_topic/impl
-    # client/import
-    # client/operation
-    # client/params
-    # client/persqueue_public
-    # client/persqueue_public/impl
-    # client/proto
-    # client/query
-    # client/rate_limiter
-    # client/result
-    # client/scheme
-    # client/table
-    # client/table/impl
-    # client/table/query_stats
-    # client/topic
-    # client/topic/codecs
-    # client/topic/impl
-    # client/types
-    # client/types/credentials
-    # client/types/exceptions
-    # client/types/fatal_error_handlers
-    # client/types/operation
-    # client/types/status
-    # client/value
+    client/import
+    client/operation
+    client/params
+    client/persqueue_public
+    client/persqueue_public/impl
+    client/proto
+    client/query
+    client/query/impl
+    client/rate_limiter
+    client/result
+    client/scheme
+    client/table
+    client/table/impl
+    client/table/query_stats
+    client/topic
+    client/topic/codecs
+    client/topic/impl
+    client/types
+    client/types/credentials
+    client/types/exceptions
+    client/types/fatal_error_handlers
+    client/types/operation
+    client/types/status
+    client/value
     library
 )

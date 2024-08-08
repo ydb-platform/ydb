@@ -42,7 +42,7 @@ public:
 
     template <class TSettings>
     static void ConvertConsumerToProto(const TConsumerSettings<TSettings>& settings, Ydb::Topic::Consumer& consumerProto) {
-        consumerProto.set_name(settings.ConsumerName_);
+        consumerProto.set_name(TStringType{settings.ConsumerName_});
         consumerProto.set_important(settings.Important_);
         consumerProto.mutable_read_from()->set_seconds(settings.ReadFrom_.Seconds());
 
@@ -55,7 +55,7 @@ public:
     }
 
     static void ConvertAlterConsumerToProto(const TAlterConsumerSettings& settings, Ydb::Topic::AlterConsumer& consumerProto) {
-        consumerProto.set_name(settings.ConsumerName_);
+        consumerProto.set_name(TStringType{settings.ConsumerName_});
         if (settings.SetImportant_)
             consumerProto.set_set_important(*settings.SetImportant_);
         if (settings.SetReadFrom_)
@@ -75,15 +75,15 @@ public:
 
     static Ydb::Topic::CreateTopicRequest MakePropsCreateRequest(const std::string& path, const TCreateTopicSettings& settings) {
         Ydb::Topic::CreateTopicRequest request = MakeOperationRequest<Ydb::Topic::CreateTopicRequest>(settings);
-        request.set_path(path);
+        request.set_path(TStringType{path});
 
         request.mutable_partitioning_settings()->set_min_active_partitions(settings.PartitioningSettings_.GetMinActivePartitions());
         request.mutable_partitioning_settings()->set_partition_count_limit(settings.PartitioningSettings_.GetPartitionCountLimit());
         request.mutable_partitioning_settings()->set_max_active_partitions(settings.PartitioningSettings_.GetMaxActivePartitions());
-        request.mutable_partitioning_settings()->mutable_autoscaling_settings()->set_strategy(static_cast<Ydb::Topic::AutoscalingStrategy>(settings.PartitioningSettings_.GetAutoscalingSettings().GetStrategy()));
-        request.mutable_partitioning_settings()->mutable_autoscaling_settings()->mutable_partition_write_speed()->mutable_threshold_time()->set_seconds(settings.PartitioningSettings_.GetAutoscalingSettings().GetThresholdTime().Seconds());
-        request.mutable_partitioning_settings()->mutable_autoscaling_settings()->mutable_partition_write_speed()->set_scale_up_threshold_percent(settings.PartitioningSettings_.GetAutoscalingSettings().GetScaleUpThresholdPercent());
-        request.mutable_partitioning_settings()->mutable_autoscaling_settings()->mutable_partition_write_speed()->set_scale_down_threshold_percent(settings.PartitioningSettings_.GetAutoscalingSettings().GetScaleDownThresholdPercent());
+        request.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->set_strategy(static_cast<Ydb::Topic::AutoPartitioningStrategy>(settings.PartitioningSettings_.GetAutoPartitioningSettings().GetStrategy()));
+        request.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->mutable_stabilization_window()->set_seconds(settings.PartitioningSettings_.GetAutoPartitioningSettings().GetStabilizationWindow().Seconds());
+        request.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_up_utilization_percent(settings.PartitioningSettings_.GetAutoPartitioningSettings().GetUpUtilizationPercent());
+        request.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_down_utilization_percent(settings.PartitioningSettings_.GetAutoPartitioningSettings().GetDownUtilizationPercent());
 
         request.mutable_retention_period()->set_seconds(settings.RetentionPeriod_.Seconds());
 
@@ -119,7 +119,7 @@ public:
 
     static Ydb::Topic::AlterTopicRequest MakePropsAlterRequest(const std::string& path, const TAlterTopicSettings& settings) {
         Ydb::Topic::AlterTopicRequest request = MakeOperationRequest<Ydb::Topic::AlterTopicRequest>(settings);
-        request.set_path(path);
+        request.set_path(TStringType{path});
 
         if (settings.AlterPartitioningSettings_) {
             if (settings.AlterPartitioningSettings_->MinActivePartitions_) {
@@ -128,18 +128,18 @@ public:
             if (settings.AlterPartitioningSettings_->MaxActivePartitions_) {
                 request.mutable_alter_partitioning_settings()->set_set_max_active_partitions(*settings.AlterPartitioningSettings_->MaxActivePartitions_);
             }
-            if (settings.AlterPartitioningSettings_->AutoscalingSettings_) {
-                if (settings.AlterPartitioningSettings_->AutoscalingSettings_->Strategy_) {
-                    request.mutable_alter_partitioning_settings()->mutable_alter_autoscaling_settings()->set_set_strategy(static_cast<Ydb::Topic::AutoscalingStrategy>(*settings.AlterPartitioningSettings_->AutoscalingSettings_->Strategy_));
+            if (settings.AlterPartitioningSettings_->AutoPartitioningSettings_) {
+                if (settings.AlterPartitioningSettings_->AutoPartitioningSettings_->Strategy_) {
+                    request.mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->set_set_strategy(static_cast<Ydb::Topic::AutoPartitioningStrategy>(*settings.AlterPartitioningSettings_->AutoPartitioningSettings_->Strategy_));
                 }
-                if (settings.AlterPartitioningSettings_->AutoscalingSettings_->ScaleDownThresholdPercent_) {
-                    request.mutable_alter_partitioning_settings()->mutable_alter_autoscaling_settings()->mutable_set_partition_write_speed()->set_set_scale_down_threshold_percent(*settings.AlterPartitioningSettings_->AutoscalingSettings_->ScaleDownThresholdPercent_);
+                if (settings.AlterPartitioningSettings_->AutoPartitioningSettings_->DownUtilizationPercent_) {
+                    request.mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->mutable_set_partition_write_speed()->set_set_down_utilization_percent(*settings.AlterPartitioningSettings_->AutoPartitioningSettings_->DownUtilizationPercent_);
                 }
-                if (settings.AlterPartitioningSettings_->AutoscalingSettings_->ScaleUpThresholdPercent_) {
-                    request.mutable_alter_partitioning_settings()->mutable_alter_autoscaling_settings()->mutable_set_partition_write_speed()->set_set_scale_up_threshold_percent(*settings.AlterPartitioningSettings_->AutoscalingSettings_->ScaleUpThresholdPercent_);
+                if (settings.AlterPartitioningSettings_->AutoPartitioningSettings_->UpUtilizationPercent_) {
+                    request.mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->mutable_set_partition_write_speed()->set_set_up_utilization_percent(*settings.AlterPartitioningSettings_->AutoPartitioningSettings_->UpUtilizationPercent_);
                 }
-                if (settings.AlterPartitioningSettings_->AutoscalingSettings_->ThresholdTime_) {
-                    request.mutable_alter_partitioning_settings()->mutable_alter_autoscaling_settings()->mutable_set_partition_write_speed()->mutable_set_threshold_time()->set_seconds(settings.AlterPartitioningSettings_->AutoscalingSettings_->ThresholdTime_->Seconds());
+                if (settings.AlterPartitioningSettings_->AutoPartitioningSettings_->StabilizationWindow_) {
+                    request.mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->mutable_set_partition_write_speed()->mutable_set_stabilization_window()->set_seconds(settings.AlterPartitioningSettings_->AutoPartitioningSettings_->StabilizationWindow_->Seconds());
                 }
             }
         }
@@ -174,7 +174,7 @@ public:
         }
 
         for (const auto& consumer : settings.DropConsumers_) {
-            request.add_drop_consumers(consumer);
+            request.add_drop_consumers(TStringType{consumer});
         }
 
         for (const auto& consumer : settings.AlterConsumers_) {
@@ -198,7 +198,7 @@ public:
 
     TAsyncStatus DropTopic(const std::string& path, const TDropTopicSettings& settings) {
         auto request = MakeOperationRequest<Ydb::Topic::DropTopicRequest>(settings);
-        request.set_path(path);
+        request.set_path(TStringType{path});
 
         return RunSimple<Ydb::Topic::V1::TopicService, Ydb::Topic::DropTopicRequest, Ydb::Topic::DropTopicResponse>(
             std::move(request),
@@ -208,7 +208,7 @@ public:
 
     TAsyncDescribeTopicResult DescribeTopic(const std::string& path, const TDescribeTopicSettings& settings) {
         auto request = MakeOperationRequest<Ydb::Topic::DescribeTopicRequest>(settings);
-        request.set_path(path);
+        request.set_path(TStringType{path});
 
         if (settings.IncludeStats_) {
             request.set_include_stats(true);
@@ -244,8 +244,8 @@ public:
 
     TAsyncDescribeConsumerResult DescribeConsumer(const std::string& path, const std::string& consumer, const TDescribeConsumerSettings& settings) {
         auto request = MakeOperationRequest<Ydb::Topic::DescribeConsumerRequest>(settings);
-        request.set_path(path);
-        request.set_consumer(consumer);
+        request.set_path(TStringType{path});
+        request.set_consumer(TStringType{consumer});
 
         if (settings.IncludeStats_) {
             request.set_include_stats(true);
@@ -281,7 +281,7 @@ public:
 
     TAsyncDescribePartitionResult DescribePartition(const std::string& path, i64 partitionId, const TDescribePartitionSettings& settings) {
         auto request = MakeOperationRequest<Ydb::Topic::DescribePartitionRequest>(settings);
-        request.set_path(path);
+        request.set_path(TStringType{path});
         request.set_partition_id(partitionId);
 
         if (settings.IncludeStats_) {
@@ -318,9 +318,9 @@ public:
     TAsyncStatus CommitOffset(const std::string& path, ui64 partitionId, const std::string& consumerName, ui64 offset,
         const TCommitOffsetSettings& settings) {
         Ydb::Topic::CommitOffsetRequest request = MakeOperationRequest<Ydb::Topic::CommitOffsetRequest>(settings);
-        request.set_path(path);
+        request.set_path(TStringType{path});
         request.set_partition_id(partitionId);
-        request.set_consumer(consumerName);
+        request.set_consumer(TStringType{consumerName});
         request.set_offset(offset);
 
         return RunSimple<Ydb::Topic::V1::TopicService, Ydb::Topic::CommitOffsetRequest, Ydb::Topic::CommitOffsetResponse>(
@@ -336,12 +336,12 @@ public:
     {
         auto request = MakeOperationRequest<Ydb::Topic::UpdateOffsetsInTransactionRequest>(settings);
 
-        request.mutable_tx()->set_id(tx.GetId());
-        request.mutable_tx()->set_session(tx.GetSession().GetId());
+        request.mutable_tx()->set_id(TStringType{tx.GetId()});
+        request.mutable_tx()->set_session(TStringType{tx.GetSession().GetId()});
 
         for (auto& t : topics) {
             auto* topic = request.mutable_topics()->Add();
-            topic->set_path(t.Path);
+            topic->set_path(TStringType{t.Path});
 
             for (auto& p : t.Partitions) {
                 auto* partition = topic->mutable_partitions()->Add();
@@ -355,7 +355,7 @@ public:
             }
         }
 
-        request.set_consumer(consumerName);
+        request.set_consumer(TStringType{consumerName});
 
         return RunSimple<Ydb::Topic::V1::TopicService, Ydb::Topic::UpdateOffsetsInTransactionRequest, Ydb::Topic::UpdateOffsetsInTransactionResponse>(
             std::move(request),

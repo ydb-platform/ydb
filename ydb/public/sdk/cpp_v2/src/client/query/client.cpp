@@ -90,7 +90,7 @@ public:
         request.set_exec_mode(::Ydb::Query::ExecMode(settings.ExecMode_));
         request.set_stats_mode(::Ydb::Query::StatsMode(settings.StatsMode_));
         request.mutable_script_content()->set_syntax(::Ydb::Query::Syntax(settings.Syntax_));
-        request.mutable_script_content()->set_text(script);
+        request.mutable_script_content()->set_text(TStringType{script});
         SetDuration(settings.ResultsTtl_, *request.mutable_results_ttl());
     
         if (params) {
@@ -128,7 +128,7 @@ public:
 
     TAsyncFetchScriptResultsResult FetchScriptResults(const NKikimr::NOperationId::TOperationId& operationId, int64_t resultSetIndex, const TFetchScriptResultsSettings& settings) {
         auto request = MakeRequest<Ydb::Query::FetchScriptResultsRequest>();
-        request.set_operation_id(NKikimr::NOperationId::ProtoToString(operationId.GetProto()));
+        request.set_operation_id(TStringType{operationId.ToString()});
         request.set_result_set_index(resultSetIndex);
         return FetchScriptResultsImpl(std::move(request), settings);
     }
@@ -136,8 +136,8 @@ public:
     TAsyncStatus RollbackTransaction(const std::string& txId, const NYdb::NQuery::TRollbackTxSettings& settings, const TSession& session) {
         using namespace Ydb::Query;
         auto request = MakeRequest<Ydb::Query::RollbackTransactionRequest>();
-        request.set_session_id(session.GetId());
-        request.set_tx_id(txId);
+        request.set_session_id(TStringType{session.GetId()});
+        request.set_tx_id(TStringType{txId});
 
         auto promise = NThreading::NewPromise<TStatus>();
 
@@ -172,8 +172,8 @@ public:
     TAsyncCommitTransactionResult CommitTransaction(const std::string& txId, const NYdb::NQuery::TCommitTxSettings& settings, const TSession& session) {
         using namespace Ydb::Query;
         auto request = MakeRequest<Ydb::Query::CommitTransactionRequest>();
-        request.set_session_id(session.GetId());
-        request.set_tx_id(txId);
+        request.set_session_id(TStringType{session.GetId()});
+        request.set_tx_id(TStringType{txId});
 
         auto promise = NThreading::NewPromise<TCommitTransactionResult>();
 
@@ -211,7 +211,7 @@ public:
     {
         using namespace Ydb::Query;
         auto request = MakeRequest<Ydb::Query::BeginTransactionRequest>();
-        request.set_session_id(session.GetId());
+        request.set_session_id(TStringType{session.GetId()});
         SetTxSettings(txSettings, request.mutable_tx_settings());
 
         auto promise = NThreading::NewPromise<TBeginTransactionResult>();
@@ -250,7 +250,7 @@ public:
     TAsyncFetchScriptResultsResult FetchScriptResultsImpl(Ydb::Query::FetchScriptResultsRequest&& request, const TFetchScriptResultsSettings& settings) {
         using namespace Ydb::Query;
         if (!settings.FetchToken_.empty()) {
-            request.set_fetch_token(settings.FetchToken_);
+            request.set_fetch_token(TStringType{settings.FetchToken_});
         }
         request.set_rows_limit(settings.RowsLimit_);
 

@@ -725,8 +725,8 @@ void TWriteSessionImpl::InitImpl() {
 
     TClientMessage req;
     auto* init = req.mutable_init_request();
-    init->set_path(Settings.Path_);
-    init->set_producer_id(Settings.ProducerId_);
+    init->set_path(TStringType{Settings.Path_});
+    init->set_producer_id(TStringType{Settings.ProducerId_});
 
    if (Settings.DirectWriteToPartition_ && (Settings.PartitionId_.has_value() || DirectWriteToPartitionId.has_value())) {
         auto partition_id = Settings.PartitionId_.has_value() ? *Settings.PartitionId_ : *DirectWriteToPartitionId;
@@ -738,7 +738,7 @@ void TWriteSessionImpl::InitImpl() {
         init->set_partition_id(*Settings.PartitionId_);
         LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: write to partition: " << *Settings.PartitionId_);
     } else {
-        init->set_message_group_id(Settings.MessageGroupId_);
+        init->set_message_group_id(TStringType{Settings.MessageGroupId_});
         LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: write to message_group: " << Settings.MessageGroupId_);
     }
 
@@ -1336,7 +1336,7 @@ void TWriteSessionImpl::UpdateTokenIfNeededImpl() {
     PrevToken = token;
 
     TClientMessage clientMessage;
-    clientMessage.mutable_update_token_request()->set_token(token);
+    clientMessage.mutable_update_token_request()->set_token(TStringType{token});
     Processor->Write(std::move(clientMessage));
 }
 
@@ -1382,8 +1382,8 @@ void TWriteSessionImpl::SendImpl() {
                 auto* msgData = writeRequest->add_messages();
 
                 if (message.Tx) {
-                    writeRequest->mutable_tx()->set_id(message.Tx->GetId());
-                    writeRequest->mutable_tx()->set_session(message.Tx->GetSession().GetId());
+                    writeRequest->mutable_tx()->set_id(TStringType{message.Tx->GetId()});
+                    writeRequest->mutable_tx()->set_session(TStringType{message.Tx->GetSession().GetId()});
                 }
 
                 msgData->set_seq_no(GetSeqNoImpl(message.Id));
@@ -1391,8 +1391,8 @@ void TWriteSessionImpl::SendImpl() {
 
                 for (auto& [k, v] : message.MessageMeta) {
                     auto* pair = msgData->add_metadata_items();
-                    pair->set_key(k);
-                    pair->set_value(v);
+                    pair->set_key(TStringType{k});
+                    pair->set_value(TStringType{v});
                 }
                 SentOriginalMessages.emplace(std::move(message));
                 OriginalMessagesToSend.pop();

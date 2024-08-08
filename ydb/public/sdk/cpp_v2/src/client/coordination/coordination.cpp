@@ -286,10 +286,10 @@ private:
         void FillRequest(TRequest& req, const std::string& name) const override {
             auto& inner = *req.mutable_acquire_semaphore();
             inner.set_req_id(ReqId);
-            inner.set_name(name);
+            inner.set_name(TStringType{name});
             inner.set_count(Settings.Count_);
             inner.set_timeout_millis(GetTimeoutMillisLeft());
-            inner.set_data(Settings.Data_);
+            inner.set_data(TStringType{Settings.Data_});
             inner.set_ephemeral(Settings.Ephemeral_);
         }
     };
@@ -302,7 +302,7 @@ private:
         void FillRequest(TRequest& req, const std::string& name) const override {
             auto& inner = *req.mutable_release_semaphore();
             inner.set_req_id(ReqId);
-            inner.set_name(name);
+            inner.set_name(TStringType{name});
         }
     };
 
@@ -358,7 +358,7 @@ private:
         void FillRequest(TRequest& req, ui64 reqId) const override {
             auto& inner = *req.mutable_describe_semaphore();
             inner.set_req_id(reqId);
-            inner.set_name(Name);
+            inner.set_name(TStringType{Name});
             inner.set_include_owners(Settings.IncludeOwners_);
             inner.set_include_waiters(Settings.IncludeWaiters_);
             inner.set_watch_data(Settings.WatchData_);
@@ -391,9 +391,9 @@ private:
         void FillRequest(TRequest& req, ui64 reqId) const override {
             auto& inner = *req.mutable_create_semaphore();
             inner.set_req_id(reqId);
-            inner.set_name(Name);
+            inner.set_name(TStringType{Name});
             inner.set_limit(Limit);
-            inner.set_data(Data);
+            inner.set_data(TStringType{Data});
         }
 
         void SetFailure(const TStatus& status) override {
@@ -414,8 +414,8 @@ private:
         void FillRequest(TRequest& req, ui64 reqId) const override {
             auto& inner = *req.mutable_update_semaphore();
             inner.set_req_id(reqId);
-            inner.set_name(Name);
-            inner.set_data(Data);
+            inner.set_name(TStringType{Name});
+            inner.set_data(TStringType{Data});
         }
 
         void SetFailure(const TStatus& status) override {
@@ -436,7 +436,7 @@ private:
         void FillRequest(TRequest& req, ui64 reqId) const override {
             auto& inner = *req.mutable_delete_semaphore();
             inner.set_req_id(reqId);
-            inner.set_name(Name);
+            inner.set_name(TStringType{Name});
             inner.set_force(Force);
         }
 
@@ -1185,11 +1185,11 @@ private:
             auto* start = req.mutable_session_start();
             start->set_seq_no(seqNo);
             start->set_session_id(sessionId);
-            start->set_path(Path_);
+            start->set_path(TStringType{Path_});
             start->set_timeout_millis(Settings_.Timeout_ != TDuration::Max() ?
                 Settings_.Timeout_.MilliSeconds() : Max<ui64>());
-            start->set_description(Settings_.Description_);
-            start->set_protection_key(ProtectionKey_);
+            start->set_description(TStringType{Settings_.Description_});
+            start->set_protection_key(TStringType{ProtectionKey_});
             processor->Write(std::move(req));
         }
 
@@ -1919,7 +1919,7 @@ TAsyncStatus TClient::CreateNode(
     const TCreateNodeSettings& settings)
 {
     auto request = MakeOperationRequest<Ydb::Coordination::CreateNodeRequest>(settings);
-    request.set_path(path);
+    request.set_path(TStringType{path});
     ConvertSettingsToProtoConfig(settings, request.mutable_config());
     return Impl_->CreateNode(std::move(request), settings);
 }
@@ -1929,7 +1929,7 @@ TAsyncStatus TClient::AlterNode(
     const TAlterNodeSettings& settings)
 {
     auto request = MakeOperationRequest<Ydb::Coordination::AlterNodeRequest>(settings);
-    request.set_path(path);
+    request.set_path(TStringType{path});
     ConvertSettingsToProtoConfig(settings, request.mutable_config());
     return Impl_->AlterNode(std::move(request), settings);
 }
@@ -1939,7 +1939,7 @@ TAsyncStatus TClient::DropNode(
     const TDropNodeSettings& settings)
 {
     auto request = MakeOperationRequest<Ydb::Coordination::DropNodeRequest>(settings);
-    request.set_path(path);
+    request.set_path(TStringType{path});
     return Impl_->DropNode(std::move(request), settings);
 }
 
@@ -1948,7 +1948,7 @@ TAsyncDescribeNodeResult TClient::DescribeNode(
     const TDescribeNodeSettings& settings)
 {
     auto request = MakeOperationRequest<Ydb::Coordination::DescribeNodeRequest>(settings);
-    request.set_path(path);
+    request.set_path(TStringType{path});
     return Impl_->DescribeNode(std::move(request), settings);
 }
 

@@ -149,18 +149,18 @@ TExportClient::TExportClient(const TDriver& driver, const TCommonClientSettings&
 TFuture<TExportToYtResponse> TExportClient::ExportToYt(const TExportToYtSettings& settings) {
     auto request = MakeOperationRequest<ExportToYtRequest>(settings);
 
-    request.mutable_settings()->set_host(settings.Host_);
+    request.mutable_settings()->set_host(TStringType{settings.Host_});
     request.mutable_settings()->set_port(settings.Port_.value_or(80));
-    request.mutable_settings()->set_token(settings.Token_);
+    request.mutable_settings()->set_token(TStringType{settings.Token_});
 
     for (const auto& item : settings.Item_) {
         auto& protoItem = *request.mutable_settings()->mutable_items()->Add();
-        protoItem.set_source_path(item.Src);
-        protoItem.set_destination_path(item.Dst);
+        protoItem.set_source_path(TStringType{item.Src});
+        protoItem.set_destination_path(TStringType{item.Dst});
     }
 
     if (settings.Description_) {
-        request.mutable_settings()->set_description(settings.Description_.value());
+        request.mutable_settings()->set_description(TStringType{settings.Description_.value()});
     }
 
     if (settings.NumberOfRetries_) {
@@ -175,21 +175,21 @@ TFuture<TExportToYtResponse> TExportClient::ExportToYt(const TExportToYtSettings
 TFuture<TExportToS3Response> TExportClient::ExportToS3(const TExportToS3Settings& settings) {
     auto request = MakeOperationRequest<ExportToS3Request>(settings);
 
-    request.mutable_settings()->set_endpoint(settings.Endpoint_);
+    request.mutable_settings()->set_endpoint(TStringType{settings.Endpoint_});
     request.mutable_settings()->set_scheme(TProtoAccessor::GetProto<ExportToS3Settings>(settings.Scheme_));
     request.mutable_settings()->set_storage_class(TProtoAccessor::GetProto(settings.StorageClass_));
-    request.mutable_settings()->set_bucket(settings.Bucket_);
-    request.mutable_settings()->set_access_key(settings.AccessKey_);
-    request.mutable_settings()->set_secret_key(settings.SecretKey_);
+    request.mutable_settings()->set_bucket(TStringType{settings.Bucket_});
+    request.mutable_settings()->set_access_key(TStringType{settings.AccessKey_});
+    request.mutable_settings()->set_secret_key(TStringType{settings.SecretKey_});
 
     for (const auto& item : settings.Item_) {
         auto& protoItem = *request.mutable_settings()->mutable_items()->Add();
-        protoItem.set_source_path(item.Src);
-        protoItem.set_destination_prefix(item.Dst);
+        protoItem.set_source_path(TStringType{item.Src});
+        protoItem.set_destination_prefix(TStringType{item.Dst});
     }
 
     if (settings.Description_) {
-        request.mutable_settings()->set_description(settings.Description_.value());
+        request.mutable_settings()->set_description(TStringType{settings.Description_.value()});
     }
 
     if (settings.NumberOfRetries_) {
@@ -197,7 +197,7 @@ TFuture<TExportToS3Response> TExportClient::ExportToS3(const TExportToS3Settings
     }
 
     if (settings.Compression_) {
-        request.mutable_settings()->set_compression(*settings.Compression_);
+        request.mutable_settings()->set_compression(TStringType{settings.Compression_.value()});
     }
 
     request.mutable_settings()->set_disable_virtual_addressing(!settings.UseVirtualAddressing_);

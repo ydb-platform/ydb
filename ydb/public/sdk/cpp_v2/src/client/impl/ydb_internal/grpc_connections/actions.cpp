@@ -42,7 +42,7 @@ void TDeferredAction::OnAlarm() {
     Y_ABORT_UNLESS(Connection_);
 
     Ydb::Operations::GetOperationRequest getOperationRequest;
-    getOperationRequest.set_id(OperationId_);
+    getOperationRequest.set_id(TStringType{OperationId_});
 
     TRpcRequestSettings settings;
     settings.PreferredEndpoint = TEndpointKey(Endpoint_, 0);

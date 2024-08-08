@@ -167,7 +167,7 @@ public:
         using namespace Ydb::Replication;
 
         auto request = MakeOperationRequest<DescribeReplicationRequest>(settings);
-        request.set_path(path);
+        request.set_path(TStringType{path});
 
         auto promise = NThreading::NewPromise<TDescribeReplicationResult>();
 

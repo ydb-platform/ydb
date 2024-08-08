@@ -21,7 +21,6 @@ SRCS(
 PEERDIR(
     library/cpp/monlib/dynamic_counters
     library/cpp/monlib/metrics
-    library/cpp/retry
     library/cpp/string_utils/url
     library/cpp/containers/disjoint_interval_tree
     ydb/public/sdk/cpp_v2/src/library/grpc/client
@@ -33,6 +32,7 @@ PEERDIR(
     ydb/public/sdk/cpp_v2/src/client/topic/codecs
     ydb/public/sdk/cpp_v2/src/client/topic/common
     ydb/public/sdk/cpp_v2/src/client/topic/impl
+    ydb/public/sdk/cpp_v2/src/library/retry
 )
 
 END()

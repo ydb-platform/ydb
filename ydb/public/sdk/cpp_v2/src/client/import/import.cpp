@@ -118,11 +118,11 @@ public:
     TAsyncImportDataResult ImportData(const std::string& table, TData&& data, const TImportYdbDumpDataSettings& settings) {
         auto request = MakeOperationRequest<ImportDataRequest>(settings);
 
-        request.set_path(table);
-        request.set_data(std::forward<TData>(data));
+        request.set_path(TStringType{table});
+        request.set_data(TStringType{std::forward<TData>(data)});
 
         for (const auto& column : settings.Columns_) {
-            request.mutable_ydb_dump()->add_columns(column);
+            request.mutable_ydb_dump()->add_columns(TStringType{column});
         }
 
         return ImportData(std::move(request), settings);
@@ -140,20 +140,20 @@ TImportClient::TImportClient(const TDriver& driver, const TCommonClientSettings&
 TFuture<TImportFromS3Response> TImportClient::ImportFromS3(const TImportFromS3Settings& settings) {
     auto request = MakeOperationRequest<ImportFromS3Request>(settings);
 
-    request.mutable_settings()->set_endpoint(settings.Endpoint_);
+    request.mutable_settings()->set_endpoint(TStringType{settings.Endpoint_});
     request.mutable_settings()->set_scheme(TProtoAccessor::GetProto<ImportFromS3Settings>(settings.Scheme_));
-    request.mutable_settings()->set_bucket(settings.Bucket_);
-    request.mutable_settings()->set_access_key(settings.AccessKey_);
-    request.mutable_settings()->set_secret_key(settings.SecretKey_);
+    request.mutable_settings()->set_bucket(TStringType{settings.Bucket_});
+    request.mutable_settings()->set_access_key(TStringType{settings.AccessKey_});
+    request.mutable_settings()->set_secret_key(TStringType{settings.SecretKey_});
 
     for (const auto& item : settings.Item_) {
         auto& protoItem = *request.mutable_settings()->mutable_items()->Add();
-        protoItem.set_source_prefix(item.Src);
-        protoItem.set_destination_path(item.Dst);
+        protoItem.set_source_prefix(TStringType{item.Src});
+        protoItem.set_destination_path(TStringType{item.Dst});
     }
 
     if (settings.Description_) {
-        request.mutable_settings()->set_description(settings.Description_.value());
+        request.mutable_settings()->set_description(TStringType{settings.Description_.value()});
     }
 
     if (settings.NumberOfRetries_) {

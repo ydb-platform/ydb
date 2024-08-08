@@ -4,6 +4,7 @@
 #include <src/client/impl/ydb_internal/value_helpers/helpers.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
+#include <ydb-cpp-sdk/type_switcher.h>
 #include <ydb-cpp-sdk/client/params/params.h>
 #include <ydb-cpp-sdk/client/types/fatal_error_handlers/handlers.h>
 
@@ -617,8 +618,8 @@ public:
 
     void Pg(const TPgType& pgType) {
         auto& pg = *GetProto().mutable_pg_type();
-        pg.set_type_name(pgType.TypeName);
-        pg.set_type_modifier(pgType.TypeModifier);
+        pg.set_type_name(TStringType{pgType.TypeName});
+        pg.set_type_modifier(TStringType{pgType.TypeModifier});
     }
 
     void BeginOptional() {
@@ -658,7 +659,7 @@ public:
         CheckPreviousKind(ETypeKind::Struct, "AddMember");
         PopPosition();
         auto member = GetProto().mutable_struct_type()->add_members();
-        member->set_name(memberName);
+        member->set_name(TStringType{memberName});
         AddPosition(member->mutable_type());
     }
 
@@ -732,7 +733,7 @@ public:
     }
 
     void BeginTagged(const std::string& tag) {
-        GetProto().mutable_tagged_type()->set_tag(tag);
+        GetProto().mutable_tagged_type()->set_tag(TStringType{tag});
         AddPosition(GetProto().mutable_tagged_type()->mutable_type());
     }
 
@@ -742,7 +743,7 @@ public:
 
     void Tagged(const std::string& tag, const TType& itemType) {
         auto taggedType = GetProto().mutable_tagged_type();
-        taggedType->set_tag(tag);
+        taggedType->set_tag(TStringType{tag});
         taggedType->mutable_type()->CopyFrom(itemType.GetProto());
     }
 
@@ -2166,37 +2167,37 @@ public:
 
     void TzDate(const std::string& value) {
         FillPrimitiveType(EPrimitiveType::TzDate);
-        GetValue().set_text_value(value);
+        GetValue().set_text_value(TStringType{value});
     }
 
     void TzDatetime(const std::string& value) {
         FillPrimitiveType(EPrimitiveType::TzDatetime);
-        GetValue().set_text_value(value);
+        GetValue().set_text_value(TStringType{value});
     }
 
     void TzTimestamp(const std::string& value) {
         FillPrimitiveType(EPrimitiveType::TzTimestamp);
-        GetValue().set_text_value(value);
+        GetValue().set_text_value(TStringType{value});
     }
 
     void String(const std::string& value) {
         FillPrimitiveType(EPrimitiveType::String);
-        GetValue().set_bytes_value(value);
+        GetValue().set_bytes_value(TStringType{value});
     }
 
     void Utf8(const std::string& value) {
         FillPrimitiveType(EPrimitiveType::Utf8);
-        GetValue().set_text_value(value);
+        GetValue().set_text_value(TStringType{value});
     }
 
     void Yson(const std::string& value) {
         FillPrimitiveType(EPrimitiveType::Yson);
-        GetValue().set_bytes_value(value);
+        GetValue().set_bytes_value(TStringType{value});
     }
 
     void Json(const std::string& value) {
         FillPrimitiveType(EPrimitiveType::Json);
-        GetValue().set_text_value(value);
+        GetValue().set_text_value(TStringType{value});
     }
 
     void Uuid(const TUuidValue& value) {
@@ -2207,12 +2208,12 @@ public:
 
     void JsonDocument(const std::string& value) {
         FillPrimitiveType(EPrimitiveType::JsonDocument);
-        GetValue().set_text_value(value);
+        GetValue().set_text_value(TStringType{value});
     }
 
     void DyNumber(const std::string& value) {
         FillPrimitiveType(EPrimitiveType::DyNumber);
-        GetValue().set_text_value(value);
+        GetValue().set_text_value(TStringType{value});
     }
 
     void Decimal(const TDecimalValue& value) {
@@ -2226,9 +2227,9 @@ public:
         if (value.IsNull()) {
             GetValue().set_null_flag_value(::google::protobuf::NULL_VALUE);
         } else if (value.IsText()) {
-            GetValue().set_text_value(value.Content_);
+            GetValue().set_text_value(TStringType{value.Content_});
         } else {
-            GetValue().set_bytes_value(value.Content_);
+            GetValue().set_bytes_value(TStringType{value.Content_});
         }
     }
 

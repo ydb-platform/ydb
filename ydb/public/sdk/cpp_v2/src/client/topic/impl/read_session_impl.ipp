@@ -459,7 +459,7 @@ inline void TSingleClusterReadSessionImpl<true>::InitImpl(TDeferredActions<true>
     init.set_ranges_mode(GetRangesMode());
     for (const NPersQueue::TTopicReadSettings& topic : Settings.Topics_) {
         auto* topicSettings = init.add_topics_read_settings();
-        topicSettings->set_topic(topic.Path_);
+        topicSettings->set_topic(TStringType{topic.Path_});
         if (topic.StartingMessageTimestamp_) {
             topicSettings->set_start_from_written_at_ms(topic.StartingMessageTimestamp_->MilliSeconds());
         }
@@ -467,7 +467,7 @@ inline void TSingleClusterReadSessionImpl<true>::InitImpl(TDeferredActions<true>
             topicSettings->add_partition_group_ids(groupId);
         }
     }
-    init.set_consumer(Settings.ConsumerName_);
+    init.set_consumer(TStringType{Settings.ConsumerName_});
     init.set_read_only_original(Settings.ReadOnlyOriginal_);
     init.mutable_read_params()->set_max_read_size(Settings.MaxMemoryUsageBytes_);
     if (Settings.MaxTimeLag_) {
@@ -488,12 +488,12 @@ inline void TSingleClusterReadSessionImpl<false>::InitImpl(TDeferredActions<fals
     TClientMessage<false> req;
     auto& init = *req.mutable_init_request();
 
-    init.set_consumer(Settings.ConsumerName_);
-    init.set_autoscaling_support(Settings.AutoscalingSupport_);
+    init.set_consumer(TStringType{Settings.ConsumerName_});
+    init.set_auto_partitioning_support(Settings.AutoPartitioningSupport_);
 
     for (const TTopicReadSettings& topic : Settings.Topics_) {
         auto* topicSettings = init.add_topics_read_settings();
-        topicSettings->set_path(topic.Path_);
+        topicSettings->set_path(TStringType{topic.Path_});
         for (ui64 partitionId : topic.PartitionIds_) {
             topicSettings->add_partition_ids(partitionId);
         }
@@ -609,8 +609,8 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
 
     if constexpr (UseMigrationProtocol) {
         auto& startRead = *req.mutable_start_read();
-        startRead.mutable_topic()->set_path(partitionStream->GetTopicPath());
-        startRead.set_cluster(partitionStream->GetCluster());
+        startRead.mutable_topic()->set_path(TStringType{partitionStream->GetTopicPath()});
+        startRead.set_cluster(TStringType{partitionStream->GetCluster()});
         startRead.set_partition(partitionStream->GetPartitionId());
         startRead.set_assign_id(partitionStream->GetAssignId());
         if (readOffset) {
@@ -681,8 +681,8 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
 
     if constexpr (UseMigrationProtocol) {
         auto& released = *req.mutable_released();
-        released.mutable_topic()->set_path(partitionStream->GetTopicPath());
-        released.set_cluster(partitionStream->GetCluster());
+        released.mutable_topic()->set_path(TStringType{partitionStream->GetTopicPath()});
+        released.set_cluster(TStringType{partitionStream->GetCluster()});
         released.set_partition(partitionStream->GetPartitionId());
         released.set_assign_id(partitionStream->GetAssignId());
     } else {
@@ -754,8 +754,8 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::RequestPartitionStream
 
     if constexpr (UseMigrationProtocol) {
         auto& status = *req.mutable_status();
-        status.mutable_topic()->set_path(partitionStream->GetTopicPath());
-        status.set_cluster(partitionStream->GetCluster());
+        status.mutable_topic()->set_path(TStringType{partitionStream->GetTopicPath()});
+        status.set_cluster(TStringType{partitionStream->GetCluster()});
         status.set_partition(partitionStream->GetPartitionId());
         status.set_assign_id(partitionStream->GetAssignId());
     } else {
@@ -2689,7 +2689,7 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
                     ) {
                         const ICodec* codecImpl = TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(data.codec()));
                         std::string decompressed = codecImpl->Decompress(data.data());
-                        data.set_data(decompressed);
+                        data.set_data(TStringType{decompressed});
                         data.set_codec(Ydb::PersQueue::V1::CODEC_RAW);
                     }
                 } else {
@@ -2699,7 +2699,7 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
                     ) {
                         const ICodec* codecImpl = TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(batch.codec()));
                         std::string decompressed = codecImpl->Decompress(data.data());
-                        data.set_data(decompressed);
+                        data.set_data(TStringType{decompressed});
                     }
                 }
 

@@ -2,6 +2,8 @@
 
 #include "grpc_common.h"
 
+#include <ydb-cpp-sdk/type_switcher.h>
+
 #include <util/thread/factory.h>
 #include <util/string/builder.h>
 #include <grpcpp/grpcpp.h>
@@ -203,7 +205,7 @@ class TGRpcRequestProcessorCommon {
 protected:
     void ApplyMeta(const TCallMeta& meta) {
         for (const auto& rec : meta.Aux) {
-            Context.AddMetadata(rec.first, rec.second);
+            Context.AddMetadata(NYdb::TStringType{rec.first}, NYdb::TStringType{rec.second});
         }
         if (meta.CallCredentials) {
             Context.set_credentials(meta.CallCredentials);
@@ -529,7 +531,7 @@ private:
     std::shared_mutex RWMutex_;
     std::unordered_map<std::string, TStubsHolder> Pool_;
     std::multimap<TInstant, std::string> LastUsedQueue_;
-    TTcpKeepAliveSettings TcpKeepAliveSettings_;
+    [[maybe_unused]] TTcpKeepAliveSettings TcpKeepAliveSettings_;
     TDuration ExpireTime_;
     TDuration UpdateReUseTime_;
     void EraseFromQueueByTime(const TInstant& lastUseTime, const std::string& channelId);

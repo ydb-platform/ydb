@@ -37,8 +37,8 @@ public:
     static const Ydb::Type& GetProto(const TType& type);
     static const Ydb::Value& GetProto(const TValue& value);
     static const Ydb::ResultSet& GetProto(const TResultSet& resultSet);
-    static const ::google::protobuf::Map<std::string, Ydb::TypedValue>& GetProtoMap(const TParams& params);
-    static ::google::protobuf::Map<std::string, Ydb::TypedValue>* GetProtoMapPtr(TParams& params);
+    static const ::google::protobuf::Map<TStringType, Ydb::TypedValue>& GetProtoMap(const TParams& params);
+    static ::google::protobuf::Map<TStringType, Ydb::TypedValue>* GetProtoMapPtr(TParams& params);
     static const Ydb::TableStats::QueryStats& GetProto(const NTable::TQueryStats& queryStats);
     static const Ydb::Table::DescribeTableResult& GetProto(const NTable::TTableDescription& tableDescription);
     static const Ydb::Topic::DescribeTopicResult& GetProto(const NYdb::NTopic::TTopicDescription& topicDescription);

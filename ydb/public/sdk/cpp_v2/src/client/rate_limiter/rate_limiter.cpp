@@ -50,10 +50,10 @@ public:
     template <class TRequest, class TSettings>
     static TRequest MakePropsCreateOrAlterRequest(const std::string& coordinationNodePath, const std::string& resourcePath, const TSettings& settings) {
         TRequest request = MakeOperationRequest<TRequest>(settings);
-        request.set_coordination_node_path(coordinationNodePath);
+        request.set_coordination_node_path(TStringType{coordinationNodePath});
 
         Ydb::RateLimiter::Resource& resource = *request.mutable_resource();
-        resource.set_resource_path(resourcePath);
+        resource.set_resource_path(TStringType{resourcePath});
 
         Ydb::RateLimiter::HierarchicalDrrSettings& hdrr = *resource.mutable_hierarchical_drr();
         if (settings.MaxUnitsPerSecond_) {
@@ -92,8 +92,8 @@ public:
 
     TAsyncStatus DropResource(const std::string& coordinationNodePath, const std::string& resourcePath, const TDropResourceSettings& settings) {
         auto request = MakeOperationRequest<Ydb::RateLimiter::DropResourceRequest>(settings);
-        request.set_coordination_node_path(coordinationNodePath);
-        request.set_resource_path(resourcePath);
+        request.set_coordination_node_path(TStringType{coordinationNodePath});
+        request.set_resource_path(TStringType{resourcePath});
 
         return RunSimple<Ydb::RateLimiter::V1::RateLimiterService, Ydb::RateLimiter::DropResourceRequest, Ydb::RateLimiter::DropResourceResponse>(
             std::move(request),
@@ -103,8 +103,8 @@ public:
 
     TAsyncListResourcesResult ListResources(const std::string& coordinationNodePath, const std::string& resourcePath, const TListResourcesSettings& settings) {
         auto request = MakeOperationRequest<Ydb::RateLimiter::ListResourcesRequest>(settings);
-        request.set_coordination_node_path(coordinationNodePath);
-        request.set_resource_path(resourcePath);
+        request.set_coordination_node_path(TStringType{coordinationNodePath});
+        request.set_resource_path(TStringType{resourcePath});
         request.set_recursive(settings.Recursive_);
 
         auto promise = NThreading::NewPromise<TListResourcesResult>();
@@ -138,8 +138,8 @@ public:
 
     TAsyncDescribeResourceResult DescribeResource(const std::string& coordinationNodePath, const std::string& resourcePath, const TDescribeResourceSettings& settings) {
         auto request = MakeOperationRequest<Ydb::RateLimiter::DescribeResourceRequest>(settings);
-        request.set_coordination_node_path(coordinationNodePath);
-        request.set_resource_path(resourcePath);
+        request.set_coordination_node_path(TStringType{coordinationNodePath});
+        request.set_resource_path(TStringType{resourcePath});
 
         auto promise = NThreading::NewPromise<TDescribeResourceResult>();
 
@@ -167,8 +167,8 @@ public:
 
     TAsyncStatus AcquireResource(const std::string& coordinationNodePath, const std::string& resourcePath, const TAcquireResourceSettings& settings) {
         auto request = MakeOperationRequest<Ydb::RateLimiter::AcquireResourceRequest>(settings);
-        request.set_coordination_node_path(coordinationNodePath);
-        request.set_resource_path(resourcePath);
+        request.set_coordination_node_path(TStringType{coordinationNodePath});
+        request.set_resource_path(TStringType{resourcePath});
 
         if (settings.IsUsedAmount_) {
             request.set_used(settings.Amount_.value());

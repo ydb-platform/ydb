@@ -274,6 +274,10 @@ class StaticConfigGenerator(object):
     @property
     def table_service_config(self):
         return self.__cluster_details.get_service("table_service_config")
+    
+    @property
+    def column_shard_config(self):
+        return self.__cluster_details.get_service("column_shard_config")
 
     @property
     def hive_config(self):
@@ -385,6 +389,9 @@ class StaticConfigGenerator(object):
 
         if self.table_service_config:
             normalized_config["table_service_config"] = self.table_service_config
+
+        if self.column_shard_config:
+            normalized_config["column_shard_config"] = self.column_shard_config
 
         if self.__cluster_details.blob_storage_config is not None:
             normalized_config["blob_storage_config"] = self.__cluster_details.blob_storage_config

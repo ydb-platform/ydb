@@ -14,7 +14,7 @@ namespace NPrivate {
 namespace {
 
 TString MakeSecretKeyName(const TString& prefix, const TString& folderId, const TString& name) {
-    return TStringBuilder{} << prefix << "_" << folderId << "_" << name << Endl;
+    return TStringBuilder{} << prefix << "_" << folderId << "_" << name;
 }
 
 }

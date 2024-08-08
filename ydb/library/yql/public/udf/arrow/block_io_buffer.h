@@ -2,6 +2,7 @@
 
 #include <util/generic/strbuf.h>
 #include <util/generic/vector.h>
+#include <util/system/unaligned_mem.h>
 
 namespace NYql {
 namespace NUdf {
@@ -22,8 +23,7 @@ public:
     template <typename T>
     T PopNumber() {
         Ensure(sizeof(T));
-        T t;
-        std::memcpy(&t, Buf_.Data() + Pos_, sizeof(t));
+        T t = ReadUnaligned<T>(Buf_.Data() + Pos_);
         Pos_ += sizeof(T);
         return t;
     }
@@ -57,7 +57,7 @@ public:
     template <typename T>
     void PushNumber(T t) {
         Ensure(sizeof(T));
-        std::memcpy(Vec_.data() + Pos_, &t, sizeof(T));
+        WriteUnaligned<T>(Vec_.data() + Pos_, t);
         Pos_ += sizeof(T);
     }
 

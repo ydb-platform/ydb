@@ -149,7 +149,7 @@ public:
         }
 
         LOG_D("Recieved subscription request, Database: " << database << ", PoolId: " << poolId);
-        Register(CreatePoolFetcherActor(SelfId(), database, poolId, nullptr));
+        GetOrCreateDatabaseState(database)->DoSubscribeRequest(std::move(ev));
     }
 
     void Handle(TEvPlaceRequestIntoPool::TPtr& ev) {
@@ -228,15 +228,16 @@ private:
     void Handle(TEvPrivate::TEvFetchPoolResponse::TPtr& ev) {
         const TString& database = ev->Get()->Database;
         const TString& poolId = ev->Get()->PoolId;
-        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-            Send(MakeKqpProxyID(SelfId().NodeId()), new TEvUpdatePoolInfo(database, poolId, std::nullopt, std::nullopt));
-            return;
+
+        TActorId poolHandler;
+        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
+            LOG_D("Successfully fetched pool " << poolId << ", Database: " << database);
+            poolHandler = GetOrCreatePoolState(database, poolId, ev->Get()->PoolConfig)->PoolHandler;
+        } else {
+            LOG_W("Failed to fetch pool " << poolId << ", Database: " << database << ", status: " << ev->Get()->Status << ", issues: " << ev->Get()->Issues.ToOneLineString());
         }
 
-        LOG_D("Successfully fetched pool " << poolId << ", Database: " << database);
-
-        auto poolState = GetOrCreatePoolState(database, poolId, ev->Get()->PoolConfig);
-        Send(poolState->PoolHandler, new TEvPrivate::TEvUpdateSchemeBoardSubscription(ev->Get()->PathId));
+        GetOrCreateDatabaseState(database)->UpdatePoolInfo(ev, poolHandler);
     }
 
     void Handle(TEvPrivate::TEvResolvePoolResponse::TPtr& ev) {

@@ -30,7 +30,7 @@ struct TEvPrivate {
         EvResignPoolHandler,
         EvStopPoolHandler,
         EvCancelRequest,
-        EvUpdateSchemeBoardSubscription,
+        EvUpdatePoolSubscription,
 
         EvCpuQuotaRequest,
         EvCpuQuotaResponse,
@@ -176,12 +176,14 @@ struct TEvPrivate {
         const TString SessionId;
     };
 
-    struct TEvUpdateSchemeBoardSubscription : public NActors::TEventLocal<TEvUpdateSchemeBoardSubscription, EvUpdateSchemeBoardSubscription> {
-        explicit TEvUpdateSchemeBoardSubscription(TPathId pathId)
+    struct TEvUpdatePoolSubscription : public NActors::TEventLocal<TEvUpdatePoolSubscription, EvUpdatePoolSubscription> {
+        explicit TEvUpdatePoolSubscription(TPathId pathId, const std::unordered_set<TActorId>& subscribers)
             : PathId(pathId)
+            , Subscribers(subscribers)
         {}
 
         const TPathId PathId;
+        const std::unordered_set<TActorId> Subscribers;
     };
 
     // Cpu load requests

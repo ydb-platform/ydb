@@ -19,10 +19,21 @@ struct TDatabaseState {
     bool& EnabledResourcePoolsOnServerless;
 
     std::vector<TEvPlaceRequestIntoPool::TPtr> PendingRequersts = {};
+    std::unordered_map<TString, std::unordered_set<TActorId>> PendingSubscriptions = {};
     bool HasDefaultPool = false;
     bool Serverless = false;
 
     TInstant LastUpdateTime = TInstant::Zero();
+
+    void DoSubscribeRequest(TEvSubscribeOnPoolChanges::TPtr ev) {
+        const TString& poolId = ev->Get()->PoolId;
+        auto& subscribers = PendingSubscriptions[poolId];
+        if (subscribers.empty()) {
+            ActorContext.Register(CreatePoolFetcherActor(ActorContext.SelfID, ev->Get()->Database, poolId, nullptr));
+        }
+
+        subscribers.emplace(ev->Sender);
+    }
 
     void DoPlaceRequest(TEvPlaceRequestIntoPool::TPtr ev) {
         TString database = ev->Get()->Database;
@@ -33,6 +44,24 @@ struct TDatabaseState {
         } else {
             StartPendingRequests();
         }
+    }
+
+    void UpdatePoolInfo(const TEvPrivate::TEvFetchPoolResponse::TPtr& ev, NActors::TActorId poolHandler) {
+        const TString& poolId = ev->Get()->PoolId;
+        auto& subscribers = PendingSubscriptions[poolId];
+        if (subscribers.empty()) {
+            return;
+        }
+
+        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS && poolHandler) {
+            ActorContext.Send(poolHandler, new TEvPrivate::TEvUpdatePoolSubscription(ev->Get()->PathId, subscribers));
+        } else {
+            const TString& database = ev->Get()->Database;
+            for (const auto& subscriber : subscribers) {
+                ActorContext.Send(subscriber, new TEvUpdatePoolInfo(database, poolId, std::nullopt, std::nullopt));
+            }
+        }
+        subscribers.clear();
     }
 
     void UpdateDatabaseInfo(const TEvPrivate::TEvFetchDatabaseResponse::TPtr& ev) {

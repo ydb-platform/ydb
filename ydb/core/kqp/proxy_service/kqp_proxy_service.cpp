@@ -1581,7 +1581,7 @@ private:
         }
 
         const auto& poolId = ev->Get()->GetPoolId();
-        const auto& poolInfo = ResourcePoolsCache.GetPoolInfo(database, poolId);
+        const auto& poolInfo = ResourcePoolsCache.GetPoolInfo(database, poolId, ActorContext());
         if (!poolInfo) {
             return true;
         }

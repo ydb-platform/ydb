@@ -462,25 +462,27 @@ public:
     }
 
     TString GetPoolId(const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TActorContext actorContext) {
-        TDatabaseInfo& databaseInfo = *GetOrCreateDatabaseInfo(database);
-        if (const auto& poolId = GetPoolIdFromClassifiers(database, userToken ? userToken->GetUserSID() : "", databaseInfo, userToken, actorContext)) {
-            return poolId;
+        if (!userToken || userToken->GetSerializedToken().empty()) {
+            return NResourcePool::DEFAULT_POOL_ID;
         }
 
-        if (userToken) {
-            for (const auto& userSID : userToken->GetGroupSIDs()) {
-                if (const auto& poolId = GetPoolIdFromClassifiers(database, userSID, databaseInfo, userToken, actorContext)) {
-                    return poolId;
-                }
+        TDatabaseInfo& databaseInfo = *GetOrCreateDatabaseInfo(database);
+        if (const auto& poolId = GetPoolIdFromClassifiers(database, userToken->GetUserSID(), databaseInfo, userToken, actorContext)) {
+            return poolId;
+        }
+        for (const auto& userSID : userToken->GetGroupSIDs()) {
+            if (const auto& poolId = GetPoolIdFromClassifiers(database, userSID, databaseInfo, userToken, actorContext)) {
+                return poolId;
             }
         }
 
         return NResourcePool::DEFAULT_POOL_ID;
     }
 
-    std::optional<TPoolInfo> GetPoolInfo(const TString& database, const TString& poolId) const {
+    std::optional<TPoolInfo> GetPoolInfo(const TString& database, const TString& poolId, TActorContext actorContext) const {
         auto it = PoolsCache.find(GetPoolKey(database, poolId));
         if (it == PoolsCache.end()) {
+            actorContext.Send(MakeKqpWorkloadServiceId(actorContext.SelfID.NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(database, poolId));
             return std::nullopt;
         }
         return it->second;

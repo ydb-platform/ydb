@@ -6,50 +6,6 @@ using namespace NTableClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TOrderedByIdTableDescriptor::TOrderedByIdTableDescriptor()
-    : NameTable(New<TNameTable>())
-    , Index(NameTable)
-{ }
-
-const TOrderedByIdTableDescriptor& TOrderedByIdTableDescriptor::Get()
-{
-    static const TOrderedByIdTableDescriptor descriptor;
-    return descriptor;
-}
-
-TOrderedByIdTableDescriptor::TIndex::TIndex(const TNameTablePtr& nameTable)
-    : IdHash(nameTable->RegisterName("id_hash"))
-    , IdHi(nameTable->RegisterName("id_hi"))
-    , IdLo(nameTable->RegisterName("id_lo"))
-    , State(nameTable->RegisterName("state"))
-    , AuthenticatedUser(nameTable->RegisterName("authenticated_user"))
-    , OperationType(nameTable->RegisterName("operation_type"))
-    , Progress(nameTable->RegisterName("progress"))
-    , Spec(nameTable->RegisterName("spec"))
-    , BriefProgress(nameTable->RegisterName("brief_progress"))
-    , BriefSpec(nameTable->RegisterName("brief_spec"))
-    , StartTime(nameTable->RegisterName("start_time"))
-    , FinishTime(nameTable->RegisterName("finish_time"))
-    , FilterFactors(nameTable->RegisterName("filter_factors"))
-    , Result(nameTable->RegisterName("result"))
-    , Events(nameTable->RegisterName("events"))
-    , Alerts(nameTable->RegisterName("alerts"))
-    , SlotIndex(nameTable->RegisterName("slot_index"))
-    , UnrecognizedSpec(nameTable->RegisterName("unrecognized_spec"))
-    , FullSpec(nameTable->RegisterName("full_spec"))
-    , RuntimeParameters(nameTable->RegisterName("runtime_parameters"))
-    , SchedulingAttributesPerPoolTree(nameTable->RegisterName("scheduling_attributes_per_pool_tree"))
-    , SlotIndexPerPoolTree(nameTable->RegisterName("slot_index_per_pool_tree"))
-    , TaskNames(nameTable->RegisterName("task_names"))
-    , ExperimentAssignments(nameTable->RegisterName("experiment_assignments"))
-    , ExperimentAssignmentNames(nameTable->RegisterName("experiment_assignment_names"))
-    , ControllerFeatures(nameTable->RegisterName("controller_features"))
-    , AlertEvents(nameTable->RegisterName("alert_events"))
-    , ProvidedSpec(nameTable->RegisterName("provided_spec"))
-{ }
-
-////////////////////////////////////////////////////////////////////////////////
-
 TOrderedByStartTimeTableDescriptor::TOrderedByStartTimeTableDescriptor()
     : NameTable(New<TNameTable>())
     , Index(NameTable)

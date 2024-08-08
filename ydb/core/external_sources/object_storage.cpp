@@ -355,15 +355,13 @@ struct TObjectStorageExternalSource : public IExternalSource {
             auto promise = NThreading::NewPromise<TMetadataResult>();
             auto schemaToMetadata = [meta](NThreading::TPromise<TMetadataResult> metaPromise, NObjectStorage::TEvInferredFileSchema&& response) {
                 TMetadataResult result;
-                if (std::holds_alternative<NYql::TIssues>(response.Response)) {
-                    auto& issues = std::get<NYql::TIssues>(response.Response);
-                    metaPromise.SetValue(NYql::NCommon::ResultFromError<TMetadataResult>(issues));
+                if (!response.Status.ok()) {
+                    metaPromise.SetValue(NYql::NCommon::ResultFromError<TMetadataResult>(response.Issues));
                     return;
                 }
-                auto& fields = std::get<std::vector<Ydb::Column>>(response.Response);
                 meta->Changed = true;
                 meta->Schema.clear_column();
-                for (const auto& column : fields) {
+                for (const auto& column : response.Fields) {
                     auto& destColumn = *meta->Schema.add_column();
                     destColumn = column;
                 }

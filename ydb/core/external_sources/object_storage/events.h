@@ -128,15 +128,19 @@ struct TEvInferFileSchema : public NActors::TEventLocal<TEvInferFileSchema, EvIn
 struct TEvInferredFileSchema : public NActors::TEventLocal<TEvInferredFileSchema, EvInferredFileSchema> {
     TEvInferredFileSchema(TString path, std::vector<Ydb::Column>&& fields)
         : Path{std::move(path)}
-        , Response{std::move(fields)}
+        , Status{arrow::Status::OK()}
+        , Fields{std::move(fields)}
     {}
     TEvInferredFileSchema(TString path, NYql::TIssues&& issues)
         : Path{std::move(path)}
-        , Response{std::move(issues)}
+        , Status{arrow::Status::Invalid("Invalid file schema")}
+        , Issues{std::move(issues)}
     {}
 
     TString Path;
-    std::variant<std::vector<Ydb::Column>, NYql::TIssues> Response;
+    arrow::Status Status;
+    std::vector<Ydb::Column> Fields;
+    NYql::TIssues Issues;
 };
 
 inline TEvInferredFileSchema* MakeErrorSchema(TString path, NFq::TIssuesIds::EIssueCode code, TString message) {

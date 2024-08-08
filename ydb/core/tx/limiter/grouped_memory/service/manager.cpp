@@ -63,21 +63,29 @@ void TManager::RegisterAllocation(
     const std::shared_ptr<IAllocation>& task, const std::shared_ptr<TStageFeatures>& stage, const ui64 externalGroupId) {
     AFL_VERIFY(task);
     AFL_VERIFY(stage);
-    const ui64 internalGroupId = GetInternalGroupIdVerified(externalGroupId);
-    auto allocationInfo = RegisterAllocationImpl(task, stage);
-    allocationInfo->AddGroupId(internalGroupId);
-    if (task->IsAllocated()) {
-        ReadyAllocations.AddAllocation(internalGroupId, allocationInfo);
-    } else if (WaitAllocations.GetMinGroupId().value_or(internalGroupId) < internalGroupId) {
-        WaitAllocations.AddAllocation(internalGroupId, allocationInfo);
-    } else if (allocationInfo->IsAllocatable(0) || internalGroupId <= GetMinInternalGroupIdOptional().value_or(internalGroupId)) {
-        if (!allocationInfo->Allocate(OwnerActorId)) {
-            UnregisterAllocation(allocationInfo->GetIdentifier());
-        } else {
-            ReadyAllocations.AddAllocation(internalGroupId, allocationInfo);
-        }
+    const std::optional<ui64> internalGroupIdOptional = GetInternalGroupIdOptional(externalGroupId);
+    if (!internalGroupIdOptional) {
+        AFL_VERIFY(!task->OnAllocated(std::make_shared<TAllocationGuard>(OwnerActorId, task->GetIdentifier(), task->GetMemory()), task))("ext_group", externalGroupId)(
+                                                                 "min_group", GetMinInternalGroupIdOptional())("stage", stage->GetName());
+        AFL_VERIFY(!HasAllocationInfo(task->GetIdentifier()));
     } else {
-        WaitAllocations.AddAllocation(internalGroupId, allocationInfo);
+        const ui64 internalGroupId = *internalGroupIdOptional;
+        auto allocationInfo = RegisterAllocationImpl(task, stage);
+        allocationInfo->AddGroupId(*internalGroupIdOptional);
+
+        if (task->IsAllocated()) {
+            ReadyAllocations.AddAllocation(internalGroupId, allocationInfo);
+        } else if (WaitAllocations.GetMinGroupId().value_or(internalGroupId) < internalGroupId) {
+            WaitAllocations.AddAllocation(internalGroupId, allocationInfo);
+        } else if (allocationInfo->IsAllocatable(0) || internalGroupId <= GetMinInternalGroupIdOptional().value_or(internalGroupId)) {
+            if (!allocationInfo->Allocate(OwnerActorId)) {
+                UnregisterAllocation(allocationInfo->GetIdentifier());
+            } else {
+                ReadyAllocations.AddAllocation(internalGroupId, allocationInfo);
+            }
+        } else {
+            WaitAllocations.AddAllocation(internalGroupId, allocationInfo);
+        }
     }
     RefreshSignals();
 }

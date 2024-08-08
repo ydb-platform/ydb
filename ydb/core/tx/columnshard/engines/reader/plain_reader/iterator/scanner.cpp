@@ -243,7 +243,7 @@ TConclusionStatus TScanHead::DetectSourcesFeatureInContextIntervalScan(const THa
 }
 
 TConclusion<bool> TScanHead::BuildNextInterval() {
-    if (AbortFlag) {
+    if (Context->IsAborted()) {
         return false;
     }
     while (BorderPoints.size()) {
@@ -304,7 +304,7 @@ bool TScanHead::IsReverse() const {
 }
 
 void TScanHead::Abort() {
-    AbortFlag = true;
+    AFL_VERIFY(Context->IsAborted());
     THashSet<ui32> sourceIds;
     for (auto&& i : FetchingIntervals) {
         for (auto&& s : i.second->GetSources()) {

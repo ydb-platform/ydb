@@ -19,7 +19,7 @@ bool TStepAction::DoApply(IDataReader& /*owner*/) const {
 }
 
 TConclusionStatus TStepAction::DoExecuteImpl() {
-    if (Source->IsAborted()) {
+    if (Source->GetContext()->IsAborted()) {
         return TConclusionStatus::Success();
     }
     auto executeResult = Cursor.Execute(Source);
@@ -180,7 +180,7 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
 bool TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
     const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) {
     auto data = Source.lock();
-    if (!data) {
+    if (!data || data->GetContext()->IsAborted()) {
         guard->Release();
         return false;
     }

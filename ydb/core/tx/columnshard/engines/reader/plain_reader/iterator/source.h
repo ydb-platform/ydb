@@ -44,7 +44,6 @@ private:
     YDB_READONLY(ui32, IntervalsCount, 0);
     virtual NJson::TJsonValue DoDebugJson() const = 0;
     bool MergingStartedFlag = false;
-    bool AbortedFlag = false;
     TAtomic SourceStartedFlag = 0;
     std::shared_ptr<TFetchingScript> FetchingPlan;
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
@@ -86,9 +85,6 @@ public:
         ResourceGuards.emplace_back(guard);
     }
 
-    bool IsAborted() const {
-        return AbortedFlag;
-    }
     bool IsSourceInMemory() const {
         return IsSourceInMemoryFlag;
     }
@@ -171,12 +167,11 @@ public:
     }
 
     void StartMerging() {
-        Y_ABORT_UNLESS(!MergingStartedFlag);
+        AFL_VERIFY(!MergingStartedFlag);
         MergingStartedFlag = true;
     }
 
     void Abort() {
-        AbortedFlag = true;
         Intervals.clear();
         DoAbort();
     }
@@ -248,7 +243,7 @@ public:
     }
 
     virtual ~IDataSource() {
-        Y_ABORT_UNLESS(AbortedFlag || Intervals.empty());
+        AFL_VERIFY(Intervals.empty());
     }
 };
 

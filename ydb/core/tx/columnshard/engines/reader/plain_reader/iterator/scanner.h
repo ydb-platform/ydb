@@ -82,12 +82,11 @@ private:
     ui64 MaxInFlight = 256;
     ui64 MaxInFlightMemory = TGlobalLimits::ScanMemoryLimit;
     ui64 ZeroCount = 0;
-    bool AbortFlag = false;
     void DrainSources();
     [[nodiscard]] TConclusionStatus DetectSourcesFeatureInContextIntervalScan(const THashMap<ui32, std::shared_ptr<IDataSource>>& intervalSources, const bool isExclusiveInterval) const;
 public:
     void OnSentDataFromInterval(const ui32 intervalIdx) const {
-        if (AbortFlag) {
+        if (Context->IsAborted()) {
             return;
         }
         auto it = FetchingIntervals.find(intervalIdx);

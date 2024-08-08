@@ -844,9 +844,10 @@ public:
         const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
         HasOlapTable |= ::NKikimr::NKqp::HasOlapTableReadInTx(phyQuery) || ::NKikimr::NKqp::HasOlapTableWriteInTx(phyQuery);
         HasOltpTable |= ::NKikimr::NKqp::HasOltpTableReadInTx(phyQuery) || ::NKikimr::NKqp::HasOltpTableWriteInTx(phyQuery);
-        if (HasOlapTable && HasOltpTable) {
+        HasTableWrite |= ::NKikimr::NKqp::HasOlapTableWriteInTx(phyQuery) || ::NKikimr::NKqp::HasOltpTableWriteInTx(phyQuery);
+        if (HasOlapTable && HasOltpTable && HasTableWrite) {
             ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
-                            "Transactions between column and row tables are disabled at current time.");
+                            "Write transactions between column and row tables are disabled at current time.");
             return false;
         }
         QueryState->TxCtx->SetTempTables(QueryState->TempTablesState);
@@ -2551,6 +2552,7 @@ private:
 
     bool HasOlapTable = false;
     bool HasOltpTable = false;
+    bool HasTableWrite = false;
 
     TGUCSettings::TPtr GUCSettings;
 };

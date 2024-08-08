@@ -3870,6 +3870,73 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         AssertTableReads(result, "/Root/SecondaryKeys/Index/indexImplTable", 1);
     }
 
+    Y_UNIT_TEST(QueryServiceAutoChoose) {
+        TKikimrSettings kisettings;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetIndexAutoChooseMode(NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_MAX_USED_PREFIX);
+        kisettings.SetAppConfig(appConfig);
+
+        TKikimrRunner kikimr(kisettings);
+
+        auto db = kikimr.GetTableClient();
+        auto client = kikimr.GetQueryClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+
+                create table demo_ba(id text, some text, ref1 text, ref2 text, primary key(id));
+                create table demo_ref1(id text, code text, some text, primary key(id), index ix_code global on (code));
+                create table demo_ref2(id text, code text, some text, primary key(id), index ix_code global on (code));
+            )").GetValueSync());
+        }
+        
+        auto query = R"(
+                  upsert into demo_ref1 
+                  select id, id as code, "some r1 for "u || id AS some from (
+                    select column0 as id from (
+                         values ("r1-0"u),("r1-1"u),("r1-2"u),("r1-3"u),("r1-4"u),
+                                ("r1-5"u),("r1-6"u),("r1-7"u),("r1-8"u),("r1-9"u)
+                    ) as q1);
+
+                upsert into demo_ref2 
+                  select id, id as code, "some r2 for "u || id AS some from (
+                    select column0 as id from (
+                         values ("r2-0"u),("r2-1"u),("r2-2"u),("r2-3"u),("r2-4"u),
+                                ("r2-5"u),("r2-6"u),("r2-7"u),("r2-8"u),("r2-9"u)
+                    ) as q1);
+
+                upsert into demo_ba
+                select "ba#"u||cast(num as Utf8) as id,
+                   "some for ba #"u||cast(num as Utf8) as some,
+                   r1id as ref1, r2id as ref2
+                from (
+                select row_number() over w as num,
+                  r1.id as r1id, r2.id as r2id
+                from demo_ref1 as r1
+                cross join demo_ref2 r2
+                window w as (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+                ) as q1;
+            )";
+
+        auto settings = NYdb::NQuery::TExecuteQuerySettings()
+            .Syntax(NYdb::NQuery::ESyntax::YqlV1)
+            .ConcurrentResultSets(false);
+        {
+            auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            //CompareYson(R"([[[1];["321"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            //CompareYson(R"([[["111"];[1]]])", FormatResultSetYson(result.GetResultSet(1)));
+        }
+        {
+            auto it = client.StreamExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            Cerr << StreamResultToYson(it);
+        }
+
+    }
 
     Y_UNIT_TEST(ComplexLookupLimit) {
         TKikimrSettings settings;

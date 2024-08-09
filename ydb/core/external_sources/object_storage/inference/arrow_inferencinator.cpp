@@ -153,6 +153,14 @@ bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type) {
     }
     return false;
 }
+
+inline TEvInferredFileSchema* MakeErrorSchema(TString path, NFq::TIssuesIds::EIssueCode code, TString message) {
+    NYql::TIssues issues;
+    issues.AddIssue(std::move(message));
+    issues.back().SetCode(code, NYql::TSeverityIds::S_ERROR);
+    return new TEvInferredFileSchema{std::move(path), std::move(issues)};
+}
+
 }
 
 struct FormatConfig {

@@ -266,6 +266,8 @@ private:
 
     bool ClusterExpr(const TRule_cluster_expr& node, bool allowWildcard, bool allowBinding, TString& service, TDeferredAtom& cluster, bool& isBinding);
     bool StructLiteralItem(TVector<TNodePtr>& labels, const TRule_expr& label, TVector<TNodePtr>& values, const TRule_expr& value);
+    bool ValidateTableSettings(const TTableSettings& settings);
+
 protected:
     NSQLTranslation::ESqlMode Mode;
 };

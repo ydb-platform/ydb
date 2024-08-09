@@ -414,6 +414,7 @@ public:
     bool MergeTasksInstant(ui64 recipientTaskId, ui64 donorTaskId, const TActorId &sender) override;
     bool ReduceTaskResourcesInstant(ui64 taskId, const TResourceValues& reduceBy, const TActorId& sender) override;
 
+    NKikimrResourceBroker::TResourceBrokerConfig GetConfig() const;
     void Configure(const NKikimrResourceBroker::TResourceBrokerConfig &config);
 
     using TOpError = THolder<TEvResourceBroker::TEvTaskOperationError>;
@@ -478,8 +479,8 @@ private:
     void Handle(TEvResourceBroker::TEvResourceBrokerRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx);
 
-    NKikimrResourceBroker::TResourceBrokerConfig Config;
-    ::NMonitoring::TDynamicCounterPtr Counters;
+    NKikimrResourceBroker::TResourceBrokerConfig BootstrapConfig;
+    ::NMonitoring::TDynamicCounterPtr BootstrapCounters;
     TIntrusivePtr<TResourceBroker> ResourceBroker;
 };
 

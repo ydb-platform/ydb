@@ -14,6 +14,7 @@ class IDataSource;
 class TSpecialReadContext {
 private:
     YDB_READONLY_DEF(std::shared_ptr<TReadContext>, CommonContext);
+    YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TProcessGuard>, ProcessMemoryGuard);
 
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, SpecColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, MergeColumns);
@@ -46,6 +47,10 @@ public:
     const ui64 RejectMemoryIntervalLimit = NYDBTest::TControllers::GetColumnShardController()->GetRejectMemoryIntervalLimit(DefaultRejectMemoryIntervalLimit);
     const ui64 ReadSequentiallyBufferSize = DefaultReadSequentiallyBufferSize;
 
+    ui64 GetProcessMemoryControlId() const {
+        AFL_VERIFY(ProcessMemoryGuard);
+        return ProcessMemoryGuard->GetProcessId();
+    }
     ui64 GetMemoryForSources(const THashMap<ui32, std::shared_ptr<IDataSource>>& sources);
     ui64 GetRequestedMemoryBytes() const {
         return MergeStageMemory->GetFullMemory() + FilterStageMemory->GetFullMemory() + FetchingStageMemory->GetFullMemory();

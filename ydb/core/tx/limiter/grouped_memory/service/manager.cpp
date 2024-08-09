@@ -4,139 +4,90 @@
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
-std::vector<std::shared_ptr<TManager::TAllocationInfo>> TManager::TGrouppedAllocations::AllocatePossible(const bool force) {
-    std::vector<std::shared_ptr<TManager::TAllocationInfo>> result;
-    ui64 allocationMemory = 0;
-    for (auto&& [_, allocation] : Allocations) {
-        if (allocation->IsAllocatable(allocationMemory) || force) {
-            allocationMemory += allocation->GetAllocatedVolume();
-            result.emplace_back(allocation);
-        }
-    }
-    return result;
-}
-
-ui64 TManager::BuildInternalGroupId(const ui64 externalGroupId) {
-    auto it = ExternalGroupIntoInternalGroup.find(externalGroupId);
-    if (it == ExternalGroupIntoInternalGroup.end()) {
-        it = ExternalGroupIntoInternalGroup.emplace(externalGroupId, externalGroupId).first;
-    }
-    return it->second;
-}
-
-std::optional<ui64> TManager::GetInternalGroupIdOptional(const ui64 externalGroupId) const {
-    auto it = ExternalGroupIntoInternalGroup.find(externalGroupId);
-    if (it != ExternalGroupIntoInternalGroup.end()) {
-        return it->second;
-    }
-    return std::nullopt;
-}
-
-ui64 TManager::GetInternalGroupIdVerified(const ui64 externalGroupId) const {
-    auto it = ExternalGroupIntoInternalGroup.find(externalGroupId);
-    AFL_VERIFY(it != ExternalGroupIntoInternalGroup.end());
-    return it->second;
-}
-
-const std::shared_ptr<TManager::TAllocationInfo>& TManager::RegisterAllocationImpl(
-    const std::shared_ptr<IAllocation>& task, const std::shared_ptr<TStageFeatures>& stage) {
-    auto it = AllocationInfo.find(task->GetIdentifier());
-    if (it == AllocationInfo.end()) {
-        it = AllocationInfo.emplace(task->GetIdentifier(), std::make_shared<TAllocationInfo>(task, stage)).first;
-    }
-    return it->second;
-}
-
-std::optional<ui64> TManager::GetMinInternalGroupIdOptional() const {
-    if (ExternalGroupIntoInternalGroup.empty()) {
-        return {};
-    } else {
-        return ExternalGroupIntoInternalGroup.begin()->first;
-    }
-}
-
-void TManager::RegisterGroup(const ui64 externalGroupId) {
-    BuildInternalGroupId(externalGroupId);
-}
-
-void TManager::RegisterAllocation(
-    const std::shared_ptr<IAllocation>& task, const std::shared_ptr<TStageFeatures>& stage, const ui64 externalGroupId) {
-    AFL_VERIFY(task);
-    AFL_VERIFY(stage);
-    const std::optional<ui64> internalGroupIdOptional = GetInternalGroupIdOptional(externalGroupId);
-    if (!internalGroupIdOptional) {
-        AFL_VERIFY(!task->OnAllocated(std::make_shared<TAllocationGuard>(OwnerActorId, task->GetIdentifier(), task->GetMemory()), task))("ext_group", externalGroupId)(
-                                                                 "min_group", GetMinInternalGroupIdOptional())("stage", stage->GetName());
-        AFL_VERIFY(!HasAllocationInfo(task->GetIdentifier()));
-    } else {
-        const ui64 internalGroupId = *internalGroupIdOptional;
-        auto allocationInfo = RegisterAllocationImpl(task, stage);
-        allocationInfo->AddGroupId(*internalGroupIdOptional);
-
-        if (task->IsAllocated()) {
-            ReadyAllocations.AddAllocation(internalGroupId, allocationInfo);
-        } else if (WaitAllocations.GetMinGroupId().value_or(internalGroupId) < internalGroupId) {
-            WaitAllocations.AddAllocation(internalGroupId, allocationInfo);
-        } else if (allocationInfo->IsAllocatable(0) || internalGroupId <= GetMinInternalGroupIdOptional().value_or(internalGroupId)) {
-            if (!allocationInfo->Allocate(OwnerActorId)) {
-                UnregisterAllocation(allocationInfo->GetIdentifier());
-            } else {
-                ReadyAllocations.AddAllocation(internalGroupId, allocationInfo);
-            }
-        } else {
-            WaitAllocations.AddAllocation(internalGroupId, allocationInfo);
-        }
-    }
+void TManager::RegisterGroup(const ui64 externalProcessId, const ui64 externalGroupId) {
+    TProcessMemory& process = GetProcessMemoryVerified(ProcessIds.GetInternalIdVerified(externalProcessId));
+    process.RegisterGroup(externalGroupId);
     RefreshSignals();
 }
 
-void TManager::UpdateAllocation(const ui64 allocationId, const ui64 volume) {
-    auto& info = GetAllocationInfoVerified(allocationId);
-    info.SetAllocatedVolume(volume);
-    TryAllocateWaiting();
+void TManager::UnregisterGroup(const ui64 externalProcessId, const ui64 externalGroupId) {
+    TProcessMemory& process = GetProcessMemoryVerified(ProcessIds.GetInternalIdVerified(externalProcessId));
+    process.UnregisterGroup(externalGroupId);
+    RefreshSignals();
+}
+
+void TManager::UpdateAllocation(const ui64 externalProcessId, const ui64 allocationId, const ui64 volume) {
+    TProcessMemory& process = GetProcessMemoryVerified(ProcessIds.GetInternalIdVerified(externalProcessId));
+    if (process.UpdateAllocation(allocationId, volume)) {
+        TryAllocateWaiting();
+    }
+
     RefreshSignals();
 }
 
 void TManager::TryAllocateWaiting() {
-    WaitAllocations.AllocateTo(*this, ReadyAllocations);
+    if (Processes.size()) {
+        auto it = Processes.find(ProcessIds.GetMinInternalIdVerified());
+        AFL_VERIFY(it != Processes.end());
+        AFL_VERIFY(it->second.IsPriorityProcess());
+        it->second.TryAllocateWaiting(0);
+    }
+    while (true) {
+        bool found = false;
+        for (auto&& i : Processes) {
+            if (i.second.TryAllocateWaiting(1)) {
+                found = true;
+            }
+        }
+        if (!found) {
+            break;
+        }
+    }
     RefreshSignals();
 }
 
-void TManager::UnregisterAllocation(const ui64 allocationId) {
-    if (UnregisterAllocationImpl(allocationId)) {
+void TManager::UnregisterAllocation(const ui64 externalProcessId, const ui64 allocationId) {
+    auto& process = GetProcessMemoryVerified(ProcessIds.GetInternalIdVerified(externalProcessId));
+    if (process.UnregisterAllocation(allocationId)) {
         TryAllocateWaiting();
     }
     RefreshSignals();
 }
 
-void TManager::UnregisterGroup(const ui64 externalGroupId) {
-    const std::optional<ui64> usageGroupId = GetInternalGroupIdOptional(externalGroupId);
-    if (!usageGroupId) {
+void TManager::RegisterAllocation(const ui64 externalProcessId, const ui64 externalGroupId,
+    const std::shared_ptr<IAllocation>& task, const std::shared_ptr<TStageFeatures>& stage) {
+    auto& process = GetProcessMemoryVerified(ProcessIds.GetInternalIdVerified(externalProcessId));
+    process.RegisterAllocation(externalGroupId, task, stage);
+    RefreshSignals();
+}
+
+void TManager::RegisterProcess(const ui64 externalProcessId) {
+    auto internalId = ProcessIds.GetInternalIdOptional(externalProcessId);
+    if (!internalId) {
+        const ui64 internalProcessId = ProcessIds.RegisterExternalIdOrGet(externalProcessId);
+        AFL_VERIFY(Processes.emplace(internalProcessId, TProcessMemory(externalProcessId, OwnerActorId, Processes.empty())).second);
+    } else {
+        ++Processes.find(*internalId)->second.MutableLinksCount();
+    }
+    RefreshSignals();
+}
+
+void TManager::UnregisterProcess(const ui64 externalProcessId) {
+    const ui64 internalProcessId = ProcessIds.GetInternalIdVerified(externalProcessId);
+    auto it = Processes.find(internalProcessId);
+    AFL_VERIFY(it != Processes.end());
+    if (--it->second.MutableLinksCount()) {
         return;
     }
-    const ui64 internalGroupId = *usageGroupId;
-    AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "remove_group")("external_group_id", externalGroupId)(
-        "internal_group_id", internalGroupId);
-    auto minGroupId = GetMinInternalGroupIdOptional();
-    ExternalGroupIntoInternalGroup.erase(externalGroupId);
-    if (auto data = WaitAllocations.ExtractGroup(internalGroupId)) {
-        for (auto&& [_, allocation] : *data) {
-            GetAllocationInfoVerified(allocation->GetIdentifier()).RemoveGroup(internalGroupId);
-        }
-    }
-    if (auto data = ReadyAllocations.ExtractGroup(internalGroupId)) {
-        for (auto&& [_, allocation] : *data) {
-            GetAllocationInfoVerified(allocation->GetIdentifier()).RemoveGroup(internalGroupId);
-        }
-    }
-    if (minGroupId && *minGroupId == internalGroupId) {
+    Y_UNUSED(ProcessIds.ExtractInternalIdVerified(externalProcessId));
+    it->second.Unregister();
+    Processes.erase(it);
+    const ui64 nextInternalProcessId = ProcessIds.GetMinInternalIdDef(internalProcessId);
+    if (internalProcessId < nextInternalProcessId) {
+        GetProcessMemoryVerified(nextInternalProcessId).SetPriorityProcess();
         TryAllocateWaiting();
     }
     RefreshSignals();
-}
-
-ui64 TManager::GetMinInternalGroupIdVerified() const {
-    return *TValidator::CheckNotNull(GetMinInternalGroupIdOptional());
 }
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

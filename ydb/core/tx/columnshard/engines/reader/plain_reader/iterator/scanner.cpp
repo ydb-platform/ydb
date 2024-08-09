@@ -105,12 +105,7 @@ TConclusionStatus TScanHead::Start() {
 TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const std::shared_ptr<TSpecialReadContext>& context)
     : Context(context)
 {
-    
     if (HasAppData()) {
-        if (AppDataVerified().ColumnShardConfig.HasMaxInFlightMemoryOnRequest()) {
-            MaxInFlightMemory = AppDataVerified().ColumnShardConfig.GetMaxInFlightMemoryOnRequest();
-        }
-
         if (AppDataVerified().ColumnShardConfig.HasMaxInFlightIntervalsOnRequest()) {
             MaxInFlight = AppDataVerified().ColumnShardConfig.GetMaxInFlightIntervalsOnRequest();
         }
@@ -251,11 +246,6 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
             if (FetchingIntervals.size() >= InFlightLimit) {
                 AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_next_interval")("reason", "too many intervals in flight")(
                     "count", FetchingIntervals.size())("limit", InFlightLimit);
-                return false;
-            }
-            if (Context->GetRequestedMemoryBytes() >= MaxInFlightMemory) {
-                AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_next_interval")("reason", "a lot of memory in usage")(
-                    "volume", Context->GetCommonContext()->GetCounters().GetRequestedMemoryBytes())("limit", MaxInFlightMemory);
                 return false;
             }
         }

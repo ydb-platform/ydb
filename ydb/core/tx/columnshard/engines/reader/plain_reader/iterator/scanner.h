@@ -80,7 +80,6 @@ private:
     std::vector<TIntervalStat> IntervalStats;
     ui64 InFlightLimit = 1;
     ui64 MaxInFlight = 256;
-    ui64 MaxInFlightMemory = TGlobalLimits::ScanMemoryLimit;
     ui64 ZeroCount = 0;
     void DrainSources();
     [[nodiscard]] TConclusionStatus DetectSourcesFeatureInContextIntervalScan(const THashMap<ui32, std::shared_ptr<IDataSource>>& intervalSources, const bool isExclusiveInterval) const;

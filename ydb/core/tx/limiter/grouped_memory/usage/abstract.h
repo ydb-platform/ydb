@@ -11,24 +11,38 @@ namespace NKikimr::NOlap::NGroupedMemoryManager {
 class TGroupGuard {
 private:
     const NActors::TActorId ActorId;
+    YDB_READONLY(ui64, ProcessId, 0);
     YDB_READONLY(ui64, GroupId, 0);
 
 public:
-    TGroupGuard(const NActors::TActorId& actorId, const ui64 groupId);
+    TGroupGuard(const NActors::TActorId& actorId, const ui64 processId, const ui64 groupId);
 
     ~TGroupGuard();
+};
+
+class TProcessGuard {
+private:
+    const NActors::TActorId ActorId;
+    YDB_READONLY(ui64, ProcessId, 0);
+
+public:
+    TProcessGuard(const NActors::TActorId& actorId, const ui64 processId);
+
+    ~TProcessGuard();
 };
 
 class TAllocationGuard {
 private:
     const NActors::TActorId ActorId;
+    YDB_READONLY(ui64, ProcessId, 0)
     YDB_READONLY(ui64, AllocationId, 0)
     YDB_READONLY(ui64, Memory, 0)
     bool Released = false;
 
 public:
-    TAllocationGuard(const NActors::TActorId actorId, const ui64 allocationId, const ui64 memory)
+    TAllocationGuard(const ui64 processId, const ui64 allocationId, const NActors::TActorId actorId, const ui64 memory)
         : ActorId(actorId)
+        , ProcessId(processId)
         , AllocationId(allocationId)
         , Memory(memory) {
     }

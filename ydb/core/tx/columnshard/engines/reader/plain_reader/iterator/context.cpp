@@ -247,7 +247,9 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
 }
 
 TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
-    : CommonContext(commonContext) {
+    : CommonContext(commonContext)
+    , ProcessMemoryGuard(NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildProcessGuard(CommonContext->GetReadMetadata()->GetTxId())) {
+
     MergeStageMemory = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures("MERGE", 0.15 * TGlobalLimits::ScanMemoryLimit);
     FilterStageMemory = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures("FILTER", 0.70 * TGlobalLimits::ScanMemoryLimit);
     FetchingStageMemory =

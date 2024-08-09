@@ -4,6 +4,10 @@ SRCS(
     actor.cpp
     manager.cpp
     counters.cpp
+    group.cpp
+    process.cpp
+    allocation.cpp
+    ids.cpp
 )
 
 PEERDIR(

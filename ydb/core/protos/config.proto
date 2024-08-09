@@ -1530,7 +1530,6 @@ message TColumnShardConfig {
     repeated TRepairInfo Repairs = 15;
 
     optional uint32 MaxInFlightIntervalsOnRequest = 16;
-    optional uint32 MaxInFlightMemoryOnRequest = 17;
     optional uint32 MaxReadStaleness_ms = 18 [default = 300000];
 }
 

@@ -57,6 +57,7 @@ PEERDIR(
     ydb/library/yql/providers/dq/expr_nodes
     ydb/library/yql/providers/dq/opt
     ydb/library/yql/providers/dq/planner
+    ydb/library/yql/providers/dq/actors
     ydb/library/yql/providers/result/expr_nodes
     ydb/library/yql/minikql
 )

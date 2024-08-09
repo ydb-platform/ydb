@@ -204,3 +204,39 @@ Pear,15,33'''
         assert (
             "Unknown compression: some_compression. Use one of: gzip, zstd, lz4, brotli, bzip2, xz" in describe_string
         )
+    
+    @yq_v2
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_invalid_compression_inference(self, kikimr, s3, client, unique_prefix):
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("fbucket")
+        bucket.create(ACL='public-read')
+
+        s3_client = boto3.client(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        fruits = R'''[{"name" : "banana", "price" : 3, "weight" : 100}]'''
+        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.json', ContentType='text/plain')
+        kikimr.control_plane.wait_bootstrap(1)
+
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = fR'''
+            SELECT *
+            FROM `{storage_connection_name}`.`fruits.json`
+            WITH (format=csv_with_names, compression="gzip", with_infer="true");
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        describe_result = client.describe_query(query_id).result
+        logging.debug("Describe result: {}".format(describe_result))
+        describe_string = "{}".format(describe_result)
+        assert (
+            "couldn\\'t decompress file, check format and compression params:" in describe_string
+        )

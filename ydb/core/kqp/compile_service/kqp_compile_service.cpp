@@ -774,7 +774,11 @@ private:
                     : (TableServiceConfig.GetEnableAstCache() && !request.QueryAst)
                         ? ECompileActorAction::PARSE
                         : ECompileActorAction::COMPILE);
-            TKqpCompileRequest compileRequest(ev->Sender, request.Uid, request.Query ? *request.Query : *compileResult->Query,
+            auto query = request.Query ? *request.Query : *compileResult->Query;
+            if (compileResult) {
+                query.UserSid = compileResult->Query->UserSid;
+            }
+            TKqpCompileRequest compileRequest(ev->Sender, request.Uid, query,
                 compileSettings, request.UserToken, dbCounters, request.GUCSettings, request.ApplicationName,
                 ev->Cookie, std::move(ev->Get()->IntrestedInResult),
                 ev->Get()->UserRequestContext,

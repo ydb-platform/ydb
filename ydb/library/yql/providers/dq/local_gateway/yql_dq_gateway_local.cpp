@@ -271,7 +271,7 @@ TIntrusivePtr<IDqGateway> CreateLocalDqGateway(const NKikimr::NMiniKQL::IFunctio
     const std::function<IActor*(void)>& metricsPusherFactory)
 {
     int startPort = 31337;
-    TRangeWalker<int> portWalker(startPort, startPort+100);
+    TRangeWalker<int> portWalker(startPort, startPort+10000);
     auto interconnectPort = BindInRange(portWalker)[1];
     auto grpcPort = BindInRange(portWalker)[1];
 
@@ -288,7 +288,8 @@ TIntrusivePtr<IDqGateway> CreateLocalDqGateway(const NKikimr::NMiniKQL::IFunctio
             metricsRegistry,
             metricsPusherFactory,
             withSpilling),
-        CreateDqGateway("[::1]", grpcPort.Addr.GetPort()));
+        // CreateDqGateway("[::1]", grpcPort.Addr.GetPort()));
+        CreateDqGateway("localhost", grpcPort.Addr.GetPort()));
 }
 
 } // namespace NYql

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <random>
+
 #include <util/generic/yexception.h>
 
 namespace NYql {

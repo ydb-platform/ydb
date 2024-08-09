@@ -577,6 +577,7 @@ public:
         request.SetUsername(username);
 
         NYdbGrpc::TCallMeta meta;
+        Cout << "CRAB: OpenSession: timeout" << OpenSessionTimeout << Endl;
         meta.Timeout = OpenSessionTimeout;
 
         auto self = weak_from_this();
@@ -745,10 +746,12 @@ private:
 };
 
 TIntrusivePtr<IDqGateway> CreateDqGateway(const TString& host, int port) {
+    Cout << "CRAB: CreateDqGateway 1" << Endl;
     return new TDqGateway(host, port, "", "");
 }
 
 TIntrusivePtr<IDqGateway> CreateDqGateway(const NProto::TDqConfig& config) {
+    Cout << "CRAB: CreateDqGateway 2" << Endl;
     return new TDqGateway("localhost", config.GetPort(),
         config.GetYtBackends()[0].GetVanillaJobLite(),
         config.GetYtBackends()[0].GetVanillaJobLiteMd5(),

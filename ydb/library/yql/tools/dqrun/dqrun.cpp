@@ -962,7 +962,6 @@ int RunMain(int argc, const char* argv[])
         if (dqPort) {
             dqGateway = CreateDqGateway(dqHost.GetOrElse("localhost"), *dqPort);
         } else {
-            Sleep(TDuration::Seconds(10));
             auto dqTaskTransformFactory = CreateCompositeTaskTransformFactory({
                 CreateCommonDqTaskTransformFactory(),
                 CreateYtDqTaskTransformFactory(),

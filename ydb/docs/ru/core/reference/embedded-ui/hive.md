@@ -2,7 +2,7 @@
 
 Web-viewer Hive предоставляет интерфейс работы с Hive.
 Hive бывает общим на кластер и тенантный.
-Попасть на страницу Web-viewer Hive можно из {{ ydb-short-name }} Monitoring.
+Попасть на страницу Web-viewer Hive можно из {{ ydb-short-name }} Monitoring с вкладки Tablets.
 
 ## Главная страница
 

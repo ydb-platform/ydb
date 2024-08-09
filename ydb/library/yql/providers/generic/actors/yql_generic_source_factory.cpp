@@ -16,7 +16,7 @@ namespace NYql::NDq {
                                           args.SecureParams, args.TaskParams, args.ComputeActorId, credentialsFactory, args.HolderFactory);
         };
 
-        for (auto& sourceName : {"ClickHouseGeneric", "PostgreSqlGeneric", "YdbGeneric"}) {
+        for (auto& sourceName : {"ClickHouseGeneric", "PostgreSqlGeneric", "YdbGeneric", "MySqlGeneric", "GreenplumGeneric"}) {
             factory.RegisterSource<Generic::TSource>(sourceName, genericFactory);
         }
     }

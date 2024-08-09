@@ -2038,6 +2038,20 @@ bool TSqlTranslation::StoreExternalTableSettingsEntry(const TIdentifier& id, con
     return true;
 }
 
+bool TSqlTranslation::ValidateTableSettings(const TTableSettings& settings) {
+    if (settings.PartitionsCount && settings.MinPartitions) {
+        Ctx.Error() << " AUTO_PARTITIONING_MIN_PARTITIONS_COUNT can't be set together with PARTITIONS_COUNT";
+        return false;
+    }
+
+    if (settings.PartitionsCount && settings.MaxPartitions) {
+        Ctx.Error() << " AUTO_PARTITIONING_MAX_PARTITIONS_COUNT can't be set together with PARTITIONS_COUNT";
+        return false;
+    }
+
+    return true;
+}
+
 bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value,
         TTableSettings& settings, bool alter, bool reset) {
     YQL_ENSURE(value || reset);
@@ -2093,6 +2107,16 @@ bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule
             return false;
         }
         if (!StoreInt(*value, settings.MaxPartitions, Ctx)) {
+            Ctx.Error() << to_upper(id.Name) << " value should be an integer";
+            return false;
+        }
+    } else if (to_lower(id.Name) == "partitions_count") {
+        if (reset) {
+            Ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+
+        if (!StoreInt(*value, settings.PartitionsCount, Ctx)) {
             Ctx.Error() << to_upper(id.Name) << " value should be an integer";
             return false;
         }
@@ -2186,7 +2210,8 @@ bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule
         Ctx.Error() << "Unknown table setting: " << id.Name;
         return false;
     }
-    return true;
+
+    return ValidateTableSettings(settings);
 }
 
 bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value& value,

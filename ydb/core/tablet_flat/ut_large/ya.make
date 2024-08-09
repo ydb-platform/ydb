@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/tablet_flat)
 
-REQUIREMENTS(ram:32)
-
 IF (WITH_VALGRIND)
     TIMEOUT(2400)
     TAG(ya:fat)

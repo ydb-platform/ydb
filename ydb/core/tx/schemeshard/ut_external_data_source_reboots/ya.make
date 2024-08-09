@@ -9,6 +9,7 @@ IF (NOT WITH_VALGRIND)
         TIMEOUT(3600)
         SIZE(LARGE)
         TAG(ya:fat)
+        REQUIREMENTS(ram:12)
     ELSE()
         TIMEOUT(600)
         SIZE(MEDIUM)
@@ -29,8 +30,6 @@ IF (NOT WITH_VALGRIND)
     SRCS(
         ut_external_data_source_reboots.cpp
     )
-
-    REQUIREMENTS(ram:12)
 
 END()
 ENDIF()

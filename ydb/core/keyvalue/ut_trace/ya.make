@@ -21,6 +21,4 @@ SRCS(
     keyvalue_ut_trace.cpp
 )
 
-REQUIREMENTS(ram:16)
-
 END()

@@ -14,9 +14,6 @@ ELSE()
     SPLIT_FACTOR(80)
     TIMEOUT(600)
     SIZE(MEDIUM)
-    REQUIREMENTS(
-        ram:16
-    )
 ENDIF()
 
 PEERDIR(

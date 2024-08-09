@@ -8,7 +8,7 @@ IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
-    REQUIREMENTS(ram:16)
+    REQUIREMENTS(ram:32)
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
@@ -33,7 +33,5 @@ SRCS(
     datashard_ut_read_iterator.cpp
     datashard_ut_read_iterator_ext_blobs.cpp
 )
-
-REQUIREMENTS(ram:32)
 
 END()

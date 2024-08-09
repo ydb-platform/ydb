@@ -2,10 +2,6 @@ UNITTEST()
 
 FORK_SUBTESTS()
 
-REQUIREMENTS(
-    ram:16
-)
-
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)

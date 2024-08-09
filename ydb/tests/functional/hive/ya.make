@@ -7,11 +7,6 @@ TEST_SRCS(
     test_drain.py
 )
 
-
-REQUIREMENTS(
-    ram:16
-)
-
 IF (SANITIZER_TYPE == "thread")
     TIMEOUT(1200)
     SIZE(LARGE)

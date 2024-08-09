@@ -3,10 +3,6 @@ UNITTEST()
     SIZE(MEDIUM)
     TIMEOUT(600)
 
-    REQUIREMENTS(
-        ram:32
-    )
-
     SRCS(
         main.cpp
     )

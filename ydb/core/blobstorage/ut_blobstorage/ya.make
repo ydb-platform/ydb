@@ -52,8 +52,6 @@ PEERDIR(
     ydb/core/blobstorage/vdisk/scrub
 )
 
-REQUIREMENTS(ram:32)
-
 END()
 
 RECURSE_FOR_TESTS(

@@ -4,12 +4,12 @@ IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
+    REQUIREMENTS(ram:32)
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
-REQUIREMENTS(ram:32)
 
 SRCS(
     packed_tuple_ut.cpp

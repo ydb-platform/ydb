@@ -6,15 +6,9 @@ IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     TIMEOUT(2400)
     SIZE(LARGE)
     TAG(ya:fat)
-    REQUIREMENTS(
-        ram:32
-    )
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
-    REQUIREMENTS(
-        ram:16
-    )
 ENDIF()
 
 PEERDIR(

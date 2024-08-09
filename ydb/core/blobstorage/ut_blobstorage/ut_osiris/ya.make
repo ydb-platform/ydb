@@ -16,8 +16,4 @@ PEERDIR(
     ydb/core/blobstorage/ut_blobstorage/lib
 )
 
-REQUIREMENTS(
-    ram:32
-)
-
 END()

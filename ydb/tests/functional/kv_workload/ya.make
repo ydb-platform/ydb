@@ -9,10 +9,6 @@ TEST_SRCS(
     test_kv_workload.py
 )
 
-REQUIREMENTS(
-    ram:32
-)
-
 TIMEOUT(600)
 SIZE(MEDIUM)
 

@@ -5,9 +5,6 @@ TEST_SRCS(
     test_actorsystem.py
 )
 
-REQUIREMENTS(
-    ram:16
-)
 TIMEOUT(600)
 SIZE(MEDIUM)
 

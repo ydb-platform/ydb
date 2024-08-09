@@ -6,6 +6,7 @@
 #include <util/system/tempfile.h>
 #include "http.h"
 #include "http_proxy.h"
+#include "http_cache.h"
 
 
 
@@ -547,5 +548,99 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
 
         UNIT_ASSERT_EQUAL(response->Response->Status, "400");
         UNIT_ASSERT_EQUAL(response->Response->Body, "Invalid http header");
+    }
+
+    Y_UNIT_TEST(CheckOutgoingCacheProxy) {
+        NActors::TTestActorRuntimeBase actorSystem(1, true);
+        actorSystem.SetUseRealInterconnect();
+        TPortManager portManager;
+        TIpPort port = portManager.GetTcpPort();
+        TAutoPtr<NActors::IEventHandle> handle;
+        actorSystem.Initialize();
+        // actorSystem.SetLogPriority(NActorsServices::HTTP, NActors::NLog::PRI_DEBUG);
+
+        NActors::IActor* proxy = NHttp::CreateHttpProxy();
+        NActors::TActorId proxyId = actorSystem.Register(proxy);
+        actorSystem.Send(new NActors::IEventHandle(proxyId, actorSystem.AllocateEdgeActor(), new NHttp::TEvHttpProxy::TEvAddListeningPort(port)), 0, true);
+        actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
+
+        NActors::TActorId serverId = actorSystem.AllocateEdgeActor();
+        actorSystem.Send(new NActors::IEventHandle(proxyId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/test", serverId)), 0, true);
+
+        auto getOutgoingCachePolicy = [] (const NHttp::THttpRequest* request) -> NHttp::TCachePolicy {
+            NHttp::TCachePolicy policy;
+            if (request->Method != "GET") {
+                return policy;
+            }
+            TStringBuf url(request->URL);
+            if (url.EndsWith("/test")) {
+                policy.TimeToExpire = TDuration::Seconds(30);
+                policy.TimeToRefresh = TDuration::Seconds(5);
+                policy.KeepOnError = true;
+            }
+            return NHttp::GetDefaultCachePolicy(request, policy);
+        };
+
+        NActors::TActorId outgoingCacheProxyId = actorSystem.Register(NHttp::CreateOutgoingHttpCache(proxyId, getOutgoingCachePolicy));
+
+        // Initiate new request to server
+        NActors::TActorId clientId = actorSystem.AllocateEdgeActor();
+        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet("http://[::1]:" + ToString(port) + "/test");
+        actorSystem.Send(new NActors::IEventHandle(outgoingCacheProxyId, clientId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest)), 0, true);
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+        UNIT_ASSERT_EQUAL(request->Request->URL, "/test");
+
+        NHttp::THttpOutgoingResponsePtr httpResponse = request->Request->CreateResponseString("HTTP/1.1 200 Found\r\nConnection: Close\r\nTransfer-Encoding: chunked\r\n\r\n6\r\npassed\r\n0\r\n\r\n");
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse)), 0, true);
+        NHttp::TEvHttpProxy::TEvHttpIncomingResponse* response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);
+        UNIT_ASSERT_EQUAL(response->Response->Status, "200");
+        UNIT_ASSERT_EQUAL(response->Response->Body, "passed");
+
+        // New request. Get response from cache
+        actorSystem.Send(new NActors::IEventHandle(outgoingCacheProxyId, clientId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest)), 0, true);
+        response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);
+        UNIT_ASSERT_EQUAL(response->Response->Status, "200");
+        UNIT_ASSERT_EQUAL(response->Response->Body, "passed");
+
+        // Generate non retryable error when refresh cache
+        request = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+        UNIT_ASSERT_EQUAL(request->Request->URL, "/test");
+        httpResponse = request->Request->CreateResponseString("HTTP/1.1 401 Unauthorized\r\nConnection: Close\r\nTransfer-Encoding: chunked\r\n\r\n13\r\nToken expired\r\n0\r\n\r\n");
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse)), 0, true);
+
+        // Waiting for refresh http cache
+        Sleep(TDuration::Seconds(7));
+
+        // Cache miss for this request. Initiate new request to server
+        actorSystem.Send(new NActors::IEventHandle(outgoingCacheProxyId, clientId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest)), 0, true);
+        request = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+        UNIT_ASSERT_EQUAL(request->Request->URL, "/test");
+
+        httpResponse = request->Request->CreateResponseString("HTTP/1.1 200 Found\r\nConnection: Close\r\nTransfer-Encoding: chunked\r\n\r\n6\r\npassed\r\n0\r\n\r\n");
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse)), 0, true);
+        response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);
+        UNIT_ASSERT_EQUAL(response->Response->Status, "200");
+        UNIT_ASSERT_EQUAL(response->Response->Body, "passed");
+
+        // New request. Get response from cache
+        actorSystem.Send(new NActors::IEventHandle(outgoingCacheProxyId, clientId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest)), 0, true);
+        response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);
+        UNIT_ASSERT_EQUAL(response->Response->Status, "200");
+        UNIT_ASSERT_EQUAL(response->Response->Body, "passed");
+
+        // Generate retryable error when refresh cache
+        request = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+        UNIT_ASSERT_EQUAL(request->Request->URL, "/test");
+        httpResponse = request->Request->CreateResponseString("HTTP/1.1 504 Gateway Timeout\r\nConnection: Close\r\nTransfer-Encoding: chunked\r\n\r\n7\r\nTimeout\r\n0\r\n\r\n");
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse)), 0, true);
+
+        // Waiting for refresh http cache
+        Sleep(TDuration::Seconds(7));
+
+        // Get response with error from cache
+        actorSystem.Send(new NActors::IEventHandle(outgoingCacheProxyId, clientId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest)), 0, true);
+        response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);
+        UNIT_ASSERT_EQUAL(response->Response->Status, "504");
+        UNIT_ASSERT_EQUAL(response->Response->Body, "Timeout");
     }
 }

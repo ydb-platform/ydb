@@ -462,7 +462,7 @@ public:
     }
 
     TString GetPoolId(const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TActorContext actorContext) {
-        if (!userToken || userToken->GetSerializedToken().empty()) {
+        if (!userToken || userToken->GetUserSID().empty()) {
             return NResourcePool::DEFAULT_POOL_ID;
         }
 
@@ -595,6 +595,7 @@ private:
             return it->second;
         }
 
+        TString poolId = "";
         for (const auto& [_, classifier] : databaseInfo.RankToClassifierInfo) {
             if (classifier.Membername != userSID) {
                 continue;
@@ -610,11 +611,12 @@ private:
                 continue;
             }
 
-            usersMap[userSID] = classifier.PoolId;
-            return classifier.PoolId;
+            poolId = classifier.PoolId;
+            break;
         }
 
-        return "";
+        usersMap[userSID] = poolId;
+        return poolId;
     }
 
     TDatabaseInfo* GetOrCreateDatabaseInfo(const TString& database) {

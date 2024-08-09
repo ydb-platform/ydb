@@ -9,7 +9,7 @@ namespace NYql {
 class TAggregateExpander {
 public:
     TAggregateExpander(bool usePartitionsByKeys, const bool useFinalizeByKeys, const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx,
-        bool forceCompact = false, bool compactForDistinct = false, bool usePhases = false)
+        bool forceCompact = false, bool compactForDistinct = false, bool usePhases = false, bool allowSpilling = false)
         : Node(node)
         , Ctx(ctx)
         , TypesCtx(typesCtx)
@@ -18,6 +18,7 @@ public:
         , ForceCompact(forceCompact)
         , CompactForDistinct(compactForDistinct)
         , UsePhases(usePhases)
+        , AllowSpilling(allowSpilling)
         , AggregatedColumns(nullptr)
         , VoidNode(ctx.NewCallable(node->Pos(), "Void", {}))
         , HaveDistinct(false)
@@ -70,8 +71,9 @@ private:
     TExprNode::TPtr GenerateCondenseSwitch(const TExprNode::TPtr& keyExtractor);
     TExprNode::TPtr BuildFinalizeByKeyLambda(const TExprNode::TPtr& preprocessLambda, const TExprNode::TPtr& keyExtractor);
     TExprNode::TPtr GeneratePostAggregateInitPhase();
-    TExprNode::TPtr GeneratePostAggregateSavePhase();
+    TExprNode::TPtr GeneratePostAggregateFinishPhase();
     TExprNode::TPtr GeneratePostAggregateMergePhase();
+    TExprNode::TPtr GeneratePostAggregateSerializePhase();
 
     std::function<TExprNodeBuilder& (TExprNodeBuilder&)> GetPartialAggArgExtractor(ui32 i, bool deserialize);
     TExprNode::TPtr GetFinalAggStateExtractor(ui32 i);
@@ -98,6 +100,7 @@ private:
     bool ForceCompact;
     bool CompactForDistinct;
     bool UsePhases;
+    bool AllowSpilling;
     TStringBuf Suffix;
 
     TSessionWindowParams SessionWindowParams;

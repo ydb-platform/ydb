@@ -11,23 +11,6 @@
 
 namespace NYql::NDq {
 
-class TSpillingSettings {
-public:
-    TSpillingSettings() = default;
-    explicit TSpillingSettings(ui64 mask) : Mask(mask) {};
-     
-    operator bool() const {
-        return Mask;
-    }
-
-    bool IsGraceJoinSpillingEnabled() const {
-        return Mask & ui64(TDqConfiguration::EEnabledSpillingNodes::GraceJoin);
-    }
-
-private:
-    const ui64 Mask = 0;
-};
-
 const TStructExprType* CollectParameters(NNodes::TCoLambda program, TExprContext& ctx);
 
 TString BuildProgram(NNodes::TCoLambda program, const TStructExprType& paramsType,

@@ -3321,6 +3321,41 @@ TExprNode::TPtr ExpandCombineByKey(const TExprNode::TPtr& node, TExprContext& ct
         .Ptr();
 }
 
+TExprNode::TPtr ExpandCombineByKeyWithSpilling(const TExprNode::TPtr& node, TExprContext& ctx) {
+    const bool isStreamOrFlow = node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream ||
+        node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow;
+
+    if (!isStreamOrFlow) {
+        return node;
+    }
+
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content() << " over stream or flow";
+
+    TCoCombineByKeyWithSpilling combine(node);
+
+    return Build<TCoCombineCoreWithSpilling>(ctx, node->Pos())
+        .Input<TCoFlatMap>()
+            .Input(combine.Input())
+            .Lambda()
+                .Args({"arg"})
+                .Body<TExprApplier>()
+                    .Apply(combine.PreMapLambda())
+                    .With(0, "arg")
+                    .Build()
+                .Build()
+            .Build()
+        .KeyExtractor(combine.KeySelectorLambda())
+        .InitHandler(combine.InitHandlerLambda())
+        .UpdateHandler(combine.UpdateHandlerLambda())
+        .FinishHandler(combine.FinishHandlerLambda())
+        .LoadHandler(combine.LoadHandlerLambda())
+        .MemLimit()
+            .Value("0")
+            .Build()
+        .Done()
+        .Ptr();
+}
+
 template<typename TRowType>
 TExprNode::TPtr MakeWideMapJoinCore(const TExprNode& mapjoin, TExprNode::TPtr&& input, TExprContext& ctx) {
     const auto inStructType = GetSeqItemType(mapjoin.Head().GetTypeAnn())->Cast<TRowType>();
@@ -3434,6 +3469,60 @@ ui32 CollectStateNodes(const TExprNode& initLambda, const TExprNode& updateLambd
     else
         std::transform(fields.cbegin(), fields.cend(), std::back_inserter(update), [&](const TExprNode::TPtr& name) {
             return ctx.NewCallable(name->Pos(), "Member", {updateLambda.TailPtr(), name});
+        });
+
+    return size;
+}
+
+ui32 CollectStateNodesForSpilling(const TExprNode& initLambda, const TExprNode& updateLambda, const TExprNode& serdeLambda, TExprNode::TListType& fields, TExprNode::TListType& init, TExprNode::TListType& update, TExprNode::TListType& serdeState, TExprContext& ctx) {
+    YQL_ENSURE(IsSameAnnotation(*initLambda.Tail().GetTypeAnn(), *updateLambda.Tail().GetTypeAnn()), "Must be same type.");
+
+    if (ETypeAnnotationKind::Struct != initLambda.Tail().GetTypeAnn()->GetKind()) {
+        fields.clear();
+        init = TExprNode::TListType(1U, initLambda.TailPtr());
+        update = TExprNode::TListType(1U, updateLambda.TailPtr());
+        serdeState = TExprNode::TListType(1U, serdeLambda.TailPtr());
+        return 1U;
+    }
+
+    const auto structType = initLambda.Tail().GetTypeAnn()->Cast<TStructExprType>();
+    const auto size = structType->GetSize();
+    fields.reserve(size);
+    init.reserve(size);
+    update.reserve(size);
+    serdeState.reserve(size);
+    fields.clear();
+    init.clear();
+    update.clear();
+    serdeState.clear();
+
+    if (initLambda.Tail().IsCallable("AsStruct"))
+        initLambda.Tail().ForEachChild([&](const TExprNode& child) { fields.emplace_back(child.HeadPtr()); });
+    else if (updateLambda.Tail().IsCallable("AsStruct"))
+        updateLambda.Tail().ForEachChild([&](const TExprNode& child) { fields.emplace_back(child.HeadPtr()); });
+    else
+        for (const auto& item : structType->GetItems())
+            fields.emplace_back(ctx.NewAtom(initLambda.Tail().Pos(), item->GetName()));
+
+    if (initLambda.Tail().IsCallable("AsStruct"))
+        initLambda.Tail().ForEachChild([&](const TExprNode& child) { init.emplace_back(child.TailPtr()); });
+    else
+        std::transform(fields.cbegin(), fields.cend(), std::back_inserter(init), [&](const TExprNode::TPtr& name) {
+            return ctx.NewCallable(name->Pos(), "Member", {initLambda.TailPtr(), name});
+        });
+
+    if (updateLambda.Tail().IsCallable("AsStruct"))
+        updateLambda.Tail().ForEachChild([&](const TExprNode& child) { update.emplace_back(child.TailPtr()); });
+    else
+        std::transform(fields.cbegin(), fields.cend(), std::back_inserter(update), [&](const TExprNode::TPtr& name) {
+            return ctx.NewCallable(name->Pos(), "Member", {updateLambda.TailPtr(), name});
+        });
+
+    if (serdeLambda.Tail().IsCallable("AsStruct"))
+        serdeLambda.Tail().ForEachChild([&](const TExprNode& child) { serdeState.emplace_back(child.TailPtr()); });
+    else
+        std::transform(fields.cbegin(), fields.cend(), std::back_inserter(serdeState), [&](const TExprNode::TPtr& name) {
+            return ctx.NewCallable(name->Pos(), "Member", {serdeLambda.TailPtr(), name});
         });
 
     return size;
@@ -3592,6 +3681,220 @@ TExprNode::TPtr ExpandFinalizeByKey(const TExprNode::TPtr& node, TExprContext& c
                                 }
                                 return parent;
                             })
+                        .Done()
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Lambda(1)
+                .Params("items", outputWidth)
+                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                    if (outputFields.empty())
+                        parent.Arg("items", 0);
+                    else {
+                        auto str = parent.Callable("AsStruct");
+                        for (ui32 i = 0U; i < outputWidth; ++i) {
+                            str.List(i)
+                                .Add(0, std::move(outputFields[i]))
+                                .Arg(1, "items", i)
+                            .Seal();
+                        }
+                        str.Seal();
+                    }
+                    return parent;
+                })
+            .Seal()
+        .Seal().Build();
+}
+
+TExprNode::TPtr ExpandFinalizeByKeyWithSpilling(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List) {
+        return ctx.NewCallable(node->Pos(), "Collect",
+            { ctx.ChangeChild(*node, 0, ctx.NewCallable(node->Pos(), "ToFlow", { node->HeadPtr() })) });
+    }
+    if (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream) {
+        return ctx.NewCallable(node->Pos(), "FromFlow",
+            { ctx.ChangeChild(*node, 0, ctx.NewCallable(node->Pos(), "ToFlow", { node->HeadPtr() })) });
+    }
+
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content() << " over stream or flow";
+
+    TCoFinalizeByKeyWithSpilling combine(node);
+
+    const auto inputStructType = GetSeqItemType(combine.PreMapLambda().Body().Ref().GetTypeAnn())->Cast<TStructExprType>();
+    const auto inputWidth = inputStructType->GetSize();
+
+    TExprNode::TListType inputFields;
+    inputFields.reserve(inputWidth);
+    for (const auto& item : inputStructType->GetItems()) {
+        inputFields.emplace_back(ctx.NewAtom(combine.PreMapLambda().Pos(), item->GetName()));
+    }
+
+    TExprNode::TListType stateFields, init, update, outputFields, save;
+    const auto stateWidth = CollectStateNodesForSpilling(combine.InitHandlerLambda().Ref(), combine.UpdateHandlerLambda().Ref(), combine.SaveHandlerLambda().Ref(), stateFields, init, update, save, ctx);
+
+    auto output = combine.FinishHandlerLambda().Body().Ptr();
+    const auto outputStructType = GetSeqItemType(node->GetTypeAnn())->Cast<TStructExprType>();
+    const ui32 outputWidth = outputStructType ? outputStructType->GetSize() : 1;
+    TExprNode::TListType finish;
+    finish.reserve(outputWidth);
+    if (output->IsCallable("AsStruct")) {
+        output->ForEachChild([&](const TExprNode& child) {
+            outputFields.emplace_back(child.HeadPtr());
+            finish.emplace_back(child.TailPtr());
+        });
+    } else if (outputStructType) {
+        for (const auto& item : outputStructType->GetItems()) {
+            outputFields.emplace_back(ctx.NewAtom(output->Pos(), item->GetName()));
+            finish.emplace_back(ctx.NewCallable(output->Pos(), "Member", { output, outputFields.back() }));
+        }
+    } else {
+        finish.emplace_back(output);
+    }
+
+    const auto uniteToStructure = [&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+        for (ui32 i = 0U; i < inputWidth; ++i) {
+            parent
+                .List(i)
+                    .Add(0, inputFields[i])
+                    .Arg(1, "items", i)
+                .Seal();
+        }
+        return parent;
+    };
+
+    return ctx.Builder(node->Pos())
+        .Callable("NarrowMap")
+            .Callable(0, "WideCombinerWithSpilling")
+                .Callable(0, "ExpandMap")
+                    .Callable(0, "FlatMap")
+                        .Add(0, combine.Input().Ptr())
+                        .Add(1, combine.PreMapLambda().Ptr())
+                    .Seal()
+                    .Lambda(1)
+                        .Param("item")
+                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                            for (ui32 i = 0U; i < inputWidth; ++i) {
+                                parent.Callable(i, "Member")
+                                    .Arg(0, "item")
+                                    .Add(1, inputFields[i])
+                                .Seal();
+                            }
+                            return parent;
+                        })
+                    .Seal()
+                .Seal()
+                .Atom(1, "")
+                .Lambda(2)
+                    .Params("items", inputWidth)
+                    .Apply(combine.KeySelectorLambda().Ref())
+                        .With(0)
+                            .Callable("AsStruct")
+                                .Do(uniteToStructure)
+                            .Seal()
+                        .Done()
+                    .Seal()
+                .Seal()
+                .Lambda(3)
+                    .Param("key")
+                    .Params("items", inputWidth)
+                    .ApplyPartial(combine.InitHandlerLambda().Args().Ptr(), init)
+                        .With(0, "key")
+                        .With(1)
+                            .Callable("AsStruct")
+                                .Do(uniteToStructure)
+                            .Seal()
+                        .Done()
+                    .Seal()
+                .Seal()
+                .Lambda(4)
+                    .Param("key")
+                    .Params("items", inputWidth)
+                    .Params("state", stateWidth)
+                    .ApplyPartial(combine.UpdateHandlerLambda().Args().Ptr(), std::move(update))
+                        .With(0)
+                            .Arg("key")
+                        .Done()
+                        .With(1)
+                            .Callable("AsStruct")
+                                .Do(uniteToStructure)
+                            .Seal()
+                        .Done()
+                        .With(2)
+                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                if (stateFields.empty())
+                                    parent.Arg("state", 0);
+                                else {
+                                    auto str = parent.Callable("AsStruct");
+                                    for (ui32 i = 0U; i < stateWidth; ++i) {
+                                        str.List(i)
+                                            .Add(0, stateFields[i])
+                                            .Arg(1, "state", i)
+                                        .Seal();
+                                    }
+                                    str.Seal();
+                                }
+                                return parent;
+                            })
+                        .Done()
+                    .Seal()
+                .Seal()
+                .Lambda(5)
+                    .Param("key")
+                    .Params("state", stateWidth)
+                    .ApplyPartial(combine.FinishHandlerLambda().Args().Ptr(), std::move(finish))
+                        .With(0, "key")
+                        .With(1)
+                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                if (stateFields.empty())
+                                    parent.Arg("state", 0);
+                                else {
+                                    auto str = parent.Callable("AsStruct");
+                                    for (ui32 i = 0U; i < stateWidth; ++i) {
+                                        str.List(i)
+                                            .Add(0, stateFields[i])
+                                            .Arg(1, "state", i)
+                                        .Seal();
+                                    }
+                                    str.Seal();
+                                }
+                                return parent;
+                            })
+                        .Done()
+                    .Seal()
+                .Seal()
+                .Lambda(6)
+                    .Param("key")
+                    .Params("state", stateWidth)
+                    .ApplyPartial(combine.SaveHandlerLambda().Args().Ptr(), std::move(save))
+                        .With(0, "key")
+                        .With(1)
+                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                if (stateFields.empty())
+                                    parent.Arg("state", 0);
+                                else {
+                                    auto str = parent.Callable("AsStruct");
+                                    for (ui32 i = 0U; i < stateWidth; ++i) {
+                                        str.List(i)
+                                            .Add(0, stateFields[i])
+                                            .Arg(1, "state", i)
+                                        .Seal();
+                                    }
+                                    str.Seal();
+                                }
+                                return parent;
+                            })
+                        .Done()
+                    .Seal()
+                .Seal()
+                .Lambda(7)
+                    .Param("key")
+                    .Params("items", inputWidth)
+                    .ApplyPartial(combine.InitHandlerLambda().Args().Ptr(), std::move(init))
+                        .With(0, "key")
+                        .With(1)
+                            .Callable("AsStruct")
+                                .Do(uniteToStructure)
+                            .Seal()
                         .Done()
                     .Seal()
                 .Seal()
@@ -4456,6 +4759,191 @@ TExprNode::TPtr OptimizeCombineCore(const TExprNode::TPtr& node, TExprContext& c
                                             str.List(i)
                                                 .Add(0, std::move(stateFields[i]))
                                                 .Arg(1, "state", i)
+                                            .Seal();
+                                        }
+                                        str.Seal();
+                                    }
+                                    return parent;
+                                })
+                            .Done()
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Lambda(1)
+                    .Params("items", outputWidth)
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        if (outputFields.empty())
+                            parent.Arg("items", 0);
+                        else {
+                            auto str = parent.Callable("AsStruct");
+                            for (ui32 i = 0U; i < outputWidth; ++i) {
+                                str.List(i)
+                                    .Add(0, std::move(outputFields[i]))
+                                    .Arg(1, "items", i)
+                                .Seal();
+                            }
+                            str.Seal();
+                        }
+                        return parent;
+                    })
+                .Seal()
+            .Seal().Build();
+    }
+
+    return node;
+}
+
+TExprNode::TPtr OptimizeCombineCoreWithSpilling(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (node->Head().IsCallable("NarrowMap") && node->Child(4U)->Tail().IsCallable("Just")) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << node->Head().Content();
+
+        const auto& output = node->Child(4U)->Tail().Head();
+        const auto inputWidth = node->Head().Tail().Head().ChildrenSize();
+
+        const auto structType = ETypeAnnotationKind::Struct == output.GetTypeAnn()->GetKind() ? output.GetTypeAnn()->Cast<TStructExprType>() : nullptr;
+        const auto outputWidth = structType ? structType->GetSize() : 1U;
+
+        TExprNode::TListType stateFields, outputFields, init, update, finish, load;
+        outputFields.reserve(outputWidth);
+        finish.reserve(outputWidth);
+
+        const auto stateWidth = CollectStateNodesForSpilling(*node->Child(2U), *node->Child(3U), *node->Child(5U), stateFields, init, update, load, ctx);
+
+        if (output.IsCallable("AsStruct")) {
+            node->Child(4U)->Tail().Head().ForEachChild([&](const TExprNode& child) {
+                outputFields.emplace_back(child.HeadPtr());
+                finish.emplace_back(child.TailPtr());
+            });
+        } else if (structType) {
+            for (const auto& item : structType->GetItems()) {
+                outputFields.emplace_back(ctx.NewAtom(output.Pos(), item->GetName()));
+                finish.emplace_back(ctx.NewCallable(output.Pos(), "Member", {node->Child(4U)->Tail().HeadPtr(), outputFields.back()}));
+            }
+        } else {
+            finish.emplace_back(node->Child(4U)->Tail().HeadPtr());
+        }
+
+        auto limit = node->ChildrenSize() > TCoCombineCoreWithSpilling::idx_MemLimit ? node->TailPtr() : ctx.NewAtom(node->Pos(), "");
+        return ctx.Builder(node->Pos())
+            .Callable("NarrowMap")
+                .Callable(0, "WideCombinerWithSpilling")
+                    .Add(0, node->Head().HeadPtr())
+                    .Add(1, std::move(limit))
+                    .Lambda(2)
+                        .Params("items", inputWidth)
+                        .Apply(*node->Child(1U))
+                            .With(0)
+                                .Apply(node->Head().Tail())
+                                    .With("items")
+                                .Seal()
+                            .Done()
+                        .Seal()
+                    .Seal()
+                    .Lambda(3)
+                        .Param("key")
+                        .Params("items", inputWidth)
+                        .ApplyPartial(node->Child(2U)->HeadPtr(), std::move(init))
+                            .With(0, "key")
+                            .With(1)
+                                .Apply(node->Head().Tail())
+                                    .With("items")
+                                .Seal()
+                            .Done()
+                        .Seal()
+                    .Seal()
+                    .Lambda(4)
+                        .Param("key")
+                        .Params("items", inputWidth)
+                        .Params("state", stateWidth)
+                        .ApplyPartial(node->Child(3U)->HeadPtr(), std::move(update))
+                            .With(0, "key")
+                            .With(1)
+                                .Apply(node->Head().Tail())
+                                    .With("items")
+                                .Seal()
+                            .Done()
+                            .With(2)
+                                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                    if (stateFields.empty())
+                                        parent.Arg("state", 0);
+                                    else {
+                                        auto str = parent.Callable("AsStruct");
+                                        for (ui32 i = 0U; i < stateWidth; ++i) {
+                                            str.List(i)
+                                                .Add(0, stateFields[i])
+                                                .Arg(1, "state", i)
+                                            .Seal();
+                                        }
+                                        str.Seal();
+                                    }
+                                    return parent;
+                                })
+                            .Done()
+                        .Seal()
+                    .Seal()
+                    .Lambda(5)
+                        .Param("key")
+                        .Params("state", stateWidth)
+                        .ApplyPartial(node->Child(4U)->HeadPtr(), finish)
+                            .With(0, "key")
+                            .With(1)
+                                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                    if (stateFields.empty())
+                                        parent.Arg("state", 0);
+                                    else {
+                                        auto str = parent.Callable("AsStruct");
+                                        for (ui32 i = 0U; i < stateWidth; ++i) {
+                                            str.List(i)
+                                                .Add(0, stateFields[i])
+                                                .Arg(1, "state", i)
+                                            .Seal();
+                                        }
+                                        str.Seal();
+                                    }
+                                    return parent;
+                                })
+                            .Done()
+                        .Seal()
+                    .Seal()
+                    .Lambda(6)
+                        .Param("key")
+                        .Params("state", stateWidth)
+                        .ApplyPartial(node->Child(4U)->HeadPtr(), std::move(finish))
+                            .With(0, "key")
+                            .With(1)
+                                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                    if (stateFields.empty())
+                                        parent.Arg("state", 0);
+                                    else {
+                                        auto str = parent.Callable("AsStruct");
+                                        for (ui32 i = 0U; i < stateWidth; ++i) {
+                                            str.List(i)
+                                                .Add(0, stateFields[i])
+                                                .Arg(1, "state", i)
+                                            .Seal();
+                                        }
+                                        str.Seal();
+                                    }
+                                    return parent;
+                                })
+                            .Done()
+                        .Seal()
+                    .Seal()
+                    .Lambda(7)
+                        .Param("key")
+                        .Params("items", outputWidth)
+                        .ApplyPartial(node->Child(5U)->HeadPtr(), std::move(load))
+                            .With(0, "key")
+                            .With(1)
+                                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                    if (outputFields.empty())
+                                        parent.Arg("items", 0);
+                                    else {
+                                        auto str = parent.Callable("AsStruct");
+                                        for (ui32 i = 0U; i < outputWidth; ++i) {
+                                            str.List(i)
+                                                .Add(0, outputFields[i])
+                                                .Arg(1, "items", i)
                                             .Seal();
                                         }
                                         str.Seal();
@@ -6962,7 +7450,7 @@ template <bool Asc, bool Equals>
 TExprNode::TPtr AggrComparePg(const TExprNode& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand '" << node.Content() << "' over Pg.";
     auto op = Asc ? ( Equals ? "<=" : "<") : ( Equals ? ">=" : ">");
-    auto finalPart = (Equals == Asc) ? MakeBool<true>(node.Pos(), ctx) : 
+    auto finalPart = (Equals == Asc) ? MakeBool<true>(node.Pos(), ctx) :
         ctx.NewCallable(node.Pos(), "Exists", { node.TailPtr() });
     if (!Asc) {
         finalPart = ctx.NewCallable(node.Pos(), "Not", { finalPart });
@@ -8310,7 +8798,9 @@ struct TPeepHoleRules {
         {"And", &OptimizeLogicalDups<true>},
         {"Or", &OptimizeLogicalDups<false>},
         {"CombineByKey", &ExpandCombineByKey},
+        {"CombineByKeyWithSpilling", &ExpandCombineByKeyWithSpilling},
         {"FinalizeByKey", &ExpandFinalizeByKey},
+        {"FinalizeByKeyWithSpilling", &ExpandFinalizeByKeyWithSpilling},
         {"SkipNullMembers", &ExpandSkipNullFields},
         {"SkipNullElements", &ExpandSkipNullFields},
         {"ConstraintsOf", &ExpandConstraintsOf},
@@ -8407,6 +8897,7 @@ struct TPeepHoleRules {
         {"Member", &OptimizeMember},
         {"Condense1", &OptimizeCondense1},
         {"CombineCore", &OptimizeCombineCore},
+        {"CombineCoreWithSpilling", &OptimizeCombineCoreWithSpilling},
         {"Chopper", &OptimizeChopper},
         {"WideCombiner", &OptimizeWideCombiner},
         {"WideCondense1", &OptimizeWideCondense1},
@@ -8474,7 +8965,7 @@ struct TPeepHoleRules {
     const TExtPeepHoleOptimizerMap BlockStageExtFinalRules = {
         {"BlockExtend", &ExpandBlockExtend},
         {"BlockOrderedExtend", &ExpandBlockExtend},
-        {"ReplicateScalars", &ExpandReplicateScalars} 
+        {"ReplicateScalars", &ExpandReplicateScalars}
     };
 
     static const TPeepHoleRules& Instance() {

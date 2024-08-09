@@ -1058,6 +1058,90 @@ TExprBase DqPushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationC
     return result.Cast();
 }
 
+TExprBase DqPushCombineWithSpillingToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap, bool allowStageMultiUsage)
+{
+    if (!node.Maybe<TCoCombineByKeyWithSpilling>().Input().Maybe<TDqCnUnionAll>()) {
+        return node;
+    }
+
+    auto combine = node.Cast<TCoCombineByKeyWithSpilling>();
+    auto dqUnion = combine.Input().Cast<TDqCnUnionAll>();
+    if (!IsSingleConsumerConnection(dqUnion, parentsMap, allowStageMultiUsage)) {
+        return node;
+    }
+
+    if (!IsDqCompletePureExpr(combine.PreMapLambda()) ||
+        !IsDqCompletePureExpr(combine.KeySelectorLambda()) ||
+        !IsDqCompletePureExpr(combine.InitHandlerLambda()) ||
+        !IsDqCompletePureExpr(combine.UpdateHandlerLambda()) ||
+        !IsDqCompletePureExpr(combine.FinishHandlerLambda()) ||
+        !IsDqCompletePureExpr(combine.LoadHandlerLambda()))
+    {
+        return node;
+    }
+
+    if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
+        return TExprBase(ctx.ChangeChild(*node.Raw(), TCoCombineByKey::idx_Input, std::move(connToPushableStage)));
+    }
+
+    auto lambda = Build<TCoLambda>(ctx, combine.Pos())
+            .Args({"stream"})
+            .Body<TCoCombineByKeyWithSpilling>()
+                .Input("stream")
+                .PreMapLambda(ctx.DeepCopyLambda(combine.PreMapLambda().Ref()))
+                .KeySelectorLambda(ctx.DeepCopyLambda(combine.KeySelectorLambda().Ref()))
+                .InitHandlerLambda(ctx.DeepCopyLambda(combine.InitHandlerLambda().Ref()))
+                .UpdateHandlerLambda(ctx.DeepCopyLambda(combine.UpdateHandlerLambda().Ref()))
+                .FinishHandlerLambda(ctx.DeepCopyLambda(combine.FinishHandlerLambda().Ref()))
+                .LoadHandlerLambda(ctx.DeepCopyLambda(combine.LoadHandlerLambda().Ref()))
+                .Build()
+            .Done();
+
+    if (HasContextFuncs(*lambda.Ptr())) {
+        lambda = Build<TCoLambda>(ctx, combine.Pos())
+            .Args({ TStringBuf("stream") })
+            .Body<TCoWithContext>()
+                .Input<TExprApplier>()
+                    .Apply(lambda)
+                    .With(0, TStringBuf("stream"))
+                .Build()
+                .Name()
+                    .Value("Agg")
+                .Build()
+            .Build()
+            .Done();
+    }
+
+    if (IsDqDependsOnStage(combine.PreMapLambda(), dqUnion.Output().Stage()) ||
+        IsDqDependsOnStage(combine.KeySelectorLambda(), dqUnion.Output().Stage()) ||
+        IsDqDependsOnStage(combine.InitHandlerLambda(), dqUnion.Output().Stage()) ||
+        IsDqDependsOnStage(combine.UpdateHandlerLambda(), dqUnion.Output().Stage()) ||
+        IsDqDependsOnStage(combine.FinishHandlerLambda(), dqUnion.Output().Stage()) ||
+        IsDqDependsOnStage(combine.LoadHandlerLambda(), dqUnion.Output().Stage()))
+    {
+        return Build<TDqCnUnionAll>(ctx, combine.Pos())
+            .Output()
+                .Stage<TDqStage>()
+                    .Inputs()
+                        .Add(dqUnion)
+                        .Build()
+                    .Program(lambda)
+                    .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+                    .Build()
+                .Index().Build("0")
+                .Build()
+            .Done();
+    }
+
+    auto result = DqPushLambdaToStageUnionAll(dqUnion, lambda, {}, ctx, optCtx);
+    if (!result) {
+        return node;
+    }
+
+    return result.Cast();
+}
+
 NNodes::TExprBase DqPushAggregateCombineToStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
@@ -1226,6 +1310,57 @@ TExprBase DqBuildFinalizeByKeyStage(TExprBase node, TExprContext& ctx,
                     .InitHandlerLambda(finalize.InitHandlerLambda())
                     .UpdateHandlerLambda(finalize.UpdateHandlerLambda())
                     .FinishHandlerLambda(finalize.FinishHandlerLambda())
+                    .Build()
+                .Build()
+            .Build()
+        .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+        .Done();
+
+    return Build<TDqCnUnionAll>(ctx, node.Pos())
+        .Output()
+            .Stage(finalizeStage)
+            .Index().Build("0")
+            .Build()
+        .Done();
+}
+
+TExprBase DqBuildFinalizeByKeyWithSpillingStage(TExprBase node, TExprContext& ctx,
+    const TParentsMap& parentsMap, bool allowStageMultiUsage)
+{
+    auto finalizeInput = node.Maybe<TCoFinalizeByKeyWithSpilling>().Input();
+    if (!finalizeInput.Maybe<TDqCnUnionAll>()) {
+        return node;
+    }
+
+    auto finalize = node.Cast<TCoFinalizeByKeyWithSpilling>();
+    auto dqUnion = finalize.Input().Cast<TDqCnUnionAll>();
+
+    if (!IsSingleConsumerConnection(dqUnion, parentsMap, allowStageMultiUsage)) {
+        return node;
+    }
+
+    auto keyLambda = finalize.KeySelectorLambda();
+
+    TVector<TCoArgument> inputArgs;
+    TVector<TExprBase> inputConns;
+
+    inputConns.push_back(dqUnion);
+
+    auto finalizeStage = Build<TDqStage>(ctx, node.Pos())
+        .Inputs()
+            .Add(inputConns)
+            .Build()
+        .Program()
+            .Args({ "input" })
+            .Body<TCoToStream>()
+                .Input<TCoFinalizeByKeyWithSpilling>()
+                    .Input("input")
+                    .PreMapLambda(finalize.PreMapLambda())
+                    .KeySelectorLambda(finalize.KeySelectorLambda())
+                    .InitHandlerLambda(finalize.InitHandlerLambda())
+                    .UpdateHandlerLambda(finalize.UpdateHandlerLambda())
+                    .FinishHandlerLambda(finalize.FinishHandlerLambda())
+                    .SaveHandlerLambda(finalize.SaveHandlerLambda())
                     .Build()
                 .Build()
             .Build()

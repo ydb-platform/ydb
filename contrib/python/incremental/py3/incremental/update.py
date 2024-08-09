@@ -6,53 +6,9 @@ from __future__ import absolute_import, division, print_function
 import click
 import os
 import datetime
-from typing import TYPE_CHECKING, Dict, Optional, Callable, Iterable
+from typing import Dict, Optional, Callable
 
-from incremental import Version
-
-if TYPE_CHECKING:
-    from typing_extensions import Protocol
-
-    class _ReadableWritable(Protocol):
-        def read(self):  # type: () -> bytes
-            pass
-
-        def write(self, v):  # type: (bytes) -> object
-            pass
-
-        def __enter__(self):  # type: () -> _ReadableWritable
-            pass
-
-        def __exit__(self, *args, **kwargs):  # type: (object, object) -> Optional[bool]
-            pass
-
-    # FilePath is missing type annotations
-    # https://twistedmatrix.com/trac/ticket/10148
-    class FilePath(object):
-        def __init__(self, path):  # type: (str) -> None
-            self.path = path
-
-        def child(self, v):  # type: (str) -> FilePath
-            pass
-
-        def isdir(self):  # type: () -> bool
-            pass
-
-        def isfile(self):  # type: () -> bool
-            pass
-
-        def getContent(self):  # type: () -> bytes
-            pass
-
-        def open(self, mode):  # type: (str) -> _ReadableWritable
-            pass
-
-        def walk(self):  # type: () -> Iterable[FilePath]
-            pass
-
-
-else:
-    from twisted.python.filepath import FilePath
+from incremental import Version, _findPath, _existing_version
 
 _VERSIONPY_TEMPLATE = '''"""
 Provides {package} version information.
@@ -70,35 +26,6 @@ __all__ = ["__version__"]
 _YEAR_START = 2000
 
 
-def _findPath(path, package):  # type: (str, str) -> FilePath
-
-    cwd = FilePath(path)
-
-    src_dir = cwd.child("src").child(package.lower())
-    current_dir = cwd.child(package.lower())
-
-    if src_dir.isdir():
-        return src_dir
-    elif current_dir.isdir():
-        return current_dir
-    else:
-        raise ValueError(
-            "Can't find under `./src` or `./`. Check the "
-            "package name is right (note that we expect your "
-            "package name to be lower cased), or pass it using "
-            "'--path'."
-        )
-
-
-def _existing_version(path):  # type: (FilePath) -> Version
-    version_info = {}  # type: Dict[str, Version]
-
-    with path.child("_version.py").open("r") as f:
-        exec(f.read(), version_info)
-
-    return version_info["__version__"]
-
-
 def _run(
     package,  # type: str
     path,  # type: Optional[str]
@@ -112,17 +39,14 @@ def _run(
     _getcwd=None,  # type: Optional[Callable[[], str]]
     _print=print,  # type: Callable[[object], object]
 ):  # type: (...) -> None
-
     if not _getcwd:
         _getcwd = os.getcwd
 
     if not _date:
         _date = datetime.date.today()
 
-    if type(package) != str:
-        package = package.encode("utf8")  # type: ignore[assignment]
-
-    _path = FilePath(path) if path else _findPath(_getcwd(), package)
+    if not path:
+        path = _findPath(_getcwd(), package)
 
     if (
         newversion
@@ -156,7 +80,7 @@ def _run(
     if newversion:
         from pkg_resources import parse_version
 
-        existing = _existing_version(_path)
+        existing = _existing_version(path)
         st_version = parse_version(newversion)._version  # type: ignore[attr-defined]
 
         release = list(st_version.release)
@@ -185,7 +109,7 @@ def _run(
         existing = v
 
     elif rc and not patch:
-        existing = _existing_version(_path)
+        existing = _existing_version(path)
 
         if existing.release_candidate:
             v = Version(
@@ -199,7 +123,7 @@ def _run(
             v = Version(package, _date.year - _YEAR_START, _date.month, 0, 1)
 
     elif patch:
-        existing = _existing_version(_path)
+        existing = _existing_version(path)
         v = Version(
             package,
             existing.major,
@@ -209,7 +133,7 @@ def _run(
         )
 
     elif post:
-        existing = _existing_version(_path)
+        existing = _existing_version(path)
 
         if existing.post is None:
             _post = 0
@@ -219,7 +143,7 @@ def _run(
         v = Version(package, existing.major, existing.minor, existing.micro, post=_post)
 
     elif dev:
-        existing = _existing_version(_path)
+        existing = _existing_version(path)
 
         if existing.dev is None:
             _dev = 0
@@ -236,7 +160,7 @@ def _run(
         )
 
     else:
-        existing = _existing_version(_path)
+        existing = _existing_version(path)
 
         if existing.release_candidate:
             v = Version(package, existing.major, existing.minor, existing.micro)
@@ -254,41 +178,43 @@ def _run(
 
     _print("Updating codebase to %s" % (v.public()))
 
-    for x in _path.walk():
+    for dirpath, dirnames, filenames in os.walk(path):
+        for filename in filenames:
+            filepath = os.path.join(dirpath, filename)
+            with open(filepath, "rb") as f:
+                original_content = f.read()
+            content = original_content
 
-        if not x.isfile():
-            continue
+            # Replace previous release_candidate calls to the new one
+            if existing.release_candidate:
+                content = content.replace(
+                    existing_version_repr_bytes, version_repr_bytes
+                )
+                content = content.replace(
+                    (package.encode("utf8") + b" " + existing.public().encode("utf8")),
+                    (package.encode("utf8") + b" " + v.public().encode("utf8")),
+                )
 
-        original_content = x.getContent()
-        content = original_content
-
-        # Replace previous release_candidate calls to the new one
-        if existing.release_candidate:
-            content = content.replace(existing_version_repr_bytes, version_repr_bytes)
+            # Replace NEXT Version calls with the new one
+            content = content.replace(NEXT_repr_bytes, version_repr_bytes)
             content = content.replace(
-                (package.encode("utf8") + b" " + existing.public().encode("utf8")),
+                NEXT_repr_bytes.replace(b"'", b'"'), version_repr_bytes
+            )
+
+            # Replace <package> NEXT with <package> <public>
+            content = content.replace(
+                package.encode("utf8") + b" NEXT",
                 (package.encode("utf8") + b" " + v.public().encode("utf8")),
             )
 
-        # Replace NEXT Version calls with the new one
-        content = content.replace(NEXT_repr_bytes, version_repr_bytes)
-        content = content.replace(
-            NEXT_repr_bytes.replace(b"'", b'"'), version_repr_bytes
-        )
+            if content != original_content:
+                _print("Updating %s" % (filepath,))
+                with open(filepath, "wb") as f:
+                    f.write(content)
 
-        # Replace <package> NEXT with <package> <public>
-        content = content.replace(
-            package.encode("utf8") + b" NEXT",
-            (package.encode("utf8") + b" " + v.public().encode("utf8")),
-        )
-
-        if content != original_content:
-            _print("Updating %s" % (x.path,))
-            with x.open("w") as f:
-                f.write(content)
-
-    _print("Updating %s/_version.py" % (_path.path))
-    with _path.child("_version.py").open("w") as f:
+    versionpath = os.path.join(path, "_version.py")
+    _print("Updating %s" % (versionpath,))
+    with open(versionpath, "wb") as f:
         f.write(
             (
                 _VERSIONPY_TEMPLATE.format(package=package, version_repr=version_repr)

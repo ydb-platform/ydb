@@ -9,44 +9,37 @@ See L{Version}.
 
 from __future__ import division, absolute_import
 
+import os
 import sys
 import warnings
-from typing import TYPE_CHECKING, Any, TypeVar, Union, Optional, Dict
+from typing import TYPE_CHECKING, Any, TypeVar, Union, Optional, Dict, BinaryIO
+from dataclasses import dataclass
+
+
+if TYPE_CHECKING:
+    import io
+    from typing_extensions import Literal
+    from distutils.dist import Distribution as _Distribution
+
 
 #
 # Compat functions
 #
 
-_T = TypeVar("_T", contravariant=True)
 
+def _cmp(a, b):  # type: (Any, Any) -> int
+    """
+    Compare two objects.
 
-if TYPE_CHECKING:
-    from typing_extensions import Literal
-    from distutils.dist import Distribution as _Distribution
-
-
-else:
-    _Distribution = object
-
-if sys.version_info > (3,):
-
-    def _cmp(a, b):  # type: (Any, Any) -> int
-        """
-        Compare two objects.
-
-        Returns a negative number if C{a < b}, zero if they are equal, and a
-        positive number if C{a > b}.
-        """
-        if a < b:
-            return -1
-        elif a == b:
-            return 0
-        else:
-            return 1
-
-
-else:
-    _cmp = cmp  # noqa: F821
+    Returns a negative number if C{a < b}, zero if they are equal, and a
+    positive number if C{a > b}.
+    """
+    if a < b:
+        return -1
+    elif a == b:
+        return 0
+    else:
+        return 1
 
 
 #
@@ -71,19 +64,17 @@ class _Inf(object):
             return 0
         return 1
 
-    if sys.version_info >= (3,):
+    def __lt__(self, other):  # type: (object) -> bool
+        return self.__cmp__(other) < 0
 
-        def __lt__(self, other):  # type: (object) -> bool
-            return self.__cmp__(other) < 0
+    def __le__(self, other):  # type: (object) -> bool
+        return self.__cmp__(other) <= 0
 
-        def __le__(self, other):  # type: (object) -> bool
-            return self.__cmp__(other) <= 0
+    def __gt__(self, other):  # type: (object) -> bool
+        return self.__cmp__(other) > 0
 
-        def __gt__(self, other):  # type: (object) -> bool
-            return self.__cmp__(other) > 0
-
-        def __ge__(self, other):  # type: (object) -> bool
-            return self.__cmp__(other) >= 0
+    def __ge__(self, other):  # type: (object) -> bool
+        return self.__cmp__(other) >= 0
 
 
 _inf = _Inf()
@@ -167,7 +158,7 @@ class Version(object):
             "Version.release_candidate instead.",
             DeprecationWarning,
             stacklevel=2,
-        ),
+        )
         return self.release_candidate
 
     def public(self):  # type: () -> str
@@ -187,7 +178,7 @@ class Version(object):
         if self.release_candidate is None:
             rc = ""
         else:
-            rc = ".rc%s" % (self.release_candidate,)
+            rc = "rc%s" % (self.release_candidate,)
 
         if self.post is None:
             post = ""
@@ -206,7 +197,6 @@ class Version(object):
     local = public
 
     def __repr__(self):  # type: () -> str
-
         if self.release_candidate is None:
             release_candidate = ""
         else:
@@ -236,7 +226,7 @@ class Version(object):
     def __str__(self):  # type: () -> str
         return "[%s, version %s]" % (self.package, self.short())
 
-    def __cmp__(self, other):  # type: (Version) -> int
+    def __cmp__(self, other):  # type: (object) -> int
         """
         Compare two versions, considering major versions, minor versions, micro
         versions, then release candidates, then postreleases, then dev
@@ -310,43 +300,41 @@ class Version(object):
         )
         return x
 
-    if sys.version_info >= (3,):
+    def __eq__(self, other):  # type: (object) -> bool
+        c = self.__cmp__(other)
+        if c is NotImplemented:
+            return c  # type: ignore[return-value]
+        return c == 0
 
-        def __eq__(self, other):  # type: (Any) -> bool
-            c = self.__cmp__(other)
-            if c is NotImplemented:
-                return c  # type: ignore[return-value]
-            return c == 0
+    def __ne__(self, other):  # type: (object) -> bool
+        c = self.__cmp__(other)
+        if c is NotImplemented:
+            return c  # type: ignore[return-value]
+        return c != 0
 
-        def __ne__(self, other):  # type: (Any) -> bool
-            c = self.__cmp__(other)
-            if c is NotImplemented:
-                return c  # type: ignore[return-value]
-            return c != 0
+    def __lt__(self, other):  # type: (object) -> bool
+        c = self.__cmp__(other)
+        if c is NotImplemented:
+            return c  # type: ignore[return-value]
+        return c < 0
 
-        def __lt__(self, other):  # type: (Version) -> bool
-            c = self.__cmp__(other)
-            if c is NotImplemented:
-                return c  # type: ignore[return-value]
-            return c < 0
+    def __le__(self, other):  # type: (object) -> bool
+        c = self.__cmp__(other)
+        if c is NotImplemented:
+            return c  # type: ignore[return-value]
+        return c <= 0
 
-        def __le__(self, other):  # type: (Version) -> bool
-            c = self.__cmp__(other)
-            if c is NotImplemented:
-                return c  # type: ignore[return-value]
-            return c <= 0
+    def __gt__(self, other):  # type: (object) -> bool
+        c = self.__cmp__(other)
+        if c is NotImplemented:
+            return c  # type: ignore[return-value]
+        return c > 0
 
-        def __gt__(self, other):  # type: (Version) -> bool
-            c = self.__cmp__(other)
-            if c is NotImplemented:
-                return c  # type: ignore[return-value]
-            return c > 0
-
-        def __ge__(self, other):  # type: (Version) -> bool
-            c = self.__cmp__(other)
-            if c is NotImplemented:
-                return c  # type: ignore[return-value]
-            return c >= 0
+    def __ge__(self, other):  # type: (object) -> bool
+        c = self.__cmp__(other)
+        if c is NotImplemented:
+            return c  # type: ignore[return-value]
+        return c >= 0
 
 
 def getVersionString(version):  # type: (Version) -> str
@@ -360,36 +348,192 @@ def getVersionString(version):  # type: (Version) -> str
     return result
 
 
-def _get_version(dist, keyword, value):  # type: (_Distribution, object, object) -> None
+def _findPath(path, package):  # type: (str, str) -> str
     """
-    Get the version from the package listed in the Distribution.
+    Determine the package root directory.
+
+    The result is one of:
+
+        - src/{package}
+        - {package}
+
+    Where {package} is downcased.
     """
-    if not value:
+    src_dir = os.path.join(path, "src", package.lower())
+    current_dir = os.path.join(path, package.lower())
+
+    if os.path.isdir(src_dir):
+        return src_dir
+    elif os.path.isdir(current_dir):
+        return current_dir
+    else:
+        raise ValueError(
+            "Can't find the directory of package {}: I looked in {} and {}".format(
+                package, src_dir, current_dir
+            )
+        )
+
+
+def _existing_version(path):  # type: (str) -> Version
+    """
+    Load the current version from {path}/_version.py.
+    """
+    version_info = {}  # type: Dict[str, Version]
+
+    versionpath = os.path.join(path, "_version.py")
+    with open(versionpath, "r") as f:
+        exec(f.read(), version_info)
+
+    return version_info["__version__"]
+
+
+def _get_setuptools_version(dist):  # type: (_Distribution) -> None
+    """
+    Setuptools integration: load the version from the working directory
+
+    This function is registered as a setuptools.finalize_distribution_options
+    entry point [1]. It is a no-op unless there is a pyproject.toml containing
+    an empty [tool.incremental] section.
+
+    @param dist: An empty C{setuptools.Distribution} instance to mutate.
+
+    [1]: https://setuptools.pypa.io/en/latest/userguide/extension.html#customizing-distribution-options
+    """
+    config = _load_pyproject_toml("./pyproject.toml")
+    if not config or not config.has_tool_incremental:
         return
 
-    from distutils.command import build_py
+    dist.metadata.version = _existing_version(config.path).public()
+
+
+def _get_distutils_version(dist, keyword, value):  # type: (_Distribution, object, object) -> None
+    """
+    Distutils integration: get the version from the package listed in the Distribution.
+
+    This function is invoked when a C{setup.py} calls C{setup(use_incremental=True)}.
+
+    @see: https://setuptools.pypa.io/en/latest/userguide/extension.html#adding-arguments
+    """
+    if not value:  # use_incremental=False
+        return  # pragma: no cover
+
+    from setuptools.command import build_py  # type: ignore
 
     sp_command = build_py.build_py(dist)
     sp_command.finalize_options()
 
-    for item in sp_command.find_all_modules():  # type: ignore[attr-defined]
+    for item in sp_command.find_all_modules():
         if item[1] == "_version":
-            version_file = {}  # type: Dict[str, Version]
+            package_path = os.path.dirname(item[2])
+            dist.metadata.version = _existing_version(package_path).public()
+            return
 
-            with open(item[2]) as f:
-                exec(f.read(), version_file)
+    raise Exception("No _version.py found.")  # pragma: no cover
 
-            dist.metadata.version = version_file["__version__"].public()
-            return None
 
-    raise Exception("No _version.py found.")
+def _load_toml(f):  # type: (BinaryIO) -> Any
+    """
+    Read the content of a TOML file.
+    """
+    # This import is deferred to avoid a hard dependency on tomli
+    # when no pyproject.toml is present.
+    if sys.version_info > (3, 11):
+        import tomllib
+    else:
+        import tomli as tomllib
+
+    return tomllib.load(f)
+
+
+@dataclass(frozen=True)
+class _IncrementalConfig:
+    """
+    Configuration loaded from a ``pyproject.toml`` file.
+    """
+
+    has_tool_incremental: bool
+    """
+    Does the pyproject.toml file contain a [tool.incremental]
+    section? This indicates that the package has explicitly
+    opted-in to Incremental versioning.
+    """
+
+    package: str
+    """The package name, capitalized as in the package metadata."""
+
+    path: str
+    """Path to the package root"""
+
+
+def _load_pyproject_toml(toml_path):  # type: (str) -> Optional[_IncrementalConfig]
+    """
+    Load Incremental configuration from a ``pyproject.toml``
+
+    If the [tool.incremental] section is empty we take the project name
+    from the [project] section. Otherwise we require only a C{name} key
+    specifying the project name. Other keys are forbidden to allow future
+    extension and catch typos.
+    """
+    try:
+        with open(toml_path, "rb") as f:
+            data = _load_toml(f)
+    except FileNotFoundError:
+        return None
+
+    tool_incremental = _extract_tool_incremental(data)
+
+    if tool_incremental is None or tool_incremental == {}:
+        try:
+            package = data["project"]["name"]
+        except KeyError:
+            raise ValueError("""\
+Couldn't extract the package name from pyproject.toml. Specify it like:
+
+    [project]
+    name = "Foo"
+
+Or:
+
+    [tool.incremental]
+    name = "Foo"
+""")
+    elif tool_incremental.keys() == {"name"}:
+        package = tool_incremental["name"]
+    else:
+        raise ValueError("Unexpected key(s) in [tool.incremental]")
+
+    if not isinstance(package, str):
+        raise TypeError(
+            "Package name must be a string, but found {}".format(type(package))
+        )
+
+    return _IncrementalConfig(
+        has_tool_incremental=tool_incremental is not None,
+        package=package,
+        path=_findPath(os.path.dirname(toml_path), package),
+    )
+
+
+def _extract_tool_incremental(data):  # type: (Dict[str, object]) -> Optional[Dict[str, object]]
+    if "tool" not in data:
+        return None
+    if not isinstance(data["tool"], dict):
+        raise ValueError("[tool] must be a table")
+    if "incremental" not in data["tool"]:
+        return None
+
+    tool_incremental = data["tool"]["incremental"]
+    if not isinstance(tool_incremental, dict):
+        raise ValueError("[tool.incremental] must be a table")
+
+    return tool_incremental
 
 
 from ._version import __version__  # noqa: E402
 
 
 def _setuptools_version():  # type: () -> str
-    return __version__.public()
+    return __version__.public()  # pragma: no cover
 
 
 __all__ = ["__version__", "Version", "getVersionString"]

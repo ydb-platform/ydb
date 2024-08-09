@@ -33,30 +33,30 @@ ui32 GetPermissionIdx(NKikimrBlobStorage::EGetHandleClass& handleClass) {
 static std::array<std::atomic<bool>, 7> ReportPermissions;
 
 bool AllowToReport(NKikimrBlobStorage::EPutHandleClass& handleClass) {
-    return ReportPermissions[GetPermissionIdx(handleClass)].swap(false);
+    return ReportPermissions[GetPermissionIdx(handleClass)].exchange(false);
 }
 
 bool AllowToReport(NKikimrBlobStorage::EGetHandleClass& handleClass) {
-    return ReportPermissions[GetPermissionIdx(handleClass)].swap(false);
+    return ReportPermissions[GetPermissionIdx(handleClass)].exchange(false);
 }
 
 class TRequestReportingThrottler : public TActorBootstrapped<TRequestReportingThrottler> {
 public:
     TRequestReportingThrottler(TDuration updatePermissionsDelay)
-        : updatePermissionsDelay(UpdatePermissionsDelay)
+        : UpdatePermissionsDelay(updatePermissionsDelay)
     {}
 
-    void TBlobStorageGroupProxy::Bootstrap() {
+    void Bootstrap() {
         Schedule(UpdatePermissionsDelay, new TEvents::TEvWakeup);
         Become(&TThis::StateFunc);
     }
 
     STRICT_STFUNC(StateFunc,
-        cFunc(TEvents::TEvWakeup, HandleWakeup);
+        cFunc(TEvents::TEvWakeup::EventType, HandleWakeup);
     )
 
 private:
-    void HandleWakeup(TEvents::TEvWakeup::TPtr& ev) {
+    void HandleWakeup() {
         for (auto& permission : ReportPermissions) {
             permission.store(true);
         }
@@ -65,9 +65,9 @@ private:
 
 private:
     TDuration UpdatePermissionsDelay;
-}
+};
 
-TActor* CreateRequestReportingThrottler(TDuration updatePermissionsDelay) {
+IActor* CreateRequestReportingThrottler(TDuration updatePermissionsDelay) {
     return new TRequestReportingThrottler(updatePermissionsDelay);
 }
 

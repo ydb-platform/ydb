@@ -8,6 +8,6 @@ namespace NKikimr {
 bool AllowToReportPut(NKikimrBlobStorage::EPutHandleClass& handleClass);
 bool AllowToReportGet(NKikimrBlobStorage::EGetHandleClass& handleClass);
 
-TActor* CreateRequestReportingThrottler();
+IActor* CreateRequestReportingThrottler(TDuration updatePermissionsDelay);
 
 } // namespace NKikimr

@@ -34,6 +34,7 @@ namespace NKikimr {
         bool CachePDisks = false;
         bool CacheVDisks = false;
         bool EnableVDiskCooldownTimeout = false;
+        TDuration RequestReportingThrottlerDelay = TDuration::Seconds(1);
 
         // debugging options
         bool VDiskReplPausedAtStart = false;

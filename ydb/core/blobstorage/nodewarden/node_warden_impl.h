@@ -241,6 +241,7 @@ namespace NKikimr::NStorage {
         void StartLocalProxy(ui32 groupId);
         void StartVirtualGroupAgent(ui32 groupId);
         void StartStaticProxies();
+        void StartRequestReportingThrottler();
 
         /**
          * Removes drives with bad serial numbers and reports them to monitoring.

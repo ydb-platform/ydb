@@ -42,10 +42,23 @@ bool TProcessMemory::UnregisterAllocation(const ui64 allocationId) {
     ui64 memoryAllocated = 0;
     auto it = AllocationInfo.find(allocationId);
     AFL_VERIFY(it != AllocationInfo.end());
-    const bool waitFlag =
-        !it->second->IsAllocated() && WaitAllocations.RemoveAllocation(GroupIds.GetInternalIdVerified(it->second->GetAllocationGroupId()), it->second);
+    bool waitFlag = false;
+    const std::optional<ui64> internalGroupId = GroupIds.GetInternalIdOptional(it->second->GetAllocationGroupId());
+    if (it->second->IsAllocated()) {
+        if (internalGroupId) {
+            AFL_VERIFY(!WaitAllocations.RemoveAllocation(*internalGroupId, it->second));
+        }
+    } else {
+        if (internalGroupId) {
+            AFL_VERIFY(WaitAllocations.RemoveAllocation(*internalGroupId, it->second));
+            waitFlag = true;
+        } else {
+            AFL_VERIFY(!it->second->Allocate(OwnerActorId));
+        }
+        
+    }
     AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "allocation_unregister")("allocation_id", allocationId)("wait", waitFlag)(
-        "internal_group_id", it->second->GetAllocationGroupId());
+        "external_group_id", it->second->GetAllocationGroupId())("internal_group_id", internalGroupId)("allocated", it->second->IsAllocated());
     memoryAllocated = it->second->GetAllocatedVolume();
     AllocationInfo.erase(it);
     return !!memoryAllocated;

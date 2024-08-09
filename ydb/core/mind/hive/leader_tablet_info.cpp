@@ -367,12 +367,16 @@ void TLeaderTabletInfo::ActualizeTabletStatistics(TInstant now) {
     }
 }
 
-void TLeaderTabletInfo::RestoreDeletedHistory() {
-    for (const auto& entry : DeletedHistory) {
+void TLeaderTabletInfo::RestoreDeletedHistory(TTransactionContext& txc) {
+    NIceDb::TNiceDb db(txc.DB);
+    while (!DeletedHistory.empty()) {
+        const auto& entry = DeletedHistory.front();
         if (entry.Channel >= TabletStorageInfo->Channels.size()) {
             continue;
         }
         TabletStorageInfo->Channels[entry.Channel].History.push_back(entry.Entry);
+        db.Table<Schema::TabletChannelGen>().Key(Id, entry.Channel, entry.Entry.FromGeneration).Update<Schema::TabletChannelGen::DeletedAtGeneration>(0);
+        DeletedHistory.pop();
     }
 
     for (auto& channel : TabletStorageInfo->Channels) {
@@ -381,8 +385,6 @@ void TLeaderTabletInfo::RestoreDeletedHistory() {
             return lhs.FromGeneration < rhs.FromGeneration;
         });
     }
-
-    DeletedHistory.clear();
 }
 
 void TLeaderTabletInfo::SetType(TTabletTypes::EType type) {

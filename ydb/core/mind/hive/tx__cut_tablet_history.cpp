@@ -14,12 +14,12 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_CUT_TABLET_HISTORY; }
 
-    bool Execute(TTransactionContext&, const TActorContext&) override {
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
         TEvHive::TEvCutTabletHistory* msg = Event->Get();
         auto tabletId = msg->Record.GetTabletID();
         BLOG_D("THive::TTxCutTabletHistory::Execute(" << tabletId << ")");
         TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(tabletId);
-        if (tablet != nullptr && tablet->IsReadyToReassignTablet()) {
+        if (tablet != nullptr && tablet->IsReadyToReassignTablet() && Self->IsCutHistoryAllowed(tablet->Type)) {
             auto channel = msg->Record.GetChannel();
             Y_ABORT_UNLESS(channel < tablet->TabletStorageInfo->Channels.size());
             TTabletChannelInfo& channelInfo = tablet->TabletStorageInfo->Channels[channel];
@@ -30,11 +30,11 @@ public:
                         channelInfo.History.end(),
                         TTabletChannelInfo::THistoryEntry(fromGeneration, groupId));
             if (it != channelInfo.History.end()) {
-                tablet->DeletedHistory.emplace_back(channel, *it);
+                Self->TabletCounters->Cumulative()[NHive::COUNTER_HISTORY_CUT].Increment(1);
+                tablet->DeletedHistory.emplace(channel, *it, tablet->KnownGeneration);
                 channelInfo.History.erase(it);
-                /* to be safe, don't do it just yet
                 NIceDb::TNiceDb db(txc.DB);
-                db.Table<Schema::TabletChannelGen>().Key(tabletId, channel, fromGeneration).Delete();*/
+                db.Table<Schema::TabletChannelGen>().Key(tabletId, channel, fromGeneration).Update<Schema::TabletChannelGen::DeletedAtGeneration>(tablet->KnownGeneration);
             }
         }
         return true;

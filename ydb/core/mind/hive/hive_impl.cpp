@@ -652,6 +652,22 @@ void THive::BuildCurrentConfig() {
         }
     }
     MakeTabletTypeSet(BalancerIgnoreTabletTypes);
+    CutHistoryDenyList.clear();
+    for (auto name : SplitString(CurrentConfig.GetCutHistoryDenyList(), ",")) {
+        TTabletTypes::EType type = TTabletTypes::StrToType(Strip(name));
+        if (IsValidTabletType(type)) {
+            CutHistoryDenyList.emplace_back(type);
+        }
+    }
+    MakeTabletTypeSet(CutHistoryDenyList);
+    CutHistoryAllowList.clear();
+    for (auto name : SplitString(CurrentConfig.GetCutHistoryAllowList(), ",")) {
+        TTabletTypes::EType type = TTabletTypes::StrToType(Strip(name));
+        if (IsValidTabletType(type)) {
+            CutHistoryAllowList.emplace_back(type);
+        }
+    }
+    MakeTabletTypeSet(CutHistoryAllowList);
     if (!CurrentConfig.GetSpreadNeighbours()) {
         // SpreadNeighbours can be turned off anytime, but
         // cannot be safely turned on without Hive restart

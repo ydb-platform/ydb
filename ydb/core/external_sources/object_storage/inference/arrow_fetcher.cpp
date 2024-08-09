@@ -165,11 +165,14 @@ private:
         }
 
         TString decompressedData;
-        while (!decompressorBuffer->eof()) {
+        while (!decompressorBuffer->eof() && decompressedData.size() < 10_MB) {
             decompressorBuffer->nextIfAtEnd();
-            TString decompressedChunk{decompressorBuffer->available(), ' '};
-            decompressorBuffer->read(&decompressedChunk.front(), decompressorBuffer->available());
-
+            size_t maxDecompressedChunkSize = std::min(
+                decompressorBuffer->available(),                
+                10_MB - decompressedData.size()
+            );
+            TString decompressedChunk{maxDecompressedChunkSize, ' '};
+            decompressorBuffer->read(&decompressedChunk.front(), maxDecompressedChunkSize);
             decompressedData += decompressedChunk;
         }
         return std::move(decompressedData);

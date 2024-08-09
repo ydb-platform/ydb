@@ -641,7 +641,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 auto *res = dynamic_cast<TEvBlobStorage::TEvPutResult*>(event);
                 Y_ABORT_UNLESS(res);
 
-                InitialAllocation.ConfirmBlob(res->Id, CheckStatus(ctx, res, {}));
+                InitialAllocation.ConfirmBlob(res->Id, CheckStatus(ctx, res, {NKikimrProto::EReplyStatus::OK}));
                 while (InitialAllocation.CanSendRequest()) {
                     IssueInitialPut(ctx);
                 }
@@ -888,7 +888,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 Y_ABORT_UNLESS(res);
 
                 WriteSettings.DelayManager->CountResponse();
-                if (!CheckStatus(ctx, res, {})) {
+                if (!CheckStatus(ctx, res, {NKikimrProto::EReplyStatus::OK})) {
                     return;
                 }
 

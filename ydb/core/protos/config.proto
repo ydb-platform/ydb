@@ -1014,6 +1014,7 @@ message TQueryServiceConfig {
     optional NYql.TGenericGatewayConfig Generic = 11;
     optional TFinalizeScriptServiceConfig FinalizeScriptServiceConfig = 12;
     optional uint64 ProgressStatsPeriodMs = 14 [default = 0]; // 0 = disabled
+    optional bool EnableMatchRecognize = 20 [default = false];
 }
 
 // Config describes immediate controls and allows

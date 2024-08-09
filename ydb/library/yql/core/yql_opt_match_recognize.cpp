@@ -146,7 +146,7 @@ TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& 
     ExtractSortKeyAndOrder(pos, sortTraits, sortKey, sortOrder, ctx);
     TExprNode::TPtr result;
     if (isStreaming) {
-        YQL_ENSURE(sortOrder->ChildrenSize() == 1, "Expect ORDER BY timestamp for MATCH_RECOGNIZE on streams");
+        YQL_ENSURE(sortOrder->ChildrenSize() == 1, "Expect ORDER BY timestamp for MATCH_RECOGNIZE");
         const auto reordered = ctx.Builder(pos)
             .Lambda()
             .Param("partition")
@@ -216,37 +216,15 @@ TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& 
             .Seal()
         .Build();
     } else { //non-streaming
-        if (partitionColumns->ChildrenSize() != 0) {
-            result = ctx.Builder(pos)
-                .Callable("PartitionsByKeys")
-                    .Add(0, input)
-                    .Add(1, partitionKeySelector)
-                    .Add(2, sortOrder)
-                    .Add(3, sortKey)
-                    .Add(4, matchRecognize)
-                .Seal()
-            .Build();
-        } else {
-            if (sortOrder->IsCallable("Void")) {
-                result = ctx.Builder(pos)
-                    .Apply(matchRecognize)
-                        .With(0, input)
-                    .Seal()
-                .Build();;
-            } else {
-                result = ctx.Builder(pos)
-                    .Apply(matchRecognize)
-                        .With(0)
-                            .Callable("Sort")
-                                .Add(0, input)
-                                .Add(1, sortOrder)
-                                .Add(2, sortKey)
-                            .Seal()
-                        .Done()
-                    .Seal()
-                .Build();
-            }
-        }
+        result = ctx.Builder(pos)
+            .Callable("PartitionsByKeys")
+                .Add(0, input)
+                .Add(1, partitionKeySelector)
+                .Add(2, sortOrder)
+                .Add(3, sortKey)
+                .Add(4, matchRecognize)
+            .Seal()
+        .Build();
     }
     YQL_CLOG(INFO, Core) << "Expanded MatchRecognize";
     return result;

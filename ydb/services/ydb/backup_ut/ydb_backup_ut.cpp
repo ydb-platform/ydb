@@ -3,16 +3,17 @@
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
+#include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/client/ydb_export/export.h>
 #include <ydb/public/sdk/cpp/client/ydb_import/import.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 
 #include <ydb/library/backup/backup.h>
 
 #include <library/cpp/testing/hook/hook.h>
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <aws/core/Aws.h>
 
@@ -21,14 +22,16 @@ using namespace NYdb::NTable;
 
 namespace {
 
+#define DEBUG_HINT (TStringBuilder() << "at line " << __LINE__)
+
 void ExecuteDataDefinitionQuery(TSession& session, const TString& script) {
     const auto result = session.ExecuteSchemeQuery(script).ExtractValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), "script:\n" << script << "\nissues:\n" << result.GetIssues().ToString());
 }
 
 TDataQueryResult ExecuteDataModificationQuery(TSession& session,
-                                                const TString& script,
-                                                const TExecDataQuerySettings& settings = {}
+                                              const TString& script,
+                                              const TExecDataQuerySettings& settings = {}
 ) {
     const auto result = session.ExecuteDataQuery(
         script,
@@ -40,39 +43,55 @@ TDataQueryResult ExecuteDataModificationQuery(TSession& session,
     return result;
 }
 
-TValue GetSingleResult(const TDataQueryResult& rawResults) {
-    auto resultSetParser = rawResults.GetResultSetParser(0);
-    UNIT_ASSERT(resultSetParser.TryNextRow());
-    return resultSetParser.GetValue(0);
+TDataQueryResult GetTableContent(TSession& session, const char* table) {
+    return ExecuteDataModificationQuery(session, Sprintf(R"(
+            SELECT * FROM `%s` ORDER BY Key;
+        )", table
+    ));
 }
 
-ui64 GetUint64(const TValue& value) {
-    return TValueParser(value).GetUint64();
+void CompareResults(const TDataQueryResult& first, const TDataQueryResult& second, const TString& debugHint = "") {
+    const auto& firstResults = first.GetResultSets();
+    const auto& secondResults = second.GetResultSets();
+
+    UNIT_ASSERT_VALUES_EQUAL_C(firstResults.size(), secondResults.size(), debugHint);
+    for (size_t i = 0; i < firstResults.size(); ++i) {
+        UNIT_ASSERT_STRINGS_EQUAL_C(
+            FormatResultSetYson(firstResults[i]),
+            FormatResultSetYson(secondResults[i]),
+            debugHint
+        );
+    }
 }
 
-auto CreateMinPartitionsChecker(ui64 expectedMinPartitions) {
+TTableDescription GetTableDescription(TSession& session, const TString& path,
+    const TDescribeTableSettings& settings = {}
+) {
+    auto describeResult = session.DescribeTable(path, settings).ExtractValueSync();
+    UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+    return describeResult.GetTableDescription();
+}
+
+auto CreateMinPartitionsChecker(ui64 expectedMinPartitions, const TString& debugHint = "") {
     return [=](const TTableDescription& tableDescription) {
-        return tableDescription.GetPartitioningSettings().GetMinPartitionsCount() == expectedMinPartitions;
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            tableDescription.GetPartitioningSettings().GetMinPartitionsCount(),
+            expectedMinPartitions,
+            debugHint
+        );
     };
 }
 
-void CheckTableDescription(TSession& session, const TString& path, auto&& checker) {
-    auto describeResult = session.DescribeTable(path).ExtractValueSync();
-    UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
-    auto tableDescription = describeResult.GetTableDescription();
-    Ydb::Table::CreateTableRequest descriptionProto;
-    // The purpose of translating to CreateTableRequest is solely to produce a clearer error message.
-    tableDescription.SerializeTo(descriptionProto);
-    UNIT_ASSERT_C(
-        checker(tableDescription),
-        descriptionProto.DebugString()
-    );
+void CheckTableDescription(TSession& session, const TString& path, auto&& checker,
+    const TDescribeTableSettings& settings = {}
+) {
+    checker(GetTableDescription(session, path, settings));
 }
 
 }
 
 Y_UNIT_TEST_SUITE(BackupRestore) {
-        
+
     void Restore(NDump::TClient& client, const TFsPath& sourceFile, const TString& dbPath) {
         auto result = client.Restore(sourceFile, dbPath);
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -85,6 +104,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         auto session = tableClient.GetSession().ExtractValueSync().GetSession();
 
         constexpr const char* table = "/Root/table";
+
         ExecuteDataDefinitionQuery(session, Sprintf(R"(
                 CREATE TABLE `%s` (
                     Key Uint32,
@@ -108,43 +128,33 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             )",
             table
         ));
+        const auto originalContent = GetTableContent(session, table);
 
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
         // TO DO: implement NDump::TClient::Dump and call it instead of BackupFolder
         NYdb::NBackup::BackupFolder(driver, "/Root", ".", pathToBackup, {}, false, false);
-        
-        NDump::TClient backupClient(driver);
 
-        // restore deleted rows in an existing table
         ExecuteDataModificationQuery(session, Sprintf(R"(
                 DELETE FROM `%s` WHERE Key > 3;
             )", table
         ));
-        Restore(backupClient, pathToBackup, "/Root");
-        {
-            auto result = ExecuteDataModificationQuery(session, Sprintf(R"(
-                    SELECT COUNT(*) FROM `%s`;
-                )", table
-            ));
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(GetSingleResult(result)), 5ull);
-        }
 
-        // restore deleted table
+        // restore deleted rows in an existing table
+        NDump::TClient backupClient(driver);
+        Restore(backupClient, pathToBackup, "/Root");
+        CompareResults(GetTableContent(session, table), originalContent, DEBUG_HINT);
+
         ExecuteDataDefinitionQuery(session, Sprintf(R"(
                 DROP TABLE `%s`;
             )", table
         ));
+
+        // restore deleted table
         Restore(backupClient, pathToBackup, "/Root");
-        {
-            auto result = ExecuteDataModificationQuery(session, Sprintf(R"(
-                    SELECT COUNT(*) FROM `%s`;
-                )", table
-            ));
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(GetSingleResult(result)), 5ull);
-        }
+        CompareResults(GetTableContent(session, table), originalContent, DEBUG_HINT);
     }
-    
+
     Y_UNIT_TEST(RestoreTablePartitioningSettings) {
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%d", server.GetPort())));
@@ -153,6 +163,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         constexpr const char* table = "/Root/table";
         constexpr int minPartitions = 10;
+
         ExecuteDataDefinitionQuery(session, Sprintf(R"(
                 CREATE TABLE `%s` (
                     Key Uint32,
@@ -166,23 +177,22 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             )",
             table, minPartitions
         ));
-
-        CheckTableDescription(session, table, CreateMinPartitionsChecker(minPartitions));
+        CheckTableDescription(session, table, CreateMinPartitionsChecker(minPartitions, DEBUG_HINT));
 
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
         // TO DO: implement NDump::TClient::Dump and call it instead of BackupFolder
-        NYdb::NBackup::BackupFolder(driver, "/Root", ".", pathToBackup, {}, false, false);
-        
-        NDump::TClient backupClient(driver);
+        NYdb::NBackup::BackupFolder(driver, "/Root", ".", pathToBackup, {}, true, false);
 
-        // restore deleted table
         ExecuteDataDefinitionQuery(session, Sprintf(R"(
                 DROP TABLE `%s`;
             )", table
         ));
+
+        // restore deleted table
+        NDump::TClient backupClient(driver);
         Restore(backupClient, pathToBackup, "/Root");
-        CheckTableDescription(session, table, CreateMinPartitionsChecker(minPartitions));
+        CheckTableDescription(session, table, CreateMinPartitionsChecker(minPartitions, DEBUG_HINT));
     }
 
     Y_UNIT_TEST(RestoreIndexTablePartitioningSettings) {
@@ -194,7 +204,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         constexpr const char* table = "/Root/table";
         constexpr const char* index = "byValue";
         const TString indexTablePath = JoinFsPaths(table, index, "indexImplTable");
-        constexpr int minPartitions = 10;
+        constexpr int minIndexPartitions = 10;
+
         ExecuteDataDefinitionQuery(session, Sprintf(R"(
                 CREATE TABLE `%s` (
                     Key Uint32,
@@ -210,25 +221,24 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                     AUTO_PARTITIONING_BY_LOAD = ENABLED,
                     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = %d
                 );
-            )", table, index, minPartitions
+            )", table, index, minIndexPartitions
         ));
+        CheckTableDescription(session, indexTablePath, CreateMinPartitionsChecker(minIndexPartitions, DEBUG_HINT));
 
-        CheckTableDescription(session, indexTablePath, CreateMinPartitionsChecker(minPartitions));
-                
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
         // TO DO: implement NDump::TClient::Dump and call it instead of BackupFolder
-        NYdb::NBackup::BackupFolder(driver, "/Root", ".", pathToBackup, {}, false, false);
-        
-        NDump::TClient backupClient(driver);
+        NYdb::NBackup::BackupFolder(driver, "/Root", ".", pathToBackup, {}, true, false);
 
-        // restore deleted table
         ExecuteDataDefinitionQuery(session, Sprintf(R"(
                 DROP TABLE `%s`;
             )", table
         ));
+
+        // restore deleted table
+        NDump::TClient backupClient(driver);
         Restore(backupClient, pathToBackup, "/Root");
-        CheckTableDescription(session, indexTablePath, CreateMinPartitionsChecker(minPartitions));
+        CheckTableDescription(session, indexTablePath, CreateMinPartitionsChecker(minIndexPartitions, DEBUG_HINT));
     }
 
 }
@@ -331,7 +341,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
     void ImportFromS3(NImport::TImportClient& importClient, ui16 s3Port, NOperation::TOperationClient& operationClient,
         const TString& source, const TString& destination
     ) {
-        // The exact values for Bucket, AccessKey and SecretKey do not matter if the S3 backend is TS3Mock. 
+        // The exact values for Bucket, AccessKey and SecretKey do not matter if the S3 backend is TS3Mock.
         // Any non-empty strings should do.
         const auto importSettings = NImport::TImportFromS3Settings()
             .Endpoint(Sprintf("localhost:%d", s3Port))
@@ -353,6 +363,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         TS3TestEnv testEnv;
 
         constexpr const char* table = "/Root/table";
+
         ExecuteDataDefinitionQuery(testEnv.GetSession(), Sprintf(R"(
                 CREATE TABLE `%s` (
                     Key Uint32,
@@ -376,6 +387,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             )",
             table
         ));
+        const auto originalContent = GetTableContent(testEnv.GetSession(), table);
 
         NExport::TExportClient exportClient(testEnv.GetDriver());
         NImport::TImportClient importClient(testEnv.GetDriver());
@@ -390,13 +402,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         ));
 
         ImportFromS3(importClient, testEnv.GetS3Port(), operationClient, "table", table);
-        {
-            auto result = ExecuteDataModificationQuery(testEnv.GetSession(), Sprintf(R"(
-                    SELECT COUNT(*) FROM `%s`;
-                )", table
-            ));
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(GetSingleResult(result)), 5ull);
-        }
+        CompareResults(GetTableContent(testEnv.GetSession(), table), originalContent, DEBUG_HINT);
     }
 
     Y_UNIT_TEST(RestoreTablePartitioningSettings) {
@@ -404,6 +410,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
         constexpr const char* table = "/Root/table";
         constexpr int minPartitions = 10;
+
         ExecuteDataDefinitionQuery(testEnv.GetSession(), Sprintf(R"(
                 CREATE TABLE `%s` (
                     Key Uint32,
@@ -417,8 +424,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             )",
             table, minPartitions
         ));
-
-        CheckTableDescription(testEnv.GetSession(), table, CreateMinPartitionsChecker(minPartitions));
+        CheckTableDescription(testEnv.GetSession(), table, CreateMinPartitionsChecker(minPartitions, DEBUG_HINT));
 
         NExport::TExportClient exportClient(testEnv.GetDriver());
         NImport::TImportClient importClient(testEnv.GetDriver());
@@ -433,7 +439,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         ));
 
         ImportFromS3(importClient, testEnv.GetS3Port(), operationClient, "table", table);
-        CheckTableDescription(testEnv.GetSession(), table, CreateMinPartitionsChecker(minPartitions));
+        CheckTableDescription(testEnv.GetSession(), table, CreateMinPartitionsChecker(minPartitions, DEBUG_HINT));
     }
 
     Y_UNIT_TEST(RestoreIndexTablePartitioningSettings) {
@@ -442,7 +448,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         constexpr const char* table = "/Root/table";
         constexpr const char* index = "byValue";
         const TString indexTablePath = JoinFsPaths(table, index, "indexImplTable");
-        constexpr int minPartitions = 10;
+        constexpr int minIndexPartitions = 10;
+
         ExecuteDataDefinitionQuery(testEnv.GetSession(), Sprintf(R"(
                 CREATE TABLE `%s` (
                     Key Uint32,
@@ -458,10 +465,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                     AUTO_PARTITIONING_BY_LOAD = ENABLED,
                     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = %d
                 );
-            )", table, index, minPartitions
+            )", table, index, minIndexPartitions
         ));
-
-        CheckTableDescription(testEnv.GetSession(), indexTablePath, CreateMinPartitionsChecker(minPartitions));
+        CheckTableDescription(testEnv.GetSession(), indexTablePath,
+            CreateMinPartitionsChecker(minIndexPartitions, DEBUG_HINT)
+        );
 
         NExport::TExportClient exportClient(testEnv.GetDriver());
         NImport::TImportClient importClient(testEnv.GetDriver());
@@ -476,7 +484,9 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         ));
 
         ImportFromS3(importClient, testEnv.GetS3Port(), operationClient, "table", table);
-        CheckTableDescription(testEnv.GetSession(), indexTablePath, CreateMinPartitionsChecker(minPartitions));
+        CheckTableDescription(testEnv.GetSession(), indexTablePath,
+            CreateMinPartitionsChecker(minIndexPartitions, DEBUG_HINT)
+        );
     }
 
 }

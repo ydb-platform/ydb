@@ -1,0 +1,258 @@
+syntax = "proto3";
+
+import "ydb/public/api/protos/ydb_operation.proto";
+import "ydb/public/api/protos/draft/field_transformation.proto";
+
+import "google/protobuf/descriptor.proto";
+
+package Ydb.Ymq.V1;
+option java_package = "com.yandex.ydb.ymq.v1";
+
+message ChangeMessageVisibilityRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string queue_url = 2;
+    string receipt_handle = 3;
+    int32 visibility_timeout = 4;
+}
+
+message ChangeMessageVisibilityResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ChangeMessageVisibilityResult {
+}
+
+message ChangeMessageVisibilityBatchRequestEntry {
+    string id = 1;
+    string receipt_handle = 2;
+    int32 visibility_timeout = 3;
+}
+
+message ChangeMessageVisibilityBatchRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    repeated ChangeMessageVisibilityBatchRequestEntry entries = 2;
+    string queue_url = 3;
+}
+
+message ChangeMessageVisibilityBatchResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ChangeMessageVisibilityBatchResultEntry {
+    string id = 1;
+}
+
+message ChangeMessageVisibilityBatchResult {
+    repeated BatchResultErrorEntry failed = 1;
+    repeated ChangeMessageVisibilityBatchResultEntry successful = 2;
+}
+
+message CreateQueueRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    map<string, string> attributes = 2;
+    string queue_name = 3;
+    map<string,string> tags = 4;
+}
+
+message CreateQueueResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message CreateQueueResult {
+    string queue_url = 1;
+}
+
+message DeleteMessageRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string queue_url = 2;
+    string receipt_handle = 3;
+}
+
+message DeleteMessageResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DeleteMessageResult {
+}
+
+message DeleteMessageBatchRequestEntry {
+    string id = 1;
+    string receipt_handle = 2;
+}
+
+message DeleteMessageBatchRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    repeated DeleteMessageBatchRequestEntry entries = 2;
+    string queue_url = 3;
+}
+
+message DeleteMessageBatchResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DeleteMessageBatchResultEntry {
+    string id = 1;
+}
+
+message DeleteMessageBatchResult {
+    repeated BatchResultErrorEntry failed = 1;
+    repeated DeleteMessageBatchResultEntry successful = 2;
+}
+
+message DeleteQueueRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string queue_url = 2;
+}
+
+message DeleteQueueResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DeleteQueueResult {
+}
+
+message GetQueueAttributesRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    repeated string attribute_names = 2;
+    string queue_url = 3;
+}
+
+message GetQueueAttributesResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message GetQueueAttributesResult {
+    map<string, string> attributes = 1;
+}
+
+message GetQueueUrlRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string queue_name = 2;
+    string queue_owner_aws_account_id = 3;
+}
+
+message GetQueueUrlResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message GetQueueUrlResult {
+    string queue_url = 1;
+}
+
+message ListQueuesRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    int64 max_results = 2;
+    string next_token = 3;
+    string queue_name_prefix = 4;
+}
+
+message ListQueuesResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ListQueuesResult {
+    string next_token = 1;
+    repeated string queue_urls = 2;
+}
+
+message PurgeQueueRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string queue_url = 2;
+}
+
+message PurgeQueueResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message PurgeQueueResult {
+}
+
+message MessageAttribute {
+    repeated bytes binary_list_values = 1 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_BASE64];
+    bytes binary_value = 2 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_BASE64];
+    string data_type = 3;
+    repeated string string_list_values = 4;
+    string string_value = 5;
+}
+
+message ReceiveMessageRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    repeated string attribute_names = 2;
+    int32 max_number_of_messages = 3;
+    repeated string message_attribute_names = 4;
+    repeated string message_system_attribute_names = 5;
+    string queue_url = 6;
+    string receive_request_attempt_id = 7;
+    int32 visibility_timeout = 8;
+    int32 wait_time_seconds = 9;
+}
+
+message ReceiveMessageResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message Message {
+    map<string, string> attributes = 1;
+    string body = 2;
+    string md5_of_body = 3;
+    string md5_of_message_attributes = 4;
+    map<string, MessageAttribute>  message_attributes = 5;
+    string  message_id = 6;
+    string receipt_handle = 7;
+}
+
+message ReceiveMessageResult {
+    repeated Message messages = 1;
+}
+
+message SendMessageRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    int32 delay_seconds = 2;
+    map<string, MessageAttribute> message_attributes = 3;
+    string message_body = 4;
+    string message_deduplication_id = 5;
+    string message_group_id = 6;
+    map<string, MessageAttribute> message_system_attributes = 7;
+    string queue_url = 8;
+}
+
+message SendMessageResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message SendMessageResult {
+    string md5_of_message_attributes = 1;
+    string md5_of_message_body= 2;
+    string md5_of_message_system_attributes= 3;
+    string message_id = 4;
+    string sequence_number = 5;
+}
+
+message SendMessageBatchRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    repeated SendMessageRequest entries = 2;
+}
+
+message SendMessageBatchResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message BatchResultErrorEntry {
+    string code = 1;
+    string id = 2;
+    bool sender_fault = 3;
+    string message = 4;
+}
+
+message SendMessageBatchResultEntry {
+    string md5_of_message_attributes = 1;
+    string md5_of_message_body= 2;
+    string md5_of_message_system_attributes= 3;
+    string message_id = 4;
+    string sequence_number = 5;
+}
+
+message SendMessageBatchResult {
+    repeated BatchResultErrorEntry failed = 1;
+    repeated SendMessageBatchResultEntry successful = 2;
+}

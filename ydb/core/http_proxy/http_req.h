@@ -52,9 +52,12 @@ private:
 
 
 struct THttpResponseData {
+    bool IsYmq = false;
     NYdb::EStatus Status{NYdb::EStatus::SUCCESS};
     NJson::TJsonValue Body;
     TString ErrorText{"OK"};
+    TString YmqStatusCode;
+    ui32 YmqHttpCode;
 
     TString DumpBody(MimeTypes contentType);
 };
@@ -85,7 +88,9 @@ struct THttpRequestContext {
     TString ApiVersion; // used once
     MimeTypes ContentType{MIME_UNKNOWN};
     TString IamToken;
+    TString SecurityToken;
     TString SerializedUserToken;
+    TString UserName;
 
     TStringBuilder LogPrefix() const {
         return TStringBuilder() << "http request [" << MethodName << "] requestId [" << RequestId << "]";
@@ -119,7 +124,8 @@ public:
                  const TActorContext& ctx);
 
 private:
-    THashMap<TString, THolder<IHttpRequestProcessor>> Name2Processor;
+    THashMap<TString, THolder<IHttpRequestProcessor>> Name2DataStreamsProcessor;
+    THashMap<TString, THolder<IHttpRequestProcessor>> Name2YmqProcessor;
 };
 
 NActors::IActor* CreateAccessServiceActor(const NKikimrConfig::TServerlessProxyConfig& config);

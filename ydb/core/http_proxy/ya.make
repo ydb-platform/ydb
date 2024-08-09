@@ -39,9 +39,11 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_datastreams
     ydb/public/sdk/cpp/client/ydb_persqueue_core
     ydb/public/sdk/cpp/client/ydb_topic/codecs
+    ydb/public/sdk/cpp/client/ydb_ymq
     ydb/public/sdk/cpp/client/iam_private
     ydb/services/datastreams
     ydb/services/persqueue_v1/actors
+    ydb/services/ymq
     ydb/public/api/grpc
     ydb/public/api/protos
 )

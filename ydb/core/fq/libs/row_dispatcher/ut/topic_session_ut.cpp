@@ -17,6 +17,7 @@ using namespace NFq;
 using namespace NYql::NDq;
 
 const ui64 TimeoutBeforeStartSessionSec = 3;
+const ui64 GrabTimeoutSec = 4 * TimeoutBeforeStartSessionSec;
 
 class TFixture : public NUnitTest::TBaseFixture {
 
@@ -91,7 +92,7 @@ public:
     }
 
     void ExpectMessageBatch(NActors::TActorId readActorId, const std::vector<TString>& expected) {
-        auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvMessageBatch>(RowDispatcherActorId, TDuration::Seconds(10));
+        auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvMessageBatch>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
         UNIT_ASSERT(eventHolder->Get()->ReadActorId == readActorId);
         UNIT_ASSERT(expected.size() == eventHolder->Get()->Record.MessagesSize());
@@ -103,13 +104,13 @@ public:
     }
 
     void ExpectSessionError(NActors::TActorId readActorId) {
-        auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvSessionError>(RowDispatcherActorId, TDuration::Seconds(10));
+        auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvSessionError>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
         UNIT_ASSERT(eventHolder->Get()->ReadActorId == readActorId);
     }
 
     void ExpectNewDataArrived(NActors::TActorId readActorId) {
-        auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvNewDataArrived>(RowDispatcherActorId, TDuration::Seconds(10));
+        auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvNewDataArrived>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
         UNIT_ASSERT(eventHolder->Get()->ReadActorId == readActorId);
     }
@@ -216,7 +217,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
     }
 
     Y_UNIT_TEST_F(SessionError, TFixture) {
-        const TString topicName = "topic";
+        const TString topicName = "topic4";
         PQCreateStream(topicName);
         Init(topicName);
         StartSession(ReadActorId1);
@@ -227,6 +228,28 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         ExpectSessionError(ReadActorId1);
         StopSession(ReadActorId1);
     }
+
+    Y_UNIT_TEST_F(RestartSessionIfNewClientWithOffset, TFixture) {
+        const TString topicName = "topic5";
+        PQCreateStream(topicName);
+        Init(topicName);
+        StartSession(ReadActorId1);
+
+        const std::vector<TString> data = { Json1, Json2 }; // offset 0, 1
+        PQWrite(data, topicName);
+        ExpectNewDataArrived(ReadActorId1);
+        Runtime.Send(new IEventHandle(TopicSession, ReadActorId1, new TEvRowDispatcher::TEvGetNextBatch()));
+        ExpectMessageBatch(ReadActorId1, data);
+
+
+        StartSession(ReadActorId2, 1);
+        ExpectNewDataArrived(ReadActorId2);
+
+
+
+        //StopSession(ReadActorId1);
+    }
+
 }
 
 }

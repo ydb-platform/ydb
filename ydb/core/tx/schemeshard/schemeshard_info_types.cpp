@@ -2143,7 +2143,7 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
 }
 
 void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {
-    Y_ABORT_UNLESS(IsBuildColumn());
+    Y_ABORT_UNLESS(IsBuildColumns());
     if (TargetName.empty()) {
         TargetName = TPath::Init(TablePathId, ss).PathString();
     }

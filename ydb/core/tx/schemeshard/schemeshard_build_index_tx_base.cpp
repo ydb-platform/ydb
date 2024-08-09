@@ -191,7 +191,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         const TShardIdx& shardIdx = item.first;
         const TIndexBuildInfo::TShardStatus& status = item.second;
 
-        if (status.Status != NKikimrTxDataShard::TEvBuildIndexProgressResponse::INPROGRESS) {
+        if (status.Status != NKikimrIndexBuilder::EBuildStatus::INPROGRESS) {
             if (status.UploadStatus != Ydb::StatusIds::SUCCESS) {
                 if (status.DebugMessage) {
                     AddIssue(index.MutableIssues(), status.ToString(shardIdx));
@@ -282,7 +282,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         default:
             Y_ABORT("Unreachable");
         }
-    } else if (info.IsBuildColumn()) {
+    } else if (info.IsBuildColumns()) {
         for(const auto& column : info.BuildColumns) {
             auto* columnProto = settings.mutable_column_build_operation()->add_column();
             columnProto->SetColumnName(column.ColumnName);

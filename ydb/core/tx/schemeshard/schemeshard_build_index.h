@@ -19,6 +19,7 @@ struct TEvIndexBuilder {
         EvForgetResponse,
         EvListRequest,
         EvListResponse,
+        EvUploadSampleKResponse,
 
         EvEnd
     };
@@ -118,6 +119,9 @@ struct TEvIndexBuilder {
     };
 
     struct TEvListResponse: public TEventPB<TEvListResponse, NKikimrIndexBuilder::TEvListResponse, EvListResponse> {
+    };
+
+    struct TEvUploadSampleKResponse: public TEventPB<TEvUploadSampleKResponse, NKikimrIndexBuilder::TEvUploadSampleKResponse, EvUploadSampleKResponse> {
     };
 
 }; // TEvIndexBuilder

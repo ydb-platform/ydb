@@ -19,15 +19,21 @@ class App(ConanFile):
 {%- endfor -%}
 }
 
+{%- if (conan.requires is defined) and (conan.requires|length) %}
+
     requires =
-{%- for conan_require in conan.requires %} "{{ conan_require }}"
-{%-     if not loop.last -%},{%- endif -%}
-{%- endfor %}
+{%-     for conan_require in conan.requires %} "{{ conan_require }}"
+{%-         if not loop.last -%},{%- endif -%}
+{%-     endfor -%}
+{%- endif -%}
+
+{%- if (conan.tool_requires is defined) and (conan.tool_requires|length) %}
 
     tool_requires =
-{%- for conan_tool_require in conan.tool_requires %} "{{ conan_tool_require }}"
-{%-     if not loop.last -%},{%- endif -%}
-{%- endfor %}
+{%-     for conan_tool_require in conan.tool_requires %} "{{ conan_tool_require }}"
+{%-         if not loop.last -%},{%- endif -%}
+{%-     endfor -%}
+{%- endif -%}
 
 {%- if use_conan2 %}
 
@@ -53,7 +59,7 @@ class App(ConanFile):
     def layout(self):
         cmake_layout(self)
 
-{%- else -%}
+{%- else %}
 
     generators = "cmake_find_package", "cmake_paths"
 

@@ -65,8 +65,12 @@ std::string MapConnectionType(const FederatedQuery::ConnectionSetting::Connectio
         return "Monitoring";
     case FederatedQuery::ConnectionSetting::ConnectionCase::kPostgresqlCluster:
         return "PostgreSQLCluster";
-    default:
-        Y_ENSURE(false, "Invalid connection case " << i32(connectionCase));
+    case FederatedQuery::ConnectionSetting::ConnectionCase::kGreenplumCluster:
+        return "GreenplumCluster";
+    case FederatedQuery::ConnectionSetting::ConnectionCase::kMysqlCluster:
+        return "MysqlCluster";
+    case FederatedQuery::ConnectionSetting::ConnectionCase::CONNECTION_NOT_SET:
+        return "CONNECTION_NOT_SET";
     }
 }
 
@@ -76,8 +80,8 @@ std::string MapBindingType(const FederatedQuery::BindingSetting::BindingCase& bi
         return "YdbDataStreams";
     case FederatedQuery::BindingSetting::BindingSetting::kObjectStorage:
         return "ObjectStorage";
-    default:
-        Y_ENSURE(false, "Invalid connection case " << i32(bindingCase));
+    case FederatedQuery::BindingSetting::BindingSetting::BINDING_NOT_SET:
+        return "BINDING_NOT_SET";
     }
 }
 

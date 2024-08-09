@@ -181,14 +181,14 @@ std::variant<ArrowFields, TString> InferCsvTypes(std::shared_ptr<arrow::io::Rand
     .Value(&reader);
 
     if (!readerStatus.ok()) {
-        return TString{TStringBuilder{} << "TArrowInferencinator: couldn't parse csv/tsv file, check format and compression params: " << readerStatus.ToString()};
+        return TString{TStringBuilder{} << "couldn't parse csv/tsv file, check format and compression params: " << readerStatus.ToString()};
     }
 
     std::shared_ptr<arrow::Table> table;
     auto tableRes = reader->Read().Value(&table);
 
     if (!tableRes.ok()) {
-        return TStringBuilder{} << "TArrowInferencinator: couldn't parse csv/tsv file, check format and compression params: " << readerStatus.ToString();
+        return TStringBuilder{} << "couldn't parse csv/tsv file, check format and compression params: " << readerStatus.ToString();
     }
 
     return table->fields();
@@ -279,8 +279,7 @@ public:
 
     void HandleFileError(TEvFileError::TPtr& ev, const NActors::TActorContext& ctx) {
         Cout << "TArrowInferencinator::HandleFileError" << Endl;
-        auto& event = *ev->Release();
-        ctx.Send(RequesterId_, new TEvInferredFileSchema(event.Path, std::move(event.Issues)));
+        ctx.Send(RequesterId_, new TEvInferredFileSchema(ev->Path, std::move(ev->Issues)));
     }
 
 private:

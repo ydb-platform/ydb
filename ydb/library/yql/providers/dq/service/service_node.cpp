@@ -132,7 +132,8 @@ namespace NYql {
 
         auto options = TServerOptions()
                            // .SetHost(CurrentNode->Address)
-                           .SetHost("[::]")
+                        //    .SetHost("[::]")
+                           .SetHost("0.0.0.0")
                            .SetPort(Config.GrpcPort)
                            .SetExternalListener(listener)
                            .SetWorkerThreads(2)
@@ -152,7 +153,12 @@ namespace NYql {
         Server = MakeHolder<TGRpcServer>(options);
         Service = TIntrusivePtr<IGRpcService>(new TDqsGrpcService(*ActorSystem, MetricsRegistry->GetSensors(), dqTaskPreprocessorFactories));
         Server->AddService(Service);
+
+        Cout << "CRAB: TServiceNode::StartService Before " << Config.GrpcPort << Endl;
+
         Server->Start();
+
+        Cout << "CRAB: TServiceNode::StartService After " << Config.GrpcPort << Endl;
     }
 
     void TServiceNode::Stop(TDuration timeout) {

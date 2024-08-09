@@ -113,6 +113,7 @@ public:
         PipeClient = RegisterWithSameMailbox(pipe);
         THolder<TEvSchemeShard::TEvLogin> request = MakeHolder<TEvSchemeShard::TEvLogin>();
         request.Get()->Record = CreateLoginRequest(AuthCredentials, AppData()->AuthConfig);
+        request.Get()->Record.SetPeerName(Request->Address->ToString());
         NTabletPipe::SendData(SelfId(), PipeClient, request.Release());
     }
 

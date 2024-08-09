@@ -38,8 +38,8 @@ public:
             std::make_shared<TAllocationGuard>(ProcessId, Allocation->GetIdentifier(), ownerId, Allocation->GetMemory()), Allocation);
         if (result) {
             Stage->Allocate(AllocatedVolume);
-            Allocation = nullptr;
         }
+        Allocation = nullptr;
         return result;
     }
 

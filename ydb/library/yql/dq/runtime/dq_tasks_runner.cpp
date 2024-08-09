@@ -1,5 +1,6 @@
 #include "dq_tasks_runner.h"
 
+#include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_multihopping.h>
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
@@ -269,6 +270,7 @@ public:
     }
 
     void SetSpillerFactory(std::shared_ptr<ISpillerFactory> spillerFactory) override {
+        spillerFactory->SetTaskCounters(SpillingTaskCounters);
         AllocatedHolder->ProgramParsed.CompGraph->GetContext().SpillerFactory = std::move(spillerFactory);
     }
 
@@ -511,6 +513,7 @@ public:
         TBindTerminator term(AllocatedHolder->ProgramParsed.CompGraph->GetTerminator());
 
         auto& typeEnv = TypeEnv();
+        SpillingTaskCounters = execCtx.GetSpillingTaskCounters();
 
         for (ui32 i = 0; i < task.InputsSize(); ++i) {
             auto& inputDesc = task.GetInputs(i);
@@ -834,6 +837,13 @@ public:
     }
 
     const TDqTaskRunnerStats* GetStats() const override {
+        // [TODO] move this into more appropriate place
+        if (Stats && SpillingTaskCounters) {
+            Stats->SpillingComputeReadBytes = SpillingTaskCounters->ComputeReadBytes.Val();
+            Stats->SpillingComputeWriteBytes = SpillingTaskCounters->ComputeWriteBytes.Val();
+            Stats->SpillingChannelReadBytes = SpillingTaskCounters->ChannelReadBytes.Val();
+            Stats->SpillingChannelWriteBytes = SpillingTaskCounters->ChannelWriteBytes.Val();
+        }
         return Stats.get();
     }
 
@@ -928,6 +938,8 @@ private:
     }
 
 private:
+    TIntrusivePtr<TSpillingTaskCounters> SpillingTaskCounters;
+
     ui64 TaskId = 0;
     TDqTaskRunnerContext Context;
     TDqTaskRunnerSettings Settings;

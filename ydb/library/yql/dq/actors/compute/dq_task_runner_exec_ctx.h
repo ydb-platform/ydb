@@ -15,11 +15,13 @@ public:
     IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem) const override;
 
     std::function<void()> GetWakeupCallback() const override;
+    TIntrusivePtr<TSpillingTaskCounters> GetSpillingTaskCounters() const override;
     TTxId GetTxId() const override;
 
 private:
     const TTxId TxId_;
     const IDqChannelStorage::TWakeUpCallback WakeUp_;
+    const TIntrusivePtr<TSpillingTaskCounters> SpillingTaskCounters_;
 };
 
 } // namespace NDq

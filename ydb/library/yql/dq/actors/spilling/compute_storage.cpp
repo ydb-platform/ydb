@@ -6,10 +6,11 @@ namespace NYql::NDq {
 
 using namespace NActors;
 
-TDqComputeStorage::TDqComputeStorage(TTxId txId, std::function<void()> wakeUpCallback, TActorSystem* actorSystem) : ActorSystem_(actorSystem) {
+TDqComputeStorage::TDqComputeStorage(TTxId txId, std::function<void()> wakeUpCallback,  TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters, 
+    TActorSystem* actorSystem) : ActorSystem_(actorSystem) {
     TStringStream spillerName;
     spillerName << "Spiller" << "_" << CreateGuidAsString();
-    ComputeStorageActor_ = CreateDqComputeStorageActor(txId, spillerName.Str(), wakeUpCallback);
+    ComputeStorageActor_ = CreateDqComputeStorageActor(txId, spillerName.Str(), wakeUpCallback, spillingTaskCounters);
     ComputeStorageActorId_ = ActorSystem_->Register(ComputeStorageActor_->GetActor());
 }
 

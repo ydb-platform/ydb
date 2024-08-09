@@ -6,10 +6,9 @@ ENV(YDB_ERASURE=block_4-2)
 
 PEERDIR(
     library/cpp/threading/local_executor
-    library/cpp/yson
     ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/client/ydb_proto
     ydb/public/sdk/cpp/client/draft
-    ydb/public/lib/yson_value
 )
 
 SRCS(

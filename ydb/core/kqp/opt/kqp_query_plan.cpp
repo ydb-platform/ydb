@@ -467,6 +467,10 @@ private:
             if (!TryFromString(wideColumnName, idx)) {
                 return wideColumnName;
             }
+
+            YQL_ENSURE(idx < settings.OutputNarrowType->GetSize(),
+                "Failed to lookup column name for index " << idx << " in type " << settings.OutputNarrowType->ToString());
+
             return TString(settings.OutputNarrowType->GetItems()[idx]->GetName());
         };
 

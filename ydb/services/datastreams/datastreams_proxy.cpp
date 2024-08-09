@@ -66,7 +66,8 @@ namespace NKikimr::NDataStreams::V1 {
 
         TString ValidatePartitioningSettings(const ::Ydb::DataStreams::V1::PartitioningSettings& s) {
             if (s.auto_partitioning_settings().strategy() == ::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP
-                || s.auto_partitioning_settings().strategy() == ::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN) {
+                || s.auto_partitioning_settings().strategy() == ::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN
+                || s.auto_partitioning_settings().strategy() == ::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_PAUSED) {
 
                 if (s.min_active_partitions() < 0) {
                     return "min_active_partitions must be great than 0";
@@ -483,9 +484,6 @@ namespace NKikimr::NDataStreams::V1 {
             auto& s = GetProtoRequest()->partitioning_settings();
             auto* t = groupConfig.MutablePQTabletConfig()->MutablePartitionStrategy();
 
-            t->SetMinPartitionCount(s.min_active_partitions() ? s.min_active_partitions() : 1);
-            t->SetMaxPartitionCount(s.max_active_partitions() ? s.max_active_partitions() : 1);
-
             auto& as = s.auto_partitioning_settings();
             switch(as.strategy()) {
                 case Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_UNSPECIFIED:
@@ -502,6 +500,17 @@ namespace NKikimr::NDataStreams::V1 {
                 case  Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN:
                     t->SetPartitionStrategyType(NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE);
                     break;
+
+                case  Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_PAUSED:
+                    t->SetPartitionStrategyType(NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_PAUSED);
+                    break;
+            }
+
+            t->SetMinPartitionCount(s.min_active_partitions() ? s.min_active_partitions() : 1);
+            if (!s.max_active_partitions() && t->GetPartitionStrategyType() != NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED) {
+                t->SetMaxPartitionCount(1);
+            } else {
+                t->SetMaxPartitionCount(s.max_active_partitions());
             }
 
             auto& ws = as.partition_write_speed();
@@ -785,10 +794,13 @@ namespace NKikimr::NDataStreams::V1 {
         if (ps.GetPartitionStrategyType() != NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED) {
             pt->set_min_active_partitions(ps.GetMinPartitionCount());
             pt->set_max_active_partitions(ps.GetMaxPartitionCount());
+
             if (ps.GetPartitionStrategyType() == NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT) {
                 pt->mutable_auto_partitioning_settings()->set_strategy(::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP);
-            } else {
+            } else if (ps.GetPartitionStrategyType() == NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE) {
                 pt->mutable_auto_partitioning_settings()->set_strategy(::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN);
+            } else {
+                pt->mutable_auto_partitioning_settings()->set_strategy(::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_PAUSED);
             }
 
             pt->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->mutable_stabilization_window()->set_seconds(ps.GetScaleThresholdSeconds());

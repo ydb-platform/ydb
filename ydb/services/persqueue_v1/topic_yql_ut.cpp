@@ -22,8 +22,40 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
         auto after = CheckPQChildrenSize("after drop");
         UNIT_ASSERT_VALUES_EQUAL(after + 1, before);
     }
+
+    Y_UNIT_TEST(CreateAndAlterTopicYqlBackCompatibility) {
+        NKikimrConfig::TFeatureFlags ff;
+        ff.SetEnableTopicSplitMerge(true);
+        auto settings = NKikimr::NPersQueueTests::PQSettings();
+        settings.SetFeatureFlags(ff);
+
+        NPersQueue::TTestServer server(settings);
+
+        const char *query = R"__(
+            CREATE TOPIC `/Root/PQ/rt3.dc1--legacy--topic1` (
+                CONSUMER c1
+            ) WITH (min_active_partitions = 2,
+                    partition_count_limit = 5
+            );
+        )__";
+
+        server.AnnoyingClient->RunYqlSchemeQuery(query);
+        auto pqGroup = server.AnnoyingClient->Ls("/Root/PQ/rt3.dc1--legacy--topic1")->Record.GetPathDescription()
+                                                                                            .GetPersQueueGroup();
+        const auto& describeAfterCreate = pqGroup.GetPQTabletConfig();
+        Cerr <<"=== PATH DESCRIPTION: \n" << pqGroup.DebugString();
+
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterCreate.GetPartitionStrategy().GetMinPartitionCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterCreate.GetPartitionStrategy().GetMaxPartitionCount(), 5);
+    }
+
     Y_UNIT_TEST(CreateAndAlterTopicYql) {
-        NPersQueue::TTestServer server;
+        NKikimrConfig::TFeatureFlags ff;
+        ff.SetEnableTopicSplitMerge(true);
+        auto settings = NKikimr::NPersQueueTests::PQSettings();
+        settings.SetFeatureFlags(ff);
+
+        NPersQueue::TTestServer server(settings);
         auto CheckPQChildrenSize = [&](const TString prefix) {
             auto children = server.AnnoyingClient->Ls("/Root/PQ/")->Record.GetPathDescription().ChildrenSize();
             Cerr << prefix << ", children in PQ:" << children << Endl;
@@ -34,60 +66,79 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
             CREATE TOPIC `/Root/PQ/rt3.dc1--legacy--topic1` (
                 CONSUMER c1,
                 CONSUMER c2 WITH (important = true, read_from = 100, supported_codecs = 'RAW, LZOP, GZIP')
-            ) WITH (min_active_partitions = 2, partition_count_limit = 5, retention_period = Interval('PT1H'),
+            ) WITH (min_active_partitions = 2,
+                    max_active_partitions = 5,
+                    auto_partitioning_stabilization_window = Interval('PT1M'),
+                    auto_partitioning_up_utilization_percent = 50,
+                    auto_partitioning_down_utilization_percent = 40,
+                    retention_period = Interval('PT1H'),
                     retention_storage_mb = 15,
-                    supported_codecs = 'RAW, GZIP', partition_write_speed_bytes_per_second = 9000,
-                    partition_write_burst_bytes = 100500
+                    supported_codecs = 'RAW, GZIP',
+                    partition_write_speed_bytes_per_second = 9000,
+                    partition_write_burst_bytes = 100500,
+                    auto_partitioning_strategy = 'scale_up'
             );
         )__";
+
         server.AnnoyingClient->RunYqlSchemeQuery(query);
         auto after = CheckPQChildrenSize("after create");
         UNIT_ASSERT_VALUES_EQUAL(after, before + 1);
         auto pqGroup = server.AnnoyingClient->Ls("/Root/PQ/rt3.dc1--legacy--topic1")->Record.GetPathDescription()
                                                                                             .GetPersQueueGroup();
-        const auto& descr = pqGroup.GetPQTabletConfig();
+        const auto& describeAfterCreate = pqGroup.GetPQTabletConfig();
         Cerr <<"=== PATH DESCRIPTION: \n" << pqGroup.DebugString();
-        UNIT_ASSERT_VALUES_EQUAL(descr.GetPartitionConfig().GetLifetimeSeconds(), 3600);
-        UNIT_ASSERT_VALUES_EQUAL(descr.GetPartitionConfig().GetBurstSize(), 100500);
-        UNIT_ASSERT_VALUES_EQUAL(descr.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(), 9000);
-        UNIT_ASSERT_VALUES_EQUAL(descr.GetPartitionConfig().ImportantClientIdSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(descr.GetPartitionConfig().GetImportantClientId(0), "c2");
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterCreate.GetPartitionConfig().GetLifetimeSeconds(), 3600);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterCreate.GetPartitionConfig().GetBurstSize(), 100500);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterCreate.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(), 9000);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterCreate.GetPartitionConfig().ImportantClientIdSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterCreate.GetPartitionConfig().GetImportantClientId(0), "c2");
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterCreate.GetPartitionStrategy().GetMinPartitionCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterCreate.GetPartitionStrategy().GetMaxPartitionCount(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterCreate.GetPartitionStrategy().GetScaleThresholdSeconds(), 60);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterCreate.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent(), 50);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterCreate.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent(), 40);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(describeAfterCreate.GetPartitionStrategy().GetPartitionStrategyType()), static_cast<int>(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT));
 
-        auto& codecs = descr.GetConsumerCodecs(1);
+        auto& codecs = describeAfterCreate.GetConsumerCodecs(1);
         UNIT_ASSERT_VALUES_EQUAL(codecs.IdsSize(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(descr.GetCodecs().IdsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterCreate.GetCodecs().IdsSize(), 2);
         UNIT_ASSERT_VALUES_EQUAL(pqGroup.GetTotalGroupCount(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(descr.GetReadFromTimestampsMs(1), 100 * 1000);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterCreate.GetReadFromTimestampsMs(1), 100 * 1000);
 
-        auto descrCopy = descr;
+        auto expectedDescr = describeAfterCreate;
         {
-            auto partCfg = descrCopy.MutablePartitionConfig();
+            auto partCfg = expectedDescr.MutablePartitionConfig();
             partCfg->SetLifetimeSeconds(7200);
             partCfg->SetBurstSize(100501);
             partCfg->SetWriteSpeedInBytesPerSecond(9001);
-            auto* rtfs = descrCopy.MutableReadFromTimestampsMs();
+            auto* rtfs = expectedDescr.MutableReadFromTimestampsMs();
             rtfs->Set(1, 1609462861000);
 
-            descrCopy.MutableConsumers(1)->SetReadFromTimestampsMs(1609462861000);
+            expectedDescr.MutablePartitionStrategy()->SetMinPartitionCount(3);
+
+            expectedDescr.MutableConsumers(1)->SetReadFromTimestampsMs(1609462861000);
         }
         const char *query2 = R"__(
         ALTER TOPIC `/Root/PQ/rt3.dc1--legacy--topic1`
             ALTER CONSUMER c2 SET (read_from = Timestamp('2021-01-01T01:01:01Z')),
-            SET (min_active_partitions = 3, retention_period = Interval('PT2H'), retention_storage_mb = 10,
-                 partition_count_limit = 5,  
-                 partition_write_burst_bytes = 100501, partition_write_speed_bytes_per_second = 9001
+            SET (min_active_partitions = 3,
+                 retention_period = Interval('PT2H'),
+                 retention_storage_mb = 10,
+                 partition_count_limit = 5,
+                 partition_write_burst_bytes = 100501,
+                 partition_write_speed_bytes_per_second = 9001
             );
         )__";
         server.AnnoyingClient->RunYqlSchemeQuery(query2);
         auto pqGroup2 = server.AnnoyingClient->Ls("/Root/PQ/rt3.dc1--legacy--topic1")->Record.GetPathDescription()
                                                                                              .GetPersQueueGroup();
-        const auto& descr2 = pqGroup2.GetPQTabletConfig();
+        const auto& describeAfterAlter = pqGroup2.GetPQTabletConfig();
 
-        Cerr << ">>>>> 1: " << descrCopy.DebugString() << Endl;
-        Cerr << ">>>>> 2: " << descr2.DebugString() << Endl;
+        Cerr << ">>>>> 1: " << expectedDescr.DebugString() << Endl;
+        Cerr << ">>>>> 2: " << describeAfterAlter.DebugString() << Endl;
 
-        UNIT_ASSERT_VALUES_EQUAL(descrCopy.DebugString(), descr2.DebugString());
-        
+        UNIT_ASSERT_VALUES_EQUAL(expectedDescr.DebugString(), describeAfterAlter.DebugString());
+
         const char *query3 = R"__(
         ALTER TOPIC `/Root/PQ/rt3.dc1--legacy--topic1`
             DROP CONSUMER c1,
@@ -111,7 +162,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
         UNIT_ASSERT_VALUES_EQUAL(descr3.GetConsumerCodecs(0).IdsSize(), 2);
         UNIT_ASSERT_VALUES_EQUAL(descr3.GetCodecs().IdsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(descr3.GetReadFromTimestampsMs(0), 1609462861000);
-        UNIT_ASSERT_VALUES_EQUAL(pqGroup2.GetTotalGroupCount(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(pqGroup2.GetTotalGroupCount(), 2);
 
         //1609462861
     }

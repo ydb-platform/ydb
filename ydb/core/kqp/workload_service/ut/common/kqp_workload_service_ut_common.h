@@ -76,6 +76,7 @@ struct TYdbSetupSettings {
     FLUENT_SETTING_DEFAULT(double, QueryMemoryLimitPercentPerNode, -1);
     FLUENT_SETTING_DEFAULT(double, DatabaseLoadCpuThreshold, -1);
 
+    NResourcePool::TPoolSettings GetDefaultPoolSettings() const;
     TIntrusivePtr<IYdbSetup> Create() const;
 };
 

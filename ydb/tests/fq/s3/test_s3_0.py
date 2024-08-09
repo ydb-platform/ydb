@@ -339,7 +339,7 @@ Apple,2,22,
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        assert "Error: couldn\\'t make table from data" in str(
+        assert "TArrowInferencinator: couldn\\'t parse csv/tsv file, check format and compression params:" in str(
             client.describe_query(query_id).result
         )
 

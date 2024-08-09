@@ -181,14 +181,14 @@ std::variant<ArrowFields, TString> InferCsvTypes(std::shared_ptr<arrow::io::Rand
     .Value(&reader);
 
     if (!readerStatus.ok()) {
-        return TString{TStringBuilder{} << "couldn't make table from data: " << readerStatus.ToString()};
+        return TString{TStringBuilder{} << "TArrowInferencinator: couldn't parse csv/tsv file, check format and compression params: " << readerStatus.ToString()};
     }
 
     std::shared_ptr<arrow::Table> table;
     auto tableRes = reader->Read().Value(&table);
 
     if (!tableRes.ok()) {
-        return TStringBuilder{} << "couldn't read table from data: " << readerStatus.ToString();
+        return TStringBuilder{} << "TArrowInferencinator: couldn't parse csv/tsv file, check format and compression params: " << readerStatus.ToString();
     }
 
     return table->fields();

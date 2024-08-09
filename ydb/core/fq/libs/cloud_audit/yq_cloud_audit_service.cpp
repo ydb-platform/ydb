@@ -70,7 +70,7 @@ std::string MapConnectionType(const FederatedQuery::ConnectionSetting::Connectio
     case FederatedQuery::ConnectionSetting::ConnectionCase::kMysqlCluster:
         return "MySQLCluster";
     case FederatedQuery::ConnectionSetting::ConnectionCase::CONNECTION_NOT_SET:
-        return "CONNECTION_NOT_SET";
+        Y_ENSURE(false, "Invalid connection case " << i32(connectionCase));
     }
 }
 
@@ -81,7 +81,7 @@ std::string MapBindingType(const FederatedQuery::BindingSetting::BindingCase& bi
     case FederatedQuery::BindingSetting::BindingSetting::kObjectStorage:
         return "ObjectStorage";
     case FederatedQuery::BindingSetting::BindingSetting::BINDING_NOT_SET:
-        return "BINDING_NOT_SET";
+        Y_ENSURE(false, "Invalid binding case " << i32(bindingCase));
     }
 }
 

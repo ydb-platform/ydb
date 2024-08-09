@@ -34,7 +34,6 @@ DEFINE_ENUM(EMultiplexingBand,
     ((Heavy)                 (2))
     ((Interactive)           (3))
     ((RealTime)              (4))
-    ((Journal)               (5))
 );
 
 EMultiplexingBand GetDefaultValue(EMultiplexingBand);

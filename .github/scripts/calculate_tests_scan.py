@@ -10,8 +10,6 @@ import datetime
 import time
 
 
-
-
 dir = os.path.dirname(__file__)
 config = configparser.ConfigParser()
 config_file_path = f"{dir}/../config/ydb_qa_db.ini"
@@ -22,7 +20,6 @@ branch = os.environ.get("branch_to_compare")
 
 DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
 DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
-
 
 
 def create_tables(pool,  table_path):
@@ -207,7 +204,6 @@ def main():
                
             create_tables(pool, table_path)
             full_path = posixpath.join(DATABASE_PATH, table_path)
-            bulk_upsert(driver.table_client, full_path,prepared_for_update_rows)
             bulk_upsert(driver.table_client, full_path,prepared_for_update_rows)
         
 

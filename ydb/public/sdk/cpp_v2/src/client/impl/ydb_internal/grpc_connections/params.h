@@ -28,10 +28,10 @@ public:
     virtual bool GetGRpcKeepAlivePermitWithoutCalls() const = 0;
     virtual TDuration GetSocketIdleTimeout() const = 0;
     virtual const TLog& GetLog() const = 0;
-    virtual ui64 GetMemoryQuota() const = 0;
-    virtual ui64 GetMaxInboundMessageSize() const = 0;
-    virtual ui64 GetMaxOutboundMessageSize() const = 0;
-    virtual ui64 GetMaxMessageSize() const = 0;
+    virtual uint64_t GetMemoryQuota() const = 0;
+    virtual uint64_t GetMaxInboundMessageSize() const = 0;
+    virtual uint64_t GetMaxOutboundMessageSize() const = 0;
+    virtual uint64_t GetMaxMessageSize() const = 0;
 };
 
 } // namespace NYdb

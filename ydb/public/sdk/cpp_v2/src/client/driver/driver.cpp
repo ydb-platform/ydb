@@ -44,10 +44,10 @@ public:
     TDuration GetGRpcKeepAliveTimeout() const override { return GRpcKeepAliveTimeout; }
     bool GetGRpcKeepAlivePermitWithoutCalls() const override { return GRpcKeepAlivePermitWithoutCalls; }
     TDuration GetSocketIdleTimeout() const override { return SocketIdleTimeout; }
-    ui64 GetMemoryQuota() const override { return MemoryQuota; }
-    ui64 GetMaxInboundMessageSize() const override { return MaxInboundMessageSize; }
-    ui64 GetMaxOutboundMessageSize() const override { return MaxOutboundMessageSize; }
-    ui64 GetMaxMessageSize() const override { return MaxMessageSize; }
+    uint64_t GetMemoryQuota() const override { return MemoryQuota; }
+    uint64_t GetMaxInboundMessageSize() const override { return MaxInboundMessageSize; }
+    uint64_t GetMaxOutboundMessageSize() const override { return MaxOutboundMessageSize; }
+    uint64_t GetMaxMessageSize() const override { return MaxMessageSize; }
     const TLog& GetLog() const override { return Log; }
 
     std::string Endpoint;
@@ -71,10 +71,10 @@ public:
     TDuration GRpcKeepAliveTimeout;
     bool GRpcKeepAlivePermitWithoutCalls = false;
     TDuration SocketIdleTimeout = TDuration::Minutes(6);
-    ui64 MemoryQuota = 0;
-    ui64 MaxInboundMessageSize = 0;
-    ui64 MaxOutboundMessageSize = 0;
-    ui64 MaxMessageSize = 0;
+    uint64_t MemoryQuota = 0;
+    uint64_t MaxInboundMessageSize = 0;
+    uint64_t MaxOutboundMessageSize = 0;
+    uint64_t MaxMessageSize = 0;
     TLog Log; // Null by default.
 };
 
@@ -153,7 +153,7 @@ TDriverConfig& TDriverConfig::SetTcpKeepAliveSettings(bool enable, size_t idle, 
     return *this;
 }
 
-TDriverConfig& TDriverConfig::SetGrpcMemoryQuota(ui64 bytes) {
+TDriverConfig& TDriverConfig::SetGrpcMemoryQuota(uint64_t bytes) {
     Impl_->MemoryQuota = bytes;
     return *this;
 }
@@ -183,17 +183,17 @@ TDriverConfig& TDriverConfig::SetSocketIdleTimeout(TDuration timeout) {
     return *this;
 }
 
-TDriverConfig& TDriverConfig::SetMaxInboundMessageSize(ui64 maxInboundMessageSize) {
+TDriverConfig& TDriverConfig::SetMaxInboundMessageSize(uint64_t maxInboundMessageSize) {
     Impl_->MaxInboundMessageSize = maxInboundMessageSize;
     return *this;
 }
 
-TDriverConfig& TDriverConfig::SetMaxOutboundMessageSize(ui64 maxOutboundMessageSize) {
+TDriverConfig& TDriverConfig::SetMaxOutboundMessageSize(uint64_t maxOutboundMessageSize) {
     Impl_->MaxOutboundMessageSize = maxOutboundMessageSize;
     return *this;
 }
 
-TDriverConfig& TDriverConfig::SetMaxMessageSize(ui64 maxMessageSize) {
+TDriverConfig& TDriverConfig::SetMaxMessageSize(uint64_t maxMessageSize) {
     Impl_->MaxMessageSize = maxMessageSize;
     return *this;
 }

@@ -95,7 +95,7 @@ TNodeRegistrationResult::TNodeRegistrationResult(TStatus&& status, const Ydb::Di
     }
 }
 
-const ui32& TNodeRegistrationResult::GetNodeId() const {
+uint32_t TNodeRegistrationResult::GetNodeId() const {
     return NodeId_;
 }
 
@@ -103,11 +103,11 @@ const std::string& TNodeRegistrationResult::GetDomainPath() const {
     return DomainPath_;
 }
 
-const ui64& TNodeRegistrationResult::GetExpire() const {
+uint64_t TNodeRegistrationResult::GetExpire() const {
     return Expire_;
 }
 
-const ui64& TNodeRegistrationResult::GetScopeTabletId() const {
+uint64_t TNodeRegistrationResult::GetScopeTabletId() const {
     return ScopeTableId_.value();
 }
 
@@ -115,7 +115,7 @@ bool TNodeRegistrationResult::HasScopeTabletId() const {
     return ScopeTableId_.has_value();
 }
 
-const ui64& TNodeRegistrationResult::GetScopePathId() const {
+uint64_t TNodeRegistrationResult::GetScopePathId() const {
     return ScopePathId_.value();
 }
 

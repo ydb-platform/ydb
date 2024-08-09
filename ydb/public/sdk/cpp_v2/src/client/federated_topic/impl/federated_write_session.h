@@ -34,17 +34,17 @@ public:
     std::optional<NTopic::TWriteSessionEvent::TEvent> GetEvent(bool block);
     std::vector<NTopic::TWriteSessionEvent::TEvent> GetEvents(bool block, std::optional<size_t> maxEventsCount);
 
-    NThreading::TFuture<ui64> GetInitSeqNo();
+    NThreading::TFuture<uint64_t> GetInitSeqNo();
 
     void Write(NTopic::TContinuationToken&& continuationToken, NTopic::TWriteMessage&& message);
 
     void WriteEncoded(NTopic::TContinuationToken&& continuationToken, NTopic::TWriteMessage&& params);
 
-    void Write(NTopic::TContinuationToken&&, std::string_view, std::optional<ui64> seqNo = std::nullopt,
+    void Write(NTopic::TContinuationToken&&, std::string_view, std::optional<uint64_t> seqNo = std::nullopt,
                        std::optional<TInstant> createTimestamp = std::nullopt);
 
     void WriteEncoded(NTopic::TContinuationToken&&, std::string_view, NTopic::ECodec, ui32,
-                              std::optional<ui64> seqNo = std::nullopt, std::optional<TInstant> createTimestamp = std::nullopt);
+                              std::optional<uint64_t> seqNo = std::nullopt, std::optional<TInstant> createTimestamp = std::nullopt);
 
     bool Close(TDuration timeout);
 
@@ -164,7 +164,7 @@ public:
     std::vector<NTopic::TWriteSessionEvent::TEvent> GetEvents(bool block, std::optional<size_t> maxEventsCount) override {
         return TryGetImpl()->GetEvents(block, maxEventsCount);
     }
-    NThreading::TFuture<ui64> GetInitSeqNo() override {
+    NThreading::TFuture<uint64_t> GetInitSeqNo() override {
         return TryGetImpl()->GetInitSeqNo();
     }
     void Write(NTopic::TContinuationToken&& continuationToken, NTopic::TWriteMessage&& message) override {
@@ -173,12 +173,12 @@ public:
     void WriteEncoded(NTopic::TContinuationToken&& continuationToken, NTopic::TWriteMessage&& params) override {
         TryGetImpl()->WriteEncoded(std::move(continuationToken), std::move(params));
     }
-    void Write(NTopic::TContinuationToken&& continuationToken, std::string_view data, std::optional<ui64> seqNo = std::nullopt,
+    void Write(NTopic::TContinuationToken&& continuationToken, std::string_view data, std::optional<uint64_t> seqNo = std::nullopt,
                        std::optional<TInstant> createTimestamp = std::nullopt) override {
         TryGetImpl()->Write(std::move(continuationToken), data, seqNo, createTimestamp);
     }
     void WriteEncoded(NTopic::TContinuationToken&& continuationToken, std::string_view data, NTopic::ECodec codec, ui32 originalSize,
-                      std::optional<ui64> seqNo = std::nullopt, std::optional<TInstant> createTimestamp = std::nullopt) override {
+                      std::optional<uint64_t> seqNo = std::nullopt, std::optional<TInstant> createTimestamp = std::nullopt) override {
         TryGetImpl()->WriteEncoded(std::move(continuationToken), data, codec, originalSize, seqNo, createTimestamp);
     }
     bool Close(TDuration timeout) override {

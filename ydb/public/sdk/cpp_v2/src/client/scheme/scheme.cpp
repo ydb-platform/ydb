@@ -17,7 +17,7 @@ namespace NScheme {
 using namespace NThreading;
 using namespace Ydb::Scheme;
 
-TVirtualTimestamp::TVirtualTimestamp(ui64 planStep, ui64 txId)
+TVirtualTimestamp::TVirtualTimestamp(uint64_t planStep, uint64_t txId)
     : PlanStep(planStep)
     , TxId(txId)
 {}

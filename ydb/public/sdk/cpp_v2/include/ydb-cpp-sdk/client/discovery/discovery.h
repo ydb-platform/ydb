@@ -102,12 +102,12 @@ class TNodeRegistrationResult : public TStatus {
 public:
     TNodeRegistrationResult() : TStatus(EStatus::GENERIC_ERROR, NYql::TIssues()) {}
     TNodeRegistrationResult(TStatus&& status, const Ydb::Discovery::NodeRegistrationResult& proto);
-    const uint32_t& GetNodeId() const;
+    uint32_t GetNodeId() const;
     const std::string& GetDomainPath() const;
-    const uint64_t& GetExpire() const;
-    const uint64_t& GetScopeTabletId() const;
+    uint64_t GetExpire() const;
+    uint64_t GetScopeTabletId() const;
     bool HasScopeTabletId() const;
-    const uint64_t& GetScopePathId() const;
+    uint64_t GetScopePathId() const;
     bool HasScopePathId() const;
     const std::string& GetNodeName() const;
     bool HasNodeName() const;

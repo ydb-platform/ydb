@@ -18,8 +18,8 @@ void GetLogBatch(uint64_t logOffset, std::vector<TLogMessage>& logBatch) {
     logBatch.clear();
     for (size_t i = 0; i < BATCH_SIZE; ++i) {
         TLogMessage message;
-        message.App = "App_" + ToString(logOffset % 10);
-        message.Host = "192.168.0." + ToString(logOffset % 11);
+        message.App = "App_" + std::to_string(logOffset % 10);
+        message.Host = "192.168.0." + std::to_string(logOffset % 11);
         message.Timestamp = TInstant::Now() + TDuration::MilliSeconds(i % 1000);
         message.HttpCode = 200;
         message.Message = i % 2 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1";

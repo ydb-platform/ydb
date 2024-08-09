@@ -68,6 +68,7 @@ void BridgeFreeQueryResult(TBridgeQueryResult* result)
     delete[] result->TaskInfo;
     delete[] result->Statistics;
     delete[] result->Plan;
+    delete[] result->Progress;
     delete[] result->YsonResult;
     delete[] result->YsonError;
     delete result;

@@ -629,6 +629,10 @@ protected:
         }
     }
 
+    void SendError(const TString& error) {
+        this->Send(this->SelfId(), TEvDq::TEvAbortExecution::InternalError(error));
+    }
+
 protected: //TDqComputeActorChannels::ICallbacks
     //i64 GetInputChannelFreeSpace(ui64 channelId) is pure and must be overridded in derived class
 

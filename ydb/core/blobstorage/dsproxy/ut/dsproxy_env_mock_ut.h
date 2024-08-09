@@ -192,10 +192,17 @@ struct TDSProxyEnv {
                     .Cookie = ev->Cookie,
                     .Now = TInstant::Now(),
                     .StoragePoolCounters = StoragePoolCounters,
+<<<<<<< HEAD
                     .RestartCounter = ev->Get()->RestartCounter,
                     .TraceId = std::move(ev->TraceId),
                     .Event = ev->Get(),
                     .ExecutionRelay = ev->Get()->ExecutionRelay
+=======
+                    .RestartCounter = ev->RestartCounter,
+                    .TraceId = std::move(ev->TraceId),
+                    .Event = ev->Get(),
+                    .ExecutionRelay = ev->ExecutionRelay
+>>>>>>> Wrap ctor args in structs
                 },
                 .UseVPatch = useVPatch
             }));

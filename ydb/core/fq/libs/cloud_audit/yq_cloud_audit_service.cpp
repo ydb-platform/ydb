@@ -68,7 +68,7 @@ std::string MapConnectionType(const FederatedQuery::ConnectionSetting::Connectio
     case FederatedQuery::ConnectionSetting::ConnectionCase::kGreenplumCluster:
         return "GreenplumCluster";
     case FederatedQuery::ConnectionSetting::ConnectionCase::kMysqlCluster:
-        return "MysqlCluster";
+        return "MySQLCluster";
     case FederatedQuery::ConnectionSetting::ConnectionCase::CONNECTION_NOT_SET:
         return "CONNECTION_NOT_SET";
     }

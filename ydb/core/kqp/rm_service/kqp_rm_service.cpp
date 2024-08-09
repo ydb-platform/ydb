@@ -92,6 +92,10 @@ public:
         SpillingCookie->SpillingPercentReached.store(Available() < OverLimit);
     }
 
+    ui64 GetUsed() const {
+        return Used;
+    }
+
     void Release(ui64 value) {
         if (Used > value) {
             Used -= value;
@@ -103,7 +107,7 @@ public:
     }
 
     void SetNewLimit(ui64 baseLimit, double memoryPoolPercent, double overPercent) {
-        if (abs(memoryPoolPercent - MemoryPoolPercent) < MYEPS && baseLimit != BaseLimit)
+        if (abs(memoryPoolPercent - MemoryPoolPercent) < MYEPS && baseLimit == BaseLimit)
             return;
 
         BaseLimit = baseLimit;
@@ -256,7 +260,7 @@ public:
             task->TotalMemoryCookie = TotalMemoryResource->GetSpillingCookie();
 
             if (hasScanQueryMemory && !tx->PoolId.empty() && tx->MemoryPoolPercent > 0) {
-                auto [it, success] = MemoryNamedPools.emplace(tx->PoolId, nullptr);
+                auto [it, success] = MemoryNamedPools.emplace(tx->MakePoolId(), nullptr);
 
                 if (success) {
                     it->second = MakeIntrusive<TMemoryResource>(TotalMemoryResource->GetLimit(), tx->MemoryPoolPercent, SpillingPercent.load());
@@ -291,9 +295,15 @@ public:
                 Counters->RmNotEnoughMemory->Inc();
                 with_lock (Lock) {
                     TotalMemoryResource->Release(resources.Memory);
-                    auto it = MemoryNamedPools.find(tx->PoolId);
-                    if (it != MemoryNamedPools.end()) {
-                        it->second->Release(resources.Memory);
+                    if (!tx->PoolId.empty()) {
+                        auto it = MemoryNamedPools.find(tx->MakePoolId());
+                        if (it != MemoryNamedPools.end()) {
+                            it->second->Release(resources.Memory);
+                        }
+
+                        if (it->second->GetUsed() == 0) {
+                            MemoryNamedPools.erase(it);
+                        }
                     }
                 }
             }
@@ -356,9 +366,15 @@ public:
         if (resources.Memory > 0) {
             with_lock (Lock) {
                 TotalMemoryResource->Release(resources.Memory);
-                auto it = MemoryNamedPools.find(tx->PoolId);
-                if (it != MemoryNamedPools.end()) {
-                    it->second->Release(resources.Memory);
+                if (!tx->PoolId.empty()) {
+                    auto it = MemoryNamedPools.find(tx->MakePoolId());
+                    if (it != MemoryNamedPools.end()) {
+                        it->second->Release(resources.Memory);
+
+                        if (it->second->GetUsed() == 0) {
+                            MemoryNamedPools.erase(it);
+                        }
+                    }
                 }
             }
         }
@@ -509,7 +525,7 @@ public:
     std::shared_ptr<TResourceSnapshotState> ResourceSnapshotState;
     TActorId ResourceInfoExchanger = TActorId();
 
-    absl::flat_hash_map<TString, TIntrusivePtr<TMemoryResource>> MemoryNamedPools;
+    absl::flat_hash_map<std::pair<TString, TString>, TIntrusivePtr<TMemoryResource>, THash<std::pair<TString, TString>>> MemoryNamedPools;
 };
 
 struct TResourceManagers {

@@ -5,7 +5,6 @@ RECURSE(
     fq
     idx_test
     json_value
-    jwt
     operation_id
     protobuf
     scheme_types

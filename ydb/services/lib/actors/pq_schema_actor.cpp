@@ -5,7 +5,7 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/persqueue/utils.h>
 
-#include <ydb/public/lib/jwt/jwt.h>
+#include <ydb-cpp-sdk/library/jwt/jwt.h>
 
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 

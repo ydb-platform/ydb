@@ -1,5 +1,6 @@
 RECURSE(
     grpc/client
+    json_value
     jwt
     operation_id
     persqueue/obfuscate
@@ -8,4 +9,5 @@ RECURSE(
     string_utils/helpers
     uuid
     yql
+    yson_value
 )

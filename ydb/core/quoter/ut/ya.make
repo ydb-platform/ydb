@@ -17,7 +17,7 @@ IF (NOT OS_WINDOWS)
 
     # reserve cpu for speed test
 
-    REQUIREMENTS(cpu:4)
+    REQUIREMENTS(cpu:1)
 
     IF (WITH_VALGRIND)
         SIZE(LARGE)

@@ -3,7 +3,7 @@ UNITTEST()
 FORK_SUBTESTS()
 
 REQUIREMENTS(
-    cpu:4
+    cpu:1
     ram:16
 )
 

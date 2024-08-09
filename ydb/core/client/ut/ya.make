@@ -8,13 +8,13 @@ IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)
     REQUIREMENTS(
-        cpu:4
+        cpu:1
         ram:32
     )
     TAG(ya:fat)
 ELSE()
     REQUIREMENTS(
-        cpu:4
+        cpu:1
         ram:16
     )
     TIMEOUT(600)

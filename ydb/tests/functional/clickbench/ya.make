@@ -12,7 +12,7 @@ ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(YDB_ENABLE_COLUMN_TABLES="true")
 REQUIREMENTS(
     ram:32
-    cpu:4
+    cpu:1
 )
 
 DEPENDS(

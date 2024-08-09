@@ -16,6 +16,7 @@ NO_COMPILER_WARNINGS()
 NO_RUNTIME()
 
 CFLAGS(
+    -DDEFAULT_TEXT_DOMAIN=\"bison-gnulib\"
     -DEXEEXT=\"\"
 )
 
@@ -24,6 +25,7 @@ SRCS(
     areadlink.c
     argmatch.c
     asnprintf.c
+    asprintf.c
     basename-lgpl.c
     basename.c
     binary-io.c
@@ -53,16 +55,22 @@ SRCS(
     fd-safer.c
     fopen-safer.c
     fseterr.c
+    fstrcmp.c
     get-errno.c
     gethrxtime.c
     getprogname.c
     gl_array_list.c
     gl_list.c
     gl_xlist.c
+    glthread/lock.c
+    glthread/threadlib.c
+    glthread/tls.c
     hard-locale.c
     hash.c
     localcharset.c
     math.c
+    mbchar.c
+    mbfile.c
     mbrtowc.c
     mbswidth.c
     path-join.c
@@ -75,6 +83,7 @@ SRCS(
     printf-parse.c
     progname.c
     quotearg.c
+    setlocale_null.c
     sig-handler.c
     spawn-pipe.c
     stripslash.c
@@ -83,10 +92,12 @@ SRCS(
     unistd.c
     uniwidth/width.c
     vasnprintf.c
+    vasprintf.c
     wait-process.c
     wctype-h.c
     xalloc-die.c
     xconcat-filename.c
+    xhash.c
     xmalloc.c
     xmemdup0.c
     xreadlink.c
@@ -130,6 +141,11 @@ ELSEIF (OS_WINDOWS)
         strverscmp.c
         waitpid.c
         wcwidth.c
+        windows-mutex.c
+        windows-once.c
+        windows-recmutex.c
+        windows-rwlock.c
+        windows-tls.c
     )
 ENDIF()
 

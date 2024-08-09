@@ -110,6 +110,12 @@ TFuture<IActiveRequestPtr> TMockClient::StartPut(const TString& /*url*/, const T
     YT_UNIMPLEMENTED();
 }
 
+TFuture<IResponsePtr> TMockClient::Request(EMethod method, const TString& url, const std::optional<TSharedRef>& body, const THeadersPtr& headers)
+{
+    auto mockResponse = Request(method, url, ToString(body), DumpHeadersSafe(headers));
+    return MakeFuture<IResponsePtr>(New<TMockResponseStream>(mockResponse));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NHttp

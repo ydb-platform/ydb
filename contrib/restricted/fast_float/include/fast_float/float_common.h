@@ -564,7 +564,7 @@ inline constexpr int binary_format<double>::smallest_power_of_ten() {
 }
 template <>
 inline constexpr int binary_format<float>::smallest_power_of_ten() {
-  return -65;
+  return -64;
 }
 
 template <> inline constexpr size_t binary_format<double>::max_digits() {

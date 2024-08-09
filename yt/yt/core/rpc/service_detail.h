@@ -411,7 +411,7 @@ protected:
         if (!typedContext->DeserializeRequest()) { \
             return; \
         } \
-        InitContext(typedContext); \
+        InitContext(typedContext.Get());          \
         auto* request = &typedContext->Request(); \
         auto* response = &typedContext->Response(); \
         this->method(request, response, typedContext); \
@@ -426,11 +426,11 @@ protected:
             return ::NYT::NRpc::TServiceBase::TLiteHandler(); \
         } \
         return \
-            BIND([=, this] ( \
+            BIND([this, typedContext = std::move(typedContext)] ( \
                 const ::NYT::NRpc::IServiceContextPtr&, \
                 const ::NYT::NRpc::THandlerInvocationOptions&) \
             { \
-                InitContext(typedContext); \
+                InitContext(typedContext.Get());          \
                 auto* request = &typedContext->Request(); \
                 auto* response = &typedContext->Response(); \
                 this->method(request, response, typedContext); \
@@ -550,7 +550,7 @@ protected:
     //! By default, this method does nothing. You may hide this method by a custom implementation
     //! (possibly switching argument type to a proper typed context class) in order to customize
     //! specific service context before invoking method handler.
-    void InitContext(IServiceContextPtr context);
+    void InitContext(IServiceContext* context);
 
     //! Information needed to a register a service method.
     struct TMethodDescriptor

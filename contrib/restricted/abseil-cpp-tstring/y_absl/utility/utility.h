@@ -51,11 +51,14 @@ Y_ABSL_NAMESPACE_BEGIN
 // abstractions for platforms that had not yet provided them. Those
 // platforms are no longer supported. New code should simply use the
 // the ones from std directly.
+using std::exchange;
+using std::forward;
 using std::index_sequence;
 using std::index_sequence_for;
 using std::integer_sequence;
 using std::make_index_sequence;
 using std::make_integer_sequence;
+using std::move;
 
 namespace utility_internal {
 
@@ -129,27 +132,6 @@ template <size_t I>
 void in_place_index(utility_internal::InPlaceIndexTag<I>) {}
 #endif  // Y_ABSL_USES_STD_VARIANT
 
-// Constexpr move and forward
-
-// move()
-//
-// A constexpr version of `std::move()`, designed to be a drop-in replacement
-// for C++14's `std::move()`.
-template <typename T>
-constexpr y_absl::remove_reference_t<T>&& move(T&& t) noexcept {
-  return static_cast<y_absl::remove_reference_t<T>&&>(t);
-}
-
-// forward()
-//
-// A constexpr version of `std::forward()`, designed to be a drop-in replacement
-// for C++14's `std::forward()`.
-template <typename T>
-constexpr T&& forward(
-    y_absl::remove_reference_t<T>& t) noexcept {  // NOLINT(runtime/references)
-  return static_cast<T&&>(t);
-}
-
 namespace utility_internal {
 // Helper method for expanding tuple into a called method.
 template <typename Functor, typename Tuple, std::size_t... Indexes>
@@ -213,26 +195,6 @@ auto apply(Functor&& functor, Tuple&& t)
       y_absl::forward<Functor>(functor), y_absl::forward<Tuple>(t),
       y_absl::make_index_sequence<std::tuple_size<
           typename std::remove_reference<Tuple>::type>::value>{});
-}
-
-// exchange
-//
-// Replaces the value of `obj` with `new_value` and returns the old value of
-// `obj`.  `y_absl::exchange` is designed to be a drop-in replacement for C++14's
-// `std::exchange`.
-//
-// Example:
-//
-//   Foo& operator=(Foo&& other) {
-//     ptr1_ = y_absl::exchange(other.ptr1_, nullptr);
-//     int1_ = y_absl::exchange(other.int1_, -1);
-//     return *this;
-//   }
-template <typename T, typename U = T>
-T exchange(T& obj, U&& new_value) {
-  T old_value = y_absl::move(obj);
-  obj = y_absl::forward<U>(new_value);
-  return old_value;
 }
 
 namespace utility_internal {

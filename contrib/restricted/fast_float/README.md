@@ -285,18 +285,19 @@ int main() {
 }
 ``````
 
-## Relation With Other Work
+## Users and Related Work
 
 The fast_float library is part of:
 
 - GCC (as of version 12): the `from_chars` function in GCC relies on fast_float.
 - [WebKit](https://github.com/WebKit/WebKit), the engine behind Safari (Apple's web browser)
+- [DuckDB](https://duckdb.org)
+- [Apache Arrow](https://github.com/apache/arrow/pull/8494) where it multiplied the number parsing speed by two or three times
+- [Google Jsonnet](https://github.com/google/jsonnet)
+- [ClickHouse](https://github.com/ClickHouse/ClickHouse)
 
 
-The fastfloat algorithm is part of the [LLVM standard libraries](https://github.com/llvm/llvm-project/commit/87c016078ad72c46505461e4ff8bfa04819fe7ba).
-
-There is a [derived implementation part of AdaCore](https://github.com/AdaCore/VSS).
-
+The fastfloat algorithm is part of the [LLVM standard libraries](https://github.com/llvm/llvm-project/commit/87c016078ad72c46505461e4ff8bfa04819fe7ba). There is a [derived implementation part of AdaCore](https://github.com/AdaCore/VSS).
 
 The fast_float library provides a performance similar to that of the [fast_double_parser](https://github.com/lemire/fast_double_parser) library but using an updated algorithm reworked from the ground up, and while offering an API more in line with the expectations of C++ programmers. The fast_double_parser library is part of the [Microsoft LightGBM machine-learning framework](https://github.com/microsoft/LightGBM).
 
@@ -313,9 +314,6 @@ The fast_float library provides a performance similar to that of the [fast_doubl
 - [There is a C# port of the fast_float library](https://github.com/CarlVerret/csFastFloat) called `csFastFloat`.
 
 
-## Users
-
-The fast_float library is used by [Apache Arrow](https://github.com/apache/arrow/pull/8494) where it multiplied the number parsing speed by two or three times. It is also used by [ClickHouse](https://github.com/ClickHouse/ClickHouse) and by [Google Jsonnet](https://github.com/google/jsonnet). It is part of GCC (as of GCC 12). It is part of WebKit (Safari).
 
 
 ## How fast is it?
@@ -381,7 +379,7 @@ the command line help.
 
 You may directly download automatically generated single-header files:
 
-https://github.com/fastfloat/fast_float/releases/download/v6.1.1/fast_float.h
+https://github.com/fastfloat/fast_float/releases/download/v6.1.3/fast_float.h
 
 ## RFC 7159
 

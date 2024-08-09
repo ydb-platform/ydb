@@ -238,5 +238,5 @@ Pear,15,33'''
         logging.debug("Describe result: {}".format(describe_result))
         describe_string = "{}".format(describe_result)
         assert (
-            "couldn\\'t decompress file, check format and compression params:" in describe_string
+            "couldn\\'t decompress file, check compression params:" in describe_string
         )

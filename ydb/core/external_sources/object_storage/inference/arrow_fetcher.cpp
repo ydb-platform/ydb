@@ -181,7 +181,7 @@ private:
             auto errorEv = MakeError(
                 request.Path,
                 NFq::TIssuesIds::INTERNAL_ERROR,
-                TStringBuilder{} << "couldn't decompress file, check format and compression params: " << error.AsStrBuf()
+                TStringBuilder{} << "couldn't decompress file, check compression params: " << error.what()
             );
             SendError(ctx, errorEv);
             return {};

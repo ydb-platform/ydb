@@ -515,4 +515,42 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
     }
 }
 
+Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
+    Y_UNIT_TEST(ResourcePoolClassifiersPermissions) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        const TString& userSID = "user@test";
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            GRANT DESCRIBE SCHEMA ON `/Root` TO `)" << userSID << R"(`;
+            GRANT DESCRIBE SCHEMA, SELECT ROW ON `/Root/.resource_pools/)" << ydb->GetSettings().PoolId_ << "` TO `" << userSID << "`;"
+        );
+        ydb->WaitPoolAccess(userSID, NACLib::EAccessRights::DescribeSchema | NACLib::EAccessRights::SelectRow);
+
+        auto settings = TQueryRunnerSettings().UserSID(userSID);
+
+        ydb->WaitFor(TDuration::Seconds(5), "Database permissions", [ydb, settings](TString& errorString) {
+            auto result = ydb->ExecuteQuery("DROP RESOURCE POOL CLASSIFIER MyResourcePoolClassifier", settings);
+
+            errorString = result.GetIssues().ToOneLineString();
+            return result.GetStatus() == EStatus::GENERIC_ERROR && errorString.Contains("You don't have access permissions for database Root");
+        });
+
+        auto createResult = ydb->ExecuteQuery(R"(
+            CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
+                RANK=20
+            );
+        )", settings);
+        UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::GENERIC_ERROR, createResult.GetIssues().ToOneLineString());
+        UNIT_ASSERT_STRING_CONTAINS(createResult.GetIssues().ToOneLineString(), "You don't have access permissions for database Root");
+
+        auto alterResult = ydb->ExecuteQuery(R"(
+            ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier SET (
+                RANK=20
+            );
+        )", settings);
+        UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::GENERIC_ERROR, alterResult.GetIssues().ToOneLineString());
+        UNIT_ASSERT_STRING_CONTAINS(alterResult.GetIssues().ToOneLineString(), "You don't have access permissions for database Root");
+    }
+}
+
 }  // namespace NKikimr::NKqp

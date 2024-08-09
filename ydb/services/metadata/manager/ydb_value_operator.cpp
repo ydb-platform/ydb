@@ -60,7 +60,7 @@ TString TYDBValue::TypeToString(const Ydb::Type& type) {
     } else if (type.type_id() == Ydb::Type::UINT32) {
         return "Uint32";
     } else if (type.type_id() == Ydb::Type::INT64) {
-        return "Uint64";
+        return "Int64";
     } else if (type.type_id() == Ydb::Type::UINT64) {
         return "Uint64";
     } else if (type.type_id() == Ydb::Type::STRING) {
@@ -117,6 +117,12 @@ Ydb::Value TYDBValue::Utf8(const char* value) {
 Ydb::Value TYDBValue::UInt64(const ui64 value) {
     Ydb::Value result;
     result.set_uint64_value(value);
+    return result;
+}
+
+Ydb::Value TYDBValue::Int64(const i64 value) {
+    Ydb::Value result;
+    result.set_int64_value(value);
     return result;
 }
 

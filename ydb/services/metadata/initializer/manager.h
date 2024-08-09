@@ -15,7 +15,7 @@ private:
 protected:
     virtual void DoPrepareObjectsBeforeModification(std::vector<TDBInitialization>&& objects,
         NModifications::IAlterPreparationController<TDBInitialization>::TPtr controller,
-        const TInternalModificationContext& context) const override;
+        const TInternalModificationContext& context, const NMetadata::NModifications::TAlterOperationContext& alterContext) const override;
 
     virtual NModifications::TOperationParsingResult DoBuildPatchFromSettings(const NYql::TObjectSettingsImpl& /*settings*/,
         TInternalModificationContext& context) const override;

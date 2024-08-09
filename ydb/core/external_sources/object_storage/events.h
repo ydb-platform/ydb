@@ -10,6 +10,7 @@
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 
 namespace NKikimr::NExternalSource::NObjectStorage {
 
@@ -128,19 +129,17 @@ struct TEvInferFileSchema : public NActors::TEventLocal<TEvInferFileSchema, EvIn
 struct TEvInferredFileSchema : public NActors::TEventLocal<TEvInferredFileSchema, EvInferredFileSchema> {
     TEvInferredFileSchema(TString path, std::vector<Ydb::Column>&& fields)
         : Path{std::move(path)}
-        , Status{arrow::Status::OK()}
+        , Status{NYdb::EStatus::SUCCESS, {}}
         , Fields{std::move(fields)}
     {}
     TEvInferredFileSchema(TString path, NYql::TIssues&& issues)
         : Path{std::move(path)}
-        , Status{arrow::Status::Invalid("Invalid file schema")}
-        , Issues{std::move(issues)}
+        , Status{NYdb::EStatus::INTERNAL_ERROR, std::move(issues)}
     {}
 
     TString Path;
-    arrow::Status Status;
+    NYdb::TStatus Status;
     std::vector<Ydb::Column> Fields;
-    NYql::TIssues Issues;
 };
 
 inline TEvInferredFileSchema* MakeErrorSchema(TString path, NFq::TIssuesIds::EIssueCode code, TString message) {

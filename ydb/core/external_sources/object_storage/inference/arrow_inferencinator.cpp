@@ -279,7 +279,7 @@ public:
 
     void HandleFileError(TEvFileError::TPtr& ev, const NActors::TActorContext& ctx) {
         Cout << "TArrowInferencinator::HandleFileError" << Endl;
-        ctx.Send(RequesterId_, new TEvInferredFileSchema(ev->Path, std::move(ev->Issues)));
+        ctx.Send(RequesterId_, new TEvInferredFileSchema(ev->Get()->Path, std::move(ev->Get()->Issues)));
     }
 
 private:

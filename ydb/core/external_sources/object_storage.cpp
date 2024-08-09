@@ -354,11 +354,11 @@ struct TObjectStorageExternalSource : public IExternalSource {
         return afterListing.Apply([arrowInferencinatorId, meta, actorSystem = ActorSystem](const NThreading::TFuture<TString>& pathFut) {
             auto promise = NThreading::NewPromise<TMetadataResult>();
             auto schemaToMetadata = [meta](NThreading::TPromise<TMetadataResult> metaPromise, NObjectStorage::TEvInferredFileSchema&& response) {
-                TMetadataResult result;
-                if (!response.Status.ok()) {
-                    metaPromise.SetValue(NYql::NCommon::ResultFromError<TMetadataResult>(response.Issues));
+                if (!response.Status.IsSuccess()) {
+                    metaPromise.SetValue(NYql::NCommon::ResultFromError<TMetadataResult>(response.Status.GetIssues()));
                     return;
                 }
+                TMetadataResult result;
                 meta->Changed = true;
                 meta->Schema.clear_column();
                 for (const auto& column : response.Fields) {

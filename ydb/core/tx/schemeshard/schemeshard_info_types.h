@@ -3020,7 +3020,13 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     struct TSampleK {
         struct TRow {
             ui64 P = 0;
-            TString row;
+            TString Row;
+
+            explicit TRow(ui64 p, TString&& row)
+                : P{p}
+                , Row{std::move(row)}
+            {
+            }
 
             bool operator<(const TRow& other) const {
                 return P < other.P;

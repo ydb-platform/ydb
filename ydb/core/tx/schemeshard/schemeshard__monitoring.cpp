@@ -835,9 +835,6 @@ private:
                             TABLED() {
                                 str << status.Processed;
                             }
-                            TABLED() {
-                                str << status.Billed;
-                            }
                         }
                         str << "\n";
                     }

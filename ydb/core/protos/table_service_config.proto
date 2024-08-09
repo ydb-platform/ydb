@@ -289,7 +289,7 @@ message TTableServiceConfig {
         BLOCK_CHANNELS_AUTO = 1;
         BLOCK_CHANNELS_FORCE = 2;
     }
-    optional EBlockChannelsMode BlockChannelsMode = 61 [default = BLOCK_CHANNELS_SCALAR];
+    optional EBlockChannelsMode BlockChannelsMode = 61 [default = BLOCK_CHANNELS_AUTO];
 
     optional uint64 QueryReplayCacheUploadTTLSec = 62 [default = 36000];
 

@@ -1016,6 +1016,10 @@ public:
         return {};
     }
 
+    TIntrusivePtr<NDq::TSpillingTaskCounters> GetSpillingTaskCounters() const override {
+        return {};
+    }
+
     NDq::TTxId GetTxId() const override {
         return {};
     }

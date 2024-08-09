@@ -21,8 +21,10 @@ struct TSpillingCounters : public TThrRefBase {
 
 struct TSpillingTaskCounters : public TThrRefBase {
     // Maybe change to std::atomic<ui64>
-    TAtomicCounter SpillingReadBytes;
-    TAtomicCounter SpillingWriteBytes;
+    TAtomicCounter ComputeReadBytes;
+    TAtomicCounter ComputeWriteBytes;
+    TAtomicCounter ChannelReadBytes;
+    TAtomicCounter ChannelWriteBytes;
 };
 
 } // namespace NYql::NDq

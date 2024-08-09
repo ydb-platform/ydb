@@ -161,7 +161,7 @@ private:
         StoredBlobsSize_ += size;
 
         if (SpillingTaskCounters_) {
-            SpillingTaskCounters_->SpillingWriteBytes.Add(size);
+            SpillingTaskCounters_->ComputeWriteBytes.Add(size);
         }
         // complete future and wake up waiting compute node
         promise.SetValue(msg.BlobId);
@@ -176,10 +176,6 @@ private:
         auto& msg = *ev->Get();
         LOG_T("[TEvReadResult] blobId: " << msg.BlobId << ", size: " << msg.Blob.size());
 
-        if (SpillingTaskCounters_) {
-            SpillingTaskCounters_->SpillingReadBytes.Add(msg.Blob.Size());
-        }
-
         // Deletion is read without fetching the results. So, after the deletion library sends TEvReadResult event
         // Check if the intention was to delete and complete correct future in this case.
         if (HandleDelete(msg.BlobId, msg.Blob.Size())) {
@@ -191,6 +187,10 @@ private:
         if (it == LoadingBlobs_.end()) {
             FailWithError(TStringBuilder() << "[TEvReadResult] Got unexpected TEvReadResult, blobId: " << msg.BlobId);
             return;
+        }
+
+        if (SpillingTaskCounters_) {
+            SpillingTaskCounters_->ComputeReadBytes.Add(msg.Blob.Size());
         }
 
         bool removedAfterRead = it->second.first;

@@ -233,7 +233,6 @@ public:
         if (CollectBasic()) {
             Stats = std::make_unique<TDqTaskRunnerStats>();
             Stats->StartTs = TInstant::Now();
-            SpillingTaskCounters = MakeIntrusive<TSpillingTaskCounters>();
             if (Y_UNLIKELY(CollectFull())) {
                 Stats->ComputeCpuTimeByRun = NMonitoring::ExponentialHistogram(6, 10, 10);
             }
@@ -514,6 +513,7 @@ public:
         TBindTerminator term(AllocatedHolder->ProgramParsed.CompGraph->GetTerminator());
 
         auto& typeEnv = TypeEnv();
+        SpillingTaskCounters = execCtx.GetSpillingTaskCounters();
 
         for (ui32 i = 0; i < task.InputsSize(); ++i) {
             auto& inputDesc = task.GetInputs(i);
@@ -839,8 +839,10 @@ public:
     const TDqTaskRunnerStats* GetStats() const override {
         // [TODO] move this into more appropriate place
         if (Stats && SpillingTaskCounters) {
-            Stats->SpillingReadBytes = SpillingTaskCounters->SpillingReadBytes.Val();
-            Stats->SpillingWriteBytes = SpillingTaskCounters->SpillingWriteBytes.Val();
+            Stats->SpillingComputeReadBytes = SpillingTaskCounters->ComputeReadBytes.Val();
+            Stats->SpillingComputeWriteBytes = SpillingTaskCounters->ComputeWriteBytes.Val();
+            Stats->SpillingChannelReadBytes = SpillingTaskCounters->ChannelReadBytes.Val();
+            Stats->SpillingChannelWriteBytes = SpillingTaskCounters->ChannelWriteBytes.Val();
         }
         return Stats.get();
     }

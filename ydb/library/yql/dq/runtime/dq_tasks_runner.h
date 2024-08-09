@@ -49,6 +49,11 @@ struct TTaskRunnerStatsBase {
     TDuration WaitInputTime;
     TDuration WaitOutputTime;
 
+    ui64 SpillingComputeReadBytes;
+    ui64 SpillingComputeWriteBytes;
+    ui64 SpillingChannelReadBytes;
+    ui64 SpillingChannelWriteBytes;
+
     // profile stats
     NMonitoring::IHistogramCollectorPtr ComputeCpuTimeByRun; // in millis
 
@@ -66,8 +71,6 @@ struct TTaskRunnerStatsBase {
 };
 
 struct TDqTaskRunnerStats : public TTaskRunnerStatsBase {
-    ui64 SpillingReadBytes;
-    ui64 SpillingWriteBytes;
 };
 
 // Provides read access to TTaskRunnerStatsBase
@@ -141,6 +144,7 @@ public:
     virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem) const = 0;
 
     virtual std::function<void()> GetWakeupCallback() const = 0;
+    virtual TIntrusivePtr<TSpillingTaskCounters> GetSpillingTaskCounters() const = 0;
     virtual TTxId GetTxId() const = 0;
 };
 
@@ -164,6 +168,10 @@ public:
     };
 
     std::function<void()> GetWakeupCallback() const override {
+        return {};
+    }
+
+    TIntrusivePtr<TSpillingTaskCounters> GetSpillingTaskCounters() const override {
         return {};
     }
 

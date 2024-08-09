@@ -150,13 +150,6 @@ public:
     }
 };
 
-struct TResultFormatSettings {
-    TString ResultType;
-    TVector<TString> Columns;
-    TMaybe<ui64> SizeLimit;
-    TMaybe<ui64> RowsLimit;
-};
-
 class TDqGatewaySession: public std::enable_shared_from_this<TDqGatewaySession> {
 public:
     using TResult = IDqGateway::TResult;
@@ -175,7 +168,7 @@ public:
     }
 
     template<typename RespType>
-    void OnResponse(TPromise<TResult> promise, NYdbGrpc::TGrpcStatus&& status, RespType&& resp, const TResultFormatSettings& resultFormatSettings, const THashMap<TString, TString>& modulesMapping, bool alwaysFallback = false) {
+    void OnResponse(TPromise<TResult> promise, NYdbGrpc::TGrpcStatus&& status, RespType&& resp, const NCommon::TResultFormatSettings& resultFormatSettings, const THashMap<TString, TString>& modulesMapping, bool alwaysFallback = false) {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(SessionId);
         YQL_CLOG(TRACE, ProviderDq) << "TDqGateway::callback";
 
@@ -296,7 +289,7 @@ public:
         TStub stub,
         int retry,
         const TDqSettings::TPtr& settings,
-        const TResultFormatSettings& resultFormatSettings,
+        const NCommon::TResultFormatSettings& resultFormatSettings,
         const THashMap<TString, TString>& modulesMapping,
         const TDqProgressWriter& progressWriter
     ) {
@@ -381,7 +374,7 @@ public:
         }
         settings->Save(queryPB);
 
-        TResultFormatSettings resultFormatSettings;
+        NCommon::TResultFormatSettings resultFormatSettings;
         resultFormatSettings.Columns = columns;
         resultFormatSettings.ResultType = plan.ResultType;
         resultFormatSettings.SizeLimit = settings->_AllResultsBytesLimit.Get();

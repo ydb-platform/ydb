@@ -245,7 +245,7 @@ struct TWriteQueue {
     private:
         void OnQueryResult(TEvQueryResponse::TPtr& ev, const NActors::TActorContext&) {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
-            YQL_ENSURE(!ev->Get()->Record.HasResultSet() && ev->Get()->Record.GetYson().empty());
+            YQL_ENSURE(!ev->Get()->Record.SampleSize());
             YQL_CLOG(DEBUG, ProviderDq) << "Shutting down TResultAggregator";
 
             BlockingActors.clear();
@@ -361,13 +361,14 @@ struct TWriteQueue {
             YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
             NDqProto::TQueryResponse result = QueryResponse->Record;
 
-            YQL_ENSURE(!result.HasResultSet() && result.GetYson().empty());
+            YQL_ENSURE(!result.SampleSize());
             FlushCounters(result);
 
-            for (auto& x : ResultSampleData) {
-                *result.AddSample() = std::move(x);
+            for (const auto& x : ResultSampleData) {
+                result.AddSample()->CopyFrom(x);
             }
 
+            ResultSampleData.clear();
             if (!Issues.Empty()) {
                 NYql::IssuesToMessage(Issues, result.MutableIssues());
             }

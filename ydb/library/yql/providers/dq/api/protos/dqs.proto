@@ -175,9 +175,9 @@ message TPullResponse {
 
 message TQueryResponse {
     reserved 4, 6;
-    Ydb.ResultSet ResultSet = 1;
+    reserved 1;
     repeated Ydb.Issue.IssueMessage Issues = 2;
-    bytes Yson = 3;
+    reserved 3;
     repeated TMetric Metric = 5;
     bool Truncated = 7;
     uint64 RowsCount = 8;

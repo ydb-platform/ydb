@@ -134,8 +134,6 @@ namespace NYql::NDqs {
             {
                 auto& result = ev->Get()->Record;
                 Yql::DqsProto::ExecuteQueryResult queryResult;
-                queryResult.Mutableresult()->CopyFrom(result.resultset());
-                queryResult.set_yson(result.yson());
                 queryResult.Mutablesample()->CopyFrom(result.sample());
 
                 auto statusCode = result.GetStatusCode();

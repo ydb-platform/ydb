@@ -2977,7 +2977,6 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         TString DebugMessage;
 
         TBillingStats Processed;
-        TBillingStats Billed;
 
         TShardStatus(TSerializedTableRange range, TString lastKeyAck);
 
@@ -2994,8 +2993,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             result << " DebugMessage: " << DebugMessage;
             result << " SeqNoRound: " << SeqNoRound;
             result << " Processed: " << Processed.ToString();
-            result << " Billed: " << Billed.ToString();
-
+            
             result << " }";
 
             return result;

@@ -31,3 +31,4 @@ jobs:
       run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=5
     - name: Collect test history data with window 1 day 
       run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=1
+      

@@ -28,13 +28,13 @@ public:
     std::optional<TWriteSessionEvent::TEvent> GetEvent(bool block = false) override;
     std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block = false,
                                                   std::optional<size_t> maxEventsCount = std::nullopt) override;
-    NThreading::TFuture<ui64> GetInitSeqNo() override;
+    NThreading::TFuture<uint64_t> GetInitSeqNo() override;
 
     void Write(TContinuationToken&& continuationToken, std::string_view data,
-               std::optional<ui64> seqNo = std::nullopt, std::optional<TInstant> createTimestamp = std::nullopt) override;
+               std::optional<uint64_t> seqNo = std::nullopt, std::optional<TInstant> createTimestamp = std::nullopt) override;
 
     void WriteEncoded(TContinuationToken&& continuationToken, std::string_view data, ECodec codec, ui32 originalSize,
-               std::optional<ui64> seqNo = std::nullopt, std::optional<TInstant> createTimestamp = std::nullopt) override;
+               std::optional<uint64_t> seqNo = std::nullopt, std::optional<TInstant> createTimestamp = std::nullopt) override;
 
     void Write(TContinuationToken&& continuationToken, TWriteMessage&& message) override;
 
@@ -64,12 +64,12 @@ public:
             std::shared_ptr<TGRpcConnectionsImpl> connections,
             TDbDriverStatePtr dbDriverState);
 
-    bool Write(std::string_view data, std::optional<ui64> seqNo = std::nullopt, std::optional<TInstant> createTimestamp = std::nullopt,
+    bool Write(std::string_view data, std::optional<uint64_t> seqNo = std::nullopt, std::optional<TInstant> createTimestamp = std::nullopt,
                const TDuration& blockTimeout = TDuration::Max()) override;
 
     bool Write(TWriteMessage&& message, const TDuration& blockTimeout = TDuration::Max()) override;
 
-    ui64 GetInitSeqNo() override;
+    uint64_t GetInitSeqNo() override;
 
     bool Close(TDuration closeTimeout = TDuration::Max()) override;
     bool IsAlive() const override;

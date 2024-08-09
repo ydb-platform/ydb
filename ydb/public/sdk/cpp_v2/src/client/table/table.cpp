@@ -217,30 +217,30 @@ std::optional<bool> TPartitioningSettings::GetPartitioningByLoad() const {
     }
 }
 
-ui64 TPartitioningSettings::GetPartitionSizeMb() const {
+uint64_t TPartitioningSettings::GetPartitionSizeMb() const {
     return GetProto().partition_size_mb();
 }
 
-ui64 TPartitioningSettings::GetMinPartitionsCount() const {
+uint64_t TPartitioningSettings::GetMinPartitionsCount() const {
     return GetProto().min_partitions_count();
 }
 
-ui64 TPartitioningSettings::GetMaxPartitionsCount() const {
+uint64_t TPartitioningSettings::GetMaxPartitionsCount() const {
     return GetProto().max_partitions_count();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TTableStats {
-    ui64 Rows = 0;
-    ui64 Size = 0;
-    ui64 Partitions = 0;
+    uint64_t Rows = 0;
+    uint64_t Size = 0;
+    uint64_t Partitions = 0;
     TInstant ModificationTime;
     TInstant CreationTime;
 };
 
 static TInstant ProtobufTimestampToTInstant(const google::protobuf::Timestamp& timestamp) {
-    ui64 lastModificationUs = timestamp.seconds() * 1000000;
+    uint64_t lastModificationUs = timestamp.seconds() * 1000000;
     lastModificationUs += timestamp.nanos() / 1000;
     return TInstant::MicroSeconds(lastModificationUs);
 }
@@ -493,7 +493,7 @@ public:
         CompactionPolicy_ = name;
     }
 
-    void SetUniformPartitions(ui64 partitionsCount) {
+    void SetUniformPartitions(uint64_t partitionsCount) {
         UniformPartitions_ = partitionsCount;
     }
 
@@ -510,7 +510,7 @@ public:
         KeyBloomFilter_ = enabled;
     }
 
-    void SetReadReplicasSettings(TReadReplicasSettings::EMode mode, ui64 readReplicasCount) {
+    void SetReadReplicasSettings(TReadReplicasSettings::EMode mode, uint64_t readReplicasCount) {
         ReadReplicasSettings_ = TReadReplicasSettings(mode, readReplicasCount);
     }
 
@@ -590,7 +590,7 @@ public:
         return CompactionPolicy_;
     }
 
-    const std::optional<ui64>& GetUniformPartitions() const {
+    const std::optional<uint64_t>& GetUniformPartitions() const {
         return UniformPartitions_;
     }
 
@@ -632,7 +632,7 @@ private:
     std::vector<TColumnFamilyDescription> ColumnFamilies_;
     std::unordered_map<std::string, std::string> Attributes_;
     std::string CompactionPolicy_;
-    std::optional<ui64> UniformPartitions_;
+    std::optional<uint64_t> UniformPartitions_;
     std::optional<TExplicitPartitions> PartitionAtKeys_;
     TPartitioningSettings PartitioningSettings_;
     std::optional<bool> KeyBloomFilter_;
@@ -793,7 +793,7 @@ void TTableDescription::SetCompactionPolicy(const std::string& name) {
     Impl_->SetCompactionPolicy(name);
 }
 
-void TTableDescription::SetUniformPartitions(ui64 partitionsCount) {
+void TTableDescription::SetUniformPartitions(uint64_t partitionsCount) {
     Impl_->SetUniformPartitions(partitionsCount);
 }
 
@@ -809,7 +809,7 @@ void TTableDescription::SetKeyBloomFilter(bool enabled) {
     Impl_->SetKeyBloomFilter(enabled);
 }
 
-void TTableDescription::SetReadReplicasSettings(TReadReplicasSettings::EMode mode, ui64 readReplicasCount) {
+void TTableDescription::SetReadReplicasSettings(TReadReplicasSettings::EMode mode, uint64_t readReplicasCount) {
     Impl_->SetReadReplicasSettings(mode, readReplicasCount);
 }
 
@@ -829,15 +829,15 @@ TInstant TTableDescription::GetCreationTime() const {
     return Impl_->GetTableStats().CreationTime;
 }
 
-ui64 TTableDescription::GetTableSize() const {
+uint64_t TTableDescription::GetTableSize() const {
     return Impl_->GetTableStats().Size;
 }
 
-ui64 TTableDescription::GetTableRows() const {
+uint64_t TTableDescription::GetTableRows() const {
     return Impl_->GetTableStats().Rows;
 }
 
-ui64 TTableDescription::GetPartitionsCount() const {
+uint64_t TTableDescription::GetPartitionsCount() const {
     return Impl_->GetTableStats().Partitions;
 }
 
@@ -1021,17 +1021,17 @@ TPartitioningSettingsBuilder& TPartitioningSettingsBuilder::SetPartitioningByLoa
     return *this;
 }
 
-TPartitioningSettingsBuilder& TPartitioningSettingsBuilder::SetPartitionSizeMb(ui64 sizeMb) {
+TPartitioningSettingsBuilder& TPartitioningSettingsBuilder::SetPartitionSizeMb(uint64_t sizeMb) {
     Impl_->Proto.set_partition_size_mb(sizeMb);
     return *this;
 }
 
-TPartitioningSettingsBuilder& TPartitioningSettingsBuilder::SetMinPartitionsCount(ui64 count) {
+TPartitioningSettingsBuilder& TPartitioningSettingsBuilder::SetMinPartitionsCount(uint64_t count) {
     Impl_->Proto.set_min_partitions_count(count);
     return *this;
 }
 
-TPartitioningSettingsBuilder& TPartitioningSettingsBuilder::SetMaxPartitionsCount(ui64 count) {
+TPartitioningSettingsBuilder& TPartitioningSettingsBuilder::SetMaxPartitionsCount(uint64_t count) {
     Impl_->Proto.set_max_partitions_count(count);
     return *this;
 }
@@ -1257,7 +1257,7 @@ TTableBuilder& TTableBuilder::SetCompactionPolicy(const std::string& name) {
     return *this;
 }
 
-TTableBuilder& TTableBuilder::SetUniformPartitions(ui64 partitionsCount) {
+TTableBuilder& TTableBuilder::SetUniformPartitions(uint64_t partitionsCount) {
     TableDescription_.SetUniformPartitions(partitionsCount);
     return *this;
 }
@@ -1277,7 +1277,7 @@ TTableBuilder& TTableBuilder::SetKeyBloomFilter(bool enabled) {
     return *this;
 }
 
-TTableBuilder& TTableBuilder::SetReadReplicasSettings(TReadReplicasSettings::EMode mode, ui64 readReplicasCount) {
+TTableBuilder& TTableBuilder::SetReadReplicasSettings(TReadReplicasSettings::EMode mode, uint64_t readReplicasCount) {
     TableDescription_.SetReadReplicasSettings(mode, readReplicasCount);
     return *this;
 }
@@ -1373,15 +1373,15 @@ TAsyncCreateSessionResult TTableClient::GetSession(const TCreateSessionSettings&
     return Impl_->GetSession(settings);
 }
 
-i64 TTableClient::GetActiveSessionCount() const {
+int64_t TTableClient::GetActiveSessionCount() const {
     return Impl_->GetActiveSessionCount();
 }
 
-i64 TTableClient::GetActiveSessionsLimit() const {
+int64_t TTableClient::GetActiveSessionsLimit() const {
     return Impl_->GetActiveSessionsLimit();
 }
 
-i64 TTableClient::GetCurrentPoolSize() const {
+int64_t TTableClient::GetCurrentPoolSize() const {
     return Impl_->GetCurrentPoolSize();
 }
 
@@ -2240,7 +2240,7 @@ const std::vector<std::string>& TIndexDescription::GetDataColumns() const {
     return DataColumns_;
 }
 
-ui64 TIndexDescription::GetSizeBytes() const {
+uint64_t TIndexDescription::GetSizeBytes() const {
     return SizeBytes;
 }
 
@@ -2828,7 +2828,7 @@ const std::optional<TAlterTtlSettings>& TAlterTableSettings::GetAlterTtlSettings
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TReadReplicasSettings::TReadReplicasSettings(EMode mode, ui64 readReplicasCount)
+TReadReplicasSettings::TReadReplicasSettings(EMode mode, uint64_t readReplicasCount)
     : Mode_(mode)
     , ReadReplicasCount_(readReplicasCount)
 {}
@@ -2837,7 +2837,7 @@ TReadReplicasSettings::EMode TReadReplicasSettings::GetMode() const {
     return Mode_;
 }
 
-ui64 TReadReplicasSettings::GetReadReplicasCount() const {
+uint64_t TReadReplicasSettings::GetReadReplicasCount() const {
     return ReadReplicasCount_;
 }
 

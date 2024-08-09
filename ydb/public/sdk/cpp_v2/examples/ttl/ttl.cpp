@@ -10,8 +10,26 @@ using namespace NYdb::NTable;
 constexpr uint32_t DOC_TABLE_PARTITION_COUNT = 4;
 constexpr uint32_t EXPIRATION_QUEUE_COUNT = 4;
 
+namespace {
+
+template <class T>
+std::string OptionalToString(const std::optional<T>& opt) {
+    if (opt.has_value()) {
+        return std::to_string(opt.value());
+    }
+    return "(NULL)";
+}
+
+template <>
+std::string OptionalToString<std::string>(const std::optional<std::string>& opt) {
+    if (opt.has_value()) {
+        return opt.value();
+    }
+    return "(NULL)";
+}
+
 //! Creates Documents table and multiple ExpirationQueue tables
-static void CreateTables(TTableClient client, const std::string& path) {
+void CreateTables(TTableClient client, const std::string& path) {
     // Documents table stores the contents of web pages.
     // The table is partitioned by hash(Url) in order to evenly distribute the load.
     ThrowOnError(client.RetryOperationSync([path](TSession session) {
@@ -50,7 +68,7 @@ static void CreateTables(TTableClient client, const std::string& path) {
 ///////////////////////////////////////////////////////////////////////////////
 
 //! Insert or replaces a document.
-static TStatus AddDocumentTransaction(TSession session, const std::string& path,
+TStatus AddDocumentTransaction(TSession session, const std::string& path,
     const std::string& url, const std::string& html, uint64_t timestamp)
 {
     // Add an entry to a random expiration queue in order to evenly distribute the load
@@ -90,7 +108,7 @@ static TStatus AddDocumentTransaction(TSession session, const std::string& path,
 }
 
 //! Reads document contents.
-static TStatus ReadDocumentTransaction(TSession session, const std::string& path,
+TStatus ReadDocumentTransaction(TSession session, const std::string& path,
     const std::string& url, std::optional<TResultSet>& resultSet)
 {
     auto query = std::format(R"(
@@ -123,7 +141,7 @@ static TStatus ReadDocumentTransaction(TSession session, const std::string& path
 }
 
 //! Reads a batch of entries from expiration queue
-static TStatus ReadExpiredBatchTransaction(TSession session, const std::string& path, const uint32_t queue,
+TStatus ReadExpiredBatchTransaction(TSession session, const std::string& path, const uint32_t queue,
     const uint64_t timestamp, const uint64_t prevTimestamp, const uint64_t prevDocId, std::optional<TResultSet>& resultSet)
 {
     auto query = std::format(R"(
@@ -179,7 +197,7 @@ static TStatus ReadExpiredBatchTransaction(TSession session, const std::string& 
 }
 
 //! Deletes an expired document
-static TStatus DeleteDocumentWithTimestamp(TSession session, const std::string& path, const uint32_t queue,
+TStatus DeleteDocumentWithTimestamp(TSession session, const std::string& path, const uint32_t queue,
     const uint64_t docId, const uint64_t timestamp)
 {
     auto query = std::format(R"(
@@ -208,6 +226,9 @@ static TStatus DeleteDocumentWithTimestamp(TSession session, const std::string& 
 
     return result;
 }
+
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 void AddDocument(TTableClient client, const std::string& path, const std::string& url,
@@ -232,10 +253,10 @@ void ReadDocument(TTableClient client, const std::string& path, const std::strin
 
     TResultSetParser parser(*resultSet);
     if (parser.TryNextRow()) {
-        std::cout << " DocId: " << ToString(parser.ColumnParser("doc_id").GetOptionalUint64()) << std::endl
-            << " Url: " << ToString(parser.ColumnParser("url").GetOptionalUtf8()) << std::endl
-            << " Timestamp: " << ToString(parser.ColumnParser("timestamp").GetOptionalUint64()) << std::endl
-            << " Html: " << ToString(parser.ColumnParser("html").GetOptionalUtf8()) << std::endl;
+        std::cout << " DocId: " << OptionalToString(parser.ColumnParser("doc_id").GetOptionalUint64()) << std::endl
+            << " Url: " << OptionalToString(parser.ColumnParser("url").GetOptionalUtf8()) << std::endl
+            << " Timestamp: " << OptionalToString(parser.ColumnParser("timestamp").GetOptionalUint64()) << std::endl
+            << " Html: " << OptionalToString(parser.ColumnParser("html").GetOptionalUtf8()) << std::endl;
     } else {
         std::cout << " Not found" << std::endl;
     }

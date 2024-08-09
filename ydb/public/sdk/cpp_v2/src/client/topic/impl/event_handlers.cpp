@@ -4,7 +4,7 @@
 
 namespace NYdb::NTopic {
 
-std::pair<ui64, ui64> GetMessageOffsetRange(const TReadSessionEvent::TDataReceivedEvent& dataReceivedEvent, ui64 index);
+std::pair<uint64_t, uint64_t> GetMessageOffsetRange(const TReadSessionEvent::TDataReceivedEvent& dataReceivedEvent, uint64_t index);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // NTopic::TReadSessionEventHandlers

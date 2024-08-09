@@ -168,7 +168,7 @@ std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabaseByHashImpl(
     NTopic::TFederatedWriteSessionSettings const& settings,
     std::vector<std::shared_ptr<TDbInfo>> const& dbInfos
 ) {
-    ui64 totalWeight = 0;
+    uint64_t totalWeight = 0;
     std::vector<std::shared_ptr<TDbInfo>> available;
 
     for (const auto& db : dbInfos) {
@@ -184,11 +184,11 @@ std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabaseByHashImpl(
 
     std::sort(available.begin(), available.end(), [](auto const& lhs, auto const& rhs) { return lhs->name() < rhs->name(); });
 
-    ui64 hashValue = THash<std::string>()(settings.Path_);
+    size_t hashValue = THash<std::string>()(settings.Path_);
     hashValue = CombineHashes(hashValue, THash<std::string>()(settings.ProducerId_));
     hashValue %= totalWeight;
 
-    ui64 borderWeight = 0;
+    uint64_t borderWeight = 0;
    for (auto const& db : available) {
         borderWeight += db->weight();
         if (hashValue < borderWeight) {
@@ -322,11 +322,11 @@ std::optional<NTopic::TWriteSessionEvent::TEvent> TFederatedWriteSessionImpl::Ge
     return events.empty() ? std::nullopt : std::optional<NTopic::TWriteSessionEvent::TEvent>{std::move(events.front())};
 }
 
-NThreading::TFuture<ui64> TFederatedWriteSessionImpl::GetInitSeqNo() {
-    return NThreading::MakeFuture<ui64>(0u);
+NThreading::TFuture<uint64_t> TFederatedWriteSessionImpl::GetInitSeqNo() {
+    return NThreading::MakeFuture<uint64_t>(0u);
 }
 
-void TFederatedWriteSessionImpl::Write(NTopic::TContinuationToken&& token, std::string_view data, std::optional<ui64> seqNo,
+void TFederatedWriteSessionImpl::Write(NTopic::TContinuationToken&& token, std::string_view data, std::optional<uint64_t> seqNo,
                                    std::optional<TInstant> createTimestamp) {
     NTopic::TWriteMessage message{std::move(data)};
     if (seqNo.has_value())
@@ -341,7 +341,7 @@ void TFederatedWriteSessionImpl::Write(NTopic::TContinuationToken&& token, NTopi
 }
 
 void TFederatedWriteSessionImpl::WriteEncoded(NTopic::TContinuationToken&& token, std::string_view data, NTopic::ECodec codec,
-                                          ui32 originalSize, std::optional<ui64> seqNo, std::optional<TInstant> createTimestamp) {
+                                          ui32 originalSize, std::optional<uint64_t> seqNo, std::optional<TInstant> createTimestamp) {
     auto message = NTopic::TWriteMessage::CompressedMessage(std::move(data), codec, originalSize);
     if (seqNo.has_value())
         message.SeqNo(*seqNo);

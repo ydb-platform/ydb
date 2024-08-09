@@ -8,6 +8,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/public/sdk/cpp_v2/src/client/topic/codecs
     ydb/public/sdk/cpp_v2/src/client/topic/common
     ydb/public/sdk/cpp_v2/src/client/topic/impl
     ydb/public/sdk/cpp_v2/include/ydb-cpp-sdk/client/topic

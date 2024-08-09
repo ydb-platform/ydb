@@ -23,7 +23,7 @@ using TPartitionSessionClosedEvent = TReadSessionEvent::TPartitionSessionClosedE
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Helpers
 
-std::pair<ui64, ui64> GetMessageOffsetRange(const TDataReceivedEvent& dataReceivedEvent, ui64 index) {
+std::pair<uint64_t, uint64_t> GetMessageOffsetRange(const TDataReceivedEvent& dataReceivedEvent, uint64_t index) {
     if (dataReceivedEvent.HasCompressedMessages()) {
         const auto& msg = dataReceivedEvent.GetCompressedMessages()[index];
         return {msg.GetOffset(), msg.GetOffset() + 1};
@@ -36,14 +36,14 @@ std::pair<ui64, ui64> GetMessageOffsetRange(const TDataReceivedEvent& dataReceiv
 // NTopic::TReadSessionEvent::TDataReceivedEvent::TMessageInformation
 
 TMessageInformation::TMessageInformation(
-    ui64 offset,
+    uint64_t offset,
     std::string producerId,
-    ui64 seqNo,
+    uint64_t seqNo,
     TInstant createTime,
     TInstant writeTime,
     TWriteSessionMeta::TPtr meta,
     TMessageMeta::TPtr messageMeta,
-    ui64 uncompressedSize,
+    uint64_t uncompressedSize,
     std::string messageGroupId
 )
     : Offset(offset)
@@ -88,7 +88,7 @@ const std::string& TMessageBase::GetData() const {
     return Data;
 }
 
-ui64 TMessageBase::GetOffset() const {
+uint64_t TMessageBase::GetOffset() const {
     return Information.Offset;
 }
 
@@ -100,7 +100,7 @@ const std::string& TMessageBase::GetMessageGroupId() const {
     return Information.MessageGroupId;
 }
 
-ui64 TMessageBase::GetSeqNo() const {
+uint64_t TMessageBase::GetSeqNo() const {
     return Information.SeqNo;
 }
 
@@ -209,7 +209,7 @@ ECodec TCompressedMessage::GetCodec() const {
     return Codec;
 }
 
-ui64 TCompressedMessage::GetUncompressedSize() const {
+uint64_t TCompressedMessage::GetUncompressedSize() const {
     return Information.UncompressedSize;
 }
 
@@ -276,7 +276,7 @@ void TPrintable<TDataReceivedEvent>::DebugString(TStringBuilder& ret, bool print
 // NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent
 
 TCommitOffsetAcknowledgementEvent::TCommitOffsetAcknowledgementEvent(TPartitionSession::TPtr partitionSession,
-                                                                     ui64 committedOffset)
+                                                                     uint64_t committedOffset)
     : TPartitionSessionAccessor(std::move(partitionSession))
     , CommittedOffset(committedOffset) {
 }
@@ -293,14 +293,14 @@ void TPrintable<TCommitOffsetAcknowledgementEvent>::DebugString(TStringBuilder& 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // NTopic::TReadSessionEvent::TStartPartitionSessionEvent
 
-TStartPartitionSessionEvent::TStartPartitionSessionEvent(TPartitionSession::TPtr partitionSession, ui64 committedOffset,
-                                                         ui64 endOffset)
+TStartPartitionSessionEvent::TStartPartitionSessionEvent(TPartitionSession::TPtr partitionSession, uint64_t committedOffset,
+                                                         uint64_t endOffset)
     : TPartitionSessionAccessor(std::move(partitionSession))
     , CommittedOffset(committedOffset)
     , EndOffset(endOffset) {
 }
 
-void TStartPartitionSessionEvent::Confirm(std::optional<ui64> readOffset, std::optional<ui64> commitOffset) {
+void TStartPartitionSessionEvent::Confirm(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset) {
     if (PartitionSession) {
         static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())
             ->ConfirmCreate(readOffset, commitOffset);
@@ -320,7 +320,7 @@ void TPrintable<TStartPartitionSessionEvent>::DebugString(TStringBuilder& ret, b
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // NTopic::TReadSessionEvent::TStopPartitionSessionEvent
 
-TStopPartitionSessionEvent::TStopPartitionSessionEvent(TPartitionSession::TPtr partitionSession, ui64 committedOffset)
+TStopPartitionSessionEvent::TStopPartitionSessionEvent(TPartitionSession::TPtr partitionSession, uint64_t committedOffset)
     : TPartitionSessionAccessor(std::move(partitionSession))
     , CommittedOffset(committedOffset) {
 }
@@ -382,7 +382,7 @@ void TPrintable<TEndPartitionSessionEvent>::DebugString(TStringBuilder& ret, boo
 // NTopic::TReadSessionEvent::TPartitionSessionStatusEvent
 
 TPartitionSessionStatusEvent::TPartitionSessionStatusEvent(TPartitionSession::TPtr partitionSession,
-                                                           ui64 committedOffset, ui64 readOffset, ui64 endOffset,
+                                                           uint64_t committedOffset, uint64_t readOffset, uint64_t endOffset,
                                                            TInstant writeTimeHighWatermark)
     : TPartitionSessionAccessor(std::move(partitionSession))
     , CommittedOffset(committedOffset)

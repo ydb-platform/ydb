@@ -153,7 +153,7 @@ bool SelectPaging(TTableClient client, const std::string& path, uint64_t pageLim
     do {
         lastCity = parser.ColumnParser("city").GetOptionalUtf8().value();
         lastNumber = parser.ColumnParser("number").GetOptionalUint32().value();
-        std::cout << lastCity << ", Школа №" << lastNumber << ", Адрес: " << ToString(parser.ColumnParser("address").GetOptionalUtf8()) << std::endl;
+        std::cout << lastCity << ", Школа №" << lastNumber << ", Адрес: " << parser.ColumnParser("address").GetOptionalUtf8().value_or("(NULL)") << std::endl;
     } while (parser.TryNextRow());
     return true;
 }

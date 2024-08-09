@@ -14,7 +14,7 @@ namespace NYdb::NPersQueue {
 
 static const std::string DRIVER_IS_STOPPING_DESCRIPTION = "Driver is stopping";
 
-std::pair<ui64, ui64> GetMessageOffsetRange(const TReadSessionEvent::TDataReceivedEvent& dataReceivedEvent, ui64 index) {
+std::pair<uint64_t, uint64_t> GetMessageOffsetRange(const TReadSessionEvent::TDataReceivedEvent& dataReceivedEvent, uint64_t index) {
     if (dataReceivedEvent.IsCompressedMessages()) {
         const auto& msg = dataReceivedEvent.GetCompressedMessages()[index];
         return {msg.GetOffset(0), msg.GetOffset(msg.GetBlocksCount() - 1) + 1};

@@ -961,8 +961,8 @@ TDecimalValue::TDecimalValue(const std::string& decimalString, ui8 precision, ui
     NYql::NDecimal::TInt128 val = NYql::NDecimal::FromString(decimalString, precision, scale);
     static_assert(sizeof(val) == 16, "wrong TInt128 size");
     char* buf = reinterpret_cast<char*>(&val);
-    Low_ = *(ui64*)buf;
-    Hi_ = *(i64*)(buf + 8);
+    Low_ = *(uint64_t*)buf;
+    Hi_ = *(int64_t*)(buf + 8);
 }
 
 std::string TDecimalValue::ToString() const {
@@ -1007,7 +1007,7 @@ bool TPgValue::IsText() const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TUuidValue::TUuidValue(ui64 low_128, ui64 high_128) {
+TUuidValue::TUuidValue(uint64_t low_128, uint64_t high_128) {
     Buf_.Halfs[0] = low_128;
     Buf_.Halfs[1] = high_128;
 }
@@ -1156,12 +1156,12 @@ public:
         return GetProto().uint32_value();
     }
 
-    i64 GetInt64() const {
+    int64_t GetInt64() const {
         CheckPrimitive(NYdb::EPrimitiveType::Int64);
         return GetProto().int64_value();
     }
 
-    ui64 GetUint64() const {
+    uint64_t GetUint64() const {
         CheckPrimitive(NYdb::EPrimitiveType::Uint64);
         return GetProto().uint64_value();
     }
@@ -1191,7 +1191,7 @@ public:
         return TInstant::MicroSeconds(GetProto().uint64_value());
     }
 
-    i64 GetInterval() const {
+    int64_t GetInterval() const {
         CheckPrimitive(NYdb::EPrimitiveType::Interval);
         return GetProto().int64_value();
     }
@@ -1201,17 +1201,17 @@ public:
         return GetProto().int32_value();
     }
 
-    i64 GetDatetime64() const {
+    int64_t GetDatetime64() const {
         CheckPrimitive(NYdb::EPrimitiveType::Datetime64);
         return GetProto().int64_value();
     }
 
-    i64 GetTimestamp64() const {
+    int64_t GetTimestamp64() const {
         CheckPrimitive(NYdb::EPrimitiveType::Timestamp64);
         return GetProto().int64_value();
     }
 
-    i64 GetInterval64() const {
+    int64_t GetInterval64() const {
         CheckPrimitive(NYdb::EPrimitiveType::Interval64);
         return GetProto().int64_value();
     }
@@ -1692,11 +1692,11 @@ ui32 TValueParser::GetUint32() const {
     return Impl_->GetUint32();
 }
 
-i64 TValueParser::GetInt64() const {
+int64_t TValueParser::GetInt64() const {
     return Impl_->GetInt64();
 }
 
-ui64 TValueParser::GetUint64() const {
+uint64_t TValueParser::GetUint64() const {
     return Impl_->GetUint64();
 }
 
@@ -1720,7 +1720,7 @@ TInstant TValueParser::GetTimestamp() const {
     return Impl_->GetTimestamp();
 }
 
-i64 TValueParser::GetInterval() const {
+int64_t TValueParser::GetInterval() const {
     return Impl_->GetInterval();
 }
 
@@ -1728,15 +1728,15 @@ i32 TValueParser::GetDate32() const {
     return Impl_->GetDate32();
 }
 
-i64 TValueParser::GetDatetime64() const {
+int64_t TValueParser::GetDatetime64() const {
     return Impl_->GetDatetime64();
 }
 
-i64 TValueParser::GetTimestamp64() const {
+int64_t TValueParser::GetTimestamp64() const {
     return Impl_->GetTimestamp64();
 }
 
-i64 TValueParser::GetInterval64() const {
+int64_t TValueParser::GetInterval64() const {
     return Impl_->GetInterval64();
 }
 
@@ -1824,12 +1824,12 @@ std::optional<ui32> TValueParser::GetOptionalUint32() const {
     RET_OPT_VALUE(ui32, Uint32);
 }
 
-std::optional<i64> TValueParser::GetOptionalInt64() const {
-    RET_OPT_VALUE(i64, Int64);
+std::optional<int64_t> TValueParser::GetOptionalInt64() const {
+    RET_OPT_VALUE(int64_t, Int64);
 }
 
-std::optional<ui64> TValueParser::GetOptionalUint64() const {
-    RET_OPT_VALUE(ui64, Uint64);
+std::optional<uint64_t> TValueParser::GetOptionalUint64() const {
+    RET_OPT_VALUE(uint64_t, Uint64);
 }
 
 std::optional<float> TValueParser::GetOptionalFloat() const {
@@ -1852,24 +1852,24 @@ std::optional<TInstant> TValueParser::GetOptionalTimestamp() const {
     RET_OPT_VALUE(TInstant, Timestamp);
 }
 
-std::optional<i64> TValueParser::GetOptionalInterval() const {
-    RET_OPT_VALUE(i64, Interval);
+std::optional<int64_t> TValueParser::GetOptionalInterval() const {
+    RET_OPT_VALUE(int64_t, Interval);
 }
 
 std::optional<i32> TValueParser::GetOptionalDate32() const {
-    RET_OPT_VALUE(i64, Date32);
+    RET_OPT_VALUE(int64_t, Date32);
 }
 
-std::optional<i64> TValueParser::GetOptionalDatetime64() const {
-    RET_OPT_VALUE(i64, Datetime64);
+std::optional<int64_t> TValueParser::GetOptionalDatetime64() const {
+    RET_OPT_VALUE(int64_t, Datetime64);
 }
 
-std::optional<i64> TValueParser::GetOptionalTimestamp64() const {
-    RET_OPT_VALUE(i64, Timestamp64);
+std::optional<int64_t> TValueParser::GetOptionalTimestamp64() const {
+    RET_OPT_VALUE(int64_t, Timestamp64);
 }
 
-std::optional<i64> TValueParser::GetOptionalInterval64() const {
-    RET_OPT_VALUE(i64, Interval64);
+std::optional<int64_t> TValueParser::GetOptionalInterval64() const {
+    RET_OPT_VALUE(int64_t, Interval64);
 }
 
 std::optional<std::string> TValueParser::GetOptionalTzDate() const {
@@ -2105,12 +2105,12 @@ public:
         GetValue().set_uint32_value(value);
     }
 
-    void Int64(i64 value) {
+    void Int64(int64_t value) {
         FillPrimitiveType(EPrimitiveType::Int64);
         GetValue().set_int64_value(value);
     }
 
-    void Uint64(ui64 value) {
+    void Uint64(uint64_t value) {
         FillPrimitiveType(EPrimitiveType::Uint64);
         GetValue().set_uint64_value(value);
     }
@@ -2140,7 +2140,7 @@ public:
         GetValue().set_uint64_value(value.MicroSeconds());
     }
 
-    void Interval(i64 value) {
+    void Interval(int64_t value) {
         FillPrimitiveType(EPrimitiveType::Interval);
         GetValue().set_int64_value(value);
     }
@@ -2150,17 +2150,17 @@ public:
         GetValue().set_int32_value(value);
     }
 
-    void Datetime64(const i64 value) {
+    void Datetime64(const int64_t value) {
         FillPrimitiveType(EPrimitiveType::Datetime64);
         GetValue().set_int64_value(value);
     }
 
-    void Timestamp64(const i64 value) {
+    void Timestamp64(const int64_t value) {
         FillPrimitiveType(EPrimitiveType::Timestamp64);
         GetValue().set_int64_value(value);
     }
 
-    void Interval64(const i64 value) {
+    void Interval64(const int64_t value) {
         FillPrimitiveType(EPrimitiveType::Interval64);
         GetValue().set_int64_value(value);
     }
@@ -2855,13 +2855,13 @@ TDerived& TValueBuilderBase<TDerived>::Uint32(ui32 value) {
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Int64(i64 value) {
+TDerived& TValueBuilderBase<TDerived>::Int64(int64_t value) {
     Impl_->Int64(value);
     return static_cast<TDerived&>(*this);
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Uint64(ui64 value) {
+TDerived& TValueBuilderBase<TDerived>::Uint64(uint64_t value) {
     Impl_->Uint64(value);
     return static_cast<TDerived&>(*this);
 }
@@ -2897,7 +2897,7 @@ TDerived& TValueBuilderBase<TDerived>::Timestamp(const TInstant& value) {
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Interval(i64 value) {
+TDerived& TValueBuilderBase<TDerived>::Interval(int64_t value) {
     Impl_->Interval(value);
     return static_cast<TDerived&>(*this);
 }
@@ -2909,19 +2909,19 @@ TDerived& TValueBuilderBase<TDerived>::Date32(const i32 value) {
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Datetime64(const i64 value) {
+TDerived& TValueBuilderBase<TDerived>::Datetime64(const int64_t value) {
     Impl_->Datetime64(value);
     return static_cast<TDerived&>(*this);
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Timestamp64(const i64 value) {
+TDerived& TValueBuilderBase<TDerived>::Timestamp64(const int64_t value) {
     Impl_->Timestamp64(value);
     return static_cast<TDerived&>(*this);
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Interval64(const i64 value) {
+TDerived& TValueBuilderBase<TDerived>::Interval64(const int64_t value) {
     Impl_->Interval64(value);
     return static_cast<TDerived&>(*this);
 }
@@ -3050,12 +3050,12 @@ TDerived& TValueBuilderBase<TDerived>::OptionalUint32(const std::optional<ui32>&
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalInt64(const std::optional<i64>& value) {
+TDerived& TValueBuilderBase<TDerived>::OptionalInt64(const std::optional<int64_t>& value) {
     SET_OPT_VALUE_MAYBE(Int64);
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalUint64(const std::optional<ui64>& value) {
+TDerived& TValueBuilderBase<TDerived>::OptionalUint64(const std::optional<uint64_t>& value) {
     SET_OPT_VALUE_MAYBE(Uint64);
 }
 
@@ -3085,7 +3085,7 @@ TDerived& TValueBuilderBase<TDerived>::OptionalTimestamp(const std::optional<TIn
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalInterval(const std::optional<i64>& value) {
+TDerived& TValueBuilderBase<TDerived>::OptionalInterval(const std::optional<int64_t>& value) {
     SET_OPT_VALUE_MAYBE(Interval);
 }
 
@@ -3095,17 +3095,17 @@ TDerived& TValueBuilderBase<TDerived>::OptionalDate32(const std::optional<i32>& 
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalDatetime64(const std::optional<i64>& value) {
+TDerived& TValueBuilderBase<TDerived>::OptionalDatetime64(const std::optional<int64_t>& value) {
     SET_OPT_VALUE_MAYBE(Datetime64);
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalTimestamp64(const std::optional<i64>& value) {
+TDerived& TValueBuilderBase<TDerived>::OptionalTimestamp64(const std::optional<int64_t>& value) {
     SET_OPT_VALUE_MAYBE(Timestamp64);
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalInterval64(const std::optional<i64>& value) {
+TDerived& TValueBuilderBase<TDerived>::OptionalInterval64(const std::optional<int64_t>& value) {
     SET_OPT_VALUE_MAYBE(Interval64);
 }
 

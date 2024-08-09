@@ -14,8 +14,8 @@ namespace NYdb::NTopic {
 class TCommonCodecsProvider {
 public:
     TCommonCodecsProvider() {
-        TCodecMap::GetTheCodecMap().Set((ui32)ECodec::GZIP, std::make_unique<TGzipCodec>());
-        TCodecMap::GetTheCodecMap().Set((ui32)ECodec::ZSTD, std::make_unique<TZstdCodec>());
+        TCodecMap::GetTheCodecMap().Set((uint32_t)ECodec::GZIP, std::make_unique<TGzipCodec>());
+        TCodecMap::GetTheCodecMap().Set((uint32_t)ECodec::ZSTD, std::make_unique<TZstdCodec>());
     }
 };
 TCommonCodecsProvider COMMON_CODECS_PROVIDER;
@@ -54,7 +54,7 @@ TTopicDescription::TTopicDescription(Ydb::Topic::DescribeTopicResult&& result)
     : Proto_(std::move(result))
     , PartitioningSettings_(Proto_.partitioning_settings())
     , RetentionPeriod_(TDuration::Seconds(Proto_.retention_period().seconds()))
-    , RetentionStorageMb_(Proto_.retention_storage_mb() > 0 ? std::optional<ui64>(Proto_.retention_storage_mb()) : std::nullopt)
+    , RetentionStorageMb_(Proto_.retention_storage_mb() > 0 ? std::optional<uint64_t>(Proto_.retention_storage_mb()) : std::nullopt)
     , PartitionWriteSpeedBytesPerSecond_(Proto_.partition_write_speed_bytes_per_second())
     , PartitionWriteBurstBytes_(Proto_.partition_write_burst_bytes())
     , MeteringMode_(TProtoAccessor::FromProto(Proto_.metering_mode()))
@@ -131,7 +131,7 @@ const TPartitioningSettings& TTopicDescription::GetPartitioningSettings() const 
     return PartitioningSettings_;
 }
 
-ui32 TTopicDescription::GetTotalPartitionsCount() const {
+uint32_t TTopicDescription::GetTotalPartitionsCount() const {
     return Partitions_.size();
 }
 
@@ -159,15 +159,15 @@ const TDuration& TTopicDescription::GetRetentionPeriod() const {
     return RetentionPeriod_;
 }
 
-std::optional<ui64> TTopicDescription::GetRetentionStorageMb() const {
+std::optional<uint64_t> TTopicDescription::GetRetentionStorageMb() const {
     return RetentionStorageMb_;
 }
 
-ui64 TTopicDescription::GetPartitionWriteSpeedBytesPerSecond() const {
+uint64_t TTopicDescription::GetPartitionWriteSpeedBytesPerSecond() const {
     return PartitionWriteSpeedBytesPerSecond_;
 }
 
-ui64 TTopicDescription::GetPartitionWriteBurstBytes() const {
+uint64_t TTopicDescription::GetPartitionWriteBurstBytes() const {
     return PartitionWriteBurstBytes_;
 }
 
@@ -227,15 +227,15 @@ TPartitioningSettings::TPartitioningSettings(const Ydb::Topic::PartitioningSetti
     , AutoPartitioningSettings_(settings.auto_partitioning_settings())
 {}
 
-ui64 TPartitioningSettings::GetMinActivePartitions() const {
+uint64_t TPartitioningSettings::GetMinActivePartitions() const {
     return MinActivePartitions_;
 }
 
-ui64 TPartitioningSettings::GetMaxActivePartitions() const {
+uint64_t TPartitioningSettings::GetMaxActivePartitions() const {
     return MaxActivePartitions_;
 }
 
-ui64 TPartitioningSettings::GetPartitionCountLimit() const {
+uint64_t TPartitioningSettings::GetPartitionCountLimit() const {
     return PartitionCountLimit_;
 }
 
@@ -258,11 +258,11 @@ TDuration TAutoPartitioningSettings::GetStabilizationWindow() const {
     return StabilizationWindow_;
 }
 
-ui32 TAutoPartitioningSettings::GetUpUtilizationPercent() const {
+uint32_t TAutoPartitioningSettings::GetUpUtilizationPercent() const {
     return UpUtilizationPercent_;
 }
 
-ui32 TAutoPartitioningSettings::GetDownUtilizationPercent() const {
+uint32_t TAutoPartitioningSettings::GetDownUtilizationPercent() const {
     return DownUtilizationPercent_;
 }
 
@@ -276,7 +276,7 @@ TTopicStats::TTopicStats(const Ydb::Topic::DescribeTopicResult::TopicStats& topi
 {
 }
 
-ui64 TTopicStats::GetStoreSizeBytes() const {
+uint64_t TTopicStats::GetStoreSizeBytes() const {
     return StoreSizeBytes_;
 }
 
@@ -288,15 +288,15 @@ TDuration TTopicStats::GetMaxWriteTimeLag() const {
     return MaxWriteTimeLag_;
 }
 
-ui64 TTopicStats::GetBytesWrittenPerMinute() const {
+uint64_t TTopicStats::GetBytesWrittenPerMinute() const {
     return BytesWrittenPerMinute_;
 }
 
-ui64 TTopicStats::GetBytesWrittenPerHour() const {
+uint64_t TTopicStats::GetBytesWrittenPerHour() const {
     return BytesWrittenPerHour_;
 }
 
-ui64 TTopicStats::GetBytesWrittenPerDay() const {
+uint64_t TTopicStats::GetBytesWrittenPerDay() const {
     return BytesWrittenPerDay_;
 }
 
@@ -313,15 +313,15 @@ TPartitionStats::TPartitionStats(const Ydb::Topic::PartitionStats& partitionStat
 
 {}
 
-ui64 TPartitionStats::GetStartOffset() const {
+uint64_t TPartitionStats::GetStartOffset() const {
     return StartOffset_;
 }
 
-ui64 TPartitionStats::GetEndOffset() const {
+uint64_t TPartitionStats::GetEndOffset() const {
     return EndOffset_;
 }
 
-ui64 TPartitionStats::GetStoreSizeBytes() const {
+uint64_t TPartitionStats::GetStoreSizeBytes() const {
     return StoreSizeBytes_;
 }
 
@@ -333,15 +333,15 @@ TDuration TPartitionStats::GetMaxWriteTimeLag() const {
     return MaxWriteTimeLag_;
 }
 
-ui64 TPartitionStats::GetBytesWrittenPerMinute() const {
+uint64_t TPartitionStats::GetBytesWrittenPerMinute() const {
     return BytesWrittenPerMinute_;
 }
 
-ui64 TPartitionStats::GetBytesWrittenPerHour() const {
+uint64_t TPartitionStats::GetBytesWrittenPerHour() const {
     return BytesWrittenPerHour_;
 }
 
-ui64 TPartitionStats::GetBytesWrittenPerDay() const {
+uint64_t TPartitionStats::GetBytesWrittenPerDay() const {
     return BytesWrittenPerDay_;
 }
 
@@ -353,11 +353,11 @@ TPartitionConsumerStats::TPartitionConsumerStats(const Ydb::Topic::DescribeConsu
     , ReadSessionId_(partitionStats.read_session_id())
 {}
 
-ui64 TPartitionConsumerStats::GetCommittedOffset() const {
+uint64_t TPartitionConsumerStats::GetCommittedOffset() const {
     return CommittedOffset_;
 }
 
-ui64 TPartitionConsumerStats::GetLastReadOffset() const {
+uint64_t TPartitionConsumerStats::GetLastReadOffset() const {
     return LastReadOffset_;
 }
 
@@ -375,11 +375,11 @@ TPartitionLocation::TPartitionLocation(const Ydb::Topic::PartitionLocation& part
 {
 }
 
-i32 TPartitionLocation::GetNodeId() const {
+int32_t TPartitionLocation::GetNodeId() const {
     return NodeId_;
 }
 
-i64 TPartitionLocation::GetGeneration() const {
+int64_t TPartitionLocation::GetGeneration() const {
     return Generation_;
 }
 
@@ -441,7 +441,7 @@ bool TPartitionInfo::GetActive() const {
     return Active_;
 }
 
-ui64 TPartitionInfo::GetPartitionId() const {
+uint64_t TPartitionInfo::GetPartitionId() const {
     return PartitionId_;
 }
 
@@ -473,7 +473,7 @@ TAsyncDescribeConsumerResult TTopicClient::DescribeConsumer(const std::string& p
     return Impl_->DescribeConsumer(path, consumer, settings);
 }
 
-TAsyncDescribePartitionResult TTopicClient::DescribePartition(const std::string& path, i64 partitionId, const TDescribePartitionSettings& settings) {
+TAsyncDescribePartitionResult TTopicClient::DescribePartition(const std::string& path, int64_t partitionId, const TDescribePartitionSettings& settings) {
     return Impl_->DescribePartition(path, partitionId, settings);
 }
 
@@ -490,7 +490,7 @@ std::shared_ptr<IWriteSession> TTopicClient::CreateWriteSession(const TWriteSess
     return Impl_->CreateWriteSession(settings);
 }
 
-TAsyncStatus TTopicClient::CommitOffset(const std::string& path, ui64 partitionId, const std::string& consumerName, ui64 offset,
+TAsyncStatus TTopicClient::CommitOffset(const std::string& path, uint64_t partitionId, const std::string& consumerName, uint64_t offset,
     const TCommitOffsetSettings& settings) {
     return Impl_->CommitOffset(path, partitionId, consumerName, offset, settings);
 }

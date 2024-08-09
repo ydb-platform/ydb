@@ -6,7 +6,7 @@
 
 namespace NYdb::NTopic {
 
-std::pair<ui64, ui64> GetMessageOffsetRange(const TReadSessionEvent::TDataReceivedEvent& dataReceivedEvent, ui64 index);
+std::pair<uint64_t, uint64_t> GetMessageOffsetRange(const TReadSessionEvent::TDataReceivedEvent& dataReceivedEvent, uint64_t index);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // NTopic::TDeferredCommit
@@ -46,11 +46,11 @@ TDeferredCommit::~TDeferredCommit() {
     }                                           \
     Impl
 
-void TDeferredCommit::Add(const TPartitionSession::TPtr& partitionStream, ui64 startOffset, ui64 endOffset) {
+void TDeferredCommit::Add(const TPartitionSession::TPtr& partitionStream, uint64_t startOffset, uint64_t endOffset) {
     GET_IMPL()->Add(partitionStream, startOffset, endOffset);
 }
 
-void TDeferredCommit::Add(const TPartitionSession::TPtr& partitionStream, ui64 offset) {
+void TDeferredCommit::Add(const TPartitionSession::TPtr& partitionStream, uint64_t offset) {
     GET_IMPL()->Add(partitionStream, offset);
 }
 

@@ -457,15 +457,15 @@ public:
         return future;
     }
 
-    i64 GetActiveSessionCount() const {
+    int64_t GetActiveSessionCount() const {
         return SessionPool_.GetActiveSessions();
     }
 
-    i64 GetActiveSessionsLimit() const {
+    int64_t GetActiveSessionsLimit() const {
         return SessionPool_.GetActiveSessionsLimit();
     }
 
-    i64 GetCurrentPoolSize() const {
+    int64_t GetCurrentPoolSize() const {
         return SessionPool_.GetCurrentPoolSize();
     }
 
@@ -564,15 +564,15 @@ TAsyncCreateSessionResult TQueryClient::GetSession(const TCreateSessionSettings&
     return Impl_->GetSession(settings);
 }
 
-i64 TQueryClient::GetActiveSessionCount() const {
+int64_t TQueryClient::GetActiveSessionCount() const {
     return Impl_->GetActiveSessionCount();
 }
 
-i64 TQueryClient::GetActiveSessionsLimit() const {
+int64_t TQueryClient::GetActiveSessionsLimit() const {
     return Impl_->GetActiveSessionsLimit();
 }
 
-i64 TQueryClient::GetCurrentPoolSize() const {
+int64_t TQueryClient::GetCurrentPoolSize() const {
     return Impl_->GetCurrentPoolSize();
 }
 

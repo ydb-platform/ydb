@@ -156,7 +156,7 @@ private:
     using IProcessor = IWriteSessionConnectionProcessorFactory::IProcessor;
 
     struct TMessage {
-        ui64 Id;
+        uint64_t Id;
         TInstant CreatedAt;
         std::string_view DataRef;
         std::optional<ECodec> Codec;
@@ -164,7 +164,7 @@ private:
         std::vector<std::pair<std::string, std::string>> MessageMeta;
         const NTable::TTransaction* Tx;
 
-        TMessage(ui64 id, const TInstant& createdAt, std::string_view data, std::optional<ECodec> codec = {},
+        TMessage(uint64_t id, const TInstant& createdAt, std::string_view data, std::optional<ECodec> codec = {},
                  ui32 originalSize = 0, const std::vector<std::pair<std::string, std::string>>& messageMeta = {},
                  const NTable::TTransaction* tx = nullptr)
             : Id(id)
@@ -180,12 +180,12 @@ private:
     struct TMessageBatch {
         TBuffer Data;
         std::vector<TMessage> Messages;
-        ui64 CurrentSize = 0;
+        uint64_t CurrentSize = 0;
         TInstant StartedAt = TInstant::Zero();
         bool Acquired = false;
         bool FlushRequested = false;
 
-        void Add(ui64 id, const TInstant& createdAt, std::string_view data, std::optional<ECodec> codec, ui32 originalSize,
+        void Add(uint64_t id, const TInstant& createdAt, std::string_view data, std::optional<ECodec> codec, ui32 originalSize,
                  const std::vector<std::pair<std::string, std::string>>& messageMeta,
                  const NTable::TTransaction* tx) {
             if (StartedAt == TInstant::Zero())
@@ -257,13 +257,13 @@ private:
     };
 
     struct TOriginalMessage {
-        ui64 Id;
+        uint64_t Id;
         TInstant CreatedAt;
         size_t Size;
         std::vector<std::pair<std::string, std::string>> MessageMeta;
         const NTable::TTransaction* Tx;
 
-        TOriginalMessage(const ui64 id, const TInstant createdAt, const size_t size,
+        TOriginalMessage(const uint64_t id, const TInstant createdAt, const size_t size,
                          const NTable::TTransaction* tx)
             : Id(id)
             , CreatedAt(createdAt)
@@ -271,7 +271,7 @@ private:
             , Tx(tx)
         {}
 
-        TOriginalMessage(const ui64 id, const TInstant createdAt, const size_t size,
+        TOriginalMessage(const uint64_t id, const TInstant createdAt, const size_t size,
                          std::vector<std::pair<std::string, std::string>>&& messageMeta,
                          const NTable::TTransaction* tx)
             : Id(id)
@@ -297,7 +297,7 @@ private:
     };
     struct TProcessSrvMessageResult {
         THandleResult HandleResult;
-        std::optional<ui64> InitSeqNo;
+        std::optional<uint64_t> InitSeqNo;
         std::vector<TWriteSessionEvent::TEvent> Events;
         bool Ok = true;
     };
@@ -318,11 +318,11 @@ public:
     std::optional<TWriteSessionEvent::TEvent> GetEvent(bool block = false);
     std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block = false,
                                                   std::optional<size_t> maxEventsCount = std::nullopt);
-    NThreading::TFuture<ui64> GetInitSeqNo();
+    NThreading::TFuture<uint64_t> GetInitSeqNo();
 
     void Write(TContinuationToken&& continuationToken, TWriteMessage&& message);
 
-    void Write(TContinuationToken&&, std::string_view, std::optional<ui64> seqNo = std::nullopt,
+    void Write(TContinuationToken&&, std::string_view, std::optional<uint64_t> seqNo = std::nullopt,
                std::optional<TInstant> createTimestamp = std::nullopt) {
         Y_UNUSED(seqNo);
         Y_UNUSED(createTimestamp);
@@ -332,7 +332,7 @@ public:
     void WriteEncoded(TContinuationToken&& continuationToken, TWriteMessage&& message);
 
     void WriteEncoded(TContinuationToken&&, std::string_view, ECodec, ui32,
-                      std::optional<ui64> seqNo = std::nullopt, std::optional<TInstant> createTimestamp = std::nullopt) {
+                      std::optional<uint64_t> seqNo = std::nullopt, std::optional<TInstant> createTimestamp = std::nullopt) {
         Y_UNUSED(seqNo);
         Y_UNUSED(createTimestamp);
         Y_ABORT("Do not use this method");
@@ -385,11 +385,11 @@ private:
 
     //std::string GetDebugIdentity() const;
     TClientMessage GetInitClientMessage();
-    bool CleanupOnAcknowledged(ui64 id);
+    bool CleanupOnAcknowledged(uint64_t id);
     bool IsReadyToSendNextImpl() const;
-    ui64 GetNextIdImpl(const std::optional<ui64>& seqNo);
-    ui64 GetSeqNoImpl(ui64 id);
-    ui64 GetIdImpl(ui64 seqNo);
+    uint64_t GetNextIdImpl(const std::optional<uint64_t>& seqNo);
+    uint64_t GetSeqNoImpl(uint64_t id);
+    uint64_t GetIdImpl(uint64_t seqNo);
     void SendImpl();
     void AbortImpl();
     void CloseImpl(EStatus statusCode, NYql::TIssues&& issues);
@@ -407,7 +407,7 @@ private:
     void ConnectToPreferredPartitionLocation(const TDuration& delay);
     void OnDescribePartition(const TStatus& status, const Ydb::Topic::DescribePartitionResult& proto, const NYdbGrpc::IQueueClientContextPtr& describePartitionContext);
 
-    std::optional<TEndpointKey> GetPreferredEndpointImpl(ui32 partitionId, ui64 partitionNodeId);
+    std::optional<TEndpointKey> GetPreferredEndpointImpl(ui32 partitionId, uint64_t partitionNodeId);
 
     bool TxIsChanged(const Ydb::Topic::StreamWriteMessage_WriteRequest* writeRequest) const;
 
@@ -459,13 +459,13 @@ private:
     bool SessionEstablished = false;
     ui32 PartitionId = 0;
     TPartitionLocation PreferredPartitionLocation = {};
-    ui64 NextId = 0;
-    ui64 MinUnsentId = 1;
-    std::optional<ui64> InitSeqNo;
+    uint64_t NextId = 0;
+    uint64_t MinUnsentId = 1;
+    std::optional<uint64_t> InitSeqNo;
     std::optional<bool> AutoSeqNoMode;
     bool ValidateSeqNoMode = false;
 
-    NThreading::TPromise<ui64> InitSeqNoPromise;
+    NThreading::TPromise<uint64_t> InitSeqNoPromise;
     bool InitSeqNoSetDone = false;
     TInstant SessionStartedTs;
     TInstant LastCountersUpdateTs = TInstant::Zero();
@@ -474,9 +474,9 @@ private:
     TDuration WakeupInterval;
 
     // Set by the write session, if Settings.DirectWriteToPartition is true and Settings.PartitionId is unset. Otherwise ignored.
-    std::optional<ui64> DirectWriteToPartitionId;
+    std::optional<uint64_t> DirectWriteToPartitionId;
 protected:
-    ui64 MessagesAcquired = 0;
+    uint64_t MessagesAcquired = 0;
 };
 
 } // namespace NYdb::NTopic

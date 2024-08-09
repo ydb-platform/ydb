@@ -286,16 +286,7 @@ bool TNodeInfo::IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* 
         return false;
     }
 
-    auto maximumResources = GetResourceMaximumValues() * Hive.GetResourceOvercommitment();
-    auto allocatedResources = GetResourceCurrentValues() + tablet.GetResourceCurrentValues();
-
-    bool result = min(maximumResources - allocatedResources) > 0;
-    if (!result) {
-        if (debugState) {
-            debugState->NodesWithoutResources++;
-        }
-    }
-    return result;
+    return true;
 }
 
 ui64 TNodeInfo::GetMaxTabletsScheduled() const {

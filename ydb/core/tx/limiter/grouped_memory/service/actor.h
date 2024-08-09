@@ -29,6 +29,8 @@ public:
     void Handle(NEvents::TEvExternal::TEvUpdateTask::TPtr& ev);
     void Handle(NEvents::TEvExternal::TEvStartGroup::TPtr& ev);
     void Handle(NEvents::TEvExternal::TEvFinishGroup::TPtr& ev);
+    void Handle(NEvents::TEvExternal::TEvStartProcess::TPtr& ev);
+    void Handle(NEvents::TEvExternal::TEvFinishProcess::TPtr& ev);
 
     void Bootstrap();
 
@@ -39,6 +41,8 @@ public:
             hFunc(NEvents::TEvExternal::TEvUpdateTask, Handle);
             hFunc(NEvents::TEvExternal::TEvStartGroup, Handle);
             hFunc(NEvents::TEvExternal::TEvFinishGroup, Handle);
+            hFunc(NEvents::TEvExternal::TEvStartProcess, Handle);
+            hFunc(NEvents::TEvExternal::TEvFinishProcess, Handle);
             default:
                 AFL_VERIFY(false)("ev_type", ev->GetTypeName());
         }

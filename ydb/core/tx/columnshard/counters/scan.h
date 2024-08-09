@@ -287,54 +287,15 @@ public:
 
 };
 
-class TReaderResourcesGuard {
-private:
-    std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> Allocated;
-    std::shared_ptr<TAtomicCounter> Requested;
-    const std::shared_ptr<NOlap::TMemoryAggregation> SignalCounter;
-    const ui64 Volume;
-
-public:
-    TReaderResourcesGuard(const ui64 volume, const std::shared_ptr<TAtomicCounter>& requested, const std::shared_ptr<NOlap::TMemoryAggregation>& signalWatcher)
-        : Requested(requested)
-        , SignalCounter(signalWatcher)
-        , Volume(volume)
-    {
-        AFL_VERIFY(Requested);
-        Requested->Add(Volume);
-        SignalCounter->AddBytes(volume);
-    }
-
-    void InitResources(const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& g) {
-        AFL_VERIFY(!Allocated);
-        AFL_VERIFY(g->GetMemory() == Volume)("volume", Volume)("allocated", g->GetMemory());
-        Allocated = g;
-    }
-
-    ~TReaderResourcesGuard() {
-        SignalCounter->RemoveBytes(Volume);
-        AFL_VERIFY(Requested->Sub(Volume) >= 0);
-    }
-};
-
 class TConcreteScanCounters: public TScanCounters {
 private:
     using TBase = TScanCounters;
-    std::shared_ptr<TAtomicCounter> RequestedResourcesBytes;
     std::shared_ptr<TAtomicCounter> MergeTasksCount;
     std::shared_ptr<TAtomicCounter> AssembleTasksCount;
     std::shared_ptr<TAtomicCounter> ReadTasksCount;
     std::shared_ptr<TAtomicCounter> ResourcesAllocationTasksCount;
 public:
     TScanAggregations Aggregations;
-
-    ui64 GetRequestedMemoryBytes() const {
-        return RequestedResourcesBytes->Val();
-    }
-
-    std::shared_ptr<TReaderResourcesGuard> BuildRequestedResourcesGuard(const ui64 volume) const {
-        return std::make_shared<TReaderResourcesGuard>(volume, RequestedResourcesBytes, Aggregations.GetRequestedResourcesMemory());
-    }
 
     TCounterGuard GetMergeTasksGuard() const {
         return TCounterGuard(MergeTasksCount);
@@ -363,7 +324,6 @@ public:
 
     TConcreteScanCounters(const TScanCounters& counters)
         : TBase(counters)
-        , RequestedResourcesBytes(std::make_shared<TAtomicCounter>())
         , MergeTasksCount(std::make_shared<TAtomicCounter>())
         , AssembleTasksCount(std::make_shared<TAtomicCounter>())
         , ReadTasksCount(std::make_shared<TAtomicCounter>())

@@ -47,9 +47,12 @@ private:
 
 public:
     const NMonitoring::TDynamicCounters::TCounterPtr GroupsCount;
+    const NMonitoring::TDynamicCounters::TCounterPtr ProcessesCount;
     TCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, const TString& name)
         : TBase("grouped_memory_limiter", counters)
-        , GroupsCount(TBase::GetValue("Groups/Count")) {
+        , GroupsCount(TBase::GetValue("Groups/Count"))
+        , ProcessesCount(TBase::GetValue("Processes/Count"))
+    {
         DeepSubGroup("limiter_name", name);
     }
 

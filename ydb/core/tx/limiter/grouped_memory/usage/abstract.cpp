@@ -7,7 +7,7 @@ namespace NKikimr::NOlap::NGroupedMemoryManager {
 
 TAllocationGuard::~TAllocationGuard() {
     if (TlsActivationContext && !Released) {
-        NActors::TActivationContext::AsActorContext().Send(ActorId, std::make_unique<NEvents::TEvExternal::TEvFinishTask>(AllocationId));
+        NActors::TActivationContext::AsActorContext().Send(ActorId, std::make_unique<NEvents::TEvExternal::TEvFinishTask>(ProcessId, AllocationId));
     }
 }
 
@@ -16,7 +16,7 @@ void TAllocationGuard::Update(const ui64 newVolume) {
     Memory = newVolume;
     if (TlsActivationContext) {
         NActors::TActivationContext::AsActorContext().Send(
-            ActorId, std::make_unique<NEvents::TEvExternal::TEvUpdateTask>(AllocationId, newVolume));
+            ActorId, std::make_unique<NEvents::TEvExternal::TEvUpdateTask>(ProcessId, AllocationId, newVolume));
     }
 }
 
@@ -30,15 +30,30 @@ bool IAllocation::OnAllocated(std::shared_ptr<TAllocationGuard>&& guard, const s
 
 TGroupGuard::~TGroupGuard() {
     if (TlsActivationContext) {
-        NActors::TActivationContext::AsActorContext().Send(ActorId, std::make_unique<NEvents::TEvExternal::TEvFinishGroup>(GroupId));
+        NActors::TActivationContext::AsActorContext().Send(ActorId, std::make_unique<NEvents::TEvExternal::TEvFinishGroup>(ProcessId, GroupId));
     }
 }
 
-TGroupGuard::TGroupGuard(const NActors::TActorId& actorId, const ui64 groupId)
+TGroupGuard::TGroupGuard(const NActors::TActorId& actorId, const ui64 processId, const ui64 groupId)
     : ActorId(actorId)
+    , ProcessId(processId)
     , GroupId(groupId) {
     if (TlsActivationContext) {
-        NActors::TActivationContext::AsActorContext().Send(ActorId, std::make_unique<NEvents::TEvExternal::TEvStartGroup>(GroupId));
+        NActors::TActivationContext::AsActorContext().Send(ActorId, std::make_unique<NEvents::TEvExternal::TEvStartGroup>(ProcessId, GroupId));
+    }
+}
+
+TProcessGuard::~TProcessGuard() {
+    if (TlsActivationContext) {
+        NActors::TActivationContext::AsActorContext().Send(ActorId, std::make_unique<NEvents::TEvExternal::TEvFinishProcess>(ProcessId));
+    }
+}
+
+TProcessGuard::TProcessGuard(const NActors::TActorId& actorId, const ui64 processId)
+    : ActorId(actorId)
+    , ProcessId(processId) {
+    if (TlsActivationContext) {
+        NActors::TActivationContext::AsActorContext().Send(ActorId, std::make_unique<NEvents::TEvExternal::TEvStartProcess>(ProcessId));
     }
 }
 

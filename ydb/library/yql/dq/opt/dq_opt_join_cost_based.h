@@ -23,7 +23,9 @@ NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
     TTypeAnnotationContext& typesCtx,
     ui32 optLevel,
     IOptimizerNew& opt,
-    const TProviderCollectFunction& providerCollect
+    const TProviderCollectFunction& providerCollect,
+    TCardinalityHints hints = TCardinalityHints(),
+    TJoinAlgoHints joinHints = TJoinAlgoHints()
 );
 
 NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
@@ -33,7 +35,9 @@ NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
     ui32 optLevel,
     IOptimizerNew& opt,
     const TProviderCollectFunction& providerCollect,
-    int& equiJoinCounter
+    int& equiJoinCounter,
+    TCardinalityHints hints = TCardinalityHints(),
+    TJoinAlgoHints joinHints = TJoinAlgoHints()
 );
 
 } // namespace NYql::NDq

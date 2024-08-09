@@ -62,6 +62,7 @@ struct TOptimizerStatistics {
     TIntrusivePtr<TKeyColumns> KeyColumns;
     TIntrusivePtr<TColumnStatMap> ColumnStatistics;
     std::unique_ptr<const IProviderStatistics> Specific;
+    std::shared_ptr<TVector<TString>> Labels = {};
 
     TOptimizerStatistics(TOptimizerStatistics&&) = default;
     TOptimizerStatistics() {}

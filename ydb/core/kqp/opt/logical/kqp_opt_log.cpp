@@ -153,7 +153,9 @@ protected:
             *opt, [](auto& rels, auto label, auto node, auto stat) {
                 rels.emplace_back(std::make_shared<TKqpRelOptimizerNode>(TString(label), stat, node));
             },
-            KqpCtx.EquiJoinsCount);
+            KqpCtx.EquiJoinsCount,
+            KqpCtx.GetCardinalityHints(),
+            KqpCtx.GetJoinAlgoHints());
         DumpAppliedRule("OptimizeEquiJoinWithCosts", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

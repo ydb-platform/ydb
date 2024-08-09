@@ -1,5 +1,6 @@
 #include "checker.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/kqp/workload_service/actors/actors.h>
 #include <ydb/core/kqp/workload_service/common/events.h>
@@ -42,7 +43,7 @@ public:
         NYdb::TParamsBuilder params;
         params
             .AddParam("$database")
-                .Utf8(Database)
+                .Utf8(CanonizePath(Database))
                 .Build();
 
         if (!RanksToCheck.empty()) {

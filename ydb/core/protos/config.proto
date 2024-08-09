@@ -1439,7 +1439,7 @@ message THiveConfig {
     optional double MinPeriodBetweenReassign = 33 [default = 300.0]; // seconds
     optional double TabletRestartWatchPeriod = 34 [default = 3600.0]; // seconds
     optional double NodeRestartWatchPeriod = 35 [default = 3600.0]; // seconds
-    optional uint64 NodeDeletePeriod = 36 [default = 14400]; // seconds
+    optional uint64 NodeDeletePeriod = 36 [default = 3600]; // seconds
     repeated THiveTabletLimit DefaultTabletLimit = 37;
     repeated THiveTabletPreference DefaultTabletPreference = 38;
     optional uint64 SystemTabletCategoryId = 39 [default = 1];

@@ -25,7 +25,7 @@ void AuditLogReplaceConfigTransaction(
         AUDIT_PART("subject", (!userSID.empty() ? userSID : EMPTY_VALUE))
         AUDIT_PART("status", TString(success ? "SUCCESS" : "ERROR"))
         AUDIT_PART("reason", reason, !reason.empty())
-        AUDIT_PART("operation", TString("replace"))
+        AUDIT_PART("operation", TString("REPLACE DYNCONFIG"))
         AUDIT_PART("old_config", oldConfig)
         AUDIT_PART("new_config", newConfig)
     );

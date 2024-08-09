@@ -1,6 +1,8 @@
 #include "ttl.h"
 #include "util.h"
 
+#include <format>
+
 using namespace NExample;
 using namespace NYdb;
 using namespace NYdb::NTable;

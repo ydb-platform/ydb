@@ -3,6 +3,7 @@
 #include <util/string/cast.h>
 
 #include <filesystem>
+#include <format>
 
 using namespace NYdb;
 using namespace NYdb::NTable;

@@ -1,4 +1,4 @@
 RECURSE(
-    #examples
+    examples
     src
 )

@@ -21,8 +21,8 @@ RECURSE(
     client/driver
     client/export
     client/extension_common
-    # client/federated_topic
-    # client/federated_topic/impl
+    client/federated_topic
+    client/federated_topic/impl
     client/import
     client/operation
     client/params

@@ -263,7 +263,7 @@ runs:
           echo "TESTMO_RUN_NAME=$TESTMO_RUN_NAME" >> $GITHUB_ENV 
           if [ $RETRY != 1 ]; then
             IS_RETRY=1
-            TESTMO_RUN_NAME="$TESTMO_RUN_NAME (attempt $RETRY)"
+            TESTMO_RUN_NAME="$TESTMO_RUN_NAME A$RETRY"
           else
             IS_RETRY=0
           fi

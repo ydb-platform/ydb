@@ -16,9 +16,6 @@ IF (SANITIZER_TYPE == "thread")
         ram:32
     )
 ELSE()
-    REQUIREMENTS(
-        ram:16
-    )
     TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()

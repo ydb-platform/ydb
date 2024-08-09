@@ -4,7 +4,6 @@ FORK_SUBTESTS()
 
 TIMEOUT(600)
 SIZE(MEDIUM)
-REQUIREMENTS(ram:16)
 
 PEERDIR(
     library/cpp/getopt

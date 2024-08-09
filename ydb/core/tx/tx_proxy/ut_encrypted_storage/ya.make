@@ -10,9 +10,6 @@ IF (WITH_VALGRIND)
         ram:32
     )
 ELSE()
-    REQUIREMENTS(
-        ram:16
-    )
     TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()

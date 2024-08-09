@@ -54,10 +54,9 @@ DATA(
 IF (SANITIZER_TYPE == "thread" OR SANITIZER_TYPE == "address")
     SIZE(LARGE)
     TAG(ya:fat)
+    REQUIREMENTS(ram:16)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
-
-REQUIREMENTS(ram:16)
 
 END()

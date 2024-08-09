@@ -9,14 +9,13 @@ IF (SANITIZER_TYPE == "thread")
     TIMEOUT(1800)
     SIZE(LARGE)
     TAG(ya:fat)
+    REQUIREMENTS(
+        ram:32
+    )
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
-
-REQUIREMENTS(
-    ram:32
-)
 
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 DEPENDS(

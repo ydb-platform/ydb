@@ -21,6 +21,4 @@ INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 SIZE(MEDIUM)
 TIMEOUT(30)
 
-REQUIREMENTS(ram:16)
-
 END()

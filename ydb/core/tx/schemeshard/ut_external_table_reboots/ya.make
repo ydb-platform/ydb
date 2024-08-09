@@ -9,6 +9,7 @@ IF (NOT WITH_VALGRIND)
         TIMEOUT(3600)
         SIZE(LARGE)
         TAG(ya:fat)
+        REQUIREMENTS(ram:12)
     ELSE()
         TIMEOUT(600)
         SIZE(MEDIUM)
@@ -30,7 +31,6 @@ IF (NOT WITH_VALGRIND)
         ut_external_table_reboots.cpp
     )
 
-    REQUIREMENTS(ram:12)
 
 END()
 ENDIF()

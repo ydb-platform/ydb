@@ -3,14 +3,13 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
-REQUIREMENTS(
-    ram:32
-)
-
 IF (WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
+    REQUIREMENTS(
+        ram:32
+    )
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)

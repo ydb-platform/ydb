@@ -12,9 +12,6 @@ IF (SANITIZER_TYPE)
 ELSE()
     SIZE(MEDIUM)
     TIMEOUT(600)
-    REQUIREMENTS(
-        ram:16
-    )
 ENDIF()
 
 

@@ -10,11 +10,6 @@ TEST_SRCS(
     test_rename.py
 )
 
-
-REQUIREMENTS(
-    ram:32
-)
-
 FORK_TEST_FILES()
 FORK_SUBTESTS()
 SPLIT_FACTOR(10)
@@ -23,6 +18,9 @@ IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
+    REQUIREMENTS(
+        ram:32
+    )
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)

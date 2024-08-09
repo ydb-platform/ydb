@@ -6,6 +6,7 @@ IF (WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
+    REQUIREMENTS(ram:32)
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
@@ -28,7 +29,5 @@ SRCS(
     proxy_ut_helpers.h
     proxy_ut_helpers.cpp
 )
-
-REQUIREMENTS(ram:32)
 
 END()

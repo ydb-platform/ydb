@@ -58,6 +58,56 @@ enum EJoinKind: ui32
 EJoinKind ConvertToJoinKind(const TString& joinString);
 TString ConvertToJoinString(const EJoinKind kind);
 
+struct TCardinalityHints {
+    enum ECardOperation : ui32 {
+        Add,
+        Subtract,
+        Multiply,
+        Divide,
+        Replace
+    };
+
+    struct TCardinalityHint {
+        TVector<TString> JoinLabels;
+        ECardOperation Operation;
+        double Value;
+
+        double ApplyHint(double originalValue) {
+            switch (Operation) {
+                case Add:
+                    return originalValue + Value;
+                case Subtract:
+                    return originalValue - Value;
+                case Multiply:
+                    return originalValue * Value;
+                case Divide:
+                    return originalValue / Value;
+                case Replace:
+                    return Value;
+
+            }
+        }
+    };
+
+    TVector<TCardinalityHint> Hints;
+
+    TCardinalityHints() {}
+    TCardinalityHints(const TString& json);
+};
+
+struct TJoinAlgoHints {
+
+    struct TJoinAlgoHint {
+        TVector<TString> JoinLabels;
+        EJoinAlgoType JoinHint;
+    };
+
+    TVector<TJoinAlgoHint> Hints;
+
+    TJoinAlgoHints() {}
+    TJoinAlgoHints(const TString& json);
+};
+
 /**
  * This is a temporary structure for KQP provider
  * We will soon be supporting multiple providers and we will need to design
@@ -73,7 +123,8 @@ struct IProviderContext {
         const TOptimizerStatistics& rightStats,
         const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions, 
         EJoinAlgoType joinAlgo,
-        EJoinKind joinKind) const = 0;
+        EJoinKind joinKind,
+        TCardinalityHints::TCardinalityHint* maybeHint = nullptr) const = 0;
 
     virtual TOptimizerStatistics ComputeJoinStats(
         const TOptimizerStatistics& leftStats,
@@ -81,7 +132,8 @@ struct IProviderContext {
         const TVector<TString>& leftJoinKeys,
         const TVector<TString>& rightJoinKeys,
         EJoinAlgoType joinAlgo,
-        EJoinKind joinKind) const = 0;
+        EJoinKind joinKind,
+        TCardinalityHints::TCardinalityHint* maybeHint = nullptr) const = 0;
 
     virtual bool IsJoinApplicable(const std::shared_ptr<IBaseOptimizerNode>& left,
         const std::shared_ptr<IBaseOptimizerNode>& right,
@@ -115,14 +167,16 @@ struct TBaseProviderContext : public IProviderContext {
         const TVector<TString>& leftJoinKeys,
         const TVector<TString>& rightJoinKeys,
         EJoinAlgoType joinAlgo,
-        EJoinKind joinKind) const override;
+        EJoinKind joinKind,
+        TCardinalityHints::TCardinalityHint* maybeHint = nullptr) const override;
 
     virtual TOptimizerStatistics ComputeJoinStats(
         const TOptimizerStatistics& leftStats,
         const TOptimizerStatistics& rightStats,
         const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
         EJoinAlgoType joinAlgo,
-        EJoinKind joinKind) const override;
+        EJoinKind joinKind,
+        TCardinalityHints::TCardinalityHint* maybeHint = nullptr) const override;
 
     static const TBaseProviderContext& Instance();
 };
@@ -179,7 +233,10 @@ struct IOptimizerNew {
 
     IOptimizerNew(IProviderContext& ctx) : Pctx(ctx) {}
     virtual ~IOptimizerNew() = default;
-    virtual std::shared_ptr<TJoinOptimizerNode> JoinSearch(const std::shared_ptr<TJoinOptimizerNode>& joinTree, TString joinHints="") = 0;
+    virtual std::shared_ptr<TJoinOptimizerNode> JoinSearch(
+        const std::shared_ptr<TJoinOptimizerNode>& joinTree, 
+        TCardinalityHints hints = TCardinalityHints(), 
+        TJoinAlgoHints joinHints = TJoinAlgoHints()) = 0;
 };
 
 } // namespace NYql

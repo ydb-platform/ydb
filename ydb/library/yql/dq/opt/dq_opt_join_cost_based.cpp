@@ -215,15 +215,20 @@ public:
         , MaxDPhypTableSize_(maxDPhypDPTableSize)
     {}
 
-    std::shared_ptr<TJoinOptimizerNode> JoinSearch(const std::shared_ptr<TJoinOptimizerNode>& joinTree, TString joinHints="") override {
+    std::shared_ptr<TJoinOptimizerNode> JoinSearch(
+        const std::shared_ptr<TJoinOptimizerNode>& joinTree, 
+        TCardinalityHints hints = TCardinalityHints(),
+        TJoinAlgoHints joinHints = TJoinAlgoHints()
+    ) override {
+
         auto relsCount = joinTree->Labels().size();
 
         if (relsCount <= 64) { // The algorithm is more efficient.
-            return JoinSearchImpl<TNodeSet64>(joinTree, joinHints);
+            return JoinSearchImpl<TNodeSet64>(joinTree, hints, joinHints);
         }
 
         if (64 < relsCount && relsCount <= 128) {
-            return JoinSearchImpl<TNodeSet128>(joinTree, joinHints);
+            return JoinSearchImpl<TNodeSet128>(joinTree, hints, joinHints);
         }
 
         ComputeStatistics(joinTree, this->Pctx);
@@ -235,9 +240,13 @@ private:
     using TNodeSet128 = std::bitset<128>;
 
     template <typename TNodeSet>
-    std::shared_ptr<TJoinOptimizerNode> JoinSearchImpl(const std::shared_ptr<TJoinOptimizerNode>& joinTree, TString joinHints="") {
+    std::shared_ptr<TJoinOptimizerNode> JoinSearchImpl(
+        const std::shared_ptr<TJoinOptimizerNode>& joinTree, 
+        TCardinalityHints hints = TCardinalityHints(),
+        TJoinAlgoHints joinHints = TJoinAlgoHints()) {
+
         TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree);
-        TDPHypSolver<TNodeSet> solver(hypergraph, this->Pctx);
+        TDPHypSolver<TNodeSet> solver(hypergraph, this->Pctx, hints, joinHints);
 
         if (solver.CountCC(MaxDPhypTableSize_) >= MaxDPhypTableSize_) {
             YQL_CLOG(TRACE, CoreDq) << "Maximum DPhyp threshold exceeded\n";
@@ -263,10 +272,11 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     ui32 optLevel,
     IOptimizerNew& opt,
     const TProviderCollectFunction& providerCollect,
-    TString joinHinst
+    TCardinalityHints hints,
+    TJoinAlgoHints joinHints
 ) {
     int dummyEquiJoinCounter = 0;
-    return DqOptimizeEquiJoinWithCosts(node, ctx, typesCtx, optLevel, opt, providerCollect, dummyEquiJoinCounter);
+    return DqOptimizeEquiJoinWithCosts(node, ctx, typesCtx, optLevel, opt, providerCollect, dummyEquiJoinCounter, hints, joinHints);
 }
 
 TExprBase DqOptimizeEquiJoinWithCosts(
@@ -277,8 +287,11 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     IOptimizerNew& opt,
     const TProviderCollectFunction& providerCollect,
     int& equiJoinCounter,
-    TString joinHints
+    TCardinalityHints hints,
+    TJoinAlgoHints joinHints
 ) {
+    Y_UNUSED(hints);
+
     if (optLevel <= 1) {
         return node;
     }
@@ -321,7 +334,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
         YQL_CLOG(TRACE, CoreDq) << str.str();
     }
 
-    joinTree = opt.JoinSearch(joinTree, joinHints);
+    joinTree = opt.JoinSearch(joinTree, hints, joinHints);
 
     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE)) {
         std::stringstream str;

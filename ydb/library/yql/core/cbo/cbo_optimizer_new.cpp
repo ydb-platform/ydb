@@ -5,6 +5,7 @@
 #include <util/string/builder.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
+#include <util/string/cast.h>
 
 #include <library/cpp/disjoint_sets/disjoint_sets.h>
 
@@ -28,6 +29,14 @@ namespace {
         {"LeftSemi",EJoinKind::LeftSemi},
         {"RightSemi",EJoinKind::RightSemi},
         {"Cross",EJoinKind::Cross}};
+
+    THashMap<TString,TCardinalityHints::ECardOperation> HintOpMap = {
+        {"+",TCardinalityHints::ECardOperation::Add},
+        {"-",TCardinalityHints::ECardOperation::Subtract},
+        {"*",TCardinalityHints::ECardOperation::Multiply},
+        {"/",TCardinalityHints::ECardOperation::Divide},
+        {"#",TCardinalityHints::ECardOperation::Replace}};
+
 }
 
 EJoinKind ConvertToJoinKind(const TString& joinString) {
@@ -161,7 +170,8 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     const TOptimizerStatistics& rightStats,
     const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
     EJoinAlgoType joinAlgo,
-    EJoinKind joinKind) const
+    EJoinKind joinKind,
+    TCardinalityHints::TCardinalityHint* maybeHint) const
 {
     TVector<TString> leftJoinKeys;
     TVector<TString> rightJoinKeys;
@@ -171,7 +181,7 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         rightJoinKeys.emplace_back(c.second.AttributeName);
     }
 
-    return ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind);
+    return ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeHint);
 }
 
 TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
@@ -180,7 +190,8 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     const TVector<TString>& leftJoinKeys,
     const TVector<TString>& rightJoinKeys,
     EJoinAlgoType joinAlgo,
-    EJoinKind joinKind) const
+    EJoinKind joinKind,
+    TCardinalityHints::TCardinalityHint* maybeHint) const
 {
     double newCard{};
     EStatisticsType outputType;
@@ -239,6 +250,10 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         outputType = EStatisticsType::ManyManyJoin;
     }
 
+    if (maybeHint) {
+        newCard = maybeHint->ApplyHint(newCard);
+    }
+
     int newNCols = leftStats.Ncols + rightStats.Ncols;
     double newByteSize = leftStats.Nrows ? (leftStats.ByteSize / leftStats.Nrows) * newCard : 0 +
             rightStats.Nrows ? (rightStats.ByteSize / rightStats.Nrows) * newCard : 0;
@@ -257,5 +272,45 @@ const TBaseProviderContext& TBaseProviderContext::Instance() {
     return staticContext;
 }
 
+TCardinalityHints::TCardinalityHints(const TString& json) {
+    auto jsonValue = new NJson::TJsonValue();
+    NJson::ReadJsonTree(json, jsonValue, true);
+
+    for (auto s : jsonValue->GetArraySafe()) {
+        auto h = s.GetMapSafe();
+
+        TCardinalityHints::TCardinalityHint hint;
+
+        for (auto t : h.at("labels").GetArraySafe()) {
+            hint.JoinLabels.push_back(t.GetStringSafe());
+        }
+
+        auto op = h.at("op").GetStringSafe();
+        hint.Operation = HintOpMap.at(op);
+
+        hint.Value = h.at("value").GetDoubleSafe();
+        Hints.push_back(hint);
+    }
+}
+
+TJoinAlgoHints::TJoinAlgoHints(const TString& json) {
+    auto jsonValue = new NJson::TJsonValue();
+    NJson::ReadJsonTree(json, jsonValue, true);
+
+    for (auto s : jsonValue->GetArraySafe()) {
+        auto h = s.GetMapSafe();
+
+        TJoinAlgoHints::TJoinAlgoHint hint;
+
+        for (auto t : h.at("labels").GetArraySafe()) {
+            hint.JoinLabels.push_back(t.GetStringSafe());
+        }
+
+        auto algo = h.at("algo").GetStringSafe();
+        hint.JoinHint = FromString<EJoinAlgoType>(algo);
+
+        Hints.push_back(hint);
+    }
+}
 
 } // namespace NYql

@@ -6,6 +6,7 @@
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
+#include <ydb/core/tablet/resource_broker.h>
 #include <util/random/random.h>
 
 namespace NKikimr {

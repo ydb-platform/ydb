@@ -1,5 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
+#include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
@@ -65,6 +66,7 @@ private:
 
         Runtime->SetLogPriority(NKikimrServices::MEMORY_CONTROLLER, NLog::PRI_TRACE);
         Runtime->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NLog::PRI_TRACE);
+        Runtime->SetLogPriority(NKikimrServices::RESOURCE_BROKER, NLog::PRI_TRACE);
     }
 
 private:
@@ -373,22 +375,50 @@ Y_UNIT_TEST(MemTable) {
 }
 
 Y_UNIT_TEST(ResourceBroker) {
+    using namespace NResourceBroker;
+
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetUseRealThreads(false);
 
     auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
-    memoryControllerConfig->SetQueryExecutionLimitPercent(40);
+    memoryControllerConfig->SetQueryExecutionLimitPercent(15);
+    
+    auto resourceBrokerConfig = serverSettings.AppConfig->MutableResourceBrokerConfig();
+    auto queue = resourceBrokerConfig->AddQueues();
+    queue->SetName("queue_cs_ttl");
+    queue->MutableLimit()->SetMemory(13_MB);
 
     auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
     server->ProcessMemoryInfo->CGroupLimit = 1000_MB;
     auto& runtime = *server->GetRuntime();
+    TAutoPtr<IEventHandle> handle;
     auto sender = runtime.AllocateEdgeActor();
 
     InitRoot(server, sender);
     
-    runtime.SimulateSleep(TDuration::Seconds(10));
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    runtime.Send(new IEventHandle(MakeResourceBrokerID(), sender, new TEvResourceBroker::TEvConfigRequest(NLocalDb::KqpResourceManagerQueue)));
+    auto config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(handle);
+    UNIT_ASSERT_VALUES_EQUAL(config->QueueConfig->GetLimit().GetMemory(), 150_MB);
+
+    server->ProcessMemoryInfo->CGroupLimit = 500_MB;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    runtime.Send(new IEventHandle(MakeResourceBrokerID(), sender, new TEvResourceBroker::TEvConfigRequest(NLocalDb::KqpResourceManagerQueue)));
+    config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(handle);
+    UNIT_ASSERT_VALUES_EQUAL(config->QueueConfig->GetLimit().GetMemory(), 75_MB);
+
+    // ensure that other settings are not affected:
+    runtime.Send(new IEventHandle(MakeResourceBrokerID(), sender, new TEvResourceBroker::TEvConfigRequest("queue_cs_ttl")));
+    config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(handle);
+    UNIT_ASSERT_VALUES_EQUAL(config->QueueConfig->GetLimit().GetCpu(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(config->QueueConfig->GetLimit().GetMemory(), 13_MB);
+    runtime.Send(new IEventHandle(MakeResourceBrokerID(), sender, new TEvResourceBroker::TEvConfigRequest("queue_cs_general")));
+    config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(handle);
+    UNIT_ASSERT_VALUES_EQUAL(config->QueueConfig->GetLimit().GetCpu(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(config->QueueConfig->GetLimit().GetMemory(), 3221225472);
+
 }
 
 }

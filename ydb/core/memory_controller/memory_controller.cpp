@@ -143,6 +143,8 @@ private:
             HFunc(TEvMemTableRegister, Handle);
             HFunc(TEvMemTableUnregister, Handle);
             HFunc(TEvMemTableCompacted, Handle);
+
+            HFunc(TEvResourceBroker::TEvConfigureResult, Handle);
         }
     }
 
@@ -300,6 +302,14 @@ private:
         }
     }
 
+    void Handle(TEvResourceBroker::TEvConfigureResult::TPtr &ev, const TActorContext& ctx) {
+        const auto *msg = ev->Get();
+        LOG_LOG_S(ctx, 
+            msg->Record.GetSuccess() ? NActors::NLog::PRI_INFO : NActors::NLog::PRI_ERROR, 
+            NKikimrServices::MEMORY_CONTROLLER, 
+            "ResourceBroker configure result " << msg->Record.ShortDebugString());
+    }
+
     double BinarySearchCoefficient(const TVector<TConsumerState>& consumers, ui64 availableMemory) {
         static const ui32 BinarySearchIterations = 20;
 
@@ -361,6 +371,16 @@ private:
             << " Limit: " << newLimits.QueryExecutionLimitBytes);
 
         Counters->GetCounter("Consumer/QueryExecution/Limit")->Set(newLimits.QueryExecutionLimitBytes);
+
+        TAutoPtr<TEvResourceBroker::TEvConfigure> configure = new TEvResourceBroker::TEvConfigure();
+        configure->Merge = true;
+        configure->Record.MutableResourceLimit()->SetMemory(activitiesLimitBytes);
+
+        auto queue = configure->Record.AddQueues();
+        queue->SetName(NLocalDb::KqpResourceManagerQueue);
+        queue->MutableLimit()->SetMemory(queryExecutionLimitBytes);
+
+        Send(MakeResourceBrokerID(), configure.Release());
     }
 
     TConsumerCounters& GetConsumerCounters(EMemoryConsumerKind consumer) {
@@ -536,7 +556,7 @@ IActor* CreateMemoryController(
         TDuration interval,
         TIntrusiveConstPtr<IProcessMemoryInfoProvider> processMemoryInfoProvider,
         const NKikimrConfig::TMemoryControllerConfig& config, 
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
+        const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) {
     return new TMemoryController(
         interval,
         std::move(processMemoryInfoProvider),

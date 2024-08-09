@@ -607,5 +607,7 @@ Y_UNIT_TEST_SUITE(TestStateFunc) {
             auto ev = runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(sender);
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Tag, tag);
         }
+
+        UNIT_ASSERT_VALUES_EQUAL(420, 42);
     }
 }

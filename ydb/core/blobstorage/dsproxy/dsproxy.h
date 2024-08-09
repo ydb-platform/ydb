@@ -379,6 +379,14 @@ struct TBlobStorageGroupMultiPutParameters {
     NKikimrBlobStorage::EPutHandleClass HandleClass;
     TEvBlobStorage::TEvPut::ETactic Tactic;
     bool EnableRequestMod3x3ForMinLatency;
+
+    static ui32 CalculateRestartCounter(TBatchedVec<TEvBlobStorage::TEvPut::TPtr>& events) {
+        ui32 maxRestarts = 0;
+        for (const auto& ev : events) {
+            maxRestarts = std::max(maxRestarts, ev->Get()->RestartCounter);
+        }
+        return maxRestarts;
+    }
 };
 IActor* CreateBlobStorageGroupPutRequest(TBlobStorageGroupMultiPutParameters params);
 

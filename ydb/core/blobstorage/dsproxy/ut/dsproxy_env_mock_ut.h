@@ -113,10 +113,10 @@ struct TDSProxyEnv {
                         .Cookie = ev->Cookie,
                         .Now =  TInstant::Now(),
                         .StoragePoolCounters = StoragePoolCounters,
-                        .RestartCounter = ev->RestartCounter,
+                        .RestartCounter = ev->Get()->RestartCounter,
                         .TraceId = std::move(ev->TraceId),
                         .Event = ev->Get(),
-                        .ExecutionRelay = ev->ExecutionRelay
+                        .ExecutionRelay = ev->Get()->ExecutionRelay,
                         .LatencyQueueKind = kind,
                     },
                     .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
@@ -137,7 +137,7 @@ struct TDSProxyEnv {
                         .Mon = Mon,
                         .Now = TInstant::Now(),
                         .StoragePoolCounters = StoragePoolCounters,
-                        .RestartCounter = maxRestarts,
+                        .RestartCounter = TBlobStorageGroupMultiPutParameters::CalculateRestartCounter(batched),
                         .LatencyQueueKind = kind,
                     },
                     .Events = batched,
@@ -163,10 +163,10 @@ struct TDSProxyEnv {
                         .Cookie = ev->Cookie,
                         .Now = TInstant::Now(),
                         .StoragePoolCounters = StoragePoolCounters,
-                        .RestartCounter = ev->RestartCounter,
+                        .RestartCounter = ev->Get()->RestartCounter,
                         .TraceId = std::move(ev->TraceId),
                         .Event = ev->Get(),
-                        .ExecutionRelay = ev->ExecutionRelay,
+                        .ExecutionRelay = ev->Get()->ExecutionRelay,
                         .LatencyQueueKind = kind,
                     },
                     .NodeLayout = TNodeLayoutInfoPtr(NodeLayoutInfo)
@@ -184,10 +184,10 @@ struct TDSProxyEnv {
                     .Cookie = ev->Cookie,
                     .Now = TInstant::Now(),
                     .StoragePoolCounters = StoragePoolCounters,
-                    .RestartCounter = ev->RestartCounter,
+                    .RestartCounter = ev->Get()->RestartCounter,
                     .TraceId = std::move(ev->TraceId),
                     .Event = ev->Get(),
-                    .ExecutionRelay = ev->ExecutionRelay
+                    .ExecutionRelay = ev->Get()->ExecutionRelay
                 },
                 .UseVPatch = useVPatch
             }));

@@ -3412,14 +3412,14 @@ class TTestBlobStorageProxyBatchedPutRequestDoesNotContainAHugeBlob : public TTe
                                 .Mon = Mon,
                                 .Now = TInstant::Now(),
                                 .StoragePoolCounters = StoragePoolCounters,
-                                .RestartCounter = maxRestarts,
+                                .RestartCounter = TBlobStorageGroupMultiPutParameters::CalculateRestartCounter(batched),
                                 .LatencyQueueKind = kind,
                             },
                             .Events = batched,
                             .TimeStatsEnabled = false,
-                            .Stats = PerDiskStats,
-                            .HandleClass = handleClass,
-                            .Tactic = tactic,
+                            .Stats = PerDiskStatsPtr,
+                            .HandleClass = HandleClass,
+                            .Tactic = Tactic,
                             .EnableRequestMod3x3ForMinLatency = false,
                         });
 

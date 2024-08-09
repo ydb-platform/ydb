@@ -496,10 +496,6 @@ namespace NKikimr {
                         ev->Get()->Deadline
                     );
                 } else {
-                    ui32 maxRestarts = 0;
-                    for (const auto& ev : batchedPuts.Queue) {
-                        maxRestarts = Max(maxRestarts, ev->Get()->RestartCounter);
-                    }
                     PushRequest(CreateBlobStorageGroupPutRequest(
                         TBlobStorageGroupMultiPutParameters{
                             .Common = {
@@ -508,7 +504,7 @@ namespace NKikimr {
                                 .Mon = Mon,
                                 .Now = TActivationContext::Now(),
                                 .StoragePoolCounters = StoragePoolCounters,
-                                .RestartCounter = maxRestarts,
+                                .RestartCounter = TBlobStorageGroupMultiPutParameters::CalculateRestartCounter(batchedPuts.Queue),
                                 .LatencyQueueKind = kind,
                             },
                             .Events = batchedPuts.Queue,

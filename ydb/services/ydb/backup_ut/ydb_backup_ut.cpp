@@ -16,6 +16,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <aws/core/Aws.h>
+#include <google/protobuf/util/message_differencer.h>
 
 using namespace NYdb;
 using namespace NYdb::NTable;
@@ -86,6 +87,22 @@ void CheckTableDescription(TSession& session, const TString& path, auto&& checke
     const TDescribeTableSettings& settings = {}
 ) {
     checker(GetTableDescription(session, path, settings));
+}
+
+}
+
+namespace NYdb::NTable {
+
+bool operator==(const TValue& lhs, const TValue& rhs) {
+    return google::protobuf::util::MessageDifferencer::Equals(lhs.GetProto(), rhs.GetProto());
+}
+
+bool operator==(const TKeyBound& lhs, const TKeyBound& rhs) {
+    return lhs.GetValue() == rhs.GetValue() && lhs.IsInclusive() == rhs.IsInclusive();
+}
+
+bool operator==(const TKeyRange& lhs, const TKeyRange& rhs) {
+    return lhs.From() == lhs.From() && lhs.To() == rhs.To();
 }
 
 }
@@ -239,6 +256,114 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         NDump::TClient backupClient(driver);
         Restore(backupClient, pathToBackup, "/Root");
         CheckTableDescription(session, indexTablePath, CreateMinPartitionsChecker(minIndexPartitions, DEBUG_HINT));
+    }
+
+    Y_UNIT_TEST(RestoreTableSplitBoundaries) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%d", server.GetPort())));
+        TTableClient tableClient(driver);
+        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
+
+        constexpr const char* table = "/Root/table";
+        constexpr int partitions = 10;
+
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint32,
+                    Value Utf8,
+                    PRIMARY KEY (Key)
+                )
+                WITH (
+                    UNIFORM_PARTITIONS = %d,
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = %d,
+                    AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = %d
+                );
+            )",
+            table, partitions, partitions, partitions
+        ));
+        const auto originalTableDescription = GetTableDescription(session, table,
+            TDescribeTableSettings().WithTableStatistics(true)
+        );
+        UNIT_ASSERT_VALUES_EQUAL(originalTableDescription.GetPartitionsCount(), partitions);
+        const auto originalKeyRanges = originalTableDescription.GetKeyRanges();
+
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+        // TO DO: implement NDump::TClient::Dump and call it instead of BackupFolder
+        NYdb::NBackup::BackupFolder(driver, "/Root", ".", pathToBackup, {}, true, false);
+
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                DROP TABLE `%s`;
+            )", table
+        ));
+
+        // restore deleted table
+        NDump::TClient backupClient(driver);
+        Restore(backupClient, pathToBackup, "/Root");
+        const auto restoredTableDescription = GetTableDescription(session, table,
+            TDescribeTableSettings().WithTableStatistics(true)
+        );
+        UNIT_ASSERT_VALUES_EQUAL(restoredTableDescription.GetPartitionsCount(), partitions);
+        UNIT_ASSERT_EQUAL(restoredTableDescription.GetKeyRanges(), originalKeyRanges);
+    }
+
+    Y_UNIT_TEST(RestoreIndexTableSplitBoundaries) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%d", server.GetPort())));
+        TTableClient tableClient(driver);
+        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
+
+        constexpr const char* table = "/Root/table";
+        constexpr const char* textTableDescription = R"(
+            Name: "table"
+            Columns { Name: "Key"    Type: "Uint32"}
+            Columns { Name: "Value"  Type: "Uint32"}
+            KeyColumnNames: ["Key"]
+        )";
+        NKikimrSchemeOp::TTableDescription protoTableDescription;
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(textTableDescription, &protoTableDescription));
+
+        constexpr const char* index = "byValue";
+        const TString indexTablePath = JoinFsPaths(table, index, "indexImplTable");
+        constexpr int indexPartitions = 5;
+
+        {
+            TClient testClient(*server.ServerSettings);
+            const auto status = testClient.CreateTableWithUniformShardedIndex(
+                "/Root",
+                protoTableDescription,
+                index,
+                { "Value" },
+                NKikimrSchemeOp::EIndexTypeGlobal,
+                {},
+                indexPartitions
+            );
+            UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+        }
+        const auto originalIndexTableDescription = GetTableDescription(session, indexTablePath,
+            TDescribeTableSettings().WithTableStatistics(true)
+        );
+        UNIT_ASSERT_VALUES_EQUAL(originalIndexTableDescription.GetPartitionsCount(), indexPartitions);
+        const auto originalKeyRanges = originalIndexTableDescription.GetKeyRanges();
+
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+        // TO DO: implement NDump::TClient::Dump and call it instead of BackupFolder
+        NYdb::NBackup::BackupFolder(driver, "/Root", ".", pathToBackup, {}, true, false);
+
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                DROP TABLE `%s`;
+            )", table
+        ));
+
+        // restore deleted table
+        NDump::TClient backupClient(driver);
+        Restore(backupClient, pathToBackup, "/Root");
+        const auto restoredIndexTableDescription = GetTableDescription(session, indexTablePath,
+            TDescribeTableSettings().WithTableStatistics(true)
+        );
+        UNIT_ASSERT_VALUES_EQUAL(restoredIndexTableDescription.GetPartitionsCount(), indexPartitions);
+        UNIT_ASSERT_EQUAL(restoredIndexTableDescription.GetKeyRanges(), originalKeyRanges);
     }
 
 }
@@ -487,6 +612,108 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         CheckTableDescription(testEnv.GetSession(), indexTablePath,
             CreateMinPartitionsChecker(minIndexPartitions, DEBUG_HINT)
         );
+    }
+
+    Y_UNIT_TEST(RestoreTableSplitBoundaries) {
+        TS3TestEnv testEnv;
+
+        constexpr const char* table = "/Root/table";
+        constexpr int partitions = 10;
+
+        ExecuteDataDefinitionQuery(testEnv.GetSession(), Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint32,
+                    Value Utf8,
+                    PRIMARY KEY (Key)
+                )
+                WITH (
+                    UNIFORM_PARTITIONS = %d,
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = %d,
+                    AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = %d
+                );
+            )",
+            table, partitions, partitions, partitions
+        ));
+        const auto originalTableDescription = GetTableDescription(testEnv.GetSession(), table,
+            TDescribeTableSettings().WithTableStatistics(true)
+        );
+        UNIT_ASSERT_VALUES_EQUAL(originalTableDescription.GetPartitionsCount(), partitions);
+        const auto originalKeyRanges = originalTableDescription.GetKeyRanges();
+
+        NExport::TExportClient exportClient(testEnv.GetDriver());
+        NImport::TImportClient importClient(testEnv.GetDriver());
+        NOperation::TOperationClient operationClient(testEnv.GetDriver());
+
+        ExportToS3(exportClient, testEnv.GetS3Port(), operationClient, table, "table");
+
+        // The table needs to be dropped before importing from S3 can proceed successfully.
+        ExecuteDataDefinitionQuery(testEnv.GetSession(), Sprintf(R"(
+                DROP TABLE `%s`;
+            )", table
+        ));
+
+        ImportFromS3(importClient, testEnv.GetS3Port(), operationClient, "table", table);
+        const auto restoredTableDescription = GetTableDescription(testEnv.GetSession(), table,
+            TDescribeTableSettings().WithTableStatistics(true)
+        );
+        UNIT_ASSERT_VALUES_EQUAL(restoredTableDescription.GetPartitionsCount(), partitions);
+        UNIT_ASSERT_EQUAL(restoredTableDescription.GetKeyRanges(), originalKeyRanges);
+    }
+
+    Y_UNIT_TEST(RestoreIndexTableSplitBoundaries) {
+        TS3TestEnv testEnv;
+
+        constexpr const char* table = "/Root/table";
+        constexpr const char* textTableDescription = R"(
+            Name: "table"
+            Columns { Name: "Key"    Type: "Uint32"}
+            Columns { Name: "Value"  Type: "Uint32"}
+            KeyColumnNames: ["Key"]
+        )";
+        NKikimrSchemeOp::TTableDescription protoTableDescription;
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(textTableDescription, &protoTableDescription));
+
+        constexpr const char* index = "byValue";
+        const TString indexTablePath = JoinFsPaths(table, index, "indexImplTable");
+        constexpr int indexPartitions = 5;
+
+        {
+            TClient testClient(*testEnv.GetServer().ServerSettings);
+            const auto status = testClient.CreateTableWithUniformShardedIndex(
+                "/Root",
+                protoTableDescription,
+                index,
+                { "Value" },
+                NKikimrSchemeOp::EIndexTypeGlobal,
+                {},
+                indexPartitions
+            );
+            UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+        }
+        const auto originalIndexTableDescription = GetTableDescription(testEnv.GetSession(), indexTablePath,
+            TDescribeTableSettings().WithTableStatistics(true)
+        );
+        UNIT_ASSERT_VALUES_EQUAL(originalIndexTableDescription.GetPartitionsCount(), indexPartitions);
+        const auto originalKeyRanges = originalIndexTableDescription.GetKeyRanges();
+
+        NExport::TExportClient exportClient(testEnv.GetDriver());
+        NImport::TImportClient importClient(testEnv.GetDriver());
+        NOperation::TOperationClient operationClient(testEnv.GetDriver());
+
+        ExportToS3(exportClient, testEnv.GetS3Port(), operationClient, table, "table");
+
+        // The table needs to be dropped before importing from S3 can proceed successfully.
+        ExecuteDataDefinitionQuery(testEnv.GetSession(), Sprintf(R"(
+                DROP TABLE `%s`;
+            )", table
+        ));
+
+        ImportFromS3(importClient, testEnv.GetS3Port(), operationClient, "table", table);
+        const auto restoredIndexTableDescription = GetTableDescription(testEnv.GetSession(), indexTablePath,
+            TDescribeTableSettings().WithTableStatistics(true)
+        );
+        UNIT_ASSERT_VALUES_EQUAL(restoredIndexTableDescription.GetPartitionsCount(), indexPartitions);
+        UNIT_ASSERT_EQUAL(restoredIndexTableDescription.GetKeyRanges(), originalKeyRanges);
     }
 
 }

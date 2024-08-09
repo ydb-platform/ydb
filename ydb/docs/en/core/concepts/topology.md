@@ -52,12 +52,12 @@ If a disk fails, {{ ydb-short-name }} can automatically reconfigure a storage gr
 
 Disk group reconfiguration replaces the VDisk located on the failed hardware with a new VDisk, and the system tries to place it on operational hardware. The same rules apply as when creating a storage group:
 
-* The new VDisk is created in a fail domain different from any other VDisks in the group.
+* The new VDisk is created in a fail domain that is different from any other VDisks in the group.
 * In the `mirror-3-dc` mode, it is created within the same fail realm as the failed VDisk.
 
 To ensure reconfiguration is possible, a cluster should have free slots available for creating VDisks in different fail domains. When determining the number of slots to keep free, consider the risk of hardware failure, the time required to replicate data, and the time needed to replace the failed hardware.
 
-Disk group reconfiguration process increases the load on other VDisks in the group as well as on the network. The total data replication speed is limited on both the source and target VDisks to minimize the impact of redundancy recovery on system performance.
+The disk group reconfiguration process increases the load on other VDisks in the group as well as on the network. The total data replication speed is limited on both the source and target VDisks to minimize the impact of redundancy recovery on system performance.
 
 The time required to restore redundancy depends on the amount of data and hardware performance. For example, replication on fast NVMe SSDs may take an hour, while it could take more than 24 hours on large HDDs.
 

@@ -70,7 +70,7 @@ Regular storage groups that are not [static](#static-group) are called **dynamic
 
 ### Storage pool {#storage-pool}
 
-**Storage pool** is a collection of data storage devices with similar characteristics. Each storage pool is assigned a unique name within a {{ ydb-short-name }} cluster. Technically each storage pool consisis of multiple [PDisks](#pdisk). Each [storage group](#storage-group) is created in the particular storage pool, which determines the performance characteristics of the storage group through the selection of the appropriate storage devices. It is typical to have separate storage pools for NVMe, SSD and HDD devices, or for the models of those devices having different capacity and speed.
+**Storage pool** is a collection of data storage devices with similar characteristics. Each storage pool is assigned a unique name within a {{ ydb-short-name }} cluster. Technically, each storage pool consists of multiple [PDisks](#pdisk). Each [storage group](#storage-group) is created in a particular storage pool, which determines the performance characteristics of the storage group through the selection of appropriate storage devices. It is typical to have separate storage pools for NVMe, SSD, and HDD devices or particular models of those devices with different capacities and speeds.
 
 ### Actor {#actor}
 

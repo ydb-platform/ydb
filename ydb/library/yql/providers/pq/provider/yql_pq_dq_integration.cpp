@@ -1,4 +1,5 @@
 #include "yql_pq_dq_integration.h"
+#include "yql_pq_dq_predicate.h"
 #include "yql_pq_helpers.h"
 #include "yql_pq_mkql_compiler.h"
 
@@ -12,6 +13,7 @@
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_dq_predicate.h>
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <util/string/builder.h>
@@ -85,6 +87,8 @@ public:
                 .Value(pqReadTopic.Format())
                 .Done());
 
+            auto format = pqReadTopic.Format().Ref().Content();
+
             TVector<TCoNameValueTuple> innerSettings;
             if (pqReadTopic.Compression() != "") {
                 innerSettings.push_back(Build<TCoNameValueTuple>(ctx, pqReadTopic.Pos())
@@ -119,24 +123,68 @@ public:
                 .Done());
 
             const auto token = "cluster:default_" + clusterName;
-            auto columns = pqReadTopic.Columns().Ptr();
-            if (!columns->IsList()) {
-                const auto pos = columns->Pos();
-                const auto& items = rowType->GetItems();
-                TExprNode::TListType cols;
-                cols.reserve(items.size());
-                std::transform(items.cbegin(), items.cend(), std::back_inserter(cols), [&](const TItemExprType* item) { return ctx.NewAtom(pos, item->GetName()); });
-                columns = ctx.NewList(pos, std::move(cols));
-            }
+            // auto columns = pqReadTopic.Columns().Ptr();
+            // if (!columns->IsList()) {
+            //     const auto pos = columns->Pos();
+            //     const auto& items = rowType->GetItems();
+            //     TExprNode::TListType cols;
+            //     cols.reserve(items.size());
+            //     std::transform(items.cbegin(), items.cend(), std::back_inserter(cols),
+            //         [&](const TItemExprType* item) {
+            //             const TTypeAnnotationNode* type =  item->GetItemType();
+            //             YQL_CLOG(DEBUG, ProviderPq) << "type type " << FormatType(type);
+            //             return ctx.NewAtom(pos, item->GetName());
+            //         });
+            //     columns = ctx.NewList(pos, std::move(cols));
+            // }
+
+            // const auto& typeItems = rowType->GetItems();
+            // YQL_CLOG(DEBUG, ProviderPq) << "size " << items.size();
+            // for (const auto item : items) {
+            //     const TTypeAnnotationNode* type =  item->GetItemType();
+            //     YQL_CLOG(DEBUG, ProviderPq) << item->GetName() << ": " << "type type2 " << FormatType(type);
+            // }
+
+            auto rowSchema = pqReadTopic.Topic().RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+            TExprNode::TListType colTypes;
+            const auto& typeItems = rowSchema->GetItems();
+            colTypes.reserve(typeItems.size());
+            const auto pos = read->Pos(); // TODO
+            std::transform(typeItems.cbegin(), typeItems.cend(), std::back_inserter(colTypes),
+                [&](const TItemExprType* item) {
+                    return ctx.NewAtom(pos, FormatType(item->GetItemType()));
+                });
+            auto columnTypes = ctx.NewList(pos, std::move(colTypes));
+            
+            TExprNode::TListType colNames;
+            colNames.reserve(typeItems.size());
+            std::transform(typeItems.cbegin(), typeItems.cend(), std::back_inserter(colNames),
+                [&](const TItemExprType* item) {
+                    return ctx.NewAtom(pos, item->GetName());
+                });
+            auto columnNames = ctx.NewList(pos, std::move(colNames));
+    
+            auto row = Build<TCoArgument>(ctx, read->Pos())
+                .Name("row")
+                .Done();
+            auto emptyPredicate = Build<TCoLambda>(ctx, read->Pos())
+                .Args({row})
+                .Body<TCoBool>()
+                    .Literal().Build("true")
+                    .Build()
+                .Done().Ptr();
+
 
             return Build<TDqSourceWrap>(ctx, read->Pos())
                 .Input<TDqPqTopicSource>()
                     .Topic(pqReadTopic.Topic())
-                    .Columns(std::move(columns))
-                    .Settings(BuildTopicReadSettings(clusterName, dqSettings, read->Pos(), ctx))
+                    .Columns(std::move(columnNames))    // TODO
+                    .Settings(BuildTopicReadSettings(clusterName, dqSettings, read->Pos(), format, ctx))
                     .Token<TCoSecureParam>()
                         .Name().Build(token)
                         .Build()
+                    .FilterPredicate(emptyPredicate)
+                    .ColumnTypes(std::move(columnTypes))
                     .Build()
                 .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
                 .DataSource(pqReadTopic.DataSource().Cast<TCoDataSource>())
@@ -179,7 +227,7 @@ public:
         }
     }
 
-    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t) override {
+    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t, TExprContext& ctx) override {
         if (auto maybeDqSource = TMaybeNode<TDqSource>(&node)) {
             auto settings = maybeDqSource.Cast().Settings();
             if (auto maybeTopicSource = TMaybeNode<TDqPqTopicSource>(settings.Raw())) {
@@ -195,6 +243,8 @@ public:
                 srcDesc.SetClusterType(ToClusterType(clusterDesc->ClusterType));
                 srcDesc.SetDatabaseId(clusterDesc->DatabaseId);
 
+                bool useRowDispatcher = false;
+                TString format;
                 size_t const settingsCount = topicSource.Settings().Size();
                 for (size_t i = 0; i < settingsCount; ++i) {
                     TCoNameValueTuple setting = topicSource.Settings().Item(i);
@@ -203,6 +253,10 @@ public:
                         srcDesc.SetConsumerName(TString(Value(setting)));
                     } else if (name == EndpointSetting) {
                         srcDesc.SetEndpoint(TString(Value(setting)));
+                    } else if (name == UseRowDispatcher) {
+                        useRowDispatcher = FromString<bool>(Value(setting));
+                    } else if (name == Format) {
+                        format = TString(Value(setting));
                     } else if (name == UseSslSetting) {
                         srcDesc.SetUseSsl(FromString<bool>(Value(setting)));
                     } else if (name == AddBearerToTokenSetting) {
@@ -230,8 +284,35 @@ public:
                     srcDesc.AddMetadataFields(metadata.Value().Maybe<TCoAtom>().Cast().StringValue());
                 }
 
+                for (const auto& column : topicSource.Columns().Cast<TCoAtomList>()) {
+                    srcDesc.AddColumns(column.StringValue());
+                }
+
+                for (const auto& columnTypes : topicSource.ColumnTypes().Cast<TCoAtomList>()) {
+                    srcDesc.AddColumnTypes(columnTypes.StringValue());
+                }
+            
+                NPq::NProto::TPredicate predicateProto;
+                if (auto predicate = topicSource.FilterPredicate(); !NYql::NDqPredicate::IsEmptyFilterPredicate(predicate)) {
+                    TStringBuilder err;
+                    if (!NYql::NDqPredicate::SerializeFilterPredicate(predicate, &predicateProto, err)) {
+                        ythrow yexception() << "Failed to serialize filter predicate for source: " << err;
+                    }
+                }
+
+                TString predicateSql = NYql::NDqPredicate::FormatWhere(predicateProto);
+                srcDesc.SetPredicate(predicateSql);
+
+                YQL_CLOG(INFO, Core) << "UseRowDispatcher " << useRowDispatcher;
+                YQL_CLOG(INFO, Core) << "UseRowDispatcher format" << format;
+
+                useRowDispatcher = true; // TODO
                 protoSettings.PackFrom(srcDesc);
-                sourceType = "PqSource";
+                useRowDispatcher = useRowDispatcher && (format == "json_each_row");
+                if (useRowDispatcher) {
+                    ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + predicateSql));
+                }
+                sourceType = !useRowDispatcher ? "PqSource" : "PqRdSource";
             }
         }
     }
@@ -278,6 +359,7 @@ public:
         const TString& cluster,
         const TDqSettings& dqSettings,
         TPositionHandle pos,
+        std::string_view format,
         TExprContext& ctx) const
     {
         TVector<TCoNameValueTuple> props;
@@ -295,6 +377,10 @@ public:
         }
 
         Add(props, EndpointSetting, clusterConfiguration->Endpoint, pos, ctx);
+        Add(props, UseRowDispatcher, ToString(clusterConfiguration->UseRowDispatcher), pos, ctx);
+        Add(props, Format, format, pos, ctx);
+
+        
         if (clusterConfiguration->UseSsl) {
             Add(props, UseSslSetting, "1", pos, ctx);
         }

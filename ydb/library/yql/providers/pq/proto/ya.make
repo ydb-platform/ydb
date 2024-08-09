@@ -1,5 +1,10 @@
 PROTO_LIBRARY()
 
+PEERDIR(
+    ydb/public/api/protos
+)
+
+
 SRCS(
     dq_io.proto
     dq_io_state.proto

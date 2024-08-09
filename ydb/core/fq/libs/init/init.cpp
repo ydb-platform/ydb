@@ -17,6 +17,7 @@
 #include <ydb/core/fq/libs/rate_limiter/events/control_plane_events.h>
 #include <ydb/core/fq/libs/rate_limiter/events/data_plane.h>
 #include <ydb/core/fq/libs/rate_limiter/quoter_service/quoter_service.h>
+#include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 #include <ydb/core/fq/libs/test_connection/test_connection.h>
 
@@ -42,6 +43,7 @@
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 #include <ydb/library/yql/providers/s3/proto/retry_config.pb.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
+#include <ydb/library/yql/providers/pq/async_io/dq_pq_rd_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
 #include <ydb/library/yql/providers/solomon/async_io/dq_solomon_write_actor.h>
 #include <ydb/library/yql/providers/ydb/actors/yql_ydb_source_factory.h>
@@ -155,6 +157,25 @@ void Init(
         actorRegistrator(NYql::NDq::MakeCheckpointStorageID(), checkpointStorage.release());
     }
 
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
+
+
+    if (protoConfig.GetTokenAccessor().GetEnabled()) {
+        const auto& tokenAccessorConfig = protoConfig.GetTokenAccessor();
+
+        TString caContent;
+        if (const auto& path = tokenAccessorConfig.GetSslCaCert()) {
+            caContent = TUnbufferedFileInput(path).ReadAll();
+        }
+
+        credentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(tokenAccessorConfig.GetEndpoint(), tokenAccessorConfig.GetUseSsl(), caContent, tokenAccessorConfig.GetConnectionPoolSize());
+    }
+
+    if (protoConfig.GetRowDispatcher().GetEnabled()) {
+        auto rowDispatcher = NFq::NewRowDispatcherService(protoConfig.GetRowDispatcher(), protoConfig.GetCommon(), NKikimr::CreateYdbCredentialsProviderFactory, yqSharedResources, credentialsFactory, tenant);
+        actorRegistrator(NFq::RowDispatcherServiceActorId(), rowDispatcher.release());
+    }
+
     TVector<NKikimr::NMiniKQL::TComputationNodeFactory> compNodeFactories = {
         NYql::GetCommonDqFactory(),
         NYql::GetDqYdbFactory(yqSharedResources->UserSpaceYdbDriver),
@@ -171,8 +192,6 @@ void Init(
 
     auto asyncIoFactory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
 
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
-
     const auto httpGateway = NYql::IHTTPGateway::Make(
         &protoConfig.GetGateways().GetHttpGateway(),
         yqCounters->GetSubgroup("subcomponent", "http_gateway"));
@@ -180,17 +199,6 @@ void Init(
     NYql::NConnector::IClient::TPtr connectorClient = nullptr;
     if (protoConfig.GetGateways().GetGeneric().HasConnector()) {
         connectorClient = NYql::NConnector::MakeClientGRPC(protoConfig.GetGateways().GetGeneric().GetConnector());
-    }
-
-    if (protoConfig.GetTokenAccessor().GetEnabled()) {
-        const auto& tokenAccessorConfig = protoConfig.GetTokenAccessor();
-
-        TString caContent;
-        if (const auto& path = tokenAccessorConfig.GetSslCaCert()) {
-            caContent = TUnbufferedFileInput(path).ReadAll();
-        }
-
-        credentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(tokenAccessorConfig.GetEndpoint(), tokenAccessorConfig.GetUseSsl(), caContent, tokenAccessorConfig.GetConnectionPoolSize());
     }
 
     auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
@@ -213,6 +221,7 @@ void Init(
 
         RegisterDqInputTransformLookupActorFactory(*asyncIoFactory);
         RegisterDqPqReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, yqCounters->GetSubgroup("subsystem", "DqSourceTracker"));
+        RegisterDqPqRdReadActorFactory(*asyncIoFactory, credentialsFactory);
         RegisterYdbReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory);
 
         s3ActorsFactory->RegisterS3ReadActorFactory(*asyncIoFactory, credentialsFactory, httpGateway, s3HttpRetryPolicy, readActorFactoryCfg,

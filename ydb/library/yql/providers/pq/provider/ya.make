@@ -8,6 +8,7 @@ SRCS(
     yql_pq_datasource.cpp
     yql_pq_datasource_type_ann.cpp
     yql_pq_dq_integration.cpp
+    yql_pq_dq_predicate.cpp
     yql_pq_io_discovery.cpp
     yql_pq_load_meta.cpp
     yql_pq_logical_opt.cpp

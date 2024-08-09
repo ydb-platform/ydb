@@ -242,6 +242,13 @@ federated_query_config:
     max_inflight: 1
     storage:
       endpoint: ""
+  row_dispatcher:
+    enabled: false
+    coordinator:
+      enabled: true
+      node_path: "row_dispatcher"
+      storage:
+        endpoint: ""
   resource_manager:
     enabled: true
   private_proxy:

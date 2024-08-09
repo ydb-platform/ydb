@@ -29,6 +29,7 @@ RECURSE(
     rate_limiter
     read_rule
     result_formatter
+    row_dispatcher
     shared_resources
     signer
     tasks_packer

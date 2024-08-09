@@ -336,7 +336,6 @@ private:
                     batchItemsEstimatedCount += val->GetMessages().size();
                 }
             }
-
             for (auto& event : events) {
                 std::visit(TTopicEventProcessor{*this, batchItemsEstimatedCount, LogPrefix}, event);
             }

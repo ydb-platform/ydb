@@ -10,10 +10,11 @@ std::shared_ptr<TJoinOptimizerNodeInternal> MakeJoinInternal(
     const TVector<TString>& rightJoinKeys,
     EJoinKind joinKind,
     EJoinAlgoType joinAlgo,
-    IProviderContext& ctx) {
+    IProviderContext& ctx,
+    TCardinalityHints::TCardinalityHint* maybeHint) {
 
     auto res = std::make_shared<TJoinOptimizerNodeInternal>(left, right, joinConditions, leftJoinKeys, rightJoinKeys, joinKind, joinAlgo);
-    res->Stats = std::make_shared<TOptimizerStatistics>(ctx.ComputeJoinStats(*left->Stats, *right->Stats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind));
+    res->Stats = std::make_shared<TOptimizerStatistics>(ctx.ComputeJoinStats(*left->Stats, *right->Stats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeHint));
     return res;
 }
 

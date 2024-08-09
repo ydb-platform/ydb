@@ -30,7 +30,7 @@ TKikimrRunner GetKikimrRunnerWithStats() {
     TVector<NKikimrKqp::TKqpSetting> settings;
 
     NKikimrKqp::TKqpSetting setting;
-    setting.SetName("OverrideStatistics");
+    setting.SetName("OptOverrideStatistics");
     setting.SetValue(STATS);
     settings.push_back(setting);
 

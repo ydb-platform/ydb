@@ -29,13 +29,13 @@ using namespace NOpt;
 class TKqpStatisticsTransformer : public NYql::NDq::TDqStatisticsTransformerBase {
 
     const TKikimrConfiguration::TPtr& Config;
-    const TKqpOptimizeContext& KqpCtx;
+    TKqpOptimizeContext& KqpCtx;
     TVector<TVector<std::shared_ptr<TOptimizerStatistics>>> TxStats;
 
     public:
         TKqpStatisticsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, 
             const TKikimrConfiguration::TPtr& config, const TKqpProviderContext& pctx) : 
-            TDqStatisticsTransformerBase(&typeCtx, pctx),
+            TDqStatisticsTransformerBase(&typeCtx, pctx, kqpCtx->GetCardinalityHints()),
             Config(config),
             KqpCtx(*kqpCtx) {}
 

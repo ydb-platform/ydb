@@ -1,4 +1,4 @@
-PRAGMA ydb.OverrideStatistics = '{"/Root/R":{"n_rows":100500, "key_columns":["id"], "columns":[{"name":"id", "n_unique_vals":50}]}}';
+PRAGMA ydb.OptOverrideStatistics = '{"/Root/R":{"n_rows":100500, "key_columns":["id"], "columns":[{"name":"id", "n_unique_vals":50}]}}';
 SELECT *
 FROM `/Root/R` as R
     INNER JOIN

@@ -7,8 +7,8 @@ namespace NYql::NDq {
 
 using namespace NNodes;
 
-TDqStatisticsTransformerBase::TDqStatisticsTransformerBase(TTypeAnnotationContext* typeCtx, const IProviderContext& ctx)
-    : TypeCtx(typeCtx), Pctx(ctx)
+TDqStatisticsTransformerBase::TDqStatisticsTransformerBase(TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TCardinalityHints hints)
+    : TypeCtx(typeCtx), Pctx(ctx), CardinalityHints(hints)
 { }
 
 IGraphTransformer::TStatus TDqStatisticsTransformerBase::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
@@ -61,10 +61,10 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
 
     // Join matchers
     else if(TCoMapJoinCore::Match(input.Get())) {
-        InferStatisticsForMapJoin(input, TypeCtx, Pctx);
+        InferStatisticsForMapJoin(input, TypeCtx, Pctx, CardinalityHints);
     }
     else if(TCoGraceJoinCore::Match(input.Get())) {
-        InferStatisticsForGraceJoin(input, TypeCtx, Pctx);
+        InferStatisticsForGraceJoin(input, TypeCtx, Pctx, CardinalityHints);
     }
 
     // Do nothing in case of EquiJoin, otherwise the EquiJoin rule won't fire

@@ -48,6 +48,29 @@ TOptimizerStatistics::TOptimizerStatistics(
     , Nrows(nrows)
     , Ncols(ncols)
     , ByteSize(byteSize)
+    , OwnCost(cost)
+    , Cost(cost)
+    , KeyColumns(keyColumns)
+    , ColumnStatistics(columnMap)
+    , Specific(std::move(specific))
+{
+}
+
+TOptimizerStatistics::TOptimizerStatistics(
+    EStatisticsType type,
+    double nrows,
+    int ncols,
+    double byteSize,
+    double ownCost,
+    double cost,
+    TIntrusivePtr<TKeyColumns> keyColumns,
+    TIntrusivePtr<TColumnStatMap> columnMap,
+    std::unique_ptr<IProviderStatistics> specific)
+    : Type(type)
+    , Nrows(nrows)
+    , Ncols(ncols)
+    , ByteSize(byteSize)
+    , OwnCost(ownCost)
     , Cost(cost)
     , KeyColumns(keyColumns)
     , ColumnStatistics(columnMap)
@@ -82,6 +105,12 @@ std::shared_ptr<TOptimizerStatistics> NYql::OverrideStatistics(const NYql::TOpti
         res->KeyColumns = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(cols));
     }
 
+    if (auto ownCost = tableStats.find("own_cost"); ownCost != tableStats.end()) {
+        res->OwnCost = ownCost->second.GetDoubleSafe();
+    }
+    if (auto cost = tableStats.find("cost"); cost != tableStats.end()) {
+        res->Cost = cost->second.GetDoubleSafe();
+    }
     if (auto nrows = tableStats.find("n_rows"); nrows != tableStats.end()) {
         res->Nrows = nrows->second.GetDoubleSafe();
     }

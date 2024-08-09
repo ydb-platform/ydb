@@ -4,6 +4,7 @@
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <ydb/library/yql/core/yql_type_helpers.h>
 
 #include <ydb/library/yql/utils/log/log.h>
 
@@ -130,7 +131,145 @@ TExprNode::TListType OriginalJoinOutputMembers(const TDqPhyMapJoin& mapJoin, TEx
     }
     return structMembers;
 }
+
+TExprNode::TPtr ExpandJoinInput(const TStructExprType& type, TExprNode::TPtr&& arg, TExprContext& ctx) {
+    return ctx.Builder(arg->Pos())
+            .Callable("ExpandMap")
+                .Add(0, std::move(arg))
+                .Lambda(1)
+                    .Param("item")
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        auto i = 0U;
+                        for (const auto& item : type.GetItems()) {
+                            parent.Callable(i++, "Member")
+                                .Arg(0, "item")
+                                .Atom(1, item->GetName())
+                                .Seal();
+                        }
+                        return parent;
+                    })
+                .Seal()
+            .Seal().Build();
+}
+
 } // anonymous namespace end
+
+TExprBase DqPeepholeRewriteMapJoinWithGraceCore(const TExprBase& node, TExprContext& ctx) {
+    if (!node.Maybe<TDqPhyGraceJoin>()) {
+        return node;
+    }
+    const auto graceJoin = node.Cast<TDqPhyGraceJoin>();
+    const auto pos = graceJoin.Pos();
+
+    const TString leftTableLabel(GetTableLabel(graceJoin.LeftLabel()));
+    const TString rightTableLabel(GetTableLabel(graceJoin.RightLabel()));
+
+    auto [leftKeyColumnNodes, rightKeyColumnNodes] = JoinKeysToAtoms(ctx, graceJoin, leftTableLabel, rightTableLabel);
+    const auto keyWidth = leftKeyColumnNodes.size();
+
+    const auto itemTypeLeft = GetSequenceItemType(graceJoin.LeftInput(), false, ctx)->Cast<TStructExprType>();
+    const auto itemTypeRight = GetSequenceItemType(graceJoin.RightInput(), false, ctx)->Cast<TStructExprType>();
+
+    TExprNode::TListType leftRenames, rightRenames;
+    std::vector<TString> fullColNames;
+    ui32 outputIndex = 0;
+
+    for (auto i = 0u; i < itemTypeLeft->GetSize(); i++) {
+        TString name(itemTypeLeft->GetItems()[i]->GetName());
+        if (leftTableLabel) {
+            name = leftTableLabel + "." + name;
+        }
+        fullColNames.push_back(name);
+        leftRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(i)));
+        leftRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(outputIndex++)));
+    }
+    if (graceJoin.JoinType().Value() != "LeftOnly" && graceJoin.JoinType().Value() != "LeftSemi") {
+        for (auto i = 0u; i < itemTypeRight->GetSize(); i++) {
+            TString name(itemTypeRight->GetItems()[i]->GetName());
+            if (rightTableLabel) {
+                name = rightTableLabel + "." + name;
+            }
+            fullColNames.push_back(name);
+            rightRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(i)));
+            rightRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(outputIndex++)));
+        }
+    }
+
+    TTypeAnnotationNode::TListType keyTypesLeft(keyWidth);
+    TTypeAnnotationNode::TListType keyTypesRight(keyWidth);
+    TTypeAnnotationNode::TListType keyTypes(keyWidth);
+    for (auto i = 0U; i < keyTypes.size(); ++i) {
+        const auto keyTypeLeft = itemTypeLeft->FindItemType(leftKeyColumnNodes[i]->Content());
+        const auto keyTypeRight = itemTypeRight->FindItemType(rightKeyColumnNodes[i]->Content());
+        bool optKey = false;
+        keyTypes[i] = JoinDryKeyType(keyTypeLeft, keyTypeRight, optKey, ctx);
+        if (!keyTypes[i]) {
+            keyTypes.clear();
+            keyTypesLeft.clear();
+            keyTypesRight.clear();
+            break;
+        }
+        keyTypesLeft[i] = optKey ? ctx.MakeType<TOptionalExprType>(keyTypes[i]) : keyTypes[i];
+        keyTypesRight[i] = optKey ? ctx.MakeType<TOptionalExprType>(keyTypes[i]) : keyTypes[i];
+    }
+
+    auto leftInput = ExpandJoinInput(*itemTypeLeft, ctx.NewCallable(graceJoin.LeftInput().Pos(), "ToFlow", {graceJoin.LeftInput().Ptr()}), ctx);
+    auto rightInput = ExpandJoinInput(*itemTypeRight, ctx.NewCallable(graceJoin.RightInput().Pos(), "ToFlow", {graceJoin.RightInput().Ptr()}), ctx);
+    YQL_ENSURE(!keyTypes.empty());
+
+    for (auto i = 0U; i < leftKeyColumnNodes.size(); i++) {
+        const auto origName = TString(leftKeyColumnNodes[i]->Content());
+        auto index = itemTypeLeft->FindItem(origName);
+        YQL_ENSURE(index);
+        leftKeyColumnNodes[i] = ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*index));
+    }
+    for (auto i = 0U; i < rightKeyColumnNodes.size(); i++) {
+        const auto origName = TString(rightKeyColumnNodes[i]->Content());
+        auto index = itemTypeRight->FindItem(origName);
+        YQL_ENSURE(index);
+        rightKeyColumnNodes[i] = ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*index));
+    }
+
+    auto [leftKeyColumnNodesCopy, rightKeyColumnNodesCopy] = JoinKeysToAtoms(ctx, graceJoin, leftTableLabel, rightTableLabel);
+
+    auto graceJoinCore = Build<TCoGraceJoinCore>(ctx, pos)
+            .LeftInput(std::move(leftInput))
+            .RightInput(std::move(rightInput))
+            .JoinKind(graceJoin.JoinType())
+            .LeftKeysColumns(ctx.NewList(pos, std::move(leftKeyColumnNodes)))
+            .RightKeysColumns(ctx.NewList(pos,  std::move(rightKeyColumnNodes)))
+            .LeftRenames(ctx.NewList(pos, std::move(leftRenames)))
+            .RightRenames(ctx.NewList(pos, std::move(rightRenames)))
+            .LeftKeysColumnNames(ctx.NewList(pos,  std::move(leftKeyColumnNodesCopy)))
+            .RightKeysColumnNames(ctx.NewList(pos,  std::move(rightKeyColumnNodesCopy)))
+            .Flags()
+            .Build()
+        .Done();
+
+    auto graceNode = ctx.Builder(pos)
+        .Callable("NarrowMap")
+            .Add(0, graceJoinCore.Ptr())
+            .Lambda(1)
+                .Params("output", fullColNames.size())
+                .Callable("AsStruct")
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        ui32 i = 0U;
+                        for (const auto& colName : fullColNames) {
+                            parent.List(i)
+                                .Atom(0, colName)
+                                .Arg(1, "output", i)
+                            .Seal();
+                            i++;
+                        }
+                        return parent;
+                    })
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+
+    return TExprBase(graceNode);
+}
 
 /**
  * Rewrites a `KqpMapJoin` to the `MapJoinCore`.
@@ -142,10 +281,11 @@ TExprNode::TListType OriginalJoinOutputMembers(const TDqPhyMapJoin& mapJoin, TEx
  *    (rely on the fact that there will be only one element in the `FlatMap`-stream)
  *  - Align key types using `StrictCast`, use internal columns to store converted left keys
  */
-TExprBase DqPeepholeRewriteMapJoin(const TExprBase& node, TExprContext& ctx) {
+TExprBase DqPeepholeRewriteMapJoinWithMapCore(const TExprBase& node, TExprContext& ctx) {
     if (!node.Maybe<TDqPhyMapJoin>()) {
         return node;
     }
+
     const auto mapJoin = node.Cast<TDqPhyMapJoin>();
     const auto pos = mapJoin.Pos();
 

@@ -211,15 +211,16 @@ public:
         SendRequest();
     }
     void ReplyWith(NHttp::THttpOutgoingResponsePtr response) {
-        TString url(Event->Get()->Request->URL.Before('?'));
-        TString status(response->Status);
-        NMonitoring::THistogramPtr ResponseTimeHgram = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "utils")
-            ->GetSubgroup("subsystem", "mon")
-            ->GetSubgroup("url", url)
-            ->GetSubgroup("status", status)
-            ->GetHistogram("ResponseTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1));
-        ResponseTimeHgram->Collect(Event->Get()->Request->Timer.Passed() * 1000);
-
+        if (response->Status.StartsWith("2")) {
+            TString url(Event->Get()->Request->URL.Before('?'));
+            TString status(response->Status);
+            NMonitoring::THistogramPtr ResponseTimeHgram = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "utils")
+                ->GetSubgroup("subsystem", "mon")
+                ->GetSubgroup("url", url)
+                ->GetSubgroup("status", status)
+                ->GetHistogram("ResponseTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+            ResponseTimeHgram->Collect(Event->Get()->Request->Timer.Passed() * 1000);
+        }
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }
 

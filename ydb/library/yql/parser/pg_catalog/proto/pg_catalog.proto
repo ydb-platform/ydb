@@ -1,0 +1,62 @@
+package NYql.NProto;
+option java_package = "ru.yandex.yql.proto";
+import "ydb/library/yql/protos/pg_ext.proto";
+
+message TPgType {
+    optional uint32 TypeId = 1;
+    optional string Name = 2;
+    optional uint32 ExtensionIndex = 3;
+    optional uint32 ArrayTypeId = 4;
+    optional uint32 Category = 5;
+    optional int32 TypeLen = 6;
+    optional bool PassByValue = 7;
+    optional uint32 TypeAlign = 8;
+    optional uint32 ElementTypeId = 9;
+    optional uint32 InFuncId = 10;
+    optional uint32 OutFuncId = 11;
+    optional uint32 SendFuncId = 12;
+    optional uint32 ReceiveFuncId = 13;
+    optional uint32 TypeModInFuncId = 14;
+    optional uint32 TypeModOutFuncId = 15;
+    optional uint32 TypeSubscriptFuncId = 16;
+    optional uint32 LessProcId = 17;
+    optional uint32 EqualProcId = 18;
+    optional uint32 CompareProcId = 19;
+    optional uint32 HashProcId = 20;
+}
+
+message TPgProc {
+    optional uint32 ProcId = 1;
+    optional string Name = 2;
+    optional uint32 ExtensionIndex = 3;
+    optional string Src = 4;
+    repeated uint32 ArgType = 5;
+    repeated uint32 OutputArgType = 6;
+    optional uint32 VariadicType = 7;
+    optional uint32 VariadicArgType = 8;
+    repeated bool DefaultArgNull = 9;
+    repeated string DefaultArgValue = 10;
+    repeated string InputArgName = 11;
+    repeated string OutputArgName = 12;
+    optional string VariadicArgName = 13;
+    optional bool IsStrict = 14;
+    optional uint32 Lang = 15;
+}
+
+message TPgTable {
+    optional uint32 Oid = 1;
+    optional string Schema = 2;
+    optional string Name = 3;
+    optional uint32 ExtensionIndex = 4;
+    repeated string Column = 5;
+    repeated string UdtType = 6;
+    repeated string DataValue = 7;
+    repeated bool DataNull = 8;
+}
+
+message TPgCatalog {
+    repeated TPgType Type = 1;
+    repeated TPgProc Proc = 2;
+    repeated TPgTable Table = 3;
+    repeated TPgExtension Extension = 4;
+}

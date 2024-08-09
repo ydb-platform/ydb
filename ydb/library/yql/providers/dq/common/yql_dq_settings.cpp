@@ -115,6 +115,7 @@ TDqConfiguration::TDqConfiguration() {
             }
             return res;
         });
+    REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
 }
 
 } // namespace NYql

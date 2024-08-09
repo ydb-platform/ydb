@@ -280,6 +280,18 @@ namespace {
         };
     }
 
+    TAnalyzeSettings ParseAnalyzeSettings(const TKiAnalyzeTable& analyze) {
+        TVector<TString> columns;
+        for (const auto& column: analyze.Columns()) {
+            columns.push_back(TString(column.Ptr()->Content()));
+        }
+
+        return TAnalyzeSettings{
+            .TablePath = TString(analyze.Table()),
+            .Columns = std::move(columns)
+        };
+    }
+
     TAlterColumnTableSettings ParseAlterColumnTableSettings(TKiAlterTable alter) {
         return TAlterColumnTableSettings{
             .Table = TString(alter.Table())
@@ -1956,38 +1968,6 @@ public:
                 });
         }
 
-        if (auto maybeCreate = TMaybeNode<TKiCreateTopic>(input)) {
-            auto requireStatus = RequireChild(*input, 0);
-            if (requireStatus.Level != TStatus::Ok) {
-                return SyncStatus(requireStatus);
-            }
-            auto cluster = TString(maybeCreate.Cast().DataSink().Cluster());
-            TString topicName = TString(maybeCreate.Cast().Topic());
-            Ydb::Topic::CreateTopicRequest createReq;
-            createReq.set_path(topicName);
-            for (const auto& consumer : maybeCreate.Cast().Consumers()) {
-                auto error = AddConsumerToTopicRequest(createReq.add_consumers(), consumer);
-                if (!error.empty()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << error << input->Content()));
-                    return SyncError();
-                }
-            }
-            AddTopicSettingsToRequest(&createReq,maybeCreate.Cast().TopicSettings());
-            bool prepareOnly = SessionCtx->Query().PrepareOnly;
-            // DEBUG
-            // Cerr << "Create topic request proto: " << createReq.DebugString() << Endl;
-            auto future = prepareOnly ? CreateDummySuccess() : (
-                    Gateway->CreateTopic(cluster, std::move(createReq))
-            );
-
-            return WrapFuture(future,
-                              [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
-                                  Y_UNUSED(res);
-                                  auto resultNode = ctx.NewWorld(input->Pos());
-                                  return resultNode;
-                              }, "Executing CREATE TOPIC");
-        }
-
         if (auto maybeCreateSequence = TMaybeNode<TKiCreateSequence>(input)) {
             auto requireStatus = RequireChild(*input, 0);
             if (requireStatus.Level != TStatus::Ok) {
@@ -2049,6 +2029,35 @@ public:
             }, "Executing CREATE SEQUENCE");
         }
 
+        if (auto maybeCreate = TMaybeNode<TKiCreateTopic>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+            auto cluster = TString(maybeCreate.Cast().DataSink().Cluster());
+            TString topicName = TString(maybeCreate.Cast().Topic());
+            Ydb::Topic::CreateTopicRequest createReq;
+            createReq.set_path(topicName);
+            for (const auto& consumer : maybeCreate.Cast().Consumers()) {
+                auto error = AddConsumerToTopicRequest(createReq.add_consumers(), consumer);
+                if (!error.empty()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << error << input->Content()));
+                    return SyncError();
+                }
+            }
+            AddTopicSettingsToRequest(&createReq,maybeCreate.Cast().TopicSettings());
+            bool existingOk = (maybeCreate.ExistingOk().Cast().Value() == "1");
+
+            auto future = Gateway->CreateTopic(cluster, std::move(createReq), existingOk);
+
+            return WrapFuture(future,
+                              [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                                  Y_UNUSED(res);
+                                  auto resultNode = ctx.NewWorld(input->Pos());
+                                  return resultNode;
+                              }, "Executing CREATE TOPIC");
+        }
+
         if (auto maybeAlter = TMaybeNode<TKiAlterTopic>(input)) {
             auto requireStatus = RequireChild(*input, 0);
             if (requireStatus.Level != TStatus::Ok) {
@@ -2076,13 +2085,9 @@ public:
                 auto name = consumer.Cast<TCoAtom>().StringValue();
                 alterReq.add_drop_consumers(name);
             }
+            bool missingOk = (maybeAlter.MissingOk().Cast().Value() == "1");
             AddAlterTopicSettingsToRequest(&alterReq, maybeAlter.Cast().TopicSettings());
-            bool prepareOnly = SessionCtx->Query().PrepareOnly;
-	    // DEBUG
-            // Cerr << "Alter topic request proto:\n" << alterReq.DebugString() << Endl;
-            auto future = prepareOnly ? CreateDummySuccess() : (
-                    Gateway->AlterTopic(cluster, std::move(alterReq))
-            );
+            auto future = Gateway->AlterTopic(cluster, std::move(alterReq), missingOk);
 
             return WrapFuture(future,
                               [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -2093,21 +2098,15 @@ public:
         }
 
         if (auto maybeDrop = TMaybeNode<TKiDropTopic>(input)) {
-            if (!EnsureNotPrepare("DROP TOPIC", input->Pos(), SessionCtx->Query(), ctx)) {
-                return SyncError();
-            }
-
             auto requireStatus = RequireChild(*input, 0);
             if (requireStatus.Level != TStatus::Ok) {
                 return SyncStatus(requireStatus);
             }
             auto cluster = TString(maybeDrop.Cast().DataSink().Cluster());
             TString topicName = TString(maybeDrop.Cast().Topic());
+            bool missingOk = (maybeDrop.MissingOk().Cast().Value() == "1");
 
-            bool prepareOnly = SessionCtx->Query().PrepareOnly;
-            auto future = prepareOnly ? CreateDummySuccess() : (
-                    Gateway->DropTopic(cluster, topicName)
-            );
+            auto future = Gateway->DropTopic(cluster, topicName, missingOk);
 
             return WrapFuture(future,
                               [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -2406,6 +2405,21 @@ public:
                                     TStringBuilder() << "Unknown PgDrop operation: " << type));
                 return SyncError();
             }
+        }
+
+        if (auto maybeAnalyze = TMaybeNode<TKiAnalyzeTable>(input)) {
+            auto cluster = TString(maybeAnalyze.Cast().DataSink().Cluster());
+
+            TAnalyzeSettings analyzeSettings = ParseAnalyzeSettings(maybeAnalyze.Cast());
+
+            auto future = Gateway->Analyze(cluster, analyzeSettings);
+            
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing ANALYZE");
         }
 
         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()

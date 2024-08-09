@@ -62,31 +62,68 @@ public:
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), false);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 60000);
-        Query = params.Get("query");
-        Database = params.Get("database");
-        Stats = params.Get("stats");
-        Action = params.Get("action");
-        TString schemaStr = params.Get("schema");
-        Schema = StringToSchemaType(schemaStr);
-        Syntax = params.Get("syntax");
-        QueryId = params.Get("query_id");
-        TransactionMode = params.Get("transaction_mode");
+        if (params.Has("query")) {
+            Query = params.Get("query");
+        }
+        if (params.Has("database")) {
+            Database = params.Get("database");
+        }
+        if (params.Has("stats")) {
+            Stats = params.Get("stats");
+        }
+        if (params.Has("action")) {
+            Action = params.Get("action");
+        }
+        if (params.Has("schema")) {
+            Schema = StringToSchemaType(params.Get("schema"));
+        }
+        if (params.Has("syntax")) {
+            Syntax = params.Get("syntax");
+        }
+        if (params.Has("query_id")) {
+            QueryId = params.Get("query_id");
+        }
+        if (params.Has("transaction_mode")) {
+            TransactionMode = params.Get("transaction_mode");
+        }
+        if (params.Has("base64")) {
+            IsBase64Encode = FromStringWithDefault<bool>(params.Get("base64"), true);
+        }
         Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
-        IsBase64Encode = FromStringWithDefault<bool>(params.Get("base64"), true);
     }
 
-    bool ParsePostContent(const TStringBuf& content) {
+    bool ParsePostContent(TStringBuf content) {
         static NJson::TJsonReaderConfig JsonConfig;
         NJson::TJsonValue requestData;
         bool success = NJson::ReadJsonTree(content, &JsonConfig, &requestData);
         if (success) {
-            Query = Query.empty() ? requestData["query"].GetStringSafe({}) : Query;
-            Database = Database.empty() ? requestData["database"].GetStringSafe({}) : Database;
-            Stats = Stats.empty() ? requestData["stats"].GetStringSafe({}) : Stats;
-            Action = Action.empty() ? requestData["action"].GetStringSafe({}) : Action;
-            Syntax = Syntax.empty() ? requestData["syntax"].GetStringSafe({}) : Syntax;
-            QueryId = QueryId.empty() ? requestData["query_id"].GetStringSafe({}) : QueryId;
-            TransactionMode = TransactionMode.empty() ? requestData["transaction_mode"].GetStringSafe({}) : TransactionMode;
+            if (requestData.Has("query")) {
+                Query = requestData["query"].GetStringRobust();
+            }
+            if (requestData.Has("database")) {
+                Database = requestData["database"].GetStringRobust();
+            }
+            if (requestData.Has("stats")) {
+                Stats = requestData["stats"].GetStringRobust();
+            }
+            if (requestData.Has("action")) {
+                Action = requestData["action"].GetStringRobust();
+            }
+            if (requestData.Has("schema")) {
+                Schema = StringToSchemaType(requestData["schema"].GetStringRobust());
+            }
+            if (requestData.Has("syntax")) {
+                Syntax = requestData["syntax"].GetStringRobust();
+            }
+            if (requestData.Has("query_id")) {
+                QueryId = requestData["query_id"].GetStringRobust();
+            }
+            if (requestData.Has("transaction_mode")) {
+                TransactionMode = requestData["transaction_mode"].GetStringRobust();
+            }
+            if (requestData.Has("base64")) {
+                IsBase64Encode = requestData["base64"].GetBooleanRobust();
+            }
         }
         return success;
     }
@@ -400,7 +437,13 @@ private:
         }
 
         TStringStream stream;
+        constexpr ui32 doubleNDigits = std::numeric_limits<double>::max_digits10;
+        constexpr ui32 floatNDigits = std::numeric_limits<float>::max_digits10;
+        constexpr EFloatToStringMode floatMode = EFloatToStringMode::PREC_NDIGITS;
         NJson::WriteJson(&stream, &jsonResponse, {
+            .DoubleNDigits = doubleNDigits,
+            .FloatNDigits = floatNDigits,
+            .FloatToStringMode = floatMode,
             .ValidateUtf8 = false,
             .WriteNanAsString = true,
         });

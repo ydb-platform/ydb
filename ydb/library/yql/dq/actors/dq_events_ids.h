@@ -52,7 +52,6 @@ struct TDqComputeEvents {
         EvAsyncInputError,
         EvLookupRequest,
         EvLookupResult,
-        EvError,
         // place all new events here
 
         EvEnd

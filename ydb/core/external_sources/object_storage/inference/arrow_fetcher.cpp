@@ -152,6 +152,7 @@ private:
     // Cutting file
 
     TMaybe<TString> DecompressFile(const TString& data, const TRequest& request, const NActors::TActorContext& ctx) {
+<<<<<<< HEAD
         try {
             auto dataBuffer = NDB::ReadBufferFromString(data);
             auto decompressorBuffer = NYql::MakeDecompressor(dataBuffer, *DecompressionFormat_);
@@ -186,6 +187,32 @@ private:
             SendError(ctx, errorEv);
             return {};
         }
+=======
+        auto dataBuffer = NDB::ReadBufferFromString(data);
+        auto decompressorBuffer = NYql::MakeDecompressor(dataBuffer, *DecompressionFormat_);
+        if (!decompressorBuffer) {
+            auto error = MakeError(
+                request.Path,
+                NFq::TIssuesIds::INTERNAL_ERROR,
+                TStringBuilder{} << "invalid decompression format: " << *DecompressionFormat_
+            );
+            SendError(ctx, error);
+            return {};
+        }
+
+        TString decompressedData;
+        while (!decompressorBuffer->eof() && decompressedData.size() < 10_MB) {
+            decompressorBuffer->nextIfAtEnd();
+            size_t maxDecompressedChunkSize = std::min(
+                decompressorBuffer->available(),                
+                10_MB - decompressedData.size()
+            );
+            TString decompressedChunk{maxDecompressedChunkSize, ' '};
+            decompressorBuffer->read(&decompressedChunk.front(), maxDecompressedChunkSize);
+            decompressedData += decompressedChunk;
+        }
+        return std::move(decompressedData);
+>>>>>>> 13f93591fe8eba5a84f704629ab20af22ecb2743
     }
 
     std::shared_ptr<arrow::io::RandomAccessFile> CleanupCsvFile(const TString& data, const TRequest& request, const arrow::csv::ParseOptions& options, const NActors::TActorContext& ctx) {

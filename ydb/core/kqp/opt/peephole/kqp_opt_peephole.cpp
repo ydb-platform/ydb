@@ -283,13 +283,13 @@ bool CanPropagateWideBlockThroughChannel(
         return false;
     }
 
-    auto outputItemType = program.Lambda().Ref().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType();
-    if (IsWideBlockType(*outputItemType)) {
-        // output is already wide block
+    if (!stageSettings.WideChannels) {
         return false;
     }
 
-    if (!stageSettings.WideChannels) {
+    auto outputItemType = program.Lambda().Ref().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType();
+    if (IsWideBlockType(*outputItemType)) {
+        // output is already wide block
         return false;
     }
 

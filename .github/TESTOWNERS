@@ -27,16 +27,23 @@
 /ydb/core/blob_depot @ijon
 /ydb/core/tx/schemeshard @ijon
 /ydb/core/tx/columnshard @ivanmorozov333
-/ydb/services/ydb/ut/ @ijon
+/ydb/services/ydb/ @ijon
+/ydb/core/util @ijon
+/ydb/core/persqueue @ijon
+/ydb/core/client @ijon
+/ydb/core/engine @ijon
 
 #YDB Query Execution Team @gridnevvvit TEAM:@ydb-platform/qp
 /ydb/core/kqp @ydb-platform/qp
 
 #YDB Application Team @asmyasnikov TEAM:?
 /ydb/public/sdk @asmyasnikov
+/ydb/tests/functional/ydb_cli @asmyasnikov
+/ydb/public/lib/ydb_cli @asmyasnikov
 
 #YDB Query Optimizer Team @pavelvelikhov 
-  # - сделаю аналогично qp
+/ydb/tests/functional/canonical @pavelvelikhov 
+
 
 #YDB Engineering Team @maximyurchuk
    # - пока не понятно
@@ -49,8 +56,12 @@
 
 /ydb/core/config/ut @ydb-platform/core
 /ydb/core/scheme @ydb-platform/core
+/ydb/core/cms @ydb-platform/core
+/ydb/tests/functional/cms @ydb-platform/core
+
 
 #Группа разработки систем поставки данных / LogBroker @alexnick88
+/ydb/tests/functional/sqs
 
 #YDB Analytics TEAM:???
 

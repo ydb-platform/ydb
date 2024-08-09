@@ -5,8 +5,9 @@
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
-void TScanHead::OnIntervalResult(const std::optional<NArrow::TShardedRecordBatch>& newBatch, const std::shared_ptr<arrow::RecordBatch>& lastPK,
-    std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger, const ui32 intervalIdx, TPlainReadData& reader) {
+void TScanHead::OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& allocationGuard, const std::optional<NArrow::TShardedRecordBatch>& newBatch,
+    const std::shared_ptr<arrow::RecordBatch>& lastPK, std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger, const ui32 intervalIdx,
+    TPlainReadData& reader) {
     if (Context->GetReadMetadata()->Limit && (!newBatch || newBatch->GetRecordsCount() == 0) && InFlightLimit < 1000) {
         if (++ZeroCount == std::max<ui64>(16, InFlightLimit)) {
             InFlightLimit = std::min<ui32>(MaxInFlight, InFlightLimit * 2);
@@ -19,9 +20,11 @@ void TScanHead::OnIntervalResult(const std::optional<NArrow::TShardedRecordBatch
     AFL_VERIFY(itInterval != FetchingIntervals.end());
     itInterval->second->SetMerger(std::move(merger));
     AFL_VERIFY(Context->GetCommonContext()->GetReadMetadata()->IsSorted());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "interval_result_received")("interval_idx", intervalIdx)(
+        "intervalId", itInterval->second->GetIntervalId());
     if (newBatch && newBatch->GetRecordsCount()) {
         const std::optional<ui32> callbackIdxSubscriver = itInterval->second->HasMerger() ? std::optional<ui32>(intervalIdx) : std::nullopt;
-        AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, std::make_shared<TPartialReadResult>(itInterval->second->GetResourcesGuard(), *newBatch, lastPK, callbackIdxSubscriver)).second);
+        AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, std::make_shared<TPartialReadResult>(std::move(allocationGuard), *newBatch, lastPK, callbackIdxSubscriver)).second);
     } else {
         AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, nullptr).second);
     }
@@ -31,9 +34,13 @@ void TScanHead::OnIntervalResult(const std::optional<NArrow::TShardedRecordBatch
         const ui32 intervalIdx = interval->GetIntervalIdx();
         auto it = ReadyIntervals.find(intervalIdx);
         if (it == ReadyIntervals.end()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "interval_result_absent")("interval_idx", intervalIdx)(
+                "merger", interval->HasMerger())("intervalId", interval->GetIntervalId());
             break;
+        } else {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "interval_result")("interval_idx", intervalIdx)("count",
+                it->second ? it->second->GetRecordsCount() : 0)("merger", interval->HasMerger())("intervalId", interval->GetIntervalId());
         }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "interval_result")("interval_idx", intervalIdx)("count", it->second ? it->second->GetRecordsCount() : 0);
         auto result = it->second;
         ReadyIntervals.erase(it);
         if (result) {
@@ -51,7 +58,8 @@ void TScanHead::OnIntervalResult(const std::optional<NArrow::TShardedRecordBatch
         AFL_VERIFY(ReadyIntervals.empty());
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "intervals_finished");
     } else {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "wait_interval")("remained", FetchingIntervals.size())("interval_idx", FetchingIntervals.begin()->first);
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "wait_interval")("remained", FetchingIntervals.size())(
+            "interval_idx", FetchingIntervals.begin()->first);
     }
 }
 
@@ -97,12 +105,7 @@ TConclusionStatus TScanHead::Start() {
 TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const std::shared_ptr<TSpecialReadContext>& context)
     : Context(context)
 {
-    
     if (HasAppData()) {
-        if (AppDataVerified().ColumnShardConfig.HasMaxInFlightMemoryOnRequest()) {
-            MaxInFlightMemory = AppDataVerified().ColumnShardConfig.GetMaxInFlightMemoryOnRequest();
-        }
-
         if (AppDataVerified().ColumnShardConfig.HasMaxInFlightIntervalsOnRequest()) {
             MaxInFlight = AppDataVerified().ColumnShardConfig.GetMaxInFlightIntervalsOnRequest();
         }
@@ -235,7 +238,7 @@ TConclusionStatus TScanHead::DetectSourcesFeatureInContextIntervalScan(const THa
 }
 
 TConclusion<bool> TScanHead::BuildNextInterval() {
-    if (AbortFlag) {
+    if (Context->IsAborted()) {
         return false;
     }
     while (BorderPoints.size()) {
@@ -243,11 +246,6 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
             if (FetchingIntervals.size() >= InFlightLimit) {
                 AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_next_interval")("reason", "too many intervals in flight")(
                     "count", FetchingIntervals.size())("limit", InFlightLimit);
-                return false;
-            }
-            if (Context->GetCommonContext()->GetCounters().GetRequestedMemoryBytes() >= MaxInFlightMemory) {
-                AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_next_interval")("reason", "a lot of memory in usage")(
-                    "volume", Context->GetCommonContext()->GetCounters().GetRequestedMemoryBytes())("limit", MaxInFlightMemory);
                 return false;
             }
         }
@@ -260,7 +258,6 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
                 CurrentState.GetCurrentSources(), Context, true, true, false);
             FetchingIntervals.emplace(intervalIdx, interval);
             IntervalStats.emplace_back(CurrentState.GetCurrentSources().size(), true);
-            NResourceBroker::NSubscribe::ITask::StartResourceSubscription(Context->GetCommonContext()->GetResourceSubscribeActorId(), interval);
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "new_interval")("interval_idx", intervalIdx)(
                 "interval", interval->DebugJson());
         }
@@ -280,7 +277,6 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
             IntervalStats.emplace_back(CurrentState.GetCurrentSources().size(), false);
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "new_interval")("interval_idx", intervalIdx)(
                 "interval", interval->DebugJson());
-            NResourceBroker::NSubscribe::ITask::StartResourceSubscription(Context->GetCommonContext()->GetResourceSubscribeActorId(), interval);
             return true;
         } else {
             IntervalStats.emplace_back(CurrentState.GetCurrentSources().size(), false);
@@ -298,7 +294,7 @@ bool TScanHead::IsReverse() const {
 }
 
 void TScanHead::Abort() {
-    AbortFlag = true;
+    AFL_VERIFY(Context->IsAborted());
     THashSet<ui32> sourceIds;
     for (auto&& i : FetchingIntervals) {
         for (auto&& s : i.second->GetSources()) {

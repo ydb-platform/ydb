@@ -1,13 +1,16 @@
 #pragma once
-#include <contrib/libs/apache/arrow/cpp/src/arrow/table.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/log.h>
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/table.h>
 
 namespace NKikimr::NOlap {
 
@@ -18,11 +21,10 @@ protected:
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Table);
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, Filter);
     YDB_READONLY(bool, UseFilter, false);
+
 public:
     TFetchedData(const bool useFilter)
-        : UseFilter(useFilter)
-    {
-
+        : UseFilter(useFilter) {
     }
 
     void SyncTableColumns(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ISnapshotSchema& schema);
@@ -106,13 +108,13 @@ public:
             AFL_VERIFY(mergeResult.IsSuccess())("error", mergeResult.GetErrorMessage());
         }
     }
-
 };
 
 class TFetchedResult {
 private:
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Batch);
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, NotAppliedFilter);
+
 public:
     TFetchedResult(std::unique_ptr<TFetchedData>&& data)
         : Batch(data->GetTable())
@@ -124,4 +126,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap

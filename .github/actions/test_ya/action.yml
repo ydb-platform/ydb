@@ -275,7 +275,7 @@ runs:
           CURRENT_MESSAGE="**{platform_name}-${BUILD_PRESET}** is running..." 
           if [ $IS_RETRY = 0 ]; then
             CURRENT_MESSAGE="Check $CURRENT_MESSAGE"
-            RERUN_FAILED_TESTS=""
+            RERUN_FAILED_OPT=""
           else
             CURRENT_MESSAGE="Failed tests rerun (try $RETRY) $CURRENT_MESSAGE"
             RERUN_FAILED_OPT="-X"

@@ -2,6 +2,7 @@
 
 #include "env.h"
 #include <ydb/core/base/logoblob.h>
+#include <util/random/mersenne.h>
 
 
 inline TBlobStorageGroupType GetErasureTypeByString(const TString& erasure) {
@@ -55,3 +56,44 @@ inline std::vector<ui32> MakePDiskLayout(const NKikimrBlobStorage::TBaseConfig& 
     }
     return pdiskLayout;
 }
+
+template <typename T>
+class TWeightedRandom {
+public:
+    TWeightedRandom(ui64 seed = 0)
+        : PrefixSum({ 0 })
+        , Mt64(seed)
+    {}
+
+    TWeightedRandom(const TWeightedRandom&) = default;
+    TWeightedRandom(TWeightedRandom&&) = default;
+    TWeightedRandom& operator=(const TWeightedRandom&) = default;
+    TWeightedRandom& operator=(TWeightedRandom&&) = default;
+
+    void AddValue(T value, ui64 weight) {
+        PrefixSum.push_back(weight + PrefixSum.back());
+        Values.push_back(value);
+    }
+
+    T GetRandom() {
+        Y_ABORT_UNLESS(WeightSum() != 0);
+        return Get(Mt64() % WeightSum());
+    }
+
+    T Get(ui64 w) {
+        Y_ABORT_UNLESS(PrefixSum.size() > 1);
+        auto it = std::upper_bound(PrefixSum.begin(), PrefixSum.end(), w);
+        Y_ABORT_UNLESS(it > PrefixSum.begin());
+        ui32 idx = it - PrefixSum.begin() - 1;
+        return Values[idx];
+    }
+
+    ui32 WeightSum() {
+        return PrefixSum.back();
+    }
+
+private:
+    std::vector<T> Values;
+    std::vector<ui64> PrefixSum;
+    TMersenne<ui64> Mt64;
+};

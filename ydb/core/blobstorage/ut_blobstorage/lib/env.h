@@ -48,6 +48,8 @@ struct TEnvironmentSetup {
         const ui32 MinHugeBlobInBytes = 0;
         const float DiskTimeAvailableScale = 1;
         const bool UseFakeConfigDispatcher = false;
+        const float SlowDiskThreshold = 2;
+        const float VDiskPredictedDelayMultiplier = 1;
     };
 
     const TSettings Settings;
@@ -363,6 +365,7 @@ struct TEnvironmentSetup {
                 auto config = MakeIntrusive<TNodeWardenConfig>(new TMockPDiskServiceFactory(*this));
                 config->BlobStorageConfig.MutableServiceSet()->AddAvailabilityDomains(DomainId);
                 config->VDiskReplPausedAtStart = Settings.VDiskReplPausedAtStart;
+                config->UseActorSystemTimeInBSQueue = true;
                 if (Settings.ConfigPreprocessor) {
                     Settings.ConfigPreprocessor(nodeId, *config);
                 }
@@ -396,6 +399,9 @@ struct TEnvironmentSetup {
                 ADD_ICB_CONTROL("VDiskControls.DiskTimeAvailableScaleHDD", 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
                 ADD_ICB_CONTROL("VDiskControls.DiskTimeAvailableScaleSSD", 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
                 ADD_ICB_CONTROL("VDiskControls.DiskTimeAvailableScaleNVME", 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
+
+                ADD_ICB_CONTROL("DSProxyControls.SlowDiskThreshold", 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
+                ADD_ICB_CONTROL("DSProxyControls.PredictedDelayMultiplier", 1'000, 1, 1'000'000, std::round(Settings.VDiskPredictedDelayMultiplier * 1'000));
 #undef ADD_ICB_CONTROL
 
                 {

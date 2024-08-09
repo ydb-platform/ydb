@@ -148,6 +148,7 @@ protected:
 
     const TDriver& GetDriver() const;
 
+    void EnsureEmptyTxWrites(const TString& topicName, ui32 partition = 0);
     void CheckTabletKeys(const TString& topicName);
     void DumpPQTabletKeys(const TString& topicName);
 
@@ -162,6 +163,11 @@ private:
                           ui32 partition);
     TVector<TString> GetTabletKeys(const TActorId& actorId,
                                    ui64 tabletId);
+    TString GetTabletValue(const TActorId& actorId,
+                           ui64 tabletId,
+                           const TString& key);
+    NKikimrPQ::TTabletTxInfo GetTabletTxInfo(const TActorId& actorId,
+                                             ui64 tabletId);
     NPQ::TWriteId GetTransactionWriteId(const TActorId& actorId,
                                         ui64 tabletId);
     void SendLongTxLockStatus(const TActorId& actorId,
@@ -1244,14 +1250,17 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_10, TFixture)
     }
 }
 
-NPQ::TWriteId TFixture::GetTransactionWriteId(const TActorId& actorId,
-                                              ui64 tabletId)
+TString TFixture::GetTabletValue(const TActorId& actorId,
+                                 ui64 tabletId,
+                                 const TString& key)
 {
     using TEvKeyValue = NKikimr::TEvKeyValue;
 
     auto request = std::make_unique<TEvKeyValue::TEvRequest>();
     request->Record.SetCookie(12345);
-    request->Record.AddCmdRead()->SetKey("_txinfo");
+
+    auto cmd = request->Record.AddCmdRead();
+    cmd->SetKey(key);
 
     auto& runtime = Setup->GetRuntime();
 
@@ -1262,10 +1271,26 @@ NPQ::TWriteId TFixture::GetTransactionWriteId(const TActorId& actorId,
     UNIT_ASSERT_VALUES_EQUAL(response->Record.GetCookie(), 12345);
     UNIT_ASSERT_VALUES_EQUAL(response->Record.ReadResultSize(), 1);
 
-    auto& read = response->Record.GetReadResult(0);
+    auto& result = response->Record.GetReadResult(0);
+
+    return result.GetValue();
+}
+
+NKikimrPQ::TTabletTxInfo TFixture::GetTabletTxInfo(const TActorId& actorId,
+                                                   ui64 tabletId)
+{
+    TString value = GetTabletValue(actorId, tabletId, "_txinfo");
 
     NKikimrPQ::TTabletTxInfo info;
-    UNIT_ASSERT(info.ParseFromString(read.GetValue()));
+    UNIT_ASSERT(info.ParseFromString(value));
+
+    return info;
+}
+
+NPQ::TWriteId TFixture::GetTransactionWriteId(const TActorId& actorId,
+                                              ui64 tabletId)
+{
+    NKikimrPQ::TTabletTxInfo info = GetTabletTxInfo(actorId, tabletId);
 
     UNIT_ASSERT_VALUES_EQUAL(info.TxWritesSize(), 1);
 
@@ -1351,6 +1376,16 @@ void TFixture::DeleteSupportivePartition(const TString& topicName, ui32 partitio
     SendLongTxLockStatus(edge, tabletId, writeId, NKikimrLongTxService::TEvLockStatus::STATUS_NOT_FOUND);
 
     WaitForTheTabletToDeleteTheWriteInfo(edge, tabletId, writeId);
+}
+
+void TFixture::EnsureEmptyTxWrites(const TString& topicName, ui32 partition)
+{
+    auto& runtime = Setup->GetRuntime();
+    TActorId edge = runtime.AllocateEdgeActor();
+    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicName, partition);
+    auto info = GetTabletTxInfo(edge, tabletId);
+
+    UNIT_ASSERT_VALUES_EQUAL(info.TxWritesSize(), 0);
 }
 
 void TFixture::CheckTabletKeys(const TString& topicName)
@@ -1781,6 +1816,8 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_24, TFixture)
     UNIT_ASSERT_VALUES_EQUAL(GetTableRecordsCount("table_A"), records.size());
 
     CheckTabletKeys("topic_A");
+
+    EnsureEmptyTxWrites("topic_A");
 }
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_25, TFixture)

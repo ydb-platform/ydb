@@ -3649,6 +3649,9 @@ void TPersQueue::EndWriteTxs(const NKikimrClient::TResponse& resp,
 
     TxWritesChanged = false;
 
+    TxWrites = std::move(NewTxWrites);
+    NewTxWrites.clear();
+
     SendReplies(ctx);
     CheckChangedTxStates(ctx);
     CreateSupportivePartitionActors(ctx);
@@ -3805,11 +3808,17 @@ void TPersQueue::ProcessDeleteTxs(const TActorContext& ctx,
 {
     Y_ABORT_UNLESS(!WriteTxsInProgress);
 
+    NewTxWrites = TxWrites;
+
     for (ui64 txId : DeleteTxs) {
         auto tx = GetTransaction(ctx, txId);
         Y_ABORT_UNLESS(tx);
 
         tx->AddCmdDelete(request);
+        if (tx->WriteId.Defined()) {
+            PQ_LOG_D("delete WriteId " << *tx->WriteId);
+            NewTxWrites.erase(*tx->WriteId);
+        }
 
         ChangedTxs.insert(tx->TxId);
     }
@@ -3860,7 +3869,7 @@ void TPersQueue::SavePlanStep(NKikimrPQ::TTabletTxInfo& info)
 
 void TPersQueue::SaveTxWrites(NKikimrPQ::TTabletTxInfo& info)
 {
-    for (auto& [writeId, write] : TxWrites) {
+    for (auto& [writeId, write] : NewTxWrites) {
         for (auto [partitionId, shadowPartitionId] : write.Partitions) {
             auto* txWrite = info.MutableTxWrites()->Add();
             SetWriteId(*txWrite, writeId);
@@ -4757,8 +4766,6 @@ void TPersQueue::Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorCon
                 DeleteTx(*tx);
             }
         }
-        PQ_LOG_D("delete WriteId " << writeId);
-        TxWrites.erase(writeId);
     }
     TxWritesChanged = true;
 

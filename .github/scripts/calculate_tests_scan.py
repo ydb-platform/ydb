@@ -24,6 +24,7 @@ DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
 def create_tables(pool,  table_path):
     print(f"> create table: {table_path}")
+
     def callee(session):
         # Creating Series table
         session.execute_scheme(f"""
@@ -47,7 +48,7 @@ def create_tables(pool,  table_path):
     return pool.retry_operation_sync(callee)
 
 
-def bulk_upsert(table_client, table_path,rows):
+def bulk_upsert(table_client, table_path, rows):
     print(f"> bulk upsert: {table_path}")
     column_types = (
         ydb.BulkUpsertColumns()
@@ -61,10 +62,10 @@ def bulk_upsert(table_client, table_path,rows):
         .add_column("mute_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
         .add_column("fail_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
         .add_column("skip_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-)
+    )
     table_client.bulk_upsert(table_path, rows, column_types)
 
-   
+
 def main():
 
     if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
@@ -89,10 +90,10 @@ def main():
         )
         tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
         table_client = ydb.TableClient(driver, tc_settings)
-        #settings
+        # settings
         table_path = 'test_results/test_runs_history'
-        default_start_date = datetime.date(2024,7,1)
-        #geting last date from history
+        default_start_date = datetime.date(2024, 7, 1)
+        # geting last date from history
         last_date_query = f"select max(date_window) as max_date_window from `{table_path}`"
         query = ydb.ScanQuery(last_date_query, {})
         it = table_client.scan_query(query)
@@ -103,8 +104,9 @@ def main():
                 results = results + result.result_set.rows
             except StopIteration:
                 break
-     
-        last_date = results[0].get('max_date_window',default_start_date).strftime('%Y-%m-%d')
+
+        last_date = results[0].get(
+            'max_date_window', default_start_date).strftime('%Y-%m-%d')
         print(f'last hisotry date: {last_date}')
         query_get_history = f"""
     select 
@@ -172,13 +174,13 @@ def main():
         start_time = time.time()
         it = driver.table_client.scan_query(query)
         # Захватываем время после завершения транзакции
-       
+
         results = []
-        prepared_for_update_rows=[]
+        prepared_for_update_rows = []
         while True:
             try:
                 result = next(it)
-                results= results + result.result_set.rows
+                results = results + result.result_set.rows
             except StopIteration:
                 break
         end_time = time.time()
@@ -186,30 +188,30 @@ def main():
 
         print(f'history data captured, {len(results)} rows')
         for row in results:
-            row['count']=dict(zip(list(row['history_list']),[list(row['history_list']).count(i) for i in list(row['history_list'])]))
+            row['count'] = dict(zip(list(row['history_list']), [list(
+                row['history_list']).count(i) for i in list(row['history_list'])]))
             prepared_for_update_rows.append({
-                'suite_folder':row['suite_folder'],
-                'test_name':row['test_name'],
-                'full_name':row['full_name'],
-                'date_window':row['date_base'],
-                'history':','.join(row['history_list']).encode('utf8'),
+                'suite_folder': row['suite_folder'],
+                'test_name': row['test_name'],
+                'full_name': row['full_name'],
+                'date_window': row['date_base'],
+                'history': ','.join(row['history_list']).encode('utf8'),
                 'history_class': row['dist_hist'],
-                'pass_count': row['count'].get('passed',0),
-                'mute_count':row['count'].get('mute',0),
-                'fail_count':row['count'].get('failure',0),
-                'skip_count':row['count'].get('skipped',0),
+                'pass_count': row['count'].get('passed', 0),
+                'mute_count': row['count'].get('mute', 0),
+                'fail_count': row['count'].get('failure', 0),
+                'skip_count': row['count'].get('skipped', 0),
             })
-        print('upserting history') 
+        print('upserting history')
         with ydb.SessionPool(driver) as pool:
-               
+
             create_tables(pool, table_path)
             full_path = posixpath.join(DATABASE_PATH, table_path)
-            bulk_upsert(driver.table_client, full_path,prepared_for_update_rows)
-        
+            bulk_upsert(driver.table_client, full_path,
+                        prepared_for_update_rows)
 
-        print('history updated')    
-   
+        print('history updated')
+
 
 if __name__ == "__main__":
     main()
-

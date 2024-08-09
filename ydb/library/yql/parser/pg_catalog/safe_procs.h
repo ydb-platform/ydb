@@ -21,3 +21,9 @@
 
 // postgis
 "postgis_lib_version",
+
+//dbeaver
+"pg_get_expr",
+"pg_get_partkeydef",
+"pg_tablespace_location",
+"current_schemas",

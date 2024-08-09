@@ -512,7 +512,7 @@ private:
     void MakeErrorReply(NJson::TJsonValue& jsonResponse, const NYdb::TStatus& status) {
         TString message;
 
-        NViewer::MakeErrorReply(jsonResponse, message, status);
+        MakeJsonErrorReply(jsonResponse, message, status);
 
         if (Span) {
             Span.EndError(message);
@@ -774,4 +774,3 @@ public:
 };
 
 }
-

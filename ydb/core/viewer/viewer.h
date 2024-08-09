@@ -230,8 +230,6 @@ void SplitIds(TStringBuf source, char delim, std::unordered_set<ValueType>& valu
     GenericSplitIds<ValueType>(source, delim, std::inserter(values, values.end()));
 }
 
-void MakeErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const NYdb::TStatus& status);
-
 TString GetHTTPOKJSON();
 TString GetHTTPGATEWAYTIMEOUT();
 NKikimrViewer::EFlag GetFlagFromTabletState(NKikimrWhiteboard::TTabletStateInfo::ETabletState state);

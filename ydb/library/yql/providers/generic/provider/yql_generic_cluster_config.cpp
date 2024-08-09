@@ -430,7 +430,7 @@ namespace NYql {
             }
         }
 
-        // All the databases with exception to managed YDB and Oracle:
+        // All the databases with exception to managed YDB, Oracle:
         // * DATABASE_NAME is mandatory field
         if (traditionalRelationalDatabaseKinds.contains(clusterConfig.GetKind()) && clusterConfig.GetKind() != NConnector::NApi::ORACLE) {
             if (!clusterConfig.GetDatabaseName()) {

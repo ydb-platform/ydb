@@ -46,9 +46,11 @@ class TJsonTenantInfo : public TViewerPipeClient {
     THashMap<TString, std::vector<TNodeId>> TenantNodes;
     THashMap<TString, NKikimrViewer::TEvViewerResponse> OffloadMergedTabletStateResponse;
     THashMap<TString, NKikimrViewer::TEvViewerResponse> OffloadMergedSystemStateResponse;
+    THashMap<TString, NKikimrViewer::TStorageUsage::EType> StoragePoolType;
     TTabletId RootHiveId = 0;
     TString RootId; // id of root domain (tenant)
     NKikimrViewer::TTenantInfo Result;
+    std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetStoragePoolsResponse>> GetStoragePoolsResponse;
 
     struct TStorageQuota {
         uint64 SoftQuota = 0;
@@ -124,6 +126,7 @@ public:
         if (Storage) {
             RequestHiveStorageStats(RootHiveId);
         }
+        GetStoragePoolsResponse = RequestBSControllerPools();
 
         if (Requests == 0) {
             ReplyAndPassAway();
@@ -154,9 +157,10 @@ public:
             hFunc(TEvViewer::TEvViewerResponse, Handle);
             hFunc(TEvents::TEvUndelivered, Undelivered);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
-            hFunc(TEvTabletPipe::TEvClientConnected, TBase::Handle);
+            hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
             hFunc(NHealthCheck::TEvSelfCheckResultProto, Handle);
+            hFunc(NSysView::TEvSysView::TEvGetStoragePoolsResponse, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
@@ -534,6 +538,30 @@ public:
         return type;
     }
 
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
+        if (ev->Get()->Status != NKikimrProto::OK) {
+            TString error = TStringBuilder() << "Failed to establish pipe: " << NKikimrProto::EReplyStatus_Name(ev->Get()->Status);
+            if (ev->Get()->TabletId == GetBSControllerId()) {
+                if (GetStoragePoolsResponse.has_value()) {
+                    GetStoragePoolsResponse->Error(error);
+                }
+            }
+        }
+        TBase::Handle(ev); // all RequestDone() are handled by base handler
+    }
+
+    void Handle(NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr& ev) {
+        GetStoragePoolsResponse->Set(std::move(ev));
+
+        if (GetStoragePoolsResponse && GetStoragePoolsResponse->IsOk()) {
+            for (const NKikimrSysView::TStoragePoolEntry& entry : GetStoragePoolsResponse->Get()->Record.GetEntries()) {
+                StoragePoolType[entry.GetInfo().GetName()] = GetStorageType(entry.GetInfo().GetKind());
+            }
+        }
+
+        RequestDone();
+    }
+
     void ReplyAndPassAway() override {
         BLOG_TRACE("ReplyAndPassAway() started");
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
@@ -666,6 +694,7 @@ public:
                 }
 
                 if (Storage) {
+                    THashMap<NKikimrViewer::TStorageUsage::EType, ui64> databaseStorageByType;
                     auto itHiveStorageStats = HiveStorageStats.find(hiveId);
                     if (itHiveStorageStats != HiveStorageStats.end()) {
                         const NKikimrHive::TEvResponseHiveStorageStats& record = itHiveStorageStats->second.Get()->Record;
@@ -675,9 +704,12 @@ public:
                         uint64 storageGroups = 0;
                         for (const NKikimrHive::THiveStoragePoolStats& poolStat : record.GetPools()) {
                             if (poolStat.GetName().StartsWith(tenantBySubDomainKey.GetName())) {
+                                NKikimrViewer::TStorageUsage::EType storageType = StoragePoolType[poolStat.GetName()];
                                 for (const NKikimrHive::THiveStorageGroupStats& groupStat : poolStat.GetGroups()) {
                                     storageAllocatedSize += groupStat.GetAllocatedSize();
                                     storageAvailableSize += groupStat.GetAvailableSize();
+                                    databaseStorageByType[storageType] += groupStat.GetAllocatedSize();
+                                    databaseStorageByType[storageType] += groupStat.GetAvailableSize();
                                     storageMinAvailableSize = std::min(storageMinAvailableSize, groupStat.GetAvailableSize());
                                     ++storageGroups;
                                 }
@@ -690,7 +722,7 @@ public:
                         tenant.SetStorageGroups(storageGroups);
                     }
 
-                    THashMap<NKikimrViewer::TStorageUsage::EType, ui64> storageUsageByType;
+                    THashMap<NKikimrViewer::TStorageUsage::EType, ui64> tablesStorageByType;
                     THashMap<NKikimrViewer::TStorageUsage::EType, TStorageQuota> storageQuotasByType;
 
                     for (const auto& quota : tenant.GetDatabaseQuotas().storage_quotas()) {
@@ -703,11 +735,11 @@ public:
                     if (entry.DomainDescription) {
                         for (const auto& poolUsage : entry.DomainDescription->Description.GetDiskSpaceUsage().GetStoragePoolsUsage()) {
                             auto type = GetStorageType(poolUsage.GetPoolKind());
-                            storageUsageByType[type] += poolUsage.GetTotalSize();
+                            tablesStorageByType[type] += poolUsage.GetTotalSize();
                         }
 
-                        if (storageUsageByType.empty() && entry.DomainDescription->Description.HasDiskSpaceUsage()) {
-                            storageUsageByType[GuessStorageType(entry.DomainDescription->Description)] =
+                        if (tablesStorageByType.empty() && entry.DomainDescription->Description.HasDiskSpaceUsage()) {
+                            tablesStorageByType[GuessStorageType(entry.DomainDescription->Description)] =
                                 entry.DomainDescription->Description.GetDiskSpaceUsage().GetTables().GetTotalSize();
                         }
 
@@ -718,16 +750,22 @@ public:
                         }
                     }
 
-                    for (const auto& [type, size] : storageUsageByType) {
-                        auto& storageUsage = *tenant.AddStorageUsage();
-                        storageUsage.SetType(type);
-                        storageUsage.SetSize(size);
+                    for (const auto& [type, size] : tablesStorageByType) {
                         auto it = storageQuotasByType.find(type);
-                        if (it != storageQuotasByType.end()) {
-                            storageUsage.SetLimit(it->second.HardQuota);
-                            storageUsage.SetSoftQuota(it->second.SoftQuota);
-                            storageUsage.SetHardQuota(it->second.HardQuota);
+                        if (it != storageQuotasByType.end() && it->second.SoftQuota) {
+                            auto& tablesStorage = *tenant.AddTablesStorage();
+                            tablesStorage.SetType(type);
+                            tablesStorage.SetSize(size);
+                            tablesStorage.SetLimit(it->second.SoftQuota);
+                            tablesStorage.SetSoftQuota(it->second.SoftQuota);
+                            tablesStorage.SetHardQuota(it->second.HardQuota);
                         }
+                    }
+
+                    for (const auto& [type, size] : databaseStorageByType) {
+                        auto& databaseStorage = *tenant.AddDatabaseStorage();
+                        databaseStorage.SetType(type);
+                        databaseStorage.SetSize(size);
                     }
                 }
 

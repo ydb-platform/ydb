@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 
+#include <ydb/core/tablet/resource_broker.h>
 #include <util/random/random.h>
 
 namespace NKikimr {
@@ -10,6 +11,38 @@ namespace NKqp {
 
 using namespace NYdb;
 using namespace NYdb::NTable;
+
+using namespace NResourceBroker;
+
+NKikimrResourceBroker::TResourceBrokerConfig MakeResourceBrokerTestConfig() {
+    NKikimrResourceBroker::TResourceBrokerConfig config;
+
+    auto queue = config.AddQueues();
+    queue->SetName("queue_default");
+    queue->SetWeight(5);
+    queue->MutableLimit()->AddResource(4);
+
+    queue = config.AddQueues();
+    queue->SetName("queue_kqp_resource_manager");
+    queue->SetWeight(20);
+    queue->MutableLimit()->AddResource(4);
+    queue->MutableLimit()->AddResource(50'000);
+
+    auto task = config.AddTasks();
+    task->SetName("unknown");
+    task->SetQueueName("queue_default");
+    task->SetDefaultDuration(TDuration::Seconds(5).GetValue());
+
+    task = config.AddTasks();
+    task->SetName(NLocalDb::KqpResourceManagerTaskName);
+    task->SetQueueName("queue_kqp_resource_manager");
+    task->SetDefaultDuration(TDuration::Seconds(5).GetValue());
+
+    config.MutableResourceLimit()->AddResource(10);
+    config.MutableResourceLimit()->AddResource(100'000);
+
+    return config;
+}
 
 namespace {
     bool IsRetryable(const EStatus& status) {
@@ -132,6 +165,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         auto app = NKikimrConfig::TAppConfig();
         app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(10);
         app.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(2000);
+
+        app.MutableResourceBrokerConfig()->CopyFrom(MakeResourceBrokerTestConfig());
 
         TKikimrRunner kikimr(app);
         CreateLargeTable(kikimr, 0, 0, 0);

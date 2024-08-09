@@ -161,10 +161,9 @@ public:
         : Counters(counters)
         , ExecutionUnitsResource(config.GetComputeActorsCount())
         , ExecutionUnitsLimit(config.GetComputeActorsCount())
-        , ScanQueryMemoryResource(config.GetQueryMemoryLimit())
-        , PublishResourcesByExchanger(config.GetEnablePublishResourcesByExchanger())
         , SpillingPercent(config.GetSpillingPercent())
         , TotalMemoryResource(MakeIntrusive<TMemoryResource>(config.GetQueryMemoryLimit(), (double)100, config.GetSpillingPercent()))
+        , PublishResourcesByExchanger(config.GetEnablePublishResourcesByExchanger())
     {
         SetConfigValues(config);
     }

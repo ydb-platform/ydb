@@ -86,6 +86,7 @@ public:
     }
 
 private:
+
     void OnStatisticsRequest(TEvStatistics::TPtr& ev) {
 
         THashMap<ui32, const IDqAsyncOutputBuffer*> sinks;
@@ -441,7 +442,8 @@ private:
 
         if (settings.GetEnableSpilling()) {
             auto wakeUpCallback = ev->Get()->ExecCtx->GetWakeupCallback();
-            TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(TxId, NActors::TActivationContext::ActorSystem(), wakeUpCallback));
+            auto errorCallback = ev->Get()->ExecCtx->GetErrorCallback();
+            TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(TxId, NActors::TActivationContext::ActorSystem(), wakeUpCallback, errorCallback));
         }
 
         auto event = MakeHolder<TEvTaskRunnerCreateFinished>(

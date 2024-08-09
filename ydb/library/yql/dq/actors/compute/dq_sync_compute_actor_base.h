@@ -213,7 +213,7 @@ protected:
         TaskRunner->Prepare(this->Task, limits, execCtx);
 
         if (this->Task.GetEnableSpilling()) {
-            TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(execCtx.GetTxId(), NActors::TActivationContext::ActorSystem(), execCtx.GetWakeupCallback()));
+            TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(execCtx.GetTxId(), NActors::TActivationContext::ActorSystem(), execCtx.GetWakeupCallback(), execCtx.GetErrorCallback()));
         }
 
         for (auto& [channelId, channel] : this->InputChannelsMap) {

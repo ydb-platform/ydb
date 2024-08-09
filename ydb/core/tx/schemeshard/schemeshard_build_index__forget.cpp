@@ -28,23 +28,22 @@ public:
         const TPathId domainPathId = database.GetPathIdForDomain();
 
         TIndexBuildId indexBuildId = TIndexBuildId(record.GetIndexBuildId());
-
-        if (!Self->IndexBuilds.contains(indexBuildId)) {
+        const auto* indexBuildInfoPtr = Self->IndexBuilds.FindPtr(indexBuildId);
+        if (!indexBuildInfoPtr) {
             return Reply(
                 Ydb::StatusIds::NOT_FOUND,
                 TStringBuilder() << "Index build process with id <" << indexBuildId << "> not found"
             );
         }
-
-        TIndexBuildInfo::TPtr indexBuildInfo = Self->IndexBuilds.at(indexBuildId);
-        if (indexBuildInfo->DomainPathId != domainPathId) {
+        const auto& indexBuildInfo = **indexBuildInfoPtr;
+        if (indexBuildInfo.DomainPathId != domainPathId) {
             return Reply(
                 Ydb::StatusIds::NOT_FOUND,
                 TStringBuilder() << "Index build process with id <" << indexBuildId << "> not found in database <" << record.GetDatabaseName() << ">"
             );
         }
 
-        if (!indexBuildInfo->IsFinished()) {
+        if (!indexBuildInfo.IsFinished()) {
             return Reply(
                 Ydb::StatusIds::PRECONDITION_FAILED,
                 TStringBuilder() << "Index build process with id <" << indexBuildId << "> hasn't been finished yet"

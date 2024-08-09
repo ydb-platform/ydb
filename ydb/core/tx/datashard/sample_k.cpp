@@ -36,8 +36,6 @@ protected:
     const TSerializedTableRange RequestedRange;
     const ui64 K;
 
-    IDriver* Driver = nullptr;
-
     struct TProbability {
         ui64 P = 0;
         ui64 I = 0;
@@ -46,10 +44,17 @@ protected:
         auto operator<=>(const TProbability&) const noexcept = default;
     };
 
-    TReallyFastRng32 Rng;
+    ui64 RowsCount = 0;
+    ui64 RowsBytes = 0;
+
+    // We are using binary heap, because we don't want to do batch processing here,
+    // serialization is more expensive than compare
     ui64 MaxProbability = 0;
+    TReallyFastRng32 Rng;
     std::vector<TProbability> MaxRows;
     std::vector<TString> DataRows;
+
+    IDriver* Driver = nullptr;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -61,6 +66,7 @@ public:
                  const TSerializedTableRange& range,
                  ui64 k,
                  ui64 seed,
+                 ui64 maxProbability,
                  TProtoColumnsCRef columns,
                  const TUserTable& tableInfo)
         : TActor(&TThis::StateWork)
@@ -71,8 +77,10 @@ public:
         , TableRange(tableInfo.Range)
         , RequestedRange(range)
         , K(k)
+        , MaxProbability(maxProbability)
         , Rng(seed)
     {
+        Y_ASSERT(MaxProbability != 0);
     }
 
     ~TSampleKScan() final = default;
@@ -109,19 +117,32 @@ public:
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final {
         LOG_T("Feed key " << DebugPrintPoint(KeyTypes, key, *AppData()->TypeRegistry) << " " << Debug());
+        ++RowsCount;
 
-        const auto probability = Rng.GenRand64();
+        const auto probability = GetProbability();
+        if (probability > MaxProbability) {
+            // TODO(mbkkt) it's not nice that we need to compute this, probably can be precomputed in TRow
+            RowsBytes += TSerializedCellVec::SerializedSize(*row);
+            return EScan::Feed;
+        }
+
+        auto serialized = TSerializedCellVec::Serialize(*row);
+        RowsBytes += serialized.size();
+
         if (DataRows.size() < K) {
             MaxRows.push_back({probability, DataRows.size()});
-            DataRows.emplace_back(TSerializedCellVec::Serialize(*row));
+            DataRows.emplace_back(std::move(serialized));
             if (DataRows.size() == K) {
                 std::make_heap(MaxRows.begin(), MaxRows.end());
                 MaxProbability = MaxRows.front().P;
             }
-        } else if (probability < MaxProbability) {
-            ReplaceRow(row, probability);
+        } else {
+            ReplaceRow(std::move(serialized), probability);
         }
 
+        if (MaxProbability == 0) {
+            return EScan::Final;
+        }
         return EScan::Feed;
     }
 
@@ -130,7 +151,7 @@ public:
         if (abort == EAbort::None) {
             FillResponse();
         } else {
-            Response->Record.SetStatus(NKikimrTxDataShard::TEvSampleKResponse::ABORTED);
+            Response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
         }
         LOG_T("Finish " << Debug());
         TActivationContext::AsActorContext().MakeFor(SelfId()).Send(ResponseActorId, Response.Release());
@@ -167,9 +188,10 @@ private:
         }
     }
 
-    void ReplaceRow(const TRow& row, ui64 p) {
+    void ReplaceRow(TString&& row, ui64 p) {
+        // TODO(mbkkt) use tournament tree to make less compare and swaps
         std::pop_heap(MaxRows.begin(), MaxRows.end());
-        DataRows[MaxRows.back().I] = TSerializedCellVec::Serialize(*row);
+        DataRows[MaxRows.back().I] = std::move(row);
         MaxRows.back().P = p;
         std::push_heap(MaxRows.begin(), MaxRows.end());
         MaxProbability = MaxRows.front().P;
@@ -177,11 +199,24 @@ private:
 
     void FillResponse() {
         std::sort(MaxRows.begin(), MaxRows.end());
+        auto& record = Response->Record;
         for (auto& [p, i] : MaxRows) {
-            Response->Record.AddProbabilities(p);
-            Response->Record.AddRows(std::move(DataRows[i]));
+            record.AddProbabilities(p);
+            record.AddRows(std::move(DataRows[i]));
         }
-        Response->Record.SetStatus(NKikimrTxDataShard::TEvSampleKResponse::DONE);
+        record.SetRowsDelta(RowsCount);
+        record.SetBytesDelta(RowsBytes);
+        record.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);
+    }
+
+    ui64 GetProbability() {
+        while (true) {
+            auto p = Rng.GenRand64();
+            // We exclude max ui64 from generated probabilities, so we can use this value as initial max
+            if (Y_LIKELY(p != std::numeric_limits<ui64>::max())) {
+                return p;
+            }
+        }
     }
 };
 
@@ -231,7 +266,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
     response->Record.SetRequestSeqNoRound(seqNo.Round);
 
     auto badRequest = [&](const TString& error) {
-        response->Record.SetStatus(NKikimrTxDataShard::TEvSampleKResponse::BAD_REQUEST);
+        response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
         auto issue = response->Record.AddIssues();
         issue->set_severity(NYql::TSeverityIds::S_ERROR);
         issue->set_message(error);
@@ -317,6 +352,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
                                       requestedRange,
                                       record.GetK(),
                                       record.GetSeed(),
+                                      record.GetMaxProbability(),
                                       record.GetColumns(),
                                       userTable),
                                   ev->Cookie,

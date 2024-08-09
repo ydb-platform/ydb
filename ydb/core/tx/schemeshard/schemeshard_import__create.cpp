@@ -471,11 +471,12 @@ private:
         Y_ABORT_UNLESS(item.State == EState::BuildIndexes);
 
         const auto uid = MakeIndexBuildUid(importInfo, itemIdx);
-        if (!Self->IndexBuildsByUid.contains(uid)) {
+        const auto* infoPtr = Self->IndexBuildsByUid.FindPtr(uid);
+        if (!infoPtr) {
             return InvalidTxId;
         }
 
-        return TTxId(ui64(Self->IndexBuildsByUid.at(uid)->Id));
+        return TTxId(ui64((**infoPtr).Id));
     }
 
     static TString MakeIndexBuildUid(TImportInfo::TPtr importInfo, ui32 itemIdx) {
@@ -555,14 +556,15 @@ private:
     }
 
     TMaybe<TString> GetIssues(TIndexBuildId indexBuildId) {
-        Y_ABORT_UNLESS(Self->IndexBuilds.contains(indexBuildId));
-        TIndexBuildInfo::TPtr indexInfo = Self->IndexBuilds.at(indexBuildId);
+        const auto* indexInfoPtr = Self->IndexBuilds.FindPtr(indexBuildId);
+        Y_ABORT_UNLESS(indexInfoPtr);
+        const auto& indexInfo = **indexInfoPtr;
 
-        if (indexInfo->IsDone()) {
+        if (indexInfo.IsDone()) {
             return Nothing();
         }
 
-        return indexInfo->Issue;
+        return indexInfo.Issue;
     }
 
     TString GetIssues(const NKikimrIndexBuilder::TEvCreateResponse& proto) {

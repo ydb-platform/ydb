@@ -7,4 +7,3 @@ configure_file(
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv1.g
 )
 
-

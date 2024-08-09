@@ -3,6 +3,7 @@
 #include "sql_select.h"
 #include "sql_values.h"
 #include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Lexer.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 #include <ydb/library/yql/utils/utf8.h>
 #include <util/charset/wide.h>
 #include <util/string/ascii.h>
@@ -11,6 +12,7 @@
 namespace NSQLTranslationV1 {
 
 using NALPDefault::SQLv1LexerTokens;
+using NALPDefaultAntlr4::SQLv1Antlr4Lexer;
 
 using namespace NSQLv1Generated;
 
@@ -1632,11 +1634,15 @@ TNodePtr TSqlExpression::SubExpr(const TRule_con_subexpr& node, const TTrailingQ
             auto token = node.GetAlt_con_subexpr2().GetRule_unary_op1().GetToken1();
             Token(token);
             TPosition pos(Ctx.Pos());
-            switch (token.GetId()) {
-                case SQLv1LexerTokens::TOKEN_NOT: opName = "Not"; break;
-                case SQLv1LexerTokens::TOKEN_PLUS: opName = "Plus"; break;
-                case SQLv1LexerTokens::TOKEN_MINUS: opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMinus" : "Minus"; break;
-                case SQLv1LexerTokens::TOKEN_TILDA: opName = "BitNot"; break;
+            switch (unifiedToken(token.GetId(), Context().Settings.Antlr4Parser)) {
+                case unifiedToken(SQLv1LexerTokens::TOKEN_NOT, 0):
+                case unifiedToken(SQLv1Antlr4Lexer::TOKEN_NOT, 1): opName = "Not"; break;
+                case unifiedToken(SQLv1LexerTokens::TOKEN_PLUS, 0):
+                case unifiedToken(SQLv1Antlr4Lexer::TOKEN_PLUS, 1): opName = "Plus"; break;
+                case unifiedToken(SQLv1LexerTokens::TOKEN_MINUS, 0):
+                case unifiedToken(SQLv1Antlr4Lexer::TOKEN_MINUS, 1): opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMinus" : "Minus"; break;
+                case unifiedToken(SQLv1LexerTokens::TOKEN_TILDA, 0):
+                case unifiedToken(SQLv1Antlr4Lexer::TOKEN_TILDA, 1): opName = "BitNot"; break;
                 default:
                     Ctx.IncrementMonCounter("sql_errors", "UnsupportedUnaryOperation");
                     Error() << "Unsupported unary operation: " << token.GetValue();
@@ -1907,7 +1913,9 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
             }
             case TRule_cond_expr::kAltCondExpr4: {
                 auto alt = cond.GetAlt_cond_expr4();
-                const bool symmetric = alt.HasBlock3() && alt.GetBlock3().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_SYMMETRIC;
+                const bool symmetric = alt.HasBlock3() &&
+                    ((!Ctx.Settings.Antlr4Parser && alt.GetBlock3().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_SYMMETRIC) ||
+                     (Ctx.Settings.Antlr4Parser && alt.GetBlock3().GetToken1().GetId() == SQLv1Antlr4Lexer::TOKEN_SYMMETRIC));
                 const bool negation = alt.HasBlock1();
                 TNodePtr left = SubExpr(alt.GetRule_eq_subexpr4(), {});
                 TNodePtr right = SubExpr(alt.GetRule_eq_subexpr6(), tail);
@@ -2033,36 +2041,44 @@ TNodePtr TSqlExpression::BinOpList(const TNode& node, TGetNode getNode, TIter be
         TPosition pos(Ctx.Pos());
         TString opName;
         auto tokenId = begin->GetToken1().GetId();
-        switch (tokenId) {
-            case SQLv1LexerTokens::TOKEN_LESS:
+        switch (unifiedToken(tokenId, Ctx.Settings.Antlr4Parser)) {
+            case unifiedToken(SQLv1LexerTokens::TOKEN_LESS, 0):
+            case unifiedToken(SQLv1Antlr4Lexer::TOKEN_LESS, 1):
                 Ctx.IncrementMonCounter("sql_binary_operations", "Less");
                 opName = "<";
                 break;
-            case SQLv1LexerTokens::TOKEN_LESS_OR_EQ:
+            case unifiedToken(SQLv1LexerTokens::TOKEN_LESS_OR_EQ, 0):
+            case unifiedToken(SQLv1Antlr4Lexer::TOKEN_LESS_OR_EQ, 1):
                 opName = "<=";
                 Ctx.IncrementMonCounter("sql_binary_operations", "LessOrEq");
                 break;
-            case SQLv1LexerTokens::TOKEN_GREATER:
+            case unifiedToken(SQLv1LexerTokens::TOKEN_GREATER, 0):
+            case unifiedToken(SQLv1Antlr4Lexer::TOKEN_GREATER, 1):
                 opName = ">";
                 Ctx.IncrementMonCounter("sql_binary_operations", "Greater");
                 break;
-            case SQLv1LexerTokens::TOKEN_GREATER_OR_EQ:
+            case unifiedToken(SQLv1LexerTokens::TOKEN_GREATER_OR_EQ, 0):
+            case unifiedToken(SQLv1Antlr4Lexer::TOKEN_GREATER_OR_EQ, 1):
                 opName = ">=";
                 Ctx.IncrementMonCounter("sql_binary_operations", "GreaterOrEq");
                 break;
-            case SQLv1LexerTokens::TOKEN_PLUS:
+            case unifiedToken(SQLv1LexerTokens::TOKEN_PLUS, 0):
+            case unifiedToken(SQLv1Antlr4Lexer::TOKEN_PLUS, 1):
                 opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedAdd" : "+MayWarn";
                 Ctx.IncrementMonCounter("sql_binary_operations", "Plus");
                 break;
-            case SQLv1LexerTokens::TOKEN_MINUS:
+            case unifiedToken(SQLv1LexerTokens::TOKEN_MINUS, 0):
+            case unifiedToken(SQLv1Antlr4Lexer::TOKEN_MINUS, 1):
                 opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedSub" : "-MayWarn";
                 Ctx.IncrementMonCounter("sql_binary_operations", "Minus");
                 break;
-            case SQLv1LexerTokens::TOKEN_ASTERISK:
+            case unifiedToken(SQLv1LexerTokens::TOKEN_ASTERISK, 0):
+            case unifiedToken(SQLv1Antlr4Lexer::TOKEN_ASTERISK, 1):
                 opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMul" : "*MayWarn";
                 Ctx.IncrementMonCounter("sql_binary_operations", "Multiply");
                 break;
-            case SQLv1LexerTokens::TOKEN_SLASH:
+            case unifiedToken(SQLv1LexerTokens::TOKEN_SLASH, 0):
+            case unifiedToken(SQLv1Antlr4Lexer::TOKEN_SLASH, 1):
                 opName = "/MayWarn";
                 Ctx.IncrementMonCounter("sql_binary_operations", "Divide");
                 if (!Ctx.Scoped->PragmaClassicDivision && partialResult) {
@@ -2071,7 +2087,8 @@ TNodePtr TSqlExpression::BinOpList(const TNode& node, TGetNode getNode, TIter be
                     opName = "CheckedDiv";
                 }
                 break;
-            case SQLv1LexerTokens::TOKEN_PERCENT:
+            case unifiedToken(SQLv1LexerTokens::TOKEN_PERCENT, 0):
+            case unifiedToken(SQLv1Antlr4Lexer::TOKEN_PERCENT, 1):
                 opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMod" : "%MayWarn";
                 Ctx.IncrementMonCounter("sql_binary_operations", "Mod");
                 break;
@@ -2099,7 +2116,8 @@ TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNo
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt1: {
                 Token(begin->GetBlock1().GetAlt1().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt1().GetToken1().GetId();
-                if (tokenId != SQLv1LexerTokens::TOKEN_SHIFT_LEFT) {
+                if ((!Ctx.Settings.Antlr4Parser && tokenId != SQLv1LexerTokens::TOKEN_SHIFT_LEFT) ||
+                    (Ctx.Settings.Antlr4Parser && tokenId != SQLv1Antlr4Lexer::TOKEN_SHIFT_LEFT)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2115,7 +2133,8 @@ TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNo
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt3: {
                 Token(begin->GetBlock1().GetAlt3().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt3().GetToken1().GetId();
-                if (tokenId != SQLv1LexerTokens::TOKEN_ROT_LEFT) {
+                if ((!Ctx.Settings.Antlr4Parser && tokenId != SQLv1LexerTokens::TOKEN_ROT_LEFT) ||
+                    (Ctx.Settings.Antlr4Parser && tokenId != SQLv1Antlr4Lexer::TOKEN_ROT_LEFT)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2131,7 +2150,8 @@ TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNo
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt5: {
                 Token(begin->GetBlock1().GetAlt5().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt5().GetToken1().GetId();
-                if (tokenId != SQLv1LexerTokens::TOKEN_AMPERSAND) {
+                if ((!Ctx.Settings.Antlr4Parser && tokenId != SQLv1LexerTokens::TOKEN_AMPERSAND) || 
+                    (Ctx.Settings.Antlr4Parser && tokenId != SQLv1Antlr4Lexer::TOKEN_AMPERSAND)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2142,7 +2162,8 @@ TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNo
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt6: {
                 Token(begin->GetBlock1().GetAlt6().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt6().GetToken1().GetId();
-                if (tokenId != SQLv1LexerTokens::TOKEN_PIPE) {
+                if ((!Ctx.Settings.Antlr4Parser && tokenId != SQLv1LexerTokens::TOKEN_PIPE) ||
+                    (Ctx.Settings.Antlr4Parser && tokenId != SQLv1Antlr4Lexer::TOKEN_PIPE)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2153,7 +2174,8 @@ TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNo
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt7: {
                 Token(begin->GetBlock1().GetAlt7().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt7().GetToken1().GetId();
-                if (tokenId != SQLv1LexerTokens::TOKEN_CARET) {
+                if ((!Ctx.Settings.Antlr4Parser && tokenId != SQLv1LexerTokens::TOKEN_CARET) ||
+                    (Ctx.Settings.Antlr4Parser && tokenId != SQLv1Antlr4Lexer::TOKEN_CARET)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2183,7 +2205,8 @@ TNodePtr TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode getNod
             case TRule_cond_expr::TAlt5::TBlock1::TBlock1::kAlt1: {
                 Token(begin->GetBlock1().GetAlt1().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt1().GetToken1().GetId();
-                if (tokenId != SQLv1LexerTokens::TOKEN_EQUALS) {
+                if ((!Ctx.Settings.Antlr4Parser && tokenId != SQLv1LexerTokens::TOKEN_EQUALS) || 
+                    (Ctx.Settings.Antlr4Parser && tokenId != SQLv1Antlr4Lexer::TOKEN_EQUALS)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2194,7 +2217,8 @@ TNodePtr TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode getNod
             case TRule_cond_expr::TAlt5::TBlock1::TBlock1::kAlt2: {
                 Token(begin->GetBlock1().GetAlt2().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt2().GetToken1().GetId();
-                if (tokenId != SQLv1LexerTokens::TOKEN_EQUALS2) {
+                if ((!Ctx.Settings.Antlr4Parser && tokenId !=  SQLv1LexerTokens::TOKEN_EQUALS2) ||
+                    (Ctx.Settings.Antlr4Parser && tokenId !=  SQLv1Antlr4Lexer::TOKEN_EQUALS2)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2205,7 +2229,8 @@ TNodePtr TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode getNod
             case TRule_cond_expr::TAlt5::TBlock1::TBlock1::kAlt3: {
                 Token(begin->GetBlock1().GetAlt3().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt3().GetToken1().GetId();
-                if (tokenId != SQLv1LexerTokens::TOKEN_NOT_EQUALS) {
+                if ((!Ctx.Settings.Antlr4Parser && tokenId != SQLv1LexerTokens::TOKEN_NOT_EQUALS) ||
+                    (Ctx.Settings.Antlr4Parser && tokenId != SQLv1Antlr4Lexer::TOKEN_NOT_EQUALS)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2216,7 +2241,8 @@ TNodePtr TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode getNod
             case TRule_cond_expr::TAlt5::TBlock1::TBlock1::kAlt4: {
                 Token(begin->GetBlock1().GetAlt4().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt4().GetToken1().GetId();
-                if (tokenId != SQLv1LexerTokens::TOKEN_NOT_EQUALS2) {
+                if ((!Ctx.Settings.Antlr4Parser && tokenId != SQLv1LexerTokens::TOKEN_NOT_EQUALS2) ||
+                    (Ctx.Settings.Antlr4Parser && tokenId != SQLv1Antlr4Lexer::TOKEN_NOT_EQUALS2)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }

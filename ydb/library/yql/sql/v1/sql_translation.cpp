@@ -7,6 +7,7 @@
 #include "source.h"
 
 #include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Lexer.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 #include <ydb/library/yql/sql/settings/partitioning.h>
 
 #include <util/generic/scope.h>
@@ -85,6 +86,7 @@ TNodePtr BuildViewSelect(const TRule_select_stmt& query, TContext& ctx) {
 namespace NSQLTranslationV1 {
 
 using NALPDefault::SQLv1LexerTokens;
+using NALPDefaultAntlr4::SQLv1Antlr4Lexer;
 
 using namespace NSQLv1Generated;
 
@@ -1612,10 +1614,12 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
                         }
 
                         auto& token = spec.GetBlock2().GetToken1();
-                        switch (token.GetId()) {
-                            case SQLv1LexerTokens::TOKEN_ASC:
+                        switch (unifiedToken(token.GetId(), Context().Settings.Antlr4Parser)) {
+                            case unifiedToken(SQLv1LexerTokens::TOKEN_ASC, 0):
+                            case unifiedToken(SQLv1Antlr4Lexer::TOKEN_ASC, 1):
                                 return true;
-                            case SQLv1LexerTokens::TOKEN_DESC:
+                            case unifiedToken(SQLv1LexerTokens::TOKEN_DESC, 0):
+                            case unifiedToken(SQLv1Antlr4Lexer::TOKEN_DESC, 1):
                                 desc = true;
                                 return true;
                             default:
@@ -3606,11 +3610,13 @@ bool TSqlTranslation::SortSpecification(const TRule_sort_specification& node, TV
     if (node.HasBlock2()) {
         const auto& token = node.GetBlock2().GetToken1();
         Token(token);
-        switch (token.GetId()) {
-            case SQLv1LexerTokens::TOKEN_ASC:
+        switch (unifiedToken(token.GetId(), Context().Settings.Antlr4Parser)) {
+            case unifiedToken(SQLv1LexerTokens::TOKEN_ASC, 0):
+            case unifiedToken(SQLv1Antlr4Lexer::TOKEN_ASC, 1):
                 Ctx.IncrementMonCounter("sql_features", "OrderByAsc");
                 break;
-            case SQLv1LexerTokens::TOKEN_DESC:
+            case unifiedToken(SQLv1LexerTokens::TOKEN_DESC, 0):
+            case unifiedToken(SQLv1Antlr4Lexer::TOKEN_DESC, 1):
                 asc = false;
                 Ctx.IncrementMonCounter("sql_features", "OrderByDesc");
                 break;
@@ -3641,11 +3647,13 @@ bool TSqlTranslation::SortSpecificationList(const TRule_sort_specification_list&
 
 bool TSqlTranslation::IsDistinctOptSet(const TRule_opt_set_quantifier& node) const {
     TPosition pos;
-    return node.HasBlock1() && node.GetBlock1().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_DISTINCT;
+    return node.HasBlock1() && ((!Ctx.Settings.Antlr4Parser && node.GetBlock1().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_DISTINCT) || 
+                               (Ctx.Settings.Antlr4Parser && node.GetBlock1().GetToken1().GetId() == SQLv1Antlr4Lexer::TOKEN_DISTINCT));
 }
 
 bool TSqlTranslation::IsDistinctOptSet(const TRule_opt_set_quantifier& node, TPosition& distinctPos) const {
-    if (node.HasBlock1() && node.GetBlock1().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_DISTINCT) {
+    if (node.HasBlock1() && ((!Ctx.Settings.Antlr4Parser && node.GetBlock1().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_DISTINCT) ||
+                            (Ctx.Settings.Antlr4Parser && node.GetBlock1().GetToken1().GetId() == SQLv1Antlr4Lexer::TOKEN_DISTINCT))) {
         distinctPos = Ctx.TokenPosition(node.GetBlock1().GetToken1());
         return true;
     }

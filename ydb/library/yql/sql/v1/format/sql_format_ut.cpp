@@ -42,6 +42,7 @@ struct TSetup {
 
     google::protobuf::Arena Arena;
     NSQLFormat::ISqlFormatter::TPtr Formatter;
+    NSQLFormat::ISqlFormatter::TPtr FormatterAntlr4;
 };
 
 }

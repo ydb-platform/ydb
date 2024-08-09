@@ -5,6 +5,7 @@ RECURSE(
     persqueue/obfuscate
     persqueue/topic_parser_public
     retry
+    string_utils/helpers
     uuid
     yql
 )

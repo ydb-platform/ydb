@@ -1935,6 +1935,12 @@ TDataQuery::TDataQuery(const TSession& session, const std::string& text, const s
                       session.Client_->Settings_.AllowRequestMigration_))
 {}
 
+TDataQuery::TDataQuery(const TSession& session, const std::string& text, const std::string& id,
+    const ::google::protobuf::Map<TStringType, Ydb::Type>& types)
+    : Impl_(new TImpl(session, text, session.Client_->Settings_.KeepDataQueryText_, id,
+                      session.Client_->Settings_.AllowRequestMigration_, types))
+{}
+
 const std::string& TDataQuery::GetId() const {
     return Impl_->GetId();
 }

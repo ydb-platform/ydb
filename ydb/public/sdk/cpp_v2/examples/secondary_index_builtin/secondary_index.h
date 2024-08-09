@@ -8,6 +8,8 @@
 
 #include <library/cpp/getopt/last_getopt.h>
 
+#include <format>
+
 #define TABLE_USERS "users"
 #define TABLE_SERIES "series"
 

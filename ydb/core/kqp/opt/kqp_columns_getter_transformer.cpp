@@ -1,8 +1,16 @@
 #include "kqp_columns_getter_transformer.h"
 
 #include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <ydb/core/statistics/service/service.h>
+#include <ydb/core/statistics/events.h>
+#include <ydb/core/kqp/gateway/actors/kqp_ic_gateway_actors.h>
+#include <ydb/library/yql/core/yql_statistics.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
 namespace NKikimr::NKqp {
+
+using namespace NThreading;
+using namespace NYql;
 
 void TKqpColumnsGetterTransformer::PropagateTableToLambdaArgument(const TExprNode::TPtr& input) {
     if (input->ChildrenSize() < 2) {
@@ -37,11 +45,12 @@ IGraphTransformer::TStatus TKqpColumnsGetterTransformer::DoTransform(TExprNode::
     Y_UNUSED(ctx);
     
     output = input;
+    auto optLvl = Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel);
+    auto enableColumnStats = Config->FeatureFlags.GetEnableColumnStatistics();
+    if (!(optLvl > 0 && enableColumnStats)) {
+        return IGraphTransformer::TStatus::Ok;
+    }
     
-    // if (Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel) == 0) {
-    //     return IGraphTransformer::TStatus::Ok;
-    // }
-
     VisitExprLambdasLast(
         input, 
         [&](const TExprNode::TPtr& input) {
@@ -57,7 +66,65 @@ IGraphTransformer::TStatus TKqpColumnsGetterTransformer::DoTransform(TExprNode::
             return AfterLambdas(input) || AfterLambdasUnmatched(input);
         }
     );
-    
+
+    struct TTableMeta {
+        TString TableName;
+        THashMap<ui32, TString> ColumnNameByTag;
+    };
+    THashMap<TPathId, TTableMeta> tableMetaByPathId;
+
+    // TODO: Add other statistics, not only COUNT_MIN_SKETCH.
+    auto getStatisticsRequest = MakeHolder<NStat::TEvStatistics::TEvGetStatistics>();
+    getStatisticsRequest->StatType = NKikimr::NStat::EStatType::COUNT_MIN_SKETCH;  
+
+    for (const auto& [table, columns]: ColumnsByTableName) {
+        auto tableMeta = Tables.GetTable(Cluster, table).Metadata;
+        auto& columnsMeta = tableMeta->Columns;
+
+        auto pathId = TPathId(tableMeta->PathId.OwnerId(), tableMeta->PathId.TableId());
+        for (const auto& column: columns) {
+            Y_ENSURE(columns.contains(column), "There is no " + column + " in column meta!");
+
+            NKikimr::NStat::TRequest req;
+            req.ColumnTag = columnsMeta[column].Id;
+            req.PathId = pathId;
+            getStatisticsRequest->StatRequests.push_back(req);
+
+            tableMetaByPathId[pathId].TableName = table;
+            tableMetaByPathId[pathId].ColumnNameByTag[req.ColumnTag.value()] = column;
+        }
+    }
+
+    using TRequest = NStat::TEvStatistics::TEvGetStatistics;
+    using TResponse = NStat::TEvStatistics::TEvGetStatisticsResult;
+    struct TResult : public NYql::IKikimrGateway::TGenericResult {
+        THashMap<TString, TOptimizerStatistics::TColumnStatMap> columnStatisticsByTableName;
+    };
+
+    auto promise = NewPromise<TResult>();
+    auto callback = [tableMetaByPathId = std::move(tableMetaByPathId)]
+    (TPromise<TResult> promise, NStat::TEvStatistics::TEvGetStatisticsResult&& response) mutable {
+        Y_ENSURE(response.Success);
+        
+        THashMap<TString, TOptimizerStatistics::TColumnStatMap> columnStatisticsByTableName;
+
+        for (auto&& stat: response.StatResponses) {
+            auto meta = tableMetaByPathId[stat.Req.PathId];
+            auto columnName = meta.ColumnNameByTag[stat.Req.ColumnTag.value()];
+            auto& columnStatistics = columnStatisticsByTableName[meta.TableName].Data[columnName];
+            columnStatistics.CountMinSketch = std::move(stat.CountMinSketch.CountMin);
+        }
+
+        promise.SetValue(TResult{.columnStatisticsByTableName = std::move(columnStatisticsByTableName)});
+    };
+    auto statServiceId = NStat::MakeStatServiceID(ActorSystem->NodeId);
+    IActor* requestHandler = 
+        new TActorRequestHandler<TRequest, TResponse, TResult>(statServiceId, getStatisticsRequest.Release(), promise, callback);
+    ActorSystem
+        ->Register(requestHandler, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
+
+    promise.GetFuture().GetValueSync();
+
     return IGraphTransformer::TStatus::Ok;
 }
 
@@ -136,9 +203,12 @@ bool TKqpColumnsGetterTransformer::AfterLambdasUnmatched(const TExprNode::TPtr& 
 }
 
 TAutoPtr<IGraphTransformer> CreateKqpColumnsGetterTransformer(
-    const TKikimrConfiguration::TPtr& config
+    const TKikimrConfiguration::TPtr& config,
+    TKikimrTablesData& tables,
+    TString cluster,
+    TActorSystem* actorSystem
 ) {
-    return THolder<IGraphTransformer>(new TKqpColumnsGetterTransformer(config));
+    return THolder<IGraphTransformer>(new TKqpColumnsGetterTransformer(config, tables, cluster, actorSystem));
 }
 
 } // end of NKikimr::NKqp

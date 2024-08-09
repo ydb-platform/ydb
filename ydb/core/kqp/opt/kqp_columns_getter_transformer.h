@@ -5,6 +5,7 @@
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 
 namespace NKikimr::NKqp {
 
@@ -14,9 +15,15 @@ using namespace NYql::NNodes;
 class TKqpColumnsGetterTransformer : public TSyncTransformerBase {
 public:
     TKqpColumnsGetterTransformer(
-        const TKikimrConfiguration::TPtr& 
+        const TKikimrConfiguration::TPtr& config,
+        TKikimrTablesData& tables,
+        TString cluster,
+        TActorSystem* actorSystem
     )
-        // : Config(config)
+        : Config(config)
+        , Tables(tables)
+        , Cluster(cluster)
+        , ActorSystem(actorSystem)
     {}
 
     // Main method of the transformer
@@ -40,11 +47,18 @@ private:
 private:
     THashMap<TExprNode::TPtr, TExprNode::TPtr> TableByExprNode;
     THashMap<TString, THashSet<TString>> ColumnsByTableName;
-    // const TKikimrConfiguration::TPtr& Config;
+
+    const TKikimrConfiguration::TPtr& Config;
+    TKikimrTablesData& Tables;
+    TString Cluster;
+    TActorSystem* ActorSystem;
 };
 
 TAutoPtr<IGraphTransformer> CreateKqpColumnsGetterTransformer(
-    const TKikimrConfiguration::TPtr& config
+    const TKikimrConfiguration::TPtr& config,
+    TKikimrTablesData& tables,
+    TString cluster,
+    TActorSystem* actorSystem
 );
 
 } // end of NKikimr::NKqp namespace

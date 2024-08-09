@@ -27,6 +27,8 @@ jobs:
     - name: Install dependencies
       run: |
         python3 -m pip install ydb ydb[yc] codeowners
-    - name: Collect test history data
-      run: python3 .github/scripts/calculate_tests_scan.py
+    - name: Collect test history data with window 5 days
+      run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=5
+    - name: Collect test history data with window 1 day 
+      run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=1
   

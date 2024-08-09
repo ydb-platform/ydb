@@ -46,14 +46,12 @@ private:
     using TBase = NColumnShard::TCommonCountersOwner;
 
 public:
-    const NMonitoring::TDynamicCounters::TCounterPtr GroupsCount;
-    const NMonitoring::TDynamicCounters::TCounterPtr ProcessesCount;
+    NMonitoring::TDynamicCounters::TCounterPtr GroupsCount;
+    NMonitoring::TDynamicCounters::TCounterPtr ProcessesCount;
     TCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, const TString& name)
-        : TBase("grouped_memory_limiter", counters)
+        : TBase(NColumnShard::TCommonCountersOwner("grouped_memory_limiter", counters), "limiter_name", name)
         , GroupsCount(TBase::GetValue("Groups/Count"))
-        , ProcessesCount(TBase::GetValue("Processes/Count"))
-    {
-        DeepSubGroup("limiter_name", name);
+        , ProcessesCount(TBase::GetValue("Processes/Count")) {
     }
 
     std::shared_ptr<TStageCounters> BuildStageCounters(const TString& stageName) const {

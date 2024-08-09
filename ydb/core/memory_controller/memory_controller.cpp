@@ -1,4 +1,5 @@
 #include "memory_controller.h"
+#include "memory_controller_config.h"
 #include "memtable_collection.h"
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/memory_controller_iface.h>
@@ -21,10 +22,6 @@ namespace {
 
 ui64 SafeDiff(ui64 a, ui64 b) {
     return a - Min(a, b);
-}
-
-ui64 GetPercent(float percent, ui64 value) {
-    return static_cast<ui64>(static_cast<double>(value) * (percent / 100.0));
 }
 
 }
@@ -157,10 +154,10 @@ private:
         auto processMemoryInfo = ProcessMemoryInfoProvider->Get();
 
         bool hasMemTotalHardLimit = false;
-        ui64 hardLimitBytes = GetHardLimitBytes(processMemoryInfo, hasMemTotalHardLimit);
-        ui64 softLimitBytes = GetSoftLimitBytes(hardLimitBytes);
-        ui64 targetUtilizationBytes = GetTargetUtilizationBytes(hardLimitBytes);
-        ui64 activitiesLimitBytes = GetActivitiesLimitBytes(hardLimitBytes);
+        ui64 hardLimitBytes = GetHardLimitBytes(Config, processMemoryInfo, hasMemTotalHardLimit);
+        ui64 softLimitBytes = GetSoftLimitBytes(Config, hardLimitBytes);
+        ui64 targetUtilizationBytes = GetTargetUtilizationBytes(Config, hardLimitBytes);
+        ui64 activitiesLimitBytes = GetActivitiesLimitBytes(Config, hardLimitBytes);
 
         TVector<TConsumerState> consumers(::Reserve(Consumers.size()));
         ui64 consumersConsumption = 0;
@@ -354,7 +351,7 @@ private:
     }
 
     void ApplyResourceBrokerLimits(ui64 hardLimitBytes, ui64 activitiesLimitBytes) {
-        ui64 queryExecutionLimitBytes = GetQueryExecutionLimitBytes(hardLimitBytes);
+        ui64 queryExecutionLimitBytes = GetQueryExecutionLimitBytes(Config, hardLimitBytes);
 
         TResourceBrokerLimits newLimits{
             activitiesLimitBytes,
@@ -420,13 +417,13 @@ private:
         
         switch (consumer.Kind) {
             case EMemoryConsumerKind::MemTable: {
-                result.MinBytes = GetMemTableMinBytes(hardLimitBytes);
-                result.MaxBytes = GetMemTableMaxBytes(hardLimitBytes);
+                result.MinBytes = GetMemTableMinBytes(Config, hardLimitBytes);
+                result.MaxBytes = GetMemTableMaxBytes(Config, hardLimitBytes);
                 break;
             }
             case EMemoryConsumerKind::SharedCache: {
-                result.MinBytes = GetSharedCacheMinBytes(hardLimitBytes);
-                result.MaxBytes = GetSharedCacheMaxBytes(hardLimitBytes);
+                result.MinBytes = GetSharedCacheMinBytes(Config, hardLimitBytes);
+                result.MaxBytes = GetSharedCacheMaxBytes(Config, hardLimitBytes);
                 result.CanZeroLimit = true;
                 break;
             }
@@ -439,104 +436,6 @@ private:
         }
 
         return result;
-    }
-
-    ui64 GetHardLimitBytes(const TProcessMemoryInfo& info, bool& hasMemTotalHardLimit) const {
-        if (Config.HasHardLimitBytes()) {
-            ui64 hardLimitBytes = Config.GetHardLimitBytes();
-            if (info.CGroupLimit.has_value()) {
-                hardLimitBytes = Min(hardLimitBytes, info.CGroupLimit.value());
-            }
-            return hardLimitBytes;
-        }
-        if (info.CGroupLimit.has_value()) {
-            return info.CGroupLimit.value();
-        }
-        if (info.MemTotal) {
-            hasMemTotalHardLimit = true;
-            return info.MemTotal.value();
-        }
-        return 512_MB; // fallback
-    }
-
-    ui64 GetSoftLimitBytes(ui64 hardLimitBytes) const {
-        if (Config.HasSoftLimitPercent() && Config.HasSoftLimitBytes()) {
-            return Min(GetPercent(Config.GetSoftLimitPercent(), hardLimitBytes), Config.GetSoftLimitBytes());
-        }
-        if (Config.HasSoftLimitBytes()) {
-            return Config.GetSoftLimitBytes();
-        }
-        return GetPercent(Config.GetSoftLimitPercent(), hardLimitBytes);
-    }
-
-    ui64 GetTargetUtilizationBytes(ui64 hardLimitBytes) const {
-        if (Config.HasTargetUtilizationPercent() && Config.HasTargetUtilizationBytes()) {
-            return Min(GetPercent(Config.GetTargetUtilizationPercent(), hardLimitBytes), Config.GetTargetUtilizationBytes());
-        }
-        if (Config.HasTargetUtilizationBytes()) {
-            return Config.GetTargetUtilizationBytes();
-        }
-        return GetPercent(Config.GetTargetUtilizationPercent(), hardLimitBytes);
-    }
-
-    ui64 GetActivitiesLimitBytes(ui64 hardLimitBytes) const {
-        if (Config.HasActivitiesLimitPercent() && Config.HasActivitiesLimitBytes()) {
-            return Min(GetPercent(Config.GetActivitiesLimitPercent(), hardLimitBytes), Config.GetActivitiesLimitBytes());
-        }
-        if (Config.HasActivitiesLimitBytes()) {
-            return Config.GetActivitiesLimitBytes();
-        }
-        return GetPercent(Config.GetActivitiesLimitPercent(), hardLimitBytes);
-    }
-    
-    ui64 GetMemTableMinBytes(ui64 hardLimitBytes) const {
-        if (Config.HasMemTableMinPercent() && Config.HasMemTableMinBytes()) {
-            return Max(GetPercent(Config.GetMemTableMinPercent(), hardLimitBytes), Config.GetMemTableMinBytes());
-        }
-        if (Config.HasMemTableMinBytes()) {
-            return Config.GetMemTableMinBytes();
-        }
-        return GetPercent(Config.GetMemTableMinPercent(), hardLimitBytes);
-    }
-
-    ui64 GetMemTableMaxBytes(ui64 hardLimitBytes) const {
-        if (Config.HasMemTableMaxPercent() && Config.HasMemTableMaxBytes()) {
-            return Min(GetPercent(Config.GetMemTableMaxPercent(), hardLimitBytes), Config.GetMemTableMaxBytes());
-        }
-        if (Config.HasMemTableMaxBytes()) {
-            return Config.GetMemTableMaxBytes();
-        }
-        return GetPercent(Config.GetMemTableMaxPercent(), hardLimitBytes);
-    }
-
-    ui64 GetSharedCacheMinBytes(ui64 hardLimitBytes) const {
-        if (Config.HasSharedCacheMinPercent() && Config.HasSharedCacheMinBytes()) {
-            return Max(GetPercent(Config.GetSharedCacheMinPercent(), hardLimitBytes), Config.GetSharedCacheMinBytes());
-        }
-        if (Config.HasSharedCacheMinBytes()) {
-            return Config.GetSharedCacheMinBytes();
-        }
-        return GetPercent(Config.GetSharedCacheMinPercent(), hardLimitBytes);
-    }
-
-    ui64 GetSharedCacheMaxBytes(ui64 hardLimitBytes) const {
-        if (Config.HasSharedCacheMaxPercent() && Config.HasSharedCacheMaxBytes()) {
-            return Min(GetPercent(Config.GetSharedCacheMaxPercent(), hardLimitBytes), Config.GetSharedCacheMaxBytes());
-        }
-        if (Config.HasSharedCacheMaxBytes()) {
-            return Config.GetSharedCacheMaxBytes();
-        }
-        return GetPercent(Config.GetSharedCacheMaxPercent(), hardLimitBytes);
-    }
-
-    ui64 GetQueryExecutionLimitBytes(ui64 hardLimitBytes) const {
-        if (Config.HasQueryExecutionLimitPercent() && Config.HasQueryExecutionLimitBytes()) {
-            return Min(GetPercent(Config.GetQueryExecutionLimitPercent(), hardLimitBytes), Config.GetQueryExecutionLimitBytes());
-        }
-        if (Config.HasQueryExecutionLimitBytes()) {
-            return Config.GetQueryExecutionLimitBytes();
-        }
-        return GetPercent(Config.GetQueryExecutionLimitPercent(), hardLimitBytes);
     }
 
 private:

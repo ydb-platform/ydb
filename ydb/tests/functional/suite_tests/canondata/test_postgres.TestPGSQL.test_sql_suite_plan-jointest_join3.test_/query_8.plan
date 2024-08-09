@@ -62,7 +62,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
+                                                        "Node Type": "Stage",
                                                         "PlanNodeId": 4,
                                                         "Plans": [
                                                             {
@@ -126,14 +126,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "ConstantExpr",
-                                                        "Operators": [
-                                                            {
-                                                                "Inputs": [],
-                                                                "Iterator": "[{x: 1}]",
-                                                                "Name": "Iterator"
-                                                            }
-                                                        ],
+                                                        "Node Type": "Stage",
                                                         "PlanNodeId": 6
                                                     }
                                                 ]

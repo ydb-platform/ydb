@@ -121,7 +121,7 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "Collect",
+                                                                        "Node Type": "Stage",
                                                                         "PlanNodeId": 17,
                                                                         "Plans": [
                                                                             {
@@ -183,8 +183,8 @@
                                                                         "Operators": [
                                                                             {
                                                                                 "Inputs": [],
-                                                                                "Iterator": "precompute_0_1",
-                                                                                "Name": "Iterator"
+                                                                                "Name": "ToFlow",
+                                                                                "ToFlow": "precompute_0_1"
                                                                             }
                                                                         ],
                                                                         "PlanNodeId": 19
@@ -206,8 +206,8 @@
                                                         "Operators": [
                                                             {
                                                                 "Inputs": [],
-                                                                "Iterator": "precompute_0_0",
-                                                                "Name": "Iterator"
+                                                                "Name": "ToFlow",
+                                                                "ToFlow": "precompute_0_0"
                                                             }
                                                         ],
                                                         "PlanNodeId": 13

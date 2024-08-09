@@ -283,12 +283,6 @@ bool CanPropagateWideBlockThroughChannel(
         return false;
     }
 
-    auto outputItemType = program.Lambda().Ref().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType();
-    if (IsWideBlockType(*outputItemType)) {
-        // output is already wide block
-        return false;
-    }
-
     if (!stageSettings.WideChannels) {
         return false;
     }
@@ -303,6 +297,15 @@ bool CanPropagateWideBlockThroughChannel(
     if (!program.Lambda().Body().Maybe<TCoFromFlow>() ||
         !program.Lambda().Body().Cast<TCoFromFlow>().Input().Maybe<TCoWideFromBlocks>())
     {
+        return false;
+    }
+
+    auto typeAnnotation = program.Lambda().Ref().GetTypeAnn();
+
+    YQL_ENSURE(typeAnnotation, "Program for stage " << output.Stage().Ref().UniqueId() << " doesn't have type annotation");
+
+    if (IsWideBlockType(*typeAnnotation->Cast<TStreamExprType>()->GetItemType())) {
+        // output is already wide block
         return false;
     }
 
@@ -445,8 +448,6 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
             .ArgsType(ExpandType(stage.Pos(), *ctx.MakeType<TTupleExprType>(argTypes), ctx))
             .Done();
 
-        YQL_ENSURE(programs.emplace(stage.Ref().UniqueId(), program).second);
-
         const bool allowNonDeterministicFunctions = !program.Lambda().Body().Maybe<TKqpEffects>();
 
         TExprNode::TPtr newProgram;
@@ -468,7 +469,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
         }
 
         optimizedStages.emplace(stage.Ref().UniqueId());
-        programs.at(stage.Ref().UniqueId()) = TKqpProgram(newProgram);
+        YQL_ENSURE(programs.emplace(stage.Ref().UniqueId(), TKqpProgram(newProgram)).second);
     }
 
     TVector<TKqpParamBinding> bindings(tx.ParamBindings().begin(), tx.ParamBindings().end());

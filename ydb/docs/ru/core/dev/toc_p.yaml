@@ -6,6 +6,11 @@ items:
   include:
     mode: link
     path: example-app/toc_p.yaml
+- name: Использование QueryService
+  href: query-service-app/index.md
+  include:
+    mode: link
+    path: query-service-app/toc_p.yaml
 - name: Туториал по YQL
   href: yql-tutorial/index.md
   include:

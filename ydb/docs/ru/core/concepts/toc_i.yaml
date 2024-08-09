@@ -8,6 +8,7 @@ items:
   include: { path: datamodel/toc_p.yaml, mode: link }
 - { name: Транзакции,                             href: transactions.md }
 - { name: Вторичные индексы,                      href: secondary_indexes.md }
+- { name: Query Service,                          href: query_service.md }
 - { name: Change Data Capture (CDC),              href: cdc.md, when: feature_changefeed }
 - { name: Time to Live (TTL),                     href: ttl.md }
 - { name: Скан запросы,                           href: scan_query.md }

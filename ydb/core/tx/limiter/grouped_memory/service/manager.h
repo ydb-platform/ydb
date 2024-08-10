@@ -20,6 +20,7 @@ private:
     const std::shared_ptr<TCounters> Signals;
     const NActors::TActorId OwnerActorId;
     THashMap<ui64, TProcessMemory> Processes;
+    std::shared_ptr<TStageFeatures> DefaultStage;
     TIdsControl ProcessIds;
 
     void TryAllocateWaiting();
@@ -43,21 +44,24 @@ private:
     }
 
 public:
-    TManager(const NActors::TActorId& ownerActorId, const TConfig& config, const TString& name, const std::shared_ptr<TCounters>& signals)
+    TManager(const NActors::TActorId& ownerActorId, const TConfig& config, const TString& name, const std::shared_ptr<TCounters>& signals,
+        const std::shared_ptr<TStageFeatures>& defaultStage)
         : Config(config)
         , Name(name)
         , Signals(signals)
-        , OwnerActorId(ownerActorId) {
+        , OwnerActorId(ownerActorId)
+        , DefaultStage(defaultStage)
+    {
     }
 
     void RegisterGroup(const ui64 externalProcessId, const ui64 externalGroupId);
     void UnregisterGroup(const ui64 externalProcessId, const ui64 externalGroupId);
 
-    void RegisterProcess(const ui64 externalProcessId);
+    void RegisterProcess(const ui64 externalProcessId, const std::vector<std::shared_ptr<TStageFeatures>>& stages);
     void UnregisterProcess(const ui64 externalProcessId);
 
     void RegisterAllocation(const ui64 externalProcessId, const ui64 externalGroupId, const std::shared_ptr<IAllocation>& task,
-        const std::shared_ptr<TStageFeatures>& stage);
+        const std::optional<ui32>& stageIdx);
     void UnregisterAllocation(const ui64 externalProcessId, const ui64 allocationId);
     void UpdateAllocation(const ui64 externalProcessId, const ui64 allocationId, const ui64 volume);
 

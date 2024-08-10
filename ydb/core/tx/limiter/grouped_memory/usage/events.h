@@ -23,20 +23,19 @@ struct TEvExternal {
     class TEvStartTask: public NActors::TEventLocal<TEvStartTask, EvStartAllocationTask> {
     private:
         YDB_READONLY_DEF(std::vector<std::shared_ptr<IAllocation>>, Allocations);
-        YDB_READONLY_DEF(std::shared_ptr<TStageFeatures>, StageFeatures);
+        YDB_READONLY_DEF(std::optional<ui32>, StageFeaturesIdx);
         YDB_READONLY(ui64, ExternalProcessId, 0);
         YDB_READONLY(ui64, ExternalGroupId, 0);
 
     public:
         explicit TEvStartTask(const ui64 externalProcessId,
             const ui64 externalGroupId, const std::vector<std::shared_ptr<IAllocation>>& allocations,
-            const std::shared_ptr<TStageFeatures>& stageFeatures)
+            const std::optional<ui32>& stageFeaturesIdx)
             : Allocations(allocations)
-            , StageFeatures(stageFeatures)
+            , StageFeaturesIdx(stageFeaturesIdx)
             , ExternalProcessId(externalProcessId)
             , ExternalGroupId(externalGroupId) {
             AFL_VERIFY(Allocations.size());
-            AFL_VERIFY(StageFeatures);
         }
     };
 
@@ -103,10 +102,11 @@ struct TEvExternal {
     class TEvStartProcess: public NActors::TEventLocal<TEvStartProcess, EvStartAllocationProcess> {
     private:
         YDB_READONLY(ui64, ExternalProcessId, 0);
-
+        YDB_READONLY_DEF(std::vector<std::shared_ptr<TStageFeatures>>, Stages);
     public:
-        explicit TEvStartProcess(const ui64 externalProcessId)
-            : ExternalProcessId(externalProcessId) {
+        explicit TEvStartProcess(const ui64 externalProcessId, const std::vector<std::shared_ptr<TStageFeatures>>& stages)
+            : ExternalProcessId(externalProcessId)
+            , Stages(stages) {
         }
     };
 };

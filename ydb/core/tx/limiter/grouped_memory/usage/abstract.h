@@ -8,6 +8,8 @@
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
+class TStageFeatures;
+
 class TGroupGuard {
 private:
     const NActors::TActorId ActorId;
@@ -26,7 +28,7 @@ private:
     YDB_READONLY(ui64, ProcessId, 0);
 
 public:
-    TProcessGuard(const NActors::TActorId& actorId, const ui64 processId);
+    TProcessGuard(const NActors::TActorId& actorId, const ui64 processId, const std::vector<std::shared_ptr<TStageFeatures>>& stages);
 
     ~TProcessGuard();
 };
@@ -187,17 +189,12 @@ private:
 
 public:
     virtual ~IAllocation() = default;
-    IAllocation() = default;
     IAllocation(const ui64 mem)
         : Memory(mem) {
     }
 
     void ResetAllocation() {
         Allocated = false;
-    }
-
-    void SetMemoryForAllocation(const ui64 value) {
-        Memory = value;
     }
 
     bool IsAllocated() const {

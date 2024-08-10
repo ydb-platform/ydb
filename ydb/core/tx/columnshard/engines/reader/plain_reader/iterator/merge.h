@@ -81,6 +81,7 @@ private:
 public:
     TBaseMergeTask(const std::shared_ptr<TMergingContext>& mergingContext, const std::shared_ptr<TSpecialReadContext>& readContext)
         : TBase(readContext->GetCommonContext()->GetScanActorId())
+        , IAllocation(TValidator::CheckNotNull(mergingContext)->GetIntervalChunkMemory())
         , Guard(readContext->GetCommonContext()->GetCounters().GetMergeTasksGuard())
         , Context(readContext)
         , MergingContext(mergingContext)

@@ -16,12 +16,15 @@ private:
     const TConfig Config;
     const TString Name;
     const std::shared_ptr<TCounters> Signals;
+    const std::shared_ptr<TStageFeatures> DefaultStage;
 
 public:
-    TMemoryLimiterActor(const TConfig& config, const TString& name, const std::shared_ptr<TCounters>& signals)
+    TMemoryLimiterActor(const TConfig& config, const TString& name, const std::shared_ptr<TCounters>& signals,
+        const std::shared_ptr<TStageFeatures>& defaultStage)
         : Config(config)
         , Name(name)
-        , Signals(signals) {
+        , Signals(signals)
+        , DefaultStage(defaultStage) {
     }
 
     void Handle(NEvents::TEvExternal::TEvStartTask::TPtr& ev);

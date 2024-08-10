@@ -209,7 +209,7 @@ class TAllocateMemoryStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
     std::shared_ptr<TColumnsSet> Columns;
-    const std::shared_ptr<NGroupedMemoryManager::TStageFeatures> Stage;
+    const EStageFeaturesIndexes StageIndex;
 
 protected:
     class TFetchingStepAllocation: public NGroupedMemoryManager::IAllocation {
@@ -230,15 +230,14 @@ protected:
         return 0;
     }
     virtual TString DoDebugString() const override {
-        return TStringBuilder() << "columns=" << Columns->DebugString() << ";stage=" << Stage->DebugString() << ";";
+        return TStringBuilder() << "columns=" << Columns->DebugString() << ";stage=" << StageIndex << ";";
     }
 
 public:
-    TAllocateMemoryStep(const std::shared_ptr<TColumnsSet>& columns, const std::shared_ptr<NGroupedMemoryManager::TStageFeatures>& stage)
-        : TBase("ALLOCATE_MEMORY::" + TValidator::CheckNotNull(stage)->GetName())
+    TAllocateMemoryStep(const std::shared_ptr<TColumnsSet>& columns, const EStageFeaturesIndexes stageIndex)
+        : TBase("ALLOCATE_MEMORY::" + ::ToString(stageIndex))
         , Columns(columns)
-        , Stage(stage) {
-        AFL_VERIFY(Stage);
+        , StageIndex(stageIndex) {
         AFL_VERIFY(Columns);
         AFL_VERIFY(Columns->GetColumnsCount());
     }

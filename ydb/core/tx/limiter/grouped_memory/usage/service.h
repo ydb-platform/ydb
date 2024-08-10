@@ -51,18 +51,18 @@ public:
         return std::make_shared<TGroupGuard>(MakeServiceId(selfId.NodeId()), processId, counter.Inc());
     }
 
-    static std::shared_ptr<TProcessGuard> BuildProcessGuard(const ui64 processId) {
+    static std::shared_ptr<TProcessGuard> BuildProcessGuard(const ui64 processId, const std::vector<std::shared_ptr<TStageFeatures>>& stages) {
         auto& context = NActors::TActorContext::AsActorContext();
         const NActors::TActorId& selfId = context.SelfID;
-        return std::make_shared<TProcessGuard>(MakeServiceId(selfId.NodeId()), processId);
+        return std::make_shared<TProcessGuard>(MakeServiceId(selfId.NodeId()), processId, stages);
     }
 
     static bool SendToAllocation(const ui64 processId, const ui64 groupId, const std::vector<std::shared_ptr<IAllocation>>& tasks,
-        const std::shared_ptr<TStageFeatures>& stage) {
+        const std::optional<ui32>& stageIdx) {
         auto& context = NActors::TActorContext::AsActorContext();
         const NActors::TActorId& selfId = context.SelfID;
         if (TSelf::IsEnabled()) {
-            context.Send(MakeServiceId(selfId.NodeId()), new NEvents::TEvExternal::TEvStartTask(processId, groupId, tasks, stage));
+            context.Send(MakeServiceId(selfId.NodeId()), new NEvents::TEvExternal::TEvStartTask(processId, groupId, tasks, stageIdx));
             return true;
         } else {
             for (auto&& i : tasks) {
@@ -81,7 +81,7 @@ public:
     }
     static NActors::IActor* CreateService(const TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> signals) {
         Register(config, signals);
-        return new TMemoryLimiterActor(config, GetMemoryLimiterName(), Singleton<TSelf>()->Counters);
+        return new TMemoryLimiterActor(config, GetMemoryLimiterName(), Singleton<TSelf>()->Counters, Singleton<TSelf>()->DefaultStageFeatures);
     }
 };
 

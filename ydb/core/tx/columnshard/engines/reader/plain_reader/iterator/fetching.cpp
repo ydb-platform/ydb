@@ -203,7 +203,7 @@ TConclusion<bool> TAllocateMemoryStep::DoExecuteInplace(
     const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
     auto allocation = std::make_shared<TFetchingStepAllocation>(source, source->GetColumnRawBytes(Columns->GetColumnIds()), step);
     NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(
-        source->GetContext()->GetProcessMemoryControlId(), source->GetFirstIntervalId(), { allocation }, Stage);
+        source->GetContext()->GetProcessMemoryControlId(), source->GetFirstIntervalId(), { allocation }, (ui32)StageIndex);
     return false;
 }
 

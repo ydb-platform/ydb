@@ -38,20 +38,20 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         std::unique_ptr<NActors::IActor> actor(
             NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(config, MakeIntrusive<NMonitoring::TDynamicCounters>()));
         auto stage = NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::GetDefaultStageFeatures();
-        auto manager = std::make_shared<NOlap::NGroupedMemoryManager::TManager>(NActors::TActorId(), config, "test", counters);
+        auto manager = std::make_shared<NOlap::NGroupedMemoryManager::TManager>(NActors::TActorId(), config, "test", counters, stage);
         {
             auto alloc1 = std::make_shared<TAllocation>(50);
-            manager->RegisterProcess(0);
+            manager->RegisterProcess(0, {});
             manager->RegisterGroup(0, 1);
-            manager->RegisterAllocation(0, 1, alloc1, stage);
+            manager->RegisterAllocation(0, 1, alloc1, {});
             AFL_VERIFY(alloc1->IsAllocated());
             auto alloc1_1 = std::make_shared<TAllocation>(50);
-            manager->RegisterAllocation(0, 1, alloc1_1, stage);
+            manager->RegisterAllocation(0, 1, alloc1_1, {});
             AFL_VERIFY(alloc1_1->IsAllocated());
 
             manager->RegisterGroup(0, 2);
             auto alloc2 = std::make_shared<TAllocation>(50);
-            manager->RegisterAllocation(0, 2, alloc2, stage);
+            manager->RegisterAllocation(0, 2, alloc2, {});
             AFL_VERIFY(!alloc2->IsAllocated());
 
             manager->UnregisterAllocation(0, alloc1->GetIdentifier());
@@ -77,25 +77,25 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         }
         std::unique_ptr<NActors::IActor> actor(NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(config, MakeIntrusive<NMonitoring::TDynamicCounters>()));
         auto stage = NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::GetDefaultStageFeatures();
-        auto manager = std::make_shared<NOlap::NGroupedMemoryManager::TManager>(NActors::TActorId(), config, "test", counters);
+        auto manager = std::make_shared<NOlap::NGroupedMemoryManager::TManager>(NActors::TActorId(), config, "test", counters, stage);
         {
-            manager->RegisterProcess(0);
+            manager->RegisterProcess(0, {});
             auto alloc1 = std::make_shared<TAllocation>(10);
             manager->RegisterGroup(0, 1);
-            manager->RegisterAllocation(0, 1, alloc1, stage);
+            manager->RegisterAllocation(0, 1, alloc1, {});
             AFL_VERIFY(alloc1->IsAllocated());
             auto alloc2 = std::make_shared<TAllocation>(1000);
             manager->RegisterGroup(0, 2);
-            manager->RegisterAllocation(0, 2, alloc2, stage);
+            manager->RegisterAllocation(0, 2, alloc2, {});
             AFL_VERIFY(!alloc2->IsAllocated());
             auto alloc3 = std::make_shared<TAllocation>(1000);
             manager->RegisterGroup(0, 3);
-            manager->RegisterAllocation(0, 3, alloc3, stage);
+            manager->RegisterAllocation(0, 3, alloc3, {});
             AFL_VERIFY(alloc1->IsAllocated());
             AFL_VERIFY(!alloc2->IsAllocated());
             AFL_VERIFY(!alloc3->IsAllocated());
             auto alloc1_1 = std::make_shared<TAllocation>(1000);
-            manager->RegisterAllocation(0, 1, alloc1_1, stage);
+            manager->RegisterAllocation(0, 1, alloc1_1, {});
             AFL_VERIFY(alloc1_1->IsAllocated());
             AFL_VERIFY(!alloc2->IsAllocated());
             manager->UnregisterAllocation(0, alloc1_1->GetIdentifier());
@@ -128,28 +128,28 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         std::unique_ptr<NActors::IActor> actor(
             NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(config, MakeIntrusive<NMonitoring::TDynamicCounters>()));
         auto stage = NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::GetDefaultStageFeatures();
-        auto manager = std::make_shared<NOlap::NGroupedMemoryManager::TManager>(NActors::TActorId(), config, "test", counters);
+        auto manager = std::make_shared<NOlap::NGroupedMemoryManager::TManager>(NActors::TActorId(), config, "test", counters, stage);
         {
-            manager->RegisterProcess(0);
+            manager->RegisterProcess(0, {});
             manager->RegisterGroup(0, 1);
             auto alloc0 = std::make_shared<TAllocation>(1000);
-            manager->RegisterAllocation(0, 1, alloc0, stage);
+            manager->RegisterAllocation(0, 1, alloc0, {});
             auto alloc1 = std::make_shared<TAllocation>(1000);
-            manager->RegisterAllocation(0, 1, alloc1, stage);
+            manager->RegisterAllocation(0, 1, alloc1, {});
             AFL_VERIFY(alloc0->IsAllocated());
             AFL_VERIFY(alloc1->IsAllocated());
 
             manager->RegisterGroup(0, 2);
             auto alloc2 = std::make_shared<TAllocation>(1000);
-            manager->RegisterAllocation(0, 2, alloc0, stage);
-            manager->RegisterAllocation(0, 2, alloc2, stage);
+            manager->RegisterAllocation(0, 2, alloc0, {});
+            manager->RegisterAllocation(0, 2, alloc2, {});
             AFL_VERIFY(alloc0->IsAllocated());
             AFL_VERIFY(!alloc2->IsAllocated());
 
             auto alloc3 = std::make_shared<TAllocation>(1000);
             manager->RegisterGroup(0, 3);
-            manager->RegisterAllocation(0, 3, alloc0, stage);
-            manager->RegisterAllocation(0, 3, alloc3, stage);
+            manager->RegisterAllocation(0, 3, alloc0, {});
+            manager->RegisterAllocation(0, 3, alloc3, {});
             AFL_VERIFY(alloc0->IsAllocated());
             AFL_VERIFY(alloc1->IsAllocated());
             AFL_VERIFY(!alloc2->IsAllocated());
@@ -187,16 +187,16 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         std::unique_ptr<NActors::IActor> actor(
             NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(config, MakeIntrusive<NMonitoring::TDynamicCounters>()));
         auto stage = NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::GetDefaultStageFeatures();
-        auto manager = std::make_shared<NOlap::NGroupedMemoryManager::TManager>(NActors::TActorId(), config, "test", counters);
+        auto manager = std::make_shared<NOlap::NGroupedMemoryManager::TManager>(NActors::TActorId(), config, "test", counters, stage);
         {
-            manager->RegisterProcess(0);
+            manager->RegisterProcess(0, {});
             auto alloc1 = std::make_shared<TAllocation>(1000);
             manager->RegisterGroup(0, 1);
-            manager->RegisterAllocation(0, 1, alloc1, stage);
+            manager->RegisterAllocation(0, 1, alloc1, {});
             AFL_VERIFY(alloc1->IsAllocated());
             auto alloc2 = std::make_shared<TAllocation>(10);
             manager->RegisterGroup(0, 3);
-            manager->RegisterAllocation(0, 3, alloc2, stage);
+            manager->RegisterAllocation(0, 3, alloc2, {});
             AFL_VERIFY(!alloc2->IsAllocated());
 
             manager->UpdateAllocation(0, alloc1->GetIdentifier(), 10);

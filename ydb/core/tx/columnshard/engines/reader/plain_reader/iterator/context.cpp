@@ -83,7 +83,7 @@ public:
         : GuaranteeNotOptional(guaranteeNotOptional) {
     }
 
-    bool AddFetchingStep(TFetchingScript& script, const TColumnsSet& columns, const std::shared_ptr<NGroupedMemoryManager::TStageFeatures>& stage) {
+    bool AddFetchingStep(TFetchingScript& script, const TColumnsSet& columns, const EStageFeaturesIndexes& stage) {
         auto actualColumns = columns - FetchingReadyColumns;
         FetchingReadyColumns = FetchingReadyColumns + columns;
         if (!actualColumns.IsEmpty()) {
@@ -134,7 +134,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         if (!exclusiveSource) {
             columnsFetch = columnsFetch + *PKColumns + *SpecColumns;
         }
-        acc.AddFetchingStep(*result, columnsFetch, FilterStageMemory);
+        acc.AddFetchingStep(*result, columnsFetch, EStageFeaturesIndexes::Filter);
         acc.AddAssembleStep(*result, columnsFetch, "SPEC_SHARDING", false);
         result->AddStep(std::make_shared<TShardingFilter>());
     }
@@ -155,7 +155,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             }
         }
         if (columnsFetch.GetColumnsCount() || hasFilterSharding || needFilterDeletion) {
-            acc.AddFetchingStep(*result, columnsFetch, FetchingStageMemory);
+            acc.AddFetchingStep(*result, columnsFetch, EStageFeaturesIndexes::Fetching);
             if (!exclusiveSource) {
                 acc.AddAssembleStep(*result, *PKColumns + *SpecColumns, "LAST_PK", false);
             }
@@ -181,7 +181,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         }
 
         AFL_VERIFY(columnsFetch.GetColumnsCount());
-        acc.AddFetchingStep(*result, columnsFetch, FilterStageMemory);
+        acc.AddFetchingStep(*result, columnsFetch, EStageFeaturesIndexes::Filter);
 
         if (needFilterDeletion) {
             acc.AddAssembleStep(*result, *DeletionColumns, "SPEC_DELETION", false);
@@ -206,7 +206,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
                 break;
             }
         }
-        acc.AddFetchingStep(*result, *FFColumns, FetchingStageMemory);
+        acc.AddFetchingStep(*result, *FFColumns, EStageFeaturesIndexes::Fetching);
         acc.AddAssembleStep(*result, *FFColumns, "LAST", true);
     } else {
         result->SetBranchName("merge");
@@ -215,7 +215,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             columnsFetch = columnsFetch + *DeletionColumns;
         }
         AFL_VERIFY(columnsFetch.GetColumnsCount());
-        acc.AddFetchingStep(*result, columnsFetch, FilterStageMemory);
+        acc.AddFetchingStep(*result, columnsFetch, EStageFeaturesIndexes::Filter);
 
         acc.AddAssembleStep(*result, *SpecColumns, "SPEC", false);
         acc.AddAssembleStep(*result, *PKColumns, "PK", false);
@@ -240,20 +240,22 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
                 break;
             }
         }
-        acc.AddFetchingStep(*result, *FFColumns, FetchingStageMemory);
+        acc.AddFetchingStep(*result, *FFColumns, EStageFeaturesIndexes::Fetching);
         acc.AddAssembleStep(*result, *FFColumns, "LAST", true);
     }
     return result;
 }
 
 TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
-    : CommonContext(commonContext)
-    , ProcessMemoryGuard(NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildProcessGuard(CommonContext->GetReadMetadata()->GetTxId())) {
+    : CommonContext(commonContext) {
 
-    MergeStageMemory = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures("MERGE", 0.15 * TGlobalLimits::ScanMemoryLimit);
-    FilterStageMemory = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures("FILTER", 0.70 * TGlobalLimits::ScanMemoryLimit);
-    FetchingStageMemory =
-        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures("FETCHING", 0.15 * TGlobalLimits::ScanMemoryLimit);
+    std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> stages = { 
+        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures("FILTER", 0.70 * TGlobalLimits::ScanMemoryLimit),
+        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures("FETCHING", 0.15 * TGlobalLimits::ScanMemoryLimit),
+        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures("MERGE", 0.15 * TGlobalLimits::ScanMemoryLimit)
+    };
+    ProcessMemoryGuard =
+        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildProcessGuard(CommonContext->GetReadMetadata()->GetTxId(), stages);
     ReadMetadata = dynamic_pointer_cast<const TReadMetadata>(CommonContext->GetReadMetadata());
     Y_ABORT_UNLESS(ReadMetadata);
     Y_ABORT_UNLESS(ReadMetadata->SelectInfo);

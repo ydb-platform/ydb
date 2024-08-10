@@ -54,18 +54,18 @@ void TManager::UnregisterAllocation(const ui64 externalProcessId, const ui64 all
     RefreshSignals();
 }
 
-void TManager::RegisterAllocation(const ui64 externalProcessId, const ui64 externalGroupId,
-    const std::shared_ptr<IAllocation>& task, const std::shared_ptr<TStageFeatures>& stage) {
+void TManager::RegisterAllocation(
+    const ui64 externalProcessId, const ui64 externalGroupId, const std::shared_ptr<IAllocation>& task, const std::optional<ui32>& stageIdx) {
     auto& process = GetProcessMemoryVerified(ProcessIds.GetInternalIdVerified(externalProcessId));
-    process.RegisterAllocation(externalGroupId, task, stage);
+    process.RegisterAllocation(externalGroupId, task, stageIdx);
     RefreshSignals();
 }
 
-void TManager::RegisterProcess(const ui64 externalProcessId) {
+void TManager::RegisterProcess(const ui64 externalProcessId, const std::vector<std::shared_ptr<TStageFeatures>>& stages) {
     auto internalId = ProcessIds.GetInternalIdOptional(externalProcessId);
     if (!internalId) {
         const ui64 internalProcessId = ProcessIds.RegisterExternalIdOrGet(externalProcessId);
-        AFL_VERIFY(Processes.emplace(internalProcessId, TProcessMemory(externalProcessId, OwnerActorId, Processes.empty())).second);
+        AFL_VERIFY(Processes.emplace(internalProcessId, TProcessMemory(externalProcessId, OwnerActorId, Processes.empty(), stages, DefaultStage)).second);
     } else {
         ++Processes.find(*internalId)->second.MutableLinksCount();
     }

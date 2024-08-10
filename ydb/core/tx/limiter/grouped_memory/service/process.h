@@ -25,6 +25,8 @@ private:
     friend class TAllocationGroups;
 
     YDB_ACCESSOR(ui32, LinksCount, 1);
+    YDB_READONLY_DEF(std::vector<std::shared_ptr<TStageFeatures>>, Stages);
+    const std::shared_ptr<TStageFeatures> DefaultStage;
 
 public:
     bool IsPriorityProcess() const {
@@ -36,13 +38,17 @@ public:
         PriorityProcessFlag = true;
     }
 
-    TProcessMemory(const ui64 externalProcessId, const NActors::TActorId& ownerActorId, const bool isPriority)
+    TProcessMemory(const ui64 externalProcessId, const NActors::TActorId& ownerActorId, const bool isPriority,
+        const std::vector<std::shared_ptr<TStageFeatures>>& stages, const std::shared_ptr<TStageFeatures>& defaultStage)
         : ExternalProcessId(externalProcessId)
         , OwnerActorId(ownerActorId)
-        , PriorityProcessFlag(isPriority) {
+        , PriorityProcessFlag(isPriority)
+        , Stages(stages)
+        , DefaultStage(defaultStage)
+    {
     }
 
-    void RegisterAllocation(const ui64 externalGroupId, const std::shared_ptr<IAllocation>& task, const std::shared_ptr<TStageFeatures>& stage);
+    void RegisterAllocation(const ui64 externalGroupId, const std::shared_ptr<IAllocation>& task, const std::optional<ui32>& stageIdx);
     bool UnregisterAllocation(const ui64 allocationId);
     bool UpdateAllocation(const ui64 allocationId, const ui64 volume) {
         GetAllocationInfoVerified(allocationId).SetAllocatedVolume(volume);

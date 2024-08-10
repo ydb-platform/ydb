@@ -49,11 +49,11 @@ TProcessGuard::~TProcessGuard() {
     }
 }
 
-TProcessGuard::TProcessGuard(const NActors::TActorId& actorId, const ui64 processId)
+TProcessGuard::TProcessGuard(const NActors::TActorId& actorId, const ui64 processId, const std::vector<std::shared_ptr<TStageFeatures>>& stages)
     : ActorId(actorId)
     , ProcessId(processId) {
     if (TlsActivationContext) {
-        NActors::TActivationContext::AsActorContext().Send(ActorId, std::make_unique<NEvents::TEvExternal::TEvStartProcess>(ProcessId));
+        NActors::TActivationContext::AsActorContext().Send(ActorId, std::make_unique<NEvents::TEvExternal::TEvStartProcess>(ProcessId, stages));
     }
 }
 

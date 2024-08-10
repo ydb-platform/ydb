@@ -22,9 +22,8 @@ void TFetchingInterval::ConstructResult() {
 
         auto task = std::make_shared<TStartMergeTask>(MergingContext, Context, std::move(Sources));
         task->SetPriority(NConveyor::ITask::EPriority::High);
-        task->SetMemoryForAllocation(MergingContext->GetIntervalChunkMemory());
         NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(
-            Context->GetProcessMemoryControlId(), GetIntervalId(), { task }, Context->GetMergeStageMemory());
+            Context->GetProcessMemoryControlId(), GetIntervalId(), { task }, (ui32)EStageFeaturesIndexes::Merge);
     }
 }
 
@@ -82,9 +81,8 @@ void TFetchingInterval::OnPartSendingComplete() {
 
     auto task = std::make_shared<TContinueMergeTask>(MergingContext, Context, std::move(Merger));
     task->SetPriority(NConveyor::ITask::EPriority::High);
-    task->SetMemoryForAllocation(MergingContext->GetIntervalChunkMemory());
     NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(
-        Context->GetProcessMemoryControlId(), GetIntervalId(), { task }, Context->GetMergeStageMemory());
+        Context->GetProcessMemoryControlId(), GetIntervalId(), { task }, (ui32)EStageFeaturesIndexes::Merge);
 }
 
 }   // namespace NKikimr::NOlap::NReader::NPlain

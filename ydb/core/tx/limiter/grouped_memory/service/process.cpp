@@ -3,8 +3,17 @@
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
 void TProcessMemory::RegisterAllocation(
-    const ui64 externalGroupId, const std::shared_ptr<IAllocation>& task, const std::shared_ptr<TStageFeatures>& stage) {
+    const ui64 externalGroupId, const std::shared_ptr<IAllocation>& task, const std::optional<ui32>& stageIdx) {
     AFL_VERIFY(task);
+    std::shared_ptr<TStageFeatures> stage;
+    if (Stages.empty()) {
+        AFL_VERIFY(!stageIdx);
+        stage = DefaultStage;
+    } else {
+        AFL_VERIFY(stageIdx);
+        AFL_VERIFY(*stageIdx < Stages.size());
+        stage = Stages[*stageIdx];
+    }
     AFL_VERIFY(stage);
     const std::optional<ui64> internalGroupIdOptional = GroupIds.GetInternalIdOptional(externalGroupId);
     if (!internalGroupIdOptional) {

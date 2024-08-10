@@ -3,13 +3,13 @@
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
 void TMemoryLimiterActor::Bootstrap() {
-    Manager = std::make_shared<TManager>(SelfId(), Config, Name, Signals);
+    Manager = std::make_shared<TManager>(SelfId(), Config, Name, Signals, DefaultStage);
     Become(&TThis::StateWait);
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvStartTask::TPtr& ev) {
     for (auto&& i : ev->Get()->GetAllocations()) {
-        Manager->RegisterAllocation(ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalGroupId(), i, ev->Get()->GetStageFeatures());
+        Manager->RegisterAllocation(ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalGroupId(), i, ev->Get()->GetStageFeaturesIdx());
     }
 }
 
@@ -34,7 +34,7 @@ void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvFinishProcess::TPtr& e
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvStartProcess::TPtr& ev) {
-    Manager->RegisterProcess(ev->Get()->GetExternalProcessId());
+    Manager->RegisterProcess(ev->Get()->GetExternalProcessId(), ev->Get()->GetStages());
 }
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

@@ -339,7 +339,7 @@ The **cluster management system** or **CMS** is a system tablet responsible for 
 A **slot** in {{ ydb-short-name }} can be used in two contexts:
 
 * **Slot** is a portion of a server's resources allocated to running a single {{ ydb-short-name }} [node](#node). A common slot size is 10 CPU cores and 50 GB of RAM. Slots are used if a {{ ydb-short-name }} cluster is deployed on servers or virtual machines with sufficient resources to host multiple slots.
-* [VDisk](#slot) **slot** or **VSlot** is a fraction of PDisk that can be allocated to one of the [VDisks](#vdisk).
+* [VDisk](#slot) **slot** or **VSlot** is a fraction of [PDisk](#pdisk) that can be allocated to one of the [VDisks](#vdisk).
 
 ### State storage {#state-storage}
 

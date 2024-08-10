@@ -256,3 +256,5 @@ federated_query_config:
       uri: ""
   pinger:
     ping_period: "30s"
+memory_controller_config:
+  hard_limit_bytes: 4194304

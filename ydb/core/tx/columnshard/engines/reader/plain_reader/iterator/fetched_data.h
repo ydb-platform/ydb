@@ -27,6 +27,13 @@ public:
         : UseFilter(useFilter) {
     }
 
+    ui32 GetFilteredCount(const ui32 recordsCount, const ui32 defLimit) const {
+        if (!Filter) {
+            return std::min(defLimit, recordsCount);
+        }
+        return Filter->GetFilteredCount().value_or(recordsCount);
+    }
+
     void SyncTableColumns(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ISnapshotSchema& schema);
 
     std::shared_ptr<NArrow::TColumnFilter> GetAppliedFilter() const {
@@ -67,6 +74,31 @@ public:
             return;
         }
         return AddFilter(*filter);
+    }
+
+    void CutFilter(const ui32 recordsCount, const ui32 limit, const bool reverse) {
+        auto filter = std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter());
+        ui32 recordsCountImpl = Filter ? Filter->GetFilteredCount().value_or(recordsCount) : recordsCount;
+        if (recordsCountImpl < limit) {
+            return;
+        }
+        if (reverse) {
+            filter->Add(false, recordsCountImpl - limit);
+            filter->Add(true, limit);
+        } else {
+            filter->Add(true, limit);
+            filter->Add(false, recordsCountImpl - limit);
+        }
+        if (Filter) {
+            if (UseFilter) {
+                AddFilter(*filter);
+            } else {
+                AddFilter(Filter->CombineSequentialAnd(*filter));
+            }
+        } else {
+            AddFilter(*filter);
+        }
+        
     }
 
     void AddFilter(const NArrow::TColumnFilter& filter) {

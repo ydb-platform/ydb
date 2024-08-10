@@ -25,10 +25,11 @@ void TProcessMemory::RegisterAllocation(
         const ui64 internalGroupId = *internalGroupIdOptional;
         auto allocationInfo = RegisterAllocationImpl(internalGroupId, task, stage);
 
-        if (task->IsAllocated()) {
+        if (allocationInfo->GetAllocationStatus() != EAllocationStatus::Waiting) {
         } else if (WaitAllocations.GetMinGroupId().value_or(internalGroupId) < internalGroupId) {
             WaitAllocations.AddAllocation(internalGroupId, allocationInfo);
         } else if (allocationInfo->IsAllocatable(0) || (IsPriorityProcess() && internalGroupId == GroupIds.GetMinInternalIdVerified())) {
+            Y_UNUSED(WaitAllocations.RemoveAllocation(internalGroupId, allocationInfo));
             if (!allocationInfo->Allocate(OwnerActorId)) {
                 UnregisterAllocation(allocationInfo->GetIdentifier());
             }
@@ -53,21 +54,25 @@ bool TProcessMemory::UnregisterAllocation(const ui64 allocationId) {
     AFL_VERIFY(it != AllocationInfo.end());
     bool waitFlag = false;
     const std::optional<ui64> internalGroupId = GroupIds.GetInternalIdOptional(it->second->GetAllocationGroupId());
-    if (it->second->IsAllocated()) {
-        if (internalGroupId) {
-            AFL_VERIFY(!WaitAllocations.RemoveAllocation(*internalGroupId, it->second));
-        }
-    } else {
-        if (internalGroupId) {
-            AFL_VERIFY(WaitAllocations.RemoveAllocation(*internalGroupId, it->second));
-            waitFlag = true;
-        } else {
-            AFL_VERIFY(!it->second->Allocate(OwnerActorId));
-        }
-        
+    switch (it->second->GetAllocationStatus()) {
+        case EAllocationStatus::Allocated:
+        case EAllocationStatus::Failed:
+            if (internalGroupId) {
+                AFL_VERIFY(!WaitAllocations.RemoveAllocation(*internalGroupId, it->second));
+            }
+            break;
+        case EAllocationStatus::Waiting:
+            if (internalGroupId) {
+                AFL_VERIFY(WaitAllocations.RemoveAllocation(*internalGroupId, it->second));
+                waitFlag = true;
+            } else {
+                AFL_VERIFY(!it->second->Allocate(OwnerActorId));
+            }
+            break;
     }
     AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "allocation_unregister")("allocation_id", allocationId)("wait", waitFlag)(
-        "external_group_id", it->second->GetAllocationGroupId())("internal_group_id", internalGroupId)("allocated", it->second->IsAllocated());
+        "external_group_id", it->second->GetAllocationGroupId())("internal_group_id", internalGroupId)(
+        "allocation_status", it->second->GetAllocationStatus());
     memoryAllocated = it->second->GetAllocatedVolume();
     AllocationInfo.erase(it);
     return !!memoryAllocated;

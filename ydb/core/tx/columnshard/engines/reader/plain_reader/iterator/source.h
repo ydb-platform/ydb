@@ -161,6 +161,8 @@ public:
 
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& columnIds) const = 0;
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const = 0;
+    virtual ui64 GetColumnBlobBytes(const std::set<ui32>& columnsIds) const = 0;
+
 
     bool IsMergingStarted() const {
         return MergingStartedFlag;
@@ -333,6 +335,10 @@ public:
         }
     }
 
+    virtual ui64 GetColumnBlobBytes(const std::set<ui32>& columnsIds) const override {
+        return Portion->GetColumnBlobBytes(columnsIds, false);
+    }
+
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const override {
         return Portion->GetIndexRawBytes(indexIds, false);
     }
@@ -407,6 +413,10 @@ public:
     }
 
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& /*columnIds*/) const override {
+        return CommittedBlob.GetBlobRange().Size;
+    }
+
+    virtual ui64 GetColumnBlobBytes(const std::set<ui32>& /*columnsIds*/) const override {
         return CommittedBlob.GetBlobRange().Size;
     }
 

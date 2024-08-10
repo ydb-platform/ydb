@@ -46,7 +46,7 @@ bool TAllocationGroups::Allocate(TProcessMemory& process, const ui32 allocations
                 break;
             }
             it = Groups.erase(it);
-            if (allocationsCount == allocationsLimit) {
+            if (!forced && allocationsCount == allocationsLimit) {
                 break;
             }
         }

@@ -3,6 +3,12 @@
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
+enum class EAllocationStatus {
+    Allocated,
+    Waiting,
+    Failed
+};
+
 class TAllocationInfo {
 private:
     std::shared_ptr<IAllocation> Allocation;
@@ -11,10 +17,14 @@ private:
     YDB_READONLY(ui64, Identifier, 0);
     YDB_READONLY(ui64, ProcessId, 0);
     const std::shared_ptr<TStageFeatures> Stage;
+    bool AllocationFailed = false;
 
 public:
     ~TAllocationInfo() {
-        Stage->Free(AllocatedVolume, IsAllocated());
+        if (GetAllocationStatus() != EAllocationStatus::Failed) {
+            Stage->Free(AllocatedVolume, GetAllocationStatus() == EAllocationStatus::Allocated);
+        }
+        
         AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "destroy")("allocation_id", Identifier)("stage", Stage->GetName());
     }
 
@@ -23,7 +33,8 @@ public:
     }
 
     void SetAllocatedVolume(const ui64 value) {
-        Stage->UpdateVolume(AllocatedVolume, value, IsAllocated());
+        AFL_VERIFY(GetAllocationStatus() != EAllocationStatus::Failed);
+        Stage->UpdateVolume(AllocatedVolume, value, GetAllocationStatus() == EAllocationStatus::Allocated);
         AllocatedVolume = value;
     }
 
@@ -38,13 +49,22 @@ public:
             std::make_shared<TAllocationGuard>(ProcessId, Allocation->GetIdentifier(), ownerId, Allocation->GetMemory()), Allocation);
         if (result) {
             Stage->Allocate(AllocatedVolume);
+        } else {
+            Stage->Free(AllocatedVolume, false);
+            AllocationFailed = true;
         }
         Allocation = nullptr;
         return result;
     }
 
-    bool IsAllocated() const {
-        return !Allocation;
+    EAllocationStatus GetAllocationStatus() const {
+        if (AllocationFailed) {
+            return EAllocationStatus::Failed;
+        } else if (Allocation) {
+            return EAllocationStatus::Waiting;
+        } else {
+            return EAllocationStatus::Allocated;
+        }
     }
 
     TAllocationInfo(const ui64 processId, const ui64 allocationGroupId, const std::shared_ptr<IAllocation>& allocation,

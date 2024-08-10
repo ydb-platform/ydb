@@ -15,4 +15,6 @@ PEERDIR(
     ydb/core/tx/columnshard/counters/common
 )
 
+GENERATE_ENUM_SERIALIZATION(allocation.h)
+
 END()

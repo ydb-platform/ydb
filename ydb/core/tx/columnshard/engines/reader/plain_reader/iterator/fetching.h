@@ -13,10 +13,12 @@
 namespace NKikimr::NOlap::NReader::NPlain {
 class IDataSource;
 class TFetchingScriptCursor;
+class TSpecialReadContext;
 class IFetchingStep {
 private:
     YDB_READONLY_DEF(TString, Name);
     YDB_READONLY(TDuration, SumDuration, TDuration::Zero());
+    YDB_READONLY(ui64, SumSize, 0);
 
 protected:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const = 0;
@@ -27,6 +29,9 @@ protected:
 public:
     void AddDuration(const TDuration d) {
         SumDuration += d;
+    }
+    void AddDataSize(const ui64 size) {
+        SumSize += size;
     }
     virtual ui64 DoPredictRawBytes(const std::shared_ptr<IDataSource>& /*source*/) const {
         return 0;
@@ -41,13 +46,18 @@ public:
         return DoExecuteInplace(source, step);
     }
 
+    virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& /*source*/) const {
+        return 0;
+    }
+
     IFetchingStep(const TString& name)
         : Name(name) {
     }
 
     TString DebugString() const {
         TStringBuilder sb;
-        sb << "name=" << Name << ";duration=" << SumDuration << ";details={" << DoDebugString() << "};";
+        sb << "name=" << Name << ";duration=" << SumDuration << ";"
+           << "size=" << 1e-9 * SumSize << ";details={" << DoDebugString() << "};";
         return sb;
     }
 };
@@ -56,29 +66,29 @@ class TFetchingScript {
 private:
     YDB_ACCESSOR(TString, BranchName, "UNDEFINED");
     std::vector<std::shared_ptr<IFetchingStep>> Steps;
+    std::optional<TMonotonic> StartInstant;
+    std::optional<TMonotonic> FinishInstant;
+    const ui32 Limit;
 
 public:
-    TFetchingScript() = default;
+    TFetchingScript(const TSpecialReadContext& context);
+
+    void AddStepDataSize(const ui32 index, const ui64 size) {
+        GetStep(index)->AddDataSize(size);
+    }
 
     void AddStepDuration(const ui32 index, const TDuration d) {
+        FinishInstant = TMonotonic::Now();
         GetStep(index)->AddDuration(d);
     }
 
-    TString DebugString() const {
-        TStringBuilder sb;
-        TStringBuilder sbBranch;
-        for (auto&& i : Steps) {
-            if (i->GetSumDuration() > TDuration::MilliSeconds(10)) {
-                sbBranch << "{" << i->DebugString() << "};";
-            }
+    void OnExecute() {
+        if (!StartInstant) {
+            StartInstant = TMonotonic::Now();
         }
-        if (!sbBranch) {
-            return "";
-        }
-        sb << "{branch:" << BranchName << ";";
-        sb << "steps_10Ms:[" << sbBranch << "]}";
-        return sb;
     }
+
+    TString DebugString() const;
 
     const std::shared_ptr<IFetchingStep>& GetStep(const ui32 index) const {
         AFL_VERIFY(index < Steps.size());
@@ -118,12 +128,16 @@ public:
 class TFetchingScriptCursor {
 private:
     std::optional<TMonotonic> CurrentStartInstant;
+    std::optional<ui64> CurrentStartDataSize;
     ui32 CurrentStepIdx = 0;
     std::shared_ptr<TFetchingScript> Script;
     void FlushDuration() {
         AFL_VERIFY(CurrentStartInstant);
+        AFL_VERIFY(CurrentStartDataSize);
         Script->AddStepDuration(CurrentStepIdx, TMonotonic::Now() - *CurrentStartInstant);
+        Script->AddStepDataSize(CurrentStepIdx, *CurrentStartDataSize);
         CurrentStartInstant.reset();
+        CurrentStartDataSize.reset();
     }
 
 public:
@@ -226,6 +240,7 @@ protected:
     };
 
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const override;
     virtual ui64 DoPredictRawBytes(const std::shared_ptr<IDataSource>& /*source*/) const override {
         return 0;
     }
@@ -256,6 +271,7 @@ protected:
     }
 
 public:
+    virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const override;
     TColumnBlobsFetchingStep(const std::shared_ptr<TColumnsSet>& columns)
         : TBase("FETCHING_COLUMNS")
         , Columns(columns) {
@@ -294,6 +310,7 @@ private:
     }
 
 public:
+    virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const override;
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     TAssemblerStep(const std::shared_ptr<TColumnsSet>& columns, const TString& specName = Default<TString>())
         : TBase("ASSEMBLER" + (specName ? "::" + specName : ""))
@@ -315,6 +332,8 @@ protected:
     virtual bool DoInitSourceSeqColumnIds(const std::shared_ptr<IDataSource>& source) const override;
 
 public:
+    virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const override;
+
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     TOptionalAssemblerStep(const std::shared_ptr<TColumnsSet>& columns, const TString& specName = Default<TString>())
         : TBase("OPTIONAL_ASSEMBLER" + (specName ? "::" + specName : ""))
@@ -337,6 +356,27 @@ public:
     TFilterProgramStep(const std::shared_ptr<NSsa::TProgramStep>& step)
         : TBase("PROGRAM")
         , Step(step) {
+    }
+};
+
+class TFilterCutLimit: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+    const ui32 Limit;
+    const bool Reverse;
+
+protected:
+    virtual ui64 DoPredictRawBytes(const std::shared_ptr<IDataSource>& /*source*/) const override {
+        return 0;
+    }
+
+public:
+    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    TFilterCutLimit(const ui32 limit, const bool reverse)
+        : TBase("LIMIT")
+        , Limit(limit)
+        , Reverse(reverse)
+    {
     }
 };
 

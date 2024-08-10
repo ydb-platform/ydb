@@ -65,7 +65,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::GetColumnsFetchingPlan(con
         return result;
     }
     {
-        std::shared_ptr<TFetchingScript> result = std::make_shared<TFetchingScript>();
+        std::shared_ptr<TFetchingScript> result = std::make_shared<TFetchingScript>(*this);
         result->SetBranchName("FAKE");
         result->AddStep(std::make_shared<TBuildFakeSpec>(source->GetRecordsCount()));
         return result;
@@ -120,7 +120,7 @@ public:
 
 std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(const bool needSnapshots, const bool exclusiveSource,
     const bool partialUsageByPredicateExt, const bool useIndexes, const bool needFilterSharding, const bool needFilterDeletion) const {
-    std::shared_ptr<TFetchingScript> result = std::make_shared<TFetchingScript>();
+    std::shared_ptr<TFetchingScript> result = std::make_shared<TFetchingScript>(*this);
     const bool partialUsageByPredicate = partialUsageByPredicateExt && PredicateColumns->GetColumnsCount();
     if (!!IndexChecker && useIndexes && exclusiveSource) {
         result->AddStep(std::make_shared<TIndexBlobsFetchingStep>(std::make_shared<TIndexesSet>(IndexChecker->GetIndexIds())));
@@ -205,6 +205,9 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             if (!i->IsFilterOnly()) {
                 break;
             }
+        }
+        if (GetReadMetadata()->Limit) {
+            result->AddStep(std::make_shared<TFilterCutLimit>(GetReadMetadata()->Limit, GetReadMetadata()->IsDescSorted()));
         }
         acc.AddFetchingStep(*result, *FFColumns, EStageFeaturesIndexes::Fetching);
         acc.AddAssembleStep(*result, *FFColumns, "LAST", true);

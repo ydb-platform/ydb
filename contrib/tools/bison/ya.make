@@ -11,9 +11,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(3.5.4)
+VERSION(3.6.4)
 
-ORIGINAL_SOURCE(mirror://gnu/bison/bison-3.5.4.tar.gz)
+ORIGINAL_SOURCE(mirror://gnu/bison/bison-3.6.4.tar.gz)
 
 PEERDIR(
     contrib/tools/bison/lib
@@ -30,7 +30,7 @@ NO_RUNTIME()
 
 CFLAGS(
     -DEXEEXT=\"\"
-    -DINSTALLDIR=\"/var/empty/bison-3.5.4/bin\"
+    -DINSTALLDIR=\"/var/empty/bison-3.6.4/bin\"
 )
 
 SRCS(

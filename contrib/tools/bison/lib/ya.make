@@ -83,6 +83,7 @@ SRCS(
     printf-parse.c
     progname.c
     quotearg.c
+    readline.c
     setlocale_null.c
     sig-handler.c
     spawn-pipe.c

@@ -11,7 +11,7 @@
 
 #include <ydb/library/binary_json/write.h>
 #include <ydb/library/binary_json/read.h>
-#include <ydb/library/uuid/uuid.h>
+#include <ydb/public/sdk/cpp_v2/src/library/uuid/uuid.h>
 #include <ydb/library/dynumber/dynumber.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>

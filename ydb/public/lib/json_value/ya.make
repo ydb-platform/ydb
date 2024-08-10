@@ -10,7 +10,7 @@ PEERDIR(
     library/cpp/string_utils/base64
     ydb/public/sdk/cpp/client/ydb_result
     ydb/public/sdk/cpp/client/ydb_value
-    ydb/library/uuid
+    ydb/public/sdk/cpp_v2/src/library/uuid
 )
 
 END()

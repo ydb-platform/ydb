@@ -91,7 +91,7 @@ PEERDIR(
     ydb/library/yql/public/result_format
     ydb/library/binary_json
     ydb/library/dynumber
-    ydb/library/uuid
+    ydb/public/sdk/cpp_v2/src/library/uuid
 
     contrib/libs/icu
     contrib/libs/libc_compat

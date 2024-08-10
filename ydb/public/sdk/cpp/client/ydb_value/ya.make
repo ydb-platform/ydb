@@ -13,7 +13,7 @@ PEERDIR(
     ydb/public/sdk/cpp/client/impl/ydb_internal/value_helpers
     ydb/public/sdk/cpp/client/ydb_types/fatal_error_handlers
     ydb/library/yql/public/decimal
-    ydb/library/uuid
+    ydb/public/sdk/cpp_v2/src/library/uuid
 )
 
 END()

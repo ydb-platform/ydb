@@ -7,7 +7,7 @@
 #include <library/cpp/threading/future/core/future.h>
 #include <library/cpp/json/json_reader.h>
 
-#include <ydb/public/lib/jwt/jwt.h>
+#include <ydb-cpp-sdk/library/jwt/jwt.h>
 #include <util/datetime/base.h>
 
 #include <util/system/spinlock.h>

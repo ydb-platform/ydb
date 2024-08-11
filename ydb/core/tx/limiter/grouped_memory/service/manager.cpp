@@ -47,8 +47,11 @@ void TManager::TryAllocateWaiting() {
 }
 
 void TManager::UnregisterAllocation(const ui64 externalProcessId, const ui64 allocationId) {
-    auto& process = GetProcessMemoryVerified(ProcessIds.GetInternalIdVerified(externalProcessId));
-    if (process.UnregisterAllocation(allocationId)) {
+    auto* process = GetProcessMemoryOptional(ProcessIds.GetInternalIdVerified(externalProcessId));
+    if (!process) {
+        return;
+    }
+    if (process->UnregisterAllocation(allocationId)) {
         TryAllocateWaiting();
     }
     RefreshSignals();
@@ -56,8 +59,13 @@ void TManager::UnregisterAllocation(const ui64 externalProcessId, const ui64 all
 
 void TManager::RegisterAllocation(
     const ui64 externalProcessId, const ui64 externalGroupId, const std::shared_ptr<IAllocation>& task, const std::optional<ui32>& stageIdx) {
-    auto& process = GetProcessMemoryVerified(ProcessIds.GetInternalIdVerified(externalProcessId));
-    process.RegisterAllocation(externalGroupId, task, stageIdx);
+    auto* process = GetProcessMemoryOptional(ProcessIds.GetInternalIdVerified(externalProcessId));
+    if (!process) {
+        AFL_VERIFY(!task->OnAllocated(std::make_shared<TAllocationGuard>(externalProcessId, task->GetIdentifier(), OwnerActorId, task->GetMemory()), task))(
+                                                                                  "ext_group", externalGroupId)("stage_idx", stageIdx);
+    } else {
+        process->RegisterAllocation(externalGroupId, task, stageIdx);
+    }
     RefreshSignals();
 }
 

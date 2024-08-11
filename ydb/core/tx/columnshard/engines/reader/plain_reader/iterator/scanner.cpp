@@ -1,20 +1,17 @@
-#include "scanner.h"
 #include "plain_read_data.h"
+#include "scanner.h"
+
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
+
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
-void TScanHead::OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& allocationGuard, const std::optional<NArrow::TShardedRecordBatch>& newBatch,
-    const std::shared_ptr<arrow::RecordBatch>& lastPK, std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger, const ui32 intervalIdx,
-    TPlainReadData& reader) {
-    if (Context->GetReadMetadata()->Limit && (!newBatch || newBatch->GetRecordsCount() == 0) && InFlightLimit < 1000) {
-        if (++ZeroCount == std::max<ui64>(16, InFlightLimit)) {
-            InFlightLimit = std::min<ui32>(MaxInFlight, InFlightLimit * 2);
-            ZeroCount = 0;
-        }
-    } else {
-        ZeroCount = 0;
+void TScanHead::OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& allocationGuard,
+    const std::optional<NArrow::TShardedRecordBatch>& newBatch, const std::shared_ptr<arrow::RecordBatch>& lastPK,
+    std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger, const ui32 intervalIdx, TPlainReadData& reader) {
+    if (Context->GetReadMetadata()->Limit && (!newBatch || newBatch->GetRecordsCount() == 0) && InFlightLimit < MaxInFlight) {
+        InFlightLimit = std::min<ui32>(MaxInFlight, InFlightLimit * 4);
     }
     auto itInterval = FetchingIntervals.find(intervalIdx);
     AFL_VERIFY(itInterval != FetchingIntervals.end());
@@ -75,7 +72,8 @@ TConclusionStatus TScanHead::Start() {
                 i.second->IncIntervalsCount();
             }
             if (!detectorResult) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "scanner_initializer_aborted")("reason", detectorResult.GetErrorMessage());
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "scanner_initializer_aborted")(
+                    "reason", detectorResult.GetErrorMessage());
                 Abort();
                 return detectorResult;
             }
@@ -91,9 +89,11 @@ TConclusionStatus TScanHead::Start() {
             for (auto&& i : context.GetCurrentSources()) {
                 i.second->IncIntervalsCount();
             }
-            auto detectorResult = DetectSourcesFeatureInContextIntervalScan(context.GetCurrentSources(), guaranteeExclusivePK || context.GetIsExclusiveInterval());
+            auto detectorResult =
+                DetectSourcesFeatureInContextIntervalScan(context.GetCurrentSources(), guaranteeExclusivePK || context.GetIsExclusiveInterval());
             if (!detectorResult) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "scanner_initializer_aborted")("reason", detectorResult.GetErrorMessage());
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "scanner_initializer_aborted")(
+                    "reason", detectorResult.GetErrorMessage());
                 Abort();
                 return detectorResult;
             }
@@ -103,8 +103,7 @@ TConclusionStatus TScanHead::Start() {
 }
 
 TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const std::shared_ptr<TSpecialReadContext>& context)
-    : Context(context)
-{
+    : Context(context) {
     if (HasAppData()) {
         if (AppDataVerified().ColumnShardConfig.HasMaxInFlightIntervalsOnRequest()) {
             MaxInFlight = AppDataVerified().ColumnShardConfig.GetMaxInFlightIntervalsOnRequest();
@@ -130,18 +129,17 @@ private:
     private:
         YDB_READONLY_DEF(std::shared_ptr<IDataSource>, Source);
         YDB_READONLY_DEF(std::shared_ptr<TFetchingScript>, FetchingInfo);
+
     public:
         TSourceInfo(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<TFetchingScript>& fetchingInfo)
             : Source(source)
-            , FetchingInfo(fetchingInfo)
-        {
-
+            , FetchingInfo(fetchingInfo) {
         }
 
         NJson::TJsonValue DebugJson() const {
             NJson::TJsonValue result = NJson::JSON_MAP;
             result.InsertValue("source", Source->DebugJsonForMemory());
-//            result.InsertValue("fetching", Fetching->DebugJsonForMemory());
+            //            result.InsertValue("fetching", Fetching->DebugJsonForMemory());
             return result;
         }
     };
@@ -149,6 +147,7 @@ private:
     std::map<ui64, THashMap<ui32, TSourceInfo>> Sources;
     YDB_READONLY(ui64, MemorySum, 0);
     YDB_READONLY_DEF(std::set<ui64>, PathIds);
+
 public:
     TString DebugString() const {
         NJson::TJsonValue resultJson;
@@ -209,7 +208,8 @@ public:
     }
 };
 
-TConclusionStatus TScanHead::DetectSourcesFeatureInContextIntervalScan(const THashMap<ui32, std::shared_ptr<IDataSource>>& intervalSources, const bool isExclusiveInterval) const {
+TConclusionStatus TScanHead::DetectSourcesFeatureInContextIntervalScan(
+    const THashMap<ui32, std::shared_ptr<IDataSource>>& intervalSources, const bool isExclusiveInterval) const {
     TSourcesStorageForMemoryOptimization optimizer;
     for (auto&& i : intervalSources) {
         if (!isExclusiveInterval) {
@@ -223,10 +223,11 @@ TConclusionStatus TScanHead::DetectSourcesFeatureInContextIntervalScan(const THa
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "next_internal_broken")("reason", "a lot of memory need")("start", startMemory)(
             "reduce_limit", Context->ReduceMemoryIntervalLimit)("reject_limit", Context->RejectMemoryIntervalLimit)(
             "need", optimizer.GetMemorySum())("path_ids", JoinSeq(",", optimizer.GetPathIds()))(
-            "details", IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_DEBUG, NKikimrServices::TX_COLUMNSHARD_SCAN) ? optimizer.DebugString() : "NEED_DEBUG_LEVEL");
+            "details", IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_DEBUG, NKikimrServices::TX_COLUMNSHARD_SCAN) ? optimizer.DebugString()
+                                                                                                               : "NEED_DEBUG_LEVEL");
         Context->GetCommonContext()->GetCounters().OnOptimizedIntervalMemoryFailed(optimizer.GetMemorySum());
-        return TConclusionStatus::Fail("We need a lot of memory in time for interval scanner: " +
-            ::ToString(optimizer.GetMemorySum()) + " path_ids: " + JoinSeq(",", optimizer.GetPathIds()) + ". We need wait compaction processing. Sorry.");
+        return TConclusionStatus::Fail("We need a lot of memory in time for interval scanner: " + ::ToString(optimizer.GetMemorySum()) +
+                                       " path_ids: " + JoinSeq(",", optimizer.GetPathIds()) + ". We need wait compaction processing. Sorry.");
     } else if (optimizer.GetMemorySum() < startMemory) {
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "memory_reduce_active")("reason", "need reduce memory")("start", startMemory)(
             "reduce_limit", Context->ReduceMemoryIntervalLimit)("reject_limit", Context->RejectMemoryIntervalLimit)(
@@ -319,4 +320,4 @@ void TScanHead::Abort() {
     Y_ABORT_UNLESS(IsFinished());
 }
 
-}
+}   // namespace NKikimr::NOlap::NReader::NPlain

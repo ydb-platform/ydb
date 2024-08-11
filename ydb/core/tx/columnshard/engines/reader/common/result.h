@@ -13,6 +13,7 @@ namespace NKikimr::NOlap::NReader {
 class TPartialReadResult: public TNonCopyable {
 private:
     YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>, ResourcesGuard);
+    YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TGroupGuard>, GroupGuard);
     NArrow::TShardedRecordBatch ResultBatch;
 
     // This 1-row batch contains the last key that was read while producing the ResultBatch.
@@ -42,7 +43,8 @@ public:
         return ResultBatch.GetRecordsCount();
     }
 
-    static std::vector<std::shared_ptr<TPartialReadResult>> SplitResults(std::vector<std::shared_ptr<TPartialReadResult>>&& resultsExt, const ui32 maxRecordsInResult);
+    static std::vector<std::shared_ptr<TPartialReadResult>> SplitResults(
+        std::vector<std::shared_ptr<TPartialReadResult>>&& resultsExt, const ui32 maxRecordsInResult);
 
     const NArrow::TShardedRecordBatch& GetShardedBatch() const {
         return ResultBatch;
@@ -53,9 +55,10 @@ public:
     }
 
     explicit TPartialReadResult(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& resourcesGuard,
-        const NArrow::TShardedRecordBatch& batch,
+        std::shared_ptr<NGroupedMemoryManager::TGroupGuard>&& gGuard, const NArrow::TShardedRecordBatch& batch,
         std::shared_ptr<arrow::RecordBatch> lastKey, const std::optional<ui32> notFinishedIntervalIdx)
         : ResourcesGuard(std::move(resourcesGuard))
+        , GroupGuard(std::move(gGuard))
         , ResultBatch(batch)
         , LastReadKey(lastKey)
         , NotFinishedIntervalIdx(notFinishedIntervalIdx) {
@@ -64,9 +67,9 @@ public:
         Y_ABORT_UNLESS(LastReadKey->num_rows() == 1);
     }
 
-    explicit TPartialReadResult(const NArrow::TShardedRecordBatch& batch,
-        std::shared_ptr<arrow::RecordBatch> lastKey, const std::optional<ui32> notFinishedIntervalIdx)
-        : TPartialReadResult(nullptr, batch, lastKey, notFinishedIntervalIdx) {
+    explicit TPartialReadResult(
+        const NArrow::TShardedRecordBatch& batch, std::shared_ptr<arrow::RecordBatch> lastKey, const std::optional<ui32> notFinishedIntervalIdx)
+        : TPartialReadResult(nullptr, nullptr, batch, lastKey, notFinishedIntervalIdx) {
     }
 };
 

@@ -17,6 +17,10 @@ TEST_SRCS(
     test_queue_counters.py
 )
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:16)
+ENDIF()
+
 IF (SANITIZER_TYPE == "thread")
     TIMEOUT(2400)
     SIZE(LARGE)
@@ -25,9 +29,6 @@ IF (SANITIZER_TYPE == "thread")
         ram:32
     )
 ELSE()
-    REQUIREMENTS(
-        ram:16
-    )
     TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()

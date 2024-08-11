@@ -4,15 +4,25 @@
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
+TProcessMemory* TManager::GetProcessMemoryByExternalIdOptional(const ui64 externalProcessId) {
+    auto internalId = ProcessIds.GetInternalIdOptional(externalProcessId);
+    if (!internalId) {
+        return nullptr;
+    }
+    return GetProcessMemoryOptional(*internalId);
+}
+
 void TManager::RegisterGroup(const ui64 externalProcessId, const ui64 externalGroupId) {
-    TProcessMemory& process = GetProcessMemoryVerified(ProcessIds.GetInternalIdVerified(externalProcessId));
-    process.RegisterGroup(externalGroupId);
+    if (auto* process = GetProcessMemoryByExternalIdOptional(externalProcessId)) {
+        process->RegisterGroup(externalGroupId);
+    }
     RefreshSignals();
 }
 
 void TManager::UnregisterGroup(const ui64 externalProcessId, const ui64 externalGroupId) {
-    TProcessMemory& process = GetProcessMemoryVerified(ProcessIds.GetInternalIdVerified(externalProcessId));
-    process.UnregisterGroup(externalGroupId);
+    if (auto* process = GetProcessMemoryByExternalIdOptional(externalProcessId)) {
+        process->UnregisterGroup(externalGroupId);
+    }
     RefreshSignals();
 }
 
@@ -47,24 +57,21 @@ void TManager::TryAllocateWaiting() {
 }
 
 void TManager::UnregisterAllocation(const ui64 externalProcessId, const ui64 allocationId) {
-    auto* process = GetProcessMemoryOptional(ProcessIds.GetInternalIdVerified(externalProcessId));
-    if (!process) {
-        return;
-    }
-    if (process->UnregisterAllocation(allocationId)) {
-        TryAllocateWaiting();
+    if (auto* process = GetProcessMemoryByExternalIdOptional(externalProcessId)) {
+        if (process->UnregisterAllocation(allocationId)) {
+            TryAllocateWaiting();
+        }
     }
     RefreshSignals();
 }
 
 void TManager::RegisterAllocation(
     const ui64 externalProcessId, const ui64 externalGroupId, const std::shared_ptr<IAllocation>& task, const std::optional<ui32>& stageIdx) {
-    auto* process = GetProcessMemoryOptional(ProcessIds.GetInternalIdVerified(externalProcessId));
-    if (!process) {
+    if (auto* process = GetProcessMemoryByExternalIdOptional(externalProcessId)) {
+        process->RegisterAllocation(externalGroupId, task, stageIdx);
+    } else {
         AFL_VERIFY(!task->OnAllocated(std::make_shared<TAllocationGuard>(externalProcessId, task->GetIdentifier(), OwnerActorId, task->GetMemory()), task))(
                                                                                   "ext_group", externalGroupId)("stage_idx", stageIdx);
-    } else {
-        process->RegisterAllocation(externalGroupId, task, stageIdx);
     }
     RefreshSignals();
 }

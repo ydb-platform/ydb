@@ -77,6 +77,9 @@ public:
     void OnPartSendingComplete();
     void SetMerger(std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger);
     bool HasMerger() const;
+    std::shared_ptr<NGroupedMemoryManager::TGroupGuard> GetGroupGuard() const {
+        return IntervalGroupGuard;
+    }
 
     TFetchingInterval(const NArrow::NMerger::TSortableBatchPosition& start, const NArrow::NMerger::TSortableBatchPosition& finish,
         const ui32 intervalIdx, const THashMap<ui32, std::shared_ptr<IDataSource>>& sources, const std::shared_ptr<TSpecialReadContext>& context,

@@ -20,8 +20,14 @@ void TScanHead::OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocat
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "interval_result_received")("interval_idx", intervalIdx)(
         "intervalId", itInterval->second->GetIntervalId());
     if (newBatch && newBatch->GetRecordsCount()) {
-        const std::optional<ui32> callbackIdxSubscriver = itInterval->second->HasMerger() ? std::optional<ui32>(intervalIdx) : std::nullopt;
-        AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, std::make_shared<TPartialReadResult>(std::move(allocationGuard), *newBatch, lastPK, callbackIdxSubscriver)).second);
+        std::optional<ui32> callbackIdxSubscriver;
+        std::shared_ptr<NGroupedMemoryManager::TGroupGuard> gGuard;
+        if (itInterval->second->HasMerger()) {
+            callbackIdxSubscriver = intervalIdx;
+        } else {
+            gGuard = itInterval->second->GetGroupGuard();
+        }
+        AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, std::make_shared<TPartialReadResult>(std::move(allocationGuard), std::move(gGuard), *newBatch, lastPK, callbackIdxSubscriver)).second);
     } else {
         AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, nullptr).second);
     }

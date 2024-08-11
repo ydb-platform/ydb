@@ -34,6 +34,8 @@ private:
         return it->second;
     }
 
+    TProcessMemory* GetProcessMemoryByExternalIdOptional(const ui64 externalProcessId);
+
     TProcessMemory* GetProcessMemoryOptional(const ui64 internalProcessId) {
         auto it = Processes.find(internalProcessId);
         if (it != Processes.end()) {

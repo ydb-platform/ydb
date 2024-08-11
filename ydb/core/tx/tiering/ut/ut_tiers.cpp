@@ -711,11 +711,18 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         lHelper.StartSchemaRequest("CREATE OBJECT secretSecretKey (TYPE SECRET) WITH (value = fakeSecret)", true, true, "user@builtin");
         Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
 
+        // TODO: fix, uncomment
+        // lHelper.StartSchemaRequest("ALTER OBJECT tier1 (TYPE TIER) WITH (tierConfig = `" + GetTierConfigProtoStr("user@builtin") + "`)",
+        //     /*expectSuccess=*/false, true, "user@builtin");
         lHelper.StartSchemaRequest(
             "CREATE OBJECT tier1 (TYPE TIER) WITH (tierConfig = `" + GetTierConfigProtoStr("user@builtin") + "`)", true, true, "user@builtin");
         lHelper.StartSchemaRequest(
             "CREATE OBJECT tier2 (TYPE TIER) WITH (tierConfig = `" + GetTierConfigProtoStr("user@builtin") + "`)", true, true, "user@builtin");
 
+        // TODO: fix, uncomment
+        // lHelper.StartSchemaRequest(
+        //     "CREATE OBJECT tiering1 (TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" + ConfigTiering1Str + "` )",
+        //     /*expectSuccess=*/false, true, "user@builtin");
         lHelper.StartSchemaRequest(
             "CREATE OBJECT tiering1 (TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" + ConfigTiering1Str + "` )", true,
             true, "user@builtin");

@@ -15,34 +15,41 @@ struct TSetup {
         NSQLTranslation::TTranslationSettings settings;
         settings.Arena = &Arena;
         Formatter = NSQLFormat::MakeSqlFormatter(settings);
+        settings.Antlr4Parser = true;
+        Antlr4Formatter = NSQLFormat::MakeSqlFormatter(settings);
     }
-
-    void Run(const TCases& cases, NSQLFormat::EFormatMode mode = NSQLFormat::EFormatMode::Pretty) {
+    
+    void RunBase(const TCases& cases, NSQLFormat::EFormatMode mode, const NSQLFormat::ISqlFormatter::TPtr& formatter) {
         for (const auto& c : cases) {
             NYql::TIssues issues;
             TString formatted;
-            auto res = Formatter->Format(c.first, formatted, issues, mode);
+            auto res = formatter->Format(c.first, formatted, issues, mode);
             UNIT_ASSERT_C(res, issues.ToString());
             auto expected = c.second;
             SubstGlobal(expected, "\t", TString(NSQLFormat::OneIndent, ' '));
             UNIT_ASSERT_NO_DIFF(formatted, expected);
 
             TString formatted2;
-            auto res2 = Formatter->Format(formatted, formatted2, issues);
+            auto res2 = formatter->Format(formatted, formatted2, issues);
             UNIT_ASSERT_C(res2, issues.ToString());
             UNIT_ASSERT_NO_DIFF(formatted, formatted2);
 
             if (mode == NSQLFormat::EFormatMode::Pretty) {
                 auto mutatedQuery = NSQLFormat::MutateQuery(c.first);
-                auto res3 = Formatter->Format(mutatedQuery, formatted, issues);
+                auto res3 = formatter->Format(mutatedQuery, formatted, issues);
                 UNIT_ASSERT_C(res3, issues.ToString());
             }
         }
     }
 
+    void Run(const TCases& cases, NSQLFormat::EFormatMode mode = NSQLFormat::EFormatMode::Pretty) {
+        RunBase(cases, mode, Formatter);
+        RunBase(cases, mode, Antlr4Formatter);
+    }
+
     google::protobuf::Arena Arena;
     NSQLFormat::ISqlFormatter::TPtr Formatter;
-    NSQLFormat::ISqlFormatter::TPtr FormatterAntlr4;
+    NSQLFormat::ISqlFormatter::TPtr Antlr4Formatter;
 };
 
 }

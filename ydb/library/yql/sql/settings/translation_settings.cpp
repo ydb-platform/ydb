@@ -53,6 +53,7 @@ namespace NSQLTranslation {
         , EnableGenericUdfs(true)
         , SyntaxVersion(1)
         , AnsiLexer(false)
+        , Antlr4Parser(false)
         , PgParser(false)
         , InferSyntaxVersion(false)
         , V0Behavior(EV0Behavior::Disable)

@@ -17,7 +17,7 @@ using namespace NSQLTranslation;
 namespace {
 
 TParsedTokenList Tokenize(const TString& query) {
-    auto lexer = NSQLTranslationV1::MakeLexer(true);
+    auto lexer = NSQLTranslationV1::MakeLexer(true, true);
     TParsedTokenList tokens;
     NYql::TIssues issues;
     UNIT_ASSERT_C(Tokenize(*lexer, query, "Query", tokens, issues, SQL_MAX_PARSER_ERRORS),

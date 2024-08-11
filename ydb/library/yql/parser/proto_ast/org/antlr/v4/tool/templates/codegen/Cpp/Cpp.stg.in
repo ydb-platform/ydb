@@ -1097,7 +1097,6 @@ MatchToken(m) ::= <<
     parent->MutableToken<elemId>()->SetColumn(token->getCharPositionInLine());
     parent->MutableToken<elemId>()->SetElement(<elemId>);
     parent->MutableToken<elemId>()->SetValue(token->getText().c_str());
-    parent->MutableToken<elemId>()->SetIsAntlr4(true);
   \} else {
     parent = nullptr;
   }
@@ -1126,7 +1125,6 @@ else {
     parent->MutableToken<elemId>()->SetColumn(token->getCharPositionInLine());
     parent->MutableToken<elemId>()->SetElement(<elemId>);
     parent->MutableToken<elemId>()->SetValue(token->getText().c_str());
-    parent->MutableToken<elemId>()->SetIsAntlr4(true);
   }
   _errHandler->reportMatch(this);
   consume();

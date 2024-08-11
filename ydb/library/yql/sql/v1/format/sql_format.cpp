@@ -3042,7 +3042,8 @@ bool SqlFormatSimple(const TString& query, TString& formattedQuery, TString& err
 
 THashSet<TString> GetKeywords() {
     TString grammar;
-    // Y_ENSURE(NResource::FindExact("SQLv1Antlr4.g.in", &grammar));
+    // ANTLR4-MIGRATION: just change SQLv1 to SQLv1Antlr4
+    Y_ENSURE(NResource::FindExact("SQLv1.g.in", &grammar));
     THashSet<TString> res;
     TVector<TString> lines;
     Split(grammar, "\n", lines);

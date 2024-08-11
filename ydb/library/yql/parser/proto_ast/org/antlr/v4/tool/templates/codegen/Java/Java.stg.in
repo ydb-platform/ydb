@@ -57,7 +57,6 @@ message TToken {
     uint32 Column = 3;
     uint32 Element = 4;
     string Value = 5;
-    bool IsAntlr4 = 6;
 }
 
 <parser>

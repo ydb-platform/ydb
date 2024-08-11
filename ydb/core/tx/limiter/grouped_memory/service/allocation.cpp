@@ -3,10 +3,10 @@
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
-TAllocationInfo::TAllocationInfo(const ui64 processId, const ui64 allocationGroupId, const std::shared_ptr<IAllocation>& allocation,
+TAllocationInfo::TAllocationInfo(const ui64 processId, const ui64 allocationInternalGroupId, const std::shared_ptr<IAllocation>& allocation,
     const std::shared_ptr<TStageFeatures>& stage)
     : Allocation(allocation)
-    , AllocationGroupId(allocationGroupId)
+    , AllocationInternalGroupId(allocationInternalGroupId)
     , Identifier(TValidator::CheckNotNull(Allocation)->GetIdentifier())
     , ProcessId(processId)
     , Stage(stage) {

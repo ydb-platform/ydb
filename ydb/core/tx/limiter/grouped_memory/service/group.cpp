@@ -39,6 +39,8 @@ bool TAllocationGroups::Allocate(TProcessMemory& process, const ui32 allocations
                     toRemove.emplace_back(i->GetIdentifier());
                 } else if (!forced) {
                     AFL_VERIFY(++allocationsCount <= allocationsLimit)("count", allocationsCount)("limit", allocationsLimit);
+                }
+                if (!forced) {
                     AFL_VERIFY(it->second.Remove(i));
                 }
             }

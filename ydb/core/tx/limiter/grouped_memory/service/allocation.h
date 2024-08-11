@@ -12,7 +12,7 @@ enum class EAllocationStatus {
 class TAllocationInfo {
 private:
     std::shared_ptr<IAllocation> Allocation;
-    YDB_READONLY(ui64, AllocationGroupId, 0);
+    YDB_READONLY(ui64, AllocationInternalGroupId, 0);
     ui64 AllocatedVolume = 0;
     YDB_READONLY(ui64, Identifier, 0);
     YDB_READONLY(ui64, ProcessId, 0);
@@ -44,7 +44,8 @@ public:
 
     [[nodiscard]] bool Allocate(const NActors::TActorId& ownerId) {
         AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "allocated")("allocation_id", Identifier)("stage", Stage->GetName());
-        AFL_VERIFY(Allocation);
+        AFL_VERIFY(Allocation)("status", GetAllocationStatus())("volume", AllocatedVolume)("id", Identifier)("stage", Stage->GetName())(
+            "allocation_internal_group_id", AllocationInternalGroupId);
         const bool result = Allocation->OnAllocated(
             std::make_shared<TAllocationGuard>(ProcessId, Allocation->GetIdentifier(), ownerId, Allocation->GetMemory()), Allocation);
         if (result) {
@@ -67,7 +68,7 @@ public:
         }
     }
 
-    TAllocationInfo(const ui64 processId, const ui64 allocationGroupId, const std::shared_ptr<IAllocation>& allocation,
+    TAllocationInfo(const ui64 processId, const ui64 allocationInternalGroupId, const std::shared_ptr<IAllocation>& allocation,
         const std::shared_ptr<TStageFeatures>& stage);
 };
 

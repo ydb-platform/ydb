@@ -53,26 +53,19 @@ bool TProcessMemory::UnregisterAllocation(const ui64 allocationId) {
     auto it = AllocationInfo.find(allocationId);
     AFL_VERIFY(it != AllocationInfo.end());
     bool waitFlag = false;
-    const std::optional<ui64> internalGroupId = GroupIds.GetInternalIdOptional(it->second->GetAllocationGroupId());
+    const ui64 internalGroupId = it->second->GetAllocationInternalGroupId();
     switch (it->second->GetAllocationStatus()) {
         case EAllocationStatus::Allocated:
         case EAllocationStatus::Failed:
-            if (internalGroupId) {
-                AFL_VERIFY(!WaitAllocations.RemoveAllocation(*internalGroupId, it->second));
-            }
+            AFL_VERIFY(!WaitAllocations.RemoveAllocation(internalGroupId, it->second));
             break;
         case EAllocationStatus::Waiting:
-            if (internalGroupId) {
-                AFL_VERIFY(WaitAllocations.RemoveAllocation(*internalGroupId, it->second));
-                waitFlag = true;
-            } else {
-                AFL_VERIFY(!it->second->Allocate(OwnerActorId));
-            }
+            AFL_VERIFY(WaitAllocations.RemoveAllocation(internalGroupId, it->second));
+            waitFlag = true;
             break;
     }
     AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "allocation_unregister")("allocation_id", allocationId)("wait", waitFlag)(
-        "external_group_id", it->second->GetAllocationGroupId())("internal_group_id", internalGroupId)(
-        "allocation_status", it->second->GetAllocationStatus());
+        "internal_group_id", internalGroupId)("allocation_status", it->second->GetAllocationStatus());
     memoryAllocated = it->second->GetAllocatedVolume();
     AllocationInfo.erase(it);
     return !!memoryAllocated;

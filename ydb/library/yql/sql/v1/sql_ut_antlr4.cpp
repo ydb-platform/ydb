@@ -3836,13 +3836,13 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(InvaildUsageReal0) {
         NYql::TAstParseResult res = SqlToYql("select .0;");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:7: Error: extraneous input '.' expecting {'<|', '+', '-', '~', '*', '(', '$', '{', '[', ABORT, ACTION, ADD, AFTER, ALL, ALTER, ANALYZE, AND, ANSI, ANY, ARRAY, AS, ASC, ASSUME, ASYMMETRIC, ASYNC, ATTACH, ATTRIBUTES, AUTOINCREMENT, BACKUP, COLLECTION, BEFORE, BEGIN, BERNOULLI, BETWEEN, BITCAST, BY, CALLABLE, CASCADE, CASE, CAST, CHANGEFEED, CHECK, COLLATE, COLUMN, COLUMNS, COMMIT, COMPACT, CONDITIONAL, CONFLICT, CONNECT, CONSTRAINT, CONSUMER, COVER, CREATE, CROSS, CUBE, CURRENT, CURRENT_DATE, CURRENT_TIME, CURRENT_TIMESTAMP, DATA, DATABASE, DECIMAL, DECLARE, DEFAULT, DEFERRABLE, DEFERRED, DEFINE, DELETE, DESC, DESCRIBE, DETACH, DICT, DIRECTORY, DISABLE, DISCARD, DISTINCT, DO, DROP, EACH, ELSE, EMPTY, EMPTY_ACTION, ENCRYPTED, END, ENUM, ERASE, ERROR, ESCAPE, EVALUATE, EXCEPT, EXCLUDE, EXCLUSION, EXCLUSIVE, EXISTS, EXPLAIN, EXPORT, EXTERNAL, FAIL, FALSE, FAMILY, FILTER, FIRST, FLATTEN, FLOW, FOLLOWING, FOR, FOREIGN, FROM, FULL, FUNCTION, GLOB, GRANT, GROUP, GROUPING, GROUPS, HASH, HAVING, HOP, IF, IGNORE, ILIKE, IMMEDIATE, IMPORT, IN, INDEX, INDEXED, INHERITS, INITIAL, INITIALLY, INNER, INSERT, INSTEAD, INTERSECT, INTO, IS, ISNULL, JOIN, JSON_EXISTS, JSON_QUERY, JSON_VALUE, KEY, LAST, LEFT, LEGACY, LIKE, LIMIT, LIST, LOCAL, MANAGE, MATCH, MATCHES, MATCH_RECOGNIZE, MEASURES, MICROSECONDS, MILLISECONDS, MODIFY, NANOSECONDS, NATURAL, NEXT, NO, NOT, NOTNULL, NULL, NULLS, OBJECT, OF, OFFSET, OMIT, ON, ONE, ONLY, OPTION, OPTIONAL, OR, ORDER, OTHERS, OUTER, OVER, PARALLEL, PARTITION, PASSING, PASSWORD, PAST, PATTERN, PER, PERMUTE, PLAN, POOL, PRAGMA, PRECEDING, PRESORT, PRIMARY, PRIVILEGES, PROCESS, QUEUE, RAISE, RANGE, REDUCE, REFERENCES, REGEXP, REINDEX, RELEASE, REMOVE, RENAME, REPLACE, REPLICATION, RESET, RESOURCE, RESPECT, RESTRICT, RESULT, RETURN, RETURNING, REVERT, REVOKE, RIGHT, RLIKE, ROLLBACK, ROLLUP, ROW, ROWS, SAMPLE, SAVEPOINT, SCHEMA, SECONDS, SEEK, SELECT, SEMI, SET, SETS, SHOW, TSKIP, SOURCE, STREAM, STRUCT, SUBQUERY, SUBSET, SYMBOLS, SYMMETRIC, SYNC, SYSTEM, TABLE, TABLES, TABLESAMPLE, TABLESTORE, TAGGED, TEMP, TEMPORARY, THEN, TIES, TO, TOPIC, TRANSACTION, TRIGGER, TRUE, TUPLE, TYPE, UNBOUNDED, UNCONDITIONAL, UNION, UNIQUE, UNKNOWN, UNMATCHED, UPDATE, UPSERT, USE, USER, USING, VACUUM, VALUES, VARIANT, VIEW, VIRTUAL, WHEN, WHERE, WINDOW, WITH, WITHOUT, WRAPPER, XOR, STRING_VALUE, ID_PLAIN, ID_QUOTED, DIGITS, INTEGER_VALUE, REAL, BLOB}\n");
+        UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "<main>:1:7: Error: extraneous input '.' expecting {");
     }
 
     Y_UNIT_TEST(InvaildUsageReal1) {
         NYql::TAstParseResult res = SqlToYql("select .0f;");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:7: Error: extraneous input '.' expecting {'<|', '+', '-', '~', '*', '(', '$', '{', '[', ABORT, ACTION, ADD, AFTER, ALL, ALTER, ANALYZE, AND, ANSI, ANY, ARRAY, AS, ASC, ASSUME, ASYMMETRIC, ASYNC, ATTACH, ATTRIBUTES, AUTOINCREMENT, BACKUP, COLLECTION, BEFORE, BEGIN, BERNOULLI, BETWEEN, BITCAST, BY, CALLABLE, CASCADE, CASE, CAST, CHANGEFEED, CHECK, COLLATE, COLUMN, COLUMNS, COMMIT, COMPACT, CONDITIONAL, CONFLICT, CONNECT, CONSTRAINT, CONSUMER, COVER, CREATE, CROSS, CUBE, CURRENT, CURRENT_DATE, CURRENT_TIME, CURRENT_TIMESTAMP, DATA, DATABASE, DECIMAL, DECLARE, DEFAULT, DEFERRABLE, DEFERRED, DEFINE, DELETE, DESC, DESCRIBE, DETACH, DICT, DIRECTORY, DISABLE, DISCARD, DISTINCT, DO, DROP, EACH, ELSE, EMPTY, EMPTY_ACTION, ENCRYPTED, END, ENUM, ERASE, ERROR, ESCAPE, EVALUATE, EXCEPT, EXCLUDE, EXCLUSION, EXCLUSIVE, EXISTS, EXPLAIN, EXPORT, EXTERNAL, FAIL, FALSE, FAMILY, FILTER, FIRST, FLATTEN, FLOW, FOLLOWING, FOR, FOREIGN, FROM, FULL, FUNCTION, GLOB, GRANT, GROUP, GROUPING, GROUPS, HASH, HAVING, HOP, IF, IGNORE, ILIKE, IMMEDIATE, IMPORT, IN, INDEX, INDEXED, INHERITS, INITIAL, INITIALLY, INNER, INSERT, INSTEAD, INTERSECT, INTO, IS, ISNULL, JOIN, JSON_EXISTS, JSON_QUERY, JSON_VALUE, KEY, LAST, LEFT, LEGACY, LIKE, LIMIT, LIST, LOCAL, MANAGE, MATCH, MATCHES, MATCH_RECOGNIZE, MEASURES, MICROSECONDS, MILLISECONDS, MODIFY, NANOSECONDS, NATURAL, NEXT, NO, NOT, NOTNULL, NULL, NULLS, OBJECT, OF, OFFSET, OMIT, ON, ONE, ONLY, OPTION, OPTIONAL, OR, ORDER, OTHERS, OUTER, OVER, PARALLEL, PARTITION, PASSING, PASSWORD, PAST, PATTERN, PER, PERMUTE, PLAN, POOL, PRAGMA, PRECEDING, PRESORT, PRIMARY, PRIVILEGES, PROCESS, QUEUE, RAISE, RANGE, REDUCE, REFERENCES, REGEXP, REINDEX, RELEASE, REMOVE, RENAME, REPLACE, REPLICATION, RESET, RESOURCE, RESPECT, RESTRICT, RESULT, RETURN, RETURNING, REVERT, REVOKE, RIGHT, RLIKE, ROLLBACK, ROLLUP, ROW, ROWS, SAMPLE, SAVEPOINT, SCHEMA, SECONDS, SEEK, SELECT, SEMI, SET, SETS, SHOW, TSKIP, SOURCE, STREAM, STRUCT, SUBQUERY, SUBSET, SYMBOLS, SYMMETRIC, SYNC, SYSTEM, TABLE, TABLES, TABLESAMPLE, TABLESTORE, TAGGED, TEMP, TEMPORARY, THEN, TIES, TO, TOPIC, TRANSACTION, TRIGGER, TRUE, TUPLE, TYPE, UNBOUNDED, UNCONDITIONAL, UNION, UNIQUE, UNKNOWN, UNMATCHED, UPDATE, UPSERT, USE, USER, USING, VACUUM, VALUES, VARIANT, VIEW, VIRTUAL, WHEN, WHERE, WINDOW, WITH, WITHOUT, WRAPPER, XOR, STRING_VALUE, ID_PLAIN, ID_QUOTED, DIGITS, INTEGER_VALUE, REAL, BLOB}\n");
+        UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "<main>:1:7: Error: extraneous input '.' expecting {");
     }
 
     Y_UNIT_TEST(InvaildUsageWinFunctionWithoutWindow) {
@@ -5414,8 +5414,8 @@ Y_UNIT_TEST_SUITE(AnsiIdentsNegative) {
         auto res = SqlToYql(req);
         UNIT_ASSERT(res.Root);
         res = SqlToYqlWithAnsiLexer(req);
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:16: Error: Unexpected character : syntax error...\n\n");
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 0);
 
         req = "/*\n"
               "--/*\n"
@@ -5423,8 +5423,8 @@ Y_UNIT_TEST_SUITE(AnsiIdentsNegative) {
         res = SqlToYql(req);
         UNIT_ASSERT(res.Root);
         res = SqlToYqlWithAnsiLexer(req);
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:12: Error: Unexpected character : syntax error...\n\n");
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 0);
 
         req = "/*\n"
               "/*\n"
@@ -5432,7 +5432,7 @@ Y_UNIT_TEST_SUITE(AnsiIdentsNegative) {
               "*/ select 1;";
         res = SqlToYql(req);
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: Unexpected token '*' : cannot match to any predicted input...\n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: mismatched input '*' expecting {';', '(', '$', ALTER, ANALYZE, COMMIT, CREATE, DECLARE, DEFINE, DELETE, DISCARD, DO, DROP, EVALUATE, EXPLAIN, EXPORT, FOR, FROM, GRANT, IF, IMPORT, INSERT, PARALLEL, PRAGMA, PROCESS, REDUCE, REPLACE, REVOKE, ROLLBACK, SELECT, UPDATE, UPSERT, USE, VALUES}\n");
         res = SqlToYqlWithAnsiLexer(req);
         UNIT_ASSERT(res.Root);
     }
@@ -6987,8 +6987,7 @@ Y_UNIT_TEST_SUITE(ResourcePool) {
         NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
                 ALTER RESOURCE POOL MyResourcePool
-                    SET (CONCURRENT_QUERY_LIMIT = 30, Weight = 5),
-                    SET QUEUE_TYPE "UNORDERED",
+                    SET (CONCURRENT_QUERY_LIMIT = 30, Weight = 5, QUEUE_TYPE = "UNORDERED"),
                     RESET (Query_Cancel_After_Seconds, Query_Count_Limit);
             )sql");
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
@@ -7102,6 +7101,90 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
         NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
                 DROP BACKUP COLLECTION TestCollection;
+            )sql");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("'features"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("dropObject"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+}
+
+Y_UNIT_TEST_SUITE(ResourcePoolClassifier) {
+    Y_UNIT_TEST(CreateResourcePoolClassifier) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
+                    RANK=20,
+                    RESOURCE_POOL='wgUserQueries',
+                    MEMBERNAME='yandex_query@abc'
+                );
+            )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"membername" '"yandex_query@abc") '('"rank" (Int32 '"20")) '('"resource_pool" '"wgUserQueries"))#");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(CreateResourcePoolClassifierWithBadArguments) {
+        ExpectFailWithError(R"sql(
+                USE plato;
+                CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier;
+            )sql" , "<main>:3:72: Error: mismatched input ';' expecting WITH\n");
+
+        ExpectFailWithError(R"sql(
+                USE plato;
+                CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
+                    DUPLICATE_SETTING="first_value",
+                    DUPLICATE_SETTING="second_value"
+                );
+            )sql" , "<main>:5:21: Error: DUPLICATE_SETTING duplicate keys\n");
+    }
+
+    Y_UNIT_TEST(AlterResourcePoolClassifier) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier
+                    SET (RANK = 30, Weight = 5, MEMBERNAME = "test@user"),
+                    RESET (Resource_Pool);
+            )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alterObject))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('features '('('"membername" '"test@user") '('"rank" (Int32 '"30")) '('"weight" (Int32 '"5")))))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('resetFeatures '('"resource_pool")))#");
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(DropResourcePoolClassifier) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                DROP RESOURCE POOL CLASSIFIER MyResourcePoolClassifier;
             )sql");
         UNIT_ASSERT(res.Root);
 

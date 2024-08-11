@@ -69,6 +69,9 @@ sql_stmt_core:
   | alter_backup_collection_stmt
   | drop_backup_collection_stmt
   | analyze_stmt
+  | create_resource_pool_classifier_stmt
+  | alter_resource_pool_classifier_stmt
+  | drop_resource_pool_classifier_stmt
 ;
 
 expr:
@@ -206,8 +209,8 @@ json_exists: JSON_EXISTS LPAREN
   json_exists_handler?
 RPAREN;
 
-json_query_wrapper: (WITHOUT ARRAY?) | WITH (CONDITIONAL | UNCONDITIONAL)? ARRAY?;
-json_query_handler: ERROR | NULL | (EMPTY ARRAY) | (EMPTY OBJECT);
+json_query_wrapper: WITHOUT ARRAY? | WITH (CONDITIONAL | UNCONDITIONAL)? ARRAY?;
+json_query_handler: ERROR | NULL | EMPTY ARRAY | EMPTY OBJECT;
 
 json_query: JSON_QUERY LPAREN
   json_common_args
@@ -244,7 +247,7 @@ invoke_expr_tail:
     (null_treatment | filter_clause)? (OVER window_name_or_specification)?
 ;
 
-using_call_expr: (an_id_or_type NAMESPACE an_id_or_type | an_id_expr | bind_parameter | (EXTERNAL FUNCTION)) invoke_expr;
+using_call_expr: (an_id_or_type NAMESPACE an_id_or_type | an_id_expr | bind_parameter | EXTERNAL FUNCTION) invoke_expr;
 
 key_expr: LBRACE_SQUARE expr RBRACE_SQUARE;
 
@@ -836,12 +839,25 @@ alter_resource_pool_stmt: ALTER RESOURCE POOL object_ref
   alter_resource_pool_action (COMMA alter_resource_pool_action)*
 ;
 alter_resource_pool_action:
-    alter_table_set_table_setting_uncompat
-  | alter_table_set_table_setting_compat
+    alter_table_set_table_setting_compat
   | alter_table_reset_table_setting
 ;
 
 drop_resource_pool_stmt: DROP RESOURCE POOL object_ref;
+
+create_resource_pool_classifier_stmt: CREATE RESOURCE POOL CLASSIFIER object_ref
+  with_table_settings
+;
+
+alter_resource_pool_classifier_stmt: ALTER RESOURCE POOL CLASSIFIER object_ref
+  alter_resource_pool_classifier_action (COMMA alter_resource_pool_classifier_action)*
+;
+alter_resource_pool_classifier_action:
+    alter_table_set_table_setting_compat
+  | alter_table_reset_table_setting
+;
+
+drop_resource_pool_classifier_stmt: DROP RESOURCE POOL CLASSIFIER object_ref;
 
 create_replication_stmt: CREATE ASYNC REPLICATION object_ref
     FOR replication_target (COMMA replication_target)*
@@ -898,7 +914,7 @@ multiple_column_assignment: set_target_list EQUALS LPAREN simple_values_source R
 set_target_list: LPAREN set_target (COMMA set_target)* RPAREN;
 
 // topics
-create_topic_stmt: CREATE TOPIC topic_ref create_topic_entries? with_topic_settings?;
+create_topic_stmt: CREATE TOPIC (IF NOT EXISTS)? topic_ref create_topic_entries? with_topic_settings?;
 
 create_topic_entries: LPAREN create_topic_entry (COMMA create_topic_entry)* RPAREN;
 create_topic_entry:
@@ -906,7 +922,7 @@ create_topic_entry:
 ;
 with_topic_settings: WITH LPAREN topic_settings RPAREN;
 
-alter_topic_stmt: ALTER TOPIC topic_ref alter_topic_action (COMMA alter_topic_action)*;
+alter_topic_stmt: ALTER TOPIC (IF EXISTS)? topic_ref alter_topic_action (COMMA alter_topic_action)*;
 alter_topic_action:
     alter_topic_add_consumer
   | alter_topic_alter_consumer
@@ -932,7 +948,7 @@ topic_alter_consumer_reset: RESET LPAREN an_id (COMMA an_id)* RPAREN;
 alter_topic_set_settings: SET LPAREN topic_settings RPAREN;
 alter_topic_reset_settings: RESET LPAREN an_id (COMMA an_id_pure)* RPAREN;
 
-drop_topic_stmt: DROP TOPIC topic_ref;
+drop_topic_stmt: DROP TOPIC (IF EXISTS)? topic_ref;
 
 topic_settings: topic_settings_entry (COMMA topic_settings_entry)*;
 topic_settings_entry: an_id EQUALS topic_setting_value;
@@ -1232,6 +1248,7 @@ keyword_as_compat:
   | CASCADE
   | CHANGEFEED
   | CHECK
+  | CLASSIFIER
   // | COLLATE
   | COLLECTION
   | COMMIT
@@ -1446,6 +1463,7 @@ keyword_compat: (
   | CASCADE
   | CHANGEFEED
   | CHECK
+  | CLASSIFIER
   | COLLATE
   | COLLECTION
   | COMMIT
@@ -1708,6 +1726,7 @@ fragment A:('a'|'A');
 fragment B:('b'|'B');
 fragment C:('c'|'C');
 fragment D:('d'|'D');
+fragment E:('e'|'E');
 fragment F:('f'|'F');
 fragment G:('g'|'G');
 fragment H:('h'|'H');
@@ -1719,18 +1738,16 @@ fragment M:('m'|'M');
 fragment N:('n'|'N');
 fragment O:('o'|'O');
 fragment P:('p'|'P');
+fragment Q:('q'|'Q');
+fragment R:('r'|'R');
 fragment S:('s'|'S');
 fragment T:('t'|'T');
+fragment U:('u'|'U');
 fragment V:('v'|'V');
 fragment W:('w'|'W');
 fragment X:('x'|'X');
-fragment Z:('z'|'Z');
-fragment Q:('q'|'Q');
-fragment U:('u'|'U');
-fragment E:('e'|'E');
-fragment R:('r'|'R');
 fragment Y:('y'|'Y');
-
+fragment Z:('z'|'Z');
 
 ABORT: A B O R T;
 ACTION: A C T I O N;
@@ -1766,6 +1783,7 @@ CASE: C A S E;
 CAST: C A S T;
 CHANGEFEED: C H A N G E F E E D;
 CHECK: C H E C K;
+CLASSIFIER: C L A S S I F I E R;
 COLLATE: C O L L A T E;
 COLUMN: C O L U M N;
 COLUMNS: C O L U M N S;

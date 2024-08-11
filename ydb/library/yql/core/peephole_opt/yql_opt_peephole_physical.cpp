@@ -2291,10 +2291,11 @@ IGraphTransformer::TStatus PeepHoleFinalStage(const TExprNode::TPtr& input, TExp
 }
 
 IGraphTransformer::TStatus PeepHoleBlockStage(const TExprNode::TPtr& input, TExprNode::TPtr& output,
-    TExprContext& ctx, TTypeAnnotationContext& types, const TExtPeepHoleOptimizerMap& extOptimizers)
+    TExprContext& ctx, TTypeAnnotationContext& types, const TExtPeepHoleOptimizerMap& extOptimizers, TProcessedNodesSet& cache)
 {
     TOptimizeExprSettings settings(&types);
     settings.CustomInstantTypeTransformer = types.CustomInstantTypeTransformer.Get();
+    settings.ProcessedNodes = &cache;
 
     return OptimizeExpr(input, output, [&types, &extOptimizers](
         const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
@@ -5693,7 +5694,11 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
         allInputTypes.push_back(i);
     }
 
-    auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(lambda->Pos()), allInputTypes, ctx);
+    const IArrowResolver::TUnsupportedTypeCallback onUnsupportedType = [&types](const auto& typeKindOrSlot) {
+        std::visit([&types](const auto& value) { types.IncNoBlockType(value); }, typeKindOrSlot);
+    };
+
+    auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(lambda->Pos()), allInputTypes, ctx, onUnsupportedType);
     YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
     if (resolveStatus != IArrowResolver::OK) {
         return false;
@@ -5747,7 +5752,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
         if (node->IsList() || rewriteAsIs ||
             node->IsCallable({"And", "Or", "Xor", "Not", "Coalesce", "Exists", "If", "Just", "AsStruct", "Member", "Nth", "ToPg", "FromPg", "PgResolvedCall", "PgResolvedOp"}))
         {
-            if (node->IsCallable() && !IsSupportedAsBlockType(node->Pos(), *node->GetTypeAnn(), ctx, types)) {
+            if (node->IsCallable() && !IsSupportedAsBlockType(node->Pos(), *node->GetTypeAnn(), ctx, types, true)) {
                 return true;
             }
 
@@ -5775,7 +5780,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
                 auto child = node->ChildPtr(index);
                 if (!child->GetTypeAnn()->IsComputable()) {
                     funcArgs.push_back(child);
-                } else if (child->IsComplete() && IsSupportedAsBlockType(child->Pos(), *child->GetTypeAnn(), ctx, types)) {
+                } else if (child->IsComplete() && IsSupportedAsBlockType(child->Pos(), *child->GetTypeAnn(), ctx, types, true)) {
                     funcArgs.push_back(ctx.NewCallable(node->Pos(), "AsScalar", { child }));
                 } else if (auto rit = rewrites.find(child.Get()); rit != rewrites.end()) {
                     funcArgs.push_back(rit->second);
@@ -5796,7 +5801,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
                     auto member = funcArgs[index];
                     auto child = member->TailPtr();
                     TExprNodePtr rewrite;
-                    if (child->IsComplete() && IsSupportedAsBlockType(child->Pos(), *child->GetTypeAnn(), ctx, types)) {
+                    if (child->IsComplete() && IsSupportedAsBlockType(child->Pos(), *child->GetTypeAnn(), ctx, types, true)) {
                         rewrite = ctx.NewCallable(child->Pos(), "AsScalar", { child });
                     } else if (auto rit = rewrites.find(child.Get()); rit != rewrites.end()) {
                         rewrite = rit->second;
@@ -5821,6 +5826,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
         const bool isUdf = node->IsCallable("Apply") && node->Head().IsCallable("Udf");
         if (isUdf) {
             if (!GetSetting(*node->Head().Child(7), "blocks")) {
+                types.IncNoBlockCallable(node->Head().Head().Content());
                 return true;
             }
         }
@@ -5832,7 +5838,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
                 allTypes.push_back(node->Child(i)->GetTypeAnn());
             }
 
-            auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(node->Pos()), allTypes, ctx);
+            auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(node->Pos()), allTypes, ctx, onUnsupportedType);
             YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
             if (resolveStatus != IArrowResolver::OK) {
                 return true;
@@ -5898,6 +5904,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
         } else {
             auto fit = funcs.find(node->Content());
             if (fit == funcs.end()) {
+                types.IncNoBlockCallable(node->Content());
                 return true;
             }
 
@@ -5907,6 +5914,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
             auto resolveStatus = types.ArrowResolver->LoadFunctionMetadata(ctx.GetPosition(node->Pos()), arrowFunctionName, argTypes, outType, ctx);
             YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
             if (resolveStatus != IArrowResolver::OK) {
+                types.IncNoBlockCallable(node->Content());
                 return true;
             }
             funcArgs.push_back(ExpandType(node->Pos(), *outType, ctx));
@@ -8555,10 +8563,10 @@ THolder<IGraphTransformer> CreatePeepHoleFinalStageTransformer(TTypeAnnotationCo
 
     pipeline.Add(
         CreateFunctorTransformer(
-            [&types](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
+            [&types, cache = TProcessedNodesSet()](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) mutable -> IGraphTransformer::TStatus {
                 if (types.IsBlockEngineEnabled()) {
                     const auto& extStageRules = TPeepHoleRules::Instance().BlockStageExtRules;
-                    return PeepHoleBlockStage(input, output, ctx, types, extStageRules);
+                    return PeepHoleBlockStage(input, output, ctx, types, extStageRules, cache);
                 } else {
                     output = input;
                     return IGraphTransformer::TStatus::Ok;
@@ -8574,10 +8582,10 @@ THolder<IGraphTransformer> CreatePeepHoleFinalStageTransformer(TTypeAnnotationCo
 
     pipeline.Add(
         CreateFunctorTransformer(
-            [&types](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
+            [&types, cache = TProcessedNodesSet()](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) mutable -> IGraphTransformer::TStatus {
                 if (types.IsBlockEngineEnabled()) {
                     const auto& extStageRules = TPeepHoleRules::Instance().BlockStageExtFinalRules;
-                    return PeepHoleBlockStage(input, output, ctx, types, extStageRules);
+                    return PeepHoleBlockStage(input, output, ctx, types, extStageRules, cache);
                 } else {
                     output = input;
                     return IGraphTransformer::TStatus::Ok;

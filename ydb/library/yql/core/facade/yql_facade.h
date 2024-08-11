@@ -192,28 +192,14 @@ public:
     [[nodiscard]]
     NThreading::TFuture<void> Abort();
 
-    inline TIssues Issues() {
-        if (ExprCtx_) {
-            return ExprCtx_->IssueManager.GetIssues();
-        } else {
-            return {};
-        }
-    }
-
-    inline TIssues CompletedIssues() const {
-        if (ExprCtx_) {
-            return ExprCtx_->IssueManager.GetCompletedIssues();
-        } else {
-            return {};
-        }
-    }
+    TIssues Issues() const;
+    TIssues CompletedIssues() const;
+    void FinalizeIssues();
 
     void Print(IOutputStream* exprOut, IOutputStream* planOut, bool cleanPlan = false);
 
     inline void PrintErrorsTo(IOutputStream& out) const {
-        if (ExprCtx_) {
-            ExprCtx_->IssueManager.GetIssues().PrintWithProgramTo(out, Filename_, SourceCode_);
-        }
+        Issues().PrintWithProgramTo(out, Filename_, SourceCode_);
     }
 
     inline const TAstNode* AstRoot() const {
@@ -455,6 +441,7 @@ private:
     TMaybe<TString> LineageStr_;
 
     TQContext QContext_;
+    TIssues FinalIssues_;
 };
 
 } // namspace NYql

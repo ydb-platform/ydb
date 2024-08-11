@@ -8,7 +8,7 @@ import yatest.common
 from yql_utils import execute, get_tables, get_files, get_http_files, \
     KSV_ATTR, yql_binary_path, is_xfail, is_canonize_peephole, is_peephole_use_blocks, is_canonize_lineage, \
     is_skip_forceblocks, get_param, normalize_source_code_path, replace_vals, get_gateway_cfg_suffix, \
-    do_custom_query_check, stable_result_file, stable_table_file
+    do_custom_query_check, stable_result_file, stable_table_file, is_with_final_result_issues
 from yqlrun import YQLRun
 
 from utils import get_config, get_parameters_json, DATA_PATH
@@ -55,7 +55,9 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
         (res, tables_res) = run_file_no_cache('yt', suite, case, cfg, config, yql_http_file_server, extra_args=['--lineage'])
         return [yatest.common.canonical_file(res.results_file)]
 
-    (res, tables_res) = run_file('yt', suite, case, cfg, config, yql_http_file_server)
+    if is_with_final_result_issues(config):
+        extra_final_args = ['--with-final-issues']
+    (res, tables_res) = run_file('yt', suite, case, cfg, config, yql_http_file_server, extra_args=extra_final_args)
 
     to_canonize = []
 

@@ -1,26 +1,19 @@
 #include "topic_session.h"
 
-#include <ydb/library/actors/core/interconnect.h>
-
 #include <ydb/core/fq/libs/actors/logging/log.h>
-#include <ydb/core/fq/libs/ydb/util.h>
-#include <ydb/core/fq/libs/events/events.h>
 
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_meta_extractor.h>
-#include <ydb/library/yql/public/udf/udf_value.h>
+//#include <ydb/library/yql/public/udf/udf_value.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/minikql/mkql_mem_info.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/dq/runtime/dq_async_stats.h>
 
 #include <util/generic/queue.h>
-#include <util/string/join.h>
-#include <queue>
 
 #include <ydb/core/fq/libs/row_dispatcher/json_parser.h>
 #include <ydb/core/fq/libs/row_dispatcher/json_filter.h>
@@ -64,8 +57,7 @@ class TTopicSession : public TActorBootstrapped<TTopicSession> {
 
     struct TReadyBatch {
     public:
-        TReadyBatch(TMaybe<TInstant> /*watermark*/, ui32 dataCapacity)
-        {
+        TReadyBatch(TMaybe<TInstant> /*watermark*/, ui32 dataCapacity) {
             Data.reserve(dataCapacity);
         }
 
@@ -86,7 +78,7 @@ private:
     const i64 BufferSize;
     TString LogPrefix;
     NYql::NDq::TDqAsyncStats IngressStats;
-    std::queue<TReadyBatch> ReadyBuffer;
+    TQueue<TReadyBatch> ReadyBuffer;
     ui32 BatchCapacity;
     //bool IsStopped = false;
     ui64 LastMessageOffset = 0;
@@ -159,21 +151,32 @@ public:
     void Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr&);
     void Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev);
+    void HandleException(const std::exception& err);
 
     static constexpr char ActorName[] = "YQ_ROW_DISPATCHER_SESSION";
 
 private:
 
-    STRICT_STFUNC(StateFunc,
+    STRICT_STFUNC_EXC(StateFunc,
         hFunc(NFq::TEvPrivate::TEvPqEventsReady, Handle);
         hFunc(NFq::TEvPrivate::TEvCreateSession, Handle);
         hFunc(NFq::TEvPrivate::TEvDataParsed, Handle);
         hFunc(TEvRowDispatcher::TEvGetNextBatch, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStartSession, Handle);
         cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway);
-        hFunc(NFq::TEvRowDispatcher::TEvStopSession, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvStopSession, Handle);,
+        ExceptionFunc(std::exception, HandleException)
     )
 
+    STRICT_STFUNC(ErrorState, {
+        cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway);
+        IgnoreFunc(NFq::TEvPrivate::TEvPqEventsReady);
+        IgnoreFunc(NFq::TEvPrivate::TEvCreateSession);
+        IgnoreFunc(NFq::TEvPrivate::TEvDataParsed);
+        IgnoreFunc(TEvRowDispatcher::TEvGetNextBatch);
+        IgnoreFunc(NFq::TEvRowDispatcher::TEvStartSession);
+        IgnoreFunc(NFq::TEvRowDispatcher::TEvStopSession);
+    })
 };
 
 TVector<TString> TTopicSession::GetVector(const google::protobuf::RepeatedPtrField<TString>& value) {
@@ -401,8 +404,6 @@ std::optional<NYql::TIssues> TTopicSession::ProcessStartPartitionSessionEvent(NY
 }
 
 std::optional<NYql::TIssues> TTopicSession::ProcessStopPartitionSessionEvent(NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent& event) {
-    //  const auto partitionKey = MakePartitionKey(event.GetPartitionSession());
-    // const auto partitionKeyStr = ToString(partitionKey);
     LOG_ROW_DISPATCHER_DEBUG("SessionId: " << GetSessionId() << " StopPartitionSessionEvent received");
     event.Confirm();
     return std::nullopt;
@@ -593,7 +594,7 @@ void TTopicSession::FatalError(const TString& message, const std::unique_ptr<TJs
         Send(RowDispatcherActorId, event.release());
     }
     StopReadSession();
-    // TODO: change handlers
+    Become(&TTopicSession::ErrorState);
 }
 
 void TTopicSession::StopReadSession() {
@@ -617,6 +618,10 @@ void TTopicSession::SendDataArrived() {
         event->ReadActorId = readActorId;
         Send(RowDispatcherActorId, event.release());
     }
+}
+
+void TTopicSession::HandleException(const std::exception& e) {
+    FatalError(TString("Internal error: exception: ") + e.what());
 }
 
 } // namespace

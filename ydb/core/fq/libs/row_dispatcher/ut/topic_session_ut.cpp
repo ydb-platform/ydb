@@ -103,10 +103,11 @@ public:
         }
     }
 
-    void ExpectSessionError(NActors::TActorId readActorId) {
+    void ExpectSessionError(NActors::TActorId readActorId, TString message) {
         auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvSessionError>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
         UNIT_ASSERT(eventHolder->Get()->ReadActorId == readActorId);
+        UNIT_ASSERT(TString(eventHolder->Get()->Record.GetMessage()).Contains(message));
     }
 
     void ExpectNewDataArrived(NActors::TActorId readActorId) {
@@ -216,7 +217,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StopSession(ReadActorId2);
     }
 
-    Y_UNIT_TEST_F(SessionError, TFixture) {
+    Y_UNIT_TEST_F(BadDataSessionError, TFixture) {
         const TString topicName = "topic4";
         PQCreateStream(topicName);
         Init(topicName);
@@ -225,7 +226,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         const std::vector<TString> data = { "not json" };
         PQWrite(data, topicName);
 
-        ExpectSessionError(ReadActorId1);
+        ExpectSessionError(ReadActorId1, "Failed to unwrap empty optional");
         StopSession(ReadActorId1);
     }
 
@@ -241,15 +242,30 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         Runtime.Send(new IEventHandle(TopicSession, ReadActorId1, new TEvRowDispatcher::TEvGetNextBatch()));
         ExpectMessageBatch(ReadActorId1, data);
 
-
+        // Restart topic session.
         StartSession(ReadActorId2, 1);
         ExpectNewDataArrived(ReadActorId2);
 
+        PQWrite({ Json3 }, topicName);
+        ExpectNewDataArrived(ReadActorId1);
 
+        Runtime.Send(new IEventHandle(TopicSession, ReadActorId1, new TEvRowDispatcher::TEvGetNextBatch()));
+        ExpectMessageBatch(ReadActorId1, { Json3 });
 
-        //StopSession(ReadActorId1);
+        Runtime.Send(new IEventHandle(TopicSession, ReadActorId2, new TEvRowDispatcher::TEvGetNextBatch()));
+        ExpectMessageBatch(ReadActorId2, { Json2, Json3 });
+
+        StopSession(ReadActorId1);
+        StopSession(ReadActorId2);
     }
 
+    Y_UNIT_TEST_F(ReadNonExistentTopic, TFixture) {
+        const TString topicName = "topic6";
+        Init(topicName);
+        StartSession(ReadActorId1);
+        ExpectSessionError(ReadActorId1, "no path");
+        StopSession(ReadActorId1);
+    }
 }
 
 }

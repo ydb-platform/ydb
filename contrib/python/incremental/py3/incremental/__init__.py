@@ -482,11 +482,20 @@ def _load_pyproject_toml(toml_path):  # type: (str) -> Optional[_IncrementalConf
 
     tool_incremental = _extract_tool_incremental(data)
 
-    if tool_incremental is None or tool_incremental == {}:
+    package = None
+    if tool_incremental is not None and "name" in tool_incremental:
+        package = tool_incremental["name"]
+    if package is None:
         try:
             package = data["project"]["name"]
         except KeyError:
-            raise ValueError("""\
+            pass
+    if package is None:
+        # We can't proceed without a project name, but that's only an error
+        # if [tool.incremental] is present.
+        if tool_incremental is None:
+            return None
+        raise ValueError("""\
 Couldn't extract the package name from pyproject.toml. Specify it like:
 
     [project]
@@ -496,12 +505,8 @@ Or:
 
     [tool.incremental]
     name = "Foo"
-""")
-    elif tool_incremental.keys() == {"name"}:
-        package = tool_incremental["name"]
-    else:
-        raise ValueError("Unexpected key(s) in [tool.incremental]")
 
+""")
     if not isinstance(package, str):
         raise TypeError(
             "Package name must be a string, but found {}".format(type(package))
@@ -526,6 +531,8 @@ def _extract_tool_incremental(data):  # type: (Dict[str, object]) -> Optional[Di
     if not isinstance(tool_incremental, dict):
         raise ValueError("[tool.incremental] must be a table")
 
+    if not {"name"}.issuperset(tool_incremental.keys()):
+        raise ValueError("Unexpected key(s) in [tool.incremental]")
     return tool_incremental
 
 

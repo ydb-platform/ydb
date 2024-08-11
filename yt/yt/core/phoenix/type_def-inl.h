@@ -141,7 +141,8 @@ public:
         std::vector<const std::type_info*> typeInfos,
         TTypeTag tag,
         bool isTemplate,
-        TConstructor constructor);
+        TPolymorphicConstructor polymorphicConstructor,
+        TConcreteConstructor concreteConstructor);
 
     template <TFieldTag::TUnderlying TagValue, auto Member>
     auto Field(TString name)
@@ -198,7 +199,8 @@ auto MakeTypeSchemaBuilderRegistrar()
         GetTypeInfos<TThis>(),
         TThis::TypeTag,
         Template,
-        TFactoryTraits<TThis>::TFactory::Constructor);
+        TFactoryTraits<TThis>::TFactory::PolymorphicConstructor,
+        TFactoryTraits<TThis>::TFactory::ConcreteConstructor);
 }
 
 template <class TThis, bool Template>
@@ -883,15 +885,15 @@ struct TSerializer
                     YT_VERIFY(streamTag == runtimeTag);
                 }
             } else {
-                if constexpr(TPolymorphicTraits<T>::Polymorphic) {
-                    auto tag = LoadSuspended<TTypeTag>(context);
-                    const auto& descriptor = ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTagOrThrow(tag);
-                    rawPtr = static_cast<T*>(descriptor.ConstructOrThrow());
-                } else {
-                    using TFactory = typename TFactoryTraits<T>::TFactory;
-                    static_assert(TFactory::Constructor);
-                    rawPtr = static_cast<T*>(TFactory::Constructor());
-                }
+                const auto& descriptor = [&] () -> const TTypeDescriptor& {
+                    if constexpr(TPolymorphicTraits<T>::Polymorphic) {
+                        auto tag = LoadSuspended<TTypeTag>(context);
+                        return ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTagOrThrow(tag);
+                    } else {
+                        return T::GetTypeDescriptor();
+                    }
+                }();
+                rawPtr = descriptor.template ConstructOrThrow<T>();
                 context.RegisterConstructedObject(rawPtr);
             }
 

@@ -774,14 +774,14 @@ TEST(TPhoenixTest, TypeDescriptorByTypeInfo)
 TEST(TPhoenixTest, InstantiateSimple)
 {
     const auto& descriptor = ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTagOrThrow(TPoint::TypeTag);
-    auto* p = static_cast<TPoint*>(descriptor.ConstructOrThrow());
+    auto* p = descriptor.ConstructOrThrow<TPoint>();
     delete p;
 }
 
 TEST(TPhoenixTest, InstantiateRefCounted)
 {
     const auto& descriptor = ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTagOrThrow(TRefCountedStruct::TypeTag);
-    auto* s = static_cast<TRefCountedStruct*>(descriptor.ConstructOrThrow());
+    auto* s = descriptor.ConstructOrThrow<TRefCountedStruct>();
     EXPECT_EQ(s->GetRefCount(), 1);
     s->Unref();
 }
@@ -789,11 +789,57 @@ TEST(TPhoenixTest, InstantiateRefCounted)
 TEST(TPhoenixTest, InstantiateNonconstructable)
 {
     const auto& descriptor = ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTagOrThrow(TAbstractStruct::TypeTag);
-    EXPECT_EQ(descriptor.TryConstruct(), nullptr);
+    EXPECT_EQ(descriptor.TryConstruct<TAbstractStruct>(), nullptr);
     EXPECT_THROW_MESSAGE_HAS_SUBSTR(
-        descriptor.ConstructOrThrow(),
+        descriptor.ConstructOrThrow<TAbstractStruct>(),
         std::exception,
         "Cannot instantiate");
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NInstantiatePolymorphic {
+
+struct TBase
+    : public TPolymorphicBase
+{
+    int A;
+
+    PHOENIX_DECLARE_TYPE(TBase, 0xbfad62ab);
+};
+
+void TBase::RegisterMetadata(auto&& registrar)
+{
+    registrar.template Field<1, &TThis::A>("a");
+}
+
+PHOENIX_DEFINE_TYPE(TBase);
+
+struct TDerived
+    : public virtual TBase
+{
+    PHOENIX_DECLARE_TYPE(TDerived, 0x623bdf71);
+};
+
+void TDerived::RegisterMetadata(auto&& registrar)
+{
+    registrar.template BaseType<TBase>();
+}
+
+PHOENIX_DEFINE_TYPE(TDerived);
+
+} // namespace NInstantiatePolymorphic
+
+TEST(TPhoenixTest, InstantiatePolymorphic)
+{
+    using namespace NInstantiatePolymorphic;
+
+    const auto& descriptor = ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTagOrThrow(TDerived::TypeTag);
+    auto* b = descriptor.ConstructOrThrow<TBase>();
+    auto* d = dynamic_cast<TDerived*>(b);
+    d->A = 123;
+    EXPECT_EQ(d->A, 123);
+    delete b;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1241,34 +1287,52 @@ TEST(TPhoenixTest, PolymorphicRawPtr)
 
 namespace NPolymorphicIntrusivePtr {
 
-struct TBase
-    : public TRefCounted
-    , public IPersistent
+struct TBase1
+    : public virtual TRefCounted
+    , public virtual IPersistent
 {
-    int X = 0;
+    int X1 = 0;
 
-    PHOENIX_DECLARE_POLYMORPHIC_TYPE(TBase, 0x149f8345);
+    PHOENIX_DECLARE_POLYMORPHIC_TYPE(TBase1, 0x149f8345);
 };
 
-void TBase::RegisterMetadata(auto&& registrar)
+void TBase1::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X>("x");
+    registrar.template Field<1, &TThis::X1>("x1");
 }
 
-PHOENIX_DEFINE_TYPE(TBase);
+PHOENIX_DEFINE_TYPE(TBase1);
+
+struct TBase2
+    : public virtual TRefCounted
+    , public virtual IPersistent
+{
+    int X2 = 0;
+
+    PHOENIX_DECLARE_POLYMORPHIC_TYPE(TBase2, 0x185ec0d);
+};
+
+void TBase2::RegisterMetadata(auto&& registrar)
+{
+    registrar.template Field<1, &TThis::X2>("x2");
+}
+
+PHOENIX_DEFINE_TYPE(TBase2);
 
 struct TDerived
-    : public TBase
+    : public TBase1
+    , public TBase2
 {
-    int Y = 0;
-    TIntrusivePtr<TBase> Z;
+    int Y;
+    TIntrusivePtr<TBase2> Z;
 
     PHOENIX_DECLARE_POLYMORPHIC_TYPE(TDerived, 0x57818795);
 };
 
 void TDerived::RegisterMetadata(auto&& registrar)
 {
-    registrar.template BaseType<TBase>();
+    registrar.template BaseType<TBase1>();
+    registrar.template BaseType<TBase2>();
     registrar.template Field<1, &TThis::Y>("y");
     registrar.template Field<2, &TThis::Z>("z");
 }
@@ -1282,19 +1346,43 @@ TEST(TPhoenixTest, PolymorphicIntrusivePtr)
     using namespace NPolymorphicIntrusivePtr;
 
     auto obj1 = New<TDerived>();
-    obj1->X = 123;
+    obj1->X1= 123;
     obj1->Y = 456;
     obj1->Z = obj1.Get();
 
     auto obj2 = New<TDerived>();
-    InplaceDeserialize(obj2, Serialize(TIntrusivePtr<TBase>(obj1)));
-    EXPECT_EQ(obj2->X, 123);
+    InplaceDeserialize(obj2, Serialize(TIntrusivePtr<TBase1>(obj1)));
+    EXPECT_EQ(obj2->X1, 123);
     EXPECT_EQ(obj2->Y, 456);
     EXPECT_EQ(obj2->Z, obj2);
 
     // Kill cycles to avoid leaking memory.
     obj1->Z.Reset();
     obj2->Z.Reset();
+}
+
+TEST(TPhoenixTest, PolymorphicMultipleInheritance)
+{
+    using namespace NPolymorphicIntrusivePtr;
+
+    auto obj1 = New<TDerived>();
+    obj1->X1 = 11;
+    obj1->X2 = 12;
+    obj1->Y = 13;
+
+    auto obj2 = New<TDerived>();
+    obj2->X1 = 21;
+    obj2->X2 = 22;
+    obj2->Y = 23;
+    obj2->Z = obj1;
+
+    auto obj3 = New<TDerived>();
+    auto x = Serialize(TIntrusivePtr<TBase1>(obj2));
+    InplaceDeserialize(obj3, x);
+    EXPECT_EQ(obj3->X1, 21);
+    EXPECT_EQ(obj3->X2, 22);
+    EXPECT_EQ(obj3->Y, 23);
+    EXPECT_EQ(obj3->Z->X2, 12);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

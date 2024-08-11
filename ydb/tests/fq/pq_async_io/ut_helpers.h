@@ -34,6 +34,10 @@ TString GetDefaultPqDatabase();
 struct TPqIoTestFixture : public NUnitTest::TBaseFixture {
     std::unique_ptr<TFakeCASetup> CaSetup = std::make_unique<TFakeCASetup>();
     NYdb::TDriver Driver = NYdb::TDriver(NYdb::TDriverConfig().SetLog(CreateLogBackend("cerr")));
+    NActors::TActorId LocalRowDispatcherId;
+    NActors::TActorId Coordinator1Id;
+    NActors::TActorId Coordinator2Id;
+    NActors::TActorId RemoteRowDispatcher;
 
     TPqIoTestFixture();
     ~TPqIoTestFixture();

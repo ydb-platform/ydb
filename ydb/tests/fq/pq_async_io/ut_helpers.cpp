@@ -94,6 +94,11 @@ void TPqIoTestFixture::InitRdSource(
     NYql::NPq::NProto::TDqPqTopicSource&& settings,
     i64 freeSpace)
 {
+    LocalRowDispatcherId = CaSetup->Runtime->AllocateEdgeActor();
+    Coordinator1Id = CaSetup->Runtime->AllocateEdgeActor();
+    Coordinator2Id = CaSetup->Runtime->AllocateEdgeActor();
+    RemoteRowDispatcher = CaSetup->Runtime->AllocateEdgeActor();
+
     CaSetup->Execute([&](TFakeActor& actor) {
         NPq::NProto::TDqReadTaskParams params;
         auto* partitioninigParams = params.MutablePartitioningParams();
@@ -117,6 +122,7 @@ void TPqIoTestFixture::InitRdSource(
             taskParams,
             nullptr,                // credentialsFactory
             actor.SelfId(),         // computeActorId
+            LocalRowDispatcherId,
             actor.GetHolderFactory(),
             //MakeIntrusive<NMonitoring::TDynamicCounters>(), // TODO
             freeSpace);

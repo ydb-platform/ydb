@@ -25,7 +25,7 @@ struct TEvRowDispatcher {
         EvStopSession,
         EvSessionError,
 
-        EvRowDispatcherRequest,
+        EvCoordinatorChangesSubscribe,
         EvRowDispatcherResult,
         EvCoordinatorRequest,
         EvCoordinatorResult,
@@ -45,7 +45,7 @@ struct TEvRowDispatcher {
 
     // Read actor <-> local row_dispatcher: get coordinator actor id.
 
-    struct TEvRowDispatcherRequest : public NActors::TEventLocal<TEvRowDispatcherRequest, EEv::EvRowDispatcherRequest> {};
+    struct TEvCoordinatorChangesSubscribe : public NActors::TEventLocal<TEvCoordinatorChangesSubscribe, EEv::EvCoordinatorChangesSubscribe> {};
 
     // Read actor <-> coordinator : get row_dispatcher actorId (which is responsible for processing) by topic/partition.
 

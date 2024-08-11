@@ -114,6 +114,7 @@ private:
     const TString Token;
     bool AddBearerToToken;
     TMaybe<NActors::TActorId> CoordinatorActorId;
+    NActors::TActorId LocalRowDispatcherActorId;
    // TMap<ui64, NActors::TActorId> RowDispatcherByPartitionId;
 
 
@@ -143,6 +144,7 @@ private:
     };
     
     TMap<ui64, SessionInfo> Sessions;
+    bool CoordinatorChangesSubscribed = false;
 
 public:
     TDqPqRdReadActor(
@@ -155,6 +157,7 @@ public:
         NPq::NProto::TDqReadTaskParams&& readParams,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const NActors::TActorId& computeActorId,
+        const NActors::TActorId& localRowDispatcherActorId,
         const TString& token,
         bool addBearerToToken);
 
@@ -216,6 +219,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         NPq::NProto::TDqReadTaskParams&& readParams,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const NActors::TActorId& computeActorId,
+        const NActors::TActorId& localRowDispatcherActorId,
         const TString& token,
         bool addBearerToToken)
         : TActor<TDqPqRdReadActor>(&TDqPqRdReadActor::StateFunc)
@@ -230,6 +234,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         , ComputeActorId(computeActorId)
         , Token(token)
         , AddBearerToToken(addBearerToToken)
+        , LocalRowDispatcherActorId(localRowDispatcherActorId)
 {
     MetadataFields.reserve(SourceParams.MetadataFieldsSize());
     TPqMetaExtractor fieldsExtractor;
@@ -242,11 +247,14 @@ TDqPqRdReadActor::TDqPqRdReadActor(
 }
 
 void TDqPqRdReadActor::ProcessState() {
-    if (!CoordinatorActorId) {
-        Send(NFq::RowDispatcherServiceActorId(), new NFq::TEvRowDispatcher::TEvRowDispatcherRequest());
+    if (!CoordinatorActorId && !CoordinatorChangesSubscribed) {
+        SRC_LOG_D("Send TEvCoordinatorChangesSubscribe");
+        CoordinatorChangesSubscribed = true;
+        Send(LocalRowDispatcherActorId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
         return;
     }
     if (Sessions.empty()) {
+        SRC_LOG_D("Send TEvCoordinatorRequest");
         Send(*CoordinatorActorId, new NFq::TEvRowDispatcher::TEvCoordinatorRequest(SourceParams, GetPartitionsToRead()));
         return;
     }
@@ -643,6 +651,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     const THashMap<TString, TString>& taskParams,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const NActors::TActorId& computeActorId,
+    const NActors::TActorId& localRowDispatcherActorId,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     i64 /*bufferSize*/) // TODO
 {
@@ -666,6 +675,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
         std::move(readTaskParamsMsg),
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
         computeActorId,
+        localRowDispatcherActorId,
         token,
         addBearerToToken
     );
@@ -692,6 +702,7 @@ void RegisterDqPqRdReadActorFactory(
             args.TaskParams,
             credentialsFactory,
             args.ComputeActorId,
+            NFq::RowDispatcherServiceActorId(),
             args.HolderFactory,
             PQRdReadDefaultFreeSpace);
     });

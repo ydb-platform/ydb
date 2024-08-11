@@ -121,7 +121,7 @@ public:
     void Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) ;
     void Handle(NActors::TEvents::TEvWakeup::TPtr &ev);
     void Handle(NActors::TEvents::TEvPong::TPtr &ev);
-    void Handle(NFq::TEvRowDispatcher::TEvRowDispatcherRequest::TPtr &ev);
+    void Handle(NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr &ev);
@@ -146,7 +146,7 @@ public:
         hFunc(NActors::TEvents::TEvWakeup, Handle)
         hFunc(NActors::TEvents::TEvPong, Handle);
 
-        hFunc(NFq::TEvRowDispatcher::TEvRowDispatcherRequest, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvGetNextBatch, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvMessageBatch, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStartSession, Handle);
@@ -244,8 +244,8 @@ void TRowDispatcher::Handle(NActors::TEvents::TEvPong::TPtr &) {
     LOG_ROW_DISPATCHER_DEBUG("NActors::TEvents::TEvPong ");
 }
 
-void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvRowDispatcherRequest::TPtr &ev) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvRowDispatcherRequest ");
+void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe::TPtr &ev) {
+    LOG_ROW_DISPATCHER_DEBUG("TEvCoordinatorChangesSubscribe ");
     if (!CoordinatorActorId) {
         return;
     }

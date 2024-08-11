@@ -199,7 +199,18 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     bool rightKeyColumns = false;
     double selectivity = 1.0;
 
-    if (IsPKJoin(rightStats,rightJoinKeys)) {
+    bool isRightPKJoin = IsPKJoin(rightStats,rightJoinKeys);
+    bool isLeftPKJoin = IsPKJoin(leftStats,leftJoinKeys);
+
+    if (isRightPKJoin && isLeftPKJoin) {
+        auto rightPKJoinCard = leftStats.Nrows * rightStats.Selectivity;
+        auto leftPKJoinCard = rightStats.Nrows * leftStats.Selectivity;
+        if (rightPKJoinCard > leftPKJoinCard) {
+            isRightPKJoin = false;
+        }
+    }
+
+    if (isRightPKJoin) {
         switch (joinKind) {
             case EJoinKind::LeftJoin:
             case EJoinKind::LeftOnly:
@@ -216,8 +227,11 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         } else {
             outputType = leftStats.Type;
         }
-    } else if (IsPKJoin(leftStats,leftJoinKeys)) {
+    } else if (isLeftPKJoin) {
         switch (joinKind) {
+            case EJoinKind::RightJoin:
+            case EJoinKind::RightOnly:
+                newCard = rightStats.Nrows; break;
             default: {
                 newCard = leftStats.Selectivity * rightStats.Nrows;
             }

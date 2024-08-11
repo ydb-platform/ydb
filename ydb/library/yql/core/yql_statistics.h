@@ -81,6 +81,8 @@ struct TOptimizerStatistics {
     bool Empty() const;
 
     friend std::ostream& operator<<(std::ostream& os, const TOptimizerStatistics& s);
+
+    TString ToString() const;
 };
 
 std::shared_ptr<TOptimizerStatistics> OverrideStatistics(const TOptimizerStatistics& s, const TStringBuf& tablePath, const std::shared_ptr<NJson::TJsonValue>& stats);

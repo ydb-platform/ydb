@@ -190,12 +190,38 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         {
             const TString query = GetStatic(queryPath);
 
-            //auto result = session.ExplainDataQuery(query).ExtractValueSync();
-            //Cout << result.GetPlan() << Endl;
+            auto result = session.ExplainDataQuery(query).ExtractValueSync();
+            Cout << result.GetPlan() << Endl;
         
             auto result2 = session.ExecuteDataQuery(query,TTxControl::BeginTx().CommitTx()).ExtractValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL(result2.GetStatus(), EStatus::SUCCESS);
+        }
+    }
+
+    void CheckJoinCardinality(const TString& queryPath, const TString& statsPath, const TString& joinKind, double card, bool useStreamLookupJoin) {
+        auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTable(session);
+
+        /* join with parameters */
+        {
+            const TString query = GetStatic(queryPath);
+
+            auto result = session.ExplainDataQuery(query).ExtractValueSync();
+            Cout << result.GetPlan() << Endl;
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+
+            if(!useStreamLookupJoin) {
+                auto joinNode = FindPlanNodeByKv(plan.GetMapSafe().at("SimplifiedPlan"), "Node Type", joinKind);
+                UNIT_ASSERT(joinNode.IsDefined());
+                auto op = joinNode.GetMapSafe().at("Operators").GetArraySafe()[0];
+                auto eRows = op.GetMapSafe().at("E-Rows").GetStringSafe();
+                UNIT_ASSERT_EQUAL(std::stod(eRows), card);
+            }
         }
     }
 
@@ -232,7 +258,11 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     //}
 
     Y_UNIT_TEST_TWIN(TestJoinHint, StreamLookupJoin) {
-        ExecuteJoinOrderTestDataQueryWithStats("queries/test_join_hint.sql", "stats/basic.json", StreamLookupJoin);
+        CheckJoinCardinality("queries/test_join_hint.sql", "stats/basic.json", "InnerJoin (Grace)", 10e6, StreamLookupJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestJoinHint2, StreamLookupJoin) {
+        CheckJoinCardinality("queries/test_join_hint2.sql", "stats/basic.json", "InnerJoin (MapJoin)", 1, StreamLookupJoin);
     }
 
     Y_UNIT_TEST_TWIN(FiveWayJoinWithConstantFold, StreamLookupJoin) {
@@ -319,6 +349,8 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
             TString ref = GetStatic(correctJoinOrderPath);
+
+            Cout << result.GetPlan() << Endl;
 
             /* correct canonized join order in cout, change corresponding join_order/.json file */
             Cout << CanonizeJoinOrder(result.GetPlan()) << Endl;

@@ -1993,6 +1993,58 @@ NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan,
         result["Stats"] = plan.GetMapSafe().at("Stats");
     }
 
+    if (plan.GetMapSafe().at("Node Type") == "TableLookupJoin" && plan.GetMapSafe().contains("Table")) {
+        result["Node Type"] = "LookupJoin";
+        NJson::TJsonValue newOps;
+        NJson::TJsonValue op;
+
+        op["Name"] = "LookupJoin";
+        op["LookupKeyColumns"] = plan.GetMapSafe().at("LookupKeyColumns");
+
+        newOps.AppendValue(op);
+        result["Operators"] = newOps;
+
+        NJson::TJsonValue newPlans;
+
+        NJson::TJsonValue lookupPlan;
+        lookupPlan["Node Type"] = "TableLookup";
+        lookupPlan["PlanNodeType"] = "TableLookup";
+
+        NJson::TJsonValue lookupOps;
+        NJson::TJsonValue lookupOp;
+
+        lookupOp["Name"] = "TableLookup";
+        lookupOp["Columns"] = plan.GetMapSafe().at("Columns");
+        lookupOp["LookupKeyColumns"] = plan.GetMapSafe().at("LookupKeyColumns");
+        lookupOp["Table"] = plan.GetMapSafe().at("Table");
+
+        if (plan.GetMapSafe().contains("E-Cost")) {
+            lookupOp["E-Cost"] = plan.GetMapSafe().at("E-Cost");
+        }
+        if (plan.GetMapSafe().contains("E-Rows")) {
+            lookupOp["E-Rows"] = plan.GetMapSafe().at("E-Rows");
+        }
+        if (plan.GetMapSafe().contains("E-Size")) {
+            lookupOp["E-Size"] = plan.GetMapSafe().at("E-Size");
+        }
+
+        lookupOps.AppendValue(lookupOp);
+        lookupPlan["Operators"] = lookupOps;
+
+        newPlans.AppendValue(ReconstructQueryPlanRec(
+            plan.GetMapSafe().at("Plans").GetArraySafe()[0],
+            0, 
+            planIndex, 
+            precomputes, 
+            nodeCounter));
+
+        newPlans.AppendValue(lookupPlan);
+
+        result["Plans"] = newPlans;
+
+        return result;
+    }
+
     if (!plan.GetMapSafe().contains("Operators")) {
         NJson::TJsonValue planInputs;
 

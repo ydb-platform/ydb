@@ -47,12 +47,14 @@ namespace {
             }
         }
 
-        return TVector<TString>({fullColumnName});
+        auto res = TVector<TString>();
+        res.push_back(fullColumnName);
+        return res;
     }
 
     std::shared_ptr<TOptimizerStatistics> ApplyCardinalityHints(
-        std::shared_ptr<TOptimizerStatistics> inputStats, 
-        TVector<TString> labels, 
+        std::shared_ptr<TOptimizerStatistics>& inputStats, 
+        TVector<TString>& labels, 
         TCardinalityHints hints) {
 
             if (labels.size() != 1) {
@@ -75,14 +77,14 @@ namespace {
             return inputStats;
     }
 
-    TVector<TString> UnionLabels(TVector<TString> leftLabels, TVector<TString> rightLabels) {
+    TVector<TString> UnionLabels(TVector<TString>& leftLabels, TVector<TString>& rightLabels) {
         auto res = TVector<TString>();
         res.insert(res.begin(), leftLabels.begin(), leftLabels.end());
         res.insert(res.end(), rightLabels.begin(), rightLabels.end());
         return res;
     }
 
-    TCardinalityHints::TCardinalityHint* FindCardHint(TVector<TString> labels, TCardinalityHints hints) {
+    TCardinalityHints::TCardinalityHint* FindCardHint(TVector<TString>& labels, TCardinalityHints& hints) {
         THashSet<TString> labelsSet;
         labelsSet.insert(labels.begin(), labels.end());
 
@@ -235,8 +237,7 @@ bool IsConstantExprWithParams(const TExprNode::TPtr& input) {
  * FIX: Currently we treat all join the same from the cost perspective, need to refine cost function
  */
 void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TCardinalityHints hints) {
-    Y_UNUSED(hints);
-
+    
     auto inputNode = TExprBase(input);
     auto join = inputNode.Cast<TCoMapJoinCore>();
 
@@ -246,15 +247,15 @@ void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationCont
     auto leftStats = typeCtx->GetStats(leftArg.Raw());
     auto rightStats = typeCtx->GetStats(rightArg.Raw());
 
+    if (!leftStats || !rightStats) {
+        return;
+    }
+
     auto leftLabels = InferLabels(leftStats, join.LeftKeysColumnNames());
     auto rightLabels = InferLabels(rightStats, join.RightKeysColumnNames());
 
     leftStats = ApplyCardinalityHints(leftStats, leftLabels, hints);
     rightStats = ApplyCardinalityHints(rightStats, rightLabels, hints);
-
-    if (!leftStats || !rightStats) {
-        return;
-    }
 
     TVector<TString> leftJoinKeys;
     TVector<TString> rightJoinKeys;
@@ -277,8 +278,10 @@ void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationCont
             ConvertToJoinKind(join.JoinKind().StringValue()),
             FindCardHint(unionOfLabels, hints))
         );
-    resStats->Labels = std::make_shared<TVector<TString>>(unionOfLabels);
+    resStats->Labels = std::make_shared<TVector<TString>>();
+    resStats->Labels->insert(resStats->Labels->begin(), unionOfLabels.begin(), unionOfLabels.end());
     typeCtx->SetStats(join.Raw(), resStats);
+    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for MapJoin: " << resStats->ToString();
 }
 
 /**
@@ -295,15 +298,15 @@ void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationCo
     auto leftStats = typeCtx->GetStats(leftArg.Raw());
     auto rightStats = typeCtx->GetStats(rightArg.Raw());
 
+    if (!leftStats || !rightStats) {
+        return;
+    }
+
     auto leftLabels = InferLabels(leftStats, join.LeftKeysColumnNames());
     auto rightLabels = InferLabels(rightStats, join.RightKeysColumnNames());
 
     leftStats = ApplyCardinalityHints(leftStats, leftLabels, hints);
     rightStats = ApplyCardinalityHints(rightStats, rightLabels, hints);
-
-    if (!leftStats || !rightStats) {
-        return;
-    }
 
     TVector<TString> leftJoinKeys;
     TVector<TString> rightJoinKeys;
@@ -328,8 +331,10 @@ void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationCo
             )
         );
 
-    resStats->Labels = std::make_shared<TVector<TString>>(unionOfLabels);
+    resStats->Labels = std::make_shared<TVector<TString>>();
+    resStats->Labels->insert(resStats->Labels->begin(), unionOfLabels.begin(), unionOfLabels.end());
     typeCtx->SetStats(join.Raw(), resStats);
+    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for GraceJoin: " << resStats->ToString();
 }
 
 /**
@@ -382,7 +387,9 @@ void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationCont
     else if (flatmap.Lambda().Body().Maybe<TCoMapJoinCore>() || 
             flatmap.Lambda().Body().Maybe<TCoMap>().Input().Maybe<TCoMapJoinCore>() ||
             flatmap.Lambda().Body().Maybe<TCoJoinDict>() ||
-            flatmap.Lambda().Body().Maybe<TCoMap>().Input().Maybe<TCoJoinDict>()){
+            flatmap.Lambda().Body().Maybe<TCoMap>().Input().Maybe<TCoJoinDict>() ||
+            flatmap.Lambda().Body().Maybe<TCoGraceJoinCore>() ||
+            flatmap.Lambda().Body().Maybe<TCoMap>().Input().Maybe<TCoGraceJoinCore>()){
 
         typeCtx->SetStats(input.Get(), typeCtx->GetStats(flatmap.Lambda().Body().Raw()));
     }
@@ -509,17 +516,25 @@ void InferStatisticsForAsList(const TExprNode::TPtr& input, TTypeAnnotationConte
 /***
  * Infer statistics for a list of structs
  */
-void InferStatisticsForListParam(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+bool InferStatisticsForListParam(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
     auto param = TCoParameter(input);
+    if (param.Name().Maybe<TCoAtom>()) {
+        auto atom = param.Name().Cast<TCoAtom>();
+        if (atom.Value().StartsWith("%kqp%tx_result_binding")) {
+            return false;
+        }
+    }
+
     if (auto maybeListType = param.Type().Maybe<TCoListType>()) {
         auto itemType = maybeListType.Cast().ItemType();
         if (auto maybeStructType = itemType.Maybe<TCoStructType>()) {
             int nRows = 100;
             int nAttrs = maybeStructType.Cast().Ptr()->ChildrenSize();
-            typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(
-                EStatisticsType::BaseTable, nRows, nAttrs, nRows*nAttrs, 0.0));
+            auto resStats = std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, nRows, nAttrs, nRows*nAttrs, 0.0);
+            typeCtx->SetStats(input.Get(), resStats);
         }
     }
+    return true;
 }
 
 /***

@@ -55,8 +55,7 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
     else if (TCoAsList::Match(input.Get())){
         InferStatisticsForAsList(input, TypeCtx);
     }
-    else if (TCoParameter::Match(input.Get())) {
-        InferStatisticsForListParam(input, TypeCtx);
+    else if (TCoParameter::Match(input.Get()) && InferStatisticsForListParam(input, TypeCtx)) {
     }
 
     // Join matchers

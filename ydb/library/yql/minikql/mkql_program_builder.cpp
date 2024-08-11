@@ -5854,6 +5854,35 @@ TRuntimeNode TProgramBuilder::ScalarApply(const TArrayRef<const TRuntimeNode>& a
     return TRuntimeNode(builder.Build(), false);
 }
 
+TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode dict,
+    EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns
+) {
+    MKQL_ENSURE(joinKind == EJoinKind::LeftSemi, "Unsupported join kind");
+    MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
+
+    TRuntimeNode::TList leftKeyColumnsNodes;
+    leftKeyColumnsNodes.reserve(leftKeyColumns.size());
+    std::transform(leftKeyColumns.cbegin(), leftKeyColumns.cend(),
+        std::back_inserter(leftKeyColumnsNodes), [this](const ui32 idx) {
+            return NewDataLiteral(idx);
+        });
+
+    auto returnJoinItems = ValidateBlockFlowType(flow.GetStaticType(), false);
+    const auto payloadType = AS_TYPE(TDictType, dict.GetStaticType())->GetPayloadType();
+    // XXX: This is the contract ensured by the expression compiler and
+    // optimizers for join types that don't require the right (i.e. dict) part.
+    MKQL_ENSURE(payloadType->IsVoid(), "Dict payload has to be Void");
+    TType* returnJoinType = NewFlowType(NewMultiType(returnJoinItems));
+
+    TCallableBuilder callableBuilder(Env, __func__, returnJoinType);
+    callableBuilder.Add(flow);
+    callableBuilder.Add(dict);
+    callableBuilder.Add(NewDataLiteral((ui32)joinKind));
+    callableBuilder.Add(NewTuple(leftKeyColumnsNodes));
+
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 namespace {
 using namespace NYql::NMatchRecognize;
 TRuntimeNode PatternToRuntimeNode(const TRowPattern& pattern, const TProgramBuilder& programBuilder) {

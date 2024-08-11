@@ -10,7 +10,7 @@
 namespace NKikimr::NOlap::NReader {
 
 // Represents a batch of rows produced by ASC or DESC scan with applied filters and partial aggregation
-class TPartialReadResult {
+class TPartialReadResult: public TNonCopyable {
 private:
     YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>, ResourcesGuard);
     NArrow::TShardedRecordBatch ResultBatch;
@@ -42,7 +42,7 @@ public:
         return ResultBatch.GetRecordsCount();
     }
 
-    static std::vector<TPartialReadResult> SplitResults(std::vector<TPartialReadResult>&& resultsExt, const ui32 maxRecordsInResult);
+    static std::vector<std::shared_ptr<TPartialReadResult>> SplitResults(std::vector<std::shared_ptr<TPartialReadResult>>&& resultsExt, const ui32 maxRecordsInResult);
 
     const NArrow::TShardedRecordBatch& GetShardedBatch() const {
         return ResultBatch;

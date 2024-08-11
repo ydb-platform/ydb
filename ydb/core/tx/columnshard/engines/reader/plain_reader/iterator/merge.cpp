@@ -2,6 +2,7 @@
 #include "plain_read_data.h"
 #include "source.h"
 
+#include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 
 namespace NKikimr::NOlap::NReader::NPlain {
@@ -27,6 +28,7 @@ std::optional<NArrow::NMerger::TCursor> TBaseMergeTask::DrainMergerLinearScan(co
 
 void TBaseMergeTask::PrepareResultBatch() {
     if (!ResultBatch || ResultBatch->num_rows() == 0) {
+        AllocationGuard = nullptr;
         ResultBatch = nullptr;
         LastPK = nullptr;
         return;
@@ -43,7 +45,7 @@ void TBaseMergeTask::PrepareResultBatch() {
         } else {
             ShardedBatch = NArrow::TShardedRecordBatch(ResultBatch);
         }
-        AllocationGuard->Update(NArrow::GetTableDataSize(ResultBatch));
+        AllocationGuard->Update(NArrow::GetTableMemorySize(ResultBatch));
         AFL_VERIFY(!!LastPK == !!ShardedBatch->GetRecordsCount())("lpk", !!LastPK)("sb", ShardedBatch->GetRecordsCount());
     } else {
         AllocationGuard = nullptr;

@@ -187,7 +187,6 @@ bool TKqpColumnsGetterTransformer::AfterLambdas(const TExprNode::TPtr& input) {
                 column = column.substr(pointPos + 1);
             }
 
-            Cout << table << " " << column << input.Get()->Dump() << Endl;
             ColumnsByTableName[table].insert(std::move(column));
         }
     } else {

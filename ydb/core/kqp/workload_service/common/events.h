@@ -45,6 +45,8 @@ struct TEvPrivate {
         EvStartRequestResponse,
         EvCleanupRequestsResponse,
 
+        EvRanksCheckerResponse,
+
         EvEnd
     };
 
@@ -293,6 +295,21 @@ struct TEvPrivate {
 
         const Ydb::StatusIds::StatusCode Status;
         const std::vector<TString> SesssionIds;
+        const NYql::TIssues Issues;
+    };
+
+    // Resource pool classifier events
+    struct TEvRanksCheckerResponse : public TEventLocal<TEvRanksCheckerResponse, EvRanksCheckerResponse> {
+        TEvRanksCheckerResponse(Ydb::StatusIds::StatusCode status, i64 maxRank, ui64 numberClassifiers, NYql::TIssues issues)
+            : Status(status)
+            , MaxRank(maxRank)
+            , NumberClassifiers(numberClassifiers)
+            , Issues(std::move(issues))
+        {}
+
+        const Ydb::StatusIds::StatusCode Status;
+        const i64 MaxRank;
+        const ui64 NumberClassifiers;
         const NYql::TIssues Issues;
     };
 };

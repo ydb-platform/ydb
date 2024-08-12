@@ -2122,17 +2122,20 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
     index.SetName(IndexName);
     index.SetType(IndexType);
 
-    for (const auto& x : IndexColumns) {
-        *index.AddKeyColumnNames() = x;
-    }
+    *index.MutableKeyColumnNames() = {
+        IndexColumns.begin(),
+        IndexColumns.end()
+    };
 
-    for (const auto& x : DataColumns) {
-        *index.AddDataColumnNames() = x;
-    }
+    *index.MutableDataColumnNames() = {
+        DataColumns.begin(),
+        DataColumns.end()
+    };
 
-    for (const auto& implTableDescription : ImplTableDescriptions) {
-        *index.AddIndexImplTableDescriptions() = implTableDescription;
-    }
+    *index.MutableIndexImplTableDescriptions() = {
+        ImplTableDescriptions.begin(),
+        ImplTableDescriptions.end()
+    };
 
     if (IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
         *index.MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);

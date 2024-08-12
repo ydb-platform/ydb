@@ -50,7 +50,7 @@ public:
 
     NActors::TActorId RegisterInferencinator(TStringBuf formatStr) {
         auto format = NInference::ConvertFileFormat(formatStr);
-        auto arrowFetcher = ActorSystem.Register(NInference::CreateArrowFetchingActor(S3ActorId, format), 1);
+        auto arrowFetcher = ActorSystem.Register(NInference::CreateArrowFetchingActor(S3ActorId, format, {}), 1);
         return ActorSystem.Register(NInference::CreateArrowInferencinator(arrowFetcher, format, {}), 1);
     }
 

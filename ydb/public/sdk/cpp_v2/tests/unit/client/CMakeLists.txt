@@ -1,8 +1,6 @@
-add_subdirectory(oauth2_token_exchange)
-
 add_ydb_test(NAME client-ydb_coordination_ut
   SOURCES
-    coordination_ut.cpp
+    coordination/coordination_ut.cpp
   LINK_LIBRARIES
     yutil
     cpp-testing-unittest_main
@@ -14,7 +12,7 @@ add_ydb_test(NAME client-ydb_coordination_ut
 
 add_ydb_test(NAME client-extensions-discovery_mutator_ut
   SOURCES
-    discovery_mutator_ut.cpp
+    discovery_mutator/discovery_mutator_ut.cpp
   LINK_LIBRARIES
     yutil
     cpp-testing-unittest_main
@@ -26,7 +24,7 @@ add_ydb_test(NAME client-extensions-discovery_mutator_ut
 
 add_ydb_test(NAME client-ydb_driver_ut
   SOURCES
-    driver_ut.cpp
+    driver/driver_ut.cpp
   LINK_LIBRARIES
     yutil
     cpp-testing-unittest_main
@@ -40,7 +38,7 @@ add_ydb_test(NAME client-impl-ydb_endpoints_ut
   INCLUDE_DIRS
     ${YDB_SDK_SOURCE_DIR}/src/client/impl/ydb_endpoints
   SOURCES
-    endpoints_ut.cpp
+    endpoints/endpoints_ut.cpp
   LINK_LIBRARIES
     yutil
     cpp-testing-unittest_main
@@ -49,9 +47,22 @@ add_ydb_test(NAME client-impl-ydb_endpoints_ut
     unit
 )
 
+add_ydb_test(NAME client-oauth2_ut
+  SOURCES
+    oauth2_token_exchange/credentials_ut.cpp
+    oauth2_token_exchange/jwt_token_source_ut.cpp
+  LINK_LIBRARIES
+    yutil
+    cpp-testing-unittest_main
+    http-server
+    client-ydb_types-credentials-oauth2
+  LABELS
+    unit
+)
+
 add_ydb_test(NAME client-ydb_params_ut
   SOURCES
-    params_ut.cpp
+    params/params_ut.cpp
   LINK_LIBRARIES
     yutil
     cpp-testing-unittest_main
@@ -63,7 +74,7 @@ add_ydb_test(NAME client-ydb_params_ut
 
 add_ydb_test(NAME client-ydb_result_ut
   SOURCES
-    result_ut.cpp
+    result/result_ut.cpp
   LINK_LIBRARIES
     yutil
     cpp-testing-unittest_main
@@ -75,7 +86,7 @@ add_ydb_test(NAME client-ydb_result_ut
 
 add_ydb_test(NAME client-ydb_value_ut
   SOURCES
-    value_ut.cpp
+    value/value_ut.cpp
   LINK_LIBRARIES
     yutil
     cpp-testing-unittest_main
@@ -89,7 +100,7 @@ add_ydb_test(NAME client-ydb_value_ut
 
 add_ydb_test(NAME client-draft_ut
   SOURCES
-    ydb_scripting_response_headers_ut.cpp
+    scripting/ydb_scripting_response_headers_ut.cpp
   LINK_LIBRARIES
     yutil
     cpp-testing-unittest_main

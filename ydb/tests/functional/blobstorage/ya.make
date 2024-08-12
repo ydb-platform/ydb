@@ -8,6 +8,10 @@ TEST_SRCS(
     test_tablet_channel_migration.py
 )
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:32)
+ENDIF()
+
 IF (SANITIZER_TYPE == "thread")
     REQUIREMENTS(
         ram:16
@@ -16,9 +20,6 @@ IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    REQUIREMENTS(
-        ram:32
-    )
     TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()

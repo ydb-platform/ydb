@@ -2,6 +2,10 @@ UNITTEST_FOR(ydb/core/tx/tx_proxy)
 
 FORK_SUBTESTS()
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:32)
+ENDIF()
+
 IF (WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)
@@ -28,7 +32,5 @@ SRCS(
     proxy_ut_helpers.h
     proxy_ut_helpers.cpp
 )
-
-REQUIREMENTS(ram:32)
 
 END()

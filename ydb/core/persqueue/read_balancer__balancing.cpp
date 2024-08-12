@@ -533,6 +533,7 @@ std::unique_ptr<TEvPersQueue::TEvReleasePartition> TPartitionFamily::MakeEvRelea
     r.SetPath(TopicPath());
     r.SetGeneration(TabletGeneration());
     r.SetClientId(Session->ClientId);
+    r.SetCount(1);
     r.SetGroup(partitionId + 1);
     ActorIdToProto(Session->Pipe, r.MutablePipeClient());
 

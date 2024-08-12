@@ -43,7 +43,7 @@ private:
     bool AfterLambdas(const TExprNode::TPtr& input);
 
     bool AfterLambdasUnmatched(const TExprNode::TPtr& input);
-
+    
 private:
     THashMap<TExprNode::TPtr, TExprNode::TPtr> TableByExprNode;
     THashMap<TString, THashSet<TString>> ColumnsByTableName;

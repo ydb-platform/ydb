@@ -335,7 +335,6 @@ private:
             .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
             .AddPostTypeAnnotation()
             .Add(CreateKqpBuildPhysicalQueryTransformer(OptimizeCtx, BuildQueryCtx), "BuildPhysicalQuery")
-            .Add(CreateKqpColumnsGetterTransformer(Config, SessionCtx->Tables(), Cluster, ActorSystem), "ColumnGetter")
             .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
             .Build(false);
 

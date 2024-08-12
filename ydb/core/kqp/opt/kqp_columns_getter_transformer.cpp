@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/gateway/actors/kqp_ic_gateway_actors.h>
 #include <ydb/library/yql/core/yql_statistics.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <ydb/library/yql/dq/opt/dq_opt_stat.h>
 
 namespace NKikimr::NKqp {
 
@@ -104,7 +105,8 @@ IGraphTransformer::TStatus TKqpColumnsGetterTransformer::DoTransform(TExprNode::
     auto promise = NewPromise<TResult>();
     auto callback = [tableMetaByPathId = std::move(tableMetaByPathId)]
     (TPromise<TResult> promise, NStat::TEvStatistics::TEvGetStatisticsResult&& response) mutable {
-        Y_ENSURE(response.Success);
+        bool isOk = response.Success;
+        Y_ENSURE(isOk);
         
         THashMap<TString, TOptimizerStatistics::TColumnStatMap> columnStatisticsByTableName;
 
@@ -120,10 +122,11 @@ IGraphTransformer::TStatus TKqpColumnsGetterTransformer::DoTransform(TExprNode::
     auto statServiceId = NStat::MakeStatServiceID(ActorSystem->NodeId);
     IActor* requestHandler = 
         new TActorRequestHandler<TRequest, TResponse, TResult>(statServiceId, getStatisticsRequest.Release(), promise, callback);
-    ActorSystem
+    auto actorId = ActorSystem
         ->Register(requestHandler, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
+    Y_UNUSED(actorId);
 
-    promise.GetFuture().GetValueSync();
+    auto columnStatisticsByTableName = promise.GetFuture().GetValueSync();
 
     return IGraphTransformer::TStatus::Ok;
 }
@@ -133,6 +136,8 @@ bool TKqpColumnsGetterTransformer::BeforeLambdas(const TExprNode::TPtr& input) {
     
     if (TKqpTable::Match(input.Get())) {
         TableByExprNode[input.Get()] = input.Get();
+    } else if (auto maybeStreamLookup = TExprBase(input).Maybe<TKqpCnStreamLookup>()) {
+        TableByExprNode[input.Get()] = maybeStreamLookup.Cast().Table().Ptr();
     } else {
         matched = false;
     }
@@ -155,31 +160,36 @@ bool TKqpColumnsGetterTransformer::AfterLambdas(const TExprNode::TPtr& input) {
     bool matched = true;
 
     if (
-        TCoFilterBase::Match(input.Get()) || 
+        TCoFilterBase::Match(input.Get()) ||
         TCoFlatMapBase::Match(input.Get()) && IsPredicateFlatMap(TExprBase(input).Cast<TCoFlatMapBase>().Lambda().Body().Ref())
     ) {
-        VisitExpr(
-            input->Child(1), 
-            [this](const TExprNode::TPtr& input) -> bool {
-                if (TCoMember::Match(input.Get())) {
-                    auto member = TExprBase(input).Cast<TCoMember>();
+        auto computer = NDq::TPredicateSelectivityComputer(nullptr, true);
+    
+        if (TCoFilterBase::Match(input.Get())) {
+            computer.Compute(TExprBase(input).Cast<TCoFilterBase>().Lambda().Body());
+        } else if (TCoFlatMapBase::Match(input.Get())) {
+            computer.Compute(TExprBase(input).Cast<TCoFlatMapBase>().Lambda().Body());
+        } else {
+            Y_ENSURE(false);
+        }
 
-                    if (!TableByExprNode.contains(input.Get()) || TableByExprNode[input.Get()] == nullptr) {
-                        return true;
-                    }
-                    auto table = TExprBase(TableByExprNode[input.Get()]).Cast<TKqpTable>().Path().StringValue();
-                    auto column = member.Name().StringValue();
-                    size_t pointPos = column.find('.'); // table.column
-                    if (pointPos != TString::npos) {
-                        column = column.substr(pointPos + 1);
-                    }
-
-                    ColumnsByTableName[table].insert(std::move(column));
-                }
-
-                return true;
+        auto columnStatsUsedMembers = computer.GetColumnStatsUsedMembers();
+        for (const auto& item: columnStatsUsedMembers.Data) {
+            auto exprNode = TExprBase(item.Member).Ptr();
+            if (!TableByExprNode.contains(exprNode) || TableByExprNode[exprNode] == nullptr) {
+                continue;
             }
-        );
+
+            auto table = TExprBase(TableByExprNode[exprNode]).Cast<TKqpTable>().Path().StringValue();
+            auto column = item.Member.Name().StringValue();
+            size_t pointPos = column.find('.'); // table.column
+            if (pointPos != TString::npos) {
+                column = column.substr(pointPos + 1);
+            }
+
+            Cout << table << " " << column << input.Get()->Dump() << Endl;
+            ColumnsByTableName[table].insert(std::move(column));
+        }
     } else {
         matched = false;
     }

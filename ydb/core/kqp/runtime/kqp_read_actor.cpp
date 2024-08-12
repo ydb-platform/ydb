@@ -60,6 +60,7 @@ public:
             : ShardId(shardId)
             , ReadResult(std::move(readResult))
             , ReadId(readId)
+            , SeqNo(seqNo)
         {
         }
     };

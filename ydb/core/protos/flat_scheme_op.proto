@@ -400,6 +400,8 @@ message TTableDescription {
     optional TTableReplicationConfig ReplicationConfig = 40;
 
     optional bool Temporary = 41;
+
+    optional bool SystemColumnNamesAllowed = 42;
 }
 
 message TDictionaryEncodingSettings {

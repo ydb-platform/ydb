@@ -11302,4 +11302,24 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
     }
 
+    Y_UNIT_TEST(CreateSystemColumn) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "SystemColumnForbidden"
+            Columns { Name: "__ydb_SomeColumn"   Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["__ydb_SomeColumn", "value"]
+        )", {NKikimrScheme::StatusSchemeError});
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "SystemColumnForbidden"
+            Columns { Name: "__ydb_SomeColumn"   Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["__ydb_SomeColumn", "value"]
+            SystemColumnNamesAllowed: true
+        )");
+    }
 }

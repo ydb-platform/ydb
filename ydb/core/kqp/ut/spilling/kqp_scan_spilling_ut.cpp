@@ -69,6 +69,14 @@ constexpr auto SimpleGraceJoinWithSpillingQuery = R"(
         order by t1.Value
     )";
 
+constexpr auto SimpleWideCombinerSpillingQuery = R"(
+        --!syntax_v1
+        PRAGMA ydb.EnableSpillingNodes="All";
+        PRAGMA ydb.CostBasedOptimizationLevel='0';
+        select count(*)
+        from `/Root/KeyValue` as t1 group by t1.Key
+    )";
+
 
 } // anonymous namespace
 
@@ -108,6 +116,34 @@ Y_UNIT_TEST_TWIN(SpillingInRuntimeNodes, EnabledSpilling) {
     Cerr << planres.GetStats()->GetAst() << Endl;
 
     auto result = db.ExecuteQuery(SimpleGraceJoinWithSpillingQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+    if (EnabledSpilling) {
+        UNIT_ASSERT(counters.SpillingWriteBlobs->Val() > 0);
+        UNIT_ASSERT(counters.SpillingReadBlobs->Val() > 0);
+    } else {
+        UNIT_ASSERT(counters.SpillingWriteBlobs->Val() == 0);
+        UNIT_ASSERT(counters.SpillingReadBlobs->Val() == 0);
+    }
+}
+
+Y_UNIT_TEST_TWIN(SpillingInRuntimeNodesCombiner, EnabledSpilling) {
+    double reasonableTreshold = EnabledSpilling ? 0.01 : 100;
+    Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
+    TKikimrRunner kikimr(AppCfgLowComputeLimits(reasonableTreshold));
+
+    auto db = kikimr.GetQueryClient();
+
+    FillTableWithData(db, 1000);
+
+    auto explainMode = NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain);
+    auto planres = db.ExecuteQuery(SimpleWideCombinerSpillingQuery, NYdb::NQuery::TTxControl::NoTx(), explainMode).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(planres.GetStatus(), EStatus::SUCCESS, planres.GetIssues().ToString());
+
+    Cerr << planres.GetStats()->GetAst() << Endl;
+
+    auto result = db.ExecuteQuery(SimpleWideCombinerSpillingQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
     TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);

@@ -184,18 +184,20 @@ protected:
 
     void BalanceNodes() {
         std::vector<TNodeInfo*> nodes;
+        TNodeFilter filter(*Hive);
+        filter.AllowedDomains = {Settings.FilterSubDomain};
         if (!Settings.FilterNodeIds.empty()) {
             nodes.reserve(Settings.FilterNodeIds.size());
             for (TNodeId nodeId : Settings.FilterNodeIds) {
                 TNodeInfo* node = Hive->FindNode(nodeId);
-                if (node != nullptr && node->IsAlive()) {
+                if (node != nullptr && node->IsAlive() && node->MatchesFilter(filter)) {
                     nodes.emplace_back(node);
                 }
             }
         } else {
             nodes.reserve(Hive->Nodes.size());
             for (auto& [nodeId, nodeInfo] : Hive->Nodes) {
-                if (nodeInfo.IsAlive()) {
+                if (nodeInfo.IsAlive() && nodeInfo.MatchesFilter(filter)) {
                     nodes.emplace_back(&nodeInfo);
                 }
             }

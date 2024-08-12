@@ -18,6 +18,7 @@ struct TDomainInfo {
     ui64 TabletsTotal = 0;
     ui64 TabletsAlive = 0;
     ui64 TabletsAliveInObjectDomain = 0;
+    std::unordered_set<TNodeId> Nodes;
 
     ENodeSelectionPolicy GetNodeSelectionPolicy() const;
 };

@@ -622,6 +622,7 @@ public:
     void AssignTabletGroups(TLeaderTabletInfo& tablet);
     TNodeInfo& GetNode(TNodeId nodeId);
     TNodeInfo* FindNode(TNodeId nodeId);
+    const TNodeInfo* FindNode(TNodeId nodeId) const;
     TLeaderTabletInfo& GetTablet(TTabletId tabletId);
     TLeaderTabletInfo* FindTablet(TTabletId tabletId);
     TLeaderTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId); // find tablets, even deleting ones
@@ -995,6 +996,8 @@ protected:
         std::vector<TNodeStat> Values;
     };
 
+    template <std::ranges::range TRange>
+    THiveStats GetStats(const TRange& nodes) const;
     THiveStats GetStats() const;
     void RemoveSubActor(ISubActor* subActor);
     bool StopSubActor(TSubActorId subActorId);
@@ -1013,6 +1016,7 @@ protected:
     void InitDefaultChannelBind(TChannelBind& bind);
     void RequestPoolsInformation();
     void RequestFreeSequence();
+    void UpdateBalanceCounters();
     void EnqueueIncomingEvent(STATEFN_SIG);
 
     bool SeenDomain(TSubDomainKey domain);

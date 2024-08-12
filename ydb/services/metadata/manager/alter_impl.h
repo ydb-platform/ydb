@@ -148,7 +148,8 @@ public:
         if (!PrepareRestoredObjects(objects)) {
             TBase::PassAway();
         } else {
-            Manager->PrepareObjectsBeforeModification(std::move(objects), InternalController, Context);
+            const TAlterOperationContext alterContext = {.SessionId = SessionId, .TransactionId = TransactionId};
+            Manager->PrepareObjectsBeforeModification(std::move(objects), InternalController, Context, alterContext);
         }
     }
 
@@ -235,8 +236,8 @@ public:
             if (!trPatch) {
                 TBase::ExternalController->OnAlteringProblem("cannot found patch for object");
                 return false;
-            } else if (!trObject.TakeValuesFrom(*trPatch)) {
-                TBase::ExternalController->OnAlteringProblem("cannot patch object");
+            } else if (const TConclusionStatus& status = objectPatched.MergeRecords(trObject, *trPatch); status.IsFail()) {
+                TBase::ExternalController->OnAlteringProblem(status.GetErrorMessage());
                 return false;
             } else if (!TObject::TDecoder::DeserializeFromRecord(objectPatched, trObject)) {
                 TBase::ExternalController->OnAlteringProblem("cannot parse object after patch");

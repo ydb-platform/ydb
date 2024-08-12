@@ -279,19 +279,19 @@
 
 **Локальная база данных таблетки**, **локальная база данных**, **tablet local database** или **local database** — это набор структур данных и связанного кода, которые управляют состоянием таблетки и хранимыми ей данными. Логически состояние локальной базы данных представлено набором таблиц, очень похожих на реляционные таблицы. Модификация состояния локальной базы данных осуществляется локальными транзакциями таблетки, создаваемыми пользовательским актором таблетки.
 
-Each local database table is stored using the [LSM-дерево](#lsm-tree) data structure.
+Каждая таблица локальной базы данных хранится как [LSM-дерево](#lsm-tree).
 
 #### Log-structured merge-tree {#lsm-tree}
 
-A **[log-structured merge-tree](https://en.wikipedia.org/wiki/Log-structured_merge-tree)** or **LSM tree**, is a data structure designed to optimize write and read performance in storage systems. It is used in {{ ydb-short-name }} for storing [local database](#local-database) tables and [VDisks](#vdisk) data.
+**[Log-structured merge-tree](https://en.wikipedia.org/wiki/Log-structured_merge-tree)** или **LSM-дерево** — это структура данных, разработанная для оптимизации производительности записи и чтения в системах хранения. Она используется в {{ ydb-short-name }} для хранения таблиц [локальной базы](#local-database) и данных [VDisks](#vdisk).
 
 #### MemTable {#memtable}
 
-All data written to a [local database](#local-database) tables is initially stored in an in-memory data structure called a **MemTable**. When the MemTable reaches a predefined size, it is flushed to disk as an immutable [SST](#sst).
+Все данные, записанные в таблицы [локальной базы](#local-database), изначально хранятся в структуре данных в оперативной памяти, называемой **MemTable**. Когда MemTable достигает заданного размера, она сбрасывается на диск как неизменяемая структура данных [SST](#sst).
 
 #### Sorted string table {#sst}
 
-A **sorted string table** or **SST** is an immutable data structure that stores rows sorted by key, facilitating efficient key lookups and range queries. Each SST is composed of a contiguous series of small data pages, typically around 7 KiB in size, which further optimizes the process of reading data from disk. An SST typically represents a part of [LSM tree](#lsm-tree).
+**Sorted string table** или **SST** — это неизменяемая структура данных, которая хранит строки таблицы, отсортированные по ключу, что облегчает эффективный поиск ключей и работу с диапазонами ключей. Каждая SST состоит из непрерывной серии маленьких страниц данных, обычно размером около 7 КиБ каждая, что дополнительно оптимизирует процесс чтения данных с диска. Обычно SST представляет собой часть [LSM-дерева](#lsm-tree).
 
 #### Пайп таблетки {#tablet-pipe}
 
@@ -307,11 +307,11 @@ A **sorted string table** or **SST** is an immutable data structure that stores 
 
 ### Shared cache {#shared-cache}
 
-A **shared cache** is an [actor](#actor) that stores data pages recently accessed and read from [distributed storage](#distributed-storage). Caching these pages reduces disk I/O operations and accelerates data retrieval, enhancing overall system performance.
+**Shared cache** — это [актор](#actor), который хранит страницы данных, недавно прочитанные из [распределенного хранилища](#distributed-storage). Кеширование этих страниц снижает количество операций ввода-вывода с диска и ускоряет получение данных, повышая общую производительность системы.
 
 ### Memory controller {#memory-controller}
 
-A **memory controller** is an [actor](#actor) that manages {{ ydb-short-name }} [memory limits](../deploy/configuration/config.md#memory-controller).
+**Memory controller** - это [актор](#actor), который управляет [ограничениями памяти](../deploy/configuration/config.md#memory-controller) {{ ydb-short-name }}.
 
 ### Типы таблеток {#tablet-types}
 

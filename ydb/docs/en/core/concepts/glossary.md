@@ -284,7 +284,7 @@ All data written to a [local database](#local-database) tables is initially stor
 
 #### Sorted string table {#sst}
 
-A **sorted string table** or **SST** is an immutable data structure that stores rows sorted by key, facilitating efficient key lookups and range queries. Each SST is composed of a contiguous series of small data pages, typically around 7 KiB in size, which further optimizes the process of reading data from disk. An SST typically represents a part of [LSM tree](#lsm-tree).
+A **sorted string table** or **SST** is an immutable data structure that stores table rows sorted by key, facilitating efficient key lookups and range queries. Each SST is composed of a contiguous series of small data pages, typically around 7 KiB in size each, which further optimizes the process of reading data from disk. An SST typically represents a part of [LSM tree](#lsm-tree).
 
 #### Tablet pipe {#tablet-pipe}
 

@@ -1451,16 +1451,20 @@ message TEvSampleKRequest {
     optional NKikimrProto.TPathID PathId = 3;
 
     optional uint64 K = 4;
+    // For now we use tablet id as seed value, but it's not convinient for tests
     optional uint64 Seed = 5;
+    // We want to sample small instead of large probabilites
+    // because size of message will be smaller (varint)
+    optional uint64 MaxProbability = 6;
 
-    repeated string Columns = 6;
-    optional NKikimrTx.TKeyRange KeyRange = 7;
+    repeated string Columns = 7;
+    optional NKikimrTx.TKeyRange KeyRange = 8;
 
-    optional uint64 SnapshotTxId = 8;
-    optional uint64 SnapshotStep = 9;
+    optional uint64 SnapshotTxId = 9;
+    optional uint64 SnapshotStep = 10;
 
-    optional uint64 SeqNoGeneration = 10;
-    optional uint64 SeqNoRound = 11;
+    optional uint64 SeqNoGeneration = 11;
+    optional uint64 SeqNoRound = 12;
 }
 
 message TEvSampleKResponse {
@@ -1472,13 +1476,14 @@ message TEvSampleKResponse {
     optional NKikimrIndexBuilder.EBuildStatus Status = 4;
     repeated Ydb.Issue.IssueMessage Issues = 5;
 
-    optional NKikimrTx.TKeyRange RequestedKeyRange = 6;
+    optional uint64 RowsDelta = 6;
+    optional uint64 BytesDelta = 7;
 
-    optional uint64 RequestSeqNoGeneration = 7;
-    optional uint64 RequestSeqNoRound = 8;
+    optional uint64 RequestSeqNoGeneration = 8;
+    optional uint64 RequestSeqNoRound = 9;
 
-    repeated uint64 Probabilities = 9;
-    repeated bytes Rows = 10;
+    repeated uint64 Probabilities = 10;
+    repeated bytes Rows = 11;
 }
 
 message TEvCdcStreamScanRequest {

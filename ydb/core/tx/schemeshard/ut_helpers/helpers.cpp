@@ -1678,6 +1678,14 @@ namespace NSchemeShardUT_Private {
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             *index.mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex();
             break;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+            auto& settings = *index.mutable_global_vector_kmeans_tree_index();
+            settings = Ydb::Table::GlobalVectorKMeansTreeIndex();
+            // some random valid settings
+            settings.mutable_vector_settings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+            settings.mutable_vector_settings()->set_vector_dimension(42);
+            settings.mutable_vector_settings()->set_distance(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        } break;
         default:
             UNIT_ASSERT_C(false, "Unknown index type: " << static_cast<ui32>(cfg.IndexType));
         }
@@ -1760,6 +1768,15 @@ namespace NSchemeShardUT_Private {
     {
         TestBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
             name, NKikimrSchemeOp::EIndexTypeGlobal, columns, {}
+        }, expectedStatus);
+    }
+
+    void TestBuildVectorIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
+                              const TString &src, const TString &name, TString column,
+                              Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        TestBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
+            name, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {column}, {}
         }, expectedStatus);
     }
 

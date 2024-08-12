@@ -1,4 +1,7 @@
 #pragma once
+
+#include "common.h"
+
 #include <ydb/core/base/appdata.h>
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
@@ -6,13 +9,13 @@
 
 namespace NKikimr::NMetadata::NModifications {
 
-class TBaseObject {
+class TBaseObject : public IRecordsMerger {
+protected:
+    virtual IColumnValuesMerger::TPtr BuildMerger(const TString& columnName) const override;
+
 public:
     static Ydb::Table::CreateTableRequest AddHistoryTableScheme(const Ydb::Table::CreateTableRequest& baseScheme, const TString& tableName);
-    static NColumnMerger::TMerger MergerFactory(const TString& columnName);
-
-private:
-    static bool DefaultColumnMerger(Ydb::Value& self, const Ydb::Value& other);
+    virtual TConclusionStatus MergeRecords(NInternal::TTableRecord& value, const NInternal::TTableRecord& patch) const override;
 };
 
 template <class TDerived>

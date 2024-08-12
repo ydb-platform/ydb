@@ -33,8 +33,10 @@ public:
         explicit TDecoder(const Ydb::ResultSet& rawData);
     };
 
-    bool DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& rawData);
+    virtual NMetadata::NModifications::IColumnValuesMerger::TPtr BuildMerger(const TString& columnName) const override;
     NMetadata::NInternal::TTableRecord SerializeToRecord() const;
+    bool DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& rawData);
+
     NResourcePool::TClassifierSettings GetClassifierSettings() const;
     NJson::TJsonValue GetDebugJson() const;
 
@@ -42,9 +44,6 @@ public:
 
     static NMetadata::IClassBehaviour::TPtr GetBehaviour();
     static TString GetTypeId();
-
-    static NMetadata::NModifications::NColumnMerger::TMerger MergerFactory(const TString& columnName);
-    static bool JsonConfigsMerger(Ydb::Value& self, const Ydb::Value& other);
 };
 
 }  // namespace NKikimr::NKqp

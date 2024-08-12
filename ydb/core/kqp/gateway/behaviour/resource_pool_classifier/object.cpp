@@ -6,7 +6,37 @@
 
 namespace NKikimr::NKqp {
 
+namespace {
+
 using namespace NResourcePool;
+
+
+class TJsonConfigsMerger : public NMetadata::NModifications::IColumnValuesMerger {
+public:
+    virtual TConclusionStatus Merge(Ydb::Value& value, const Ydb::Value& patch) const override {
+        NJson::TJsonValue selfConfigJson;
+        if (!NJson::ReadJsonTree(value.text_value(), &selfConfigJson)) {
+            return TConclusionStatus::Fail("Failed to parse object json config");
+        }
+
+        NJson::TJsonValue otherConfigJson;
+        if (!NJson::ReadJsonTree(patch.text_value(), &otherConfigJson)) {
+            return TConclusionStatus::Fail("Failed to parse patch json config");
+        }
+
+        for (const auto& [key, value] : otherConfigJson.GetMap()) {
+            selfConfigJson.InsertValue(key, value);
+        }
+
+        NJsonWriter::TBuf writer;
+        writer.WriteJsonValue(&selfConfigJson);
+        *value.mutable_text_value() = writer.Str();
+
+        return TConclusionStatus::Success();
+    }
+};
+
+}  // anonymous namespace
 
 
 //// TResourcePoolClassifierConfig::TDecoder
@@ -19,6 +49,13 @@ TResourcePoolClassifierConfig::TDecoder::TDecoder(const Ydb::ResultSet& rawData)
 {}
 
 //// TResourcePoolClassifierConfig
+
+NMetadata::NModifications::IColumnValuesMerger::TPtr TResourcePoolClassifierConfig::BuildMerger(const TString& columnName) const {
+    if (columnName == TDecoder::ConfigJson) {
+        return std::make_shared<TJsonConfigsMerger>();
+    }
+    return TBase::BuildMerger(columnName);
+}
 
 bool TResourcePoolClassifierConfig::DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& rawData) {
     if (!decoder.Read(decoder.GetDatabaseIdx(), Database, rawData)) {
@@ -95,35 +132,6 @@ NMetadata::IClassBehaviour::TPtr TResourcePoolClassifierConfig::GetBehaviour() {
 
 TString TResourcePoolClassifierConfig::GetTypeId() {
     return "RESOURCE_POOL_CLASSIFIER";
-}
-
-NMetadata::NModifications::NColumnMerger::TMerger TResourcePoolClassifierConfig::MergerFactory(const TString& columnName) {
-    if (columnName == TDecoder::ConfigJson) {
-        return &JsonConfigsMerger;
-    }
-    return TBase::MergerFactory(columnName);
-}
-
-bool TResourcePoolClassifierConfig::JsonConfigsMerger(Ydb::Value& self, const Ydb::Value& other) {
-    NJson::TJsonValue selfConfigJson;
-    if (!NJson::ReadJsonTree(self.text_value(), &selfConfigJson)) {
-        return false;
-    }
-
-    NJson::TJsonValue otherConfigJson;
-    if (!NJson::ReadJsonTree(other.text_value(), &otherConfigJson)) {
-        return false;
-    }
-
-    for (const auto& [key, value] : otherConfigJson.GetMap()) {
-        selfConfigJson.InsertValue(key, value);
-    }
-
-    NJsonWriter::TBuf writer;
-    writer.WriteJsonValue(&selfConfigJson);
-    *self.mutable_text_value() = writer.Str();
-
-    return true;
 }
 
 }  // namespace NKikimr::NKqp

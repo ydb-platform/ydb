@@ -64,11 +64,6 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - name: Install Node required for Testmo CLI
-      uses: actions/setup-node@v3
-      with:
-        node-version: 19
-    
     - name: Init
       id: init
       shell: bash
@@ -93,13 +88,6 @@ runs:
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
 
         python3 -m pip install ydb ydb[yc] codeowners
-    
-
-    - name: set environment variables required by some tests
-      if: inputs.run_tests
-      shell: bash
-      run: |
-        echo "PSQL_BINARY=/usr/bin/psql" >> $GITHUB_ENV
 
     - name: ya build and test
       id: build
@@ -203,9 +191,6 @@ runs:
         TESTMO_ARCH="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
         TESTMO_PR_NUMBER=${{ github.event.number }}
         
-        # install testmo
-        npm install -g @testmo/testmo-cli
-
         case "$BUILD_PRESET" in
           relwithdebinfo)
             TESTMO_SOURCE="ya-${TESTMO_ARCH}"
@@ -221,31 +206,6 @@ runs:
             exit 1
             ;;
         esac
-        
-        case $GITHUB_EVENT_NAME in
-          workflow_dispatch)
-            TESTMO_RUN_NAME="${{ github.run_id }} manual"
-            TESTMO_EXTRA_TAG="manual"
-            ;;
-          pull_request | pull_request_target)
-            TESTMO_RUN_NAME="${{ github.run_id }} PR #${TESTMO_PR_NUMBER}"
-            TESTMO_EXTRA_TAG="pr"
-            TESTMO_BRANCH_TAG=""
-            ;;
-          schedule)
-            TESTMO_RUN_NAME="${{ github.run_id }} schedule"
-            TESTMO_EXTRA_TAG="schedule"
-            ;;
-          push)
-            TESTMO_RUN_NAME="${{ github.run_id }} POST"
-            TESTMO_EXTRA_TAG="post-commit"
-            ;;
-          *)
-            TESTMO_RUN_NAME="${{ github.run_id }}"
-            TESTMO_EXTRA_TAG=""
-            ;;
-        esac
-        echo "TESTMO_RUN_NAME=$TESTMO_RUN_NAME" >> $GITHUB_ENV 
 
         echo "::debug::get version"
         ./ya --version
@@ -261,8 +221,34 @@ runs:
 
         for RETRY in $(seq 1 $TEST_RETRY_COUNT)
         do
+          case $GITHUB_EVENT_NAME in
+            workflow_dispatch)
+              TESTMO_RUN_NAME="${{ github.run_id }} manual"
+              TESTMO_EXTRA_TAG="manual"
+              ;;
+            pull_request | pull_request_target)
+              TESTMO_RUN_NAME="${{ github.run_id }} PR #${TESTMO_PR_NUMBER}"
+              TESTMO_EXTRA_TAG="pr"
+              TESTMO_BRANCH_TAG=""
+              ;;
+            schedule)
+              TESTMO_RUN_NAME="${{ github.run_id }} schedule"
+              TESTMO_EXTRA_TAG="schedule"
+              ;;
+            push)
+              TESTMO_RUN_NAME="${{ github.run_id }} POST"
+              TESTMO_EXTRA_TAG="post-commit"
+              ;;
+            *)
+              TESTMO_RUN_NAME="${{ github.run_id }}"
+              TESTMO_EXTRA_TAG=""
+              ;;
+          esac
+
+          echo "TESTMO_RUN_NAME=$TESTMO_RUN_NAME" >> $GITHUB_ENV 
           if [ $RETRY != 1 ]; then
             IS_RETRY=1
+            TESTMO_RUN_NAME="$TESTMO_RUN_NAME A$RETRY"
           else
             IS_RETRY=0
           fi
@@ -289,13 +275,12 @@ runs:
           CURRENT_MESSAGE="**{platform_name}-${BUILD_PRESET}** is running..." 
           if [ $IS_RETRY = 0 ]; then
             CURRENT_MESSAGE="Check $CURRENT_MESSAGE"
-            RERUN_FAILED_TESTS=""
+            RERUN_FAILED_OPT=""
           else
             CURRENT_MESSAGE="Failed tests rerun (try $RETRY) $CURRENT_MESSAGE"
             RERUN_FAILED_OPT="-X"
           fi
 
-          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
           echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
           CURRENT_PUBLIC_DIR_RELATIVE=try_$RETRY
@@ -348,6 +333,8 @@ runs:
             IS_LAST_RETRY=1
           fi
 
+          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
+
           if [ $FAILED_TESTS_COUNT -gt 500 ]; then 
             IS_LAST_RETRY=1
             TOO_MANY_FAILED="Too many tests failed, NOT going to retry"
@@ -374,7 +361,7 @@ runs:
             # finish testme session
 
             # split large junit_report
-            export TESTMO_JUNIT_REPORT_PARTS=$TMP_DIR/junit-split
+            export TESTMO_JUNIT_REPORT_PARTS=$TMP_DIR/try_$RETRY/junit-split
             mkdir -p $TESTMO_JUNIT_REPORT_PARTS
             .github/scripts/tests/split-junit.py -o "$TESTMO_JUNIT_REPORT_PARTS" "$CURRENT_JUNIT_XML_PATH"
             # archive unitest reports (transformed)

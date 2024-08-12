@@ -1,6 +1,8 @@
 Extension {
     Name: "postgis"
     InstallName: "$libdir/postgis-3"
-    DDLPath: "../../../../../yql/pg_ext/postgis/libs/postgis/postgis/postgis.sql"
+    SqlPath: "../../../../../yql/pg_ext/postgis/libs/postgis/postgis/postgis.sql"
+    SqlPath: "../../../../../yql/pg_ext/postgis/libs/postgis/spatial_ref_sys.sql"
     LibraryPath: "../../../../../yql/pg_ext/postgis/libs/postgis/libpostgis.so"
 }
+

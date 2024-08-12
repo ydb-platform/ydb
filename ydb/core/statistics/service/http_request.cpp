@@ -107,13 +107,13 @@ void THttpRequest::Handle(TEvStatistics::TEvAnalyzeStatusResponse::TPtr& ev) {
         HttpReply("Status is unspecified");
         break;
     case NKikimrStat::TEvAnalyzeStatusResponse::STATUS_NO_OPERATION:
-        HttpReply("No scan operation");
+        HttpReply("No analyze operation");
         break;
     case NKikimrStat::TEvAnalyzeStatusResponse::STATUS_ENQUEUED:
-        HttpReply("Scan is enqueued");
+        HttpReply("Analyze is enqueued");
         break;
     case NKikimrStat::TEvAnalyzeStatusResponse::STATUS_IN_PROGRESS:
-        HttpReply("Scan is in progress");
+        HttpReply("Analyze is in progress");
         break;
     }
 }
@@ -136,7 +136,7 @@ void THttpRequest::ResolveSuccess() {
         Send(MakePipePerNodeCacheID(false),
             new TEvPipeCache::TEvForward(analyze.release(), StatisticsAggregatorId, true));
 
-        HttpReply("Scan sent");
+        HttpReply("Analyze sent");
     } else {
         auto getStatus = std::make_unique<TEvStatistics::TEvAnalyzeStatus>();
         auto& record = getStatus->Record;

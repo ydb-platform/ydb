@@ -509,6 +509,10 @@ namespace {
         config.Opts->AddLongOption("starting-message-timestamp", "Unix timestamp starting from '1970-01-01 00:00:00' from which read is allowed")
             .Optional()
             .StoreResult(&StartingMessageTimestamp_);
+        config.Opts->AddLongOption("important", "Is consumer important")
+            .Optional()
+            .DefaultValue(false)
+            .StoreResult(&IsImportant_);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
         AddAllowedCodecs(config, AllowedCodecs);
@@ -539,6 +543,7 @@ namespace {
             codecs.push_back(NTopic::ECodec::RAW);
         }
         consumerSettings.SetSupportedCodecs(codecs);
+        consumerSettings.SetImportant(IsImportant_);
 
         readRuleSettings.AppendAddConsumers(consumerSettings);
 

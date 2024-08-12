@@ -875,6 +875,18 @@ std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::Recor
     return DeserializeBatch(SerializeBatch(original, arrow::ipc::IpcWriteOptions::Defaults()), original->schema());
 }
 
+std::shared_ptr<arrow::Table> ReallocateBatch(const std::shared_ptr<arrow::Table>& original) {
+    if (!original) {
+        return original;
+    }
+    auto batches = NArrow::SliceToRecordBatches(original);
+    for (auto&& i : batches) {
+        i = NArrow::TStatusValidator::GetValid(
+            NArrow::NSerialization::TNativeSerializer().Deserialize(NArrow::NSerialization::TNativeSerializer().SerializeFull(i)));
+    }
+    return NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches(batches));
+}
+
 std::shared_ptr<arrow::RecordBatch> MergeColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches) {
     std::vector<std::shared_ptr<arrow::Array>> columns;
     std::vector<std::shared_ptr<arrow::Field>> fields;

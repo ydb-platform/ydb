@@ -223,7 +223,11 @@ private:
     TSerializedCellVec LastKey;
 };
 
-class TBuildScanUpload: public TActor<TBuildScanUpload>, public NTable::IScan {
+template <NKikimrServices::TActivity::EType Activity>
+class TBuildScanUpload: public TActor<TBuildScanUpload<Activity>>, public NTable::IScan {
+    using TThis = TBuildScanUpload<Activity>;
+    using TBase = TActor<TThis>;
+
 protected:
     const TUploadLimits Limits;
 
@@ -264,7 +268,7 @@ protected:
                      const TSerializedTableRange& range,
                      const TUserTable& tableInfo,
                      TUploadLimits limits)
-        : TActor(&TThis::StateWork)
+        : TBase(&TThis::StateWork)
         , Limits(limits)
         , BuildIndexId(buildIndexId)
         , TargetTable(target)
@@ -279,7 +283,7 @@ protected:
     }
 
     template <typename TAddRow>
-    EScan FeedImpl(TArrayRef<const TCell> key, const TRow& row, TAddRow&& addRow) noexcept {
+    EScan FeedImpl(TArrayRef<const TCell> key, const TRow& /*row*/, TAddRow&& addRow) noexcept {
         LOG_T("Feed key " << DebugPrintPoint(KeyTypes, key, *AppData()->TypeRegistry) << " " << Debug());
 
         addRow();
@@ -300,8 +304,8 @@ protected:
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::BUILD_INDEX_SCAN_ACTOR;
+    static constexpr auto ActorActivityType() {
+        return Activity;
     }
 
     ~TBuildScanUpload() override = default;
@@ -354,7 +358,7 @@ public:
     }
 
     TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override {
-        auto ctx = TActivationContext::AsActorContext().MakeFor(SelfId());
+        auto ctx = TActivationContext::AsActorContext().MakeFor(TBase::SelfId());
 
         if (Uploader) {
             TAutoPtr<TEvents::TEvPoisonPill> poison = new TEvents::TEvPoisonPill;
@@ -386,7 +390,7 @@ public:
         LOG_D("Finish " << Debug());
 
         Driver = nullptr;
-        PassAway();
+        this->PassAway();
         return nullptr;
     }
 
@@ -436,7 +440,7 @@ private:
         }
     }
 
-    void HandleWakeup(const NActors::TActorContext& ctx) {
+    void HandleWakeup(const NActors::TActorContext& /*ctx*/) {
         LOG_D("Retry upload " << Debug());
 
         if (!WriteBuf.IsEmpty()) {
@@ -519,17 +523,17 @@ private:
         LOG_D("Upload, last key " << DebugPrintPoint(KeyTypes, WriteBuf.GetLastKey().GetCells(), *AppData()->TypeRegistry) << " " << Debug());
 
         auto actor = NTxProxy::CreateUploadRowsInternal(
-            SelfId(), TargetTable,
+            TBase::SelfId(), TargetTable,
             UploadColumnsTypes,
             WriteBuf.GetRowsData(),
             UploadMode,
             true /*writeToPrivateTable*/);
 
-        Uploader = TActivationContext::AsActorContext().MakeFor(SelfId()).Register(actor);
+        Uploader = TActivationContext::AsActorContext().MakeFor(TBase::SelfId()).Register(actor);
     }
 };
 
-class TBuildIndexScan final: public TBuildScanUpload {
+class TBuildIndexScan final: public TBuildScanUpload<NKikimrServices::TActivity::BUILD_INDEX_SCAN_ACTOR> {
     const ui32 TargetDataColumnPos; // positon of first data column in target table
 
 public:
@@ -563,7 +567,7 @@ public:
     }
 };
 
-class TBuildColumnsScan final: public TBuildScanUpload {
+class TBuildColumnsScan final: public TBuildScanUpload<NKikimrServices::TActivity::BUILD_COLUMNS_SCAN_ACTOR> {
     TString ValueSerialized;
 
 public:

@@ -20,9 +20,8 @@ PEERDIR(
     ydb/core/blobstorage/ut_blobstorage/lib
 )
 
-REQUIREMENTS(
-    cpu:4
-    ram:32
-)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:32)
+ENDIF()
 
 END()

@@ -37,6 +37,7 @@ public:
     TString MetaApiEndpoint;
     TString MetaDatabase;
     bool MetaCache = false;
+    static TString MetaDatabaseTokenName;
 
     TMVP(int argc, char** argv);
     int Init();
@@ -46,6 +47,9 @@ public:
     THolder<NActors::TActorSystemSetup> BuildActorSystemSetup(int argc, char** argv);
     TIntrusivePtr<NActors::NLog::TSettings> BuildLoggerSettings();
     void InitMeta();
+
+    TString static GetMetaDatabaseAuthToken(const TRequest& request);
+    NYdb::NTable::TClientSettings static GetMetaDatabaseClientSettings(const TRequest& request, const TYdbLocation& location);
 
     void TryGetMetaOptionsFromConfig(const YAML::Node& config);
     void TryGetGenericOptionsFromConfig(
@@ -64,7 +68,6 @@ public:
     NActors::TActorId HttpProxyId;
     NActors::TActorId HandlerId;
 
-    TString YdbUserToken;
     static NMvp::TTokensConfig TokensConfig;
 };
 

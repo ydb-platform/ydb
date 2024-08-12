@@ -19,7 +19,7 @@ View a description of the command to restore data from a dump:
 
 ## Parameters of the subcommand {#options}
 
-Parameter name | Parameter description 
+Parameter name | Parameter description
 --- | ---
 `-p`<br/>`--path` | The path to the folder or table to dump.<br/>Default value is `.`, a full database dump will be performed.
 `-o`<br/>`--output` | Required parameter.<br/>The path on the local file system where the dump objects will be placed. The dump folder must not exist or must be empty.
@@ -87,4 +87,3 @@ data_00.csv  scheme.pb
 /home/user/dump/series:
 data_00.csv  scheme.pb
 ```
-

@@ -49,6 +49,14 @@ public:
     }
 };
 
+template <bool Nullable>
+class TFixedSizeBlockItemHasher<NYql::NDecimal::TInt128, Nullable> : public TBlockItemHasherBase<TFixedSizeBlockItemHasher<NYql::NDecimal::TInt128, Nullable>, Nullable> {
+public:
+    ui64 DoHash(TBlockItem value) const {
+        return GetValueHash<TDataType<NUdf::TDecimal>::Slot>(NUdf::TUnboxedValuePod(value.GetInt128()));
+    }
+};
+
 template <typename T, bool Nullable>
 class TTzDateBlockItemHasher : public TBlockItemHasherBase<TTzDateBlockItemHasher<T, Nullable>, Nullable> {
 public:

@@ -167,9 +167,9 @@ int TTestChannel::GetInflightRequestCount()
     return 0;
 }
 
-IMemoryUsageTrackerPtr TTestChannel::GetChannelMemoryTracker()
+const IMemoryUsageTrackerPtr& TTestChannel::GetChannelMemoryTracker()
 {
-    return GetNullMemoryUsageTracker();
+    return MemoryUsageTracker_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

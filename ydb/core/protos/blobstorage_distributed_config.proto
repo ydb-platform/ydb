@@ -65,6 +65,7 @@ message TEvNodeConfigReversePush {
     uint32 RootNodeId = 1; // current tree root as known by the sender, always nonzero
     bool Rejected = 2; // is the request rejected due to cyclic graph?
     TStorageConfig CommittedStorageConfig = 3; // last known committed storage configuration
+    bool RecurseConfigUpdate = 4;
 }
 
 // Remove node from bound list.
@@ -81,6 +82,7 @@ message TEvNodeConfigScatter {
     }
 
     optional uint64 Cookie = 1;
+    optional fixed64 TaskId = 4; // random (and not necessarily unique) identifier
 
     oneof Request {
         TCollectConfigs CollectConfigs = 2;
@@ -136,6 +138,7 @@ message TEvNodeConfigGather {
     }
 
     optional uint64 Cookie = 1;
+    optional bool Aborted = 4;
 
     oneof Response {
         TCollectConfigs CollectConfigs = 2;

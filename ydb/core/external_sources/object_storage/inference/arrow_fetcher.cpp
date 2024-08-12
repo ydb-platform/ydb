@@ -13,17 +13,24 @@
 #include <ydb/core/external_sources/object_storage/events.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/yql/providers/s3/compressors/factory.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBufferFromString.h>
 
 namespace NKikimr::NExternalSource::NObjectStorage::NInference {
 
 class TArrowFileFetcher : public NActors::TActorBootstrapped<TArrowFileFetcher> {
     static constexpr uint64_t PrefixSize = 10_MB;
 public:
-    TArrowFileFetcher(NActors::TActorId s3FetcherId, EFileFormat format)
+    TArrowFileFetcher(NActors::TActorId s3FetcherId, EFileFormat format, const THashMap<TString, TString>& params)
         : S3FetcherId_{s3FetcherId}
         , Format_{format}
     {
         Y_ABORT_UNLESS(IsArrowInferredFormat(Format_));
+        
+        auto decompression = params.FindPtr("compression");
+        if (decompression) {
+            DecompressionFormat_ = *decompression;
+        }
     }
 
     void Bootstrap() {
@@ -67,6 +74,15 @@ public:
 
         const auto& request = requestIt->second;
 
+        TString data = std::move(response.Data);
+        if (DecompressionFormat_) {
+            auto decompressedData = DecompressFile(data, request, ctx);
+            if (!decompressedData) {
+                return;
+            }
+            data = std::move(*decompressedData);
+        }
+
         std::shared_ptr<arrow::io::RandomAccessFile> file;
         switch (Format_) {
             case EFileFormat::CsvWithNames:
@@ -76,7 +92,7 @@ public:
                 if (Format_ == EFileFormat::TsvWithNames) {
                     options.delimiter = '\t';
                 }
-                file = CleanupCsvFile(response.Data, request, options, ctx);
+                file = CleanupCsvFile(data, request, options, ctx);
                 ctx.Send(request.Requester, new TEvArrowFile(std::move(file), request.Path));
                 break;
             }
@@ -135,6 +151,43 @@ private:
 
     // Cutting file
 
+    TMaybe<TString> DecompressFile(const TString& data, const TRequest& request, const NActors::TActorContext& ctx) {
+        try {
+            NDB::ReadBufferFromString dataBuffer(data);
+            auto decompressorBuffer = NYql::MakeDecompressor(dataBuffer, *DecompressionFormat_);
+            if (!decompressorBuffer) {
+                auto error = MakeError(
+                    request.Path,
+                    NFq::TIssuesIds::INTERNAL_ERROR,
+                    TStringBuilder{} << "unknown compression: " << *DecompressionFormat_ << ". Use one of: gzip, zstd, lz4, brotli, bzip2, xz" 
+                );
+                SendError(ctx, error);
+                return {};
+            }
+
+            TStringBuilder decompressedData;
+            while (!decompressorBuffer->eof() && decompressedData.size() < 10_MB) {
+                decompressorBuffer->nextIfAtEnd();
+                size_t maxDecompressedChunkSize = std::min(
+                    decompressorBuffer->available(),                
+                    10_MB - decompressedData.size()
+                );
+                TString decompressedChunk{maxDecompressedChunkSize, ' '};
+                decompressorBuffer->read(&decompressedChunk.front(), maxDecompressedChunkSize);
+                decompressedData << decompressedChunk;
+            }
+            return std::move(decompressedData);
+        } catch (const yexception& error) {
+            auto errorEv = MakeError(
+                request.Path,
+                NFq::TIssuesIds::INTERNAL_ERROR,
+                TStringBuilder{} << "couldn't decompress file, check compression params: " << error.what()
+            );
+            SendError(ctx, errorEv);
+            return {};
+        }
+    }
+
     std::shared_ptr<arrow::io::RandomAccessFile> CleanupCsvFile(const TString& data, const TRequest& request, const arrow::csv::ParseOptions& options, const NActors::TActorContext& ctx) {
         auto chunker = arrow::csv::MakeChunker(options);
         std::shared_ptr<arrow::Buffer> whole, partial;
@@ -183,10 +236,11 @@ private:
     // Fields
     NActors::TActorId S3FetcherId_;
     EFileFormat Format_;
+    TMaybe<TString> DecompressionFormat_;
     std::unordered_map<TString, TRequest> InflightRequests_; // Path -> Request
 };
 
-NActors::IActor* CreateArrowFetchingActor(NActors::TActorId s3FetcherId, EFileFormat format) {
-    return new TArrowFileFetcher{s3FetcherId, format};
+NActors::IActor* CreateArrowFetchingActor(NActors::TActorId s3FetcherId, EFileFormat format, const THashMap<TString, TString>& params) {
+    return new TArrowFileFetcher{s3FetcherId, format, params};
 }
 } // namespace NKikimr::NExternalSource::NObjectStorage::NInference

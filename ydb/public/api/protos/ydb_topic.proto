@@ -1021,6 +1021,13 @@ message DescribeTopicResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
+message PartitionKeyRange {
+    // Inclusive left border. Emptiness means -inf.
+    optional bytes from_bound = 1;
+    // Exclusive right border. Emptiness means +inf.
+    optional bytes to_bound = 2;
+}
+
 // Describe topic result message that will be inside DescribeTopicResponse.operation.
 message DescribeTopicResult {
     // Description of scheme object.
@@ -1089,6 +1096,8 @@ message DescribeTopicResult {
 
         // Partition location, filled only when include_location in request is true.
         PartitionLocation partition_location = 6;
+
+        PartitionKeyRange key_range = 7;
     }
 
     message TopicStats {

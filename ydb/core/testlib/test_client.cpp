@@ -112,6 +112,7 @@
 #include <ydb/services/ext_index/service/executor.h>
 #include <ydb/core/tx/conveyor/service/service.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 #include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
 
 #include <ydb/core/client/server/ic_nodes_cache_service.h>
@@ -566,7 +567,9 @@ namespace Tests {
         hostConfig.SetHostConfigId(nodeId);
         TString path = TStringBuilder() << Runtime->GetTempDir() << "pdisk_1.dat";
         hostConfig.AddDrive()->SetPath(path);
-        Cerr << "test_client.cpp: SetPath # " << path << Endl;
+        if (Settings->Verbose) {
+            Cerr << "test_client.cpp: SetPath # " << path << Endl;
+        }
         bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineHostConfig()->CopyFrom(hostConfig);
 
         auto& host = *boxConfig.AddHost();
@@ -764,6 +767,11 @@ namespace Tests {
             auto* actor = NCSIndex::CreateService(NCSIndex::TConfig());
             const auto aid = Runtime->Register(actor, nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NCSIndex::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
+        }
+        {
+            auto* actor = NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(NOlap::NGroupedMemoryManager::TConfig(), new ::NMonitoring::TDynamicCounters());
+            const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
+            Runtime->RegisterService(NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         {
             auto* actor = NConveyor::TScanServiceOperator::CreateService(NConveyor::TConfig(), new ::NMonitoring::TDynamicCounters());
@@ -1254,6 +1262,7 @@ namespace Tests {
         , DomainName(settings.DomainName)
         , SupportsRedirect(settings.SupportsRedirect)
         , StoragePoolTypes(settings.StoragePoolTypes)
+        , Verbose(settings.Verbose)
         , FunctionRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry()))
         , LoadedFunctionRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry()))
     {
@@ -1272,7 +1281,9 @@ namespace Tests {
         Client.reset(new NMsgBusProxy::TMsgBusClient(ClientConfig));
         Client->Init();
 
-        Cerr << "TClient is connected to server " << ClientConfig.Ip << ":" << ClientConfig.Port << Endl;
+        if (Verbose) {
+            Cerr << "TClient is connected to server " << ClientConfig.Ip << ":" << ClientConfig.Port << Endl;
+        }
     }
 
     const NMsgBusProxy::TMsgBusClientConfig& TClient::GetClientConfig() const {
@@ -1350,13 +1361,17 @@ namespace Tests {
 
     void TClient::WaitRootIsUp(const TString& root) {
         while (true) {
-            Cerr << "WaitRootIsUp '" << root << "'..." << Endl;
+            if (Verbose) {
+                Cerr << "WaitRootIsUp '" << root << "'..." << Endl;
+            }
 
             TAutoPtr<NMsgBusProxy::TBusResponse> resp = Ls(root);
             UNIT_ASSERT(resp);
 
             if (resp->Record.GetStatus() == NMsgBusProxy::MSTATUS_OK && resp->Record.GetSchemeStatus() == NKikimrScheme::StatusSuccess) {
-                Cerr << "WaitRootIsUp '" << root << "' success." << Endl;
+                if (Verbose) {
+                    Cerr << "WaitRootIsUp '" << root << "' success." << Endl;
+                }
                 break;
             }
         }
@@ -1381,7 +1396,9 @@ namespace Tests {
         TAutoPtr<NBus::TBusMessage> reply;
         SendAndWaitCompletion(request, reply);
 
-        Cout << PrintToString<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
+        if (Verbose) {
+            Cout << PrintToString<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
+        }
         return reply;
     }
 
@@ -1411,7 +1428,9 @@ namespace Tests {
             msg->Record.MutableFlatTxId()->SetSchemeShardTabletId(schemeshard);
             msg->Record.MutableFlatTxId()->SetPathId(pathId);
             msg->Record.MutablePollOptions()->SetTimeout(timeout.MilliSeconds());
-            Cerr << "waiting..." << Endl;
+            if (Verbose) {
+                Cerr << "waiting..." << Endl;
+            }
             status = SyncCall(msg, reply);
             if (status != NBus::MESSAGE_OK) {
                 const char *description = NBus::MessageStatusDescription(status);
@@ -1949,7 +1968,9 @@ namespace Tests {
     }
 
     TAutoPtr<NMsgBusProxy::TBusResponse> TClient::LsImpl(const TString& path) {
-        Cerr << "TClient::Ls request: " << path << Endl;
+        if (Verbose) {
+            Cerr << "TClient::Ls request: " << path << Endl;
+        }
 
         TAutoPtr<NMsgBusProxy::TBusSchemeDescribe> request(new NMsgBusProxy::TBusSchemeDescribe());
         request->Record.SetPath(path);
@@ -1958,7 +1979,9 @@ namespace Tests {
         NBus::EMessageStatus msgStatus = SendWhenReady(request, reply);
         UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
 
-        Cerr << "TClient::Ls response: " << PrintToString<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
+        if (Verbose) {
+            Cerr << "TClient::Ls response: " << PrintToString<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
+        }
 
         return dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Release());
     }

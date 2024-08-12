@@ -538,7 +538,7 @@ TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
     const auto& renames = GetRenames(node, ctx);
     const auto& joinKind = node.Child(2)->Head().Content();
     if (joinKind == "Cross") {
-        auto result = ctx.Builder(node.Pos())
+        return ctx.Builder(node.Pos())
             .Callable("FlatMap")
                 .Add(0, std::move(list1))
                 .Lambda(1)
@@ -566,20 +566,6 @@ TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
                     .Seal()
                 .Seal()
             .Seal().Build();
-
-        if (const auto iterator = FindNode(result->Tail().Tail().HeadPtr(),
-            [] (const TExprNode::TPtr& node) { return node->IsCallable("Iterator"); })) {
-            auto children = iterator->ChildrenList();
-            children.emplace_back(ctx.NewCallable(iterator->Pos(), "DependsOn", {result->Tail().Head().HeadPtr()}));
-            result = ctx.ReplaceNode(std::move(result), *iterator, ctx.ChangeChildren(*iterator, std::move(children)));
-        }
-
-        if (const auto forward = FindNode(result->Tail().Tail().HeadPtr(),
-            [] (const TExprNode::TPtr& node) { return node->IsCallable("ForwardList"); })) {
-            result = ctx.ReplaceNode(std::move(result), *forward, ctx.RenameNode(*forward, "Collect"));
-        }
-
-        return result;
     }
 
     const auto list1type = list1->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();

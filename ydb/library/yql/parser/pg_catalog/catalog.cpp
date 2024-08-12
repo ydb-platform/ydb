@@ -1,4 +1,5 @@
 #include "catalog.h"
+#include <ydb/library/yql/parser/pg_catalog/proto/pg_catalog.pb.h>
 #include <util/generic/array_size.h>
 #include <util/generic/utility.h>
 #include <util/generic/hash.h>
@@ -11,8 +12,11 @@
 #include <util/system/mutex.h>
 #include <util/system/tempfile.h>
 #include <library/cpp/resource/resource.h>
+#include <library/cpp/digest/md5/md5.h>
 
 namespace NYql::NPg {
+
+const ui32 MaximumExtensionsCount = 64; // see TTypeAnnotationNode::GetUsedPgExtensions
 
 constexpr ui32 FuncMaxArgs = 100;
 constexpr ui32 InvalidOid = 0;
@@ -1594,9 +1598,10 @@ const TColumnInfoRaw AllStaticColumnsRaw[] = {
 const char* AllowedProcsRaw[] = {
 #include "safe_procs.h"
 #include "used_procs.h"
+#include "postgis_procs.h"
 };
 
-struct TCatalog : public IExtensionDDLBuilder {
+struct TCatalog : public IExtensionSqlBuilder {
     TCatalog() {
         for (size_t i = 0; i < Y_ARRAY_SIZE(AllStaticTablesRaw); ++i) {
             const auto& raw = AllStaticTablesRaw[i];
@@ -1916,6 +1921,12 @@ struct TCatalog : public IExtensionDDLBuilder {
                 AllowedProcs.insert(t.second.Name);
             }
         }
+
+        AllowedProcsWithoutExtensions = AllowedProcs;
+        TypesWithoutExtensions = Types;
+        TypeByNameWithoutExtensions = TypeByName;
+        ProcsWithoutExtensions = Procs;
+        ProcByNameWithoutExtensions = ProcByName;
     }
 
     void ExportFunction(ui32 procOid) const {
@@ -2007,6 +2018,61 @@ struct TCatalog : public IExtensionDDLBuilder {
         *byIdPtr = desc;
     }
 
+    void CreateTable(const TTableInfo& table, const TVector<TColumnInfo>& columns) final {
+        Y_ENSURE(!columns.empty());
+        THashSet<TString> usedColumns;
+        for (const auto& c : columns) {
+            Y_ENSURE(c.Schema == table.Schema);
+            Y_ENSURE(c.TableName == table.Name);
+            Y_ENSURE(c.ExtensionIndex == table.ExtensionIndex);
+            Y_ENSURE(usedColumns.insert(c.Name).second);
+        }
+
+        TTableInfoKey key{table};
+        TTableInfo value = table;
+        value.Oid = 16000 + StaticTables.size();
+        Y_ENSURE(StaticTables.emplace(key, value).second);
+        Y_ENSURE(StaticColumns.emplace(key, columns).second);
+
+        AllStaticTables.push_back(value);
+        for (const auto& c : columns) {
+            AllStaticColumns.push_back(c);
+        }
+    }
+
+    void InsertValues(const TTableInfoKey& table, const TVector<TString>& columns,
+        const TVector<TMaybe<TString>>& data) final {
+        Y_ENSURE(StaticTables.contains(table));
+        const auto& columnDefs = *StaticColumns.FindPtr(table);
+        Y_ENSURE(columnDefs.size() == columns.size());
+        Y_ENSURE(data.size() % columns.size() == 0);
+        THashMap<TString, ui32> columnToIndex;
+        for (ui32 i = 0; i < columnDefs.size(); ++i) {
+            columnToIndex[columnDefs[i].Name] = i;
+        }
+
+        THashSet<TString> usedColumns;
+        TVector<ui32> dataColumnRemap;
+        for (const auto& c : columns) {
+            Y_ENSURE(usedColumns.insert(c).second);
+            dataColumnRemap.push_back(*columnToIndex.FindPtr(c));
+        }
+
+        auto& tableData = StaticTablesData[table];
+        size_t writePos = tableData.size();
+        tableData.resize(tableData.size() + data.size());
+        size_t readRowPos = 0;
+        while (writePos < tableData.size()) {
+            for (size_t colIdx = 0; colIdx < columns.size(); ++colIdx) {
+                tableData[writePos++] = data[readRowPos + dataColumnRemap[colIdx]];
+            }
+
+            readRowPos += columns.size();
+        }
+
+        Y_ENSURE(readRowPos == data.size());
+    }
+
     static const TCatalog& Instance() {
         return *Singleton<TCatalog>();
     }
@@ -2043,12 +2109,18 @@ struct TCatalog : public IExtensionDDLBuilder {
     TVector<TColumnInfo> AllStaticColumns;
     THashMap<TTableInfoKey, TTableInfo> StaticTables;
     THashMap<TTableInfoKey, TVector<TColumnInfo>> StaticColumns;
+    THashMap<TTableInfoKey, TVector<TMaybe<TString>>> StaticTablesData;
 
     mutable TMaybe<TFile> ExportFile;
     bool AllowAllFunctions = false;
     TMutex ExportGuard;
 
     THashSet<TString> AllowedProcs;
+    THashSet<TString> AllowedProcsWithoutExtensions;
+    TTypes TypesWithoutExtensions;
+    THashMap<TString, ui32> TypeByNameWithoutExtensions;
+    TProcs ProcsWithoutExtensions;
+    THashMap<TString, TVector<ui32>> ProcByNameWithoutExtensions;
 };
 
 bool ValidateProcArgs(const TProcDesc& d, const TVector<ui32>& argTypeIds) {
@@ -2474,13 +2546,14 @@ bool IsExactMatch(const TVector<ui32>& procArgTypes, ui32 procVariadicType, cons
     return true;
 }
 
-ui64 CalcProcScore(const TVector<ui32>& procArgTypes, ui32 procVariadicType, const TVector<ui32>& argTypeIds, const TCatalog& catalog) {
+ui64 CalcProcScore(const TVector<ui32>& procArgTypes, ui32 procVariadicType, ui32 procDefArgs, const TVector<ui32>& argTypeIds, const TCatalog& catalog) {
     ui64 result = 0UL;
     if (!procVariadicType) {
         ++result;
     }
 
-    if (argTypeIds.size() < procArgTypes.size()) {
+    Y_ENSURE(procArgTypes.size() >= procDefArgs);
+    if (argTypeIds.size() < procArgTypes.size() - procDefArgs) {
         return ArgTypeMismatch;
     }
 
@@ -2749,7 +2822,7 @@ std::variant<const TProcDesc*, const TTypeDesc*> LookupProcWithCasts(const TStri
         }
 
         // https://www.postgresql.org/docs/14/typeconv-func.html, steps 4.a, 4.c, 4.d
-        auto score = NPrivate::CalcProcScore(d->ArgTypes, d->VariadicType, argTypeIds, catalog);
+        auto score = NPrivate::CalcProcScore(d->ArgTypes, d->VariadicType, d->DefaultArgs.size(), argTypeIds, catalog);
         if (bestScore < score) {
             bestScore = score;
 
@@ -3114,7 +3187,7 @@ const TAggregateDesc& LookupAggregation(const TString& name, const TVector<ui32>
         }
 
         // https://www.postgresql.org/docs/14/typeconv-func.html, steps 4.a, 4.c, 4.d
-        auto score = NPrivate::CalcProcScore(d->ArgTypes, 0, argTypeIds, catalog);
+        auto score = NPrivate::CalcProcScore(d->ArgTypes, 0, 0, argTypeIds, catalog);
 
         if (bestScore < score) {
             bestScore = score;
@@ -3322,21 +3395,58 @@ const TTableInfo& LookupStaticTable(const TTableInfoKey& tableKey) {
     return *tablePtr;
 }
 
+const TVector<TMaybe<TString>>* ReadTable(
+    const TTableInfoKey& tableKey,
+    const TVector<TString>& columnNames,
+    size_t* columnsRemap, // should have the same length as columnNames
+    size_t& rowStep) {
+    const auto& catalog = TCatalog::Instance();
+    auto dataPtr = catalog.StaticTablesData.FindPtr(tableKey);
+    if (!dataPtr) {
+        throw yexception() << "Missing data for table " 
+            << tableKey.Schema << "." << tableKey.Name;
+    }
+
+    const auto& allColumns = *catalog.StaticColumns.FindPtr(tableKey);
+    THashMap<TString, size_t> columnsToIndex;
+    for (size_t i = 0; i < allColumns.size(); ++i) {
+        Y_ENSURE(columnsToIndex.emplace(allColumns[i].Name,i).second);
+    }
+
+    rowStep = allColumns.size();
+    for (size_t i = 0; i < columnNames.size(); ++i) {
+        auto indexPtr = columnsToIndex.FindPtr(columnNames[i]);
+        if (!indexPtr) {
+            throw yexception() << "Missing column " << columnNames[i] << " in table "
+                << tableKey.Schema << "." << tableKey.Name;
+        }
+
+        columnsRemap[i] = *indexPtr;
+    }
+
+    return dataPtr;
+}
+
 bool AreAllFunctionsAllowed() {
     const auto& catalog = TCatalog::Instance();
     return catalog.AllowAllFunctions;
 }
 
 void RegisterExtensions(const TVector<TExtensionDesc>& extensions, bool typesOnly,
-    IExtensionDDLParser& parser, IExtensionLoader* loader) {
+    IExtensionSqlParser& parser, IExtensionLoader* loader) {
+    if (extensions.size() > MaximumExtensionsCount) {
+        throw yexception() << "Too many extensions: " << extensions.size();
+    }
+
     auto& catalog = TCatalog::MutableInstance();
     with_lock (catalog.ExtensionsGuard) {
         Y_ENSURE(!catalog.ExtensionsInit);
+
         auto savedAllowAllFunctions = catalog.AllowAllFunctions;
         catalog.AllowAllFunctions = true;
         for (ui32 i = 0; i < extensions.size(); ++i) {
             auto e = extensions[i];
-            e.TypesOnly = e.TypesOnly && typesOnly;
+            e.TypesOnly = e.TypesOnly || typesOnly;
             if (e.Name.empty()) {
                 throw yexception() << "Empty extension name";
             }
@@ -3349,9 +3459,18 @@ void RegisterExtensions(const TVector<TExtensionDesc>& extensions, bool typesOnl
                 throw yexception() << "Duplicated extension install name: " << e.InstallName;
             }
 
+            if (e.LibraryMD5.empty()) {
+                e.LibraryMD5 = MD5::File(e.LibraryPath);
+            }
+
             catalog.Extensions.push_back(e);
-            TString sql = TFileInput(e.DDLPath).ReadAll();;
-            parser.Parse(i + 1, sql, catalog);
+            TVector<TString> sqls;
+            for (const auto& p : e.SqlPaths) {
+                TString sql = TFileInput(p).ReadAll();
+                sqls.push_back(sql);
+            }
+
+            parser.Parse(i + 1, sqls, catalog);
             if (loader && !e.TypesOnly) {
                 loader->Load(i + 1, e.Name, e.LibraryPath);
             }
@@ -3359,6 +3478,338 @@ void RegisterExtensions(const TVector<TExtensionDesc>& extensions, bool typesOnl
 
         catalog.AllowAllFunctions = savedAllowAllFunctions;
         catalog.ExtensionsInit = true;
+    }
+}
+
+TString ExportExtensions(const TMaybe<TSet<ui32>>& filter) {
+    auto& catalog = TCatalog::Instance();
+    if (catalog.Extensions.empty()) {
+        return TString();
+    }
+
+    NProto::TPgCatalog proto;
+    for (ui32 i = 0; i < catalog.Extensions.size(); ++i) {
+        const auto& ext = catalog.Extensions[i];
+        const bool skip = filter && !filter->contains(i + 1);
+        auto protoExt = proto.AddExtension();
+        protoExt->SetName(ext.Name);
+        protoExt->SetInstallName(ext.InstallName);
+        protoExt->SetTypesOnly(skip);
+        if (!skip && !ext.LibraryPath.empty()) {
+            protoExt->SetLibraryPath(TFsPath(".") / TFsPath(ext.LibraryPath).GetName());
+            protoExt->SetLibraryMD5(ext.LibraryMD5);
+        }
+    }
+
+    TVector<ui32> extTypes;
+    for (const auto& t : catalog.Types) {
+        const auto& desc = t.second;
+        if (!desc.ExtensionIndex) {
+            continue;
+        }
+
+        extTypes.push_back(t.first);
+    }
+
+    Sort(extTypes);
+    for (const auto t : extTypes) {
+        const auto& desc = *catalog.Types.FindPtr(t);
+        auto protoType = proto.AddType();
+        protoType->SetTypeId(desc.TypeId);
+        protoType->SetName(desc.Name);
+        protoType->SetExtensionIndex(desc.ExtensionIndex);
+        protoType->SetCategory(desc.Category);
+        protoType->SetTypeLen(desc.TypeLen);
+        protoType->SetPassByValue(desc.PassByValue);
+        protoType->SetTypeAlign(desc.TypeAlign);
+        protoType->SetElementTypeId(desc.ElementTypeId);
+        protoType->SetArrayTypeId(desc.ArrayTypeId);
+        if (desc.InFuncId) {
+            protoType->SetInFuncId(desc.InFuncId);
+        }
+        if (desc.OutFuncId) {
+            protoType->SetOutFuncId(desc.OutFuncId);
+        }
+        if (desc.SendFuncId) {
+            protoType->SetSendFuncId(desc.SendFuncId);
+        }
+        if (desc.ReceiveFuncId) {
+            protoType->SetReceiveFuncId(desc.ReceiveFuncId);
+        }
+        if (desc.TypeModInFuncId) {
+            protoType->SetTypeModInFuncId(desc.TypeModInFuncId);
+        }
+        if (desc.TypeModOutFuncId) {
+            protoType->SetTypeModOutFuncId(desc.TypeModOutFuncId);
+        }
+        if (desc.TypeSubscriptFuncId) {
+            protoType->SetTypeSubscriptFuncId(desc.TypeSubscriptFuncId);
+        }
+        if (desc.LessProcId) {
+            protoType->SetLessProcId(desc.LessProcId);
+        }
+        if (desc.EqualProcId) {
+            protoType->SetEqualProcId(desc.EqualProcId);
+        }
+        if (desc.CompareProcId) {
+            protoType->SetCompareProcId(desc.CompareProcId);
+        }
+        if (desc.HashProcId) {
+            protoType->SetHashProcId(desc.HashProcId);
+        }
+    }
+
+    TVector<ui32> extProcs;
+    for (const auto& p : catalog.Procs) {
+        const auto& desc = p.second;
+        if (!desc.ExtensionIndex) {
+            continue;
+        }
+
+        extProcs.push_back(p.first);
+    }
+
+    Sort(extProcs);
+    for (const auto p : extProcs) {
+        const auto& desc = *catalog.Procs.FindPtr(p);
+        auto protoProc = proto.AddProc();
+        protoProc->SetProcId(desc.ProcId);
+        protoProc->SetName(desc.Name);
+        protoProc->SetExtensionIndex(desc.ExtensionIndex);
+        protoProc->SetSrc(desc.Src);
+        for (const auto t : desc.ArgTypes) {
+            protoProc->AddArgType(t);
+        }
+
+        for (const auto t : desc.OutputArgTypes) {
+            protoProc->AddOutputArgType(t);
+        }
+
+        protoProc->SetVariadicType(desc.VariadicType);
+        protoProc->SetVariadicArgType(desc.VariadicArgType);
+        for (const auto& name : desc.InputArgNames) {
+            protoProc->AddInputArgName(name);
+        }
+
+        for (const auto& name : desc.OutputArgNames) {
+            protoProc->AddOutputArgName(name);
+        }
+
+        protoProc->SetVariadicArgName(desc.VariadicArgName);
+        for (const auto& d : desc.DefaultArgs) {
+            protoProc->AddDefaultArgNull(!d.Defined());
+            protoProc->AddDefaultArgValue(d ? *d : "");
+        }
+
+        protoProc->SetIsStrict(desc.IsStrict);
+        protoProc->SetLang(desc.Lang);
+    }
+
+    TVector<TTableInfoKey> extTables;
+    for (const auto& t : catalog.StaticTables) {
+        if (!t.second.ExtensionIndex) {
+            continue;
+        }
+
+        extTables.push_back(t.first);
+    }
+
+    Sort(extTables);
+    for (const auto& key : extTables) {
+        const auto& table = *catalog.StaticTables.FindPtr(key);
+        auto protoTable = proto.AddTable();
+        protoTable->SetOid(table.Oid);
+        protoTable->SetSchema(table.Schema);
+        protoTable->SetName(table.Name);
+        protoTable->SetExtensionIndex(table.ExtensionIndex);
+        const auto columnsPtr = catalog.StaticColumns.FindPtr(key);
+        Y_ENSURE(columnsPtr);
+        for (const auto& c : *columnsPtr) {
+            protoTable->AddColumn(c.Name);
+            protoTable->AddUdtType(c.UdtType);
+        }
+
+        const auto dataPtr = catalog.StaticTablesData.FindPtr(key);
+        if (dataPtr) {
+            for (const auto& v : *dataPtr) {
+                if (v.Defined()) {
+                    protoTable->AddDataNull(false);
+                    protoTable->AddDataValue(*v);
+                } else {
+                    protoTable->AddDataNull(true);
+                    protoTable->AddDataValue("");
+                }
+            }
+        }
+    }
+
+    return proto.SerializeAsString();
+}
+
+void ImportExtensions(const TString& exported, bool typesOnly, IExtensionLoader* loader) {
+    auto& catalog = TCatalog::MutableInstance();
+    with_lock (catalog.ExtensionsGuard) {
+        Y_ENSURE(!catalog.ExtensionsInit);
+        if (exported.empty()) {
+            catalog.ExtensionsInit = true;
+            return;
+        }
+
+        NProto::TPgCatalog proto;
+        Y_ENSURE(proto.ParseFromString(exported));
+        for (ui32 i = 0; i < proto.ExtensionSize(); ++i) {
+            const auto& protoExt = proto.GetExtension(i);
+            TExtensionDesc ext;
+            ext.Name = protoExt.GetName();
+            ext.InstallName = protoExt.GetInstallName();
+            ext.TypesOnly = protoExt.GetTypesOnly();
+            ext.LibraryMD5 = protoExt.GetLibraryMD5();
+            ext.LibraryPath = protoExt.GetLibraryPath();
+            catalog.Extensions.push_back(ext);
+        }
+
+        for (const auto& protoType : proto.GetType()) {
+            TTypeDesc desc;
+            desc.TypeId = protoType.GetTypeId();
+            desc.Name = protoType.GetName();
+            desc.ExtensionIndex = protoType.GetExtensionIndex();
+            desc.Category = protoType.GetCategory();
+            desc.TypeLen = protoType.GetTypeLen();
+            desc.PassByValue = protoType.GetPassByValue();
+            desc.TypeAlign = protoType.GetTypeAlign();
+            desc.ElementTypeId = protoType.GetElementTypeId();
+            desc.ArrayTypeId = protoType.GetArrayTypeId();
+            desc.InFuncId = protoType.GetInFuncId();
+            desc.OutFuncId = protoType.GetOutFuncId();
+            desc.SendFuncId = protoType.GetSendFuncId();
+            desc.ReceiveFuncId = protoType.GetReceiveFuncId();
+            desc.TypeModInFuncId = protoType.GetTypeModInFuncId();
+            desc.TypeModOutFuncId = protoType.GetTypeModOutFuncId();
+            desc.TypeSubscriptFuncId = protoType.GetTypeSubscriptFuncId();
+            desc.LessProcId = protoType.GetLessProcId();
+            desc.EqualProcId = protoType.GetEqualProcId();
+            desc.CompareProcId = protoType.GetCompareProcId();
+            desc.HashProcId = protoType.GetHashProcId();
+            Y_ENSURE(catalog.Types.emplace(desc.TypeId, desc).second);
+            Y_ENSURE(catalog.TypeByName.emplace(desc.Name, desc.TypeId).second);
+        }
+
+        for (const auto& protoProc : proto.GetProc()) {
+            TProcDesc desc;
+            desc.ProcId = protoProc.GetProcId();
+            desc.Name = protoProc.GetName();
+            desc.ExtensionIndex = protoProc.GetExtensionIndex();
+            desc.Src = protoProc.GetSrc();
+            desc.IsStrict = protoProc.GetIsStrict();
+            desc.Lang = protoProc.GetLang();
+            for (const auto t : protoProc.GetArgType()) {
+                desc.ArgTypes.push_back(t);
+            }
+            for (const auto t : protoProc.GetOutputArgType()) {
+                desc.OutputArgTypes.push_back(t);
+            }
+            desc.VariadicType = protoProc.GetVariadicType();
+            desc.VariadicArgType = protoProc.GetVariadicArgType();
+            for (const auto& name : protoProc.GetInputArgName()) {
+                desc.InputArgNames.push_back(name);
+            }
+            for (const auto& name : protoProc.GetOutputArgName()) {
+                desc.OutputArgNames.push_back(name);
+            }
+            desc.VariadicArgName = protoProc.GetVariadicArgName();
+            Y_ENSURE(protoProc.DefaultArgNullSize() == protoProc.DefaultArgValueSize());
+            for (ui32 i = 0; i < protoProc.DefaultArgNullSize(); ++i) {
+                if (protoProc.GetDefaultArgNull(i)) {
+                    desc.DefaultArgs.push_back(Nothing());
+                } else {
+                    desc.DefaultArgs.push_back(protoProc.GetDefaultArgValue(i));
+                }
+            }
+
+            Y_ENSURE(catalog.Procs.emplace(desc.ProcId, desc).second);
+            catalog.ProcByName[desc.Name].push_back(desc.ProcId);
+        }
+
+        for (const auto& protoTable : proto.GetTable()) {
+            TTableInfo table;
+            table.Oid = protoTable.GetOid();
+            table.Schema = protoTable.GetSchema();
+            table.Name = protoTable.GetName();
+            table.Kind = ERelKind::Relation;
+            table.ExtensionIndex = protoTable.GetExtensionIndex();
+            catalog.AllStaticTables.push_back(table);
+            TTableInfoKey key = table;
+            Y_ENSURE(catalog.StaticTables.emplace(key, table).second);
+            Y_ENSURE(protoTable.ColumnSize() > 0);
+            Y_ENSURE(protoTable.ColumnSize() == protoTable.UdtTypeSize());
+            for (ui32 i = 0; i < protoTable.ColumnSize(); ++i) {
+                TColumnInfo columnInfo;
+                columnInfo.Schema = table.Schema;
+                columnInfo.TableName = table.Name;
+                columnInfo.ExtensionIndex = table.ExtensionIndex;
+                columnInfo.Name = protoTable.GetColumn(i);
+                columnInfo.UdtType = protoTable.GetUdtType(i);
+                catalog.AllStaticColumns.push_back(columnInfo);
+                catalog.StaticColumns[key].push_back(columnInfo);
+            }
+
+            if (protoTable.DataValueSize() > 0) {
+                Y_ENSURE(protoTable.DataValueSize() == protoTable.DataNullSize());
+                auto& data = catalog.StaticTablesData[key];
+                data.reserve(protoTable.DataValueSize());
+                for (ui64 i = 0; i < protoTable.DataValueSize(); ++i) {
+                    if (protoTable.GetDataNull(i)) {
+                        data.push_back(Nothing());
+                    } else {
+                        data.push_back(protoTable.GetDataValue(i));
+                    }
+                }
+            }
+        }
+
+        if (!typesOnly && loader) {
+            for (ui32 extensionIndex = 1; extensionIndex <= catalog.Extensions.size(); ++extensionIndex) {
+                const auto& e = catalog.Extensions[extensionIndex - 1];
+                if (!e.TypesOnly) {
+                    loader->Load(extensionIndex, e.Name, e.LibraryPath);
+                }
+            }
+        }
+
+        catalog.AllowAllFunctions = true;
+        catalog.AllowedProcs.clear();
+        catalog.ExtensionsInit = true;
+    }
+}
+
+void ClearExtensions() {
+    auto& catalog = TCatalog::MutableInstance();
+    with_lock (catalog.ExtensionsGuard) {
+        if (!catalog.ExtensionsInit) {
+            return;
+        }
+
+        catalog.StaticTablesData.clear();
+        while (!catalog.AllStaticTables.empty() && catalog.AllStaticTables.back().ExtensionIndex) {
+            catalog.StaticTables.erase(TTableInfoKey{catalog.AllStaticTables.back()});
+            catalog.StaticColumns.erase(TTableInfoKey{catalog.AllStaticTables.back()});
+            catalog.AllStaticTables.pop_back();
+        }
+
+        while (!catalog.AllStaticColumns.empty() && catalog.AllStaticColumns.back().ExtensionIndex) {
+            catalog.AllStaticColumns.pop_back();
+        }
+
+        catalog.AllowedProcs = catalog.AllowedProcsWithoutExtensions;
+        catalog.Types = catalog.TypesWithoutExtensions;
+        catalog.TypeByName = catalog.TypeByNameWithoutExtensions;
+        catalog.Procs = catalog.ProcsWithoutExtensions;
+        catalog.ProcByName = catalog.ProcByNameWithoutExtensions;
+        catalog.Extensions.clear();
+        catalog.ExtensionsByName.clear();
+        catalog.ExtensionsByInstallName.clear();
+
+        catalog.ExtensionsInit = false;
     }
 }
 

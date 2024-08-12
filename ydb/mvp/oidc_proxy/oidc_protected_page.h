@@ -59,6 +59,7 @@ public:
             return;
         }
         NHttp::THeaders headers(Request->Headers);
+        IsAjaxRequest = DetectAjaxRequest(headers);
         TStringBuf authHeader = headers.Get(AUTH_HEADER_NAME);
         if (Request->Method == "OPTIONS" || IsAuthorizedRequest(authHeader)) {
             ForwardUserRequest(TString(authHeader), ctx);
@@ -67,11 +68,12 @@ public:
         }
     }
 
-    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
+    void HandleProxy(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
         NHttp::THttpOutgoingResponsePtr httpResponse;
         if (event->Get()->Response != nullptr) {
             NHttp::THttpIncomingResponsePtr response = event->Get()->Response;
-            if (response->Status == "400" && RequestedPageScheme.empty()) {
+            LOG_DEBUG_S(ctx, EService::MVP, "Incoming response for protected resource: " << response->Status);
+            if ((response->Status == "400" || response->Status.empty()) && RequestedPageScheme.empty()) {
                 NHttp::THttpOutgoingRequestPtr request = response->GetRequest();
                 if (!request->Secure) {
                     LOG_DEBUG_S(ctx, EService::MVP, "Try to send request to HTTPS port");

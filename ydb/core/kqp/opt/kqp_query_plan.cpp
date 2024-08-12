@@ -94,7 +94,7 @@ struct TSerializerCtx {
         const TIntrusivePtr<NYql::TKikimrTablesData> tablesData,
         const TKikimrConfiguration::TPtr config, ui32 txCount,
         TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults,
-        TTypeAnnotationContext& typeCtx, 
+        TTypeAnnotationContext& typeCtx,
         TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx)
         : ExprCtx(exprCtx)
         , Cluster(cluster)
@@ -348,7 +348,7 @@ private:
 
                 writer.WriteKey("Inputs");
                 writer.BeginList();
-                
+
                 for (const auto& input : op.Inputs) {
 
                     if (std::holds_alternative<ui32>(input)) {
@@ -461,6 +461,19 @@ private:
     }
 
     void FillConnectionPlanNode(const TDqConnection& connection, TQueryPlanNode& planNode) {
+        TDqStageSettings settings = TDqStageSettings::Parse(connection.Output().Stage());
+        auto GetNarrowColumnName = [&](const TString& wideColumnName) {
+            ui32 idx;
+            if (!TryFromString(wideColumnName, idx)) {
+                return wideColumnName;
+            }
+
+            YQL_ENSURE(idx < settings.OutputNarrowType->GetSize(),
+                "Failed to lookup column name for index " << idx << " in type " << settings.OutputNarrowType->ToString());
+
+            return TString(settings.OutputNarrowType->GetItems()[idx]->GetName());
+        };
+
         planNode.Type = EPlanNodeType::Connection;
 
         if (connection.Maybe<TDqCnUnionAll>()) {
@@ -473,15 +486,23 @@ private:
             planNode.TypeName = "HashShuffle";
             auto& keyColumns = planNode.NodeInfo["KeyColumns"];
             for (const auto& column : hashShuffle.Cast().KeyColumns()) {
-                keyColumns.AppendValue(TString(column.Value()));
+                if (settings.WideChannels) {
+                    keyColumns.AppendValue(GetNarrowColumnName(TString(column.Value())));
+                } else {
+                    keyColumns.AppendValue(TString(column.Value()));
+                }
             }
         } else if (auto merge = connection.Maybe<TDqCnMerge>()) {
             planNode.TypeName = "Merge";
             auto& sortColumns = planNode.NodeInfo["SortColumns"];
             for (const auto& sortColumn : merge.Cast().SortColumns()) {
                 TStringBuilder sortColumnDesc;
-                sortColumnDesc << sortColumn.Column().Value() << " ("
-                    << sortColumn.SortDirection().Value() << ")";
+                if (settings.WideChannels) {
+                    sortColumnDesc << GetNarrowColumnName(TString(sortColumn.Column().Value()));
+                } else {
+                    sortColumnDesc << sortColumn.Column().Value();
+                }
+                sortColumnDesc << " (" << sortColumn.SortDirection().Value() << ")";
 
                 sortColumns.AppendValue(sortColumnDesc);
             }
@@ -1376,7 +1397,7 @@ private:
 
         TOperator op;
         op.Properties["Name"] = name;
-        
+
         return AddOperator(planNode, name, std::move(op));
     }
 
@@ -1728,8 +1749,8 @@ private:
 
     template <typename TReadTableSettings>
     void AddReadTableSettings(
-        TOperator& op, 
-        const TReadTableSettings& readTableSettings, 
+        TOperator& op,
+        const TReadTableSettings& readTableSettings,
         TTableRead& readInfo
     ) {
         auto settings = NYql::TKqpReadTableSettings::Parse(readTableSettings);
@@ -1751,9 +1772,9 @@ private:
         }
 
         if (settings.SequentialInFlight) {
-            op.Properties["Scan"] = "Sequential"; 
+            op.Properties["Scan"] = "Sequential";
         } else {
-            op.Properties["Scan"] = "Parallel"; 
+            op.Properties["Scan"] = "Parallel";
         }
     }
 
@@ -1953,8 +1974,8 @@ TVector<NJson::TJsonValue> RemoveRedundantNodes(NJson::TJsonValue& plan, const T
     return {plan};
 }
 
-NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan, 
-    int operatorIndex, 
+NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan,
+    int operatorIndex,
     const THashMap<int, NJson::TJsonValue>& planIndex,
     const THashMap<TString, NJson::TJsonValue>& precomputes,
     int& nodeCounter) {
@@ -1993,14 +2014,14 @@ NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan,
             NJson::TJsonValue newOps;
             NJson::TJsonValue op;
 
-            op["Name"] = "TableLookup"; 
+            op["Name"] = "TableLookup";
             op["Columns"] = plan.GetMapSafe().at("Columns");
             op["LookupKeyColumns"] = plan.GetMapSafe().at("LookupKeyColumns");
             op["Table"] = plan.GetMapSafe().at("Table");
 
             if (plan.GetMapSafe().contains("E-Cost")) {
                 op["E-Cost"] = plan.GetMapSafe().at("E-Cost");
-            } 
+            }
             if (plan.GetMapSafe().contains("E-Rows")) {
                 op["E-Rows"] = plan.GetMapSafe().at("E-Rows");
             }
@@ -2075,8 +2096,8 @@ NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan,
         op.GetMapSafe().erase("Inputs");
     }
 
-    if (op.GetMapSafe().contains("Input") 
-        || op.GetMapSafe().contains("ToFlow") 
+    if (op.GetMapSafe().contains("Input")
+        || op.GetMapSafe().contains("ToFlow")
         || op.GetMapSafe().contains("Member")
         || op.GetMapSafe().contains("AssumeSorted")
         || op.GetMapSafe().contains("Iterator")) {
@@ -2149,7 +2170,7 @@ double ComputeCpuTimes(NJson::TJsonValue& plan) {
 }
 
 void ComputeTotalRows(NJson::TJsonValue& plan) {
-    
+
     if (plan.GetMapSafe().contains("Plans")) {
         for (auto& p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
             ComputeTotalRows(p);
@@ -2201,7 +2222,7 @@ NJson::TJsonValue SimplifyQueryPlan(NJson::TJsonValue& plan) {
         "ToFlow",
         "Member",
         "AssumeSorted"
-    };    
+    };
 
     THashMap<int, NJson::TJsonValue> planIndex;
     THashMap<TString, NJson::TJsonValue> precomputes;
@@ -2237,13 +2258,13 @@ TString AddSimplifiedPlan(const TString& planText, TIntrusivePtr<NOpt::TKqpOptim
         optimizerStats["JoinsCount"] = optCtx->JoinsCount;
         optimizerStats["EquiJoinsCount"] = optCtx->EquiJoinsCount;
         simplifiedPlan["OptimizerStats"] = optimizerStats;
-    }   
+    }
     planJson["SimplifiedPlan"] = simplifiedPlan;
 
     return planJson.GetStringRobust();
 }
 
-TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx, const TString commonPlanInfo = "") {
+TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx, const TString commonPlanInfo = "", const TString& queryStats = "") {
     NJsonWriter::TBuf writer;
     writer.SetIndentSpaces(2);
 
@@ -2266,6 +2287,15 @@ TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NO
     writer.BeginObject();
     writer.WriteKey("Node Type").WriteString("Query");
     writer.WriteKey("PlanNodeType").WriteString("Query");
+
+    if (queryStats) {
+        NJson::TJsonValue queryStatsJson;
+        NJson::ReadJsonTree(queryStats, &queryStatsJson, true);
+
+        writer.WriteKey("Stats");
+        writer.WriteJsonValue(&queryStatsJson);
+    }
+
     writer.WriteKey("Plans");
     writer.BeginList();
 
@@ -2717,7 +2747,27 @@ TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats) {
             txPlans.push_back(txPlan);
         }
     }
-    return SerializeTxPlans(txPlans, TIntrusivePtr<NOpt::TKqpOptimizeContext>());
+
+    NJsonWriter::TBuf writer;
+    writer.BeginObject();
+
+    if (queryStats.HasCompilation()) {
+        const auto& compilation = queryStats.GetCompilation();
+
+        writer.WriteKey("Compilation");
+        writer.BeginObject();
+        writer.WriteKey("FromCache").WriteBool(compilation.GetFromCache());
+        writer.WriteKey("DurationUs").WriteLongLong(compilation.GetDurationUs());
+        writer.WriteKey("CpuTimeUs").WriteLongLong(compilation.GetCpuTimeUs());
+        writer.EndObject();
+    }
+
+    writer.WriteKey("ProcessCpuTimeUs").WriteLongLong(queryStats.GetWorkerCpuTimeUs());
+    writer.WriteKey("TotalDurationUs").WriteLongLong(queryStats.GetDurationUs());
+    writer.WriteKey("QueuedTimeUs").WriteLongLong(queryStats.GetQueuedTimeUs());
+    writer.EndObject();
+
+    return SerializeTxPlans(txPlans, TIntrusivePtr<NOpt::TKqpOptimizeContext>(), "", writer.Str());
 }
 
 TString SerializeScriptPlan(const TVector<const TString>& queryPlans) {

@@ -118,16 +118,16 @@ Y_UNIT_TEST_SUITE (TableIndex) {
             const TTableColumns Table2{{"PK", "DATA", NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn}, {"PK"}};
 
             UNIT_ASSERT(!IsCompatibleIndex(type, Table2, {{NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn}, {}}, explain));
-            UNIT_ASSERT_STRINGS_EQUAL(explain, "index key column shouldn't have a reserved name: -parent");
+            UNIT_ASSERT_STRINGS_EQUAL(explain, TStringBuilder() << "index key column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn);
 
             UNIT_ASSERT(!IsCompatibleIndex(type, Table2, {{"DATA"}, {NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn}}, explain));
-            UNIT_ASSERT_STRINGS_EQUAL(explain, "index data column shouldn't have a reserved name: -parent");
+            UNIT_ASSERT_STRINGS_EQUAL(explain, TStringBuilder() << "index data column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn);
         }
         {
             const TTableColumns Table3{{"PK", "DATA", NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn}, {NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn}};
 
             UNIT_ASSERT(!IsCompatibleIndex(type, Table3, {{"DATA"}, {}}, explain));
-            UNIT_ASSERT_STRINGS_EQUAL(explain, "table key column shouldn't have a reserved name: -parent");
+            UNIT_ASSERT_STRINGS_EQUAL(explain, TStringBuilder() << "table key column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn);
         }
     }
 }

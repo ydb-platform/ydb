@@ -531,6 +531,20 @@
             "uri": "https://{canondata_backend}/1889210/b0118a685beb1cfba4436799d514f392b983c379/resource.tar.gz#test.test_blocks-coalesce_ints--Plan_/plan.txt"
         }
     ],
+    "test.test[blocks-combine_all_decimal--Debug]": [
+        {
+            "checksum": "6a14942091e192a9cfc41b1f8bd222f0",
+            "size": 9047,
+            "uri": "https://{canondata_backend}/1871182/aba145d12e60259474a4d54a3c0451194ac1617f/resource.tar.gz#test.test_blocks-combine_all_decimal--Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[blocks-combine_all_decimal--Plan]": [
+        {
+            "checksum": "c6efb578089e649666b0f254bce73693",
+            "size": 5645,
+            "uri": "https://{canondata_backend}/1809005/7142336c5d0d72d24df8de2731d5f39f0b6e741c/resource.tar.gz#test.test_blocks-combine_all_decimal--Plan_/plan.txt"
+        }
+    ],
     "test.test[blocks-combine_all_min_filter--Debug]": [
         {
             "checksum": "29a4530555819599901f599a116aa9f0",

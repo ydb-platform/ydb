@@ -210,7 +210,7 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
         }
     }
 
-    if (runnerOptions.YdbSettings.MonitoringEnabled) {
+    if (runnerOptions.YdbSettings.MonitoringEnabled || runnerOptions.YdbSettings.GrpcEnabled) {
         RunAsDaemon();
     }
 
@@ -452,8 +452,17 @@ protected:
             });
         options.AddLongOption("inflight-limit", "In flight limit for async queries (use 0 for unlimited)")
             .RequiredArgument("uint")
-            .DefaultValue(RunnerOptions.YdbSettings.InFlightLimit)
-            .StoreResult(&RunnerOptions.YdbSettings.InFlightLimit);
+            .DefaultValue(0)
+            .StoreResult(&RunnerOptions.YdbSettings.AsyncQueriesSettings.InFlightLimit);
+        TChoices<NKqpRun::TAsyncQueriesSettings::EVerbose> verbose({
+            {"each-query", NKqpRun::TAsyncQueriesSettings::EVerbose::EachQuery},
+            {"final", NKqpRun::TAsyncQueriesSettings::EVerbose::Final}
+        });
+        options.AddLongOption("async-verbose", "Verbose type for async queries")
+            .RequiredArgument("type")
+            .DefaultValue("each-query")
+            .Choices(verbose.GetChoices())
+            .StoreMappedResultT<TString>(&RunnerOptions.YdbSettings.AsyncQueriesSettings.Verbose, verbose);
 
         TChoices<NKikimrKqp::EQueryAction> scriptAction({
             {"execute", NKikimrKqp::QUERY_ACTION_EXECUTE},
@@ -501,12 +510,21 @@ protected:
                 return nodeCount;
             });
 
-        options.AddLongOption('M', "monitoring", "Embedded UI port (use 0 to start on random free port), if used kqprun will be runs as daemon")
+        options.AddLongOption('M', "monitoring", "Embedded UI port (use 0 to start on random free port), if used kqprun will be run as daemon")
             .RequiredArgument("uint")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 if (const TString& port = option->CurVal()) {
                     RunnerOptions.YdbSettings.MonitoringEnabled = true;
                     RunnerOptions.YdbSettings.MonitoringPortOffset = FromString(port);
+                }
+            });
+
+        options.AddLongOption('G', "grpc", "gRPC port (use 0 to start on random free port), if used kqprun will be run as daemon")
+            .RequiredArgument("uint")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                if (const TString& port = option->CurVal()) {
+                    RunnerOptions.YdbSettings.GrpcEnabled = true;
+                    RunnerOptions.YdbSettings.GrpcPort = FromString(port);
                 }
             });
 
@@ -529,7 +547,7 @@ protected:
     }
 
     int DoRun(NLastGetopt::TOptsParseResult&&) override {
-        if (!ExecutionOptions.SchemeQuery && ExecutionOptions.ScriptQueries.empty() && !RunnerOptions.YdbSettings.MonitoringEnabled) {
+        if (!ExecutionOptions.SchemeQuery && ExecutionOptions.ScriptQueries.empty() && !RunnerOptions.YdbSettings.MonitoringEnabled && !RunnerOptions.YdbSettings.GrpcEnabled) {
             ythrow yexception() << "Nothing to execute";
         }
 

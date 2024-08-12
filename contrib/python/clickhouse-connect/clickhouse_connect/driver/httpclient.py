@@ -69,7 +69,8 @@ class HttpClient(Client):
                  https_proxy: Optional[str] = None,
                  server_host_name: Optional[str] = None,
                  apply_server_timezone: Optional[Union[str, bool]] = None,
-                 show_clickhouse_errors: Optional[bool] = None):
+                 show_clickhouse_errors: Optional[bool] = None,
+                 autogenerate_session_id: Optional[bool] = None):
         """
         Create an HTTP ClickHouse Connect client
         See clickhouse_connect.get_client for parameters
@@ -93,7 +94,7 @@ class HttpClient(Client):
             # pylint: disable=too-many-boolean-expressions
             if not self.http and (server_host_name or ca_cert or client_cert or not verify or https_proxy):
                 options = {'verify': verify is not False}
-                dict_add(options,'ca_cert', ca_cert)
+                dict_add(options, 'ca_cert', ca_cert)
                 dict_add(options, 'client_cert', client_cert)
                 dict_add(options, 'client_cert_key', client_cert_key)
                 if server_host_name:
@@ -128,9 +129,14 @@ class HttpClient(Client):
         self._progress_interval = None
         self._active_session = None
 
+        # allow to override the global autogenerate_session_id setting via the constructor params
+        _autogenerate_session_id = common.get_setting('autogenerate_session_id') \
+            if autogenerate_session_id is None \
+            else autogenerate_session_id
+
         if session_id:
             ch_settings['session_id'] = session_id
-        elif 'session_id' not in ch_settings and common.get_setting('autogenerate_session_id'):
+        elif 'session_id' not in ch_settings and _autogenerate_session_id:
             ch_settings['session_id'] = str(uuid.uuid4())
 
         if coerce_bool(compress):

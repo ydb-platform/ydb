@@ -31,14 +31,14 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EquiJoin(TExprBase node
         }
         if (auto maybeFlatMap = list.Maybe<TCoFlatMapBase>()) {
             TSyncMap syncList;
-            if (!IsYtCompleteIsolatedLambda(maybeFlatMap.Cast().Lambda().Ref(), syncList, usedCluster, true, false)) {
+            if (!IsYtCompleteIsolatedLambda(maybeFlatMap.Cast().Lambda().Ref(), syncList, usedCluster, false)) {
                 return node;
             }
             list = maybeFlatMap.Cast().Input();
         }
         if (!IsYtProviderInput(list)) {
             TSyncMap syncList;
-            if (!IsYtCompleteIsolatedLambda(list.Ref(), syncList, usedCluster, true, false)) {
+            if (!IsYtCompleteIsolatedLambda(list.Ref(), syncList, usedCluster, false)) {
                 return node;
             }
             continue;
@@ -84,7 +84,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EquiJoin(TExprBase node
         if (auto maybeFlatMap = listStepForward.Maybe<TCoFlatMapBase>()) {
             auto flatMap = maybeFlatMap.Cast();
             if (IsLambdaSuitableForPullingIntoEquiJoin(flatMap, joinInput.Scope().Ref(), tableKeysMap, extractedMembers.Get())) {
-                if (!IsYtCompleteIsolatedLambda(flatMap.Lambda().Ref(), worldList, usedCluster, true, false)) {
+                if (!IsYtCompleteIsolatedLambda(flatMap.Lambda().Ref(), worldList, usedCluster, false)) {
                     return node;
                 }
 
@@ -134,7 +134,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EquiJoin(TExprBase node
             }
             else {
                 TSyncMap syncList;
-                if (!IsYtCompleteIsolatedLambda(list.Ref(), syncList, usedCluster, true, false)) {
+                if (!IsYtCompleteIsolatedLambda(list.Ref(), syncList, usedCluster, false)) {
                     return node;
                 }
 

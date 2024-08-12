@@ -83,6 +83,7 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<partitioning_setting_nam
 #### Пример
 
 Код из следующего примера включает автоматическое партиционирование по нагрузке для индекса с именем `title_index` в таблице `series` и устанавливает ему минимальное количество партиций равным 5:
+
 ```sql
 ALTER TABLE `series` ALTER INDEX `title_index` SET (
     AUTO_PARTITIONING_BY_LOAD = ENABLED,
@@ -214,7 +215,7 @@ ALTER TABLE <old_table_name> RENAME TO <new_table_name>;
 Переименование может использоваться для перемещения таблицы из одной директории внутри БД в другую, например:
 
 ``` sql
-ALTER TABLE `table1` RENAME TO `/backup/table1`;
+ALTER TABLE `table1` RENAME TO `backup/table1`;
 ```
 
 ## Изменение групп колонок {#column-family}
@@ -238,11 +239,11 @@ ALTER TABLE series_with_families ALTER COLUMN release_date SET FAMILY family_sma
 
 ```sql
 ALTER TABLE series_with_families
-	ADD FAMILY family_small (
-    	DATA = "ssd",
-    	COMPRESSION = "off"
-	),
-	ALTER COLUMN release_date SET FAMILY family_small;
+    ADD FAMILY family_small (
+        DATA = "ssd",
+        COMPRESSION = "off"
+    ),
+    ALTER COLUMN release_date SET FAMILY family_small;
 ```
 
 При помощи команды ```ALTER FAMILY``` можно изменить параметры группы колонок. Приведенный ниже код для группы колонок ```default``` в таблице ```series_with_families``` сменит тип хранилища на ```hdd```:

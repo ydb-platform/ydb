@@ -11315,11 +11315,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         )", {NKikimrScheme::StatusSchemeError});
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "SystemColumnForbidden"
+            Name: "SystemColumnAllowed"
             Columns { Name: "__ydb_SomeColumn"   Type: "Uint64" }
             Columns { Name: "value" Type: "Uint64" }
             KeyColumnNames: ["__ydb_SomeColumn", "value"]
             SystemColumnNamesAllowed: true
         )");
+
+        env.TestWaitNotification(runtime, txId);
+
+        TestCopyTable(runtime, ++txId, "/MyRoot", "SystemColumnInCopyAllowed", "/MyRoot/SystemColumnAllowed");
     }
 }

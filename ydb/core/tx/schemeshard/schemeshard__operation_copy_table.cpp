@@ -20,6 +20,7 @@ void PrepareScheme(NKikimrSchemeOp::TTableDescription* schema, const TString& na
     //inherit all from Src except PartitionConfig, PartitionConfig could be altered
     completedSchema.MutablePartitionConfig()->CopyFrom(schema->GetPartitionConfig());
     schema->Swap(&completedSchema);
+    schema->SetSystemColumnNamesAllowed(true);
 }
 
 class TConfigureParts: public TSubOperationState {
@@ -761,6 +762,7 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
         operation->SetOmitFollowers(copying.GetOmitFollowers());
         operation->SetIsBackup(copying.GetIsBackup());
         operation->MutablePartitionConfig()->CopyFrom(copying.GetPartitionConfig());
+        operation->SetSystemColumnNamesAllowed(true);
 
         result.push_back(CreateCopyTable(NextPartId(nextId, result), schema, sequences));
     }
@@ -822,6 +824,7 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             operation->SetCopyFromTable(implTable.PathString());
             operation->SetOmitFollowers(copying.GetOmitFollowers());
             operation->SetIsBackup(copying.GetIsBackup());
+            operation->SetSystemColumnNamesAllowed(true);
 
             result.push_back(CreateCopyTable(NextPartId(nextId, result), schema));
         }

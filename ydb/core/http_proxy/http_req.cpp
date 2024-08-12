@@ -528,6 +528,8 @@ namespace NKikimr::NHttpProxy {
                         action = NSQS::EAction::DeleteQueue;
                     } else if (Method == "ChangeMessageVisibility") {
                         action = NSQS::EAction::ChangeMessageVisibility;
+                    } else if (Method == "SetQueueAttributes") {
+                        action = NSQS::EAction::SetQueueAttributes;
                     }
 
                     requestHolder->SetRequestId(HttpContext.RequestId);
@@ -1063,6 +1065,7 @@ namespace NKikimr::NHttpProxy {
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(PurgeQueue);
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(DeleteQueue);
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(ChangeMessageVisibility);
+        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(SetQueueAttributes);
         #undef DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN
     }
 

@@ -42,6 +42,7 @@ void TGRpcYmqService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
     ADD_REQUEST(PurgeQueue, DoYmqPurgeQueueRequest, nullptr, Off)
     ADD_REQUEST(DeleteQueue, DoYmqDeleteQueueRequest, nullptr, Off)
     ADD_REQUEST(ChangeMessageVisibility, DoYmqChangeMessageVisibilityRequest, nullptr, Off)
+    ADD_REQUEST(SetQueueAttributes, DoYmqSetQueueAttributesRequest, nullptr, Off)
 
 #undef ADD_REQUEST
 }

@@ -256,3 +256,16 @@ message SendMessageBatchResult {
     repeated BatchResultErrorEntry failed = 1;
     repeated SendMessageBatchResultEntry successful = 2;
 }
+
+message SetQueueAttributesRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    map<string, string> attributes = 2;
+    string queue_url = 3;
+}
+
+message SetQueueAttributesResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message SetQueueAttributesResult {
+}

@@ -694,6 +694,47 @@ namespace NKikimr::NYmq::V1 {
             return result;
         }
     };
+
+    class TSetQueueAttributesReplyCallback : public TReplyCallback<
+            NKikimr::NSQS::TSetQueueAttributesResponse,
+            Ydb::Ymq::V1::SetQueueAttributesResult> {
+    public:
+        using TReplyCallback::TReplyCallback;
+
+    private:
+        const NKikimr::NSQS::TSetQueueAttributesResponse& GetResponse(const NKikimrClient::TSqsResponse& resp) override {
+            return resp.GetSetQueueAttributes();
+        }
+
+        Ydb::Ymq::V1::SetQueueAttributesResult GetResult(const NKikimrClient::TSqsResponse&) override {
+            Ydb::Ymq::V1::SetQueueAttributesResult result;
+            return result;
+        }
+    };
+
+    void AddAttribute(THolder<TSqsRequest>& requestHolder, const TString& name, TString value) {
+        auto attribute = requestHolder->MutableSetQueueAttributes()->MutableAttributes()->Add();
+        attribute->SetName(name);
+        attribute->SetValue(value);
+    };
+
+    class TSetQueueAttributesActor : public TRpcRequestActor<
+            TEvYmqSetQueueAttributesRequest,
+            NKikimr::NSQS::TSetQueueAttributesRequest,
+            TSetQueueAttributesReplyCallback> {
+    public:
+        using TRpcRequestActor::TRpcRequestActor;
+
+    private:
+        NKikimr::NSQS::TSetQueueAttributesRequest* GetRequest(THolder<TSqsRequest>& requestHolder) override {
+            auto result = requestHolder->MutableSetQueueAttributes();
+            for (auto& [name, value]: GetProtoRequest()->Getattributes()) {
+                AddAttribute(requestHolder, name, value);
+            }
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url())->second);
+            return result;
+        }
+    };
 }
 
 namespace NKikimr::NGRpcService {
@@ -717,5 +758,6 @@ DECLARE_RPC(DeleteMessage);
 DECLARE_RPC(PurgeQueue);
 DECLARE_RPC(DeleteQueue);
 DECLARE_RPC(ChangeMessageVisibility);
+DECLARE_RPC(SetQueueAttributes);
 
 }

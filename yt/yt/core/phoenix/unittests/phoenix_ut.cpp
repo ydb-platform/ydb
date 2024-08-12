@@ -1457,5 +1457,48 @@ TEST(TPhoenixTest, Opaque)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NPrivateInner {
+
+class TOuter
+{
+public:
+    static void Test()
+    {
+        TInner inner1;
+        inner1.A = 123;
+
+        auto inner2 = Deserialize<TInner>(Serialize(inner1));
+        EXPECT_EQ(inner1, inner2);
+    }
+
+private:
+    PHOENIX_DECLARE_FRIEND();
+
+    struct TInner
+    {
+        int A;
+
+        bool operator==(const TInner&) const = default;
+
+        PHOENIX_DECLARE_TYPE(TInner, 0xbca5a722);
+    };
+};
+
+PHOENIX_DEFINE_TYPE(TOuter::TInner);
+
+void TOuter::TInner::RegisterMetadata(auto&& registrar)
+{
+    registrar.template Field<1, &TThis::A>("a")();
+}
+
+} // namespace NPrivateInner
+
+TEST(TPhoenixTest, PrivateInner)
+{
+    NPrivateInner::TOuter::Test();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace
 } // namespace NYT::NPhoenix2

@@ -25,10 +25,14 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 #define PHOENIX_DEFINE_TYPE__STATIC_INIT(type, parenthesizedTypeArgs) \
-    [[maybe_unused]] static const void* PhoenixTypeDescriptorStaticInit__ ## type = [] { \
-        type PP_DEPAREN(parenthesizedTypeArgs)::GetTypeDescriptor(); \
-        return nullptr; \
-    }()
+    template <class T> \
+    struct TPhoenixTypeInitializer__; \
+    \
+    template <> \
+    struct TPhoenixTypeInitializer__<type PP_DEPAREN(parenthesizedTypeArgs)> \
+    { \
+        [[maybe_unused]] static inline const void* Dummy = &type PP_DEPAREN(parenthesizedTypeArgs)::GetTypeDescriptor(); \
+    }
 
 #define PHOENIX_DEFINE_TYPE(type) \
     PHOENIX_DEFINE_TYPE__STATIC_INIT(type, ()); \

@@ -99,3 +99,11 @@ ydb/tests/functional/tenants test_storage_config.py.TestStorageConfig.*
 ydb/tests/functional/tenants test_tenants.py.*
 ydb/tests/functional/ydb_cli test_ydb_impex.py.TestImpex.test_big_dataset*
 ydb/tests/tools/pq_read/test test_timeout.py.TestTimeout.test_timeout
+ydb/core/blobstorage/ut_blobstorage/ut_scrub/ BlobScrubbing.block42
+ydb/core/blobstorage/ut_blobstorage/ut_scrub/ BlobScrubbing.mirror3dc
+ydb/core/blobstorage/ut_blobstorage/ut_scrub/ BlobScrubbing.mirror3of4
+ydb/core/tx/schemeshard/ut_move_reboots/ TSchemeShardMoveRebootsTest.WithData
+ydb/core/tx/schemeshard/ut_move_reboots/ TSchemeShardMoveRebootsTest.WithDataAndPersistentPartitionStats
+ydb/core/tx/schemeshard/ut_pq_reboots/ TPqGroupTestReboots.AlterWithReboots-PQConfigTransactionsAtSchemeShard-false
+ydb/apps/ydb/ut/ YdbWorkloadTransferTopicToTable.Default_Init_Clean
+ydb/library/actors/interconnect/ut_huge_cluster/HugeCluster.AllToAll

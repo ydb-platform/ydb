@@ -8,7 +8,7 @@
 
 {% list tabs %}
 
-- go
+- Go
 
    ```(go)
    err := db.Coordination().CreateNode(
@@ -23,7 +23,7 @@
 
 {% list tabs %}
 
-- go
+- Go
 
    ```(go)
    session, err := db.Coordination().CreateSession(
@@ -38,7 +38,7 @@
 
 {% list tabs %}
 
-- go
+- Go
 
   В Go SDK для отслеживания таких ситуаций используется контекст сессии `session.Context()`, который завершается вместе с сессией. При этом SDK умеет самостоятельно обрабатывать ошибки транспортного уровня и переустанавливать соединение с сервисом, пытаясь восстановить сессию, если это ещё возможно. Таким образом, клиенту достаточно следить только за контекстом сессии, чтобы вовремя отреагировать на её потерю.
 
@@ -50,7 +50,7 @@
 
 {% list tabs %}
 
-- go
+- Go
 
    ```(go)
    err := session.CreateSemaphore(ctx,
@@ -67,7 +67,7 @@
 
 {% list tabs %}
 
-- go
+- Go
 
    ```(go)
    lease, err := session.AcquireSemaphore(ctx, "mySemaphore", 5);
@@ -81,7 +81,7 @@
 
 {% list tabs %}
 
-- go
+- Go
 
    ```(go)
    err := lease.Release()
@@ -103,7 +103,7 @@
 
 {% list tabs %}
 
-- go
+- Go
 
    ```(go)
    for {

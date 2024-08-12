@@ -35,7 +35,7 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     extra_args=["--emulate-yt"]
     if what == 'Analyze':
         extra_args += ["--analyze-query", "--optimize"]
-    if what == 'Results' and is_with_final_result_issues(config):
+    if is_with_final_result_issues(config):
         extra_args += ["--with-final-issues"]
 
     if what == 'Analyze':

@@ -242,8 +242,9 @@ void TSchemeShard::SetupRouting(const TDeque<TIndexBuildId>& indexIds, const TAc
             }
         };
 
-        handle(buildInfo.AlterMainTableTxId);
+        // TODO(mbkkt) order here is unexpected, is it intentional or accidental?
         handle(buildInfo.LockTxId);
+        handle(buildInfo.AlterMainTableTxId);
         handle(buildInfo.InitiateTxId);
         handle(buildInfo.ApplyTxId);
         handle(buildInfo.UnlockTxId);

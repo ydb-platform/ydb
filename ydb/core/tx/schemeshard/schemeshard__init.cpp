@@ -4397,8 +4397,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     auto [it, emplaced] = Self->IndexBuilds.emplace(indexInfo->Id, indexInfo);
                     Y_ABORT_UNLESS(emplaced);
                     if (indexInfo->Uid) {
-                        std::tie(std::ignore, emplaced) = Self->IndexBuildsByUid.emplace(indexInfo->Uid, indexInfo);
-                        Y_ABORT_UNLESS(emplaced);
+                        // TODO(mbkkt) It also should be unique, but we're not sure.
+                        Y_ASSERT(!Self->IndexBuildsByUid.contains(indexInfo->Uid));
+                        Self->IndexBuildsByUid[indexInfo->Uid] = indexInfo;
                     }
 
                     OnComplete.ToProgress(indexInfo->Id);

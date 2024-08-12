@@ -235,8 +235,8 @@ struct IOptimizerNew {
     virtual ~IOptimizerNew() = default;
     virtual std::shared_ptr<TJoinOptimizerNode> JoinSearch(
         const std::shared_ptr<TJoinOptimizerNode>& joinTree, 
-        TCardinalityHints hints = TCardinalityHints(), 
-        TJoinAlgoHints joinHints = TJoinAlgoHints()) = 0;
+        TCardinalityHints hints = {}, 
+        TJoinAlgoHints joinHints = {}) = 0;
 };
 
 } // namespace NYql

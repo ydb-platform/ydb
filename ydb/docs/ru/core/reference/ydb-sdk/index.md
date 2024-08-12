@@ -20,6 +20,9 @@
 - [Установка](install.md)
 - [Аутентификация](auth.md)
 - [Сравнение возможностей SDK](feature-parity.md)
+- [Параметризованные запросы](parameterized_queries.md)
+- [Работа с топиками](topic.md)
+- [Работа с сервисом координации YDB](coordination.md)
 
 Смотрите также:
 

@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     arrow_util.cpp
     mkql_functions.cpp
-    mkql_memory_pool.cpp
 )
 
 PEERDIR(

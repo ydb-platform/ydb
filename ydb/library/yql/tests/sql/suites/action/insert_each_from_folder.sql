@@ -6,7 +6,7 @@ use plato;
 $list = (
     select aggregate_list(Path) from (
     select Path from folder("")
-    where Type = "table"
+    where Type = "table" and Path like "Input%"
     order by Path desc
     limit 30
     )

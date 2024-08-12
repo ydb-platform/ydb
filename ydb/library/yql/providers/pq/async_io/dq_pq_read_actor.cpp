@@ -6,7 +6,7 @@
 #include <ydb/library/yql/dq/actors/compute/dq_source_watermark_tracker.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
@@ -85,6 +85,30 @@ struct TEvPrivate {
 } // namespace
 
 class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public IDqComputeActorAsyncInput {
+    struct TMetrics {
+        TMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters)
+            : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
+            , Counters(counters) {
+            SubGroup = Counters->GetSubgroup("sink", "PqRead");
+            auto sink = SubGroup->GetSubgroup("tx_id", TxId);
+            auto task = sink->GetSubgroup("task_id", ToString(taskId));
+            InFlyAsyncInputData = task->GetCounter("InFlyAsyncInputData");
+            InFlySubscribe = task->GetCounter("InFlySubscribe");
+            AsyncInputDataRate = task->GetCounter("AsyncInputDataRate", true);
+        }
+
+        ~TMetrics() {
+            SubGroup->RemoveSubgroup("id", TxId);
+        }
+
+        TString TxId;
+        ::NMonitoring::TDynamicCounterPtr Counters;
+        ::NMonitoring::TDynamicCounterPtr SubGroup;
+        ::NMonitoring::TDynamicCounters::TCounterPtr InFlyAsyncInputData;
+        ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
+        ::NMonitoring::TDynamicCounters::TCounterPtr AsyncInputDataRate;
+    };
+
 public:
     using TPartitionKey = std::pair<TString, ui64>; // Cluster, partition id.
     using TDebugOffsets = TMaybe<std::pair<ui64, ui64>>;
@@ -100,10 +124,12 @@ public:
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const NActors::TActorId& computeActorId,
+        const ::NMonitoring::TDynamicCounterPtr& counters,
         i64 bufferSize)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
         , InputIndex(inputIndex)
         , TxId(txId)
+        , Metrics(txId, taskId, counters)
         , BufferSize(bufferSize)
         , HolderFactory(holderFactory)
         , LogPrefix(TStringBuilder() << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << taskId << ". PQ source. ")
@@ -137,7 +163,7 @@ public:
     static constexpr char ActorName[] = "DQ_PQ_READ_ACTOR";
 
 public:
-    void SaveState(const NDqProto::TCheckpoint& checkpoint, NDqProto::TSourceState& state) override {
+    void SaveState(const NDqProto::TCheckpoint& checkpoint, TSourceState& state) override {
         NPq::NProto::TDqPqTopicSourceState stateProto;
 
         NPq::NProto::TDqPqTopicSourceState::TTopicDescription* topic = stateProto.AddTopics();
@@ -161,22 +187,19 @@ public:
         TString stateBlob;
         YQL_ENSURE(stateProto.SerializeToString(&stateBlob));
 
-        auto* data = state.AddData()->MutableStateData();
-        data->SetVersion(StateVersion);
-        data->SetBlob(stateBlob);
+        state.Data.emplace_back(stateBlob, StateVersion);
 
         DeferredCommits.emplace(checkpoint.GetId(), std::move(CurrentDeferredCommit));
         CurrentDeferredCommit = NYdb::NTopic::TDeferredCommit();
     }
 
-    void LoadState(const NDqProto::TSourceState& state) override {
+    void LoadState(const TSourceState& state) override {
         TInstant minStartingMessageTs = state.DataSize() ? TInstant::Max() : StartingMessageTimestamp;
         ui64 ingressBytes = 0;
-        for (const auto& stateData : state.GetData()) {
-            const auto& data = stateData.GetStateData();
-            if (data.GetVersion() == StateVersion) { // Current version
+        for (const auto& data : state.Data) {
+            if (data.Version == StateVersion) { // Current version
                 NPq::NProto::TDqPqTopicSourceState stateProto;
-                YQL_ENSURE(stateProto.ParseFromString(data.GetBlob()), "Serialized state is corrupted");
+                YQL_ENSURE(stateProto.ParseFromString(data.Blob), "Serialized state is corrupted");
                 YQL_ENSURE(stateProto.TopicsSize() == 1, "One topic per source is expected");
                 PartitionToOffset.reserve(PartitionToOffset.size() + stateProto.PartitionsSize());
                 for (const NPq::NProto::TDqPqTopicSourceState::TPartitionReadState& partitionProto : stateProto.GetPartitions()) {
@@ -190,7 +213,7 @@ public:
                 minStartingMessageTs = Min(minStartingMessageTs, TInstant::MilliSeconds(stateProto.GetStartingMessageTimestampMs()));
                 ingressBytes += stateProto.GetIngressBytes();
             } else {
-                ythrow yexception() << "Invalid state version " << data.GetVersion();
+                ythrow yexception() << "Invalid state version " << data.Version;
             }
         }
         for (const auto& [key, value] : PartitionToOffset) {
@@ -248,9 +271,14 @@ private:
         hFunc(TEvPrivate::TEvSourceDataReady, Handle);
     )
 
-    void Handle(TEvPrivate::TEvSourceDataReady::TPtr&) {
+    void Handle(TEvPrivate::TEvSourceDataReady::TPtr& ev) {
         SRC_LOG_T("SessionId: " << GetSessionId() << " Source data ready");
         SubscribedOnEvent = false;
+        if (ev.Get()->Cookie) {
+            Metrics.InFlySubscribe->Dec();
+        }
+        Metrics.InFlyAsyncInputData->Set(1);
+        Metrics.AsyncInputDataRate->Inc();
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
 
@@ -285,6 +313,7 @@ private:
     }
 
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) override {
+        Metrics.InFlyAsyncInputData->Set(0);
         SRC_LOG_T("SessionId: " << GetSessionId() << " GetAsyncInputData freeSpace = " << freeSpace);
 
         const auto now = TInstant::Now();
@@ -390,9 +419,10 @@ private:
     void SubscribeOnNextEvent() {
         if (!SubscribedOnEvent) {
             SubscribedOnEvent = true;
+            Metrics.InFlySubscribe->Inc();
             NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
             EventFuture = GetReadSession().WaitEvent().Subscribe([actorSystem, selfId = SelfId()](const auto&){
-                actorSystem->Send(selfId, new TEvPrivate::TEvSourceDataReady());
+                actorSystem->Send(selfId, new TEvPrivate::TEvSourceDataReady(), 0, 1);
             });
         }
     }
@@ -491,8 +521,15 @@ private:
         }
 
         void operator()(NYdb::NTopic::TSessionClosedEvent& ev) {
-            ythrow yexception() << "SessionId: " << Self.GetSessionId() << " Read session to topic \"" << Self.SourceParams.GetTopicPath()
-                << "\" was closed: " << ev.DebugString();
+            const auto& LogPrefix = Self.LogPrefix;
+            TString message = (TStringBuilder() << "Read session to topic \"" << Self.SourceParams.GetTopicPath() << "\" was closed");
+            SRC_LOG_E("SessionId: " << Self.GetSessionId() << " " << message << ": " << ev.DebugString());
+            TIssue issue(message);
+            for (const auto& subIssue : ev.GetIssues()) {
+                TIssuePtr newIssue(new TIssue(subIssue));
+                issue.AddSubIssue(newIssue);
+            }
+            Self.Send(Self.ComputeActorId, new TEvAsyncInputError(Self.InputIndex, TIssues({issue}), NYql::NDqProto::StatusIds::BAD_REQUEST));
         }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent&) { }
@@ -517,6 +554,12 @@ private:
             const auto partitionKeyStr = ToString(partitionKey);
             SRC_LOG_D("SessionId: " << Self.GetSessionId() << " Key: " << partitionKeyStr << " StopPartitionSessionEvent received");
             event.Confirm();
+        }
+
+        void operator()(NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent& event) {
+            const auto partitionKey = MakePartitionKey(event.GetPartitionSession());
+            const auto partitionKeyStr = ToString(partitionKey);
+            SRC_LOG_D("SessionId: " << Self.GetSessionId() << " Key: " << partitionKeyStr << " EndPartitionSessionEvent received");
         }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent&) { }
@@ -585,6 +628,7 @@ private:
     const ui64 InputIndex;
     TDqAsyncStats IngressStats;
     const TTxId TxId;
+    TMetrics Metrics;
     const i64 BufferSize;
     const THolderFactory& HolderFactory;
     const TString LogPrefix;
@@ -619,6 +663,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const NActors::TActorId& computeActorId,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    const ::NMonitoring::TDynamicCounterPtr& counters,
     i64 bufferSize
     )
 {
@@ -643,15 +688,16 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
         std::move(driver),
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
         computeActorId,
+        counters,
         bufferSize
     );
 
     return {actor, actor};
 }
 
-void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) {
+void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const ::NMonitoring::TDynamicCounterPtr& counters) {
     factory.RegisterSource<NPq::NProto::TDqPqTopicSource>("PqSource",
-        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory)](
+        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters](
             NPq::NProto::TDqPqTopicSource&& settings,
             IDqAsyncIoFactory::TSourceArguments&& args)
     {
@@ -668,6 +714,7 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
             credentialsFactory,
             args.ComputeActorId,
             args.HolderFactory,
+            counters,
             PQReadDefaultFreeSpace);
     });
 

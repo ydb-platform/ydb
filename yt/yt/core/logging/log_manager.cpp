@@ -80,7 +80,7 @@ using namespace NTracing;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const TLogger Logger(SystemLoggingCategoryName);
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, SystemLoggingCategoryName);
 
 static constexpr auto DiskProfilingPeriod = TDuration::Minutes(5);
 static constexpr auto AnchorProfilingPeriod = TDuration::Seconds(15);
@@ -355,7 +355,7 @@ TCpuInstant GetEventInstant(const TLoggerQueueItem& item)
 using TThreadLocalQueue = TSpscQueue<TLoggerQueueItem>;
 
 static constexpr uintptr_t ThreadQueueDestroyedSentinel = -1;
-YT_THREAD_LOCAL(TThreadLocalQueue*) PerThreadQueue;
+YT_DEFINE_THREAD_LOCAL(TThreadLocalQueue*, PerThreadQueue);
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -364,7 +364,7 @@ struct TLocalQueueReclaimer
     ~TLocalQueueReclaimer();
 };
 
-YT_THREAD_LOCAL(TLocalQueueReclaimer) LocalQueueReclaimer;
+YT_DEFINE_THREAD_LOCAL(TLocalQueueReclaimer, LocalQueueReclaimer);
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -379,7 +379,7 @@ public:
         : EventQueue_(New<TMpscInvokerQueue>(
             EventCount_,
             NConcurrency::GetThreadTags("Logging")))
-        , LoggingThread_(New<TThread>(this))
+        , LoggingThread_(New<TLoggingThread>(this))
         , SystemWriters_({
             CreateStderrLogWriter(
                 std::make_unique<TPlainTextLogFormatter>(),
@@ -708,11 +708,11 @@ public:
     }
 
 private:
-    class TThread
+    class TLoggingThread
         : public TSchedulerThread
     {
     public:
-        explicit TThread(TImpl* owner)
+        explicit TLoggingThread(TImpl* owner)
             : TSchedulerThread(
                 owner->EventCount_,
                 "Logging",
@@ -949,6 +949,11 @@ private:
 
         GetWrittenEventsCounter(event).Increment();
 
+        if (event.Anchor) {
+            event.Anchor->MessageCounter.Current += 1;
+            event.Anchor->ByteCounter.Current += std::ssize(event.MessageRef);
+        }
+
         for (const auto& writer : GetWriters(event)) {
             writer->Write(event);
         }
@@ -1041,17 +1046,17 @@ private:
 
     void PushEvent(TLoggerQueueItem&& event)
     {
-        if (!PerThreadQueue) {
-            PerThreadQueue = new TThreadLocalQueue();
-            RegisteredLocalQueues_.Enqueue(GetTlsRef(PerThreadQueue));
-            Y_UNUSED(LocalQueueReclaimer); // Touch thread-local variable so that its destructor is called.
+        auto& perThreadQueue = PerThreadQueue();
+        if (!perThreadQueue) {
+            perThreadQueue = new TThreadLocalQueue();
+            RegisteredLocalQueues_.Enqueue(perThreadQueue);
         }
 
         ++EnqueuedEvents_;
-        if (PerThreadQueue == reinterpret_cast<TThreadLocalQueue*>(ThreadQueueDestroyedSentinel)) {
+        if (perThreadQueue == reinterpret_cast<TThreadLocalQueue*>(ThreadQueueDestroyedSentinel)) {
             GlobalQueue_.Enqueue(std::move(event));
         } else {
-            PerThreadQueue->Push(std::move(event));
+            perThreadQueue->Push(std::move(event));
         }
     }
 
@@ -1130,18 +1135,16 @@ private:
         auto* currentAnchor = FirstAnchor_.load();
         while (currentAnchor) {
             auto getRate = [&] (auto& counter) {
-                auto current = counter.Current.load(std::memory_order::relaxed);
+                auto current = counter.Current;
                 auto rate = (current - counter.Previous) / deltaSeconds;
                 counter.Previous = current;
                 return rate;
             };
 
-            auto messageRate = getRate(currentAnchor->MessageCounter);
-            auto byteRate = getRate(currentAnchor->ByteCounter);
             result.push_back({
-                currentAnchor,
-                messageRate,
-                byteRate
+                .Anchor = currentAnchor,
+                .MessageRate = getRate(currentAnchor->MessageCounter),
+                .ByteRate = getRate(currentAnchor->ByteCounter),
             });
 
             currentAnchor = currentAnchor->NextAnchor;
@@ -1239,7 +1242,7 @@ private:
 
             MakeHeap(heap.begin(), heap.end());
             ExtractHeap(heap.begin(), heap.end());
-            THeapItem topItem = heap.back();
+            auto topItem = heap.back();
             heap.pop_back();
 
             while (!heap.empty()) {
@@ -1388,7 +1391,7 @@ private:
 private:
     const TIntrusivePtr<NThreading::TEventCount> EventCount_ = New<NThreading::TEventCount>();
     const TMpscInvokerQueuePtr EventQueue_;
-    const TIntrusivePtr<TThread> LoggingThread_;
+    const TIntrusivePtr<TLoggingThread> LoggingThread_;
     const TShutdownCookie ShutdownCookie_ = RegisterShutdownCallback(
         "LogManager",
         BIND_NO_PROPAGATE(&TImpl::Shutdown, MakeWeak(this)),
@@ -1476,10 +1479,10 @@ private:
 
 TLocalQueueReclaimer::~TLocalQueueReclaimer()
 {
-    if (PerThreadQueue) {
+    if (auto& perThreadQueue = PerThreadQueue()) {
         auto logManager = TLogManager::Get()->Impl_;
-        logManager->UnregisteredLocalQueues_.Enqueue(GetTlsRef(PerThreadQueue));
-        PerThreadQueue = reinterpret_cast<TThreadLocalQueue*>(ThreadQueueDestroyedSentinel);
+        logManager->UnregisteredLocalQueues_.Enqueue(perThreadQueue);
+        perThreadQueue = reinterpret_cast<TThreadLocalQueue*>(ThreadQueueDestroyedSentinel);
     }
 }
 

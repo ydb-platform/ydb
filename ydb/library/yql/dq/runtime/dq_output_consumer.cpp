@@ -8,6 +8,7 @@
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
 
 #include <ydb/library/yql/public/udf/arrow/args_dechunker.h>
+#include <ydb/library/yql/public/udf/arrow/memory_pool.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
 
 #include <ydb/library/yql/utils/yql_panic.h>
@@ -19,6 +20,11 @@ namespace {
 using namespace NKikimr;
 using namespace NMiniKQL;
 using namespace NUdf;
+
+inline ui64 SpreadHash(ui64 hash) {
+    // https://probablydance.com/2018/06/16/fibonacci-hashing-the-optimization-that-the-world-forgot-or-a-better-alternative-to-integer-modulo/
+    return ((unsigned __int128)hash * 11400714819323198485llu) >> 64;
+}
 
 
 class TDqOutputMultiConsumer : public IDqOutputConsumer {
@@ -189,6 +195,9 @@ private:
             hash = CombineHashes(hash, HashColumn(keyId, columnValue));
         }
 
+
+        hash = SpreadHash(hash);
+
         return hash % Outputs.size();
     }
 
@@ -199,6 +208,8 @@ private:
             MKQL_ENSURE_S(KeyColumns[keyId].Index < OutputWidth);
             hash = CombineHashes(hash, HashColumn(keyId, values[KeyColumns[keyId].Index]));
         }
+
+        hash = SpreadHash(hash);
 
         return hash % Outputs.size();
     }
@@ -302,6 +313,8 @@ private:
             YQL_ENSURE(KeyColumns_[keyId].Index < OutputWidth_);
             hash = CombineHashes(hash, HashColumn(keyId, values[KeyColumns_[keyId].Index]));
         }
+
+        hash = SpreadHash(hash);
 
         return hash % Outputs_.size();
     }
@@ -500,6 +513,9 @@ private:
             }
             hash = CombineHashes(hash, keyHash);
         }
+
+        hash = SpreadHash(hash);
+
         return hash % Outputs_.size();
     }
 
@@ -522,7 +538,7 @@ private:
             if (blockType->GetShape() == NMiniKQL::TBlockType::EShape::Many) {
                 auto itemType = blockType->GetItemType();
                 YQL_ENSURE(!itemType->IsPg(), "pg types are not supported yet");
-                Builders_.emplace_back(MakeArrayBuilder(helper, itemType, *arrow::default_memory_pool(), maxBlockLen, nullptr));
+                Builders_.emplace_back(MakeArrayBuilder(helper, itemType, *NYql::NUdf::GetYqlMemoryPool(), maxBlockLen, nullptr));
             } else {
                 Builders_.emplace_back();
             }

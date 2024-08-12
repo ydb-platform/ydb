@@ -1,6 +1,8 @@
+from __future__ import annotations
+
+import collections.abc as cabc
 import time
-import typing
-import typing as _t
+import typing as t
 from datetime import datetime
 from datetime import timezone
 
@@ -12,15 +14,9 @@ from .encoding import want_bytes
 from .exc import BadSignature
 from .exc import BadTimeSignature
 from .exc import SignatureExpired
+from .serializer import _TSerialized
 from .serializer import Serializer
 from .signer import Signer
-
-_t_str_bytes = _t.Union[str, bytes]
-_t_opt_str_bytes = _t.Optional[_t_str_bytes]
-_t_opt_int = _t.Optional[int]
-
-if _t.TYPE_CHECKING:
-    import typing_extensions as _te
 
 
 class TimestampSigner(Signer):
@@ -46,7 +42,7 @@ class TimestampSigner(Signer):
         """
         return datetime.fromtimestamp(ts, tz=timezone.utc)
 
-    def sign(self, value: _t_str_bytes) -> bytes:
+    def sign(self, value: str | bytes) -> bytes:
         """Signs the given string and also attaches time information."""
         value = want_bytes(value)
         timestamp = base64_encode(int_to_bytes(self.get_timestamp()))
@@ -57,30 +53,28 @@ class TimestampSigner(Signer):
     # Ignore overlapping signatures check, return_timestamp is the only
     # parameter that affects the return type.
 
-    @typing.overload
-    def unsign(  # type: ignore
+    @t.overload
+    def unsign(  # type: ignore[overload-overlap]
         self,
-        signed_value: _t_str_bytes,
-        max_age: _t_opt_int = None,
-        return_timestamp: "_te.Literal[False]" = False,
-    ) -> bytes:
-        ...
+        signed_value: str | bytes,
+        max_age: int | None = None,
+        return_timestamp: t.Literal[False] = False,
+    ) -> bytes: ...
 
-    @typing.overload
+    @t.overload
     def unsign(
         self,
-        signed_value: _t_str_bytes,
-        max_age: _t_opt_int = None,
-        return_timestamp: "_te.Literal[True]" = True,
-    ) -> _t.Tuple[bytes, datetime]:
-        ...
+        signed_value: str | bytes,
+        max_age: int | None = None,
+        return_timestamp: t.Literal[True] = True,
+    ) -> tuple[bytes, datetime]: ...
 
     def unsign(
         self,
-        signed_value: _t_str_bytes,
-        max_age: _t_opt_int = None,
+        signed_value: str | bytes,
+        max_age: int | None = None,
         return_timestamp: bool = False,
-    ) -> _t.Union[_t.Tuple[bytes, datetime], bytes]:
+    ) -> tuple[bytes, datetime] | bytes:
         """Works like the regular :meth:`.Signer.unsign` but can also
         validate the time. See the base docstring of the class for
         the general behavior. If ``return_timestamp`` is ``True`` the
@@ -112,8 +106,8 @@ class TimestampSigner(Signer):
             raise BadTimeSignature("timestamp missing", payload=result)
 
         value, ts_bytes = result.rsplit(sep, 1)
-        ts_int: _t_opt_int = None
-        ts_dt: _t.Optional[datetime] = None
+        ts_int: int | None = None
+        ts_dt: datetime | None = None
 
         try:
             ts_int = bytes_to_int(base64_decode(ts_bytes))
@@ -163,7 +157,7 @@ class TimestampSigner(Signer):
 
         return value
 
-    def validate(self, signed_value: _t_str_bytes, max_age: _t_opt_int = None) -> bool:
+    def validate(self, signed_value: str | bytes, max_age: int | None = None) -> bool:
         """Only validates the given signed value. Returns ``True`` if
         the signature exists and is valid."""
         try:
@@ -173,28 +167,28 @@ class TimestampSigner(Signer):
             return False
 
 
-class TimedSerializer(Serializer):
+class TimedSerializer(Serializer[_TSerialized]):
     """Uses :class:`TimestampSigner` instead of the default
     :class:`.Signer`.
     """
 
-    default_signer: _t.Type[TimestampSigner] = TimestampSigner
+    default_signer: type[TimestampSigner] = TimestampSigner
 
     def iter_unsigners(
-        self, salt: _t_opt_str_bytes = None
-    ) -> _t.Iterator[TimestampSigner]:
-        return _t.cast("_t.Iterator[TimestampSigner]", super().iter_unsigners(salt))
+        self, salt: str | bytes | None = None
+    ) -> cabc.Iterator[TimestampSigner]:
+        return t.cast("cabc.Iterator[TimestampSigner]", super().iter_unsigners(salt))
 
     # TODO: Signature is incompatible because parameters were added
     #  before salt.
 
-    def loads(  # type: ignore
+    def loads(  # type: ignore[override]
         self,
-        s: _t_str_bytes,
-        max_age: _t_opt_int = None,
+        s: str | bytes,
+        max_age: int | None = None,
         return_timestamp: bool = False,
-        salt: _t_opt_str_bytes = None,
-    ) -> _t.Any:
+        salt: str | bytes | None = None,
+    ) -> t.Any:
         """Reverse of :meth:`dumps`, raises :exc:`.BadSignature` if the
         signature validation fails. If a ``max_age`` is provided it will
         ensure the signature is not older than that time in seconds. In
@@ -223,12 +217,12 @@ class TimedSerializer(Serializer):
             except BadSignature as err:
                 last_exception = err
 
-        raise _t.cast(BadSignature, last_exception)
+        raise t.cast(BadSignature, last_exception)
 
-    def loads_unsafe(  # type: ignore
+    def loads_unsafe(  # type: ignore[override]
         self,
-        s: _t_str_bytes,
-        max_age: _t_opt_int = None,
-        salt: _t_opt_str_bytes = None,
-    ) -> _t.Tuple[bool, _t.Any]:
+        s: str | bytes,
+        max_age: int | None = None,
+        salt: str | bytes | None = None,
+    ) -> tuple[bool, t.Any]:
         return self._loads_unsafe_impl(s, salt, load_kwargs={"max_age": max_age})

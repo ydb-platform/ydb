@@ -1,0 +1,36 @@
+items:
+- name: Начало работы
+  href: getting-started.md
+- name: Примеры приложений
+  href: example-app/index.md
+  include:
+    mode: link
+    path: example-app/toc_p.yaml
+- name: Туториал по YQL
+  href: yql-tutorial/index.md
+  include:
+    mode: link
+    path: yql-tutorial/toc_p.yaml
+- name: Первичный ключ
+  href: primary-key/index.md
+  include:
+    mode: link
+    path: primary-key/toc_p.yaml
+- name: Вторичные индексы
+  href: secondary-indexes.md
+- name: Оптимизация планов запросов
+  href: query-plans-optimization.md
+- name: Пакетная загрузка
+  href: batch-upload.md
+- name: Постраничный вывод
+  href: paging.md
+- name: Таймауты
+  href: timeouts.md
+- name: Системные таблицы
+  href: system-views.md
+- name: Change Data Capture
+  href: cdc.md
+- name: Terraform
+  href: terraform.md
+- name: Пользовательские атрибуты
+  href: custom-attributes.md

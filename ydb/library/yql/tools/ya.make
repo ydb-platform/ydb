@@ -1,13 +1,14 @@
 RECURSE(
     astdiff
-    dqrun
     dq
+    dqrun
     mrjob
     mrrun
     pg_catalog_dump
-    pgrun
     pg-make-test
+    pgrun
     purebench
+    solomon_emulator
     sql2yql
     sql_formatter
     udf_dep_stub

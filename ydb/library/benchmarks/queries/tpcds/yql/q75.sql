@@ -1,13 +1,17 @@
 {% include 'header.sql.jinja' %}
 
 -- NB: Subquerys
+$todecimal = ($x) -> {
+  return cast(cast($x as string?) as decimal(7,2))
+};
+
 $sales_detail = (SELECT d_year
              ,i_brand_id
              ,i_class_id
              ,i_category_id
              ,i_manufact_id
              ,cs_quantity - COALESCE(cr_return_quantity,0) AS sales_cnt
-             ,cs_ext_sales_price - COALESCE(cr_return_amount,0.0) AS sales_amt
+             ,$todecimal(cs_ext_sales_price) - COALESCE($todecimal(cr_return_amount),cast(0 as decimal(7,2))) AS sales_amt
        FROM {{catalog_sales}} as catalog_sales 
        JOIN {{item}} as item ON item.i_item_sk=catalog_sales.cs_item_sk
                           JOIN {{date_dim}} as date_dim ON date_dim.d_date_sk=catalog_sales.cs_sold_date_sk
@@ -21,7 +25,7 @@ $sales_detail = (SELECT d_year
              ,i_category_id
              ,i_manufact_id
              ,ss_quantity - COALESCE(sr_return_quantity,0) AS sales_cnt
-             ,ss_ext_sales_price - COALESCE(sr_return_amt,0.0) AS sales_amt
+             ,$todecimal(ss_ext_sales_price) - COALESCE($todecimal(sr_return_amt),cast(0 as decimal(7,2))) AS sales_amt
        FROM {{store_sales}} as store_sales
        JOIN {{item}} as item ON item.i_item_sk=store_sales.ss_item_sk
                         JOIN {{date_dim}} as date_dim ON date_dim.d_date_sk=store_sales.ss_sold_date_sk
@@ -35,7 +39,7 @@ $sales_detail = (SELECT d_year
              ,i_category_id
              ,i_manufact_id
              ,ws_quantity - COALESCE(wr_return_quantity,0) AS sales_cnt
-             ,ws_ext_sales_price - COALESCE(wr_return_amt,0.0) AS sales_amt
+             ,$todecimal(ws_ext_sales_price) - COALESCE($todecimal(wr_return_amt),cast(0 as decimal(7,2))) AS sales_amt
        FROM {{web_sales}} as web_sales 
        JOIN {{item}} as item ON item.i_item_sk=web_sales.ws_item_sk
                       JOIN {{date_dim}} as date_dim ON date_dim.d_date_sk=web_sales.ws_sold_date_sk

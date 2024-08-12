@@ -76,6 +76,7 @@ public:
     TString GetPeer() const override { return {}; }
     bool SslServer() const override { return false; }
     bool IsClientLost() const override { return false; }
+    bool IsStreamCall() const override { return false; }
 
 public:
     NYql::TIssues GetIssues() {
@@ -87,7 +88,10 @@ protected:
         return *BaseRequest_;
     }
 
-private:
+    IRequestCtx& GetBaseRequest() noexcept {
+        return *BaseRequest_;
+    }
+
     void RaiseIssue(const NYql::TIssue& issue) {
         IssueManager_.RaiseIssue(issue);
     }

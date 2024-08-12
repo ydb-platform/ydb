@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet_1",
-                "PlanNodeId": 9,
+                "PlanNodeId": 11,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,47 +14,26 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 7
+                                        "ExternalPlanNodeId": 9
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 8,
+                        "PlanNodeId": 10,
                         "Plans": [
                             {
                                 "Node Type": "UnionAll",
-                                "PlanNodeId": 7,
+                                "PlanNodeId": 9,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
                                         "CTE Name": "precompute_0_0",
-                                        "Node Type": "Limit-Aggregate-ConstantExpr-InnerJoin (MapJoin)-ConstantExpr-Filter-TableFullScan",
+                                        "Node Type": "Limit-CrossJoin-InnerJoin (MapJoin)-ConstantExpr-Filter-ConstantExpr",
                                         "Operators": [
                                             {
                                                 "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 3
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
                                                     {
                                                         "InternalOperatorId": 1
                                                     },
@@ -90,23 +69,21 @@
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 2
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 5
                                                     }
                                                 ],
-                                                "Name": "Aggregate"
-                                            },
-                                            {
-                                                "Inputs": [],
-                                                "Name": "ToFlow",
-                                                "ToFlow": "precompute_0_0"
+                                                "Name": "CrossJoin"
                                             },
                                             {
                                                 "Condition": "thousand = Sum0",
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 5
+                                                        "InternalOperatorId": 4
                                                     },
                                                     {
-                                                        "InternalOperatorId": 4
+                                                        "InternalOperatorId": 3
                                                     }
                                                 ],
                                                 "Name": "InnerJoin (MapJoin)"
@@ -119,7 +96,7 @@
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 6
+                                                        "ExternalPlanNodeId": 7
                                                     }
                                                 ],
                                                 "Name": "Filter",
@@ -127,21 +104,36 @@
                                             },
                                             {
                                                 "Inputs": [],
-                                                "Name": "TableFullScan",
-                                                "ReadColumns": [
-                                                    "tenthous",
-                                                    "thousand"
-                                                ],
-                                                "ReadRanges": [
-                                                    "unique1 (-\u221e, +\u221e)",
-                                                    "unique2 (-\u221e, +\u221e)"
-                                                ],
-                                                "Table": "postgres_jointest/join0.test_plan/tenk1"
+                                                "Name": "ToFlow",
+                                                "ToFlow": "precompute_0_0"
                                             }
                                         ],
-                                        "PlanNodeId": 6,
-                                        "Tables": [
-                                            "postgres_jointest/join0.test_plan/tenk1"
+                                        "PlanNodeId": 8,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "TableFullScan",
+                                                "Operators": [
+                                                    {
+                                                        "Inputs": [],
+                                                        "Name": "TableFullScan",
+                                                        "ReadColumns": [
+                                                            "tenthous",
+                                                            "thousand"
+                                                        ],
+                                                        "ReadRanges": [
+                                                            "unique1 (-\u221e, +\u221e)",
+                                                            "unique2 (-\u221e, +\u221e)"
+                                                        ],
+                                                        "ReadRangesPointPrefixLen": "0",
+                                                        "Scan": "Parallel",
+                                                        "Table": "postgres_jointest/join0.test_plan/tenk1"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 7,
+                                                "Tables": [
+                                                    "postgres_jointest/join0.test_plan/tenk1"
+                                                ]
+                                            }
                                         ]
                                     }
                                 ]
@@ -153,7 +145,7 @@
             {
                 "Node Type": "Precompute_0",
                 "Parent Relationship": "InitPlan",
-                "PlanNodeId": 4,
+                "PlanNodeId": 5,
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
@@ -170,46 +162,56 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 2
+                                        "ExternalPlanNodeId": 3
                                     }
                                 ],
                                 "Limit": "1",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 3,
+                        "PlanNodeId": 4,
                         "Plans": [
                             {
                                 "Node Type": "UnionAll",
-                                "PlanNodeId": 2,
+                                "PlanNodeId": 3,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Aggregate-TableFullScan",
+                                        "Node Type": "Aggregate",
                                         "Operators": [
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 1
+                                                        "ExternalPlanNodeId": 1
                                                     }
                                                 ],
                                                 "Name": "Aggregate"
-                                            },
-                                            {
-                                                "Inputs": [],
-                                                "Name": "TableFullScan",
-                                                "ReadColumns": [
-                                                    "f1"
-                                                ],
-                                                "ReadRanges": [
-                                                    "f1 (-\u221e, +\u221e)"
-                                                ],
-                                                "Table": "postgres_jointest/join0.test_plan/int4_tbl"
                                             }
                                         ],
-                                        "PlanNodeId": 1,
-                                        "Tables": [
-                                            "postgres_jointest/join0.test_plan/int4_tbl"
+                                        "PlanNodeId": 2,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "TableFullScan",
+                                                "Operators": [
+                                                    {
+                                                        "Inputs": [],
+                                                        "Name": "TableFullScan",
+                                                        "ReadColumns": [
+                                                            "f1"
+                                                        ],
+                                                        "ReadRanges": [
+                                                            "f1 (-\u221e, +\u221e)"
+                                                        ],
+                                                        "ReadRangesPointPrefixLen": "0",
+                                                        "Scan": "Parallel",
+                                                        "Table": "postgres_jointest/join0.test_plan/int4_tbl"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 1,
+                                                "Tables": [
+                                                    "postgres_jointest/join0.test_plan/int4_tbl"
+                                                ]
+                                            }
                                         ]
                                     }
                                 ]

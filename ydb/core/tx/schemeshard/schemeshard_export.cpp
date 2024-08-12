@@ -83,6 +83,17 @@ namespace {
 void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportInfo::TPtr exportInfo) {
     exprt.SetId(exportInfo->Id);
     exprt.SetStatus(Ydb::StatusIds::SUCCESS);
+    
+    if (exportInfo->StartTime != TInstant::Zero()) {
+        *exprt.MutableStartTime() = SecondsToProtoTimeStamp(exportInfo->StartTime.Seconds());
+    }
+    if (exportInfo->EndTime != TInstant::Zero()) {
+        *exprt.MutableEndTime() = SecondsToProtoTimeStamp(exportInfo->EndTime.Seconds());
+    }
+
+    if (exportInfo->UserSID) {
+        exprt.SetUserSID(*exportInfo->UserSID);
+    }
 
     switch (exportInfo->State) {
     case TExportInfo::EState::CreateExportDir:
@@ -182,7 +193,9 @@ void TSchemeShard::PersistExportState(NIceDb::TNiceDb& db, const TExportInfo::TP
     db.Table<Schema::Exports>().Key(exportInfo->Id).Update(
         NIceDb::TUpdate<Schema::Exports::State>(static_cast<ui8>(exportInfo->State)),
         NIceDb::TUpdate<Schema::Exports::WaitTxId>(exportInfo->WaitTxId),
-        NIceDb::TUpdate<Schema::Exports::Issue>(exportInfo->Issue)
+        NIceDb::TUpdate<Schema::Exports::Issue>(exportInfo->Issue),
+        NIceDb::TUpdate<Schema::Exports::StartTime>(exportInfo->StartTime.Seconds()),
+        NIceDb::TUpdate<Schema::Exports::EndTime>(exportInfo->EndTime.Seconds())
     );
 }
 

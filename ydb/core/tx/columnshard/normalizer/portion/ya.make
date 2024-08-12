@@ -2,8 +2,11 @@ LIBRARY()
 
 SRCS(
     normalizer.cpp
-    min_max.cpp
-    chunks.cpp
+    GLOBAL portion.cpp
+    GLOBAL chunks.cpp
+    GLOBAL clean.cpp
+    GLOBAL clean_empty.cpp
+    GLOBAL broken_blobs.cpp
 )
 
 PEERDIR(

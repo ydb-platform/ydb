@@ -1,6 +1,7 @@
 #include "yql_type_parser.h"
 
 #include <library/cpp/yson/node/node_io.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
 
 namespace NYql {
 namespace NCommon {
@@ -38,6 +39,17 @@ void TYqlTypeYsonSaverBase::SavePgType(const TStringBuf& pgType) {
     SaveTypeHeader("PgType");
     Writer.OnListItem();
     Writer.OnStringScalar(pgType);
+    if (ExtendedForm) {
+        Writer.OnListItem();
+        const auto& desc = NYql::NPg::LookupType(TString(pgType));
+        char cat = desc.Category;
+        if (desc.ArrayTypeId == desc.TypeId) {
+            cat = NYql::NPg::LookupType(desc.ElementTypeId).Category;
+        }
+        
+        Writer.OnStringScalar(TStringBuf(&cat, 1));
+    }
+    
     Writer.OnEndList();
 }
 

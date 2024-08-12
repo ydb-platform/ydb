@@ -120,8 +120,11 @@ SRCS(
     table_client/row_buffer.cpp
     table_client/schema.cpp
     table_client/schema_serialization_helpers.cpp
+    table_client/schemaless_buffered_dynamic_table_writer.cpp
+    table_client/schemaless_dynamic_table_writer.cpp
     table_client/serialize.cpp
     table_client/logical_type.cpp
+    table_client/merge_table_schemas.cpp
     table_client/name_table.cpp
     table_client/wire_protocol.cpp
     table_client/columnar_statistics.cpp
@@ -131,12 +134,14 @@ SRCS(
     table_client/schemaless_row_reorderer.cpp
     table_client/unordered_schemaful_reader.cpp
     table_client/validate_logical_type.cpp
+    table_client/versioned_io_options.cpp
     table_client/composite_compare.cpp
     table_client/columnar.cpp
     table_client/record_codegen_cpp.cpp
     table_client/record_helpers.cpp
 
     tablet_client/config.cpp
+    tablet_client/watermark_runtime_data.cpp
     tablet_client/table_mount_cache_detail.cpp
     tablet_client/table_mount_cache.cpp
     tablet_client/public.cpp
@@ -147,7 +152,6 @@ SRCS(
     queue_client/consumer_client.cpp
     queue_client/helpers.cpp
     queue_client/partition_reader.cpp
-    queue_client/producer_client.cpp
     queue_client/queue_rowset.cpp
 
     ypath/rich.cpp
@@ -174,13 +178,18 @@ SRCS(
     complex_types/check_yson_token.cpp
     complex_types/check_type_compatibility.cpp
     complex_types/infinite_entity.cpp
-    complex_types/yson_format_conversion.cpp
-    complex_types/uuid_text.cpp
+    complex_types/merge_complex_types.cpp
     complex_types/time_text.cpp
+    complex_types/uuid_text.cpp
+    complex_types/yson_format_conversion.cpp
 
     zookeeper/packet.cpp
     zookeeper/protocol.cpp
     zookeeper/requests.cpp
+
+    kafka/packet.cpp
+    kafka/protocol.cpp
+    kafka/requests.cpp
 )
 
 SRCS(
@@ -208,6 +217,7 @@ END()
 
 RECURSE(
     arrow
+    cache
     driver
     federated
     hedging

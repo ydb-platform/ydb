@@ -90,21 +90,15 @@ XZ Utils Installation
 
 1.2.3. MINIX 3
 
-    The default install of MINIX 3 includes Amsterdam Compiler Kit (ACK),
-    which doesn't support C99. Install GCC to compile XZ Utils.
+    Version 3.3.0 and later are supported.
 
-    MINIX 3.1.8 and older have bugs in /usr/include/stdint.h, which has
-    to be patched before XZ Utils can be compiled correctly. See
-    <http://gforge.cs.vu.nl/gf/project/minix/tracker/?action=TrackerItemEdit&tracker_item_id=537>.
+    Multithreading isn't supported because MINIX 3 doesn't have
+    pthreads. The option --disable-threads must be passed to configure
+    as this isn't autodetected.
 
-    MINIX 3.2.0 and later use a different libc and aren't affected by
-    the above bug.
-
-    XZ Utils doesn't have code to detect the amount of physical RAM and
-    number of CPU cores on MINIX 3.
-
-    See section 5.4 in this file about symbol visibility warnings (you
-    may want to pass gl_cv_cc_visibility=no to configure).
+    Note that disabling threads causes "make check" to show a few tests
+    as skipped ("SKIP"). It's only due to a few threading-dependent
+    subtests are skipped. See the matching tests/test_*.log files.
 
 
 1.2.4. OpenVMS
@@ -352,6 +346,12 @@ XZ Utils Installation
                 will still be installed. The $docdir can be changed
                 with --docdir=DIR.
 
+    --enable-doxygen
+                Enable generation of the HTML version of the liblzma API
+                documentation using Doxygen. The resulting files are
+                installed to $docdir/api. This option assumes that
+                the 'doxygen' tool is available.
+
     --disable-assembler
                 This disables CRC32 and CRC64 assembly code on
                 32-bit x86. This option currently does nothing
@@ -518,14 +518,6 @@ XZ Utils Installation
                                 calls any liblzma functions from more than
                                 one thread, something bad may happen.
 
-    --enable-ifunc
-                Use __attribute__((__ifunc__())) in liblzma. This is
-                enabled by default on GNU/Linux and FreeBSD.
-
-                The ifunc attribute is incompatible with
-                -fsanitize=address. --disable-ifunc must be used
-                if any -fsanitize= option is specified in CFLAGS.
-
     --enable-sandbox=METHOD
                 There is limited sandboxing support in the xz and xzdec
                 tools. If built with sandbox support, xz uses it
@@ -561,10 +553,45 @@ XZ Utils Installation
                                 sandboxing. If no Landlock support
                                 is found, configure will give an error.
 
-    --enable-symbol-versions
-                Use symbol versioning for liblzma. This is enabled by
-                default on GNU/Linux, other GNU-based systems, and
-                FreeBSD.
+    --enable-symbol-versions[=VARIANT]
+                Use symbol versioning for liblzma shared library.
+                This is enabled by default on GNU/Linux (glibc only),
+                other GNU-based systems, and FreeBSD.
+
+                Symbol versioning is never used for static liblzma. This
+                option is ignored when not building a shared library.
+
+                Supported VARIANTs:
+
+                        no      Disable symbol versioning. This is the
+                                same as using --disable-symbol-versions.
+
+                        auto    Autodetect between "no", "linux",
+                                and "generic".
+
+                        yes     Autodetect between "linux" and
+                                "generic". This forces symbol
+                                versioning to be used when
+                                building a shared library.
+
+                        generic Generic version is the default for
+                                FreeBSD and GNU/Linux on MicroBlaze.
+
+                                This is also used on GNU/Linux when
+                                building with NVIDIA HPC Compiler
+                                because the compiler doesn't support
+                                the features required for the "linux"
+                                variant below.
+
+                        linux   Special version for GNU/Linux (glibc
+                                only). This adds a few extra symbol
+                                versions for compatibility with binaries
+                                that have been linked against a liblzma
+                                version that has been patched with
+                                "xz-5.2.2-compat-libs.patch" from
+                                RHEL/CentOS 7. That patch was used
+                                by some build tools outside of
+                                RHEL/CentOS 7 too.
 
     --enable-debug
                 This enables the assert() macro and possibly some other

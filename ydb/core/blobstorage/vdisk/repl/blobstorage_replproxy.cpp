@@ -396,7 +396,7 @@ namespace NKikimr {
                                     " VDISK CAN NOT REPLICATE A BLOB BECAUSE HAS FOUND INCONSISTENCY IN BLOB SIZE",
                                     id.ToString().data(), buffer.size());
                                 STLOG(PRI_CRIT, BS_REPL, BSVR26, message, (BlobId, id), (BufferSize, buffer.size()));
-                                Y_DEBUG_ABORT_UNLESS(false, "%s", message.data());
+                                Y_DEBUG_ABORT("%s", message.data());
 
                                 // count this blob as erroneous one
                                 portion.DataPortion.AddError(id, NKikimrProto::ERROR);

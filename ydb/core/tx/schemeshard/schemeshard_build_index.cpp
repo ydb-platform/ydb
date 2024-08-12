@@ -47,6 +47,8 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
         NIceDb::TUpdate<Schema::IndexBuild::MaxShards>(info->Limits.MaxShards),
         NIceDb::TUpdate<Schema::IndexBuild::MaxRetries>(info->Limits.MaxRetries),
         NIceDb::TUpdate<Schema::IndexBuild::BuildKind>(ui32(info->BuildKind))
+
+        // TODO save info->ImplTableDescriptions
     );
 
     ui32 columnNo = 0;

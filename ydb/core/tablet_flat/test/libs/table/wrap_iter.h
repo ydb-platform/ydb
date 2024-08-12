@@ -69,11 +69,11 @@ namespace NTest {
 
             for (auto &mem: Frozen)
                 Iter->Push(
-                    TMemIt::Make(*mem, mem.Snapshot, key, seek, KeyCellDefaults, &Iter->Remap, Env,
+                    TMemIter::Make(*mem, mem.Snapshot, key, seek, KeyCellDefaults, &Iter->Remap, Env,
                         TIter::Direction));
 
             for (auto &run: Levels) {
-                auto one = MakeHolder<TRunIt>(run, Remap().Tags, KeyCellDefaults, Env);
+                auto one = MakeHolder<TRunIter>(run, Remap().Tags, KeyCellDefaults, Env);
 
                 EReady status;
                 if constexpr (TIter::Direction == EDirection::Reverse) {
@@ -112,8 +112,8 @@ namespace NTest {
         TAutoPtr<TIter> Iter;
     };
 
-    using TWrapIter = TWrapIterImpl<TTableIt>;
-    using TWrapReverseIter = TWrapIterImpl<TTableReverseIt>;
+    using TWrapIter = TWrapIterImpl<TTableIter>;
+    using TWrapReverseIter = TWrapIterImpl<TTableReverseIter>;
 
 }
 }

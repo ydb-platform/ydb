@@ -23,16 +23,13 @@ enum EFinalizationStatus : i32 {
 };
 
 struct TEvForgetScriptExecutionOperation : public NActors::TEventLocal<TEvForgetScriptExecutionOperation, TKqpScriptExecutionEvents::EvForgetScriptExecutionOperation> {
-    explicit TEvForgetScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id, TInstant deadline)
+    TEvForgetScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id)
         : Database(database)
         , OperationId(id)
-        , Deadline(deadline)
-    {
-    }
+    {}
 
-    TString Database;
-    NOperationId::TOperationId OperationId;
-    TInstant Deadline;
+    const TString Database;
+    const NOperationId::TOperationId OperationId;
 };
 
 struct TEvForgetScriptExecutionOperationResponse : public NActors::TEventLocal<TEvForgetScriptExecutionOperationResponse, TKqpScriptExecutionEvents::EvForgetScriptExecutionOperationResponse> {
@@ -201,6 +198,18 @@ struct TEvSaveScriptResultMetaFinished : public NActors::TEventLocal<TEvSaveScri
     NYql::TIssues Issues;
 };
 
+struct TEvSaveScriptResultPartFinished : public NActors::TEventLocal<TEvSaveScriptResultPartFinished, TKqpScriptExecutionEvents::EvSaveScriptResultPartFinished> {
+    TEvSaveScriptResultPartFinished(Ydb::StatusIds::StatusCode status, i64 savedSize, NYql::TIssues issues = {})
+        : Status(status)
+        , SavedSize(savedSize)
+        , Issues(std::move(issues))
+    {}
+
+    Ydb::StatusIds::StatusCode Status;
+    i64 SavedSize;
+    NYql::TIssues Issues;
+};
+
 struct TEvSaveScriptResultFinished : public NActors::TEventLocal<TEvSaveScriptResultFinished, TKqpScriptExecutionEvents::EvSaveScriptResultFinished> {
     TEvSaveScriptResultFinished(Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {})
         : Status(status)
@@ -212,15 +221,18 @@ struct TEvSaveScriptResultFinished : public NActors::TEventLocal<TEvSaveScriptRe
     NYql::TIssues Issues;
 };
 
-struct TEvFetchScriptResultsQueryResponse : public NActors::TEventLocal<TEvFetchScriptResultsQueryResponse, TKqpScriptExecutionEvents::EvFetchScriptResultsQueryResponse> {
-    TEvFetchScriptResultsQueryResponse(bool truncated, NKikimrKqp::TEvFetchScriptResultsResponse&& results)
-        : Truncated(truncated)
-        , Results(std::move(results))
-    {
-    }
+struct TEvFetchScriptResultsResponse : public NActors::TEventLocal<TEvFetchScriptResultsResponse, TKqpScriptExecutionEvents::EvFetchScriptResultsResponse> {
+    TEvFetchScriptResultsResponse(Ydb::StatusIds::StatusCode status, std::optional<Ydb::ResultSet>&& resultSet, bool hasMoreResults, NYql::TIssues issues)
+        : Status(status)
+        , ResultSet(std::move(resultSet))
+        , HasMoreResults(hasMoreResults)
+        , Issues(std::move(issues))
+    {}
 
-    bool Truncated;
-    NKikimrKqp::TEvFetchScriptResultsResponse Results;
+    Ydb::StatusIds::StatusCode Status;
+    std::optional<Ydb::ResultSet> ResultSet;
+    bool HasMoreResults;
+    NYql::TIssues Issues;
 };
 
 struct TEvSaveScriptExternalEffectRequest : public NActors::TEventLocal<TEvSaveScriptExternalEffectRequest, TKqpScriptExecutionEvents::EvSaveScriptExternalEffectRequest> {
@@ -285,6 +297,7 @@ struct TEvScriptFinalizeRequest : public NActors::TEventLocal<TEvScriptFinalizeR
         std::optional<TString> QueryPlan;
         std::optional<TString> QueryAst;
         std::optional<ui64> LeaseGeneration;
+        std::optional<TString> QueryAstCompressionMethod;
     };
 
     TEvScriptFinalizeRequest(EFinalizationStatus finalizationStatus, const TString& executionId, const TString& database,
@@ -337,6 +350,16 @@ struct TEvDescribeSecretsResponse : public NActors::TEventLocal<TEvDescribeSecre
     {}
 
     TDescription Description;
+};
+
+struct TEvScriptExecutionsTablesCreationFinished : public NActors::TEventLocal<TEvScriptExecutionsTablesCreationFinished, TKqpScriptExecutionEvents::EvScriptExecutionsTableCreationFinished> {
+    TEvScriptExecutionsTablesCreationFinished(bool success, NYql::TIssues issues)
+        : Success(success)
+        , Issues(std::move(issues))
+    {}
+
+    const bool Success;
+    const NYql::TIssues Issues;
 };
 
 } // namespace NKikimr::NKqp

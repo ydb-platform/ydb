@@ -64,6 +64,7 @@ message TTabletStateInfo {
     optional EFlag Overall = 15; // filled during merge
     optional NKikimrSubDomains.TDomainKey TenantId = 16;
     optional fixed64 HiveId = 17;
+    optional string EndOfRangeKeyPrefix = 18; // filled during merge
 }
 
 message TEvTabletStateRequest {
@@ -125,6 +126,12 @@ message TPDiskStateInfo {
     // overall state - to be filled
     optional EFlag Overall = 17;
     optional string SerialNumber = 18;
+    optional uint64 SystemSize = 19;
+    optional uint64 LogUsedSize = 20;
+    optional uint64 LogTotalSize = 21;
+    optional uint32 ExpectedSlotCount = 22;
+    optional uint64 EnforcedDynamicSlotSize = 23;
+    optional uint32 NumActiveSlots = 24;
 }
 
 message TEvPDiskStateRequest {
@@ -247,6 +254,8 @@ message TBSGroupStateInfo {
     optional bool Encryption = 19;
     repeated uint32 VDiskNodeIds = 20;
     optional uint64 BlobDepotId = 21; // if set, then this is virtual group
+    optional bool NoVDisksInGroup = 22;
+    optional uint64 BlobDepotOnlineTime = 23;
 }
 
 message TEvBSGroupStateRequest {
@@ -269,6 +278,7 @@ message TSystemStateInfo {
         optional string Name = 1;
         optional double Usage = 2 [(InsignificantChangePercent) = 30];
         optional uint32 Threads = 3;
+        optional uint32 Limit = 4;
     }
 
     message TEndpoint {
@@ -283,6 +293,7 @@ message TSystemStateInfo {
         optional uint32 Body = 4;
     }
 
+    // TODO: use memory stats
     message TNodeSharedCache {
         optional uint64 UsedBytes = 1;
         optional uint64 LimitBytes = 2;
@@ -319,8 +330,9 @@ message TSystemStateInfo {
     optional int64 MaxClockSkewWithPeerUs = 32; // a positive value means the peer is ahead in time; a negative value means it's behind
     optional uint32 MaxClockSkewPeerId = 33;
     optional uint64 DisconnectTime = 34;
-    optional TNodeSharedCache SharedCacheStats = 35;
+    optional TNodeSharedCache SharedCacheStats = 35; // TODO: use memory stats
     optional uint32 TotalSessions = 36;
+    optional string NodeName = 37;
 }
 
 message TEvSystemStateRequest {

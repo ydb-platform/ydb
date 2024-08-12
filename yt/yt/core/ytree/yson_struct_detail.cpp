@@ -29,7 +29,7 @@ bool ShouldThrow(EUnrecognizedStrategy strategy)
 
 void TYsonStructMeta::SetDefaultsOfInitializedStruct(TYsonStructBase* target) const
 {
-    for (const auto& [_, parameter] : Parameters_) {
+    for (const auto& [_, parameter] : SortedParameters_) {
         parameter->SetDefaultsInitialized(target);
     }
 
@@ -60,7 +60,7 @@ IYsonStructParameterPtr TYsonStructMeta::GetParameter(const TString& keyOrAlias)
         return it->second;
     }
 
-    for (const auto& [_, parameter] : Parameters_) {
+    for (const auto& [_, parameter] : SortedParameters_) {
         if (Count(parameter->GetAliases(), keyOrAlias) > 0) {
             return parameter;
         }
@@ -71,7 +71,7 @@ IYsonStructParameterPtr TYsonStructMeta::GetParameter(const TString& keyOrAlias)
 void TYsonStructMeta::LoadParameter(TYsonStructBase* target, const TString& key, const NYTree::INodePtr& node) const
 {
     const auto& parameter = GetParameter(key);
-    auto validate = [&] () {
+    auto validate = [&] {
         parameter->PostprocessParameter(target, "/" + key);
         try {
             for (const auto& postprocessor : Postprocessors_) {
@@ -94,7 +94,7 @@ void TYsonStructMeta::LoadParameter(TYsonStructBase* target, const TString& key,
 
 void TYsonStructMeta::PostprocessStruct(TYsonStructBase* target, const TYPath& path) const
 {
-    for (const auto& [name, parameter] : Parameters_) {
+    for (const auto& [name, parameter] : SortedParameters_) {
         parameter->PostprocessParameter(target, path + "/" + ToYPathLiteral(name));
     }
 
@@ -125,7 +125,7 @@ void TYsonStructMeta::LoadStruct(
 
     auto mapNode = node->AsMap();
     auto unrecognizedStrategy = target->InstanceUnrecognizedStrategy_.template value_or(MetaUnrecognizedStrategy_);
-    for (const auto& [name, parameter] : Parameters_) {
+    for (const auto& [name, parameter] : SortedParameters_) {
         TString key = name;
         auto child = mapNode->FindChild(name); // can be NULL
         for (const auto& alias : parameter->GetAliases()) {
@@ -195,7 +195,7 @@ void TYsonStructMeta::LoadStruct(
 
     THashMap<TStringBuf, IYsonStructParameter*> keyToParameter;
     THashSet<IYsonStructParameter*> pendingParameters;
-    for (const auto& [key, parameter] : Parameters_) {
+    for (const auto& [key, parameter] : SortedParameters_) {
         EmplaceOrCrash(keyToParameter, key, parameter.Get());
         for (const auto& alias : parameter->GetAliases()) {
             EmplaceOrCrash(keyToParameter, alias, parameter.Get());
@@ -287,7 +287,7 @@ IMapNodePtr TYsonStructMeta::GetRecursiveUnrecognized(const TYsonStructBase* tar
     // Take a copy of `LocalUnrecognized` and add parameter->GetRecursiveUnrecognized()
     // for all parameters that are TYsonStruct's themselves.
     auto result = target->LocalUnrecognized_ ? ConvertTo<IMapNodePtr>(target->LocalUnrecognized_) : GetEphemeralNodeFactory()->CreateMap();
-    for (const auto& [name, parameter] : Parameters_) {
+    for (const auto& [name, parameter] : SortedParameters_) {
         auto unrecognized = parameter->GetRecursiveUnrecognized(target);
         if (unrecognized && unrecognized->AsMap()->GetChildCount() > 0) {
             result->AddChild(name, unrecognized);

@@ -11,7 +11,7 @@ bool TBackgroundController::StartCompaction(const NOlap::TPlanCompactionInfo& in
 void TBackgroundController::CheckDeadlines() {
     for (auto&& i : ActiveCompactionInfo) {
         if (TMonotonic::Now() - i.second.GetStartTime() > NOlap::TCompactionLimits::CompactionTimeout) {
-            AFL_EMERG(NKikimrServices::TX_COLUMNSHARD)("event", "deadline_compaction");
+            AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "deadline_compaction");
             Y_DEBUG_ABORT_UNLESS(false);
         }
     }
@@ -20,7 +20,7 @@ void TBackgroundController::CheckDeadlines() {
 void TBackgroundController::CheckDeadlinesIndexation() {
     for (auto&& i : ActiveIndexationTasks) {
         if (TMonotonic::Now() - i.second > NOlap::TCompactionLimits::CompactionTimeout) {
-            AFL_EMERG(NKikimrServices::TX_COLUMNSHARD)("event", "deadline_compaction")("task_id", i.first);
+            AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "deadline_indexation")("task_id", i.first);
             Y_DEBUG_ABORT_UNLESS(false);
         }
     }
@@ -45,15 +45,6 @@ TString TBackgroundController::DebugStringIndexation() const {
     sb << ";";
     sb << "}";
     return sb;
-}
-
-TString TBackgroundActivity::DebugString() const {
-    return TStringBuilder()
-        << "indexation:" << HasIndexation() << ";"
-        << "compaction:" << HasCompaction() << ";"
-        << "cleanup:" << HasCleanup() << ";"
-        << "ttl:" << HasTtl() << ";"
-        ;
 }
 
 }

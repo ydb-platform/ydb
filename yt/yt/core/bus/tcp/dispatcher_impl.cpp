@@ -22,7 +22,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = BusLogger;
+static constexpr auto& Logger = BusLogger;
 
 static constexpr auto PeriodicCheckPeriod = TDuration::MilliSeconds(100);
 static constexpr auto PerConnectionPeriodicCheckPeriod = TDuration::Seconds(10);
@@ -89,7 +89,14 @@ IPollerPtr TTcpDispatcher::TImpl::GetOrCreatePoller(
     {
         auto guard = WriterGuard(PollerLock_);
         if (!*pollerPtr) {
-            *pollerPtr = CreateThreadPoolPoller(isXfer ? Config_->ThreadPoolSize : 1, threadNamePrefix);
+            if (isXfer) {
+                *pollerPtr = CreateThreadPoolPoller(
+                    Config_->ThreadPoolSize,
+                    threadNamePrefix,
+                    Config_->ThreadPoolPollingPeriod);
+            } else {
+                *pollerPtr = CreateThreadPoolPoller(/*threadCount*/ 1, threadNamePrefix);
+            }
         }
         poller = *pollerPtr;
     }
@@ -165,6 +172,7 @@ void TTcpDispatcher::TImpl::Configure(const TTcpDispatcherConfigPtr& config)
 
         if (XferPoller_) {
             XferPoller_->Reconfigure(Config_->ThreadPoolSize);
+            XferPoller_->Reconfigure(Config_->ThreadPoolPollingPeriod);
         }
     }
 

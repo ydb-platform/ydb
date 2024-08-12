@@ -14,6 +14,31 @@ using namespace NSchemeCache;
 #define LOG_D(msg) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
 #define LOG_T(msg) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
 
+
+TKqpQueryState::TQueryTxId::TQueryTxId(const TQueryTxId& other) {
+    YQL_ENSURE(!Id);
+    Id = other.Id;
+}
+
+TKqpQueryState::TQueryTxId& TKqpQueryState::TQueryTxId::operator=(const TQueryTxId& id) {
+    YQL_ENSURE(!Id);
+    Id = id.Id;
+    return *this;
+}
+
+void TKqpQueryState::TQueryTxId::SetValue(const TTxId& id) {
+    YQL_ENSURE(!Id);
+    Id = id.Id;
+}
+
+TTxId TKqpQueryState::TQueryTxId::GetValue() {
+    return Id ? *Id : TTxId();
+}
+
+void TKqpQueryState::TQueryTxId::Reset() {
+    Id = TTxId();
+}
+
 bool TKqpQueryState::EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigateKeySetResult& response) {
     Y_ENSURE(response.Request);
     const auto& navigate = *response.Request;
@@ -92,7 +117,7 @@ std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySet> TKqpQueryState::BuildN
 
     auto navigate = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
     navigate->DatabaseName = Database;
-    if (UserToken && !UserToken->GetSerializedToken().empty()) {
+    if (HasUserToken()) {
         navigate->UserToken = UserToken;
     }
 
@@ -131,6 +156,15 @@ bool TKqpQueryState::SaveAndCheckCompileResult(TEvKqp::TEvCompileResponse* ev) {
     if (ev->ReplayMessage) {
         ReplayMessage = *ev->ReplayMessage;
     }
+    if (!CommandTagName) {
+        CommandTagName = CompileResult->CommandTagName;
+    }
+    for (const auto& param : PreparedQuery->GetParameters()) {
+        const auto& ast = CompileResult->Ast;
+        if (!ast || !ast->PgAutoParamValues || !ast->PgAutoParamValues->contains(param.GetName())) {
+            ResultParams.push_back(param);
+        }
+    }
     return true;
 }
 
@@ -138,6 +172,7 @@ bool TKqpQueryState::SaveAndCheckParseResult(TEvKqp::TEvParseResponse&& ev) {
     Statements = std::move(ev.AstStatements);
     CurrentStatementId = 0;
     Orbit = std::move(ev.Orbit);
+    CommandTagName = Statements.back().CommandTagName;
     return true;
 }
 
@@ -159,7 +194,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
     settings.Syntax = GetSyntax();
 
     bool keepInCache = false;
-    bool perStatementResult = !HasTxControl() && GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE;
+    bool perStatementResult = HasImplicitTx();
     TGUCSettings gUCSettings = gUCSettingsPtr ? *gUCSettingsPtr : TGUCSettings();
     switch (GetAction()) {
         case NKikimrKqp::QUERY_ACTION_EXECUTE:
@@ -240,8 +275,15 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
         compileDeadline = Min(compileDeadline, QueryDeadlines.CancelAt);
     }
 
-    return std::make_unique<TEvKqp::TEvRecompileRequest>(UserToken, CompileResult->Uid, CompileResult->Query, isQueryActionPrepare,
-        compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie), UserRequestContext, std::move(Orbit), TempTablesState);
+    TMaybe<TQueryAst> statementAst;
+    if (!Statements.empty()) {
+        YQL_ENSURE(CurrentStatementId < Statements.size());
+        statementAst = Statements[CurrentStatementId];
+    }
+
+    return std::make_unique<TEvKqp::TEvRecompileRequest>(UserToken, CompileResult->Uid, query, isQueryActionPrepare,
+        compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie), UserRequestContext, std::move(Orbit), TempTablesState,
+        statementAst);
 }
 
 std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildSplitRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr) {
@@ -287,11 +329,14 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
         false, SplittedCtx.Get(), SplittedExprs.at(NextSplittedExpr));
 }
 
+bool TKqpQueryState::ProcessingLastStatementPart() {
+    return SplittedExprs.empty() || (NextSplittedExpr + 1 >= static_cast<int>(SplittedExprs.size()));
+}
+
 bool TKqpQueryState::PrepareNextStatementPart() {
     QueryData = {};
     PreparedQuery = {};
     CompileResult = {};
-    TxCtx = {};
     CurrentTx = 0;
     TableVersions = {};
     MaxReadType = ETableReadType::Other;
@@ -300,9 +345,7 @@ bool TKqpQueryState::PrepareNextStatementPart() {
     TopicOperations = {};
     ReplayMessage = {};
 
-    ++NextSplittedExpr;
-    
-    if (NextSplittedExpr >= static_cast<int>(SplittedExprs.size()) || SplittedExprs.empty()) {
+    if (ProcessingLastStatementPart()) {
         SplittedWorld.Reset();
         SplittedExprs.clear();
         SplittedCtx.Reset();
@@ -310,6 +353,7 @@ bool TKqpQueryState::PrepareNextStatementPart() {
         return false;
     }
 
+    ++NextSplittedExpr;
     return true;
 }
 
@@ -319,8 +363,14 @@ void TKqpQueryState::AddOffsetsToTransaction() {
     const auto& operations = GetTopicOperations();
 
     TMaybe<TString> consumer;
-    if (operations.HasConsumer())
+    if (operations.HasConsumer()) {
         consumer = operations.GetConsumer();
+    }
+
+    TMaybe<ui32> supportivePartition;
+    if (operations.HasSupportivePartition()) {
+        supportivePartition = operations.GetSupportivePartition();
+    }
 
     TopicOperations = NTopic::TTopicOperations();
 
@@ -330,7 +380,7 @@ void TKqpQueryState::AddOffsetsToTransaction() {
 
         for (auto& partition : topic.partitions()) {
             if (partition.partition_offsets().empty()) {
-                TopicOperations.AddOperation(path, partition.partition_id());
+                TopicOperations.AddOperation(path, partition.partition_id(), supportivePartition);
             } else {
                 for (auto& range : partition.partition_offsets()) {
                     YQL_ENSURE(consumer.Defined());
@@ -362,12 +412,23 @@ std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> TKqpQueryState::BuildSchemeC
         consumer = operations.GetConsumer();
 
     TopicOperations.FillSchemeCacheNavigate(*navigate, std::move(consumer));
-    navigate->UserToken = UserToken;
+    if (HasUserToken()) {
+        navigate->UserToken = UserToken;
+    }
     navigate->Cookie = QueryId;
     return navigate;
 }
 
+bool TKqpQueryState::HasUserToken() const
+{
+    return UserToken && !UserToken->GetSerializedToken().empty();
+}
+
 bool TKqpQueryState::IsAccessDenied(const NSchemeCache::TSchemeCacheNavigate& response, TString& message) {
+    if (!HasUserToken()) {
+        return false;
+    }
+
     auto checkAccessDenied = [&] (const NSchemeCache::TSchemeCacheNavigate::TEntry& result) {
         static const auto selectRowRights = NACLib::EAccessRights::SelectRow;
         static const auto accessAttributesRights = NACLib::EAccessRights::ReadAttributes | NACLib::EAccessRights::WriteAttributes;
@@ -417,15 +478,13 @@ bool TKqpQueryState::HasErrors(const NSchemeCache::TSchemeCacheNavigate& respons
     return true;
 }
 
-bool TKqpQueryState::HasImpliedTx() const {
+bool TKqpQueryState::HasImplicitTx() const {
     if (HasTxControl()) {
         return false;
     }
 
     const NKikimrKqp::EQueryAction action = RequestEv->GetAction();
-    if (action != NKikimrKqp::QUERY_ACTION_EXECUTE &&
-        action != NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED)
-    {
+    if (action != NKikimrKqp::QUERY_ACTION_EXECUTE) {
         return false;
     }
 
@@ -437,22 +496,7 @@ bool TKqpQueryState::HasImpliedTx() const {
         return false;
     }
 
-    for (const auto& transactionPtr : PreparedQuery->GetTransactions()) {
-        switch (transactionPtr->GetType()) {
-        case NKqpProto::TKqpPhyTx::TYPE_GENERIC: // data transaction
-            return true;
-        case NKqpProto::TKqpPhyTx::TYPE_UNSPECIFIED:
-        case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
-        case NKqpProto::TKqpPhyTx::TYPE_DATA: // data transaction, but not in QueryService API
-        case NKqpProto::TKqpPhyTx::TYPE_SCAN:
-        case NKqpProto::TKqpPhyTx::TYPE_SCHEME:
-        case NKqpProto::TKqpPhyTx_EType_TKqpPhyTx_EType_INT_MIN_SENTINEL_DO_NOT_USE_:
-        case NKqpProto::TKqpPhyTx_EType_TKqpPhyTx_EType_INT_MAX_SENTINEL_DO_NOT_USE_:
-            break;
-        }
-    }
-
-    return false;
+    return true;
 }
 
 }

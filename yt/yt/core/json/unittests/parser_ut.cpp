@@ -147,8 +147,7 @@ TEST(TJsonParserTest, IncorrectInfinity)
 
     TStringInput stream(input);
     EXPECT_ANY_THROW(
-        ParseJson(&stream, &Mock)
-    );
+        ParseJson(&stream, &Mock));
 }
 
 TEST(TJsonParserTest, UnsignedInteger3)
@@ -199,8 +198,7 @@ TEST(TJsonParserTest, OutOfRangeUnicodeSymbols)
     TStringInput stream(input);
 
     EXPECT_ANY_THROW(
-        ParseJson(&stream, &Mock)
-    );
+        ParseJson(&stream, &Mock));
 }
 
 TEST(TJsonParserTest, EscapedUnicodeSymbols)
@@ -235,8 +233,7 @@ TEST(TJsonParserTest, InvalidJson)
 
     TStringInput stream(input);
     EXPECT_ANY_THROW(
-        ParseJson(&stream, &Mock)
-    );
+        ParseJson(&stream, &Mock));
 }
 
 TEST(TJsonParserTest, Embedded)
@@ -653,8 +650,7 @@ TEST(TJsonParserTest, AttributesWithoutValue)
 
     TStringInput stream(input);
     EXPECT_ANY_THROW(
-        ParseJson(&stream, &Mock)
-    );
+        ParseJson(&stream, &Mock));
 }
 
 TEST(TJsonParserTest, Trash)
@@ -665,8 +661,7 @@ TEST(TJsonParserTest, Trash)
 
     TStringInput stream(input);
     EXPECT_ANY_THROW(
-        ParseJson(&stream, &Mock)
-    );
+        ParseJson(&stream, &Mock));
 }
 
 TEST(TJsonParserTest, TrailingTrash)
@@ -681,8 +676,7 @@ TEST(TJsonParserTest, TrailingTrash)
 
     TStringInput stream(input);
     EXPECT_ANY_THROW(
-        ParseJson(&stream, &Mock)
-    );
+        ParseJson(&stream, &Mock));
 }
 
 TEST(TJsonParserTest, MultipleValues)
@@ -697,8 +691,7 @@ TEST(TJsonParserTest, MultipleValues)
 
     TStringInput stream(input);
     EXPECT_ANY_THROW(
-        ParseJson(&stream, &Mock)
-    );
+        ParseJson(&stream, &Mock));
 }
 
 TEST(TJsonParserTest, ReservedKeyName)
@@ -711,8 +704,7 @@ TEST(TJsonParserTest, ReservedKeyName)
 
     TStringInput stream(input);
     EXPECT_ANY_THROW(
-        ParseJson(&stream, &Mock)
-    );
+        ParseJson(&stream, &Mock));
 }
 
 TEST(TJsonParserTest, MemoryLimit1)
@@ -726,8 +718,7 @@ TEST(TJsonParserTest, MemoryLimit1)
 
     TStringInput stream(input);
     EXPECT_ANY_THROW(
-        ParseJson(&stream, &Mock, config)
-    );
+        ParseJson(&stream, &Mock, config));
 }
 
 TEST(TJsonParserTest, MemoryLimit2)
@@ -768,8 +759,7 @@ TEST(TJsonParserTest, MemoryLimit3)
     stream << "}";
 
     EXPECT_ANY_THROW(
-        ParseJson(&stream, &Mock, config)
-    );
+        ParseJson(&stream, &Mock, config));
 }
 
 TEST(TJsonParserTest, MemoryLimit4)

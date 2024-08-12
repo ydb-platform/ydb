@@ -445,6 +445,27 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["SqlColumn"]);
     }
 
+    Y_UNIT_TEST(DisabledJoinCartesianProduct) {
+        NYql::TAstParseResult res = SqlToYql("pragma DisableAnsiImplicitCrossJoin; use plato; select * from A,B,C");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "<main>:1:67: Error: Cartesian product of tables is disabled. Please use explicit CROSS JOIN or enable it via PRAGMA AnsiImplicitCrossJoin\n");
+    }
+
+    Y_UNIT_TEST(JoinCartesianProduct) {
+        NYql::TAstParseResult res = SqlToYql("pragma AnsiImplicitCrossJoin; use plato; select * from A,B,C");
+        UNIT_ASSERT(res.Root);
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "EquiJoin") {
+                auto pos = line.find("Cross");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, pos);
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Cross", pos + 1));
+            }
+        };
+        TWordCountHive elementStat = {{TString("EquiJoin"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["EquiJoin"]);
+    }
+
     Y_UNIT_TEST(JoinWithoutConcreteColumns) {
         NYql::TAstParseResult res = SqlToYql(
             " use plato;"
@@ -533,6 +554,24 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             UNIT_ASSERT(!res.Root);
             UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "<main>:1:98: Error: Duplicate join strategy hint\n");
         }
+    }
+
+    Y_UNIT_TEST(WarnCrossJoinStrategyHint) {
+        NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input AS a CROSS JOIN /*+ merge() */ plato.Input AS b;");
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "<main>:1:32: Warning: Non-default join strategy will not be used for CROSS JOIN, code: 4534\n");
+    }
+
+    Y_UNIT_TEST(WarnCartesianProductStrategyHint) {
+        NYql::TAstParseResult res = SqlToYql("pragma AnsiImplicitCrossJoin; use plato; SELECT * FROM A, /*+ merge() */ B;");
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "<main>:1:74: Warning: Non-default join strategy will not be used for CROSS JOIN, code: 4534\n");
+    }
+
+    Y_UNIT_TEST(WarnUnknownJoinStrategyHint) {
+        NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input AS a JOIN /*+ xmerge() */ plato.Input AS b USING (key);");
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "<main>:1:41: Warning: Unsupported join strategy: xmerge, code: 4534\n");
     }
 
     Y_UNIT_TEST(ReverseLabels) {
@@ -1873,7 +1912,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         auto res = SqlToYql(req);
         UNIT_ASSERT(res.Root);
         const auto programm = GetPrettyPrint(res);
-        auto expected = "(Apply (lambda '(\"$foo bar\" \"$x\")";
+        auto expected = "(lambda '(\"$foo bar\" \"$x\")";
         UNIT_ASSERT(programm.find(expected) != TString::npos);
     }
 
@@ -2481,8 +2520,98 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(AlterTableAddIndexWithIsNotSupported) {
-        ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx LOCAL WITH (a=b, c=d, e=f) ON (col)",
-            "<main>:1:40: Error: local: alternative is not implemented yet: 717:7: local_index\n");
+        ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx GLOBAL ON (col) WITH (a=b)",
+            "<main>:1:40: Error: with: alternative is not implemented yet: 746:20: global_index\n");
+    }
+
+    Y_UNIT_TEST(AlterTableAddIndexLocalIsNotSupported) {
+        ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx LOCAL ON (col)",
+            "<main>:1:40: Error: local: alternative is not implemented yet: 746:35: local_index\n");
+    }
+
+    Y_UNIT_TEST(CreateTableAddIndexVector) {
+        const auto result = SqlToYql(R"(USE plato;
+            CREATE TABLE table (
+                pk INT32 NOT NULL,
+                col String, 
+                INDEX idx GLOBAL USING vector_kmeans_tree 
+                    ON (col) COVER (col)
+                    WITH (distance=cosine, vector_type=float, vector_dimension=1024,),
+                PRIMARY KEY (pk))
+                )");
+        UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+    }
+
+    Y_UNIT_TEST(AlterTableAddIndexVector) {
+        const auto result = SqlToYql(R"(USE plato; 
+            ALTER TABLE table ADD INDEX idx 
+                GLOBAL USING vector_kmeans_tree 
+                ON (col) COVER (col)
+                WITH (distance=cosine, vector_type="float", vector_dimension=1024) 
+                )");
+        UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+    }
+
+    Y_UNIT_TEST(AlterTableAddIndexUnknownSubtype) {
+        ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx GLOBAL USING unknown ON (col)",
+            "<main>:1:57: Error: UNKNOWN index subtype is not supported\n");
+    }
+
+    Y_UNIT_TEST(AlterTableAddIndexMissedParameter) {
+        ExpectFailWithError(R"(USE plato; 
+            ALTER TABLE table ADD INDEX idx 
+                GLOBAL USING vector_kmeans_tree 
+                ON (col)
+                WITH (distance=cosine, vector_type=float) 
+                )",
+            "<main>:5:52: Error: vector_dimension should be set\n");
+    }
+
+    Y_UNIT_TEST(AlterTableAlterIndexSetPartitioningIsCorrect) {
+        const auto result = SqlToYql("USE plato; ALTER TABLE table ALTER INDEX index SET AUTO_PARTITIONING_MIN_PARTITIONS_COUNT 10");
+        UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+    }
+
+    Y_UNIT_TEST(AlterTableAlterIndexSetMultiplePartitioningSettings) {
+        const auto result = SqlToYql("USE plato; ALTER TABLE table ALTER INDEX index SET "
+            "(AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10)"
+        );
+        UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+    }
+
+    Y_UNIT_TEST(AlterTableAlterIndexResetPartitioningIsNotSupported) {
+        ExpectFailWithError("USE plato; ALTER TABLE table ALTER INDEX index RESET (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT)",
+            "<main>:1:55: Error: AUTO_PARTITIONING_MIN_PARTITIONS_COUNT reset is not supported\n"
+        );
+    }
+
+    Y_UNIT_TEST(AlterTableAlterColumnDropNotNullAstCorrect) {
+        auto reqSetNull = SqlToYql(R"(
+            USE plato;
+            CREATE TABLE tableName (
+                id Uint32,
+                val Uint32 NOT NULL,
+                PRIMARY KEY (id)
+            );
+
+            COMMIT;
+            ALTER TABLE tableName ALTER COLUMN val DROP NOT NULL;
+        )");
+
+        UNIT_ASSERT(reqSetNull.IsOk());
+        UNIT_ASSERT(reqSetNull.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            Y_UNUSED(word);
+
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(
+                R"(let world (Write! world sink (Key '('tablescheme (String '"tableName"))) (Void) '('('mode 'alter) '('actions '('('alterColumns '('('"val" '('changeColumnConstraints '('('drop_not_null)))))))))))"
+            ));
+        };
+
+        TWordCountHive elementStat({TString("\'mode \'alter")});
+        VerifyProgram(reqSetNull, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
     }
 
     Y_UNIT_TEST(OptionalAliases) {
@@ -2510,7 +2639,12 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(WithSchemaEquals) {
         UNIT_ASSERT(SqlToYql("select * from plato.T with schema Struct<a:Int32, b:String>;").IsOk());
         UNIT_ASSERT(SqlToYql("select * from plato.T with columns = Struct<a:Int32, b:String>;").IsOk());
-        UNIT_ASSERT(SqlToYql("select * from plato.T with (format=csv_with_names, schema=(year Int32, month String, day String, a Utf8, b Uint16));").IsOk());
+    }
+
+    Y_UNIT_TEST(WithNonStructSchemaS3) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.ClusterMapping["s3bucket"] = NYql::S3ProviderName;
+        UNIT_ASSERT(SqlToYql("select * from s3bucket.`foo` with schema (col1 Int32, String as col2, Int64 as col3);", settings).IsOk());
     }
 
     Y_UNIT_TEST(AllowNestedTuplesInGroupBy) {
@@ -2547,6 +2681,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             CREATE ASYNC REPLICATION MyReplication
             FOR table1 AS table2, table3 AS table4
             WITH (
+                CONNECTION_STRING = "grpc://localhost:2135/?database=/MyDatabase",
                 ENDPOINT = "localhost:2135",
                 DATABASE = "/MyDatabase"
             );
@@ -2557,14 +2692,16 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createAsyncReplication"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("create"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table1"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table2"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table3"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table4"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("ENDPOINT"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("connection_string"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("grpc://localhost:2135/?database=/MyDatabase"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("endpoint"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("localhost:2135"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("DATABASE"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("database"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("/MyDatabase"));
             }
         };
@@ -2573,6 +2710,111 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(CreateAsyncReplicationUnsupportedSettings) {
+        auto reqTpl = R"(
+            USE plato;
+            CREATE ASYNC REPLICATION MyReplication
+            FOR table1 AS table2, table3 AS table4
+            WITH (
+                %s = "%s"
+            )
+        )";
+
+        auto settings = THashMap<TString, TString>{
+            {"STATE", "DONE"},
+            {"FAILOVER_MODE", "FORCE"},
+        };
+
+        for (const auto& [k, v] : settings) {
+            auto req = Sprintf(reqTpl, k.c_str(), v.c_str());
+            auto res = SqlToYql(req);
+            UNIT_ASSERT(!res.Root);
+            UNIT_ASSERT_NO_DIFF(Err2Str(res), Sprintf("<main>:6:%zu: Error: %s is not supported in CREATE\n", 20 + k.size(), k.c_str()));
+        }
+    }
+
+    Y_UNIT_TEST(AlterAsyncReplicationParseCorrect) {
+        auto req = R"(
+            USE plato;
+            ALTER ASYNC REPLICATION MyReplication
+            SET (
+                STATE = "DONE",
+                FAILOVER_MODE = "FORCE"
+            );
+        )";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("alter"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("state"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("DONE"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("failover_mode"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("FORCE"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(AlterAsyncReplicationUnsupportedSettings) {
+        auto reqTpl = R"(
+            USE plato;
+            ALTER ASYNC REPLICATION MyReplication
+            SET (
+                %s = "%s"
+            )
+        )";
+
+        auto settings = THashMap<TString, TString>{
+            {"connection_string", "grpc://localhost:2135/?database=/MyDatabase"},
+            {"endpoint", "localhost:2135"},
+            {"database", "/MyDatabase"},
+            {"token", "foo"},
+            {"token_secret_name", "foo_secret_name"},
+            {"user", "user"},
+            {"password", "bar"},
+            {"password_secret_name", "bar_secret_name"},
+        };
+
+        for (const auto& setting : settings) {
+            auto& key = setting.first;
+            auto& value = setting.second;
+            auto req = Sprintf(reqTpl, key.c_str(), value.c_str());
+            auto res = SqlToYql(req);
+            UNIT_ASSERT(res.Root);
+            
+            TVerifyLineFunc verifyLine = [&key, &value](const TString& word, const TString& line) {
+                if (word == "Write") {
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("alter"));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(key));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(value));
+                }
+            };
+
+            TWordCountHive elementStat = { {TString("Write"), 0}};
+            VerifyProgram(res, elementStat, verifyLine);
+
+            UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+        }
+    }
+
+    Y_UNIT_TEST(AsyncReplicationInvalidSettings) {
+        auto req = R"(
+            USE plato;
+            ALTER ASYNC REPLICATION MyReplication SET (FOO = "BAR");
+        )";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:62: Error: Unknown replication setting: FOO\n");
     }
 
     Y_UNIT_TEST(DropAsyncReplicationParseCorrect) {
@@ -2586,8 +2828,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("dropAsyncReplication"));
-                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("cascade"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("drop"));
             }
         };
 
@@ -2607,7 +2848,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("cascade"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("dropCascade"));
             }
         };
 
@@ -3074,6 +3315,10 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(ErrorsInOrderByWhenColumnIsMissingInProjection) {
         ExpectFailWithError("select subkey from (select 1 as subkey) order by key", "<main>:1:50: Error: Column key is not in source column set\n");
         ExpectFailWithError("select subkey from plato.Input as a order by x.key", "<main>:1:46: Error: Unknown correlation name: x\n");
+        ExpectFailWithError("select distinct a, b from plato.Input order by c", "<main>:1:48: Error: Column c is not in source column set. Did you mean a?\n");
+        ExpectFailWithError("select count(*) as a from plato.Input order by c", "<main>:1:48: Error: Column c is not in source column set. Did you mean a?\n");
+        ExpectFailWithError("select count(*) as a, b, from plato.Input group by b order by c", "<main>:1:63: Error: Column c is not in source column set. Did you mean a?\n");
+        UNIT_ASSERT(SqlToYql("select a, b from plato.Input order by c").IsOk());
     }
 
     Y_UNIT_TEST(SelectAggregatedWhere) {
@@ -3755,6 +4000,16 @@ select FormatType($f());
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:44: Error: ANY should not be used with Cross JOIN\n");
     }
 
+    Y_UNIT_TEST(AnyWithCartesianProduct) {
+        NYql::TAstParseResult res = SqlToYql("pragma AnsiImplicitCrossJoin; use plato; select * from any Input1, Input2");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:56: Error: ANY should not be used with Cross JOIN\n");
+
+        res = SqlToYql("pragma AnsiImplicitCrossJoin; use plato; select * from Input1, any Input2");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:64: Error: ANY should not be used with Cross JOIN\n");
+    }
+
     Y_UNIT_TEST(ErrorPlainEndAsInlineActionTerminator) {
         NYql::TAstParseResult res = SqlToYql(
             "do begin\n"
@@ -4422,9 +4677,11 @@ select FormatType($f());
     }
 
     Y_UNIT_TEST(WarnForDeprecatedSchema) {
-        NYql::TAstParseResult res = SqlToYql("select * from plato.T with schema (col1 Int32, String as col2, Int64 as col3);");
+        NSQLTranslation::TTranslationSettings settings;
+        settings.ClusterMapping["s3bucket"] = NYql::S3ProviderName;
+        NYql::TAstParseResult res = SqlToYql("select * from s3bucket.`foo` with schema (col1 Int32, String as col2, Int64 as col3);", settings);
         UNIT_ASSERT(res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:48: Warning: Deprecated syntax for positional schema: please use 'column type' instead of 'type AS column', code: 4535\n");
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "Warning: Deprecated syntax for positional schema: please use 'column type' instead of 'type AS column', code: 4535\n");
     }
 
     Y_UNIT_TEST(ErrorOnColumnNameInMaxByLimit) {
@@ -4453,14 +4710,6 @@ select FormatType($f());
         auto res = SqlToYqlWithMode(withTopLevelSubq, NSQLTranslation::ESqlMode::LIBRARY);
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:17: Error: Named subquery can not be used as a top level statement in libraries\n");
-    }
-
-    Y_UNIT_TEST(SelectingFromMonitoringIsNotAllowed) {
-        NSQLTranslation::TTranslationSettings settings;
-        auto res = SqlToYqlWithSettings("select * from mon.zzz;", settings);
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res),
-            "<main>:1:15: Error: Selecting data from monitoring source is not supported\n");
     }
 
     Y_UNIT_TEST(SessionStartAndSessionStateShouldSurviveSessionWindowArgsError){
@@ -5035,6 +5284,7 @@ Y_UNIT_TEST_SUITE(JsonPassing) {
 
         for (const auto& function : functions) {
             const auto query = Sprintf(R"(
+                pragma CompactNamedExprs;
                 $json = CAST(@@{"key": 1238}@@ as Json);
                 SELECT %s(
                     $json,
@@ -5058,7 +5308,7 @@ Y_UNIT_TEST_SUITE(JsonPassing) {
                 UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos, line.find(R"('('"var2" (Double '"1.234")))"), "Cannot find `var2`");
                 UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos, line.find(R"('('"var3" (SafeCast (Int32 '"1") (DataType 'Int64))))"), "Cannot find `var3`");
                 UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos, line.find(R"('('"var4" (Bool '"true")))"), "Cannot find `var4`");
-                UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos, line.find(R"('('"var5" (SafeCast (String '@@{"key": 1238}@@) (DataType 'Json))))"), "Cannot find `var5`");
+                UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos, line.find(R"('('"var5" namedexprnode0))"), "Cannot find `var5`");
             };
 
             TWordCountHive elementStat({"JsonVariables"});
@@ -5452,7 +5702,7 @@ Y_UNIT_TEST_SUITE(ExternalDeclares) {
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "declare") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"__((declare $foo (DataType 'String)))__"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"__((declare "$foo" (DataType 'String)))__"));
             }
         };
 
@@ -5471,7 +5721,7 @@ Y_UNIT_TEST_SUITE(ExternalDeclares) {
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "declare") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"__((declare $foo (DataType 'Int32)))__"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"__((declare "$foo" (DataType 'Int32)))__"));
             }
         };
 
@@ -5490,7 +5740,7 @@ Y_UNIT_TEST_SUITE(ExternalDeclares) {
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "declare") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"__((declare $foo (DataType 'String)))__"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"__((declare "$foo" (DataType 'String)))__"));
             }
         };
 
@@ -6404,6 +6654,20 @@ Y_UNIT_TEST_SUITE(TopicsDDL) {
                 ALTER CONSUMER consumer3 SET (read_from = 2);
         )", false);
     }
+
+    Y_UNIT_TEST(TopicWithPrefix) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+            USE plato;
+            PRAGMA TablePathPrefix = '/database/path/to/tables';
+            ALTER TOPIC `my_table/my_feed` ADD CONSUMER `my_consumer`;
+        )");
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("/database/path/to/tables/my_table/my_feed"), 0}, {"topic", 0}};
+        VerifyProgram(res, elementStat);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["topic"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["/database/path/to/tables/my_table/my_feed"]);
+    }
 }
 
 Y_UNIT_TEST_SUITE(BlockEnginePragma) {
@@ -6580,5 +6844,363 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
+    }
+    
+    Y_UNIT_TEST(YtAlternativeSchemaSyntax) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+            SELECT * FROM plato.Input WITH schema(y Int32, x String not null);
+        )");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "userschema") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
+                    line.find(R"__('('('"userschema" (StructType '('"y" (AsOptionalType (DataType 'Int32))) '('"x" (DataType 'String))))))__"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("userschema"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["userschema"]);
+    }
+
+    Y_UNIT_TEST(UseViewAndFullColumnId) {
+        NYql::TAstParseResult res = SqlToYql("USE plato; SELECT Input.x FROM Input VIEW uitzicht;");
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("SqlAccess"), 0}, {"SqlProjectItem", 0}, {"Read!", 0}};
+        VerifyProgram(res, elementStat);
+        UNIT_ASSERT_VALUES_EQUAL(0, elementStat["SqlAccess"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["SqlProjectItem"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Read!"]);
+    }
+}
+
+Y_UNIT_TEST_SUITE(CompactNamedExprs) {
+    Y_UNIT_TEST(SourceCallablesInWrongContext) {
+        TString query = R"(
+            pragma CompactNamedExprs;
+            $foo = %s();
+            select $foo from plato.Input;
+        )";
+
+        THashMap<TString, TString> errs = {
+            {"TableRow", "<main>:3:20: Error: TableRow requires data source\n"},
+            {"JoinTableRow", "<main>:3:20: Error: JoinTableRow requires data source\n"},
+            {"TableRecordIndex", "<main>:3:20: Error: Unable to use function: TableRecord without source\n"},
+            {"TablePath", "<main>:3:20: Error: Unable to use function: TablePath without source\n"},
+            {"SystemMetadata", "<main>:3:20: Error: Unable to use function: SystemMetadata without source\n"},
+        };
+
+        for (TString callable : { "TableRow", "JoinTableRow", "TableRecordIndex", "TablePath", "SystemMetadata"}) {
+            auto req = Sprintf(query.c_str(), callable.c_str());
+            ExpectFailWithError(req, errs[callable]);
+        }
+    }
+
+    Y_UNIT_TEST(ValidateUnusedExprs) {
+        TString query = R"(
+            pragma warning("disable", "4527");
+            pragma CompactNamedExprs;
+            pragma ValidateUnusedExprs;
+
+            $foo = count(1);
+            select 1;
+        )";
+        ExpectFailWithError(query, "<main>:6:20: Error: Aggregation is not allowed in this context\n");
+        query = R"(
+            pragma warning("disable", "4527");
+            pragma CompactNamedExprs;
+            pragma ValidateUnusedExprs;
+
+            define subquery $x() as 
+                select count(1, 2);
+            end define;
+            select 1;
+        )";
+        ExpectFailWithError(query, "<main>:7:24: Error: Aggregation function Count requires exactly 1 argument(s), given: 2\n");
+    }
+
+    Y_UNIT_TEST(DisableValidateUnusedExprs) {
+        TString query = R"(
+            pragma warning("disable", "4527");
+            pragma CompactNamedExprs;
+            pragma DisableValidateUnusedExprs;
+
+            $foo = count(1);
+            select 1;
+        )";
+        SqlToYql(query).IsOk();
+        query = R"(
+            pragma warning("disable", "4527");
+            pragma CompactNamedExprs;
+            pragma DisableValidateUnusedExprs;
+
+            define subquery $x() as 
+                select count(1, 2);
+            end define;
+            select 1;
+        )";
+        SqlToYql(query).IsOk();
+    }
+}
+
+Y_UNIT_TEST_SUITE(ResourcePool) {
+    Y_UNIT_TEST(CreateResourcePool) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                CREATE RESOURCE POOL MyResourcePool WITH (
+                    CONCURRENT_QUERY_LIMIT=20,
+                    QUERY_CANCEL_AFTER_SECONDS=86400,
+                    QUEUE_TYPE="FIFO"
+                );
+            )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"concurrent_query_limit" (Int32 '"20")) '('"query_cancel_after_seconds" (Int32 '"86400")) '('"queue_type" '"FIFO"))#");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(CreateResourcePoolWithBadArguments) {
+        ExpectFailWithError(R"sql(
+                USE plato;
+                CREATE RESOURCE POOL MyResourcePool;
+            )sql" , "<main>:3:51: Error: Unexpected token ';' : syntax error...\n\n");
+
+        ExpectFailWithError(R"sql(
+                USE plato;
+                CREATE RESOURCE POOL MyResourcePool WITH (
+                    DUPLICATE_SETTING="first_value",
+                    DUPLICATE_SETTING="second_value"
+                );
+            )sql" , "<main>:5:21: Error: DUPLICATE_SETTING duplicate keys\n");
+    }
+
+    Y_UNIT_TEST(AlterResourcePool) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                ALTER RESOURCE POOL MyResourcePool
+                    SET (CONCURRENT_QUERY_LIMIT = 30, Weight = 5, QUEUE_TYPE = "UNORDERED"),
+                    RESET (Query_Cancel_After_Seconds, Query_Count_Limit);
+            )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alterObject))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('features '('('"concurrent_query_limit" (Int32 '"30")) '('"queue_type" '"UNORDERED") '('"weight" (Int32 '"5")))))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('resetFeatures '('"query_cancel_after_seconds" '"query_count_limit")))#");
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(DropResourcePool) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                DROP RESOURCE POOL MyResourcePool;
+            )sql");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("'features"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("dropObject"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+}
+
+Y_UNIT_TEST_SUITE(BackupCollection) {
+    Y_UNIT_TEST(CreateBackupCollection) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                CREATE BACKUP COLLECTION TestCollection WITH (
+                    STORAGE="local",
+                    TAG="test" -- for testing purposes, not a real thing
+                );
+            )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"storage" '"local") '('"tag" '"test"))#");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(CreateBackupCollectionWithBadArguments) {
+        ExpectFailWithError(R"sql(
+                USE plato;
+                CREATE BACKUP COLLECTION TestCollection;
+            )sql" , "<main>:3:55: Error: Unexpected token ';' : syntax error...\n\n");
+
+        ExpectFailWithError(R"sql(
+                USE plato;
+                CREATE BACKUP COLLECTION TestCollection WITH (
+                    DUPLICATE_SETTING="first_value",
+                    DUPLICATE_SETTING="second_value"
+                );
+            )sql" , "<main>:5:21: Error: DUPLICATE_SETTING duplicate keys\n");
+
+        ExpectFailWithError(R"sql(
+                USE plato;
+                CREATE BACKUP COLLECTION TestCollection WITH (
+                    INT_SETTING=1
+                );
+            )sql" , "<main>:4:21: Error: INT_SETTING value should be a string literal\n");
+    }
+
+    Y_UNIT_TEST(AlterBackupCollection) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                ALTER BACKUP COLLECTION TestCollection
+                    SET (STORAGE="remote"), -- also just for test
+                    SET (TAG1 = "123"),
+                    RESET (TAG2, TAG3);
+            )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alterObject))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('features '('('"storage" '"remote") '('"tag1" '"123"))))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('resetFeatures '('"tag2" '"tag3")))#");
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(DropBackupCollection) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                DROP BACKUP COLLECTION TestCollection;
+            )sql");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("'features"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("dropObject"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+}
+
+Y_UNIT_TEST_SUITE(ResourcePoolClassifier) {
+    Y_UNIT_TEST(CreateResourcePoolClassifier) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
+                    RANK=20,
+                    RESOURCE_POOL='wgUserQueries',
+                    MEMBERNAME='yandex_query@abc'
+                );
+            )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"membername" '"yandex_query@abc") '('"rank" (Int32 '"20")) '('"resource_pool" '"wgUserQueries"))#");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(CreateResourcePoolClassifierWithBadArguments) {
+        ExpectFailWithError(R"sql(
+                USE plato;
+                CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier;
+            )sql" , "<main>:3:72: Error: Unexpected token ';' : syntax error...\n\n");
+
+        ExpectFailWithError(R"sql(
+                USE plato;
+                CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
+                    DUPLICATE_SETTING="first_value",
+                    DUPLICATE_SETTING="second_value"
+                );
+            )sql" , "<main>:5:21: Error: DUPLICATE_SETTING duplicate keys\n");
+    }
+
+    Y_UNIT_TEST(AlterResourcePoolClassifier) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier
+                    SET (RANK = 30, Weight = 5, MEMBERNAME = "test@user"),
+                    RESET (Resource_Pool);
+            )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alterObject))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('features '('('"membername" '"test@user") '('"rank" (Int32 '"30")) '('"weight" (Int32 '"5")))))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('resetFeatures '('"resource_pool")))#");
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(DropResourcePoolClassifier) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                DROP RESOURCE POOL CLASSIFIER MyResourcePoolClassifier;
+            )sql");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("'features"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("dropObject"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 }

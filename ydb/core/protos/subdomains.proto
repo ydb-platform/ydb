@@ -26,6 +26,7 @@ message TSubDomainSettings {
     optional TAuditSettings AuditSettings = 13;
     optional bool ExternalStatisticsAggregator = 14 [default = false];
     optional bool GraphShard = 16 [default = false];
+    optional bool ExternalBackupController = 17 [default = false];
 }
 
 message TProcessingParams {
@@ -40,6 +41,7 @@ message TProcessingParams {
     optional fixed64 SysViewProcessor = 8;
     optional fixed64 StatisticsAggregator = 10;
     optional fixed64 GraphShard = 11;
+    optional fixed64 BackupController = 12;
 
     // Plan resolution for idle coordinators
     optional uint64 IdlePlanResolution = 9;
@@ -61,8 +63,17 @@ message TDiskSpaceUsage {
         optional uint64 UsedReserveSize = 4;
     }
 
+    message TStoragePoolUsage {
+        // in bytes
+        optional string PoolKind = 1;
+        optional uint64 TotalSize = 2;
+        optional uint64 DataSize = 3;
+        optional uint64 IndexSize = 4;
+    }
+
     optional TTables Tables = 1;
     optional TTopics Topics = 2;
+    repeated TStoragePoolUsage StoragePoolsUsage = 3;
 }
 
 message TDomainState {

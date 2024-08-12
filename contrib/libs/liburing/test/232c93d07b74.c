@@ -65,8 +65,7 @@ static void *rcv(void *arg)
 	int res;
 
 	if (p->tcp) {
-		int val = 1;
-                
+		int ret, val = 1;
 
 		s0 = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, IPPROTO_TCP);
 		res = setsockopt(s0, SOL_SOCKET, SO_REUSEPORT, &val, sizeof(val));
@@ -78,7 +77,8 @@ static void *rcv(void *arg)
 
 		addr.sin_family = AF_INET;
 		addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-		assert(t_bind_ephemeral_port(s0, &addr) == 0);
+		ret = t_bind_ephemeral_port(s0, &addr);
+		assert(!ret);
 		p->bind_port = addr.sin_port;
 	} else {
 		s0 = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);

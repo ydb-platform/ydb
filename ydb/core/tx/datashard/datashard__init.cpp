@@ -425,6 +425,12 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
             return false;
     }
 
+    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::SchemaSnapshots::TableId)) {
+        if (!Self->SchemaSnapshotManager.Load(db)) {
+            return false;
+        }
+    }
+
     if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::ChangeRecords::TableId)) {
         if (!Self->LoadChangeRecords(db, ChangeRecords)) {
             return false;
@@ -512,12 +518,6 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         }
     }
 
-    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::SchemaSnapshots::TableId)) {
-        if (!Self->SchemaSnapshotManager.Load(db)) {
-            return false;
-        }
-    }
-
     if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::Locks::TableId)) {
         TDataShardLocksDb locksDb(*Self, txc);
         if (!Self->SysLocks.Load(locksDb)) {
@@ -529,6 +529,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         if (!Self->VolatileTxManager.Load(db)) {
             return false;
         }
+        Self->OutReadSets.HoldArbiterReadSets();
     }
 
     if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::CdcStreamScans::TableId)) {
@@ -546,6 +547,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
     Self->SubscribeNewLocks();
 
     Self->ScheduleRemoveAbandonedLockChanges();
+    Self->ScheduleRemoveAbandonedSchemaSnapshots();
 
     return true;
 }
@@ -694,10 +696,12 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
     Y_ABORT_UNLESS(userTablesSchema, "UserTables");
 
     // Check if tables changed since last time we synchronized them
-    ui64 lastSysUpdate = txc.DB.Head(Schema::Sys::TableId).Serial;
-    ui64 lastSchemeUpdate = txc.DB.Head(Schema::UserTables::TableId).Serial;
-    ui64 lastSnapshotsUpdate = scheme.GetTableInfo(Schema::Snapshots::TableId)
-        ? txc.DB.Head(Schema::Snapshots::TableId).Serial : 0;
+    NTable::TDatabase::TChangeCounter lastSysUpdate = txc.DB.Head(Schema::Sys::TableId);
+    NTable::TDatabase::TChangeCounter lastSchemeUpdate = txc.DB.Head(Schema::UserTables::TableId);
+    NTable::TDatabase::TChangeCounter lastSnapshotsUpdate;
+    if (scheme.GetTableInfo(Schema::Snapshots::TableId)) {
+        lastSnapshotsUpdate = txc.DB.Head(Schema::Snapshots::TableId);
+    }
 
     NIceDb::TNiceDb db(txc.DB);
 
@@ -733,10 +737,8 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
     if (FollowerState.LastSysUpdate < lastSysUpdate) {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "Updating sys metadata on follower, tabletId " << TabletID()
-                << " prevGen " << (FollowerState.LastSysUpdate >> 32)
-                << " prevStep " << (FollowerState.LastSysUpdate & (ui32)-1)
-                << " newGen " << (lastSysUpdate >> 32)
-                << " newStep " << (lastSysUpdate & (ui32)-1));
+                << " prev " << FollowerState.LastSysUpdate
+                << " current " << lastSysUpdate);
 
         bool ready = true;
         ready &= SysGetUi64(db, Schema::Sys_PathOwnerId, PathOwnerId);
@@ -752,10 +754,8 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
     if (FollowerState.LastSchemeUpdate < lastSchemeUpdate) {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "Updating tables metadata on follower, tabletId " << TabletID()
-                << " prevGen " << (FollowerState.LastSchemeUpdate >> 32)
-                << " prevStep " << (FollowerState.LastSchemeUpdate & (ui32)-1)
-                << " newGen " << (lastSchemeUpdate >> 32)
-                << " newStep " << (lastSchemeUpdate & (ui32)-1));
+                << " prev " << FollowerState.LastSchemeUpdate
+                << " current " << lastSchemeUpdate);
 
         struct TRow {
             TPathId TableId;
@@ -825,10 +825,8 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
     if (FollowerState.LastSnapshotsUpdate < lastSnapshotsUpdate) {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "Updating snapshots metadata on follower, tabletId " << TabletID()
-                << " prevGen " << (FollowerState.LastSnapshotsUpdate >> 32)
-                << " prevStep " << (FollowerState.LastSnapshotsUpdate & (ui32)-1)
-                << " newGen " << (lastSnapshotsUpdate >> 32)
-                << " newStep " << (lastSnapshotsUpdate & (ui32)-1));
+                << " prev " << FollowerState.LastSnapshotsUpdate
+                << " current " << lastSnapshotsUpdate);
 
         NIceDb::TNiceDb db(txc.DB);
         if (!SnapshotManager.ReloadSnapshots(db)) {

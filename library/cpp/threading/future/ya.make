@@ -1,7 +1,3 @@
-SUBSCRIBER(
-    swarmer
-)
-
 LIBRARY()
 
 SRCS(
@@ -19,6 +15,7 @@ SRCS(
 END()
 
 RECURSE(
+    benchmark
     mt_ut
     perf
     ut

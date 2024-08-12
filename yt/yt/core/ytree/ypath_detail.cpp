@@ -145,64 +145,18 @@ bool TYPathServiceBase::ShouldHideAttributes()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#define IMPLEMENT_SUPPORTS_VERB_RESOLVE(method, onPathError) \
-    DEFINE_RPC_SERVICE_METHOD(TSupports##method, method) \
-    { \
-        NYPath::TTokenizer tokenizer(GetRequestTargetYPath(context->RequestHeader())); \
-        if (tokenizer.Advance() == NYPath::ETokenType::EndOfStream) { \
-            method##Self(request, response, context); \
-            return; \
-        } \
-        tokenizer.Skip(NYPath::ETokenType::Ampersand); \
-        if (tokenizer.GetType() != NYPath::ETokenType::Slash) { \
-            onPathError \
-            return; \
-        } \
-        if (tokenizer.Advance() == NYPath::ETokenType::At) { \
-            method##Attribute(TYPath(tokenizer.GetSuffix()), request, response, context); \
-        } else { \
-            method##Recursive(TYPath(tokenizer.GetInput()), request, response, context); \
-        } \
-    }
+IMPLEMENT_SUPPORTS_METHOD(GetKey)
+IMPLEMENT_SUPPORTS_METHOD(Get)
+IMPLEMENT_SUPPORTS_METHOD(Set)
+IMPLEMENT_SUPPORTS_METHOD(List)
+IMPLEMENT_SUPPORTS_METHOD(Remove)
 
-#define IMPLEMENT_SUPPORTS_VERB(method) \
-    IMPLEMENT_SUPPORTS_VERB_RESOLVE( \
-        method, \
-        { \
-            tokenizer.ThrowUnexpected(); \
-        } \
-    ) \
-    \
-    void TSupports##method::method##Attribute(const TYPath& /*path*/, TReq##method* /*request*/, TRsp##method* /*response*/, const TCtx##method##Ptr& context) \
-    { \
-        ThrowMethodNotSupported(context->GetMethod(), TString("attribute")); \
-    } \
-    \
-    void TSupports##method::method##Self(TReq##method* /*request*/, TRsp##method* /*response*/, const TCtx##method##Ptr& context) \
-    { \
-        ThrowMethodNotSupported(context->GetMethod(), TString("self")); \
-    } \
-    \
-    void TSupports##method::method##Recursive(const TYPath& /*path*/, TReq##method* /*request*/, TRsp##method* /*response*/, const TCtx##method##Ptr& context) \
-    { \
-        ThrowMethodNotSupported(context->GetMethod(), TString("recursive")); \
-    }
-
-IMPLEMENT_SUPPORTS_VERB(GetKey)
-IMPLEMENT_SUPPORTS_VERB(Get)
-IMPLEMENT_SUPPORTS_VERB(Set)
-IMPLEMENT_SUPPORTS_VERB(List)
-IMPLEMENT_SUPPORTS_VERB(Remove)
-
-IMPLEMENT_SUPPORTS_VERB_RESOLVE(
+IMPLEMENT_SUPPORTS_METHOD_RESOLVE(
     Exists,
     {
         context->SetRequestInfo();
         Reply(context, /*exists*/ false);
     })
-
-#undef IMPLEMENT_SUPPORTS_VERB
-#undef IMPLEMENT_SUPPORTS_VERB_RESOLVE
 
 void TSupportsExists::ExistsAttribute(
     const TYPath& /*path*/,
@@ -528,7 +482,7 @@ TFuture<TYsonString> TSupportsAttributes::DoGetAttribute(
         writer.OnBeginMap();
 
         if (attributeFilter) {
-            WriteAttributesFragment(&writer, attributeFilter, /*stable*/false);
+            WriteAttributesFragment(&writer, attributeFilter, /*stable*/ false);
         } else {
             if (builtinAttributeProvider) {
                 std::vector<ISystemAttributeProvider::TAttributeDescriptor> builtinDescriptors;
@@ -1775,6 +1729,8 @@ IYPathServiceContextPtr CreateYPathContext(
 
     return New<TYPathServiceContext>(
         std::move(requestMessage),
+        TMemoryUsageTrackerGuard(),
+        GetNullMemoryUsageTracker(),
         std::move(logger),
         logLevel);
 }
@@ -1790,6 +1746,8 @@ IYPathServiceContextPtr CreateYPathContext(
     return New<TYPathServiceContext>(
         std::move(requestHeader),
         std::move(requestMessage),
+        TMemoryUsageTrackerGuard(),
+        GetNullMemoryUsageTracker(),
         std::move(logger),
         logLevel);
 }

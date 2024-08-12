@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Callable, Mapping
+from typing import Any
 
 from .. import ClosedResourceError, DelimiterNotFound, EndOfStream, IncompleteRead
 from ..abc import AnyByteReceiveStream, ByteReceiveStream
@@ -10,8 +11,8 @@ from ..abc import AnyByteReceiveStream, ByteReceiveStream
 @dataclass(eq=False)
 class BufferedByteReceiveStream(ByteReceiveStream):
     """
-    Wraps any bytes-based receive stream and uses a buffer to provide sophisticated receiving
-    capabilities in the form of a byte stream.
+    Wraps any bytes-based receive stream and uses a buffer to provide sophisticated
+    receiving capabilities in the form of a byte stream.
     """
 
     receive_stream: AnyByteReceiveStream
@@ -42,8 +43,8 @@ class BufferedByteReceiveStream(ByteReceiveStream):
         elif isinstance(self.receive_stream, ByteReceiveStream):
             return await self.receive_stream.receive(max_bytes)
         else:
-            # With a bytes-oriented object stream, we need to handle any surplus bytes we get from
-            # the receive() call
+            # With a bytes-oriented object stream, we need to handle any surplus bytes
+            # we get from the receive() call
             chunk = await self.receive_stream.receive()
             if len(chunk) > max_bytes:
                 # Save the surplus bytes in the buffer

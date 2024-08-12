@@ -4,12 +4,12 @@
 
 #include <util/string/hex.h>
 
-using namespace NYT;
-using namespace NYT::NDecimal;
+namespace NYT::NDecimal {
+namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static TString RoundConvertText(TStringBuf textValue, int precision, int scale)
+TString RoundConvertText(TStringBuf textValue, int precision, int scale)
 {
     auto binary = TDecimal::TextToBinary(textValue, precision, scale);
     return TDecimal::BinaryToText(binary, precision, scale);
@@ -155,7 +155,8 @@ class TDecimalWithPrecisionTest
     , public ::testing::WithParamInterface<int>
 {
 public:
-    static std::vector<int> GetAllPossiblePrecisions() {
+    static std::vector<int> GetAllPossiblePrecisions()
+    {
         std::vector<int> result;
         for (int i = 1; i <= TDecimal::MaxPrecision; ++i) {
             result.push_back(i);
@@ -297,3 +298,8 @@ TEST_P(TDecimalWithPrecisionTest, TestBinaryValidation)
     binaryValueDecrement(binBuffer, binValue.size());
     EXPECT_THROW_WITH_SUBSTRING(TDecimal::ValidateBinaryValue(binValue, precision, 0), "does not have enough precision to represent");
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace
+} // namespace NYT::NDecimal

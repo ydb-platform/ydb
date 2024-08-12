@@ -235,13 +235,18 @@ public:
     //! If |true| reader will retain a set of peers that will be banned for every session.
     bool BanPeersPermanently;
 
-    //! For testing purposes.
     //! If |true| network throttlers will be applied even in case of requests to local host.
     bool EnableLocalThrottling;
 
     //! For testing purposes.
     //! Unless null, reader will simulate failure of accessing chunk meta cache with such probability.
     std::optional<double> ChunkMetaCacheFailureProbability;
+
+    //! Use chunk prober to reduce the number of probing requests.
+    bool UseChunkProber;
+
+    //! Use request batcher to reduce the number of get blocks requests.
+    bool UseReadBlocksBatcher;
 
     REGISTER_YSON_STRUCT(TReplicationReaderConfig);
 
@@ -363,6 +368,9 @@ public:
 
     std::optional<TDuration> TestingDelay;
 
+    //! If |true| network throttlers will be applied even in case of requests to local host.
+    bool EnableLocalThrottling;
+
     int GetDirectUploadNodeCount();
 
     REGISTER_YSON_STRUCT(TReplicationWriterConfig);
@@ -425,9 +433,7 @@ class TMemoryTrackedWriterOptions
     : public NYTree::TYsonStruct
 {
 public:
-    IMemoryUsageTrackerPtr MemoryTracker;
-
-    IMemoryReferenceTrackerPtr MemoryReferenceTracker;
+    IMemoryUsageTrackerPtr MemoryUsageTracker;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1,5 +1,17 @@
 items:
-- name: Log records collection in a Kubernetes cluster using FluentBit and YDB
+- name: Log records collection using FluentBit
   href: fluent-bit.md
+- name: Grafana data source
+  href: grafana.md
+- name: Logstash plugins
+  href: logstash.md
 - name: Schema migrations with goose
   href: goose.md
+- name: Schema migrations with Liquibase
+  href: liquibase.md
+- name: Schema migrations with Flyway
+  href: flyway.md
+- name: Using Hibernate
+  href: hibernate.md
+- name: Importing from JDBC data sources
+  href: import-jdbc.md

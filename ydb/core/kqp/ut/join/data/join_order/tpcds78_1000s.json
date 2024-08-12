@@ -1,0 +1,76 @@
+{
+  "op_name": "LeftJoin (Grace)",
+  "args": [
+    {
+      "op_name": "LeftJoin (Grace)",
+      "args": [
+        {
+          "op_name": "LeftJoin (Grace)",
+          "args": [
+            {
+              "op_name": "InnerJoin (MapJoin)",
+              "args": [
+                {
+                  "op_name": "TableFullScan",
+                  "table": "test/ds/store_sales"
+                },
+                {
+                  "op_name": "TableFullScan",
+                  "table": "test/ds/date_dim"
+                }
+              ]
+            },
+            {
+              "op_name": "TableFullScan",
+              "table": "test/ds/store_returns"
+            }
+          ]
+        },
+        {
+          "op_name": "InnerJoin (MapJoin)",
+          "args": [
+            {
+              "op_name": "LeftJoin (Grace)",
+              "args": [
+                {
+                  "op_name": "TableFullScan",
+                  "table": "test/ds/web_sales"
+                },
+                {
+                  "op_name": "TableFullScan",
+                  "table": "test/ds/web_returns"
+                }
+              ]
+            },
+            {
+              "op_name": "TableFullScan",
+              "table": "test/ds/date_dim"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "op_name": "InnerJoin (MapJoin)",
+      "args": [
+        {
+          "op_name": "LeftJoin (Grace)",
+          "args": [
+            {
+              "op_name": "TableFullScan",
+              "table": "test/ds/catalog_sales"
+            },
+            {
+              "op_name": "TableFullScan",
+              "table": "test/ds/catalog_returns"
+            }
+          ]
+        },
+        {
+          "op_name": "TableFullScan",
+          "table": "test/ds/date_dim"
+        }
+      ]
+    }
+  ]
+}

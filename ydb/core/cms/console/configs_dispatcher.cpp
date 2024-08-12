@@ -64,6 +64,9 @@ const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::AllowEditYamlInUiItem,
     (ui32)NKikimrConsole::TConfigItem::BackgroundCleaningConfigItem,
     (ui32)NKikimrConsole::TConfigItem::TracingConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::BlobStorageConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::MetadataCacheConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::MemoryControllerConfigItem,
 });
 
 const THashSet<ui32> NON_YAML_KINDS({
@@ -413,7 +416,12 @@ void TConfigsDispatcher::ReplyMonJson(TActorId mailbox) {
     response.InsertValue("current_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(CurrentConfig, NYamlConfig::GetProto2JsonConfig()), true));
 
     if (DebugInfo) {
-        response.InsertValue("initial_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(DebugInfo->StaticConfig, NYamlConfig::GetProto2JsonConfig()), true));
+        // TODO: write custom json serializer for security fields
+        // for now json info not documented and used only for some very specifigc
+        // debug purproses, so we can disable it for now without any risks
+        // and postpone implementation
+        //
+        // response.InsertValue("initial_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(DebugInfo->StaticConfig, NYamlConfig::GetProto2JsonConfig()), true));
         response.InsertValue("initial_cms_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(DebugInfo->OldDynConfig, NYamlConfig::GetProto2JsonConfig()), true));
         response.InsertValue("initial_cms_yaml_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(DebugInfo->NewDynConfig, NYamlConfig::GetProto2JsonConfig()), true));
     }

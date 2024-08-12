@@ -212,6 +212,9 @@ public:
             bool allowedResource = true;
             if (!AllowedResourceIds.empty()) {
                 allowedResource = false;
+                if (IsIn(AllowedResourceIds, check.container_id())) {
+                    allowedResource = true;
+                }
                 for (const auto& resourcePath : check.resource_path().path()) {
                     if (IsIn(AllowedResourceIds, resourcePath.id())) {
                         allowedResource = true;

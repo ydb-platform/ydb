@@ -59,18 +59,8 @@
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "Aggregate-TableFullScan",
+                                                                "Node Type": "TableFullScan",
                                                                 "Operators": [
-                                                                    {
-                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1),_yql_agg_1: MIN(item.URL,state._yql_agg_1)}",
-                                                                        "GroupBy": "item.SearchPhrase",
-                                                                        "Inputs": [
-                                                                            {
-                                                                                "InternalOperatorId": 1
-                                                                            }
-                                                                        ],
-                                                                        "Name": "Aggregate"
-                                                                    },
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TableFullScan",
@@ -79,12 +69,13 @@
                                                                             "URL"
                                                                         ],
                                                                         "ReadRanges": [
-                                                                            "EventTime (-\u221e, +\u221e)",
                                                                             "CounterID (-\u221e, +\u221e)",
                                                                             "EventDate (-\u221e, +\u221e)",
                                                                             "UserID (-\u221e, +\u221e)",
+                                                                            "EventTime (-\u221e, +\u221e)",
                                                                             "WatchID (-\u221e, +\u221e)"
                                                                         ],
+                                                                        "Scan": "Parallel",
                                                                         "SsaProgram": {
                                                                             "Command": [
                                                                                 {
@@ -112,7 +103,8 @@
                                                                                                 }
                                                                                             ],
                                                                                             "FunctionType": 2,
-                                                                                            "KernelIdx": 0
+                                                                                            "KernelIdx": 0,
+                                                                                            "YqlOperationId": 12
                                                                                         }
                                                                                     }
                                                                                 },
@@ -151,7 +143,8 @@
                                                                                                 }
                                                                                             ],
                                                                                             "FunctionType": 2,
-                                                                                            "KernelIdx": 1
+                                                                                            "KernelIdx": 1,
+                                                                                            "YqlOperationId": 10
                                                                                         }
                                                                                     }
                                                                                 },
@@ -163,19 +156,54 @@
                                                                                     }
                                                                                 },
                                                                                 {
+                                                                                    "GroupBy": {
+                                                                                        "Aggregates": [
+                                                                                            {
+                                                                                                "Column": {
+                                                                                                    "Id": 110
+                                                                                                },
+                                                                                                "Function": {
+                                                                                                    "Id": 2
+                                                                                                }
+                                                                                            },
+                                                                                            {
+                                                                                                "Column": {
+                                                                                                    "Id": 111
+                                                                                                },
+                                                                                                "Function": {
+                                                                                                    "Arguments": [
+                                                                                                        {
+                                                                                                            "Id": 14
+                                                                                                        }
+                                                                                                    ],
+                                                                                                    "Id": 3
+                                                                                                }
+                                                                                            }
+                                                                                        ],
+                                                                                        "KeyColumns": [
+                                                                                            {
+                                                                                                "Id": 40
+                                                                                            }
+                                                                                        ]
+                                                                                    }
+                                                                                },
+                                                                                {
                                                                                     "Projection": {
                                                                                         "Columns": [
                                                                                             {
                                                                                                 "Id": 40
                                                                                             },
                                                                                             {
-                                                                                                "Id": 14
+                                                                                                "Id": 110
+                                                                                            },
+                                                                                            {
+                                                                                                "Id": 111
                                                                                             }
                                                                                         ]
                                                                                     }
                                                                                 }
                                                                             ],
-                                                                            "Version": 4
+                                                                            "Version": 5
                                                                         },
                                                                         "Table": "clickbench/plans/column/hits"
                                                                     }
@@ -210,10 +238,10 @@
                                 "URL"
                             ],
                             "scan_by": [
-                                "EventTime (-\u221e, +\u221e)",
                                 "CounterID (-\u221e, +\u221e)",
                                 "EventDate (-\u221e, +\u221e)",
                                 "UserID (-\u221e, +\u221e)",
+                                "EventTime (-\u221e, +\u221e)",
                                 "WatchID (-\u221e, +\u221e)"
                             ],
                             "type": "FullScan"

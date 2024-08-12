@@ -39,7 +39,7 @@ struct TDriverRequest
 
     //! Stream used for reading command input.
     //! The stream must stay alive for the duration of #IDriver::Execute.
-    NConcurrency::IAsyncInputStreamPtr InputStream;
+    NConcurrency::IAsyncZeroCopyInputStreamPtr InputStream;
 
     //! Stream where the command output is written.
     //! The stream must stay alive for the duration of #IDriver::Execute.

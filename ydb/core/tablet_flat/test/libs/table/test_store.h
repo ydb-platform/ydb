@@ -24,8 +24,8 @@ namespace NTest {
 
         struct TEggs {
             bool Rooted;
-            TVector<TPageId> GroupIndexes;
-            TVector<TPageId> HistoricIndexes;
+            TVector<TPageId> FlatGroupIndexes;
+            TVector<TPageId> FlatHistoricIndexes;
             TVector<NPage::TBtreeIndexMeta> BTreeGroupIndexes;
             TVector<NPage::TBtreeIndexMeta> BTreeHistoricIndexes;
             TData *Scheme;
@@ -210,51 +210,53 @@ namespace NTest {
         {
             Y_ABORT_UNLESS(!Finished, "This store is already finished");
 
-            auto& pages = PageCollections[GetOuterRoom()];
+            auto room = GetOuterRoom();
+            TPageId pageId = PageCollections[room].size();
 
-            pages.emplace_back(std::move(page));
+            PageCollections[room].emplace_back(std::move(page));
+            PageTypes[room].push_back(EPage::Opaque);
 
-            return pages.size() - 1;
+            return pageId;
         }
 
         TPageId Write(TSharedData page, EPage type, ui32 group) noexcept
         {
             Y_ABORT_UNLESS(group < PageCollections.size() - 1, "Invalid column group");
             Y_ABORT_UNLESS(!Finished, "This store is already finished");
-            NPageCollection::Checksum(page); /* will catch uninitialised values */
+            NPageCollection::Checksum(page); /* will catch uninitialized values */
 
             if (type == EPage::DataPage) {
                 DataBytes[group] += page.size();
             }
-            TPageId id = PageCollections[group].size();
-            PageCollections[group].push_back(std::move(page));
+            TPageId pageId = PageCollections[group].size();
+            PageCollections[group].emplace_back(std::move(page));
             PageTypes[group].push_back(type);
 
             if (group == 0) {
                 switch (type) {
-                    case EPage::Index:
-                        Indexes.push_back(id);
+                    case EPage::FlatIndex:
+                        Indexes.push_back(pageId);
                         break;
                     case EPage::Frames:
-                        Large = id;
+                        Large = pageId;
                         break;
                     case EPage::Globs:
-                        Globs = id;
+                        Globs = pageId;
                         break;
                     case EPage::Scheme:
                     case EPage::Schem2:
-                        Scheme = id;
+                        Scheme = pageId;
                         Rooted = (type == EPage::Schem2);
                         break;
                     case EPage::Bloom:
-                        ByKey = id;
+                        ByKey = pageId;
                         break;
                     default:
                         break;
                 }
             }
 
-            return id;
+            return pageId;
         }
 
         void WriteInplace(TPageId page, TArrayRef<const char> body) noexcept
@@ -268,11 +270,13 @@ namespace NTest {
         {
             Y_ABORT_UNLESS(!Finished, "This store is already finished");
 
-            auto& pages = PageCollections[GetExternRoom()];
+            auto room = GetExternRoom();
+            TPageId pageId = PageCollections[room].size();
 
-            pages.emplace_back(std::move(data));
+            PageCollections[room].emplace_back(std::move(data));
+            PageTypes[room].push_back(EPage::Opaque);
 
-            return GlobForBlob(pages.size() - 1);
+            return GlobForBlob(pageId);
         }
 
         void Finish() noexcept

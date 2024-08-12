@@ -2,15 +2,17 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/helpers/selfping_actor.h>
+#include <library/cpp/http/misc/httpcodes.h>
+#include <library/cpp/http/simple/http_client.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_reader.h>
 #include <util/stream/null.h>
+#include <util/string/join.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
-#include "json_handlers.h"
-#include "json_tabletinfo.h"
-#include "json_vdiskinfo.h"
-#include "json_pdiskinfo.h"
+#include "viewer_tabletinfo.h"
+#include "viewer_vdiskinfo.h"
+#include "viewer_pdiskinfo.h"
 #include "query_autocomplete_helper.h"
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -22,6 +24,8 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/library/actors/core/interconnect.h>
 
+#include <util/string/builder.h>
+
 using namespace NKikimr;
 using namespace NViewer;
 using namespace NKikimrWhiteboard;
@@ -29,6 +33,7 @@ using namespace NKikimrWhiteboard;
 using namespace NSchemeShard;
 using namespace Tests;
 using namespace NMonitoring;
+using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
 #ifdef NDEBUG
 #define Ctest Cnull
@@ -187,32 +192,11 @@ Y_UNIT_TEST_SUITE(Viewer) {
         Ctest << "Data has merged" << Endl;
     }
 
-    template <typename T>
-    void TestSwagger() {
-        T h;
-        h.Init();
-
-        TStringStream json;
-        json << "{";
-        h.PrintForSwagger(json);
-        json << "}";
-
-        NJson::TJsonReaderConfig jsonCfg;
-        jsonCfg.DontValidateUtf8 = true;
-        jsonCfg.AllowComments = false;
-
-        ValidateJsonThrow(json.Str(), jsonCfg);
-    }
-
-    Y_UNIT_TEST(Swagger) {
-        TestSwagger<TViewerJsonHandlers>();
-        TestSwagger<TVDiskJsonHandlers>();
-    }
-
     struct THttpRequest : NMonitoring::IHttpRequest {
         HTTP_METHOD Method;
         TCgiParameters CgiParameters;
         THttpHeaders HttpHeaders;
+        TString PostContent;
 
         THttpRequest(HTTP_METHOD method)
             : Method(method)
@@ -237,7 +221,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
 
         TStringBuf GetPostContent() const override {
-            return TString();
+            return PostContent;
         }
 
         HTTP_METHOD GetMethod() const override {
@@ -1037,6 +1021,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("abc", ""), 3);
         UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("apple", "apple"), 0);
         UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("apple", "aple"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("UPPER", "upper"), 0);
         UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("horse", "ros"), 3);
         UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("intention", "execution"), 5);
         UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("/slice/db", "/slice"), 3);
@@ -1045,63 +1030,668 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("/slice/db", "/slice/db26000"), 5);
     }
 
-    Y_UNIT_TEST(FuzzySearcher)
+    TVector<TString> SimilarWordsDictionary = { "/slice", "/slice/db", "/slice/db26000" };
+    TVector<TString> DifferentWordsDictionary = { "/orders", "/peoples", "/OrdinaryScheduleTables" };
+
+    void FuzzySearcherTest(TVector<TString>& dictionary, TString search, ui32 limit, TVector<TString> expectations) {
+        auto fuzzy = FuzzySearcher<TString>(dictionary);
+        auto result = fuzzy.Search(search, limit);
+
+        UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
+        for (ui32 i = 0; i < expectations.size(); i++) {
+            UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
+        }
+    }
+
+    Y_UNIT_TEST(FuzzySearcherLimit1OutOf4)
     {
-        TVector<TString> dictionary = { "/slice", "/slice/db", "/slice/db26000" };
+        FuzzySearcherTest(SimilarWordsDictionary, "/slice/db", 1, { "/slice/db" });
+    }
 
-        {
-            TVector<TString> expectations = { "/slice/db" };
-            auto fuzzy = FuzzySearcher<TString>(dictionary);
-            auto result = fuzzy.Search("/slice/db", 1);
+    Y_UNIT_TEST(FuzzySearcherLimit2OutOf4)
+    {
+        FuzzySearcherTest(SimilarWordsDictionary, "/slice/db", 2, { "/slice/db", "/slice/db26000" });
+    }
 
-            UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
-            for (ui32 i = 0; i < expectations.size(); i++) {
-                UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
+    Y_UNIT_TEST(FuzzySearcherLimit3OutOf4)
+    {
+        FuzzySearcherTest(SimilarWordsDictionary, "/slice/db", 3, { "/slice/db", "/slice/db26000", "/slice"});
+    }
+
+    Y_UNIT_TEST(FuzzySearcherLimit4OutOf4)
+    {
+        FuzzySearcherTest(SimilarWordsDictionary, "/slice/db", 4, { "/slice/db", "/slice/db26000", "/slice"});
+    }
+
+    Y_UNIT_TEST(FuzzySearcherLongWord)
+    {
+        FuzzySearcherTest(SimilarWordsDictionary, "/slice/db26001", 10, { "/slice/db26000", "/slice/db", "/slice"});
+    }
+
+    Y_UNIT_TEST(FuzzySearcherPriority)
+    {
+        FuzzySearcherTest(DifferentWordsDictionary, "/ord", 10, { "/orders", "/OrdinaryScheduleTables", "/peoples"});
+        FuzzySearcherTest(DifferentWordsDictionary, "Tables", 10, { "/OrdinaryScheduleTables", "/orders", "/peoples"});
+    }
+
+    void JsonAutocompleteTest(HTTP_METHOD method, NJson::TJsonValue& value, TString prefix = "", TString database = "", TVector<TString> tables = {}, ui32 limit = 10, bool lowerCaseContentType = false) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        THttpRequest httpReq(method);
+        if (method == HTTP_METHOD_GET) {
+            if (database) {
+                httpReq.CgiParameters.emplace("database", database);
+            }
+            if (tables.size() > 0) {
+                httpReq.CgiParameters.emplace("table", JoinSeq(",", tables));
+            }
+            if (prefix) {
+                httpReq.CgiParameters.emplace("prefix", prefix);
+            }
+            httpReq.CgiParameters.emplace("limit", ToString(limit));
+        } else if (method == HTTP_METHOD_POST) {
+            NJson::TJsonArray tableArray;
+            for (const TString& table : tables) {
+                tableArray.AppendValue(table);
+            }
+
+            NJson::TJsonValue root = NJson::TJsonMap{
+                {"database", database},
+                {"table", tableArray},
+                {"prefix", prefix},
+                {"limit", limit}
+            };
+            httpReq.PostContent = NJson::WriteJson(root);
+            auto contentType = lowerCaseContentType ? "content-type" : "Content-Type";
+            httpReq.HttpHeaders.AddHeader(contentType, "application/json");
+        }
+        httpReq.CgiParameters.emplace("direct", "1");
+        auto page = MakeHolder<TMonPage>("viewer", "title");
+        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/autocomplete", nullptr);
+        THolder<NMon::TEvHttpInfo> request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            Y_UNUSED(ev);
+            switch (ev->GetTypeRewrite()) {
+                case NConsole::TEvConsole::EvListTenantsResponse: {
+                    auto *x = reinterpret_cast<NConsole::TEvConsole::TEvListTenantsResponse::TPtr*>(&ev);
+                    Ydb::Cms::ListDatabasesResult listTenantsResult;
+                    (*x)->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
+                    listTenantsResult.Addpaths("/Root/slice");
+                    listTenantsResult.Addpaths("/Root/qwerty");
+                    listTenantsResult.Addpaths("/Root/MyDatabase");
+                    listTenantsResult.Addpaths("/Root/TestDatabase");
+                    listTenantsResult.Addpaths("/Root/test");
+                    (*x)->Get()->Record.MutableResponse()->mutable_operation()->mutable_result()->PackFrom(listTenantsResult);
+                    break;
+                }
+                case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
+                    auto *x = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
+                    (*x)->Get()->Request->ErrorCount = 0;
+                    for (auto& entry: (*x)->Get()->Request->ResultSet) {
+                        if (entry.Path.size() <= 2) {
+                            const TPathId pathId(1, 1);
+                            auto listNodeEntry = MakeIntrusive<TNavigate::TListNodeEntry>();
+                            listNodeEntry->Children.reserve(3);
+                            listNodeEntry->Children.emplace_back("orders", pathId, TNavigate::KindTable);
+                            listNodeEntry->Children.emplace_back("clients", pathId, TNavigate::KindTable);
+                            listNodeEntry->Children.emplace_back("products", pathId, TNavigate::KindTable);
+                            entry.ListNodeEntry = listNodeEntry;
+                            entry.Kind = TSchemeCacheNavigate::EKind::KindExtSubdomain;
+                        } else {
+                            entry.Columns[1].Name = "id";
+                            entry.Columns[2].Name = "name";
+                            entry.Columns[3].Name = "description";
+                            entry.Kind = TSchemeCacheNavigate::EKind::KindTable;
+                        }
+                        entry.Status = TSchemeCacheNavigate::EStatus::Ok;
+                    }
+                    break;
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
+        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+
+        size_t pos = result->Answer.find('{');
+        TString jsonResult = result->Answer.substr(pos);
+        Ctest << "json result: " << jsonResult << Endl;
+        try {
+            NJson::ReadJsonTree(jsonResult, &value, true);
+        }
+        catch (yexception ex) {
+            Ctest << ex.what() << Endl;
+        }
+    }
+
+    void VerifyJsonAutocompleteSuccess(NJson::TJsonValue& value, TVector<TString> names) {
+        UNIT_ASSERT_VALUES_EQUAL(value.GetMap().at("Success").GetBoolean(), true);
+        UNIT_ASSERT_VALUES_EQUAL(value.GetMap().at("Result").GetMap().at("Total").GetInteger(), names.size());
+        auto& entities = value.GetMap().at("Result").GetMap().at("Entities").GetArray();
+        for (ui32 k = 0; k < names.size(); k++) {
+            UNIT_ASSERT_VALUES_EQUAL(entities[k].GetMap().at("Name").GetString(), names[k]);
+        }
+    }
+
+    Y_UNIT_TEST(JsonAutocompleteEmpty) {
+        NJson::TJsonValue value;
+        JsonAutocompleteTest(HTTP_METHOD_GET, value);
+        VerifyJsonAutocompleteSuccess(value, {
+            "/Root/test",
+            "/Root/slice",
+            "/Root/qwerty",
+            "/Root/MyDatabase",
+            "/Root/TestDatabase"
+        });
+    }
+
+    Y_UNIT_TEST(JsonAutocompleteStartOfDatabaseName) {
+        NJson::TJsonValue value;
+        JsonAutocompleteTest(HTTP_METHOD_GET, value, "/Root");
+        VerifyJsonAutocompleteSuccess(value, {
+            "/Root/test",
+            "/Root/slice",
+            "/Root/qwerty",
+            "/Root/MyDatabase",
+            "/Root/TestDatabase"
+        });
+    }
+
+    Y_UNIT_TEST(JsonAutocompleteEndOfDatabaseName) {
+        NJson::TJsonValue value;
+        JsonAutocompleteTest(HTTP_METHOD_GET, value, "Database");
+        VerifyJsonAutocompleteSuccess(value, {
+            "/Root/MyDatabase",
+            "/Root/TestDatabase",
+            "/Root/test",
+            "/Root/slice",
+            "/Root/qwerty"
+        });
+    }
+
+    Y_UNIT_TEST(JsonAutocompleteSimilarDatabaseName) {
+        NJson::TJsonValue value;
+        JsonAutocompleteTest(HTTP_METHOD_GET, value, "/Root/Database");
+        VerifyJsonAutocompleteSuccess(value, {
+            "/Root/MyDatabase",
+            "/Root/TestDatabase",
+            "/Root/test",
+            "/Root/slice",
+            "/Root/qwerty"
+        });
+    }
+
+    Y_UNIT_TEST(JsonAutocompleteSimilarDatabaseNameWithLimit) {
+        NJson::TJsonValue value;
+        JsonAutocompleteTest(HTTP_METHOD_GET, value, "/Root/Database", "", {}, 2);
+        VerifyJsonAutocompleteSuccess(value, {
+            "/Root/MyDatabase",
+            "/Root/TestDatabase"
+        });
+    }
+
+    Y_UNIT_TEST(JsonAutocompleteSimilarDatabaseNamePOST) {
+        NJson::TJsonValue value;
+        JsonAutocompleteTest(HTTP_METHOD_POST, value, "/Root/Database", "", {}, 2);
+        VerifyJsonAutocompleteSuccess(value, {
+            "/Root/MyDatabase",
+            "/Root/TestDatabase"
+        });
+    }
+
+    Y_UNIT_TEST(JsonAutocompleteSimilarDatabaseNameLowerCase) {
+        NJson::TJsonValue value;
+        JsonAutocompleteTest(HTTP_METHOD_POST, value, "/Root/Database", "", {}, 2, true);
+        VerifyJsonAutocompleteSuccess(value, {
+            "/Root/MyDatabase",
+            "/Root/TestDatabase"
+        });
+
+    }
+
+    Y_UNIT_TEST(JsonAutocompleteScheme) {
+        NJson::TJsonValue value;
+        JsonAutocompleteTest(HTTP_METHOD_GET, value, "clien", "/Root/Database");
+        VerifyJsonAutocompleteSuccess(value, {
+            "clients",
+            "orders",
+            "products"
+        });
+    }
+
+    Y_UNIT_TEST(JsonAutocompleteSchemePOST) {
+        NJson::TJsonValue value;
+        JsonAutocompleteTest(HTTP_METHOD_POST, value, "clien", "/Root/Database");
+        VerifyJsonAutocompleteSuccess(value, {
+            "clients",
+            "orders",
+            "products"
+        });
+    }
+
+    Y_UNIT_TEST(JsonAutocompleteEmptyColumns) {
+        NJson::TJsonValue value;
+        JsonAutocompleteTest(HTTP_METHOD_GET, value, "", "/Root/Database", {"orders"});
+        VerifyJsonAutocompleteSuccess(value, {
+            "id",
+            "name",
+            "description"
+        });
+    }
+
+    Y_UNIT_TEST(JsonAutocompleteColumns) {
+        NJson::TJsonValue value;
+        JsonAutocompleteTest(HTTP_METHOD_GET, value, "nam", "/Root/Database", {"orders", "products"});
+        VerifyJsonAutocompleteSuccess(value, {
+            "name",
+            "id",
+            "description",
+        });
+    }
+
+    Y_UNIT_TEST(JsonAutocompleteColumnsPOST) {
+        NJson::TJsonValue value;
+        JsonAutocompleteTest(HTTP_METHOD_POST, value, "nam", "/Root/Database", {"orders", "products"});
+        VerifyJsonAutocompleteSuccess(value, {
+            "name",
+            "id",
+            "description",
+        });
+    }
+
+    void ChangeBSGroupStateResponse(TEvWhiteboard::TEvBSGroupStateResponse::TPtr* ev) {
+        ui64 nodeId = (*ev)->Cookie;
+        auto& pbRecord = (*ev)->Get()->Record;
+
+        pbRecord.clear_bsgroupstateinfo();
+
+        for (ui64 groupId = 1; groupId <= 9; groupId++) {
+            if (groupId % 9 == nodeId % 9) {
+                continue;
+            }
+            auto state = pbRecord.add_bsgroupstateinfo();
+            state->set_groupid(groupId);
+            state->set_storagepoolname("/Root:test");
+            state->set_nodeid(nodeId);
+            for (int k = 1; k <= 8; k++) {
+                auto vdisk = groupId * 8 + k;
+                auto vdiskId = state->add_vdiskids();
+                vdiskId->set_groupid(groupId);
+                vdiskId->set_groupgeneration(1);
+                vdiskId->set_vdisk(vdisk);
+            }
+        }
+    }
+
+    void ChangePDiskStateResponse(TEvWhiteboard::TEvPDiskStateResponse::TPtr* ev) {
+        auto& pbRecord = (*ev)->Get()->Record;
+        pbRecord.clear_pdiskstateinfo();
+        for (int k = 0; k < 2; k++) {
+            auto state = pbRecord.add_pdiskstateinfo();
+            state->set_pdiskid(k);
+        }
+    }
+
+    void ChangeVDiskStateOn9NodeResponse(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse::TPtr* ev) {
+        ui64 nodeId = (*ev)->Cookie;
+        auto& pbRecord = (*ev)->Get()->Record;
+
+        pbRecord.clear_vdiskstateinfo();
+
+        for (int k = 0; k < 8; k++) {
+            auto groupId = (nodeId + k) % 9 + 1;
+            auto vdisk = groupId * 8 + k + 1;
+            ui32 pdisk = k / 4;
+            ui32 slotid = k % 4;
+            auto state = pbRecord.add_vdiskstateinfo();
+            state->set_pdiskid(pdisk);
+            state->set_vdiskslotid(slotid);
+            state->mutable_vdiskid()->set_groupid(groupId);
+            state->mutable_vdiskid()->set_groupgeneration(1);
+            state->mutable_vdiskid()->set_vdisk(vdisk++);
+            state->set_vdiskstate(NKikimrWhiteboard::EVDiskState::OK);
+            state->set_nodeid(nodeId);
+        }
+    }
+
+    void AddGroupsInControllerSelectGroupsResult(TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr* ev,  int groupCount) {
+        auto& pbRecord = (*ev)->Get()->Record;
+        auto pbMatchGroups = pbRecord.mutable_matchinggroups(0);
+
+        auto sample = pbMatchGroups->groups(0);
+        pbMatchGroups->ClearGroups();
+
+        for (int groupId = 1; groupId <= groupCount; groupId++) {
+            auto group = pbMatchGroups->add_groups();
+            group->CopyFrom(sample);
+            group->set_groupid(groupId++);
+            group->set_storagepoolname("/Root:test");
+        }
+    };
+
+    void JsonStorage9Nodes9GroupsListingTest(TString version, bool groupFilter, bool nodeFilter, bool pdiskFilter, ui32 expectedFoundGroups, ui32 expectedTotalGroups) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(9)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        THttpRequest httpReq(HTTP_METHOD_GET);
+        httpReq.CgiParameters.emplace("with", "all");
+        httpReq.CgiParameters.emplace("version", version);
+        if (groupFilter) {
+            httpReq.CgiParameters.emplace("group_id", "1");
+        }
+        if (nodeFilter) {
+            httpReq.CgiParameters.emplace("node_id", ToString(runtime.GetFirstNodeId()));
+        }
+        if (pdiskFilter) {
+            httpReq.CgiParameters.emplace("pdisk_id", "0");
+        }
+        auto page = MakeHolder<TMonPage>("viewer", "title");
+        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/storage", nullptr);
+        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            Y_UNUSED(ev);
+            switch (ev->GetTypeRewrite()) {
+                case NConsole::TEvConsole::EvListTenantsResponse: {
+                    auto *x = reinterpret_cast<NConsole::TEvConsole::TEvListTenantsResponse::TPtr*>(&ev);
+                    Ydb::Cms::ListDatabasesResult listTenantsResult;
+                    (*x)->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
+                    listTenantsResult.Addpaths("/Root");
+                    (*x)->Get()->Record.MutableResponse()->mutable_operation()->mutable_result()->PackFrom(listTenantsResult);
+                    break;
+                }
+                case TEvWhiteboard::EvBSGroupStateResponse: {
+                    auto *x = reinterpret_cast<TEvWhiteboard::TEvBSGroupStateResponse::TPtr*>(&ev);
+                    ChangeBSGroupStateResponse(x);
+                    break;
+                }
+                case TEvWhiteboard::EvVDiskStateResponse: {
+                    auto *x = reinterpret_cast<TEvWhiteboard::TEvVDiskStateResponse::TPtr*>(&ev);
+                    ChangeVDiskStateOn9NodeResponse(x);
+                    break;
+                }
+                case TEvWhiteboard::EvPDiskStateResponse: {
+                    auto *x = reinterpret_cast<TEvWhiteboard::TEvPDiskStateResponse::TPtr*>(&ev);
+                    ChangePDiskStateResponse(x);
+                    break;
+                }
+                case TEvBlobStorage::EvControllerSelectGroupsResult: {
+                    auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr*>(&ev);
+                    AddGroupsInControllerSelectGroupsResult(x, 9);
+                    break;
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
+        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+
+        size_t pos = result->Answer.find('{');
+        TString jsonResult = result->Answer.substr(pos);
+        NJson::TJsonValue json;
+        try {
+            NJson::ReadJsonTree(jsonResult, &json, true);
+        }
+        catch (yexception ex) {
+            Ctest << ex.what() << Endl;
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("FoundGroups"), ToString(expectedFoundGroups));
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("TotalGroups"), ToString(expectedTotalGroups));
+    }
+
+    Y_UNIT_TEST(JsonStorageListingV1) {
+        JsonStorage9Nodes9GroupsListingTest("v1", false, false, false, 9, 9);
+    }
+
+    Y_UNIT_TEST(JsonStorageListingV2) {
+        JsonStorage9Nodes9GroupsListingTest("v2", false, false, false, 9, 9);
+    }
+
+    Y_UNIT_TEST(JsonStorageListingV1GroupIdFilter) {
+        JsonStorage9Nodes9GroupsListingTest("v1", true, false, false, 1, 9);
+    }
+
+    Y_UNIT_TEST(JsonStorageListingV2GroupIdFilter) {
+        JsonStorage9Nodes9GroupsListingTest("v2", true, false, false, 1, 9);
+    }
+
+    Y_UNIT_TEST(JsonStorageListingV1NodeIdFilter) {
+        JsonStorage9Nodes9GroupsListingTest("v1", false, true, false, 8, 8);
+    }
+
+    Y_UNIT_TEST(JsonStorageListingV2NodeIdFilter) {
+        JsonStorage9Nodes9GroupsListingTest("v2", false, true, false, 8, 8);
+    }
+
+    Y_UNIT_TEST(JsonStorageListingV1PDiskIdFilter) {
+        JsonStorage9Nodes9GroupsListingTest("v1", false, true, true, 4, 8);
+        JsonStorage9Nodes9GroupsListingTest("v1", false, true, true, 4, 8);
+    }
+
+    Y_UNIT_TEST(JsonStorageListingV2PDiskIdFilter) {
+        JsonStorage9Nodes9GroupsListingTest("v2", false, true, true, 4, 8);
+    }
+
+    struct TFakeTicketParserActor : public TActor<TFakeTicketParserActor> {
+        TFakeTicketParserActor()
+            : TActor<TFakeTicketParserActor>(&TFakeTicketParserActor::StFunc)
+        {}
+
+        STFUNC(StFunc) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvTicketParser::TEvAuthorizeTicket, Handle);
+                default:
+                    break;
             }
         }
 
-        {
-            TVector<TString> expectations = { "/slice/db", "/slice" };
-            auto fuzzy = FuzzySearcher<TString>(dictionary);
-            auto result = fuzzy.Search("/slice/db", 2);
+        void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, "Ticket parser: got TEvAuthorizeTicket event: " << ev->Get()->Ticket << " " << ev->Get()->Database << " " << ev->Get()->Entries.size());
+            ++AuthorizeTicketRequests;
 
-            UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
-            for (ui32 i = 0; i < expectations.size(); i++) {
-                UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
+            if (ev->Get()->Database != "/Root") {
+                Fail(ev, TStringBuilder() << "Incorrect database " << ev->Get()->Database);
+                return;
             }
+
+            if (ev->Get()->Ticket != "test_ydb_token") {
+                Fail(ev, TStringBuilder() << "Incorrect token " << ev->Get()->Ticket);
+                return;
+            }
+
+            bool databaseIdFound = false;
+            bool folderIdFound = false;
+            for (const TEvTicketParser::TEvAuthorizeTicket::TEntry& entry : ev->Get()->Entries) {
+                for (const std::pair<TString, TString>& attr : entry.Attributes) {
+                    if (attr.first == "database_id") {
+                        databaseIdFound = true;
+                        if (attr.second != "test_database_id") {
+                            Fail(ev, TStringBuilder() << "Incorrect database_id " << attr.second);
+                            return;
+                        }
+                    } else if (attr.first == "folder_id") {
+                        folderIdFound = true;
+                        if (attr.second != "test_folder_id") {
+                            Fail(ev, TStringBuilder() << "Incorrect folder_id " << attr.second);
+                            return;
+                        }
+                    }
+                }
+            }
+            if (!databaseIdFound) {
+                Fail(ev, "database_id not found");
+                return;
+            }
+            if (!folderIdFound) {
+                Fail(ev, "folder_id not found");
+                return;
+            }
+
+            Success(ev);
         }
 
-        {
-            TVector<TString> expectations = { "/slice/db", "/slice", "/slice/db26000"};
-            auto fuzzy = FuzzySearcher<TString>(dictionary);
-            auto result = fuzzy.Search("/slice/db", 3);
-
-            UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
-            for (ui32 i = 0; i < expectations.size(); i++) {
-                UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
-            }
+        void Fail(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev, const TString& message) {
+            ++AuthorizeTicketFails;
+            TEvTicketParser::TError err;
+            err.Retryable = false;
+            err.Message = message ? message : "Test error";
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, "Send TEvAuthorizeTicketResult: " << err.Message);
+            Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, err));
         }
 
-        {
-            TVector<TString> expectations = { "/slice/db", "/slice", "/slice/db26000" };
-            auto fuzzy = FuzzySearcher<TString>(dictionary);
-            auto result = fuzzy.Search("/slice/db", 4);
-
-            UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
-            for (ui32 i = 0; i < expectations.size(); i++) {
-                UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
-            }
+        void Success(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
+            ++AuthorizeTicketSuccesses;
+            NACLib::TUserToken::TUserTokenInitFields args;
+            args.UserSID = "user_name";
+            args.GroupSIDs.push_back("group_name");
+            TIntrusivePtr<NACLib::TUserToken> userToken = MakeIntrusive<NACLib::TUserToken>(args);
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, "Send TEvAuthorizeTicketResult success");
+            Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, userToken));
         }
 
-        {
-            TVector<TString> expectations = { "/slice/db26000", "/slice/db", "/slice" };
-            auto fuzzy = FuzzySearcher<TString>(dictionary);
-            auto result = fuzzy.Search("/slice/db26001");
+        size_t AuthorizeTicketRequests = 0;
+        size_t AuthorizeTicketSuccesses = 0;
+        size_t AuthorizeTicketFails = 0;
+    };
 
-            UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
-            for (ui32 i = 0; i < expectations.size(); i++) {
-                UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
-            }
+    Y_UNIT_TEST(FloatPointJsonQuery) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetMonitoringPortOffset(monPort, true);
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        TStringStream responseStream;
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Content-Type"] = "application/json";
+        headers["Authorization"] = "test_ydb_token";
+        TString requestBody = R"json({
+            "query": "SELECT cast('311111111113.222222223' as Double);",
+            "database": "/Root",
+            "action": "execute-script",
+            "syntax": "yql_v1",
+            "stats": "profile"
+        })json";
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/query?timeout=600000&base64=false&schema=modern", requestBody, &responseStream, headers);
+        const TString response = responseStream.ReadAll();
+        UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
+        {
+            NJson::TJsonReaderConfig jsonCfg;
+
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(response, &jsonCfg, &json, /* throwOnError = */ true);
+
+            auto resultSets = json["result"].GetArray();
+            UNIT_ASSERT_EQUAL_C(1, resultSets.size(), response);
+
+            double parsed = resultSets.begin()->GetArray().begin()->GetDouble();
+            double expected = 311111111113.22222;
+            UNIT_ASSERT_DOUBLES_EQUAL(parsed, expected, 0.00001);
         }
+    }
+
+    Y_UNIT_TEST(AuthorizeYdbTokenWithDatabaseAttributes) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetMonitoringPortOffset(monPort, true); // authorization is implemented only in async mon
+
+        auto& securityConfig = *settings.AppConfig->MutableDomainsConfig()->MutableSecurityConfig();
+        securityConfig.SetEnforceUserTokenCheckRequirement(true);
+
+        TFakeTicketParserActor* ticketParser = nullptr;
+        settings.CreateTicketParser = [&](const TTicketParserSettings&) -> IActor* {
+            ticketParser = new TFakeTicketParserActor();
+            return ticketParser;
+        };
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+
+        const auto alterAttrsStatus = client.AlterUserAttributes("/", "Root", {
+            { "folder_id", "test_folder_id" },
+            { "database_id", "test_database_id" },
+        });
+        UNIT_ASSERT_EQUAL(alterAttrsStatus, NMsgBusProxy::MSTATUS_OK);
+
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        TStringStream responseStream;
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Content-Type"] = "application/json";
+        headers["Authorization"] = "test_ydb_token";
+        TString requestBody = R"json({
+            "query": "SELECT 42;",
+            "database": "/Root",
+            "action": "execute-script",
+            "syntax": "yql_v1",
+            "stats": "profile"
+        })json";
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/query?timeout=600000&base64=false&schema=modern", requestBody, &responseStream, headers);
+        const TString response = responseStream.ReadAll();
+        UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
+
+        UNIT_ASSERT(ticketParser);
+        UNIT_ASSERT_VALUES_EQUAL_C(ticketParser->AuthorizeTicketRequests, 1, response);
+        UNIT_ASSERT_VALUES_EQUAL_C(ticketParser->AuthorizeTicketSuccesses, 1, response);
     }
 }

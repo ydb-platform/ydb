@@ -46,6 +46,8 @@ YT_DEFINE_ERROR_ENUM(
     ((ForeignPrerequisiteTransaction)   (11011))
     ((IncompletePrepareSignature)       (11012))
     ((TransactionSuccessorHasLeases)    (11013))
+    ((UnknownClockClusterTag)           (11014))
+    ((ClockClusterTagMismatch)          (11015))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

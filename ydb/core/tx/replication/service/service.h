@@ -4,6 +4,7 @@
 #include <ydb/core/base/events.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/common/sensitive_event_pb.h>
+#include <ydb/core/tx/replication/common/worker_id.h>
 
 namespace NKikimr::NReplication {
 
@@ -15,6 +16,7 @@ struct TEvService {
         EvStatus,
         EvRunWorker,
         EvStopWorker,
+        EvWorkerStatus,
 
         EvEnd,
     };
@@ -40,6 +42,34 @@ struct TEvService {
 
     struct TEvStopWorker: public TEventPB<TEvStopWorker, NKikimrReplication::TEvStopWorker, EvStopWorker> {
         TEvStopWorker() = default;
+    };
+
+    struct TEvWorkerStatus: public TEventPB<TEvWorkerStatus, NKikimrReplication::TEvWorkerStatus, EvWorkerStatus> {
+        TEvWorkerStatus() = default;
+
+        explicit TEvWorkerStatus(const TWorkerId& id, NKikimrReplication::TEvWorkerStatus::EStatus status) {
+            id.Serialize(*Record.MutableWorker());
+            Record.SetStatus(status);
+            Record.SetReason(NKikimrReplication::TEvWorkerStatus::REASON_ACK);
+        }
+
+        explicit TEvWorkerStatus(const TWorkerId& id,
+                NKikimrReplication::TEvWorkerStatus::EStatus status,
+                NKikimrReplication::TEvWorkerStatus::EReason reason,
+                const TString& errorDescription
+        ) {
+            id.Serialize(*Record.MutableWorker());
+            Record.SetStatus(status);
+            Record.SetReason(reason);
+            Record.SetErrorDescription(errorDescription);
+        }
+
+        explicit TEvWorkerStatus(const TWorkerId& id, TDuration lag) {
+            id.Serialize(*Record.MutableWorker());
+            Record.SetStatus(NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
+            Record.SetReason(NKikimrReplication::TEvWorkerStatus::REASON_INFO);
+            Record.SetLagMilliSeconds(lag.MilliSeconds());
+        }
     };
 };
 

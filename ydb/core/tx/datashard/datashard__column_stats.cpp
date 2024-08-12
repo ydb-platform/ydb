@@ -1,7 +1,7 @@
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/tablet_flat/flat_row_state.h>
 #include <ydb/core/tx/datashard/datashard_impl.h>
-#include <ydb/core/util/count_min_sketch.h>
+#include <ydb/library/minsketch/count_min_sketch.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -12,11 +12,12 @@ using namespace NTable;
 
 class TStatisticsScan: public NTable::IScan {
 public:
-    explicit TStatisticsScan(TActorId replyTo, ui64 cookie, ui64 shardTabletId)
+    explicit TStatisticsScan(TActorId replyTo, ui64 cookie, ui64 shardTabletId, TSerializedCellVec&& startKey)
         : Driver(nullptr)
         , ReplyTo(replyTo)
         , Cookie(cookie)
         , ShardTabletId(shardTabletId)
+        , StartKey(std::move(startKey))
     {}
 
     void Describe(IOutputStream& o) const noexcept override {
@@ -37,7 +38,7 @@ public:
     }
 
     EScan Seek(TLead& lead, ui64) noexcept override {
-        lead.To(Scheme->Tags(), {}, ESeek::Lower);
+        lead.To(Scheme->Tags(), StartKey.GetCells(), ESeek::Lower);
 
         return EScan::Feed;
     }
@@ -57,18 +58,18 @@ public:
     }
 
     TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override {
-        auto response = std::make_unique<TEvDataShard::TEvStatisticsScanResponse>();
+        auto response = std::make_unique<NStat::TEvStatistics::TEvStatisticsResponse>();
         auto& record = response->Record;
         record.SetShardTabletId(ShardTabletId);
 
         if (abort != EAbort::None) {
-            record.SetStatus(NKikimrTxDataShard::TEvStatisticsScanResponse::ABORTED);
+            record.SetStatus(NKikimrStat::TEvStatisticsResponse::STATUS_ABORTED);
             TlsActivationContext->Send(new IEventHandle(ReplyTo, TActorId(), response.release(), 0, Cookie));
             delete this;
             return nullptr;
         }
 
-        record.SetStatus(NKikimrTxDataShard::TEvStatisticsScanResponse::SUCCESS);
+        record.SetStatus(NKikimrStat::TEvStatisticsResponse::STATUS_SUCCESS);
         auto tags = Scheme->Tags();
         for (size_t t = 0; t < tags.size(); ++t) {
             auto* column = record.AddColumns();
@@ -92,13 +93,14 @@ private:
     TActorId ReplyTo;
     ui64 Cookie = 0;
     ui64 ShardTabletId = 0;
+    TSerializedCellVec StartKey;
 
     std::vector<std::unique_ptr<TCountMinSketch>> CountMinSketches;
 };
 
 class TDataShard::TTxHandleSafeStatisticsScan : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    TTxHandleSafeStatisticsScan(TDataShard* self, TEvDataShard::TEvStatisticsScanRequest::TPtr&& ev)
+    TTxHandleSafeStatisticsScan(TDataShard* self, NStat::TEvStatistics::TEvStatisticsRequest::TPtr&& ev)
         : TTransactionBase(self)
         , Ev(std::move(ev))
     {}
@@ -112,10 +114,10 @@ public:
     }
 
 private:
-    TEvDataShard::TEvStatisticsScanRequest::TPtr Ev;
+    NStat::TEvStatistics::TEvStatisticsRequest::TPtr Ev;
 };
 
-void TDataShard::Handle(TEvDataShard::TEvStatisticsScanRequest::TPtr& ev, const TActorContext&) {
+void TDataShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext&) {
     Execute(new TTxHandleSafeStatisticsScan(this, std::move(ev)));
 }
 
@@ -124,32 +126,34 @@ void TDataShard::Handle(TEvPrivate::TEvStatisticsScanFinished::TPtr&, const TAct
     StatisticsScanId = 0;
 }
 
-void TDataShard::HandleSafe(TEvDataShard::TEvStatisticsScanRequest::TPtr& ev, const TActorContext&) {
+void TDataShard::HandleSafe(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext&) {
     const auto& record = ev->Get()->Record;
 
-    auto response = std::make_unique<TEvDataShard::TEvStatisticsScanResponse>();
+    auto response = std::make_unique<NStat::TEvStatistics::TEvStatisticsResponse>();
     response->Record.SetShardTabletId(TabletID());
 
-    const auto& tableId = record.GetTableId();
-    if (PathOwnerId != tableId.GetOwnerId()) {
-        response->Record.SetStatus(NKikimrTxDataShard::TEvStatisticsScanResponse::ERROR);
+    const auto& pathId = record.GetTable().GetPathId();
+    if (PathOwnerId != pathId.GetOwnerId()) {
+        response->Record.SetStatus(NKikimrStat::TEvStatisticsResponse::STATUS_ERROR);
         Send(ev->Sender, response.release(), 0, ev->Cookie);
         return;
     }
 
-    auto infoIt = TableInfos.find(tableId.GetTableId());
+    auto infoIt = TableInfos.find(pathId.GetLocalId());
     if (infoIt == TableInfos.end()) {
-        response->Record.SetStatus(NKikimrTxDataShard::TEvStatisticsScanResponse::ERROR);
+        response->Record.SetStatus(NKikimrStat::TEvStatisticsResponse::STATUS_ERROR);
         Send(ev->Sender, response.release(), 0, ev->Cookie);
         return;
     }
     const auto& tableInfo = infoIt->second;
 
+    TSerializedCellVec startKey(record.GetStartKey());
+
     if (StatisticsScanId != 0) {
         CancelScan(StatisticsScanTableId, StatisticsScanId);
     }
 
-    auto scan = std::make_unique<TStatisticsScan>(ev->Sender, ev->Cookie, TabletID());
+    auto scan = std::make_unique<TStatisticsScan>(ev->Sender, ev->Cookie, TabletID(), std::move(startKey));
 
     auto scanOptions = TScanOptions()
         .SetResourceBroker("statistics_scan", 20)

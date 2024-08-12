@@ -82,6 +82,7 @@ RESOURCE(
     ui/datashard_rs.js cms/ui/datashard_rs.js
     ui/datashard_slow_ops.js cms/ui/datashard_slow_ops.js
     ui/enums.js cms/ui/enums.js
+    ui/ext/myers-diff/myers_diff.js cms/ui/ext/myers-diff/myers_diff.js
     ui/ext/bootstrap.min.css cms/ui/ext/bootstrap.min.css
     ui/ext/fuzzycomplete.min.css cms/ui/ext/fuzzycomplete.min.css
     ui/ext/fuzzycomplete.min.js cms/ui/ext/fuzzycomplete.min.js
@@ -237,4 +238,5 @@ RECURSE(
 RECURSE_FOR_TESTS(
     ut
     ut_sentinel
+    ut_sentinel_unstable
 )

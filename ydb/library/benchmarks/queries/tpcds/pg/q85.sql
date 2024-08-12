@@ -9,7 +9,7 @@ select  substr(r_reason_desc,1,20) reason
  where ws_web_page_sk = wp_web_page_sk
    and ws_item_sk = wr_item_sk
    and ws_order_number = wr_order_number
-   and ws_sold_date_sk = d_date_sk and d_year = 1998
+   and ws_sold_date_sk = d_date_sk and d_year = 2001
    and cd1.cd_demo_sk = wr_refunded_cdemo_sk
    and cd2.cd_demo_sk = wr_returning_cdemo_sk
    and ca_address_sk = wr_refunded_addr_sk
@@ -25,7 +25,7 @@ select  substr(r_reason_desc,1,20) reason
      and
      cd1.cd_education_status = cd2.cd_education_status
      and
-     ws_sales_price between 100.00::numeric and 150.00::numeric
+     ws_sales_price between 100.00 and 150.00
     )
    or
     (
@@ -37,7 +37,7 @@ select  substr(r_reason_desc,1,20) reason
      and
      cd1.cd_education_status = cd2.cd_education_status
      and
-     ws_sales_price between 50.00::numeric and 100.00::numeric
+     ws_sales_price between 50.00 and 100.00
     )
    or
     (
@@ -49,7 +49,7 @@ select  substr(r_reason_desc,1,20) reason
      and
      cd1.cd_education_status = cd2.cd_education_status
      and
-     ws_sales_price between 150.00::numeric and 200.00::numeric
+     ws_sales_price between 150.00 and 200.00
     )
    )
    and
@@ -58,21 +58,21 @@ select  substr(r_reason_desc,1,20) reason
      ca_country = 'United States'
      and
      ca_state in ('TX', 'VA', 'CA')
-     and ws_net_profit between 100::numeric and 200::numeric
+     and ws_net_profit between 100 and 200
     )
     or
     (
      ca_country = 'United States'
      and
      ca_state in ('AR', 'NE', 'MO')
-     and ws_net_profit between 150::numeric and 300::numeric
+     and ws_net_profit between 150 and 300
     )
     or
     (
      ca_country = 'United States'
      and
      ca_state in ('IA', 'MS', 'WA')
-     and ws_net_profit between 50::numeric and 250::numeric
+     and ws_net_profit between 50 and 250
     )
    )
 group by r_reason_desc

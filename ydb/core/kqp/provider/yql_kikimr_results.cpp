@@ -292,6 +292,14 @@ TExprNode::TPtr MakeAtomForDataType(EDataSlot slot, const NKikimrMiniKQL::TValue
         return ctx.NewAtom(pos, ToString(value.GetUint64()));
     } else if (slot == EDataSlot::Interval) {
         return ctx.NewAtom(pos, ToString(value.GetInt64()));
+    } else if (slot == EDataSlot::Date32) {
+        return ctx.NewAtom(pos, ToString(value.GetInt32()));
+    } else if (slot == EDataSlot::Datetime64) {
+        return ctx.NewAtom(pos, ToString(value.GetInt64()));
+    } else if (slot == EDataSlot::Timestamp64) {
+        return ctx.NewAtom(pos, ToString(value.GetInt64()));
+    } else if (slot == EDataSlot::Interval64) {
+        return ctx.NewAtom(pos, ToString(value.GetInt64()));
     } else {
        return nullptr;
     }
@@ -363,6 +371,7 @@ NKikimrMiniKQL::TResult* KikimrResultToProto(const NKikimrMiniKQL::TResult& resu
     auto* truncatedValue = packedValue->AddStruct();
 
     bool truncated = false;
+    TColumnOrder order(columnHints);
     if (result.GetType().GetKind() == NKikimrMiniKQL::ETypeKind::List) {
         const auto& itemType = result.GetType().GetList().GetItem();
 
@@ -378,11 +387,11 @@ NKikimrMiniKQL::TResult* KikimrResultToProto(const NKikimrMiniKQL::TResult& resu
             auto* newItem = dataType->MutableList()->MutableItem();
             newItem->SetKind(NKikimrMiniKQL::ETypeKind::Struct);
             auto* newStructType = newItem->MutableStruct();
-            for (auto& column : columnHints) {
-                auto* memberIndex = memberIndices.FindPtr(column);
+            for (auto& [column, gen_col] : order) {
+                auto* memberIndex = memberIndices.FindPtr(gen_col);
                 YQL_ENSURE(memberIndex);
 
-                *newStructType->AddMember() = structType.GetMember(*memberIndex);
+                (*newStructType->AddMember() = structType.GetMember(*memberIndex)).SetName(column);
             }
         } else {
             *dataType = result.GetType();
@@ -395,11 +404,10 @@ NKikimrMiniKQL::TResult* KikimrResultToProto(const NKikimrMiniKQL::TResult& resu
                 truncated = true;
                 break;
             }
-
             if (!memberIndices.empty()) {
                 auto* newStruct = dataValue->AddList();
-                for (auto& column : columnHints) {
-                    auto* memberIndex = memberIndices.FindPtr(column);
+                for (auto& [column, gen_column] : order) {
+                    auto* memberIndex = memberIndices.FindPtr(gen_column);
                     YQL_ENSURE(memberIndex);
 
                     *newStruct->AddStruct() = item.GetStruct(*memberIndex);

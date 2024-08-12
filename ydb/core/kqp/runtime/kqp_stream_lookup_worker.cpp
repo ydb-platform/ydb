@@ -142,7 +142,8 @@ TKqpStreamLookupWorker::TKqpStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSetti
     , HolderFactory(holderFactory)
     , InputDesc(inputDesc)
     , TablePath(settings.GetTable().GetPath())
-    , TableId(MakeTableId(settings.GetTable())) {
+    , TableId(MakeTableId(settings.GetTable()))
+    , Strategy(settings.GetLookupStrategy()) {
 
     KeyColumns.reserve(settings.GetKeyColumns().size());
     i32 keyOrder = 0;
@@ -493,11 +494,14 @@ public:
     void AddInputRow(NUdf::TUnboxedValue inputRow) final {
         auto joinKey = inputRow.GetElement(0);
         std::vector<TCell> joinKeyCells(LookupKeyColumns.size());
-        for (size_t colId = 0; colId < LookupKeyColumns.size(); ++colId) {
-            const auto* joinKeyColumn = LookupKeyColumns[colId];
-            YQL_ENSURE(joinKeyColumn->KeyOrder < static_cast<i64>(joinKeyCells.size()));
-            joinKeyCells[joinKeyColumn->KeyOrder] = MakeCell(joinKeyColumn->PType,
-                joinKey.GetElement(colId), TypeEnv, true);
+
+        if (joinKey.HasValue()) {
+            for (size_t colId = 0; colId < LookupKeyColumns.size(); ++colId) {
+                const auto* joinKeyColumn = LookupKeyColumns[colId];
+                YQL_ENSURE(joinKeyColumn->KeyOrder < static_cast<i64>(joinKeyCells.size()));
+                joinKeyCells[joinKeyColumn->KeyOrder] = MakeCell(joinKeyColumn->PType,
+                    joinKey.GetElement(colId), TypeEnv, true);
+            }
         }
 
         UnprocessedRows.emplace_back(std::make_pair(TOwnedCellVec(joinKeyCells), std::move(inputRow.GetElement(1))));
@@ -601,9 +605,18 @@ public:
                 break;
             }
 
-            UnprocessedRows.pop_front();
+            auto hasNulls = [](const TOwnedCellVec& cellVec) {
+                for (const auto& cell : cellVec) {
+                    if (cell.IsNull()) {
+                        return true;
+                    }
+                }
 
-            if (!joinKey.data()->IsNull()) {  // don't use nulls as lookup keys, because null != null
+                return false;
+            };
+
+            UnprocessedRows.pop_front();
+            if (!hasNulls(joinKey)) {  // don't use nulls as lookup keys, because null != null
                 std::vector <std::pair<ui64, TOwnedTableRange>> partitions;
                 if (joinKey.size() < KeyColumns.size()) {
                     // build prefix range [[key_prefix, NULL, ..., NULL], [key_prefix, +inf, ..., +inf])
@@ -730,11 +743,16 @@ public:
                 for (size_t joinKeyIdx = 0; joinKeyIdx < LookupKeyColumns.size(); ++joinKeyIdx) {
                     auto it = ReadColumns.find(LookupKeyColumns[joinKeyIdx]->Name);
                     YQL_ENSURE(it != ReadColumns.end());
-                    joinKeyCells[joinKeyIdx] = row[std::distance(ReadColumns.begin(), it)];
+                    joinKeyCells[LookupKeyColumns[joinKeyIdx]->KeyOrder] = row[std::distance(ReadColumns.begin(), it)];
                 }
 
                 auto leftRowIt = PendingLeftRowsByKey.find(joinKeyCells);
                 YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
+
+                if (Strategy == NKqpProto::EStreamLookupStrategy::SEMI_JOIN && leftRowIt->second.RightRowExist) {
+                    // Semi join should return one result row per key
+                    continue;
+                }
 
                 TReadResultStats rowStats;
                 i64 availableSpace = freeSpace - (i64)resultStats.ResultBytesCount;
@@ -950,6 +968,7 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
         case NKqpProto::EStreamLookupStrategy::LOOKUP:
             return std::make_unique<TKqpLookupRows>(std::move(settings), typeEnv, holderFactory, inputDesc);
         case NKqpProto::EStreamLookupStrategy::JOIN:
+        case NKqpProto::EStreamLookupStrategy::SEMI_JOIN:
             return std::make_unique<TKqpJoinRows>(std::move(settings), typeEnv, holderFactory, inputDesc);
         default:
             return {};

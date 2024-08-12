@@ -28,6 +28,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#define PY_SSIZE_T_CLEAN
 #include <Python.h>
 
 #include <google/protobuf/message_lite.h>
@@ -93,39 +94,28 @@ static PyMethodDef ModuleMethods[] = {
      (PyCFunction)google::protobuf::python::cmessage::SetAllowOversizeProtos, METH_O,
      "Enable/disable oversize proto parsing."},
     // DO NOT USE: For migration and testing only.
-    {NULL, NULL}};
+    {nullptr, nullptr}};
 
-#if PY_MAJOR_VERSION >= 3
 static struct PyModuleDef _module = {PyModuleDef_HEAD_INIT,
                                      "_message",
                                      module_docstring,
                                      -1,
                                      ModuleMethods, /* m_methods */
-                                     NULL,
-                                     NULL,
-                                     NULL,
-                                     NULL};
-#define INITFUNC PyInit__message
-#define INITFUNC_ERRORVAL NULL
-#else  // Python 2
-#define INITFUNC init_message
-#define INITFUNC_ERRORVAL
-#endif
+                                     nullptr,
+                                     nullptr,
+                                     nullptr,
+                                     nullptr};
 
-PyMODINIT_FUNC INITFUNC() {
+PyMODINIT_FUNC PyInit__message() {
   PyObject* m;
-#if PY_MAJOR_VERSION >= 3
   m = PyModule_Create(&_module);
-#else
-  m = Py_InitModule3("_message", ModuleMethods, module_docstring);
-#endif
-  if (m == NULL) {
-    return INITFUNC_ERRORVAL;
+  if (m == nullptr) {
+    return nullptr;
   }
 
   if (!google::protobuf::python::InitProto2MessageModule(m)) {
     Py_DECREF(m);
-    return INITFUNC_ERRORVAL;
+    return nullptr;
   }
 
   // Adds the C++ API
@@ -137,10 +127,8 @@ PyMODINIT_FUNC INITFUNC() {
           })) {
     PyModule_AddObject(m, "proto_API", api);
   } else {
-    return INITFUNC_ERRORVAL;
+    return nullptr;
   }
 
-#if PY_MAJOR_VERSION >= 3
   return m;
-#endif
 }

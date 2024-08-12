@@ -1,25 +1,13 @@
 #pragma once
 
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/impl/aliases.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/callback_context.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/callback_context.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/impl/persqueue_impl.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 
 #include <util/generic/buffer.h>
 
 namespace NYdb::NPersQueue {
-
-inline const TString& GetCodecId(const ECodec codec) {
-    static THashMap<ECodec, TString> idByCodec{
-        {ECodec::RAW, TString(1, '\0')},
-        {ECodec::GZIP, "\1"},
-        {ECodec::LZOP, "\2"},
-        {ECodec::ZSTD, "\3"}
-    };
-    Y_ABORT_UNLESS(idByCodec.contains(codec));
-    return idByCodec[codec];
-}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TWriteSessionEventsQueue

@@ -4,8 +4,8 @@
 $ssr =
  (select  store.s_store_id as store_id,
           sum(ss_ext_sales_price) as sales,
-          sum(coalesce(sr_return_amt, 0)) as returns,
-          sum(ss_net_profit - coalesce(sr_net_loss, 0)) as profit
+          sum(coalesce(sr_return_amt, $z0)) as returns,
+          sum(ss_net_profit - coalesce(sr_net_loss, $z0)) as profit
   from {{store_sales}} as store_sales
   left join {{store_returns}} as store_returns on
          (store_sales.ss_item_sk = store_returns.sr_item_sk and store_sales.ss_ticket_number = store_returns.sr_ticket_number) cross join
@@ -25,8 +25,8 @@ $ssr =
  $csr=
  (select  catalog_page.cp_catalog_page_id as catalog_page_id,
           sum(cs_ext_sales_price) as sales,
-          sum(coalesce(cr_return_amount, 0)) as returns,
-          sum(cs_net_profit - coalesce(cr_net_loss, 0)) as profit
+          sum(coalesce(cr_return_amount, $z0)) as returns,
+          sum(cs_net_profit - coalesce(cr_net_loss, $z0)) as profit
   from {{catalog_sales}} as catalog_sales left join {{catalog_returns}} as catalog_returns on
          (catalog_sales.cs_item_sk = catalog_returns.cr_item_sk and catalog_sales.cs_order_number = catalog_returns.cr_order_number) cross join
      {{date_dim}} as date_dim cross join
@@ -46,8 +46,8 @@ group by catalog_page.cp_catalog_page_id)
  $wsr =
  (select  web_site.web_site_id web_site_id,
           sum(ws_ext_sales_price) as sales,
-          sum(coalesce(wr_return_amt, 0)) as returns,
-          sum(ws_net_profit - coalesce(wr_net_loss, 0)) as profit
+          sum(coalesce(wr_return_amt, $z0)) as returns,
+          sum(ws_net_profit - coalesce(wr_net_loss, $z0)) as profit
   from {{web_sales}} as web_sales
   left outer join {{web_returns}} as web_returns on
          (web_sales.ws_item_sk = web_returns.wr_item_sk and web_sales.ws_order_number = web_returns.wr_order_number) cross join

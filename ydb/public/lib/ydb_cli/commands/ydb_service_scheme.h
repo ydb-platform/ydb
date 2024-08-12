@@ -5,6 +5,7 @@
 
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
+#include <ydb/public/sdk/cpp/client/draft/ydb_replication.h>
 #include <ydb/public/sdk/cpp/client/ydb_coordination/coordination.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
@@ -56,23 +57,20 @@ private:
     int DescribeEntryDefault(NScheme::TSchemeEntry entry);
     int DescribeTable(TDriver& driver);
     int DescribeColumnTable(TDriver& driver);
-    int PrintTableResponse(NTable::TDescribeTableResult& result);
-    void PrintResponsePretty(const NTable::TTableDescription& tableDescription);
-    int PrintResponseProtoJsonBase64(const NTable::TTableDescription& tableDescription);
+    int PrintTableResponsePretty(const NTable::TTableDescription& tableDescription) const;
     void WarnAboutTableOptions();
 
     int DescribeTopic(TDriver& driver);
-    int PrintTopicResponse(const NYdb::NTopic::TDescribeTopicResult& result);
-    int PrintTopicResponsePretty(const NYdb::NTopic::TTopicDescription& settings);
-    int PrintTopicResponseProtoJsonBase64(const NYdb::NTopic::TDescribeTopicResult& result);
+    int PrintTopicResponsePretty(const NYdb::NTopic::TTopicDescription& settings) const;
 
     int DescribeCoordinationNode(const TDriver& driver);
-    int PrintCoordinationNodeResponse(const NYdb::NCoordination::TDescribeNodeResult& result) const;
     int PrintCoordinationNodeResponsePretty(const NYdb::NCoordination::TNodeDescription& result) const;
-    int PrintCoordinationNodeResponseProtoJsonBase64(const NYdb::NCoordination::TNodeDescription& result) const;
+
+    int DescribeReplication(const TDriver& driver);
+    int PrintReplicationResponsePretty(const NYdb::NReplication::TDescribeReplicationResult& result) const;
 
     template<typename TDescriptionType>
-    void PrintPermissionsIfNeeded(const TDescriptionType& description) {
+    void PrintPermissionsIfNeeded(const TDescriptionType& description) const {
         if (ShowPermissions) {
             Cout << Endl;
             PrintAllPermissions(

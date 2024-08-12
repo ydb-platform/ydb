@@ -17,7 +17,7 @@ from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
     DataSourceType,
     SelectWhat,
 )
-from ydb.library.yql.providers.generic.connector.tests.test_cases.base import BaseTestCase
+from ydb.library.yql.providers.generic.connector.tests.common_test_cases.base import BaseTestCase
 
 
 @dataclass

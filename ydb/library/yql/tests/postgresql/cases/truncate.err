@@ -169,7 +169,7 @@ ALTER TABLE truncate_a ADD FOREIGN KEY (col1) REFERENCES trunc_c;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	-- circular references
 	^
 <sql-statement>
@@ -652,9 +652,9 @@ DROP FUNCTION trunctrigger();
 -- test TRUNCATE ... RESTART IDENTITY
 CREATE SEQUENCE truncate_a_id1 START WITH 33;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Pre type annotation
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 278
+    -stdin-:<main>:1:1: Error: Unexpected tag: pgObject
     	-- test TRUNCATE ... RESTART IDENTITY
 	^
 <sql-statement>
@@ -666,7 +666,7 @@ ALTER SEQUENCE truncate_a_id1 OWNED BY truncate_a.id1;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 279
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 231
     	ALTER SEQUENCE truncate_a_id1 OWNED BY truncate_a.id1;
 	^
 <sql-statement>

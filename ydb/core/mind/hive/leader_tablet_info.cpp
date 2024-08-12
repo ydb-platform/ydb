@@ -367,6 +367,24 @@ void TLeaderTabletInfo::ActualizeTabletStatistics(TInstant now) {
     }
 }
 
+void TLeaderTabletInfo::RestoreDeletedHistory() {
+    for (const auto& entry : DeletedHistory) {
+        if (entry.Channel >= TabletStorageInfo->Channels.size()) {
+            continue;
+        }
+        TabletStorageInfo->Channels[entry.Channel].History.push_back(entry.Entry);
+    }
+
+    for (auto& channel : TabletStorageInfo->Channels) {
+        using TEntry = decltype(channel.History)::value_type;
+        std::sort(channel.History.begin(), channel.History.end(), [] (const TEntry& lhs, const TEntry& rhs) {
+            return lhs.FromGeneration < rhs.FromGeneration;
+        });
+    }
+
+    DeletedHistory.clear();
+}
+
 void TLeaderTabletInfo::SetType(TTabletTypes::EType type) {
     Type = type;
     NodeFilter.TabletType = type;

@@ -77,7 +77,7 @@ namespace NKikimr::NBsController {
             // apply new report
             auto& record = ev->Get()->Record;
             for (const NKikimrBlobStorage::TEvGroupStatReport& item : record.GetPerGroupReport()) {
-                const TGroupId groupId = item.GetGroupId();
+                const TGroupId groupId = TGroupId::FromProto(&item, &NKikimrBlobStorage::TEvGroupStatReport::GetGroupId);
                 auto it = Groups.find(groupId);
                 if (it != Groups.end()) {
                     it->second.Update(item, now, groupId, GroupCleanupSchedule);
@@ -100,7 +100,7 @@ namespace NKikimr::NBsController {
             GroupCleanupSchedule.erase(GroupCleanupSchedule.begin(), it);
 
             // recalculate percentiles for changed groups
-            for (const TGroupId groupId : ids) {
+            for (const TGroupId& groupId : ids) {
                 Groups[groupId].RecalculatePercentiles();
                 UpdatedGroupIds.insert(groupId);
             }

@@ -10,6 +10,7 @@
 #include <util/system/unaligned_mem.h>
 #include <util/memory/pool.h>
 
+#include <deque>
 #include <type_traits>
 
 namespace NKikimr {
@@ -168,6 +169,20 @@ public:
 static_assert(sizeof(TCell) == 12, "TCell must be 12 bytes");
 using TCellsRef = TConstArrayRef<const TCell>;
 
+inline size_t EstimateSize(TCellsRef cells) {
+    size_t cellsSize = cells.size();
+
+    size_t size = sizeof(TCell) * cellsSize;
+    for (auto& cell : cells) {
+        if (!cell.IsNull() && !cell.IsInline()) {
+            const size_t cellSize = cell.Size();
+            size += AlignUp(cellSize);
+        }
+    }
+    
+    return size;
+}
+
 inline int CompareCellsAsByteString(const TCell& a, const TCell& b, bool isDescending) {
     const char* pa = (const char*)a.Data();
     const char* pb = (const char*)b.Data();
@@ -263,7 +278,7 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeInfoO
     }
 
     default:
-        Y_DEBUG_ABORT_UNLESS(false, "Unknown type");
+        Y_DEBUG_ABORT("Unknown type");
     };
 
     return 0;
@@ -362,7 +377,7 @@ inline ui64 GetValueHash(NScheme::TTypeInfo info, const TCell& cell) {
         return NPg::PgNativeBinaryHash(cell.Data(), cell.Size(), typeDesc);
     }
 
-    Y_DEBUG_ABORT_UNLESS(false, "Type not supported for user columns: %d", typeId);
+    Y_DEBUG_ABORT("Type not supported for user columns: %d", typeId);
     return 0;
 }
 
@@ -539,6 +554,9 @@ public:
     TConstArrayRef<TCell> GetCells() const {
         return Cells;
     }
+
+    // read headers, assuming the buf is correct and append additional cells at the end
+    static bool UnsafeAppendCells(TConstArrayRef<TCell> cells, TString& serializedCellVec);
 
     static void Serialize(TString& res, TConstArrayRef<TCell> cells);
 
@@ -735,5 +753,8 @@ private:
 void DbgPrintValue(TString&, const TCell&, NScheme::TTypeInfo typeInfo);
 TString DbgPrintCell(const TCell& r, NScheme::TTypeInfo typeInfo, const NScheme::TTypeRegistry& typeRegistry);
 TString DbgPrintTuple(const TDbTupleRef& row, const NScheme::TTypeRegistry& typeRegistry);
+
+size_t GetCellMatrixHeaderSize();
+size_t GetCellHeaderSize();
 
 }

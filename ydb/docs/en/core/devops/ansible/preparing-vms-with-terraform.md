@@ -1,6 +1,6 @@
 # Deploy infrastructure for {{ ydb-short-name }} cluster using Terraform
 
-You can deploy a {{ ydb-short-name }} cluster for production use in three recommended ways: using [Ansible](./initial-deployment.md), [Kubernetes](../kubernetes/index.md) or [manually](../../deploy/index.md). While the Kubernetes option is almost self-sufficient, the Ansible and manual options require SSH access to properly configured servers or virtual machines.
+You can deploy a {{ ydb-short-name }} cluster for production use in three recommended ways: using [Ansible](./initial-deployment.md), [Kubernetes](../kubernetes/index.md) or [manually](../../devops/manual/index.md). While the Kubernetes option is almost self-sufficient, the Ansible and manual options require SSH access to properly configured servers or virtual machines.
 
 This article describes how to create and configure the necessary set of virtual machines in various cloud providers for a {{ ydb-short-name }} cluster, using Terraform.
 
@@ -111,9 +111,9 @@ If you already use Terraform providers provided in the [official repository](htt
 
 ## Deployment overview
 
-The following are step-by-step instructions for creating infrastructure in [AWS](#aws-cluster), [Azure](#aws-cluster), [GCP](#gcp-cluster), or [Yandex Cloud](#gcp-cluster). The scenarios proposed by Terraform deploy the same type of infrastructure:
+The following are step-by-step instructions for creating infrastructure in [AWS](#aws-cluster), [Azure](#aws-cluster), [GCP](#gcp-cluster), or [Yandex Cloud](#gcp-cluster). By default, example Terraform scenarios deploy the same type of infrastructure:
 
-* 9 VMs in three availability zones (16 vCPU, 32 GB RAM, additional 200GB disk for data).
+* VMs in three availability zones.
 * Cloud network, public and private subnets (per subnet per availability zone).
 * Private DNS zone.
 * Security groups allowing ICMP and traffic on ports: 22, 65535, 19001, 8765, and 2135.

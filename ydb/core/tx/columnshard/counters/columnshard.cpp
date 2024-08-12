@@ -8,7 +8,8 @@ namespace NKikimr::NColumnShard {
 
 TCSCounters::TCSCounters()
     : TBase("CS")
-{
+    , Initialization(*this)
+    , TxProgress(*this) {
     StartBackgroundCount = TBase::GetDeriviative("StartBackground/Count");
     TooEarlyBackgroundCount = TBase::GetDeriviative("TooEarlyBackground/Count");
     SetupCompactionCount = TBase::GetDeriviative("SetupCompaction/Count");
@@ -24,14 +25,18 @@ TCSCounters::TCSCounters()
     FutureIndexationInputBytes = TBase::GetDeriviative("FutureIndexationInput/Bytes");
     IndexationInputBytes = TBase::GetDeriviative("IndexationInput/Bytes");
 
-    OverloadInsertTableBytes = TBase::GetDeriviative("OverloadInsertTable/Bytes");
-    OverloadInsertTableCount = TBase::GetDeriviative("OverloadInsertTable/Count");
-    OverloadShardTxBytes = TBase::GetDeriviative("OverloadShard/Tx/Bytes");
-    OverloadShardTxCount = TBase::GetDeriviative("OverloadShard/Tx/Count");
-    OverloadShardWritesBytes = TBase::GetDeriviative("OverloadShard/Writes/Bytes");
-    OverloadShardWritesCount = TBase::GetDeriviative("OverloadShard/Writes/Count");
-    OverloadShardWritesSizeBytes = TBase::GetDeriviative("OverloadShard/WritesSize/Bytes");
-    OverloadShardWritesSizeCount = TBase::GetDeriviative("OverloadShard/WritesSize/Count");
+    IndexMetadataLimitBytes = TBase::GetValue("IndexMetadata/Limit/Bytes");
+
+    OverloadInsertTableBytes = TBase::GetDeriviative("Overload/InsertTable/Bytes");
+    OverloadInsertTableCount = TBase::GetDeriviative("Overload/InsertTable/Count");
+    OverloadMetadataBytes = TBase::GetDeriviative("Overload/Metadata/Bytes");
+    OverloadMetadataCount = TBase::GetDeriviative("Overload/Metadata/Count");
+    OverloadShardTxBytes = TBase::GetDeriviative("Overload/Shard/Tx/Bytes");
+    OverloadShardTxCount = TBase::GetDeriviative("Overload/Shard/Tx/Count");
+    OverloadShardWritesBytes = TBase::GetDeriviative("Overload/Shard/Writes/Bytes");
+    OverloadShardWritesCount = TBase::GetDeriviative("Overload/Shard/Writes/Count");
+    OverloadShardWritesSizeBytes = TBase::GetDeriviative("Overload/Shard/WritesSize/Bytes");
+    OverloadShardWritesSizeCount = TBase::GetDeriviative("Overload/Shard/WritesSize/Count");
 
     InternalCompactionGranuleBytes = TBase::GetValueAutoAggregationsClient("InternalCompaction/Bytes");
     InternalCompactionGranulePortionsCount = TBase::GetValueAutoAggregationsClient("InternalCompaction/PortionsCount");

@@ -1,7 +1,5 @@
 #pragma once
 
-#include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
-
 #include <ydb/public/sdk/cpp/client/ydb_types/fluent_settings_helpers.h>
 
 namespace NYdb::NQuery {
@@ -63,12 +61,16 @@ struct TTxSettings {
         TS_SNAPSHOT_RO
     };
 
-    const ETransactionMode Mode_;
     FLUENT_SETTING(TTxOnlineSettings, OnlineSettings);
 
+    ETransactionMode GetMode() const {
+        return Mode_;
+    }
 private:
     TTxSettings(ETransactionMode mode)
         : Mode_(mode) {}
+
+    ETransactionMode Mode_;
 };
 
 struct TTxControl {

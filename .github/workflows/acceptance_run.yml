@@ -1,0 +1,61 @@
+name: Acceptance-run
+on:
+  schedule:
+    - cron: "0 0 * * *"  # At 00:00 every day
+  workflow_dispatch:
+    inputs:
+      build_preset:
+        type: choice
+        default: "relwithdebinfo"
+        description: "Build preset"
+        options:
+          - debug
+          - release
+          - relwithdebinfo
+          - release-asan
+          - release-tsan
+          - release-msan
+      runner_label:
+        type: string
+        default: "auto-provisioned"
+        description: "runner label"
+      commit_sha:
+        type: string
+        default: ""
+
+jobs:
+  main:
+    name: Build and test ydb/tests/acceptance
+    runs-on: [ self-hosted, "${{ inputs.runner_label || 'auto-provisioned' }}", "${{ format('build-preset-{0}', inputs.build_preset || 'relwithdebinfo') }}" ]
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+      with:
+        ref: ${{ inputs.commit_sha }}
+
+    - name: Setup ssh key for slice 
+      uses: webfactory/ssh-agent@v0.9.0
+      with:
+        ssh-private-key: ${{ secrets.SLICE_QA_SSH_PRIVATE_KEY }}
+
+    - name: Setup ydb access
+      uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+      with:
+        ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+
+    - name: Build and test
+      uses: ./.github/actions/build_and_test_ya
+      with:
+        build_preset: ${{ inputs.build_preset || 'relwithdebinfo'}}
+        build_target: "ydb/tests/acceptance"
+        increment: false
+        run_tests: true
+        test_retry_count: 1
+        test_size: small,medium,large
+        test_type: unittest,py3test,py2test,pytest
+        test_threads: 1
+        put_build_results_to_cache: true
+        secs: ${{ format('{{"TESTMO_TOKEN2":"{0}","AWS_KEY_ID":"{1}","AWS_KEY_VALUE":"{2}","REMOTE_CACHE_USERNAME":"{3}","REMOTE_CACHE_PASSWORD":"{4}"}}',
+          secrets.TESTMO_TOKEN2, secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD ) }}
+        vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","TESTMO_URL":"{3}","TESTMO_PROJECT_ID":"{4}"}}',
+          vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.TESTMO_URL, vars.TESTMO_PROJECT_ID ) }}

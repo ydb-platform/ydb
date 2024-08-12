@@ -177,6 +177,8 @@ class THeaders
     : public virtual TRefCounted
 {
 public:
+    using THeaderNames = THashSet<TString, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualityComparer>;
+
     void Add(const TString& header, TString value);
     void Set(const TString& header, TString value);
     void Remove(TStringBuf header);
@@ -190,15 +192,13 @@ public:
 
     const TCompactVector<TString, 1>& GetAll(TStringBuf header) const;
 
-    void WriteTo(
-        IOutputStream* out,
-        const THashSet<TString, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualityComparer>* filtered = nullptr) const;
+    void WriteTo(IOutputStream* out, const THeaderNames* filtered = nullptr) const;
 
     THeadersPtr Duplicate() const;
 
     void MergeFrom(const THeadersPtr& headers);
 
-    std::vector<std::pair<TString, TString>> Dump() const;
+    std::vector<std::pair<TString, TString>> Dump(const THeaderNames* filtered = nullptr) const;
 
 private:
     struct TEntry

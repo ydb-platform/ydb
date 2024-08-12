@@ -1,7 +1,7 @@
 Registering pre-existing tables
-	int8_tbl
 	onek
 	tenk1
+	int8_tbl
 <sql-statement>
 --
 -- LIMIT
@@ -376,6 +376,17 @@ SELECT
     -stdin-:<main>:6:40: Error: Columns are not allowed in: OFFSET
     	             ORDER BY n LIMIT 1 OFFSET s-1) AS y) AS z
 	                                       ^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	-- Stress test for variable LIMIT in conjunction with bounded-heap sorting
+	^
+        -stdin-:<main>:3:3: Error: At function: PgSubLink, At function: PgSelect
+        	  (SELECT n
+	  ^
+            -stdin-:<main>:3:3: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+            	  (SELECT n
+	  ^
 <sql-statement>
 --
 -- Test behavior of volatile and set-returning functions in conjunction
@@ -383,9 +394,9 @@ SELECT
 --
 create temp sequence testseq;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Pre type annotation
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 278
+    -stdin-:<main>:1:1: Error: Unexpected tag: pgObject
     	--
 	^
 <sql-statement>

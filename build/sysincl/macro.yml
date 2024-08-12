@@ -1222,3 +1222,24 @@
     - YOTTA_CFG_MBEDTLS_TARGET_CONFIG_FILE
     - YOTTA_CFG_MBEDTLS_USER_CONFIG_FILE
     - xstr(MQTTCLIENT_PLATFORM_HEADER)
+
+- source_filter: "^contrib/libs/openthread"
+  includes:
+    - MBEDTLS_CONFIG_FILE: contrib/libs/openthread/third_party/mbedtls/openthread-mbedtls-config.h
+    - OPENTHREAD_CONFIG_FILE
+
+- source_filter: "^smart_devices/platforms/yandexmidi/zigbee/firmware/ncp"
+  includes:
+    - EMBER_AF_API_EMBER_TYPES: smart_devices/third_party/gecko_sdk/protocol/zigbee/stack/include/ember-types.h
+    - EMBER_AF_API_EZSP: smart_devices/third_party/gecko_sdk/protocol/zigbee/app/em260/command-context.h
+    - EMBER_AF_API_NEIGHBOR_HEADER: smart_devices/third_party/gecko_sdk/protocol/zigbee/stack/include/stack-info.h
+    - EMBER_AF_API_MFGLIB: smart_devices/third_party/gecko_sdk/protocol/zigbee/stack/include/mfglib.h
+    - EMBER_AF_API_CBKE: smart_devices/third_party/gecko_sdk/protocol/zigbee/stack/include/cbke-crypto-engine.h
+    - EMBER_AF_API_NVM3: smart_devices/third_party/gecko_sdk/platform/base/hal/plugin/nvm3/nvm3-token.h
+    - EMBER_AF_API_ZIGBEE_PRO: smart_devices/third_party/gecko_sdk/protocol/zigbee/stack/include/ember.h
+    - EMBER_AF_API_STACK: smart_devices/third_party/gecko_sdk/protocol/zigbee/stack/include/ember.h
+
+- source_filter: "^smart_devices/third_party/gecko_sdk"
+  includes:
+    - SL_RAIL_UTIL_PA_CURVE_HEADER: smart_devices/third_party/gecko_sdk/platform/radio/rail_lib/plugin/pa-conversions/pa_curves_efr32.h
+    - SL_RAIL_UTIL_PA_CURVE_TYPES: smart_devices/third_party/gecko_sdk/platform/radio/rail_lib/plugin/pa-conversions/pa_curve_types_efr32.h

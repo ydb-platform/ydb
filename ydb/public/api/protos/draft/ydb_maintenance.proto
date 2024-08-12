@@ -65,13 +65,13 @@ enum AvailabilityMode {
     AVAILABILITY_MODE_UNSPECIFIED = 0;
 
     // In this mode allowed:
-    // - at most 1 unavailable disk in each storage group;
+    // - at most 1 unavailable disk in each affected storage group;
     // - at most 1 unavailable state storage ring.
     // For nodes tenant and cluster policies are followed.
     AVAILABILITY_MODE_STRONG = 1;
 
     // In this mode:
-    // - total number of an unavailable disks in each storage group
+    // - total number of an unavailable disks in each affected storage group
     //   shouldn't exceed number of parity parts in that group;
     // - it is allowed to disable (n_to_select - 1) / 2 state storage rings.
     // Nodes are handled as in strong mode.

@@ -76,7 +76,6 @@ def main():
     makedirs(dst_dir)
 
     src_dir = os.path.normpath(args.src_dir) + os.path.sep
-    assert src_dir.startswith(source_root)
 
     if src_dir.startswith(source_root):
         root = source_root

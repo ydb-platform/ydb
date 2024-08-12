@@ -865,17 +865,6 @@ SELECT x,
 FROM (VALUES (0), (30), (90), (150), (180),
       (210), (270), (330), (360)) AS t(x);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	-- test exact cases for trigonometric functions in degrees
-	^
-        -stdin-:<main>:4:16: Error: At function: PgIn
-        	       sind(x) IN (-1,-0.5,0,0.5,1) AS sind_exact
-	               ^
-            -stdin-:<main>:4:16: Error: Mismatch of types in IN expressions: float8 is not equal to numeric
-            	       sind(x) IN (-1,-0.5,0,0.5,1) AS sind_exact
-	               ^
 <sql-statement>
 SELECT x,
        cosd(x),
@@ -883,17 +872,6 @@ SELECT x,
 FROM (VALUES (0), (60), (90), (120), (180),
       (240), (270), (300), (360)) AS t(x);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT x,
-	^
-        -stdin-:<main>:3:16: Error: At function: PgIn
-        	       cosd(x) IN (-1,-0.5,0,0.5,1) AS cosd_exact
-	               ^
-            -stdin-:<main>:3:16: Error: Mismatch of types in IN expressions: float8 is not equal to numeric
-            	       cosd(x) IN (-1,-0.5,0,0.5,1) AS cosd_exact
-	               ^
 <sql-statement>
 SELECT x,
        tand(x),
@@ -913,29 +891,6 @@ SELECT x,
        acosd(x) IN (0,60,90,120,180) AS acosd_exact
 FROM (VALUES (-1), (-0.5), (0), (0.5), (1)) AS t(x);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
-    	SELECT x,
-	^
-        -stdin-:<main>:1:1: Error: At function: PgResultItem
-        	SELECT x,
-	^
-            -stdin-:<main>:3:17: Error: At function: PgIn
-            	       asind(x) IN (-90,-30,0,30,90) AS asind_exact,
-	                ^
-                -stdin-:<main>:3:17: Error: Mismatch of types in IN expressions: float8 is not equal to int4
-                	       asind(x) IN (-90,-30,0,30,90) AS asind_exact,
-	                ^
-        -stdin-:<main>:1:1: Error: At function: PgResultItem
-        	SELECT x,
-	^
-            -stdin-:<main>:5:17: Error: At function: PgIn
-            	       acosd(x) IN (0,60,90,120,180) AS acosd_exact
-	                ^
-                -stdin-:<main>:5:17: Error: Mismatch of types in IN expressions: float8 is not equal to int4
-                	       acosd(x) IN (0,60,90,120,180) AS acosd_exact
-	                ^
 <sql-statement>
 SELECT x,
        atand(x),
@@ -943,17 +898,6 @@ SELECT x,
 FROM (VALUES ('-Infinity'::float8), (-1), (0), (1),
       ('Infinity'::float8)) AS t(x);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT x,
-	^
-        -stdin-:<main>:3:17: Error: At function: PgIn
-        	       atand(x) IN (-90,-45,0,45,90) AS atand_exact
-	                ^
-            -stdin-:<main>:3:17: Error: Mismatch of types in IN expressions: float8 is not equal to int4
-            	       atand(x) IN (-90,-45,0,45,90) AS atand_exact
-	                ^
 <sql-statement>
 SELECT x, y,
        atan2d(y, x),
@@ -961,17 +905,6 @@ SELECT x, y,
 FROM (SELECT 10*cosd(a), 10*sind(a)
       FROM generate_series(0, 360, 90) AS t(a)) AS t(x,y);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT x, y,
-	^
-        -stdin-:<main>:3:21: Error: At function: PgIn
-        	       atan2d(y, x) IN (-90,0,90,180) AS atan2d_exact
-	                    ^
-            -stdin-:<main>:3:21: Error: Mismatch of types in IN expressions: float8 is not equal to int4
-            	       atan2d(y, x) IN (-90,0,90,180) AS atan2d_exact
-	                    ^
 <sql-statement>
 --
 -- test output (and round-trip safety) of various values.
@@ -1074,6 +1007,14 @@ select float8send(flt) as ibits,
     -stdin-:<main>:22:30: Error: Unknown type: xfloat8
     	  from (select bits::bigint::xfloat8::float8 as flt
 	                             ^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	-- float8: seeeeeee eeeeeeee eeeeeeee mmmmmmmm mmmmmmmm(x4)
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	-- float8: seeeeeee eeeeeeee eeeeeeee mmmmmmmm mmmmmmmm(x4)
+	^
 <sql-statement>
 -- round-trip tests
 with testdata(bits) as (values
@@ -1228,6 +1169,14 @@ select float8send(flt) as ibits,
     -stdin-:<main>:145:30: Error: Unknown type: xfloat8
     	  from (select bits::bigint::xfloat8::float8 as flt
 	                             ^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	-- round-trip tests
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	-- round-trip tests
+	^
 <sql-statement>
 -- clean up, lest opr_sanity complain
 drop type xfloat8 cascade;

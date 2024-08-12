@@ -2,13 +2,12 @@
 
 PY3_LIBRARY()
 
-VERSION(1.11.0)
+VERSION(1.12.1)
 
 LICENSE(Apache-2.0)
 
 PEERDIR(
     contrib/python/requests
-    contrib/python/six
 )
 
 NO_LINT()
@@ -24,7 +23,6 @@ PY_SRCS(
     requests_mock/__init__.pyi
     requests_mock/adapter.py
     requests_mock/adapter.pyi
-    requests_mock/compat.py
     requests_mock/contrib/__init__.py
     requests_mock/contrib/_pytest_plugin.py
     requests_mock/contrib/_pytest_plugin.pyi

@@ -5,7 +5,7 @@
 
 namespace NYT::NConcurrency {
 
-static const auto& Logger = ConcurrencyLogger;
+static constexpr auto& Logger = ConcurrencyLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -110,7 +110,7 @@ void TNotifyManager::Wait(NThreading::TEventCount::TCookie cookie, std::function
     bool firstWaiter = !PollingWaiterLock_.exchange(true);
     if (firstWaiter) {
         while (true) {
-            bool notified = EventCount_->Wait(cookie, PollingPeriod_);
+            bool notified = EventCount_->Wait(cookie, PollingPeriod_.load());
             if (notified) {
                 break;
             }
@@ -172,6 +172,11 @@ void TNotifyManager::CancelWait()
 NThreading::TEventCount* TNotifyManager::GetEventCount()
 {
     return EventCount_.Get();
+}
+
+void TNotifyManager::Reconfigure(TDuration pollingPeriod)
+{
+    PollingPeriod_.store(pollingPeriod);
 }
 
 // Returns true if was locked.

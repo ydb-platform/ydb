@@ -24,6 +24,7 @@ public:
         : YqSharedResources(params.YqSharedResources)
         , CredentialsProviderFactory(params.CredentialsProviderFactory)
         , ComputeConnection(params.ComputeConnection)
+        , WorkloadManager(params.WorkloadManager)
     {}
 
     void Bootstrap() {
@@ -52,6 +53,10 @@ public:
         settings.ExecMode(event.ExecMode);
         settings.StatsMode(event.StatsMode);
         settings.TraceId(event.TraceId);
+
+        if (WorkloadManager.GetEnable()) {
+            settings.PoolId(WorkloadManager.GetExecutionResourcePool());
+        }
 
         NYdb::TParamsBuilder paramsBuilder;
         for (const auto& [k, v] : event.QueryParameters) {
@@ -130,6 +135,7 @@ public:
     void Handle(const TEvYdbCompute::TEvFetchScriptResultRequest::TPtr& ev) {
         NYdb::NQuery::TFetchScriptResultsSettings settings;
         settings.FetchToken(ev->Get()->FetchToken);
+        settings.RowsLimit(ev->Get()->RowsLimit);
         QueryClient
             ->FetchScriptResults(ev->Get()->OperationId, ev->Get()->ResultSetId, settings)
             .Apply([actorSystem = NActors::TActivationContext::ActorSystem(), recipient = ev->Sender, cookie = ev->Cookie, database = ComputeConnection.database()](auto future) {
@@ -222,6 +228,7 @@ private:
     TYqSharedResources::TPtr YqSharedResources;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
     NConfig::TYdbStorageConfig ComputeConnection;
+    NConfig::TWorkloadManagerConfig WorkloadManager;
     std::unique_ptr<NYdb::NQuery::TQueryClient> QueryClient;
     std::unique_ptr<NYdb::NOperation::TOperationClient> OperationClient;
 };

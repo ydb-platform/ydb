@@ -37,6 +37,7 @@ enum ENodeType : int
     NT_LINK                 /* "link" */,
     NT_GROUP                /* "group" */,
     NT_PORTAL               /* "portal_entrance" */,
+    NT_CHAOS_TABLE_REPLICA  /* "chaos_table_replica" */,
 };
 
 ///
@@ -554,7 +555,8 @@ struct TFileWriterOptions
     FLUENT_FIELD_OPTION(TWriterOptions, WriterOptions);
 };
 
-class TSkiffRowHints {
+class TSkiffRowHints
+{
 public:
     /// @cond Doxygen_Suppress
     using TSelf = TSkiffRowHints;
@@ -565,6 +567,12 @@ public:
     ///
     /// You can set something in it to pass necessary information to CreateSkiffParser<...>() and GetSkiffSchema<...>() functions.
     FLUENT_FIELD_OPTION(TNode, Attributes);
+
+    ///
+    /// @brief Index of table in parallel table reader.
+    ///
+    /// For internal usage only. If you set it, it will be overriden by parallel table reader.
+    FLUENT_FIELD_OPTION(int, TableIndex);
 };
 
 /// Options that control how C++ objects represent table rows when reading or writing a table.

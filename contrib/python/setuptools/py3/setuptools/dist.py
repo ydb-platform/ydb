@@ -1,5 +1,4 @@
-__all__ = ['Distribution']
-
+from __future__ import annotations
 
 import io
 import itertools
@@ -10,7 +9,7 @@ import sys
 from contextlib import suppress
 from glob import iglob
 from pathlib import Path
-from typing import List, Optional, Set
+from typing import TYPE_CHECKING, MutableMapping
 
 import distutils.cmd
 import distutils.command
@@ -38,6 +37,7 @@ from .discovery import ConfigDiscovery
 from .monkey import get_unpatched
 from .warnings import InformationOnly, SetuptoolsDeprecationWarning
 
+__all__ = ['Distribution']
 
 sequence = tuple, list
 
@@ -158,9 +158,7 @@ def check_specifier(dist, attr, value):
     try:
         SpecifierSet(value)
     except (InvalidSpecifier, AttributeError) as error:
-        tmpl = (
-            "{attr!r} must be a string " "containing valid version specifiers; {error}"
-        )
+        tmpl = "{attr!r} must be a string containing valid version specifiers; {error}"
         raise DistutilsSetupError(tmpl.format(attr=attr, error=error)) from error
 
 
@@ -202,7 +200,11 @@ def check_packages(dist, attr, value):
             )
 
 
-_Distribution = get_unpatched(distutils.core.Distribution)
+if TYPE_CHECKING:
+    # Work around a mypy issue where type[T] can't be used as a base: https://github.com/python/mypy/issues/10962
+    _Distribution = distutils.core.Distribution
+else:
+    _Distribution = get_unpatched(distutils.core.Distribution)
 
 
 class Distribution(_Distribution):
@@ -268,6 +270,8 @@ class Distribution(_Distribution):
     }
 
     _patched_dist = None
+    # Used by build_py, editable_wheel and install_lib commands for legacy namespaces
+    namespace_packages: list[str]  #: :meta private: DEPRECATED
 
     def patch_missing_pkg_info(self, attrs):
         # Fake up a replacement for the data that would normally come from
@@ -283,12 +287,12 @@ class Distribution(_Distribution):
                 dist._version = _normalization.safe_version(str(attrs['version']))
                 self._patched_dist = dist
 
-    def __init__(self, attrs=None):
+    def __init__(self, attrs: MutableMapping | None = None) -> None:
         have_package_data = hasattr(self, "package_data")
         if not have_package_data:
-            self.package_data = {}
+            self.package_data: dict[str, list[str]] = {}
         attrs = attrs or {}
-        self.dist_files = []
+        self.dist_files: list[tuple[str, str, str]] = []
         # Filter-out setuptools' specific options.
         self.src_root = attrs.pop("src_root", None)
         self.patch_missing_pkg_info(attrs)
@@ -305,7 +309,7 @@ class Distribution(_Distribution):
         # Private API (setuptools-use only, not restricted to Distribution)
         # Stores files that are referenced by the configuration and need to be in the
         # sdist (e.g. `version = file: VERSION.txt`)
-        self._referenced_files: Set[str] = set()
+        self._referenced_files: set[str] = set()
 
         self.set_defaults = ConfigDiscovery(self)
 
@@ -381,12 +385,12 @@ class Distribution(_Distribution):
             k: list(map(str, _reqs.parse(v or []))) for k, v in extras_require.items()
         }
 
-    def _finalize_license_files(self):
+    def _finalize_license_files(self) -> None:
         """Compute names of all license files which should be included."""
-        license_files: Optional[List[str]] = self.metadata.license_files
-        patterns: List[str] = license_files if license_files else []
+        license_files: list[str] | None = self.metadata.license_files
+        patterns: list[str] = license_files if license_files else []
 
-        license_file: Optional[str] = self.metadata.license_file
+        license_file: str | None = self.metadata.license_file
         if license_file and license_file not in patterns:
             patterns.append(license_file)
 
@@ -394,7 +398,7 @@ class Distribution(_Distribution):
             # Default patterns match the ones wheel uses
             # See https://wheel.readthedocs.io/en/stable/user_guide.html
             # -> 'Including license files in the generated wheel file'
-            patterns = ('LICEN[CS]E*', 'COPYING*', 'NOTICE*', 'AUTHORS*')
+            patterns = ['LICEN[CS]E*', 'COPYING*', 'NOTICE*', 'AUTHORS*']
 
         self.metadata.license_files = list(
             unique_everseen(self._expand_patterns(patterns))
@@ -405,8 +409,8 @@ class Distribution(_Distribution):
         """
         >>> list(Distribution._expand_patterns(['LICENSE']))
         ['LICENSE']
-        >>> list(Distribution._expand_patterns(['setup.cfg', 'LIC*']))
-        ['setup.cfg', 'LICENSE']
+        >>> list(Distribution._expand_patterns(['pyproject.toml', 'LIC*']))
+        ['pyproject.toml', 'LICENSE']
         """
         return (
             path
@@ -531,7 +535,8 @@ class Distribution(_Distribution):
 
     def _setuptools_commands(self):
         try:
-            return metadata.distribution('setuptools').entry_points.names
+            entry_points = metadata.distribution('setuptools').entry_points
+            return {ep.name for ep in entry_points}  # Avoid newer API for compatibility
         except metadata.PackageNotFoundError:
             # during bootstrapping, distribution doesn't exist
             return []
@@ -681,7 +686,7 @@ class Distribution(_Distribution):
             os.mkdir(egg_cache_dir)
             windows_support.hide_file(egg_cache_dir)
             readme_txt_filename = os.path.join(egg_cache_dir, 'README.txt')
-            with open(readme_txt_filename, 'w') as f:
+            with open(readme_txt_filename, 'w', encoding="utf-8") as f:
                 f.write(
                     'This directory contains eggs that were downloaded '
                     'by setuptools to build, test, and run plug-ins.\n\n'
@@ -704,6 +709,12 @@ class Distribution(_Distribution):
         """Pluggable version of get_command_class()"""
         if command in self.cmdclass:
             return self.cmdclass[command]
+
+        # Special case bdist_wheel so it's never loaded from "wheel"
+        if command == 'bdist_wheel':
+            from .command.bdist_wheel import bdist_wheel
+
+            return bdist_wheel
 
         eps = metadata.entry_points(group='distutils.commands', name=command)
         for ep in eps:

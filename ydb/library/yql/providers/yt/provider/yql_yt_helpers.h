@@ -21,9 +21,9 @@
 namespace NYql {
 
 bool UpdateUsedCluster(TString& usedCluster, const TString& newCluster);
-bool IsYtIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, TString& usedCluster, bool supportsReads, bool supportsDq);
-bool IsYtCompleteIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, bool supportsReads, bool supportsDq);
-bool IsYtCompleteIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, TString& usedCluster, bool supportsReads, bool supportsDq);
+bool IsYtIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, TString& usedCluster, bool supportsDq);
+bool IsYtCompleteIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, bool supportsDq);
+bool IsYtCompleteIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, TString& usedCluster, bool supportsDq);
 TExprNode::TPtr YtCleanupWorld(const TExprNode::TPtr& input, TExprContext& ctx, TYtState::TPtr state);
 TVector<TYtTableBaseInfo::TPtr> GetInputTableInfos(NNodes::TExprBase input);
 TVector<TYtPathInfo::TPtr> GetInputPaths(NNodes::TExprBase input);
@@ -39,7 +39,7 @@ TExprNode::TPtr GetLimitExpr(const TExprNode::TPtr& limitSetting, TExprContext& 
 IGraphTransformer::TStatus UpdateTableMeta(const TExprNode::TPtr& tableNode, TExprNode::TPtr& newTableNode,
     const TYtTablesData::TPtr& tablesData, bool checkSqlView, bool updateRowSpecType, TExprContext& ctx);
 TExprNode::TPtr ValidateAndUpdateTablesMeta(const TExprNode::TPtr& input, TStringBuf cluster, const TYtTablesData::TPtr& tablesData, bool updateRowSpecType, TExprContext& ctx);
-TExprNode::TPtr ResetTablesMeta(const TExprNode::TPtr& input, TExprContext& ctx, bool resetTmpOnly = false);
+TExprNode::TPtr ResetTablesMeta(const TExprNode::TPtr& input, TExprContext& ctx, bool resetTmpOnly, bool isEvaluationInProgress);
 NNodes::TExprBase GetOutTable(NNodes::TExprBase ytOutput);
 std::pair<NNodes::TExprBase, TString> GetOutTableWithCluster(NNodes::TExprBase ytOutput);
 NNodes::TMaybeNode<NNodes::TCoFlatMapBase> GetFlatMapOverInputStream(NNodes::TCoLambda opLambda, const TParentsMap& parentsMap);

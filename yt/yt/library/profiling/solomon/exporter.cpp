@@ -1,6 +1,7 @@
 #include "exporter.h"
 #include "private.h"
 #include "sensor_service.h"
+#include "helpers.h"
 
 #include <yt/yt/build/build.h>
 
@@ -38,7 +39,7 @@ using namespace NLogging;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const static auto& Logger = SolomonLogger;
+static constexpr auto& Logger = SolomonLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -68,6 +69,10 @@ void TSolomonExporterConfig::Register(TRegistrar registrar)
         .Default(1);
     registrar.Parameter("encoding_thread_pool_size", &TThis::EncodingThreadPoolSize)
         .Default(1);
+    registrar.Parameter("thread_pool_polling_period", &TThis::ThreadPoolPollingPeriod)
+        .Default(TDuration::MilliSeconds(10));
+    registrar.Parameter("encoding_thread_pool_polling_period", &TThis::EncodingThreadPoolPollingPeriod)
+        .Default(TDuration::MilliSeconds(10));
 
     registrar.Parameter("convert_counters_to_rate_for_solomon", &TThis::ConvertCountersToRateForSolomon)
         .Alias("convert_counters_to_rate")
@@ -117,6 +122,10 @@ void TSolomonExporterConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("update_sensor_service_tree_period", &TThis::UpdateSensorServiceTreePeriod)
         .Default(TDuration::Seconds(30));
+
+    registrar.Parameter("producer_collection_batch_size", &TThis::ProducerCollectionBatchSize)
+        .Default(DefaultProducerCollectionBatchSize)
+        .GreaterThan(0);
 
     registrar.Postprocessor([] (TThis* config) {
         if (config->LingerTimeout.GetValue() % config->GridStep.GetValue() != 0) {
@@ -190,8 +199,14 @@ TSolomonExporter::TSolomonExporter(
     : Config_(std::move(config))
     , Registry_(registry ? registry : TSolomonRegistry::Get())
     , ControlQueue_(New<TActionQueue>("ProfControl"))
-    , OffloadThreadPool_(CreateThreadPool(Config_->ThreadPoolSize, "ProfOffload"))
-    , EncodingOffloadThreadPool_(CreateThreadPool(Config_->EncodingThreadPoolSize, "ProfEncode"))
+    , OffloadThreadPool_(CreateThreadPool(
+        Config_->ThreadPoolSize,
+        "ProfOffload",
+        {.PollingPeriod = Config_->ThreadPoolPollingPeriod}))
+    , EncodingOffloadThreadPool_(CreateThreadPool(
+        Config_->EncodingThreadPoolSize,
+        "ProfEncode",
+        {.PollingPeriod = Config_->EncodingThreadPoolPollingPeriod}))
 {
     if (Config_->EnableSelfProfiling) {
         Registry_->Profile(TProfiler{Registry_, ""});
@@ -208,6 +223,7 @@ TSolomonExporter::TSolomonExporter(
     }
 
     Registry_->SetWindowSize(Config_->WindowSize);
+    Registry_->SetProducerCollectionBatchSize(Config_->ProducerCollectionBatchSize);
     Registry_->SetGridFactor([config = Config_] (const TString& name) -> int {
         auto shard = config->MatchShard(name);
         if (!shard) {
@@ -612,48 +628,11 @@ void TSolomonExporter::DoHandleShard(
 {
     TPromise<TSharedRef> responsePromise = NewPromise<TSharedRef>();
 
+    auto Logger = NProfiling::Logger().WithTag("Shard: %v", name);
+
     try {
-        auto format = NMonitoring::EFormat::JSON;
-        if (auto accept = req->GetHeaders()->Find("Accept")) {
-            format = NMonitoring::FormatFromAcceptHeader(*accept);
-        }
-
-        NMonitoring::ECompression compression = NMonitoring::ECompression::IDENTITY;
-        if (auto acceptEncoding = req->GetHeaders()->Find("Accept-Encoding")) {
-            compression = NMonitoring::CompressionFromAcceptEncodingHeader(*acceptEncoding);
-            if (compression == NMonitoring::ECompression::UNKNOWN) {
-                // Fallback to identity if we cannot recognize the requested encoding.
-                compression = NMonitoring::ECompression::IDENTITY;
-            }
-        }
-
-        auto buffer = std::make_shared<TStringStream>();
-        NMonitoring::IMetricEncoderPtr encoder;
-        switch (format) {
-            case NMonitoring::EFormat::UNKNOWN:
-            case NMonitoring::EFormat::JSON:
-                encoder = NMonitoring::BufferedEncoderJson(buffer.get());
-                format = NMonitoring::EFormat::JSON;
-                compression = NMonitoring::ECompression::IDENTITY;
-                break;
-
-            case NMonitoring::EFormat::SPACK:
-                encoder = NMonitoring::EncoderSpackV1(
-                    buffer.get(),
-                    NMonitoring::ETimePrecision::SECONDS,
-                    compression);
-                break;
-
-            case NMonitoring::EFormat::PROMETHEUS:
-                encoder = NMonitoring::EncoderPrometheus(buffer.get());
-                break;
-
-            default:
-                THROW_ERROR_EXCEPTION("Unsupported format %Qv", NMonitoring::ContentTypeByFormat(format));
-        }
-
-        rsp->GetHeaders()->Set("Content-Type", TString{NMonitoring::ContentTypeByFormat(format)});
-        rsp->GetHeaders()->Set("Content-Encoding", TString{NMonitoring::ContentEncodingByCompression(compression)});
+        auto outputEncodingContext = CreateOutputEncodingContextFromHeaders(req->GetHeaders());
+        FillResponseHeaders(outputEncodingContext, rsp->GetHeaders());
 
         TCgiParameters params(req->GetUrl().RawQuery);
 
@@ -705,8 +684,8 @@ void TSolomonExporter::DoHandleShard(
         if (now && period) {
             cacheKey = TCacheKey{
                 .Shard = name,
-                .Format = format,
-                .Compression = compression,
+                .Format = outputEncodingContext.Format,
+                .Compression = outputEncodingContext.Compression,
                 .Now = *now,
                 .Period = *period,
                 .Grid = readGridStep,
@@ -715,8 +694,8 @@ void TSolomonExporter::DoHandleShard(
 
         auto solomonCluster = req->GetHeaders()->Find("X-Solomon-ClusterId");
         YT_LOG_DEBUG("Processing sensor pull (Format: %v, Compression: %v, SolomonCluster: %v, Now: %v, Period: %v, Grid: %v)",
-            format,
-            compression,
+            outputEncodingContext.Format,
+            outputEncodingContext.Compression,
             solomonCluster ? *solomonCluster : "",
             now,
             period,
@@ -793,8 +772,7 @@ void TSolomonExporter::DoHandleShard(
         options.Host = Config_->Host;
         options.InstanceTags = std::vector<TTag>{Config_->InstanceTags.begin(), Config_->InstanceTags.end()};
 
-        auto isSolomon = format == NMonitoring::EFormat::JSON || format == NMonitoring::EFormat::SPACK;
-        if (Config_->ConvertCountersToRateForSolomon && isSolomon) {
+        if (Config_->ConvertCountersToRateForSolomon && outputEncodingContext.IsSolomonPull) {
             options.ConvertCountersToRateGauge = true;
             options.RenameConvertedCounters = Config_->RenameConvertedCounters;
 
@@ -804,7 +782,7 @@ void TSolomonExporter::DoHandleShard(
             }
         }
 
-        options.EnableSolomonAggregationWorkaround = isSolomon;
+        options.EnableSolomonAggregationWorkaround = outputEncodingContext.IsSolomonPull;
         options.Times = readWindow;
         options.SummaryPolicy = Config_->GetSummaryPolicy();
         options.MarkAggregates = Config_->MarkAggregates;
@@ -830,14 +808,14 @@ void TSolomonExporter::DoHandleShard(
             }
         }
 
-        encoder->OnStreamBegin();
-        Registry_->ReadSensors(options, encoder.Get());
-        encoder->OnStreamEnd();
+        outputEncodingContext.Encoder->OnStreamBegin();
+        Registry_->ReadSensors(options, outputEncodingContext.Encoder.Get());
+        outputEncodingContext.Encoder->OnStreamEnd();
 
         guard->Release();
 
         // NB(eshcherbin): Offload inner representation to binary/text format encoding (including compression).
-        auto encodeFuture = BIND([buffer, encoder = std::move(encoder)] {
+        auto encodeFuture = BIND([buffer = outputEncodingContext.EncoderBuffer, encoder = std::move(outputEncodingContext.Encoder)] {
             encoder->Close();
         })
             .AsyncVia(EncodingOffloadThreadPool_->GetInvoker())
@@ -847,7 +825,7 @@ void TSolomonExporter::DoHandleShard(
 
         rsp->SetStatus(EStatusCode::OK);
 
-        auto replyBlob = TSharedRef::FromString(buffer->Str());
+        auto replyBlob = TSharedRef::FromString(outputEncodingContext.EncoderBuffer->Str());
         responsePromise.Set(replyBlob);
 
         WaitFor(rsp->WriteBody(replyBlob))
@@ -945,8 +923,8 @@ TErrorOr<TReadWindow> TSolomonExporter::SelectReadWindow(
         int index = Registry_->IndexOf(iteration / gridFactor);
         if (time >= now - period && time < now) {
             if (readWindow.empty() ||
-                readWindow.back().first.size() >= static_cast<size_t>(gridSubsample)
-            ) {
+                readWindow.back().first.size() >= static_cast<size_t>(gridSubsample))
+            {
                 readWindow.emplace_back(std::vector<int>{index}, time);
             } else {
                 readWindow.back().first.push_back(index);
@@ -1026,7 +1004,7 @@ TSharedRef TSolomonExporter::DumpSensors()
     Registry_->ProcessRegistrations();
     Registry_->Collect(OffloadThreadPool_->GetInvoker());
 
-    return SerializeProtoToRef(Registry_->DumpSensors());
+    return SerializeProtoToRef(Registry_->DumpSensors(Config_->Host, Config_->InstanceTags));
 }
 
 void TSolomonExporter::AttachRemoteProcess(TCallback<TFuture<TSharedRef>()> dumpSensors)

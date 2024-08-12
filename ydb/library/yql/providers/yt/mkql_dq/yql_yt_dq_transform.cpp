@@ -59,7 +59,7 @@ public:
                             TString paramsKey = TStringBuilder() << grp << "/" << i;
 
                             TTupleLiteral* tableTuple = AS_VALUE(TTupleLiteral, tableList->GetItems()[i]);
-                            YQL_ENSURE(tableTuple->GetValuesCount() == 3);
+                            YQL_ENSURE(tableTuple->GetValuesCount() == 4);
 
                             NYT::TRichYPath richYPath;
                             NYT::Deserialize(richYPath, NYT::NodeFromYsonString(TString(AS_VALUE(TDataLiteral, tableTuple->GetValue(1))->AsValue().AsStringRef())));
@@ -76,6 +76,7 @@ public:
                                 tableTuple->GetValue(0),
                                 pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(NYT::NodeToYsonString(NYT::PathToNode(richYPath))),
                                 tableTuple->GetValue(2),
+                                tableTuple->GetValue(3)
                             }));
                         }
                         newGrpList.push_back(pgmBuilder.NewList(newTableList.front().GetStaticType(), newTableList));

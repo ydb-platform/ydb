@@ -2,11 +2,15 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/test_utils.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/sdk_test_setup.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/impl/executor.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/include/aliases.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/impl/write_session.h>
+
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/executor_impl.h>
 
 using namespace NKikimr;
 using namespace NKikimr::NPersQueueTests;
+
+using NYdb::NTopic::IAsyncExecutor;
 
 namespace NYdb::NPersQueue::NTests {
 

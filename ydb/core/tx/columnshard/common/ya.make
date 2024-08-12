@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    limits.h
+    limits.cpp
     reverse_accessor.cpp
     scalars.cpp
     snapshot.cpp
@@ -11,7 +11,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/protos
+    ydb/core/formats/arrow/protos
     contrib/libs/apache/arrow
     ydb/core/formats/arrow
     ydb/core/tx/columnshard/common/protos

@@ -30,7 +30,6 @@ class DynamicConfigGenerator(object):
         self._walle_provider = walle_provider
         self._cluster_details = base.ClusterDetailsProvider(template, walle_provider=self._walle_provider)
         self._grpc_endpoint = grpc_endpoint
-        self.__define_storage_pools_request = None
         self.__configure_request = None
         self.__static_config = static.StaticConfigGenerator(
             template, binary_path, output_dir, walle_provider=walle_provider, local_binary_path=local_binary_path
@@ -60,6 +59,7 @@ class DynamicConfigGenerator(object):
 
     def __add_storage_pool(
         self,
+        request,
         box_id,
         storage_pool_id,
         erasure,
@@ -72,7 +72,7 @@ class DynamicConfigGenerator(object):
         encryption_mode=0,
         generation=0,
     ):
-        cmd = self.__define_storage_pools_request.Command.add()
+        cmd = request.Command.add()
         cmd.DefineStoragePool.BoxId = box_id
         name = "Storage Pool with id: %d" % storage_pool_id if name is None else name
         cmd.DefineStoragePool.ItemConfigGeneration = generation
@@ -152,8 +152,7 @@ class DynamicConfigGenerator(object):
         return '\n'.join(
             [
                 "set -eu",
-                self.__init_storage_command("DefineBox.txt"),
-                self.__init_storage_command("DefineStoragePools.txt"),
+                self.__init_storage_command("DefineBoxAndStoragePools.txt"),
             ]
         )
 
@@ -174,8 +173,8 @@ class DynamicConfigGenerator(object):
     def cms_init_cmd(self):
         return self.__cms_init_cmds()
 
-    def define_box_request(self):
-        define_box_request = bs_config.TConfigRequest()
+    def define_box_and_storage_pools_request(self):
+        request = bs_config.TConfigRequest()
         box_id = 1
         drives_to_config_id = {}
         host_config_id_iter = itertools.count(start=1)
@@ -195,7 +194,7 @@ class DynamicConfigGenerator(object):
 
         for host_config in self._cluster_details.host_configs:
             at_least_one_host_config_defined = True
-            cmd = define_box_request.Command.add()
+            cmd = request.Command.add()
             cmd.DefineHostConfig.HostConfigId = host_config.host_config_id
             cmd.DefineHostConfig.ItemConfigGeneration = host_config.generation
             drives_to_config_id[host_config.drives] = host_config.host_config_id
@@ -212,14 +211,14 @@ class DynamicConfigGenerator(object):
                 )
 
             host_config_id = next(host_config_id_iter)
-            cmd = define_box_request.Command.add()
+            cmd = request.Command.add()
             cmd.DefineHostConfig.HostConfigId = host_config_id
             for drive in host.drives:
                 add_drive(cmd.DefineHostConfig.Drive, drive)
 
             drives_to_config_id[host.drives] = host_config_id
 
-        box_cmd = define_box_request.Command.add()
+        box_cmd = request.Command.add()
         box_cmd.DefineBox.BoxId = box_id
         box_cmd.DefineBox.ItemConfigGeneration = self._cluster_details.storage_config_generation
         for host in self._cluster_details.hosts:
@@ -230,23 +229,20 @@ class DynamicConfigGenerator(object):
                 box_host.HostConfigId = host.host_config_id
             else:
                 box_host.HostConfigId = drives_to_config_id[host.drives]
-        return define_box_request
 
-    def define_storage_pools_request(self):
-        self.__define_storage_pools_request = bs_config.TConfigRequest()
         storage_pool_id = itertools.count(start=1)
 
         if self._cluster_details.storage_pools_deprecated:
             for storage_pool in self._cluster_details.storage_pools_deprecated:
-                self.__add_storage_pool(storage_pool_id=next(storage_pool_id), **storage_pool.to_dict())
+                self.__add_storage_pool(request, storage_pool_id=next(storage_pool_id), **storage_pool.to_dict())
 
         # for tablets in domain lets make pools
         # but it is not supposed to make tablets in domain directly
         for domain in self._cluster_details.domains:
             for storage_pool in domain.storage_pools:
-                self.__add_storage_pool(storage_pool_id=next(storage_pool_id), **storage_pool.to_dict())
+                self.__add_storage_pool(request, storage_pool_id=next(storage_pool_id), **storage_pool.to_dict())
 
-        return self.__define_storage_pools_request
+        return request
 
     @staticmethod
     def make_bind_root_storage_request(domain):
@@ -274,7 +270,8 @@ class DynamicConfigGenerator(object):
         if self._cluster_details.use_auto_config:
             app_config.ActorSystemConfig.CpuCount = self._cluster_details.dynamic_cpu_count
             app_config.ActorSystemConfig.NodeType = app_config.ActorSystemConfig.ENodeType.Value('COMPUTE')
-            app_config.ActorSystemConfig.ForceIOPoolThreads = self._cluster_details.force_io_pool_threads
+            if self._cluster_details.force_io_pool_threads is not None:
+                app_config.ActorSystemConfig.ForceIOPoolThreads = self._cluster_details.force_io_pool_threads
         action.AddConfigItem.ConfigItem.Config.CopyFrom(app_config)
         action.AddConfigItem.EnableAutoSplit = True
 
@@ -298,8 +295,7 @@ class DynamicConfigGenerator(object):
 
     def get_storage_requests(self):
         return {
-            'DefineBox.txt': utils.message_to_string(self.define_box_request()),
-            'DefineStoragePools.txt': utils.message_to_string(self.define_storage_pools_request()),
+            'DefineBoxAndStoragePools.txt': utils.message_to_string(self.define_box_and_storage_pools_request()),
         }
 
     @staticmethod

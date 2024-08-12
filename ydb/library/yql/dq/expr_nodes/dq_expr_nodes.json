@@ -48,6 +48,11 @@
         ]
     },
     {
+        "Name": "TDqPhyGraceJoin",
+        "Base": "TDqJoinBase",
+        "Match": {"Type": "Callable", "Name": "DqPhyGraceJoin"}
+    },
+    {
         "Name": "TDqPhyMapJoin",
         "Base": "TDqJoinBase",
         "Match": {"Type": "Callable", "Name": "DqPhyMapJoin"}
@@ -174,6 +179,23 @@
         "Name": "TDqCnMap",
         "Base": "TDqConnection",
         "Match": {"Type": "Callable", "Name": "DqCnMap"}
+    },
+    {
+        "Name": "TDqCnStreamLookup",
+        "Base": "TDqConnection",
+        "Match": {"Type": "Callable", "Name": "DqCnStreamLookup"},
+        "Children": [
+            {"Index": 1, "Name": "LeftLabel", "Type": "TCoAtom"},
+            {"Index": 2, "Name": "RightInput", "Type": "TExprBase"},
+            {"Index": 3, "Name": "RightLabel", "Type": "TCoAtom"},
+            {"Index": 4, "Name": "JoinType", "Type": "TCoAtom"},
+            {"Index": 5, "Name": "JoinKeys", "Type": "TDqJoinKeyTupleList"},
+            {"Index": 6, "Name": "LeftJoinKeyNames", "Type": "TCoAtomList"},
+            {"Index": 7, "Name": "RightJoinKeyNames", "Type": "TCoAtomList"},
+            {"Index": 8, "Name": "TTL", "Type": "TCoAtom"},
+            {"Index": 9, "Name": "MaxDelay", "Type": "TCoAtom"},
+            {"Index": 10, "Name": "MaxCachedRows", "Type": "TCoAtom"}
+        ]
     },
     {
         "Name": "TDqCnResult",

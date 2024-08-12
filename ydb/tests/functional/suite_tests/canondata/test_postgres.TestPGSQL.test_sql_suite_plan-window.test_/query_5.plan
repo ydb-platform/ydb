@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet",
-                "PlanNodeId": 10,
+                "PlanNodeId": 11,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,18 +14,18 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 8
+                                        "ExternalPlanNodeId": 9
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 9,
+                        "PlanNodeId": 10,
                         "Plans": [
                             {
                                 "Node Type": "Merge",
-                                "PlanNodeId": 8,
+                                "PlanNodeId": 9,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
@@ -44,18 +44,18 @@
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 6
+                                                        "ExternalPlanNodeId": 7
                                                     }
                                                 ],
                                                 "Name": "Sort",
                                                 "SortBy": "row.depname"
                                             }
                                         ],
-                                        "PlanNodeId": 7,
+                                        "PlanNodeId": 8,
                                         "Plans": [
                                             {
                                                 "Node Type": "UnionAll",
-                                                "PlanNodeId": 6,
+                                                "PlanNodeId": 7,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
@@ -64,61 +64,71 @@
                                                             {
                                                                 "Inputs": [
                                                                     {
-                                                                        "ExternalPlanNodeId": 4
+                                                                        "ExternalPlanNodeId": 5
                                                                     }
                                                                 ],
                                                                 "Name": "Sort",
                                                                 "SortBy": "row.depname"
                                                             }
                                                         ],
-                                                        "PlanNodeId": 5,
+                                                        "PlanNodeId": 6,
                                                         "Plans": [
                                                             {
                                                                 "Node Type": "UnionAll",
-                                                                "PlanNodeId": 4,
+                                                                "PlanNodeId": 5,
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
                                                                         "Node Type": "Stage",
-                                                                        "PlanNodeId": 3,
+                                                                        "PlanNodeId": 4,
                                                                         "Plans": [
                                                                             {
                                                                                 "KeyColumns": [
                                                                                     "depname"
                                                                                 ],
                                                                                 "Node Type": "HashShuffle",
-                                                                                "PlanNodeId": 2,
+                                                                                "PlanNodeId": 3,
                                                                                 "PlanNodeType": "Connection",
                                                                                 "Plans": [
                                                                                     {
-                                                                                        "Node Type": "Aggregate-TableFullScan",
+                                                                                        "Node Type": "Aggregate",
                                                                                         "Operators": [
                                                                                             {
                                                                                                 "Aggregation": "{_yql_agg_0: SUM(item.salary,state._yql_agg_0)}",
                                                                                                 "GroupBy": "item.depname",
                                                                                                 "Inputs": [
                                                                                                     {
-                                                                                                        "InternalOperatorId": 1
+                                                                                                        "ExternalPlanNodeId": 1
                                                                                                     }
                                                                                                 ],
                                                                                                 "Name": "Aggregate"
-                                                                                            },
-                                                                                            {
-                                                                                                "Inputs": [],
-                                                                                                "Name": "TableFullScan",
-                                                                                                "ReadColumns": [
-                                                                                                    "depname",
-                                                                                                    "salary"
-                                                                                                ],
-                                                                                                "ReadRanges": [
-                                                                                                    "empno (-\u221e, +\u221e)"
-                                                                                                ],
-                                                                                                "Table": "postgres_window.test_plan/empsalary"
                                                                                             }
                                                                                         ],
-                                                                                        "PlanNodeId": 1,
-                                                                                        "Tables": [
-                                                                                            "postgres_window.test_plan/empsalary"
+                                                                                        "PlanNodeId": 2,
+                                                                                        "Plans": [
+                                                                                            {
+                                                                                                "Node Type": "TableFullScan",
+                                                                                                "Operators": [
+                                                                                                    {
+                                                                                                        "Inputs": [],
+                                                                                                        "Name": "TableFullScan",
+                                                                                                        "ReadColumns": [
+                                                                                                            "depname",
+                                                                                                            "salary"
+                                                                                                        ],
+                                                                                                        "ReadRanges": [
+                                                                                                            "empno (-\u221e, +\u221e)"
+                                                                                                        ],
+                                                                                                        "ReadRangesPointPrefixLen": "0",
+                                                                                                        "Scan": "Parallel",
+                                                                                                        "Table": "postgres_window.test_plan/empsalary"
+                                                                                                    }
+                                                                                                ],
+                                                                                                "PlanNodeId": 1,
+                                                                                                "Tables": [
+                                                                                                    "postgres_window.test_plan/empsalary"
+                                                                                                ]
+                                                                                            }
                                                                                         ]
                                                                                     }
                                                                                 ]

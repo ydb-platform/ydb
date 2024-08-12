@@ -24,7 +24,7 @@ DEFAULT_CLUSTER_CONFIG = dict(
         'SCHEME_BOARD_SUBSCRIBER': LogLevels.WARN,
         'TX_DATASHARD': LogLevels.DEBUG,
         'CHANGE_EXCHANGE': LogLevels.DEBUG,
-    }
+    },
 )
 
 
@@ -75,24 +75,15 @@ def ydb_safe_test_name(request):
 
 
 @contextlib.contextmanager
-def ydb_database_ctx(ydb_cluster, database_path, node_count=1, timeout_seconds=20):
-    ''' ??? '''
+def ydb_database_ctx(ydb_cluster, database_path, node_count=1, timeout_seconds=20, storage_pools={'hdd': 1}):
+    '''???'''
     assert os.path.abspath(database_path), 'database_path should be an (absolute) path, not a database name'
 
-    ydb_cluster.remove_database(
-        database_path,
-        timeout_seconds=timeout_seconds
-    )
+    ydb_cluster.remove_database(database_path, timeout_seconds=timeout_seconds)
 
     logger.debug("create database %s: create path and declare internals", database_path)
 
-    ydb_cluster.create_database(
-        database_path,
-        storage_pool_units_count={
-            'hdd': 1
-        },
-        timeout_seconds=timeout_seconds
-    )
+    ydb_cluster.create_database(database_path, storage_pool_units_count=storage_pools, timeout_seconds=timeout_seconds)
 
     logger.debug("create database %s: start nodes and construct internals", database_path)
     database_nodes = ydb_cluster.register_and_start_slots(database_path, node_count)
@@ -104,10 +95,7 @@ def ydb_database_ctx(ydb_cluster, database_path, node_count=1, timeout_seconds=2
     yield database_path
 
     logger.debug("destroy database %s: remove path and dismantle internals", database_path)
-    ydb_cluster.remove_database(
-        database_path,
-        timeout_seconds=timeout_seconds
-    )
+    ydb_cluster.remove_database(database_path, timeout_seconds=timeout_seconds)
 
     logger.debug("destroy database %s: stop nodes", database_path)
     ydb_cluster.unregister_and_stop_slots(database_nodes)
@@ -139,6 +127,7 @@ def ydb_client(ydb_endpoint, request):
 
         request.addfinalizer(stop_driver)
         return driver
+
     return _make_driver
 
 
@@ -153,6 +142,7 @@ def ydb_client_session(ydb_client, request):
 
         request.addfinalizer(stop_pool)
         return pool
+
     return _make_pool
 
 

@@ -30,7 +30,7 @@ namespace NYT::NConcurrency {
 
 using namespace NProfiling;
 
-inline const NLogging::TLogger Logger("FairShareThreadPool");
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "FairShareThreadPool");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -43,7 +43,7 @@ DECLARE_REFCOUNTED_CLASS(TBucket)
 struct TExecutionPool;
 
 // High 16 bits is thread index and 48 bits for thread pool ptr.
-YT_THREAD_LOCAL(TPackedPtr) ThreadCookie = 0;
+YT_DEFINE_THREAD_LOCAL(TPackedPtr, ThreadCookie, 0);
 
 static constexpr auto LogDurationThreshold = TDuration::Seconds(1);
 
@@ -618,10 +618,61 @@ public:
         ThreadCount_.store(threadCount);
     }
 
-    // Invoke is lock free.
+    void Configure(TDuration pollingPeriod)
+    {
+        TNotifyManager::Reconfigure(pollingPeriod);
+    }
+
+    // (arkady-e1ppa): Explanation of memory orders and fences around Stopped_:
+    /*
+        We have two concurrent actions: Invoke and Shutdown.
+        For our logic Invoke method does 2 things:
+        1) It pushes callback to the queue (we assume it be release RMW operation)
+        In reality right now it is seq_cst, but it this can and should be changed in the future.
+        2) Now, the second (and third) action is seq_cst fence and then seq_cst read of Stopped_.
+        Shutdown also does two thigns:
+        1) It does a seq_cst rmw in Stopped_ (effectively, just write)
+        2) It drains the queue.
+        In order to prevent losing callbacks in queue
+        We need to make sure that either Invoke observes |true| in the read
+        or Shutdown observes placed callback from said Invoke.
+        We care about this, because if callback is stuck in queue it will
+        remain there until process is killed. If said callback MUST be
+        either executed or discarded (e.g. IPollable or Fiber) in order
+        for program to finish correctly (an not get stuck), then such a leak
+        can cause hung shutdown (and it used to do exactly that).
+
+        Relevant parts of execution are written below
+        (letter is the same in the code).
+            T1(Invoke)                  T2(Shutdown)
+        RMW^rel(Queue, 0, 1)   (a)   RMW^rlx(Stopping, false, true) (d)
+        Fence^sc               (b)   Fence^sc                       (e)
+        R^rlx(Stopping, false) (c)   RMW^acq(Queue, 0, 0)           (f)
+
+        We suppose that callback is lost so we haven't
+        seen 1 in (f) nor true in (c).
+        Since (c) reads false it reads from ctor which precedes
+        (d) in modification order. Thus we have (c) -cob-> (d)
+        (coherence-ordered before, https://eel.is/c++draft/atomics.order#3.3).
+        Likewise (f) must have read from some previous
+        dequeue attempt (or ctor) which precedes (a) in modification order.
+        Again, (f) -cob-> (a).
+        Now, for fences we have (sb means sequenced-before):
+        (b) -sb-> (c) -cob-> (d) -sb-> (e) => (b) -S-> (e)
+        (see https://eel.is/c++draft/atomics.order#4.4).
+        We also have
+        (e) -sb-> (f) -cob-> (a) -sb-> (b) => (b) -S-> (e).
+        Thus loop in S found contradicting the assumption
+        that (f) doesn't read 1 and (c) doesn't read true.
+    */
+
+    // Invoke is lock free on a fast path (a.k.a. no shutdown).
     void Invoke(TClosure callback, TBucket* bucket) override
     {
-        if (Stopped_.load()) {
+        // We can't guarantee read of |true| in time anyway
+        // So relaxed order is enough.
+        if (Stopped_.load(std::memory_order::relaxed)) {
+            Drain();
             return;
         }
 
@@ -636,9 +687,17 @@ public:
         // Callback keeps raw ptr to bucket to minimize bucket ref count.
         action.Callback = BIND(&TBucket::RunCallback, Unretained(bucket), std::move(callback), cpuInstant);
         action.BucketHolder = MakeStrong(bucket);
-        action.EnqueuedThreadCookie = ThreadCookie;
+        action.EnqueuedThreadCookie = ThreadCookie();
 
-        InvokeQueue_.Enqueue(std::move(action));
+        InvokeQueue_.Enqueue(std::move(action)); // <- (a)
+
+        std::atomic_thread_fence(std::memory_order::seq_cst); // <- (b)
+        if (Stopped_.load(std::memory_order::relaxed)) { // <- (c)
+            // We have encountered stop right after we have enqueued
+            // callback. There is a possibility that it is now stuck
+            // in queue forever. We dequeue it ourselves.
+            Drain();
+        }
 
         NotifyFromInvoke(cpuInstant, ActiveThreads_.load() == 0);
     }
@@ -683,12 +742,16 @@ public:
 
     void Shutdown()
     {
-        Drain();
+        if (Stopped_.exchange(true, std::memory_order::relaxed)) { // <- (d)
+            return;
+        }
+        std::atomic_thread_fence(std::memory_order::seq_cst); // <- (e)
+
+        Drain(); // <- (f)
     }
 
     void Drain()
     {
-        Stopped_.store(true);
         auto guard = Guard(MainLock_);
 
         WaitHeap_.Clear();
@@ -712,9 +775,11 @@ public:
             }
         }
 
+        InvokeQueue_.DequeueAll();
+
+        guard.Release();
         actions.clear();
 
-        InvokeQueue_.DequeueAll();
     }
 
     void RegisterWaitTimeObserver(TWaitTimeObserver waitTimeObserver)
@@ -919,7 +984,9 @@ private:
     {
         VERIFY_SPINLOCK_AFFINITY(MainLock_);
 
-        YT_LOG_DEBUG_IF(VerboseLogging_, "Buckets: %v",
+        YT_LOG_DEBUG_IF(
+            VerboseLogging_,
+            "Buckets: %v",
             MakeFormattableView(
                 xrange(size_t(0), ActivePoolsHeap_.GetSize()),
                 [&] (auto* builder, auto index) {
@@ -1201,7 +1268,7 @@ protected:
 
     void OnStart() override
     {
-        ThreadCookie = TTaggedPtr(Queue_.Get(), static_cast<ui16>(Index_)).Pack();
+        ThreadCookie() = TTaggedPtr(Queue_.Get(), static_cast<ui16>(Index_)).Pack();
     }
 
     void StopPrologue() override
@@ -1261,6 +1328,11 @@ public:
         TThreadPoolBase::Configure(threadCount);
     }
 
+    void Configure(TDuration pollingPeriod) override
+    {
+        Queue_->Configure(pollingPeriod);
+    }
+
     IInvokerPtr GetInvoker(
         const TString& poolName,
         const TFairShareThreadPoolTag& bucketName) override
@@ -1290,15 +1362,9 @@ private:
 
     void DoShutdown() override
     {
+        Queue_->Shutdown();
         TThreadPoolBase::DoShutdown();
-    }
-
-    TClosure MakeFinalizerCallback() override
-    {
-        return BIND([queue = Queue_, callback = TThreadPoolBase::MakeFinalizerCallback()] {
-            callback();
-            queue->Drain();
-        });
+        Queue_->Drain();
     }
 
     void DoConfigure(int threadCount) override

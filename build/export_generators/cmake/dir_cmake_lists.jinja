@@ -1,0 +1,11 @@
+{%- include '[generator]/disclaimer.jinja' %}
+{% include 'prologue.cmake' ignore missing -%}
+
+{%- include "[generator]/dir_packages.jinja" -%}
+{%- include "[generator]/dir_tools.jinja" -%}
+{%- include "[generator]/dir_includes.jinja" -%}
+{%- include "[generator]/dir_macroses.jinja" -%}
+{%- include "[generator]/dir_targets.jinja" -%}
+
+{%- include 'epilogue.cmake' ignore missing -%}
+{%- include "[generator]/debug.jinja" ignore missing -%}

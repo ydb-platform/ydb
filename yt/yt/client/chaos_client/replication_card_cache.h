@@ -14,11 +14,10 @@ struct TReplicationCardCacheKey
     TReplicationEra RefreshEra = InvalidReplicationEra;
 
     operator size_t() const;
-    bool operator == (const TReplicationCardCacheKey& other) const = default;
+    bool operator == (const TReplicationCardCacheKey& other) const;
 };
 
 void FormatValue(TStringBuilderBase* builder, const TReplicationCardCacheKey& key, TStringBuf /*spec*/);
-TString ToString(const TReplicationCardCacheKey& key);
 
 ////////////////////////////////////////////////////////////////////////////////
 

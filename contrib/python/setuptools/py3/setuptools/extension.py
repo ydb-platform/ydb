@@ -3,6 +3,7 @@ import functools
 import distutils.core
 import distutils.errors
 import distutils.extension
+from typing import TYPE_CHECKING
 
 from .monkey import get_unpatched
 
@@ -15,16 +16,18 @@ def _have_cython():
     try:
         # from (cython_impl) import build_ext
         __import__(cython_impl, fromlist=['build_ext']).build_ext
-        return True
     except Exception:
-        pass
-    return False
+        return False
+    return True
 
 
 # for compatibility
 have_pyrex = _have_cython
-
-_Extension = get_unpatched(distutils.core.Extension)
+if TYPE_CHECKING:
+    # Work around a mypy issue where type[T] can't be used as a base: https://github.com/python/mypy/issues/10962
+    _Extension = distutils.core.Extension
+else:
+    _Extension = get_unpatched(distutils.core.Extension)
 
 
 class Extension(_Extension):

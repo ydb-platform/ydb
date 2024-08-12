@@ -41,7 +41,14 @@ public:
             } else {
                 Sort(servicedDomains);
             }
-            db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Local, Schema::Node::ServicedDomains, Schema::Node::Statistics>(Local, servicedDomains, node.Statistics);
+            const TString& name = Record.GetName();
+            db.Table<Schema::Node>().Key(nodeId).Update(
+                NIceDb::TUpdate<Schema::Node::Local>(Local),
+                NIceDb::TUpdate<Schema::Node::ServicedDomains>(servicedDomains),
+                NIceDb::TUpdate<Schema::Node::Statistics>(node.Statistics),
+                NIceDb::TUpdate<Schema::Node::Name>(name)
+            );
+ 
             node.BecomeDisconnected();
             if (node.LastSeenServicedDomains != servicedDomains) {
                 // new tenant - new rules
@@ -49,9 +56,15 @@ public:
                 node.SetFreeze(false);
                 db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Down, Schema::Node::Freeze>(false, false);
             }
+            if (node.BecomeUpOnRestart) {
+                node.SetDown(false);
+                node.BecomeUpOnRestart = false;
+                db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Down, Schema::Node::BecomeUpOnRestart>(false, false);
+            }
             node.Local = Local;
             node.ServicedDomains.swap(servicedDomains);
             node.LastSeenServicedDomains = node.ServicedDomains;
+            node.Name = name;
         }
         if (Record.HasSystemLocation() && Record.GetSystemLocation().HasDataCenter()) {
             node.Location = TNodeLocation(Record.GetSystemLocation());
@@ -74,7 +87,9 @@ public:
         BLOG_D("THive::TTxRegisterNode(" << Local.NodeId() << ")::Complete");
         TNodeInfo* node = Self->FindNode(Local.NodeId());
         if (node != nullptr && node->Local) { // we send ping on every RegisterNode because we want to re-sync tablets upon every reconnection
+            Self->NodePingsInProgress.erase(node->Id);
             node->Ping();
+            Self->ProcessNodePingQueue();
         }
     }
 };

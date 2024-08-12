@@ -16,7 +16,7 @@ select
 from
     `{path}lineitem`
 where
-    CAST(l_shipdate AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D"))
+    l_shipdate <= Date('1998-12-01') - Interval("P100D")
 group by
     l_returnflag,
     l_linestatus

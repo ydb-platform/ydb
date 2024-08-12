@@ -29,11 +29,19 @@ const THashSet<TWorkerId>& TSessionInfo::GetWorkers() const {
     return Workers;
 }
 
+bool TSessionInfo::HasWorker(const TWorkerId& id) const {
+    return Workers.contains(id);
+}
+
 TWorkerInfo::TWorkerInfo(NKikimrReplication::TRunWorkerCommand* cmd) {
     SetCommand(cmd);
 }
 
 void TWorkerInfo::SetCommand(NKikimrReplication::TRunWorkerCommand* cmd) {
+    if (!cmd) {
+        return;
+    }
+
     if (!Command) {
         Command = MakeHolder<NKikimrReplication::TRunWorkerCommand>();
     }

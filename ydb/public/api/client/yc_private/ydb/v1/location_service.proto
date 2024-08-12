@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.ydb.v1;
+
+import "ydb/public/api/client/yc_private/ydb/v1/location.proto";
+
+service LocationService {
+  // Returns the specified location.
+  rpc Get (GetLocationRequest) returns (Location);
+
+  // Returns the list of available locations.
+  rpc List (ListLocationsRequest) returns (ListLocationsResponse);
+}
+
+message GetLocationRequest {
+  // Required. ID of the location to return.
+  string location_id = 1; // [(required) = true];
+}
+
+message ListLocationsRequest {
+  // The maximum number of results per page that should be returned. If the number of available
+  // results is larger than `page_size`, the service returns a `next_page_token` that can be used
+  // to get the next page of results in subsequent ListLocations requests.
+  // Acceptable values are 0 to 1000, inclusive. Default value: 100.
+  int64 page_size = 1; // [(value) = "0-1000"];
+
+  // Page token. Set `page_token` to the `next_page_token` returned by a previous ListLocations
+  // request to get the next page of results.
+  string page_token = 2; // [(length) = "<=100"];
+}
+
+message ListLocationsResponse {
+  // Requested list of locations.
+  repeated Location locations = 1;
+
+  // This token allows you to get the next page of results for ListLocations requests,
+  // if the number of results is larger than `page_size` specified in the request.
+  // To get the next page, specify the value of `next_page_token` as a value for
+  // the `page_token` parameter in the next ListLocations request. Subsequent ListLocations
+  // requests will have their own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}

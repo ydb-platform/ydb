@@ -4,6 +4,5 @@ RECURSE(
     fastcheck
     issue
     purecalc
-    types
     udf
 )

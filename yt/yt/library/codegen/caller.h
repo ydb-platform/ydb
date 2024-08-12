@@ -27,7 +27,7 @@ public:
 #ifdef YT_ENABLE_BIND_LOCATION_TRACKING
             location
 #endif
-        )
+    )
         , Module_(std::move(module))
         , FunctionPointer_(function)
     { }

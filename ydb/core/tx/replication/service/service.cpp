@@ -8,7 +8,6 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/statestorage.h>
-#include <ydb/core/tx/replication/common/worker_id.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -46,9 +45,31 @@ public:
         return Workers.contains(id);
     }
 
-    void RegisterWorker(IActorOps* ops, const TWorkerId& id, IActor* actor) {
+    bool HasWorker(const TActorId& id) const {
+        return ActorIdToWorkerId.contains(id);
+    }
+
+    TActorId GetWorkerActorId(const TWorkerId& id) const {
+        auto it = Workers.find(id);
+        Y_ABORT_UNLESS(it != Workers.end());
+        return it->second;
+    }
+
+    TWorkerId GetWorkerId(const TActorId& id) const {
+        auto it = ActorIdToWorkerId.find(id);
+        Y_ABORT_UNLESS(it != ActorIdToWorkerId.end());
+        return it->second;
+    }
+
+    TActorId RegisterWorker(IActorOps* ops, const TWorkerId& id, IActor* actor) {
         auto res = Workers.emplace(id, ops->Register(actor));
         Y_ABORT_UNLESS(res.second);
+
+        const auto actorId = res.first->second;
+        ActorIdToWorkerId.emplace(actorId, id);
+
+        SendWorkerStatus(ops, id, NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
+        return actorId;
     }
 
     void StopWorker(IActorOps* ops, const TWorkerId& id) {
@@ -56,7 +77,27 @@ public:
         Y_ABORT_UNLESS(it != Workers.end());
 
         ops->Send(it->second, new TEvents::TEvPoison());
+        SendWorkerStatus(ops, id, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED);
+
+        ActorIdToWorkerId.erase(it->second);
         Workers.erase(it);
+    }
+
+    template <typename... Args>
+    void StopWorker(IActorOps* ops, const TActorId& id, Args&&... args) {
+        auto it = ActorIdToWorkerId.find(id);
+        Y_ABORT_UNLESS(it != ActorIdToWorkerId.end());
+
+        // actor already stopped
+        SendWorkerStatus(ops, it->second, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED, std::forward<Args>(args)...);
+
+        Workers.erase(it->second);
+        ActorIdToWorkerId.erase(it);
+    }
+
+    template <typename... Args>
+    void SendWorkerStatus(IActorOps* ops, const TWorkerId& id, Args&&... args) {
+        ops->Send(ActorId, new TEvService::TEvWorkerStatus(id, std::forward<Args>(args)...));
     }
 
     void SendStatus(IActorOps* ops) const {
@@ -80,12 +121,13 @@ private:
     TActorId ActorId;
     ui64 Generation;
     THashMap<TWorkerId, TActorId> Workers;
+    THashMap<TActorId, TWorkerId> ActorIdToWorkerId;
 
 }; // TSessionInfo
 
-struct TCredentialsKey: std::tuple<TString, TString, TString> {
-    explicit TCredentialsKey(const TString& endpoint, const TString& database, const TString& user)
-        : std::tuple<TString, TString, TString>(endpoint, database, user)
+struct TConnectionParams: std::tuple<TString, TString, bool, TString> {
+    explicit TConnectionParams(const TString& endpoint, const TString& database, bool ssl, const TString& user)
+        : std::tuple<TString, TString, bool, TString>(endpoint, database, ssl, user)
     {
     }
 
@@ -97,23 +139,31 @@ struct TCredentialsKey: std::tuple<TString, TString, TString> {
         return std::get<1>(*this);
     }
 
-    static TCredentialsKey FromParams(const NKikimrReplication::TConnectionParams& params) {
+    bool EnableSsl() const {
+        return std::get<2>(*this);
+    }
+
+    static TConnectionParams FromProto(const NKikimrReplication::TConnectionParams& params) {
+        const auto& endpoint = params.GetEndpoint();
+        const auto& database = params.GetDatabase();
+        const bool ssl = params.GetEnableSsl();
+
         switch (params.GetCredentialsCase()) {
         case NKikimrReplication::TConnectionParams::kStaticCredentials:
-            return TCredentialsKey(params.GetEndpoint(), params.GetDatabase(), params.GetStaticCredentials().GetUser());
+            return TConnectionParams(endpoint, database, ssl, params.GetStaticCredentials().GetUser());
         case NKikimrReplication::TConnectionParams::kOAuthToken:
-            return TCredentialsKey(params.GetEndpoint(), params.GetDatabase(), params.GetOAuthToken() /* TODO */);
+            return TConnectionParams(endpoint, database, ssl, params.GetOAuthToken().GetToken());
         default:
             Y_ABORT("Unexpected credentials");
         }
     }
 
-}; // TCredentialsKey
+}; // TConnectionParams
 
 } // NKikimr::NReplication::NService
 
 template <>
-struct THash<NKikimr::NReplication::NService::TCredentialsKey> : THash<std::tuple<TString, TString, TString>> {};
+struct THash<NKikimr::NReplication::NService::TConnectionParams> : THash<std::tuple<TString, TString, bool, TString>> {};
 
 namespace NKikimr::NReplication {
 
@@ -167,11 +217,11 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     }
 
     template <typename... Args>
-    const TActorId& GetOrCreateYdbProxy(TCredentialsKey&& key, Args&&... args) {
-        auto it = YdbProxies.find(key);
+    const TActorId& GetOrCreateYdbProxy(TConnectionParams&& params, Args&&... args) {
+        auto it = YdbProxies.find(params);
         if (it == YdbProxies.end()) {
-            auto ydbProxy = Register(CreateYdbProxy(key.Endpoint(), key.Database(), std::forward<Args>(args)...));
-            auto res = YdbProxies.emplace(std::move(key), std::move(ydbProxy));
+            auto ydbProxy = Register(CreateYdbProxy(params.Endpoint(), params.Database(), params.EnableSsl(), std::forward<Args>(args)...));
+            auto res = YdbProxies.emplace(std::move(params), std::move(ydbProxy));
             Y_ABORT_UNLESS(res.second);
             it = res.first;
         }
@@ -184,10 +234,10 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         const auto& params = settings.GetConnectionParams();
         switch (params.GetCredentialsCase()) {
         case NKikimrReplication::TConnectionParams::kStaticCredentials:
-            ydbProxy = GetOrCreateYdbProxy(TCredentialsKey::FromParams(params), params.GetStaticCredentials());
+            ydbProxy = GetOrCreateYdbProxy(TConnectionParams::FromProto(params), params.GetStaticCredentials());
             break;
         case NKikimrReplication::TConnectionParams::kOAuthToken:
-            ydbProxy = GetOrCreateYdbProxy(TCredentialsKey::FromParams(params), params.GetOAuthToken());
+            ydbProxy = GetOrCreateYdbProxy(TConnectionParams::FromProto(params), params.GetOAuthToken().GetToken());
             break;
         default:
             Y_ABORT("Unexpected credentials");
@@ -239,7 +289,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         }
 
         if (session.HasWorker(id)) {
-            return;
+            return session.SendWorkerStatus(this, id, NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
         }
 
         LOG_I("Run worker"
@@ -249,7 +299,9 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         // TODO: validate settings
         const auto& readerSettings = cmd.GetRemoteTopicReader();
         const auto& writerSettings = cmd.GetLocalTableWriter();
-        session.RegisterWorker(this, id, CreateWorker(ReaderFn(readerSettings), WriterFn(writerSettings)));
+        const auto actorId = session.RegisterWorker(this, id,
+            CreateWorker(SelfId(), ReaderFn(readerSettings), WriterFn(writerSettings)));
+        WorkerActorIdToSession[actorId] = controller.GetTabletId();
     }
 
     void Handle(TEvService::TEvStopWorker::TPtr& ev) {
@@ -278,10 +330,70 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             return;
         }
 
-        if (session.HasWorker(id)) {
-            LOG_I("Stop worker"
+        if (!session.HasWorker(id)) {
+            return session.SendWorkerStatus(this, id, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED);
+        }
+
+        LOG_I("Stop worker"
+            << ": worker# " << id);
+        WorkerActorIdToSession.erase(session.GetWorkerActorId(id));
+        session.StopWorker(this, id);
+    }
+
+    void Handle(TEvWorker::TEvGone::TPtr& ev) {
+        LOG_T("Handle " << ev->Get()->ToString());
+
+        auto* session = SessionFromWorker(ev->Sender);
+        if (!session) {
+            return;
+        }
+
+        if (!session->HasWorker(ev->Sender)) {
+            LOG_E("Cannot find worker"
+                << ": worker# " << ev->Sender);
+            return;
+        }
+
+        LOG_I("Worker has gone"
+            << ": worker# " << ev->Sender);
+        WorkerActorIdToSession.erase(ev->Sender);
+        session->StopWorker(this, ev->Sender, ToReason(ev->Get()->Status), ev->Get()->ErrorDescription);
+    }
+
+    void Handle(TEvWorker::TEvStatus::TPtr& ev) {
+        LOG_T("Handle " << ev->Get()->ToString());
+
+        auto* session = SessionFromWorker(ev->Sender);
+        if (session && session->HasWorker(ev->Sender)) {
+            session->SendWorkerStatus(this, session->GetWorkerId(ev->Sender), ev->Get()->Lag);
+        }
+    }
+
+    TSessionInfo* SessionFromWorker(const TActorId& id) {
+        auto wit = WorkerActorIdToSession.find(id);
+        if (wit == WorkerActorIdToSession.end()) {
+            LOG_W("Unknown worker has gone"
                 << ": worker# " << id);
-            session.StopWorker(this, id);
+            return nullptr;
+        }
+
+        auto it = Sessions.find(wit->second);
+        if (it == Sessions.end()) {
+            LOG_E("Cannot find session"
+                << ": worker# " << id
+                << ", session# " << wit->second);
+            return nullptr;
+        }
+
+        return &it->second;
+    }
+
+    static NKikimrReplication::TEvWorkerStatus::EReason ToReason(TEvWorker::TEvGone::EStatus status) {
+        switch (status) {
+        case TEvWorker::TEvGone::SCHEME_ERROR:
+            return NKikimrReplication::TEvWorkerStatus::REASON_ERROR;
+        default:
+            return NKikimrReplication::TEvWorkerStatus::REASON_UNSPECIFIED;
         }
     }
 
@@ -316,6 +428,8 @@ public:
             hFunc(TEvService::TEvHandshake, Handle);
             hFunc(TEvService::TEvRunWorker, Handle);
             hFunc(TEvService::TEvStopWorker, Handle);
+            hFunc(TEvWorker::TEvGone, Handle);
+            hFunc(TEvWorker::TEvStatus, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -324,7 +438,8 @@ private:
     mutable TMaybe<TString> LogPrefix;
     TActorId BoardPublisher;
     THashMap<ui64, TSessionInfo> Sessions;
-    THashMap<TCredentialsKey, TActorId> YdbProxies;
+    THashMap<TConnectionParams, TActorId> YdbProxies;
+    THashMap<TActorId, ui64> WorkerActorIdToSession;
 
 }; // TReplicationService
 

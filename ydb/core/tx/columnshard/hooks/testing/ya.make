@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     controller.cpp
+    ro_controller.cpp
 )
 
 PEERDIR(

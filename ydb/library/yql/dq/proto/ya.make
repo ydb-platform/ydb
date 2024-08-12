@@ -5,7 +5,6 @@ PEERDIR(
 )
 
 SRCS(
-    dq_checkpoint.proto
     dq_state_load_plan.proto
     dq_tasks.proto
     dq_transport.proto

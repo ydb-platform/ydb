@@ -1,35 +1,40 @@
-{% include prologue ignore missing %}
-{% include '[generator]/disclaimer.jinja' -%}
+{%- include '[generator]/disclaimer.jinja' %}
+{% include 'prologue.cmake' ignore missing -%}
 
-{% for package in packages -%}
+{%-  for package in packages -%}
 find_package({{ package[0] }} REQUIRED
-    {%- if package[1]|length > 0 %} COMPONENTS
-        {%- for component in package[1] %} {{ component }}
-        {%- endfor %}
-    {%- endif %})
-{% endfor -%}
-{% for incl in includes -%}
-include({{ incl }})
-{% endfor -%}
-{% for subdir in subdirs -%}
-add_subdirectory({{ subdir }})
-{% endfor -%}
-{% for dir_macro in dir_macros %}
-    {{- dir_macro[0] }}({{"\n"}}
-    {%- for value in dir_macro[1] %}  {{ value }}{{"\n"}}
-    {%- endfor %})
+{%-      if package[1]|length > 0 %} COMPONENTS
+{%-          for component in package[1] %}
+  {{ component }}
+{%           endfor -%}
+{%-      endif -%}
+)
+{%  endfor -%}
 
-{% endfor -%}
-{% for target in targets %}
-{%- set macro = target.macro -%}
-    {%- set name = target.name -%}
-    {%- set is_interface = target.is_interface -%}
-    {%- set macro_args = target.macro_args -%}
-    {%- set properties = target.properties -%}
-    {%- set attributes = target.attributes -%}
-    {%- set target_dir_macros = target.target_dir_macros -%}
-    {%- set target_macros = target.target_macros -%}
-    {%- set dependencies = target.dependencies -%}
-    {%- include '[generator]/target_cmake_lists.jinja' %}{{"\n"}}
-{%- endfor %}
-{% include epilogue ignore missing %}
+{%- if includes is defined -%}
+{%-     for incl in includes -%}
+include({{ incl }})
+{%      endfor -%}
+{%- endif -%}
+
+{%- for subdir in subdirs -%}
+add_subdirectory({{ subdir }})
+{%  endfor -%}
+
+{%- for dir_macro in dir_macros %}
+{{ dir_macro[0] }}(
+{%-     for value in dir_macro[1] %}
+  {{ value }}
+{%-     endfor %}
+)
+{%  endfor -%}
+
+{%- if target is defined -%}
+{%-     include '[generator]/target_cmake_lists.jinja' -%}
+{%- endif -%}
+{%- if extra_targets is defined -%}
+{%-     for target in extra_targets -%}
+{%-         include '[generator]/target_cmake_lists.jinja' -%}
+{%-     endfor -%}
+{%- endif -%}
+{%- include 'epilogue.cmake' ignore missing -%}

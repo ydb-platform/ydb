@@ -1,8 +1,17 @@
 
 {% include '[generator]/disclaimer.jinja' -%}
 
-{% for i in range(platform_vars|length) %}
-if({{ platform_flags[i] }})
-{% for var in platform_vars[i] %}  set({% for arg in var %}{{arg}}{% if not loop.last %} {% endif %}{% endfor %})
-{% endfor %}endif()
-{% endfor %}
+{%  set platforms_count = platform_names|length -%}
+{%  if platforms_count > 0 -%}
+{%      for i in range(platforms_count) %}
+{%          if i != 0 %}else{% endif %}if ({{ platforms[platform_names[i]] }})
+{%-         for var in platform_vars[i] %}
+  set({% for arg in var %}{{arg}}{% if not loop.last %} {% endif %}{% endfor %})
+{%-         endfor %}
+{%-         if "windows" in platform_names[i] %}
+  set(ENV{PYTHONIOENCODING} utf-8)
+  set(ENV{PYTHONUTF8} 1)
+{%-         endif %}
+{%-     endfor %}
+endif()
+{%  endif %}

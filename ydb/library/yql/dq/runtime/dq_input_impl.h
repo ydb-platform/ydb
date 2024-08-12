@@ -255,11 +255,9 @@ public:
 
     void Pause() override {
         Y_ABORT_UNLESS(!IsPaused());
-        if (!Finished) {
-            BatchesBeforePause = Batches.size() | PauseMask;
-            StoredRowsBeforePause = StoredRows;
-            StoredBytesBeforePause = StoredBytes;
-        }
+        BatchesBeforePause = Batches.size() | PauseMask;
+        StoredRowsBeforePause = StoredRows;
+        StoredBytesBeforePause = StoredBytes;
     }
 
     void Resume() override {

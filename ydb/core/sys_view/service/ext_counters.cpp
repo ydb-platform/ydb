@@ -23,12 +23,15 @@ class TExtCountersUpdaterActor
     TCounterPtr MemoryUsedBytes;
     TCounterPtr MemoryLimitBytes;
     TCounterPtr StorageUsedBytes;
+    TCounterPtr StorageUsedBytesOnSsd;
+    TCounterPtr StorageUsedBytesOnHdd;
     TVector<TCounterPtr> CpuUsedCorePercents;
     TVector<TCounterPtr> CpuLimitCorePercents;
     THistogramPtr ExecuteLatencyMs;
 
     TCounterPtr AnonRssSize;
     TCounterPtr CGroupMemLimit;
+    TCounterPtr MemoryHardLimit;
     TVector<TCounterPtr> PoolElapsedMicrosec;
     TVector<TCounterPtr> PoolCurrentThreadCount;
     TVector<ui64> PoolElapsedMicrosecPrevValue;
@@ -54,6 +57,10 @@ public:
             "resources.memory.limit_bytes", false);
         StorageUsedBytes = ydbGroup->GetNamedCounter("name",
             "resources.storage.used_bytes", false);
+        StorageUsedBytesOnSsd = ydbGroup->GetNamedCounter("name",
+            "resources.storage.used_bytes.ssd", false);
+        StorageUsedBytesOnHdd = ydbGroup->GetNamedCounter("name",
+            "resources.storage.used_bytes.hdd", false);
 
         auto poolCount = Config.Pools.size();
         CpuUsedCorePercents.resize(poolCount);
@@ -95,6 +102,13 @@ private:
                 }
             }
         }
+        if (!MemoryHardLimit) {
+            auto utilsGroup = GetServiceCounters(AppData()->Counters, "utils");
+            auto memoryControllerGroup = utilsGroup->FindSubgroup("component", "memory_controller");
+            if (memoryControllerGroup) {
+                MemoryHardLimit = memoryControllerGroup->FindCounter("Stats/HardLimit");
+            }
+        }
     }
 
     void Transform() {
@@ -104,11 +118,19 @@ private:
             MemoryUsedBytes->Set(AnonRssSize->Val());
             metrics->AddMetric("resources.memory.used_bytes", AnonRssSize->Val());
         }
-        if (CGroupMemLimit) {
+        if (CGroupMemLimit && !MemoryHardLimit) {
             MemoryLimitBytes->Set(CGroupMemLimit->Val());
+        } else if (MemoryHardLimit) {
+            MemoryLimitBytes->Set(MemoryHardLimit->Val());
         }
         if (StorageUsedBytes->Val() != 0) {
             metrics->AddMetric("resources.storage.used_bytes", StorageUsedBytes->Val());
+        }
+        if (StorageUsedBytesOnSsd->Val() != 0) {
+            metrics->AddMetric("resources.storage.used_bytes.ssd", StorageUsedBytesOnSsd->Val());
+        }
+        if (StorageUsedBytesOnHdd->Val() != 0) {
+            metrics->AddMetric("resources.storage.used_bytes.hdd", StorageUsedBytesOnHdd->Val());
         }
         if (!Config.Pools.empty()) {
             double cpuUsage = 0;
@@ -154,7 +176,8 @@ private:
                 ExecuteLatencyMsValues[n] = diff;
                 ExecuteLatencyMsPrevValues[n] = value;
                 if (ExecuteLatencyMsBounds[n] == 0) {
-                    ExecuteLatencyMsBounds[n] = snapshot->UpperBound(n);
+                    NMonitoring::TBucketBound bound = snapshot->UpperBound(n);
+                    ExecuteLatencyMsBounds[n] = bound == Max<NMonitoring::TBucketBound>() ? Max<ui64>() : bound;
                 }
             }
             metrics->AddMetric("queries.requests", total);
@@ -183,4 +206,3 @@ IActor* CreateExtCountersUpdater(TExtCountersConfig&& config) {
 
 }
 }
-

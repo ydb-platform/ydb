@@ -17,6 +17,8 @@
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
+#include <openssl/sha.h>
+
 #include <util/string/builder.h>
 
 namespace NYql {
@@ -24,6 +26,8 @@ namespace NYql {
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 using namespace NNodes;
+
+const TString EvaluationComponent = "Evaluation";
 
 static THashSet<TStringBuf> EvaluationFuncs = {
     TStringBuf("EvaluateAtom"),
@@ -40,6 +44,23 @@ static THashSet<TStringBuf> SubqueryExpandFuncs = {
     TStringBuf("SubqueryOrderBy"),
     TStringBuf("SubqueryAssumeOrderBy")
 };
+
+TString MakeCacheKey(const TExprNode& root, TExprContext& ctx) {
+    TConvertToAstSettings settings;
+    settings.NormalizeAtomFlags = true;
+    settings.AllowFreeArgs = false;
+    settings.RefAtoms = true;
+    settings.NoInlineFunc = [](const TExprNode&) { return true; };
+    auto ast = ConvertToAst(root, ctx, settings);
+    YQL_ENSURE(ast.Root);
+    auto str = ast.Root->ToString();
+    SHA256_CTX sha;
+    SHA256_Init(&sha);
+    SHA256_Update(&sha, str.Data(), str.Size());
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+    SHA256_Final(hash, &sha);
+    return TString((const char*)hash, sizeof(hash));
+}
 
 bool CheckPendingArgs(const TExprNode& root, TNodeSet& visited, TNodeMap<const TExprNode*>& activeArgs, const TNodeMap<ui32>& externalWorlds, TExprContext& ctx,
     bool underTypeOf, bool& hasUnresolvedTypes) {
@@ -384,6 +405,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
     TString nextProvider;
     TMaybe<IDataProvider*> calcProvider;
     TExprNode::TPtr calcWorldRoot;
+    TPositionHandle pipelinePos;
     bool isAtomPipeline = false;
     bool isOptionalAtom = false;
     bool isTypePipeline = false;
@@ -959,6 +981,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             return nullptr;
         }
 
+        pipelinePos = node->Pos();
         isAtomPipeline = node->IsCallable("EvaluateAtom");
         isTypePipeline = node->IsCallable("EvaluateType");
         isCodePipeline = node->IsCallable("EvaluateCode");
@@ -976,6 +999,10 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             fullTransformer->Rewind();
             auto prevSteps = ctx.Step;
             TEvalScope scope(types);
+            ctx.Step.Reset();
+            if (prevSteps.IsDone(TExprStep::Recapture)) {
+                ctx.Step.Done(TExprStep::Recapture);
+            }
             status = SyncTransform(*fullTransformer, clonedArg, ctx);
             ctx.Step = prevSteps;
             if (status.Level == IGraphTransformer::TStatus::Error) {
@@ -1023,16 +1050,34 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
 
             delegatedNode->SetTypeAnn(atomType);
             delegatedNode->SetState(TExprNode::EState::ConstrComplete);
-
-            status = SyncTransform(calcTransfomer ? *calcTransfomer : (*calcProvider.Get())->GetCallableExecutionTransformer(), delegatedNode, ctx);
-            if (status.Level == IGraphTransformer::TStatus::Error) {
-                return nullptr;
+            TString yson;
+            TString key;
+            if (types.QContext) {
+                key = MakeCacheKey(*clonedArg, ctx);
             }
 
-            auto yson = delegatedNode->GetResult().Content();
+            if (types.QContext.CanRead()) {
+                auto item = types.QContext.GetReader()->Get({EvaluationComponent, key}).GetValueSync();
+                if (!item) {
+                    throw yexception() << "Missing replay data";
+                }
+
+                yson = item->Value;
+            } else {
+                auto& transformer = calcTransfomer ? *calcTransfomer : (*calcProvider.Get())->GetCallableExecutionTransformer();
+                status = SyncTransform(transformer, delegatedNode, ctx);
+                if (status.Level == IGraphTransformer::TStatus::Error) {
+                    return nullptr;
+                }
+
+                yson = delegatedNode->GetResult().Content();
+            }
+
             ysonNode = NYT::NodeFromYsonString(yson);
             if (ysonNode.HasKey("FallbackProvider")) {
                 nextProvider = ysonNode["FallbackProvider"].AsString();
+            } else if (types.QContext.CanWrite()) {
+                types.QContext.GetWriter()->Put({EvaluationComponent, key}, yson).GetValueSync();
             }
         } while (ysonNode.HasKey("FallbackProvider"));
 

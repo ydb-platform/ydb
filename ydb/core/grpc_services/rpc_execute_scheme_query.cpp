@@ -84,7 +84,7 @@ public:
             const auto& kqpResponse = record.GetResponse();
             const auto& issueMessage = kqpResponse.GetQueryIssues();
 
-            ReplyWithResult(Ydb::StatusIds::SUCCESS, issueMessage, ctx);
+            Reply(Ydb::StatusIds::SUCCESS, issueMessage, ctx);
         } else {
             return OnGenericQueryResponseError(record, ctx);
         }

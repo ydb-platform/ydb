@@ -59,9 +59,10 @@ void FromProto(TQueryStatistics* original, const NProto::TQueryStatistics& seria
     FromProto(&original->InnerStatistics, serialized.inner_statistics());
 }
 
-TString ToString(const TQueryStatistics& stats)
+void FormatValue(TStringBuilderBase* builder, const TQueryStatistics& stats, TStringBuf /*spec*/)
 {
-    return Format(
+    Format(
+        builder,
         "{"
         "RowsRead: %v, DataWeightRead: %v, RowsWritten: %v, "
         "SyncTime: %v, AsyncTime: %v, ExecuteTime: %v, ReadTime: %v, WriteTime: %v, CodegenTime: %v, "

@@ -34,9 +34,14 @@ NYql::TIssues ValidateCreateOrDeleteRateLimiterResource(const TString& queryId, 
 
 std::vector<TString> GetMeteringRecords(const TString& statistics, bool billable, const TString& jobId, const TString& scope, const TString& sourceId);
 
-void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& dest, std::string_view statsStr, TDuration executionTime);
+void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& dest,
+                              const THashMap<TString, i64>& aggregatedStats,
+                              TDuration executionTime);
+void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& dest,
+                              std::string_view statsStr,
+                              TDuration executionTime);
 
-using StatsValuesList = std::vector<std::pair<TString, ui64>>;
+using StatsValuesList = std::vector<std::pair<TString, i64>>;
 
 StatsValuesList ExtractStatisticsFromProtobuf(const google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& statsProto);
 
@@ -47,5 +52,7 @@ struct Statistics {
 };
 
 TStringBuilder& operator<<(TStringBuilder& builder, const Statistics& statistics);
+
+void AddTransientIssues(::google::protobuf::RepeatedPtrField< ::Ydb::Issue::IssueMessage>* protoIssues, NYql::TIssues&& issues);
 
 };

@@ -9,6 +9,10 @@ message TFeatureFlags {
         VALUE_FALSE = 2;
     }
 
+    // leave removed fields below
+    reserved "SomeRemovedFeatureFlagExample";
+    reserved "AnotherRemovedFeatureFlagExample";
+
     optional bool EnableSeparateSolomonShardForPDisk = 1 [default = true];
     optional bool UseForsetiSchedulerByDefaultForPDisk = 2 [default = true];
     optional bool EnableSeparateTrimThreadForPDisk = 3 [default = true];
@@ -102,10 +106,10 @@ message TFeatureFlags {
     optional bool EnableLLVMCache = 87 [default = false];
     optional bool EnableExternalDataSources = 88 [default = false];
     optional bool EnableTopicDiskSubDomainQuota = 89 [default = true];
-    optional bool EnableSeparationComputeActorsFromRead = 90 [default = false];
+    optional bool EnableSeparationComputeActorsFromRead = 90 [default = true];
     optional bool EnablePQConfigTransactionsAtSchemeShard = 91 [default = false];
     optional bool EnableScriptExecutionOperations = 92 [default = true];
-    optional bool EnableImplicitQueryParameterTypes = 93 [default = true];
+    reserved 93; // optional bool EnableImplicitQueryParameterTypes = 93 [default = true];
     optional bool EnableForceImmediateEffectsExecution = 94 [default = false];
     optional bool EnableTopicSplitMerge = 95 [default = false];
     optional bool EnableChangefeedDynamoDBStreamsFormat = 96 [default = true];
@@ -118,10 +122,10 @@ message TFeatureFlags {
     optional bool SuppressCompatibilityCheck = 103 [default = false];
     optional bool EnableUniqConstraint = 104 [default = false];
     optional bool EnableChangefeedDebeziumJsonFormat = 105 [default = false];
-    optional bool EnableStatistics = 106 [default = false];
+    optional bool EnableStatistics = 106 [default = true];
     optional bool EnableUuidAsPrimaryKey = 107 [default = false];
     optional bool EnableTablePgTypes = 108 [default = false];
-    optional bool EnableLocalDBBtreeIndex = 109 [default = false];
+    optional bool EnableLocalDBBtreeIndex = 109 [default = true];
     optional bool EnablePDiskHighHDDInFlight = 110 [default = false];
     optional bool UseVDisksBalancing = 111 [default = false];
     optional bool EnableViews = 112 [default = false];
@@ -134,5 +138,17 @@ message TFeatureFlags {
     optional bool EnableLocalDBFlatIndex = 119 [default = true];
     optional bool ExtendedVDiskCounters = 120 [default = true];
     optional bool ExtendedPDiskSensors = 121 [default = true];
-    optional bool EnableSlotNameGeneration = 122 [default = false];
+    optional bool EnableStableNodeNames = 122 [default = false];
+    optional bool EnableBackupService = 123 [default = false];
+    optional bool EnableVolatileTransactionArbiters = 124 [default = true];
+    optional bool EnableGraphShard = 125 [default = false];
+    optional bool EnableExternalSourceSchemaInference = 126 [default = false];
+    optional bool EnableDbMetadataCache = 127 [default = false];
+    optional bool EnableTableDatetime64 = 128 [default = true];
+    optional bool EnableResourcePools = 129 [default = false];
+    optional bool EnableColumnStatistics = 130 [default = false];
+    optional bool EnableSingleCompositeActionGroup = 131 [default = false];
+    optional bool EnableResourcePoolsOnServerless = 132 [default = false];
+    optional bool EnableVectorIndex = 133 [default = false];
+    optional bool EnableChangefeedsOnIndexTables = 134 [default = false];
 }

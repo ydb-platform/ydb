@@ -9,9 +9,21 @@
 
 {% list tabs %}
 
+- C++
+
+  [Пример читателя на GitHub](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/topic_reader)
+
+- Go
+
+  [Примеры на GitHub](https://github.com/ydb-platform/ydb-go-sdk/tree/master/examples/topic)
+
 - Java
 
   [Примеры на GitHub](https://github.com/ydb-platform/ydb-java-examples/tree/master/ydb-cookbook/src/main/java/tech/ydb/examples/topic)
+
+- Python
+
+  [Примеры на GitHub](https://github.com/ydb-platform/ydb-python-sdk/tree/main/examples/topic)
 
 
 {% endlist %}
@@ -194,7 +206,14 @@
 
 - Python
 
-  Функциональность находится в разработке.
+  Пример изменения списка поддерживаемых кодеков и минимального количества партиций у топика 
+
+  ```python
+  driver.topic_client.alter_topic(topic_path,
+      set_supported_codecs=[ydb.TopicCodec.RAW, ydb.TopicCodec.GZIP], # optional
+      set_min_active_partitions=3,                                    # optional
+  )
+  ```
 
 - Java
 
@@ -647,7 +666,7 @@
                           logger.debug(str.toString());
                           break;
                       case ALREADY_WRITTEN:
-                          logger.warn("Message was already written");
+                          logger.warn("Message has already been written");
                           break;
                       default:
                           break;
@@ -744,7 +763,7 @@
 
 ### Запись метаданных на уровне сообщения {#messagemeta}
 
-При записи сообщения можно дополнительно указать метаданные как список пар "ключ-значение". Эти данные будут доступны при вычитывании сообщения. 
+При записи сообщения можно дополнительно указать метаданные как список пар "ключ-значение". Эти данные будут доступны при вычитывании сообщения.
 Ограничение на размер метаданных — не более 1000 ключей.
 
 {% list tabs %}
@@ -772,6 +791,173 @@
   }
 
   ```
+
+- Java
+
+  При конструировании сообщения для записи с помощью Builder'а, ему можно передать объекты типа `MetadataItem` с парой ключ типа `String` + значение типа `byte[]`.
+
+  Можно передать сразу `List` таких объектов:
+
+  ```java
+  List<MetadataItem> metadataItems = Arrays.asList(
+          new MetadataItem("meta-key", "meta-value".getBytes()),
+          new MetadataItem("another-key", "value".getBytes())
+  );
+  writer.send(
+          Message.newBuilder()
+                  .setMetadataItems(metadataItems)
+                  .build()
+  );
+  ```
+
+  Или добавлять каждый `MetadataItem` отдельно:
+
+  ```java
+  writer.send(
+          Message.newBuilder()
+                  .addMetadataItem(new MetadataItem("meta-key", "meta-value".getBytes()))
+                  .addMetadataItem(new MetadataItem("another-key", "value".getBytes()))
+                  .build()
+  );
+  ```
+
+  При чтении эти метаданные сообщения получить, вызвав на нём метод `getMetadataItems()`:
+
+  ```java
+  Message message = reader.receive();
+  List<MetadataItem> metadata = message.getMetadataItems();
+  ```
+
+{% endlist %}
+
+### Запись в транзакции {#write-tx}
+
+{% list tabs %}
+
+- Java (sync)
+
+  [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionWriteSync.java)
+
+  В настройках `SendSettings` метода `send` можно указать транзакцию.
+  Тогда сообщение будет записано вместе с коммитом этой транзакцией.
+
+  ```java
+  // creating a session in the table service
+  Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
+  if (!sessionResult.isSuccess()) {
+      logger.error("Couldn't get a session from the pool: {}", sessionResult);
+      return; // retry or shutdown
+  }
+  Session session = sessionResult.getValue();
+  // creating a transaction in the table service
+  // this transaction is not yet active and has no id
+  TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
+
+  // get message text within the transaction
+  Result<DataQueryResult> dataQueryResult = transaction.executeDataQuery("SELECT \"Hello, world!\";")
+          .join();
+  if (!dataQueryResult.isSuccess()) {
+      logger.error("Couldn't execute DataQuery: {}", dataQueryResult);
+      return; // retry or shutdown
+  }
+  // now the transaction is active and has an id
+
+  ResultSetReader rsReader = dataQueryResult.getValue().getResultSet(0);
+  byte[] message;
+  if (rsReader.next()) {
+      message = rsReader.getColumn(0).getBytes();
+  } else {
+      return; // retry or shutdown
+  }
+
+  writer.send(
+          Message.of(message),
+          SendSettings.newBuilder()
+                  .setTransaction(transaction)
+                  .build()
+  );
+
+  // flush to wait until all messages reach server before commit
+  writer.flush();
+
+  Status commitStatus = transaction.commit().join();
+  analyzeCommitStatus(commitStatus);
+  ```
+
+  {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
+
+- Java (async)
+
+  [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionWriteAsync.java)
+
+  В настройках `SendSettings` метода `send` можно указать транзакцию.
+  Тогда сообщение будет записано вместе с коммитом этой транзакцией.
+
+  ```java
+  // creating a session in the table service
+  Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
+  if (!sessionResult.isSuccess()) {
+      logger.error("Couldn't get a session from the pool: {}", sessionResult);
+      return; // retry or shutdown
+  }
+  Session session = sessionResult.getValue();
+  // creating a transaction in the table service
+  // this transaction is not yet active and has no id
+  TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
+
+  // get message text within the transaction
+  Result<DataQueryResult> dataQueryResult = transaction.executeDataQuery("SELECT \"Hello, world!\";")
+          .join();
+  if (!dataQueryResult.isSuccess()) {
+      logger.error("Couldn't execute DataQuery: {}", dataQueryResult);
+      return; // retry or shutdown
+  }
+  // now the transaction is active and has an id
+
+  ResultSetReader rsReader = dataQueryResult.getValue().getResultSet(0);
+  byte[] message;
+  if (rsReader.next()) {
+      message = rsReader.getColumn(0).getBytes();
+  } else {
+      return; // retry or shutdown
+  }
+
+  try {
+      writer.send(Message.newBuilder()
+                              .setData(message)
+                              .build(),
+                      SendSettings.newBuilder()
+                              .setTransaction(transaction)
+                              .build())
+              .whenComplete((result, ex) -> {
+                  if (ex != null) {
+                      logger.error("Exception while sending a message: ", ex);
+                  } else {
+                      switch (result.getState()) {
+                          case WRITTEN:
+                              WriteAck.Details details = result.getDetails();
+                              logger.info("Message was written successfully, offset: " + details.getOffset());
+                              break;
+                          case ALREADY_WRITTEN:
+                              logger.info("Message has already been written");
+                              break;
+                          default:
+                              break;
+                      }
+                  }
+              })
+              // Waiting for the message to reach the server before committing the transaction
+              .join();
+
+      Status commitStatus = transaction.commit().join();
+      analyzeCommitStatus(commitStatus);
+  } catch (QueueOverflowException exception) {
+      logger.error("Queue overflow exception while sending a message{}: ", index, exception);
+      // Send queue is full. Need to retry with backoff or skip
+  }
+  ```
+
+  {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
 {% endlist %}
 
@@ -1133,6 +1319,8 @@
 
 Например с сервера пришли сообщения 1, 2, 3. Программа обрабатывает их параллельно и отправляет подтверждения в таком порядке: 1, 3, 2. В этом случае сначала будет закоммичено сообщение 1, а сообщения 2 и 3 будут закоммичены только после того как сервер получит подтверждение об обработке сообщения 2.
 
+В случае ошибки на коммите сообщения можно написать эту ошибку в лог и продолжить работу. Состояние сообщения в этой точке неизвестно. Сообщение могло закоммититься, а потом возникла сетевая ошибка и клиент не получил подтверждения. Если сообщение не закоммитилось, то оно будет прочитано ещё раз и снова поступит в обработку (может быть на другом читателе). Ретраить именно коммит смысла нет, т.к. сессия чтения этого сообщения уже потеряна.
+
 #### Чтение сообщений по одному с подтверждением
 
 {% list tabs %}
@@ -1266,15 +1454,29 @@
 
 ### Чтение с хранением позиции на клиентской стороне {#client-commit}
 
-При начале чтения клиентский код должен сообщить серверу стартовую позицию чтения:
+Вместо коммитов сообщений на сервер можно хранить прогресс чтения самостоятельно. В этом случае нужно передать в SDK обработчик, который будет вызываться при старте чтения каждой партиции. В этом обработчике нужно будет
+указать позицию, с которой нужно начинать чтение этой партиции.
 
 {% list tabs %}
 
 - C++
 
-  Чтение с заданной позиции в текущей версии SDK отсутствует.
+  При обработке событий `TStartPartitionSessionEvent` можно при ответе серверу задать позицию, с которой следует начинать чтение.
+  Для этого в метод `Confirm` следует передать параметр `readOffset`.
+  Допольнительно можно передать параметр `commitOffset`, который укажет позицию, сообщения до которой следует считать [закоммиченными](#commit).
 
-  Поддерживается настройка `ReadFromTimestamp` для чтения событий с отметками времени записи не меньше данной.
+  Пример установки обработчика:
+  ```cpp
+  settings.EventHandlers_.StartPartitionSessionHandler(
+      [](TReadSessionEvent::TStartPartitionSessionEvent& event) {
+          auto readFromOffset = GetOffsetToReadFrom(event.GetPartitionId());
+          event.Confirm(readFromOffset);
+      }
+  );
+  ```
+  Здесь `GetOffsetToReadFrom` - это часть примера, а не SDK. Используйте свой способ определить требуемую стартовую позицию чтения для партиции с данным partition id.
+
+  Также в `TReadSessionSettings` поддерживается настройка `ReadFromTimestamp` для чтения событий с отметками времени записи не меньше данной. Эта настройка предполагается не для точного позиционирования старта, а для пропуска объёма данных за большой интервал времени. Несколько первых полученных сообщений могут иметь отметки времени записи меньше указанной.
 
 - Go
 
@@ -1324,9 +1526,54 @@
 
 - Java
 
-  Чтение с заданной позиции в текущей версии SDK отсутствует.
+  Чтение с заданного оффсета в Java возможно только в асинхронном читателе.
+  В обработчике событий `StartPartitionSessionEvent` можно при ответе серверу задать позицию, с которой следует начинать чтение.
+  Для этого в метод `confirm` следует передать настройки `StartPartitionSessionSettings` с указанным оффсетом через `setReadOffset`.
+  Также вызовом `setCommitOffset` можно указать оффсет, который следует считать закоммиченным.
 
-  Поддерживается настройка читателя `setReadFrom` для чтения событий с отметками времени записи не меньше данной.
+  ```java
+  @Override
+  public void onStartPartitionSession(StartPartitionSessionEvent event) {
+      event.confirm(StartPartitionSessionSettings.newBuilder()
+              .setReadOffset(lastReadOffset) // Long
+              .setCommitOffset(lastCommitOffset) // Long
+              .build());
+  }
+  ```
+
+  Также поддерживается настройка читателя `setReadFrom` для чтения событий с отметками времени записи не меньше данной.
+
+{% endlist %}
+
+### Чтение без указания Consumer'а {#no-consumer}
+
+Обычно прогресс чтения топика сохраняется на сервере в каждом `Consumer`е. Но можно не хранить такой прогресс на сервере и при создании читателя явно указать, что чтение будет происходить без `Consumer`а.
+
+{% list tabs %}
+
+- Java
+
+  Для чтения без `Consumer`а следует в настройках читателя `ReaderSettings` это явно указать, вызвав `withoutConsumer()`:
+
+  ```java
+  ReaderSettings settings = ReaderSettings.newBuilder()
+          .withoutConsumer()
+          .addTopic(TopicReadSettings.newBuilder()
+                  .setPath(TOPIC_NAME)
+                  .build())
+          .build();
+  ```
+
+  В таком случае нужно учитывать, что при переустановке соединения прогресс на сервере будет сброшен. Поэтому, чтобы не начинать чтение сначала, в SDK следует передавать offset начала чтения при каждом старте сессии чтения партиции:
+
+  ```java
+  @Override
+  public void onStartPartitionSession(StartPartitionSessionEvent event) {
+      event.confirm(StartPartitionSessionSettings.newBuilder()
+              .setReadOffset(lastReadOffset) // the last offset read by this client, Long
+              .build());
+  }
+  ```
 
 {% endlist %}
 
@@ -1359,11 +1606,11 @@
       auto commitResult = Transaction.Commit(commitSettings).GetValueSync();
   ```
 
-{% note warning %}
+  {% note warning %}
 
   При обработке событий `events` не нужно явно подтверждать обработку для событий типа `TDataReceivedEvent`.
 
-{% endnote %}
+  {% endnote %}
 
   Подтверждение обработки события `TStopPartitionSessionEvent` надо делать после вызова `Commit`.
 
@@ -1388,17 +1635,66 @@
       }
   ```
 
-- Go
+- Java (sync)
 
-  Функциональность находится в разработке.
+  [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionReadSync.java)
 
-- Python
+  В настройках `ReceiveSettings` метода `receive` можно указать транзакцию:
 
-  Функциональность находится в разработке.
+  ```java
+  Message message = reader.receive(ReceiveSettings.newBuilder()
+          .setTransaction(transaction)
+          .build());
+  ```
+  Тогда полученное сообщение будет закоммичено вместе с транзакцией. Коммитить его отдельно не нужно.
+  Метод `receive` свяжет на сервере оффсеты сообщения с транзакцией вызовом `sendUpdateOffsetsInTransaction` и вернёт управление, когда получит ответ на него.
 
-- Java
+  {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
-  Функциональность находится в разработке.
+- Java (async)
+
+  [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionReadAsync.java)
+
+  После получения сообщения в обработчике `onMessages` можно связать одно или несколько сообщений с транзакцией.
+  Для этого нужно вызвать отдельный метод `reader.updateOffsetsInTransaction` и дождаться его выполнения на сервере.
+  Этот метод принимает параметром список оффсетов. Для удобства у `Message` и `DataReceivedEvent` есть метод `getPartitionOffsets()`, возвращающий такой список.
+
+  ```java
+  @Override
+  public void onMessages(DataReceivedEvent event) {
+      for (Message message : event.getMessages()) {
+          // creating a session in the table service
+          Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
+          if (!sessionResult.isSuccess()) {
+              logger.error("Couldn't get a session from the pool: {}", sessionResult);
+              return; // retry or shutdown
+          }
+          Session session = sessionResult.getValue();
+          // creating a transaction in the table service
+          // this transaction is not yet active and has no id
+          TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
+
+          // do something else in the transaction
+          transaction.executeDataQuery("SELECT 1").join();
+          // now the transaction is active and has an id
+          // analyzeQueryResultIfNeeded();
+
+          Status updateStatus = reader.updateOffsetsInTransaction(transaction,
+                          message.getPartitionOffsets(), new UpdateOffsetsInTransactionSettings.Builder().build())
+                  // Do not commit a transaction without waiting for updateOffsetsInTransaction result to avoid a race condition
+                  .join();
+          if (!updateStatus.isSuccess()) {
+              logger.error("Couldn't update offsets in a transaction: {}", updateStatus);
+              return; // retry or shutdown
+          }
+
+          Status commitStatus = transaction.commit().join();
+          analyzeCommitStatus(commitStatus);
+      }
+  }
+  ```
+
+  {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
 {% endlist %}
 

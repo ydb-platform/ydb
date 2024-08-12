@@ -6,6 +6,7 @@
 #include <util/string/cast.h>
 #include <util/string/printf.h>
 #include <util/string/split.h>
+#include <util/string/strip.h>
 
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -56,6 +57,29 @@ ui64 GetFullTimeValue(const TString& output)
     Split(lines.back(), "\t", columns);
 
     return FromString<ui64>(columns.back());
+}
+
+THashSet<TString> GetCodecsList(const TString& output)
+{
+    THashSet<TString> result;
+
+    TVector<TString> lines;
+    Split(output, "\n", lines);
+
+    for (auto& line : lines) {
+        TVector<TString> fields;
+        Split(line, ":", fields);
+
+        if (fields[0] == "SupportedCodecs") {
+            TVector<TString> codecs;
+            Split(fields[1], ",", codecs);
+            for (auto& codec : codecs) {
+                result.insert(Strip(codec));
+            }
+        }
+    }
+
+    return result;
 }
 
 void UnitAssertColumnsOrder(TString line,

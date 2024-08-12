@@ -60,14 +60,6 @@
           {
             "DomainId":1,
             "SchemeRoot":72057594046678944,
-            "SSId":
-              [
-                1
-              ],
-            "HiveUid":
-              [
-                1
-              ],
             "PlanResolution":10,
             "Name":"Root",
             "StoragePoolTypes":
@@ -140,7 +132,6 @@
       "HiveConfig":
         [
           {
-            "HiveUid":1,
             "Hive":72057594037968897
           }
         ],
@@ -1418,6 +1409,7 @@
     },
   "GRpcConfig":
     {
+      "Port":2135,
       "CA":"/opt/ydb/certs/ca.crt",
       "Cert":"/opt/ydb/certs/node.crt",
       "Key":"/opt/ydb/certs/node.key"

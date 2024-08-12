@@ -211,6 +211,11 @@ ETokenType TTokenizer::GetType() const
     return Type_;
 }
 
+ETokenType TTokenizer::GetPreviousType() const
+{
+    return PreviousType_;
+}
+
 TStringBuf TTokenizer::GetToken() const
 {
     return Token_;
@@ -248,7 +253,28 @@ const TString& TTokenizer::GetLiteralValue() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool HasPrefix(const TYPath& fullPath, const TYPath& prefixPath)
+TTokenizer::TCheckpoint::TCheckpoint(TTokenizer& tokenizer)
+    : Tokenizer_(tokenizer)
+    , Path_(tokenizer.Path_)
+    , Type_(tokenizer.Type_)
+    , PreviousType_(tokenizer.PreviousType_)
+    , Token_(tokenizer.Token_)
+    , Input_(tokenizer.Input_)
+{ }
+
+TTokenizer::TCheckpoint::~TCheckpoint()
+{
+    Tokenizer_.Path_ = Path_;
+    Tokenizer_.Type_ = Type_;
+    Tokenizer_.PreviousType_ = PreviousType_;
+    Tokenizer_.Token_ = Token_;
+    Tokenizer_.Input_ = Input_;
+    Tokenizer_.LiteralValue_.clear();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool HasPrefix(TYPathBuf fullPath, TYPathBuf prefixPath)
 {
     TTokenizer fullTokenizer(fullPath);
     TTokenizer prefixTokenizer(prefixPath);

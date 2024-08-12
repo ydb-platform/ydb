@@ -395,7 +395,7 @@ private:
         } catch (const TExFatal& ex) {
             const TString msg = TStringBuilder() << "fatal error: " << ex.what();
             QLOG_CRIT_S("BSQ38", msg);
-            Y_DEBUG_ABORT_UNLESS(false, "%s %s", LogPrefix.data(), msg.data());
+            Y_DEBUG_ABORT("%s %s", LogPrefix.data(), msg.data());
             ResetConnection(ctx, NKikimrProto::ERROR, msg, TDuration::Zero());
             return;
         }

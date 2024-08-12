@@ -26,6 +26,8 @@
 #include <boost/type_traits/is_polymorphic.hpp>
 #include <boost/type_traits/remove_const.hpp>
 
+#include <boost/detail/workaround.hpp>
+
 #include <boost/serialization/static_warning.hpp>
 #include <boost/serialization/singleton.hpp>
 #include <boost/serialization/extended_type_info.hpp>
@@ -99,7 +101,8 @@ class extended_type_info_no_rtti :
     };
 public:
     extended_type_info_no_rtti() :
-        no_rtti_system::extended_type_info_no_rtti_0(get_key())
+        no_rtti_system::extended_type_info_no_rtti_0(
+            action<guid_defined< T >::value >::invoke())
     {
         key_register();
     }
@@ -111,8 +114,8 @@ public:
         // find the type that corresponds to the most derived type.
         // this implementation doesn't depend on typeid() but assumes
         // that the specified type has a function of the following signature.
-        // A common implemention of such a function is to define as a virtual
-        // function. So if the is not a polymorphic type it's likely an error
+        // A common implementation of such a function is to define as a virtual
+        // function. So if the type is not a polymorphic type it's likely an error
         BOOST_STATIC_WARNING(boost::is_polymorphic< T >::value);
         const char * derived_key = t.get_key();
         BOOST_ASSERT(NULL != derived_key);

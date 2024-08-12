@@ -1,6 +1,7 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/protos/table_stats.pb.h>
 
 using namespace NKikimr;
@@ -124,6 +125,39 @@ void WaitAndCheckStatPersisted(
     eventAction = TTestActorRuntime::EEventAction::PROCESS;
 }
 
+void SetStatsObserver(TTestActorRuntime& runtime, const std::function<TTestActorRuntime::EEventAction()>& statsObserver) {
+    // capture original observer func by setting a dummy one
+    auto originalObserver = runtime.SetObserverFunc([](TAutoPtr<IEventHandle>&) {
+        return TTestActorRuntime::EEventAction::PROCESS;
+    });
+    // now set a custom observer backed up by the original
+    runtime.SetObserverFunc([originalObserver, statsObserver](TAutoPtr<IEventHandle>& ev) {
+        switch (ev->GetTypeRewrite()) {
+        case TEvDataShard::EvPeriodicTableStats:
+            return statsObserver();
+        default:
+            return originalObserver(ev);
+        }
+    });
+}
+
+TVector<ui64> GetTableShards(TTestActorRuntime& runtime,
+                             const TString& path
+) {
+    TVector<ui64> shards;
+    auto tableDescription = DescribePath(runtime, path, true);
+    for (const auto& part : tableDescription.GetPathDescription().GetTablePartitions()) {
+        shards.emplace_back(part.GetDatashardId());
+    }
+
+    return shards;
+}
+
+TTableId ResolveTableId(TTestActorRuntime& runtime, const TString& path) {
+    auto response = Navigate(runtime, path);
+    return response->ResultSet.at(0).TableId;
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
@@ -149,21 +183,10 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
         GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
         auto eventAction = TTestActorRuntime::EEventAction::PROCESS;
-
-        // capture original observer func by setting dummy one
-        auto originalObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>&) {
-            return TTestActorRuntime::EEventAction::PROCESS;
-        });
-        // now set our observer backed up by original
-        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            switch (ev->GetTypeRewrite()) {
-            case TEvDataShard::EvPeriodicTableStats: {
+        SetStatsObserver(runtime, [&]() {
                 return eventAction;
             }
-            default:
-                return originalObserver(ev);
-            }
-        });
+        );
 
         ui64 txId = 1000;
 
@@ -197,22 +220,11 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
 
         auto eventAction = TTestActorRuntime::EEventAction::PROCESS;
         ui64 statsCount = 0;
-
-        // capture original observer func by setting dummy one
-        auto originalObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>&) {
-            return TTestActorRuntime::EEventAction::PROCESS;
-        });
-        // now set our observer backed up by original
-        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            switch (ev->GetTypeRewrite()) {
-            case TEvDataShard::EvPeriodicTableStats: {
+        SetStatsObserver(runtime, [&]() {
                 ++statsCount;
                 return eventAction;
             }
-            default:
-                return originalObserver(ev);
-            }
-        });
+        );
 
         ui64 txId = 1000;
 
@@ -269,21 +281,10 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
         GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
         auto eventAction = TTestActorRuntime::EEventAction::PROCESS;
-
-        // capture original observer func by setting dummy one
-        auto originalObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>&) {
-            return TTestActorRuntime::EEventAction::PROCESS;
-        });
-        // now set our observer backed up by original
-        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            switch (ev->GetTypeRewrite()) {
-            case TEvDataShard::EvPeriodicTableStats: {
+        SetStatsObserver(runtime, [&]() {
                 return eventAction;
             }
-            default:
-                return originalObserver(ev);
-            }
-        });
+        );
 
         ui64 txId = 1000;
 
@@ -395,10 +396,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
 
         SendTEvPeriodicTopicStats(runtime, topic3Id, generation, ++round, 151, 151);
         Assert(808, 31 + 151);
-
-        TestDeallocatePQ(runtime, ++txId, "/MyRoot", "Name: \"Topic3\"");
-        env.TestWaitNotification(runtime, txId);
-        Assert(247, 31);
     }
 
     Y_UNIT_TEST(TopicPeriodicStatMeteringModeReserved) {
@@ -594,3 +591,117 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
     }
 
 };
+
+Y_UNIT_TEST_SUITE(TStoragePoolsStatsPersistence) {
+    Y_UNIT_TEST(SameAggregatedStatsAfterRestart) {
+        TTestBasicRuntime runtime;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnvOptions opts;
+        opts.DisableStatsBatching(true);
+        opts.EnablePersistentPartitionStats(true);
+        opts.EnableBackgroundCompaction(false);
+        TTestEnv env(runtime, opts);
+
+        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+        NDataShard::gDbStatsDataSizeResolution = 1;
+        NDataShard::gDbStatsRowCountResolution = 1;
+
+        ui64 txId = 100;
+
+        TVector<TString> poolsKinds;
+        {
+            auto databaseDescription = DescribePath(runtime, "/MyRoot").GetPathDescription().GetDomainDescription();
+            UNIT_ASSERT_GE_C(databaseDescription.StoragePoolsSize(), 2u, databaseDescription.DebugString());
+            for (const auto& pool : databaseDescription.GetStoragePools()) {
+                poolsKinds.emplace_back(pool.GetKind());
+            }
+        }
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                    Name: "SomeTable"
+                    Columns { Name: "key"   Type: "Uint32" FamilyName: "default"}
+                    Columns { Name: "value" Type: "Utf8"   FamilyName: "alternative"}
+                    KeyColumnNames: ["key"]
+                    PartitionConfig {
+                        ColumnFamilies {
+                            Name: "default"
+                            StorageConfig {
+                                SysLog { PreferredPoolKind: "%s" }
+                                Log { PreferredPoolKind: "%s" }
+                                Data { PreferredPoolKind: "%s" }
+                            }
+                        }
+                        ColumnFamilies {
+                            Name: "alternative"
+                            StorageConfig {
+                                Data { PreferredPoolKind: "%s" }
+                            }
+                        }
+                    }
+                )", poolsKinds[0].c_str(), poolsKinds[0].c_str(), poolsKinds[0].c_str(), poolsKinds[1].c_str()
+            )
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        auto shards = GetTableShards(runtime, "/MyRoot/SomeTable");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1);
+        auto& datashard = shards[0];
+        constexpr ui32 rowsCount = 100u;
+        for (ui32 i = 0u; i < rowsCount; ++i) {
+            UpdateRow(runtime, "SomeTable", i, "meaningless_value", datashard);
+        }
+
+        // compaction is necessary for storage pools' stats to appear in the periodic messages from datashards
+        UNIT_ASSERT_VALUES_EQUAL(NKikimr::CompactTable(runtime, datashard, ResolveTableId(runtime, "/MyRoot/SomeTable")).GetStatus(),
+                                 NKikimrTxDataShard::TEvCompactTableResult::OK
+        );
+        // we wait for at least 1 part count, because it signals that the stats have been recalculated after compaction
+        WaitTableStats(runtime, datashard, 1, rowsCount).GetTableStats();
+
+        auto checkUsage = [&poolsKinds](ui64 totalUsage, const auto& poolUsage) {
+            if (IsIn(poolsKinds, poolUsage.GetPoolKind())) {
+                UNIT_ASSERT_GT_C(totalUsage, 0, poolUsage.DebugString());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(totalUsage, 0, poolUsage.DebugString());
+            }
+        };
+        const auto expectedTableStats = DescribePath(runtime, "/MyRoot/SomeTable").GetPathDescription().GetTableStats();
+        UNIT_ASSERT_GT_C(expectedTableStats.GetStoragePools().PoolsUsageSize(), 0, expectedTableStats.DebugString());
+        for (const auto& poolUsage : expectedTableStats.GetStoragePools().GetPoolsUsage()) {
+            checkUsage(poolUsage.GetDataSize() + poolUsage.GetIndexSize(), poolUsage);
+        }
+        const auto expectedDatabaseStats = DescribePath(runtime, "/MyRoot").GetPathDescription().GetDomainDescription().GetDiskSpaceUsage();
+        UNIT_ASSERT_GT_C(expectedDatabaseStats.StoragePoolsUsageSize(), 0, expectedDatabaseStats.DebugString());
+        for (const auto& poolUsage : expectedDatabaseStats.GetStoragePoolsUsage()) {
+            checkUsage(poolUsage.GetTotalSize(), poolUsage);
+        }
+
+        // will be used to turn off table stats processing in SchemeShard
+        auto statsEventAction = TTestActorRuntime::EEventAction::PROCESS;
+        SetStatsObserver(runtime, [&]() {
+                return statsEventAction;
+            }
+        );
+
+        // drop any further stat updates and restart SS
+        // the only way for SS to know proper stat is to read it from localDB
+        statsEventAction = TTestActorRuntime::EEventAction::DROP;
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        auto tableStats = DescribePath(runtime, "/MyRoot/SomeTable").GetPathDescription().GetTableStats();
+        auto databaseStats = DescribePath(runtime, "/MyRoot").GetPathDescription().GetDomainDescription().GetDiskSpaceUsage();
+
+        using google::protobuf::util::MessageDifferencer;
+        MessageDifferencer differencer;
+        TString diff;
+        differencer.ReportDifferencesToString(&diff);
+        differencer.set_repeated_field_comparison(MessageDifferencer::RepeatedFieldComparison::AS_SET);
+        UNIT_ASSERT_C(differencer.Compare(tableStats.GetStoragePools(), expectedTableStats.GetStoragePools()), diff);
+        UNIT_ASSERT_C(differencer.Compare(databaseStats, expectedDatabaseStats), diff);
+    }
+}

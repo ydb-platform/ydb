@@ -13,9 +13,6 @@ SRCS(
     load_network.h
     long_timer.cpp
     long_timer.h
-    mad_squirrel.cpp
-    mad_squirrel.h
-    melancholic_gopher.cpp
     name_service_client_protocol.cpp
     name_service_client_protocol.h
     proto_ready_actor.h

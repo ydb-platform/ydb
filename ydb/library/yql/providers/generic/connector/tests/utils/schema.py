@@ -9,7 +9,9 @@ from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 impo
 from ydb.public.api.protos.ydb_value_pb2 import Type, OptionalType
 
 import ydb.library.yql.providers.generic.connector.tests.utils.types.clickhouse as clickhouse
+import ydb.library.yql.providers.generic.connector.tests.utils.types.mysql as mysql
 import ydb.library.yql.providers.generic.connector.tests.utils.types.postgresql as postgresql
+import ydb.library.yql.providers.generic.connector.tests.utils.types.ydb as Ydb
 
 YsonList: TypeAlias = yson.yson_types.YsonList
 
@@ -17,15 +19,21 @@ YsonList: TypeAlias = yson.yson_types.YsonList
 @dataclass
 class DataSourceType:
     ch: clickhouse.Type = None
+    my: mysql.Type = None
     pg: postgresql.Type = None
+    ydb: Ydb.Type = None
 
     def pick(self, kind: EDataSourceKind.ValueType) -> str:
         target = None
         match kind:
             case EDataSourceKind.CLICKHOUSE:
                 target = self.ch
+            case EDataSourceKind.MYSQL:
+                target = self.my
             case EDataSourceKind.POSTGRESQL:
                 target = self.pg
+            case EDataSourceKind.YDB:
+                target = self.ydb
             case _:
                 raise Exception(f'invalid data source: {kind}')
 
@@ -79,6 +87,8 @@ class Column:
                 return ydb_value.Type.BOOL
             case "Utf8":
                 return ydb_value.Type.UTF8
+            case "Json":
+                return ydb_value.Type.JSON
             case "String":
                 return ydb_value.Type.STRING
             case "Int8":
@@ -138,6 +148,10 @@ class Column:
             case ydb_value.Type.BOOL:
                 return value
             case ydb_value.Type.UTF8:
+                return value
+            case ydb_value.Type.JSON:
+                return value
+            case ydb_value.Type.JSON_DOCUMENT:
                 return value
             case ydb_value.Type.STRING:
                 return value

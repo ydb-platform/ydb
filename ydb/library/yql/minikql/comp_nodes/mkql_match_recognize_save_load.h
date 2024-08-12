@@ -26,7 +26,7 @@ struct TSerializerContext {
 template<class>
 inline constexpr bool always_false_v = false;
 
-struct TOutputSerializer {
+struct TMrOutputSerializer : TOutputSerializer {
 private:
     enum class TPtrStateMode {
         Saved = 0,
@@ -34,34 +34,20 @@ private:
     };
 
 public:
-    TOutputSerializer(const TSerializerContext& context)
-        : Context(context)
+    TMrOutputSerializer(const TSerializerContext& context, EMkqlStateType stateType, ui32 stateVersion, TComputationContext& ctx)
+        : TOutputSerializer(stateType, stateVersion, ctx)
+        , Context(context)
     {} 
+
+    using TOutputSerializer::Write;
 
     template <typename... Ts>
     void operator()(Ts&&... args) {
         (Write(std::forward<Ts>(args)), ...);
     }
 
-    template<typename Type>
-    void Write(const Type& value ) {
-        if constexpr (std::is_same_v<std::remove_cv_t<Type>, TString>) {
-            WriteString(Buf, value);
-        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui64>) {
-            WriteUi64(Buf, value);
-        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, bool>) {
-            WriteBool(Buf, value);
-        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui8>) {
-            WriteByte(Buf, value);
-        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui32>) {
-            WriteUi32(Buf, value);
-        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, NUdf::TUnboxedValue>) {     // Only Row type (StateType) supported !
-            WriteUnboxedValue(Buf, Context.RowPacker.RefMutableObject(Context.Ctx, false, Context.RowType), value);
-        } else if constexpr (std::is_empty_v<Type>){
-            // Empty struct is not saved/loaded.
-        } else {
-            static_assert(always_false_v<Type>, "Not supported type / not implemented");
-        }
+    void Write(const NUdf::TUnboxedValue& value) {
+        WriteUnboxedValue(Context.RowPacker.RefMutableObject(Context.Ctx, false, Context.RowType), value);
     }
 
     template<class Type>
@@ -84,32 +70,12 @@ public:
         Cache[addr] = addr;
     }
 
-    template<class Type1, class Type2>
-    void Write(const std::pair<Type1, Type2>& value) {
-        Write(value.first);
-        Write(value.second);
-    }
-
-    template<class Type, class Allocator>
-    void Write(const std::vector<Type, Allocator>& value) {
-        Write(value.size());
-        for (size_t i = 0; i < value.size(); ++i) {
-            Write(value[i]);
-        }
-    }
-
-    NUdf::TUnboxedValuePod MakeString() {
-        auto strRef = NUdf::TStringRef(Buf.data(), Buf.size());
-        return NKikimr::NMiniKQL::MakeString(strRef);
-    }
-
 private:
     const TSerializerContext& Context;
-    TString Buf;
     mutable std::map<std::uintptr_t, std::uintptr_t> Cache;
 };
 
-struct TInputSerializer {
+struct TMrInputSerializer : TInputSerializer {
 private:
     enum class TPtrStateMode {
         Saved = 0,
@@ -117,56 +83,20 @@ private:
     };
 
 public:
-    TInputSerializer(TSerializerContext& context, const NUdf::TStringRef& state)
-        : Context(context)
-        , Buf(state.Data(), state.Size())
-    {}
+    TMrInputSerializer(TSerializerContext& context, const NUdf::TUnboxedValue& state)
+        : TInputSerializer(state, EMkqlStateType::SIMPLE_BLOB)
+        , Context(context) {    
+    }
+
+    using TInputSerializer::Read;
 
     template <typename... Ts>
     void operator()(Ts&... args) {
         (Read(args), ...);
     }
 
-    template<typename Type, typename ReturnType = Type>
-    ReturnType Read() {
-        if constexpr (std::is_same_v<std::remove_cv_t<Type>, TString>) {
-            return ReadString(Buf);
-        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui64>) {
-            return ReadUi64(Buf);
-        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, bool>) {
-            return ReadBool(Buf);
-        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui8>) {
-            return ReadByte(Buf);
-        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui32>) {
-            return ReadUi32(Buf);
-        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, NUdf::TUnboxedValue>) {
-            return ReadUnboxedValue(Buf, Context.RowPacker.RefMutableObject(Context.Ctx, false, Context.RowType), Context.Ctx);
-        } else if constexpr (std::is_empty_v<Type>){
-            // Empty struct is not saved/loaded.
-        } else {
-            static_assert(always_false_v<Type>, "Not supported type / not implemented");
-        }
-    }
-
-    template<typename Type>
-    void Read(Type& value) {
-        if constexpr (std::is_same_v<std::remove_cv_t<Type>, TString>) {
-            value = ReadString(Buf);
-        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui64>) {
-            value = ReadUi64(Buf);
-        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, bool>) {
-            value = ReadBool(Buf);
-        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui8>) {
-            value = ReadByte(Buf);
-        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui32>) {
-            value = ReadUi32(Buf);
-        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, NUdf::TUnboxedValue>) {
-            value = ReadUnboxedValue(Buf, Context.RowPacker.RefMutableObject(Context.Ctx, false, Context.RowType), Context.Ctx);
-        } else if constexpr (std::is_empty_v<Type>){
-            // Empty struct is not saved/loaded.
-        } else {
-            static_assert(always_false_v<Type>, "Not supported type / not implemented");
-        }
+    void Read(NUdf::TUnboxedValue& value) {
+        value = ReadUnboxedValue(Context.RowPacker.RefMutableObject(Context.Ctx, false, Context.RowType), Context.Ctx);
     }
 
     template<class Type>
@@ -189,37 +119,9 @@ public:
         auto* cachePtr = static_cast<Type*>(it->second);
         ptr = TIntrusivePtr<Type>(cachePtr);
     }
-
-    template<class Type1, class Type2>
-    void Read(std::pair<Type1, Type2>& value) {
-        Read(value.first);
-        Read(value.second);
-    }
-
-    template<class Type, class Allocator>
-    void Read(std::vector<Type, Allocator>& value) {
-        using TVector = std::vector<Type, Allocator>;
-        auto size = Read<typename TVector::size_type>();
-        //auto size = Read<TVector::size_type>();
-        value.clear();
-        value.resize(size);
-        for (size_t i = 0; i < size; ++i) {
-            Read(value[i]);
-        }
-    }
-
-    NUdf::TUnboxedValuePod MakeString() {
-        auto strRef = NUdf::TStringRef(Buf.data(), Buf.size());
-        return NKikimr::NMiniKQL::MakeString(strRef);
-    }
-
-    bool Empty() const {
-        return Buf.empty();
-    }
-
+ 
 private:
     TSerializerContext& Context;
-    TStringBuf Buf;
     mutable std::map<std::uintptr_t, void *> Cache;
 };
 

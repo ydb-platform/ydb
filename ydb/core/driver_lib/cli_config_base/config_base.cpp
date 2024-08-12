@@ -1,3 +1,5 @@
+#include <ydb/core/util/address_classifier.h>
+
 #include "config_base.h"
 
 namespace NKikimr {
@@ -16,27 +18,17 @@ TCommandConfig::TServerEndpoint TCommandConfig::ParseServerAddress(const TString
     if (address.empty()) {
         endpoint.Address = "localhost";
     }
-    TString hostname;
-    ui32 port = 0;
+    endpoint.ServerType = EServerType::GRpc;
     if (address.StartsWith("grpc://")) {
-        endpoint.ServerType = EServerType::GRpc;
         endpoint.Address = endpoint.Address.substr(7);
-        port = 2135;
         endpoint.EnableSsl = false;
     } else if (address.StartsWith("grpcs://")) {
-        endpoint.ServerType = EServerType::GRpc;
         endpoint.Address = endpoint.Address.substr(8);
-        port = 2135;
         endpoint.EnableSsl = true;
-    } else if (address.StartsWith("mbus://")) {
-        endpoint.ServerType = EServerType::MessageBus;
-        endpoint.Address = endpoint.Address.substr(7);
-        port = 2134;
-    } else {
-        endpoint.ServerType = EServerType::GRpc; // default;
-        port = 2135;
     }
-    NMsgBusProxy::TMsgBusClientConfig::CrackAddress(endpoint.Address, hostname, port);
+    TString hostname;
+    ui32 port = 2135; // default
+    NKikimr::NAddressClassifier::ParseAddress(endpoint.Address, hostname, port);
     endpoint.Address = hostname + ':' + ToString(port);
     return endpoint;
 }

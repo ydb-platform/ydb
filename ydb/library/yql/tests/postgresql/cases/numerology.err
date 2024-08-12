@@ -1,10 +1,10 @@
 Registering pre-existing tables
-	INT4_TBL
-	INT2_TBL
-	FLOAT8_TBL
 	int4_tbl
+	INT4_TBL
 	float8_tbl
+	INT2_TBL
 	int2_tbl
+	FLOAT8_TBL
 <sql-statement>
 --
 -- NUMEROLOGY

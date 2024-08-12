@@ -407,7 +407,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         if (allow) {
             if (!isSafe && !flags.Test(NConvertFlags::AllowUnsafeConvert)) {
                 auto castResult = NKikimr::NUdf::GetCastResult(from, to);
-                if (!castResult || *castResult & NKikimr::NUdf::Impossible) {
+                if (*castResult & NKikimr::NUdf::Impossible) {
                     return IGraphTransformer::TStatus::Error;
                 }
 
@@ -3126,12 +3126,20 @@ bool IsWideSequenceBlockType(const TTypeAnnotationNode& type) {
     return IsWideBlockType(*itemType);
 }
 
-bool IsSupportedAsBlockType(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx, TTypeAnnotationContext& types) {
+bool IsSupportedAsBlockType(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx, TTypeAnnotationContext& types,
+    bool reportUnspported)
+{
     if (!types.ArrowResolver) {
         return false;
     }
 
-    auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(pos), { &type }, ctx);
+    IArrowResolver::TUnsupportedTypeCallback onUnsupportedType;
+    if (reportUnspported) {
+        onUnsupportedType  = [&types](const auto& typeKindOrSlot) {
+            std::visit([&types](const auto& value) { types.IncNoBlockType(value); }, typeKindOrSlot);
+        };
+    }
+    auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(pos), { &type }, ctx, onUnsupportedType);
     YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
     return resolveStatus == IArrowResolver::OK;
 }
@@ -3456,6 +3464,19 @@ bool EnsureTaggedType(const TExprNode& node, TExprContext& ctx) {
 
     if (node.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Tagged) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected tagged type, but got: " << *node.GetTypeAnn()));
+        return false;
+    }
+
+    return true;
+}
+
+bool EnsureTaggedType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
+    if (HasError(&type, ctx)) {
+        return false;
+    }
+
+    if (type.GetKind() != ETypeAnnotationKind::Tagged) {
+        ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected tagged type, but got: " << type));
         return false;
     }
 
@@ -3981,7 +4002,7 @@ bool EnsureAnySeqType(TPositionHandle position, const TTypeAnnotationNode& type,
     return false;
 }
 
-bool EnsureStructOrOptionalStructType(const TExprNode& node, TExprContext& ctx) {
+bool EnsureStructOrOptionalStructType(const TExprNode& node, bool& isOptional, const TStructExprType*& structType, TExprContext& ctx) {
     if (HasError(node.GetTypeAnn(), ctx)) {
         return false;
     }
@@ -3992,10 +4013,11 @@ bool EnsureStructOrOptionalStructType(const TExprNode& node, TExprContext& ctx) 
         return false;
     }
 
-    return EnsureStructOrOptionalStructType(node.Pos(), *node.GetTypeAnn(), ctx);
+    return EnsureStructOrOptionalStructType(node.Pos(), *node.GetTypeAnn(), isOptional, structType, ctx);
 }
-
-bool EnsureStructOrOptionalStructType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
+bool EnsureStructOrOptionalStructType(TPositionHandle position, const TTypeAnnotationNode& type, bool& isOptional,
+    const TStructExprType*& structType, TExprContext& ctx)
+{
     if (HasError(&type, ctx)) {
         return false;
     }
@@ -4005,6 +4027,7 @@ bool EnsureStructOrOptionalStructType(TPositionHandle position, const TTypeAnnot
         ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected either struct or optional of struct, but got: " << type));
         return false;
     }
+
     if (kind == ETypeAnnotationKind::Optional) {
         auto itemType = type.Cast<TOptionalExprType>()->GetItemType();
         kind = itemType->GetKind();
@@ -4012,6 +4035,11 @@ bool EnsureStructOrOptionalStructType(TPositionHandle position, const TTypeAnnot
             ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected either struct or optional of struct, but got: " << type));
             return false;
         }
+        isOptional = true;
+        structType = itemType->Cast<TStructExprType>();
+    } else {
+        isOptional = false;
+        structType = type.Cast<TStructExprType>();
     }
 
     return true;
@@ -4232,6 +4260,18 @@ EDataSlot WithTzDate(EDataSlot dataSlot) {
         return EDataSlot::TzTimestamp;
     }
 
+    if (dataSlot == EDataSlot::Date32) {
+        return EDataSlot::TzDate32;
+    }
+
+    if (dataSlot == EDataSlot::Datetime64) {
+        return EDataSlot::TzDatetime64;
+    }
+
+    if (dataSlot == EDataSlot::Timestamp64) {
+        return EDataSlot::TzTimestamp64;
+    }
+
     return dataSlot;
 }
 
@@ -4246,6 +4286,18 @@ EDataSlot WithoutTzDate(EDataSlot dataSlot) {
 
     if (dataSlot == EDataSlot::TzTimestamp) {
         return EDataSlot::Timestamp;
+    }
+
+    if (dataSlot == EDataSlot::TzDate32) {
+        return EDataSlot::Date32;
+    }
+
+    if (dataSlot == EDataSlot::TzDatetime64) {
+        return EDataSlot::Datetime64;
+    }
+
+    if (dataSlot == EDataSlot::TzTimestamp64) {
+        return EDataSlot::Timestamp64;
     }
 
     return dataSlot;
@@ -5993,14 +6045,7 @@ bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, bool& convertT
         }
 
         auto slot = unpacked->Cast<TDataExprType>()->GetSlot();
-        auto convertedTypeId = ConvertToPgType(slot);
-        if (!convertedTypeId) {
-            ctx.AddError(TIssue(ctx.GetPosition(pos),
-                TStringBuilder() << "Type is not compatible to PG: " << slot));
-            return false;
-        }
-
-        pgType = *convertedTypeId;
+        pgType = ConvertToPgType(slot);
         convertToPg = true;
         return true;
     } else if (type->GetKind() != ETypeAnnotationKind::Pg) {
@@ -6834,7 +6879,7 @@ void CheckExpectedTypeAndColumnOrder(const TExprNode& node, TExprContext& ctx, T
             auto status = typesCtx.SetColumnOrder(node, oldColumnOrder, ctx);
             YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
         } else {
-            YQL_ENSURE(newColumnOrder == oldColumnOrder,
+            YQL_ENSURE(newColumnOrder && *newColumnOrder == oldColumnOrder,
                 "Rewrite error, column order should be: "
                 << FormatColumnOrder(oldColumnOrder) << ", but it is: "
                 << FormatColumnOrder(newColumnOrder) << " for node "

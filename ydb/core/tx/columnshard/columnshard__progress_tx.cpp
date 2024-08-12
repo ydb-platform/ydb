@@ -18,8 +18,9 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("tx_state", "execute");
         Y_ABORT_UNLESS(Self->ProgressTxInFlight);
+        Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TX_COMPLETE_LAG, Self->GetTxCompleteLag().MilliSeconds());
 
-        size_t removedCount = Self->ProgressTxController->CleanExpiredTxs(txc);
+        const size_t removedCount = Self->ProgressTxController->CleanExpiredTxs(txc);
         if (removedCount > 0) {
             // We cannot continue with this transaction, start a new transaction
             Self->Execute(new TTxProgressTx(Self), ctx);
@@ -29,6 +30,7 @@ public:
         // Process a single transaction at the front of the queue
         auto plannedItem = Self->ProgressTxController->StartPlannedTx();
         if (!!plannedItem) {
+            PlannedQueueItem.emplace(plannedItem->PlanStep, plannedItem->TxId);
             ui64 step = plannedItem->PlanStep;
             ui64 txId = plannedItem->TxId;
             LastCompletedTx = NOlap::TSnapshot(step, txId);
@@ -39,14 +41,9 @@ public:
             }
 
             TxOperator = Self->ProgressTxController->GetVerifiedTxOperator(txId);
-            AFL_VERIFY(TxOperator->Progress(*Self, NOlap::TSnapshot(step, txId), txc));
+            AFL_VERIFY(TxOperator->ProgressOnExecute(*Self, NOlap::TSnapshot(step, txId), txc));
             Self->ProgressTxController->FinishPlannedTx(txId, txc);
-            Self->RescheduleWaitingReads();
-        }
-
-        Self->ProgressTxInFlight = false;
-        if (!!Self->ProgressTxController->GetPlannedTx()) {
-            Self->EnqueueProgressTx(ctx);
+            Self->Counters.GetTabletCounters()->IncCounter(COUNTER_PLANNED_TX_COMPLETED);
         }
         return true;
     }
@@ -54,18 +51,27 @@ public:
     void Complete(const TActorContext& ctx) override {
         NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("tx_state", "complete");
         if (TxOperator) {
-            TxOperator->Complete(*Self, ctx);
+            TxOperator->ProgressOnComplete(*Self, ctx);
+            Self->RescheduleWaitingReads();
+        }
+        if (PlannedQueueItem) {
+            Self->GetProgressTxController().CompleteRunningTx(*PlannedQueueItem);
         }
         if (LastCompletedTx) {
             Self->LastCompletedTx = std::max(*LastCompletedTx, Self->LastCompletedTx);
+        }
+        Self->ProgressTxInFlight = false;
+        if (!!Self->ProgressTxController->GetPlannedTx()) {
+            Self->EnqueueProgressTx(ctx);
         }
         Self->SetupIndexation();
     }
 
 private:
-    TTxController::ITransactionOperatior::TPtr TxOperator;
+    TTxController::ITransactionOperator::TPtr TxOperator;
     const ui32 TabletTxNo;
     std::optional<NOlap::TSnapshot> LastCompletedTx;
+    std::optional<TTxController::TPlanQueueItem> PlannedQueueItem;
 };
 
 void TColumnShard::EnqueueProgressTx(const TActorContext& ctx) {

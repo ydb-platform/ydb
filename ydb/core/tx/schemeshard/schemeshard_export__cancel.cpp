@@ -79,6 +79,10 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
             }
         }
 
+        if (exportInfo->State == TExportInfo::EState::Cancelled) {
+            exportInfo->EndTime = TAppData::TimeProvider->Now();
+        }
+
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistExportState(db, exportInfo);
 
@@ -158,6 +162,7 @@ struct TSchemeShard::TExport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
 
         if (cancelledItems == cancellableItems) {
             exportInfo->State = TExportInfo::EState::Cancelled;
+            exportInfo->EndTime = TAppData::TimeProvider->Now();
             Self->PersistExportState(db, exportInfo);
         }
 

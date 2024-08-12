@@ -25,38 +25,13 @@
 
 namespace NYT::NHttp {
 
-static const auto& Logger = HttpLogger;
+static constexpr auto& Logger = HttpLogger;
 
 using namespace NJson;
 using namespace NYson;
 using namespace NYTree;
 using namespace NConcurrency;
-
-////////////////////////////////////////////////////////////////////////////////
-
-static const TString XYTErrorHeaderName("X-YT-Error");
-static const TString XYTResponseCodeHeaderName("X-YT-Response-Code");
-static const TString XYTResponseMessageHeaderName("X-YT-Response-Message");
-static const TString AccessControlAllowCredentialsHeaderName("Access-Control-Allow-Credentials");
-static const TString AccessControlAllowOriginHeaderName("Access-Control-Allow-Origin");
-static const TString AccessControlAllowMethodsHeaderName("Access-Control-Allow-Methods");
-static const TString AccessControlMaxAgeHeaderName("Access-Control-Max-Age");
-static const TString AccessControlAllowHeadersHeaderName("Access-Control-Allow-Headers");
-static const TString AccessControlExposeHeadersHeaderName("Access-Control-Expose-Headers");
-static const TString XSourcePortYHeaderName("X-Source-Port-Y");
-static const TString XForwardedForYHeaderName("X-Forwarded-For-Y");
-static const TString ContentTypeHeaderName("Content-Type");
-static const TString ContentRangeHeaderName("Content-Range");
-static const TString PragmaHeaderName("Pragma");
-static const TString RangeHeaderName("Range");
-static const TString ExpiresHeaderName("Expires");
-static const TString CacheControlHeaderName("Cache-Control");
-static const TString XContentTypeOptionsHeaderName("X-Content-Type-Options");
-static const TString XFrameOptionsHeaderName("X-Frame-Options");
-static const TString XDnsPrefetchControlHeaderName("X-DNS-Prefetch-Control");
-static const TString XYTRequestIdHeaderName("X-YT-Request-Id");
-static const TString XYTTraceIdHeaderName("X-YT-Trace-Id");
-static const TString XYTSpanIdHeaderName("X-YT-Span-Id");
+using namespace NHeaders;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -188,6 +163,47 @@ static const auto HeadersWhitelist = JoinSeq(", ", std::vector<TString>{
     "X-YT-Trace-Id",
     "X-YT-User-Tag",
 });
+
+static const std::vector<TString> KnownHeaders = {
+    AcceptHeaderName,
+    AccessControlAllowCredentialsHeaderName,
+    AccessControlAllowHeadersHeaderName,
+    AccessControlAllowMethodsHeaderName,
+    AccessControlAllowOriginHeaderName,
+    AccessControlExposeHeadersHeaderName,
+    AccessControlMaxAgeHeaderName,
+    AuthorizationHeaderName,
+    CacheControlHeaderName,
+    ContentRangeHeaderName,
+    ContentTypeHeaderName,
+    CookieHeaderName,
+    ExpiresHeaderName,
+    PragmaHeaderName,
+    RangeHeaderName,
+    RequestTimeoutHeaderName,
+    UserAgentHeaderName,
+    XContentTypeOptionsHeaderName,
+    XRequestTimeoutHeaderName,
+
+    UserTicketHeaderName,
+    XDnsPrefetchControlHeaderName,
+    XForwardedForYHeaderName,
+    XFrameOptionsHeaderName,
+    XSourcePortYHeaderName,
+
+    ProtocolVersionMajor,
+    ProtocolVersionMinor,
+    RequestFormatOptionsHeaderName,
+    RequestIdHeaderName,
+    ResponseFormatOptionsHeaderName,
+    UserNameHeaderName,
+    UserTagHeaderName,
+    XYTErrorHeaderName,
+    XYTResponseCodeHeaderName,
+    XYTResponseMessageHeaderName,
+    XYTSpanIdHeaderName,
+    XYTTraceIdHeaderName,
+};
 
 bool MaybeHandleCors(
     const IRequestPtr& req,
@@ -359,7 +375,7 @@ void SetTraceId(const IResponseWriterPtr& rsp, NTracing::TTraceId traceId)
 void SetRequestId(const IResponseWriterPtr& rsp, NRpc::TRequestId requestId)
 {
     if (requestId) {
-        rsp->GetHeaders()->Set(XYTRequestIdHeaderName, ToString(requestId));
+        rsp->GetHeaders()->Set(RequestIdHeaderName, ToString(requestId));
     }
 }
 
@@ -471,6 +487,12 @@ TString SanitizeUrl(const TString& url)
     } else {
         return Format("%v:%v%v", urlRef.Host, urlRef.PortStr, urlRef.Path);
     }
+}
+
+std::vector<std::pair<TString, TString>> DumpUnknownHeaders(const THeadersPtr& headers)
+{
+    static const THeaders::THeaderNames known(KnownHeaders.begin(), KnownHeaders.end());
+    return headers->Dump(&known);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

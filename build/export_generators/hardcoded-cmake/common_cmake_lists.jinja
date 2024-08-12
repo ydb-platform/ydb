@@ -2,9 +2,9 @@
 {% include '[generator]/disclaimer.jinja' -%}
 {% set platforms_count = platform_names|length -%}
 {% if platforms_count > 0 -%}
-{% for i in range(platforms_count) %}
-{% if i != 0 %}else{% endif %}if ({{ platforms[platform_names[i]] }})
-  include({{ platform_cmakelists[i] }})
-{%- endfor %}
+{%     for i in range(platforms_count) %}
+{%         if i != 0 %}else{% endif %}if ({{ platforms[platform_names[i]] }})
+  include(CMakeLists.{{ platform_names[i] }}.txt)
+{%-    endfor %}
 endif()
 {% endif -%}

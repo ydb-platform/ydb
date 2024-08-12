@@ -49,6 +49,25 @@ public:
     }
 };
 
+template <bool Nullable>
+class TFixedSizeBlockItemHasher<NYql::NDecimal::TInt128, Nullable> : public TBlockItemHasherBase<TFixedSizeBlockItemHasher<NYql::NDecimal::TInt128, Nullable>, Nullable> {
+public:
+    ui64 DoHash(TBlockItem value) const {
+        return GetValueHash<TDataType<NUdf::TDecimal>::Slot>(NUdf::TUnboxedValuePod(value.GetInt128()));
+    }
+};
+
+template <typename T, bool Nullable>
+class TTzDateBlockItemHasher : public TBlockItemHasherBase<TTzDateBlockItemHasher<T, Nullable>, Nullable> {
+public:
+    ui64 DoHash(TBlockItem value) const {
+        using TLayout = typename TDataType<T>::TLayout;
+        TUnboxedValuePod uv {value.Get<TLayout>()};
+        uv.SetTimezoneId(value.GetTimezoneId());
+        return GetValueHash<TDataType<T>::Slot>(uv);
+    }
+};
+
 template <typename TStringType, bool Nullable>
 class TStringBlockItemHasher : public TBlockItemHasherBase<TStringBlockItemHasher<TStringType, Nullable>, Nullable> {
 public:

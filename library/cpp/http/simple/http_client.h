@@ -185,12 +185,19 @@ private:
 
 class TRedirectableHttpClient: public TSimpleHttpClient {
 public:
+    using TOptions = TSimpleHttpClientOptions;
+
+    explicit TRedirectableHttpClient(const TOptions& options);
+
     TRedirectableHttpClient(const TString& host, ui32 port, TDuration socketTimeout = TDuration::Seconds(5),
                             TDuration connectTimeout = TDuration::Seconds(30));
 
 private:
     void PrepareClient(TKeepAliveHttpClient& cl) const override;
     void ProcessResponse(const TStringBuf relativeUrl, THttpInput& input, IOutputStream* output, const unsigned statusCode) const override;
+
+private:
+    TOptions Opts;
 };
 
 namespace NPrivate {

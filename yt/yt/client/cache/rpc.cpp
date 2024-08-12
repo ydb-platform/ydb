@@ -109,10 +109,21 @@ NApi::NRpcProxy::TConnectionConfigPtr GetConnectionConfig(const TConfig& config)
 
 std::pair<TStringBuf, TStringBuf> ExtractClusterAndProxyRole(TStringBuf clusterUrl)
 {
-    TStringBuf cluster;
-    TStringBuf proxyRole;
-    clusterUrl.Split('/', cluster, proxyRole);
-    return {cluster, proxyRole};
+    static const TStringBuf schemeDelim = "://";
+
+    auto startPos = clusterUrl.find(schemeDelim);
+    if (startPos != TStringBuf::npos) {
+        startPos += schemeDelim.size();
+    } else {
+        startPos = 0;
+    }
+
+    auto endPos = clusterUrl.rfind('/');
+    if (endPos != TStringBuf::npos && endPos > startPos) {
+        return {clusterUrl.Head(endPos), clusterUrl.Tail(endPos + 1)};
+    } else {
+        return {clusterUrl, ""};
+    }
 }
 
 void SetClusterUrl(const NApi::NRpcProxy::TConnectionConfigPtr& config, TStringBuf clusterUrl)

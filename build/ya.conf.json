@@ -1,5 +1,20 @@
 {
     "bottles": {
+        "allure_commandline": {
+            "executable": {
+                "allure": [
+                    "bin",
+                    "allure"
+                ]
+            },
+            "formula": {
+                "by_platform": {
+                    "any": {
+                        "uri": "sbr:6277415836"
+                    }
+                }
+            }
+        },
         "atop": {
             "executable": {
                 "atop": [
@@ -24,19 +39,19 @@
             "formula": {
                 "by_platform": {
                     "darwin-arm64": {
-                        "uri": "sbr:5599877541"
+                        "uri": "sbr:6635026071"
                     },
                     "darwin-x86_64": {
-                        "uri": "sbr:5599878022"
+                        "uri": "sbr:6635026187"
                     },
                     "linux-aarch64": {
-                        "uri": "sbr:5599877008"
+                        "uri": "sbr:6635025898"
                     },
                     "linux-x86_64": {
-                        "uri": "sbr:5599878769"
+                        "uri": "sbr:6635026422"
                     },
                     "win32-x86_64": {
-                        "uri": "sbr:5599878473"
+                        "uri": "sbr:6635026287"
                     }
                 }
             }
@@ -48,6 +63,20 @@
                 ]
             },
             "formula": "build/external_resources/bloat/resources.json"
+        },
+        "buf": {
+            "executable": {
+                "buf": [
+                    "buf"
+                ]
+            },
+            "formula": {
+                "by_platform": {
+                    "linux-x86_64": {
+                        "uri": "sbr:1812152858"
+                    }
+                }
+            }
         },
         "clang-format": {
             "executable": {
@@ -206,7 +235,24 @@
                     "gofmt"
                 ]
             },
-            "formula": "build/external_resources/go_tools/go1.21.json"
+            "formula": "build/external_resources/go_tools/go1.22.json"
+        },
+        "jdk17": {
+            "executable": {
+                "jar": [
+                    "bin",
+                    "jar"
+                ],
+                "java": [
+                    "bin",
+                    "java"
+                ],
+                "javac": [
+                    "bin",
+                    "javac"
+                ]
+            },
+            "formula": "build/platform/java/jdk/jdk17/jdk.json"
         },
         "python": {
             "executable": {
@@ -259,6 +305,28 @@
         }
     },
     "toolchain": {
+        "allure_commandline": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                }
+            ],
+            "tools": {
+                "allure": {
+                    "bottle": "allure_commandline",
+                    "executable": "allure"
+                }
+            }
+        },
         "atop": {
             "platforms": [
                 {
@@ -337,6 +405,22 @@
                 "bloat": {
                     "bottle": "bloat",
                     "executable": "bloat"
+                }
+            }
+        },
+        "buf": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    }
+                }
+            ],
+            "tools": {
+                "buf": {
+                    "bottle": "buf",
+                    "executable": "buf"
                 }
             }
         },
@@ -1703,7 +1787,7 @@
         "golang": {
             "params": {
                 "type": "golang",
-                "version": "1.20.6"
+                "version": "1.22.1"
             },
             "platforms": [
                 {
@@ -1740,6 +1824,61 @@
                 "gofmt": {
                     "bottle": "golang",
                     "executable": "gofmt"
+                }
+            }
+        },
+        "jdk17": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    }
+                }
+            ],
+            "tools": {
+                "jar": {
+                    "bottle": "jdk17",
+                    "executable": "jar"
+                },
+                "jar17": {
+                    "bottle": "jdk17",
+                    "executable": "jar"
+                },
+                "java": {
+                    "bottle": "jdk17",
+                    "executable": "java"
+                },
+                "java17": {
+                    "bottle": "jdk17",
+                    "executable": "java"
+                },
+                "javac": {
+                    "bottle": "jdk17",
+                    "executable": "javac"
+                },
+                "javac17": {
+                    "bottle": "jdk17",
+                    "executable": "javac"
                 }
             }
         },
@@ -1793,6 +1932,10 @@
             }
         },
         "python3": {
+            "params": {
+                "match_root": "YMAKE_PYTHON3",
+                "use_bundle": true
+            },
             "platforms": [
                 {
                     "default": true,
@@ -1946,6 +2089,9 @@
         "msvc-win-x86_64": "msvc2019-win-x86_64"
     },
     "tools": {
+        "allure": {
+            "description": "Run Allure commandline"
+        },
         "atop": {
             "description": "Advanced System & Process Monitor"
         },
@@ -1955,6 +2101,9 @@
         "bloat": {
             "description": "Run bloat tool",
             "visible": false
+        },
+        "buf": {
+            "description": "Protobuf lint and breaking change detector"
         },
         "c++": {
             "description": "Run C++ compiler"
@@ -1985,6 +2134,24 @@
         },
         "gofmt": {
             "description": "Run gofmt tool"
+        },
+        "jar": {
+            "description": "Run current jar (17)"
+        },
+        "jar17": {
+            "description": "Run jar from jdk17"
+        },
+        "java": {
+            "description": "Run current java (17)"
+        },
+        "java17": {
+            "description": "Run java 17"
+        },
+        "javac": {
+            "description": "Run current javac (17)"
+        },
+        "javac17": {
+            "description": "Run javac 17"
         },
         "llvm-cov": {
             "description": "Run llvm-cov Clang utility"
@@ -2025,7 +2192,8 @@
             "visible": false
         },
         "ytexec": {
-            "description": "Run ytexec"
+            "description": "Run ytexec",
+            "visible": false
         }
     }
 }

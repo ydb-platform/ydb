@@ -949,6 +949,83 @@ class ObjectIdentifierPicklingTestCase(unittest.TestCase):
         assert new_asn1 == (2, 3, 1, 1, 2)
 
 
+class RelativeOID(BaseTestCase):
+    def testStr(self):
+        assert str(univ.RelativeOID((1, 3, 6))) == '1.3.6', 'str() fails'
+
+    def testRepr(self):
+        assert '1.3.6' in repr(univ.RelativeOID('1.3.6'))
+
+    def testEq(self):
+        assert univ.RelativeOID((1, 3, 6)) == (1, 3, 6), '__cmp__() fails'
+
+    def testAdd(self):
+        assert univ.RelativeOID((1, 3)) + (6,) == (1, 3, 6), '__add__() fails'
+
+    def testRadd(self):
+        assert (1,) + univ.RelativeOID((3, 6)) == (1, 3, 6), '__radd__() fails'
+
+    def testLen(self):
+        assert len(univ.RelativeOID((1, 3))) == 2, '__len__() fails'
+
+    def testPrefix(self):
+        o = univ.RelativeOID('1.3.6')
+        assert o.isPrefixOf((1, 3, 6)), 'isPrefixOf() fails'
+        assert o.isPrefixOf((1, 3, 6, 1)), 'isPrefixOf() fails'
+        assert not o.isPrefixOf((1, 3)), 'isPrefixOf() fails'
+
+    def testInput1(self):
+        assert univ.RelativeOID('1.3.6') == (1, 3, 6), 'prettyIn() fails'
+
+    def testInput2(self):
+        assert univ.RelativeOID((1, 3, 6)) == (1, 3, 6), 'prettyIn() fails'
+
+    def testInput3(self):
+        assert univ.RelativeOID(univ.RelativeOID('1.3') + (6,)) == (1, 3, 6), 'prettyIn() fails'
+
+    def testUnicode(self):
+        s = '1.3.6'
+        if sys.version_info[0] < 3:
+            s = s.decode()
+        assert univ.RelativeOID(s) == (1, 3, 6), 'unicode init fails'
+
+    def testTag(self):
+        assert univ.RelativeOID().tagSet == tag.TagSet(
+            (),
+            tag.Tag(tag.tagClassUniversal, tag.tagFormatSimple, 0x0d)
+        )
+
+    def testContains(self):
+        s = univ.RelativeOID('1.3.6.1234.99999')
+        assert 1234 in s
+        assert 4321 not in s
+
+    def testStaticDef(self):
+
+        class RelOID(univ.ObjectIdentifier):
+            pass
+
+        assert str(RelOID((1, 3, 6))) == '1.3.6'
+
+
+class RelativeOIDPicklingTestCase(unittest.TestCase):
+
+    def testSchemaPickling(self):
+        old_asn1 = univ.RelativeOID()
+        serialised = pickle.dumps(old_asn1)
+        assert serialised
+        new_asn1 = pickle.loads(serialised)
+        assert type(new_asn1) == univ.RelativeOID
+        assert old_asn1.isSameTypeWith(new_asn1)
+
+    def testValuePickling(self):
+        old_asn1 = univ.RelativeOID('2.3.1.1.2')
+        serialised = pickle.dumps(old_asn1)
+        assert serialised
+        new_asn1 = pickle.loads(serialised)
+        assert new_asn1 == (2, 3, 1, 1, 2)
+
+
 class SequenceOf(BaseTestCase):
     def setUp(self):
         BaseTestCase.setUp(self)

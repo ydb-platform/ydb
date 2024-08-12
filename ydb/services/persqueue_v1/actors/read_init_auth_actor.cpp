@@ -90,7 +90,8 @@ void TReadInitAndAuthActor::SendCacheNavigateRequest(const TActorContext& ctx, c
 
 
 bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
-        const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, THashMap<TString, TTopicHolder>::iterator topicsIter,
+        const NSchemeCache::TSchemeCacheNavigate::TEntry& entry,
+        THashMap<TString, TTopicHolder>::iterator topicsIter,
         const TActorContext& ctx
 ) {
     Y_ABORT_UNLESS(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
@@ -103,9 +104,11 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
     topicsIter->second.DbPath = pqDescr.GetPQTabletConfig().GetYdbDatabasePath();
     topicsIter->second.IsServerless = entry.DomainInfo->IsServerless();
 
+    NPQ::TPartitionGraph graph = NPQ::MakePartitionGraph(pqDescr);
+
     for (const auto& partitionDescription : pqDescr.GetPartitions()) {
-        topicsIter->second.PartitionIdToTabletId[partitionDescription.GetPartitionId()] =
-            partitionDescription.GetTabletId();
+        topicsIter->second.Partitions[partitionDescription.GetPartitionId()] =
+            TPartitionInfo{ partitionDescription.GetTabletId() };
     }
 
     if (!topicsIter->second.DiscoveryConverter->IsValid()) {
@@ -201,7 +204,7 @@ bool TReadInitAndAuthActor::CheckTopicACL(
         //TODO : add here checking of client-service-type password. Provide it via API-call.
         if (!NPQ::HasConsumer(pqDescr.GetPQTabletConfig(), ClientId)) {
             CloseSession(
-                    TStringBuilder() << "no read rule provided for consumer '" << ClientPath << "' in topic '" << topic << "' in current cluster '" << LocalCluster,
+                    TStringBuilder() << "no read rule provided for consumer '" << ClientPath << "' in topic '" << topic << "' in current cluster '" << LocalCluster << "'",
                     PersQueue::ErrorCode::BAD_REQUEST, ctx
             );
             return false;
@@ -268,7 +271,7 @@ void TReadInitAndAuthActor::FinishInitialization(const TActorContext& ctx) {
     TTopicInitInfoMap res;
     for (auto& [name, holder] : Topics) {
         res.insert(std::make_pair(name, TTopicInitInfo{
-            holder.FullConverter, holder.TabletID, holder.CloudId, holder.DbId, holder.DbPath, holder.IsServerless, holder.FolderId, holder.MeteringMode, holder.PartitionIdToTabletId
+            holder.FullConverter, holder.TabletID, holder.CloudId, holder.DbId, holder.DbPath, holder.IsServerless, holder.FolderId, holder.MeteringMode, holder.Partitions
         }));
     }
     ctx.Send(ParentId, new TEvPQProxy::TEvAuthResultOk(std::move(res)));

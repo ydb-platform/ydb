@@ -13,7 +13,7 @@ using namespace NYson;
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Used only for YT_LOG_FATAL below.
-static const TLogger Logger("TableClientKey");
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "TableClientKey");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -125,7 +125,7 @@ bool operator==(const TKey& lhs, const TKey& rhs)
     return CompareValueRanges(lhs.Elements(), rhs.Elements()) == 0;
 }
 
-void FormatValue(TStringBuilderBase* builder, const TKey& key, TStringBuf /*format*/)
+void FormatValue(TStringBuilderBase* builder, const TKey& key, TStringBuf /*spec*/)
 {
     if (key) {
         builder->AppendFormat("[%v]", JoinToString(key.Begin(), key.End()));
@@ -134,16 +134,11 @@ void FormatValue(TStringBuilderBase* builder, const TKey& key, TStringBuf /*form
     }
 }
 
-TString ToString(const TKey& key)
-{
-    return ToStringViaBuilder(key);
-}
-
 void Serialize(const TKey& key, IYsonConsumer* consumer)
 {
     if (key) {
         BuildYsonFluently(consumer)
-            .DoListFor(MakeRange(key.Begin(), key.End()), [&](TFluentList fluent, const TUnversionedValue& value) {
+            .DoListFor(MakeRange(key.Begin(), key.End()), [&] (TFluentList fluent, const TUnversionedValue& value) {
                 fluent
                     .Item()
                     .Value(value);

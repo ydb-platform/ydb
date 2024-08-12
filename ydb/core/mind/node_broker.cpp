@@ -64,7 +64,7 @@ void TNodeBroker::OnActivateExecutor(const TActorContext &ctx)
     MinDynamicId = Max(MaxStaticId + 1, (ui64)Min(appData->DynamicNameserviceConfig->MinDynamicNodeId, TActorId::MaxNodeId));
     MaxDynamicId = Max(MinDynamicId, (ui64)Min(appData->DynamicNameserviceConfig->MaxDynamicNodeId, TActorId::MaxNodeId));
 
-    EnableSlotNameGeneration = appData->FeatureFlags.GetEnableSlotNameGeneration();
+    EnableStableNodeNames = appData->FeatureFlags.GetEnableStableNodeNames();
 
     ClearState();
 
@@ -107,6 +107,7 @@ bool TNodeBroker::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
                 << "  MaxStaticNodeId: " << AppData(ctx)->DynamicNameserviceConfig->MaxStaticNodeId << Endl
                 << "  MaxDynamicNodeId: " << AppData(ctx)->DynamicNameserviceConfig->MaxDynamicNodeId << Endl
                 << "  EpochDuration: " << EpochDuration << Endl
+                << "  StableNodeNamePrefix: " << StableNodeNamePrefix << Endl
                 << "  BannedIds:";
             for (auto &pr : BannedIds)
                 str << " [" << pr.first << ", " << pr.second << "]";
@@ -339,9 +340,15 @@ void TNodeBroker::FillNodeInfo(const TNodeInfo &node,
     info.SetAddress(node.Address);
     info.SetExpire(node.Expire.GetValue());
     node.Location.Serialize(info.MutableLocation(), false);
-    if (EnableSlotNameGeneration && node.SlotIndex.has_value()) {
-        const TString slotName = TStringBuilder() << "slot-" << node.SlotIndex;
-        info.SetSlotName(slotName);
+    FillNodeName(node.SlotIndex, info);
+}
+
+void TNodeBroker::FillNodeName(const std::optional<ui32> &slotIndex,
+                               NKikimrNodeBroker::TNodeInfo &info) const
+{
+    if (EnableStableNodeNames && slotIndex.has_value()) {
+        const TString name = TStringBuilder() << StableNodeNamePrefix << slotIndex.value();
+        info.SetName(name);
     }
 }
 
@@ -438,8 +445,9 @@ void TNodeBroker::AddNodeToEpochCache(const TNodeInfo &node)
 
 void TNodeBroker::SubscribeForConfigUpdates(const TActorContext &ctx)
 {
-    ui32 item = (ui32)NKikimrConsole::TConfigItem::NodeBrokerConfigItem;
-    NConsole::SubscribeViaConfigDispatcher(ctx, {item}, ctx.SelfID);
+    ui32 nodeBrokerItem = (ui32)NKikimrConsole::TConfigItem::NodeBrokerConfigItem;
+    ui32 featureFlagsItem = (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem;
+    NConsole::SubscribeViaConfigDispatcher(ctx, {nodeBrokerItem, featureFlagsItem}, ctx.SelfID);
 }
 
 void TNodeBroker::ProcessTx(ITransaction *tx,
@@ -479,6 +487,8 @@ void TNodeBroker::LoadConfigFromProto(const NKikimrNodeBroker::TConfig &config)
                     " small. Using min. value: " << MIN_LEASE_DURATION);
         EpochDuration = MIN_LEASE_DURATION;
     }
+
+    StableNodeNamePrefix = config.GetStableNodeNamePrefix();
 
     BannedIds.clear();
     for (auto &banned : config.GetBannedNodeIds())
@@ -779,7 +789,12 @@ void TNodeBroker::DbUpdateNodeLocation(const TNodeInfo &node,
 
 void TNodeBroker::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                          const TActorContext &ctx)
-{
+{   
+    const auto& appConfig = ev->Get()->Record.GetConfig();
+    if (appConfig.HasFeatureFlags()) {
+        EnableStableNodeNames = appConfig.GetFeatureFlags().GetEnableStableNodeNames();
+    }
+
     if (ev->Get()->Record.HasLocal() && ev->Get()->Record.GetLocal()) {
         ProcessTx(CreateTxUpdateConfig(ev), ctx);
     } else {
@@ -845,9 +860,9 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
     LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER, "Handle TEvNodeBroker::TEvRegistrationRequest"
         << ": request# " << ev->Get()->Record.ShortDebugString());
 
-    class TRegisterNodeActor : public TActorBootstrapped<TRegisterNodeActor> {
+    class TResolveTenantActor : public TActorBootstrapped<TResolveTenantActor> {
         TEvNodeBroker::TEvRegistrationRequest::TPtr Ev;
-        TNodeBroker *Self;
+        TActorId ReplyTo;
         NActors::TScopeId ScopeId;
         TSubDomainKey ServicedSubDomain;
 
@@ -856,9 +871,9 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
             return NKikimrServices::TActivity::NODE_BROKER_ACTOR;
         }
 
-        TRegisterNodeActor(TEvNodeBroker::TEvRegistrationRequest::TPtr& ev, TNodeBroker *self)
+        TResolveTenantActor(TEvNodeBroker::TEvRegistrationRequest::TPtr& ev, TActorId replyTo)
             : Ev(ev)
-            , Self(self)
+            , ReplyTo(replyTo)
         {}
 
         void Bootstrap(const TActorContext& ctx) {
@@ -915,7 +930,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
                 << ": scope id# " << ScopeIdToString(ScopeId)
                 << ": serviced subdomain# " << ServicedSubDomain);
 
-            Self->ProcessTx(Self->CreateTxRegisterNode(Ev, ScopeId, ServicedSubDomain), ctx);
+            Send(ReplyTo, new TEvPrivate::TEvResolvedRegistrationRequest(Ev, ScopeId, ServicedSubDomain));
             Die(ctx);
         }
 
@@ -924,7 +939,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
             CFunc(TEvents::TSystem::Undelivered, HandleUndelivered)
         })
     };
-    ctx.RegisterWithSameMailbox(new TRegisterNodeActor(ev, this));
+    ctx.RegisterWithSameMailbox(new TResolveTenantActor(ev, SelfId()));
 }
 
 void TNodeBroker::Handle(TEvNodeBroker::TEvExtendLeaseRequest::TPtr &ev,
@@ -972,6 +987,12 @@ void TNodeBroker::Handle(TEvPrivate::TEvUpdateEpoch::TPtr &ev,
     }
 
     ProcessTx(CreateTxUpdateEpoch(), ctx);
+}
+
+void TNodeBroker::Handle(TEvPrivate::TEvResolvedRegistrationRequest::TPtr &ev,
+                         const TActorContext &ctx)
+{
+    ProcessTx(CreateTxRegisterNode(ev), ctx);
 }
 
 IActor *CreateNodeBroker(const TActorId &tablet,

@@ -131,7 +131,7 @@ TTcpConnection::TTcpConnection(
         EndpointDescription_,
         Config_->EncryptionMode,
         Config_->VerificationMode))
-    , Logger(BusLogger.WithTag(LoggingTag_.c_str()))
+    , Logger(BusLogger().WithRawTag(LoggingTag_))
     , GenerateChecksums_(Config_->GenerateChecksums)
     , Socket_(socket)
     , MultiplexingBand_(multiplexingBand)
@@ -196,7 +196,10 @@ void TTcpConnection::Close()
 
     EncodedFragments_.clear();
 
-    FlushStatistics();
+    {
+        auto guard = Guard(Lock_);
+        FlushStatistics();
+    }
 }
 
 void TTcpConnection::Start()
@@ -257,7 +260,10 @@ void TTcpConnection::RunPeriodicCheck()
         return;
     }
 
-    FlushStatistics();
+    {
+        auto guard = Guard(Lock_);
+        FlushStatistics();
+    }
 
     auto now = NProfiling::GetCpuInstant();
 
@@ -279,16 +285,6 @@ void TTcpConnection::RunPeriodicCheck()
             << TErrorAttribute("timeout", Config_->ReadStallTimeout)
             << TErrorAttribute("pending_control", static_cast<EPollControl>(PendingControl_.load())));
         return;
-    }
-}
-
-EPollablePriority TTcpConnection::GetPriority() const
-{
-    switch (MultiplexingBand_.load(std::memory_order::relaxed)) {
-        case EMultiplexingBand::RealTime:
-            return EPollablePriority::RealTime;
-        default:
-            return EPollablePriority::Normal;
     }
 }
 
@@ -1475,7 +1471,7 @@ bool TTcpConnection::MaybeEncodeFragments()
     size_t encodedSize = 0;
     size_t coalescedSize = 0;
 
-    auto flushCoalesced = [&] () {
+    auto flushCoalesced = [&] {
         if (coalescedSize > 0) {
             EncodedFragments_.push(TRef(buffer->End() - coalescedSize, coalescedSize));
             coalescedSize = 0;
@@ -1789,6 +1785,7 @@ void TTcpConnection::InitSocketTosLevel(TTosLevel tosLevel)
 
 void TTcpConnection::FlushStatistics()
 {
+    VERIFY_SPINLOCK_AFFINITY(Lock_);
     UpdateTcpStatistics();
     FlushBusStatistics();
 }

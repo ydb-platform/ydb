@@ -104,14 +104,23 @@ public:
 class IDataReader {
 protected:
     std::shared_ptr<TReadContext> Context;
+    bool Started = false;
+    virtual TConclusionStatus DoStart() = 0;
     virtual TString DoDebugString(const bool verbose) const = 0;
     virtual void DoAbort() = 0;
     virtual bool DoIsFinished() const = 0;
-    virtual std::vector<TPartialReadResult> DoExtractReadyResults(const int64_t maxRowsInBatch) = 0;
+    virtual std::vector<std::shared_ptr<TPartialReadResult>> DoExtractReadyResults(const int64_t maxRowsInBatch) = 0;
     virtual TConclusion<bool> DoReadNextInterval() = 0;
 public:
     IDataReader(const std::shared_ptr<TReadContext>& context);
     virtual ~IDataReader() = default;
+
+    TConclusionStatus Start() {
+        AFL_VERIFY(!Started);
+        Started = true;
+        return DoStart();
+    }
+    virtual void OnSentDataFromInterval(const ui32 intervalIdx) const = 0;
 
     const TReadContext& GetContext() const {
         return *Context;
@@ -125,7 +134,8 @@ public:
         return Context->GetCounters();
     }
 
-    void Abort() {
+    void Abort(const TString& reason) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "scan_aborted")("reason", reason);
         return DoAbort();
     }
 
@@ -143,7 +153,7 @@ public:
         return *result;
     }
 
-    std::vector<TPartialReadResult> ExtractReadyResults(const int64_t maxRowsInBatch) {
+    std::vector<std::shared_ptr<TPartialReadResult>> ExtractReadyResults(const int64_t maxRowsInBatch) {
         return DoExtractReadyResults(maxRowsInBatch);
     }
 

@@ -2,6 +2,7 @@
 #include "hive_impl.h"
 #include "object_distribution.h"
 
+#include <util/datetime/cputimer.h>
 #include <util/stream/null.h>
 
 #include <map>
@@ -16,7 +17,7 @@ using namespace NHive;
 #define Ctest Cerr
 #endif
 
-Y_UNIT_TEST_SUITE(ObjectDistribuiton) {
+Y_UNIT_TEST_SUITE(ObjectDistribution) {
     Y_UNIT_TEST(TestImbalanceCalcualtion) {
         static constexpr size_t NUM_NODES = 8;
         static constexpr size_t NUM_OBJECTS = 250;
@@ -244,5 +245,51 @@ Y_UNIT_TEST_SUITE(ObjectDistribuiton) {
         }
         UNIT_ASSERT_VALUES_EQUAL(imbalance, objectDistributions.GetMaxImbalance());
 
+    }
+
+    Y_UNIT_TEST(TestManyIrrelevantNodes) {
+        static constexpr size_t NUM_NODES = 10'000;
+        static constexpr size_t NUM_OBJECTS = 10'000;
+        static constexpr TSubDomainKey DOMAIN_A = {1, 1};
+        static constexpr TSubDomainKey DOMAIN_B = {2, 2};
+
+        TIntrusivePtr<TTabletStorageInfo> hiveStorage = new TTabletStorageInfo;
+        hiveStorage->TabletType = TTabletTypes::Hive;
+        THive hive(hiveStorage.Get(), TActorId());
+
+        std::unordered_map<TNodeId, TNodeInfo> nodes;
+        TObjectDistributions objectDistributions(nodes);
+        NKikimrLocal::TTabletAvailability dummyTabletAvailability;
+        dummyTabletAvailability.SetType(TTabletTypes::Dummy);
+        for (TNodeId nodeId = 0; nodeId < NUM_NODES; ++nodeId) {
+            TNodeInfo& node = nodes.emplace(std::piecewise_construct, std::tuple<TNodeId>(nodeId), std::tuple<TNodeId, THive&>(nodeId, hive)).first->second;
+            node.ServicedDomains.push_back(nodeId == 0 ? DOMAIN_A : DOMAIN_B);
+            node.RegisterInDomains();
+            node.LocationAcquired = true;
+            node.TabletAvailability.emplace(std::piecewise_construct,
+                                            std::tuple<TTabletTypes::EType>(TTabletTypes::Dummy),
+                                            std::tuple<NKikimrLocal::TTabletAvailability>(dummyTabletAvailability));
+        }
+
+        for (size_t i = 0; i < NUM_OBJECTS; i++) {
+            TLeaderTabletInfo tablet(0, hive);
+            tablet.AssignDomains(DOMAIN_A, {});
+            tablet.ObjectId = {1, i + 1};
+            tablet.SetType(TTabletTypes::Dummy);
+            objectDistributions.UpdateCountForTablet(tablet, nodes.at(0), +1);
+        }
+
+        TProfileTimer timer;
+        for (const auto& [nodeId, node] : nodes) {
+            objectDistributions.AddNode(node);
+        }
+
+        double passed = timer.Get().SecondsFloat();
+        Cerr << "Took " << passed << " seconds" << Endl;
+#ifndef SANITIZER_TYPE
+#ifdef NDEBUG
+        UNIT_ASSERT_GE(NUM_NODES / passed, 1000);
+#endif
+#endif
     }
 }

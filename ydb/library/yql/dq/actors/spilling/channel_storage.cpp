@@ -30,10 +30,10 @@ class TDqChannelStorage : public IDqChannelStorage {
         NThreading::TFuture<void> IsBlobWrittenFuture_;
     };
 public:
-    TDqChannelStorage(TTxId txId, ui64 channelId, TWakeUpCallback&& wakeUp, TActorSystem* actorSystem)
+    TDqChannelStorage(TTxId txId, ui64 channelId, TWakeUpCallback&& wakeUpCallback, TErrorCallback&& errorCallback, TActorSystem* actorSystem)
     : ActorSystem_(actorSystem)
     {
-        ChannelStorageActor_ = CreateDqChannelStorageActor(txId, channelId, std::move(wakeUp), actorSystem);
+        ChannelStorageActor_ = CreateDqChannelStorageActor(txId, channelId, std::move(wakeUpCallback), std::move(errorCallback), actorSystem);
         ChannelStorageActorId_ = ActorSystem_->Register(ChannelStorageActor_->GetActor());
     }
 
@@ -63,7 +63,7 @@ public:
 
         ActorSystem_->Send(ChannelStorageActorId_, new TEvDqChannelSpilling::TEvPut(blobId, std::move(blob), std::move(promise)), /*flags*/0, cookie);
 
-        WritingBlobs_.emplace(blobId, TWritingBlobInfo(blobSize, std::move(future)));
+        WritingBlobs_.emplace(blobId, TWritingBlobInfo{blobSize, std::move(future)});
         WritingBlobsTotalSize_ += blobSize;
     }
 
@@ -119,9 +119,12 @@ private:
 
 } // anonymous namespace
 
-IDqChannelStorage::TPtr CreateDqChannelStorage(TTxId txId, ui64 channelId, IDqChannelStorage::TWakeUpCallback wakeUp, TActorSystem* actorSystem)
+IDqChannelStorage::TPtr CreateDqChannelStorage(TTxId txId, ui64 channelId,
+    TWakeUpCallback wakeUpCallback,
+    TErrorCallback errorCallback,
+    TActorSystem* actorSystem)
 {
-    return new TDqChannelStorage(txId, channelId, std::move(wakeUp), actorSystem);
+    return new TDqChannelStorage(txId, channelId, std::move(wakeUpCallback), std::move(errorCallback), actorSystem);
 }
 
 } // namespace NYql::NDq

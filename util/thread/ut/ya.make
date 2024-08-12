@@ -1,7 +1,5 @@
 UNITTEST_FOR(util)
 
-SUBSCRIBER(g:util-subscribers)
-
 SRCS(
     thread/factory_ut.cpp
     thread/lfqueue_ut.cpp

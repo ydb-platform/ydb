@@ -99,6 +99,8 @@ struct TEvPQProxy {
         EvGetStatus,
         EvWriteDone,
         EvMoveTopic,
+        EvReadingStarted,
+        EvReadingFinished,
         EvEnd,
     };
 
@@ -358,6 +360,28 @@ struct TEvPQProxy {
         TString SourcePath;
         TString DestinationPath;
     };
+
+    struct TEvReadingStarted : public TEventLocal<TEvReadingStarted, EvReadingStarted> {
+        TEvReadingStarted(const TString& topic, ui32 partitionId)
+            : Topic(topic)
+            , PartitionId(partitionId)
+        {}
+
+        TString Topic;
+        ui32 PartitionId;
+    };
+
+    struct TEvReadingFinished : public TEventLocal<TEvReadingFinished, EvReadingFinished> {
+        TEvReadingFinished(const TString& topic, ui32 partitionId, bool first)
+            : Topic(topic)
+            , PartitionId(partitionId)
+            , FirstMessage(first)
+        {}
+
+        TString Topic;
+        ui32 PartitionId;
+        bool FirstMessage;
+    };
 };
 
 
@@ -604,6 +628,9 @@ private:
             HFunc(TEvPQProxy::TEvPartitionReady, Handle) //from partitionActor
             HFunc(TEvPQProxy::TEvPartitionReleased, Handle) //from partitionActor
 
+            HFunc(TEvPQProxy::TEvReadingStarted, Handle); // from partitionActor
+            HFunc(TEvPQProxy::TEvReadingFinished, Handle); // from partitionActor
+
             HFunc(TEvPQProxy::TEvReadResponse, Handle) //from partitionActor
             HFunc(TEvPQProxy::TEvCommit, Handle) //from gRPC
             HFunc(TEvPQProxy::TEvLocked, Handle) //from gRPC
@@ -651,6 +678,9 @@ private:
     void Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvPersQueue::TEvReleasePartition::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvPersQueue::TEvError::TPtr& ev, const NActors::TActorContext& ctx);
+
+    void Handle(TEvPQProxy::TEvReadingStarted::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQProxy::TEvReadingFinished::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const NActors::TActorContext& ctx);

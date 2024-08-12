@@ -16,7 +16,7 @@ from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
     makeOptionalYdbTypeFromTypeID,
 )
 
-from ydb.library.yql.providers.generic.connector.tests.test_cases.select_positive_common import TestCase
+from ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_positive_common import TestCase
 
 
 class Factory:
@@ -138,7 +138,7 @@ class Factory:
                     ydb_type=makeOptionalYdbTypeFromTypeID(Type.UTF8),
                     data_source_type=DataSourceType(pg=postgresql.Text()),
                 ),
-                Column(
+                Column(  # TODO: maybe refactor: in fq-connector-go col_23_timestamp, col_24_date
                     name='col_23_date',
                     ydb_type=makeOptionalYdbTypeFromTypeID(Type.DATE),
                     data_source_type=DataSourceType(pg=postgresql.Date()),
@@ -154,6 +154,12 @@ class Factory:
                 #     ydb_type=?,
                 #     data_source_type=DataSourceType(pg=postgresql.time),
                 # ),
+                # maybe col_26_time?
+                Column(
+                    name='col_27_json',
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.JSON),
+                    data_source_type=DataSourceType(pg=postgresql.Json()),
+                ),
             )
         )
 
@@ -188,6 +194,7 @@ class Factory:
                     'az',
                     datetime.date(2023, 8, 9),
                     datetime.datetime(2023, 8, 9, 13, 19, 11),
+                    '{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}',
                     # TODO: support time in YQ-2297
                 ],
                 [
@@ -215,6 +222,7 @@ class Factory:
                     'buki',
                     datetime.date(1988, 11, 20),
                     datetime.datetime(1988, 11, 20, 12, 00, 00),
+                    '{ "TODO" : "unicode" }',
                     # TODO: support time in YQ-2297
                 ],
                 [
@@ -232,6 +240,7 @@ class Factory:
                     None,
                     3,
                     3,
+                    None,
                     None,
                     None,
                     None,
@@ -458,6 +467,47 @@ class Factory:
             ),
         ]
 
+    def _json(self) -> TestCase:
+        schema = Schema(
+            columns=ColumnList(
+                Column(
+                    name='col_json',
+                    ydb_type=Type.JSON,
+                    data_source_type=DataSourceType(pg=postgresql.Json()),
+                ),
+            ),
+        )
+
+        data_in = [
+            ['{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}'],
+            ['{ "TODO" : "unicode" }'],
+            [None],
+        ]
+
+        data_out_1 = [
+            ['{"age":35,"name":"James Holden"}'],
+            [None],
+            [None],
+        ]
+
+        data_source_kind = EDataSourceKind.POSTGRESQL
+
+        test_case_name = 'json'
+
+        return [
+            TestCase(
+                name_=test_case_name,
+                data_in=data_in,
+                data_out_=data_out_1,
+                protocol=EProtocol.NATIVE,
+                select_what=SelectWhat(SelectWhat.Item(name='JSON_QUERY(col_json, "$.friends[0]")', kind='expr')),
+                select_where=None,
+                data_source_kind=data_source_kind,
+                pragmas=dict(),
+                schema=schema,
+            ),
+        ]
+
     def make_test_cases(self) -> Sequence[TestCase]:
         return list(
             itertools.chain(
@@ -466,5 +516,6 @@ class Factory:
                 self._constant(),
                 self._count(),
                 self._pushdown(),
+                self._json(),
             )
         )

@@ -1,7 +1,7 @@
 name: Prewarm-debug
 on:
   schedule:
-    - cron: "15 */6 * * *"
+    - cron: "15 */6 * * *"  # At minute 15 past every 6th hour
   workflow_dispatch:
 
 jobs:

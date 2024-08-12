@@ -28,7 +28,7 @@ using namespace NNet;
 using namespace NConcurrency;
 using namespace NLogging;
 
-static const TLogger Logger{"Tls"};
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Tls");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -102,7 +102,7 @@ struct TSslContextImpl
 #endif
     }
 
-    void Commit()
+    void Commit(TInstant time)
     {
         SSL_CTX* oldCtx;
         YT_ASSERT(Ctx);
@@ -111,10 +111,17 @@ struct TSslContextImpl
             oldCtx = ActiveCtx_;
             ActiveCtx_ = Ctx;
             Ctx = nullptr;
+            CommitTime_ = time;
         }
         if (oldCtx) {
             SSL_CTX_free(oldCtx);
         }
+    }
+
+    TInstant GetCommitTime() const
+    {
+        auto guard = ReaderGuard(Lock_);
+        return CommitTime_;
     }
 
     SSL* NewSsl()
@@ -133,6 +140,7 @@ struct TSslContextImpl
 private:
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, Lock_);
     SSL_CTX* ActiveCtx_ = nullptr;
+    TInstant CommitTime_;
 };
 
 DEFINE_REFCOUNTED_TYPE(TSslContextImpl)
@@ -191,14 +199,14 @@ public:
         sslResult = SSL_get_error(Ssl_, sslResult);
         YT_VERIFY(sslResult == SSL_ERROR_WANT_READ);
 
-        Invoker_->Invoke(BIND(&TTlsConnection::DoRun, MakeStrong(this)));
+        Invoker_->Invoke(BIND(&TTlsConnection::DoRun, MakeWeak(this)));
     }
 
     void StartServer()
     {
         SSL_set_accept_state(Ssl_);
 
-        Invoker_->Invoke(BIND(&TTlsConnection::DoRun, MakeStrong(this)));
+        Invoker_->Invoke(BIND(&TTlsConnection::DoRun, MakeWeak(this)));
     }
 
     int GetHandle() const override
@@ -260,7 +268,11 @@ public:
     {
         auto promise = NewPromise<size_t>();
         ++ActiveIOCount_;
-        Invoker_->Invoke(BIND([this, this_ = MakeStrong(this), promise, buffer] () {
+        Invoker_->Invoke(BIND([this, weakThis = MakeWeak(this), promise, buffer] {
+            auto thisLocked = weakThis.Lock();
+            if (!thisLocked) {
+                return;
+            }
             ReadBuffer_ = buffer;
             ReadPromise_ = promise;
 
@@ -281,7 +293,11 @@ public:
     {
         auto promise = NewPromise<void>();
         ++ActiveIOCount_;
-        Invoker_->Invoke(BIND([this, this_ = MakeStrong(this), promise, buffer] () {
+        Invoker_->Invoke(BIND([this, weakThis = MakeWeak(this), promise, buffer] {
+            auto thisLocked = weakThis.Lock();
+            if (!thisLocked) {
+                return;
+            }
             WriteBuffer_ = buffer;
             WritePromise_ = promise;
 
@@ -308,7 +324,7 @@ public:
     TFuture<void> Close() override
     {
         ++ActiveIOCount_;
-        return BIND([this, this_ = MakeStrong(this)] () {
+        return BIND([this, this_ = MakeStrong(this)] {
             CloseRequested_ = true;
 
             DoRun();
@@ -324,7 +340,7 @@ public:
 
     TFuture<void> Abort() override
     {
-        return BIND([this, this_ = MakeStrong(this)] () {
+        return BIND([this, this_ = MakeStrong(this)] {
             if (Error_.IsOK()) {
                 Error_ = TError("TLS connection aborted");
                 CheckError();
@@ -412,7 +428,11 @@ private:
             UnderlyingReadActive_ = true;
             HandleUnderlyingIOResult(
                 Underlying_->Read(InputBuffer_),
-                BIND([this, this_ = MakeStrong(this)] (const TErrorOr<size_t>& result) {
+                BIND([this, weakThis = MakeWeak(this)] (const TErrorOr<size_t>& result) {
+                    auto thisLocked = weakThis.Lock();
+                    if (!thisLocked) {
+                        return;
+                    }
                     UnderlyingReadActive_ = false;
                     if (result.IsOK()) {
                         if (result.Value() > 0) {
@@ -439,7 +459,11 @@ private:
 
             HandleUnderlyingIOResult(
                 Underlying_->Write(OutputBuffer_.Slice(0, count)),
-                BIND([this, this_ = MakeStrong(this)] (const TError& result) {
+                BIND([this, weakThis = MakeWeak(this)] (const TError& result) {
+                    auto thisLocked = weakThis.Lock();
+                    if (!thisLocked) {
+                        return;
+                    }
                     UnderlyingWriteActive_ = false;
                     if (result.IsOK()) {
                         // Hooray!
@@ -554,7 +578,7 @@ public:
     TFuture<IConnectionPtr> Dial(const TNetworkAddress& remote, TDialerContextPtr context) override
     {
         return Underlying_->Dial(remote)
-            .Apply(BIND([ctx = Ctx_, poller = Poller_, context = std::move(context)](const IConnectionPtr& underlying) -> IConnectionPtr {
+            .Apply(BIND([ctx = Ctx_, poller = Poller_, context = std::move(context)] (const IConnectionPtr& underlying) -> IConnectionPtr {
                 auto connection = New<TTlsConnection>(ctx, poller, underlying);
                 if (context != nullptr && context->Host != std::nullopt) {
                     connection->SetHost(*(context->Host));
@@ -624,13 +648,12 @@ void TSslContext::Reset()
 
 void TSslContext::Commit(TInstant time)
 {
-    CommitTime_ = time;
-    Impl_->Commit();
+    Impl_->Commit(time);
 }
 
-TInstant TSslContext::GetCommitTime()
+TInstant TSslContext::GetCommitTime() const
 {
-    return CommitTime_;
+    return Impl_->GetCommitTime();
 }
 
 void TSslContext::UseBuiltinOpenSslX509Store()

@@ -20,7 +20,7 @@ namespace NYT::NCompression::NDetail {
 
 namespace {
 
-const auto& Logger = CompressionLogger;
+static constexpr auto& Logger = CompressionLogger;
 
 // ISzAlloc is an interface containing alloc/free functions (with its own signatures)
 // required by lzma API.

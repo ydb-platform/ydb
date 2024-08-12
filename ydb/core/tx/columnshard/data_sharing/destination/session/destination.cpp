@@ -1,66 +1,56 @@
 #include "destination.h"
+
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <ydb/core/tx/columnshard/data_sharing/destination/events/transfer.h>
+#include <ydb/core/tx/columnshard/data_sharing/destination/transactions/tx_data_from_source.h>
 #include <ydb/core/tx/columnshard/data_sharing/destination/transactions/tx_finish_ack_from_initiator.h>
 #include <ydb/core/tx/columnshard/data_sharing/destination/transactions/tx_finish_from_source.h>
-#include <ydb/core/tx/columnshard/data_sharing/destination/transactions/tx_data_from_source.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 namespace NKikimr::NOlap::NDataSharing {
 
 NKikimr::TConclusionStatus TDestinationSession::DataReceived(THashMap<ui64, NEvents::TPathIdData>&& data, TColumnEngineForLogs& index, const std::shared_ptr<IStoragesManager>& /*manager*/) {
-    auto guard = index.GranulesStorage->StartPackModification();
+    auto guard = index.GranulesStorage->GetStats()->StartPackModification();
     for (auto&& i : data) {
         auto it = PathIds.find(i.first);
         AFL_VERIFY(it != PathIds.end())("path_id_undefined", i.first);
         for (auto&& portion : i.second.DetachPortions()) {
-            ui32 contains = 0;
-            ui32 notContains = 0;
-            THashMap<TString, THashSet<TUnifiedBlobId>> blobIds;
-            portion.FillBlobIdsByStorage(blobIds, index.GetVersionedIndex());
-            for (auto&& s : blobIds) {
-                auto it = CurrentBlobIds.find(s.first);
-                if (it == CurrentBlobIds.end()) {
-                    notContains += s.second.size();
-                    continue;
-                }
-                for (auto&& b : s.second) {
-                    if (it->second.contains(b)) {
-                        ++contains;
-                    }
-                }
-            }
-            AFL_VERIFY(!contains || !notContains);
-            if (!contains) {
-                portion.SetPathId(it->second);
-                index.UpsertPortion(std::move(portion));
-            }
+            portion.SetPathId(it->second);
+            index.UpsertPortion(std::move(portion));
         }
     }
     return TConclusionStatus::Success();
 }
 
-void TDestinationSession::SendCurrentCursorAck(const NColumnShard::TColumnShard& shard, const std::optional<TTabletId> tabletId) {
-    AFL_VERIFY(IsStarted() || IsStarting());
-    bool found = false;
-    bool allTransfersFinished = true;
+ui32 TDestinationSession::GetSourcesInProgressCount() const {
+    AFL_VERIFY(IsInProgress());
+    AFL_VERIFY(Cursors.size());
+    ui32 result = 0;
     for (auto&& [_, cursor] : Cursors) {
         if (!cursor.GetDataFinished()) {
-            allTransfersFinished = false;
+            ++result;
         }
+    }
+    return result;
+}
+
+void TDestinationSession::SendCurrentCursorAck(const NColumnShard::TColumnShard& shard, const std::optional<TTabletId> tabletId) {
+    AFL_VERIFY(IsInProgress() || IsPrepared());
+    bool found = false;
+    for (auto&& [_, cursor] : Cursors) {
         if (tabletId && *tabletId != cursor.GetTabletId()) {
             continue;
         }
         found = true;
         if (cursor.GetDataFinished()) {
             auto ev = std::make_unique<NEvents::TEvAckFinishToSource>(GetSessionId());
-            NActors::TActivationContext::AsActorContext().Send(MakePipePeNodeCacheID(false),
+            NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
                 new TEvPipeCache::TEvForward(ev.release(), (ui64)cursor.GetTabletId(), true), IEventHandle::FlagTrackDelivery, GetRuntimeId());
         } else if (cursor.GetPackIdx()) {
             auto ev = std::make_unique<NEvents::TEvAckDataToSource>(GetSessionId(), cursor.GetPackIdx());
-            NActors::TActivationContext::AsActorContext().Send(MakePipePeNodeCacheID(false),
+            NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
                 new TEvPipeCache::TEvForward(ev.release(), (ui64)cursor.GetTabletId(), true), IEventHandle::FlagTrackDelivery, GetRuntimeId());
         } else {
             std::set<ui64> pathIdsBase;
@@ -69,14 +59,9 @@ void TDestinationSession::SendCurrentCursorAck(const NColumnShard::TColumnShard&
             }
             TSourceSession source(GetSessionId(), TransferContext, cursor.GetTabletId(), pathIdsBase, (TTabletId)shard.TabletID());
             auto ev = std::make_unique<NEvents::TEvStartToSource>(source);
-            NActors::TActivationContext::AsActorContext().Send(MakePipePeNodeCacheID(false),
+            NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
                 new TEvPipeCache::TEvForward(ev.release(), (ui64)cursor.GetTabletId(), true), IEventHandle::FlagTrackDelivery, GetRuntimeId());
         }
-    }
-    if (allTransfersFinished && !IsFinished()) {
-        NYDBTest::TControllers::GetColumnShardController()->OnDataSharingFinished(shard.TabletID(), GetSessionId());
-        Finish(shard.GetDataLocksManager());
-        InitiatorController.Finished(GetSessionId());
     }
     AFL_VERIFY(found);
 }
@@ -92,9 +77,8 @@ NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestin
 }
 
 NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestinationSession::ReceiveFinished(NColumnShard::TColumnShard* self, const TTabletId sourceTabletId, const std::shared_ptr<TDestinationSession>& selfPtr) {
-    auto result = GetCursorVerified(sourceTabletId).ReceiveFinished();
-    if (!result) {
-        return result;
+    if (GetCursorVerified(sourceTabletId).GetDataFinished()) {
+        return TConclusionStatus::Fail("session finished already");
     }
     return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxFinishFromSource(self, sourceTabletId, selfPtr));
 }
@@ -184,4 +168,23 @@ bool TDestinationSession::DoStart(const NColumnShard::TColumnShard& shard, const
     return true;
 }
 
+bool TDestinationSession::TryTakePortionBlobs(const TVersionedIndex& vIndex, const TPortionInfo& portion) {
+    THashMap<TString, THashSet<TUnifiedBlobId>> blobIds;
+    portion.FillBlobIdsByStorage(blobIds, vIndex);
+    ui32 containsCounter = 0;
+    ui32 newCounter = 0;
+    for (auto&& i : blobIds) {
+        auto& storageBlobIds = CurrentBlobIds[i.first];
+        for (auto&& b : i.second) {
+            if (storageBlobIds.emplace(b).second) {
+                ++newCounter;
+            } else {
+                ++containsCounter;
+            }
+        }
+    }
+    AFL_VERIFY((containsCounter == 0) ^ (newCounter == 0));
+    return newCounter;
 }
+
+}   // namespace NKikimr::NOlap::NDataSharing

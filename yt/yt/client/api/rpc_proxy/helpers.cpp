@@ -3,6 +3,8 @@
 #include <yt/yt/client/api/rowset.h>
 #include <yt/yt/client/api/table_client.h>
 
+#include <yt/yt/client/sequoia_client/public.h>
+
 #include <yt/yt/client/table_client/columnar_statistics.h>
 #include <yt/yt/client/table_client/column_sort_schema.h>
 #include <yt/yt/client/table_client/logical_type.h>
@@ -617,6 +619,22 @@ void FromProto(
     FromProto(&statistics->InnerStatistics, protoStatistics.inner_statistics());
 }
 
+void ToProto(
+    NProto::TVersionedReadOptions* protoOptions,
+    const NTableClient::TVersionedReadOptions& options)
+{
+    protoOptions->set_read_mode(static_cast<i32>(options.ReadMode));
+}
+
+void FromProto(
+    NTableClient::TVersionedReadOptions* options,
+    const NProto::TVersionedReadOptions& protoOptions)
+{
+    if (protoOptions.has_read_mode()) {
+        options->ReadMode = CheckedEnumCast<EVersionedIOMode>(protoOptions.read_mode());
+    }
+}
+
 void ToProto(NProto::TOperation* protoOperation, const NApi::TOperation& operation)
 {
     protoOperation->Clear();
@@ -688,6 +706,10 @@ void ToProto(NProto::TOperation* protoOperation, const NApi::TOperation& operati
 
     if (operation.SlotIndexPerPoolTree) {
         protoOperation->set_slot_index_per_pool_tree(operation.SlotIndexPerPoolTree.ToString());
+    }
+
+    if (operation.SchedulingAttributesPerPoolTree) {
+        protoOperation->set_scheduling_attributes_per_pool_tree(operation.SchedulingAttributesPerPoolTree.ToString());
     }
 
     if (operation.TaskNames) {
@@ -822,6 +844,12 @@ void FromProto(NApi::TOperation* operation, const NProto::TOperation& protoOpera
         operation->SlotIndexPerPoolTree = TYsonString();
     }
 
+    if (protoOperation.has_scheduling_attributes_per_pool_tree()) {
+        operation->SchedulingAttributesPerPoolTree = TYsonString(protoOperation.scheduling_attributes_per_pool_tree());
+    } else {
+        operation->SchedulingAttributesPerPoolTree = TYsonString();
+    }
+
     if (protoOperation.has_task_names()) {
         operation->TaskNames = TYsonString(protoOperation.task_names());
     } else {
@@ -944,6 +972,12 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     }
     if (job.JobCookie) {
         protoJob->set_job_cookie(*job.JobCookie);
+    }
+    if (job.ArchiveFeatures) {
+        protoJob->set_archive_features(job.ArchiveFeatures.ToString());
+    }
+    if (job.MonitoringDescriptor) {
+        protoJob->set_monitoring_descriptor(*job.MonitoringDescriptor);
     }
 }
 
@@ -1083,6 +1117,16 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
         job->JobCookie = protoJob.job_cookie();
     } else {
         job->JobCookie.reset();
+    }
+    if (protoJob.has_archive_features()) {
+        job->ArchiveFeatures = TYsonString(protoJob.archive_features());
+    } else {
+        job->ArchiveFeatures = TYsonString();
+    }
+    if (protoJob.has_monitoring_descriptor()) {
+        job->MonitoringDescriptor = protoJob.monitoring_descriptor();
+    } else {
+        job->MonitoringDescriptor.reset();
     }
 }
 
@@ -1353,7 +1397,7 @@ void ToProto(
         protoQuery->set_start_time(NYT::ToProto<i64>(*query.StartTime));
     }
     if (query.FinishTime) {
-        protoQuery->set_start_time(NYT::ToProto<i64>(*query.FinishTime));
+        protoQuery->set_finish_time(NYT::ToProto<i64>(*query.FinishTime));
     }
     if (query.Settings) {
         protoQuery->set_settings(query.Settings.ToString());
@@ -1364,6 +1408,8 @@ void ToProto(
     if (query.AccessControlObject) {
         protoQuery->set_access_control_object(*query.AccessControlObject);
     }
+    protoQuery->set_access_control_objects(query.AccessControlObjects->ToString());
+
     if (query.State) {
         protoQuery->set_state(ConvertQueryStateToProto(*query.State));
     }
@@ -1430,12 +1476,17 @@ void FromProto(
     } else {
         query->AccessControlObject.reset();
     }
+    if (protoQuery.has_access_control_objects()) {
+        query->AccessControlObjects = TYsonString(protoQuery.access_control_objects());
+    } else {
+        query->AccessControlObjects.reset();
+    }
     if (protoQuery.has_state()) {
         query->State = ConvertQueryStateFromProto(protoQuery.state());
     } else {
         query->State.reset();
     }
-    if (protoQuery.result_count()) {
+    if (protoQuery.has_result_count()) {
         query->ResultCount = protoQuery.result_count();
     } else {
         query->ResultCount.reset();
@@ -1888,8 +1939,20 @@ bool IsDynamicTableRetriableError(const TError& error)
         error.FindMatching(NTabletClient::EErrorCode::NoSuchTablet);
 }
 
-bool IsRetriableError(const TError& error, bool retryProxyBanned)
+bool IsRetriableError(const TError& error, bool retryProxyBanned, bool retrySequoiaErrorsOnly)
 {
+    // For now transient Sequoia failures are always retriable even if client's
+    // retries are disabled.
+    // TODO(kvk1920): consider to make a separate flag "EnableSequoiaRetries"
+    // for this.
+    if (error.FindMatching(NSequoiaClient::EErrorCode::SequoiaRetriableError)) {
+        return true;
+    }
+
+    if (retrySequoiaErrorsOnly) {
+        return false;
+    }
+
     if (error.FindMatching(NRpcProxy::EErrorCode::ProxyBanned) ||
         error.FindMatching(NRpc::EErrorCode::PeerBanned))
     {

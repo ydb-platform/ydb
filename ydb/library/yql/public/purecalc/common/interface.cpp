@@ -27,6 +27,8 @@ TProgramFactoryOptions::TProgramFactoryOptions()
     : UdfsDir_("")
     , UserData_()
     , LLVMSettings("OFF")
+    , BlockEngineSettings("disable")
+    , ExprOutputStream(nullptr)
     , CountersProvider(nullptr)
     , NativeYtTypeFlags(0)
     , UseSystemColumns(false)
@@ -74,6 +76,16 @@ TProgramFactoryOptions& TProgramFactoryOptions::AddUDF(NUserData::EDisposition d
 
 TProgramFactoryOptions& TProgramFactoryOptions::SetLLVMSettings(TStringBuf llvm_settings) {
     LLVMSettings = llvm_settings;
+    return *this;
+}
+
+TProgramFactoryOptions& TProgramFactoryOptions::SetBlockEngineSettings(TStringBuf blockEngineSettings) {
+    BlockEngineSettings = blockEngineSettings;
+    return *this;
+}
+
+TProgramFactoryOptions& TProgramFactoryOptions::SetExprOutputStream(IOutputStream* exprOutputStream) {
+    ExprOutputStream = exprOutputStream;
     return *this;
 }
 

@@ -39,7 +39,7 @@ public:
 private:
     bool CgroupErrorLogged_ = false;
 
-    std::atomic<i64> TotalMemoryLimit{0};
+    std::atomic<i64> TotalMemoryLimit = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

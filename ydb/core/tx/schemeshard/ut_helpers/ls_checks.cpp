@@ -13,6 +13,10 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <contrib/libs/protobuf/src/google/protobuf/text_format.h>
+#include <contrib/libs/protobuf/src/google/protobuf/util/field_comparator.h>
+#include <contrib/libs/protobuf/src/google/protobuf/util/message_differencer.h>
+
 namespace NSchemeShardUT_Private {
 namespace NLs {
 
@@ -460,8 +464,14 @@ void IsView(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeView);
 }
 
-TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns,
-                        NKikimrSchemeOp::EPathState pathState) {
+void IsResourcePool(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
+    const auto& pathDescr = record.GetPathDescription();
+    const auto& selfPath = pathDescr.GetSelf();
+    UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeResourcePool);
+}
+
+TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns, bool strictCount) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT(record.HasPathDescription());
         NKikimrSchemeOp::TPathDescription descr = record.GetPathDescription();
@@ -472,12 +482,13 @@ TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const
         TString curName = self.GetName();
         ui32 curPathState = self.GetPathState();
         UNIT_ASSERT_STRINGS_EQUAL(curName, name);
-        UNIT_ASSERT_VALUES_EQUAL(curPathState, (ui32)pathState);
+        UNIT_ASSERT_VALUES_EQUAL(curPathState, (ui32)NKikimrSchemeOp::EPathState::EPathStateNoChanges);
 
         UNIT_ASSERT(descr.HasTable());
         NKikimrSchemeOp::TTableDescription table = descr.GetTable();
         UNIT_ASSERT(table.ColumnsSize());
 
+        UNIT_ASSERT(!strictCount || columns.size() - droppedColumns.size() == table.ColumnsSize());
         for (auto& col : table.GetColumns()) {
             UNIT_ASSERT(col.HasName());
             UNIT_ASSERT(col.HasId());
@@ -488,6 +499,7 @@ TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const
             UNIT_ASSERT(!droppedColumns.contains(name));
         }
 
+        UNIT_ASSERT(!strictCount || keyColumns.size() == table.KeyColumnNamesSize());
         for (auto& keyName : table.GetKeyColumnNames()) {
             UNIT_ASSERT(keyColumns.contains(keyName));
         }
@@ -513,7 +525,7 @@ void CheckBoundaries(const NKikimrScheme::TEvDescribeSchemeResult &record) {
         const auto& b = descr.GetTable().GetSplitBoundary(i);
         TVector<TCell> cells;
         TVector<TString> memoryOwner;
-        NMiniKQL::CellsFromTuple(nullptr, b.GetKeyPrefix(), keyColTypes, false, cells, errStr, memoryOwner);
+        NMiniKQL::CellsFromTuple(nullptr, b.GetKeyPrefix(), keyColTypes, {}, false, cells, errStr, memoryOwner);
         UNIT_ASSERT_VALUES_EQUAL(errStr, "");
 
         TString serialized = TSerializedCellVec::Serialize(cells);
@@ -819,6 +831,68 @@ TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames) {
     };
 }
 
+TCheckFunc VectorIndexDescription(Ydb::Table::VectorIndexSettings_Distance dist, 
+                                  Ydb::Table::VectorIndexSettings_Similarity similarity, 
+                                  Ydb::Table::VectorIndexSettings_VectorType vectorType,
+                                  ui32 vectorDimension
+                                  ) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        if (record.GetPathDescription().GetTableIndex().HasVectorIndexKmeansTreeDescription()) {
+            const auto& settings = record.GetPathDescription().GetTableIndex().GetVectorIndexKmeansTreeDescription().GetSettings();
+            UNIT_ASSERT_VALUES_EQUAL(settings.distance(), dist);
+            UNIT_ASSERT_VALUES_EQUAL(settings.similarity(), similarity);
+            UNIT_ASSERT_VALUES_EQUAL(settings.vector_type(), vectorType);
+            UNIT_ASSERT_VALUES_EQUAL(settings.vector_dimension(), vectorDimension);
+        } else {
+            UNIT_FAIL("oneof SpecializedIndexDescription should be set.");
+        }
+    };
+
+}
+
+
+TCheckFunc SequenceName(const TString& name) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetSequenceDescription().GetName(), name);
+    };
+}
+
+TCheckFunc SequenceIncrement(i64 increment) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetSequenceDescription().GetIncrement(), increment);
+    };
+}
+
+TCheckFunc SequenceMaxValue(i64 maxValue) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetSequenceDescription().GetMaxValue(), maxValue);
+    };
+}
+
+TCheckFunc SequenceMinValue(i64 minValue) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetSequenceDescription().GetMinValue(), minValue);
+    };
+}
+
+TCheckFunc SequenceCycle(bool cycle) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetSequenceDescription().GetCycle(), cycle);
+    };
+}
+
+TCheckFunc SequenceStartValue(i64 startValue) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetSequenceDescription().GetStartValue(), startValue);
+    };
+}
+
+TCheckFunc SequenceCache(ui64 cache) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetSequenceDescription().GetCache(), cache);
+    };
+}
+
 TCheckFunc StreamMode(NKikimrSchemeOp::ECdcStreamMode mode) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetMode(), mode);
@@ -852,6 +926,14 @@ TCheckFunc StreamResolvedTimestamps(const TDuration& value) {
 TCheckFunc StreamAwsRegion(const TString& value) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetAwsRegion(), value);
+    };
+}
+
+TCheckFunc StreamInitialScanProgress(ui32 total, ui32 completed) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        const auto& scanProgress = record.GetPathDescription().GetCdcStreamDescription().GetScanProgress();
+        UNIT_ASSERT_VALUES_EQUAL(total, scanProgress.GetShardsTotal());
+        UNIT_ASSERT_VALUES_EQUAL(completed, scanProgress.GetShardsCompleted());
     };
 }
 
@@ -1061,6 +1143,14 @@ TCheckFunc ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::EReplicatio
     };
 }
 
+TCheckFunc ReplicationState(NKikimrReplication::TReplicationState::StateCase state) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        const auto& replication = record.GetPathDescription().GetReplicationDescription();
+        UNIT_ASSERT(replication.HasState());
+        UNIT_ASSERT_EQUAL(replication.GetState().GetStateCase(), state);
+    };
+}
+
 TCheckFunc HasColumnTableSchemaPreset(const TString& presetName) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         const auto& table = record.GetPathDescription().GetColumnTableDescription();
@@ -1201,9 +1291,42 @@ TCheckFunc ServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeR
     };
 }
 
+void HasOffloadConfigBase(const NKikimrScheme::TEvDescribeSchemeResult& record, const TString* const config, TInverseTag inverse) {
+    UNIT_ASSERT(inverse.Value xor record.GetPathDescription().GetPersQueueGroup()
+        .GetPQTabletConfig().HasOffloadConfig());
+
+    if (config) {
+        NKikimrPQ::TOffloadConfig expectedConfig;
+
+        bool parseResult = google::protobuf::TextFormat::ParseFromString(*config, &expectedConfig);
+        UNIT_ASSERT(parseResult);
+
+        google::protobuf::util::MessageDifferencer md;
+        auto fieldComparator = google::protobuf::util::DefaultFieldComparator();
+        md.set_field_comparator(&fieldComparator);
+        auto& givenConfig = record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetOffloadConfig();
+        UNIT_ASSERT(md.Compare(expectedConfig, givenConfig));
+    }
+}
+
 #undef DESCRIBE_ASSERT_EQUAL
 #undef DESCRIBE_ASSERT_GE
 #undef DESCRIBE_ASSERT
+
+TCheckFunc IncrementalBackup(bool flag) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        const auto& attrs = record.GetPathDescription().GetUserAttributes();
+        TMap<TString, TString> attrsMap;
+        for (const auto& attr : attrs) {
+            attrsMap[attr.GetKey()] = attr.GetValue();
+        }
+        if (flag) {
+            UNIT_ASSERT(attrsMap["__incremental_backup"] == "{}");
+        } else {
+            UNIT_ASSERT(!attrsMap.contains("__incremental_backup") || attrsMap["__incremental_backup"] == "null");
+        }
+    };
+}
 
 } // NLs
 } // NSchemeShardUT_Private

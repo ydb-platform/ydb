@@ -147,11 +147,14 @@ public:
             .Done().Ptr();
     }
 
-    void GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs) override {
+    ui32 GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs, bool withLimits) override {
+        Y_UNUSED(withLimits);
         if (auto maybeOp = TMaybeNode<TPqWriteTopic>(&node)) {
             auto op = maybeOp.Cast();
             outputs.push_back(TPinInfo(nullptr, op.DataSink().Raw(), op.Topic().Raw(), MakeTopicDisplayName(op.Topic().Cluster().Value(), op.Topic().Path().Value()), false));
+            return 1;
         }
+        return 0;
     }
 
     bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override {

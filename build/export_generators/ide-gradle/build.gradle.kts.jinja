@@ -3,7 +3,18 @@
 {%- set with_kotlin = target.with_kotlin -%}
 {%- set kotlin_version = target.kotlin_version -%}
 {%- set hasJunit5Test = extra_targets|selectattr('junit5_test') -%}
+{%- set errorprone_plugin_version = "4.0.0" -%}
 plugins {
+{# some plugins configuration #}
+{%- for library in target.consumer if library.classpath -%}
+{# error prone plugin configuration #}
+{%-     if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) and "contrib/java/com/google/errorprone/error_prone_annotations/" in library.jar -%}
+
+    id("net.ltgt.errorprone") version "{{ errorprone_plugin_version }}"
+
+{%-     endif -%}
+{%- endfor -%}
+{# lombok configuration #}
 {%- if "lombok.launch.AnnotationProcessorHider$AnnotationProcessor" in target.annotation_processors %}
     id("io.freefair.lombok") version "8.6"
 {%- endif -%}
@@ -74,6 +85,17 @@ tasks.withType<Javadoc> {
 }
 {% endif %}
 
+{# javac flags #}
+{%- if (target.javac.flags is defined) and (target.javac.flags|length) %}
+tasks.withType<JavaCompile> {
+{%- for javac_flag in target.javac.flags %}
+{%-     if '-Xep:' in javac_flag %}
+{%      else %}
+    options.compilerArgs.add("{{ javac_flag }}")
+{%-     endif %}
+{%- endfor %}
+}
+{%- endif %}
 
 val bucketUsername: String by project
 val bucketPassword: String by project
@@ -91,7 +113,7 @@ repositories {
 
 }
 
-val project_root="{%- if exportRoot.startswith(arcadiaRoot + '/') -%}{{ arcadiaRoot }}{%- else -%}{{ exportRoot }}{%- endif -%}"
+val project_root="{%- if export_root.startswith(arcadia_root + '/') -%}{{ arcadia_root }}{%- else -%}{{ export_root }}/.hic_sunt_dracones{%- endif -%}"
 
 {%  if mainClass -%}
 application {
@@ -116,7 +138,7 @@ configurations.testImplementation {
     isTransitive = false
 }
 
-{%  if hasTest -%}
+{%  if has_test -%}
 val testsJar by tasks.registering(Jar::class) {
     dependsOn(JavaPlugin.COMPILE_TEST_JAVA_TASK_NAME)
     archiveClassifier.set("tests")
@@ -165,17 +187,31 @@ sourceSets {
 
 dependencies {
 {%- for library in target.consumer if library.classpath -%}
+{# error prone plugin configuration #}
+{%-     if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) and "contrib/java/com/google/errorprone/error_prone_annotations" in library.jar -%}
+{%          set errorprone_version = library.jar -%}
+{%          set errorprone_parts = errorprone_version|replace("contrib/java/com/google/errorprone/error_prone_annotations/") -%}
+{%          set errorprone_parts = split(errorprone_parts, '/') -%}
+
+    errorprone("com.google.errorprone:error_prone_core:{{ errorprone_parts[0] }}")
+
+{%-     endif -%}
+
 {%-     if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) %}
     implementation(files("$project_root/{{ library.jar }}"))
 {%-     else -%}
+{%-         set classpath = library.classpath -%}
+{%-         if classpath|replace('"','') == classpath -%}
+{%-             set classpath = '"' + classpath + '"' -%}
+{%-         endif -%}
 {%-         if library.type != "contrib" %}
 {%-             if library.testdep %}
     implementation(project(path = ":{{ library.testdep | replace("/", ":") }}", configuration = "testArtifacts"))
 {%-             else %}
-    implementation({{ library.classpath }})
+    implementation({{ classpath }})
 {%-             endif -%}
 {%-         else %}
-    api({{ library.classpath }})
+    api({{ classpath }})
 {%-         endif -%}
 {%-         if library.excludes.consumer is defined %} {
 {%              for exclude in library.excludes.consumer if exclude.classpath -%}
@@ -193,10 +229,14 @@ dependencies {
 {%-         if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) %}
     testImplementation(files("$project_root/{{ library.jar }}"))
 {%-         else -%}
+{%-             set classpath = library.classpath -%}
+{%-             if classpath|replace('"','') == classpath -%}
+{%-                 set classpath = '"' + classpath + '"' -%}
+{%-             endif %}
 {%-             if library.type != "contrib" and library.testdep %}
     testImplementation(project(path = ":{{ library.testdep | replace("/", ":") }}", configuration = "testArtifacts"))
 {%-             else %}
-    testImplementation({{ library.classpath }})
+    testImplementation({{ classpath }})
 {%-             endif -%}
 {%-             if library.excludes.consumer is defined %} {
 {%                  for exclude in library.excludes.consumer if exclude.classpath -%}
@@ -218,23 +258,41 @@ tasks.named<Test>("test") {
 
 {% endif -%}
 
-{% set runs = targets|selectattr("runs") -%}
+{# run_java_program #}
+{# {% set runs = targets|selectattr("runs") -%} #}
+{% set runs = target.runs -%}
 {% if runs -%}
 {%     for run in runs -%}
-tasks.build.dependsOn(
-    task<JavaExec>("runJavaProgram") {
-        group = "build"
-        description = "Code generation by rub java program"
 
-        mainClass.set(mainClass)
+val runJav{{ loop.index }} = task<JavaExec>("runJavaProgram{{ loop.index }}") {
+        group = "build"
+        description = "Code generation by run java program"
+
+        mainClass.set("{{ run.args[0] }}")
 {%         if run.classpath -%}
-        classpath = "{{ run.classpath }}"
+{%             for classpath in run.classpath -%}
+{%                 set real_classpath = classpath|replace('@', '') -%}
+{%                 set real_classpath = real_classpath|replace('.run.cp', '') -%}
+{%                 set real_classpath = real_classpath|replace('.cplst', '') -%}
+{%                 set real_classpath = real_classpath|replace(export_root, '') -%}
+{%                 set real_gradle_classpath = real_classpath|replace('/', ':') %}
+        val classPath = "{{ real_gradle_classpath }}"
+        val classPathParts = classPath.split(":")
+        classPathParts[classPathParts.size - 2]
+        classpath = files("$project_root{{ real_classpath }}") + project(classPath.replace(":${classPathParts[classPathParts.size - 2]}.jar", "")).configurations.runtimeClasspath.get()
+{%             endfor -%}
 {%         else -%}
         classpath = sourceSets.main.get().runtimeClasspath
 {%         endif -%}
-{%         if run.args -%}
-{#             for arg in run.args #}
-        args = "{{ run.args }}"
+{%         set args = run.args -%}
+{%         if args -%}
+        val argsList = mutableListOf(
+{%             for arg in args -%}
+            "{{ arg }}",
+{%             endfor -%}
+        )
+        argsList.removeAt(0)
+        args = argsList
 {%         endif -%}
 {%         if run.in_dir -%}
 {%             for dir in run.in_dir -%}
@@ -260,7 +318,11 @@ tasks.build.dependsOn(
 #}
 {%         endif -%}
     }
-)
+tasks {
+    build {
+        dependsOn(runJav{{ loop.index }})
+    }
+}
 {%     endfor -%}
 {% endif -%}
 
@@ -268,5 +330,9 @@ tasks.build.dependsOn(
 {% if publish -%}
 {% include 'publish.gradle.kts' ignore missing -%}
 {% endif -%}
+{# To disable redundant javadoc (it may fail the build) #}
+tasks.withType<Javadoc>().configureEach {
+    isEnabled = false
+}
 
 {%- include "[generator]/debug.jinja" ignore missing -%}

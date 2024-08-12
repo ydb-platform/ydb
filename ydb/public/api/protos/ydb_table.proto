@@ -14,6 +14,7 @@ import "ydb/public/api/protos/ydb_formats.proto";
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/duration.proto";
+import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
 package Ydb.Table;
@@ -46,13 +47,66 @@ message DeleteSessionResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
+message GlobalIndexSettings {
+    oneof partitions {
+        // Enable uniform partitioning of the table that implements the index using the specified partition count.
+        // Note that the index columns must be of type Uint32 or Uint64.
+        uint64 uniform_partitions = 1;
+        // Explicitly specify the key values of the index columns that define the partition boundaries
+        // for the table implementing the index.
+        ExplicitPartitions partition_at_keys = 2;
+    }
+    // Partitioning settings for the table that implements the index.
+    PartitioningSettings partitioning_settings = 3;
+}
+
+message VectorIndexSettings {
+    enum Distance {
+        DISTANCE_UNSPECIFIED = 0;
+        DISTANCE_COSINE = 1;
+        DISTANCE_MANHATTAN = 2;
+        DISTANCE_EUCLIDEAN = 3;
+    }
+
+    enum Similarity {
+        SIMILARITY_UNSPECIFIED = 0;
+        SIMILARITY_COSINE = 1;
+        SIMILARITY_INNER_PRODUCT = 2;
+    }   
+
+    enum VectorType {
+        VECTOR_TYPE_UNSPECIFIED = 0;
+        VECTOR_TYPE_FLOAT = 1;
+        VECTOR_TYPE_UINT8 = 2;
+        VECTOR_TYPE_INT8 = 3;
+        VECTOR_TYPE_BIT = 4;
+    }
+
+    oneof metric {
+        Distance distance = 1;
+        Similarity similarity = 2;
+    }
+    VectorType vector_type = 3;
+
+    uint32 vector_dimension = 4;
+}
+
 message GlobalIndex {
+    GlobalIndexSettings settings = 1;
 }
 
 message GlobalAsyncIndex {
+    GlobalIndexSettings settings = 1;
 }
 
 message GlobalUniqueIndex {
+    GlobalIndexSettings settings = 1;
+}
+
+message GlobalVectorKMeansTreeIndex {
+    GlobalIndexSettings level_table_settings = 1;
+    GlobalIndexSettings posting_table_settings = 2;
+    VectorIndexSettings vector_settings = 3;
 }
 
 // Represent secondary index
@@ -66,6 +120,7 @@ message TableIndex {
        GlobalIndex global_index = 3;
        GlobalAsyncIndex global_async_index = 4;
        GlobalUniqueIndex global_unique_index = 6;
+       GlobalVectorKMeansTreeIndex global_vector_kmeans_tree_index = 7;
     }
     // list of columns content to be copied in to index table
     repeated string data_columns = 5;
@@ -89,6 +144,7 @@ message TableIndexDescription {
        GlobalIndex global_index = 3;
        GlobalAsyncIndex global_async_index = 5;
        GlobalUniqueIndex global_unique_index = 8;
+       GlobalVectorKMeansTreeIndex global_vector_kmeans_tree_index = 9;
     }
     Status status = 4;
     // list of columns content to be copied in to index table
@@ -191,6 +247,11 @@ message ChangefeedDescription {
         STATE_INITIAL_SCAN = 3;
     }
 
+    message InitialScanProgress {
+        uint32 parts_total = 1;
+        uint32 parts_completed = 2;
+    }
+
     // Name of the feed
     string name = 1;
     // Mode specifies the information that will be written to the feed
@@ -207,6 +268,8 @@ message ChangefeedDescription {
     string aws_region = 7;
     // Interval of emitting of resolved timestamps. If unspecified, resolved timestamps are not emitted.
     google.protobuf.Duration resolved_timestamps_interval = 8;
+    // Progress of initial scan. If unspecified, initial scan was not launched.
+    InitialScanProgress initial_scan_progress = 9;
 }
 
 message StoragePool {
@@ -346,6 +409,7 @@ message SequenceDescription {
     optional sint64 increment = 6; // increment at each call, defaults to 1
     optional bool cycle = 7; // true when cycle on overflow is allowed
     optional SetVal set_val = 8; // set_val(next_value, next_used) is executed atomically when creating
+    optional Type data_type = 9; // data type of the sequence
 }
 
 message ColumnMeta {
@@ -361,6 +425,7 @@ message ColumnMeta {
     oneof default_value {
         TypedValue from_literal = 5;
         SequenceDescription from_sequence = 6;
+        google.protobuf.NullValue empty_default = 7;
     }
 }
 
@@ -1090,6 +1155,7 @@ message ReadTableRequest {
     // greater than any of the limits
     uint64 batch_limit_bytes = 8;
     uint64 batch_limit_rows = 9;
+    Ydb.FeatureFlag.Status return_not_null_data_as_optional = 10;
 }
 
 // ReadTable doesn't use Operation, returns result directly

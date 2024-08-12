@@ -55,10 +55,13 @@ PEERDIR(
     ydb/library/yql/providers/generic/proto
     ydb/library/yql/providers/generic/connector/api/common
     ydb/library/yql/providers/generic/connector/libcpp
+    ydb/library/yql/providers/result/expr_nodes
     ydb/library/yql/utils/plan
     ydb/public/sdk/cpp/client/ydb_types/credentials
 )
 
 END()
 
-RECURSE_FOR_TESTS(ut)
+RECURSE_FOR_TESTS(
+    ut
+)

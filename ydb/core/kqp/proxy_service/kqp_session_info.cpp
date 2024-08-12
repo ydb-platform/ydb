@@ -68,7 +68,6 @@ void TKqpSessionInfo::SerializeTo(::NKikimrKqp::TSessionInfo* proto, const TFiel
     if (fieldsMap.NeedField(VSessions::UserSID::ColumnId)) {  // 14
         proto->SetUserSID(ClientSID);
     }
-
 }
 
 }  // namespace NKikimr::NKqp

@@ -16,14 +16,6 @@ template <class TOptions>
 class TSimpleOperationCommandBase
     : public virtual TTypedCommandBase<TOptions>
 {
-private:
-    NScheduler::TOperationId OperationId;
-    std::optional<TString> OperationAlias;
-
-protected:
-    // Is calculated by two fields above.
-    NScheduler::TOperationIdOrAlias OperationIdOrAlias;
-
 public:
     REGISTER_YSON_STRUCT_LITE(TSimpleOperationCommandBase);
 
@@ -51,6 +43,14 @@ public:
             }
         });
     }
+
+protected:
+    // Is calculated by OperationId and OperationAlias.
+    NScheduler::TOperationIdOrAlias OperationIdOrAlias;
+
+private:
+    NScheduler::TOperationId OperationId;
+    std::optional<TString> OperationAlias;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -237,15 +237,33 @@ private:
 class TAbortJobCommand
     : public TTypedCommand<NApi::TAbortJobOptions>
 {
-private:
-    NJobTrackerClient::TJobId JobId;
-
 public:
     REGISTER_YSON_STRUCT_LITE(TAbortJobCommand);
 
     static void Register(TRegistrar registrar);
 
     void DoExecute(ICommandContextPtr context) override;
+
+private:
+    NJobTrackerClient::TJobId JobId;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TDumpJobProxyLogCommand
+    : public TTypedCommand<NApi::TDumpJobProxyLogOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TDumpJobProxyLogCommand);
+
+    static void Register(TRegistrar registrar);
+
+    void DoExecute(ICommandContextPtr context) override;
+
+private:
+    NJobTrackerClient::TJobId JobId;
+    NJobTrackerClient::TOperationId OperationId;
+    NYPath::TYPath Path;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

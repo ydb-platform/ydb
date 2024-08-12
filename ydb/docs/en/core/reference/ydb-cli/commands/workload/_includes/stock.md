@@ -83,9 +83,9 @@ See the description of the command to run the data load:
 | `--rate <value>` | - | Total rate for all threads, in transactions per second. Default: 0 (no rate limit). |
 | `--quiet` | - | Outputs only the total result. |
 | `--print-timestamp` | - | Print the time together with the statistics of each time window. |
-| `--client-timeout` | - | [Transport timeout in milliseconds](../../../../../best_practices/timeouts.md). |
-| `--operation-timeout` | - | [Operation timeout in milliseconds](../../../../../best_practices/timeouts.md). |
-| `--cancel-after` | - | [Timeout for canceling an operation in milliseconds](../../../../../best_practices/timeouts.md). |
+| `--client-timeout` | - | [Transport timeout in milliseconds](../../../../../dev/timeouts.md). |
+| `--operation-timeout` | - | [Operation timeout in milliseconds](../../../../../dev/timeouts.md). |
+| `--cancel-after` | - | [Timeout for canceling an operation in milliseconds](../../../../../dev/timeouts.md). |
 | `--window` | - | Statistics collection window in seconds. Default: 1. |
 
 

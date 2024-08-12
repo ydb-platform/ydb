@@ -22,6 +22,7 @@ Y_UNIT_TEST_SUITE(TPQTest) {
 
 Y_UNIT_TEST(TestDirectReadHappyWay) {
     TTestContext tc;
+    tc.EnableDetailedPQLog = true;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
     }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
@@ -65,6 +66,7 @@ Y_UNIT_TEST(TestDirectReadHappyWay) {
 
 Y_UNIT_TEST(DirectReadBadSessionOrPipe) {
     TTestContext tc;
+    tc.EnableDetailedPQLog = true;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
     }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
@@ -122,6 +124,7 @@ Y_UNIT_TEST(DirectReadBadSessionOrPipe) {
 }
 Y_UNIT_TEST(DirectReadOldPipe) {
     TTestContext tc;
+    tc.EnableDetailedPQLog = true;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
     }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
@@ -316,115 +319,6 @@ Y_UNIT_TEST(TestPartitionWriteQuota) {
     });
 }
 
-Y_UNIT_TEST(TestGroupsBalancer) {
-    TTestContext tc;
-    TFinalizer finalizer(tc);
-    tc.Prepare();
-
-    tc.Runtime->SetScheduledLimit(50);
-    tc.Runtime->SetDispatchTimeout(TDuration::Seconds(1));
-    tc.Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
-    TFakeSchemeShardState::TPtr state{new TFakeSchemeShardState()};
-    ui64 ssId = 325;
-    BootFakeSchemeShard(*tc.Runtime, ssId, state);
-
-    PQBalancerPrepare(TOPIC_NAME, {{0,{1, 1}}, {11,{1, 1}}, {1,{1, 2}}, {2,{1, 2}}}, ssId, tc);
-
-    TActorId pipe = RegisterReadSession("session1", tc);
-    Y_UNUSED(pipe);
-    WaitPartition("session1", tc, 0, "", "", TActorId());
-    WaitPartition("session1", tc, 0, "", "", TActorId());
-    WaitPartition("session1", tc, 0, "", "", TActorId());
-    WaitPartition("session1", tc, 0, "", "", TActorId());
-    WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions - return error
-
-    TActorId pipe2 = RegisterReadSession("session2", tc, {1});
-
-    WaitPartition("session2", tc, 0, "", "", TActorId());
-    WaitPartition("session2", tc, 0, "", "", TActorId());
-    WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions to balance
-
-    TActorId pipe4 = RegisterReadSession("session8", tc, {1});
-    Y_UNUSED(pipe4);
-
-    WaitPartition("session8", tc, 0, "session2", "topic1", pipe2);
-    WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions to balance
-
-    tc.Runtime->Send(new IEventHandle(pipe2, tc.Edge, new TEvents::TEvPoisonPill()), 0, true); //will cause dying of pipe and first session
-
-    WaitPartition("session8", tc, 0, "", "", TActorId());
-    WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions to balance
-
-    RegisterReadSession("session3", tc);
-    WaitPartition("session3", tc, 0, "", "", TActorId());
-    WaitPartition("session3", tc, 0, "", "", TActorId());
-    WaitPartition("session3", tc, 0, "session8", "topic1", pipe4);
-    WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions to balance
-
-
-}
-
-Y_UNIT_TEST(TestGroupsBalancer2) {
-    TTestContext tc;
-    TFinalizer finalizer(tc);
-    tc.Prepare();
-
-    tc.Runtime->SetScheduledLimit(50);
-    tc.Runtime->SetDispatchTimeout(TDuration::Seconds(1));
-    tc.Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
-    TFakeSchemeShardState::TPtr state{new TFakeSchemeShardState()};
-    ui64 ssId = 325;
-    BootFakeSchemeShard(*tc.Runtime, ssId, state);
-
-    PQBalancerPrepare(TOPIC_NAME, {{0, {1, 1}}, {1, {1, 2}}, {2, {1, 3}}, {3, {1, 4}}}, ssId, tc);
-
-    TActorId pipe = RegisterReadSession("session1", tc, {1,2});
-    Y_UNUSED(pipe);
-
-    WaitPartition("session1", tc, 0, "", "", TActorId());
-    WaitPartition("session1", tc, 0, "", "", TActorId());
-    WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions - return error
-    TActorId pipe2 = RegisterReadSession("session2", tc, {3,4});
-    Y_UNUSED(pipe2);
-
-    WaitPartition("session2", tc, 0, "", "", TActorId());
-    WaitPartition("session2", tc, 0, "", "", TActorId());
-    WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions - return error
-}
-
-Y_UNIT_TEST(TestGroupsBalancer3) {
-    TTestContext tc;
-    TFinalizer finalizer(tc);
-    tc.Prepare();
-
-    tc.Runtime->SetScheduledLimit(50);
-    tc.Runtime->SetDispatchTimeout(TDuration::Seconds(1));
-    tc.Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
-    TFakeSchemeShardState::TPtr state{new TFakeSchemeShardState()};
-    ui64 ssId = 325;
-    BootFakeSchemeShard(*tc.Runtime, ssId, state);
-
-    PQBalancerPrepare(TOPIC_NAME, {{0, {1, 1}}, {1, {1, 2}} }, ssId, tc);
-
-    TActorId pipe = RegisterReadSession("session", tc, {2});
-
-    WaitPartition("session", tc, 0, "", "", TActorId());
-    WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions - return error
-
-    tc.Runtime->Send(new IEventHandle(pipe, tc.Edge, new TEvents::TEvPoisonPill()), 0, true); //will cause dying of pipe and first session
-
-    TActorId pipe2 = RegisterReadSession("session1", tc);
-    Y_UNUSED(pipe2);
-
-    WaitPartition("session1", tc, 0, "", "", TActorId());
-    WaitPartition("session1", tc, 0, "", "", TActorId());
-    WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions - return error
-
-    pipe = RegisterReadSession("session2", tc, {2});
-    WaitReadSessionKill(tc); //session 1 will die
-}
-
-
 Y_UNIT_TEST(TestUserInfoCompatibility) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
@@ -568,55 +462,6 @@ Y_UNIT_TEST(TestReadRuleVersions) {
     });
 }
 
-Y_UNIT_TEST(TestCreateBalancer) {
-    TTestContext tc;
-    RunTestWithReboots(tc.TabletIds, [&]() {
-        return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
-        TFinalizer finalizer(tc);
-        tc.Prepare(dispatchName, setup, activeZone);
-        activeZone = false;
-        tc.Runtime->SetScheduledLimit(50);
-        tc.Runtime->SetDispatchTimeout(TDuration::MilliSeconds(100));
-
-        TFakeSchemeShardState::TPtr state{new TFakeSchemeShardState()};
-        ui64 ssId = 325;
-        BootFakeSchemeShard(*tc.Runtime, ssId, state);
-
-        PQBalancerPrepare(TOPIC_NAME, {{1,{1,2}}}, ssId, tc);
-
-        TActorId pipe1 = RegisterReadSession("session0", tc, {1});
-
-        PQBalancerPrepare(TOPIC_NAME, {{1,{1,2}}, {2,{1,3}}}, ssId, tc);
-
-        tc.Runtime->Send(new IEventHandle(pipe1, tc.Edge, new TEvents::TEvPoisonPill()), 0, true); //will cause dying of pipe and first session
-
-
-//        PQBalancerPrepare(TOPIC_NAME, {{2,1}}, tc); //TODO: not supported yet
-//        PQBalancerPrepare(TOPIC_NAME, {{1,1}}, tc); // TODO: not supported yet
-        PQBalancerPrepare(TOPIC_NAME, {{1,{1, 2}}, {2,{1, 3}}, {3,{1, 4}}}, ssId, tc);
-        activeZone = false;
-
-        TActorId pipe = RegisterReadSession("session1", tc);
-        WaitPartition("session1", tc, 0, "", "", TActorId());
-        WaitPartition("session1", tc, 0, "", "", TActorId());
-        WaitPartition("session1", tc, 0, "", "", TActorId());
-        WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions - return error
-        TActorId pipe2 = RegisterReadSession("session2", tc);
-        Y_UNUSED(pipe2);
-        WaitPartition("session2", tc, 1, "session1", "topic1", pipe);
-        WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions to balance
-        tc.Runtime->Send(new IEventHandle(pipe, tc.Edge, new TEvents::TEvPoisonPill()), 0, true); //will cause dying of pipe and first session
-
-        TDispatchOptions options;
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvServerDisconnected));
-        tc.Runtime->DispatchEvents(options);
-        WaitPartition("session2", tc, 0, "", "", TActorId());
-        WaitPartition("session2", tc, 0, "", "", TActorId());
-        WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions to balance
-    });
-}
-
 Y_UNIT_TEST(TestDescribeBalancer) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
@@ -658,7 +503,7 @@ Y_UNIT_TEST(TestCheckACL) {
         TFakeSchemeShardState::TPtr state{new TFakeSchemeShardState()};
         ui64 ssId = 9876;
         BootFakeSchemeShard(*tc.Runtime, ssId, state);
-        IActor* ticketParser = NKikimr::CreateTicketParser(tc.Runtime->GetAppData().AuthConfig);
+        IActor* ticketParser = NKikimr::CreateTicketParser({.AuthConfig = tc.Runtime->GetAppData().AuthConfig, .CertificateAuthValues = {}});
         TActorId ticketParserId = tc.Runtime->Register(ticketParser);
         tc.Runtime->RegisterService(NKikimr::MakeTicketParserID(), ticketParserId);
 
@@ -1062,7 +907,7 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
             UNIT_ASSERT(result);
 
             UNIT_ASSERT(result->Record.HasStatus());
-            UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::BAD_REQUEST);
+            UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::INITIALIZING);
         }
 
         PQGetPartInfo(0, 1, tc);
@@ -1088,8 +933,8 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
                 UNIT_ASSERT(result);
 
                 UNIT_ASSERT(result->Record.HasStatus());
-                if ( j == toWrite) {
-                    UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::BAD_REQUEST);
+                if (j == toWrite) {
+                    UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::INITIALIZING);
                 } else {
                     UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::OK);
 
@@ -1161,7 +1006,7 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
 
             UNIT_ASSERT(result);
             UNIT_ASSERT(result->Record.HasStatus());
-            UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::BAD_REQUEST);
+            UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::INITIALIZING);
 
             //check very big msg
             cookie = CmdSetOwner(0, tc).first;

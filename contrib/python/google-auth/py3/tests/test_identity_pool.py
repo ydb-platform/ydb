@@ -21,7 +21,7 @@ import urllib
 import mock
 import pytest  # type: ignore
 
-from google.auth import _helpers
+from google.auth import _helpers, external_account
 from google.auth import exceptions
 from google.auth import identity_pool
 from google.auth import metrics
@@ -152,6 +152,22 @@ INVALID_SERVICE_ACCOUNT_IMPERSONATION_URLS = [
 ]
 
 
+class TestSubjectTokenSupplier(identity_pool.SubjectTokenSupplier):
+    def __init__(
+        self, subject_token=None, subject_token_exception=None, expected_context=None
+    ):
+        self._subject_token = subject_token
+        self._subject_token_exception = subject_token_exception
+        self._expected_context = expected_context
+
+    def get_subject_token(self, context, request):
+        if self._expected_context is not None:
+            assert self._expected_context == context
+        if self._subject_token_exception is not None:
+            raise self._subject_token_exception
+        return self._subject_token
+
+
 class TestCredentials(object):
     CREDENTIAL_SOURCE_TEXT = {"file": SUBJECT_TOKEN_TEXT_FILE}
     CREDENTIAL_SOURCE_JSON = {
@@ -163,6 +179,12 @@ class TestCredentials(object):
     CREDENTIAL_SOURCE_JSON_URL = {
         "url": CREDENTIAL_URL,
         "format": {"type": "json", "subject_token_field_name": "access_token"},
+    }
+    CREDENTIAL_SOURCE_CERTIFICATE = {
+        "certificate": {"use_default_certificate_config": "true"}
+    }
+    CREDENTIAL_SOURCE_CERTIFICATE_NOT_DEFAULT = {
+        "certificate": {"certificate_config_location": "path/to/config"}
     }
     SUCCESS_RESPONSE = {
         "access_token": "ACCESS_TOKEN",
@@ -274,10 +296,13 @@ class TestCredentials(object):
         else:
             metrics_options["sa-impersonation"] = "false"
         metrics_options["config-lifetime"] = "false"
-        if credentials._credential_source_file:
-            metrics_options["source"] = "file"
+        if credentials._credential_source:
+            if credentials._credential_source_file:
+                metrics_options["source"] = "file"
+            else:
+                metrics_options["source"] = "url"
         else:
-            metrics_options["source"] = "url"
+            metrics_options["source"] = "programmatic"
 
         token_headers["x-goog-api-client"] = metrics.byoid_metrics_header(
             metrics_options
@@ -387,6 +412,7 @@ class TestCredentials(object):
         default_scopes=None,
         service_account_impersonation_url=None,
         credential_source=None,
+        subject_token_supplier=None,
         workforce_pool_user_project=None,
     ):
         return identity_pool.Credentials(
@@ -396,6 +422,7 @@ class TestCredentials(object):
             token_info_url=token_info_url,
             service_account_impersonation_url=service_account_impersonation_url,
             credential_source=credential_source,
+            subject_token_supplier=subject_token_supplier,
             client_id=client_id,
             client_secret=client_secret,
             quota_project_id=quota_project_id,
@@ -433,6 +460,7 @@ class TestCredentials(object):
             client_id=CLIENT_ID,
             client_secret=CLIENT_SECRET,
             credential_source=self.CREDENTIAL_SOURCE_TEXT,
+            subject_token_supplier=None,
             quota_project_id=QUOTA_PROJECT_ID,
             workforce_pool_user_project=None,
             universe_domain=DEFAULT_UNIVERSE_DOMAIN,
@@ -461,6 +489,38 @@ class TestCredentials(object):
             client_id=None,
             client_secret=None,
             credential_source=self.CREDENTIAL_SOURCE_TEXT,
+            subject_token_supplier=None,
+            quota_project_id=None,
+            workforce_pool_user_project=None,
+            universe_domain=DEFAULT_UNIVERSE_DOMAIN,
+        )
+
+    @mock.patch.object(identity_pool.Credentials, "__init__", return_value=None)
+    def test_from_info_supplier(self, mock_init):
+        supplier = TestSubjectTokenSupplier()
+
+        credentials = identity_pool.Credentials.from_info(
+            {
+                "audience": AUDIENCE,
+                "subject_token_type": SUBJECT_TOKEN_TYPE,
+                "token_url": TOKEN_URL,
+                "subject_token_supplier": supplier,
+            }
+        )
+
+        # Confirm identity_pool.Credentials instantiated with expected attributes.
+        assert isinstance(credentials, identity_pool.Credentials)
+        mock_init.assert_called_once_with(
+            audience=AUDIENCE,
+            subject_token_type=SUBJECT_TOKEN_TYPE,
+            token_url=TOKEN_URL,
+            token_info_url=None,
+            service_account_impersonation_url=None,
+            service_account_impersonation_options={},
+            client_id=None,
+            client_secret=None,
+            credential_source=None,
+            subject_token_supplier=supplier,
             quota_project_id=None,
             workforce_pool_user_project=None,
             universe_domain=DEFAULT_UNIVERSE_DOMAIN,
@@ -490,6 +550,7 @@ class TestCredentials(object):
             client_id=None,
             client_secret=None,
             credential_source=self.CREDENTIAL_SOURCE_TEXT,
+            subject_token_supplier=None,
             quota_project_id=None,
             workforce_pool_user_project=WORKFORCE_POOL_USER_PROJECT,
             universe_domain=DEFAULT_UNIVERSE_DOMAIN,
@@ -525,6 +586,7 @@ class TestCredentials(object):
             client_id=CLIENT_ID,
             client_secret=CLIENT_SECRET,
             credential_source=self.CREDENTIAL_SOURCE_TEXT,
+            subject_token_supplier=None,
             quota_project_id=QUOTA_PROJECT_ID,
             workforce_pool_user_project=None,
             universe_domain=DEFAULT_UNIVERSE_DOMAIN,
@@ -554,6 +616,7 @@ class TestCredentials(object):
             client_id=None,
             client_secret=None,
             credential_source=self.CREDENTIAL_SOURCE_TEXT,
+            subject_token_supplier=None,
             quota_project_id=None,
             workforce_pool_user_project=None,
             universe_domain=DEFAULT_UNIVERSE_DOMAIN,
@@ -584,6 +647,7 @@ class TestCredentials(object):
             client_id=None,
             client_secret=None,
             credential_source=self.CREDENTIAL_SOURCE_TEXT,
+            subject_token_supplier=None,
             quota_project_id=None,
             workforce_pool_user_project=WORKFORCE_POOL_USER_PROJECT,
             universe_domain=DEFAULT_UNIVERSE_DOMAIN,
@@ -620,6 +684,40 @@ class TestCredentials(object):
 
         assert excinfo.match(r"Ambiguous credential_source")
 
+    def test_constructor_invalid_options_url_and_certificate(self):
+        credential_source = {
+            "url": self.CREDENTIAL_URL,
+            "certificate": {"certificate": {"use_default_certificate_config": True}},
+        }
+
+        with pytest.raises(ValueError) as excinfo:
+            self.make_credentials(credential_source=credential_source)
+
+        assert excinfo.match(r"Ambiguous credential_source")
+
+    def test_constructor_invalid_options_file_and_certificate(self):
+        credential_source = {
+            "file": SUBJECT_TOKEN_TEXT_FILE,
+            "certificate": {"certificate": {"use_default_certificate": True}},
+        }
+
+        with pytest.raises(ValueError) as excinfo:
+            self.make_credentials(credential_source=credential_source)
+
+        assert excinfo.match(r"Ambiguous credential_source")
+
+    def test_constructor_invalid_options_url_file_and_certificate(self):
+        credential_source = {
+            "file": SUBJECT_TOKEN_TEXT_FILE,
+            "url": self.CREDENTIAL_URL,
+            "certificate": {"certificate": {"use_default_certificate": True}},
+        }
+
+        with pytest.raises(ValueError) as excinfo:
+            self.make_credentials(credential_source=credential_source)
+
+        assert excinfo.match(r"Ambiguous credential_source")
+
     def test_constructor_invalid_options_environment_id(self):
         credential_source = {"url": self.CREDENTIAL_URL, "environment_id": "aws1"}
 
@@ -634,10 +732,32 @@ class TestCredentials(object):
         with pytest.raises(ValueError) as excinfo:
             self.make_credentials(credential_source="non-dict")
 
-        assert excinfo.match(r"Missing credential_source")
+        assert excinfo.match(
+            r"Invalid credential_source. The credential_source is not a dict."
+        )
+
+    def test_constructor_invalid_no_credential_source_or_supplier(self):
+        with pytest.raises(ValueError) as excinfo:
+            self.make_credentials()
+
+        assert excinfo.match(
+            r"A valid credential source or a subject token supplier must be provided."
+        )
+
+    def test_constructor_invalid_both_credential_source_and_supplier(self):
+        supplier = TestSubjectTokenSupplier()
+        with pytest.raises(ValueError) as excinfo:
+            self.make_credentials(
+                credential_source=self.CREDENTIAL_SOURCE_TEXT,
+                subject_token_supplier=supplier,
+            )
+
+        assert excinfo.match(
+            r"Identity pool credential cannot have both a credential source and a subject token supplier."
+        )
 
     def test_constructor_invalid_credential_source_format_type(self):
-        credential_source = {"format": {"type": "xml"}}
+        credential_source = {"file": "test.txt", "format": {"type": "xml"}}
 
         with pytest.raises(ValueError) as excinfo:
             self.make_credentials(credential_source=credential_source)
@@ -645,7 +765,7 @@ class TestCredentials(object):
         assert excinfo.match(r"Invalid credential_source format 'xml'")
 
     def test_constructor_missing_subject_token_field_name(self):
-        credential_source = {"format": {"type": "json"}}
+        credential_source = {"file": "test.txt", "format": {"type": "json"}}
 
         with pytest.raises(ValueError) as excinfo:
             self.make_credentials(credential_source=credential_source)
@@ -653,6 +773,27 @@ class TestCredentials(object):
         assert excinfo.match(
             r"Missing subject_token_field_name for JSON credential_source format"
         )
+
+    def test_constructor_default_and_file_location_certificate(self):
+        credential_source = {
+            "certificate": {
+                "use_default_certificate_config": True,
+                "certificate_config_location": "test",
+            }
+        }
+
+        with pytest.raises(ValueError) as excinfo:
+            self.make_credentials(credential_source=credential_source)
+
+        assert excinfo.match(r"Invalid certificate configuration")
+
+    def test_constructor_no_default_or_file_location_certificate(self):
+        credential_source = {"certificate": {"use_default_certificate_config": False}}
+
+        with pytest.raises(ValueError) as excinfo:
+            self.make_credentials(credential_source=credential_source)
+
+        assert excinfo.match(r"Invalid certificate configuration")
 
     def test_info_with_workforce_pool_user_project(self):
         credentials = self.make_credentials(
@@ -703,6 +844,69 @@ class TestCredentials(object):
             "universe_domain": DEFAULT_UNIVERSE_DOMAIN,
         }
 
+    def test_info_with_certificate_credential_source(self):
+        credentials = self.make_credentials(
+            credential_source=self.CREDENTIAL_SOURCE_CERTIFICATE.copy()
+        )
+
+        assert credentials.info == {
+            "type": "external_account",
+            "audience": AUDIENCE,
+            "subject_token_type": SUBJECT_TOKEN_TYPE,
+            "token_url": TOKEN_URL,
+            "token_info_url": TOKEN_INFO_URL,
+            "credential_source": self.CREDENTIAL_SOURCE_CERTIFICATE,
+            "universe_domain": DEFAULT_UNIVERSE_DOMAIN,
+        }
+
+    def test_info_with_non_default_certificate_credential_source(self):
+        credentials = self.make_credentials(
+            credential_source=self.CREDENTIAL_SOURCE_CERTIFICATE_NOT_DEFAULT.copy()
+        )
+
+        assert credentials.info == {
+            "type": "external_account",
+            "audience": AUDIENCE,
+            "subject_token_type": SUBJECT_TOKEN_TYPE,
+            "token_url": TOKEN_URL,
+            "token_info_url": TOKEN_INFO_URL,
+            "credential_source": self.CREDENTIAL_SOURCE_CERTIFICATE_NOT_DEFAULT,
+            "universe_domain": DEFAULT_UNIVERSE_DOMAIN,
+        }
+
+    def test_info_with_default_token_url(self):
+        credentials = identity_pool.Credentials(
+            audience=AUDIENCE,
+            subject_token_type=SUBJECT_TOKEN_TYPE,
+            credential_source=self.CREDENTIAL_SOURCE_TEXT_URL.copy(),
+        )
+
+        assert credentials.info == {
+            "type": "external_account",
+            "audience": AUDIENCE,
+            "subject_token_type": SUBJECT_TOKEN_TYPE,
+            "token_url": TOKEN_URL,
+            "credential_source": self.CREDENTIAL_SOURCE_TEXT_URL,
+            "universe_domain": DEFAULT_UNIVERSE_DOMAIN,
+        }
+
+    def test_info_with_default_token_url_with_universe_domain(self):
+        credentials = identity_pool.Credentials(
+            audience=AUDIENCE,
+            subject_token_type=SUBJECT_TOKEN_TYPE,
+            credential_source=self.CREDENTIAL_SOURCE_TEXT_URL.copy(),
+            universe_domain="testdomain.org",
+        )
+
+        assert credentials.info == {
+            "type": "external_account",
+            "audience": AUDIENCE,
+            "subject_token_type": SUBJECT_TOKEN_TYPE,
+            "token_url": "https://sts.testdomain.org/v1/token",
+            "credential_source": self.CREDENTIAL_SOURCE_TEXT_URL,
+            "universe_domain": "testdomain.org",
+        }
+
     def test_retrieve_subject_token_missing_subject_token(self, tmpdir):
         # Provide empty text file.
         empty_file = tmpdir.join("empty.txt")
@@ -732,6 +936,15 @@ class TestCredentials(object):
         subject_token = credentials.retrieve_subject_token(None)
 
         assert subject_token == JSON_FILE_SUBJECT_TOKEN
+
+    def test_retrieve_subject_token_certificate(self):
+        credentials = self.make_credentials(
+            credential_source=self.CREDENTIAL_SOURCE_CERTIFICATE
+        )
+
+        subject_token = credentials.retrieve_subject_token(None)
+
+        assert subject_token == ""
 
     def test_retrieve_subject_token_json_file_invalid_field_name(self):
         credential_source = {
@@ -1297,4 +1510,104 @@ class TestCredentials(object):
             "Unable to parse subject_token from JSON file '{}' using key '{}'".format(
                 self.CREDENTIAL_URL, "not_found"
             )
+        )
+
+    def test_retrieve_subject_token_supplier(self):
+        supplier = TestSubjectTokenSupplier(subject_token=JSON_FILE_SUBJECT_TOKEN)
+
+        credentials = self.make_credentials(subject_token_supplier=supplier)
+
+        subject_token = credentials.retrieve_subject_token(None)
+
+        assert subject_token == JSON_FILE_SUBJECT_TOKEN
+
+    def test_retrieve_subject_token_supplier_correct_context(self):
+        supplier = TestSubjectTokenSupplier(
+            subject_token=JSON_FILE_SUBJECT_TOKEN,
+            expected_context=external_account.SupplierContext(
+                SUBJECT_TOKEN_TYPE, AUDIENCE
+            ),
+        )
+
+        credentials = self.make_credentials(subject_token_supplier=supplier)
+
+        credentials.retrieve_subject_token(None)
+
+    def test_retrieve_subject_token_supplier_error(self):
+        expected_exception = exceptions.RefreshError("test error")
+        supplier = TestSubjectTokenSupplier(subject_token_exception=expected_exception)
+
+        credentials = self.make_credentials(subject_token_supplier=supplier)
+
+        with pytest.raises(exceptions.RefreshError) as excinfo:
+            credentials.refresh(self.make_mock_request(token_data=JSON_FILE_CONTENT))
+
+        assert excinfo.match("test error")
+
+    def test_refresh_success_supplier_with_impersonation_url(self):
+        # Initialize credentials with service account impersonation and a supplier.
+        supplier = TestSubjectTokenSupplier(subject_token=JSON_FILE_SUBJECT_TOKEN)
+        credentials = self.make_credentials(
+            subject_token_supplier=supplier,
+            service_account_impersonation_url=SERVICE_ACCOUNT_IMPERSONATION_URL,
+            scopes=SCOPES,
+        )
+
+        self.assert_underlying_credentials_refresh(
+            credentials=credentials,
+            audience=AUDIENCE,
+            subject_token=TEXT_FILE_SUBJECT_TOKEN,
+            subject_token_type=SUBJECT_TOKEN_TYPE,
+            token_url=TOKEN_URL,
+            service_account_impersonation_url=SERVICE_ACCOUNT_IMPERSONATION_URL,
+            basic_auth_encoding=None,
+            quota_project_id=None,
+            used_scopes=SCOPES,
+            scopes=SCOPES,
+            default_scopes=None,
+        )
+
+    def test_refresh_success_supplier_without_impersonation_url(self):
+        # Initialize supplier credentials without service account impersonation.
+        supplier = TestSubjectTokenSupplier(subject_token=JSON_FILE_SUBJECT_TOKEN)
+        credentials = self.make_credentials(
+            subject_token_supplier=supplier, scopes=SCOPES
+        )
+
+        self.assert_underlying_credentials_refresh(
+            credentials=credentials,
+            audience=AUDIENCE,
+            subject_token=TEXT_FILE_SUBJECT_TOKEN,
+            subject_token_type=SUBJECT_TOKEN_TYPE,
+            token_url=TOKEN_URL,
+            basic_auth_encoding=None,
+            quota_project_id=None,
+            used_scopes=SCOPES,
+            scopes=SCOPES,
+            default_scopes=None,
+        )
+
+    @mock.patch(
+        "google.auth.transport._mtls_helper._get_workload_cert_and_key_paths",
+        return_value=("cert", "key"),
+    )
+    def test_get_mtls_certs(self, mock_get_workload_cert_and_key_paths):
+        credentials = self.make_credentials(
+            credential_source=self.CREDENTIAL_SOURCE_CERTIFICATE.copy()
+        )
+
+        cert, key = credentials._get_mtls_cert_and_key_paths()
+        assert cert == "cert"
+        assert key == "key"
+
+    def test_get_mtls_certs_invalid(self):
+        credentials = self.make_credentials(
+            credential_source=self.CREDENTIAL_SOURCE_TEXT.copy()
+        )
+
+        with pytest.raises(exceptions.RefreshError) as excinfo:
+            credentials._get_mtls_cert_and_key_paths()
+
+        assert excinfo.match(
+            'The credential is not configured to use mtls requests. The credential should include a "certificate" section in the credential source.'
         )

@@ -305,7 +305,8 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
             .NotDeleted()
             .NotUnderDeleting()
             .IsCommonSensePath()
-            .IsLikeDirectory();
+            .IsLikeDirectory()
+            .FailOnRestrictedCreateInTempZone();
 
         if (!checks) {
             result->SetError(checks.GetStatus(), checks.GetError());
@@ -494,11 +495,10 @@ TTxState& TCreateFileStore::PrepareChanges(
     context.SS->ChangeTxState(db, operationId, TTxState::CreateParts);
     context.OnComplete.ActivateTx(operationId);
 
-    context.SS->PersistPath(db, fsPath->PathId);
     if (!acl.empty()) {
         fsPath->ApplyACL(acl);
-        context.SS->PersistACL(db, fsPath);
     }
+    context.SS->PersistPath(db, fsPath->PathId);
 
     context.SS->FileStoreInfos[pathId] = fs;
     context.SS->PersistFileStoreInfo(db, pathId, fs);

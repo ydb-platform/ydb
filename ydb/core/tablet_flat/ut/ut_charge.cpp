@@ -53,15 +53,15 @@ namespace {
             , Sticky(std::move(sticky))
             { }
 
-        const TSharedData* TryGetPage(const TPart *part, TPageId id, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart *part, TPageId pageId, TGroupId groupId) override
         {
-            Touched[groupId].insert(id);
+            Touched[groupId].insert(pageId);
             
-            if (!Fail || Sticky.contains({groupId, id})) {
-                return NTest::TTestEnv::TryGetPage(part, id, groupId);
+            if (!Fail || Sticky.contains({groupId, pageId})) {
+                return NTest::TTestEnv::TryGetPage(part, pageId, groupId);
             }
 
-            ToLoad[groupId].insert(id);
+            ToLoad[groupId].insert(pageId);
             return nullptr;
         }
 
@@ -93,7 +93,7 @@ namespace {
 
     private:
         const NTest::TRowTool Tool;
-        NPage::TIndexWriter Writer;
+        NPage::TFlatIndexWriter Writer;
     };
 
     struct TModel : public NTest::TSteps<TModel> {
@@ -247,7 +247,7 @@ namespace {
             Y_ABORT_UNLESS(lower < Mass.Saved.Size() && upper < Mass.Saved.Size());
 
             auto sticky = GetIndexPages();
-            NTest::TCheckIt wrap(Eggs, { new TTouchEnv(false, sticky) });
+            NTest::TCheckIter wrap(Eggs, { new TTouchEnv(false, sticky) });
 
             wrap.To(CurrentStep());
             wrap.StopAfter(Tool.KeyCells(Mass.Saved[upper]));
@@ -283,7 +283,7 @@ namespace {
             Y_ABORT_UNLESS(lower < Mass.Saved.Size() && upper < Mass.Saved.Size());
 
             auto sticky = GetIndexPages();
-            NTest::TCheckReverseIt wrap(Eggs, { new TTouchEnv(false, sticky) });
+            NTest::TCheckReverseIter wrap(Eggs, { new TTouchEnv(false, sticky) });
 
             wrap.To(CurrentStep());
             wrap.StopAfter(Tool.KeyCells(Mass.Saved[upper]));
@@ -333,10 +333,10 @@ namespace {
             }
 
             for (auto &x : pages.BTreeGroups) {
-                result.insert({mainGroupId, x.PageId});
+                result.insert({mainGroupId, x.GetPageId()});
             }
             for (auto &x : pages.BTreeHistoric) {
-                result.insert({mainGroupId, x.PageId});
+                result.insert({mainGroupId, x.GetPageId()});
             }
 
             return result;
@@ -428,7 +428,7 @@ Y_UNIT_TEST_SUITE(Charge) {
         const auto bar = *TSchemedCookRow(*lay).Col(777_u32, "bar");
         const auto baz = *TSchemedCookRow(*lay).Col(999_u32, "baz");
 
-        NPage::TIndex me(
+        NPage::TFlatIndex me(
             TCooker(*lay)
                 .Add(foo, 0, 1)
                 .Add(bar, 10, 2)

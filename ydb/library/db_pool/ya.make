@@ -15,6 +15,3 @@ PEERDIR(
 
 END()
 
-RECURSE(
-    protos
-)

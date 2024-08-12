@@ -11,7 +11,7 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_memory_quota.h>
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 #include <ydb/library/yql/dq/proto/dq_transport.pb.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 
@@ -29,10 +29,10 @@ struct TTaskRunnerEvents {
         EvOutputChannelDataRequest,
         EvOutputChannelData,
 
-	EvInputChannelData,
+        EvInputChannelData,
         EvInputChannelDataAck,
 
-	// EvContinueRun -> TaskRunner->Run() -> TEvTaskRunFinished
+        // EvContinueRun -> TaskRunner->Run() -> TEvTaskRunFinished
         EvContinueRun,
         EvRunFinished,
 
@@ -171,21 +171,34 @@ struct TEvTaskRunnerCreateFinished
     : NActors::TEventLocal<TEvTaskRunnerCreateFinished, TTaskRunnerEvents::EvCreateFinished>
 {
 
-    TEvTaskRunnerCreateFinished() = default;
     TEvTaskRunnerCreateFinished(
         const THashMap<TString, TString>& secureParams,
         const THashMap<TString, TString>& taskParams,
         const TVector<TString>& readRanges,
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-        const TTaskRunnerActorSensors& sensors = {})
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+        THashMap<ui64, std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr>>&& inputTransforms,
+        const TTaskRunnerActorSensors& sensors = {}
+    )
         : Sensors(sensors)
         , SecureParams(secureParams)
         , TaskParams(taskParams)
         , ReadRanges(readRanges)
         , TypeEnv(typeEnv)
         , HolderFactory(holderFactory)
-    { }
+        , Alloc(alloc)
+        , InputTransforms(std::move(inputTransforms))
+    { 
+        Y_ABORT_UNLESS(inputTransforms.empty() || Alloc);
+    }
+
+    ~TEvTaskRunnerCreateFinished() {
+        if (!InputTransforms.empty()) {
+            auto guard = Guard(*Alloc);
+            InputTransforms.clear();
+        }
+    }
 
     TTaskRunnerActorSensors Sensors;
 
@@ -195,6 +208,8 @@ struct TEvTaskRunnerCreateFinished
     const TVector<TString>& ReadRanges;
     const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
     const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+    THashMap<ui64, std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr>> InputTransforms; //can'not be const, because we need to explicitly clear it in destructor
 };
 
 struct TEvTaskRunFinished
@@ -207,7 +222,7 @@ struct TEvTaskRunFinished
         const TTaskRunnerActorSensors& sensors = {},
         const TDqMemoryQuota::TProfileStats& profileStats = {},
         ui64 mkqlMemoryLimit = 0,
-        THolder<NDqProto::TMiniKqlProgramState>&& programState = nullptr,
+        THolder<TMiniKqlProgramState>&& programState = nullptr,
         bool watermarkInjectedToOutputs = false,
         bool checkpointRequestedFromTaskRunner = false,
         TDuration computeTime = TDuration::Zero())
@@ -230,7 +245,7 @@ struct TEvTaskRunFinished
     THashMap<ui32, i64> SourcesFreeSpace;
     TDqMemoryQuota::TProfileStats ProfileStats;
     ui64 MkqlMemoryLimit = 0;
-    THolder<NDqProto::TMiniKqlProgramState> ProgramState;
+    THolder<TMiniKqlProgramState> ProgramState;
     bool WatermarkInjectedToOutputs = false;
     bool CheckpointRequestedFromTaskRunner = false;
     TDuration ComputeTime;

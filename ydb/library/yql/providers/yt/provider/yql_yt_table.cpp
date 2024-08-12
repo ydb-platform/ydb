@@ -7,6 +7,7 @@
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
+#include <ydb/library/yql/providers/yt/gateway/lib/yt_helpers.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/public/udf/tz/udf_tz.h>
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
@@ -16,6 +17,7 @@
 
 #include <library/cpp/yson/node/node_io.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
+#include <yt/cpp/mapreduce/interface/serialize.h>
 
 #include <util/stream/output.h>
 #include <util/stream/str.h>
@@ -115,16 +117,16 @@ public:
         Converters.emplace(TCoInterval::CallableName(), [](const TExprNode& node) {
             return NYT::TNode(NYql::FromString<i64>(*node.Child(0), EDataSlot::Interval));
         });
-        Converters.emplace(TCoDate::CallableName(), [](const TExprNode& node) {
+        Converters.emplace(TCoDate32::CallableName(), [](const TExprNode& node) {
             return NYT::TNode((i64)NYql::FromString<i32>(*node.Child(0), EDataSlot::Date32));
         });
-        Converters.emplace(TCoDatetime::CallableName(), [](const TExprNode& node) {
+        Converters.emplace(TCoDatetime64::CallableName(), [](const TExprNode& node) {
             return NYT::TNode(NYql::FromString<i64>(*node.Child(0), EDataSlot::Datetime64));
         });
-        Converters.emplace(TCoTimestamp::CallableName(), [](const TExprNode& node) {
+        Converters.emplace(TCoTimestamp64::CallableName(), [](const TExprNode& node) {
             return NYT::TNode(NYql::FromString<i64>(*node.Child(0), EDataSlot::Timestamp64));
         });
-        Converters.emplace(TCoInterval::CallableName(), [](const TExprNode& node) {
+        Converters.emplace(TCoInterval64::CallableName(), [](const TExprNode& node) {
             return NYT::TNode(NYql::FromString<i64>(*node.Child(0), EDataSlot::Interval64));
         });
         Converters.emplace(TCoTzDate::CallableName(), [](const TExprNode& node) {
@@ -149,6 +151,30 @@ public:
             GetNext(tzName, ',', valueStr);
             TStringStream out;
             NMiniKQL::SerializeTzTimestamp(::FromString<ui64>(valueStr), NMiniKQL::GetTimezoneId(tzName), out);
+            return NYT::TNode(out.Str());
+        });
+        Converters.emplace(TCoTzDate32::CallableName(), [](const TExprNode& node) {
+            TStringBuf tzName = node.Child(0)->Content();
+            TStringBuf valueStr;
+            GetNext(tzName, ',', valueStr);
+            TStringStream out;
+            NMiniKQL::SerializeTzDate32(::FromString<i32>(valueStr), NMiniKQL::GetTimezoneId(tzName), out);
+            return NYT::TNode(out.Str());
+        });
+        Converters.emplace(TCoTzDatetime64::CallableName(), [](const TExprNode& node) {
+            TStringBuf tzName = node.Child(0)->Content();
+            TStringBuf valueStr;
+            GetNext(tzName, ',', valueStr);
+            TStringStream out;
+            NMiniKQL::SerializeTzDatetime64(::FromString<i64>(valueStr), NMiniKQL::GetTimezoneId(tzName), out);
+            return NYT::TNode(out.Str());
+        });
+        Converters.emplace(TCoTzTimestamp64::CallableName(), [](const TExprNode& node) {
+            TStringBuf tzName = node.Child(0)->Content();
+            TStringBuf valueStr;
+            GetNext(tzName, ',', valueStr);
+            TStringStream out;
+            NMiniKQL::SerializeTzTimestamp64(::FromString<i64>(valueStr), NMiniKQL::GetTimezoneId(tzName), out);
             return NYT::TNode(out.Str());
         });
         Converters.emplace(TCoUuid::CallableName(), [](const TExprNode& node) {
@@ -899,8 +925,14 @@ bool TYtOutTableInfo::Validate(const TExprNode& node, TExprContext& ctx) {
         return false;
     }
 
-    if (!ValidateSettings(*node.Child(TYtOutTable::idx_Settings), EYtSettingType::UniqueBy | EYtSettingType::OpHash, ctx)) {
+    if (!ValidateSettings(*node.Child(TYtOutTable::idx_Settings), EYtSettingType::UniqueBy | EYtSettingType::OpHash | EYtSettingType::ColumnGroups, ctx)) {
         return false;
+    }
+
+    if (auto setting = NYql::GetSetting(*node.Child(TYtOutTable::idx_Settings), EYtSettingType::ColumnGroups)) {
+        if (!ValidateColumnGroups(*setting, *node.Child(TYtOutTable::idx_RowSpec)->GetTypeAnn()->Cast<TStructExprType>(), ctx)) {
+            return false;
+        }
     }
 
     return true;
@@ -961,6 +993,15 @@ TYtOutTableInfo& TYtOutTableInfo::SetUnique(const TDistinctConstraintNode* disti
         }
     }
     return *this;
+}
+
+NYT::TNode TYtOutTableInfo::GetColumnGroups() const {
+    if (Settings) {
+        if (auto setting = NYql::GetSetting(Settings.Ref(), EYtSettingType::ColumnGroups)) {
+            return NYT::NodeFromYsonString(setting->Tail().Content());
+        }
+    }
+    return {};
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1582,11 +1623,6 @@ void ScaleDate(ui64& val, bool& includeBound, EDataSlot srcDataSlot, EDataSlot t
             break;
         }
         break;
-    case EDataSlot::Date32:
-    case EDataSlot::Datetime64:
-    case EDataSlot::Timestamp64:
-        // TODO
-        break;
     default:
         break;
     }
@@ -1713,22 +1749,6 @@ bool AdjustLowerValue(TString& lowerValue, bool& lowerInclude, EDataSlot lowerDa
             case EDataSlot::Interval:
                 valMin = static_cast<i64>(std::numeric_limits<i64>::min());
                 valMax = static_cast<i64>(std::numeric_limits<i64>::max());
-                break;
-            case EDataSlot::Date32:
-                valMin = MIN_DATE32;
-                valMax = MAX_DATE32;
-                break;
-            case EDataSlot::Datetime64:
-                valMin = MIN_DATETIME64;
-                valMax = MAX_DATETIME64;
-                break;
-            case EDataSlot::Timestamp64:
-                valMin = MIN_TIMESTAMP64;
-                valMax = MAX_TIMESTAMP64;
-                break;
-            case EDataSlot::Interval64:
-                valMin = -MAX_INTERVAL64;
-                valMax = MAX_INTERVAL64;
                 break;
             default:
                 break;
@@ -1956,19 +1976,6 @@ bool AdjustUpperValue(TString& upperValue, bool& upperInclude, EDataSlot upperDa
                 valMin = static_cast<i64>(std::numeric_limits<i64>::min());
                 valMax = static_cast<i64>(std::numeric_limits<i64>::max());
                 break;
-            case EDataSlot::Date32:
-                valMin = MIN_DATE32;
-                valMax = MAX_DATE32;
-                break;
-            case EDataSlot::Datetime64:
-                valMin = MIN_DATETIME64;
-                valMax = MAX_DATETIME64;
-            case EDataSlot::Timestamp64:
-                valMin = MIN_TIMESTAMP64;
-                valMax = MAX_TIMESTAMP64;
-            case EDataSlot::Interval64:
-                valMin = -MAX_INTERVAL64;
-                valMax = MAX_INTERVAL64;
             default:
                 break;
             }
@@ -2772,7 +2779,7 @@ bool TYtPathInfo::Validate(const TExprNode& node, TExprContext& ctx) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected " << TYtPath::CallableName()));
         return false;
     }
-    if (!EnsureArgsCount(node, 4, ctx)) {
+    if (!EnsureMinMaxArgsCount(node, 4, 5, ctx)) {
         return false;
     }
 
@@ -2805,6 +2812,10 @@ bool TYtPathInfo::Validate(const TExprNode& node, TExprContext& ctx) {
         return false;
     }
 
+    if (node.ChildrenSize() > TYtPath::idx_AdditionalAttributes && !EnsureAtom(*node.Child(TYtPath::idx_AdditionalAttributes), ctx)) {
+        return false;
+    }
+
     return true;
 }
 
@@ -2824,6 +2835,9 @@ void TYtPathInfo::Parse(TExprBase node) {
 
     if (path.Stat().Maybe<TYtStat>()) {
         Stat = MakeIntrusive<TYtTableStatInfo>(path.Stat().Ptr());
+    }
+    if (path.AdditionalAttributes().Maybe<TCoAtom>()) {
+        AdditionalAttributes = path.AdditionalAttributes().Cast().Value();
     }
 }
 
@@ -2845,11 +2859,19 @@ TExprBase TYtPathInfo::ToExprNode(TExprContext& ctx, const TPositionHandle& pos,
     } else {
         pathBuilder.Stat<TCoVoid>().Build();
     }
+    if (AdditionalAttributes) {
+        pathBuilder.AdditionalAttributes<TCoAtom>()
+            .Value(*AdditionalAttributes, TNodeFlags::MultilineContent)
+        .Build();
+    }
 
     return pathBuilder.Done();
 }
 
 void TYtPathInfo::FillRichYPath(NYT::TRichYPath& path) const {
+    if (AdditionalAttributes) {
+        DeserializeRichYPathAttrs(*AdditionalAttributes, path);
+    }
     if (Columns) {
         // Should have the same criteria as in TYtPathInfo::GetCodecSpecNode()
         bool useAllColumns = !Table->RowSpec; // Always use all columns for YAMR format

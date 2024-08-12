@@ -1,6 +1,8 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/include/errors.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/include/read_events.h>
+
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 
 #include <util/generic/queue.h>

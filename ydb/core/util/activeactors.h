@@ -76,7 +76,7 @@ namespace NActors {
             counter.Value += value;
             if (counter.Value >= CounterLimit && !std::exchange(counter.Warning, true)) {
                 LOG_CRIT_S(ctx, service, "Activity " << key << " reached active actors limit");
-                Y_DEBUG_ABORT_UNLESS(false, "Activity %s reached active actors limit", key.c_str());
+                Y_DEBUG_ABORT("Activity %s reached active actors limit", key.c_str());
             }
         }
     };

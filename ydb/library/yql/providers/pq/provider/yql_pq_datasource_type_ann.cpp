@@ -47,7 +47,7 @@ public:
         return TStatus::Ok;
     }
 
-    const TTypeAnnotationNode* GetReadTopicSchema(TPqTopic topic, TMaybeNode<TCoAtomList> columns, TExprContext& ctx, TVector<TString>& columnOrder) {
+    const TTypeAnnotationNode* GetReadTopicSchema(TPqTopic topic, TMaybeNode<TCoAtomList> columns, TExprContext& ctx, TColumnOrder& columnOrder) {
         TVector<const TItemExprType*> items;
         items.reserve((columns ? columns.Cast().Ref().ChildrenSize() : 0) + topic.Metadata().Size());
 
@@ -56,7 +56,7 @@ public:
 
         std::unordered_set<TString> addedFields;
         if (columns) {
-            columnOrder.reserve(items.capacity());
+            columnOrder.Reserve(items.capacity());
 
             for (auto c : columns.Cast().Ref().ChildrenList()) {
                 if (!EnsureAtom(*c, ctx)) {
@@ -67,7 +67,7 @@ public:
                     ctx.AddError(TIssue(ctx.GetPosition(topic.Pos()), TStringBuilder() << "Unable to find column: " << c->Content()));
                     return nullptr;
                 }
-                columnOrder.push_back(TString(c->Content()));
+                columnOrder.AddColumn(TString(c->Content()));
                 items.push_back(itemSchema->GetItems()[*index]);
                 addedFields.emplace(c->Content());
             }
@@ -99,23 +99,27 @@ public:
             return TStatus::Error;
         }
 
-        auto format = read.Format().Ref().Content();
-        if (!NCommon::ValidateFormatForInput(format, ctx)) {
-            return TStatus::Error;
-        }
-
-        if (!NCommon::ValidateCompressionForInput(format, read.Compression().Ref().Content(), ctx)) {
-            return TStatus::Error;
-        }
-
         TPqTopic topic = read.Topic();
         if (!EnsureCallable(topic.Ref(), ctx)) {
             return TStatus::Error;
         }
 
-        TVector<TString> columnOrder;
+        TColumnOrder columnOrder;
         auto schema = GetReadTopicSchema(topic, read.Columns().Maybe<TCoAtomList>(), ctx, columnOrder);
         if (!schema) {
+            return TStatus::Error;
+        }
+
+        auto format = read.Format().Ref().Content();
+        if (!State_->IsRtmrMode() && !NCommon::ValidateFormatForInput(      // Rtmr has 3 field (key/subkey/value).
+            format,
+            schema->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(),
+            [](TStringBuf fieldName) {return FindPqMetaFieldDescriptorBySysColumn(TString(fieldName)); },
+            ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!NCommon::ValidateCompressionForInput(format, read.Compression().Ref().Content(), ctx)) {
             return TStatus::Error;
         }
 

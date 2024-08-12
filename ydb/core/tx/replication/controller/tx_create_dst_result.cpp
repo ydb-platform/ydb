@@ -55,11 +55,13 @@ public:
                 << ", tid# " << tid
                 << ", pathId# " << Ev->Get()->DstPathId);
         } else {
-            Replication->SetState(TReplication::EState::Error);
             target->SetDstState(TReplication::EDstState::Error);
             target->SetIssue(TStringBuilder() << "Create dst error"
                 << ": " << NKikimrScheme::EStatus_Name(Ev->Get()->Status)
                 << ", " << Ev->Get()->Error);
+
+            Replication->SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target->GetId()
+                << ": " << target->GetIssue());
 
             CLOG_E(ctx, "Create dst error"
                 << ": rid# " << rid
@@ -70,7 +72,8 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Replications>().Key(rid).Update(
-            NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState())
+            NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
+            NIceDb::TUpdate<Schema::Replications::Issue>(Replication->GetIssue())
         );
         db.Table<Schema::Targets>().Key(rid, tid).Update(
             NIceDb::TUpdate<Schema::Targets::DstPathOwnerId>(target->GetDstPathId().OwnerId),

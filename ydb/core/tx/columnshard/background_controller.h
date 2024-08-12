@@ -1,48 +1,13 @@
 #pragma once
 #include "engines/changes/abstract/compaction_info.h"
 #include "engines/portions/meta.h"
+#include <ydb/core/tx/columnshard/counters/counters_manager.h>
 
 namespace NKikimr::NOlap {
 class TColumnEngineChanges;
 }
 
 namespace NKikimr::NColumnShard {
-
-class TBackgroundActivity {
-public:
-    enum EBackActivity : ui32 {
-        NONE = 0x00,
-        INDEX = 0x01,
-        COMPACT = 0x02,
-        CLEAN  = 0x04,
-        TTL = 0x08,
-        ALL = 0xffff
-    };
-
-    static TBackgroundActivity Indexation() { return TBackgroundActivity(INDEX); }
-    static TBackgroundActivity Compaction() { return TBackgroundActivity(COMPACT); }
-    static TBackgroundActivity Cleanup() { return TBackgroundActivity(CLEAN); }
-    static TBackgroundActivity Ttl() { return TBackgroundActivity(TTL); }
-    static TBackgroundActivity All() { return TBackgroundActivity(ALL); }
-    static TBackgroundActivity None() { return TBackgroundActivity(NONE); }
-
-    TBackgroundActivity() = default;
-
-    bool HasIndexation() const { return Activity & INDEX; }
-    bool HasCompaction() const { return Activity & COMPACT; }
-    bool HasCleanup() const { return Activity & CLEAN; }
-    bool HasTtl() const { return Activity & TTL; }
-    bool HasAll() const { return Activity == ALL; }
-
-    TString DebugString() const;
-
-private:
-    EBackActivity Activity = NONE;
-
-    TBackgroundActivity(EBackActivity activity)
-        : Activity(activity)
-    {}
-};
 
 class TBackgroundController {
 private:
@@ -51,10 +16,16 @@ private:
     using TCurrentCompaction = THashMap<ui64, NOlap::TPlanCompactionInfo>;
     TCurrentCompaction ActiveCompactionInfo;
 
+    std::shared_ptr<TBackgroundControllerCounters> Counters;
     bool ActiveCleanupPortions = false;
     bool ActiveCleanupTables = false;
+    bool ActiveCleanupInsertTable = false;
     YDB_READONLY(TMonotonic, LastIndexationInstant, TMonotonic::Zero());
 public:
+    TBackgroundController(std::shared_ptr<TBackgroundControllerCounters> counters)
+        : Counters(std::move(counters)) {
+    }
+
     THashSet<NOlap::TPortionAddress> GetConflictTTLPortions() const;
     THashSet<NOlap::TPortionAddress> GetConflictCompactionPortions() const;
 
@@ -64,6 +35,7 @@ public:
     bool StartCompaction(const NOlap::TPlanCompactionInfo& info);
     void FinishCompaction(const NOlap::TPlanCompactionInfo& info) {
         Y_ABORT_UNLESS(ActiveCompactionInfo.erase(info.GetPathId()));
+        Counters->OnCompactionFinish(info.GetPathId());
     }
     const TCurrentCompaction& GetActiveCompaction() const {
         return ActiveCompactionInfo;
@@ -101,6 +73,18 @@ public:
     }
     bool IsCleanupTablesActive() const {
         return ActiveCleanupTables;
+    }
+
+    void StartCleanupInsertTable() {
+        Y_ABORT_UNLESS(!ActiveCleanupInsertTable);
+        ActiveCleanupInsertTable = true;
+    }
+    void FinishCleanupInsertTable() {
+        Y_ABORT_UNLESS(ActiveCleanupInsertTable);
+        ActiveCleanupInsertTable = false;
+    }
+    bool IsCleanupInsertTableActive() const {
+        return ActiveCleanupInsertTable;
     }
 };
 

@@ -3,6 +3,7 @@
 #include <library/cpp/json/json_value.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_query/client.h>
+#include <ydb/library/accessor/accessor.h>
 
 #include <vector>
 
@@ -20,10 +21,13 @@ struct TTestInfo {
     double Mean = 0;
     double Median = 0;
     double Std = 0;
+    TDuration UnixBench;
     std::vector<TDuration> ClientTimings; // timings captured by the client application. these timings include time RTT between server and the client application.
     std::vector<TDuration> ServerTimings; // query timings measured by the server.
 
     explicit TTestInfo(std::vector<TDuration>&& clientTimings, std::vector<TDuration>&& serverTimings);
+    void operator +=(const TTestInfo& other);
+    void operator /=(const ui32 count);
 };
 
 class TQueryResultInfo {
@@ -46,21 +50,28 @@ public:
     const TVector<NYdb::TColumn>& GetColumns() const {
         return Columns;
     }
+    bool IsExpected(std::string_view expected) const;
 };
 
 class TQueryBenchmarkResult {
 private:
-    TString ErrorInfo;
-    TString YSONResult;
-    TQueryResultInfo QueryResult;
-    TDuration ServerTiming;
+    YDB_READONLY_DEF(TString, ErrorInfo);
+    YDB_READONLY_DEF(TString, YSONResult);
+    YDB_READONLY_DEF(TQueryResultInfo, QueryResult);
+    YDB_READONLY_DEF(TDuration, ServerTiming);
+    YDB_READONLY_DEF(TString, QueryPlan);
+    YDB_READONLY_DEF(TString, PlanAst);
     TQueryBenchmarkResult() = default;
 public:
-    static TQueryBenchmarkResult Result(const TString& yson, const TQueryResultInfo& queryResult, const TDuration& serverTiming) {
+    static TQueryBenchmarkResult Result(const TString& yson, const TQueryResultInfo& queryResult,
+        const TDuration& serverTiming, const TString& queryPlan, const TString& planAst)
+    {
         TQueryBenchmarkResult result;
         result.YSONResult = yson;
         result.QueryResult = queryResult;
         result.ServerTiming = serverTiming;
+        result.QueryPlan = queryPlan;
+        result.PlanAst = planAst;
         return result;
     }
     static TQueryBenchmarkResult Error(const TString& error) {
@@ -68,20 +79,8 @@ public:
         result.ErrorInfo = error;
         return result;
     }
-    bool operator!() const {
-        return !!ErrorInfo;
-    }
-    const TString& GetErrorInfo() const {
-        return ErrorInfo;
-    }
-    TDuration GetServerTiming() const {
-        return ServerTiming;
-    }
-    const TString& GetYSONResult() const {
-        return YSONResult;
-    }
-    const TQueryResultInfo& GetQueryResult() const {
-        return QueryResult;
+    operator bool() const {
+        return !ErrorInfo;
     }
 };
 

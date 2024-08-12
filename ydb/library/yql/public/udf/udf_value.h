@@ -181,7 +181,20 @@ private:
 };
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 30)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 36)
+class IBoxedValue7 : public IBoxedValue6 {
+friend struct TBoxedValueAccessor;
+private:
+    virtual bool Load2(const TUnboxedValue& state) = 0;
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 36)
+class IBoxedValue : public IBoxedValue7 {
+protected:
+    IBoxedValue();
+};
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 30)
 class IBoxedValue : public IBoxedValue6 {
 protected:
     IBoxedValue();
@@ -222,7 +235,7 @@ UDF_ASSERT_TYPE_SIZE(IBoxedValuePtr, 8);
 ///////////////////////////////////////////////////////////////////////////////
 struct TBoxedValueAccessor
 {
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 30)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 36)
 
 #define METHOD_MAP(xx) \
     xx(HasFastListLength) \
@@ -266,7 +279,54 @@ struct TBoxedValueAccessor
     xx(Unused4) \
     xx(Unused5) \
     xx(Unused6) \
-    xx(WideFetch)
+    xx(WideFetch) \
+    xx(Load2)
+
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 30)
+
+#define METHOD_MAP(xx) \
+    xx(HasFastListLength) \
+    xx(GetListLength) \
+    xx(GetEstimatedListLength) \
+    xx(GetListIterator) \
+    xx(GetListRepresentation) \
+    xx(ReverseListImpl) \
+    xx(SkipListImpl) \
+    xx(TakeListImpl) \
+    xx(ToIndexDictImpl) \
+    xx(GetDictLength) \
+    xx(GetDictIterator) \
+    xx(GetKeysIterator) \
+    xx(GetPayloadsIterator) \
+    xx(Contains) \
+    xx(Lookup) \
+    xx(GetElement) \
+    xx(GetElements) \
+    xx(Run) \
+    xx(GetResourceTag) \
+    xx(GetResource) \
+    xx(HasListItems) \
+    xx(HasDictItems) \
+    xx(GetVariantIndex) \
+    xx(GetVariantItem) \
+    xx(Fetch) \
+    xx(Skip) \
+    xx(Next) \
+    xx(NextPair) \
+    xx(Apply) \
+    xx(GetTraverseCount) \
+    xx(GetTraverseItem) \
+    xx(Save) \
+    xx(Load) \
+    xx(Push) \
+    xx(IsSortedDict) \
+    xx(Unused1) \
+    xx(Unused2) \
+    xx(Unused3) \
+    xx(Unused4) \
+    xx(Unused5) \
+    xx(Unused6) \
+    xx(WideFetch) \
 
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
 
@@ -555,6 +615,10 @@ struct TBoxedValueAccessor
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 30)
     static inline EFetchStatus WideFetch(IBoxedValue& value, TUnboxedValue* result, ui32 width);
 #endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 36)
+    static inline bool Load2(IBoxedValue& value, const TUnboxedValue& data);
+#endif
 };
 
 #define MAP_HANDLER(xx) template<> inline uintptr_t TBoxedValueAccessor::GetMethodPtr<TBoxedValueAccessor::EMethod::xx>() { return GetMethodPtr(&IBoxedValue::xx); }
@@ -642,6 +706,10 @@ private:
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 30)
     EFetchStatus WideFetch(TUnboxedValue* result, ui32 width) override;
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 36)
+    bool Load2(const TUnboxedValue& value) override;
 #endif
 };
 
@@ -839,6 +907,10 @@ public:
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 30)
     inline EFetchStatus WideFetch(TUnboxedValue *result, ui32 width) const;
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 36)
+    inline bool Load2(const TUnboxedValue& value);
 #endif
 
     inline bool TryMakeVariant(ui32 index);
@@ -1228,6 +1300,13 @@ inline void TBoxedValueBase::Unused6() {
 inline EFetchStatus TBoxedValueBase::WideFetch(TUnboxedValue *result, ui32 width) {
     Y_UNUSED(result);
     Y_UNUSED(width);
+    Y_ABORT("Not implemented");
+}
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 36)
+inline bool TBoxedValueBase::Load2(const TUnboxedValue& value) {
+    Y_UNUSED(value);
     Y_ABORT("Not implemented");
 }
 #endif

@@ -16,8 +16,9 @@
 /* Define to 1 if you have the <arpa/inet.h> header file. */
 #define HAVE_ARPA_INET_H 1
 
-/* Define to 1 if you have the std::atomic_* overloads for std::shared_ptr. */
-#define HAVE_ATOMIC_STD_SHARED_PTR 1
+/* Define to 1 if you have the std::atomic<std::shared_ptr<T>> is supported.
+   */
+/* #undef HAVE_ATOMIC_STD_SHARED_PTR */
 
 /* Define to 1 if you have enum bpf_stats_type in linux/bpf.h. */
 /* #undef HAVE_BPF_STATS_TYPE */
@@ -28,8 +29,8 @@
 /* Define to 1 if you have the `clock_gettime' function. */
 #define HAVE_CLOCK_GETTIME 1
 
-/* define if the compiler supports basic C++14 syntax */
-#define HAVE_CXX14 1
+/* define if the compiler supports basic C++20 syntax */
+#define HAVE_CXX20 1
 
 /* Define to 1 if you have the declaration of `CLOCK_MONOTONIC', and to 0 if
    you don't. */
@@ -263,7 +264,7 @@
 #define PACKAGE_NAME "nghttp2"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "nghttp2 1.60.0"
+#define PACKAGE_STRING "nghttp2 1.62.1"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "nghttp2"
@@ -272,7 +273,7 @@
 #define PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "1.60.0"
+#define PACKAGE_VERSION "1.62.1"
 
 /* Define to 1 if all of the C90 standard headers exist (not just the ones
    required in a freestanding environment). This macro is provided for
@@ -371,7 +372,7 @@
 
 
 /* Version number of package */
-#define VERSION "1.60.0"
+#define VERSION "1.62.1"
 
 /* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
    significant byte first (like Motorola and SPARC, unlike Intel). */

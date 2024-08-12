@@ -1,7 +1,6 @@
 #pragma once
-#include "defs.h"
+#include "flat_page_iface.h"
 #include "flat_sausage_gut.h"
-#include "flat_sausage_fetch.h"
 #include "shared_handle.h"
 #include "shared_cache_events.h"
 #include <ydb/core/util/cache_cache.h>
@@ -20,6 +19,8 @@ struct TPrivatePageCacheWaitPad : public TExplicitSimpleCounter {
 
 class TPrivatePageCache {
     using TPinned = THashMap<TLogoBlobID, THashMap<ui32, TIntrusivePtr<TPrivatePageCachePinPad>>>;
+    using EPage = NTable::NPage::EPage;
+    using TPageId = NTable::NPage::TPageId;
 
 public:
     struct TInfo;
@@ -34,6 +35,7 @@ public:
         ui64 PinnedSetSize = 0; // number of bytes pinned by transactions (even those not currently loaded)
         ui64 PinnedLoadSize = 0; // number of bytes pinned by transactions (which are currently being loaded)
         size_t CurrentCacheHits = 0; // = Touches.Size()
+        ui64 CurrentCacheHitSize = 0; // = Touches.Where(t => !t.Sticky).Sum(t => t.Size)
         size_t CurrentCacheMisses = 0; // = ToLoad.Size()
     };
 
@@ -52,7 +54,7 @@ public:
         ui32 Sticky : 1;
         ui32 SharedPending : 1;
         
-        const ui32 Id;
+        const TPageId Id;
         const size_t Size;
 
         TInfo* const Info;
@@ -61,7 +63,7 @@ public:
         TSharedPageRef SharedBody;
         TSharedData PinnedBody;
 
-        TPage(size_t size, ui32 pageId, TInfo* info);
+        TPage(size_t size, TPageId pageId, TInfo* info);
 
         TPage(const TPage&) = delete;
         TPage(TPage&&) = delete;
@@ -101,16 +103,24 @@ public:
             return PageMap.size();
         }
 
-        const TSharedData* Lookup(ui32 pageId) const noexcept {
+        const TSharedData* Lookup(TPageId pageId) const noexcept {
             auto* page = GetPage(pageId);
             return page ? page->GetPinnedBody() : nullptr;
         }
 
-        TPage* GetPage(ui32 pageId) const noexcept {
+        TPage* GetPage(TPageId pageId) const noexcept {
             return PageMap[pageId].Get();
         }
 
-        TPage* EnsurePage(ui32 pageId) noexcept {
+        EPage GetPageType(TPageId pageId) const noexcept {
+            return EPage(PageCollection->Page(pageId).Type);
+        }
+
+        ui64 GetPageSize(TPageId pageId) const noexcept {
+            return PageCollection->Page(pageId).Size;
+        }
+
+        TPage* EnsurePage(TPageId pageId) noexcept {
             auto* page = GetPage(pageId);
             if (!page) {
                 PageMap.emplace(pageId, THolder<TPage>(page = new TPage(PageCollection->Page(pageId).Size, pageId, this)));
@@ -145,7 +155,7 @@ public:
 
     TInfo* Info(TLogoBlobID id);
 
-    void MarkSticky(ui32 pageId, TInfo *collectionInfo);
+    void MarkSticky(TPageId pageId, TInfo *collectionInfo);
 
     const TStats& GetStats() const { return Stats; }
 
@@ -154,6 +164,7 @@ public:
     const TSharedData* Lookup(ui32 page, TInfo *collection);
     TSharedPageRef LookupShared(ui32 page, TInfo *collection);
 
+    void CountTouches(TPinned &pinned, ui32 &newPages, ui64 &newMemory, ui64 &pinnedMemory);
     void PinTouches(TPinned &pinned, ui32 &touchedPages, ui32 &pinnedPages, ui64 &pinnedMemory);
     void PinToLoad(TPinned &pinned, ui32 &pinnedPages, ui64 &pinnedMemory);
     void RepinPages(TPinned &newPinned, TPinned &oldPinned, size_t &pinnedPages);
@@ -161,16 +172,16 @@ public:
     THashMap<TPrivatePageCache::TInfo*, TVector<ui32>> GetToLoad() const;
     void ResetTouchesAndToLoad(bool verifyEmpty);
 
-    void UpdateSharedBody(TInfo *collectionInfo, ui32 pageId, TSharedPageRef shared);
-    void DropSharedBody(TInfo *collectionInfo, ui32 pageId);
+    void UpdateSharedBody(TInfo *collectionInfo, TPageId pageId, TSharedPageRef shared);
+    void DropSharedBody(TInfo *collectionInfo, TPageId pageId);
 
     TPage::TWaitQueuePtr ProvideBlock(NSharedCache::TEvResult::TLoaded&& loaded, TInfo *collectionInfo);
     THashMap<TLogoBlobID, TIntrusivePtr<TInfo>> DetachPrivatePageCache();
-    THashMap<TLogoBlobID, THashMap<ui32, TSharedData>> GetPrepareSharedTouched();
+    THashMap<TLogoBlobID, THashMap<TPageId, TSharedData>> GetPrepareSharedTouched();
 
 private:
     THashMap<TLogoBlobID, TIntrusivePtr<TInfo>> PageCollections;
-    THashMap<TLogoBlobID, THashMap<ui32, TSharedData>> ToTouchShared;
+    THashMap<TLogoBlobID, THashMap<TPageId, TSharedData>> ToTouchShared;
 
     TStats Stats;
 

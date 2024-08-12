@@ -9,15 +9,18 @@
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
-class TPlainReadData: public IDataReader, TNonCopyable {
+class TPlainReadData: public IDataReader, TNonCopyable, NColumnShard::TMonitoringObjectsCounter<TPlainReadData> {
 private:
     using TBase = IDataReader;
     std::shared_ptr<TScanHead> Scanner;
     std::shared_ptr<TSpecialReadContext> SpecialReadContext;
-    std::vector<TPartialReadResult> PartialResults;
+    std::vector<std::shared_ptr<TPartialReadResult>> PartialResults;
     ui32 ReadyResultsCount = 0;
-    bool AbortedFlag = false;
 protected:
+    virtual TConclusionStatus DoStart() override {
+        return Scanner->Start();
+    }
+
     virtual TString DoDebugString(const bool verbose) const override {
         TStringBuilder sb;
         sb << SpecialReadContext->DebugString() << ";";
@@ -27,11 +30,11 @@ protected:
         return sb;
     }
 
-    virtual std::vector<TPartialReadResult> DoExtractReadyResults(const int64_t maxRowsInBatch) override;
+    virtual std::vector<std::shared_ptr<TPartialReadResult>> DoExtractReadyResults(const int64_t maxRowsInBatch) override;
     virtual TConclusion<bool> DoReadNextInterval() override;
 
     virtual void DoAbort() override {
-        AbortedFlag = true;
+        SpecialReadContext->Abort();
         Scanner->Abort();
         PartialResults.clear();
         Y_ABORT_UNLESS(IsFinished());
@@ -40,6 +43,10 @@ protected:
         return (Scanner->IsFinished() && PartialResults.empty());
     }
 public:
+    virtual void OnSentDataFromInterval(const ui32 intervalIdx) const override {
+        Scanner->OnSentDataFromInterval(intervalIdx);
+    }
+
     const TReadMetadata::TConstPtr& GetReadMetadata() const {
         return SpecialReadContext->GetReadMetadata();
     }
@@ -60,8 +67,8 @@ public:
 
     TPlainReadData(const std::shared_ptr<TReadContext>& context);
     ~TPlainReadData() {
-        if (!AbortedFlag) {
-            Abort();
+        if (!SpecialReadContext->IsAborted()) {
+            Abort("unexpected on destructor");
         }
     }
 };

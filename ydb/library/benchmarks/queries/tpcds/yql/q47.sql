@@ -1,12 +1,16 @@
 {% include 'header.sql.jinja' %}
 
 -- NB: Subquerys
+$todecimal = ($x) -> {
+  return cast(cast($x as string?) as decimal(7,2))
+};
+
 $v1 = (
  select item.i_category i_category, item.i_brand i_brand,
         store.s_store_name s_store_name, store.s_company_name s_company_name,
         date_dim.d_year d_year, date_dim.d_moy d_moy,
-        sum(ss_sales_price) sum_sales,
-        avg(sum(ss_sales_price)) over
+        sum($todecimal(ss_sales_price)) sum_sales,
+        avg(sum($todecimal(ss_sales_price))) over
           (partition by item.i_category, item.i_brand,
                      store.s_store_name, store.s_company_name, date_dim.d_year)
           avg_monthly_sales,
@@ -44,8 +48,8 @@ $v2 = (
        v1.s_store_name = v1_lead.s_store_name and
        v1.s_company_name = v1_lag.s_company_name and
        v1.s_company_name = v1_lead.s_company_name and
-       v1.rn = v1_lag.rn + 1 and
-       v1.rn = v1_lead.rn - 1);
+       v1.rn = v1_lag.rn + 1U and
+       v1.rn = v1_lead.rn - 1U);
 
 
 -- start query 1 in stream 0 using template query47.tpl and seed 2031708268
@@ -53,7 +57,7 @@ select *
  from $v2
  where  d_year = 1999 and
         avg_monthly_sales > 0 and
-        case when avg_monthly_sales > 0 then abs(sum_sales - avg_monthly_sales) / avg_monthly_sales else null end > 0.1
+        case when avg_monthly_sales > 0 then abs(sum_sales - avg_monthly_sales) / avg_monthly_sales else null end > cast("0.1" as decimal(7,2))
  order by sum_sales - avg_monthly_sales, sum_sales
  limit 100;
 

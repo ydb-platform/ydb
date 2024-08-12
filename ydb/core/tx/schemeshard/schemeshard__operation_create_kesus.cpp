@@ -49,11 +49,10 @@ TTxState& PrepareChanges(TOperationId operationId, TPathElement::TPtr parentDir,
     context.SS->ChangeTxState(db, operationId, TTxState::CreateParts);
     context.OnComplete.ActivateTx(operationId);
 
-    context.SS->PersistPath(db, item->PathId);
     if (!acl.empty()) {
         item->ApplyACL(acl);
-        context.SS->PersistACL(db, item);
     }
+    context.SS->PersistPath(db, item->PathId);
     context.SS->KesusInfos[pathId] = kesus;
     context.SS->PersistKesusInfo(db, pathId, kesus);
     context.SS->IncrementPathDbRefCount(pathId);
@@ -321,7 +320,8 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsCommonSensePath()
-                .IsLikeDirectory();
+                .IsLikeDirectory()
+                .FailOnRestrictedCreateInTempZone();
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());

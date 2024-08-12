@@ -24,7 +24,7 @@ struct TExportConv {
             NOperationId::AddOptionalValue(operationId, "kind", "s3");
             break;
         default:
-            Y_DEBUG_ABORT_UNLESS(false, "Unknown export kind");
+            Y_DEBUG_ABORT("Unknown export kind");
             break;
         }
 
@@ -45,6 +45,17 @@ struct TExportConv {
             operation.mutable_issues()->CopyFrom(exprt.GetIssues());
         }
 
+        if (exprt.HasStartTime()) {
+            *operation.mutable_create_time() = exprt.GetStartTime();
+        }
+        if (exprt.HasEndTime()) {
+            *operation.mutable_end_time() = exprt.GetEndTime();
+        }
+
+        if (exprt.HasUserSID()) {
+            operation.set_created_by(exprt.GetUserSID());
+        }
+
         using namespace Ydb::Export;
         switch (exprt.GetSettingsCase()) {
         case NKikimrExport::TExport::kExportToYtSettings:
@@ -54,7 +65,7 @@ struct TExportConv {
             Fill<ExportToS3Metadata, ExportToS3Result>(operation, exprt, exprt.GetExportToS3Settings());
             break;
         default:
-            Y_DEBUG_ABORT_UNLESS(false, "Unknown export kind");
+            Y_DEBUG_ABORT("Unknown export kind");
             break;
         }
 

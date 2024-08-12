@@ -33,7 +33,11 @@ struct TDataRow {
             {16, TTypeInfo(NTypeIds::Datetime), ""},
             {17, TTypeInfo(NTypeIds::Timestamp), ""},
             {18, TTypeInfo(NTypeIds::Interval), ""},
-            {19, TTypeInfo(NTypeIds::Decimal), ""},
+            {19, TTypeInfo(NTypeIds::Date32), ""},
+            {20, TTypeInfo(NTypeIds::Datetime64), ""},
+            {21, TTypeInfo(NTypeIds::Timestamp64), ""},
+            {22, TTypeInfo(NTypeIds::Interval64), ""},
+            {23, TTypeInfo(NTypeIds::Decimal), ""},
         };
     }
 
@@ -56,6 +60,10 @@ struct TDataRow {
     i64 Datetime;
     i64 Timestamp;
     i64 Interval;
+    i32 Date32;
+    i64 Datetime64;
+    i64 Timestamp64;
+    i64 Interval64;
     NYql::NDecimal::TInt128 Decimal;
 
     static std::shared_ptr<arrow::Schema> MakeArrowSchema() {
@@ -79,6 +87,10 @@ struct TDataRow {
             arrow::field("datetime", arrow::timestamp(arrow::TimeUnit::TimeUnit::SECOND)),
             arrow::field("ts", arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO)),
             arrow::field("ival", arrow::duration(arrow::TimeUnit::TimeUnit::MICRO)),
+            arrow::field("date32", arrow::date32()),
+            arrow::field("datetime64", arrow::date64()),
+            arrow::field("timestamp64", arrow::date64()),
+            arrow::field("interval64", arrow::date64()),
             arrow::field("dec", arrow::decimal(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE)),
         };
 
@@ -153,6 +165,18 @@ std::shared_ptr<arrow::RecordBatch> VectorToBatch(const std::vector<struct TData
             } else if (colName == "ival") {
                 auto result = batchBuilder->GetFieldAs<arrow::DurationBuilder>(colIndex++)->Append(row.Interval);
                 UNIT_ASSERT(result.ok());
+            } else if (colName == "date32") {
+                auto result = batchBuilder->GetFieldAs<arrow::Date32Builder>(colIndex++)->Append(row.Date32);
+                UNIT_ASSERT(result.ok());
+            } else if (colName == "datetime64") {
+                auto result = batchBuilder->GetFieldAs<arrow::Date64Builder>(colIndex++)->Append(row.Datetime64);
+                UNIT_ASSERT(result.ok());
+            } else if (colName == "timestamp64") {
+                auto result = batchBuilder->GetFieldAs<arrow::Date64Builder>(colIndex++)->Append(row.Timestamp64);
+                UNIT_ASSERT(result.ok());
+            } else if (colName == "interval64") {
+                auto result = batchBuilder->GetFieldAs<arrow::Date64Builder>(colIndex++)->Append(row.Interval64);
+                UNIT_ASSERT(result.ok());
             } else if (colName == "dec") {
                 auto result = batchBuilder->GetFieldAs<arrow::Decimal128Builder>(colIndex++)->Append(reinterpret_cast<const char*>(&row.Decimal));
                 UNIT_ASSERT(result.ok());
@@ -167,11 +191,11 @@ std::shared_ptr<arrow::RecordBatch> VectorToBatch(const std::vector<struct TData
 
 TVector<TDataRow> TestRows() {
     TVector<TDataRow> rows = {
-        {false, -1, -1, -1, -1, 1, 1, 1, 1, -1.0f, -1.0, "s1"                       , "u1"                      , "{j:1}", "{y:1}", 0, 0, 0, 0, 111},
-        {false,  2,  2,  2,  2, 2, 2, 2, 2,  2.0f,  2.0, "s2"                       , "u2"                      , "{j:2}", "{y:2}", 0, 0, 0, 0, 222},
-        {false, -3, -3, -3, -3, 3, 3, 3, 3, -3.0f, -3.0, "s3"                       , "u3"                      , "{j:3}", "{y:3}", 0, 0, 0, 0, 333},
-        {false, -4, -4, -4, -4, 4, 4, 4, 4,  4.0f,  4.0, "s4"                       , "u4"                      , "{j:4}", "{y:4}", 0, 0, 0, 0, 444},
-        {false, -5, -5, -5, -5, 5, 5, 5, 5,  5.0f,  5.0, "long5long5long5long5long5", "utflong5utflong5utflong5", "{j:5}", "{y:5}", 0, 0, 0, 0, 555},
+        {false, -1, -1, -1, -1, 1, 1, 1, 1, -1.0f, -1.0, "s1"                       , "u1"                      , "{j:1}", "{y:1}", 0, 0, 0, 0, -1, -1, -1, -1, 111},
+        {false,  2,  2,  2,  2, 2, 2, 2, 2,  2.0f,  2.0, "s2"                       , "u2"                      , "{j:2}", "{y:2}", 0, 0, 0, 0, -2, -2, -2, -2, 222},
+        {false, -3, -3, -3, -3, 3, 3, 3, 3, -3.0f, -3.0, "s3"                       , "u3"                      , "{j:3}", "{y:3}", 0, 0, 0, 0, -3, -3, -3, -3, 333},
+        {false, -4, -4, -4, -4, 4, 4, 4, 4,  4.0f,  4.0, "s4"                       , "u4"                      , "{j:4}", "{y:4}", 0, 0, 0, 0, -4, -4, -4, -4, 444},
+        {false, -5, -5, -5, -5, 5, 5, 5, 5,  5.0f,  5.0, "long5long5long5long5long5", "utflong5utflong5utflong5", "{j:5}", "{y:5}", 0, 0, 0, 0, -5, -5, -5, -5, 555},
     };
     return rows;
 }
@@ -210,6 +234,10 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
             {NUdf::TUnboxedValuePod(            ), NTypeIds::Datetime    , {16, 8 } },
             {NUdf::TUnboxedValuePod(            ), NTypeIds::Timestamp   , {16, 8 } },
             {NUdf::TUnboxedValuePod(            ), NTypeIds::Interval    , {16, 8 } },
+            {NUdf::TUnboxedValuePod(            ), NTypeIds::Date32      , {16, 8 } },
+            {NUdf::TUnboxedValuePod(            ), NTypeIds::Datetime64  , {16, 8 } },
+            {NUdf::TUnboxedValuePod(            ), NTypeIds::Timestamp64 , {16, 8 } },
+            {NUdf::TUnboxedValuePod(            ), NTypeIds::Interval64  , {16, 8 } },
             {NUdf::TUnboxedValuePod(true        ), NTypeIds::Bool        , {16, 8 } },
             {NUdf::TUnboxedValuePod((i8) 1      ), NTypeIds::Int8        , {16, 8 } },
             {NUdf::TUnboxedValuePod((i16) 2     ), NTypeIds::Int16       , {16, 8 } },
@@ -225,6 +253,10 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
             {NUdf::TUnboxedValuePod(123456789012), NTypeIds::Datetime    , {16, 8 } },
             {NUdf::TUnboxedValuePod(123456789012), NTypeIds::Timestamp   , {16, 8 } },
             {NUdf::TUnboxedValuePod(123456789012), NTypeIds::Interval    , {16, 8 } },
+            {NUdf::TUnboxedValuePod(-12345678901), NTypeIds::Date32      , {16, 8 } },
+            {NUdf::TUnboxedValuePod(-12345678901), NTypeIds::Datetime64  , {16, 8 } },
+            {NUdf::TUnboxedValuePod(-12345678901), NTypeIds::Timestamp64 , {16, 8 } },
+            {NUdf::TUnboxedValuePod(-12345678901), NTypeIds::Interval64  , {16, 8 } },
             {NUdf::TUnboxedValuePod(decimalVal  ), NTypeIds::Decimal     , {16, 16} },
             {NUdf::TUnboxedValuePod::Embedded("12charecters"), NTypeIds::String , {16, 12 } },
             {NUdf::TUnboxedValuePod::Embedded("foooo"), NTypeIds::String , {16, 8 } },
@@ -252,7 +284,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
         scanData.AddData(batch, {}, factory);
 
         std::vector<NUdf::TUnboxedValue> container;
-        container.resize(20);
+        container.resize(24);
         std::vector<NUdf::TUnboxedValue*> containerPtr;
         for (auto&& i : container) {
             containerPtr.emplace_back(&i);
@@ -282,7 +314,11 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
             UNIT_ASSERT_EQUAL(container[16].Get<i64 >(), row.Datetime );
             UNIT_ASSERT_EQUAL(container[17].Get<i64 >(), row.Timestamp);
             UNIT_ASSERT_EQUAL(container[18].Get<i64 >(), row.Interval );
-            UNIT_ASSERT_EQUAL(container[19].GetInt128(), row.Decimal  );
+            UNIT_ASSERT_EQUAL(container[19].Get<i32 >(), row.Date32   );
+            UNIT_ASSERT_EQUAL(container[20].Get<i64 >(), row.Datetime64);
+            UNIT_ASSERT_EQUAL(container[21].Get<i64 >(), row.Timestamp64);
+            UNIT_ASSERT_EQUAL(container[22].Get<i64 >(), row.Interval64 );
+            UNIT_ASSERT_EQUAL(container[23].GetInt128(), row.Decimal    );
         }
 
         UNIT_ASSERT(scanData.IsEmpty());

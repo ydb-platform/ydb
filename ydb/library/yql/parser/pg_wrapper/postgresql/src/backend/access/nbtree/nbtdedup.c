@@ -3,7 +3,7 @@
  * nbtdedup.c
  *	  Deduplicate or bottom-up delete items in Postgres btrees.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -16,6 +16,7 @@
 
 #include "access/nbtree.h"
 #include "access/nbtxlog.h"
+#include "access/xloginsert.h"
 #include "miscadmin.h"
 #include "utils/rel.h"
 
@@ -54,17 +55,17 @@ static bool _bt_posting_valid(IndexTuple posting);
  * LP_DEAD bits set.
  */
 void
-_bt_dedup_pass(Relation rel, Buffer buf, Relation heapRel, IndexTuple newitem,
-			   Size newitemsz, bool bottomupdedup)
+_bt_dedup_pass(Relation rel, Buffer buf, IndexTuple newitem, Size newitemsz,
+			   bool bottomupdedup)
 {
 	OffsetNumber offnum,
 				minoff,
 				maxoff;
 	Page		page = BufferGetPage(buf);
-	BTPageOpaque opaque = (BTPageOpaque) PageGetSpecialPointer(page);
+	BTPageOpaque opaque = BTPageGetOpaque(page);
 	Page		newpage;
 	BTDedupState state;
-	Size		pagesaving = 0;
+	Size		pagesaving PG_USED_FOR_ASSERTS_ONLY = 0;
 	bool		singlevalstrat = false;
 	int			nkeyatts = IndexRelationGetNumberOfKeyAttributes(rel);
 
@@ -165,8 +166,8 @@ _bt_dedup_pass(Relation rel, Buffer buf, Relation heapRel, IndexTuple newitem,
 			 * maxpostingsize).
 			 *
 			 * If state contains pending posting list with more than one item,
-			 * form new posting tuple, and actually update the page.  Else
-			 * reset the state and move on without modifying the page.
+			 * form new posting tuple and add it to our temp page (newpage).
+			 * Else add pending interval's base tuple to the temp page as-is.
 			 */
 			pagesaving += _bt_dedup_finish_pending(newpage, state);
 
@@ -183,7 +184,8 @@ _bt_dedup_pass(Relation rel, Buffer buf, Relation heapRel, IndexTuple newitem,
 				 * stop merging together tuples altogether.  The few tuples
 				 * that remain at the end of the page won't be merged together
 				 * at all (at least not until after a future page split takes
-				 * place).
+				 * place, when this page's newly allocated right sibling page
+				 * gets its first deduplication pass).
 				 */
 				if (state->nmaxitems == 5)
 					_bt_singleval_fillfactor(page, state, newitemsz);
@@ -230,7 +232,7 @@ _bt_dedup_pass(Relation rel, Buffer buf, Relation heapRel, IndexTuple newitem,
 	 */
 	if (P_HAS_GARBAGE(opaque))
 	{
-		BTPageOpaque nopaque = (BTPageOpaque) PageGetSpecialPointer(newpage);
+		BTPageOpaque nopaque = BTPageGetOpaque(newpage);
 
 		nopaque->btpo_flags &= ~BTP_HAS_GARBAGE;
 	}
@@ -309,7 +311,7 @@ _bt_bottomupdel_pass(Relation rel, Buffer buf, Relation heapRel,
 				minoff,
 				maxoff;
 	Page		page = BufferGetPage(buf);
-	BTPageOpaque opaque = (BTPageOpaque) PageGetSpecialPointer(page);
+	BTPageOpaque opaque = BTPageGetOpaque(page);
 	BTDedupState state;
 	TM_IndexDeleteOp delstate;
 	bool		neverdedup;
@@ -348,6 +350,8 @@ _bt_bottomupdel_pass(Relation rel, Buffer buf, Relation heapRel,
 	 * concerning ourselves with avoiding work during the tableam call.  Our
 	 * role in costing the bottom-up deletion process is strictly advisory.
 	 */
+	delstate.irel = rel;
+	delstate.iblknum = BufferGetBlockNumber(buf);
 	delstate.bottomup = true;
 	delstate.bottomupfreespace = Max(BLCKSZ / 16, newitemsz);
 	delstate.ndeltids = 0;
@@ -563,6 +567,8 @@ _bt_dedup_finish_pending(Page newpage, BTDedupState state)
 	{
 		/* Use original, unchanged base tuple */
 		tuplesz = IndexTupleSize(state->base);
+		Assert(tuplesz == MAXALIGN(IndexTupleSize(state->base)));
+		Assert(tuplesz <= BTMaxItemSize(newpage));
 		if (PageAddItem(newpage, (Item) state->base, tuplesz, tupoff,
 						false, false) == InvalidOffsetNumber)
 			elog(ERROR, "deduplication failed to add tuple to page");
@@ -582,6 +588,7 @@ _bt_dedup_finish_pending(Page newpage, BTDedupState state)
 		state->intervals[state->nintervals].nitems = state->nitems;
 
 		Assert(tuplesz == MAXALIGN(IndexTupleSize(final)));
+		Assert(tuplesz <= BTMaxItemSize(newpage));
 		if (PageAddItem(newpage, (Item) final, tuplesz, tupoff, false,
 						false) == InvalidOffsetNumber)
 			elog(ERROR, "deduplication failed to add tuple to page");

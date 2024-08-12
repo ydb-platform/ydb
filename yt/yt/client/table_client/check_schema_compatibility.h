@@ -6,6 +6,13 @@ namespace NYT::NTableClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TTableSchemaCompatibilityOptions
+{
+    bool IgnoreSortOrder = false;
+    bool ForbidExtraComputedColumns = true;
+    bool IgnoreStableNamesDifference = false;
+};
+
 // Validates that values from table with inputSchema also match outputSchema.
 //
 // Result pair contains following elements:
@@ -15,7 +22,7 @@ namespace NYT::NTableClient {
 std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibility(
     const TTableSchema& inputSchema,
     const TTableSchema& outputSchema,
-    bool ignoreSortOrder);
+    TTableSchemaCompatibilityOptions options);
 
 ////////////////////////////////////////////////////////////////////////////////
 

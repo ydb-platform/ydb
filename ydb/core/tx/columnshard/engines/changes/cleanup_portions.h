@@ -33,7 +33,7 @@ protected:
 
 public:
     TCleanupPortionsColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager)
-        : TBase(storagesManager, StaticTypeName()) {
+        : TBase(storagesManager, NBlobOperations::EConsumer::CLEANUP_PORTIONS) {
 
     }
 
@@ -42,7 +42,7 @@ public:
     virtual ui32 GetWritePortionsCount() const override {
         return 0;
     }
-    virtual TPortionInfoWithBlobs* GetWritePortionInfo(const ui32 /*index*/) override {
+    virtual TWritePortionInfoWithBlobsResult* GetWritePortionInfo(const ui32 /*index*/) override {
         return nullptr;
     }
     virtual bool NeedWritePortion(const ui32 /*index*/) const override {

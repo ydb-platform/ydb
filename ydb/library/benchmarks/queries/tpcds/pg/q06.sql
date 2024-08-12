@@ -15,7 +15,7 @@ select  a.ca_state state, count(*) cnt
  	      from {{date_dim}}
                where d_year = 2002
  	        and d_moy = 3 )
- 	and i.i_current_price > 1.2::numeric *
+ 	and i.i_current_price > 1.2 *
              (select avg(j.i_current_price)
  	     from {{item}} j
  	     where j.i_category = i.i_category)

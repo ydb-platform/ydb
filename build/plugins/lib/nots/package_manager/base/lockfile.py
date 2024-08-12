@@ -29,6 +29,13 @@ class LockfilePackageMeta(object):
     def to_str(self):
         return " ".join([self.tarball_url, self.sky_id, self.integrity, self.integrity_algorithm])
 
+    def to_uri(self):
+        tarball_url: str = self.tarball_url
+        if not tarball_url.startswith("https://") and not tarball_url.startswith("http://"):
+            tarball_url = "https://npm.yandex-team.ru/" + tarball_url
+        pkg_uri = f"{tarball_url}#integrity={self.integrity_algorithm}-{self.integrity}"
+        return pkg_uri
+
 
 class LockfilePackageMetaInvalidError(RuntimeError):
     pass
@@ -73,4 +80,8 @@ class BaseLockfile(object):
 
     @abstractmethod
     def validate_has_addons_flags(self):
+        pass
+
+    @abstractmethod
+    def get_requires_build_packages(self):
         pass

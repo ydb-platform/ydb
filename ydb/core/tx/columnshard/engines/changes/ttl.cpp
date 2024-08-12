@@ -1,4 +1,5 @@
 #include "ttl.h"
+#include <ydb/core/tx/columnshard/engines/portions/read_with_blobs.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
@@ -13,7 +14,7 @@ void TTTLColumnEngineChanges::DoDebugString(TStringOutput& out) const {
 }
 
 void TTTLColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
-    Y_ABORT_UNLESS(PortionsToEvict.size() || PortionsToRemove.size());
+    Y_ABORT_UNLESS(PortionsToEvict.size() || HasPortionsToRemove());
     THashMap<TString, THashSet<TBlobRange>> blobRanges;
     auto& engine = self.MutableIndexAs<TColumnEngineForLogs>();
     auto& index = engine.GetVersionedIndex();
@@ -38,26 +39,24 @@ void TTTLColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChan
         for (auto&& i : PortionsToEvict) {
             AFL_VERIFY(restoreIndexAddresses[i.GetPortionInfo().GetPathId()].emplace(i.GetPortionInfo().GetPortionId()).second);
         }
-        for (auto&& i : PortionsToRemove) {
+        for (auto&& i : GetPortionsToRemove()) {
             AFL_VERIFY(restoreIndexAddresses[i.first.GetPathId()].emplace(i.first.GetPortionId()).second);
         }
         engine.ReturnToIndexes(restoreIndexAddresses);
     }
 }
 
-std::optional<TPortionInfoWithBlobs> TTTLColumnEngineChanges::UpdateEvictedPortion(TPortionForEviction& info, NBlobOperations::NRead::TCompositeReadBlobs& srcBlobs,
+std::optional<TWritePortionInfoWithBlobsResult> TTTLColumnEngineChanges::UpdateEvictedPortion(TPortionForEviction& info, NBlobOperations::NRead::TCompositeReadBlobs& srcBlobs,
     TConstructionContext& context) const
 {
     const TPortionInfo& portionInfo = info.GetPortionInfo();
     auto& evictFeatures = info.GetFeatures();
-    auto blobSchema = context.SchemaVersions.GetSchema(portionInfo.GetMinSnapshot());
+    auto blobSchema = portionInfo.GetSchema(context.SchemaVersions);
     Y_ABORT_UNLESS(portionInfo.GetMeta().GetTierName() != evictFeatures.GetTargetTierName() || blobSchema->GetVersion() < evictFeatures.GetTargetScheme()->GetVersion());
 
-    auto portionWithBlobs = TPortionInfoWithBlobs::RestorePortion(portionInfo, srcBlobs, blobSchema->GetIndexInfo(), SaverContext.GetStoragesManager());
-    TPortionInfoWithBlobs result = TPortionInfoWithBlobs::SyncPortion(
+    auto portionWithBlobs = TReadPortionInfoWithBlobs::RestorePortion(portionInfo, srcBlobs, blobSchema->GetIndexInfo());
+    std::optional<TWritePortionInfoWithBlobsResult> result = TReadPortionInfoWithBlobs::SyncPortion(
         std::move(portionWithBlobs), blobSchema, evictFeatures.GetTargetScheme(), evictFeatures.GetTargetTierName(), SaverContext.GetStoragesManager(), context.Counters.SplitterCounters);
-
-    result.GetPortionInfo().MutableMeta().SetTierName(evictFeatures.GetTargetTierName());
     return std::move(result);
 }
 
@@ -67,8 +66,7 @@ NKikimr::TConclusionStatus TTTLColumnEngineChanges::DoConstructBlobs(TConstructi
 
     for (auto&& info : PortionsToEvict) {
         if (auto pwb = UpdateEvictedPortion(info, Blobs, context)) {
-            info.MutablePortionInfo().SetRemoveSnapshot(info.MutablePortionInfo().GetMinSnapshot());
-            AFL_VERIFY(PortionsToRemove.emplace(info.GetPortionInfo().GetAddress(), info.GetPortionInfo()).second);
+            AddPortionToRemove(info.GetPortionInfo());
             AppendedPortions.emplace_back(std::move(*pwb));
         }
     }

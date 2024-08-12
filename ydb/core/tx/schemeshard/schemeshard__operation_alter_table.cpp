@@ -40,8 +40,20 @@ bool IsSuperUser(const NACLib::TUserToken* userToken) {
     return (it != adminSids.end());
 }
 
+template <typename TMessage>
+bool CheckAllowedFields(const TMessage& message, THashSet<TString>&& allowedFields) {
+    std::vector<const google::protobuf::FieldDescriptor*> fields;
+    message.GetReflection()->ListFields(message, &fields);
+    for (const auto* field : fields) {
+        if (!allowedFields.contains(field->name())) {
+            return false;
+        }
+    }
+    return true;
+}
+
 TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table, const NKikimrSchemeOp::TTableDescription& alter,
-                                      const bool shadowDataAllowed,
+                                      const bool shadowDataAllowed, const THashSet<TString>& localSequences,
                                       TString& errStr, NKikimrScheme::EStatus& status, TOperationContext& context) {
     const TAppData* appData = AppData(context.Ctx);
 
@@ -71,7 +83,11 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         return nullptr;
     }
 
-    if (!hasSchemaChanges && !copyAlter.HasPartitionConfig() && !copyAlter.HasTTLSettings()) {
+    if (!hasSchemaChanges
+        && !copyAlter.HasPartitionConfig()
+        && !copyAlter.HasTTLSettings()
+        && !copyAlter.HasReplicationConfig())
+    {
         errStr = Sprintf("No changes specified");
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
@@ -128,7 +144,11 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
 
     const TSubDomainInfo& subDomain = *path.DomainInfo();
     const TSchemeLimits& limits = subDomain.GetSchemeLimits();
-    TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(table, copyAlter, *appData->TypeRegistry, limits, subDomain, context.SS->EnableTablePgTypes, errStr);
+
+
+    TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(
+        table, copyAlter, *appData->TypeRegistry, limits, subDomain,
+        context.SS->EnableTablePgTypes, context.SS->EnableTableDatetime64, errStr, localSequences);
     if (!alterData) {
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
@@ -497,8 +517,11 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .IsTable()
-                .NotAsyncReplicaTable()
                 .NotUnderOperation();
+
+            if (!Transaction.GetInternal()) {
+                checks.NotAsyncReplicaTable();
+            }
 
             if (!context.IsAllowedPrivateTables) {
                 checks.IsCommonSensePath(); //forbid alter impl index tables outside consistent operation
@@ -507,6 +530,35 @@ public:
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
+            }
+        }
+
+        THashSet<TString> localSequences;
+
+        for (const auto& column: alter.GetColumns()) {
+            if (column.HasDefaultFromSequence()) {
+                TString defaultFromSequence = column.GetDefaultFromSequence();
+
+                const auto sequencePath = TPath::Resolve(defaultFromSequence, context.SS);
+                {
+                    const auto checks = sequencePath.Check();
+                    checks
+                        .NotEmpty()
+                        .NotUnderDomainUpgrade()
+                        .IsAtLocalSchemeShard()
+                        .IsResolved()
+                        .NotDeleted()
+                        .IsSequence()
+                        .NotUnderDeleting()
+                        .NotUnderOperation();
+
+                    if (!checks) {
+                        result->SetError(checks.GetStatus(), checks.GetError());
+                        return result;
+                    }
+                }
+
+                localSequences.insert(sequencePath.PathString());
             }
         }
 
@@ -553,7 +605,8 @@ public:
         }
 
         NKikimrScheme::EStatus status;
-        TTableInfo::TAlterDataPtr alterData = ParseParams(path, table, alter, IsShadowDataAllowed(), errStr, status, context);
+        TTableInfo::TAlterDataPtr alterData = ParseParams(
+            path, table, alter, IsShadowDataAllowed(), localSequences, errStr, status, context);
         if (!alterData) {
             result->SetError(status, errStr);
             return result;
@@ -639,7 +692,7 @@ ISubOperation::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, TTxState:
 TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
 
-    auto alter = tx.GetAlterTable();
+    const auto& alter = tx.GetAlterTable();
 
     const TString& parentPathStr = tx.GetWorkingDir();
     const TString& name = alter.GetName();
@@ -675,16 +728,23 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
         return {CreateAlterTable(id, tx)};
     }
 
-    TVector<ISubOperation::TPtr> result;
-
-    // only for super user use
-    // until correct and safe altering index api is released
-    if (!IsSuperUser(context.UserToken.Get())) {
+    // Admins can alter indexImplTable unconditionally.
+    // Regular users can only alter allowed fields.
+    if (!IsSuperUser(context.UserToken.Get())
+        && (!CheckAllowedFields(alter, {"Name", "PathId", "PartitionConfig", "ReplicationConfig"})
+            || (alter.HasPartitionConfig()
+                && !CheckAllowedFields(alter.GetPartitionConfig(), {"PartitioningPolicy"})
+            )
+        )
+    ) {
         return {CreateAlterTable(id, tx)};
     }
 
+    TVector<ISubOperation::TPtr> result;
+
     {
         auto tableIndexAltering = TransactionTemplate(parent.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
+        tableIndexAltering.SetInternal(tx.GetInternal());
         auto alterIndex = tableIndexAltering.MutableAlterTableIndex();
         alterIndex->SetName(parent.LeafName());
         alterIndex->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);

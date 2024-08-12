@@ -22,12 +22,6 @@ bool ValidateS3PackedPaths(TPositionHandle pos, TStringBuf blob, bool isTextEnco
     try {
         TPathList paths;
         UnpackPathsList(blob, isTextEncoded, paths);
-        for (size_t i = 0; i < paths.size(); ++i) {
-            if (paths[i].Path.empty()) {
-                ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Expected non-empty path (index " << i << ")"));
-                return false;
-            }
-        }
     } catch (const std::exception& ex) {
         ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Failed to parse packed paths: " << ex.what()));
         return false;
@@ -282,6 +276,18 @@ bool ExtractSettingValue(const TExprNode& value, TStringBuf settingName, TString
 
 }
 
+bool EnsureParquetTypeSupported(TPositionHandle position, const TTypeAnnotationNode* type, TExprContext& ctx, const IArrowResolver::TPtr& arrowResolver) {
+    auto resolveStatus = arrowResolver->AreTypesSupported(ctx.GetPosition(position), { type }, ctx);
+    YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
+
+    if (resolveStatus != IArrowResolver::OK) {
+        ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Type " << *type << " is not supported for parquet"));
+        return false;
+    }
+
+    return true;
+}
+
 class TS3DataSourceTypeAnnotationTransformer : public TVisitorTransformerBase {
 public:
     TS3DataSourceTypeAnnotationTransformer(TS3State::TPtr state)
@@ -297,7 +303,7 @@ public:
     }
 
     TStatus HandleS3SourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinArgsCount(*input, 3U, ctx)) {
+        if (!EnsureMinArgsCount(*input, 4U, ctx)) {
             return TStatus::Error;
         }
 
@@ -315,6 +321,10 @@ public:
             return TStatus::Error;
         }
 
+        if (!EnsureAtom(*input->Child(TS3SourceSettings::idx_Path), ctx)) {
+            return TStatus::Error;
+        }
+
         const TTypeAnnotationNode* itemType = ctx.MakeType<TDataExprType>(EDataSlot::String);
         if (extraColumnsType->GetSize()) {
             itemType = ctx.MakeType<TTupleExprType>(
@@ -325,7 +335,7 @@ public:
     }
 
     TStatus HandleS3ParseSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 5U, 6U, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 7U, 8U, ctx)) {
             return TStatus::Error;
         }
 
@@ -344,8 +354,12 @@ public:
             return TStatus::Error;
         }
 
+        if (!EnsureAtom(*input->Child(TS3ParseSettings::idx_Path), ctx)) {
+            return TStatus::Error;
+        }
+
         if (!EnsureAtom(*input->Child(TS3ParseSettings::idx_Format), ctx) ||
-            !NCommon::ValidateFormatForInput(input->Child(TS3ParseSettings::idx_Format)->Content(), ctx))
+            !NCommon::ValidateFormatForInput(input->Child(TS3ParseSettings::idx_Format)->Content(), nullptr, nullptr, ctx))
         {
             return TStatus::Error;
         }
@@ -390,12 +404,47 @@ public:
             itemType = ctx.MakeType<TTupleExprType>(
                 TTypeAnnotationNode::TListType{ itemType, ctx.MakeType<TDataExprType>(EDataSlot::Uint64) });
         }
+
+        // Filter
+        const TStatus filterAnnotationStatus = AnnotateFilterPredicate(input, TS3ParseSettings::idx_FilterPredicate, rowType->Cast<TStructExprType>(), ctx);
+        if (filterAnnotationStatus != TStatus::Ok) {
+            return filterAnnotationStatus;
+        }
+    
         input->SetTypeAnn(ctx.MakeType<TStreamExprType>(itemType));
         return TStatus::Ok;
     }
 
+    TStatus AnnotateFilterPredicate(const TExprNode::TPtr& input, size_t childIndex, const TStructExprType* itemType, TExprContext& ctx) {
+        if (childIndex >= input->ChildrenSize()) {
+            return TStatus::Error;
+        }
+
+        auto& filterLambda = input->ChildRef(childIndex);
+        if (!EnsureLambda(*filterLambda, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!UpdateLambdaAllArgumentsTypes(filterLambda, {itemType}, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (const auto* filterLambdaType = filterLambda->GetTypeAnn()) {
+            if (filterLambdaType->GetKind() != ETypeAnnotationKind::Data) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            const TDataExprType* dataExprType = static_cast<const TDataExprType*>(filterLambdaType);
+            if (dataExprType->GetSlot() != EDataSlot::Bool) {
+                return IGraphTransformer::TStatus::Error;
+            }
+        } else {
+            return IGraphTransformer::TStatus::Repeat;
+        }
+        return TStatus::Ok;
+    }
+
     TStatus HandleRead(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 4U, 5U, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 6U, 7U, ctx)) {
             return TStatus::Error;
         }
 
@@ -407,7 +456,12 @@ public:
             return TStatus::Error;
         }
 
-        if (!TS3Object::Match(input->Child(TS3ReadObject::idx_Object))) {
+        if (!EnsureAtom(*input->Child(TS3ReadObject::idx_Path), ctx)) {
+            return TStatus::Error;
+        }
+
+        const auto& objectNode = input->Child(TS3ReadObject::idx_Object);
+        if (!TS3Object::Match(objectNode)) {
             ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3ReadObject::idx_Object)->Pos()), "Expected S3 object."));
             return TStatus::Error;
         }
@@ -425,13 +479,15 @@ public:
         std::vector<TString> partitionedBy;
         TString projection;
         {
-            THashSet<TStringBuf> columns;
+            TS3Object s3Object(input->Child(TS3ReadObject::idx_Object));
+            auto format = s3Object.Format().Ref().Content();
             const TStructExprType* structRowType = rowType->Cast<TStructExprType>();
+
+            THashSet<TStringBuf> columns;
             for (const TItemExprType* item : structRowType->GetItems()) {
                 columns.emplace(item->GetName());
             }
-
-            TS3Object s3Object(input->Child(TS3ReadObject::idx_Object));
+            
             if (TMaybeNode<TExprBase> settings = s3Object.Settings()) {
                 for (auto& settingNode : settings.Raw()->ChildrenList()) {
                     const TStringBuf name = settingNode->Head().Content();
@@ -448,12 +504,26 @@ public:
                             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Table contains no columns except partitioning columns"));
                             return TStatus::Error;
                         }
-
                     }
                     if (name == "projection"sv) {
                         projection = settingNode->Tail().Content();
                     }
                 }
+            }
+
+            TSet<TString> partitionedBySet{partitionedBy.begin(), partitionedBy.end()};
+            if (!NCommon::ValidateFormatForInput(
+                format,
+                structRowType,
+                [partitionedBySet](TStringBuf fieldName) {return partitionedBySet.contains(fieldName); },
+                ctx)) {
+                return TStatus::Error;
+            }
+
+            // Filter
+            const TStatus filterAnnotationStatus = AnnotateFilterPredicate(input, TS3ReadObject::idx_FilterPredicate, structRowType, ctx);
+            if (filterAnnotationStatus != TStatus::Ok) {
+                return filterAnnotationStatus;
             }
         }
 
@@ -465,6 +535,19 @@ public:
                 ctx,
                 State_->Configuration->GeneratorPathsLimit)) {
             return TStatus::Error;
+        }
+
+        if (objectNode->Child(TS3Object::idx_Format)->Content() == "parquet") {
+            YQL_ENSURE(State_->Types->ArrowResolver);
+            bool allTypesSupported = true;
+            for (const auto& item : rowType->Cast<TStructExprType>()->GetItems()) {
+                if (!EnsureParquetTypeSupported(input->Pos(), item->GetItemType(), ctx, State_->Types->ArrowResolver)) {
+                    allTypesSupported = false;
+                }
+            }
+            if (!allTypesSupported) {
+                return TStatus::Error;
+            }
         }
 
         input->SetTypeAnn(ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
@@ -490,7 +573,7 @@ public:
                 }
                 columnOrder.push_back(ToString(col));
             }
-            return State_->Types->SetColumnOrder(*input, columnOrder, ctx);
+            return State_->Types->SetColumnOrder(*input, TColumnOrder(columnOrder), ctx);
         }
 
         return TStatus::Ok;
@@ -524,7 +607,7 @@ public:
         }
 
         const auto format = input->Child(TS3Object::idx_Format)->Content();
-        if (!EnsureAtom(*input->Child(TS3Object::idx_Format), ctx) || !NCommon::ValidateFormatForInput(format, ctx)) {
+        if (!EnsureAtom(*input->Child(TS3Object::idx_Format), ctx) || !NCommon::ValidateFormatForInput(format, nullptr, nullptr, ctx)) {
             return TStatus::Error;
         }
 
@@ -671,6 +754,14 @@ public:
                     return true;
                 }
 
+                if (name == "constraints"sv) {
+                    TStringBuf unused;
+                    if (!ExtractSettingValue(setting.Tail(), "constraints"sv, format, {}, ctx, unused)) {
+                        return false;
+                    }
+                    return true;
+                }
+
                 YQL_ENSURE(name == "projection"sv);
                 haveProjection = true;
                 if (!EnsureAtom(setting.Tail(), ctx)) {
@@ -685,7 +776,7 @@ public:
                 return true;
             };
             if (!EnsureValidSettings(*input->Child(TS3Object::idx_Settings),
-                                     { "compression"sv, "partitionedby"sv, "projection"sv, "data.interval.unit"sv,
+                                     { "compression"sv, "partitionedby"sv, "projection"sv, "data.interval.unit"sv, "constraints"sv,
                                         "data.datetime.formatname"sv, "data.datetime.format"sv, "data.timestamp.formatname"sv, "data.timestamp.format"sv,
                                         "readmaxbytes"sv, "csvdelimiter"sv, "directories"sv, "filepattern"sv, "pathpattern"sv, "pathpatternvariant"sv }, validator, ctx))
             {

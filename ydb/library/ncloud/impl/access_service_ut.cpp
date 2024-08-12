@@ -34,7 +34,7 @@ struct TTestSetup : public NUnitTest::TBaseFixture {
 
     TTestActorRuntime::TEgg MakeEgg() {
         return
-            { new TAppData(0, 0, 0, 0, { }, nullptr, nullptr, nullptr, nullptr), nullptr, nullptr };
+            { new TAppData(0, 0, 0, 0, { }, nullptr, nullptr, nullptr, nullptr), nullptr, nullptr, {} };
     }
 
     void Init() {

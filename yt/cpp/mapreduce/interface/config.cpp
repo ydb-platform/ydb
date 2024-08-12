@@ -193,13 +193,14 @@ void TConfig::Reset()
     Prefix = GetEnv("YT_PREFIX");
     ApiVersion = GetEnv("YT_VERSION", "v3");
     LogLevel = GetEnv("YT_LOG_LEVEL", "error");
+    LogPath = GetEnv("YT_LOG_PATH");
 
     ContentEncoding = GetEncoding("YT_CONTENT_ENCODING");
     AcceptEncoding = GetEncoding("YT_ACCEPT_ENCODING");
 
     GlobalTxId = GetEnv("YT_TRANSACTION", "");
 
-    UseAsyncTxPinger = false;
+    UseAsyncTxPinger = true;
     AsyncHttpClientThreads = 1;
     AsyncTxPingerPoolThreads = 1;
 

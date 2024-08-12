@@ -1,12 +1,19 @@
 #pragma once
-#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
-#include <library/cpp/object_factory/object_factory.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/reader/position.h>
 
+#include <ydb/library/conclusion/result.h>
+#include <ydb/services/bg_tasks/abstract/interface.h>
+
+#include <library/cpp/object_factory/object_factory.h>
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+
 namespace NKikimr::NOlap {
-class TGranuleMeta;
 class TColumnEngineChanges;
+class IStoragesManager;
+class TGranuleMeta;
+class TPortionInfo;
 namespace NDataLocks {
 class TManager;
 }
@@ -51,6 +58,26 @@ public:
 
 };
 
+class TTaskDescription {
+private:
+    YDB_READONLY(ui64, TaskId, 0);
+    YDB_ACCESSOR_DEF(TString, Start);
+    YDB_ACCESSOR_DEF(TString, Finish);
+    YDB_ACCESSOR_DEF(TString, Details);
+    YDB_ACCESSOR_DEF(ui64, WeightCategory);
+    YDB_ACCESSOR_DEF(i64, Weight);
+public:
+    TTaskDescription(const ui64 taskId)
+        : TaskId(taskId)
+    {
+
+    }
+
+    bool operator<(const TTaskDescription& item) const {
+        return TaskId < item.TaskId;
+    }
+};
+
 class IOptimizerPlanner {
 private:
     const ui64 PathId;
@@ -67,13 +94,17 @@ protected:
         return NJson::JSON_NULL;
     }
     virtual bool DoIsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const = 0;
+    virtual std::vector<TTaskDescription> DoGetTasksDescription() const = 0;
 
 public:
-    using TFactory = NObjectFactory::TObjectFactory<IOptimizerPlanner, TString>;
     IOptimizerPlanner(const ui64 pathId)
         : PathId(pathId)
     {
 
+    }
+
+    std::vector<TTaskDescription> GetTasksDescription() const {
+        return DoGetTasksDescription();
     }
 
     class TModificationGuard: TNonCopyable {
@@ -82,23 +113,8 @@ public:
         THashMap<ui64, std::shared_ptr<TPortionInfo>> AddPortions;
         THashMap<ui64, std::shared_ptr<TPortionInfo>> RemovePortions;
     public:
-        TModificationGuard& AddPortion(const std::shared_ptr<TPortionInfo>& portion) {
-            if (HasAppData() && AppDataVerified().ColumnShardConfig.GetSkipOldGranules() && portion->GetDeprecatedGranuleId() > 0) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_granule")("granule_id", portion->GetDeprecatedGranuleId());
-                return *this;
-            }
-            AFL_VERIFY(AddPortions.emplace(portion->GetPortionId(), portion).second);
-            return*this;
-        }
-
-        TModificationGuard& RemovePortion(const std::shared_ptr<TPortionInfo>& portion) {
-            if (HasAppData() && AppDataVerified().ColumnShardConfig.GetSkipOldGranules() && portion->GetDeprecatedGranuleId() > 0) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_granule")("granule_id", portion->GetDeprecatedGranuleId());
-                return *this;
-            }
-            AFL_VERIFY(RemovePortions.emplace(portion->GetPortionId(), portion).second);
-            return*this;
-        }
+        TModificationGuard& AddPortion(const std::shared_ptr<TPortionInfo>& portion);
+        TModificationGuard& RemovePortion(const std::shared_ptr<TPortionInfo>& portion);
 
         TModificationGuard(IOptimizerPlanner& owner)
             : Owner(owner)
@@ -118,7 +134,7 @@ public:
         return DoDebugString();
     }
 
-    virtual std::vector<NArrow::NMerger::TSortableBatchPosition> GetBucketPositions() const = 0;
+    virtual NArrow::NMerger::TIntervalPositions GetBucketPositions() const = 0;
     bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
         return DoIsLocked(dataLocksManager);
     }
@@ -140,6 +156,92 @@ public:
         ActualizationInstant = currentInstant;
         return DoActualize(currentInstant);
     }
+};
+
+class IOptimizerPlannerConstructor {
+public:
+    class TBuildContext {
+    private:
+        YDB_READONLY(ui64, PathId, 0);
+        YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, Storages);
+        YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, PKSchema);
+    public:
+        TBuildContext(const ui64 pathId, const std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema)
+            : PathId(pathId)
+            , Storages(storages)
+            , PKSchema(pkSchema) {
+
+        }
+    };
+
+    using TFactory = NObjectFactory::TObjectFactory<IOptimizerPlannerConstructor, TString>;
+    using TProto = NKikimrSchemeOp::TCompactionPlannerConstructorContainer;
+private:
+    virtual TConclusion<std::shared_ptr<IOptimizerPlanner>> DoBuildPlanner(const TBuildContext& context) const = 0;
+    virtual void DoSerializeToProto(TProto& proto) const = 0;
+    virtual bool DoDeserializeFromProto(const TProto& proto) = 0;
+    virtual bool DoIsEqualTo(const IOptimizerPlannerConstructor& item) const = 0;
+    virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) = 0;
+    virtual bool DoApplyToCurrentObject(IOptimizerPlanner& current) const = 0;
+
+public:
+
+    static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault() {
+        auto result = TFactory::MakeHolder("l-buckets");
+        AFL_VERIFY(!!result);
+        return std::shared_ptr<IOptimizerPlannerConstructor>(result.Release());
+    }
+
+    virtual ~IOptimizerPlannerConstructor() = default;
+
+    bool ApplyToCurrentObject(const std::shared_ptr<IOptimizerPlanner>& current) const {
+        if (!current) {
+            return false;
+        }
+        return DoApplyToCurrentObject(*current);
+    }
+
+    TConclusionStatus DeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
+        return DoDeserializeFromJson(jsonInfo);
+    }
+
+    TConclusion<std::shared_ptr<IOptimizerPlanner>> BuildPlanner(const TBuildContext& context) const {
+        return DoBuildPlanner(context);
+    }
+
+    virtual TString GetClassName() const = 0;
+    void SerializeToProto(TProto& proto) const {
+        DoSerializeToProto(proto);
+    }
+
+    bool IsEqualTo(const std::shared_ptr<IOptimizerPlannerConstructor>& item) const {
+        AFL_VERIFY(!!item);
+        if (GetClassName() != item->GetClassName()) {
+            return false;
+        }
+        return DoIsEqualTo(*item);
+    }
+
+    bool DeserializeFromProto(const TProto& proto) {
+        return DoDeserializeFromProto(proto);
+    }
+
+};
+
+class TOptimizerPlannerConstructorContainer: public NBackgroundTasks::TInterfaceProtoContainer<IOptimizerPlannerConstructor> {
+private:
+    using TBase = NBackgroundTasks::TInterfaceProtoContainer<IOptimizerPlannerConstructor>;
+public:
+    using TBase::TBase;
+
+    static TConclusion<TOptimizerPlannerConstructorContainer> BuildFromProto(const IOptimizerPlannerConstructor::TProto& data) {
+        TOptimizerPlannerConstructorContainer result;
+        if (!result.DeserializeFromProto(data)) {
+            return TConclusionStatus::Fail("cannot parse interface from proto: " + data.DebugString());
+        }
+        return result;
+    }
+
 };
 
 } // namespace NKikimr::NOlap

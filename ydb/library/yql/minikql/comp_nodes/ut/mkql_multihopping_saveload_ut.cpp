@@ -47,8 +47,9 @@ namespace {
             return NUdf::TUnboxedValue::Zero();
         }
 
-        void Load(const NUdf::TStringRef& state) override {
+        bool Load2(const NUdf::TUnboxedValue& state) override {
             Y_UNUSED(state);
+            return false;
         }
 
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final {

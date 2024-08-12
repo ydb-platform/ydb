@@ -110,7 +110,7 @@ public:
         IGraphTransformer& transformer,
         TExprContext& ctx,
         TKqlTransformContext& transformCtx)
-        : TKqpAsyncResultBase(queryRoot, ctx, transformer)
+        : TKqpAsyncResultBase(queryRoot, ctx, transformer, nullptr)
         , TransformCtx(transformCtx)
     {
     }
@@ -148,7 +148,7 @@ public:
         , OptimizeCtx(MakeIntrusive<TKqpOptimizeContext>(cluster, Config, sessionCtx->QueryPtr(),
             sessionCtx->TablesPtr()))
         , BuildQueryCtx(MakeIntrusive<TKqpBuildQueryContext>())
-        , Pctx(TKqpProviderContext(*OptimizeCtx, Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel)))
+        , Pctx(TKqpProviderContext(*OptimizeCtx, Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->DefaultCostBasedOptimizationLevel)))
     {
         CreateGraphTransformer(typesCtx, sessionCtx, funcRegistry);
     }
@@ -198,12 +198,39 @@ public:
         YQL_ENSURE(IsIn({EKikimrQueryType::Query, EKikimrQueryType::Script}, TransformCtx->QueryCtx->Type));
         YQL_ENSURE(TMaybeNode<TKiDataQueryBlocks>(query));
 
-        TypesCtx.BlockEngineMode = NYql::EBlockEngineMode::Auto;
+        const auto dataQueryBlocks = TKiDataQueryBlocks(query);
 
-        return PrepareQueryInternal(cluster, TKiDataQueryBlocks(query), ctx, settings);
+        if (IsOlapQuery(dataQueryBlocks)) {
+            switch (TransformCtx->Config->BlockChannelsMode) {
+                case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_SCALAR:
+                case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO:
+                    TypesCtx.BlockEngineMode = NYql::EBlockEngineMode::Auto;
+                    break;
+                case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE:
+                    TypesCtx.BlockEngineMode = NYql::EBlockEngineMode::Force;
+                    break;
+                default:
+                    YQL_ENSURE(false);
+            }
+        }
+
+        return PrepareQueryInternal(cluster, dataQueryBlocks, ctx, settings);
     }
 
 private:
+    bool IsOlapQuery(const TKiDataQueryBlocks& dataQueryBlocks) {
+        if (dataQueryBlocks.ArgCount() != 1) {
+            return false;
+        }
+        const auto& operations = dataQueryBlocks.Arg(0).Operations();
+        return std::any_of(
+                std::begin(operations),
+                std::end(operations),
+                [this](const auto& operation) {
+                    const auto& tableData = SessionCtx->Tables().ExistingTable(operation.Cluster(), operation.Table());
+                    return tableData.Metadata->IsOlap();
+                });
+    }
 
     TIntrusivePtr<TAsyncQueryResult> PrepareQueryInternal(const TString& cluster,
         const TKiDataQueryBlocks& dataQueryBlocks, TExprContext& ctx,
@@ -256,7 +283,7 @@ private:
         const NMiniKQL::IFunctionRegistry& funcRegistry)
     {
         auto preparedExplainTransformer = CreateKqpExplainPreparedTransformer(
-            Gateway, Cluster, TransformCtx, &funcRegistry, *typesCtx);
+            Gateway, Cluster, TransformCtx, &funcRegistry, *typesCtx, OptimizeCtx);
 
         auto physicalOptimizeTransformer = CreateKqpQueryBlocksTransformer(TTransformationPipeline(typesCtx)
             .AddServiceTransformers()
@@ -312,6 +339,7 @@ private:
             .Add(Log("PhysicalPeephole"), "LogPhysicalPeephole")
             .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
             .AddPostTypeAnnotation()
+            .Add(GetDqIntegrationPeepholeTransformer(false, typesCtx), "DqIntegrationPeephole")
             .Add(
                 CreateKqpTxsPeepholeTransformer(
                     CreateTypeAnnotationTransformer(

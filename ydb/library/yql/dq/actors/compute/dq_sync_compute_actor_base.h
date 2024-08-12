@@ -1,45 +1,25 @@
 #include "dq_compute_actor_impl.h"
 #include "dq_compute_actor_async_input_helper.h"
+#include <ydb/library/yql/dq/actors/spilling/spiller_factory.h>
 
 namespace NYql::NDq {
 
-struct TComputeActorAsyncInputHelperForTaskRunner : public TComputeActorAsyncInputHelper
-{
-public:
-    using TComputeActorAsyncInputHelper::TComputeActorAsyncInputHelper;
-
-    void AsyncInputPush(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space, bool finished) override {
-        Buffer->Push(std::move(batch), space);
-        if (finished) {
-            Buffer->Finish();
-            Finished = true;
-        }
-    }
-    i64 GetFreeSpace() const override{
-        return Buffer->GetFreeSpace();
-    }
-
-    IDqAsyncInputBuffer::TPtr Buffer;
-};
-
 template<typename TDerived>
-class TDqSyncComputeActorBase: public TDqComputeActorBase<TDerived, TComputeActorAsyncInputHelperForTaskRunner> {
-    using TBase = TDqComputeActorBase<TDerived, TComputeActorAsyncInputHelperForTaskRunner>;
+class TDqSyncComputeActorBase: public TDqComputeActorBase<TDerived, TComputeActorAsyncInputHelperSync> {
+    using TBase = TDqComputeActorBase<TDerived, TComputeActorAsyncInputHelperSync>;
 public:
-    using TDqComputeActorBase<TDerived, TComputeActorAsyncInputHelperForTaskRunner>::TDqComputeActorBase;
+    using TDqComputeActorBase<TDerived, TComputeActorAsyncInputHelperSync>::TDqComputeActorBase;
     static constexpr bool HasAsyncTaskRunner = false;
 
-    template<typename T>
-    requires(std::is_base_of<TComputeActorAsyncInputHelperForTaskRunner, T>::value)
-    T CreateInputHelper(const TString& logPrefix,
+    TComputeActorAsyncInputHelperSync CreateInputHelper(const TString& logPrefix,
         ui64 index,
         NDqProto::EWatermarksMode watermarksMode
     )
     {
-        return T(logPrefix, index, watermarksMode);
+        return TComputeActorAsyncInputHelperSync(logPrefix, index, watermarksMode);
     }
 
-    const IDqAsyncInputBuffer* GetInputTransform(ui64, const TComputeActorAsyncInputHelperForTaskRunner& inputTransformInfo) const
+    const IDqAsyncInputBuffer* GetInputTransform(ui64, const TComputeActorAsyncInputHelperSync& inputTransformInfo) const
     {
         return inputTransformInfo.Buffer.Get();
     }
@@ -181,19 +161,20 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
         }
     }
 
-    void SaveState(const NDqProto::TCheckpoint& checkpoint, NDqProto::TComputeActorState& state) const override final{
+    void SaveState(const NDqProto::TCheckpoint& checkpoint, TComputeActorState& state) const override final{
         CA_LOG_D("Save state");
-        NDqProto::TMiniKqlProgramState& mkqlProgramState = *state.MutableMiniKqlProgram();
-        mkqlProgramState.SetRuntimeVersion(NDqProto::RUNTIME_VERSION_YQL_1_0);
-        NDqProto::TStateData::TData& data = *mkqlProgramState.MutableData()->MutableStateData();
-        data.SetVersion(TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion);
-        data.SetBlob(TaskRunner->Save());
+        TMiniKqlProgramState& mkqlProgramState = state.MiniKqlProgram.ConstructInPlace();
+        mkqlProgramState.RuntimeVersion = NDqProto::RUNTIME_VERSION_YQL_1_0;
+        TStateData& data = mkqlProgramState.Data;
+        data.Version = TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion;
+        data.Blob = TaskRunner->Save();
 
         for (auto& [inputIndex, source] : this->SourcesMap) {
             YQL_ENSURE(source.AsyncInput, "Source[" << inputIndex << "] is not created");
-            NDqProto::TSourceState& sourceState = *state.AddSources();
+            state.Sources.push_back({});
+            TSourceState& sourceState = state.Sources.back();
             source.AsyncInput->SaveState(checkpoint, sourceState);
-            sourceState.SetInputIndex(inputIndex);
+            sourceState.InputIndex = inputIndex;
         }
     }
 
@@ -223,9 +204,17 @@ protected:
 
         TDqTaskRunnerMemoryLimits limits;
         limits.ChannelBufferSize = this->MemoryLimits.ChannelBufferSize;
-        limits.OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
+        limits.OutputChunkMaxSize = this->MemoryLimits.OutputChunkMaxSize;
+
+        if (!limits.OutputChunkMaxSize) {
+            limits.OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
+	}
 
         TaskRunner->Prepare(this->Task, limits, execCtx);
+
+        if (this->Task.GetEnableSpilling()) {
+            TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(execCtx.GetTxId(), NActors::TActivationContext::ActorSystem(), execCtx.GetWakeupCallback(), execCtx.GetErrorCallback()));
+        }
 
         for (auto& [channelId, channel] : this->InputChannelsMap) {
             channel.Channel = TaskRunner->GetInputChannel(channelId);
@@ -237,7 +226,7 @@ protected:
         }
 
         for (auto& [inputIndex, transform] : this->InputTransformsMap) {
-            std::tie(transform.InputBuffer, transform.Buffer) = TaskRunner->GetInputTransform(inputIndex);
+            std::tie(transform.Input, transform.Buffer) = *TaskRunner->GetInputTransform(inputIndex);
         }
 
         for (auto& [channelId, channel] : this->OutputChannelsMap) {
@@ -380,4 +369,3 @@ protected:
 };
 
 } //namespace NYql::NDq
-

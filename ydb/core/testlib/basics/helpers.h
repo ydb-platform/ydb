@@ -20,9 +20,9 @@ namespace NFake {
     };
 
     struct TCaches {
-        ui64 Shared = 32 * (ui64(1) << 20); // Shared cache limit, bytes
-        ui64 ScanQueue = 512 * (ui64(1) << 20); // Scan queue in flight limit, bytes
-        ui64 AsyncQueue = 512 * (ui64(1) << 20); // Async queue in flight limit, bytes
+        std::optional<ui64> Shared = 32_MB; // Shared cache limit, bytes
+        ui64 ScanQueue = 512_MB; // Scan queue in flight limit, bytes
+        ui64 AsyncQueue = 512_MB; // Async queue in flight limit, bytes
     };
 
     struct INode {
@@ -43,8 +43,8 @@ namespace NFake {
     void SetupCustomStateStorage(TTestActorRuntime &runtime, ui32 NToSelect, ui32 nrings, ui32 ringSize); 
     void SetupBSNodeWarden(TTestActorRuntime& runtime, ui32 nodeIndex, TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig);
     void SetupTabletResolver(TTestActorRuntime& runtime, ui32 nodeIndex);
-    void SetupTabletPipePeNodeCaches(TTestActorRuntime& runtime, ui32 nodeIndex, bool forceFollowers = false);
-    void SetupResourceBroker(TTestActorRuntime& runtime, ui32 nodeIndex);
+    void SetupTabletPipePerNodeCaches(TTestActorRuntime& runtime, ui32 nodeIndex, bool forceFollowers = false);
+    void SetupResourceBroker(TTestActorRuntime& runtime, ui32 nodeIndex, const NKikimrResourceBroker::TResourceBrokerConfig& resourceBrokerConfig);
     void SetupSharedPageCache(TTestActorRuntime& runtime, ui32 nodeIndex, NFake::TCaches caches);
     void SetupNodeWhiteboard(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupMonitoringProxy(TTestActorRuntime& runtime, ui32 nodeIndex);
@@ -53,6 +53,8 @@ namespace NFake {
     void SetupSchemeCache(TTestActorRuntime& runtime, ui32 nodeIndex, const TString& root);
     void SetupQuoterService(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupSysViewService(TTestActorRuntime& runtime, ui32 nodeIndex);
+    void SetupIcb(TTestActorRuntime& runtime, ui32 nodeIndex, const NKikimrConfig::TImmediateControlsConfig& config,
+            const TIntrusivePtr<NKikimr::TControlBoard>& icb);
 
     // StateStorage, NodeWarden, TabletResolver, ResourceBroker, SharedPageCache
     void SetupBasicServices(TTestActorRuntime &runtime, TAppPrepare &app, bool mockDisk = false,

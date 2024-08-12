@@ -8,33 +8,31 @@
 
 namespace NKikimr::NArrow {
 
-TSplitBlobResult SplitByBlobSize(const std::shared_ptr<arrow::RecordBatch>& batch, const TBatchSplitttingContext& context) {
-    std::vector<TSerializedBatch> resultLocal;
-    TString errorMessage;
+TConclusion<std::vector<TSerializedBatch>> SplitByBlobSize(const std::shared_ptr<arrow::RecordBatch>& batch, const TBatchSplitttingContext& context) {
     if (GetBatchDataSize(batch) <= context.GetSizeLimit()) {
-        if (!TSerializedBatch::BuildWithLimit(batch, context, resultLocal, &errorMessage)) {
-            return TSplitBlobResult("full batch splitting: " + errorMessage);
-        } else {
-            return TSplitBlobResult(std::move(resultLocal));
-        }
+        return TSerializedBatch::BuildWithLimit(batch, context);
     }
     TRowSizeCalculator rowCalculator(8);
     if (!rowCalculator.InitBatch(batch)) {
-        return TSplitBlobResult("unexpected column type on batch initialization for row size calculator");
+        return TConclusionStatus::Fail("unexpected column type on batch initialization for row size calculator");
     }
     ui32 currentSize = 0;
     ui32 startIdx = 0;
+    std::vector<TSerializedBatch> result;
     for (ui32 i = 0; i < batch->num_rows(); ++i) {
         const ui32 rowSize = rowCalculator.GetRowBytesSize(i);
         if (rowSize > context.GetSizeLimit()) {
-            return TSplitBlobResult("there is row with size more then limit (" + ::ToString(context.GetSizeLimit()) + ")");
+            return TConclusionStatus::Fail("there is row with size more then limit (" + ::ToString(context.GetSizeLimit()) + ")");
         }
         if (rowCalculator.GetApproxSerializeSize(currentSize + rowSize) > context.GetSizeLimit()) {
             if (!currentSize) {
-                return TSplitBlobResult("there is row with size + metadata more then limit (" + ::ToString(context.GetSizeLimit()) + ")");
+                return TConclusionStatus::Fail("there is row with size + metadata more then limit (" + ::ToString(context.GetSizeLimit()) + ")");
             }
-            if (!TSerializedBatch::BuildWithLimit(batch->Slice(startIdx, i - startIdx), context, resultLocal, &errorMessage)) {
-                return TSplitBlobResult("cannot build blobs for batch slice (" + ::ToString(i - startIdx) + " rows): " + errorMessage);
+            auto localResult = TSerializedBatch::BuildWithLimit(batch->Slice(startIdx, i - startIdx), context);
+            if (localResult.IsFail()) {
+                return TConclusionStatus::Fail("cannot build blobs for batch slice (" + ::ToString(i - startIdx) + " rows): " + localResult.GetErrorMessage());
+            } else {
+                result.insert(result.end(), localResult.GetResult().begin(), localResult.GetResult().end());
             }
             currentSize = 0;
             startIdx = i;
@@ -42,11 +40,14 @@ TSplitBlobResult SplitByBlobSize(const std::shared_ptr<arrow::RecordBatch>& batc
         currentSize += rowSize;
     }
     if (currentSize) {
-        if (!TSerializedBatch::BuildWithLimit(batch->Slice(startIdx, batch->num_rows() - startIdx), context, resultLocal, &errorMessage)) {
-            return TSplitBlobResult("cannot build blobs for last batch slice (" + ::ToString(batch->num_rows() - startIdx) + " rows): " + errorMessage);
+        auto localResult = TSerializedBatch::BuildWithLimit(batch->Slice(startIdx, batch->num_rows() - startIdx), context);
+        if (localResult.IsFail()) {
+            return TConclusionStatus::Fail("cannot build blobs for last batch slice (" + ::ToString(batch->num_rows() - startIdx) + " rows): " + localResult.GetErrorMessage());
+        } else {
+            result.insert(result.end(), localResult.GetResult().begin(), localResult.GetResult().end());
         }
     }
-    return TSplitBlobResult(std::move(resultLocal));
+    return result;
 }
 
 ui32 TRowSizeCalculator::GetRowBitWidth(const ui32 row) const {
@@ -147,6 +148,32 @@ ui64 GetBatchMemorySize(const std::shared_ptr<arrow::RecordBatch>& batch) {
     return bytes;
 }
 
+ui64 GetTableMemorySize(const std::shared_ptr<arrow::Table>& batch) {
+    if (!batch) {
+        return 0;
+    }
+    ui64 bytes = 0;
+    for (auto& column : batch->columns()) {
+        for (auto&& chunk : column->chunks()) {
+            bytes += GetArrayMemorySize(chunk->data());
+        }
+    }
+    return bytes;
+}
+
+ui64 GetTableDataSize(const std::shared_ptr<arrow::Table>& batch) {
+    if (!batch) {
+        return 0;
+    }
+    ui64 bytes = 0;
+    for (auto& column : batch->columns()) {
+        for (auto&& chunk : column->chunks()) {
+            bytes += GetArrayDataSize(chunk);
+        }
+    }
+    return bytes;
+}
+
 template <typename TType>
 ui64 GetArrayDataSizeImpl(const std::shared_ptr<arrow::Array>& column) {
     return sizeof(typename TType::c_type) * column->length();
@@ -215,47 +242,44 @@ ui64 GetArrayDataSize(const std::shared_ptr<arrow::Array>& column) {
 }
 
 NKikimr::NArrow::TSerializedBatch TSerializedBatch::Build(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplitttingContext& context) {
-    std::optional<TFirstLastSpecialKeys> specialKeys;
+    std::optional<TString> specialKeys;
     if (context.GetFieldsForSpecialKeys().size()) {
-        specialKeys = TFirstLastSpecialKeys(batch, context.GetFieldsForSpecialKeys());
+        specialKeys = TFirstLastSpecialKeys(batch, context.GetFieldsForSpecialKeys()).SerializeToString();
     }
-    return TSerializedBatch(NArrow::SerializeSchema(*batch->schema()), NArrow::SerializeBatchNoCompression(batch), batch->num_rows(), NArrow::GetBatchDataSize(batch), specialKeys);
+    return TSerializedBatch(NArrow::SerializeSchema(*batch->schema()), NArrow::SerializeBatchNoCompression(batch), batch->num_rows(), 
+        NArrow::GetBatchDataSize(batch), specialKeys);
 }
 
-bool TSerializedBatch::BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplitttingContext& context, std::optional<TSerializedBatch>& sbL, std::optional<TSerializedBatch>& sbR, TString* errorMessage) {
+TConclusionStatus TSerializedBatch::BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplitttingContext& context, std::optional<TSerializedBatch>& sbL, std::optional<TSerializedBatch>& sbR) {
     TSerializedBatch sb = TSerializedBatch::Build(batch, context);
     const ui32 length = batch->num_rows();
     if (sb.GetSize() <= context.GetSizeLimit()) {
         sbL = std::move(sb);
-        return true;
+        return TConclusionStatus::Success();
     } else if (length == 1) {
-        if (errorMessage) {
-            *errorMessage = TStringBuilder() << "original batch too big: " << sb.GetSize() << " and contains 1 row (cannot be splitted)";
-        }
-        return false;
+        return TConclusionStatus::Fail(TStringBuilder() << "original batch too big: " << sb.GetSize() << " and contains 1 row (cannot be splitted)");
     } else {
         const ui32 delta = length / 2;
         TSerializedBatch localSbL = TSerializedBatch::Build(batch->Slice(0, delta), context);
         TSerializedBatch localSbR = TSerializedBatch::Build(batch->Slice(delta, length - delta), context);
         if (localSbL.GetSize() > context.GetSizeLimit() || localSbR.GetSize() > context.GetSizeLimit()) {
-            if (errorMessage) {
-                *errorMessage = TStringBuilder() << "original batch too big: " << sb.GetSize() << " and after 2 parts split we have: "
-                    << localSbL.GetSize() << "(" << localSbL.GetRowsCount() << ")" << " / "
-                    << localSbR.GetSize() << "(" << localSbR.GetRowsCount() << ")" << " part sizes. Its unexpected for limit " << context.GetSizeLimit();
-            }
-            return false;
+            return TConclusionStatus::Fail(TStringBuilder() << "original batch too big: " << sb.GetSize() << " and after 2 parts split we have: "
+                << localSbL.GetSize() << "(" << localSbL.GetRowsCount() << ")" << " / "
+                << localSbR.GetSize() << "(" << localSbR.GetRowsCount() << ")" << " part sizes. Its unexpected for limit " << context.GetSizeLimit());
         }
         sbL = std::move(localSbL);
         sbR = std::move(localSbR);
-        return true;
+        return TConclusionStatus::Success();
     }
 }
 
-bool TSerializedBatch::BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplitttingContext& context, std::vector<TSerializedBatch>& result, TString* errorMessage) {
+TConclusion<std::vector<TSerializedBatch>> TSerializedBatch::BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplitttingContext& context) {
+    std::vector<TSerializedBatch> result;
     std::optional<TSerializedBatch> sbL;
     std::optional<TSerializedBatch> sbR;
-    if (!TSerializedBatch::BuildWithLimit(batch, context, sbL, sbR, errorMessage)) {
-        return false;
+    auto simpleResult = TSerializedBatch::BuildWithLimit(batch, context, sbL, sbR);
+    if (simpleResult.IsFail()) {
+        return simpleResult;
     }
     if (sbL) {
         result.emplace_back(std::move(*sbL));
@@ -263,7 +287,7 @@ bool TSerializedBatch::BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch,
     if (sbR) {
         result.emplace_back(std::move(*sbR));
     }
-    return true;
+    return result;
 }
 
 TString TSerializedBatch::DebugString() const {

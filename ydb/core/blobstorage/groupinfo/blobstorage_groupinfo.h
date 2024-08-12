@@ -6,6 +6,7 @@
 #include <ydb/core/protos/blobstorage.pb.h>
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/event_filter.h>
 #include <ydb/core/protos/blobstorage_base3.pb.h>
@@ -83,7 +84,6 @@ public:
     using TVDiskIds = TStackVec<TVDiskID, 16>;
     using TServiceIds = TStackVec<TActorId, 16>;
     using TOrderNums = TStackVec<ui32, 16>;
-
     enum EBlobStateFlags {
         EBSF_DISINTEGRATED = 1, // Group is disintegrated.
         EBSF_UNRECOVERABLE = 1 << 1, // Recoverability: Blob can not be recovered. Ever.
@@ -280,13 +280,13 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     struct TDynamicInfo {
         // blobstorage group id
-        const ui32 GroupId;
+        const TGroupId GroupId;
         // blobstorage group generation
         const ui32 GroupGeneration;
         // map to quickly get Service id (TActorId) from its order number inside TTopology
         TVector<TActorId> ServiceIdForOrderNumber;
 
-        TDynamicInfo(ui32 groupId, ui32 groupGen);
+        TDynamicInfo(TGroupId groupId, ui32 groupGen);
         TDynamicInfo(const TDynamicInfo&) = default;
         TDynamicInfo(TDynamicInfo&&) = default;
         TDynamicInfo &operator =(TDynamicInfo&&) = default;
@@ -311,7 +311,7 @@ public:
     explicit TBlobStorageGroupInfo(TBlobStorageGroupType gtype, ui32 numVDisksPerFailDomain = 1,
             ui32 numFailDomains = 0, ui32 numFailRealms = 1, const TVector<TActorId> *vdiskIds = nullptr,
             EEncryptionMode encryptionMode = EEM_ENC_V1, ELifeCyclePhase lifeCyclePhase = ELCP_IN_USE,
-            TCypherKey key = TCypherKey((const ui8*)"TestKey", 8));
+            TCypherKey key = TCypherKey((const ui8*)"TestKey", 8), TGroupId groupId = TGroupId::Zero());
 
     TBlobStorageGroupInfo(std::shared_ptr<TTopology> topology, TDynamicInfo&& rti, TString storagePoolName,
         TMaybe<TKikimrScopeId> acceptedScope, NPDisk::EDeviceType deviceType);
@@ -415,7 +415,7 @@ private:
 
 public:
     // blobstorage group id
-    const ui32 GroupID;
+    const TGroupId GroupID;
     // blobstorage group generation
     const ui32 GroupGeneration;
     // erasure primarily

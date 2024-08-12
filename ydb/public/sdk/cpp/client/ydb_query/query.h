@@ -1,7 +1,5 @@
 #pragma once
 
-#include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
-
 #include <ydb/public/sdk/cpp/client/ydb_query/stats.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/fluent_settings_helpers.h>
@@ -10,8 +8,6 @@
 #include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 
 #include <library/cpp/threading/future/future.h>
-
-#include <variant>
 
 namespace NYdb::NQuery {
 
@@ -72,10 +68,12 @@ private:
 using TAsyncExecuteQueryIterator = NThreading::TFuture<TExecuteQueryIterator>;
 
 struct TExecuteQuerySettings : public TRequestSettings<TExecuteQuerySettings> {
+    FLUENT_SETTING_OPTIONAL(ui32, OutputChunkMaxSize);
     FLUENT_SETTING_DEFAULT(ESyntax, Syntax, ESyntax::YqlV1);
     FLUENT_SETTING_DEFAULT(EExecMode, ExecMode, EExecMode::Execute);
     FLUENT_SETTING_DEFAULT(EStatsMode, StatsMode, EStatsMode::None);
     FLUENT_SETTING_OPTIONAL(bool, ConcurrentResultSets);
+    FLUENT_SETTING(TString, PoolId);
 };
 
 struct TBeginTxSettings : public TRequestSettings<TBeginTxSettings> {};
@@ -95,10 +93,11 @@ using TAsyncBeginTransactionResult = NThreading::TFuture<TBeginTransactionResult
 using TAsyncCommitTransactionResult = NThreading::TFuture<TCommitTransactionResult>;
 
 struct TExecuteScriptSettings : public TOperationRequestSettings<TExecuteScriptSettings> {
-    FLUENT_SETTING_DEFAULT(Ydb::Query::Syntax, Syntax, Ydb::Query::SYNTAX_YQL_V1);
-    FLUENT_SETTING_DEFAULT(Ydb::Query::ExecMode, ExecMode, Ydb::Query::EXEC_MODE_EXECUTE);
-    FLUENT_SETTING_DEFAULT(Ydb::Query::StatsMode, StatsMode, Ydb::Query::STATS_MODE_NONE);
+    FLUENT_SETTING_DEFAULT(ESyntax, Syntax, ESyntax::YqlV1);
+    FLUENT_SETTING_DEFAULT(EExecMode, ExecMode, EExecMode::Execute);
+    FLUENT_SETTING_DEFAULT(EStatsMode, StatsMode, EStatsMode::None);
     FLUENT_SETTING(TDuration, ResultsTtl);
+    FLUENT_SETTING(TString, PoolId);
 };
 
 class TQueryContent {
@@ -114,6 +113,21 @@ public:
     ESyntax Syntax = ESyntax::Unspecified;
 };
 
+class TResultSetMeta {
+public:
+    TResultSetMeta() = default;
+
+    explicit TResultSetMeta(const std::vector<TColumn>& columns)
+        : Columns(columns)
+    {}
+
+    explicit TResultSetMeta(std::vector<TColumn>&& columns)
+        : Columns(std::move(columns))
+    {}
+
+    std::vector<TColumn> Columns;
+};
+
 class TScriptExecutionOperation : public TOperation {
 public:
     struct TMetadata {
@@ -122,8 +136,8 @@ public:
         EExecMode ExecMode = EExecMode::Unspecified;
 
         TQueryContent ScriptContent;
-        Ydb::TableStats::QueryStats ExecStats;
-        TVector<Ydb::Query::ResultSetMeta> ResultSetsMeta;
+        TExecStats ExecStats;
+        std::vector<TResultSetMeta> ResultSetsMeta;
     };
 
     using TOperation::TOperation;

@@ -131,6 +131,49 @@ Y_UNIT_TEST(UnalignedMmapUnalignedSize) {
     );
 }
 
+Y_UNIT_TEST(YellowZoneSwitchesCorrectlyBlock) {
+    TAlignedPagePool::ResetGlobalsUT();
+    TAlignedPagePoolImpl alloc(__LOCATION__);
+
+    // choose relatively big chunk so ALLOC_AHEAD_PAGES don't affect the correctness of the test 
+    auto size = 1024 * TAlignedPagePool::POOL_PAGE_SIZE;
+
+    alloc.SetLimit(size * 10);
+
+    // 50% allocated -> no yellow zone
+    auto block1 = alloc.GetBlock(size * 5);
+    UNIT_ASSERT_VALUES_EQUAL(false, alloc.IsMemoryYellowZoneEnabled());
+
+    // 70% allocated -> no yellow zone
+    auto block2 = alloc.GetBlock(size * 2);
+    UNIT_ASSERT_VALUES_EQUAL(false, alloc.IsMemoryYellowZoneEnabled());
+
+    // 90% allocated -> yellow zone is enabled (> 80%)
+    auto block3 = alloc.GetBlock(size * 2);
+    UNIT_ASSERT_VALUES_EQUAL(true, alloc.IsMemoryYellowZoneEnabled());
+
+    // 70% allocated -> yellow zone is still enabled (> 50%)
+    alloc.ReturnBlock(block3, size * 2);
+    UNIT_ASSERT_VALUES_EQUAL(true, alloc.IsMemoryYellowZoneEnabled());
+
+    // 50% allocated -> yellow zone is disabled
+    alloc.ReturnBlock(block2, size * 2);
+    UNIT_ASSERT_VALUES_EQUAL(false, alloc.IsMemoryYellowZoneEnabled());
+
+    // 0% allocated -> yellow zone is disabled
+    alloc.ReturnBlock(block1, size * 5);
+    UNIT_ASSERT_VALUES_EQUAL(false, alloc.IsMemoryYellowZoneEnabled());
+}
+
+Y_UNIT_TEST(YellowZoneZeroDivision) {
+    TAlignedPagePool::ResetGlobalsUT();
+    TAlignedPagePoolImpl alloc(__LOCATION__);
+
+    alloc.SetLimit(0);
+
+    UNIT_ASSERT_EQUAL(false, alloc.IsMemoryYellowZoneEnabled());
+}
+
 } // Y_UNIT_TEST_SUITE(TAlignedPagePoolTest)
 
 } // namespace NMiniKQL

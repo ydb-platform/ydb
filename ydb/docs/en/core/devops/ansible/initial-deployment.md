@@ -1,8 +1,8 @@
 # Deploying {{ ydb-short-name }} cluster with Ansible
 
-This guide outlines the process of deploying a {{ ydb-short-name }} cluster on a group of servers using Ansible. {{ ydb-short-name }} can be deployed on any desired number of servers, but the minimum number of servers in the cluster should not be less than eight for the `block-4-2` redundancy model and nine servers for the `mirror-3-dc` redundancy model. You can learn about redundancy models from the article [{#T}](../../deploy/configuration/config.md#domains-blob).
+This guide outlines the process of deploying a {{ ydb-short-name }} cluster on a group of servers using [Ansible](https://www.ansible.com/). The recommended setup to get started is 3 servers with 3 disk drives for user data each. For reliability purposes each server should have as independent infrastructure as possible: they'd better be each in a separate datacenter or availability zone, or at least in different server racks.
 
-During operation, the cluster can be [expanded](../../maintenance/manual/cluster_expansion.md) without suspending user access to the databases.
+For large-scale setups, it is recommended to use at least 9 servers for highly available clusters (`mirror-3-dc`) or 8 servers for single-datacenter clusters (`block-4-2`). In these cases, servers can have only one disk drive for user data each, but they'd better have an additional small drive for the operating system. You can learn about redundancy models available in {{ ydb-short-name }} from the [{#T}](../../concepts/topology.md) article. During operation, the cluster can be [expanded](../../maintenance/manual/cluster_expansion.md) without suspending user access to the databases.
 
 {% note info %}
 
@@ -10,15 +10,15 @@ During operation, the cluster can be [expanded](../../maintenance/manual/cluster
 
 * 16 CPUs (calculated based on the utilization of 8 CPUs by the storage node and 8 CPUs by the dynamic node).
 * 16 GB RAM (recommended minimum RAM).
-* An additional 120 GB network SSD drive (cannot be smaller – installation requirements for {{ ydb-short-name }}).
-* SSH access;
+* Additional SSD drives for data, at least 120 GB each.
+* SSH access.
 * Network connectivity between machines in the cluster.
 * OS: Ubuntu 18+, Debian 9+. 
 * Internet access is needed to update repositories and download necessary packages.
 
 {% endnote %}
 
-You can download the repository with the playbook for installing {{ ydb-short-name }} on the cluster from GitHub – `git clone https://github.com/ydb-platform/ydb-ansible-examples.git`. This repository contains installation templates for deploying {{ ydb-short-name }} on a cluster of eight servers – `8-nodes-block-4-2`, and nine servers – `9-nodes-mirror-3-dc`, as well as scripts for generating TLS certificates and requirement files for installing necessary Python packages.
+Download the GitHub repository with examples for installing {{ ydb-short-name }} cluster – `git clone https://github.com/ydb-platform/ydb-ansible-examples.git`. This repository contains a few installation templates for deploying {{ ydb-short-name }} clusters in subfolders, as well as scripts for generating TLS certificates and requirement files for installing necessary Python packages. In this article, we'll use the `3-nodes-mirror-3-dc` subfolder for the most simple setup. Alternatively, you can similarly use `8-nodes-block-4-2` or `9-nodes-mirror-3-dc` if you have the necessary number of suitable servers.
 
 {% cut "Repository Structure" %}
 
@@ -31,81 +31,63 @@ To work with the project on a local (intermediate or installation) machine, you 
 
 {% list tabs %}
 
-- Installing Ansible globally (in the system)
+- Installing Ansible globally (Ubuntu 22.04 LTS)
 
-  * Update the apt package list with `sudo apt update`.
-  * Upgrade packages with `sudo apt upgrade`.
+  * Update the apt package list with `sudo apt-get update`.
+  * Upgrade packages with `sudo apt-get upgrade`.
   * Install the `software-properties-common` package to manage your distribution's software sources – `sudo apt install software-properties-common`.
   * Add a new PPA to apt – `sudo add-apt-repository --yes --update ppa:ansible/ansible`.
-  * Install Ansible – `sudo apt install ansible-core`.
+  * Install Ansible – `sudo apt-get install ansible-core` (note that installing just `ansible` will lead to an unsuitable outdated version).
   * Check the Ansible core version – `ansible --version`
 
 - Installing Ansible in a Python virtual environment
 
-  * Update the apt package list – `sudo apt update`.
-  * Install the `venv` package for Python3 – `sudo apt install python3-venv`
-  * Create a directory where the virtual environment will be created and where the playbooks will be downloaded. For example, `mkdir ydb-install-ansible`.
-  * Go to the created directory and create a virtual environment – `python3 -m venv ydb-ansible`.
-  * Activate the virtual environment – `source venv/bin/activate`. All further actions with Ansible are performed inside the virtual environment. You can exit it with the command `deactivate`.
-  * Install the recommended version of Ansible using the command `pip install -r requirements.txt`, while in the root directory of the downloaded repository.
+  * Update the apt package list – `sudo apt-get update`.
+  * Install the `venv` package for Python3 – `sudo apt-get install python3-venv`
+  * Create a directory where the virtual environment will be created and where the playbooks will be downloaded. For example, `mkdir venv-ansible`.
+  * Create a Python virtual environment – `python3 -m venv venv-ansible`.
+  * Activate the virtual environment – `source venv-ansible/bin/activate`. All further actions with Ansible are performed inside the virtual environment. You can exit it with the command `deactivate`.
+  * Install the recommended version of Ansible using the command `pip3 install -r requirements.txt`, while in the root directory of the downloaded repository.
   * Check the Ansible core version – `ansible --version`
 
 {% endlist %}
 
-
-## Configuring the Ansible project {#ansible-project-setup}
-
 Navigate to the root directory of the downloaded repository and execute the command `ansible-galaxy install -r requirements.yaml` – this will download the Ansible collections `ydb_platform.ydb` and `community.general`, which contain roles and plugins for installing {{ ydb-short-name }}.
 
-[Download](../../downloads/index.md#ydb-server) the archive of the current version of {{ ydb-short-name }} into the project's root directory. For example, using wget: `wget https://binaries.ydb.tech/release/23.3.17/ydbd-23.3.17-linux-amd64.tar.gz` and also copy the private part of the SSH key for accessing the {{ ydb-short-name }} cluster servers to the same location. The SSH key should have the following permissions:
-```text
--rw------- (600)  # Only the owner has read and write permission.
-```
-You can set the required permissions with the command `sudo chmod 600 <ssh-key name>`.
+## Configure the Ansible project {#ansible-project-setup}
 
-Next, you can go to the TLS directory and specify in the file ydb-ca-nodes.txt a list of FQDNs for which TLS certificates will be generated. By default, the list looks as follows:
-```text
-static-node-1 static-node-1.ydb-cluster.com
-static-node-2 static-node-2.ydb-cluster.com
-static-node-3 static-node-3.ydb-cluster.com
-static-node-4 static-node-4.ydb-cluster.com
-static-node-5 static-node-5.ydb-cluster.com
-static-node-6 static-node-6.ydb-cluster.com
-static-node-7 static-node-7.ydb-cluster.com
-static-node-8 static-node-8.ydb-cluster.com
-static-node-9 static-node-9.ydb-cluster.com
-```
+### Edit the inventory files {#inventory-edit}
 
-Generate a set of TLS certificates, which will be placed in the CA subdirectory (`TLS/CA/certs/<create date_crete time>`) using the script `ydb-ca-update.sh`.
-
-After generating the TLS certificates, installing the Ansible collections, uploading the private part of the SSH key, and downloading the current version of {{ ydb-short-name }}, you need to update the inventory files according to the chosen type of cluster for deployment.
-
-### Editing the project's inventory files {#inventory-edit}
-
-Regardless of the type of cluster being created (eight servers – `8-nodes-block-4-2` or nine servers – `9-nodes-mirror-3-dc`), the main parameters for installing and configuring {{ ydb-short-name }} are contained in the inventory file `50-inventory.yaml`, which is located in the `<cluster model>/inventory/` directory.
+Regardless of the chosen cluster topology (`3-nodes-mirror-3-dc`, `9-nodes-mirror-3-dc`, or `8-nodes-block-4-2`), the main parameters for installing and configuring {{ ydb-short-name }} are contained in the inventory file `50-inventory.yaml`, which is located in the `inventory/` directory.
 
 In the inventory file `50-inventory.yaml`, you need to specify the current list of FQDNs of the servers where {{ ydb-short-name }} will be installed. By default, the list appears as follows:
   ```yaml
   all:
     children:
-        ydb:
-        hosts:
-          static-node-1.ydb-cluster.com:
-          static-node-2.ydb-cluster.com:
-          static-node-3.ydb-cluster.com:
-          static-node-4.ydb-cluster.com:
-          static-node-5.ydb-cluster.com:
-          static-node-6.ydb-cluster.com:
-          static-node-7.ydb-cluster.com:
-          static-node-8.ydb-cluster.com:
-          static-node-9.ydb-cluster.com:
+      ydb:
+        static-node-1.ydb-cluster.com:
+        static-node-2.ydb-cluster.com:
+        static-node-3.ydb-cluster.com:
   ```
 
 Next, you need to make the following changes in the `vars` section of the inventory file:
+
   * `ansible_user` – specify the user for Ansible to connect via SSH.
-  * `ansible_ssh_common_args: "-o ProxyJump=<ansible_user>@<static-node-1 IP>"` – option for connecting Ansible to a server by IP, from which {{ ydb-short-name }} will be installed (including ProxyJump server). It is used when installing {{ ydb-short-name }} from a local machine that is not included in the private DNS zone.
-  * `ansible_ssh_private_key_file` – change the default ssh-key name to the actual one: `"../<ssh-private-key-name>"`.
-  * `ydb_tls_dir` – specify the current path part (`/files/CA/certs/<date_time create certs>`) to the security certificates after they have been generated by the `ydb-ca-update.sh` script.
+  * `ansible_ssh_common_args: "-o ProxyJump=<ansible_user>@<static-node-1-IP>"` – option for connecting Ansible to a server by IP, from which {{ ydb-short-name }} will be installed (including ProxyJump server). It is used when installing {{ ydb-short-name }} from a local machine not included in the private DNS zone.
+  * `ansible_ssh_private_key_file` – change the default private SSH-key path to the actual one: `"../<ssh-private-key-name>"`.
+  * Choose one of the available options for deploying {{ ydb-short-name }} executables:
+    * `ydb_version`: automatically download one of the [{{ ydb-short-name }} official releases](../../downloads/index.md#ydb-server) by version number. For example, `23.4.11`.
+    * `ydb_git_version`: automatically compile the {{ ydb-short-name }} executables from the source code, downloaded from [the official GitHub repository](https://github.com/ydb-platform/ydb). The setting's value is a branch, tag, or commit name. For example, `main`.
+    * `ydb_archive`: a local filesystem path for a {{ ydb-short-name }} distribution archive [downloaded](../../downloads/index.md#ydb-server) or otherwise prepared in advance.
+    * `ydbd_binary` and `ydb_cli_binary`: local filesystem paths for {{ ydb-short-name }} server and client executables, [downloaded](../../downloads/index.md#ydb-server) or otherwise prepared in advance.
+
+#### Optional changes in the inventory files
+
+Feel free to change these settings if needed, but it is not necessary in straightforward cases:
+
+  * `ydb_cores_static` – set the number of CPU cores allocated to static nodes.
+  * `ydb_cores_dynamic` – set the number of CPU cores allocated to dynamic nodes.
+  * `ydb_tls_dir` – specify a local path to a folder with TLS certificates prepared in advance. It must contain the `ca.crt` file and subdirectories with names matching node hostnames, containing certificates for a given node. If omitted, self-signed TLS certificates will be generated automatically for the whole {{ ydb-short-name }} cluster.
   * `ydb_brokers` – list the FQDNs of the broker nodes. For example:
     ```yaml
     ydb_brokers:
@@ -113,8 +95,6 @@ Next, you need to make the following changes in the `vars` section of the invent
         - static-node-2.ydb-cluster.com
         - static-node-3.ydb-cluster.com
     ``` 
-  * `ydb_cores_static` – set the number of CPU cores consumed by the static node;
-  * `ydb_cores_dynamic` – set the number of CPU cores consumed by the dynamic node;
 
 The value of the `ydb_database_groups` variable in the `vars` section has a fixed value tied to the redundancy type and does not depend on the size of the cluster:
 * For the redundancy type `block-4-2`, the value of `ydb_database_groups` is seven.
@@ -140,21 +120,24 @@ The values of the `system_timezone` and `system_ntp_servers` variables depend on
 
 {% endlist %}
 
-No changes to other sections of the `50-inventory.yaml` configuration file are required. Next, you can change the standard YDB root user password contained in the encrypted inventory file `99-inventory-vault.yaml` and in the file `ansible_vault_password_file.txt`. To change the password – specify the new password in the `ansible_vault_password_file.txt` file and duplicate it in the `99-inventory-vault.yaml` file in the format:
+No changes to other sections of the `50-inventory.yaml` configuration file are required.
+
+#### Changing the root user password { #change-password }
+
+Next, you can change the standard YDB root user password contained in the encrypted inventory file `99-inventory-vault.yaml` and in the file `ansible_vault_password_file.txt`. To change the password – specify the new password in the `ansible_vault_password_file.txt` file and duplicate it in the `99-inventory-vault.yaml` file in the format:
   ```yaml
   all:
-        children:
-          ydb:
-            vars:
-              ydb_password: <new password>
+    children:
+      ydb:
+        vars:
+          ydb_password: <new-password>
   ```
 
 To encrypt `99-inventory-vault.yaml`, execute the command `ansible-vault encrypt inventory/99-inventory-vault.yaml`.
 
 After modifying the inventory files, you can proceed to prepare the {{ ydb-short-name }} configuration file.
 
-
-### Preparing the {{ ydb-short-name }} Configuration File {#ydb-config-prepare}
+### Prepare the {{ ydb-short-name }} configuration file {#ydb-config-prepare}
 
 The {{ ydb-short-name }} configuration file contains the settings for {{ ydb-short-name }} nodes and is located in the subdirectory `/files/config.yaml`. A detailed description of the configuration file settings for {{ ydb-short-name }} can be found in the article [{#T}](../../deploy/configuration/config.md).
 
@@ -197,11 +180,11 @@ In `mirror-3-dc` servers should be distributed across three availability zones o
 The [repository](https://github.com/ydb-platform/ydb-ansible-examples) contains two ready sets of templates for deploying a {{ ydb-short-name }} cluster of eight (redundancy model `block-4-2`) and nine servers (`mirror-3-dc`). Both options can be scaled to any required number of servers, considering a number of technical requirements.
 
 To prepare your template, you can follow the instructions below:
-1. Create a copy of the directory with the ready example (`9-nodes-mirror-3-dc` or `8-nodes-block-4-2`).
+1. Create a copy of the directory with the ready example (`3-nodes-mirror-3-dc`, `9-nodes-mirror-3-dc`, or `8-nodes-block-4-2`).
 2. Specify the FQDNs of the servers in the file `TLS/ydb-ca-nodes.txt` and execute the script `ydb-ca-update.sh` to generate sets of TLS certificates.
 3. Change the template's inventory files according to the [instructions](#inventory-edit).
 4. Make changes to the {{ ydb-short-name }} configuration file according to the [instructions](#ydb-config-prepare).
-5. In the directory of the cloned template, execute the command `ansible-playbook setup_playbook.yaml`.
+5. In the directory of the cloned template, execute the command `ansible-playbook ydb_platform.ydb.initial_setup`.
 
 
 ## Installation script execution plan for {{ ydb-short-name }} {#ydb-playbook-run}
@@ -219,7 +202,7 @@ The sequence of role executions and their brief descriptions:
 
 {% endcut %}
 
-As a result of executing the playbook, a {{ ydb-short-name }} cluster will be created, with a test database named `database`, a `root` user with maximum access rights created, and [Embedded UI](../../maintenance/embedded_monitoring/index.md) running on port 8765. To connect to the Embedded UI, you can set up SSH tunneling. For this, execute the command `ssh -L 8765:localhost:8765 -i <ssh private key> <user>@<first-ydb-static-node-ip>` on your local machine. After successfully establishing the connection, you can navigate to the URL [localhost:8765](http://localhost:8765):
+As a result of executing the playbook, a {{ ydb-short-name }} cluster will be created, with a test database named `database`, a `root` user with maximum access rights created, and [Embedded UI](../../reference/embedded-ui/index.md) running on port 8765. To connect to the Embedded UI, you can set up SSH tunneling. For this, execute the command `ssh -L 8765:localhost:8765 -i <ssh private key> <user>@<first-ydb-static-node-ip>` on your local machine. After successfully establishing the connection, you can navigate to the URL [localhost:8765](http://localhost:8765):
 
 ![ydb-web-ui](../../_assets/ydb-web-console.png)
 
@@ -238,7 +221,7 @@ You can check the state of the storage group in the `storage` section – [http:
 
 ![ydb-storage-gr-check](../../_assets/ydb-storage-gr-check.png)
 
-The `VDisks` indicators should be green, and the `state` status (found in the tooltip when hovering over the Vdisk indicator) should be `Ok`. More about the cluster state indicators and monitoring can be read in the article [{#T}](../../maintenance/embedded_monitoring/ydb_monitoring.md).
+The `VDisks` indicators should be green, and the `state` status (found in the tooltip when hovering over the Vdisk indicator) should be `Ok`. More about the cluster state indicators and monitoring can be read in the article [{#T}](../../reference/embedded-ui/ydb-monitoring.md).
 
 ## Cluster Testing { #testing }
 
@@ -259,8 +242,8 @@ Command parameters and their values:
 
 * `config profile create` – This command is used to create a connection profile. You specify the profile name. More detailed information on how to create and modify profiles can be found in the article [{#T}](../../reference/ydb-cli/profile/create.md).
 * `-e` – Endpoint, a string in the format `protocol://host:port`. You can specify the FQDN of any cluster node and omit the port. By default, port 2135 is used.
-* `--ca-file` – Path to the root certificate for connections to the database using `grpcs`. The certificate is created by the `ydb-ca-update.sh` script in the `TLS` directory and is located at the path `TLS/CA/certs/` relative to the root of the ydb-ansible-examples repository.
-* `--user` – The user for connecting to the database. By default, the user `root` is created when executing the `setup_playbook.yaml` playbook.
+* `--ca-file` – Path to the root certificate for connections to the database using `grpcs`. The certificate is created by the `ydb-ca-update.sh` script in the `TLS` directory and is located at the path `TLS/CA/certs/` relative to the root of the `ydb-ansible-examples` repository.
+* `--user` – The user for connecting to the database. By default, the user `root` is created when executing the `ydb_platform.ydb.initial_setup` playbook.
 * `--password-file` – Path to the password file. In each folder with a YDB cluster deployment template, there is an `ansible_vault_password_file` that contains the password for the user `root`.
 
 You can check if the profile has been created using the command `./ydb config profile list`, which will display a list of profiles. After creating a profile, you need to activate it with the command `./ydb config profile activate <profile name>`. To verify that the profile has been activated, you can rerun the command `./ydb config profile list` – the active profile will have an (active) mark.

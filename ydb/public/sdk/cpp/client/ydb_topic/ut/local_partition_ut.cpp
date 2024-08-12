@@ -4,7 +4,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/ut_utils.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/trace_lazy.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/trace_lazy.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/ut/ut_utils/trace.h>
 
@@ -610,6 +610,56 @@ namespace NYdb::NTopic::NTests {
             UNIT_ASSERT(expected.Matches(events));
         }
 
+        Y_UNIT_TEST(DirectWriteWithoutDescribeResourcesPermission) {
+            // The DirectWrite option makes the write session send a DescribePartitionRequest to locate the partition's node.
+            // Previously, it required DescribeSchema (DescribeResources) permission. However, this permission is too broad
+            // to be granted to anyone who needs the DirectWrite option. The DescribePartitionRequest should work when either
+            // UpdateRow (WriteTopic) or DescribeSchema permission is granted.
+            //
+            // In this test, we don't grant DescribeSchema permission and check that direct write works anyway.
+
+            auto setup = CreateSetup(TEST_CASE_NAME);
+            auto authToken = "x-user-x@builtin";
+
+            {
+                // Allow UpdateRow only, no DescribeSchema permission.
+                NACLib::TDiffACL acl;
+                acl.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, authToken);
+                setup->GetServer().AnnoyingClient->ModifyACL("/Root", TEST_TOPIC, acl.SerializeAsString());
+            }
+
+            TMockDiscoveryService discovery;
+            discovery.SetGoodEndpoints(*setup);
+            auto* tracingBackend = new TTracingBackend();
+            auto driverConfig = CreateConfig(*setup, discovery.GetDiscoveryAddr())
+                .SetLog(CreateCompositeLogBackend({new TStreamLogBackend(&Cerr), tracingBackend}))
+                .SetAuthToken(authToken);
+            TDriver driver(driverConfig);
+            TTopicClient client(driver);
+
+            auto sessionSettings = TWriteSessionSettings()
+                .Path(TEST_TOPIC)
+                .ProducerId(TEST_MESSAGE_GROUP_ID)
+                .MessageGroupId(TEST_MESSAGE_GROUP_ID)
+                .DirectWriteToPartition(true);
+
+            auto writeSession = client.CreateSimpleBlockingWriteSession(sessionSettings);
+            UNIT_ASSERT(writeSession->Write("message"));
+            writeSession->Close();
+
+            TExpectedTrace expected{
+                "InitRequest",
+                "InitResponse partition_id=0",
+                "DescribePartitionRequest partition_id=0",
+                "DescribePartitionResponse partition_id=0 pl_generation=1",
+                "PreferredPartitionLocation Generation=1",
+                "InitRequest pwg_partition_id=0 pwg_generation=1",
+                "InitResponse partition_id=0",
+            };
+            auto const events = tracingBackend->GetEvents();
+            UNIT_ASSERT(expected.Matches(events));
+        }
+
         Y_UNIT_TEST(WithoutPartitionWithSplit) {
             auto setup = CreateSetupForSplitMerge(TEST_CASE_NAME);
             setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
@@ -627,7 +677,7 @@ namespace NYdb::NTopic::NTests {
                                 .MessageGroupId(TEST_MESSAGE_GROUP_ID)
                                 .DirectWriteToPartition(true);
             auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
-            TTestReadSession ReadSession(client, 2);
+            TTestReadSession ReadSession("Session-0", client, 2);
 
             UNIT_ASSERT(writeSession->Write(Msg("message_1.1", 2)));
 
@@ -638,7 +688,7 @@ namespace NYdb::NTopic::NTests {
 
             ReadSession.WaitAllMessages();
 
-            for (const auto& info : ReadSession.ReceivedMessages) {
+            for (const auto& info : ReadSession.Impl->ReceivedMessages) {
                 if (info.Data == "message_1.1") {
                     UNIT_ASSERT_EQUAL(0, info.PartitionId);
                     UNIT_ASSERT_EQUAL(2, info.SeqNo);
@@ -673,6 +723,8 @@ namespace NYdb::NTopic::NTests {
             };
             auto const events = tracingBackend->GetEvents();
             UNIT_ASSERT(expected.Matches(events));
+
+            ReadSession.Close();
         }
     }
 }

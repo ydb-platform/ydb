@@ -196,6 +196,14 @@ public:
                                         case NScheme::NTypeIds::Interval:
                                             str << *(i64*)data;
                                             break;
+                                        case NScheme::NTypeIds::Date32:
+                                            str << *(i32*)data;
+                                            break;
+                                        case NScheme::NTypeIds::Datetime64:
+                                        case NScheme::NTypeIds::Timestamp64:
+                                        case NScheme::NTypeIds::Interval64:
+                                            str << *(i64*)data;
+                                            break;
                                         case NScheme::NTypeIds::PairUi64Ui64:
                                             str << "(" << ((std::pair<ui64,ui64>*)data)->first << "," << ((std::pair<ui64,ui64>*)data)->second << ")";
                                             break;

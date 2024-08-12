@@ -1,80 +1,14 @@
 #include "s3_storage.h"
 #include "s3_storage_config.h"
 
-#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/internal/AWSHttpResourceClient.h>
-#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/utils/stream/PreallocatedStreamBuf.h>
-#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/utils/stream/ResponseStream.h>
-#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/Aws.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/utils/threading/Executor.h>
 
-#include <contrib/libs/curl/include/curl/curl.h>
-#include <ydb/library/actors/core/actorsystem.h>
-#include <ydb/library/actors/core/log.h>
 #include <util/string/cast.h>
 
 #ifndef KIKIMR_DISABLE_S3_OPS
 namespace NKikimr::NWrappers::NExternalStorage {
 
-using namespace Aws;
-using namespace Aws::Auth;
-using namespace Aws::Client;
-using namespace Aws::S3;
-using namespace Aws::S3::Model;
-using namespace Aws::Utils::Stream;
-
 namespace {
-
-struct TCurlInitializer {
-    TCurlInitializer() {
-        curl_global_init(CURL_GLOBAL_ALL);
-    }
-
-    ~TCurlInitializer() {
-        curl_global_cleanup();
-    }
-};
-
-struct TApiInitializer {
-    TApiInitializer() {
-        Options.httpOptions.initAndCleanupCurl = false;
-        InitAPI(Options);
-
-        Internal::CleanupEC2MetadataClient(); // speeds up config construction
-    }
-
-    ~TApiInitializer() {
-        ShutdownAPI(Options);
-    }
-
-private:
-    SDKOptions Options;
-};
-
-class TApiOwner {
-public:
-    void Ref() {
-        auto guard = Guard(Mutex);
-        if (!RefCount++) {
-            if (!CurlInitializer) {
-                CurlInitializer.Reset(new TCurlInitializer);
-            }
-            ApiInitializer.Reset(new TApiInitializer);
-        }
-    }
-
-    void UnRef() {
-        auto guard = Guard(Mutex);
-        if (!--RefCount) {
-            ApiInitializer.Destroy();
-        }
-    }
-
-private:
-    ui64 RefCount = 0;
-    TMutex Mutex;
-    THolder<TCurlInitializer> CurlInitializer;
-    THolder<TApiInitializer> ApiInitializer;
-};
 
 namespace NPrivate {
 
@@ -93,10 +27,10 @@ Aws::Client::ClientConfiguration ConfigFromSettings(const TSettings& settings) {
 
     switch (settings.scheme()) {
         case TSettings::HTTP:
-            config.scheme = Http::Scheme::HTTP;
+            config.scheme = Aws::Http::Scheme::HTTP;
             break;
         case TSettings::HTTPS:
-            config.scheme = Http::Scheme::HTTPS;
+            config.scheme = Aws::Http::Scheme::HTTPS;
             break;
         default:
             Y_ABORT("Unknown scheme");
@@ -114,21 +48,40 @@ Aws::Auth::AWSCredentials CredentialsFromSettings(const TSettings& settings) {
 
 } // anonymous
 
-TS3User::TS3User(const TS3User& /*baseObject*/) {
-    Singleton<TApiOwner>()->Ref();
-}
+class TS3ThreadsPoolByEndpoint {
+private:
 
-TS3User::TS3User(TS3User& /*baseObject*/) {
-    Singleton<TApiOwner>()->Ref();
-}
+    class TPool {
+    public:
+        std::shared_ptr<Aws::Utils::Threading::PooledThreadExecutor> Executor;
+        ui32 ThreadsCount = 0;
+        TPool(const std::shared_ptr<Aws::Utils::Threading::PooledThreadExecutor>& executor, const ui32 threadsCount)
+            : Executor(executor)
+            , ThreadsCount(threadsCount)
+        {
 
-TS3User::TS3User() {
-    Singleton<TApiOwner>()->Ref();
-}
+        }
+    };
 
-TS3User::~TS3User() {
-    Singleton<TApiOwner>()->UnRef();
-}
+    THashMap<TString, TPool> Pools;
+    TMutex Mutex;
+    std::shared_ptr<Aws::Utils::Threading::PooledThreadExecutor> GetPoolImpl(const TString& endpoint, const ui32 threadsCount) {
+        TGuard<TMutex> g(Mutex);
+        auto it = Pools.find(endpoint);
+        if (it == Pools.end()) {
+            TPool pool(std::make_shared<Aws::Utils::Threading::PooledThreadExecutor>(threadsCount), threadsCount);
+            it = Pools.emplace(endpoint, std::move(pool)).first;
+        } else if (it->second.ThreadsCount < threadsCount) {
+            TPool pool(std::make_shared<Aws::Utils::Threading::PooledThreadExecutor>(threadsCount), threadsCount);
+            it->second = std::move(pool);
+        }
+        return it->second.Executor;
+    }
+public:
+    static std::shared_ptr<Aws::Utils::Threading::PooledThreadExecutor> GetPool(const TString& endpoint, const ui32 threadsCount) {
+        return Singleton<TS3ThreadsPoolByEndpoint>()->GetPoolImpl(endpoint, threadsCount);
+    }
+};
 
 Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(const NKikimrSchemeOp::TS3Settings& settings) {
     Aws::Client::ClientConfiguration config;
@@ -143,7 +96,7 @@ Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(co
     if (settings.HasHttpRequestTimeoutMs()) {
         config.httpRequestTimeoutMs = settings.GetHttpRequestTimeoutMs();
     }
-    config.executor = std::make_shared<Aws::Utils::Threading::PooledThreadExecutor>(settings.GetExecutorThreadsCount());
+    config.executor = TS3ThreadsPoolByEndpoint::GetPool(settings.GetEndpoint(), settings.GetExecutorThreadsCount());
     config.enableTcpKeepAlive = true;
     //    config.lowSpeedLimit = 0;
     config.maxConnections = settings.HasMaxConnectionsCount() ? settings.GetMaxConnectionsCount() : settings.GetExecutorThreadsCount();

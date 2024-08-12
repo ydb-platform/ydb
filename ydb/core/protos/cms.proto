@@ -384,7 +384,7 @@ message TLimits {
     optional uint32 DisabledNodesLimit = 1;
     // Works similarly to DisabledNodesLimit but specify
     // limit in percents of cluster/tenant nodes count.
-    optional uint32 DisabledNodesRatioLimit = 2 [default = 10];
+    optional uint32 DisabledNodesRatioLimit = 2 [default = 13]; // 1/8 rounded up
 }
 
 message TCmsConfig {

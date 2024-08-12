@@ -166,13 +166,14 @@ public:
         UpdateCounters();
     }
 
-    void RunTask(NMiniKQL::TScopedAlloc& alloc, TTask& task, const TDqTaskRunnerContext& context, const TDqTaskRunnerSettings& settings) {
+    void RunTask(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, TTask& task, const TDqTaskRunnerContext& context, const TDqTaskRunnerSettings& settings) {
         auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         NDqProto::TDqTask protoTask;
         protoTask.SetId(task.Id);
         protoTask.SetStageId(task.StageId.StageId);
+        protoTask.SetEnableSpilling(false); // TODO: enable spilling
         protoTask.MutableProgram()->CopyFrom(stage.GetProgram()); // it's not good...
 
         TaskId2StageId[task.Id] = task.StageId.StageId;
@@ -211,7 +212,7 @@ public:
         auto status = taskRunner->Run();
         YQL_ENSURE(status == ERunStatus::Finished);
 
-        with_lock (alloc) { // allocator is used only by outputChannel->PopAll()
+        with_lock (*alloc) { // allocator is used only by outputChannel->PopAll()
             for (auto& taskOutput : task.Outputs) {
                 for (ui64 outputChannelId : taskOutput.Channels) {
                     auto outputChannel = taskRunner->GetOutputChannel(outputChannelId);
@@ -276,7 +277,7 @@ public:
 
 private:
     void CleanupCtx() {
-        with_lock(Request.TxAlloc->Alloc) {
+        with_lock(*Request.TxAlloc->Alloc) {
             TaskRunners.erase(TaskRunners.begin(), TaskRunners.end());
             Request.Transactions.erase(Request.Transactions.begin(), Request.Transactions.end());
             ComputeCtx.reset();

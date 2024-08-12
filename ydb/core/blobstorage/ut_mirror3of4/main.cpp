@@ -273,6 +273,7 @@ private:
                 ""
             );
             const auto vcfg = MakeIntrusive<TVDiskConfig>(baseInfo);
+            vcfg->UseCostTracker = false;
             auto vdiskCounters = Counters->GetSubgroup("vdisk", ToString(i));
             runtime.RegisterService(info.GetActorId(i), runtime.Register(CreateVDisk(vcfg, Info, vdiskCounters),
                 TActorId(), 0, std::nullopt, pdisk.NodeId));

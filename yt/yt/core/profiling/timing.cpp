@@ -53,6 +53,11 @@ TDuration TWallTimer::GetElapsedTime() const
     return CpuDurationToDuration(GetElapsedCpuTime());
 }
 
+TDuration TWallTimer::GetCurrentDuration() const
+{
+    return CpuDurationToDuration(GetCurrentCpuDuration());
+}
+
 TCpuInstant TWallTimer::GetStartCpuTime() const
 {
     return StartTime_;
@@ -122,6 +127,36 @@ TFiberWallTimer::TFiberWallTimer()
         [this] () noexcept { Stop(); },
         [this] () noexcept { Start(); })
 { }
+
+////////////////////////////////////////////////////////////////////////////////
+
+TFiberSliceTimer::TFiberSliceTimer(TCpuDuration threshold, std::function<void(TCpuDuration)> callback)
+    : TContextSwitchGuard(
+        [this] () noexcept { OnOut(); },
+        [this] () noexcept { OnIn(); })
+    , Threshold_(threshold)
+    , Callback_(callback)
+{
+    OnIn();
+}
+
+TFiberSliceTimer::~TFiberSliceTimer()
+{
+    OnOut();
+}
+
+void TFiberSliceTimer::OnIn() noexcept
+{
+    LastInTime_ = GetCpuInstant();
+}
+
+void TFiberSliceTimer::OnOut() noexcept
+{
+    auto execution = GetCpuInstant() - LastInTime_;
+    if (execution > Threshold_) {
+        Callback_(execution);
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -1,5 +1,6 @@
-#include "yql_http_gateway.h"
+#include "yql_aws_signature.h"
 #include "yql_dns_gateway.h"
+#include "yql_http_gateway.h"
 
 #include <util/generic/size_literals.h>
 #include <util/generic/yexception.h>
@@ -99,7 +100,8 @@ public:
         size_t sizeLimit = 0,
         size_t bodySize = 0,
         const TCurlInitConfig& config = TCurlInitConfig(),
-        TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr)
+        TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr,
+        TString data = {})
         : Headers(std::move(headers))
         , Method(method)
         , Offset(offset)
@@ -111,7 +113,8 @@ public:
         , Config(config)
         , ErrorBuffer(static_cast<size_t>(CURL_ERROR_SIZE), '\0')
         , DnsCache(dnsCache)
-        , Url(url) {
+        , Url(url)
+        , Data(std::move(data)) {
         InitHandles();
         Counter->Inc();
     }
@@ -164,12 +167,41 @@ public:
         curl_easy_setopt(Handle, CURLOPT_LOW_SPEED_LIMIT, Config.LowSpeedLimit);
         curl_easy_setopt(Handle, CURLOPT_ERRORBUFFER, ErrorBuffer.data());
 
-        if (Headers.Options.AwsSigV4) {
-            curl_easy_setopt(Handle, CURLOPT_AWS_SIGV4, Headers.Options.AwsSigV4.c_str());
-        }
+        if (Headers.Options.CurlSignature) {
+            if (Headers.Options.AwsSigV4) {
+                curl_easy_setopt(Handle, CURLOPT_AWS_SIGV4, Headers.Options.AwsSigV4.c_str());
+            }
 
-        if (Headers.Options.UserPwd) {
-            curl_easy_setopt(Handle, CURLOPT_USERPWD, Headers.Options.UserPwd.c_str());
+            if (Headers.Options.UserPwd) {
+                curl_easy_setopt(Handle, CURLOPT_USERPWD, Headers.Options.UserPwd.c_str());
+            }
+        } else if (Headers.Options.AwsSigV4 || Headers.Options.UserPwd) {
+            TString method;
+            switch (Method) {
+                case EMethod::GET:
+                    method = "GET";
+                    break;
+                case EMethod::POST:
+                    method = "POST";
+                    break;
+                case EMethod::PUT:
+                    method = "PUT";
+                    break;
+                case EMethod::DELETE:
+                    method = "DELETE";
+                    break;
+            }
+
+            TString contentType;
+            for (const auto& field: Headers.Fields) {
+                if (field.StartsWith("Content-Type:")) {
+                    contentType = field.substr(strlen("Content-Type:"));
+                }
+            }
+            TAwsSignature signature(method, Url, contentType, Data, Headers.Options.AwsSigV4, Headers.Options.UserPwd);
+            Headers.Fields.push_back(TStringBuilder{} << "Authorization: " << signature.GetAuthorization());
+            Headers.Fields.push_back(TStringBuilder{} << "x-amz-content-sha256: " << signature.GetXAmzContentSha256());
+            Headers.Fields.push_back(TStringBuilder{} << "x-amz-date: " << signature.GetAmzDate());
         }
 
         if (DnsCache != nullptr) {
@@ -285,6 +317,7 @@ private:
     TDNSGateway<>::TDNSConstCurlListPtr DnsCache;
 public:
     TString Url;
+    const TString Data;
 };
 
 class TEasyCurlBuffer : public TEasyCurl {
@@ -317,8 +350,8 @@ public:
               sizeLimit,
               data.size(),
               std::move(config),
-              std::move(dnsCache))
-        , Data(std::move(data))
+              std::move(dnsCache),
+              std::move(data))
         , Input(Data)
         , Output(Buffer)
         , HeaderOutput(Header)
@@ -422,7 +455,6 @@ private:
         return Input.Read(buffer, size * nmemb);
     }
 
-    const TString Data;
     TString Buffer, Header;
     TStringInput Input;
     TStringOutput Output, HeaderOutput;

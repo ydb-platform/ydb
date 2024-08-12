@@ -33,6 +33,8 @@ COPY_FILE(TEXT
         mkql_builtins.h
         mkql_builtins_codegen.h
         mkql_builtins_codegen_llvm.h
+        arrow/array/array_base.h
+        arrow/array/util.h
 )
 
 COPY_FILE(TEXT

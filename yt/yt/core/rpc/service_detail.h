@@ -20,6 +20,7 @@
 #include <yt/yt/core/misc/object_pool.h>
 #include <yt/yt/core/misc/protobuf_helpers.h>
 #include <yt/yt/core/misc/ring_queue.h>
+#include <yt/yt/core/misc/memory_usage_tracker.h>
 
 #include <yt/yt/core/profiling/timing.h>
 
@@ -195,6 +196,7 @@ public:
         }
 
         Request_->Context_ = underlyingContext.Get();
+        const auto& tracker = Request_->Context_->GetMemoryUsageTracker();
 
         const auto& requestHeader = this->GetRequestHeader();
         // COMPAT(danilalexeev): legacy RPC codecs
@@ -226,12 +228,12 @@ public:
                 formatOptionsYson = NYson::TYsonString(requestHeader.request_format_options());
             }
             if (format != EMessageFormat::Protobuf) {
-                body = ConvertMessageFromFormat(
+                body = TrackMemory(tracker, ConvertMessageFromFormat(
                     body,
                     format,
                     NYson::ReflectProtobufMessageType<TRequestMessage>(),
                     formatOptionsYson,
-                    !bodyCodecId.has_value());
+                    !bodyCodecId.has_value()));
             }
         }
 
@@ -247,9 +249,19 @@ public:
 
         std::vector<TSharedRef> requestAttachments;
         try {
-            requestAttachments = DecompressAttachments(
-                underlyingContext->RequestAttachments(),
-                attachmentCodecId);
+            if (attachmentCodecId == NCompression::ECodec::None) {
+                requestAttachments = underlyingContext->RequestAttachments();
+            } else {
+                requestAttachments = DecompressAttachments(
+                    underlyingContext->RequestAttachments(),
+                    attachmentCodecId);
+
+                // For decompressed blocks, memory tracking must be used again,
+                // since they are allocated in a new allocation.
+                for (auto& attachment : requestAttachments) {
+                    attachment = TrackMemory(tracker, attachment);
+                }
+            }
         } catch (const std::exception& ex) {
             underlyingContext->Reply(TError(
                 NRpc::EErrorCode::ProtocolError,
@@ -637,29 +649,25 @@ protected:
         TMethodDescriptor SetHandleMethodError(bool value) const;
     };
 
-    struct TErrorCodesCounter
+    struct TErrorCodeCounter
     {
-        TErrorCodesCounter(const NProfiling::TProfiler& profiler)
-            : Profiler_(profiler)
-        { }
+        explicit TErrorCodeCounter(NProfiling::TProfiler profiler);
 
-        void RegisterCode(TErrorCode code)
-        {
-            ErrorCodes_.FindOrInsert(code, [&] () {
-                return Profiler_.WithTag("code", ToString(code)).Counter("/code_count");
-            }).first->Increment();
-        }
+        void Increment(TErrorCode code);
 
     private:
-        NYT::NConcurrency::TSyncMap<TErrorCode, NProfiling::TCounter> ErrorCodes_;
-        NProfiling::TProfiler Profiler_;
+        const NProfiling::TProfiler Profiler_;
+
+        NConcurrency::TSyncMap<TErrorCode, NProfiling::TCounter> CodeToCounter_;
     };
 
     //! Per-user and per-method profiling counters.
     struct TMethodPerformanceCounters
         : public TRefCounted
     {
-        TMethodPerformanceCounters(const NProfiling::TProfiler& profiler, const THistogramConfigPtr& histogramConfig);
+        TMethodPerformanceCounters(
+            const NProfiling::TProfiler& profiler,
+            const TTimeHistogramConfigPtr& timeHistogramConfig);
 
         //! Counts the number of method calls.
         NProfiling::TCounter RequestCounter;
@@ -700,7 +708,8 @@ protected:
         //! Counts the number of bytes in response message attachment.
         NProfiling::TCounter ResponseMessageAttachmentSizeCounter;
 
-        TErrorCodesCounter ErrorCodes;
+        //! Counts the number of errors, per error code.
+        TErrorCodeCounter ErrorCodeCounter;
     };
 
     using TMethodPerformanceCountersPtr = TIntrusivePtr<TMethodPerformanceCounters>;
@@ -815,6 +824,14 @@ protected:
         TRealmId realmId = NullRealmId,
         IAuthenticatorPtr authenticator = nullptr);
 
+    TServiceBase(
+        IInvokerPtr defaultInvoker,
+        const TServiceDescriptor& descriptor,
+        IMemoryUsageTrackerPtr memoryUsageTracker,
+        const NLogging::TLogger& logger,
+        TRealmId realmId = NullRealmId,
+        IAuthenticatorPtr authenticator = nullptr);
+
     //! Registers a method handler.
     //! This call is must be performed prior to service registration.
     virtual TRuntimeMethodInfoPtr RegisterMethod(const TMethodDescriptor& descriptor);
@@ -894,6 +911,7 @@ private:
     const IAuthenticatorPtr Authenticator_;
     const TServiceDescriptor ServiceDescriptor_;
     const TServiceId ServiceId_;
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_;
 
     const NProfiling::TProfiler Profiler_;
 
@@ -954,10 +972,9 @@ private:
 
     std::atomic<bool> EnablePerUserProfiling_ = false;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, HistogramConfigLock_);
-    THistogramConfigPtr HistogramTimerProfiling{};
+    TAtomicIntrusivePtr<TTimeHistogramConfig> TimeHistogramConfig_;
 
-    std::atomic<bool> EnableErrorCodeCounting = false;
+    std::atomic<bool> EnableErrorCodeCounter_ = false;
 
     const NConcurrency::TPeriodicExecutorPtr ServiceLivenessChecker_;
 
@@ -977,6 +994,8 @@ private:
         TSharedRefArray Message;
         TRequestQueue* RequestQueue;
         std::optional<TError> ThrottledError;
+        TMemoryUsageTrackerGuard MemoryGuard;
+        IMemoryUsageTrackerPtr MemoryUsageTracker;
     };
 
     void DoDeclareServerFeature(int featureId);

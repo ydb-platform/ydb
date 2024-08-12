@@ -91,35 +91,58 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        constexpr ui64 usInDay = 86400000000ull;
-        constexpr ui32 usInSec = 1000000u;
+        constexpr i64 usInDay = 86400'000'000ll;
+        constexpr i64 usInSec = 1000'000ll;
 
-        ui64 us;
-        if (From == EDataSlot::Timestamp) {
-            us = Source->GetValue(ctx).Get<NUdf::TDataType<TTimestamp>::TLayout>();
+        i64 us;
+        if (From == EDataSlot::Timestamp64) {
+            us = Source->GetValue(ctx).Get<i64>();
+        } else if (From == EDataSlot::Datetime64) {
+            us = usInSec * Source->GetValue(ctx).Get<i64>();
+        } else if (From == EDataSlot::Timestamp) {
+            us = static_cast<i64>(Source->GetValue(ctx).Get<ui64>());
+        } else if (From == EDataSlot::Datetime) {
+            us = usInSec * static_cast<i64>(Source->GetValue(ctx).Get<ui32>());
         } else {
-            Y_ENSURE(From == EDataSlot::Datetime);
-            us = Source->GetValue(ctx).Get<NUdf::TDataType<TDatetime>::TLayout>();
-            us *= usInSec;
+            Y_ENSURE(From == EDataSlot::Date32);
+            us = usInDay * static_cast<i64>(Source->GetValue(ctx).Get<i32>());
         }
 
-        TUnboxedValuePod result;
-        if (To == EDataSlot::Date) {
-            NUdf::TDataType<TTimestamp>::TLayout rounded = (us + (Down ? 0 : (usInDay - 1u))) / usInDay;
-            if (rounded >= MAX_DATE) {
-                return {};
+        if (To == EDataSlot::Date || To == EDataSlot::Date32) {
+            i64 rounded = us / usInDay;
+            i64 rem = us % usInDay;
+            if (rem > 0 && !Down) {
+                rounded += 1;
+            } else if (rem < 0 && Down) {
+                rounded -= 1;
             }
-            result = TUnboxedValuePod(rounded);
+            if (To == EDataSlot::Date32 && rounded <= MAX_DATE32) {
+                // lower bound check is not needed as RoundDown(MinTimestamp64) is valid value
+                return TUnboxedValuePod(static_cast<i32>(rounded));
+            } else if (To == EDataSlot::Date && rounded >= 0 && rounded < MAX_DATE) {
+                return TUnboxedValuePod(static_cast<ui16>(rounded));
+            }
+        } else if (To == EDataSlot::Datetime || To == EDataSlot::Datetime64) {
+            i64 rounded = us / usInSec;
+            i64 rem = us % usInSec;
+            if (rem > 0 && !Down) {
+                rounded += 1;
+            } else if (rem < 0 && Down) {
+                rounded -= 1;
+            }
+            if (To == EDataSlot::Datetime64 && rounded <= MAX_DATETIME64) {
+                // lower bound check is not needed as RoundDown(MinTimestamp64) is valid value
+                return TUnboxedValuePod(rounded);
+            } else if (To == EDataSlot::Datetime && rounded >= 0 && rounded < MAX_DATETIME) {
+                return TUnboxedValuePod(static_cast<ui32>(rounded));
+            }
         } else {
-            Y_ENSURE(To == EDataSlot::Datetime);
-            NUdf::TDataType<TDatetime>::TLayout rounded = (us + (Down ? 0 : (usInSec - 1u))) / usInSec;
-            if (rounded >= MAX_DATETIME) {
-                return {};
+            Y_ENSURE(To == EDataSlot::Timestamp);
+            if (0 <= us && us < static_cast<i64>(MAX_TIMESTAMP)) {
+                return TUnboxedValuePod(static_cast<ui64>(us));
             }
-            result = TUnboxedValuePod(rounded);
         }
-
-        return result;
+        return {};
     }
 
 private:
@@ -211,6 +234,9 @@ IComputationNode* WrapRound(TCallable& callable, const TComputationNodeFactoryCo
         case EDataSlot::Uint64: return FromIntegral<ui64>(ctx.Mutables, source, down, to);
         case EDataSlot::Datetime:
         case EDataSlot::Timestamp:
+        case EDataSlot::Date32: // From Date cases are covered in NYql::NTypeAnnImpl::RoundWrapper
+        case EDataSlot::Datetime64:
+        case EDataSlot::Timestamp64:
             Y_ENSURE(GetDataTypeInfo(to).Features & DateType);
             return new TRoundDateTypeWrapper(ctx.Mutables, source, down, from, to);
         case EDataSlot::String:

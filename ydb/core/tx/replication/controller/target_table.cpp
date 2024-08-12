@@ -102,15 +102,35 @@ private:
 
 }; // TTableWorkerRegistar
 
-TTableTarget::TTableTarget(ui64 id, const TString& srcPath, const TString& dstPath)
-    : TTargetWithStream(ETargetKind::Table, id, srcPath, dstPath)
+TTargetTableBase::TTargetTableBase(TReplication* replication, ETargetKind finalKind,
+        ui64 id, const TString& srcPath, const TString& dstPath)
+    : TTargetWithStream(replication, finalKind, id, srcPath, dstPath)
 {
 }
 
-IActor* TTableTarget::CreateWorkerRegistar(TReplication::TPtr replication, const TActorContext& ctx) const {
+IActor* TTargetTableBase::CreateWorkerRegistar(const TActorContext& ctx) const {
+    auto replication = GetReplication();
     return new TTableWorkerRegistar(ctx.SelfID, replication->GetYdbProxy(),
         replication->GetConfig().GetSrcConnectionParams(), replication->GetId(), GetId(),
-        CanonizePath(ChildPath(SplitPath(GetSrcPath()), GetStreamName())), GetDstPathId());
+        BuildStreamPath(), GetDstPathId());
+}
+
+TTargetTable::TTargetTable(TReplication* replication, ui64 id, const TString& srcPath, const TString& dstPath)
+    : TTargetTableBase(replication, ETargetKind::Table, id, srcPath, dstPath)
+{
+}
+
+TString TTargetTable::BuildStreamPath() const {
+    return CanonizePath(ChildPath(SplitPath(GetSrcPath()), GetStreamName()));
+}
+
+TTargetIndexTable::TTargetIndexTable(TReplication* replication, ui64 id, const TString& srcPath, const TString& dstPath)
+    : TTargetTableBase(replication, ETargetKind::IndexTable, id, srcPath, dstPath)
+{
+}
+
+TString TTargetIndexTable::BuildStreamPath() const {
+    return CanonizePath(ChildPath(SplitPath(GetSrcPath()), {"indexImplTable", GetStreamName()}));
 }
 
 }

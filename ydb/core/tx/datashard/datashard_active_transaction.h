@@ -192,6 +192,7 @@ public:
     const absl::flat_hash_set<ui64>& GetVolatileDependencies() const { return EngineBay.GetVolatileDependencies(); }
     std::optional<ui64> GetVolatileChangeGroup() const { return EngineBay.GetVolatileChangeGroup(); }
     bool GetVolatileCommitOrdered() const { return EngineBay.GetVolatileCommitOrdered(); }
+    bool GetPerformedUserReads() const { return EngineBay.GetPerformedUserReads(); }
 
     void SetStep(ui64 step) { StepTxId_.Step = step; }
 

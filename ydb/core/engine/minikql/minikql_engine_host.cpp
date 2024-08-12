@@ -73,7 +73,7 @@ bool TEngineHost::IsValidKey(TKeyDesc& key) const {
     return NMiniKQL::IsValidKey(Scheme, localTableId, key);
 }
 ui64 TEngineHost::CalculateReadSize(const TVector<const TKeyDesc*>& keys) const {
-    NTable::TSizeEnv env;
+    auto env = Db.CreateSizeEnv();
 
     for (const TKeyDesc* ki : keys) {
         DoCalculateReadSize(*ki, env);
@@ -120,7 +120,7 @@ ui64 TEngineHost::CalculateResultSize(const TKeyDesc& key) const {
     if (key.Range.Point) {
         return Db.EstimateRowSize(localTid);
     } else {
-        NTable::TSizeEnv env;
+        auto env = Db.CreateSizeEnv();
         DoCalculateReadSize(key, env);
         ui64 size = env.GetSize();
 
@@ -291,10 +291,10 @@ NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArray
     return std::move(rowResult);
 }
 
-template<class TTableIt>
-class TSelectRangeLazyRow : public TComputationValue<TSelectRangeLazyRow<TTableIt>> {
+template<class TTableIter>
+class TSelectRangeLazyRow : public TComputationValue<TSelectRangeLazyRow<TTableIter>> {
 private:
-    using TBase = TComputationValue<TSelectRangeLazyRow<TTableIt>>;
+    using TBase = TComputationValue<TSelectRangeLazyRow<TTableIter>>;
     NUdf::TUnboxedValue GetElement(ui32 index) const override {
         BuildValue(index);
         return GetPtr()[index];
@@ -335,7 +335,7 @@ public:
         }
     }
 
-    void OwnDb(THolder<TTableIt>&& iter) {
+    void OwnDb(THolder<TTableIter>&& iter) {
         Iter = std::move(iter);
     }
 
@@ -348,7 +348,7 @@ public:
 private:
     TSelectRangeLazyRow(const TDbTupleRef& dbData, const THolderFactory& holderFactory, ui32 maskSize,
         const TSmallVec<NTable::TTag>& systemColumnTags, ui64 shardId)
-        : TComputationValue<TSelectRangeLazyRow<TTableIt>>(&holderFactory.GetMemInfo())
+        : TComputationValue<TSelectRangeLazyRow<TTableIter>>(&holderFactory.GetMemInfo())
         , Iter()
         , DbData(dbData)
         , MaskSize(maskSize)
@@ -413,7 +413,7 @@ private:
     }
 
 private:
-    THolder<TTableIt> Iter;
+    THolder<TTableIter> Iter;
     TDbTupleRef DbData;
     ui32 MaskSize;
     TSmallVec<NTable::TTag> SystemColumnTags;
@@ -425,14 +425,14 @@ public:
     template<class>
     friend class TIterator;
 
-    template<class TTableIt>
-    class TIterator : public TComputationValue<TIterator<TTableIt>> {
+    template<class TTableIter>
+    class TIterator : public TComputationValue<TIterator<TTableIter>> {
         static const ui32 PeriodicCallbackIterations = 1000;
 
-        using TBase = TComputationValue<TIterator<TTableIt>>;
+        using TBase = TComputationValue<TIterator<TTableIter>>;
 
     public:
-        TIterator(TMemoryUsageInfo* memInfo, const TSelectRangeLazyRowsList& list, TAutoPtr<TTableIt>&& iter,
+        TIterator(TMemoryUsageInfo* memInfo, const TSelectRangeLazyRowsList& list, TAutoPtr<TTableIter>&& iter,
             const TSmallVec<NTable::TTag>& systemColumnTags, ui64 shardId)
             : TBase(memInfo)
             , List(list)
@@ -524,7 +524,7 @@ public:
                 if (HasCurrent && CurrentRowValue.UniqueBoxed()) {
                     CurrentRow()->Reuse(rowValues);
                 } else {
-                    CurrentRowValue = TSelectRangeLazyRow<TTableIt>::Create(rowValues, List.HolderFactory, SystemColumnTags, ShardId);
+                    CurrentRowValue = TSelectRangeLazyRow<TTableIter>::Create(rowValues, List.HolderFactory, SystemColumnTags, ShardId);
                 }
 
                 value = CurrentRowValue;
@@ -568,13 +568,13 @@ public:
             }
         }
 
-        TSelectRangeLazyRow<TTableIt>* CurrentRow() const {
-            return static_cast<TSelectRangeLazyRow<TTableIt>*>(CurrentRowValue.AsBoxed().Get());
+        TSelectRangeLazyRow<TTableIter>* CurrentRow() const {
+            return static_cast<TSelectRangeLazyRow<TTableIter>*>(CurrentRowValue.AsBoxed().Get());
         }
 
     private:
         const TSelectRangeLazyRowsList& List;
-        THolder<TTableIt> Iter;
+        THolder<TTableIter> Iter;
         bool HasCurrent;
         ui64 Iterations;
         ui64 Items;
@@ -631,13 +631,13 @@ public:
             auto read = Db.IterateRangeReverse(LocalTid, keyRange, Tags, EngineHost.GetReadVersion(TableId), TxMap, TxObserver);
 
             return NUdf::TUnboxedValuePod(
-                new TIterator<NTable::TTableReverseIt>(GetMemInfo(), *this, std::move(read), SystemColumnTags, ShardId)
+                new TIterator<NTable::TTableReverseIter>(GetMemInfo(), *this, std::move(read), SystemColumnTags, ShardId)
             );
         } else {
             auto read = Db.IterateRange(LocalTid, keyRange, Tags, EngineHost.GetReadVersion(TableId), TxMap, TxObserver);
 
             return NUdf::TUnboxedValuePod(
-                new TIterator<NTable::TTableIt>(GetMemInfo(), *this, std::move(read), SystemColumnTags, ShardId)
+                new TIterator<NTable::TTableIter>(GetMemInfo(), *this, std::move(read), SystemColumnTags, ShardId)
             );
         }
     }
@@ -1090,7 +1090,7 @@ NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeInfo type) {
         return NYql::NCommon::PgValueFromNativeBinary(cell.AsBuf(), NPg::PgTypeIdFromTypeDesc(type.GetTypeDesc()));
     }
 
-    Y_DEBUG_ABORT_UNLESS(false, "Unsupported type: %" PRIu16, type.GetTypeId());
+    Y_DEBUG_ABORT("Unsupported type: %" PRIu16, type.GetTypeId());
     return MakeString(NUdf::TStringRef(cell.Data(), cell.Size()));
 }
 

@@ -470,6 +470,14 @@ SELECT array_to_json(array_agg(q),false)
     -stdin-:<main>:3:16: Error: alternative is not implemented yet : 138
     	               ARRAY[ROW(x.*,ARRAY[1,2,3]),
 	               ^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	SELECT array_to_json(array_agg(q),false)
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	SELECT array_to_json(array_agg(q),false)
+	^
 <sql-statement>
 SELECT array_to_json(array_agg(x),false) from generate_series(5,10) x;
 </sql-statement>
@@ -499,6 +507,14 @@ FROM (SELECT $$a$$ || x AS b,
     -stdin-:<main>:4:10: Error: alternative is not implemented yet : 138
     	         ARRAY[ROW(x.*,ARRAY[1,2,3]),
 	         ^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	SELECT row_to_json(q)
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	SELECT row_to_json(q)
+	^
 <sql-statement>
 SELECT row_to_json(q,true)
 FROM (SELECT $$a$$ || x AS b,
@@ -513,6 +529,14 @@ FROM (SELECT $$a$$ || x AS b,
     -stdin-:<main>:4:10: Error: alternative is not implemented yet : 138
     	         ARRAY[ROW(x.*,ARRAY[1,2,3]),
 	         ^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	SELECT row_to_json(q,true)
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	SELECT row_to_json(q,true)
+	^
 <sql-statement>
 CREATE TEMP TABLE rows AS
 SELECT x, 'txt' || x as y
@@ -587,11 +611,6 @@ BEGIN;
 <sql-statement>
 SET LOCAL TIME ZONE 10.5;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: timezone
-    	SET LOCAL TIME ZONE 10.5;
-	^
 <sql-statement>
 select to_json(timestamptz '2014-05-28 12:22:35.614298-04');
 </sql-statement>
@@ -609,11 +628,6 @@ select to_json(timestamptz '2014-05-28 12:22:35.614298-04');
 <sql-statement>
 SET LOCAL TIME ZONE -8;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: timezone
-    	SET LOCAL TIME ZONE -8;
-	^
 <sql-statement>
 select to_json(timestamptz '2014-05-28 12:22:35.614298-04');
 </sql-statement>
@@ -743,6 +757,14 @@ SELECT json_agg(q)
     -stdin-:<main>:4:16: Error: alternative is not implemented yet : 138
     	               ARRAY[ROW(x.*,ARRAY[1,2,3]),
 	               ^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	--json_agg
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	--json_agg
+	^
 <sql-statement>
 SELECT json_agg(q ORDER BY x, y)
   FROM rows q;
@@ -906,6 +928,17 @@ select count(*) from
     -stdin-:<main>:4:19: Error: Generator functions are not allowed in: SELECT
     	     from (select unnest(array['f'||n,n::text])as g
 	                  ^
+    -stdin-:<main>:3:13: Error: Generator functions are not allowed in: SELECT
+    	    (select json_object_keys(json_object(array_agg(g)))
+	            ^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	-- test extending object_keys resultset - initial resultset size is 256
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	-- test extending object_keys resultset - initial resultset size is 256
+	^
 <sql-statement>
 -- nulls
 select (test_json->'field3') is null as expect_false

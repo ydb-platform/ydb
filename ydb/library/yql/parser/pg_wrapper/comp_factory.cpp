@@ -1,26 +1,4 @@
-#include <ydb/library/yql/parser/pg_wrapper/interface/interface.h>
-#include <ydb/library/yql/minikql/computation/mkql_block_impl.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_pack_impl.h>
-#include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
-#include <ydb/library/yql/minikql/computation/presort_impl.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_buffer.h>
-#include <ydb/library/yql/minikql/mkql_node_builder.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/minikql/mkql_type_builder.h>
-#include <ydb/library/yql/public/udf/arrow/block_reader.h>
-#include <ydb/library/yql/public/udf/arrow/block_builder.cpp>
-#include <ydb/library/yql/parser/pg_catalog/catalog.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_buf.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_results.h>
-#include <ydb/library/yql/public/udf/udf_value_builder.h>
-#include <ydb/library/yql/utils/fp_bits.h>
-#include <library/cpp/yson/detail.h>
-#include <util/string/split.h>
-#include <util/system/getpid.h>
+#include "pg_compat.h"
 
 #define TypeName PG_TypeName
 #define SortBy PG_SortBy
@@ -39,6 +17,7 @@ extern "C" {
 #include "catalog/pg_namespace_d.h"
 #include "catalog/pg_tablespace_d.h"
 #include "catalog/pg_type_d.h"
+#include "datatype/timestamp.h"
 #include "utils/builtins.h"
 #include "utils/memutils.h"
 #include "utils/array.h"
@@ -46,7 +25,9 @@ extern "C" {
 #include "utils/datum.h"
 #include "utils/lsyscache.h"
 #include "utils/datetime.h"
+#include "utils/numeric.h"
 #include "utils/typcache.h"
+#include "utils/memutils_internal.h"
 #include "mb/pg_wchar.h"
 #include "nodes/execnodes.h"
 #include "executor/executor.h"
@@ -73,9 +54,67 @@ extern "C" {
 #undef fopen
 #undef bind
 #undef locale_t
+constexpr auto PG_DAY = DAY;
+constexpr auto PG_SECOND = SECOND;
+constexpr auto PG_ERROR = ERROR;
+#undef DAY
+#undef SECOND
+#undef ERROR
 }
 
+#include <ydb/library/yql/core/pg_settings/guc_settings.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/interface.h>
+#include <ydb/library/yql/parser/pg_wrapper/memory_context.h>
+#include <ydb/library/yql/parser/pg_wrapper/pg_catalog_consts.h>
+#include <ydb/library/yql/minikql/computation/mkql_block_impl.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_pack_impl.h>
+#include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
+#include <ydb/library/yql/minikql/computation/presort_impl.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <ydb/library/yql/minikql/mkql_alloc.h>
+#include <ydb/library/yql/minikql/mkql_buffer.h>
+#include <ydb/library/yql/minikql/mkql_node_builder.h>
+#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <ydb/library/yql/minikql/mkql_type_builder.h>
+#include <ydb/library/binary_json/read.h>
+#include <ydb/library/uuid/uuid.h>
+#include <ydb/library/yql/public/udf/arrow/block_reader.h>
+#include <ydb/library/yql/public/udf/arrow/block_builder.cpp>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
+#include <ydb/library/yql/providers/common/codec/yql_codec_buf.h>
+#include <ydb/library/yql/providers/common/codec/yql_codec_results.h>
+#include <ydb/library/yql/public/udf/udf_value_builder.h>
+#include <ydb/library/yql/utils/fp_bits.h>
+#include <library/cpp/yson/detail.h>
+#include <util/string/split.h>
+#include <util/system/getpid.h>
+
 #include "arrow.h"
+#include "arrow_impl.h"
+
+#define DAY PG_DAY
+#define SECOND PG_SECOND
+#define ERROR PG_ERROR
+
+extern "C" {
+extern void *MkqlAlloc(MemoryContext context, Size size);
+extern void MkqlFree(void *pointer);
+extern void *MkqlRealloc(void *pointer, Size size);
+extern void MkqlReset(MemoryContext context);
+extern void MkqlDelete(MemoryContext context);
+extern MemoryContext MkqlGetChunkContext(void *pointer);
+extern Size MkqlGetChunkSpace(void *pointer);
+extern bool MkqlIsEmpty(MemoryContext context);
+extern void MkqlStats(MemoryContext context,
+						  MemoryStatsPrintFunc printfunc, void *passthru,
+						      MemoryContextCounters *totals,
+						  bool print_to_stderr);
+#ifdef MEMORY_CONTEXT_CHECKING
+extern void MkqlCheck(MemoryContext context);
+#endif
+}
 
 namespace NYql {
 
@@ -85,19 +124,6 @@ TVPtrHolder TVPtrHolder::Instance;
 
 // use 'false' for native format
 static __thread bool NeedCanonizeFp = false;
-
-struct TMainContext {
-    MemoryContextData Data;
-    MemoryContextData ErrorData;
-    MemoryContext PrevCurrentMemoryContext = nullptr;
-    MemoryContext PrevErrorContext = nullptr;
-    MemoryContext PrevCacheMemoryContext = nullptr;
-    RecordCacheState CurrentRecordCacheState = { NULL, NULL, NULL, 0, 0, INVALID_TUPLEDESC_IDENTIFIER };
-    RecordCacheState PrevRecordCacheState;
-    TimestampTz StartTimestamp;
-    pg_stack_base_t PrevStackBase;
-    TString LastError;
-};
 
 NUdf::TUnboxedValue CreatePgString(i32 typeLen, ui32 targetTypeId, TStringBuf data) {
     // typname => 'cstring', typlen => '-2'
@@ -114,16 +140,18 @@ NUdf::TUnboxedValue CreatePgString(i32 typeLen, ui32 targetTypeId, TStringBuf da
     }
 }
 
-void *MkqlAllocSetAlloc(MemoryContext context, Size size) {
+extern "C" void *MkqlAlloc(MemoryContext context, Size size) {
+    Y_UNUSED(context);
     auto fullSize = size + sizeof(TMkqlPAllocHeader);
     auto header = (TMkqlPAllocHeader*)MKQLAllocWithSize(fullSize, EMemorySubPool::Default);
     header->Size = size;
     header->U.Entry.Link(TlsAllocState->CurrentPAllocList);
-    header->Self = context;
+    Y_ENSURE((ui64(context) & MEMORY_CONTEXT_METHODID_MASK) == 0);
+    header->Self = ui64(context) | MCTX_UNUSED3_ID;
     return header + 1;
 }
 
-void MkqlAllocSetFree(MemoryContext context, void* pointer) {
+extern "C" void MkqlFree(void* pointer) {
     if (pointer) {
         auto header = ((TMkqlPAllocHeader*)pointer) - 1;
         // remove this block from list
@@ -133,58 +161,58 @@ void MkqlAllocSetFree(MemoryContext context, void* pointer) {
     }
 }
 
-void* MkqlAllocSetRealloc(MemoryContext context, void* pointer, Size size) {
+extern "C" void* MkqlRealloc(void* pointer, Size size) {
     if (!size) {
-        MkqlAllocSetFree(context, pointer);
+        MkqlFree(pointer);
         return nullptr;
     }
 
-    auto ret = MkqlAllocSetAlloc(context, size);
+    auto ret = MkqlAlloc(nullptr, size);
     if (pointer) {
         auto header = ((TMkqlPAllocHeader*)pointer) - 1;
         memmove(ret, pointer, header->Size);
-        MkqlAllocSetFree(context, pointer);
+        MkqlFree(pointer);
     }
 
     return ret;
 }
 
-void MkqlAllocSetReset(MemoryContext context) {
+extern "C" void MkqlReset(MemoryContext context) {
+    Y_UNUSED(context);
 }
 
-void MkqlAllocSetDelete(MemoryContext context) {
+extern "C" void MkqlDelete(MemoryContext context) {
+    Y_UNUSED(context);
 }
 
-Size MkqlAllocSetGetChunkSpace(MemoryContext context, void* pointer) {
+extern "C" MemoryContext MkqlGetChunkContext(void *pointer) {
+    return (MemoryContext)(((ui64*)pointer)[-1] & ~MEMORY_CONTEXT_METHODID_MASK);
+}
+
+extern "C" Size MkqlGetChunkSpace(void* pointer) {
+    Y_UNUSED(pointer);
     return 0;
 }
 
-bool MkqlAllocSetIsEmpty(MemoryContext context) {
+extern "C" bool MkqlIsEmpty(MemoryContext context) {
+    Y_UNUSED(context);
     return false;
 }
 
-void MkqlAllocSetStats(MemoryContext context,
+extern "C" void MkqlStats(MemoryContext context,
     MemoryStatsPrintFunc printfunc, void *passthru,
     MemoryContextCounters *totals,
     bool print_to_stderr) {
+    Y_UNUSED(context);
+    Y_UNUSED(printfunc);
+    Y_UNUSED(passthru);
+    Y_UNUSED(totals);
+    Y_UNUSED(print_to_stderr);
 }
 
-void MkqlAllocSetCheck(MemoryContext context) {
+extern "C" void MkqlCheck(MemoryContext context) {
+    Y_UNUSED(context);
 }
-
-const MemoryContextMethods MkqlMethods = {
-    MkqlAllocSetAlloc,
-    MkqlAllocSetFree,
-    MkqlAllocSetRealloc,
-    MkqlAllocSetReset,
-    MkqlAllocSetDelete,
-    MkqlAllocSetGetChunkSpace,
-    MkqlAllocSetIsEmpty,
-    MkqlAllocSetStats
-#ifdef MEMORY_CONTEXT_CHECKING
-    ,MkqlAllocSetCheck
-#endif
-};
 
 Datum MakeArrayOfText(const TVector<TString>& arr) {
     TVector<Datum> elems(arr.size());
@@ -217,7 +245,7 @@ public:
         }
 
         Y_ENSURE(inFuncId);
-        fmgr_info(inFuncId, &FInfo);
+        GetPgFuncAddr(inFuncId, FInfo);
         Y_ENSURE(!FInfo.fn_retset);
         Y_ENSURE(FInfo.fn_addr);
         Y_ENSURE(FInfo.fn_nargs >=1 && FInfo.fn_nargs <= 3);
@@ -281,6 +309,30 @@ private:
 
 class TPgTableContent : public TMutableComputationNode<TPgTableContent> {
     typedef TMutableComputationNode<TPgTableContent> TBaseComputation;
+private:
+    static NUdf::TUnboxedValuePod MakePgDatabaseDatnameColumn(ui32 index) {
+        std::string content;
+        switch (index) {
+            case 1: {
+                content = "template1";
+                break;
+            }
+            case 2: {
+                content = "template0";
+                break;
+            }
+            case PG_POSTGRES_DATABASE_ID: {
+                content = "postgres";
+                break;
+            }
+            case PG_CURRENT_DATABASE_ID: {
+                Y_ENSURE(PGGetGUCSetting("ydb_database"));
+                content = *PGGetGUCSetting("ydb_database");
+                break;
+            }
+        }
+        return PointerDatumToPod((Datum)(MakeFixedString(content, NAMEDATALEN)));
+    }
 public:
     TPgTableContent(
         TComputationMutables& mutables,
@@ -300,7 +352,7 @@ public:
                     {"typname", [](const NPg::TTypeDesc& desc) { return PointerDatumToPod((Datum)(MakeFixedString(desc.Name, NAMEDATALEN))); }},
                     {"typinput", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.InFuncId)); }},
                     {"typnamespace", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(PG_CATALOG_NAMESPACE)); }},
-                    {"typtype", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(CharGetDatum(desc.TypType)); }},
+                    {"typtype", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(CharGetDatum((char)desc.TypType)); }},
                     {"typrelid", [](const NPg::TTypeDesc&) { return ScalarDatumToPod(ObjectIdGetDatum(0)); }},
                     {"typelem", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.ElementTypeId)); }},
                 };
@@ -310,10 +362,9 @@ public:
                 static const std::pair<const char*, TPgDatabaseFiller> AllPgDatabaseFillers[] = {
                     {"oid", [](ui32 index) { return ScalarDatumToPod(ObjectIdGetDatum(index)); }},
                     {"datdba", [](ui32) { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
-                    {"datistemplate", [](ui32 index) { return ScalarDatumToPod(BoolGetDatum(index < 3)); }},
+                    {"datistemplate", [](ui32 index) { return ScalarDatumToPod(BoolGetDatum(index < PG_POSTGRES_DATABASE_ID)); }},
                     {"datallowconn", [](ui32 index) { return ScalarDatumToPod(BoolGetDatum(index != 2)); }},
-                    {"datname", [](ui32 index) { return PointerDatumToPod((Datum)(MakeFixedString(
-                        index == 1 ? "template1" : (index == 2 ? "template0" : "postgres"), NAMEDATALEN))); }},
+                    {"datname", MakePgDatabaseDatnameColumn},
                     {"encoding", [](ui32) { return ScalarDatumToPod(Int32GetDatum(PG_UTF8)); }},
                     {"datcollate", [](ui32) { return PointerDatumToPod((Datum)(MakeFixedString("C", NAMEDATALEN))); }},
                     {"datctype", [](ui32) { return PointerDatumToPod((Datum)(MakeFixedString("C", NAMEDATALEN))); }},
@@ -359,7 +410,7 @@ public:
                 static const std::pair<const char*, TPgAmFiller> AllPgAmFillers[] = {
                     {"oid", [](const NPg::TAmDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.Oid)); }},
                     {"amname", [](const NPg::TAmDesc& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.AmName, NAMEDATALEN)); }},
-                    {"amtype", [](const NPg::TAmDesc& desc) { return ScalarDatumToPod(CharGetDatum(desc.AmType)); }},
+                    {"amtype", [](const NPg::TAmDesc& desc) { return ScalarDatumToPod(CharGetDatum((char)desc.AmType)); }},
                 };
 
                 ApplyFillers(AllPgAmFillers, Y_ARRAY_SIZE(AllPgAmFillers), PgAmFillers_);
@@ -381,18 +432,20 @@ public:
                 ApplyFillers(AllPgTablesFillers, Y_ARRAY_SIZE(AllPgTablesFillers), PgTablesFillers_);
             } else if (Table_ == "pg_roles") {
                 static const std::pair<const char*, TPgRolesFiller> AllPgRolesFillers[] = {
-                    {"rolname", []() { return PointerDatumToPod((Datum)MakeFixedString("postgres", NAMEDATALEN)); }},
-                    {"oid", []() { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
-                    {"rolbypassrls", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
-                    {"rolsuper", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
-                    {"rolinherit", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
-                    {"rolcreaterole", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
-                    {"rolcreatedb", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
-                    {"rolcanlogin", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
-                    {"rolreplication", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
-                    {"rolconnlimit", []() { return ScalarDatumToPod(Int32GetDatum(-1)); }},
-                    {"rolvaliduntil", []() { return NUdf::TUnboxedValuePod(); }},
-                    {"rolconfig", []() { return PointerDatumToPod(MakeArrayOfText({
+                    {"rolname", [](ui32 index) {
+                        return PointerDatumToPod((Datum)MakeFixedString(index == 1 ? "postgres" : *PGGetGUCSetting("ydb_user"), NAMEDATALEN));
+                    }},
+                    {"oid", [](ui32 index) { return ScalarDatumToPod(ObjectIdGetDatum(index)); }},
+                    {"rolbypassrls", [](ui32) { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolsuper", [](ui32) { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolinherit", [](ui32) { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolcreaterole", [](ui32) { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolcreatedb", [](ui32) { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolcanlogin", [](ui32) { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolreplication", [](ui32) { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolconnlimit", [](ui32) { return ScalarDatumToPod(Int32GetDatum(-1)); }},
+                    {"rolvaliduntil", [](ui32) { return NUdf::TUnboxedValuePod(); }},
+                    {"rolconfig", [](ui32) { return PointerDatumToPod(MakeArrayOfText({
                         "search_path=public",
                         "default_transaction_isolation=serializable",
                         "standard_conforming_strings=on",
@@ -400,6 +453,26 @@ public:
                 };
 
                 ApplyFillers(AllPgRolesFillers, Y_ARRAY_SIZE(AllPgRolesFillers), PgRolesFillers_);
+            } else if (Table_ == "pg_user") {
+                static const std::pair<const char*, TPgUserFiller> AllPgUserFillers[] = {
+                    {"usename", [](ui32 index) {
+                        return PointerDatumToPod((Datum)MakeFixedString(index == 1 ? "postgres" : *PGGetGUCSetting("ydb_user"), NAMEDATALEN));
+                    }},
+                    {"usesysid", [](ui32 index) { return ScalarDatumToPod(ObjectIdGetDatum(index)); }},
+                    {"usecreatedb", [](ui32) { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"usesuper", [](ui32) { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"userepl", [](ui32) { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"usebypassrls", [](ui32) { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"passwd", [](ui32) { return NUdf::TUnboxedValuePod(); }},
+                    {"valuntil", [](ui32) { return NUdf::TUnboxedValuePod(); }},
+                    {"useconfig", [](ui32) { return PointerDatumToPod(MakeArrayOfText({
+                        "search_path=public",
+                        "default_transaction_isolation=serializable",
+                        "standard_conforming_strings=on",
+                    })); }},
+                };
+
+                ApplyFillers(AllPgUserFillers, Y_ARRAY_SIZE(AllPgUserFillers), PgUserFillers_);
             } else if (Table_ == "pg_stat_database") {
                 static const std::pair<const char*, TPgDatabaseStatFiller> AllPgDatabaseStatFillers[] = {
                     {"datid", [](ui32 index) { return ScalarDatumToPod(ObjectIdGetDatum(index ? 3 : 0)); }},
@@ -419,7 +492,7 @@ public:
                 static const std::pair<const char*, TPgClassFiller> AllPgClassFillers[] = {
                     {"oid", [](const NPg::TTableInfo& desc, ui32, ui32) { return ScalarDatumToPod(ObjectIdGetDatum(desc.Oid)); }},
                     {"relispartition", [](const NPg::TTableInfo&, ui32, ui32) { return ScalarDatumToPod(BoolGetDatum(false)); }},
-                    {"relkind", [](const NPg::TTableInfo& desc, ui32, ui32) { return ScalarDatumToPod(CharGetDatum(desc.Kind)); }},
+                    {"relkind", [](const NPg::TTableInfo& desc, ui32, ui32) { return ScalarDatumToPod(CharGetDatum((char)desc.Kind)); }},
                     {"relname", [](const NPg::TTableInfo& desc, ui32, ui32) { return PointerDatumToPod((Datum)MakeFixedString(desc.Name, NAMEDATALEN)); }},
                     {"relnamespace", [](const NPg::TTableInfo&, ui32 namespaceOid,ui32) { return ScalarDatumToPod(ObjectIdGetDatum(namespaceOid)); }},
                     {"relowner", [](const NPg::TTableInfo&, ui32, ui32) { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
@@ -435,7 +508,7 @@ public:
                     {"proowner", [](const NPg::TProcDesc&) { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
                     {"prorettype", [](const NPg::TProcDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.ResultType)); }},
                     {"prolang", [](const NPg::TProcDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.Lang)); }},
-                    {"prokind", [](const NPg::TProcDesc& desc) { return ScalarDatumToPod(CharGetDatum(desc.Kind)); }},
+                    {"prokind", [](const NPg::TProcDesc& desc) { return ScalarDatumToPod(CharGetDatum((char)desc.Kind)); }},
                 };
 
                 ApplyFillers(AllPgProcFillers, Y_ARRAY_SIZE(AllPgProcFillers), PgProcFillers_);
@@ -456,7 +529,7 @@ public:
             } else if (Table_ == "pg_aggregate") {
                 static const std::pair<const char*, TPgAggregateFiller> AllPgAggregateFillers[] = {
                     {"aggfnoid", [](const NPg::TAggregateDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.AggId)); }},
-                    {"aggkind", [](const NPg::TAggregateDesc& desc) { return ScalarDatumToPod(CharGetDatum(desc.Kind)); }},
+                    {"aggkind", [](const NPg::TAggregateDesc& desc) { return ScalarDatumToPod(CharGetDatum((char)desc.Kind)); }},
                     {"aggtranstype", [](const NPg::TAggregateDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.TransTypeId)); }},
                 };
 
@@ -469,7 +542,7 @@ public:
                 };
 
                 ApplyFillers(AllPgLanguageFillers, Y_ARRAY_SIZE(AllPgLanguageFillers), PgLanguageFillers_);
-            }            
+            }
         } else {
             if (Table_ == "tables") {
                 static const std::pair<const char*, TTablesFiller> AllTablesFillers[] = {
@@ -505,7 +578,7 @@ public:
     class TSystemColumnFiller {
     public:
         TSystemColumnFiller(TStructType* itemType, const TString& cluster, const TString& table) {
-            const auto& info = NPg::LookupStaticTable(NPg::TTableInfoKey(cluster, table));
+            const auto& info = NPg::LookupStaticTable(NPg::TTableInfoKey{cluster, table});
             TableOid = info.Oid;
             if (info.Kind != NPg::ERelKind::Relation) {
                 return;
@@ -544,7 +617,11 @@ public:
                     rows.emplace_back(row);
                 });
             } else if (Table_ == "pg_database") {
-                for (ui32 index = 1; index <= 3; ++index) {
+                TVector <ui32> dbOids = {1, 2, 3};
+                if (PGGetGUCSetting("ydb_database")) {
+                    dbOids.emplace_back(PG_CURRENT_DATABASE_ID);
+                }
+                for (ui32 index : dbOids) {
                     NUdf::TUnboxedValue* items;
                     auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgDatabaseFillers_.size(), items);
                     for (ui32 i = 0; i < PgDatabaseFillers_.size(); ++i) {
@@ -734,16 +811,33 @@ public:
                     rows.emplace_back(row);
                 }
             } else if (Table_ == "pg_roles") {
-                NUdf::TUnboxedValue* items;
-                auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgRolesFillers_.size(), items);
-                for (ui32 i = 0; i < PgRolesFillers_.size(); ++i) {
-                    if (PgRolesFillers_[i]) {
-                        items[i] = PgRolesFillers_[i]();
+                ui32 tableSize = PGGetGUCSetting("ydb_user") ? 2 : 1;
+                for (ui32 index = 1; index <= tableSize; ++index) {
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgRolesFillers_.size(), items);
+                    for (ui32 i = 0; i < PgRolesFillers_.size(); ++i) {
+                        if (PgRolesFillers_[i]) {
+                            items[i] = PgRolesFillers_[i](index);
+                        }
                     }
-                }
 
-                sysFiller.Fill(items);
-                rows.emplace_back(row);
+                    sysFiller.Fill(items);
+                    rows.emplace_back(row);
+                }
+            } else if (Table_ == "pg_user") {
+                ui32 tableSize = PGGetGUCSetting("ydb_user") ? 2 : 1;
+                for (ui32 index = 1; index <= tableSize; ++index) {
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgUserFillers_.size(), items);
+                    for (ui32 i = 0; i < PgUserFillers_.size(); ++i) {
+                        if (PgUserFillers_[i]) {
+                            items[i] = PgUserFillers_[i](index);
+                        }
+                    }
+
+                    sysFiller.Fill(items);
+                    rows.emplace_back(row);
+                }
             } else if (Table_ == "pg_stat_database") {
                 for (ui32 index = 0; index <= 1; ++index) {
                     NUdf::TUnboxedValue* items;
@@ -772,7 +866,7 @@ public:
                 });
 
                 for (const auto& t : tables) {
-                    const ui32 amOid = (t.Kind == NPg::ERelKind::Relation) ? btreeAmOid : 0;                    
+                    const ui32 amOid = (t.Kind == NPg::ERelKind::Relation) ? btreeAmOid : 0;
                     NUdf::TUnboxedValue* items;
                     auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgClassFillers_.size(), items);
                     for (ui32 i = 0; i < PgClassFillers_.size(); ++i) {
@@ -894,8 +988,10 @@ private:
     TVector<TPgNamespaceFiller> PgNamespaceFillers_;
     using TPgAmFiller = NUdf::TUnboxedValuePod(*)(const NPg::TAmDesc&);
     TVector<TPgAmFiller> PgAmFillers_;
-    using TPgRolesFiller = NUdf::TUnboxedValuePod(*)();
+    using TPgRolesFiller = NUdf::TUnboxedValuePod(*)(ui32 index);
     TVector<TPgRolesFiller> PgRolesFillers_;
+    using TPgUserFiller = NUdf::TUnboxedValuePod(*)(ui32 index);
+    TVector<TPgUserFiller> PgUserFillers_;
     using TPgDatabaseStatFiller = NUdf::TUnboxedValuePod(*)(ui32 index);
     TVector<TPgDatabaseStatFiller> PgDatabaseStatFillers_;
 
@@ -1048,11 +1144,14 @@ public:
     void Add(ui32 argOid)
     {
         PgArgNodes.emplace_back();
-        auto& v = PgArgNodes.back();
-        Zero(v);
-        v.xpr.type = T_Var;
-        v.vartype = argOid;
-        v.vartypmod = -1;
+        auto& p = PgArgNodes.back();
+        Zero(p);
+        p.xpr.type = T_Param;
+        p.paramkind = PARAM_EXTERN;
+        p.paramtype = argOid;
+        p.paramcollid = DEFAULT_COLLATION_OID;
+        p.paramtypmod = -1;
+        p.paramid = PgArgNodes.size();
     }
 
     Node* Build(const NPg::TProcDesc& procDesc) {
@@ -1069,12 +1168,13 @@ public:
         PgFuncNode.funcid = procDesc.ProcId;
         PgFuncNode.funcresulttype = procDesc.ResultType;
         PgFuncNode.funcretset = procDesc.ReturnSet;
+        PgFuncNode.funcvariadic = procDesc.VariadicArgType && procDesc.VariadicArgType != procDesc.VariadicType;
         PgFuncNode.args = PgFuncArgsList.get();
         return (Node*)&PgFuncNode;
     }
 
 private:
-    TVector<Var> PgArgNodes;
+    TVector<Param> PgArgNodes;
     std::unique_ptr<List, decltype(&free)> PgFuncArgsList;
     FuncExpr PgFuncNode;
 };
@@ -1097,7 +1197,7 @@ public:
     {
         Zero(FInfo);
         Y_ENSURE(Id);
-        fmgr_info(Id, &FInfo);
+        GetPgFuncAddr(Id, FInfo);
         Y_ENSURE(FInfo.fn_retset == isList);
         Y_ENSURE(FInfo.fn_addr);
         Y_ENSURE(ArgNodes.size() <= FUNC_MAX_ARGS);
@@ -1141,7 +1241,7 @@ protected:
     const TVector<TType*> ArgTypes;
     const TStructType* StructType;
     TVector<NPg::TTypeDesc> ArgDesc;
-    
+
     TPgArgsExprBuilder ArgsExprBuilder;
 };
 
@@ -1285,7 +1385,7 @@ private:
 
                     rsInfo.expectedDesc = BlessTupleDesc(rsInfo.expectedDesc);
                 }
-                
+
                 TupleSlot = MakeSingleTupleTableSlot(rsInfo.expectedDesc, &TTSOpsMinimalTuple);
                 for (ui32 i = 0; i < args.size(); ++i) {
                     const auto& value = args[i];
@@ -1356,7 +1456,7 @@ private:
                     FinishAndFree();
                     return false;
                 }
-                
+
                 slot_getallattrs(TupleSlot);
                 if (RetTypeDesc.TypeId == RECORDOID) {
                     if (StructType) {
@@ -1624,7 +1724,7 @@ public:
             const auto& cast = NPg::LookupCast(TargetElemDesc.TypeId, TargetElemDesc.TypeId);
 
             Y_ENSURE(cast.FunctionId);
-            fmgr_info(cast.FunctionId, &FInfo1);
+            GetPgFuncAddr(cast.FunctionId, FInfo1);
             Y_ENSURE(!FInfo1.fn_retset);
             Y_ENSURE(FInfo1.fn_addr);
             Y_ENSURE(FInfo1.fn_nargs >= 2 && FInfo1.fn_nargs <= 3);
@@ -1675,7 +1775,7 @@ public:
         }
 
         Y_ENSURE(funcId);
-        fmgr_info(funcId, &FInfo1);
+        GetPgFuncAddr(funcId, FInfo1);
         Y_ENSURE(!FInfo1.fn_retset);
         Y_ENSURE(FInfo1.fn_addr);
         Y_ENSURE(FInfo1.fn_nargs >= 1 && FInfo1.fn_nargs <= 3);
@@ -1687,7 +1787,7 @@ public:
 
         if (funcId2) {
             Y_ENSURE(funcId2);
-            fmgr_info(funcId2, &FInfo2);
+            GetPgFuncAddr(funcId2, FInfo2);
             Y_ENSURE(!FInfo2.fn_retset);
             Y_ENSURE(FInfo2.fn_addr);
             Y_ENSURE(FInfo2.fn_nargs == 1);
@@ -1903,6 +2003,24 @@ private:
     bool ConvertLength = false;
 };
 
+const i32 PgDateShift = UNIX_EPOCH_JDATE - POSTGRES_EPOCH_JDATE;
+const i64 PgTimestampShift = USECS_PER_DAY * (UNIX_EPOCH_JDATE - POSTGRES_EPOCH_JDATE);
+
+inline i32 Date2Pg(i32 value) {
+    return value + PgDateShift;
+}
+
+inline i64 Timestamp2Pg(i64 value) {
+    return value + PgTimestampShift;
+}
+
+inline Interval* Interval2Pg(i64 value) {
+    auto ret = (Interval*)palloc(sizeof(Interval));
+    ret->time = value % 86400000000ll;
+    ret->day = value / 86400000000ll;
+    ret->month = 0;
+    return ret;
+}
 
 template <NUdf::EDataSlot Slot>
 NUdf::TUnboxedValuePod ConvertToPgValue(NUdf::TUnboxedValuePod value, TMaybe<NUdf::EDataSlot> actualSlot = {}) {
@@ -1918,21 +2036,94 @@ NUdf::TUnboxedValuePod ConvertToPgValue(NUdf::TUnboxedValuePod value, TMaybe<NUd
     switch (Slot) {
     case NUdf::EDataSlot::Bool:
         return ScalarDatumToPod(BoolGetDatum(value.Get<bool>()));
+    case NUdf::EDataSlot::Int8:
+        return ScalarDatumToPod(Int16GetDatum(value.Get<i8>()));
+    case NUdf::EDataSlot::Uint8:
+        return ScalarDatumToPod(Int16GetDatum(value.Get<ui8>()));
     case NUdf::EDataSlot::Int16:
         return ScalarDatumToPod(Int16GetDatum(value.Get<i16>()));
+    case NUdf::EDataSlot::Uint16:
+        return ScalarDatumToPod(Int32GetDatum(value.Get<ui16>()));
     case NUdf::EDataSlot::Int32:
         return ScalarDatumToPod(Int32GetDatum(value.Get<i32>()));
+    case NUdf::EDataSlot::Uint32:
+        return ScalarDatumToPod(Int64GetDatum(value.Get<ui32>()));
     case NUdf::EDataSlot::Int64:
         return ScalarDatumToPod(Int64GetDatum(value.Get<i64>()));
+    case NUdf::EDataSlot::Uint64:
+        return PointerDatumToPod(NumericGetDatum(Uint64ToPgNumeric(value.Get<ui64>())));
+    case NUdf::EDataSlot::DyNumber:
+        return PointerDatumToPod(NumericGetDatum(DyNumberToPgNumeric(value)));
     case NUdf::EDataSlot::Float:
         return ScalarDatumToPod(Float4GetDatum(value.Get<float>()));
     case NUdf::EDataSlot::Double:
         return ScalarDatumToPod(Float8GetDatum(value.Get<double>()));
     case NUdf::EDataSlot::String:
+    case NUdf::EDataSlot::Yson:
     case NUdf::EDataSlot::Utf8: {
         const auto& ref = value.AsStringRef();
         return PointerDatumToPod((Datum)MakeVar(ref));
     }
+    case NUdf::EDataSlot::Date: {
+        auto res = Date2Pg(value.Get<ui16>());
+        return ScalarDatumToPod(res);
+    }
+    case NUdf::EDataSlot::Datetime: {
+        auto res = Timestamp2Pg(value.Get<ui32>() * 1000000ull);
+        return ScalarDatumToPod(res);
+    }
+    case NUdf::EDataSlot::Timestamp: {
+        auto res = Timestamp2Pg(value.Get<ui64>());
+        return ScalarDatumToPod(res);
+    }
+    case NUdf::EDataSlot::Interval:
+    case NUdf::EDataSlot::Interval64: {
+        auto res = Interval2Pg(value.Get<i64>());
+        return PointerDatumToPod(PointerGetDatum(res));
+    }
+    case NUdf::EDataSlot::Date32: {
+        auto res = Date2Pg(value.Get<i32>());
+        return ScalarDatumToPod(res);
+    }
+    case NUdf::EDataSlot::Datetime64: {
+        auto res = Timestamp2Pg(value.Get<i64>() * 1000000ull);
+        return ScalarDatumToPod(res);
+    }
+    case NUdf::EDataSlot::Timestamp64: {
+        auto res = Timestamp2Pg(value.Get<i64>());
+        return ScalarDatumToPod(res);
+    }
+    case NUdf::EDataSlot::Json: {
+        auto input = MakeCString(value.AsStringRef());
+        auto res = DirectFunctionCall1Coll(json_in, DEFAULT_COLLATION_OID, PointerGetDatum(input));
+        pfree(input);
+        return PointerDatumToPod(PointerGetDatum((void*)res));
+    }
+    case NUdf::EDataSlot::JsonDocument: {
+        auto str = NKikimr::NBinaryJson::SerializeToJson(value.AsStringRef());
+        auto res = (text*)DirectFunctionCall1Coll(jsonb_in, DEFAULT_COLLATION_OID, PointerGetDatum(str.c_str()));
+        return PointerDatumToPod(PointerGetDatum(res));
+    }
+    case NUdf::EDataSlot::Uuid: {
+        TString str;
+        str.reserve(36);
+        ui16 dw[8];
+        std::memcpy(dw, value.AsStringRef().Data(), sizeof(dw));
+        TStringOutput out(str);
+        NKikimr::NUuid::UuidToString(dw, out);
+        auto res = DirectFunctionCall1Coll(uuid_in, DEFAULT_COLLATION_OID, PointerGetDatum(str.c_str()));
+        return PointerDatumToPod(PointerGetDatum((void*)res));
+    }
+    case NUdf::EDataSlot::TzDate:
+    case NUdf::EDataSlot::TzDatetime:
+    case NUdf::EDataSlot::TzTimestamp: 
+    case NUdf::EDataSlot::TzDate32:
+    case NUdf::EDataSlot::TzDatetime64:
+    case NUdf::EDataSlot::TzTimestamp64: {
+        NUdf::TUnboxedValue str = ValueToString(Slot, value);
+        return PointerDatumToPod(PointerGetDatum(MakeVar(str.AsStringRef())));
+    }
+
     default:
         ythrow yexception() << "Unexpected data slot in ConvertToPgValue: " << Slot;
     }
@@ -1971,6 +2162,29 @@ NUdf::TUnboxedValuePod ConvertFromPgValue(NUdf::TUnboxedValuePod value, TMaybe<N
             auto x = (const text*)PointerDatumFromPod(value);
             return MakeString(GetVarBuf(x));
         }
+    case NUdf::EDataSlot::Date32: {
+        auto res = (i32)DatumGetInt32(ScalarDatumFromPod(value)) - PgDateShift;
+        if (res < NUdf::MIN_DATE32 || res > NUdf::MAX_DATE32) {
+            return NUdf::TUnboxedValuePod();
+        }
+
+        return NUdf::TUnboxedValuePod(res);
+    }
+    case NUdf::EDataSlot::Timestamp64: {
+        auto res = (i64)DatumGetInt64(ScalarDatumFromPod(value)) - PgTimestampShift;
+        if (res < NUdf::MIN_TIMESTAMP64 || res > NUdf::MAX_TIMESTAMP64) {
+            return NUdf::TUnboxedValuePod();
+        }
+
+        return NUdf::TUnboxedValuePod(res);
+    }
+    case NUdf::EDataSlot::Uuid: {
+        auto str = (char*)DirectFunctionCall1Coll(uuid_out, DEFAULT_COLLATION_OID, PointerDatumFromPod(value));
+        auto res = ParseUuid(NUdf::TStringRef(TStringBuf(str)));
+        pfree(str);
+        return res;
+    }
+
     default:
         ythrow yexception() << "Unexpected data slot in ConvertFromPgValue: " << Slot;
     }
@@ -2091,9 +2305,10 @@ template <NUdf::EDataSlot Slot>
 class TToPg : public TMutableComputationNode<TToPg<Slot>> {
     typedef TMutableComputationNode<TToPg<Slot>> TBaseComputation;
 public:
-    TToPg(TComputationMutables& mutables, IComputationNode* arg)
+    TToPg(TComputationMutables& mutables, IComputationNode* arg, TDataType* argType)
         : TBaseComputation(mutables)
         , Arg(arg)
+        , ArgType(argType)
     {
     }
 
@@ -2103,7 +2318,13 @@ public:
             return value.Release();
         }
 
-        return ConvertToPgValue<Slot>(value);
+        if constexpr (Slot == NUdf::EDataSlot::Decimal) {
+            auto decimalType = static_cast<TDataDecimalType*>(ArgType);
+            return PointerDatumToPod(NumericGetDatum(DecimalToPgNumeric(value,
+                decimalType->GetParams().first, decimalType->GetParams().second)));
+        } else {
+            return ConvertToPgValue<Slot>(value);
+        }
     }
 
 private:
@@ -2112,6 +2333,7 @@ private:
     }
 
     IComputationNode* const Arg;
+    TDataType* ArgType;
 };
 
 class TPgArray : public TMutableComputationNode<TPgArray> {
@@ -2506,6 +2728,50 @@ struct TFromPgExec {
             *res = builder.Build(true);
             break;
         }
+        case DATEOID: {
+            NUdf::TFixedSizeBlockReader<ui64, true> reader;
+            NUdf::TFixedSizeArrayBuilder<i32, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::int32(), *ctx->memory_pool(), length);
+            for (size_t i = 0; i < length; ++i) {
+                auto item = reader.GetItem(array, i);
+                if (!item) {
+                    builder.Add(NUdf::TBlockItem());
+                    continue;
+                }
+
+                auto res = (i32)DatumGetInt32((Datum)item.Get<ui64>()) - PgDateShift;
+                if (res < NUdf::MIN_DATE32 || res > NUdf::MAX_DATE32) {
+                    builder.Add(NUdf::TBlockItem());
+                    continue;
+                }
+
+                builder.Add(NUdf::TBlockItem(res));
+            }
+
+            *res = builder.Build(true);
+            break;
+        }
+        case TIMESTAMPOID: {
+            NUdf::TFixedSizeBlockReader<ui64, true> reader;
+            NUdf::TFixedSizeArrayBuilder<i64, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::int64(), *ctx->memory_pool(), length);
+            for (size_t i = 0; i < length; ++i) {
+                auto item = reader.GetItem(array, i);
+                if (!item) {
+                    builder.Add(NUdf::TBlockItem());
+                    continue;
+                }
+
+                auto res = (i64)DatumGetInt64((Datum)item.Get<ui64>()) - PgTimestampShift;
+                if (res < NUdf::MIN_TIMESTAMP64 || res > NUdf::MAX_TIMESTAMP64) {
+                    builder.Add(NUdf::TBlockItem());
+                    continue;
+                }
+
+                builder.Add(NUdf::TBlockItem(res));
+            }
+
+            *res = builder.Build(true);
+            break;
+        }
         default:
             ythrow yexception() << "Unsupported type: " << NPg::LookupType(SourceId).Name;
         }
@@ -2539,6 +2805,8 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeFromPgKernel(TType* inputType,
     case VARCHAROID:
     case BYTEAOID:
     case CSTRINGOID:
+    case DATEOID:
+    case TIMESTAMPOID:
         kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
         break;
     default:
@@ -2549,9 +2817,8 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeFromPgKernel(TType* inputType,
 }
 
 struct TToPgExec {
-    TToPgExec(ui32 targetId)
-        : TargetId(targetId)
-        , IsCString(NPg::LookupType(targetId).TypeLen == -2)
+    TToPgExec(NUdf::EDataSlot sourceDataSlot)
+        : SourceDataSlot(sourceDataSlot)
     {}
 
     arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
@@ -2559,8 +2826,8 @@ struct TToPgExec {
         Y_ENSURE(inputDatum.is_array());
         const auto& array= *inputDatum.array();
         size_t length = array.length;
-        switch (TargetId) {
-        case BOOLOID: {
+        switch (SourceDataSlot) {
+        case NUdf::EDataSlot::Bool: {
             auto inputPtr = array.GetValues<ui8>(1);
             auto outputPtr = res->array()->GetMutableValues<ui64>(1);
             for (size_t i = 0; i < length; ++i) {
@@ -2568,7 +2835,23 @@ struct TToPgExec {
             }
             break;
         }
-        case INT2OID: {
+        case NUdf::EDataSlot::Int8: {
+            auto inputPtr = array.GetValues<i8>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = Int16GetDatum(inputPtr[i]);
+            }
+            break;
+        }
+        case NUdf::EDataSlot::Uint8: {
+            auto inputPtr = array.GetValues<ui8>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = Int16GetDatum(inputPtr[i]);
+            }
+            break;
+        }
+        case NUdf::EDataSlot::Int16: {
             auto inputPtr = array.GetValues<i16>(1);
             auto outputPtr = res->array()->GetMutableValues<ui64>(1);
             for (size_t i = 0; i < length; ++i) {
@@ -2576,7 +2859,15 @@ struct TToPgExec {
             }
             break;
         }
-        case INT4OID: {
+        case NUdf::EDataSlot::Uint16: {
+            auto inputPtr = array.GetValues<ui16>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = Int32GetDatum(inputPtr[i]);
+            }
+            break;
+        }
+        case NUdf::EDataSlot::Int32: {
             auto inputPtr = array.GetValues<i32>(1);
             auto outputPtr = res->array()->GetMutableValues<ui64>(1);
             for (size_t i = 0; i < length; ++i) {
@@ -2584,7 +2875,15 @@ struct TToPgExec {
             }
             break;
         }
-        case INT8OID: {
+        case NUdf::EDataSlot::Uint32: {
+            auto inputPtr = array.GetValues<ui32>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = Int64GetDatum(inputPtr[i]);
+            }
+            break;
+        }
+        case NUdf::EDataSlot::Int64: {
             auto inputPtr = array.GetValues<i64>(1);
             auto outputPtr = res->array()->GetMutableValues<ui64>(1);
             for (size_t i = 0; i < length; ++i) {
@@ -2592,7 +2891,27 @@ struct TToPgExec {
             }
             break;
         }
-        case FLOAT4OID: {
+        case NUdf::EDataSlot::Uint64: {
+            NUdf::TFixedSizeBlockReader<ui64, true> reader;
+            NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
+            for (size_t i = 0; i < length; ++i) {
+                auto item = reader.GetItem(array, i);
+                if (!item) {
+                    builder.Add(NUdf::TBlockItem());
+                    continue;
+                }
+
+                auto res = Uint64ToPgNumeric(item.Get<ui64>());
+                auto ref = NUdf::TStringRef((const char*)res, GetFullVarSize((const text*)res));
+                auto ptr = builder.AddPgItem<false, 0>(ref);
+                UpdateCleanVarSize((text*)(ptr + sizeof(void*)), GetCleanVarSize((const text*)res));
+                pfree(res);
+            }
+
+            *res = builder.Build(true);
+            break;
+        }
+        case NUdf::EDataSlot::Float: {
             auto inputPtr = array.GetValues<float>(1);
             auto outputPtr = res->array()->GetMutableValues<ui64>(1);
             for (size_t i = 0; i < length; ++i) {
@@ -2600,7 +2919,7 @@ struct TToPgExec {
             }
             break;
         }
-        case FLOAT8OID: {
+        case NUdf::EDataSlot::Double: {
             auto inputPtr = array.GetValues<double>(1);
             auto outputPtr = res->array()->GetMutableValues<ui64>(1);
             for (size_t i = 0; i < length; ++i) {
@@ -2608,8 +2927,9 @@ struct TToPgExec {
             }
             break;
         }
-        case TEXTOID:
-        case BYTEAOID: {
+        case NUdf::EDataSlot::Utf8:
+        case NUdf::EDataSlot::String:
+        case NUdf::EDataSlot::Yson: {
             NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
             NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
             for (size_t i = 0; i < length; ++i) {
@@ -2627,43 +2947,171 @@ struct TToPgExec {
             *res = builder.Build(true);
             break;
         }
+        case NUdf::EDataSlot::Date: {
+            auto inputPtr = array.GetValues<ui16>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = Int32GetDatum(Date2Pg(inputPtr[i]));
+            }
+            break;
+        }
+        case NUdf::EDataSlot::Datetime: {
+            auto inputPtr = array.GetValues<ui32>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = Int64GetDatum(Timestamp2Pg(inputPtr[i] * 1000000ull));
+            }
+            break;
+        }
+        case NUdf::EDataSlot::Timestamp: {
+            auto inputPtr = array.GetValues<ui64>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = Int64GetDatum(Timestamp2Pg(inputPtr[i]));
+            }
+            break;
+        }
+        case NUdf::EDataSlot::Date32: {
+            auto inputPtr = array.GetValues<i32>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = Int32GetDatum(Date2Pg(inputPtr[i]));
+            }
+            break;
+        }
+        case NUdf::EDataSlot::Datetime64: {
+            auto inputPtr = array.GetValues<i64>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = Int64GetDatum(Timestamp2Pg(inputPtr[i] * 1000000ull));
+            }
+            break;
+        }
+        case NUdf::EDataSlot::Timestamp64: {
+            auto inputPtr = array.GetValues<i64>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = Int64GetDatum(Timestamp2Pg(inputPtr[i]));
+            }
+            break;
+        }
+        case NUdf::EDataSlot::Interval:
+        case NUdf::EDataSlot::Interval64: {
+            NUdf::TFixedSizeBlockReader<i64, true> reader;
+            NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
+            for (size_t i = 0; i < length; ++i) {
+                auto item = reader.GetItem(array, i);
+                if (!item) {
+                    builder.Add(NUdf::TBlockItem());
+                    continue;
+                }
+
+                Interval pgInterval;
+                pgInterval.time = item.Get<i64>() % 86400000000ll;
+                pgInterval.day = item.Get<i64>() / 86400000000ll;
+                pgInterval.month = 0;
+                auto ref = NUdf::TStringRef((const char*)&pgInterval, sizeof(Interval));
+                builder.AddPgItem<false, 0>(ref);
+            }
+
+            *res = builder.Build(true);
+            break;
+        }
+        case NUdf::EDataSlot::Json:
+        {
+            NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
+            NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
+            for (size_t i = 0; i < length; ++i) {
+                auto item = reader.GetItem(array, i);
+                if (!item) {
+                    builder.Add(NUdf::TBlockItem());
+                    continue;
+                }
+
+                auto input = MakeCString(item.AsStringRef());
+                auto res = (text*)DirectFunctionCall1Coll(json_in, DEFAULT_COLLATION_OID, PointerGetDatum(input));
+                pfree(input);
+                auto ref = NUdf::TStringRef((const char*)res, GetFullVarSize(res));
+                auto ptr = builder.AddPgItem<false, 0>(ref);
+                UpdateCleanVarSize((text*)(ptr + sizeof(void*)), GetCleanVarSize(res));
+                pfree(res);
+            }
+
+            *res = builder.Build(true);
+            break;
+        }
+        case NUdf::EDataSlot::JsonDocument:
+        {
+            NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
+            NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
+            for (size_t i = 0; i < length; ++i) {
+                auto item = reader.GetItem(array, i);
+                if (!item) {
+                    builder.Add(NUdf::TBlockItem());
+                    continue;
+                }
+
+                auto str = NKikimr::NBinaryJson::SerializeToJson(item.AsStringRef());
+                auto res = (text*)DirectFunctionCall1Coll(jsonb_in, DEFAULT_COLLATION_OID, PointerGetDatum(str.c_str()));
+                auto ref = NUdf::TStringRef((const char*)res, GetFullVarSize(res));
+                auto ptr = builder.AddPgItem<false, 0>(ref);
+                UpdateCleanVarSize((text*)(ptr + sizeof(void*)), GetCleanVarSize(res));
+                pfree(res);
+            }
+
+            *res = builder.Build(true);
+            break;
+        }
         default:
-            ythrow yexception() << "Unsupported type: " << NPg::LookupType(TargetId).Name;
+            ythrow yexception() << "Unsupported type: " << NUdf::GetDataTypeInfo(SourceDataSlot).Name;
         }
         return arrow::Status::OK();
     }
 
-    const ui32 TargetId;
-    const bool IsCString;
+    const NUdf::EDataSlot SourceDataSlot;
 };
 
-std::shared_ptr<arrow::compute::ScalarKernel> MakeToPgKernel(TType* inputType, TType* resultType, ui32 targetId) {
+std::shared_ptr<arrow::compute::ScalarKernel> MakeToPgKernel(TType* inputType, TType* resultType, NUdf::EDataSlot dataSlot) {
     const TVector<TType*> argTypes = { inputType };
 
     std::shared_ptr<arrow::DataType> returnArrowType;
     MKQL_ENSURE(ConvertArrowType(AS_TYPE(TBlockType, resultType)->GetItemType(), returnArrowType), "Unsupported arrow type");
-    auto exec = std::make_shared<TToPgExec>(targetId);
+    auto exec = std::make_shared<TToPgExec>(dataSlot);
     auto kernel = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
         [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         return exec->Exec(ctx, batch, res);
     });
 
-    switch (targetId) {
-    case BOOLOID:
-    case INT2OID:
-    case INT4OID:
-    case INT8OID:
-    case FLOAT4OID:
-    case FLOAT8OID:
+    switch (dataSlot) {
+    case NUdf::EDataSlot::Bool:
+    case NUdf::EDataSlot::Int8:
+    case NUdf::EDataSlot::Uint8:
+    case NUdf::EDataSlot::Int16:
+    case NUdf::EDataSlot::Uint16:
+    case NUdf::EDataSlot::Int32:
+    case NUdf::EDataSlot::Uint32:
+    case NUdf::EDataSlot::Int64:
+    case NUdf::EDataSlot::Float:
+    case NUdf::EDataSlot::Double:
+    case NUdf::EDataSlot::Date:
+    case NUdf::EDataSlot::Datetime:
+    case NUdf::EDataSlot::Timestamp:
+    case NUdf::EDataSlot::Date32:
+    case NUdf::EDataSlot::Datetime64:
+    case NUdf::EDataSlot::Timestamp64:
         break;
-    case TEXTOID:
-    case VARCHAROID:
-    case BYTEAOID:
-    case CSTRINGOID:
+    case NUdf::EDataSlot::String:
+    case NUdf::EDataSlot::Utf8:
+    case NUdf::EDataSlot::Interval:
+    case NUdf::EDataSlot::Interval64:
+    case NUdf::EDataSlot::Uint64:
+    case NUdf::EDataSlot::Yson:
+    case NUdf::EDataSlot::Json:
+    case NUdf::EDataSlot::JsonDocument:
         kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
         break;
     default:
-        ythrow yexception() << "Unsupported type: " << NPg::LookupType(targetId).Name;
+        ythrow yexception() << "Unsupported type: " << NUdf::GetDataTypeInfo(dataSlot).Name;
     }
 
     return kernel;
@@ -2693,7 +3141,7 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakePgKernel(TVector<TType*> argTy
     kernel->init = [procId, pgArgTypes](arrow::compute::KernelContext*, const arrow::compute::KernelInitArgs&) {
         auto state = std::make_unique<TPgKernelState>();
         Zero(state->flinfo);
-        fmgr_info(procId, &state->flinfo);
+        GetPgFuncAddr(procId, state->flinfo);
         YQL_ENSURE(state->flinfo.fn_addr);
         state->resultinfo = nullptr;
         state->context = nullptr;
@@ -2746,6 +3194,7 @@ TComputationNodeFactory GetPgFactory() {
                 const auto cluster = clusterData->AsValue().AsStringRef();
                 const auto table = tableData->AsValue().AsStringRef();
                 const auto returnType = callable.GetType()->GetReturnType();
+
                 return new TPgTableContent(ctx.Mutables, cluster, table, returnType);
             }
 
@@ -2866,6 +3315,12 @@ TComputationNodeFactory GetPgFactory() {
                     return new TFromPg<NUdf::EDataSlot::String, false>(ctx.Mutables, arg);
                 case CSTRINGOID:
                     return new TFromPg<NUdf::EDataSlot::Utf8, true>(ctx.Mutables, arg);
+                case DATEOID:
+                    return new TFromPg<NUdf::EDataSlot::Date32, true>(ctx.Mutables, arg);
+                case TIMESTAMPOID:
+                    return new TFromPg<NUdf::EDataSlot::Timestamp64, true>(ctx.Mutables, arg);
+                case UUIDOID:
+                    return new TFromPg<NUdf::EDataSlot::Uuid, true>(ctx.Mutables, arg);
                 default:
                     ythrow yexception() << "Unsupported type: " << NPg::LookupType(sourceId).Name;
                 }
@@ -2882,36 +3337,98 @@ TComputationNodeFactory GetPgFactory() {
 
             if (name == "ToPg") {
                 auto arg = LocateNode(ctx.NodeLocator, callable, 0);
-                auto returnType = callable.GetType()->GetReturnType();
-                auto targetId = AS_TYPE(TPgType, returnType)->GetTypeId();
-                switch (targetId) {
-                case BOOLOID:
-                    return new TToPg<NUdf::EDataSlot::Bool>(ctx.Mutables, arg);
-                case INT2OID:
-                    return new TToPg<NUdf::EDataSlot::Int16>(ctx.Mutables, arg);
-                case INT4OID:
-                    return new TToPg<NUdf::EDataSlot::Int32>(ctx.Mutables, arg);
-                case INT8OID:
-                    return new TToPg<NUdf::EDataSlot::Int64>(ctx.Mutables, arg);
-                case FLOAT4OID:
-                    return new TToPg<NUdf::EDataSlot::Float>(ctx.Mutables, arg);
-                case FLOAT8OID:
-                    return new TToPg<NUdf::EDataSlot::Double>(ctx.Mutables, arg);
-                case TEXTOID:
-                    return new TToPg<NUdf::EDataSlot::Utf8>(ctx.Mutables, arg);
-                case BYTEAOID:
-                    return new TToPg<NUdf::EDataSlot::String>(ctx.Mutables, arg);
+                auto inputType = callable.GetInput(0).GetStaticType();
+                auto argType = inputType;
+                if (argType->IsOptional()) {
+                    argType = AS_TYPE(TOptionalType, argType)->GetItemType();
+                }
+
+                auto dataType = AS_TYPE(TDataType, argType);
+                auto sourceDataSlot = dataType->GetDataSlot();
+                switch (*sourceDataSlot) {
+                case NUdf::EDataSlot::Bool:
+                    return new TToPg<NUdf::EDataSlot::Bool>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::Int8:
+                    return new TToPg<NUdf::EDataSlot::Int8>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::Uint8:
+                    return new TToPg<NUdf::EDataSlot::Uint8>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::Int16:
+                    return new TToPg<NUdf::EDataSlot::Int16>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::Uint16:
+                    return new TToPg<NUdf::EDataSlot::Uint16>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::Int32:
+                    return new TToPg<NUdf::EDataSlot::Int32>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::Uint32:
+                    return new TToPg<NUdf::EDataSlot::Uint32>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::Int64:
+                    return new TToPg<NUdf::EDataSlot::Int64>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::Uint64:
+                    return new TToPg<NUdf::EDataSlot::Uint64>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::Float:
+                    return new TToPg<NUdf::EDataSlot::Float>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::Double:
+                    return new TToPg<NUdf::EDataSlot::Double>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::Utf8:
+                    return new TToPg<NUdf::EDataSlot::Utf8>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::String:
+                    return new TToPg<NUdf::EDataSlot::String>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::Date:
+                    return new TToPg<NUdf::EDataSlot::Date>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::Datetime:
+                    return new TToPg<NUdf::EDataSlot::Datetime>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::Timestamp:
+                    return new TToPg<NUdf::EDataSlot::Timestamp>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::Interval:
+                    return new TToPg<NUdf::EDataSlot::Interval>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::TzDate:
+                    return new TToPg<NUdf::EDataSlot::TzDate>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::TzDatetime:
+                    return new TToPg<NUdf::EDataSlot::TzDatetime>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::TzTimestamp:
+                    return new TToPg<NUdf::EDataSlot::TzTimestamp>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::Date32:
+                    return new TToPg<NUdf::EDataSlot::Date32>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::Datetime64:
+                    return new TToPg<NUdf::EDataSlot::Datetime64>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::Timestamp64:
+                    return new TToPg<NUdf::EDataSlot::Timestamp64>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::Interval64:
+                    return new TToPg<NUdf::EDataSlot::Interval64>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::TzDate32:
+                    return new TToPg<NUdf::EDataSlot::TzDate32>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::TzDatetime64:
+                    return new TToPg<NUdf::EDataSlot::TzDatetime64>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::TzTimestamp64:
+                    return new TToPg<NUdf::EDataSlot::TzTimestamp64>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::Uuid:
+                    return new TToPg<NUdf::EDataSlot::Uuid>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::Yson:
+                    return new TToPg<NUdf::EDataSlot::Yson>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::Json:
+                    return new TToPg<NUdf::EDataSlot::Json>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::JsonDocument:
+                    return new TToPg<NUdf::EDataSlot::JsonDocument>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::Decimal:
+                    return new TToPg<NUdf::EDataSlot::Decimal>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::DyNumber:
+                    return new TToPg<NUdf::EDataSlot::DyNumber>(ctx.Mutables, arg, dataType);
                 default:
-                    ythrow yexception() << "Unsupported type: " << NPg::LookupType(targetId).Name;
+                    ythrow yexception() << "Unsupported type: " << NUdf::GetDataTypeInfo(*sourceDataSlot).Name;
                 }
             }
 
             if (name == "BlockToPg") {
                 auto arg = LocateNode(ctx.NodeLocator, callable, 0);
                 auto inputType = callable.GetInput(0).GetStaticType();
+                auto argType = AS_TYPE(TBlockType, inputType)->GetItemType();
+                if (argType->IsOptional()) {
+                    argType = AS_TYPE(TOptionalType, argType)->GetItemType();
+                }
+
+                auto sourceDataSlot = AS_TYPE(TDataType, argType)->GetDataSlot();
                 auto returnType = callable.GetType()->GetReturnType();
                 auto targetId = AS_TYPE(TPgType, AS_TYPE(TBlockType, returnType)->GetItemType())->GetTypeId();
-                auto kernel = MakeToPgKernel(inputType, returnType, targetId);
+                auto kernel = MakeToPgKernel(inputType, returnType, *sourceDataSlot);
                 return new TBlockFuncNode(ctx.Mutables, callable.GetType()->GetName(), { arg }, { inputType }, *kernel, kernel);
             }
 
@@ -2974,7 +3491,7 @@ TString PgValueToNativeText(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId) 
         FmgrInfo finfo;
         Zero(finfo);
         Y_ENSURE(outFuncId);
-        fmgr_info(outFuncId, &finfo);
+        GetPgFuncAddr(outFuncId, finfo);
         Y_ENSURE(!finfo.fn_retset);
         Y_ENSURE(finfo.fn_addr);
         Y_ENSURE(finfo.fn_nargs == 1);
@@ -2997,6 +3514,10 @@ TString PgValueToNativeText(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId) 
 template <typename F>
 void PgValueToNativeBinaryImpl(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId, bool needCanonizeFp, F f) {
     YQL_ENSURE(value); // null could not be represented as binary
+    if (!NPg::HasType(pgTypeId)) {
+        f(TStringBuf(value.AsStringRef()));
+        return;
+    }
 
     const bool oldNeedCanonizeFp = NeedCanonizeFp;
     NeedCanonizeFp = needCanonizeFp;
@@ -3022,7 +3543,7 @@ void PgValueToNativeBinaryImpl(const NUdf::TUnboxedValuePod& value, ui32 pgTypeI
         FmgrInfo finfo;
         Zero(finfo);
         Y_ENSURE(sendFuncId);
-        fmgr_info(sendFuncId, &finfo);
+        GetPgFuncAddr(sendFuncId, finfo);
         Y_ENSURE(!finfo.fn_retset);
         Y_ENSURE(finfo.fn_addr);
         Y_ENSURE(finfo.fn_nargs == 1);
@@ -3083,10 +3604,15 @@ TString PgValueToString(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId) {
     }
 }
 
-void WriteYsonValueInTableFormatPg(TOutputBuf& buf, TPgType* type, const NUdf::TUnboxedValuePod& value) {
+void WriteYsonValueInTableFormatPg(TOutputBuf& buf, TPgType* type, const NUdf::TUnboxedValuePod& value, bool topLevel) {
     using namespace NYson::NDetail;
     if (!value) {
-        buf.Write(EntitySymbol);
+        if (topLevel) {
+            buf.Write(BeginListSymbol);
+            buf.Write(EndListSymbol);
+        } else {
+            buf.Write(EntitySymbol);
+        }
         return;
     }
 
@@ -3162,6 +3688,16 @@ NUdf::TUnboxedValue ReadYsonValueInTableFormatPg(TPgType* type, char cmd, TInput
         return NUdf::TUnboxedValuePod();
     }
 
+    if (cmd == BeginListSymbol) {
+        cmd = buf.Read();
+        if (cmd == ListItemSeparatorSymbol) {
+            cmd = buf.Read();
+        }
+
+        YQL_ENSURE(cmd == EndListSymbol);
+        return NUdf::TUnboxedValuePod();
+    }
+
     switch (type->GetTypeId()) {
     case BOOLOID: {
         YQL_ENSURE(cmd == FalseMarker || cmd == TrueMarker, "Expected either true or false, but got: " << TString(cmd).Quote());
@@ -3216,6 +3752,10 @@ NUdf::TUnboxedValue ReadYsonValueInTableFormatPg(TPgType* type, char cmd, TInput
 }
 
 NUdf::TUnboxedValue PgValueFromNativeBinary(const TStringBuf binary, ui32 pgTypeId) {
+    if (!NPg::HasType(pgTypeId)) {
+        return MakeString(binary);
+    }
+    
     TPAllocScope call;
     StringInfoData stringInfo;
     stringInfo.data = (char*)binary.Data();
@@ -3234,7 +3774,7 @@ NUdf::TUnboxedValue PgValueFromNativeBinary(const TStringBuf binary, ui32 pgType
         FmgrInfo finfo;
         Zero(finfo);
         Y_ENSURE(receiveFuncId);
-        fmgr_info(receiveFuncId, &finfo);
+        GetPgFuncAddr(receiveFuncId, finfo);
         Y_ENSURE(!finfo.fn_retset);
         Y_ENSURE(finfo.fn_addr);
         Y_ENSURE(finfo.fn_nargs >= 1 && finfo.fn_nargs <= 3);
@@ -3274,7 +3814,7 @@ NUdf::TUnboxedValue PgValueFromNativeText(const TStringBuf text, ui32 pgTypeId) 
         FmgrInfo finfo;
         Zero(finfo);
         Y_ENSURE(inFuncId);
-        fmgr_info(inFuncId, &finfo);
+        GetPgFuncAddr(inFuncId, finfo);
         Y_ENSURE(!finfo.fn_retset);
         Y_ENSURE(finfo.fn_addr);
         Y_ENSURE(finfo.fn_nargs >= 1 && finfo.fn_nargs <= 3);
@@ -3578,16 +4118,26 @@ arrow::Datum MakePgScalar(NKikimr::NMiniKQL::TPgType* type, const NUdf::TBlockIt
     );
 }
 
-TMaybe<ui32> ConvertToPgType(NUdf::EDataSlot slot) {
+ui32 ConvertToPgType(NUdf::EDataSlot slot) {
     switch (slot) {
     case NUdf::EDataSlot::Bool:
         return BOOLOID;
+    case NUdf::EDataSlot::Int8:
+        return INT2OID;
+    case NUdf::EDataSlot::Uint8:
+        return INT2OID;
     case NUdf::EDataSlot::Int16:
         return INT2OID;
+    case NUdf::EDataSlot::Uint16:
+        return INT4OID;
     case NUdf::EDataSlot::Int32:
         return INT4OID;
+    case NUdf::EDataSlot::Uint32:
+        return INT8OID;
     case NUdf::EDataSlot::Int64:
         return INT8OID;
+    case NUdf::EDataSlot::Uint64:
+        return NUMERICOID;
     case NUdf::EDataSlot::Float:
         return FLOAT4OID;
     case NUdf::EDataSlot::Double:
@@ -3596,8 +4146,46 @@ TMaybe<ui32> ConvertToPgType(NUdf::EDataSlot slot) {
         return BYTEAOID;
     case NUdf::EDataSlot::Utf8:
         return TEXTOID;
-    default:
-        return Nothing();
+    case NUdf::EDataSlot::Yson:
+        return BYTEAOID;
+    case NUdf::EDataSlot::Json:
+        return JSONOID;
+    case NUdf::EDataSlot::Uuid:
+        return UUIDOID;
+    case NUdf::EDataSlot::Date:
+        return DATEOID;
+    case NUdf::EDataSlot::Datetime:
+        return TIMESTAMPOID;
+    case NUdf::EDataSlot::Timestamp:
+        return TIMESTAMPOID;
+    case NUdf::EDataSlot::Interval:
+        return INTERVALOID;
+    case NUdf::EDataSlot::TzDate:
+        return TEXTOID;
+    case NUdf::EDataSlot::TzDatetime:
+        return TEXTOID;
+    case NUdf::EDataSlot::TzTimestamp:
+        return TEXTOID;
+    case NUdf::EDataSlot::Decimal:
+        return NUMERICOID;
+    case NUdf::EDataSlot::DyNumber:
+        return NUMERICOID;
+    case NUdf::EDataSlot::JsonDocument:
+        return JSONBOID;
+    case NUdf::EDataSlot::Date32:
+        return DATEOID;
+    case NUdf::EDataSlot::Datetime64:
+        return TIMESTAMPOID;
+    case NUdf::EDataSlot::Timestamp64:
+        return TIMESTAMPOID;
+    case NUdf::EDataSlot::Interval64:
+        return INTERVALOID;
+    case NUdf::EDataSlot::TzDate32:
+        return TEXTOID;
+    case NUdf::EDataSlot::TzDatetime64:
+        return TEXTOID;
+    case NUdf::EDataSlot::TzTimestamp64:
+        return TEXTOID;
     }
 }
 
@@ -3618,7 +4206,15 @@ TMaybe<NUdf::EDataSlot> ConvertFromPgType(ui32 typeId) {
     case BYTEAOID:
         return NUdf::EDataSlot::String;
     case TEXTOID:
+    case VARCHAROID:
+    case CSTRINGOID:
         return NUdf::EDataSlot::Utf8;
+    case DATEOID:
+        return NUdf::EDataSlot::Date32;
+    case TIMESTAMPOID:
+        return NUdf::EDataSlot::Timestamp64;
+    case UUIDOID:
+        return NUdf::EDataSlot::Uuid;
     }
 
     return Nothing();
@@ -3966,7 +4562,7 @@ public:
 
         Y_ENSURE(hashProcId);;
         Zero(FInfoHash);
-        fmgr_info(hashProcId, &FInfoHash);
+        GetPgFuncAddr(hashProcId, FInfoHash);
         Y_ENSURE(!FInfoHash.fn_retset);
         Y_ENSURE(FInfoHash.fn_addr);
         Y_ENSURE(FInfoHash.fn_nargs == 1);
@@ -4078,19 +4674,19 @@ public:
             Y_ENSURE(lessProcId);
             Y_ENSURE(equalProcId);
 
-            fmgr_info(lessProcId, &FInfoLess);
+            GetPgFuncAddr(lessProcId, FInfoLess);
             Y_ENSURE(!FInfoLess.fn_retset);
             Y_ENSURE(FInfoLess.fn_addr);
             Y_ENSURE(FInfoLess.fn_nargs == 2);
 
-            fmgr_info(equalProcId, &FInfoEquals);
+            GetPgFuncAddr(equalProcId, FInfoEquals);
             Y_ENSURE(!FInfoEquals.fn_retset);
             Y_ENSURE(FInfoEquals.fn_addr);
             Y_ENSURE(FInfoEquals.fn_nargs == 2);
         }
 
         Y_ENSURE(compareProcId);
-        fmgr_info(compareProcId, &FInfoCompare);
+        GetPgFuncAddr(compareProcId, FInfoCompare);
         Y_ENSURE(!FInfoCompare.fn_retset);
         Y_ENSURE(FInfoCompare.fn_addr);
         Y_ENSURE(FInfoCompare.fn_nargs == 2);
@@ -4292,7 +4888,7 @@ public:
         Y_ENSURE(equalProcId);
 
         Zero(FInfoEquate);
-        fmgr_info(equalProcId, &FInfoEquate);
+        GetPgFuncAddr(equalProcId, FInfoEquate);
         Y_ENSURE(!FInfoEquate.fn_retset);
         Y_ENSURE(FInfoEquate.fn_addr);
         Y_ENSURE(FInfoEquate.fn_nargs == 2);
@@ -4352,14 +4948,16 @@ NUdf::IEquate::TPtr MakePgEquate(const TPgType* type) {
 
 void* PgInitializeMainContext() {
     auto ctx = new TMainContext();
+    static_assert(MEMORY_CONTEXT_METHODID_MASK < alignof(decltype(TMainContext::Data)));
     MemoryContextCreate((MemoryContext)&ctx->Data,
         T_AllocSetContext,
-        &MkqlMethods,
+        MCTX_UNUSED3_ID,
         nullptr,
         "mkql");
+    static_assert(MEMORY_CONTEXT_METHODID_MASK < alignof(decltype(TMainContext::ErrorData)));
     MemoryContextCreate((MemoryContext)&ctx->ErrorData,
         T_AllocSetContext,
-        &MkqlMethods,
+        MCTX_UNUSED3_ID,
         nullptr,
         "mkql-err");
     ctx->StartTimestamp = GetCurrentTimestamp();
@@ -4367,12 +4965,16 @@ void* PgInitializeMainContext() {
 }
 
 void PgDestroyMainContext(void* ctx) {
-    delete (TMainContext*)ctx;
+    auto typedCtx = (TMainContext*)ctx;
+    MemoryContextDeleteChildren((MemoryContext)&typedCtx->Data);
+    MemoryContextDeleteChildren((MemoryContext)&typedCtx->ErrorData);
+    delete typedCtx;
 }
 
 void PgAcquireThreadContext(void* ctx) {
     if (ctx) {
         pg_thread_init();
+        TExtensionsRegistry::Instance().InitThread();
         auto main = (TMainContext*)ctx;
         main->PrevCurrentMemoryContext = CurrentMemoryContext;
         main->PrevErrorContext = ErrorContext;
@@ -4384,6 +4986,9 @@ void PgAcquireThreadContext(void* ctx) {
         SetParallelStartTimestamps(main->StartTimestamp, main->StartTimestamp);
         main->PrevStackBase = set_stack_base();
         yql_error_report_active = true;
+        if (main->GUCSettings && main->GUCSettings->Get("ydb_database")) {
+            MyDatabaseId = PG_CURRENT_DATABASE_ID;
+        }
     }
 }
 
@@ -4397,7 +5002,41 @@ void PgReleaseThreadContext(void* ctx) {
         LoadRecordCacheState(&main->PrevRecordCacheState);
         restore_stack_base(main->PrevStackBase);
         yql_error_report_active = false;
+        MyDatabaseId = PG_POSTGRES_DATABASE_ID;
     }
+}
+
+class TExtensionLoader : public NYql::NPg::IExtensionLoader {
+public:
+    void Load(ui32 extensionIndex, const TString& name, const TString& path) final {
+        RebuildSysCache();
+        TExtensionsRegistry::Instance().Load(extensionIndex, name, path);
+    }
+};
+
+std::unique_ptr<NYql::NPg::IExtensionLoader> CreateExtensionLoader() {
+    return std::make_unique<TExtensionLoader>();
+}
+
+void PgSetGUCSettings(void* ctx, const TGUCSettings::TPtr& GUCSettings) {
+    if (ctx && GUCSettings) {
+        auto main = (TMainContext*)ctx;
+        main->GUCSettings = GUCSettings;
+        if (main->GUCSettings->Get("ydb_database")) {
+            MyDatabaseId = PG_CURRENT_DATABASE_ID;
+        }
+    }
+    PgCreateSysCacheEntries(ctx);
+}
+
+std::optional<std::string> PGGetGUCSetting(const std::string& key) {
+    if (TlsAllocState) {
+        auto ctx = (TMainContext*)TlsAllocState->MainContext;
+        if (ctx && ctx->GUCSettings) {
+            return ctx->GUCSettings->Get(key);
+        }
+    }
+    return std::nullopt;
 }
 
 extern "C" void yql_prepare_error(const char* msg) {
@@ -5027,7 +5666,7 @@ private:
     static inline void InitFunc(ui32 funcId, FmgrInfo* info, ui32 argCountMin, ui32 argCountMax) {
         Zero(*info);
         Y_ENSURE(funcId);
-        fmgr_info(funcId, info);
+        NYql::GetPgFuncAddr(funcId, *info);
         Y_ENSURE(info->fn_addr);
         Y_ENSURE(info->fn_nargs >= argCountMin && info->fn_nargs <= argCountMax);
     }

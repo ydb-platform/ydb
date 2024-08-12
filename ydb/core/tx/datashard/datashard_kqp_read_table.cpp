@@ -243,7 +243,7 @@ protected:
     TSmallVec<bool> SkipNullKeys;
     TKqpTableStats& ShardTableStats;
     TKqpTableStats& TaskTableStats;
-    using TTableIterator = std::conditional_t<IsReverse, NTable::TTableReverseIt, NTable::TTableIt>;
+    using TTableIterator = std::conditional_t<IsReverse, NTable::TTableReverseIter, NTable::TTableIter>;
     mutable TAutoPtr<TTableIterator> Iterator;
     mutable std::optional<ui64> Remains;
 };
@@ -269,10 +269,10 @@ private:
     EFetchResult ReadValue(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const final {
         if (!this->Iterator) {
             TVector<TCell> fromCells;
-            BuildKeyTupleCells(ParseResult.FromTuple->GetType(), FromNode->GetValue(ctx), fromCells, *ctx.TypeEnv);
+            BuildKeyTupleCells(ParseResult.FromTuple->GetType(), FromNode->GetValue(ctx), fromCells, ctx.TypeEnv);
 
             TVector<TCell> toCells;
-            BuildKeyTupleCells(ParseResult.ToTuple->GetType(), ToNode->GetValue(ctx), toCells, *ctx.TypeEnv);
+            BuildKeyTupleCells(ParseResult.ToTuple->GetType(), ToNode->GetValue(ctx), toCells, ctx.TypeEnv);
 
             auto range = TTableRange(fromCells, ParseResult.FromInclusive, toCells, ParseResult.ToInclusive);
 
@@ -328,7 +328,7 @@ private:
         if (!RangeId) {
             const auto localTid = this->ComputeCtx.GetLocalTableId(ParseResult.TableId);
             const auto* tableInfo = this->ComputeCtx.Database->GetScheme().GetTableInfo(localTid);
-            Ranges = CreateTableRanges<IsReverse>(ParseResult, RangesNode, *ctx.TypeEnv, ctx, tableInfo->KeyColumns.size());
+            Ranges = CreateTableRanges<IsReverse>(ParseResult, RangesNode, ctx.TypeEnv, ctx, tableInfo->KeyColumns.size());
             RangeId = 0;
 
             if (ItemsLimit) {

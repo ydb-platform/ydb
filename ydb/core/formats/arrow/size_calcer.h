@@ -1,6 +1,8 @@
 #pragma once
 #include "special_keys.h"
+
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/conclusion/result.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
@@ -72,13 +74,13 @@ private:
     YDB_READONLY_DEF(TString, Data);
     YDB_READONLY(ui32, RowsCount, 0);
     YDB_READONLY(ui32, RawBytes, 0);
-    std::optional<TFirstLastSpecialKeys> SpecialKeys;
+    std::optional<TString> SpecialKeys;
 public:
     size_t GetSize() const {
         return Data.size();
     }
 
-    const TFirstLastSpecialKeys& GetSpecialKeysSafe() const {
+    const TString& GetSpecialKeysSafe() const {
         AFL_VERIFY(SpecialKeys);
         return *SpecialKeys;
     }
@@ -89,11 +91,11 @@ public:
 
     TString DebugString() const;
 
-    static bool BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplitttingContext& context, std::vector<TSerializedBatch>& result, TString* errorMessage);
-    static bool BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplitttingContext& context, std::optional<TSerializedBatch>& sbL, std::optional<TSerializedBatch>& sbR, TString* errorMessage);
+    static TConclusion<std::vector<TSerializedBatch>> BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplitttingContext& context);
+    static TConclusionStatus BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplitttingContext& context, std::optional<TSerializedBatch>& sbL, std::optional<TSerializedBatch>& sbR);
     static TSerializedBatch Build(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplitttingContext& context);
 
-    TSerializedBatch(TString&& schemaData, TString&& data, const ui32 rowsCount, const ui32 rawBytes, const std::optional<TFirstLastSpecialKeys>& specialKeys)
+    TSerializedBatch(TString&& schemaData, TString&& data, const ui32 rowsCount, const ui32 rawBytes, const std::optional<TString>& specialKeys)
         : SchemaData(schemaData)
         , Data(data)
         , RowsCount(rowsCount)
@@ -104,35 +106,15 @@ public:
     }
 };
 
-class TSplitBlobResult {
-private:
-    YDB_READONLY_DEF(std::vector<TSerializedBatch>, Result);
-    YDB_ACCESSOR_DEF(TString, ErrorMessage);
-public:
-    TSplitBlobResult(std::vector<TSerializedBatch>&& result)
-        : Result(std::move(result)) {
-
-    }
-    TSplitBlobResult(const TString& errorMessage)
-        : ErrorMessage(errorMessage) {
-
-    }
-    bool operator!() const {
-        return !!ErrorMessage;
-    }
-
-    std::vector<TSerializedBatch>&& ReleaseResult() {
-        return std::move(Result);
-    }
-};
-
-TSplitBlobResult SplitByBlobSize(const std::shared_ptr<arrow::RecordBatch>& batch, const TBatchSplitttingContext& context);
+TConclusion<std::vector<TSerializedBatch>> SplitByBlobSize(const std::shared_ptr<arrow::RecordBatch>& batch, const TBatchSplitttingContext& context);
 
 // Return size in bytes including size of bitmap mask
 ui64 GetBatchDataSize(const std::shared_ptr<arrow::RecordBatch>& batch);
+ui64 GetTableDataSize(const std::shared_ptr<arrow::Table>& batch);
 // Return size in bytes including size of bitmap mask
 ui64 GetArrayMemorySize(const std::shared_ptr<arrow::ArrayData>& data);
 ui64 GetBatchMemorySize(const std::shared_ptr<arrow::RecordBatch>&batch);
+ui64 GetTableMemorySize(const std::shared_ptr<arrow::Table>& batch);
 // Return size in bytes *not* including size of bitmap mask
 ui64 GetArrayDataSize(const std::shared_ptr<arrow::Array>& column);
 

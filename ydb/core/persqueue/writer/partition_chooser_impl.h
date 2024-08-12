@@ -10,7 +10,6 @@
 namespace NKikimr::NPQ {
 namespace NPartitionChooser {
 
-// For testing purposes
 struct TAsIsSharder {
     ui32 operator()(const TString& sourceId, ui32 totalShards) const;
 };
@@ -19,7 +18,6 @@ struct TMd5Sharder {
     ui32 operator()(const TString& sourceId, ui32 totalShards) const;
 };
 
-// For testing purposes
 struct TAsIsConverter {
     TString operator()(const TString& sourceId) const;
 };
@@ -94,10 +92,10 @@ TBoundaryChooser<THasher>::TBoundaryChooser(const NKikimrSchemeOp::TPersQueueGro
 template<class THasher>
 const typename TBoundaryChooser<THasher>::TPartitionInfo* TBoundaryChooser<THasher>::GetPartition(const TString& sourceId) const {
     const auto keyHash = Hasher(sourceId);
-    auto result = std::upper_bound(Partitions.begin(), Partitions.end(), keyHash, 
+    auto result = std::upper_bound(Partitions.begin(), Partitions.end(), keyHash,
                     [](const TString& value, const TPartitionInfo& partition) { return !partition.ToBound || value < partition.ToBound; });
     Y_ABORT_UNLESS(result != Partitions.end(), "Partition not found. Maybe wrong partitions bounds. Topic '%s'", TopicName.c_str());
-    return result;        
+    return result;
 }
 
 template<class THasher>
@@ -130,7 +128,7 @@ THashChooser<THasher>::THashChooser(const NKikimrSchemeOp::TPersQueueGroupDescri
         }
     }
 
-    std::sort(Partitions.begin(), Partitions.end(), 
+    std::sort(Partitions.begin(), Partitions.end(),
         [](const TPartitionInfo& a, const TPartitionInfo& b) { return a.PartitionId < b.PartitionId; });
 }
 
@@ -144,7 +142,7 @@ const typename THashChooser<THasher>::TPartitionInfo* THashChooser<THasher>::Get
 
 template<class THasher>
 const typename THashChooser<THasher>::TPartitionInfo* THashChooser<THasher>::GetPartition(ui32 partitionId) const {
-    auto it = std::lower_bound(Partitions.begin(), Partitions.end(), partitionId, 
+    auto it = std::lower_bound(Partitions.begin(), Partitions.end(), partitionId,
                     [](const TPartitionInfo& partition, const ui32 value) { return value > partition.PartitionId; });
     if (it == Partitions.end()) {
         return nullptr;

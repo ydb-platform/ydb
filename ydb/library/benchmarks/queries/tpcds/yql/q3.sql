@@ -1,13 +1,15 @@
 {% include 'header.sql.jinja' %}
 
 -- NB: Subquerys
-
+$todecimal = ($x) -> {
+  return cast(cast($x as string?) as decimal(7,2))
+};
 
 -- start query 1 in stream 0 using template query3.tpl and seed 2031708268
 select  dt.d_year
        ,item.i_brand_id brand_id
        ,item.i_brand brand
-       ,sum(ss_sales_price) sum_agg
+       ,sum($todecimal(ss_sales_price)) sum_agg
  from  {{date_dim}} dt
       cross join {{store_sales}} as store_sales
       cross join {{item}} as item

@@ -43,6 +43,8 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
         case TReplication::ETargetKind::Table:
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
             break;
+        case TReplication::ETargetKind::IndexTable:
+            Y_ABORT("unreachable");
         }
 
         Send(PipeCache, new TEvPipeCache::TEvForward(ev.Release(), SchemeShardId, true));
@@ -156,7 +158,13 @@ public:
         if (!DstPathId) {
             Success();
         } else {
-            AllocateTxId();
+            switch (Kind) {
+            case TReplication::ETargetKind::Table:
+                return AllocateTxId();
+            case TReplication::ETargetKind::IndexTable:
+                // indexed table will be removed along with its indexes
+                return Success();
+            }
         }
     }
 
@@ -183,7 +191,7 @@ private:
 
 }; // TDstRemover
 
-IActor* CreateDstRemover(TReplication::TPtr replication, ui64 targetId, const TActorContext& ctx) {
+IActor* CreateDstRemover(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
     return CreateDstRemover(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),

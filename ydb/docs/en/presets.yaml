@@ -1,2 +1,24 @@
 default:
   lang: en
+  pub-cover-size: 700x400
+  team:
+      blinkov:
+        name: Ivan Blinkov
+        position: VP, Product and Open Source
+        profile: https://www.linkedin.com/in/ivanblinkov/
+      bondar:
+        name: Oleg Bondar
+        position: CPO YDB
+        profile: https://www.linkedin.com/in/olegbondar2000/
+      ivanov:
+        name: Evgenii Ivanov
+        position: Senior developer
+        profile: https://www.linkedin.com/in/eivanov89/  
+      ozeritskiy:
+        name: Alexey Ozeritskiy
+        position: Lead Software Engineer
+        profile: https://www.linkedin.com/in/alexey-ozeritskiy/
+      smirnov:
+        name: Alexander Smirnov
+        position: Technology Expert at Nebius
+        profile: https://www.linkedin.com/in/alexander-smirnov-bb990434/

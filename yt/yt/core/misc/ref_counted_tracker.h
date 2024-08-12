@@ -1,12 +1,12 @@
 #pragma once
 
 #include "public.h"
-#include "source_location.h"
 #include "singleton.h"
 
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
 
 #include <library/cpp/yt/misc/tls.h>
+#include <library/cpp/yt/misc/source_location.h>
 
 namespace NYT {
 
@@ -50,6 +50,15 @@ class TRefCountedTracker
     : private TNonCopyable
 {
 public:
+    struct TLocalSlot;
+    using TLocalSlots = std::vector<TLocalSlot>;
+
+    struct TGlobalSlot;
+    using TGlobalSlots = std::vector<TGlobalSlot>;
+
+    class TNamedSlot;
+    using TNamedStatistics = std::vector<TNamedSlot>;
+
     static TRefCountedTracker* Get();
 
     TRefCountedTypeCookie GetCookie(
@@ -89,25 +98,6 @@ private:
         bool operator < (const TKey& other) const;
         bool operator == (const TKey& other) const;
     };
-
-    struct TLocalSlot;
-    using TLocalSlots = std::vector<TLocalSlot>;
-
-    struct TGlobalSlot;
-    using TGlobalSlots = std::vector<TGlobalSlot>;
-
-    class TNamedSlot;
-    using TNamedStatistics = std::vector<TNamedSlot>;
-
-    // nullptr if not initialized or already destroyed
-    static YT_THREAD_LOCAL(TLocalSlots*) LocalSlots_;
-
-    // nullptr if not initialized or already destroyed
-    static YT_THREAD_LOCAL(TLocalSlot*) LocalSlotsBegin_;
-
-    //  0 if not initialized
-    // -1 if already destroyed
-    static YT_THREAD_LOCAL(int) LocalSlotsSize_;
 
     mutable NThreading::TForkAwareSpinLock SpinLock_;
     std::map<TKey, TRefCountedTypeCookie> KeyToCookie_;

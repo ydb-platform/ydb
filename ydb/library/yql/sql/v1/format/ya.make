@@ -1,6 +1,5 @@
 LIBRARY()
 
-OWNER(g:yql)
 
 SRCS(
     sql_format.cpp

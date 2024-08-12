@@ -59,7 +59,7 @@
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "Aggregate-Filter-TableFullScan",
+                                                                "Node Type": "Aggregate-Filter-TableRangeScan",
                                                                 "Operators": [
                                                                     {
                                                                         "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1)}",
@@ -78,25 +78,24 @@
                                                                             }
                                                                         ],
                                                                         "Name": "Filter",
-                                                                        "Predicate": "item.CounterID == 62 And item.EventDate >= \"15887\" And item.EventDate <= \"15917\" And item.DontCountHits == 0 And item.IsRefresh == 0 And item.URL != \"\""
+                                                                        "Predicate": "item.DontCountHits == 0 And item.IsRefresh == 0 And item.URL != \"\""
                                                                     },
                                                                     {
                                                                         "Inputs": [],
-                                                                        "Name": "TableFullScan",
+                                                                        "Name": "TableRangeScan",
                                                                         "ReadColumns": [
-                                                                            "CounterID",
                                                                             "DontCountHits",
-                                                                            "EventDate",
                                                                             "IsRefresh",
                                                                             "URL"
                                                                         ],
-                                                                        "ReadRanges": [
-                                                                            "EventTime (-\u221e, +\u221e)",
-                                                                            "CounterID (-\u221e, +\u221e)",
-                                                                            "EventDate (-\u221e, +\u221e)",
+                                                                        "ReadRange": [
+                                                                            "CounterID (62)",
+                                                                            "EventDate [15887, 15917]",
                                                                             "UserID (-\u221e, +\u221e)",
+                                                                            "EventTime (-\u221e, +\u221e)",
                                                                             "WatchID (-\u221e, +\u221e)"
                                                                         ],
+                                                                        "Scan": "Parallel",
                                                                         "Table": "clickbench/plans/row/hits"
                                                                     }
                                                                 ],
@@ -126,20 +125,20 @@
                     "reads": [
                         {
                             "columns": [
-                                "CounterID",
                                 "DontCountHits",
-                                "EventDate",
                                 "IsRefresh",
                                 "URL"
                             ],
+                            "lookup_by": [
+                                "CounterID (62)"
+                            ],
                             "scan_by": [
-                                "EventTime (-\u221e, +\u221e)",
-                                "CounterID (-\u221e, +\u221e)",
-                                "EventDate (-\u221e, +\u221e)",
+                                "EventDate [15887, 15917]",
                                 "UserID (-\u221e, +\u221e)",
+                                "EventTime (-\u221e, +\u221e)",
                                 "WatchID (-\u221e, +\u221e)"
                             ],
-                            "type": "FullScan"
+                            "type": "Scan"
                         }
                     ]
                 }

@@ -10,7 +10,7 @@
 // basic_binary_iarchive.hpp
 //
 // archives stored as native binary - this should be the fastest way
-// to archive the state of a group of obects.  It makes no attempt to
+// to archive the state of a group of objects.  It makes no attempt to
 // convert to any canonical form.
 
 // IN GENERAL, ARCHIVES CREATED WITH THIS CLASS WILL NOT BE READABLE
@@ -69,7 +69,7 @@ protected:
     // intermediate level to support override of operators
     // fot templates in the absence of partial function
     // template ordering. If we get here pass to base class
-    // note extra nonsense to sneak it pass the borland compiers
+    // note extra nonsense to sneak it pass the borland compilers
     typedef detail::common_iarchive<Archive> detail_common_iarchive;
     template<class T>
     void load_override(T & t){

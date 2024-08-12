@@ -1,0 +1,6 @@
+{"_yql_row_spec"={
+    "Type"=["StructType";[
+        ["a";["DataType";"Interval"]];
+        ["b";["DataType";"Interval64"]];
+    ]];
+}}

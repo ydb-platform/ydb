@@ -23,6 +23,8 @@ namespace NYql {
             const TUserDataTable& UserData;
             const THashMap<TString, TString>& Modules;
             TString LLVMSettings;
+            EBlockEngineMode BlockEngineMode;
+            IOutputStream* ExprOutputStream;
             NKikimr::NUdf::ICountersProvider* CountersProvider_;
             ETranslationMode TranslationMode_;
             ui16 SyntaxVersion_;
@@ -41,6 +43,8 @@ namespace NYql {
                 const TUserDataTable& UserData,
                 const THashMap<TString, TString>& Modules,
                 TString LLVMSettings,
+                EBlockEngineMode BlockEngineMode,
+                IOutputStream* ExprOutputStream,
                 NKikimr::NUdf::ICountersProvider* CountersProvider,
                 ETranslationMode translationMode,
                 ui16 syntaxVersion,
@@ -58,6 +62,8 @@ namespace NYql {
                 , UserData(UserData)
                 , Modules(Modules)
                 , LLVMSettings(std::move(LLVMSettings))
+                , BlockEngineMode(BlockEngineMode)
+                , ExprOutputStream(ExprOutputStream)
                 , CountersProvider_(CountersProvider)
                 , TranslationMode_(translationMode)
                 , SyntaxVersion_(syntaxVersion)
@@ -82,10 +88,14 @@ namespace NYql {
             TString SerializedProgram_;
             TVector<const TStructExprType*> InputTypes_;
             TVector<const TStructExprType*> OriginalInputTypes_;
+            TVector<const TStructExprType*> RawInputTypes_;
             const TTypeAnnotationNode* OutputType_;
+            const TTypeAnnotationNode* RawOutputType_;
             TVector<THashSet<TString>> AllColumns_;
             TVector<THashSet<TString>> UsedColumns_;
             TString LLVMSettings_;
+            EBlockEngineMode BlockEngineMode_;
+            IOutputStream* ExprOutputStream_;
             NKikimr::NUdf::ICountersProvider* CountersProvider_;
             ui64 NativeYtTypeFlags_;
             TMaybe<ui64> DeterministicTimeProviderSeed_;
@@ -117,6 +127,7 @@ namespace NYql {
                 IModuleResolver::TPtr moduleResolver,
                 ui16 syntaxVersion,
                 const THashMap<TString, TString>& modules,
+                const TInputSpecBase& inputSpec,
                 const TOutputSpecBase& outputSpec,
                 EProcessorMode processorMode);
         };

@@ -144,7 +144,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         }
 
     private:
-        TActorId PipeCache = MakePipePeNodeCacheID(false);
+        TActorId PipeCache = MakePipePerNodeCacheID(false);
         TActorId Owner;
         TActorId Client;
 
@@ -397,9 +397,9 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
             : Table(table)
         {
             if (testActorType == ETestActorType::SorceRead) {
-                InterceptReadActorPipeCache(MakePipePeNodeCacheID(false));
+                InterceptReadActorPipeCache(MakePipePerNodeCacheID(false));
             } else if (testActorType == ETestActorType::StreamLookup) {
-                InterceptStreamLookupActorPipeCache(MakePipePeNodeCacheID(false));
+                InterceptStreamLookupActorPipeCache(MakePipePerNodeCacheID(false));
             }
             
             if (providedServer) {

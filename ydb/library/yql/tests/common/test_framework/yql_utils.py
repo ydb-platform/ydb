@@ -481,11 +481,36 @@ def is_canonize_peephole(cfg):
     return False
 
 
+def is_peephole_use_blocks(cfg):
+    for item in cfg:
+        if item[0] == 'peephole_use_blocks':
+            return True
+    return False
+
+
 def is_canonize_lineage(cfg):
     for item in cfg:
         if item[0] == 'canonize_lineage':
             return True
     return False
+
+
+def is_canonize_yt(cfg):
+    for item in cfg:
+        if item[0] == 'canonize_yt':
+            return True
+    return False
+
+def is_with_final_result_issues(cfg):
+    for item in cfg:
+        if item[0] == 'with_final_result_issues':
+            return True
+    return False
+
+def skip_test_if_required(cfg):
+    for item in cfg:
+        if item[0] == 'skip_test':
+            pytest.skip(item[1])
 
 
 def get_pragmas(cfg):
@@ -823,8 +848,11 @@ def normalize_table_yson(y):
     return y
 
 
-def dump_table_yson(res_yson):
-    return cyson.dumps(sorted(normalize_table_yson(cyson.loads('[' + res_yson + ']'))), format="pretty")
+def dump_table_yson(res_yson, sort=True):
+    rows = normalize_table_yson(cyson.loads('[' + res_yson + ']'))
+    if sort:
+        rows = sorted(rows)
+    return cyson.dumps(rows, format="pretty")
 
 
 def normalize_source_code_path(s):
@@ -914,6 +942,72 @@ def normalize_result(res, sort):
             if 'Data' in data and len(data['Data']) == 0:
                 del data['Data']
     return res
+
+
+def stable_write(writer, node):
+    if hasattr(node, 'attributes'):
+        writer.begin_attributes()
+        for k in sorted(node.attributes.keys()):
+            writer.key(k)
+            stable_write(writer, node.attributes[k])
+        writer.end_attributes()
+    if isinstance(node, list):
+        writer.begin_list()
+        for r in node:
+            stable_write(writer, r)
+        writer.end_list()
+        return
+    if isinstance(node, dict):
+        writer.begin_map()
+        for k in sorted(node.keys()):
+            writer.key(k)
+            stable_write(writer, node[k])
+        writer.end_map()
+        return
+    writer.write(node)
+
+
+def stable_result_file(res):
+    path = res.results_file
+    assert os.path.exists(path)
+    with open(path) as f:
+        res = f.read()
+    res = cyson.loads(res)
+    res = replace_vals(res)
+    for r in res:
+        for data in r['Write']:
+            if 'Unordered' in r and 'Data' in data:
+                data['Data'] = sorted(data['Data'])
+    with open(path, 'w') as f:
+        writer = cyson.Writer(stream=cyson.OutputStream.from_file(f), format='pretty', mode='node')
+        writer.begin_stream()
+        stable_write(writer, res)
+        writer.end_stream()
+    with open(path) as f:
+        return f.read()
+
+
+def stable_table_file(table):
+    path = table.file
+    assert os.path.exists(path)
+    assert table.attr is not None
+    is_sorted = False
+    for column in cyson.loads(table.attr)['schema']:
+        if 'sort_order' in column:
+            is_sorted = True
+            break
+    if not is_sorted:
+        with open(path) as f:
+            r = cyson.Reader(cyson.InputStream.from_file(f), mode='list_fragment')
+            lst = sorted(list(r.list_fragments()))
+        with open(path, 'w') as f:
+            writer = cyson.Writer(stream=cyson.OutputStream.from_file(f), format='pretty', mode='list_fragment')
+            writer.begin_stream()
+            for r in lst:
+                stable_write(writer, r)
+            writer.end_stream()
+    with open(path) as f:
+        return f.read()
 
 
 class LoggingDowngrade(object):

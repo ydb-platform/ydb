@@ -1,4 +1,5 @@
 #include "defs.h"
+#include "activity_guard.h"
 #include "actorsystem.h"
 #include "callstack.h"
 #include "cpu_manager.h"
@@ -96,6 +97,7 @@ namespace NActors {
         if (Y_UNLIKELY(!ev))
             return false;
 
+        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_SEND, false> activityGuard;
 #ifdef USE_ACTOR_CALLSTACK
         ev->Callstack.TraceIfEmpty();
 #endif
@@ -123,6 +125,7 @@ namespace NActors {
                     if (!target) {
                         target = actorId;
                         ServiceMap->RegisterLocalService(recipient, target);
+                        DynamicProxies.push_back(target);
                     }
                 }
                 if (target != actorId) {
@@ -230,10 +233,21 @@ namespace NActors {
 
     ui32 TActorSystem::BroadcastToProxies(const std::function<IEventHandle*(const TActorId&)>& eventFabric) {
         // TODO: get rid of this method
+        ui32 res = 0;
         for (ui32 i = 0; i < InterconnectCount; ++i) {
             Send(eventFabric(Interconnect[i]));
+            ++res;
         }
-        return InterconnectCount;
+
+        auto guard = Guard(ProxyCreationLock);
+        for (size_t i = 0; i < DynamicProxies.size(); ++i) {
+            const TActorId actorId = DynamicProxies[i];
+            auto unguard = Unguard(guard);
+            Send(eventFabric(actorId));
+            ++res;
+        }
+
+        return res;
     }
 
     TActorId TActorSystem::LookupLocalService(const TActorId& x) const {
@@ -324,4 +338,13 @@ namespace NActors {
         CpuManager->Cleanup();
         Scheduler.Destroy();
     }
+
+    void TActorSystem::GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const {
+        CpuManager->GetExecutorPoolState(poolId, state);
+    }
+
+    void TActorSystem::GetExecutorPoolStates(std::vector<TExecutorPoolState> &states) const {
+        CpuManager->GetExecutorPoolStates(states);
+    }
+
 }

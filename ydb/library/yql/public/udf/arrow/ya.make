@@ -10,6 +10,7 @@ SRCS(
     block_item_hasher.cpp
     block_item_comparator.cpp
     block_type_helper.cpp
+    memory_pool.cpp
 )
 
 PEERDIR(

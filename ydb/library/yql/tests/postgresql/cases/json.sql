@@ -63,6 +63,8 @@ SELECT array_to_json(array(select 1 as a));
 SELECT array_to_json(array_agg(x),false) from generate_series(5,10) x;
 SELECT array_to_json('{{1,5},{99,100}}'::int[]);
 BEGIN;
+SET LOCAL TIME ZONE 10.5;
+SET LOCAL TIME ZONE -8;
 COMMIT;
 -- non-numeric output
 SELECT row_to_json(q)

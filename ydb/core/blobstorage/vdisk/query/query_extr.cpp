@@ -66,8 +66,8 @@ namespace NKikimr {
 
         template<typename TMerger>
         bool IsBlobDeleted(const TLogoBlobID &id, const TMerger &merger) {
-            const auto &status = BarriersEssence->Keep(id, merger.GetMemRec(), merger.GetMemRecsMerged(),
-                QueryCtx->HullCtx->AllowKeepFlags, true /*allowGarbageCollection*/);
+            const auto &status = BarriersEssence->Keep(id, merger.GetMemRec(), {}, QueryCtx->HullCtx->AllowKeepFlags,
+                true /*allowGarbageCollection*/);
             return !status.KeepData;
         }
 

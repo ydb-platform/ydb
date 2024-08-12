@@ -9,6 +9,10 @@ namespace NKikimrColumnShardProto {
 class TSnapshot;
 }
 
+namespace NJson {
+class TJsonValue;
+};
+
 namespace NKikimr::NOlap {
 
 class TSnapshot {
@@ -50,6 +54,10 @@ public:
         return TSnapshot(-1ll, -1ll);
     }
 
+    static TSnapshot MaxForPlanInstant(const TInstant planInstant) noexcept;
+
+    static TSnapshot MaxForPlanStep(const ui64 planStep) noexcept;
+
     constexpr bool operator==(const TSnapshot&) const noexcept = default;
 
     constexpr auto operator<=>(const TSnapshot&) const noexcept = default;
@@ -71,15 +79,20 @@ public:
         PlanStep = proto.GetPlanStep();
         TxId = proto.GetTxId();
         if (!PlanStep) {
-            return TConclusionStatus::Fail("incorrect planStep in proto");
+            return TConclusionStatus::Fail("incorrect planStep in proto for snapshot");
         }
         if (!TxId) {
-            return TConclusionStatus::Fail("incorrect txId in proto");
+            return TConclusionStatus::Fail("incorrect txId in proto for snapshot");
         }
         return TConclusionStatus::Success();
     }
 
+    TConclusionStatus DeserializeFromString(const TString& data);
+
+    TString SerializeToString() const;
+
     TString DebugString() const;
+    NJson::TJsonValue DebugJson() const;
 };
 
 } // namespace NKikimr::NOlap

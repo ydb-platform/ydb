@@ -40,19 +40,19 @@ DEFINE_REFCOUNTED_TYPE(THistogramExponentialBounds)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class THistogramConfig
+class TTimeHistogramConfig
     : public NYTree::TYsonStruct
 {
 public:
     std::optional<THistogramExponentialBoundsPtr> ExponentialBounds;
     std::optional<std::vector<TDuration>> CustomBounds;
 
-    REGISTER_YSON_STRUCT(THistogramConfig);
+    REGISTER_YSON_STRUCT(TTimeHistogramConfig);
 
     static void Register(TRegistrar registrar);
 };
 
-DEFINE_REFCOUNTED_TYPE(THistogramConfig)
+DEFINE_REFCOUNTED_TYPE(TTimeHistogramConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -62,8 +62,8 @@ class TServiceCommonConfig
 {
 public:
     bool EnablePerUserProfiling;
-    THistogramConfigPtr HistogramTimerProfiling;
-    bool EnableErrorCodeCounting;
+    TTimeHistogramConfigPtr TimeHistogram;
+    bool EnableErrorCodeCounter;
     ERequestTracingMode TracingMode;
 
     REGISTER_YSON_STRUCT(TServiceCommonConfig);
@@ -96,8 +96,8 @@ class TServiceCommonDynamicConfig
 {
 public:
     std::optional<bool> EnablePerUserProfiling;
-    std::optional<THistogramConfigPtr> HistogramTimerProfiling;
-    std::optional<bool> EnableErrorCodeCounting;
+    std::optional<TTimeHistogramConfigPtr> TimeHistogram;
+    std::optional<bool> EnableErrorCodeCounter;
     std::optional<ERequestTracingMode> TracingMode;
 
     REGISTER_YSON_STRUCT(TServiceCommonDynamicConfig);
@@ -129,9 +129,9 @@ class TServiceConfig
 {
 public:
     std::optional<bool> EnablePerUserProfiling;
-    std::optional<bool> EnableErrorCodeCounting;
+    std::optional<bool> EnableErrorCodeCounter;
     std::optional<ERequestTracingMode> TracingMode;
-    THistogramConfigPtr HistogramTimerProfiling;
+    TTimeHistogramConfigPtr TimeHistogram;
     THashMap<TString, TMethodConfigPtr> Methods;
     std::optional<int> AuthenticationQueueSizeLimit;
     std::optional<TDuration> PendingPayloadsTimeout;
@@ -425,6 +425,7 @@ public:
     static constexpr int DefaultCompressionPoolSize = 8;
     int HeavyPoolSize;
     int CompressionPoolSize;
+    TDuration HeavyPoolPollingPeriod;
 
     bool AlertOnMissingRequestInfo;
 
@@ -445,6 +446,7 @@ class TDispatcherDynamicConfig
 public:
     std::optional<int> HeavyPoolSize;
     std::optional<int> CompressionPoolSize;
+    std::optional<TDuration> HeavyPoolPollingPeriod;
 
     std::optional<bool> AlertOnMissingRequestInfo;
 

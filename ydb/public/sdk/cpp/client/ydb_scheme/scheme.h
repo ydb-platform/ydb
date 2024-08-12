@@ -6,6 +6,8 @@ namespace Ydb {
     class VirtualTimestamp;
     namespace Scheme {
         class Entry;
+        class ModifyPermissionsRequest;
+        class Permissions;
     }
 }
 
@@ -24,6 +26,8 @@ struct TPermissions {
     {}
     TString Subject;
     TVector<TString> PermissionNames;
+
+    void SerializeTo(::Ydb::Scheme::Permissions& proto) const;
 };
 
 enum class ESchemeEntryType : i32 {
@@ -42,7 +46,8 @@ enum class ESchemeEntryType : i32 {
     Topic = 17,
     ExternalTable = 18,
     ExternalDataSource = 19,
-    View = 20
+    View = 20,
+    ResourcePool = 21
 };
 
 struct TVirtualTimestamp {
@@ -77,6 +82,9 @@ struct TSchemeEntry {
     TSchemeEntry(const ::Ydb::Scheme::Entry& proto);
 
     void Out(IOutputStream& out) const;
+
+    // Fills ModifyPermissionsRequest proto from this entry
+    void SerializeTo(::Ydb::Scheme::ModifyPermissionsRequest& request) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -91,7 +99,9 @@ using TAsyncListDirectoryResult = NThreading::TFuture<TListDirectoryResult>;
 
 struct TMakeDirectorySettings : public TOperationRequestSettings<TMakeDirectorySettings> {};
 
-struct TRemoveDirectorySettings : public TOperationRequestSettings<TRemoveDirectorySettings> {};
+struct TRemoveDirectorySettings : public TOperationRequestSettings<TRemoveDirectorySettings> {
+    FLUENT_SETTING_DEFAULT(bool, NotExistsIsOk, false);
+};
 
 struct TDescribePathSettings : public TOperationRequestSettings<TDescribePathSettings> {};
 

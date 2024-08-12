@@ -3,6 +3,3 @@ items:
   include: { mode: link, path: manual/toc_p.yaml }
 - name: Конфигурация
   href: configuration/config.md
-- name: Промышленные конфигурации BlobStorage
-  href: ../administration/production-storage-config.md
-

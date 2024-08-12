@@ -1,8 +1,3 @@
----
-title: "YDB. FAQ"
-description: "What is YDB? For what tasks is it worth using YDB, and for which virtual machines with databases? What part of the management and maintenance of databases does YDB take on? Answers to these and other questions in this article."
----
-
 # General questions about {{ ydb-short-name }}
 
 #### What is {{ ydb-short-name }}? {#what-is-ydb}
@@ -29,7 +24,7 @@ To design a primary key properly, follow the rules below.
 * The fewer table partitions a query uses, the faster it runs. For greater performance, follow the one query — one partition rule.
 * Avoid situations where a small part of the DB is under much heavier load than the rest of the DB.
 
-For more information, see [Schema design](../../best_practices/schema_design.md).
+For more information, see [choosing a primary key](../../dev/primary-key/index.md).
 
 #### How do I evenly distribute load across table partitions? {#balance-shard-load}
 
@@ -40,7 +35,7 @@ You can use the following techniques to distribute the load evenly across table 
    * use a hash of the key column values as the primary key.
 * Reduce the number of partitions used in a single query.
 
-For more information, see [Schema design](../../best_practices/schema_design.md#balance-shard-load).
+For more information, see [choosing a primary key](../../dev/primary-key/index.md).
 
 #### Can I use NULL in a key column? {#null}
 
@@ -64,7 +59,7 @@ For more information, see [Secondary indexes](../../concepts/secondary_indexes.m
 
 To print paginated results, we recommend selecting data sorted by primary key sequentially, limiting the number of rows with the `LIMIT` keyword. We do not recommend using the `OFFSET` keyword to solve this problem.
 
-For more information, see [Paginated results](../../best_practices/paging.md).
+For more information, see [Paginated results](../../dev/paging.md).
 
 #### How do I delete expired data? {#ttl}
 

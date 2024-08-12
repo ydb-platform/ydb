@@ -1,0 +1,28 @@
+items:
+- name: Deployment
+  include:
+    mode: link
+    path: ../../deploy/toc_p.yaml
+- name: Managing a cluster's disk subsystem
+  include:
+    mode: link
+    path: ../../maintenance/manual/toc_p.yaml
+- name: Backup and recovery
+  href: backup-and-recovery.md
+- name: Monitoring
+  href: monitoring.md
+- name: Logging
+  href: logging.md
+- name: Updating YDB
+  href: upgrade.md
+- name: Changing an actor system's configuration
+  href: ../../maintenance/manual/change_actorsystem_configs.md
+- name: Updating configurations via CMS
+  href: ../../maintenance/manual/cms.md
+- name: System views
+  href: system-views.md
+- name: Maintenance without downtime
+  href: maintenance-without-downtime.md
+- include:
+    mode: link
+    path: ../../deploy/manual/toc_p.yaml

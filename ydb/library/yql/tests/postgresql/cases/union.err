@@ -1,15 +1,15 @@
 Registering pre-existing tables
+	int4_tbl
 	INT4_TBL
-	VARCHAR_TBL
+	tenk1
 	text_tbl
-	FLOAT8_TBL
+	VARCHAR_TBL
+	float8_tbl
 	CHAR_TBL
 	TEXT_TBL
-	int4_tbl
+	FLOAT8_TBL
 	varchar_tbl
 	int8_tbl
-	float8_tbl
-	tenk1
 <sql-statement>
 --
 -- UNION (also INTERSECT, EXCEPT)
@@ -475,6 +475,14 @@ select x from (values (row(1, 2)), (row(1, 3))) _(x) union select x from (values
     -stdin-:<main>:1:1: Error: alternative is not implemented yet : 138
     	select x from (values (row(1, 2)), (row(1, 3))) _(x) union select x from (values (row(1, 2)), (row(1, 4))) _(x);
 	^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select x from (values (row(1, 2)), (row(1, 3))) _(x) union select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	select x from (values (row(1, 2)), (row(1, 3))) _(x) union select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
 <sql-statement>
 explain (costs off)
 select x from (values (row(1, 2)), (row(1, 3))) _(x) intersect select x from (values (row(1, 2)), (row(1, 4))) _(x);
@@ -492,6 +500,14 @@ select x from (values (row(1, 2)), (row(1, 3))) _(x) intersect select x from (va
     -stdin-:<main>:1:1: Error: alternative is not implemented yet : 138
     	select x from (values (row(1, 2)), (row(1, 3))) _(x) intersect select x from (values (row(1, 2)), (row(1, 4))) _(x);
 	^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select x from (values (row(1, 2)), (row(1, 3))) _(x) intersect select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	select x from (values (row(1, 2)), (row(1, 3))) _(x) intersect select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
 <sql-statement>
 explain (costs off)
 select x from (values (row(1, 2)), (row(1, 3))) _(x) except select x from (values (row(1, 2)), (row(1, 4))) _(x);
@@ -508,6 +524,14 @@ select x from (values (row(1, 2)), (row(1, 3))) _(x) except select x from (value
 
     -stdin-:<main>:1:1: Error: alternative is not implemented yet : 138
     	select x from (values (row(1, 2)), (row(1, 3))) _(x) except select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select x from (values (row(1, 2)), (row(1, 3))) _(x) except select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	select x from (values (row(1, 2)), (row(1, 3))) _(x) except select x from (values (row(1, 2)), (row(1, 4))) _(x);
 	^
 <sql-statement>
 -- non-hashable type
@@ -528,6 +552,14 @@ select x from (values (row(100::money)), (row(200::money))) _(x) union select x 
 
     -stdin-:<main>:1:1: Error: alternative is not implemented yet : 138
     	select x from (values (row(100::money)), (row(200::money))) _(x) union select x from (values (row(100::money)), (row(300::money))) _(x);
+	^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select x from (values (row(100::money)), (row(200::money))) _(x) union select x from (values (row(100::money)), (row(300::money))) _(x);
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	select x from (values (row(100::money)), (row(200::money))) _(x) union select x from (values (row(100::money)), (row(300::money))) _(x);
 	^
 <sql-statement>
 -- With a defined row type, the typcache can inspect the type's fields
@@ -556,6 +588,17 @@ select x from (values (row(100::money)::ct1), (row(200::money)::ct1)) _(x) union
     -stdin-:<main>:1:41: Error: alternative is not implemented yet : 138
     	select x from (values (row(100::money)::ct1), (row(200::money)::ct1)) _(x) union select x from (values (row(100::money)::ct1), (row(300::money)::ct1)) _(x);
 	                                        ^
+    -stdin-:<main>:1:122: Error: alternative is not implemented yet : 138
+    	select x from (values (row(100::money)::ct1), (row(200::money)::ct1)) _(x) union select x from (values (row(100::money)::ct1), (row(300::money)::ct1)) _(x);
+	                                                                                                                         ^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select x from (values (row(100::money)::ct1), (row(200::money)::ct1)) _(x) union select x from (values (row(100::money)::ct1), (row(300::money)::ct1)) _(x);
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	select x from (values (row(100::money)::ct1), (row(200::money)::ct1)) _(x) union select x from (values (row(100::money)::ct1), (row(300::money)::ct1)) _(x);
+	^
 <sql-statement>
 drop type ct1;
 </sql-statement>
@@ -589,6 +632,14 @@ select x from (values (row(1, 2)), (row(1, 3))) _(x) union select x from (values
     -stdin-:<main>:1:1: Error: alternative is not implemented yet : 138
     	select x from (values (row(1, 2)), (row(1, 3))) _(x) union select x from (values (row(1, 2)), (row(1, 4))) _(x);
 	^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select x from (values (row(1, 2)), (row(1, 3))) _(x) union select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	select x from (values (row(1, 2)), (row(1, 3))) _(x) union select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
 <sql-statement>
 explain (costs off)
 select x from (values (row(1, 2)), (row(1, 3))) _(x) intersect select x from (values (row(1, 2)), (row(1, 4))) _(x);
@@ -606,6 +657,14 @@ select x from (values (row(1, 2)), (row(1, 3))) _(x) intersect select x from (va
     -stdin-:<main>:1:1: Error: alternative is not implemented yet : 138
     	select x from (values (row(1, 2)), (row(1, 3))) _(x) intersect select x from (values (row(1, 2)), (row(1, 4))) _(x);
 	^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select x from (values (row(1, 2)), (row(1, 3))) _(x) intersect select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	select x from (values (row(1, 2)), (row(1, 3))) _(x) intersect select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
 <sql-statement>
 explain (costs off)
 select x from (values (row(1, 2)), (row(1, 3))) _(x) except select x from (values (row(1, 2)), (row(1, 4))) _(x);
@@ -622,6 +681,14 @@ select x from (values (row(1, 2)), (row(1, 3))) _(x) except select x from (value
 
     -stdin-:<main>:1:1: Error: alternative is not implemented yet : 138
     	select x from (values (row(1, 2)), (row(1, 3))) _(x) except select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select x from (values (row(1, 2)), (row(1, 3))) _(x) except select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	select x from (values (row(1, 2)), (row(1, 3))) _(x) except select x from (values (row(1, 2)), (row(1, 4))) _(x);
 	^
 <sql-statement>
 reset enable_hashagg;
@@ -1015,7 +1082,7 @@ ALTER TABLE t1c INHERIT t1;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	ALTER TABLE t1c INHERIT t1;
 	^
 <sql-statement>
@@ -1207,6 +1274,14 @@ ORDER BY x;
     -stdin-:<main>:2:19: Error: Generator functions are not allowed in: SELECT
     	  (SELECT 1 AS t, generate_series(1,10) AS x
 	                  ^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	SELECT * FROM
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	SELECT * FROM
+	^
 <sql-statement>
 explain (costs off)
 SELECT * FROM

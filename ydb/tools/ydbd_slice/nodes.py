@@ -8,21 +8,26 @@ logger = logging.getLogger(__name__)
 
 
 class Nodes(object):
-    def __init__(self, nodes, dry_run=False):
+    def __init__(self, nodes, dry_run=False, ssh_user=None):
         assert isinstance(nodes, list)
         assert len(nodes) > 0
         assert isinstance(nodes[0], str)
         self._nodes = nodes
         self._dry_run = bool(dry_run)
+        self._ssh_user = ssh_user
         self._logger = logger.getChild(self.__class__.__name__)
 
     @property
     def nodes_list(self):
         return self._nodes
 
-    @staticmethod
-    def _wrap_ssh_cmd(cmd, host):
-        return ['ssh', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null', '-A', host, cmd]
+    def _get_ssh_command_prefix(self):
+        command = []
+        command.extend(['ssh', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null', '-A'])
+        if (self._ssh_user):
+            command.extend(['-l', self._ssh_user])
+
+        return command
 
     def _check_async_execution(self, running_jobs, check_retcode=True, results=None):
         if self._dry_run:
@@ -32,6 +37,17 @@ class Nodes(object):
 
         for cmd, process, host in running_jobs:
             out, err = process.communicate()
+
+            if out is None:
+                out = "<None>"
+            else:
+                out = out.decode("utf-8", errors='replace')
+
+            if err is None:
+                err = "<None>"
+            else:
+                err = err.decode("utf-8", errors='replace')
+
             retcode = process.poll()
             if retcode != 0:
                 status_line = "execution '{cmd}' finished with '{retcode}' retcode".format(
@@ -65,7 +81,7 @@ class Nodes(object):
             if self._dry_run:
                 continue
 
-            actual_cmd = self._wrap_ssh_cmd(cmd, host)
+            actual_cmd = self._get_ssh_command_prefix() + [host, cmd]
             process = subprocess.Popen(actual_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             running_jobs.append((actual_cmd, process, host))
         return running_jobs
@@ -85,8 +101,10 @@ class Nodes(object):
         if self._dry_run:
             return
         destination = "{host}:{path}".format(host=host, path=remote_path)
-        subprocess.check_call(["rsync", "-avqLW", "--del", "--no-o", "--no-g", "--rsync-path=sudo rsync", "--progress",
-                              local_path, destination])
+        rsh = " ".join(self._get_ssh_command_prefix())
+        subprocess.check_call(["rsync", "-avqLW", "--del", "--no-o", "--no-g",
+                               "--rsh={}".format(rsh),
+                               "--rsync-path=sudo rsync", "--progress", local_path, destination])
 
     def _copy_between_nodes(self, hub, hub_path, hosts, remote_path):
         if isinstance(hosts, str):
@@ -106,11 +124,13 @@ class Nodes(object):
             )
             if self._dry_run:
                 continue
-            cmd = [
-                "ssh", dst, "-A", "sudo", "rsync", "-avqW", "--del", "--no-o", "--no-g",
-                "--rsh='ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -l %s'" % os.getenv("USER"),
-                src, remote_path,
-            ]
+            cmd = self._get_ssh_command_prefix() + [dst]
+            rsh = " ".join(self._get_ssh_command_prefix())
+            cmd.extend([
+                "sudo", "SSH_AUTH_SOCK=$SSH_AUTH_SOCK", "rsync", "-avqW", "--del", "--no-o", "--no-g",
+                "--rsh='{}'".format(rsh),
+                src, remote_path
+            ])
             process = subprocess.Popen(cmd)
             running_jobs.append((cmd, process, dst))
 
@@ -128,6 +148,9 @@ class Nodes(object):
             local_path = compressed_path
             original_remote_path = remote_path
             remote_path += '.zstd'
+
+        self.execute_async("sudo mkdir -p {}".format(os.path.dirname(remote_path)))
+
         hub = self._nodes[0]
         self._copy_on_node(local_path, hub, remote_path)
         self._copy_between_nodes(hub, remote_path, self._nodes[1:], remote_path)

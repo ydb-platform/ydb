@@ -62,9 +62,11 @@ namespace internal {
 
 MemoryManager* memory_manager = nullptr;
 
+ProfilerManager* profiler_manager = nullptr;
+
 namespace {
 
-static constexpr IterationCount kMaxIterations = 1000000000;
+static constexpr IterationCount kMaxIterations = 1000000000000;
 const double kDefaultMinTime =
     std::strtod(::benchmark::kDefaultMinTimeStr, /*p_end*/ nullptr);
 
@@ -97,6 +99,7 @@ BenchmarkReporter::Run CreateRunReport(
     } else {
       report.real_accumulated_time = results.real_time_used;
     }
+    report.use_real_time_for_initial_big_o = b.use_manual_time();
     report.cpu_accumulated_time = results.cpu_time_used;
     report.complexity_n = results.complexity_n;
     report.complexity = b.complexity();
@@ -109,7 +112,7 @@ BenchmarkReporter::Run CreateRunReport(
       report.memory_result = memory_result;
       report.allocs_per_iter =
           memory_iterations ? static_cast<double>(memory_result->num_allocs) /
-                                  memory_iterations
+                                  static_cast<double>(memory_iterations)
                             : 0;
     }
 
@@ -235,7 +238,7 @@ BenchmarkRunner::BenchmarkRunner(
       has_explicit_iteration_count(b.iterations() != 0 ||
                                    parsed_benchtime_flag.tag ==
                                        BenchTimeType::ITERS),
-      pool(b.threads() - 1),
+      pool(static_cast<size_t>(b.threads() - 1)),
       iters(has_explicit_iteration_count
                 ? ComputeIters(b_, parsed_benchtime_flag)
                 : 1),
@@ -327,8 +330,8 @@ IterationCount BenchmarkRunner::PredictNumItersNeeded(
 
   // So what seems to be the sufficiently-large iteration count? Round up.
   const IterationCount max_next_iters = static_cast<IterationCount>(
-      std::lround(std::max(multiplier * static_cast<double>(i.iters),
-                           static_cast<double>(i.iters) + 1.0)));
+      std::llround(std::max(multiplier * static_cast<double>(i.iters),
+                            static_cast<double>(i.iters) + 1.0)));
   // But we do have *some* limits though..
   const IterationCount next_iters = std::min(max_next_iters, kMaxIterations);
 
@@ -402,6 +405,41 @@ void BenchmarkRunner::RunWarmUp() {
   }
 }
 
+MemoryManager::Result* BenchmarkRunner::RunMemoryManager(
+    IterationCount memory_iterations) {
+  // TODO(vyng): Consider making BenchmarkReporter::Run::memory_result an
+  // optional so we don't have to own the Result here.
+  // Can't do it now due to cxx03.
+  memory_results.push_back(MemoryManager::Result());
+  MemoryManager::Result* memory_result = &memory_results.back();
+  memory_manager->Start();
+  std::unique_ptr<internal::ThreadManager> manager;
+  manager.reset(new internal::ThreadManager(1));
+  b.Setup();
+  RunInThread(&b, memory_iterations, 0, manager.get(),
+              perf_counters_measurement_ptr);
+  manager->WaitForAllThreads();
+  manager.reset();
+  b.Teardown();
+  memory_manager->Stop(*memory_result);
+  return memory_result;
+}
+
+void BenchmarkRunner::RunProfilerManager() {
+  // TODO: Provide a way to specify the number of iterations.
+  IterationCount profile_iterations = 1;
+  std::unique_ptr<internal::ThreadManager> manager;
+  manager.reset(new internal::ThreadManager(1));
+  b.Setup();
+  profiler_manager->AfterSetupStart();
+  RunInThread(&b, profile_iterations, 0, manager.get(),
+              /*perf_counters_measurement_ptr=*/nullptr);
+  manager->WaitForAllThreads();
+  profiler_manager->BeforeTeardownStop();
+  manager.reset();
+  b.Teardown();
+}
+
 void BenchmarkRunner::DoOneRepetition() {
   assert(HasRepeatsRemaining() && "Already done all repetitions?");
 
@@ -446,28 +484,18 @@ void BenchmarkRunner::DoOneRepetition() {
            "then we should have accepted the current iteration run.");
   }
 
-  // Oh, one last thing, we need to also produce the 'memory measurements'..
+  // Produce memory measurements if requested.
   MemoryManager::Result* memory_result = nullptr;
   IterationCount memory_iterations = 0;
   if (memory_manager != nullptr) {
-    // TODO(vyng): Consider making BenchmarkReporter::Run::memory_result an
-    // optional so we don't have to own the Result here.
-    // Can't do it now due to cxx03.
-    memory_results.push_back(MemoryManager::Result());
-    memory_result = &memory_results.back();
     // Only run a few iterations to reduce the impact of one-time
     // allocations in benchmarks that are not properly managed.
     memory_iterations = std::min<IterationCount>(16, iters);
-    memory_manager->Start();
-    std::unique_ptr<internal::ThreadManager> manager;
-    manager.reset(new internal::ThreadManager(1));
-    b.Setup();
-    RunInThread(&b, memory_iterations, 0, manager.get(),
-                perf_counters_measurement_ptr);
-    manager->WaitForAllThreads();
-    manager.reset();
-    b.Teardown();
-    memory_manager->Stop(*memory_result);
+    memory_result = RunMemoryManager(memory_iterations);
+  }
+
+  if (profiler_manager != nullptr) {
+    RunProfilerManager();
   }
 
   // Ok, now actually report.

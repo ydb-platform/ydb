@@ -1,3 +1,3 @@
 <tmp_path>/program.sql:<main>: Info: Optimization
 
-    <tmp_path>/program.sql:<main>: Info: DQ cannot execute the query. Cause: table without statistics
+    <tmp_path>/program.sql:<main>: Info: DQ cannot execute the query. Cause: system sampling

@@ -24,7 +24,7 @@ namespace NYT::NConcurrency {
 
 using namespace NProfiling;
 
-static const auto& Logger = ConcurrencyLogger;
+static constexpr auto& Logger = ConcurrencyLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -219,6 +219,10 @@ public:
     void Invoke(TClosure callback, TBucket* bucket)
     {
         auto guard = Guard(SpinLock_);
+        // See Shutdown method.
+        if (Stopping_) {
+            return;
+        }
         const auto& pool = IdToPool_[bucket->PoolId];
 
         pool->SizeCounter.Record(++pool->Size);
@@ -267,12 +271,13 @@ public:
 
     void Shutdown()
     {
-        Drain();
-    }
-
-    void Drain()
-    {
         auto guard = Guard(SpinLock_);
+        // NB(arkady-e1ppa): We write/read value under spinlock
+        // instead of atomic in order to ensure that in Invoke method
+        // we either observe |false| and enqueue callback
+        // which will be drained here or we observe |true|
+        // and not enqueue callback at all.
+        Stopping_ = true;
 
         for (const auto& pool : IdToPool_) {
             if (pool) {
@@ -453,6 +458,9 @@ private:
     const IPoolWeightProviderPtr PoolWeightProvider_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    // NB: We set this flag to true so that whomever may spam tasks to queue
+    // will stop doing so after the shutdown.
+    bool Stopping_ = false;
     std::vector<std::unique_ptr<TExecutionPool>> IdToPool_;
     THashMap<TString, int> NameToPoolId_;
 
@@ -530,7 +538,8 @@ private:
             }
         }
 
-        YT_LOG_TRACE("Buckets: %v",
+        YT_LOG_TRACE(
+            "Buckets: %v",
             MakeFormattableView(
                 xrange(size_t(0), IdToPool_.size()),
                 [&] (auto* builder, auto index) {
@@ -663,6 +672,9 @@ public:
         TThreadPoolBase::Configure(threadCount);
     }
 
+    void Configure(TDuration /*pollingPeriod*/) override
+    { }
+
     int GetThreadCount() override
     {
         return TThreadPoolBase::GetThreadCount();
@@ -695,14 +707,6 @@ private:
     {
         Queue_->Shutdown();
         TThreadPoolBase::DoShutdown();
-    }
-
-    TClosure MakeFinalizerCallback() override
-    {
-        return BIND_NO_PROPAGATE([queue = Queue_, callback = TThreadPoolBase::MakeFinalizerCallback()] {
-            callback();
-            queue->Drain();
-        });
     }
 
     void DoConfigure(int threadCount) override

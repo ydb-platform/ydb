@@ -91,7 +91,7 @@ struct TNfaTransitionGraph {
     template<class>
     inline constexpr static bool always_false_v = false;
 
-    void Save(TOutputSerializer& serializer) const {
+    void Save(TMrOutputSerializer& serializer) const {
         serializer(Transitions.size());
         for (ui64 i = 0; i < Transitions.size(); ++i) {
             serializer.Write(Transitions[i].index());
@@ -100,7 +100,7 @@ struct TNfaTransitionGraph {
         serializer(Input, Output);
     }
 
-    void Load(TInputSerializer& serializer) {
+    void Load(TMrInputSerializer& serializer) {
         ui64 transitionSize = serializer.Read<TTransitions::size_type>();
         Transitions.resize(transitionSize);
         for (ui64 i = 0; i < transitionSize; ++i) {
@@ -329,7 +329,7 @@ class TNfa {
 
         TQuantifiersStack Quantifiers;
 
-        void Save(TOutputSerializer& serializer) const {
+        void Save(TMrOutputSerializer& serializer) const {
             serializer.Write(Index);
             serializer.Write(Vars.size());
             for (const auto& vector : Vars) {
@@ -344,7 +344,7 @@ class TNfa {
             }
         }
 
-        void Load(TInputSerializer& serializer) {
+        void Load(TMrInputSerializer& serializer) {
             serializer.Read(Index);
 
             auto varsSize = serializer.Read<TMatchedVars::size_type>();
@@ -436,7 +436,7 @@ public:
         return ActiveStates.size();
     }
 
-    void Save(TOutputSerializer& serializer) const {
+    void Save(TMrOutputSerializer& serializer) const {
         // TransitionGraph is not saved/loaded, passed in constructor.
         serializer.Write(ActiveStates.size());
         for (const auto& state : ActiveStates) {
@@ -445,7 +445,7 @@ public:
         serializer.Write(EpsilonTransitionsLastRow);
     }
 
-    void Load(TInputSerializer& serializer) {
+    void Load(TMrInputSerializer& serializer) {
         auto stateSize = serializer.Read<ui64>();
         for (size_t i = 0; i < stateSize; ++i) {
             TState state;

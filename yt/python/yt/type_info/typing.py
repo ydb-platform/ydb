@@ -341,7 +341,9 @@ class _GenericDecimal(type_base.Generic):
         return self.__getitem__((type_["precision"], type_["scale"],))
 
 
-Bool = type_base.make_primitive_type("Bool")
+Bool = type_base.make_primitive_type("Bool", yt_type_name_v1="boolean")
+Yson = type_base.make_primitive_type("Yson", yt_type_name_v1="any")
+
 Int8 = type_base.make_primitive_type("Int8")
 Uint8 = type_base.make_primitive_type("Uint8")
 Int16 = type_base.make_primitive_type("Int16")
@@ -354,7 +356,6 @@ Float = type_base.make_primitive_type("Float")
 Double = type_base.make_primitive_type("Double")
 String = type_base.make_primitive_type("String")
 Utf8 = type_base.make_primitive_type("Utf8")
-Yson = type_base.make_primitive_type("Yson")
 Json = type_base.make_primitive_type("Json")
 Uuid = type_base.make_primitive_type("Uuid")
 Date = type_base.make_primitive_type("Date")
@@ -381,7 +382,8 @@ Decimal = _GenericDecimal("Decimal")
 EmptyTuple = Tuple.__getitem__(tuple())
 EmptyStruct = Struct.__getitem__(tuple())
 
-PRIMITIVES = {type_.yt_type_name: type_ for type_ in locals().values() if isinstance(type_, type_base.Primitive)}
+PRIMITIVES_V1 = {type_.yt_type_name_v1: type_ for type_ in locals().values() if isinstance(type_, type_base.Primitive)}
+PRIMITIVES_V3 = {type_.yt_type_name: type_ for type_ in locals().values() if isinstance(type_, type_base.Primitive)}
 GENERICS = {type_.yt_type_name: type_ for type_ in locals().values() if isinstance(type_, type_base.Generic)}
 
 
@@ -396,8 +398,8 @@ def _validate_contains(dict, key):
 
 def _parse_type(type_description):
     if isinstance(type_description, six.string_types):
-        _validate(type_description in PRIMITIVES, "unknown type \"{}\"".format(type_description))
-        return PRIMITIVES[type_description]
+        _validate(type_description in PRIMITIVES_V3, "unknown type \"{}\"".format(type_description))
+        return PRIMITIVES_V3[type_description]
 
     _validate(isinstance(type_description, dict),
               "type must be either a string or a map, got {}".format(type_base._with_type(type_description)))
@@ -407,12 +409,21 @@ def _parse_type(type_description):
     type_name = type_description["type_name"]
     _validate(isinstance(type_name, six.string_types), "\"type_name\" must contain a string")
 
-    _validate(type_name in PRIMITIVES or type_name in GENERICS, "unknown type \"{}\"".format(type_name))
+    _validate(type_name in PRIMITIVES_V3 or type_name in GENERICS, "unknown type \"{}\"".format(type_name))
 
-    if type_name in PRIMITIVES:
-        return PRIMITIVES[type_name]
+    if type_name in PRIMITIVES_V3:
+        return PRIMITIVES_V3[type_name]
 
     return GENERICS[type_name].from_dict(type_description)
+
+
+def _parse_type_v1(type_description, required):
+    if required:
+        _validate(isinstance(type_description, six.string_types), "\"type_description\" must be a string for v1 type")
+        _validate(type_description in PRIMITIVES_V1, "unknown type \"{}\"".format(type_description))
+        return PRIMITIVES_V1[type_description]
+    else:
+        return Optional[_parse_type_v1(type_description, True)]
 
 
 def _check_serialization_available():
@@ -439,5 +450,18 @@ def deserialize_yson(yson):
     try:
         type_description = yt.yson.loads(yson)
         return _parse_type(type_description)
+    except (ValueError, yt.yson.YsonError) as e:
+        six.raise_from(ValueError("deserialization failed: {}".format(e)), e)
+
+
+def deserialize_yson_v1(yson, required):
+    _check_serialization_available()
+
+    if type(yson) is six.text_type and six.PY3:
+        yson = yson.encode("utf-8")
+
+    try:
+        type_description = yt.yson.loads(yson)
+        return _parse_type_v1(type_description, required)
     except (ValueError, yt.yson.YsonError) as e:
         six.raise_from(ValueError("deserialization failed: {}".format(e)), e)

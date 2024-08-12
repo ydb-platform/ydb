@@ -109,7 +109,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
 
         auto CheckSpeedAndDistribution = [](
             std::unordered_map<ui64, TLeaderTabletInfo>& allTablets,
-            std::function<void(std::vector<TTabletInfo*>&, EResourceToBalance)> func,
+            std::function<void(std::vector<TTabletInfo*>::iterator, std::vector<TTabletInfo*>::iterator, EResourceToBalance)> func,
             EResourceToBalance resource) -> void {
 
             std::vector<TTabletInfo*> tablets;
@@ -119,7 +119,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
 
             TProfileTimer timer;
 
-            func(tablets, resource);
+            func(tablets.begin(), tablets.end(), resource);
 
             double passed = timer.Get().SecondsFloat();
 
@@ -198,5 +198,23 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         // This asserts we don't have different tablet types with same short name
         // In a world with constexpr maps this could have been a static_assert...
         UNIT_ASSERT_VALUES_EQUAL(TABLET_TYPE_SHORT_NAMES.size(), TABLET_TYPE_BY_SHORT_NAME.size());
+    }
+
+    Y_UNIT_TEST(TestStDev) {
+        using TSingleResource = std::tuple<double>;
+
+        TVector<TSingleResource> values(100, 50.0 / 1'000'000);
+        values.front() = 51.0 / 1'000'000;
+
+        double stDev1 = std::get<0>(GetStDev(values));
+
+        std::swap(values.front(), values.back());
+
+        double stDev2 = std::get<0>(GetStDev(values));
+
+        double expectedStDev = sqrt(0.9703) / 1'000'000;
+
+        UNIT_ASSERT_DOUBLES_EQUAL(expectedStDev, stDev1, 1e-6);
+        UNIT_ASSERT_VALUES_EQUAL(stDev1, stDev2);
     }
 }

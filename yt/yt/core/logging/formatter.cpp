@@ -18,7 +18,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const TLogger Logger(SystemLoggingCategoryName);
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, SystemLoggingCategoryName);
 
 namespace {
 
@@ -26,7 +26,7 @@ TLogEvent GetStartLogEvent()
 {
     TLogEvent event;
     event.Instant = GetCpuInstant();
-    event.Category = Logger.GetCategory();
+    event.Category = Logger().GetCategory();
     event.Level = ELogLevel::Info;
     event.MessageRef = TSharedRef::FromString(Format("Logging started (Version: %v, BuildHost: %v, BuildTime: %v)",
         GetVersion(),
@@ -40,7 +40,7 @@ TLogEvent GetStartLogStructuredEvent()
 {
     TLogEvent event;
     event.Instant = GetCpuInstant();
-    event.Category = Logger.GetCategory();
+    event.Category = Logger().GetCategory();
     event.Level = ELogLevel::Info;
     event.MessageRef = BuildYsonStringFluently<NYson::EYsonType::MapFragment>()
         .Item("message").Value("Logging started")
@@ -57,7 +57,7 @@ TLogEvent GetSkippedLogEvent(i64 count, TStringBuf skippedBy)
 {
     TLogEvent event;
     event.Instant = GetCpuInstant();
-    event.Category = Logger.GetCategory();
+    event.Category = Logger().GetCategory();
     event.Level = ELogLevel::Info;
     event.MessageRef = TSharedRef::FromString(Format("Skipped log records in last second (Count: %v, SkippedBy: %v)",
         count,
@@ -70,7 +70,7 @@ TLogEvent GetSkippedLogStructuredEvent(i64 count, TStringBuf skippedBy)
 {
     TLogEvent event;
     event.Instant = GetCpuInstant();
-    event.Category = Logger.GetCategory();
+    event.Category = Logger().GetCategory();
     event.Level = ELogLevel::Info;
     event.MessageRef = BuildYsonStringFluently<NYson::EYsonType::MapFragment>()
         .Item("message").Value("Events skipped")

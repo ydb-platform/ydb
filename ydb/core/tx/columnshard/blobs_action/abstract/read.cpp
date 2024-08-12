@@ -10,24 +10,10 @@ void IBlobsReadingAction::StartReading(std::vector<TBlobRange>&& ranges) {
     for (auto&& i : ranges) {
         Counters->OnRequest(i.Size);
     }
-    std::sort(ranges.begin(), ranges.end());
     THashSet<TBlobRange> result;
-    std::optional<TBlobRange> currentRange;
-    std::vector<TBlobRange> currentList;
-    for (auto&& br : ranges) {
-        if (!currentRange) {
-            currentRange = br;
-        } else if (!currentRange->TryGlueWithNext(br)) {
-            result.emplace(*currentRange);
-            Groups.emplace(*currentRange, std::move(currentList));
-            currentRange = br;
-            currentList.clear();
-        }
-        currentList.emplace_back(br);
-    }
-    if (currentRange) {
-        result.emplace(*currentRange);
-        Groups.emplace(*currentRange, std::move(currentList));
+    Groups = GroupBlobsForOptimization(std::move(ranges));
+    for (auto&& [range, _] :Groups) {
+        result.emplace(range);
     }
     return DoStartReading(std::move(result));
 }

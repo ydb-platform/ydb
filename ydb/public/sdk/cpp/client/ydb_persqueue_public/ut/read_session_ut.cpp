@@ -636,8 +636,7 @@ TSingleClusterReadSessionImpl* TReadSessionImplTestSetup::GetSession() {
             GetEventsQueue(),
             FakeContext,
             PartitionIdStart,
-            PartitionIdStep,
-            ProvidedCodecs);
+            PartitionIdStep);
         Session = CbContext->TryGet();
     }
     return Session.get();
@@ -1931,8 +1930,8 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         TDeferredActions actions;
 
         TPartitionStreamImpl::SignalReadyEvents(stream,
-                                                      &sessionQueue,
-                                                      actions);
+                                                &sessionQueue,
+                                                actions);
 
         UNIT_ASSERT_DATA_EVENT(1);
         UNIT_ASSERT_CONTROL_EVENT();

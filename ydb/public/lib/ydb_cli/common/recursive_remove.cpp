@@ -26,14 +26,26 @@ TStatus RemoveTable(TTableClient& client, const TString& path, const TDropTableS
     });
 }
 
-TStatus RemoveColumnStore(TTableClient& client, const TString& path, const TRemoveDirectorySettings& settings) {
+TStatus RemoveThrowQuery(const TString& entry, TTableClient& client, const TString& path, const TRemoveDirectorySettings& settings) {
     // This is temporary solution, safe deleting of columnstore is impossible now
-    return client.RetryOperationSync([path, settings](TSession session) {
+    return client.RetryOperationSync([path, settings, entry](TSession session) {
         auto execSettings = TExecSchemeQuerySettings().UseClientTimeoutForOperation(settings.UseClientTimeoutForOperation_)
             .ClientTimeout(settings.ClientTimeout_).OperationTimeout(settings.OperationTimeout_).CancelAfter(settings.CancelAfter_)
             .Header(settings.Header_).ReportCostInfo(settings.ReportCostInfo_).RequestType(settings.RequestType_).TraceId(settings.TraceId_);
-        return session.ExecuteSchemeQuery("DROP TABLESTORE `" + path + "`", execSettings).ExtractValueSync();
+        return session.ExecuteSchemeQuery("DROP " + entry + " `" + path + "`", execSettings).ExtractValueSync();
     });
+}
+
+TStatus RemoveColumnStore(TTableClient& client, const TString& path, const TRemoveDirectorySettings& settings) {
+    return RemoveThrowQuery("TABLESTORE", client, path, settings);
+}
+
+TStatus RemoveExternalDataSource(TTableClient& client, const TString& path, const TRemoveDirectorySettings& settings) {
+    return RemoveThrowQuery("EXTERNAL DATA SOURCE", client, path, settings);
+}
+
+TStatus RemoveExternalTable(TTableClient& client, const TString& path, const TRemoveDirectorySettings& settings) {
+    return RemoveThrowQuery("EXTERNAL TABLE", client, path, settings);
 }
 
 TStatus RemoveTopic(TTopicClient& client, const TString& path, const TDropTopicSettings& settings) {
@@ -109,6 +121,10 @@ TStatus Remove(
 
     case ESchemeEntryType::Topic:
         return Remove(&RemoveTopic, schemeClient, topicClient, type, path, prompt, settings);
+    case ESchemeEntryType::ExternalDataSource:
+        return Remove(&RemoveExternalDataSource, schemeClient, tableClient, type, path, prompt, settings);
+    case ESchemeEntryType::ExternalTable:
+        return Remove(&RemoveExternalTable, schemeClient, tableClient, type, path, prompt, settings);
 
     default:
         return TStatus(EStatus::UNSUPPORTED, MakeIssues(TStringBuilder()
@@ -182,6 +198,9 @@ TStatus RemoveDirectoryRecursive(
 NYdb::TStatus RemovePathRecursive(NScheme::TSchemeClient& schemeClient, NTable::TTableClient& tableClient, NTopic::TTopicClient& topicClient, const TString& path, ERecursiveRemovePrompt prompt, const NScheme::TRemoveDirectorySettings& settings /*= {}*/, bool createProgressBar /*= true*/) {
     auto entity = schemeClient.DescribePath(path).ExtractValueSync();
     if (!entity.IsSuccess()) {
+        if (settings.NotExistsIsOk_ && entity.GetStatus() == EStatus::SCHEME_ERROR && entity.GetIssues().ToString().find("Path not found") != TString::npos) {
+            return TStatus(EStatus::SUCCESS, {});
+        }
         return entity;
     }
     switch (entity.GetEntry().Type) {

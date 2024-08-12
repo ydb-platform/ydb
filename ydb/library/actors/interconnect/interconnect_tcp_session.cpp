@@ -89,6 +89,12 @@ namespace NActors {
         Proxy->Metrics->SubSubscribersCount(Subscribers.size());
         Subscribers.clear();
 
+        for (auto& d : DelayedEvents) {
+            d.Span.EndError("nondelivery");
+            TActivationContext::Send(IEventHandle::ForwardOnNondelivery(d.Event, TEvents::TEvUndelivered::Disconnected));
+        }
+        DelayedEvents.clear();
+
         ChannelScheduler->ForEach([&](TEventOutputChannel& channel) {
             channel.NotifyUndelivered();
         });
@@ -115,15 +121,11 @@ namespace NActors {
         Y_ABORT("TInterconnectSessionTCP::PassAway() can't be called directly");
     }
 
-    void TInterconnectSessionTCP::Forward(STATEFN_SIG) {
-        Proxy->ValidateEvent(ev, "Forward");
+    void TInterconnectSessionTCP::Enqueue(STATEFN_SIG) {
+        Proxy->ValidateEvent(ev, "Enqueue");
 
         LOG_DEBUG_IC_SESSION("ICS02", "send event from: %s to: %s", ev->Sender.ToString().data(), ev->Recipient.ToString().data());
         ++MessagesGot;
-
-        if (ev->Flags & IEventHandle::FlagSubscribeOnSession) {
-            Subscribe(ev);
-        }
 
         ui16 evChannel = ev->GetChannel();
         auto& oChannel = ChannelScheduler->GetOutputChannel(evChannel);
@@ -162,6 +164,35 @@ namespace NActors {
         }
 
         IssueRam(true);
+    }
+
+    void TInterconnectSessionTCP::Forward(STATEFN_SIG) {
+        Proxy->ValidateEvent(ev, "Forward");
+
+        if (ev->Flags & IEventHandle::FlagSubscribeOnSession) {
+            Subscribe(ev);
+        }
+
+        if (Y_UNLIKELY(Proxy->Common->Settings.EventDelay)) {
+            auto& d = DelayedEvents.emplace_back();
+            d.Event = std::move(ev);
+            if (Y_UNLIKELY(d.Event->TraceId)) {
+                d.Span = NWilson::TSpan(15 /*max verbosity*/, std::move(d.Event->TraceId), "Interconnect.Delay");
+                // Reparent event to the delay span
+                d.Event->TraceId = d.Span.GetTraceId();
+            }
+            Schedule(Proxy->Common->Settings.EventDelay, new TEvInterconnect::TEvForwardDelayed);
+        } else {
+            Enqueue(ev);
+        }
+    }
+
+    void TInterconnectSessionTCP::ForwardDelayed() {
+        Y_ABORT_UNLESS(!DelayedEvents.empty());
+        auto d = std::move(DelayedEvents.front());
+        DelayedEvents.pop_front();
+        d.Span.End();
+        Enqueue(d.Event);
     }
 
     void TInterconnectSessionTCP::Subscribe(STATEFN_SIG) {

@@ -37,7 +37,7 @@ sourceSets {
     }
 }
 
-val project_root="{%- if exportRoot.startswith(arcadiaRoot + '/') -%}{{ arcadiaRoot }}{%- else -%}{{ exportRoot }}{%- endif -%}"
+val project_root="{%- if export_root.startswith(arcadia_root + '/') -%}{{ arcadia_root }}{%- else -%}{{ export_root }}{%- endif -%}"
 
 java {
     withSourcesJar()
@@ -68,11 +68,15 @@ dependencies {
 {%-     if library.prebuilt and library.jar and (library.type != "contrib" or target.handler.build_contribs) %}
     implementation(files("$project_root/{{ library.jar }}"))
 {%-     else -%}
+{%-         set classpath = library.classpath -%}
+{%-         if classpath|replace('"','') == classpath -%}
+{%-             set classpath = '"' + classpath + '"' -%}
+{%-         endif %}
 {%-         if library.type != "contrib" %}
     implementation
 {%-         else %}
     api
-{%-         endif -%}({{ library.classpath }})
+{%-         endif -%}({{ classpath }})
 {%-         if library.excludes.consumer is defined %} {
 {%              for exclude in library.excludes.consumer -%}
 {%                  set classpath = exclude.classpath|replace('"','') -%}
@@ -133,6 +137,14 @@ val prepareProto = tasks.register<Copy>("prepareProto") {
 
 afterEvaluate {
     tasks.getByName("extractProto").dependsOn(prepareProto)
+}
+{# To avoid problems when build project with proto #}
+tasks.named("sourcesJar").configure {
+    dependsOn("generateProto")
+}
+{# To disable redundant javadoc (it may fail the build) #}
+tasks.withType<Javadoc>().configureEach {
+    isEnabled = false
 }
 
 {%- include "[generator]/debug.jinja" ignore missing -%}

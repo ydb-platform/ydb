@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h> // Y_UNIT_TEST_(TWIN|QUAD)
@@ -1216,103 +1217,6 @@ Y_UNIT_TEST(ScanFollowedByUpdate) {
     proxy.ExecQueue();
 }
 
-Y_UNIT_TEST(TestDelayedTxWaitsForWriteActiveTxOnly) {
-    TPortManager pm;
-    NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
-    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
-    TServerSettings serverSettings(pm.GetPort(2134));
-    serverSettings.SetDomainName("Root")
-        .SetUseRealThreads(false)
-        .SetAppConfig(app);
-
-    Tests::TServer::TPtr server = new TServer(serverSettings);
-    auto &runtime = *server->GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
-    TAutoPtr<IEventHandle> handle;
-
-    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
-    runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
-    runtime.SetLogPriority(NKikimrServices::MINIKQL_ENGINE, NActors::NLog::PRI_DEBUG);
-
-    InitRoot(server, sender);
-
-    CreateShardedTable(server, sender, "/Root", "table-1", 1);
-    CreateShardedTable(server, sender, "/Root", "table-2", 1);
-
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (3, 3);"));
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2);"));
-
-    ui64 shard2 = GetTableShards(server, sender, "/Root/table-2")[0];
-
-    TVector<TAutoPtr<IEventHandle>> rss;
-
-    // We want to intercept all RS to table-2.
-    bool blockReadSets = true;
-    auto captureRS = [shard2,&rss,&blockReadSets](TAutoPtr<IEventHandle> &event) -> auto {
-        if (blockReadSets && event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
-            auto &rec = event->Get<TEvTxProcessing::TEvReadSet>()->Record;
-            if (rec.GetTabletDest() == shard2) {
-                rss.push_back(std::move(event));
-                return TTestActorRuntime::EEventAction::DROP;
-            }
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    };
-    runtime.SetObserverFunc(captureRS);
-
-    // Send ReadTable request and wait until it hangs waiting for quota.
-    {
-        auto *req = new TEvTxUserProxy::TEvProposeTransaction;
-        req->Record.SetStreamResponse(true);
-        auto &tx = *req->Record.MutableTransaction()->MutableReadTableTransaction();
-        tx.SetPath("/Root/table-2");
-
-        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, req));
-        runtime.GrabEdgeEventRethrow<TEvTxProcessing::TEvStreamQuotaRequest>(handle);
-    }
-
-    // Copy data from table-1 to table-3. Txs should hang due to dropped RS.
-    SendSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) SELECT key, value FROM `/Root/table-1` WHERE key = 1"));
-    SendSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) SELECT key, value FROM `/Root/table-1` WHERE key = 3"));
-    {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(IsTxResultComplete(), 4);
-        runtime.DispatchEvents(options);
-    }
-
-    // With mvcc (or a better dependency tracking) the read below may start out-of-order,
-    // because transactions above are stuck before performing any writes. Make sure it's
-    // forced to wait for above transactions by commiting a write that is guaranteed
-    // to "happen" after transactions above.
-    blockReadSets = false; // volatile transactions exchange readsets
-    ExecSQL(server, sender, Q_(R"(
-        UPSERT INTO `/Root/table-1` (key, value) VALUES (4, 4);
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (5, 5);
-    )"));
-    blockReadSets = true; // restore to blocking
-
-    // This immediate tx should be delayed due to conflict with upserts.
-    SendSQL(server, sender, Q_("SELECT * FROM `/Root/table-2`"));
-    {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(TEvDataShard::EvProposeTransaction, 1);
-        runtime.DispatchEvents(options);
-    }
-
-    // Don't catch RS any more and send caught ones to proceed with upsert.
-    runtime.SetObserverFunc(&TTestActorRuntime::DefaultObserverFunc);
-    for (auto &rs : rss)
-        runtime.Send(rs.Release());
-
-    // Wait for upserts and immediate tx to finish.
-    {
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(IsTxResultComplete(), 3);
-        runtime.DispatchEvents(options);
-    }
-}
-
 }
 
 Y_UNIT_TEST_SUITE(DataShardOutOfOrder) {
@@ -1320,7 +1224,6 @@ Y_UNIT_TEST_SUITE(DataShardOutOfOrder) {
 Y_UNIT_TEST_TWIN(TestOutOfOrderLockLost, StreamLookup) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
     app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -1449,7 +1352,6 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderLockLost, StreamLookup) {
 Y_UNIT_TEST_QUAD(TestOutOfOrderReadOnlyAllowed, StreamLookup, EvWrite) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
     app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -2540,7 +2442,6 @@ Y_UNIT_TEST(TestReadTableSingleShardImmediate) {
 
     runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
     runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-    runtime.GetAppData().AllowReadTableImmediate = true;
 
     InitRoot(server, sender);
 
@@ -2746,7 +2647,6 @@ Y_UNIT_TEST(TestImmediateQueueThenSplit) {
 void TestLateKqpQueryAfterColumnDrop(bool dataQuery, const TString& query) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
     app.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(false);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -2863,136 +2763,6 @@ Y_UNIT_TEST(TestLateKqpScanAfterColumnDrop) {
     TestLateKqpQueryAfterColumnDrop(false, "SELECT SUM(value2) FROM `/Root/table-1`");
 }
 
-Y_UNIT_TEST(TestLateKqpDataReadAfterColumnDrop) {
-    TestLateKqpQueryAfterColumnDrop(true, R"(
-            SELECT SUM(value2) FROM `/Root/table-1`
-        )");
-}
-
-Y_UNIT_TEST(MvccTestSnapshotRead) {
-    TPortManager pm;
-    NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
-    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
-    TServerSettings serverSettings(pm.GetPort(2134));
-    serverSettings.SetDomainName("Root")
-        .SetAppConfig(app)
-        .SetUseRealThreads(false);
-
-    Tests::TServer::TPtr server = new TServer(serverSettings);
-    auto &runtime = *server->GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
-
-    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-    runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
-
-    InitRoot(server, sender);
-
-    CreateShardedTable(server, sender, "/Root", "table-1", 1);
-
-    TString senderSession = CreateSessionRPC(runtime);
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 0), (1, 1), (2, 2), (3, 3);"));
-
-    auto waitFor = [&](const auto& condition, const TString& description) {
-        if (!condition()) {
-            Cerr << "... waiting for " << description << Endl;
-            TDispatchOptions options;
-            options.CustomFinalCondition = [&]() {
-                return condition();
-            };
-            runtime.DispatchEvents(options);
-            UNIT_ASSERT_C(condition(), "... failed to wait for " << description);
-        }
-    };
-
-    bool captureTimecast = false;
-    bool rewritten = false;
-    bool rescheduled = false;
-
-    TRowVersion snapshot = TRowVersion::Min();
-    ui64 lastStep = 0;
-
-    auto captureEvents = [&](TAutoPtr<IEventHandle> &event) -> auto {
-        switch (event->GetTypeRewrite()) {
-            case TEvMediatorTimecast::EvUpdate: {
-                if (captureTimecast) {
-                    auto update = event->Get<TEvMediatorTimecast::TEvUpdate>();
-                    lastStep = update->Record.GetTimeBarrier();
-                    Cerr << "---- dropped EvUpdate ----" << Endl;
-                    return TTestActorRuntime::EEventAction::DROP;
-                }
-                break;
-            }
-            case TEvDataShard::EvProposeTransaction: {
-                if (!snapshot)
-                    break;
-                auto &propose = event->Get<TEvDataShard::TEvProposeTransaction>()->Record;
-                if (!propose.HasMvccSnapshot()) {
-                    auto mutableSnapshot = propose.MutableMvccSnapshot();
-                    mutableSnapshot->SetStep(snapshot.Step);
-                    mutableSnapshot->SetTxId(snapshot.TxId);
-                    Cerr << "---- rewrite EvProposeTransaction ----" << Endl;
-                    rewritten = true;
-                } else if (propose.HasMvccSnapshot() && propose.GetMvccSnapshot().GetStep() == snapshot.Step &&
-                           propose.GetMvccSnapshot().GetTxId() == snapshot.TxId) {
-                    Cerr << "---- EvProposeTransaction rescheduled----" << Endl;
-                    rescheduled = true;
-                }
-                break;
-            }
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    };
-    auto prevObserverFunc = runtime.SetObserverFunc(captureEvents);
-
-    // check transaction waits for proper plan step
-    captureTimecast = true;
-
-    waitFor([&]{ return lastStep != 0; }, "intercepted TEvUpdate");
-
-    // future snapshot
-    snapshot = TRowVersion(lastStep + 1000, Max<ui64>());
-
-    auto f = SendRequest(
-        runtime,
-        MakeSimpleRequestRPC(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 2 ORDER BY key"), senderSession, "", true));
-
-    waitFor([&]{ return rewritten; }, "EvProposeTransaction rewritten");
-
-    captureTimecast = false;
-
-    waitFor([&]{ return rescheduled; }, "EvProposeTransaction rescheduled");
-
-    {
-        auto response = AwaitResponse(runtime, f);
-        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
-        Ydb::Table::ExecuteQueryResult result;
-        response.operation().result().UnpackTo(&result);
-        UNIT_ASSERT_VALUES_EQUAL(FormatResult(result), "{ items { uint32_value: 2 } items { uint32_value: 2 } }");
-    }
-
-    auto tmp = std::exchange(snapshot, TRowVersion::Min());
-
-    // check transaction reads from snapshot
-
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 10);"));
-
-    {
-        auto result = KqpSimpleExec(runtime, Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 2 ORDER BY key"));
-        UNIT_ASSERT_VALUES_EQUAL(result, "{ items { uint32_value: 2 } items { uint32_value: 10 } }");
-    }
-
-    snapshot = tmp;
-    rescheduled = false;
-
-    {
-        auto result = KqpSimpleExec(runtime, Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 2 ORDER BY key"));
-        UNIT_ASSERT_VALUES_EQUAL(result, "{ items { uint32_value: 2 } items { uint32_value: 2 } }");
-    }
-
-    UNIT_ASSERT(!rescheduled);
-}
-
 Y_UNIT_TEST(TestSecondaryClearanceAfterShardRestartRace) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
@@ -3081,7 +2851,6 @@ Y_UNIT_TEST(TestSecondaryClearanceAfterShardRestartRace) {
 Y_UNIT_TEST_TWIN(TestShardRestartNoUndeterminedImmediate, StreamLookup) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
     app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -3199,7 +2968,6 @@ Y_UNIT_TEST_TWIN(TestShardRestartNoUndeterminedImmediate, StreamLookup) {
 Y_UNIT_TEST_QUAD(TestShardRestartPlannedCommitShouldSucceed, StreamLookup, EvWrite) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
     app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -3315,7 +3083,6 @@ Y_UNIT_TEST_QUAD(TestShardRestartPlannedCommitShouldSucceed, StreamLookup, EvWri
 Y_UNIT_TEST(TestShardRestartDuringWaitingRead) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetUseRealThreads(false)
@@ -3810,6 +3577,12 @@ Y_UNIT_TEST(TestSnapshotReadAfterStuckRW) {
 Y_UNIT_TEST(TestSnapshotReadPriority) {
     TPortManager pm;
     TServerSettings::TControls controls;
+    // This test needs to make sure mediator time does not advance while
+    // certain operations are running. Unfortunately, volatile planning
+    // may happen every 1ms, and it's too hard to guarantee time stays
+    // still for such a short time. We disable volatile planning to make
+    // coordinator ticks are 100ms apart.
+    controls.MutableCoordinatorControls()->SetVolatilePlanLeaseMs(0);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetControls(controls)
@@ -4476,7 +4249,7 @@ Y_UNIT_TEST(UncommittedReadSetAck) {
     for (auto& ev : capturedCommits) {
         auto proxy = ev->Recipient;
         ui32 groupId = GroupIDFromBlobStorageProxyID(proxy);
-        auto res = ev->Get<TEvBlobStorage::TEvPut>()->MakeErrorResponse(NKikimrProto::ERROR, "Something went wrong", groupId);
+        auto res = ev->Get<TEvBlobStorage::TEvPut>()->MakeErrorResponse(NKikimrProto::ERROR, "Something went wrong", TGroupId::FromValue(groupId));
         runtime.Send(new IEventHandle(ev->Sender, proxy, res.release()), 1, true);
     }
     capturedCommits.clear();

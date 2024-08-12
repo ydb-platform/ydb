@@ -373,6 +373,30 @@
       "kind": "RATE"
     },
     {
+      "kind":"RATE",
+      "labels":  {
+        "cloud_id":"cloud4",
+        "database":"/Root",
+        "database_id":"database4",
+        "folder_id":"folder4",
+        "name":"topic.write.discarded_bytes",
+        "topic":"test-counters-stream"
+      },
+      "value":0
+    },
+    {
+      "kind":"RATE",
+      "labels": {
+        "cloud_id":"cloud4",
+        "database":"/Root",
+        "database_id":"database4",
+        "folder_id":"folder4",
+        "name":"topic.write.discarded_messages",
+        "topic":"test-counters-stream"
+      },
+      "value":0
+    },
+    {
       "labels": {
         "name": "topic.write.message_size_bytes",
         "topic": "test-counters-stream",

@@ -8,6 +8,7 @@ TIndexationCounters::TIndexationCounters(const TString& module)
     : TBase(module)
 {
     ReadBytes = TBase::GetDeriviative("Read/Bytes");
+    ReadErrors = TBase::GetDeriviative("Read/Errors/Count");
     AnalizeInsertedPortions = TBase::GetDeriviative("AnalizeInsertion/Portions");
     AnalizeInsertedBytes = TBase::GetDeriviative("AnalizeInsertion/Bytes");
     RepackedInsertedPortions = TBase::GetDeriviative("RepackedInsertion/Portions");

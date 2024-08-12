@@ -21,6 +21,13 @@ namespace {
         }
     }
 
+    NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec) {
+        NProtoBuf::Timestamp timestamp;
+        timestamp.set_seconds((i64)(sec));
+        timestamp.set_nanos(0);
+        return timestamp;
+    }
+
     TImportInfo::EState GetMinState(TImportInfo::TPtr importInfo) {
         TImportInfo::EState state = TImportInfo::EState::Invalid;
 
@@ -40,6 +47,17 @@ namespace {
 void TSchemeShard::FromXxportInfo(NKikimrImport::TImport& import, const TImportInfo::TPtr importInfo) {
     import.SetId(importInfo->Id);
     import.SetStatus(Ydb::StatusIds::SUCCESS);
+
+    if (importInfo->StartTime != TInstant::Zero()) {
+        *import.MutableStartTime() = SecondsToProtoTimeStamp(importInfo->StartTime.Seconds());
+    }
+    if (importInfo->EndTime != TInstant::Zero()) {
+        *import.MutableEndTime() = SecondsToProtoTimeStamp(importInfo->EndTime.Seconds());
+    }
+
+    if (importInfo->UserSID) {
+        import.SetUserSID(*importInfo->UserSID);
+    }
 
     switch (importInfo->State) {
     case TImportInfo::EState::Waiting:
@@ -131,7 +149,9 @@ void TSchemeShard::PersistRemoveImport(NIceDb::TNiceDb& db, const TImportInfo::T
 void TSchemeShard::PersistImportState(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo) {
     db.Table<Schema::Imports>().Key(importInfo->Id).Update(
         NIceDb::TUpdate<Schema::Imports::State>(static_cast<ui8>(importInfo->State)),
-        NIceDb::TUpdate<Schema::Imports::Issue>(importInfo->Issue)
+        NIceDb::TUpdate<Schema::Imports::Issue>(importInfo->Issue),
+        NIceDb::TUpdate<Schema::Imports::StartTime>(importInfo->StartTime.Seconds()),
+        NIceDb::TUpdate<Schema::Imports::EndTime>(importInfo->EndTime.Seconds())
     );
 }
 

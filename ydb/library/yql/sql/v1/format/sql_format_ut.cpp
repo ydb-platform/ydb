@@ -275,14 +275,16 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
              "CREATE TABLE user (\n\tuser int32\n)\nWITH (ttl = interval('P1D') ON user AS MICROSECONDS);\n"},
             {"create table user(user int32) with (ttl=interval('P1D') on user as nAnOsEcOnDs)",
              "CREATE TABLE user (\n\tuser int32\n)\nWITH (ttl = interval('P1D') ON user AS NANOSECONDS);\n"},
-            {"create table user(index user global unique sync with (user=user,user=user) on (user,user))",
-             "CREATE TABLE user (\n\tINDEX user GLOBAL UNIQUE SYNC WITH (user = user, user = user) ON (user, user)\n);\n"},
-            {"create table user(index user global async with (user=user,) on (user))",
-             "CREATE TABLE user (\n\tINDEX user GLOBAL ASYNC WITH (user = user,) ON (user)\n);\n"},
+            {"create table user(index user global unique sync on (user,user) with (user=user,user=user))",
+             "CREATE TABLE user (\n\tINDEX user GLOBAL UNIQUE SYNC ON (user, user) WITH (user = user, user = user)\n);\n"},
+            {"create table user(index user global async on (user) with (user=user,))",
+             "CREATE TABLE user (\n\tINDEX user GLOBAL ASYNC ON (user) WITH (user = user,)\n);\n"},
             {"create table user(index user local on (user) cover (user))",
              "CREATE TABLE user (\n\tINDEX user LOCAL ON (user) COVER (user)\n);\n"},
             {"create table user(index user local on (user) cover (user,user))",
              "CREATE TABLE user (\n\tINDEX user LOCAL ON (user) COVER (user, user)\n);\n"},
+            {"create table user(index idx global using subtype on (col) cover (col) with (setting = foo, another_setting = bar));",
+             "CREATE TABLE user (\n\tINDEX idx GLOBAL USING subtype ON (col) COVER (col) WITH (setting = foo, another_setting = bar)\n);\n"},
             {"create table user(family user (user='foo'))",
              "CREATE TABLE user (\n\tFAMILY user (user = 'foo')\n);\n"},
             {"create table user(family user (user='foo',user='bar'))",
@@ -380,6 +382,8 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
         TCases cases = {
             {"create async replication user for table1 AS table2 with (user='foo')",
              "CREATE ASYNC REPLICATION user FOR table1 AS table2 WITH (user = 'foo');\n"},
+            {"alter async replication user set (user='foo')",
+             "ALTER ASYNC REPLICATION user SET (user = 'foo');\n"},
             {"drop async replication user",
              "DROP ASYNC REPLICATION user;\n"},
             {"drop async replication user cascade",
@@ -436,6 +440,8 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
              "ALTER TABLE user\n\tDROP COLUMN user;\n"},
             {"alter table user alter column user set family user",
              "ALTER TABLE user\n\tALTER COLUMN user SET FAMILY user;\n"},
+            {"alter table t alter column c drop not null",
+             "ALTER TABLE t\n\tALTER COLUMN c DROP NOT NULL;\n"},
             {"alter table user add family user(user='foo')",
              "ALTER TABLE user\n\tADD FAMILY user (user = 'foo');\n"},
             {"alter table user alter family user set user 'foo'",
@@ -452,6 +458,14 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
              "ALTER TABLE user\n\tRESET (user, user);\n"},
             {"alter table user add index user local on (user)",
              "ALTER TABLE user\n\tADD INDEX user LOCAL ON (user);\n"},
+            {"alter table user alter index idx set setting 'foo'",
+             "ALTER TABLE user\n\tALTER INDEX idx SET setting 'foo';\n"},
+            {"alter table user alter index idx set (setting = 'foo', another_setting = 'bar')",
+             "ALTER TABLE user\n\tALTER INDEX idx SET (setting = 'foo', another_setting = 'bar');\n"},
+            {"alter table user alter index idx reset (setting, another_setting)",
+             "ALTER TABLE user\n\tALTER INDEX idx RESET (setting, another_setting);\n"},
+            {"alter table user add index idx global using subtype on (col) cover (col) with (setting = foo, another_setting = 'bar');",
+             "ALTER TABLE user\n\tADD INDEX idx GLOBAL USING subtype ON (col) COVER (col) WITH (setting = foo, another_setting = 'bar');\n"},
             {"alter table user drop index user",
              "ALTER TABLE user\n\tDROP INDEX user;\n"},
             {"alter table user rename to user",
@@ -499,6 +513,7 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
         TSetup setup;
         setup.Run(cases);
     }
+
     Y_UNIT_TEST(AlterTopic) {
         TCases cases = {
              {"alter topic topic1 alter consumer c1 set (important = false)",
@@ -515,10 +530,25 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
         TSetup setup;
         setup.Run(cases);
     }
+
     Y_UNIT_TEST(DropTopic) {
         TCases cases = {
             {"drop topic topic1",
              "DROP TOPIC topic1;\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(TopicExistsStatement) {
+        TCases cases = {
+            {"drop topic if exists topic1",
+             "DROP TOPIC IF EXISTS topic1;\n"},
+            {"create topic if not exists topic1 with (partition_count_limit = 5)",
+             "CREATE TOPIC IF NOT EXISTS topic1 WITH (\n\tpartition_count_limit = 5\n);\n"},
+             {"alter topic if exists topic1 alter consumer c1 set (important = false)",
+             "ALTER TOPIC IF EXISTS topic1\n\tALTER CONSUMER c1 SET (important = FALSE);\n"},
         };
 
         TSetup setup;
@@ -1568,6 +1598,68 @@ FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
         TCases cases = {
             {"dRop viEW theVIEW",
              "DROP VIEW theVIEW;\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(ResourcePoolOperations) {
+        TCases cases = {
+            {"creAte reSourCe poOl naMe With (a = \"b\")",
+             "CREATE RESOURCE POOL naMe WITH (a = \"b\");\n"},
+             {"create resource pool eds with (a=\"a\",b=\"b\",c = true)",
+             "CREATE RESOURCE POOL eds WITH (\n\ta = \"a\",\n\tb = \"b\",\n\tc = TRUE\n);\n"},
+             {"alTer reSOurcE poOl naMe resEt (b, c), seT (x=y, z=false)",
+             "ALTER RESOURCE POOL naMe\n\tRESET (b, c),\n\tSET (x = y, z = FALSE);\n"},
+             {"alter resource pool eds reset (a), set (x=y)",
+             "ALTER RESOURCE POOL eds\n\tRESET (a),\n\tSET (x = y);\n"},
+            {"dRop reSourCe poOl naMe",
+             "DROP RESOURCE POOL naMe;\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(BackupCollectionOperations) {
+        TCases cases = {
+            {"creAte  BackuP colLection `-naMe` wIth (a = \"b\")",
+             "CREATE BACKUP COLLECTION `-naMe` WITH (a = \"b\");\n"},
+             {"alTer bACKuP coLLECTION naMe resEt (b, c), seT (x=y, z=false)",
+             "ALTER BACKUP COLLECTION naMe\n\tRESET (b, c),\n\tSET (x = y, z = FALSE);\n"},
+            {"DROP backup collectiOn       `/some/path`",
+             "DROP BACKUP COLLECTION `/some/path`;\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(Analyze) {
+        TCases cases = {
+            {"analyze table (col1, col2, col3)",
+             "ANALYZE table (col1, col2, col3);\n"},
+             {"analyze table",
+             "ANALYZE table;\n"}
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(ResourcePoolClassifierOperations) {
+        TCases cases = {
+            {"creAte reSourCe poOl ClaSsiFIer naMe With (a = \"b\")",
+             "CREATE RESOURCE POOL CLASSIFIER naMe WITH (a = \"b\");\n"},
+             {"create resource pool classifier eds with (a=\"a\",b=\"b\",c = true)",
+             "CREATE RESOURCE POOL CLASSIFIER eds WITH (\n\ta = \"a\",\n\tb = \"b\",\n\tc = TRUE\n);\n"},
+             {"alTer reSOurcE poOl ClaSsiFIer naMe resEt (b, c), seT (x=y, z=false)",
+             "ALTER RESOURCE POOL CLASSIFIER naMe\n\tRESET (b, c),\n\tSET (x = y, z = FALSE);\n"},
+             {"alter resource pool classifier eds reset (a), set (x=y)",
+             "ALTER RESOURCE POOL CLASSIFIER eds\n\tRESET (a),\n\tSET (x = y);\n"},
+            {"dRop reSourCe poOl ClaSsiFIer naMe",
+             "DROP RESOURCE POOL CLASSIFIER naMe;\n"},
         };
 
         TSetup setup;

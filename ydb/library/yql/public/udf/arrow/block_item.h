@@ -22,6 +22,11 @@ public:
 
     template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result>>
     inline explicit TBlockItem(T value);
+
+    inline explicit TBlockItem(NYql::NDecimal::TInt128 value) {
+        *reinterpret_cast<NYql::NDecimal::TInt128*>(&Raw) = value;
+        Raw.Simple.Meta = static_cast<ui8>(EMarkers::Embedded);
+    }
     
     inline explicit TBlockItem(IBoxedValuePtr&& value) {
         Raw.Resource.Meta = static_cast<ui8>(EMarkers::Boxed);
@@ -73,6 +78,14 @@ public:
 
     template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result>>
     inline T Get() const;
+
+    inline NYql::NDecimal::TInt128 GetInt128() const {
+        Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::Embedded);
+        auto v = *reinterpret_cast<const NYql::NDecimal::TInt128*>(&Raw);
+        const auto p = reinterpret_cast<ui8*>(&v);
+        p[0xF] = (p[0xE] & 0x80) ? 0xFF : 0x00;
+        return v;
+    }
 
     // TODO: deprecate AsTuple() in favor of GetElements()
     inline const TBlockItem* AsTuple() const {
@@ -155,6 +168,15 @@ public:
 
     bool IsBoxed() const { return EMarkers::Boxed == GetMarkers(); }
     bool IsEmbedded() const { return EMarkers::Embedded == GetMarkers(); }
+    inline void SetTimezoneId(ui16 id) {
+        UDF_VERIFY(GetMarkers() == EMarkers::Embedded, "Value is not a datetime");
+        Raw.Simple.TimezoneId = id;
+    }
+
+    inline ui16 GetTimezoneId() const {
+        UDF_VERIFY(GetMarkers() == EMarkers::Embedded, "Value is not a datetime");
+        return Raw.Simple.TimezoneId;
+    }
 
 private:
     union TRaw {
@@ -180,7 +202,8 @@ private:
             union {
                 ui64 FullMeta;
                 struct {
-                    ui8 Reserved[7];
+                    TTimezoneId TimezoneId;
+                    ui8 Reserved[5];
                     ui8 Meta;
                 };
             };

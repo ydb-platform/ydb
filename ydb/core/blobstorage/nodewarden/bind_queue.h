@@ -26,6 +26,10 @@ namespace NKikimr::NStorage {
 #endif
 
     public:
+        bool Empty() const {
+            return BindQueue.empty();
+        }
+
         void Disable(ui32 nodeId) {
 #ifndef NDEBUG
             Y_ABORT_UNLESS(Enabled.contains(nodeId));

@@ -3,6 +3,7 @@
 #include "public.h"
 
 #include "pull_parser.h"
+#include "protobuf_interop.h"
 
 #include <library/cpp/yt/containers/enum_indexed_array.h>
 
@@ -159,6 +160,18 @@ void Deserialize(std::unique_ptr<T>& value, TYsonPullParserCursor* cursor);
 
 template <class T, class TTag>
 void Deserialize(TStrongTypedef<T, TTag>& value, TYsonPullParserCursor* cursor);
+
+void DeserializeProtobufMessage(
+    google::protobuf::Message& message,
+    const NYson::TProtobufMessageType* type,
+    NYson::TYsonPullParserCursor* cursor,
+    const NYson::TProtobufWriterOptions& options = {});
+
+template <class T>
+    requires std::derived_from<T, google::protobuf::Message>
+void Deserialize(
+    T& message,
+    NYson::TYsonPullParserCursor* cursor);
 
 ////////////////////////////////////////////////////////////////////////////////
 

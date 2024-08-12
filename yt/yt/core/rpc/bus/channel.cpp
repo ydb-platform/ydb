@@ -21,6 +21,8 @@
 #include <yt/yt/core/misc/finally.h>
 #include <yt/yt/core/misc/atomic_object.h>
 
+#include <yt/yt/core/tracing/public.h>
+
 #include <yt/yt_proto/yt/core/rpc/proto/rpc.pb.h>
 
 #include <library/cpp/yt/threading/rw_spin_lock.h>
@@ -33,17 +35,18 @@
 namespace NYT::NRpc::NBus {
 
 using namespace NYT::NBus;
+using namespace NConcurrency;
+using namespace NTracing;
 using namespace NYPath;
 using namespace NYTree;
 using namespace NYson;
-using namespace NConcurrency;
 
 using NYT::FromProto;
 using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = RpcClientLogger;
+static constexpr auto& Logger = RpcClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -51,10 +54,14 @@ class TBusChannel
     : public IChannel
 {
 public:
-    explicit TBusChannel(IBusClientPtr client)
+    TBusChannel(
+        IBusClientPtr client,
+        IMemoryUsageTrackerPtr memoryUsageTracker)
         : Client_(std::move(client))
+        , MemoryUsageTracker_(std::move(memoryUsageTracker))
     {
         YT_VERIFY(Client_);
+        YT_VERIFY(MemoryUsageTracker_);
     }
 
     const TString& GetEndpointDescription() const override
@@ -143,6 +150,11 @@ public:
         return requestCount;
     }
 
+    const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override
+    {
+        return MemoryUsageTracker_;
+    }
+
 private:
     class TSession;
     using TSessionPtr = TIntrusivePtr<TSession>;
@@ -151,6 +163,7 @@ private:
     using TClientRequestControlPtr = TIntrusivePtr<TClientRequestControl>;
 
     const IBusClientPtr Client_;
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_;
 
     TSingleShotCallbackList<void(const TError&)> Terminated_;
 
@@ -198,7 +211,9 @@ private:
 
             bucket.Sessions.reserve(options.MultiplexingParallelism);
             while (bucket.Sessions.size() <= index) {
-                auto session = New<TSession>(options.MultiplexingBand);
+                auto session = New<TSession>(
+                    options.MultiplexingBand,
+                    MemoryUsageTracker_);
                 auto messageHandler = New<TMessageHandler>(session);
 
                 auto bus = Client_->CreateBus(
@@ -282,9 +297,14 @@ private:
         : public IMessageHandler
     {
     public:
-        explicit TSession(EMultiplexingBand band)
+        TSession(
+            EMultiplexingBand band,
+            IMemoryUsageTrackerPtr memoryUsageTracker)
             : TosLevel_(TTcpDispatcher::Get()->GetTosLevelForBand(band))
-        { }
+            , MemoryUsageTracker_(std::move(memoryUsageTracker))
+        {
+            YT_VERIFY(MemoryUsageTracker_);
+        }
 
         void Initialize(IBusPtr bus)
         {
@@ -357,10 +377,11 @@ private:
             }
 
             if (auto readyFuture = GetBusReadyFuture()) {
-                YT_LOG_DEBUG("Waiting for bus to become ready (RequestId: %v, Method: %v.%v)",
+                YT_LOG_DEBUG("Waiting for bus to become ready (RequestId: %v, Method: %v.%v, Endpoint: %v)",
                     requestControl->GetRequestId(),
                     requestControl->GetService(),
-                    requestControl->GetMethod());
+                    requestControl->GetMethod(),
+                    Bus_->GetEndpointDescription());
 
                 readyFuture.Subscribe(BIND(
                     [
@@ -389,7 +410,7 @@ private:
             return requestControl;
         }
 
-        void Cancel(const TClientRequestControlPtr& requestControl)
+        YT_PREVENT_TLS_CACHING void Cancel(const TClientRequestControlPtr& requestControl)
         {
             VERIFY_THREAD_AFFINITY_ANY();
 
@@ -419,7 +440,7 @@ private:
             }
 
             // YT-1639: Avoid long chain of recursive calls.
-            YT_THREAD_LOCAL(int) Depth = 0;
+            thread_local int Depth = 0;
             constexpr int MaxDepth = 10;
             if (Depth < MaxDepth) {
                 ++Depth;
@@ -627,6 +648,7 @@ private:
 
     private:
         const TTosLevel TosLevel_;
+        const IMemoryUsageTrackerPtr MemoryUsageTracker_;
 
         IBusPtr Bus_;
         std::atomic<bool> BusReady_ = false;
@@ -899,11 +921,24 @@ private:
                     error = FromProto<TError>(header.error());
                 }
                 if (error.IsOK()) {
-                    NotifyResponse(
-                        requestId,
-                        requestControl,
-                        responseHandler,
-                        std::move(message));
+                    message = TrackMemory(MemoryUsageTracker_, std::move(message));
+                    if (MemoryUsageTracker_->IsExceeded()) {
+                        auto error = TError(
+                            NRpc::EErrorCode::MemoryPressure,
+                            "Response is dropped due to high memory pressure");
+                        requestControl->ProfileError(error);
+                        NotifyError(
+                            requestControl,
+                            responseHandler,
+                            TStringBuf("Response is dropped due to high memory pressure"),
+                            error);
+                    } else {
+                        NotifyResponse(
+                            requestId,
+                            requestControl,
+                            responseHandler,
+                            std::move(message));
+                    }
                 } else {
                     requestControl->ProfileError(error);
                     if (error.GetCode() == EErrorCode::PoisonPill) {
@@ -921,7 +956,7 @@ private:
         void OnStreamingPayloadMessage(TSharedRefArray message)
         {
             NProto::TStreamingPayloadHeader header;
-            if (!ParseStreamingPayloadHeader(message, &header)) {
+            if (!TryParseStreamingPayloadHeader(message, &header)) {
                 YT_LOG_ERROR("Error parsing streaming payload header");
                 return;
             }
@@ -976,7 +1011,7 @@ private:
         void OnStreamingFeedbackMessage(TSharedRefArray message)
         {
             NProto::TStreamingFeedbackHeader header;
-            if (!ParseStreamingFeedbackHeader(message, &header)) {
+            if (!TryParseStreamingFeedbackHeader(message, &header)) {
                 YT_LOG_ERROR("Error parsing streaming feedback header");
                 return;
             }
@@ -1066,6 +1101,12 @@ private:
             if (requestControl->GetTimeout()) {
                 detailedError = detailedError
                     << TErrorAttribute("timeout", *requestControl->GetTimeout());
+            }
+
+            if (!detailedError.HasTracingAttributes()) {
+                if (auto tracingAttributes = requestControl->GetTracingAttributes()) {
+                    detailedError.SetTracingAttributes(*tracingAttributes);
+                }
             }
 
             YT_LOG_DEBUG(detailedError, "%v (RequestId: %v)",
@@ -1163,6 +1204,11 @@ private:
             return TraceContext_.MakeTraceContextGuard();
         }
 
+        std::optional<TTracingAttributes> GetTracingAttributes() const
+        {
+            return TraceContext_.GetTracingAttributes();
+        }
+
         template <typename TLock>
         bool IsActive(const TGuard<TLock>&) const
         {
@@ -1235,11 +1281,16 @@ private:
     };
 };
 
-IChannelPtr CreateBusChannel(IBusClientPtr client)
+IChannelPtr CreateBusChannel(
+    IBusClientPtr client,
+    IMemoryUsageTrackerPtr memoryUsageTracker)
 {
     YT_VERIFY(client);
+    YT_VERIFY(memoryUsageTracker);
 
-    return New<TBusChannel>(std::move(client));
+    return New<TBusChannel>(
+        std::move(client),
+        std::move(memoryUsageTracker));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1253,7 +1304,9 @@ public:
         IMemoryUsageTrackerPtr memoryUsageTracker)
         : Config_(ConvertToNode(std::move(config)))
         , MemoryUsageTracker_(std::move(memoryUsageTracker))
-    { }
+    {
+        YT_VERIFY(MemoryUsageTracker_);
+    }
 
     IChannelPtr CreateChannel(const TString& address) override
     {
@@ -1261,9 +1314,11 @@ public:
         config->Load(Config_, /*postprocess*/ true, /*setDefaults*/ false);
         auto client = CreateBusClient(
             std::move(config),
-            GetYTPacketTranscoderFactory(MemoryUsageTracker_),
+            GetYTPacketTranscoderFactory(),
             MemoryUsageTracker_);
-        return CreateBusChannel(std::move(client));
+        return CreateBusChannel(
+            std::move(client),
+            MemoryUsageTracker_);
     }
 
 private:
@@ -1301,9 +1356,11 @@ public:
         config->Load(Config_, /*postprocess*/ true, /*setDefaults*/ false);
         auto client = CreateBusClient(
             std::move(config),
-            GetYTPacketTranscoderFactory(MemoryUsageTracker_),
+            GetYTPacketTranscoderFactory(),
             MemoryUsageTracker_);
-        return CreateBusChannel(std::move(client));
+        return CreateBusChannel(
+            std::move(client),
+            MemoryUsageTracker_);
     }
 
 private:

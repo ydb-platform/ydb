@@ -1,0 +1,23 @@
+str str sum sum sum sum avg avg avg cnt
+num str str int str str str str
+int sum str int
+str cnt
+str sum
+sum
+str str int sum
+int rat
+str int sum
+int str sum num str str str str
+int sum
+str sum sum
+cnt cnt
+rat
+int str str str sum
+str str num cnt
+avg
+str int int str num sum
+sum
+str str
+str cnt
+num cnt sum
+

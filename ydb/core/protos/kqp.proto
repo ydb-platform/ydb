@@ -66,19 +66,19 @@ enum EIsolationLevel {
     ISOLATION_LEVEL_READ_STALE = 4;
 };
 
-enum EQueryReplyFlags {
-    QUERY_REPLY_FLAG_RESULTS = 1;
-    QUERY_REPLY_FLAG_PLAN = 2;
-    QUERY_REPLY_FLAG_AST = 4;
-};
-
 message TTopicOperationsRequest {
     optional string Consumer = 1;
     repeated Ydb.Topic.UpdateOffsetsInTransactionRequest.TopicOffsets Topics = 2;
+    optional uint32 SupportivePartition = 3;
 }
 
 message TTopicOperationsResponse {
-    optional int64 WriteId = 1;
+    message TWriteId {
+        optional uint64 NodeId = 1;
+        optional uint64 KeyId = 2;
+    }
+
+    optional TWriteId WriteId = 1;
 };
 
 message TQueryRequest {
@@ -93,7 +93,8 @@ message TQueryRequest {
     optional EQueryAction Action = 9;
     reserved 10; // (deprecated) Profile
     optional bytes PreparedQuery = 11;
-    optional uint32 ReplyFlags = 12 [default = 1];
+    // optional uint32 ReplyFlags = 12 [default = 1];
+    reserved 12;
     optional Ydb.Table.TransactionControl TxControl = 13;
     optional string Database = 14;
     optional Ydb.Table.QueryCachePolicy QueryCachePolicy = 15;
@@ -115,11 +116,17 @@ message TQueryRequest {
     optional string ClientSdkBuildInfo = 31;
     optional string ApplicationName = 32;
     optional string UserSID = 33;
+    optional uint64 OutputChunkMaxSize = 34;
+    optional string PoolId = 35;
 }
 
 message TKqpPathIdProto {
     optional uint32 OwnerId = 1;
     optional uint32 TableId = 2;
+}
+
+message TVectorIndexKmeansTreeDescription {
+    optional Ydb.Table.VectorIndexSettings Settings = 1;
 }
 
 message TIndexDescriptionProto {
@@ -131,6 +138,9 @@ message TIndexDescriptionProto {
     optional uint32 PathOwnerId = 6;
     repeated string KeyColumns = 7;
     repeated string DataColumns = 8;
+    oneof SpecializedIndexDescription {
+        TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 9;
+    }
 };
 
 message TKqpColumnMetadataProto {
@@ -176,6 +186,7 @@ message TKqpTableMetadataProto {
     repeated TKqpTableMetadataProto SecondaryGlobalIndexMetadata = 12;
     optional uint64 RecordsCount = 13;
     optional uint64 DataSize = 14;
+    optional bool StatsLoaded = 15;
 }
 
 message TRlPath {
@@ -195,35 +206,6 @@ message TEvQueryRequest {
     optional Ydb.StatusIds.StatusCode YdbStatus = 8;
     optional NActorsProto.TActorId CancelationActor = 9;
 }
-
-message TMkqlProfile {
-    optional string Query = 1;
-    optional NKikimrQueryStats.TTxStats TxStats = 2;
-};
-
-message TTransformProfile {
-    optional string Name = 1;
-    optional uint64 TransformDurationUs = 2;
-    optional uint64 WaitDurationUs = 3;
-    optional int32 NewExprNodes = 4;
-    optional int32 NewTypeNodes = 5;
-    optional uint32 Repeats = 6;
-    optional uint32 Restarts = 7;
-
-    repeated TTransformProfile Stages = 100;
-}
-
-message TKqlProfile {
-    optional string Query = 1;
-    repeated TMkqlProfile MkqlProfiles = 2;
-    optional EIsolationLevel EffectiveIsolationLevel = 3;
-    optional TTransformProfile TransformStats = 4;
-}
-
-message TQueryProfile {
-    repeated TKqlProfile KqlProfiles = 1;
-    optional TTransformProfile TransformStats = 2;
-};
 
 message TParameterBinding {
     optional string Name = 1;
@@ -258,6 +240,14 @@ message TPreparedQuery {
     optional NKqpProto.TKqpPhyQuery PhysicalQuery = 6;
 };
 
+message TQueryResponsePgInfo {
+    optional string CommandTag = 1;
+}
+
+message TQueryResponseExtraInfo {
+    optional TQueryResponsePgInfo PgInfo = 1;
+}
+
 message TQueryResponse {
     optional bytes SessionId = 1;
     reserved 2; // (deprecated) QueryErrors
@@ -275,6 +265,7 @@ message TQueryResponse {
     repeated Ydb.ResultSet YdbResults = 13;
     optional TTopicOperationsResponse TopicOperations = 14;
     optional string QueryDiagnostics = 15;
+    optional TQueryResponseExtraInfo ExtraInfo = 16;
 }
 
 message TEvQueryResponse {
@@ -307,13 +298,6 @@ message TEvCloseSessionResponse {
     optional TCloseSessionResponse Response = 3;
 }
 
-message TEvProcessResponse {
-    reserved 1; // (deprecated) KqpStatus
-    optional bytes Error = 2;
-    optional Ydb.StatusIds.StatusCode YdbStatus = 3;
-    optional bool WorkerIsClosing = 4 [default = false];
-}
-
 message TSessionInfo {
     optional string SessionId = 1;
     /// optional ui32 NodeId = 2;
@@ -330,6 +314,7 @@ message TSessionInfo {
     optional int64 StateChangeAt = 13;
     optional string UserSID = 14;
     optional bool PgWire = 15 [default = false];
+    optional string UserName = 16;
 }
 
 message TEvListSessionsRequest {
@@ -360,7 +345,6 @@ message TKqpDefaultSettings {
 
 message TCreateSessionRequest {
     optional string Database = 1;
-    optional string ApplicationName = 2;
 }
 
 message TEvCreateSessionRequest {
@@ -381,6 +365,7 @@ message TEvCreateSessionRequest {
     optional string ClientSdkBuildInfo = 10;
     optional string ApplicationName = 11;
     optional string UserSID = 12;
+    optional string UserName = 13;
 }
 
 message TCreateSessionResponse {
@@ -562,6 +547,11 @@ message TEvStartKqpTasksRequest {
     optional NActorsProto.TActorId ExecuterActorId = 4;
     optional TKqpSnapshot Snapshot = 5;
     optional bool StartAllOrFail = 6 [default = true];
+    optional uint64 OutputChunkMaxSize = 7 [default = 0]; // 0 - use some default value
+    optional string SerializedGUCSettings = 8;
+    optional string SchedulerGroup = 9;
+    optional double MemoryPoolPercent = 10 [default = 100];
+    optional string Database = 11;
 }
 
 message TEvStartKqpTasksResponse {
@@ -705,12 +695,31 @@ message TEvKqpOutputActorResultInfo {
     repeated NKikimrDataEvents.TLock Locks = 1;
 }
 
+message TKqpTableSinkLocks {
+    repeated NKikimrDataEvents.TLock Locks = 1;
+    repeated uint64 SendingShards = 2;
+    repeated uint64 ReceivingShards = 3;
+}
+
 message TKqpTableSinkSettings {
+    enum EType {
+        MODE_REPLACE = 0;
+        MODE_UPSERT = 1;
+        MODE_INSERT = 2;
+        MODE_DELETE = 3;
+        MODE_UPDATE = 4;
+    }
+
     optional NKqpProto.TKqpPhyTableId Table = 3;
     repeated TKqpColumnMetadataProto KeyColumns = 4;
     repeated TKqpColumnMetadataProto Columns = 5;
     optional uint64 LockTxId = 6;
     optional uint64 LockNodeId = 7;
+    optional bool FinalTx = 8; // If tx is immediate then commit, otherwise send prepare
+    optional bool ImmediateTx = 9; // Try to be immediate tx
+    optional bool InconsistentTx = 10; // Write each batch in it's own single immediate tx
+    optional EType Type = 11;
+    optional TKqpTableSinkLocks Locks = 12;
 }
 
 message TKqpStreamLookupSettings {
@@ -729,19 +738,6 @@ message TKqpSequencerSettings {
     optional NKqpProto.TKqpPhyTableId Table = 1;
     repeated TKqpColumnMetadataProto Columns = 2;
     optional string Database = 3;
-}
-
-message TEvFetchScriptResultsRequest {
-    optional uint64 ResultSetIndex = 3;
-    optional uint64 RowsOffset = 1;
-    optional uint64 RowsLimit = 2;
-}
-
-message TEvFetchScriptResultsResponse {
-    optional Ydb.StatusIds.StatusCode Status = 1;
-    repeated Ydb.Issue.IssueMessage Issues = 2;
-    optional uint64 ResultSetIndex = 3;
-    optional Ydb.ResultSet ResultSet = 4;
 }
 
 message TResourceExchangeNodeData {
@@ -775,4 +771,10 @@ message TEvCheckAliveResponse {
 message TScriptExecutionOperationMeta {
     optional google.protobuf.Duration OperationTtl = 1;
     optional google.protobuf.Duration ResultsTtl = 2;
+}
+
+/// KQP workload manager Events
+message TEvRefreshPoolState {
+    optional string PoolId = 1;
+    optional string Database = 2;
 }

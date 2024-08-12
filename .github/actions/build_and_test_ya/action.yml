@@ -14,23 +14,21 @@ inputs:
     type: boolean
     default: true
     description: "run tests"
-  run_tests_if_build_fails:
-    default: "true"
-    description: "run tests if build fails"
   test_threads:
     type: string
     default: 28
     description: "Test threads count"
   link_threads:
     type: string
-    default: 8
+    default: 12
     description: "link threads count"
   test_size:
     type: string
     default: "small,medium,large"
   test_type:
     type: string
-    default: "unittest,py3test,py2test,pytest"
+    default: ""
+    description: "run only specific test types (or all by default)"
   increment:
     type: boolean
     required: true
@@ -41,6 +39,9 @@ inputs:
   put_build_results_to_cache:
     type: boolean
     default: true
+  additional_ya_make_args:
+    type: string
+    default: ""
   secs:
     type: string
     default: ""
@@ -65,7 +66,21 @@ runs:
         check_url=$(curl -s $jobs_url | jq --arg n "$BUILD_PRESET" -r '.jobs[] | select(.name | contains($n)) | .html_url')
         
         echo "Pre-commit [check]($check_url) for $(git rev-parse HEAD) has started." | .github/scripts/tests/comment-pr.py --rewrite
-    
+
+        curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+          https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
+          -d '{"state":"pending","description":"The check has been started","context":"build_${{inputs.build_preset}}"}'
+
+        if [[ "${{inputs.run_tests}}" == "true" ]];then
+          curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
+            -d '{"state":"pending","description":"The check has been started","context":"test_${{inputs.build_preset}}"}'
+        fi
+   
+    - name: Clean ya cache
+      shell: bash
+      run: rm -rf ~/.ya
+
     - name: Prepare s3cmd
       uses: ./.github/actions/s3cmd
       with:
@@ -76,59 +91,86 @@ runs:
         folder_prefix: ya-
         build_preset: ${{ inputs.build_preset }}
 
-    - name: Build
-      uses: ./.github/actions/build_ya
-      id: build
-      if: ${{ inputs.run_build == 'true' }}
-      with:
-        build_target: ${{ inputs.build_target }}
-        build_preset: ${{ inputs.build_preset }}
-        bazel_remote_uri: ${{  fromJSON( inputs.vars ).REMOTE_CACHE_URL || '' }}
-        bazel_remote_username: ${{ inputs.put_build_results_to_cache &&  fromJSON( inputs.secs ).REMOTE_CACHE_USERNAME || '' }}
-        bazel_remote_password: ${{ inputs.put_build_results_to_cache &&  fromJSON( inputs.secs ).REMOTE_CACHE_PASSWORD || '' }}
-        link_threads: ${{ inputs.link_threads }}
-
-    - name: Generate ya.make with affected test suites list
-      if: inputs.run_tests == 'true' && inputs.increment == 'true'
+    - name: Generate ya.make with affected test suites and modules list
+      if: inputs.increment == 'true'
       uses: ./.github/actions/graph_compare
  
-    - name: Check if there's a list of tests to run
-      id: test_run_choice
+    - name: Change target in case of incremental
+      id: target_choice
       shell: bash
       run: |
-        if [ -f ya.make ];then
-          echo "target='.'" >> $GITHUB_OUTPUT
-          echo "Listed test targets: "
-          cat ya.make
+        if [ "${{ inputs.increment }}" == "true" ]; then
+          echo "target=." >> $GITHUB_OUTPUT
         else
           echo "target=${{ inputs.build_target }}" >> $GITHUB_OUTPUT
         fi
 
-    - name: Run tests
+    - name: Run build and tests
+      id: build
       uses: ./.github/actions/test_ya
-      if: ${{ inputs.run_tests == 'true' &&  (steps.build.outputs.success == 'true' || inputs.run_tests_if_build_fails == 'true') }}
       with:
-        build_target: ${{ steps.test_run_choice.outputs.target }}
+        build_target: ${{ steps.target_choice.outputs.target }}
         build_preset: ${{ inputs.build_preset }}
         test_size: ${{ inputs.test_size }}
-        testman_token: ${{ fromJSON( inputs.secs ).TESTMO_TOKEN }}
+        test_type: ${{ inputs.test_type }}
+        run_tests: ${{ inputs.run_tests }}
+        testman_token: ${{ fromJSON( inputs.secs ).TESTMO_TOKEN2 }}
         testman_url: ${{  fromJSON( inputs.vars ).TESTMO_URL }}
         testman_project_id: ${{  fromJSON( inputs.vars ).TESTMO_PROJECT_ID }}
         link_threads: ${{ inputs.link_threads }}
+        additional_ya_make_args: ${{ inputs.additional_ya_make_args }}
         test_threads: ${{ inputs.test_threads }}
+        bazel_remote_uri: ${{  fromJSON( inputs.vars ).REMOTE_CACHE_URL || '' }}
+        bazel_remote_username: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_USERNAME || '' }}
+        bazel_remote_password: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_PASSWORD || '' }}
+        put_build_results_to_cache: ${{ inputs.put_build_results_to_cache }}
         
-    - name: Notify about failed build
-      if: ${{ steps.build.outputs.success != 'true' && inputs.run_tests == 'true' && inputs.run_tests_if_build_fails == 'false' }}
+    - name: build_stats
       shell: bash
+      continue-on-error: true
+      if: always()
       run: |
-        echo 'Build failed. See the [build log](${{ steps.build.outputs.log_url }}).' >> $GITHUB_STEP_SUMMARY
+        set -x
+        export build_preset="${{ inputs.build_preset }}" 
+        export commit_git_sha="$(git rev-parse HEAD)"
+
+        python3 -m pip install ydb ydb[yc]
+        python3 .github/scripts/send_build_stats.py
+
+    - name: show_build_size_diff
+      shell: bash
+      continue-on-error: true
+      if: always()
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        set -x
+        export build_preset="${{ inputs.build_preset }}" 
+        export branch_to_compare="$GITHUB_REF_NAME" 
+        export yellow_treshold=102400
+        export red_treshold=2097152 
+        export commit_git_sha="$(git rev-parse HEAD)"
+
+        python3 -m pip install ydb ydb[yc] humanize
+
+        get_sizes_comment_script=.github/scripts/get_build_diff.py
+        comment_raw=`$get_sizes_comment_script`
         
-        if [[ "$GITHUB_EVENT_NAME" =~ ^pull_request ]]; then
-          echo "Tests run skipped." | .github/scripts/tests/comment-pr.py --fail
+        IFS=';;;'
+        read -ra comment_arr <<< "$comment_raw"
+
+        printf "$comment"
+        if [[ ${comment_raw} != "Error"* ]];then
+          color=${comment_arr[0]}
+          replace=$color";;;"
+          comment=${comment_raw/$replace/""}
+          
+          printf "$comment" | .github/scripts/tests/comment-pr.py --color $color
+
+        else
+          echo "Skipped build size difference, comment_raw = ${comment_raw}"
         fi
-        
-        exit 1
-    
+
     - name: comment-if-cancel
       shell: bash
       if: cancelled() && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')

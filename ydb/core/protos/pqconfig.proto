@@ -1,15 +1,17 @@
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
 import "ydb/public/api/protos/draft/persqueue_common.proto";
 
+import "ydb/public/api/protos/annotations/sensitive.proto";
+
 import "ydb/core/protos/base.proto";
 import "ydb/core/protos/msgbus_kv.proto";
-import "ydb/core/protos/node_limits.proto";
 import "ydb/core/protos/netclassifier.proto";
-import "ydb/library/services/services.proto";
+import "ydb/core/protos/node_limits.proto";
+import "ydb/core/scheme/protos/pathid.proto";
 import "ydb/core/scheme/protos/type_info.proto";
 
 import "ydb/library/actors/protos/actors.proto";
-
+import "ydb/library/services/services.proto";
 
 package NKikimrPQ;
 option java_package = "ru.yandex.kikimr.proto";
@@ -219,11 +221,11 @@ message TMirrorPartitionConfig {
     message TCredentials {
         message IamCredentials {
             optional string Endpoint = 1;
-            optional string ServiceAccountKey = 2;
+            optional string ServiceAccountKey = 2 [(Ydb.sensitive) = true];
         }
         oneof Credentials {
-            string OauthToken = 1;
-            string JwtParams = 2;
+            string OauthToken = 1 [(Ydb.sensitive) = true];
+            string JwtParams = 2 [(Ydb.sensitive) = true];
             IamCredentials Iam = 3;
         }
     }
@@ -301,6 +303,22 @@ enum EConsumerScalingSupport {
     PARTIAL_SUPPORT = 2;
     // The consumer fully supports scaling: during the reading process, offsets are regularly committed.
     FULL_SUPPORT = 3;
+}
+
+message TOffloadConfig {
+    message TIncrementalBackup {
+        optional string DstPath = 1;
+        optional NKikimrProto.TPathID DstPathId = 2;
+    }
+
+    message TIncrementalRestore {
+        optional NKikimrProto.TPathID DstPathId = 1;
+    }
+
+    oneof Strategy {
+        TIncrementalBackup IncrementalBackup = 1;
+        TIncrementalRestore IncrementalRestore = 2;
+    }
 }
 
 message TPQTabletConfig {
@@ -383,17 +401,34 @@ message TPQTabletConfig {
     }
     optional EMeteringMode MeteringMode = 34;
 
+    enum TPartitionStrategyType {
+        // The autoscaling is disabled.
+        DISABLED = 0;
+        // The autoscaling algorithm will increase partitions count depending on the load characteristics.
+        // The autoscaling algorithm will never decrease the number of partitions.
+        CAN_SPLIT = 1;
+        // The autoscaling algorithm will both increase and decrease partitions count depending on the load characteristics.
+        CAN_SPLIT_AND_MERGE = 2;
+        PAUSED = 3;
+    }
+
     // Strategy for automatically changing the number of topic partitions depending on the load
     message TPartitionStrategy {
         // The minimum number of partitions that will be supported by the strategy
         optional uint32 MinPartitionCount = 1 [default = 1];
         // The maximum number of partitions that will be supported by the strategy. The strategy will not create partitions if the specified
         // amount is reached, even if the load exceeds the current capabilities of the topic.
-        required uint32 MaxPartitionCount = 2;
+        optional uint32 MaxPartitionCount = 2 [default = 1];;
+        optional uint32 ScaleThresholdSeconds = 3 [default = 300];
+        optional uint32 ScaleUpPartitionWriteSpeedThresholdPercent = 4 [default = 80];
+        optional uint32 ScaleDownPartitionWriteSpeedThresholdPercent = 5 [default = 20];
+        required TPartitionStrategyType PartitionStrategyType = 6 [default = DISABLED];
     }
     optional TPartitionStrategy PartitionStrategy = 35;
 
     repeated TPartition AllPartitions = 36; // filled by schemeshard
+
+    optional TOffloadConfig OffloadConfig = 38;
 }
 
 message THeartbeat {
@@ -614,10 +649,11 @@ message TReleasePartition {
     optional uint64 Generation = 2;
     optional string Session = 3;
     optional string ClientId = 4;
-    optional uint32 Count = 5;
+    optional uint32 Count = 5 [deprecated = true]; // Remove at 2025-1
     optional NActorsProto.TActorId PipeClient = 6;
     optional uint32 Group = 7;
     optional string Path = 8;
+    reserved 9; // repeated uint32 Partition = 9
 }
 
 message TPartitionReleased {
@@ -724,6 +760,12 @@ message TAggregatedCounters {
     }
 }
 
+enum EScaleStatus {
+    NORMAL = 0;
+    NEED_SPLIT = 1;
+    NEED_MERGE = 2;
+}
+
 message TStatusResponse {
     enum EStatus {
         STATUS_OK = 0;
@@ -784,6 +826,11 @@ message TStatusResponse {
 
         optional int64 UsedReserveSize = 31;
         optional TAggregatedCounters AggregatedCounters = 32;
+
+        optional uint32 Generation = 33;
+        optional uint64 Cookie = 34;
+
+        optional EScaleStatus ScaleStatus = 35;
     }
 
     message TConsumerResult {
@@ -822,6 +869,9 @@ message THasDataInfoResponse { //signal
     optional uint64 Cookie = 2;
     optional uint64 SizeLag = 3;
     optional uint64 WriteTimestampEstimateMS = 4;
+    optional bool ReadingFinished = 5;
+    repeated uint32 AdjacentPartitionIds = 6;
+    repeated uint32 ChildPartitionIds = 7;
 }
 
 message TBatchHeader {
@@ -899,6 +949,12 @@ message TPartitionOperation {
     optional uint64 End = 3;
     optional string Consumer = 4;
     optional string Path = 5; // topic path
+    optional uint32 SupportivePartition = 6;
+};
+
+message TWriteId {
+    optional uint64 NodeId = 1;
+    optional fixed64 KeyId = 2;
 };
 
 message TDataTransaction {
@@ -914,7 +970,7 @@ message TDataTransaction {
     repeated uint64 SendingShards = 3;
     repeated uint64 ReceivingShards = 4;
     optional bool Immediate = 5;
-    optional fixed64 WriteId = 6;
+    optional TWriteId WriteId = 6;
 }
 
 message TConfigTransaction {
@@ -929,6 +985,19 @@ message TEvProposeTransaction {
         TDataTransaction Data = 3;
         TConfigTransaction Config = 4;
     }
+    optional NActorsProto.TActorId SupportivePartitionActor = 5;
+};
+
+message TError {
+    enum EKind {
+        OK = 0;
+        ERROR = 1;
+        INTERNAL = 2;
+        BAD_REQUEST = 3;
+    }
+
+    optional EKind Kind = 1;
+    optional string Reason = 2;
 };
 
 message TEvProposeTransactionResult {
@@ -951,6 +1020,7 @@ message TEvProposeTransactionResult {
     optional string StatusMessage = 7;
     optional uint64 Step = 8;
     repeated fixed64 DomainCoordinators = 9;
+    repeated TError Errors = 10;
 };
 
 message TEvCancelTransactionProposal {
@@ -983,10 +1053,31 @@ message TEvCheckPartitionStatusResponse {
     optional uint64 SeqNo = 2;
 };
 
-// The consumer's reading of the partition is finished
+// The consumer's reading of the partition is finished  (from the partition)
 message TEvReadingPartitionStatusRequest {
     optional string Consumer = 1;
     optional uint32 PartitionId = 2;
+    optional uint32 Generation = 3;
+    optional uint32 Cookie = 4;
+};
+
+// The consumer's reading of the partition is finished (from ReadSession)
+message TEvReadingPartitionFinishedRequest {
+    optional string Consumer = 1;
+    optional uint32 PartitionId = 2;
+    optional bool ScaleAwareSDK = 3;
+    optional bool StartedReadingFromEndOffset = 4;
+};
+
+// The consumer's reading of the partition is started (from ReadSession)
+message TEvReadingPartitionStartedRequest {
+    optional string Consumer = 1;
+    optional uint32 PartitionId = 2;
+};
+
+message TEvPartitionScaleStatusChanged {
+    required uint32 PartitionId = 1;
+    required EScaleStatus ScaleStatus = 2;
 };
 
 message TTransaction {
@@ -999,15 +1090,21 @@ message TTransaction {
     enum EState {
         UNKNOWN = 0;
         PREPARING = 1;
-        PREPARED = 2;     // хранится
+        PREPARED = 2;     // persist
         PLANNING = 3;
-        PLANNED = 4;      // хранится. хотим выкинуть и не персистить
+        PLANNED = 4;      // persist
         CALCULATING = 5;
         CALCULATED = 6;
-        WAIT_RS = 7;      // хранится
+        WAIT_RS = 7;      // persist
         EXECUTING = 8;
         EXECUTED = 9;
+        DELETING = 10;
     };
+
+    message TPredicateReceived {
+        optional uint64 TabletId = 1;
+        optional bool Predicate = 2;
+    }
 
     optional EKind Kind = 11;
     optional uint64 Step = 8;
@@ -1016,14 +1113,14 @@ message TTransaction {
     optional uint64 MinStep = 3;
     optional uint64 MaxStep = 4;
 
+    repeated TPredicateReceived PredicatesReceived = 5;
+    repeated uint64 PredicateRecipients = 6;
+    optional bool Predicate = 9;
+
     //
     // TDataTransaction
     //
-    repeated uint64 Senders = 5;
-    repeated uint64 Receivers = 6;
     repeated TPartitionOperation Operations = 7;
-    optional bool SelfPredicate = 9;  // только предикаты партиций. предикаты коллег отдельно
-    optional bool AggrPredicate = 10;
 
     //
     // TConfigTransaction
@@ -1036,18 +1133,20 @@ message TTransaction {
     //
     optional NActorsProto.TActorId SourceActor = 14;
 
-    optional uint64 WriteId = 15;
+    optional TWriteId WriteId = 15;
 };
 
 message TTabletTxInfo {
     message TTxWriteInfo {
-        optional uint64 WriteId = 1;
+        optional TWriteId WriteId = 1;
         optional uint32 OriginalPartitionId = 2;
         optional uint32 InternalPartitionId = 3;
     };
 
-    optional uint64 LastStep = 2;
-    optional uint64 LastTxId = 3;
+    optional uint64 PlanStep = 2;
+    optional uint64 PlanTxId = 3;
     repeated TTxWriteInfo TxWrites = 4;
     optional uint64 NextSupportivePartitionId = 5;
+    optional uint64 ExecStep = 6;
+    optional uint64 ExecTxId = 7;
 }

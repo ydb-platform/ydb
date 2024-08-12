@@ -58,6 +58,18 @@ public:
         AFL_VERIFY(Blobs.emplace(range, std::move(data)).second);
     }
 
+    bool Contains(const TBlobRange& bRange) const {
+        return Blobs.contains(bRange);
+    }
+
+    std::optional<TString> GetBlobRangeOptional(const TBlobRange& bRange) const {
+        auto it = Blobs.find(bRange);
+        if (it == Blobs.end()) {
+            return {};
+        }
+        return it->second;
+    }
+
     TString Extract(const TBlobRange& bRange) {
         auto it = Blobs.find(bRange);
         AFL_VERIFY(it != Blobs.end());
@@ -69,6 +81,54 @@ public:
     bool IsEmpty() const {
         return Blobs.empty();
     }
+};
+
+class TBlobsGlueing {
+public:
+    class TSequentialGluePolicy {
+    public:
+        bool Glue(TBlobRange& currentRange, const TBlobRange& addRange) const {
+            return currentRange.TryGlueWithNext(addRange);
+        }
+    };
+
+    class TBlobGluePolicy {
+    private:
+        const ui64 BlobLimitSize = 8LLU << 20;
+    public:
+        TBlobGluePolicy(const ui64 blobLimitSize)
+            : BlobLimitSize(blobLimitSize)
+        {
+        }
+
+        bool Glue(TBlobRange& currentRange, const TBlobRange& addRange) const {
+            return currentRange.TryGlueSameBlob(addRange, BlobLimitSize);
+        }
+    };
+
+    template <class TGluePolicy>
+    static THashMap<TBlobRange, std::vector<TBlobRange>> GroupRanges(std::vector<TBlobRange>&& ranges, const TGluePolicy& policy) {
+        std::sort(ranges.begin(), ranges.end());
+        THashMap<TBlobRange, std::vector<TBlobRange>> result;
+        std::optional<TBlobRange> currentRange;
+        std::vector<TBlobRange> currentList;
+        for (auto&& br : ranges) {
+            if (!currentRange) {
+                currentRange = br;
+            }
+            else if (!policy.Glue(*currentRange, br)) {
+                result.emplace(*currentRange, std::move(currentList));
+                currentRange = br;
+                currentList.clear();
+            }
+            currentList.emplace_back(br);
+        }
+        if (currentRange) {
+            result.emplace(*currentRange, std::move(currentList));
+        }
+        return result;
+    }
+
 };
 
 class IBlobsReadingAction: public ICommonBlobsAction {
@@ -91,6 +151,7 @@ private:
 protected:
     virtual void DoStartReading(THashSet<TBlobRange>&& range) = 0;
     void StartReading(std::vector<TBlobRange>&& ranges);
+    virtual THashMap<TBlobRange, std::vector<TBlobRange>> GroupBlobsForOptimization(std::vector<TBlobRange>&& ranges) const = 0;
 public:
 
     const THashMap<TBlobRange, std::vector<TBlobRange>>& GetGroups() const {

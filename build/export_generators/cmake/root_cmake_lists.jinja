@@ -1,0 +1,74 @@
+{% include '[generator]/disclaimer.jinja' %}
+
+cmake_minimum_required(VERSION 3.15)
+if (POLICY CMP0132)
+  cmake_policy(SET CMP0132 NEW)
+endif()
+
+project({{ project_name }} LANGUAGES
+{%- for project_language in project_languages -%}
+{%-     if project_language == "ASM" -%}
+{%          set has_asm = true %}
+{%-     else  %} {{ project_language }}
+{%-     endif  -%}
+{%-     if has_asm %} ASM
+{%-     endif  -%}
+{%- endfor -%})
+
+set(BUILD_SHARED_LIBS Off)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_EXTENSIONS Off)
+set({{ project_name }}_MAX_LINK_JOBS 5 CACHE STRING "Maximum parallel link jobs for Ninja generator")
+set_property(GLOBAL PROPERTY JOB_POOLS link_jobs=${{ '{' }}{{ project_name }}_MAX_LINK_JOBS{{ '}' }})
+set(CMAKE_JOB_POOL_LINK link_jobs)
+
+list(APPEND CMAKE_MODULE_PATH ${{ '{' }}PROJECT_BINARY_DIR{{ '}' }} ${{ '{' }}PROJECT_SOURCE_DIR{{ '}' }}/cmake)
+include_directories(${{ '{' }}PROJECT_SOURCE_DIR{{ '}' }} ${{ '{' }}PROJECT_BINARY_DIR{{ '}' }})
+list(APPEND CMAKE_CTEST_ARGUMENTS "--output-on-failure")
+enable_testing()
+
+# Disable 'empty CUDA_ARCHITECTURES not allowed' warning
+# Can't set it in cuda.cmake because of CMake policy subdirectory stack rules
+cmake_policy(SET CMP0104 OLD)
+
+include(cmake/global_flags.cmake)
+include(cmake/global_vars.cmake)
+{% if includes is defined -%}
+{%     for incl in includes -%}
+{%         if not(use_conan2) or (incl != "cmake/conan1_deprecated.cmake") -%}
+include({{ incl }})
+{%         endif -%}
+{%     endfor -%}
+{%  endif -%}
+
+{%- if (conan.requires or conan.tool_requires) and not(use_conan2) %}
+if (CMAKE_CROSSCOMPILING)
+  include(${PROJECT_BINARY_DIR}/conan_paths.cmake)
+else()
+  conan_cmake_autodetect(settings)
+  conan_cmake_install(
+    PATH_OR_REFERENCE ${PROJECT_SOURCE_DIR}
+    INSTALL_FOLDER ${PROJECT_BINARY_DIR}
+    BUILD missing
+    REMOTE conancenter
+    SETTINGS ${settings}
+    ENV "CONAN_CMAKE_GENERATOR=${CMAKE_GENERATOR}"
+    CONF "tools.cmake.cmaketoolchain:generator=${CMAKE_GENERATOR}"
+  )
+endif()
+{% endif -%}
+
+{%- if vanilla_protobuf %}
+
+set(vanilla_protobuf "yes")
+{%- endif -%}
+
+{%- if platform_names|length %}
+{%     for platform_name in platform_names %}
+{%        if not loop.first %}else{% endif %}if ({{ platform_conditions[platform_name] }})
+  include(CMakeLists.{{ platform_name }}.txt)
+{%-     endfor %}
+endif()
+
+{% endif -%}
+{%- include "[generator]/debug.jinja" ignore missing -%}

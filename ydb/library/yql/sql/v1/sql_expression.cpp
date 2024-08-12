@@ -561,7 +561,7 @@ TNodePtr TSqlExpression::JsonValueCaseHandler(const TRule_json_case_handler& nod
         }
         case TRule_json_case_handler::kAltJsonCaseHandler3:
             mode = EJsonValueHandlerMode::DefaultValue;
-            return Build(node.GetAlt_json_case_handler3().GetBlock1().GetRule_expr2());
+            return Build(node.GetAlt_json_case_handler3().GetRule_expr2());
         case TRule_json_case_handler::ALT_NOT_SET:
             Y_ABORT("You should change implementation according to grammar changes");
     }
@@ -718,7 +718,7 @@ EJsonQueryWrap TSqlExpression::JsonQueryWrapper(const TRule_json_query& node) {
     }
 
     // WITH (CONDITIONAL | UNCONDITIONAL)? ARRAY? - wrapping depends on 2nd token. Default is UNCONDITIONAL
-    const auto& withWrapperRule = wrapperRule.GetAlt_json_query_wrapper2().GetBlock1();
+    const auto& withWrapperRule = wrapperRule.GetAlt_json_query_wrapper2();
     if (!withWrapperRule.HasBlock2()) {
         return EJsonQueryWrap::Wrap;
     }
@@ -838,13 +838,13 @@ TNodePtr MatchRecognizeVarAccess(TTranslation& ctx, const TString& var, const TR
     return BuildMatchRecognizeVarAccess(TPosition{}, var, column, theSameVar);
 }
 
-TNodePtr TSqlExpression::RowPatternVarAccess(const TString& alias, const TRule_unary_subexpr_suffix_TBlock1_TAlt3_TBlock1_TBlock2 block) {
+TNodePtr TSqlExpression::RowPatternVarAccess(const TString& alias, const TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2 block) {
     switch (block.GetAltCase()) {
-        case TRule_unary_subexpr_suffix_TBlock1_TAlt3_TBlock1_TBlock2::kAlt1:
+        case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::kAlt1:
             break;
-        case TRule_unary_subexpr_suffix_TBlock1_TAlt3_TBlock1_TBlock2::kAlt2:
+        case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::kAlt2:
             break;
-        case TRule_unary_subexpr_suffix_TBlock1_TAlt3_TBlock1_TBlock2::kAlt3:
+        case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::kAlt3:
             switch (block.GetAlt3().GetRule_an_id_or_type1().GetAltCase()) {
                 case TRule_an_id_or_type::kAltAnIdOrType1: {
                     const auto &idOrType = block.GetAlt3().GetRule_an_id_or_type1().GetAlt_an_id_or_type1().GetRule_id_or_type1();
@@ -869,7 +869,7 @@ TNodePtr TSqlExpression::RowPatternVarAccess(const TString& alias, const TRule_u
                     break;
             }
             break;
-        case TRule_unary_subexpr_suffix_TBlock1_TAlt3_TBlock1_TBlock2::ALT_NOT_SET:
+        case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::ALT_NOT_SET:
             Y_ABORT("You should change implementation according to grammar changes");
     }
     return TNodePtr{};
@@ -932,14 +932,15 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
     bool isColumnRef = !expr;
     bool isFirstElem = true;
 
-    for (auto& b : suffix.GetBlock1()) {
+    for (auto& _b : suffix.GetBlock1()) {
+        auto& b = _b.GetBlock1();
         switch (b.Alt_case()) {
-        case TRule_unary_subexpr_suffix::TBlock1::kAlt1: {
+        case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt1: {
             // key_expr
             // onlyDots = false;
             break;
         }
-        case TRule_unary_subexpr_suffix::TBlock1::kAlt2: {
+        case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt2: {
             // invoke_expr - cannot be a column, function name
             if (isFirstElem) {
                 isColumnRef = false;
@@ -948,20 +949,20 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
             // onlyDots = false;
             break;
         }
-        case TRule_unary_subexpr_suffix::TBlock1::kAlt3: {
+        case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt3: {
             // In case of MATCH_RECOGNIZE lambdas
             // X.Y is treated as Var.Column access
             if (isColumnRef && EColumnRefState::MatchRecognize == Ctx.GetColumnReferenceState()) {
                 if (auto rowPatternVarAccess = RowPatternVarAccess(
                     name,
-                    b.GetAlt3().GetBlock1().GetBlock2())
+                    b.GetAlt3().GetBlock2())
                 ) {
                     return rowPatternVarAccess;
                 }
             }
             break;
         }
-        case TRule_unary_subexpr_suffix::TBlock1::ALT_NOT_SET:
+        case TRule_unary_subexpr_suffix::TBlock1::TBlock1::ALT_NOT_SET:
             AltNotImplemented("unary_subexpr_suffix", b);
             return nullptr;
         }
@@ -1008,9 +1009,10 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
     }
 
     TPosition pos(Ctx.Pos());
-    for (auto& b : suffix.GetBlock1()) {
+    for (auto& _b : suffix.GetBlock1()) {
+        auto& b = _b.GetBlock1();
         switch (b.Alt_case()) {
-        case TRule_unary_subexpr_suffix::TBlock1::kAlt1: {
+        case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt1: {
             // key_expr
             auto keyExpr = KeyExpr(b.GetAlt1().GetRule_key_expr1());
             if (!keyExpr) {
@@ -1029,7 +1031,7 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
             ids.clear();
             break;
         }
-        case TRule_unary_subexpr_suffix::TBlock1::kAlt2: {
+        case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt2: {
             // invoke_expr - cannot be a column, function name
             TSqlCallExpr call(Ctx, Mode);
             if (isFirstElem && !name.Empty()) {
@@ -1055,15 +1057,15 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
 
             break;
         }
-        case TRule_unary_subexpr_suffix::TBlock1::kAlt3: {
+        case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt3: {
             // dot
             if (lastExpr) {
                 ids.push_back(lastExpr);
             }
 
-            auto bb = b.GetAlt3().GetBlock1().GetBlock2();
+            auto bb = b.GetAlt3().GetBlock2();
             switch (bb.Alt_case()) {
-                case TRule_unary_subexpr_suffix_TBlock1_TAlt3_TBlock1_TBlock2::kAlt1: {
+                case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::kAlt1: {
                     TString named;
                     if (!NamedNodeImpl(bb.GetAlt1().GetRule_bind_parameter1(), named, *this)) {
                         return nullptr;
@@ -1077,16 +1079,16 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
                     ids.back().Expr = namedNode;
                     break;
                 }
-                case TRule_unary_subexpr_suffix_TBlock1_TAlt3_TBlock1_TBlock2::kAlt2: {
+                case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::kAlt2: {
                     const TString str(Token(bb.GetAlt2().GetToken1()));
                     ids.push_back(str);
                     break;
                 }
-                case TRule_unary_subexpr_suffix_TBlock1_TAlt3_TBlock1_TBlock2::kAlt3: {
+                case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::kAlt3: {
                     ids.push_back(Id(bb.GetAlt3().GetRule_an_id_or_type1(), *this));
                     break;
                 }
-                case TRule_unary_subexpr_suffix_TBlock1_TAlt3_TBlock1_TBlock2::ALT_NOT_SET:
+                case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::ALT_NOT_SET:
                     Y_ABORT("You should change implementation according to grammar changes");
             }
 
@@ -1097,7 +1099,7 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
 
             break;
         }
-        case TRule_unary_subexpr_suffix::TBlock1::ALT_NOT_SET:
+        case TRule_unary_subexpr_suffix::TBlock1::TBlock1::ALT_NOT_SET:
             AltNotImplemented("unary_subexpr_suffix", b);
             return nullptr;
         }
@@ -1175,9 +1177,9 @@ TNodePtr TSqlExpression::LambdaRule(const TRule_lambda& rule) {
     TColumnRefScope scope(Ctx, EColumnRefState::Deny);
     scope.SetNoColumnErrContext("in lambda function");
     if (bodyBlock.GetBlock2().HasAlt1()) {
-        ret = SqlLambdaExprBody(Ctx, bodyBlock.GetBlock2().GetAlt1().GetBlock1().GetRule_expr2(), exprSeq);
+        ret = SqlLambdaExprBody(Ctx, bodyBlock.GetBlock2().GetAlt1().GetRule_expr2(), exprSeq);
     } else {
-        ret = SqlLambdaExprBody(Ctx, bodyBlock.GetBlock2().GetAlt2().GetBlock1().GetRule_lambda_body2(), exprSeq);
+        ret = SqlLambdaExprBody(Ctx, bodyBlock.GetBlock2().GetAlt2().GetRule_lambda_body2(), exprSeq);
     }
 
     TVector<TString> argNames;
@@ -1299,7 +1301,7 @@ TNodePtr TSqlExpression::CaseRule(const TRule_case_expr& rule) {
         TSqlExpression condExpr(Ctx, Mode);
         branches.back().Pred = condExpr.Build(block.GetRule_expr2());
         if (caseExpr) {
-            branches.back().Pred = BuildBinaryOp(Ctx, Ctx.Pos(), "==", caseExpr, branches.back().Pred);
+            branches.back().Pred = BuildBinaryOp(Ctx, Ctx.Pos(), "==", caseExpr->Clone(), branches.back().Pred);
         }
         if (!branches.back().Pred) {
             return {};
@@ -1515,7 +1517,7 @@ bool TSqlExpression::SqlLambdaParams(const TNodePtr& node, TVector<TSymbolNameWi
     args.clear();
     optionalArgumentsCount = 0;
     auto errMsg = TStringBuf("Invalid lambda arguments syntax. Lambda arguments should start with '$' as named value.");
-    auto tupleNodePtr = dynamic_cast<TTupleNode*>(node.Get());
+    auto tupleNodePtr = node->GetTupleNode();;
     if (!tupleNodePtr) {
         Ctx.Error(node->GetPos()) << errMsg;
         return false;
@@ -1998,7 +2000,7 @@ TSqlExpression::TCaseBranch TSqlExpression::ReduceCaseBranches(TVector<TCaseBran
     }
 
     TCaseBranch result;
-    result.Pred = new TCallNodeImpl(Ctx.Pos(), "Or", preds);
+    result.Pred = new TCallNodeImpl(Ctx.Pos(), "Or", CloneContainer(preds));
     result.Value = BuildBuiltinFunc(Ctx, Ctx.Pos(), "If", { left.Pred, left.Value, right.Value });
     return result;
 }

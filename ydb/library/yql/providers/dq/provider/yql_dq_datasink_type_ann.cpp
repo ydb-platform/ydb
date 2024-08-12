@@ -21,6 +21,7 @@ public:
         AddHandler({TDqPhyStage::CallableName()}, Hndl(&NDq::AnnotateDqPhyStage));
         AddHandler({TDqOutput::CallableName()}, Hndl(&NDq::AnnotateDqOutput));
         AddHandler({TDqCnUnionAll::CallableName()}, Hndl(&NDq::AnnotateDqConnection));
+        AddHandler({TDqCnStreamLookup::CallableName()}, Hndl(&NDq::AnnotateDqCnStreamLookup));
         AddHandler({TDqCnHashShuffle::CallableName()}, Hndl(&NDq::AnnotateDqCnHashShuffle));
         AddHandler({TDqCnResult::CallableName()}, Hndl(&NDq::AnnotateDqCnResult));
         AddHandler({TDqCnMap::CallableName()}, Hndl(&NDq::AnnotateDqConnection));
@@ -33,6 +34,7 @@ public:
             AddHandler({TDqReplicate::CallableName()}, Hndl(&TDqsDataSinkTypeAnnotationTransformer::AnnotateDqReplicateAlwaysError));
         }
         AddHandler({TDqJoin::CallableName()}, Hndl(&NDq::AnnotateDqJoin));
+        AddHandler({TDqPhyGraceJoin::CallableName()}, Hndl(&NDq::AnnotateDqMapOrDictJoin));
         AddHandler({TDqPhyMapJoin::CallableName()}, Hndl(&NDq::AnnotateDqMapOrDictJoin));
         AddHandler({TDqPhyCrossJoin::CallableName()}, Hndl(&NDq::AnnotateDqCrossJoin));
         AddHandler({TDqPhyJoinDict::CallableName()}, Hndl(&NDq::AnnotateDqMapOrDictJoin));

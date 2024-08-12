@@ -192,8 +192,7 @@ public:
 
         if (!programHeaderOffset ||
             !programHeaderNumEntries ||
-            programHeaderOffset + programHeaderNumEntries * sizeof(TElfPhdr) > ElfSize_
-        ) {
+            programHeaderOffset + programHeaderNumEntries * sizeof(TElfPhdr) > ElfSize_) {
             throw yexception() << "The ELF is truncated (program header points after end of file)";
         }
 
@@ -442,7 +441,7 @@ private:
             */
 
             size_t symCnt = 0;
-            for (const auto * it = dynBegin; it->d_tag != DT_NULL; ++it) {
+            for (const auto* it = dynBegin; it->d_tag != DT_NULL; ++it) {
                 if (it->d_tag == DT_GNU_HASH) {
                     /// This code based on Musl-libc.
 

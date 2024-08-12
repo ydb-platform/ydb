@@ -236,7 +236,8 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsCommonSensePath()
-                .IsLikeDirectory();
+                .IsLikeDirectory()
+                .FailOnRestrictedCreateInTempZone();
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -330,12 +331,11 @@ public:
         context.SS->TabletCounters->Simple()[COUNTER_RTMR_PARTITIONS_COUNT].Add(rtmrVolumeInfo->Partitions.size());
         context.SS->IncrementPathDbRefCount(newRtmrVolume->PathId);
 
-        context.SS->PersistPath(db, newRtmrVolume->PathId);
-
         if (!acl.empty()) {
             newRtmrVolume->ApplyACL(acl);
-            context.SS->PersistACL(db, newRtmrVolume);
         }
+        context.SS->PersistPath(db, newRtmrVolume->PathId);
+
         context.SS->PersistRtmrVolume(db, newRtmrVolume->PathId, rtmrVolumeInfo);
         context.SS->PersistTxState(db, OperationId);
 

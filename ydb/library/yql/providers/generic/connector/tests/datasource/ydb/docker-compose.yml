@@ -1,0 +1,24 @@
+services:
+  fq-connector-go:
+    command: |
+      sh -c "
+        echo \"$$(dig fq-tests-ydb-ydb +short) fq-tests-ydb-ydb\" >> /etc/hosts; cat /etc/hosts;
+        /opt/ydb/bin/fq-connector-go server -c /opt/ydb/cfg/fq-connector-go.yaml"
+    container_name: fq-tests-ydb-fq-connector-go
+    image: ghcr.io/ydb-platform/fq-connector-go:v0.5.0@sha256:6d3cec43478bef88dda195cd38c10e4df719c8ce6d13c9bd288c7ec40410e9d8
+    ports:
+    - 2130
+    volumes:
+    - ../../fq-connector-go/:/opt/ydb/cfg/
+  ydb:
+    container_name: fq-tests-ydb-ydb
+    environment:
+      POSTGRES_PASSWORD: password
+      POSTGRES_USER: user
+      YDB_DEFAULT_LOG_LEVEL: DEBUG
+    hostname: fq-tests-ydb-ydb
+    image: ghcr.io/ydb-platform/local-ydb:latest@sha256:9045e00afec1923dc3277564c7b2f829087c2115f45f18e1d38b80bb89f98be6
+    volumes:
+    - ./init/init_ydb:/init_ydb
+    - ./init/01_basic.sh:/01_basic.sh
+version: "3.4"

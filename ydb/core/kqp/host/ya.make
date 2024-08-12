@@ -28,9 +28,10 @@ PEERDIR(
     ydb/library/yql/providers/common/udf_resolve
     ydb/library/yql/providers/config
     ydb/library/yql/providers/generic/provider
-    ydb/library/yql/providers/result/provider
-    ydb/library/yql/providers/s3/provider
     ydb/library/yql/providers/pg/provider
+    ydb/library/yql/providers/result/provider
+    ydb/library/yql/providers/s3/expr_nodes
+    ydb/public/sdk/cpp/client/impl/ydb_internal/common
 )
 
 YQL_LAST_ABI_VERSION()

@@ -1,10 +1,5 @@
 LIBRARY()
 
-OWNER(
-    g:cloud-nbs
-    g:kikimr
-)
-
 SRCS(
     test_runtime.cpp
 )

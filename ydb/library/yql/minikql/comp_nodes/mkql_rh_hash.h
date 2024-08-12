@@ -78,6 +78,7 @@ protected:
         : HashLocal(std::move(hash))
         , EqualLocal(std::move(equal))
         , Capacity(initialCapacity)
+        , CapacityShift(64 - MostSignificantBit(initialCapacity))
         , Allocator()
         , SelfHash(GetSelfHash(this))
     {
@@ -99,7 +100,7 @@ public:
     // returns iterator
     Y_FORCE_INLINE char* Insert(TKey key, bool& isNew) {
         auto hash = HashLocal(key);
-        auto ptr = MakeIterator(hash, Data, Capacity);
+        auto ptr = MakeIterator(hash, Data, CapacityShift);
         auto ret = InsertImpl(key, hash, isNew, Data, DataEnd, ptr);
         Size += isNew ? 1 : 0;
         return ret;
@@ -121,7 +122,7 @@ public:
         for (size_t i = 0; i < batchRequest.size(); ++i) {
             auto& r = batchRequest[i];
             r.Hash = HashLocal(r.GetKey());
-            r.InitialIterator = MakeIterator(r.Hash, Data, Capacity);
+            r.InitialIterator = MakeIterator(r.Hash, Data, CapacityShift);
             NYql::PrefetchForWrite(r.InitialIterator);
         }
 
@@ -212,9 +213,9 @@ private:
         char* OriginalIterator;
     };
 
-    Y_FORCE_INLINE char* MakeIterator(const ui64 hash, char* data, ui64 capacity) {
+    Y_FORCE_INLINE char* MakeIterator(const ui64 hash, char* data, ui64 capacityShift) {
         // https://probablydance.com/2018/06/16/fibonacci-hashing-the-optimization-that-the-world-forgot-or-a-better-alternative-to-integer-modulo/        
-        ui64 bucket = ((SelfHash ^ hash) * 11400714819323198485llu) & (capacity - 1);
+        ui64 bucket = ((SelfHash ^ hash) * 11400714819323198485llu) >> capacityShift;
         char* ptr = data + AsDeriv().GetCellSize() * bucket;
         return ptr;
     }
@@ -291,6 +292,7 @@ private:
             growFactor = 2;
         }
         auto newCapacity = Capacity * growFactor;
+        auto newCapacityShift = 64 - MostSignificantBit(newCapacity);
         char *newData, *newDataEnd;
         Allocate(newCapacity, newData, newDataEnd);
         Y_DEFER {
@@ -319,13 +321,14 @@ private:
                 r.Hash = HashLocal(r.GetKey());
             }
 
-            r.InitialIterator = MakeIterator(r.Hash, newData, newCapacity);
+            r.InitialIterator = MakeIterator(r.Hash, newData, newCapacityShift);
             NYql::PrefetchForWrite(r.InitialIterator);
         }
 
         CopyBatch({batch.data(), batchLen}, newData, newDataEnd);
 
         Capacity = newCapacity;
+        CapacityShift = newCapacityShift;
         std::swap(Data, newData);
         std::swap(DataEnd, newDataEnd);
     }
@@ -378,6 +381,7 @@ private:
 private:
     ui64 Size = 0;
     ui64 Capacity;
+    ui64 CapacityShift;
     TAllocator Allocator;
     const ui64 SelfHash;
     char* Data = nullptr;

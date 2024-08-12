@@ -1,0 +1,30 @@
+import "ydb/core/formats/arrow/protos/ssa.proto";
+
+package NKikimrTxColumnShard;
+
+message TSnapshot {
+    optional uint64 PlanStep = 1;
+    optional uint64 TxId = 2;
+}
+
+message TIndexPortionMeta {
+    oneof Produced {
+        bool IsInserted = 1;
+        bool IsCompacted = 2;
+        bool IsSplitCompacted = 3;
+        bool IsEvicted = 4;
+    }
+    optional string TierName = 5;
+    optional bytes PrimaryKeyBorders = 6; // arrow::RecordBatch with first and last ReplaceKey rows
+    optional TSnapshot RecordSnapshotMin = 7;
+    optional TSnapshot RecordSnapshotMax = 8;
+    optional uint32 DeletionsCount = 10;
+}
+
+message TIndexColumnMeta {
+    optional uint32 NumRows = 1;
+    optional uint32 RawBytes = 2;
+    optional NKikimrSSA.TProgram.TConstant MinValue = 3;
+    optional NKikimrSSA.TProgram.TConstant MaxValue = 4;
+    optional TIndexPortionMeta PortionMeta = 5; // First PK column could contain portion info
+}

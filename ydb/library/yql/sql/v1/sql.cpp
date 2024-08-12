@@ -163,6 +163,17 @@ bool NeedUseForAllStatements(const TRule_sql_stmt_core::AltCase& subquery) {
         case TRule_sql_stmt_core::kAltSqlStmtCore41: // upsert object
         case TRule_sql_stmt_core::kAltSqlStmtCore42: // create view
         case TRule_sql_stmt_core::kAltSqlStmtCore43: // drop view
+        case TRule_sql_stmt_core::kAltSqlStmtCore44: // alter replication
+        case TRule_sql_stmt_core::kAltSqlStmtCore45: // create resource pool
+        case TRule_sql_stmt_core::kAltSqlStmtCore46: // alter resource pool
+        case TRule_sql_stmt_core::kAltSqlStmtCore47: // drop resource pool
+        case TRule_sql_stmt_core::kAltSqlStmtCore48: // create backup collection
+        case TRule_sql_stmt_core::kAltSqlStmtCore49: // alter backup collection
+        case TRule_sql_stmt_core::kAltSqlStmtCore50: // drop backup collection
+        case TRule_sql_stmt_core::kAltSqlStmtCore51: // analyze
+        case TRule_sql_stmt_core::kAltSqlStmtCore52: // create resource pool classifier
+        case TRule_sql_stmt_core::kAltSqlStmtCore53: // alter resource pool classifier
+        case TRule_sql_stmt_core::kAltSqlStmtCore54: // drop resource pool classifier
             return false;
     }
 }

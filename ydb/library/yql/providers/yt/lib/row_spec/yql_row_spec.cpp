@@ -42,11 +42,12 @@ ui64 GetNativeYtTypeFlagsImpl(const TTypeAnnotationNode* itemType) {
             case EDataSlot::Datetime:
             case EDataSlot::Timestamp:
             case EDataSlot::Interval:
+                return NTCF_DATE;
             case EDataSlot::Date32:
             case EDataSlot::Datetime64:
             case EDataSlot::Timestamp64:
             case EDataSlot::Interval64:
-                return NTCF_DATE;
+                return NTCF_BIGDATE;
             case EDataSlot::Json:
                 return NTCF_JSON;
             case EDataSlot::Float:
@@ -57,6 +58,9 @@ ui64 GetNativeYtTypeFlagsImpl(const TTypeAnnotationNode* itemType) {
             case EDataSlot::TzDate:
             case EDataSlot::TzDatetime:
             case EDataSlot::TzTimestamp:
+            case EDataSlot::TzDate32:
+            case EDataSlot::TzDatetime64:
+            case EDataSlot::TzTimestamp64:
             case EDataSlot::DyNumber:
             case EDataSlot::JsonDocument:
                 return NTCF_NO_YT_SUPPORT;
@@ -259,9 +263,9 @@ bool TYqlRowSpecInfo::ParsePatched(const NYT::TNode& rowSpecAttr, const THashMap
 
             // Patch Columns
             TColumnOrder newColumns;
-            for (auto& col: *Columns) {
+            for (auto& [col, gen_col]: *Columns) {
                 if (!auxFields.contains(col)) {
-                    newColumns.push_back(col);
+                    newColumns.AddColumn(col);
                 }
             }
             Columns = std::move(newColumns);
@@ -399,7 +403,7 @@ bool TYqlRowSpecInfo::ParseType(const NYT::TNode& rowSpecAttr, TExprContext& ctx
     if (!rowSpecAttr.HasKey(RowSpecAttrType)) {
         YQL_LOG_CTX_THROW yexception() << "Row spec doesn't have mandatory Type attribute";
     }
-    TVector<TString> columns;
+    TColumnOrder columns;
     auto type = NCommon::ParseOrderAwareTypeFromYson(rowSpecAttr[RowSpecAttrType], columns, ctx, ctx.GetPosition(pos));
     if (!type) {
         return false;
@@ -424,7 +428,7 @@ bool TYqlRowSpecInfo::ParseType(const NYT::TNode& rowSpecAttr, TExprContext& ctx
                 ctx.MakeType<TDataExprType>(EDataSlot::String));
             items.push_back(ctx.MakeType<TItemExprType>(YqlOthersColumnName, dictType));
             Type = ctx.MakeType<TStructExprType>(items);
-            Columns->push_back(TString(YqlOthersColumnName));
+            Columns->AddColumn(TString(YqlOthersColumnName));
         }
     }
 
@@ -934,7 +938,7 @@ bool TYqlRowSpecInfo::Validate(const TExprNode& node, TExprContext& ctx, const T
             ctx.MakeType<TDataExprType>(EDataSlot::String));
         items.push_back(ctx.MakeType<TItemExprType>(YqlOthersColumnName, dictType));
         if (columnOrder) {
-            columnOrder->push_back(TString(YqlOthersColumnName));
+            columnOrder->AddColumn(TString(YqlOthersColumnName));
         }
         type = ctx.MakeType<TStructExprType>(items);
     }
@@ -1006,7 +1010,7 @@ void TYqlRowSpecInfo::Parse(NNodes::TExprBase node, bool withTypes) {
             if (withTypes) {
                 if (val.Type() == TExprNode::Atom) {
                     TypeNode = NYT::NodeFromYsonString(val.Content());
-                    Columns = NCommon::ExtractColumnOrderFromYsonStructType(TypeNode);
+                    Columns = TColumnOrder(NCommon::ExtractColumnOrderFromYsonStructType(TypeNode));
                 }
                 Type = node.Ref().GetTypeAnn()->Cast<TStructExprType>();
             }
@@ -1042,7 +1046,7 @@ void TYqlRowSpecInfo::Parse(NNodes::TExprBase node, bool withTypes) {
         }
     }
     if (Columns && !StrictSchema) {
-        Columns->push_back(TString(YqlOthersColumnName));
+        Columns->AddColumn(TString(YqlOthersColumnName));
     }
 }
 
@@ -1110,15 +1114,15 @@ void TYqlRowSpecInfo::CopyTypeOrders(const NYT::TNode& typeNode) {
     }
 
     NYT::TNode members = NYT::TNode::CreateList();
-    TVector<TString> columns;
-    if (Columns.Defined() && Columns->size() == Type->GetSize()) {
+    TColumnOrder columns;
+    if (Columns.Defined() && Columns->Size() == Type->GetSize()) {
         columns = *Columns;
     } else {
         for (auto& item : Type->GetItems()) {
-            columns.emplace_back(item->GetName());
+            columns.AddColumn(TString(item->GetName()));
         }
     }
-    for (auto name: columns) {
+    for (auto& [name, gen_name]: columns) {
         if (!StrictSchema && name == YqlOthersColumnName) {
             continue;
         }

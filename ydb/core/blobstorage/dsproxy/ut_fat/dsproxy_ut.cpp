@@ -377,7 +377,8 @@ protected:
                     auto& msgId = *x->Record.MutableMsgQoS()->MutableMsgId();
                     msgId.SetMsgId(1);
                     msgId.SetSequenceId(1);
-                    GroupQueues->Send(*this, BsInfo->GetTopology(), std::move(x), 0, NWilson::TTraceId(), false);
+                    auto queueId = x->Record.GetMsgQoS().GetExtQueueId();
+                    GroupQueues->Send(*this, BsInfo->GetTopology(), std::move(x), 0, NWilson::TTraceId(), vDiskId, queueId);
                   break;
                 }
                 [[fallthrough]];
@@ -3403,9 +3404,24 @@ class TTestBlobStorageProxyBatchedPutRequestDoesNotContainAHugeBlob : public TTe
                 batched[1] = GetPut(blobIds[1], Data2);
 
                 TMaybe<TGroupStat::EKind> kind = PutHandleClassToGroupStatKind(HandleClass);
-                IActor *reqActor = CreateBlobStorageGroupPutRequest(BsInfo, GroupQueues,
-                        Mon, batched, false, PerDiskStatsPtr, kind,TInstant::Now(),
-                        StoragePoolCounters, HandleClass, Tactic, false);
+                IActor *reqActor = CreateBlobStorageGroupPutRequest(
+                        TBlobStorageGroupMultiPutParameters{
+                            .Common = {
+                                .GroupInfo = BsInfo,
+                                .GroupQueues = GroupQueues,
+                                .Mon = Mon,
+                                .Now = TInstant::Now(),
+                                .StoragePoolCounters = StoragePoolCounters,
+                                .RestartCounter = TBlobStorageGroupMultiPutParameters::CalculateRestartCounter(batched),
+                                .LatencyQueueKind = kind,
+                            },
+                            .Events = batched,
+                            .TimeStatsEnabled = false,
+                            .Stats = PerDiskStatsPtr,
+                            .HandleClass = HandleClass,
+                            .Tactic = Tactic,
+                            .EnableRequestMod3x3ForMinLatency = false,
+                        });
 
                 ctx.Register(reqActor);
                 break;
@@ -4252,6 +4268,7 @@ public:
                 vDiskConfig->GCOnlySynced = false;
                 vDiskConfig->HullCompLevelRateThreshold = 0.1;
                 vDiskConfig->SkeletonFrontQueueBackpressureCheckMsgId = false;
+                vDiskConfig->UseCostTracker = false;
 
                 IActor* vDisk = CreateVDisk(vDiskConfig, bsInfo, counters);
                 TActorSetupCmd vDiskSetup(vDisk, TMailboxType::Revolving, 0);

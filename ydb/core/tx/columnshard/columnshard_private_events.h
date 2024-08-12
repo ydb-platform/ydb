@@ -11,6 +11,10 @@
 #include <ydb/core/tx/data_events/write_data.h>
 #include <ydb/core/formats/arrow/special_keys.h>
 
+namespace NKikimr::NOlap::NReader {
+class IApplyAction;
+}
+
 namespace NKikimr::NColumnShard {
 
 struct TEvPrivate {
@@ -41,10 +45,27 @@ struct TEvPrivate {
         EvExportCursorSaved,
         EvExportSaveCursor,
 
+        EvTaskProcessedResult,
+        EvPingSnapshotsUsage,
+
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
+
+    class TEvTaskProcessedResult: public NActors::TEventLocal<TEvTaskProcessedResult, EvTaskProcessedResult> {
+    private:
+        TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>> Result;
+
+    public:
+        TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>> ExtractResult() {
+            return std::move(Result);
+        }
+
+        TEvTaskProcessedResult(const TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>>& result)
+            : Result(result) {
+        }
+    };
 
     struct TEvTieringModified: public TEventLocal<TEvTieringModified, EvTieringModified> {
     };
@@ -122,8 +143,9 @@ struct TEvPrivate {
 
     struct TEvReadFinished : public TEventLocal<TEvReadFinished, EvReadFinished> {
         explicit TEvReadFinished(ui64 requestCookie, ui64 txId = 0)
-            : RequestCookie(requestCookie), TxId(txId)
-        {}
+            : RequestCookie(requestCookie)
+            , TxId(txId) {
+        }
 
         ui64 RequestCookie;
         ui64 TxId;
@@ -137,11 +159,24 @@ struct TEvPrivate {
         bool Manual;
     };
 
-    class TEvWriteBlobsResult : public TEventLocal<TEvWriteBlobsResult, EvWriteBlobsResult> {
+    struct TEvPingSnapshotsUsage: public TEventLocal<TEvPingSnapshotsUsage, EvPingSnapshotsUsage> {
+        TEvPingSnapshotsUsage() = default;
+    };
+
+    class TEvWriteBlobsResult: public TEventLocal<TEvWriteBlobsResult, EvWriteBlobsResult> {
     private:
         NColumnShard::TBlobPutResult::TPtr PutResult;
         NOlap::TWritingBuffer WritesBuffer;
+        YDB_READONLY_DEF(TString, ErrorMessage);
     public:
+        
+        static std::unique_ptr<TEvWriteBlobsResult> Error(const NKikimrProto::EReplyStatus status, NOlap::TWritingBuffer&& writesBuffer, const TString& error) {
+            std::unique_ptr<TEvWriteBlobsResult> result = std::make_unique<TEvWriteBlobsResult>(std::make_shared<NColumnShard::TBlobPutResult>(status), 
+                std::move(writesBuffer));
+            result->ErrorMessage = error;
+            return result;
+        }
+
         TEvWriteBlobsResult(const NColumnShard::TBlobPutResult::TPtr& putResult, NOlap::TWritingBuffer&& writesBuffer)
             : PutResult(putResult)
             , WritesBuffer(std::move(writesBuffer))

@@ -71,7 +71,7 @@ private:
     TSourceIdMap InMemorySourceIds;
     THashMap<TString, TString> SourceIdOwners;
     TVector<TString> OwnersToDrop;
-    TSet<std::pair<ui64, TString>> SourceIdsByOffset;
+    TSet<std::pair<ui64, TString>> SourceIdsByOffset[2];
     // used to track heartbeats
     THashSet<TString> ExplicitSourceIds;
 
@@ -83,6 +83,10 @@ public:
 
     const TSourceIdMap& GetSourceIdsToWrite() const {
         return Registrations;
+    }
+
+    const THashSet<TString>& GetSourceIdsToDelete() const {
+        return Deregistrations;
     }
 
     template <typename... Args>

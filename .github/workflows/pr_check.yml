@@ -5,6 +5,7 @@ on:
       - 'main'
       - 'stable-*'
       - 'stream-nb-*'
+      - '*-stable-*'
     paths-ignore:
       - 'ydb/docs/**'
       - '*'
@@ -24,6 +25,12 @@ jobs:
       result: ${{ steps.check-ownership-membership.outputs.result == 'true' && steps.check-is-mergeable.outputs.result == 'true' }}
       commit_sha: ${{ steps.check-is-mergeable.outputs.commit_sha }}
     steps:
+      - name: Reset integrated status
+        run: |
+          curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
+            -d '{"state":"pending","description":"Waiting for relevant checks to complete","context":"checks_integrated"}'
+
       - name: Check if running tests is allowed
         id: check-ownership-membership
         uses: actions/github-script@v6
@@ -205,6 +212,10 @@ jobs:
       with:
         ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
         fetch-depth: 2
+    - name: Setup ydb access
+      uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+      with:
+        ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
     - name: Build and test
       uses: ./.github/actions/build_and_test_ya
       with:
@@ -213,11 +224,34 @@ jobs:
         increment: true
         run_tests: ${{ contains(fromJSON('["relwithdebinfo", "release-asan"]'), matrix.build_preset) }}
         test_size: "small,medium"
-        test_type: "unittest,py3test,py2test,pytest"
         test_threads: 52
+        test_retry_count: 1
         put_build_results_to_cache: true
-        run_tests_if_build_fails: false
-        secs: ${{ format('{{"TESTMO_TOKEN":"{0}","AWS_KEY_ID":"{1}","AWS_KEY_VALUE":"{2}","REMOTE_CACHE_USERNAME":"{3}","REMOTE_CACHE_PASSWORD":"{4}"}}', 
-          secrets.TESTMO_TOKEN, secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD ) }}
+        secs: ${{ format('{{"TESTMO_TOKEN2":"{0}","AWS_KEY_ID":"{1}","AWS_KEY_VALUE":"{2}","REMOTE_CACHE_USERNAME":"{3}","REMOTE_CACHE_PASSWORD":"{4}"}}',
+          secrets.TESTMO_TOKEN2, secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD ) }}
         vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","TESTMO_URL":"{3}","TESTMO_PROJECT_ID":"{4}"}}',
           vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.TESTMO_URL, vars.TESTMO_PROJECT_ID ) }}
+
+  update_integrated_status:
+    runs-on: ubuntu-latest
+    needs: build_and_test
+    if: always()
+    steps:
+      - name: Gather required checks results
+        shell: bash
+        run: |
+          successbuilds=$(curl -L -X GET -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{github.repository}}/commits/${{github.event.pull_request.head.sha}}/status | \
+            jq -cr '.statuses | .[] | select(.state=="success") | select(.context | (startswith("build_") or startswith("test_relwithdebinfo")) ) | .context' | \
+            wc -l )
+          if [[ $successbuilds == "4" ]];then
+            integrated_status="success"
+          else
+            integrated_status="failure"
+          fi
+          curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
+            -d '{"state":"'$integrated_status'","description":"All checks completed","context":"checks_integrated"}'
+
+
+        

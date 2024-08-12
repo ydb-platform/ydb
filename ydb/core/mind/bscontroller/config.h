@@ -82,7 +82,7 @@ namespace NKikimr {
             // volatile reconfiguration state
             THashMap<TVSlotId, TPDiskId> ExplicitReconfigureMap;
             std::set<TVSlotId> SuppressDonorMode;
-            std::unordered_set<ui32> SanitizingRequests;
+            std::unordered_set<TGroupId> SanitizingRequests;
 
             // just-created vslots, which are not yet committed to the storage
             TSet<TVSlotId> UncommittedVSlots;
@@ -93,6 +93,7 @@ namespace NKikimr {
             // outgoing messages
             std::deque<std::tuple<TNodeId, std::unique_ptr<IEventBase>, ui64>> Outbox;
             std::deque<std::unique_ptr<IEventBase>> StatProcessorOutbox;
+            std::deque<std::unique_ptr<IEventBase>> NodeWhiteboardOutbox;
             THolder<TEvControllerUpdateSelfHealInfo> UpdateSelfHealInfoMsg;
 
             // deferred callbacks
@@ -119,6 +120,8 @@ namespace NKikimr {
 
             THashSet<TGroupId> GroupContentChanged;
             THashSet<TGroupId> GroupFailureModelChanged;
+
+            bool PushStaticGroupsToSelfHeal = false;
 
         public:
             TConfigState(TBlobStorageController &controller, const THostRecordMap &hostRecords, TInstant timestamp)
@@ -308,6 +311,7 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TSanitizeGroup& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TCancelVirtualGroup& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TSetVDiskReadOnly& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TRestartPDisk& cmd, TStatus& status);
         };
 
     } // NBsController

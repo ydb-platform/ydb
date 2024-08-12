@@ -1555,7 +1555,7 @@ mdb_strerror(int err)
 	buf[0] = 0;
 	FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM |
 		FORMAT_MESSAGE_IGNORE_INSERTS,
-		NULL, err, 0, ptr, MSGSIZE, (va_list *)buf+MSGSIZE);
+		NULL, err, 0, ptr, MSGSIZE, NULL);
 	return ptr;
 #else
 	if (err < 0)
@@ -2796,9 +2796,14 @@ mdb_txn_renew0(MDB_txn *txn)
 			do /* LY: Retry on a race, ITS#7970. */
 				r->mr_txnid = ti->mti_txnid;
 			while(r->mr_txnid != ti->mti_txnid);
+			if (!r->mr_txnid && (env->me_flags & MDB_RDONLY)) {
+				meta = mdb_env_pick_meta(env);
+				r->mr_txnid = meta->mm_txnid;
+			} else {
+				meta = env->me_metas[r->mr_txnid & 1];
+			}
 			txn->mt_txnid = r->mr_txnid;
 			txn->mt_u.reader = r;
-			meta = env->me_metas[txn->mt_txnid & 1];
 		}
 
 	} else {
@@ -5701,7 +5706,7 @@ mdb_page_search(MDB_cursor *mc, MDB_val *key, int flags)
 					MDB_node *leaf = mdb_node_search(&mc2,
 						&mc->mc_dbx->md_name, &exact);
 					if (!exact)
-						return MDB_NOTFOUND;
+						return MDB_BAD_DBI;
 					if ((leaf->mn_flags & (F_DUPDATA|F_SUBDATA)) != F_SUBDATA)
 						return MDB_INCOMPATIBLE; /* not a named DB */
 					rc = mdb_node_read(&mc2, leaf, &data);

@@ -3,6 +3,7 @@
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/util/tuples.h>
 #include <ydb/core/util/templates.h>
+#include <ydb/core/base/blobstorage_common.h>
 
 #include <util/system/type_name.h>
 #include <util/system/unaligned_mem.h>
@@ -109,7 +110,10 @@ public:
 
     operator i64() const {
         Y_ABORT_UNLESS((Type() == NScheme::NTypeIds::Int64
-                  || Type() == NScheme::NTypeIds::Interval)
+                  || Type() == NScheme::NTypeIds::Interval
+                  || Type() == NScheme::NTypeIds::Datetime64
+                  || Type() == NScheme::NTypeIds::Timestamp64
+                  || Type() == NScheme::NTypeIds::Interval64)
                  && Size() == sizeof(i64), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
         return ReadUnaligned<i64>(reinterpret_cast<const i64*>(Data()));
     }
@@ -123,7 +127,9 @@ public:
     }
 
     operator i32() const {
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::Int32 && Size() == sizeof(i32), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+        Y_ABORT_UNLESS((Type() == NScheme::NTypeIds::Int32 
+                  || Type() == NScheme::NTypeIds::Date32)
+                 && Size() == sizeof(i32), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
         i32 value = ReadUnaligned<i32>(reinterpret_cast<const i32*>(Data()));
         return value;
     }
@@ -229,6 +235,10 @@ template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Date> { typedef ui16 Typ
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Datetime> { typedef ui32 Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Timestamp> { typedef ui64 Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Interval> { typedef i64 Type; };
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Date32> { typedef i32 Type; };
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Datetime64> { typedef i64 Type; };
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Timestamp64> { typedef i64 Type; };
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Interval64> { typedef i64 Type; };
 
 /// only for compatibility with old code
 template <NScheme::TTypeId ValType>
@@ -361,6 +371,22 @@ struct TConvertValue<TColumnType, TDuration, TRawTypeValue> {
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TIdWrapper conversion
+
+template <typename TColumnType, typename T, typename Tag>
+struct TConvertValue<TColumnType, TRawTypeValue, TIdWrapper<T, Tag>> {
+    typename NSchemeTypeMapper<TColumnType::ColumnType>::Type Storage;
+    TTypeValue Value;
+    TConvertValue(const TIdWrapper<T, Tag> & value) : Storage(value.GetRawId()), Value(Storage, TColumnType::ColumnType) {}
+    operator const TRawTypeValue&() const { return Value; }
+};
+
+template <typename TColumnType, typename T, typename Tag>
+struct TConvertValue<TColumnType, TIdWrapper<T, Tag>, TRawTypeValue> {
+    TTypeValue Value;
+    TConvertValue(const TRawTypeValue & value) : Value(value) {}
+    operator TIdWrapper<T, Tag>() const { return TIdWrapper<T, Tag>::FromValue(static_cast<T>(Value)); }
+};
 
 template <typename TColumnType, typename SourceType>
 struct TConvertValue<TColumnType, TRawTypeValue, SourceType> {
@@ -757,13 +783,10 @@ struct Schema {
                 return *this;
             }
 
-            auto Key(typename KeyColumns::Type... keyValues) {
-                return KeyOperations<TableType, KeyValuesType>(*Database, keyValues...);
-            }
-
-            auto Key(const KeyValuesType& keyValues) {
-                return KeyOperations<TableType, KeyValuesType>(*Database, keyValues);
-            }
+            template<typename... Keys>
+            auto Key(Keys&&... keyValues) {
+                return KeyOperations<TableType, KeyValuesType>(*Database, std::forward<Keys>(keyValues)...);
+             }
 
             template <typename... Keys>
             auto Range(Keys... keyValues) {
@@ -843,7 +866,7 @@ struct Schema {
             }
 
             template <typename TableType>
-            using Selector = TableSelector<NTable::TTableIt, TableType, KeyColumnsTypes...>;
+            using Selector = TableSelector<NTable::TTableIter, TableType, KeyColumnsTypes...>;
             using KeyColumnsType = std::tuple<KeyColumnsTypes...>;
             using KeyValuesType = typename TableColumns<KeyColumnsTypes...>::TupleType;
             using RealKeyValuesType = typename TableColumns<KeyColumnsTypes...>::RealTupleType;
@@ -1319,11 +1342,11 @@ struct Schema {
 
             template <typename TableType, typename KeyValuesType>
             class EqualKeyIterator
-                : public KeyIterator<NTable::TTableIt, EqualKeyIterator<TableType, KeyValuesType>>
+                : public KeyIterator<NTable::TTableIter, EqualKeyIterator<TableType, KeyValuesType>>
             {
             public:
                 using KeyColumnsType = typename TableType::TKey::KeyColumnsType;
-                using Iterator = KeyIterator<NTable::TTableIt, EqualKeyIterator<TableType, KeyValuesType>>;
+                using Iterator = KeyIterator<NTable::TTableIter, EqualKeyIterator<TableType, KeyValuesType>>;
 
                 EqualKeyIterator(TToughDb& database, const KeyValuesType& key, NTable::TTagsRef columns)
                     : Iterator(MakeIterator(database, key, columns))
@@ -1336,9 +1359,9 @@ struct Schema {
                 EqualKeyIterator(EqualKeyIterator&& iterator) = default;
                 EqualKeyIterator& operator =(EqualKeyIterator&& iterator) = default;
 
-                static THolder<NTable::TTableIt> MakeIterator(TToughDb& database, const KeyValuesType& keyValues, NTable::TTagsRef columns) {
+                static THolder<NTable::TTableIter> MakeIterator(TToughDb& database, const KeyValuesType& keyValues, NTable::TTagsRef columns) {
                     TTupleToRawTypeValue<KeyValuesType, KeyColumnsType> key(keyValues);
-                    return THolder<NTable::TTableIt>(database.IterateExact(TableId, key, columns).Release());
+                    return THolder<NTable::TTableIter>(database.IterateExact(TableId, key, columns).Release());
                 }
 
                 static bool Precharge(
@@ -1355,7 +1378,7 @@ struct Schema {
                         key,
                         key,
                         columns,
-                        NTable::TTableIt::Direction,
+                        NTable::TTableIter::Direction,
                         maxRowCount,
                         maxBytes);
                 }

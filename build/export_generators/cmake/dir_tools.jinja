@@ -1,0 +1,13 @@
+{%- if tools is defined -%}
+{%-     for tool in tools -%}
+{%-         set path_and_name = rsplit(tool, "/", 2) -%}
+{%-         set toolPath = path_and_name[0] -%}
+{%-         set toolName = path_and_name[1] %}
+get_built_tool_path(
+  TOOL_{{ toolName }}_bin
+  TOOL_{{ toolName }}_dependency
+  {{ toolPath }}
+  {{ toolName }}
+)
+{%      endfor -%}
+{%- endif -%}

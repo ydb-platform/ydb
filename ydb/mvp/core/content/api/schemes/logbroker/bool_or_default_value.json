@@ -1,0 +1,19 @@
+{
+    "properties": {
+        "default": {
+            "type": "boolean"
+        },
+        "userDefined": {
+            "type": "boolean"
+        },
+        "variantType": {
+            "type": "string",
+            "description": "oneOf case property name",
+            "enum": ["userDefined", "default"]
+        }
+    },
+    "title": "BoolOrDefaultValue",
+    "type": "object",
+    "required": ["variantType"]
+
+}

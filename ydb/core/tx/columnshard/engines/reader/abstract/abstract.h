@@ -6,20 +6,32 @@
 namespace NKikimr::NOlap::NReader {
 
 class TScanIteratorBase {
+protected:
+    virtual void DoOnSentDataFromInterval(const ui32 /*intervalIdx*/) const {
+
+    }
 public:
     virtual ~TScanIteratorBase() = default;
 
-    virtual void Apply(IDataTasksProcessor::ITask::TPtr /*processor*/) {
+    virtual void Apply(const std::shared_ptr<IApplyAction>& /*task*/) {
 
     }
 
+    virtual TConclusionStatus Start() = 0;
+
     virtual const TReadStats& GetStats() const;
+
+    void OnSentDataFromInterval(const std::optional<ui32> intervalIdx) const {
+        if (intervalIdx) {
+            DoOnSentDataFromInterval(*intervalIdx);
+        }
+    }
 
     virtual std::optional<ui32> GetAvailableResultsCount() const {
         return {};
     }
     virtual bool Finished() const = 0;
-    virtual TConclusion<std::optional<TPartialReadResult>> GetBatch() = 0;
+    virtual TConclusion<std::shared_ptr<TPartialReadResult>> GetBatch() = 0;
     virtual void PrepareResults() {
 
     }

@@ -246,6 +246,81 @@ public:
     }
 };
 
+// fill sequence description with default values
+std::optional<NKikimrSchemeOp::TSequenceDescription> FillSequenceDescription(const NKikimrSchemeOp::TSequenceDescription& sequence,
+        const NScheme::TTypeRegistry& typeRegistry, bool pgTypesEnabled,
+        TString& errStr) {
+    NKikimrSchemeOp::TSequenceDescription result = sequence;
+
+    TString dataType;
+    if (!sequence.HasDataType()) {
+        dataType = NScheme::TypeName(NScheme::NTypeIds::Int64);
+    } else {
+        dataType = sequence.GetDataType();
+    }
+
+    auto validationResult = ValidateSequenceType(sequence.GetName(), dataType, typeRegistry, pgTypesEnabled, errStr);
+    if (!validationResult) {
+        return std::nullopt;
+    }
+
+    auto [dataTypeMinValue, dataTypeMaxValue] = *validationResult;
+
+    i64 increment = 0;
+    if (result.HasIncrement()) {
+        increment = result.GetIncrement();
+    }
+    if (increment == 0) {
+        increment = 1;
+    }
+    result.SetIncrement(increment);
+
+    i64 minValue = 1;
+    i64 maxValue = dataTypeMaxValue;
+    if (increment < 0) {
+        maxValue = -1;
+        minValue = dataTypeMinValue;
+    }
+
+    if (result.HasMaxValue()) {
+        maxValue = result.GetMaxValue();
+    }
+
+    if (result.HasMinValue()) {
+        minValue = result.GetMinValue();
+    }
+
+    result.SetMaxValue(maxValue);
+    result.SetMinValue(minValue);
+
+    bool cycle = false;
+    if (result.HasCycle()) {
+        cycle = result.GetCycle();
+    }
+
+    result.SetCycle(cycle);
+
+    i64 startValue = minValue;
+    if (increment < 0) {
+        startValue = maxValue;
+    }
+    if (result.HasStartValue()) {
+        startValue = result.GetStartValue();
+    }
+
+    result.SetStartValue(startValue);
+
+    ui64 cache = 1;
+    if (result.HasCache()) {
+        cache = result.GetCache();
+    }
+
+    result.SetCache(cache);
+    result.SetDataType(dataType);
+
+    return result;
+}
+
 class TCreateSequence : public TSubOperation {
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
@@ -313,7 +388,8 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-                .IsCommonSensePath();
+                .IsCommonSensePath()
+                .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
 
             if (checks) {
                 if (parentPath->IsTable()) {
@@ -429,7 +505,15 @@ public:
 
         TSequenceInfo::TPtr sequenceInfo = new TSequenceInfo(0);
         TSequenceInfo::TPtr alterData = sequenceInfo->CreateNextVersion();
-        alterData->Description = descr;
+        const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
+        auto description = FillSequenceDescription(
+            descr, *typeRegistry, context.SS->EnableTablePgTypes, errStr);
+        if (!description) {
+            status = NKikimrScheme::StatusInvalidParameter;
+            result->SetError(status, errStr);
+            return result;
+        }
+        alterData->Description = *description;
 
         if (shardsToCreate) {
             sequenceShard = context.SS->RegisterShardInfo(
@@ -460,11 +544,10 @@ public:
         context.SS->ChangeTxState(db, OperationId, txState.State);
         context.OnComplete.ActivateTx(OperationId);
 
-        context.SS->PersistPath(db, dstPath->PathId);
         if (!acl.empty()) {
             dstPath->ApplyACL(acl);
-            context.SS->PersistACL(db, dstPath.Base());
         }
+        context.SS->PersistPath(db, dstPath->PathId);
 
         context.SS->Sequences[pathId] = sequenceInfo;
         context.SS->PersistSequence(db, pathId, *sequenceInfo);

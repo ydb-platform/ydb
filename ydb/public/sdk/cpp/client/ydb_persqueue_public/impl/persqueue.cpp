@@ -86,10 +86,19 @@ TDescribeTopicResult::TDescribeTopicResult(TStatus status, const Ydb::PersQueue:
 }
 
 TDescribeTopicResult::TTopicSettings::TTopicSettings(const Ydb::PersQueue::V1::TopicSettings& settings) {
-
-    PartitionsCount_ = settings.partitions_count();
     RetentionPeriod_ = TDuration::MilliSeconds(settings.retention_period_ms());
     SupportedFormat_ = static_cast<EFormat>(settings.supported_format());
+
+    if (settings.has_auto_partitioning_settings()) {
+        PartitionsCount_ = settings.auto_partitioning_settings().min_active_partitions();
+        MaxPartitionsCount_ = settings.auto_partitioning_settings().max_active_partitions();
+        StabilizationWindow_ = TDuration::Seconds(settings.auto_partitioning_settings().partition_write_speed().stabilization_window().seconds());
+        UpUtilizationPercent_ = settings.auto_partitioning_settings().partition_write_speed().up_utilization_percent();
+        DownUtilizationPercent_ = settings.auto_partitioning_settings().partition_write_speed().down_utilization_percent();
+        AutoPartitioningStrategy_ = settings.auto_partitioning_settings().strategy();
+    } else {
+        PartitionsCount_ = settings.partitions_count();
+    }
 
     for (const auto& codec : settings.supported_codecs()) {
         SupportedCodecs_.push_back(static_cast<ECodec>(codec));
@@ -151,17 +160,6 @@ TDescribeTopicResult::TTopicSettings::TRemoteMirrorRule::TRemoteMirrorRule(const
 TPersQueueClient::TPersQueueClient(const TDriver& driver, const TPersQueueClientSettings& settings)
     : Impl_(std::make_shared<TImpl>(CreateInternalInterface(driver), settings))
 {
-    ProvideCodec(ECodec::GZIP, MakeHolder<TGzipCodec>());
-    ProvideCodec(ECodec::LZOP, MakeHolder<TUnsupportedCodec>());
-    ProvideCodec(ECodec::ZSTD, MakeHolder<TZstdCodec>());
-}
-
-void TPersQueueClient::ProvideCodec(ECodec codecId, THolder<ICodec>&& codecImpl) {
-    return Impl_->ProvideCodec(codecId, std::move(codecImpl));
-}
-
-void TPersQueueClient::OverrideCodec(ECodec codecId, THolder<ICodec>&& codecImpl) {
-    return Impl_->OverrideCodec(codecId, std::move(codecImpl));
 }
 
 TAsyncStatus TPersQueueClient::CreateTopic(const TString& path, const TCreateTopicSettings& settings) {
@@ -186,35 +184,6 @@ TAsyncStatus TPersQueueClient::RemoveReadRule(const TString& path, const TRemove
 
 TAsyncDescribeTopicResult TPersQueueClient::DescribeTopic(const TString& path, const TDescribeTopicSettings& settings) {
     return Impl_->DescribeTopic(path, settings);
-}
-
-IRetryPolicy::TPtr IRetryPolicy::GetDefaultPolicy() {
-    static IRetryPolicy::TPtr policy = GetExponentialBackoffPolicy();
-    return policy;
-}
-
-IRetryPolicy::TPtr IRetryPolicy::GetNoRetryPolicy() {
-    return ::IRetryPolicy<EStatus>::GetNoRetryPolicy();
-}
-
-IRetryPolicy::TPtr IRetryPolicy::GetExponentialBackoffPolicy(TDuration minDelay,
-                                                             TDuration minLongRetryDelay,
-                                                             TDuration maxDelay,
-                                                             size_t maxRetries,
-                                                             TDuration maxTime,
-                                                             double scaleFactor,
-                                                             std::function<ERetryErrorClass(EStatus)> customRetryClassFunction)
-{
-    return ::IRetryPolicy<EStatus>::GetExponentialBackoffPolicy(customRetryClassFunction ? customRetryClassFunction : GetRetryErrorClass, minDelay, minLongRetryDelay, maxDelay, maxRetries, maxTime, scaleFactor);
-}
-
-IRetryPolicy::TPtr IRetryPolicy::GetFixedIntervalPolicy(TDuration delay,
-                                                        TDuration longRetryDelay,
-                                                        size_t maxRetries,
-                                                        TDuration maxTime,
-                                                        std::function<ERetryErrorClass(EStatus)> customRetryClassFunction)
-{
-    return ::IRetryPolicy<EStatus>::GetFixedIntervalPolicy(customRetryClassFunction ? customRetryClassFunction : GetRetryErrorClass, delay, longRetryDelay, maxRetries, maxTime);
 }
 
 std::shared_ptr<IReadSession> TPersQueueClient::CreateReadSession(const TReadSessionSettings& settings) {

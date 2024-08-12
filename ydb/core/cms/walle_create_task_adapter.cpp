@@ -123,7 +123,7 @@ private:
         request->Record.SetDryRun(task.GetDryRun());
         const auto &action = task.GetAction();
         if (action == "temporary-unreachable") {
-            request->Record.SetPriority(WALLE_SOFT_MAINTAINANCE_PRIORITY);
+            request->Record.SetPriority(WALLE_SOFT_MAINTENANCE_PRIORITY);
         } else {
             request->Record.SetPriority(WALLE_DEFAULT_PRIORITY);
         }

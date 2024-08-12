@@ -50,6 +50,8 @@ struct TSolomonExporterConfig
 
     int ThreadPoolSize;
     int EncodingThreadPoolSize;
+    TDuration ThreadPoolPollingPeriod;
+    TDuration EncodingThreadPoolPollingPeriod;
 
     bool ConvertCountersToRateForSolomon;
     bool RenameConvertedCounters;
@@ -83,6 +85,8 @@ struct TSolomonExporterConfig
     THashMap<TString, TShardConfigPtr> Shards;
 
     TDuration UpdateSensorServiceTreePeriod;
+
+    int ProducerCollectionBatchSize;
 
     TShardConfigPtr MatchShard(const TString& sensorName);
 

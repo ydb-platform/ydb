@@ -13,7 +13,7 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const static auto& Logger = SolomonLogger;
+static constexpr auto& Logger = SolomonLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -406,7 +406,7 @@ void TSensorSet::InitializeType(ESensorType type)
     }
 }
 
-void TSensorSet::DumpCube(NProto::TCube *cube) const
+void TSensorSet::DumpCube(NProto::TCube *cube, const std::vector<TTagId>& extraTags) const
 {
     cube->set_sparse(Options_.Sparse);
     cube->set_global(Options_.Global);
@@ -414,14 +414,14 @@ void TSensorSet::DumpCube(NProto::TCube *cube) const
     cube->set_disable_sensors_rename(Options_.DisableSensorsRename);
     cube->set_summary_policy(ToProto<ui64>(Options_.SummaryPolicy));
 
-    CountersCube_.DumpCube(cube);
-    TimeCountersCube_.DumpCube(cube);
-    GaugesCube_.DumpCube(cube);
-    SummariesCube_.DumpCube(cube);
-    TimersCube_.DumpCube(cube);
-    TimeHistogramsCube_.DumpCube(cube);
-    GaugeHistogramsCube_.DumpCube(cube);
-    RateHistogramsCube_.DumpCube(cube);
+    CountersCube_.DumpCube(cube, extraTags);
+    TimeCountersCube_.DumpCube(cube, extraTags);
+    GaugesCube_.DumpCube(cube, extraTags);
+    SummariesCube_.DumpCube(cube, extraTags);
+    TimersCube_.DumpCube(cube, extraTags);
+    TimeHistogramsCube_.DumpCube(cube, extraTags);
+    GaugeHistogramsCube_.DumpCube(cube, extraTags);
+    RateHistogramsCube_.DumpCube(cube, extraTags);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

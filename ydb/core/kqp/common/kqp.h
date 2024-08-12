@@ -80,6 +80,8 @@ public:
     /// Accepts query text
     virtual void Collect(const TString& queryData) = 0;
 
+    virtual bool IsNull() { return false; } 
+
     virtual ~IQueryReplayBackend() {};
 
     //// Updates configuration onn running backend, if applicable.
@@ -93,6 +95,10 @@ public:
     }
 
     virtual void UpdateConfig(const NKikimrConfig::TTableServiceConfig&) {
+    }
+
+    bool IsNull() {
+        return true;
     }
 
     ~TNullQueryReplayBackend() {

@@ -6,17 +6,11 @@
         <tmp_path>/program.sql:<main>:5:37: Error: At function: AssumeColumnOrderPartial
         	SELECT SOME(YQL::NewMTRand(1)) FROM Input
 	                                    ^
-            <tmp_path>/program.sql:<main>:5:8: Error: At function: Aggregate
+            <tmp_path>/program.sql:<main>:5:8: Error: At function: Aggregate, At function: AggApply, At function: PersistableRepr
             	SELECT SOME(YQL::NewMTRand(1)) FROM Input
 	       ^
-                <tmp_path>/program.sql:/lib/yql/aggregate.yql:xxx:yyy: Error: At function: AggregationTraits
-                	
-	                 ^
-                    <tmp_path>/program.sql:<main>:5:8: Error: At function: PersistableRepr
+                <tmp_path>/program.sql:<main>: Error: Treat warning as error mode enabled. To disable it use "pragma warning("default", <code>);"
+                
+                    <tmp_path>/program.sql:<main>:5:18: Error: Persistable required. Atom, key, world, datasink, datasource, callable, resource, stream and lambda are not persistable
                     	SELECT SOME(YQL::NewMTRand(1)) FROM Input
-	       ^
-                        <tmp_path>/program.sql:<main>: Error: Treat warning as error mode enabled. To disable it use "pragma warning("default", <code>);"
-                        
-                            <tmp_path>/program.sql:<main>:5:18: Error: Persistable required. Atom, key, world, datasink, datasource, callable, resource, stream and lambda are not persistable
-                            	SELECT SOME(YQL::NewMTRand(1)) FROM Input
 	                 ^

@@ -675,86 +675,7 @@ TExprNode::TPtr ApplyExtractMembersToAggregate(const TExprNode::TPtr& node, cons
         outMembers.insert(x->Content());
     }
 
-    // prune handlers first
-    TExprNodeList newHandlers;
-    bool rebuildHandlers = false;
-    for (const auto& handler : aggr.Handlers()) {
-        if (handler.ColumnName().Ref().IsList()) {
-            // many columns
-            auto columns = handler.ColumnName().Cast<TCoAtomList>();
-            TVector<size_t> liveIndexes;
-            for (size_t i = 0; i < columns.Size(); ++i) {
-                if (outMembers.contains(columns.Item(i).Value())) {
-                    liveIndexes.push_back(i);
-                }
-            }
-
-            if (liveIndexes.empty()) {
-                // drop handler
-                rebuildHandlers = true;
-                continue;
-            } else if (liveIndexes.size() < columns.Size() && handler.Trait().Maybe<TCoAggregationTraits>()) {
-                auto traits = handler.Trait().Cast<TCoAggregationTraits>();
-
-                TExprNodeList nameNodes;
-                TExprNodeList finishBody;
-                TExprNode::TPtr arg = ctx.NewArgument(traits.FinishHandler().Pos(), "arg");
-                auto originalTuple = ctx.Builder(traits.FinishHandler().Pos())
-                    .Apply(traits.FinishHandler().Ref())
-                        .With(0, arg)
-                    .Seal()
-                    .Build();
-                
-                for (auto& idx : liveIndexes) {
-                    nameNodes.emplace_back(columns.Item(idx).Ptr());
-                    finishBody.emplace_back(ctx.Builder(traits.FinishHandler().Pos())
-                        .Callable("Nth")
-                            .Add(0, originalTuple)
-                            .Atom(1, idx)
-                        .Seal()
-                        .Build());
-                }
-
-                auto finishLambda = ctx.NewLambda(traits.FinishHandler().Pos(),
-                    ctx.NewArguments(traits.FinishHandler().Pos(), { arg }),
-                    ctx.NewList(traits.FinishHandler().Pos(), std::move(finishBody)));
-
-                auto newHandler = Build<TCoAggregateTuple>(ctx, handler.Pos())
-                    .InitFrom(handler)
-                    .ColumnName(ctx.NewList(handler.ColumnName().Pos(), std::move(nameNodes)))
-                    .Trait<TCoAggregationTraits>()
-                        .InitFrom(traits)
-                        .FinishHandler(finishLambda)
-                    .Build()
-                    .Done().Ptr();
-                
-                newHandlers.emplace_back(std::move(newHandler));
-                rebuildHandlers = true;
-                continue;
-            }
-        } else {
-            if (!outMembers.contains(handler.ColumnName().Cast<TCoAtom>().Value())) {
-                // drop handler
-                rebuildHandlers = true;
-                continue;
-            }
-        }
-
-        newHandlers.push_back(handler.Ptr());
-    }
-
-    if (rebuildHandlers) {
-        YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to payloads of " << node->Content() << logSuffix;
-        return Build<TCoExtractMembers>(ctx, aggr.Pos())
-            .Input<TCoAggregate>()
-                .InitFrom(aggr)
-                .Handlers(ctx.NewList(aggr.Pos(), std::move(newHandlers)))
-            .Build()
-            .Members(members)
-            .Done()
-            .Ptr();
-    }
-
+    // TODOD: remove ExtractMembers pushdown to inputs when FieldSubsetEnableMultiusage is enabled
     TMaybe<TStringBuf> sessionColumn;
     const auto sessionSetting = GetSetting(aggr.Settings().Ref(), "session");
     if (sessionSetting) {
@@ -833,28 +754,23 @@ TExprNode::TPtr ApplyExtractMembersToAggregate(const TExprNode::TPtr& node, cons
 
     auto inputStructType = aggr.Input().Ptr()->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     YQL_ENSURE(usedFields.size() <= inputStructType->GetSize());
-    if (usedFields.size() == inputStructType->GetSize()) {
-        return {};
+    auto newInput = aggr.Input();
+    if (usedFields.size() < inputStructType->GetSize()) {
+        TExprNode::TListType usedExprList;
+        for (const auto& x : usedFields) {
+            usedExprList.push_back(ctx.NewAtom(aggr.Pos(), x));
+        }
+        newInput = Build<TCoExtractMembers>(ctx, aggr.Pos())
+            .Input(aggr.Input())
+            .Members(ctx.NewList(aggr.Pos(), std::move(usedExprList)))
+            .Done();
     }
-
-    TExprNode::TListType usedExprList;
-    for (const auto& x : usedFields) {
-        usedExprList.push_back(ctx.NewAtom(aggr.Pos(), x));
-    }
-
-    auto newInput = Build<TCoExtractMembers>(ctx, aggr.Pos())
-        .Input(aggr.Input())
-        .Members(ctx.NewList(aggr.Pos(), std::move(usedExprList)))
-        .Done()
-        .Ptr();
 
     YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix;
-    return Build<TCoExtractMembers>(ctx, aggr.Pos())
-        .Input<TCoAggregate>()
-            .InitFrom(aggr)
-            .Input(newInput)
-        .Build()
-        .Members(members)
+    return Build<TCoAggregate>(ctx, aggr.Pos())
+        .InitFrom(aggr)
+        .Input(newInput)
+        .Settings(ReplaceSetting(aggr.Settings().Ref(), members->Pos(), "output_columns", members, ctx))
         .Done()
         .Ptr();
 }

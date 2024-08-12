@@ -83,7 +83,7 @@ struct TAllocationStats {
     size_t Sizes[MaxSizeIndex];
     size_t Counts[MaxSizeIndex];
 
-    static constexpr ui32 MaxTag = 1024;
+    static constexpr ui32 MaxTag = 2048;
     size_t TagSizes[MaxTag];
     size_t TagCounts[MaxTag];
 
@@ -118,7 +118,7 @@ struct TAllocationStats {
         Counts[index] += sample.count;
 
         ui32 tag = reinterpret_cast<uintptr_t>(sample.user_data);
-        tag = (tag < MaxTag) ? tag : 0;
+        tag = (tag < MaxTag) ? tag : NProfiling::GetOverlimitCountersTag();
         TagSizes[tag] += sample.sum;
         TagCounts[tag] += sample.count;
     }
@@ -446,13 +446,16 @@ public:
 
 class TTcMallocState : public IAllocState {
 public:
-    ui64 GetAllocatedMemoryEstimate() const override {
+    TState Get() const override {
         const auto properties = tcmalloc::MallocExtension::GetProperties();
 
         ui64 used = GetProperty(properties, "generic.physical_memory_used");
         ui64 caches = GetCachesSize(properties);
 
-        return used > caches ? used - caches : 0;
+        return {
+            used - Min(used, caches),
+            caches
+        };
     }
 };
 

@@ -11,11 +11,11 @@
 
 #include <util/string/join.h>
 
-#include <grpc++/resource_quota.h>
-#include <grpc++/security/server_credentials.h>
-#include <grpc++/server_builder.h>
-#include <grpc++/server_context.h>
-#include <grpc++/server.h>
+#include <grpcpp/resource_quota.h>
+#include <grpcpp/security/server_credentials.h>
+#include <grpcpp/server_builder.h>
+#include <grpcpp/server_context.h>
+#include <grpcpp/server.h>
 
 using grpc::Server;
 using grpc::ServerContext;
@@ -152,22 +152,6 @@ public:
         }
     }
 
-    void Reply(const NKikimrClient::TDsTestLoadResponse& resp) override {
-        if (const TOut* x = dynamic_cast<const TOut*>(&resp)) {
-            Finish(*x, 0);
-        } else {
-            ReplyError("request failed");
-        }
-    }
-
-    void Reply(const NKikimrClient::TBsTestLoadResponse& resp) override {
-        if (const TOut* x = dynamic_cast<const TOut*>(&resp)) {
-            Finish(*x, 0);
-        } else {
-            ReplyError("request failed");
-        }
-    }
-
     void Reply(const NKikimrClient::TJSON& resp) override {
         try {
             Finish(dynamic_cast<const TOut&>(resp), 0);
@@ -265,7 +249,7 @@ private:
 
     void Finish(const TOut& resp, ui32 status) {
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] issuing response Name# %s data# %s peer# %s", this,
-            Name, NYdbGrpc::FormatMessage(resp).data(), GetPeerName().c_str());
+            Name, NYdbGrpc::FormatMessage<TOut>(resp).data(), GetPeerName().c_str());
         ResponseSize = resp.ByteSize();
         ResponseStatus = status;
         StateFunc = &TSimpleRequest::FinishDone;
@@ -292,7 +276,7 @@ private:
         OnAfterCall();
 
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] received request Name# %s ok# %s data# %s peer# %s current inflight# %li", this,
-            Name, ok ? "true" : "false", NYdbGrpc::FormatMessage(Request, ok).data(), GetPeerName().c_str(), Server->GetCurrentInFlight());
+            Name, ok ? "true" : "false", NYdbGrpc::FormatMessage<TIn>(Request, ok).data(), GetPeerName().c_str(), Server->GetCurrentInFlight());
 
         if (Context.c_call() == nullptr) {
             Y_ABORT_UNLESS(!ok);
@@ -463,21 +447,17 @@ void TGRpcService::SetupIncomingRequests() {
     ADD_ACTOR_REQUEST(LocalSchemeTx,             TLocalSchemeTx,                    MTYPE_CLIENT_LOCAL_SCHEME_TX)
     ADD_ACTOR_REQUEST(TabletKillRequest,         TTabletKillRequest,                MTYPE_CLIENT_TABLET_KILL_REQUEST)
     ADD_ACTOR_REQUEST(SchemeOperationStatus,     TSchemeOperationStatus,            MTYPE_CLIENT_FLAT_TX_STATUS_REQUEST)
-    ADD_ACTOR_REQUEST(BlobStorageLoadRequest,    TBsTestLoadRequest,                MTYPE_CLIENT_LOAD_REQUEST)
-    ADD_ACTOR_REQUEST(BlobStorageGetRequest,     TBsGetRequest,                     MTYPE_CLIENT_GET_REQUEST)
     ADD_ACTOR_REQUEST(ChooseProxy,               TChooseProxyRequest,               MTYPE_CLIENT_CHOOSE_PROXY)
-    ADD_ACTOR_REQUEST(WhoAmI,                    TWhoAmI,                           MTYPE_CLIENT_WHOAMI)
     ADD_ACTOR_REQUEST(ResolveNode,               TResolveNodeRequest,               MTYPE_CLIENT_RESOLVE_NODE)
     ADD_ACTOR_REQUEST(FillNode,                  TFillNodeRequest,                  MTYPE_CLIENT_FILL_NODE)
     ADD_ACTOR_REQUEST(DrainNode,                 TDrainNodeRequest,                 MTYPE_CLIENT_DRAIN_NODE)
     ADD_ACTOR_REQUEST(InterconnectDebug,         TInterconnectDebug,                MTYPE_CLIENT_INTERCONNECT_DEBUG)
     ADD_ACTOR_REQUEST(TestShardControl,          TTestShardControlRequest,          MTYPE_CLIENT_TEST_SHARD_CONTROL)
-    ADD_ACTOR_REQUEST(LoginRequest,              TLoginRequest,                     MTYPE_CLIENT_LOGIN_REQUEST)
 
     // dynamic node registration
     ADD_REQUEST(RegisterNode, TNodeRegistrationRequest, TNodeRegistrationResponse, {
         NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_NODE_REGISTRATION_REQUEST));
-        RegisterRequestActor(CreateMessageBusRegisterNode(msg, DynamicNodeAuthorizationParams));
+        RegisterRequestActor(CreateMessageBusRegisterNode(msg));
     })
 
     // CMS request
@@ -518,14 +498,6 @@ void TGRpcService::SetupIncomingRequests() {
     ADD_PROXY_REQUEST(Request,          TRequest,          TEvBusProxy::TEvRequest,             MTYPE_CLIENT_REQUEST)
     ADD_PROXY_REQUEST(SchemeOperation,  TSchemeOperation,  TEvBusProxy::TEvFlatTxRequest,       MTYPE_CLIENT_FLAT_TX_REQUEST)
     ADD_PROXY_REQUEST(SchemeDescribe,   TSchemeDescribe,   TEvBusProxy::TEvFlatDescribeRequest, MTYPE_CLIENT_FLAT_DESCRIBE_REQUEST)
-
-#define ADD_PROXY_REQUEST_JJ(NAME, EVENT_TYPE, MTYPE) \
-    ADD_PROXY_REQUEST_BASE(NAME, TJSON, TJSON, EVENT_TYPE, MTYPE)
-
-    // DB proxy requests both consuming and returning TJSON
-    ADD_PROXY_REQUEST_JJ(DbSchema,    TEvBusProxy::TEvDbSchema,    MTYPE_CLIENT_DB_SCHEMA)
-    ADD_PROXY_REQUEST_JJ(DbOperation, TEvBusProxy::TEvDbOperation, MTYPE_CLIENT_DB_OPERATION)
-    ADD_PROXY_REQUEST_JJ(DbBatch,     TEvBusProxy::TEvDbBatch,     MTYPE_CLIENT_DB_BATCH)
 }
 
 }

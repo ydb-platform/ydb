@@ -6,6 +6,7 @@ __all__ = [
     "TopicClientSettings",
     "TopicCodec",
     "TopicConsumer",
+    "TopicAlterConsumer",
     "TopicDescription",
     "TopicError",
     "TopicMeteringMode",
@@ -15,6 +16,7 @@ __all__ = [
     "TopicReaderMessage",
     "TopicReaderSelector",
     "TopicReaderSettings",
+    "TopicReaderUnexpectedCodecError",
     "TopicReaderPartitionExpiredError",
     "TopicStatWindow",
     "TopicWriteResult",
@@ -49,6 +51,7 @@ from ._topic_reader.topic_reader_sync import TopicReaderSync as TopicReader
 from ._topic_reader.topic_reader_asyncio import (
     PublicAsyncIOReader as TopicReaderAsyncIO,
     PublicTopicReaderPartitionExpiredError as TopicReaderPartitionExpiredError,
+    PublicTopicReaderUnexpectedCodecError as TopicReaderUnexpectedCodecError,
 )
 
 from ._topic_writer.topic_writer import (  # noqa: F401
@@ -75,6 +78,7 @@ from ._grpc.grpcwrapper.ydb_topic_public_types import (  # noqa: F401
     PublicPartitionStats as TopicPartitionStats,
     PublicCodec as TopicCodec,
     PublicConsumer as TopicConsumer,
+    PublicAlterConsumer as TopicAlterConsumer,
     PublicMeteringMode as TopicMeteringMode,
 )
 
@@ -140,6 +144,53 @@ class TopicClientAsyncIO:
             req.to_proto(),
             _apis.TopicService.Stub,
             _apis.TopicService.CreateTopic,
+            _wrap_operation,
+        )
+
+    async def alter_topic(
+        self,
+        path: str,
+        set_min_active_partitions: Optional[int] = None,
+        set_partition_count_limit: Optional[int] = None,
+        add_consumers: Optional[List[Union[TopicConsumer, str]]] = None,
+        alter_consumers: Optional[List[Union[TopicAlterConsumer, str]]] = None,
+        drop_consumers: Optional[List[str]] = None,
+        alter_attributes: Optional[Dict[str, str]] = None,
+        set_metering_mode: Optional[TopicMeteringMode] = None,
+        set_partition_write_speed_bytes_per_second: Optional[int] = None,
+        set_partition_write_burst_bytes: Optional[int] = None,
+        set_retention_period: Optional[datetime.timedelta] = None,
+        set_retention_storage_mb: Optional[int] = None,
+        set_supported_codecs: Optional[List[Union[TopicCodec, int]]] = None,
+    ):
+        """
+        alter topic command
+
+        :param path: full path to topic
+        :param set_min_active_partitions: Minimum partition count auto merge would stop working at.
+        :param set_partition_count_limit: Limit for total partition count, including active (open for write)
+            and read-only partitions.
+        :param add_consumers: List of consumers for this topic to add
+        :param alter_consumers: List of consumers for this topic to alter
+        :param drop_consumers: List of consumer names for this topic to drop
+        :param alter_attributes: User and server attributes of topic.
+            Server attributes starts from "_" and will be validated by server.
+        :param set_metering_mode: Metering mode for the topic in a serverless database
+        :param set_partition_write_speed_bytes_per_second: Partition write speed in bytes per second
+        :param set_partition_write_burst_bytes: Burst size for write in partition, in bytes
+        :param set_retention_period: How long data in partition should be stored
+        :param set_retention_storage_mb: How much data in partition should be stored
+        :param set_supported_codecs: List of allowed codecs for writers. Writes with codec not from this list are forbidden.
+            Empty list mean disable codec compatibility checks for the topic.
+        """
+        args = locals().copy()
+        del args["self"]
+        req = _ydb_topic_public_types.AlterTopicRequestParams(**args)
+        req = _ydb_topic.AlterTopicRequest.from_public(req)
+        await self._driver(
+            req.to_proto(),
+            _apis.TopicService.Stub,
+            _apis.TopicService.AlterTopic,
             _wrap_operation,
         )
 
@@ -292,6 +343,55 @@ class TopicClient:
             req.to_proto(),
             _apis.TopicService.Stub,
             _apis.TopicService.CreateTopic,
+            _wrap_operation,
+        )
+
+    def alter_topic(
+        self,
+        path: str,
+        set_min_active_partitions: Optional[int] = None,
+        set_partition_count_limit: Optional[int] = None,
+        add_consumers: Optional[List[Union[TopicConsumer, str]]] = None,
+        alter_consumers: Optional[List[Union[TopicAlterConsumer, str]]] = None,
+        drop_consumers: Optional[List[str]] = None,
+        alter_attributes: Optional[Dict[str, str]] = None,
+        set_metering_mode: Optional[TopicMeteringMode] = None,
+        set_partition_write_speed_bytes_per_second: Optional[int] = None,
+        set_partition_write_burst_bytes: Optional[int] = None,
+        set_retention_period: Optional[datetime.timedelta] = None,
+        set_retention_storage_mb: Optional[int] = None,
+        set_supported_codecs: Optional[List[Union[TopicCodec, int]]] = None,
+    ):
+        """
+        alter topic command
+
+        :param path: full path to topic
+        :param set_min_active_partitions: Minimum partition count auto merge would stop working at.
+        :param set_partition_count_limit: Limit for total partition count, including active (open for write)
+            and read-only partitions.
+        :param add_consumers: List of consumers for this topic to add
+        :param alter_consumers: List of consumers for this topic to alter
+        :param drop_consumers: List of consumer names for this topic to drop
+        :param alter_attributes: User and server attributes of topic.
+            Server attributes starts from "_" and will be validated by server.
+        :param set_metering_mode: Metering mode for the topic in a serverless database
+        :param set_partition_write_speed_bytes_per_second: Partition write speed in bytes per second
+        :param set_partition_write_burst_bytes: Burst size for write in partition, in bytes
+        :param set_retention_period: How long data in partition should be stored
+        :param set_retention_storage_mb: How much data in partition should be stored
+        :param set_supported_codecs: List of allowed codecs for writers. Writes with codec not from this list are forbidden.
+            Empty list mean disable codec compatibility checks for the topic.
+        """
+        args = locals().copy()
+        del args["self"]
+        self._check_closed()
+
+        req = _ydb_topic_public_types.AlterTopicRequestParams(**args)
+        req = _ydb_topic.AlterTopicRequest.from_public(req)
+        self._driver(
+            req.to_proto(),
+            _apis.TopicService.Stub,
+            _apis.TopicService.AlterTopic,
             _wrap_operation,
         )
 

@@ -227,6 +227,9 @@
     "test_ydb_impex.TestImpex.test_stdin[tsv-additional_args3-row]": {
         "uri": "file://test_ydb_impex.TestImpex.test_stdin_tsv-additional_args3-row_/result.output"
     },
+    "test_ydb_scripting.TestExecuteScriptFromStdinWithWideOutput.test_wide_table": {
+        "uri": "file://test_ydb_scripting.TestExecuteScriptFromStdinWithWideOutput.test_wide_table/result.output"
+    },
     "test_ydb_scripting.TestExecuteScriptWithFormats.test_stream_yql_script_json_base64": {
         "uri": "file://test_ydb_scripting.TestExecuteScriptWithFormats.test_stream_yql_script_json_base64/result.output"
     },

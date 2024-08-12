@@ -1,5 +1,6 @@
 #include "retryful_writer_v2.h"
 
+#include <util/generic/scope.h>
 #include <yt/cpp/mapreduce/client/retry_heavy_write_request.h>
 #include <yt/cpp/mapreduce/client/transaction.h>
 #include <yt/cpp/mapreduce/client/transaction_pinger.h>
@@ -32,6 +33,9 @@ public:
 
     void Clear()
     {
+        // This method can be called only if no other object is holding snapshot.
+        Y_ABORT_IF(Buffer_.use_count() != 1);
+
         Size_ = 0;
     }
 
@@ -60,7 +64,7 @@ public:
     }
 
 private:
-    std::shared_ptr<std::string> Buffer_ = nullptr;
+    std::shared_ptr<std::string> Buffer_ = std::make_shared<std::string>();
     ssize_t Size_ = 0;
     ssize_t Capacity_ = 0;
 };
@@ -84,6 +88,12 @@ public:
     {
         Abort();
         SenderThread_.Join();
+    }
+
+    bool IsRunning() const
+    {
+        auto g = Guard(Lock_);
+        return State_.load() == EState::Running && !Error_;
     }
 
     void Abort()
@@ -114,7 +124,7 @@ public:
 
         auto taskId = NextTaskId_++;
         const auto& [it, inserted] = TaskMap_.emplace(taskId, TWriteTask{});
-        Y_ABORT_UNLESS(inserted);
+        Y_ABORT_IF(!inserted);
         TaskIdQueue_.push(taskId);
         HaveMoreData_.Signal();
         it->second.SendingComplete = NThreading::NewPromise();
@@ -131,7 +141,7 @@ public:
             CheckNoError();
 
             auto it = TaskMap_.find(taskId);
-            Y_ABORT_UNLESS(it != TaskMap_.end());
+            Y_ABORT_IF(it == TaskMap_.end());
             auto& writeTask = it->second;
             writeTask.Data = std::move(snapshot.first);
             writeTask.Size = snapshot.second;
@@ -246,7 +256,7 @@ private:
     struct TWriteTask
     {
         NThreading::TPromise<void> SendingComplete;
-        std::shared_ptr<std::string> Data;
+        std::shared_ptr<std::string> Data = std::make_shared<std::string>();
         ssize_t Size = 0;
         bool BufferComplete = false;
     };
@@ -333,20 +343,31 @@ TRetryfulWriterV2::TRetryfulWriterV2(
 
 void TRetryfulWriterV2::Abort()
 {
-    if (Sender_) {
-        Sender_->Abort();
+    auto sender = std::move(Sender_);
+    auto writeTransaction = std::move(WriteTransaction_);
+    if (sender) {
+        sender->Abort();
+        if (writeTransaction) {
+            writeTransaction->Abort();
+        }
     }
+}
+
+size_t TRetryfulWriterV2::GetBufferMemoryUsage() const
+{
+    return BufferSize_ * 4;
 }
 
 void TRetryfulWriterV2::DoFinish()
 {
-    if (Sender_) {
-        Sender_->UpdateBlock(Current_->TaskId, Current_->Buffer, true);
-        Sender_->Finish();
-        Sender_.Reset();
-    }
-    if (WriteTransaction_) {
-        WriteTransaction_->Commit();
+    auto sender = std::move(Sender_);
+    auto writeTransaction = std::move(WriteTransaction_);
+    if (sender && sender->IsRunning()) {
+        sender->UpdateBlock(Current_->TaskId, Current_->Buffer, true);
+        sender->Finish();
+        if (writeTransaction) {
+            writeTransaction->Commit();
+        }
     }
 }
 

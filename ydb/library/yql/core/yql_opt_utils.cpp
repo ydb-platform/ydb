@@ -369,9 +369,9 @@ TExprNode::TPtr KeepColumnOrder(const TColumnOrder& order, const TExprNode::TPtr
             .List(1)
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                     size_t index = 0;
-                    for (auto& col : order) {
+                    for (auto& [col, gen_col] : order) {
                         parent
-                            .Atom(index++, col);
+                            .Atom(index++, gen_col);
                     }
                     return parent;
                 })
@@ -553,6 +553,17 @@ TExprNode::TPtr GetSetting(const TExprNode& settings, const TStringBuf& name) {
         }
     }
     return nullptr;
+}
+
+TExprNode::TPtr FilterSettings(const TExprNode& settings, const THashSet<TStringBuf>& names, TExprContext& ctx) {
+    TExprNode::TListType children;
+    for (auto setting : settings.Children()) {
+        if (setting->ChildrenSize() != 0 && names.contains(setting->Head().Content())) {
+            children.push_back(setting);
+        }
+    }
+
+    return ctx.NewList(settings.Pos(), std::move(children));
 }
 
 bool HasSetting(const TExprNode& settings, const TStringBuf& name) {
@@ -1192,6 +1203,61 @@ TExprNode::TPtr ExpandCastStruct(const TExprNode::TPtr& node, TExprContext& ctx)
     return ctx.NewCallable(node->Pos(), "AsStruct", std::move(items));
 }
 
+TExprNode::TListType GetOptionals(const TPositionHandle& pos, const TStructExprType& type, TExprContext& ctx) {
+    TExprNode::TListType result;
+    for (const auto& item : type.GetItems())
+        if (ETypeAnnotationKind::Optional == item->GetItemType()->GetKind())
+            result.emplace_back(ctx.NewAtom(pos, item->GetName()));
+    return result;
+}
+
+TExprNode::TListType GetOptionals(const TPositionHandle& pos, const TTupleExprType& type, TExprContext& ctx) {
+    TExprNode::TListType result;
+    if (const auto& items = type.GetItems(); !items.empty())
+        for (ui32 i = 0U; i < items.size(); ++i)
+            if (ETypeAnnotationKind::Optional == items[i]->GetKind())
+                result.emplace_back(ctx.NewAtom(pos, i));
+    return result;
+}
+
+TExprNode::TPtr ExpandSkipNullFields(const TExprNode::TPtr& node, TExprContext& ctx) {
+    YQL_ENSURE(node->IsCallable({"SkipNullMembers", "SkipNullElements"}));
+    YQL_CLOG(DEBUG, Core) << "Expand " << node->Content();
+    const bool isTuple = node->IsCallable("SkipNullElements");
+    TExprNode::TListType fields;
+    if (node->ChildrenSize() > 1) {
+        fields = node->Child(1)->ChildrenList();
+    } else if (isTuple) {
+        fields = GetOptionals(node->Pos(), *GetSeqItemType(node->Head().GetTypeAnn())->Cast<TTupleExprType>(), ctx);
+    } else {
+        fields = GetOptionals(node->Pos(), *GetSeqItemType(node->Head().GetTypeAnn())->Cast<TStructExprType>(), ctx);
+    }
+    if (fields.empty()) {
+        return node->HeadPtr();
+    }
+    return ctx.Builder(node->Pos())
+        .Callable("OrderedFilter")
+            .Add(0, node->HeadPtr())
+            .Lambda(1)
+                .Param("item")
+                .Callable("And")
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        for (ui32 i = 0U; i < fields.size(); ++i) {
+                            parent
+                                .Callable(i, "Exists")
+                                    .Callable(0, isTuple ? "Nth" : "Member")
+                                        .Arg(0, "item")
+                                        .Add(1, std::move(fields[i]))
+                                    .Seal()
+                                .Seal();
+                        }
+                        return parent;
+                    })
+                .Seal()
+            .Seal()
+        .Seal().Build();
+}
+
 void ExtractSimpleKeys(const TExprNode* keySelectorBody, const TExprNode* keySelectorArg, TVector<TStringBuf>& columns) {
     if (keySelectorBody->IsList()) {
         for (auto& child: keySelectorBody->Children()) {
@@ -1747,7 +1813,8 @@ TExprNode::TPtr FindNonYieldTransparentNodeImpl(const TExprNode::TPtr& root, con
                 || TCoForwardList::Match(node.Get())
                 || TCoApply::Match(node.Get())
                 || TCoSwitch::Match(node.Get())
-                || node->IsCallable("DqReplicate");
+                || node->IsCallable("DqReplicate")
+                || TCoPartitionsByKeys::Match(node.Get());
         }
     );
 
@@ -1784,6 +1851,11 @@ TExprNode::TPtr FindNonYieldTransparentNodeImpl(const TExprNode::TPtr& root, con
                 if (auto node = FindNonYieldTransparentNodeImpl(candidate->Child(i)->TailPtr(), udfSupportsYield, TNodeSet{&candidate->Child(i)->Head().Head()})) {
                     return node;
                 }
+            }
+        } else if (TCoPartitionsByKeys::Match(candidate.Get())) {
+            const auto handlerChild = candidate->Child(TCoPartitionsByKeys::idx_ListHandlerLambda);
+            if (auto node = FindNonYieldTransparentNodeImpl(handlerChild->TailPtr(), udfSupportsYield, TNodeSet{&handlerChild->Head().Head()})) {
+                return node;
             }
         }
     }
@@ -1829,26 +1901,35 @@ bool IsYieldTransparent(const TExprNode::TPtr& root, const TTypeAnnotationContex
     return !FindNonYieldTransparentNode(root, typeCtx);
 }
 
+TMaybe<bool> IsStrictNoRecurse(const TExprNode& node) {
+    if (node.IsCallable({"Unwrap", "Ensure", "ScriptUdf", "Error", "ErrorType"})) {
+        return false;
+    }
+    if (node.IsCallable("Udf")) {
+        return HasSetting(*node.Child(TCoUdf::idx_Settings), "strict");
+    }
+    return {};
+}
+
 bool IsStrict(const TExprNode::TPtr& root) {
     // TODO: add TExprNode::IsStrict() method (with corresponding flag). Fill it as part of type annotation pass
     bool isStrict = true;
-    size_t insideAssumeStrict = 0;
-
     VisitExpr(root, [&](const TExprNode::TPtr& node) {
         if (node->IsCallable("AssumeStrict")) {
-            ++insideAssumeStrict;
-        } else if (isStrict && !insideAssumeStrict && node->IsCallable({"Udf", "ScriptUdf", "Unwrap", "Ensure"})) {
-            if (!node->IsCallable("Udf") || !HasSetting(*node->Child(TCoUdf::idx_Settings), "strict")) {
-                isStrict = false;
-            }
+            return false;
         }
+
+        if (node->IsCallable("AssumeNonStrict")) {
+            isStrict = false;
+            return false;
+        }
+
+        auto maybeStrict = IsStrictNoRecurse(*node);
+        if (maybeStrict.Defined() && !*maybeStrict) {
+            isStrict = false;
+        }
+
         return isStrict;
-    }, [&](const TExprNode::TPtr& node) {
-        if (node->IsCallable("AssumeStrict")) {
-            YQL_ENSURE(insideAssumeStrict > 0);
-            --insideAssumeStrict;
-        }
-        return true;
     });
 
     return isStrict;
@@ -2105,5 +2186,35 @@ TPartOfConstraintBase::TSetType GetPathsToKeys(const TExprNode& body, const TExp
 
 template TPartOfConstraintBase::TSetType GetPathsToKeys<true>(const TExprNode& body, const TExprNode& arg);
 template TPartOfConstraintBase::TSetType GetPathsToKeys<false>(const TExprNode& body, const TExprNode& arg);
+
+TVector<TString> GenNoClashColumns(const TStructExprType& source, TStringBuf prefix, size_t count) {
+    YQL_ENSURE(prefix.StartsWith("_yql"));
+    TSet<size_t> existing;
+    for (auto& item : source.GetItems()) {
+        TStringBuf column = item->GetName();
+        if (column.SkipPrefix(prefix)) {
+            size_t idx;
+            if (TryFromString(column, idx)) {
+                existing.insert(idx);
+            }
+        }
+    }
+
+    size_t current = 0;
+    TVector<TString> result;
+    auto it = existing.cbegin();
+    while (count) {
+        if (it == existing.cend() || current < *it) {
+            result.push_back(TStringBuilder() << prefix << current);
+            --count;
+        } else {
+            ++it;
+        }
+        YQL_ENSURE(!count || (current + 1 > current));
+        ++current;
+    }
+    return result;
+}
+
 
 }

@@ -26,20 +26,20 @@ Please see the [contribution guidelines](https://github.com/websocket-client/web
 
 ## Installation
 
-You can use either `python3 setup.py install` or `pip3 install websocket-client`
-to install. This module is tested on Python 3.8+.
+You can use `pip install websocket-client` to install, or `pip install -e .`
+to install from a local copy of the code. This module is tested on Python 3.8+.
 
 There are several optional dependencies that can be installed to enable
 specific websocket-client features.
 - To install `python-socks` for proxy usage and `wsaccel` for a minor performance boost, use:
- `pip3 install websocket-client[optional]`
+ `pip install websocket-client[optional]`
 - To install `websockets` to run unit tests using the local echo server, use:
- `pip3 install websocket-client[test]`
+ `pip install websocket-client[test]`
 - To install `Sphinx` and `sphinx_rtd_theme` to build project documentation, use:
- `pip3 install websocket-client[docs]`
+ `pip install websocket-client[docs]`
 
 While not a strict dependency, [rel](https://github.com/bubbleboy14/registeredeventlistener)
-is useful when using `run_forever` with automatic reconnect. Install rel with `pip3 install rel`.
+is useful when using `run_forever` with automatic reconnect. Install rel with `pip install rel`.
 
 Footnote: Some shells, such as zsh, require you to escape the `[` and `]` characters with a `\`.
 

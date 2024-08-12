@@ -519,7 +519,7 @@ bool TSnapshotManager::ReleaseReference(const TSnapshotKey& key, NTable::TDataba
     auto refIt = References.find(key);
 
     if (Y_UNLIKELY(refIt == References.end() || refIt->second <= 0)) {
-        Y_DEBUG_ABORT_UNLESS(false, "ReleaseReference underflow, check acquire/release pairs");
+        Y_DEBUG_ABORT("ReleaseReference underflow, check acquire/release pairs");
         return false;
     }
 
@@ -532,7 +532,7 @@ bool TSnapshotManager::ReleaseReference(const TSnapshotKey& key, NTable::TDataba
 
     auto it = Snapshots.find(key);
     if (it == Snapshots.end()) {
-        Y_DEBUG_ABORT_UNLESS(false, "ReleaseReference on an already deleted snapshot");
+        Y_DEBUG_ABORT("ReleaseReference on an already deleted snapshot");
         return false;
     }
 

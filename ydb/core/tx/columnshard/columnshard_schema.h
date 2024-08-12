@@ -19,6 +19,7 @@ namespace NKikimr::NColumnShard {
 
 using NOlap::TWriteId;
 using NOlap::IBlobGroupSelector;
+struct TFullTxInfo;
 
 struct Schema : NIceDb::Schema {
     // These settings are persisted on each Init. So we use empty settings in order not to overwrite what
@@ -51,7 +52,13 @@ struct Schema : NIceDb::Schema {
         DestinationSessionsTableId,
         OperationTxIdsId,
         BackupIdsDeprecated,
-        ExportSessionsId
+        ExportSessionsId,
+        PortionsTableId,
+        BackgroundSessionsTableId,
+        ShardingInfoTableId,
+        RepairsTableId,
+        NormalizersTableId,
+        NormalizerEventsTableId
     };
 
     enum class ETierTables: ui32 {
@@ -76,6 +83,9 @@ struct Schema : NIceDb::Schema {
         OwnerPath = 12,
         LastCompletedStep = 13,
         LastCompletedTxId = 14,
+        LastNormalizerSequentialId = 15,
+        GCBarrierPreparationGen = 16,
+        GCBarrierPreparationStep = 17
     };
 
     enum class EInsertTableIds : ui8 {
@@ -98,7 +108,8 @@ struct Schema : NIceDb::Schema {
         TableVersionInfo = 11,
         SmallBlobs = 12,
         OneToOneEvictedBlobs = 13,
-        BlobsToDeleteWT = 14
+        BlobsToDeleteWT = 14,
+        InFlightSnapshots = 15
     };
 
     // Tablet tables
@@ -119,10 +130,11 @@ struct Schema : NIceDb::Schema {
         struct MaxStep : Column<4, NScheme::NTypeIds::Uint64> {};
         struct PlanStep : Column<5, NScheme::NTypeIds::Uint64> {};
         struct Source : Column<6, NScheme::NTypeIds::ActorId> {};
-        struct Cookie : Column<7, NScheme::NTypeIds::Uint64> {};
+        struct Cookie: Column<7, NScheme::NTypeIds::Uint64> {};
+        struct SeqNo: Column<8, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<TxId>;
-        using TColumns = TableColumns<TxId, TxKind, TxBody, MaxStep, PlanStep, Source, Cookie>;
+        using TColumns = TableColumns<TxId, TxKind, TxBody, MaxStep, PlanStep, Source, Cookie, SeqNo>;
     };
 
     struct SchemaPresetInfo : Table<(ui32)ECommonTables::SchemaPresetInfo> {
@@ -189,9 +201,10 @@ struct Schema : NIceDb::Schema {
         struct WriteId: Column<1, NScheme::NTypeIds::Uint64> {};
         struct LongTxId : Column<2, NScheme::NTypeIds::String> {};
         struct WritePartId: Column<3, NScheme::NTypeIds::Uint32> {};
+        struct GranuleShardingVersion: Column<4, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<WriteId>;
-        using TColumns = TableColumns<WriteId, LongTxId, WritePartId>;
+        using TColumns = TableColumns<WriteId, LongTxId, WritePartId, GranuleShardingVersion>;
     };
 
     struct BlobsToKeep : Table<(ui32)ECommonTables::BlobsToKeep> {
@@ -236,6 +249,14 @@ struct Schema : NIceDb::Schema {
 
         using TKey = TableKey<BlobId, TabletId>;
         using TColumns = TableColumns<BlobId, TabletId>;
+    };
+
+    struct InFlightSnapshots: Table<(ui32)ECommonTables::InFlightSnapshots> {
+        struct PlanStep: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct TxId: Column<2, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<PlanStep, TxId>;
+        using TColumns = TableColumns<PlanStep, TxId>;
     };
 
     // Index tables
@@ -310,10 +331,11 @@ struct Schema : NIceDb::Schema {
         struct CreatedAt : Column<4, NScheme::NTypeIds::Uint64> {};
         struct GlobalWriteId : Column<5, NScheme::NTypeIds::Uint64> {};
         struct Metadata : Column<6, NScheme::NTypeIds::String> {};
-        struct Cookie : Column<7, NScheme::NTypeIds::Uint64> {};
+        struct Cookie: Column<7, NScheme::NTypeIds::Uint64> {};
+        struct GranuleShardingVersionId: Column<8, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<WriteId>;
-        using TColumns = TableColumns<LockId, WriteId, Status, CreatedAt, GlobalWriteId, Metadata, Cookie>;
+        using TColumns = TableColumns<LockId, WriteId, Status, CreatedAt, GlobalWriteId, Metadata, Cookie, GranuleShardingVersionId>;
     };
 
     struct OperationTxIds : NIceDb::Schema::Table<OperationTxIdsId> {
@@ -322,16 +344,6 @@ struct Schema : NIceDb::Schema {
 
         using TKey = TableKey<TxId, LockId>;
         using TColumns = TableColumns<TxId, LockId>;
-    };
-
-    struct ExportPersistentSessions : NIceDb::Schema::Table<ExportSessionsId> {
-        struct Identifier : Column<1, NScheme::NTypeIds::String> {};
-        struct Status: Column<2, NScheme::NTypeIds::String> {};
-        struct Task: Column<3, NScheme::NTypeIds::String> {};
-        struct Cursor: Column<4, NScheme::NTypeIds::String> {};
-
-        using TKey = TableKey<Identifier>;
-        using TColumns = TableColumns<Identifier, Status, Task, Cursor>;
     };
 
     struct TierBlobsDraft: NIceDb::Schema::Table<(ui32)ETierTables::TierBlobsDraft> {
@@ -369,9 +381,10 @@ struct Schema : NIceDb::Schema {
         struct Size: Column<7, NScheme::NTypeIds::Uint32> {};
         struct RecordsCount: Column<8, NScheme::NTypeIds::Uint32> {};
         struct RawBytes: Column<9, NScheme::NTypeIds::Uint64> {};
+        struct BlobData: Column<10, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<PathId, PortionId, IndexId, ChunkIdx>;
-        using TColumns = TableColumns<PathId, PortionId, IndexId, ChunkIdx, Blob, Offset, Size, RecordsCount, RawBytes>;
+        using TColumns = TableColumns<PathId, PortionId, IndexId, ChunkIdx, Blob, Offset, Size, RecordsCount, RawBytes, BlobData>;
     };
 
     struct SharedBlobIds: NIceDb::Schema::Table<SharedBlobIdsTableId> {
@@ -451,6 +464,63 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<LockId, TxId>;
     };
 
+    struct IndexPortions: NIceDb::Schema::Table<PortionsTableId> {
+        struct PathId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct PortionId: Column<2, NScheme::NTypeIds::Uint64> {};
+        struct SchemaVersion: Column<3, NScheme::NTypeIds::Uint64> {};
+        struct XPlanStep: Column<4, NScheme::NTypeIds::Uint64> {};
+        struct XTxId: Column<5, NScheme::NTypeIds::Uint64> {};
+        struct Metadata: Column<6, NScheme::NTypeIds::String> {}; // NKikimrTxColumnShard.TIndexColumnMeta
+        struct ShardingVersion: Column<7, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<PathId, PortionId>;
+        using TColumns = TableColumns<PathId, PortionId, SchemaVersion, XPlanStep, XTxId, Metadata, ShardingVersion>;
+    };
+
+    struct BackgroundSessions: Table<BackgroundSessionsTableId> {
+        struct ClassName: Column<1, NScheme::NTypeIds::String> {};
+        struct Identifier: Column<2, NScheme::NTypeIds::String> {};
+        struct StatusChannel: Column<3, NScheme::NTypeIds::String> {};
+        struct LogicDescription: Column<4, NScheme::NTypeIds::String> {};
+        struct Progress: Column<5, NScheme::NTypeIds::String> {};
+        struct State: Column<6, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<ClassName, Identifier>;
+        using TColumns = TableColumns<ClassName, Identifier, StatusChannel, LogicDescription, Progress, State>;
+    };
+
+    struct ShardingInfo : Table<ShardingInfoTableId> {
+        struct PathId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct VersionId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct Snapshot : Column<3, NScheme::NTypeIds::String> {};
+        struct Logic : Column<4, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<PathId, VersionId>;
+        using TColumns = TableColumns<PathId, VersionId, Snapshot, Logic>;
+    };
+
+    struct Normalizers: Table<NormalizersTableId> {
+        struct ClassName: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Description: Column<2, NScheme::NTypeIds::Utf8> {};
+        struct Identifier: Column<3, NScheme::NTypeIds::Utf8> {};
+        struct Start: Column<4, NScheme::NTypeIds::Uint64> {};
+        struct Finish: Column<5, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<ClassName, Description, Identifier>;
+        using TColumns = TableColumns<ClassName, Description, Identifier, Start, Finish>;
+    };
+
+    struct NormalizerEvents: Table<NormalizerEventsTableId> {
+        struct NormalizerId: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct EventId: Column<2, NScheme::NTypeIds::Utf8> {};
+        struct Instant: Column<3, NScheme::NTypeIds::Uint64> {};
+        struct EventType: Column<4, NScheme::NTypeIds::Utf8> {};
+        struct Description: Column<5, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<NormalizerId, EventId>;
+        using TColumns = TableColumns<NormalizerId, EventId, Instant, EventType, Description>;
+    };
+
     using TTables = SchemaTables<
         Value,
         TxInfo,
@@ -480,7 +550,12 @@ struct Schema : NIceDb::Schema {
         SourceSessions,
         DestinationSessions,
         OperationTxIds,
-        ExportPersistentSessions
+        IndexPortions,
+        BackgroundSessions,
+        ShardingInfo,
+        Normalizers,
+        NormalizerEvents,
+        InFlightSnapshots
         >;
 
     //
@@ -501,8 +576,39 @@ struct Schema : NIceDb::Schema {
 
         auto rowset = db.Table<Value>().Key((ui32)key).Select<TSource>();
         if (rowset.IsReady()) {
-            if (rowset.IsValid())
+            if (rowset.IsValid()) {
                 value = T{rowset.template GetValue<TSource>()};
+                return true;
+            }
+        }
+        return false;
+    }
+
+    template <typename T>
+    static bool GetSpecialValueOpt(NIceDb::TNiceDb& db, EValueIds key, T& value) {
+        using TSource = std::conditional_t<std::is_integral_v<T> || std::is_enum_v<T>, Value::Digit, Value::Bytes>;
+
+        auto rowset = db.Table<Value>().Key((ui32)key).Select<TSource>();
+        if (rowset.IsReady()) {
+            if (rowset.IsValid()) {
+                value = T{rowset.template GetValue<TSource>()};
+            }
+            return true;
+        }
+        return false;
+    }
+
+    template <typename T>
+    static bool GetSpecialValueOpt(NIceDb::TNiceDb& db, EValueIds key, std::optional<T>& value) {
+        using TSource = std::conditional_t<std::is_integral_v<T> || std::is_enum_v<T>, Value::Digit, Value::Bytes>;
+
+        auto rowset = db.Table<Value>().Key((ui32)key).Select<TSource>();
+        if (rowset.IsReady()) {
+            if (rowset.IsValid()) {
+                value = T{ rowset.template GetValue<TSource>() };
+            } else {
+                value = {};
+            }
             return true;
         }
         return false;
@@ -520,6 +626,33 @@ struct Schema : NIceDb::Schema {
         return false;
     }
 
+    static void AddNormalizerEvent(NIceDb::TNiceDb& db, const TString& normalizerId, const TString& eventType, const TString& description) {
+        db.Table<NormalizerEvents>().Key(normalizerId, TGUID::CreateTimebased().AsUuidString())
+            .Update(
+                NIceDb::TUpdate<NormalizerEvents::Instant>(TInstant::Now().MicroSeconds()),
+                NIceDb::TUpdate<NormalizerEvents::EventType>(eventType),
+                NIceDb::TUpdate<NormalizerEvents::Description>(description)
+            );
+    }
+
+    static void StartNormalizer(NIceDb::TNiceDb& db, const TString& className, const TString& description, const TString& normalizerId) {
+        db.Table<Normalizers>().Key(className, description, normalizerId)
+            .Update(
+                NIceDb::TUpdate<Normalizers::Start>(TInstant::Now().MicroSeconds())
+            );
+    }
+
+    static void RemoveNormalizer(NIceDb::TNiceDb& db, const TString& className, const TString& description, const TString& normalizerId) {
+        db.Table<Normalizers>().Key(className, description, normalizerId).Delete();
+    }
+
+    static void FinishNormalizer(NIceDb::TNiceDb& db, const TString& className, const TString& description, const TString& normalizerId) {
+        db.Table<Normalizers>().Key(className, description, normalizerId)
+            .Update(
+                NIceDb::TUpdate<Normalizers::Finish>(TInstant::Now().MicroSeconds())
+            );
+    }
+
     static void SaveSpecialValue(NIceDb::TNiceDb& db, EValueIds key, const TString& value) {
         db.Table<Value>().Key((ui32)key).Update(NIceDb::TUpdate<Value::Bytes>(value));
     }
@@ -535,13 +668,13 @@ struct Schema : NIceDb::Schema {
         SaveSpecialValue(db, key, serialized);
     }
 
-    static void SaveTxInfo(NIceDb::TNiceDb& db, ui64 txId, NKikimrTxColumnShard::ETransactionKind txKind,
-                           const TString& txBody, ui64 maxStep, const TActorId& source, ui64 cookie)
-    {
+    static void SaveTxInfo(NIceDb::TNiceDb& db, const TFullTxInfo& txInfo,
+                           const TString& txBody);
+
+    static void UpdateTxInfoSource(NIceDb::TNiceDb& db, const TFullTxInfo& txInfo);
+
+    static void UpdateTxInfoSource(NIceDb::TNiceDb& db, ui64 txId, const TActorId& source, ui64 cookie) {
         db.Table<TxInfo>().Key(txId).Update(
-            NIceDb::TUpdate<TxInfo::TxKind>(txKind),
-            NIceDb::TUpdate<TxInfo::TxBody>(txBody),
-            NIceDb::TUpdate<TxInfo::MaxStep>(maxStep),
             NIceDb::TUpdate<TxInfo::Source>(source),
             NIceDb::TUpdate<TxInfo::Cookie>(cookie));
     }
@@ -619,14 +752,16 @@ struct Schema : NIceDb::Schema {
         db.Table<TableInfo>().Key(pathId).Delete();
     }
 
-    static void SaveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId) {
+    static void SaveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId, const std::optional<ui32> granuleShardingVersion) {
         NKikimrLongTxService::TLongTxId proto;
         longTxId.ToProto(&proto);
         TString serialized;
         Y_ABORT_UNLESS(proto.SerializeToString(&serialized));
         db.Table<LongTxWrites>().Key((ui64)writeId).Update(
-            NIceDb::TUpdate<LongTxWrites::LongTxId>(serialized),
-            NIceDb::TUpdate<LongTxWrites::WritePartId>(writePartId));
+            NIceDb::TUpdate<LongTxWrites::LongTxId>(serialized), 
+            NIceDb::TUpdate<LongTxWrites::WritePartId>(writePartId), 
+            NIceDb::TUpdate<LongTxWrites::GranuleShardingVersion>(granuleShardingVersion.value_or(0))
+            );
     }
 
     static void EraseLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId) {
@@ -752,13 +887,20 @@ public:
 
 class TIndexChunkLoadContext {
 private:
-    YDB_READONLY_DEF(TBlobRange, BlobRange);
+    YDB_READONLY_DEF(std::optional<TBlobRange>, BlobRange);
+    YDB_READONLY_DEF(std::optional<TString>, BlobData);
     TChunkAddress Address;
     const ui32 RecordsCount;
     const ui32 RawBytes;
 public:
     TIndexChunk BuildIndexChunk(const TBlobRangeLink16::TLinkId blobLinkId) const {
-        return TIndexChunk(Address.GetColumnId(), Address.GetChunkIdx(), RecordsCount, RawBytes, BlobRange.BuildLink(blobLinkId));
+        AFL_VERIFY(BlobRange);
+        return TIndexChunk(Address.GetColumnId(), Address.GetChunkIdx(), RecordsCount, RawBytes, BlobRange->BuildLink(blobLinkId));
+    }
+
+    TIndexChunk BuildIndexChunk() const {
+        AFL_VERIFY(BlobData);
+        return TIndexChunk(Address.GetColumnId(), Address.GetChunkIdx(), RecordsCount, RawBytes, *BlobData);
     }
 
     template <class TSource>
@@ -768,13 +910,20 @@ public:
         , RawBytes(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::RawBytes>())
     {
         AFL_VERIFY(Address.GetColumnId())("event", "incorrect address")("address", Address.DebugString());
-        TString strBlobId = rowset.template GetValue<NColumnShard::Schema::IndexIndexes::Blob>();
-        Y_ABORT_UNLESS(strBlobId.size() == sizeof(TLogoBlobID), "Size %" PRISZT "  doesn't match TLogoBlobID", strBlobId.size());
-        TLogoBlobID logoBlobId((const ui64*)strBlobId.data());
-        BlobRange.BlobId = NOlap::TUnifiedBlobId(dsGroupSelector->GetGroup(logoBlobId), logoBlobId);
-        BlobRange.Offset = rowset.template GetValue<NColumnShard::Schema::IndexIndexes::Offset>();
-        BlobRange.Size = rowset.template GetValue<NColumnShard::Schema::IndexIndexes::Size>();
-        AFL_VERIFY(BlobRange.BlobId.IsValid() && BlobRange.Size)("event", "incorrect blob")("blob", BlobRange.ToString());
+        if (rowset.template HaveValue<NColumnShard::Schema::IndexIndexes::Blob>()) {
+            TBlobRange& bRange = BlobRange.emplace();
+            TString strBlobId = rowset.template GetValue<NColumnShard::Schema::IndexIndexes::Blob>();
+            Y_ABORT_UNLESS(strBlobId.size() == sizeof(TLogoBlobID), "Size %" PRISZT "  doesn't match TLogoBlobID", strBlobId.size());
+            TLogoBlobID logoBlobId((const ui64*)strBlobId.data());
+            bRange.BlobId = NOlap::TUnifiedBlobId(dsGroupSelector->GetGroup(logoBlobId), logoBlobId);
+            bRange.Offset = rowset.template GetValue<NColumnShard::Schema::IndexIndexes::Offset>();
+            bRange.Size = rowset.template GetValue<NColumnShard::Schema::IndexIndexes::Size>();
+            AFL_VERIFY(bRange.BlobId.IsValid() && bRange.Size)("event", "incorrect blob")("blob", bRange.ToString());
+        } else if (rowset.template HaveValue<NColumnShard::Schema::IndexIndexes::BlobData>()) {
+            BlobData = rowset.template GetValue<NColumnShard::Schema::IndexIndexes::BlobData>();
+        } else {
+            AFL_VERIFY(false);
+        }
     }
 };
 

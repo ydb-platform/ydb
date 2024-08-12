@@ -157,6 +157,7 @@ inline size_t CompressBitmap(const ui8* src, size_t srcOffset,
 
 using NYql::NUdf::CompressAsSparseBitmap;
 using NYql::NUdf::CompressArray;
+using NYql::NUdf::DecompressToSparseBitmap;
 
 } // namespace NMiniKQL
 } // namespace NKikimr

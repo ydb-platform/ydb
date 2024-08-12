@@ -60,18 +60,8 @@
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "Aggregate-TableFullScan",
+                                                                "Node Type": "TableFullScan",
                                                                 "Operators": [
-                                                                    {
-                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1)}",
-                                                                        "GroupBy": "",
-                                                                        "Inputs": [
-                                                                            {
-                                                                                "InternalOperatorId": 1
-                                                                            }
-                                                                        ],
-                                                                        "Name": "Aggregate"
-                                                                    },
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TableFullScan",
@@ -80,12 +70,13 @@
                                                                             "SearchPhrase"
                                                                         ],
                                                                         "ReadRanges": [
-                                                                            "EventTime (-\u221e, +\u221e)",
                                                                             "CounterID (-\u221e, +\u221e)",
                                                                             "EventDate (-\u221e, +\u221e)",
                                                                             "UserID (-\u221e, +\u221e)",
+                                                                            "EventTime (-\u221e, +\u221e)",
                                                                             "WatchID (-\u221e, +\u221e)"
                                                                         ],
+                                                                        "Scan": "Parallel",
                                                                         "SsaProgram": {
                                                                             "Command": [
                                                                                 {
@@ -113,7 +104,8 @@
                                                                                                 }
                                                                                             ],
                                                                                             "FunctionType": 2,
-                                                                                            "KernelIdx": 0
+                                                                                            "KernelIdx": 0,
+                                                                                            "YqlOperationId": 12
                                                                                         }
                                                                                     }
                                                                                 },
@@ -125,8 +117,18 @@
                                                                                     }
                                                                                 },
                                                                                 {
-                                                                                    "Projection": {
-                                                                                        "Columns": [
+                                                                                    "GroupBy": {
+                                                                                        "Aggregates": [
+                                                                                            {
+                                                                                                "Column": {
+                                                                                                    "Id": 108
+                                                                                                },
+                                                                                                "Function": {
+                                                                                                    "Id": 2
+                                                                                                }
+                                                                                            }
+                                                                                        ],
+                                                                                        "KeyColumns": [
                                                                                             {
                                                                                                 "Id": 39
                                                                                             },
@@ -135,9 +137,24 @@
                                                                                             }
                                                                                         ]
                                                                                     }
+                                                                                },
+                                                                                {
+                                                                                    "Projection": {
+                                                                                        "Columns": [
+                                                                                            {
+                                                                                                "Id": 39
+                                                                                            },
+                                                                                            {
+                                                                                                "Id": 40
+                                                                                            },
+                                                                                            {
+                                                                                                "Id": 108
+                                                                                            }
+                                                                                        ]
+                                                                                    }
                                                                                 }
                                                                             ],
-                                                                            "Version": 4
+                                                                            "Version": 5
                                                                         },
                                                                         "Table": "clickbench/plans/column/hits"
                                                                     }
@@ -172,10 +189,10 @@
                                 "SearchPhrase"
                             ],
                             "scan_by": [
-                                "EventTime (-\u221e, +\u221e)",
                                 "CounterID (-\u221e, +\u221e)",
                                 "EventDate (-\u221e, +\u221e)",
                                 "UserID (-\u221e, +\u221e)",
+                                "EventTime (-\u221e, +\u221e)",
                                 "WatchID (-\u221e, +\u221e)"
                             ],
                             "type": "FullScan"

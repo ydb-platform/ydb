@@ -1,5 +1,7 @@
 #include "shutdown.h"
 
+#include <yt/yt/core/concurrency/system_invokers.h>
+
 #include <yt/yt/core/misc/collection_helpers.h>
 #include <yt/yt/core/misc/proc.h>
 #include <yt/yt/core/misc/singleton.h>
@@ -177,6 +179,12 @@ public:
         return ShutdownThreadId_.load();
     }
 
+    void EnsureSafeShutdown() const
+    {
+        NConcurrency::GetFinalizerInvoker();
+        NConcurrency::GetShutdownInvoker();
+    }
+
 private:
     std::atomic<FILE*> ShutdownLogFile_ = IsShutdownLoggingEnabledImpl() ? stderr : nullptr;
 
@@ -275,6 +283,11 @@ size_t GetShutdownThreadId()
     return TShutdownManager::Get()->GetShutdownThreadId();
 }
 
+void EnsureSafeShutdown()
+{
+    TShutdownManager::Get()->EnsureSafeShutdown();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 static const void* ShutdownGuardInitializer = [] {
@@ -290,7 +303,7 @@ static const void* ShutdownGuardInitializer = [] {
         }
     };
 
-    static YT_THREAD_LOCAL(TShutdownGuard) Guard;
+    static thread_local TShutdownGuard Guard;
     return nullptr;
 }();
 

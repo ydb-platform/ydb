@@ -158,7 +158,7 @@ void SetupServices(TTestActorRuntime &runtime,
         SetupBSNodeWarden(runtime, nodeIndex, nodeWardenConfig);
         SetupNodeWhiteboard(runtime, nodeIndex);
         SetupTabletResolver(runtime, nodeIndex);
-        SetupResourceBroker(runtime, nodeIndex);
+        SetupResourceBroker(runtime, nodeIndex, {});
         SetupSharedPageCache(runtime, nodeIndex, NFake::TCaches{
             .Shared = 1,
         });
@@ -173,7 +173,7 @@ void SetupServices(TTestActorRuntime &runtime,
     dnConfig->MinDynamicNodeId = 1024;
     dnConfig->MaxDynamicNodeId = 1024 + (maxDynNodes - 1);
     runtime.GetAppData().FeatureFlags.SetEnableNodeBrokerSingleDomainMode(true);
-    runtime.GetAppData().FeatureFlags.SetEnableSlotNameGeneration(true);
+    runtime.GetAppData().FeatureFlags.SetEnableStableNodeNames(true);
      
     if (!runtime.IsRealThreads()) {
         TDispatchOptions options;
@@ -321,7 +321,7 @@ void CheckRegistration(TTestActorRuntime &runtime,
                        bool fixed = false,
                        const TString &path = DOMAIN_NAME,
                        const TMaybe<TKikimrScopeId> &scopeId = {},
-                       const TString &slotName = "")
+                       const TString &name = "")
 {
     auto event = MakeRegistrationRequest(host, port, resolveHost, address, path, dc, room, rack, body, fixed);
     runtime.SendToPipe(MakeNodeBrokerID(), sender, event.Release(), 0, GetPipeConfigWithRetries());
@@ -349,8 +349,8 @@ void CheckRegistration(TTestActorRuntime &runtime,
             UNIT_ASSERT_VALUES_EQUAL(rec.GetScopeTabletId(), scopeId->GetSchemeshardId());
             UNIT_ASSERT_VALUES_EQUAL(rec.GetScopePathId(), scopeId->GetPathItemId());
         }
-        if (slotName) {
-            UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetSlotName(), slotName);
+        if (name) {
+            UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetName(), name);
         }
     }
 }
@@ -363,10 +363,10 @@ void CheckRegistration(TTestActorRuntime &runtime,
                        TStatus::ECode code = TStatus::OK,
                        ui32 nodeId = 0,
                        ui64 expire = 0,
-                       const TString &slotName = "")
+                       const TString &name = "")
 {
     CheckRegistration(runtime, sender, host, port, host, "", 0, 0, 0, 0, code, nodeId, expire,
-                      false, path, Nothing(), slotName);
+                      false, path, Nothing(), name);
 }
 
 NKikimrNodeBroker::TEpoch GetEpoch(TTestActorRuntime &runtime,
@@ -1366,7 +1366,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                           sharedScopeId);
     }
 
-    Y_UNIT_TEST(SlotNameExpiration)
+    Y_UNIT_TEST(NodeNameExpiration)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 4, { "/dc-1/my-database" });
@@ -1389,7 +1389,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckLeaseExtension(runtime, sender, NODE1, TStatus::OK, epoch);
         CheckLeaseExtension(runtime, sender, NODE3, TStatus::OK, epoch);
 
-        // After this epoch update NODE2 is expired, but stil holds slot name
+        // After this epoch update NODE2 is expired, but stil holds name
         epoch = WaitForEpochUpdate(runtime, sender);
 
         // Extend lease for NODE1 and NODE3
@@ -1400,15 +1400,15 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckRegistration(runtime, sender, "host4", 19001, "/dc-1/my-database",
                           TStatus::OK, NODE4, epoch.GetNextEnd(), "slot-3");
 
-        // After this epoch update NODE2 is removed and slot name is free 
+        // After this epoch update NODE2 is removed and name is free 
         epoch = WaitForEpochUpdate(runtime, sender);
 
-        // Register node using new host, it reuses slot name
+        // Register node using new host, it reuses name
         CheckRegistration(runtime, sender, "host5", 19001, "/dc-1/my-database",
                           TStatus::OK, NODE2, epoch.GetNextEnd(), "slot-1");
     }
 
-    Y_UNIT_TEST(SlotNameReuseRestart)
+    Y_UNIT_TEST(NodeNameReuseRestart)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 4, { "/dc-1/my-database" });
@@ -1435,7 +1435,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                           TStatus::OK, NODE1, epoch.GetNextEnd(), "slot-0");
     }
 
-    Y_UNIT_TEST(SlotNameReuseRestartWithHostChanges)
+    Y_UNIT_TEST(NodeNameReuseRestartWithHostChanges)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 4, { "/dc-1/my-database" });
@@ -1461,7 +1461,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckLeaseExtension(runtime, sender, NODE3, TStatus::OK, epoch);
         CheckLeaseExtension(runtime, sender, NODE4, TStatus::OK, epoch);
 
-        // After this epoch update NODE1 and NODE2 are expired, but stil hold slot names
+        // After this epoch update NODE1 and NODE2 are expired, but stil hold names
         epoch = WaitForEpochUpdate(runtime, sender);
 
         CheckLeaseExtension(runtime, sender, NODE3, TStatus::OK, epoch);
@@ -1477,7 +1477,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                           TStatus::OK, NODE2, epoch.GetNextEnd(), "slot-1");
     }
 
-    Y_UNIT_TEST(SlotNameWithDifferentTenants)
+    Y_UNIT_TEST(NodeNameWithDifferentTenants)
     {
         TTestBasicRuntime runtime(8, false);
 

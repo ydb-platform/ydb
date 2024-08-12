@@ -55,7 +55,7 @@ namespace NDetail {
 template <size_t Length, class... TArgs>
 TString FormatErrorMessage(const char (&format)[Length], TArgs&&... args)
 {
-    return Format(format, std::forward<TArgs>(args)...);
+    return Format(TRuntimeFormat{format}, std::forward<TArgs>(args)...);
 }
 
 template <size_t Length>
@@ -75,6 +75,32 @@ template <size_t Length, class... TArgs>
 TError::TErrorOr(TErrorCode code, const char (&messageOrFormat)[Length], TArgs&&... args)
     : TErrorOr(code, NYT::NDetail::FormatErrorMessage(messageOrFormat, std::forward<TArgs>(args)...))
 { }
+
+template <CInvocable<bool(const TError&)> TFilter>
+std::optional<TError> TError::FindMatching(const TFilter& filter) const
+{
+    if (!Impl_) {
+        return {};
+    }
+
+    if (filter(*this)) {
+        return *this;
+    }
+
+    for (const auto& innerError : InnerErrors()) {
+        if (auto innerResult = innerError.FindMatching(filter)) {
+            return innerResult;
+        }
+    }
+
+    return {};
+}
+
+template <CInvocable<bool(TErrorCode)> TFilter>
+std::optional<TError> TError::FindMatching(const TFilter& filter) const
+{
+    return FindMatching([&] (const TError& error) { return filter(error.GetCode()); });
+}
 
 template <class... TArgs>
     requires std::constructible_from<TError, TArgs...>
@@ -100,6 +126,34 @@ template <CErrorNestable TValue>
 TError TError::operator << (TValue&& rhs) const &
 {
     return TError(*this) << std::forward<TValue>(rhs);
+}
+
+template <CErrorNestable TValue>
+TError&& TError::operator << (const std::optional<TValue>& rhs) &&
+{
+    if (rhs) {
+        return std::move(*this <<= *rhs);
+    } else {
+        return std::move(*this);
+    }
+}
+
+template <CErrorNestable TValue>
+TError TError::operator << (const std::optional<TValue>& rhs) const &
+{
+    if (rhs) {
+        return TError(*this) << *rhs;
+    } else {
+        return *this;
+    }
+}
+
+template <class... TArgs>
+void TError::ThrowOnError(TArgs&&... args) const
+{
+    if (!IsOK()) {
+        THROW_ERROR std::move(*this).Wrap(std::forward<TArgs>(args)...);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -196,61 +250,64 @@ TErrorOr<T>& TErrorOr<T>::operator = (TErrorOr<T>&& other) noexcept
 }
 
 template <class T>
-T&& TErrorOr<T>::ValueOrThrow() &&
+template <class... TArgs>
+T&& TErrorOr<T>::ValueOrThrow(TArgs&&... args) && Y_LIFETIME_BOUND
 {
     if (!IsOK()) {
-        THROW_ERROR std::move(*this);
+        THROW_ERROR std::move(*this).Wrap(std::forward<TArgs>(args)...);
     }
     return std::move(*Value_);
 }
 
 template <class T>
-T& TErrorOr<T>::ValueOrThrow() &
+template <class... TArgs>
+T& TErrorOr<T>::ValueOrThrow(TArgs&&... args) & Y_LIFETIME_BOUND
 {
     if (!IsOK()) {
-        THROW_ERROR *this;
+        THROW_ERROR Wrap(std::forward<TArgs>(args)...);
     }
     return *Value_;
 }
 
 template <class T>
-const T& TErrorOr<T>::ValueOrThrow() const &
+template <class... TArgs>
+const T& TErrorOr<T>::ValueOrThrow(TArgs&&... args) const & Y_LIFETIME_BOUND
 {
     if (!IsOK()) {
-        THROW_ERROR *this;
+        THROW_ERROR Wrap(std::forward<TArgs>(args)...);
     }
     return *Value_;
 }
 
 template <class T>
-T&& TErrorOr<T>::Value() &&
+T&& TErrorOr<T>::Value() && Y_LIFETIME_BOUND
 {
     YT_ASSERT(IsOK());
     return std::move(*Value_);
 }
 
 template <class T>
-T& TErrorOr<T>::Value() &
+T& TErrorOr<T>::Value() & Y_LIFETIME_BOUND
 {
     YT_ASSERT(IsOK());
     return *Value_;
 }
 
 template <class T>
-const T& TErrorOr<T>::Value() const &
+const T& TErrorOr<T>::Value() const & Y_LIFETIME_BOUND
 {
     YT_ASSERT(IsOK());
     return *Value_;
 }
 
 template <class T>
-const T& TErrorOr<T>::ValueOrDefault(const T& defaultValue) const &
+const T& TErrorOr<T>::ValueOrDefault(const T& defaultValue Y_LIFETIME_BOUND) const & Y_LIFETIME_BOUND
 {
     return IsOK() ? *Value_ : defaultValue;
 }
 
 template <class T>
-T& TErrorOr<T>::ValueOrDefault(T& defaultValue) &
+T& TErrorOr<T>::ValueOrDefault(T& defaultValue Y_LIFETIME_BOUND) & Y_LIFETIME_BOUND
 {
     return IsOK() ? *Value_ : defaultValue;
 }
@@ -277,12 +334,6 @@ template <class T>
 void FormatValue(TStringBuilderBase* builder, const TErrorOr<T>& error, TStringBuf spec)
 {
     FormatValue(builder, static_cast<const TError&>(error), spec);
-}
-
-template <class T>
-TString ToString(const TErrorOr<T>& valueOrError)
-{
-    return ToString(TError(valueOrError));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -337,5 +388,7 @@ void ThrowErrorExceptionIfFailed(TErrorLike&& error, TArgs&&... args)
 }
 
 } // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

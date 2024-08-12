@@ -592,6 +592,12 @@ namespace NKikimr {
         TForwardIterator(const THullCtxPtr &hullCtx, const TContType *data)
             : TBase(hullCtx, (data ? data->IndexAndData.Get() : nullptr), (data ? data->SnapLsn : 0))
         {}
+
+        template <class THeap>
+        void PutToHeap(THeap& heap) {
+            heap.Add(this);
+        }
+
     };
 
     template <class TKey, class TMemRec>
@@ -603,6 +609,12 @@ namespace NKikimr {
         TBackwardIterator(const THullCtxPtr &hullCtx, const TContType *data)
             : TBase(hullCtx, (data ? data->IndexAndData.Get() : nullptr), (data ? data->SnapLsn : 0))
         {}
+
+        template <class THeap>
+        void PutToHeap(THeap& heap) {
+            heap.Add(this);
+        }
+
     };
     /////////////////////////////////////////////////////////////////////////////////////////
     // TFreshSegmentSnapshot
@@ -631,6 +643,7 @@ namespace NKikimr {
         using TBase::Next;
         using TBase::Valid;
         using TBase::Seek;
+        using TBase::PutToHeap;
     };
 
     template <class TKey, class TMemRec>
@@ -655,6 +668,7 @@ namespace NKikimr {
         using TBase::Prev;
         using TBase::Valid;
         using TBase::Seek;
+        using TBase::PutToHeap;
     };
 
     template <class TKey, class TMemRec>
@@ -689,7 +703,7 @@ namespace NKikimr {
                 std::vector<std::pair<TKey, TMemRec>>& Recs;
 
                 void AddFromSegment(const TMemRec&, const TDiskPart*, const TKey&, ui64) {
-                    Y_DEBUG_ABORT_UNLESS(false, "should not be called");
+                    Y_DEBUG_ABORT("should not be called");
                 }
 
                 void AddFromFresh(const TMemRec& memRec, const TRope* /*data*/, const TKey& key, ui64 /*lsn*/) {

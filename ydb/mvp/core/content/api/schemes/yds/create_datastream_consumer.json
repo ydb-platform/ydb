@@ -1,0 +1,53 @@
+{
+  "post": {
+    "tags": [
+      "YDBC"
+    ],
+    "consumes": [
+      "application/json"
+    ],
+    "description": "register datastream consumer",
+    "produces": [
+      "application/json"
+    ],
+    "summary": "register datastream consumer",
+    "parameters": [
+      {
+        "description": "database location",
+        "in": "path",
+        "name": "location",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "description": "database to register consumer in",
+        "in": "query",
+        "name": "databaseId",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "description": "stream name",
+        "in": "query",
+        "name": "name",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "description": "consumer name",
+        "in": "query",
+        "name": "consumer",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "responses": {
+      "200": {
+        "description": "successful operation"
+      },
+      "503": {
+        "description": "service unavailable (some errors occurred)"
+      }
+    }
+  }
+}

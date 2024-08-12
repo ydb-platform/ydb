@@ -34,15 +34,15 @@ void TGRpcYdbOverFqService::DecRequest() {
 
 void TGrpcTableOverFqService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
-#ifdef ADD_REQUEST
-#error ADD_REQUEST macro already defined
+#if defined(ADD_REQUEST) or defined (ADD_REQUEST_IMPL)
+#error ADD_REQUEST or ADD_REQUEST_IMPL macro already defined
 #endif
-#define ADD_REQUEST(NAME) \
-MakeIntrusive<TGRpcRequest<Ydb::Table::NAME##Request, Ydb::Table::NAME##Response, TGrpcTableOverFqService, TSecurityTextFormatPrinter<Ydb::Table::NAME##Request>, TSecurityTextFormatPrinter<Ydb::Table::NAME##Response>>>( \
+#define ADD_REQUEST_IMPL(NAME, REQ, RESP, CALL) \
+MakeIntrusive<TGRpcRequest<REQ, RESP, TGrpcTableOverFqService, TSecurityTextFormatPrinter<REQ>, TSecurityTextFormatPrinter<RESP>>>( \
     this, &Service_, CQ_, \
     [this](NYdbGrpc::IRequestContextBase *ctx) { \
         NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
-        auto op_call = new TGrpcRequestOperationCall<Ydb::Table::NAME##Request, Ydb::Table::NAME##Response>( \
+        auto op_call = new CALL<REQ, RESP>( \
             ctx, NYdbOverFq::Get##NAME##Executor(GRpcRequestProxyId_)); \
         ActorSystem_->Send(GRpcRequestProxyId_, op_call); \
     }, \
@@ -50,11 +50,16 @@ MakeIntrusive<TGRpcRequest<Ydb::Table::NAME##Request, Ydb::Table::NAME##Response
     #NAME, logger, getCounterBlock("ydb_over_fq", #NAME)) \
     ->Run();
 
+#define ADD_REQUEST(NAME) ADD_REQUEST_IMPL(NAME, Ydb::Table::NAME##Request, Ydb::Table::NAME##Response, TGrpcRequestOperationCall)
+#define ADD_STREAM_REQUEST(NAME, REQ, RESP) ADD_REQUEST_IMPL(NAME, REQ, RESP, TGrpcRequestNoOperationCall)
+
     ADD_REQUEST(ExecuteDataQuery)
     ADD_REQUEST(ExplainDataQuery)
     ADD_REQUEST(CreateSession)
+    ADD_REQUEST(DeleteSession)
     ADD_REQUEST(KeepAlive)
     ADD_REQUEST(DescribeTable)
+    ADD_STREAM_REQUEST(StreamExecuteScanQuery, Ydb::Table::ExecuteScanQueryRequest, Ydb::Table::ExecuteScanQueryPartialResponse)
 
 #undef ADD_REQUEST
 }

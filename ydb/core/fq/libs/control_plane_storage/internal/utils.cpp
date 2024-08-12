@@ -218,7 +218,7 @@ void AggregateNode(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, co
 
 namespace {
 
-void AggregateStatisticsBySources(const NJson::TJsonValue& root, std::unordered_map<TString, i64>& aggregatedStats) {
+void AggregateStatisticsBySources(const NJson::TJsonValue& root, THashMap<TString, i64>& aggregatedStats) {
     for (const auto& [stageName, stageStats] : root.GetMap()) {
         if (!stageStats.IsMap()) {
             continue;
@@ -259,7 +259,7 @@ constexpr std::initializer_list<std::pair<std::string_view, std::string_view>> F
         {"CpuTimeUs", "CpuTimeUs.sum"},
         {"ExecutionTimeUs", "ExecutionTimeUs.sum"}};
 
-void CollectTotalStatistics(const NJson::TJsonValue& stats, std::unordered_map<TString, i64>& aggregatedStatistics) {
+void CollectTotalStatistics(const NJson::TJsonValue& stats, THashMap<TString, i64>& aggregatedStatistics) {
     for (const auto& [rootKey, graph] : stats.GetMap()) {
         bool isV1 = rootKey.find('=') != TString::npos;
         for (auto [field, path] : FieldToPath) {
@@ -274,36 +274,24 @@ void CollectTotalStatistics(const NJson::TJsonValue& stats, std::unordered_map<T
     }
 }
 
-void CollectDetalizationStatistics(const NJson::TJsonValue& stats, std::unordered_map<TString, i64>& aggregatedStatistics) {
+void CollectDetalizationStatistics(const NJson::TJsonValue& stats, THashMap<TString, i64>& aggregatedStatistics) {
     for (const auto& [rootKey, graph] : stats.GetMap()) {
         AggregateStatisticsBySources(graph, aggregatedStatistics);
     }
 }
-
-bool IsIngressStat(TStringBuf statName) {
-    return std::none_of(FieldToPath.begin() + 1, FieldToPath.end(), [&](const auto& field_to_path) { return field_to_path.first == statName; });
 }
 
-void PrintSpeeds(TStringBuilder& builder, const StatsValuesList& stats, std::string_view postfix, TDuration execTime) {
-    for (const auto& [statName, value] : stats) {
-        if (!IsIngressStat(statName)) {
-            continue;
-        }
-        // getting bytes/second = 1'000'000 * bytes/microsecond
-        auto speed = (value * 1000000.) / std::max(execTime.MicroSeconds(), ui64{1});
-        builder << ", \"" << statName << postfix << "\": " << speed;
+void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& dest,
+                              const THashMap<TString, i64>& aggregatedStats,
+                              TDuration executionTime) {
+    for (const auto& [field, stat] : aggregatedStats) {
+        auto& newStat = *dest.Add();
+        newStat.set_name(field);
+        newStat.set_value(stat);
     }
-}
-
-void PrintSpeeds(TStringBuilder& builder, const StatsValuesList& stats) {
-    for (const auto& [statName, stat] : stats) {
-        if (statName == "ExecutionTimeUs") {
-            PrintSpeeds(builder, stats, "PerSecond", TDuration::MicroSeconds(stat));
-        } else if (statName == "CpuTimeUs") {
-            PrintSpeeds(builder, stats, "PerCpuPerSecond", TDuration::MicroSeconds(stat));
-        }
-    }
-}
+    auto& execTime = *dest.Add();
+    execTime.set_name("ExecutionTimeUs");
+    execTime.set_value(executionTime.MicroSeconds());
 }
 
 void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& dest, std::string_view statsStr, TDuration executionTime) {
@@ -316,16 +304,11 @@ void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery:
         return;
     }
 
-    std::unordered_map<TString, i64> aggregatedStatistics;
+    THashMap<TString, i64> aggregatedStatistics;
     CollectTotalStatistics(statsJson, aggregatedStatistics);
     CollectDetalizationStatistics(statsJson, aggregatedStatistics);
-    aggregatedStatistics["ExecutionTimeUs"] = executionTime.MicroSeconds();
 
-    for (auto [field, stat] : aggregatedStatistics) {
-        auto newStat = dest.Add();
-        newStat->set_name(TString{field});
-        newStat->set_value(stat);
-    }
+    PackStatisticsToProtobuf(dest, aggregatedStatistics, executionTime);
 }
 
 StatsValuesList ExtractStatisticsFromProtobuf(const google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& statsProto) {
@@ -347,9 +330,17 @@ TStringBuilder& operator<<(TStringBuilder& builder, const Statistics& statistics
         builder << '"' << field << "\": " << value;
         first = false;
     }
-    PrintSpeeds(builder, statistics.Stats);
     builder << '}';
     return builder;
+}
+
+void AddTransientIssues(::google::protobuf::RepeatedPtrField< ::Ydb::Issue::IssueMessage>* protoIssues, NYql::TIssues&& issues) {
+    for (const auto& issue: *protoIssues) {
+        issues.AddIssue(NYql::IssueFromMessage(issue));
+    }
+    NYql::TIssues newIssues;
+    std::for_each_n(issues.begin(), std::min(static_cast<unsigned long long>(issues.Size()), 20ULL), [&](auto& issue){ newIssues.AddIssue(issue); });
+    NYql::IssuesToMessage(newIssues, protoIssues);
 }
 
 };

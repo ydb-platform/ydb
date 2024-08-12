@@ -24,7 +24,7 @@ inline bool TLogger::IsAnchorUpToDate(const TLoggingAnchor& position) const
 template <class... TArgs>
 void TLogger::AddTag(const char* format, TArgs&&... args)
 {
-    AddRawTag(Format(format, std::forward<TArgs>(args)...));
+    AddRawTag(Format(TRuntimeFormat{format}, std::forward<TArgs>(args)...));
 }
 
 template <class TType>
@@ -64,6 +64,11 @@ Y_FORCE_INLINE bool TLogger::IsLevelEnabled(ELogLevel level) const
     return IsLevelEnabledHeavy(level);
 }
 
+Y_FORCE_INLINE const TLogger& TLogger::operator()() const
+{
+    return *this;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace NDetail {
@@ -90,19 +95,7 @@ protected:
     void DoReserve(size_t newLength) override;
 
 private:
-    struct TPerThreadCache
-    {
-        ~TPerThreadCache();
-
-        TSharedMutableRef Chunk;
-        size_t ChunkOffset = 0;
-    };
-
     TSharedMutableRef Buffer_;
-
-    static YT_THREAD_LOCAL(TPerThreadCache*) Cache_;
-    static YT_THREAD_LOCAL(bool) CacheDestroyed_;
-    static TPerThreadCache* GetCache();
 
     static constexpr size_t ChunkSize = 128_KB - 64;
 };
@@ -188,59 +181,74 @@ struct TLogMessage
     TStringBuf Anchor;
 };
 
-template <size_t Length, class... TArgs>
+template <class T>
+concept CLiteralLogFormat =
+    requires (T& t) {
+        [] (const char*) { } (t);
+    };
+
+template <class... TArgs>
 TLogMessage BuildLogMessage(
     const TLoggingContext& loggingContext,
     const TLogger& logger,
-    const char (&format)[Length],
+    TFormatString<TArgs...> format,
     TArgs&&... args)
 {
     TMessageStringBuilder builder;
-    AppendLogMessageWithFormat(&builder, loggingContext, logger, format, std::forward<TArgs>(args)...);
-    return {builder.Flush(), format};
+    AppendLogMessageWithFormat(&builder, loggingContext, logger, format.Get(), std::forward<TArgs>(args)...);
+    return {builder.Flush(), format.Get()};
 }
 
-template <class T>
+template <CFormattable T>
+    requires (!CLiteralLogFormat<std::remove_cvref_t<T>>)
 TLogMessage BuildLogMessage(
     const TLoggingContext& loggingContext,
     const TLogger& logger,
     const T& obj)
 {
     TMessageStringBuilder builder;
-    FormatValue(&builder, obj, TStringBuf());
+    FormatValue(&builder, obj, TStringBuf("v"));
     if (HasMessageTags(loggingContext, logger)) {
         builder.AppendString(TStringBuf(" ("));
         AppendMessageTags(&builder, loggingContext, logger);
         builder.AppendChar(')');
     }
-    return {builder.Flush(), TStringBuf()};
+
+    if constexpr (std::same_as<TStringBuf, std::remove_cvref_t<T>>) {
+        // NB(arkady-e1ppa): This is the overload where TStringBuf
+        // falls as well as zero-argument format strings.
+        // Formerly (before static analysis) there was a special overload
+        // which guaranteed that Anchor is set to the value of said TStringBuf
+        // object. Now we have overload for TFormatString<> which fordids
+        // us having overload for TStringBuf (both have implicit ctors from
+        // string literals) thus we have to accommodate TStringBuf specifics
+        // in this if constexpr part.
+        return {builder.Flush(), obj};
+    } else {
+        return {builder.Flush(), TStringBuf()};
+    }
 }
 
 inline TLogMessage BuildLogMessage(
     const TLoggingContext& loggingContext,
     const TLogger& logger,
-    TStringBuf message)
-{
-    TMessageStringBuilder builder;
-    builder.AppendString(message);
-    if (HasMessageTags(loggingContext, logger)) {
-        builder.AppendString(TStringBuf(" ("));
-        AppendMessageTags(&builder, loggingContext, logger);
-        builder.AppendChar(')');
-    }
-    return {builder.Flush(), message};
-}
-
-template <size_t Length>
-TLogMessage BuildLogMessage(
-    const TLoggingContext& loggingContext,
-    const TLogger& logger,
-    const char (&message)[Length])
+    TFormatString<> format)
 {
     return BuildLogMessage(
         loggingContext,
         logger,
-        TStringBuf(message));
+        format.Get());
+}
+
+inline TLogMessage BuildLogMessage(
+    const TLoggingContext& loggingContext,
+    const TLogger& logger,
+    TRuntimeFormat format)
+{
+    return BuildLogMessage(
+        loggingContext,
+        logger,
+        format.Get());
 }
 
 inline TLogMessage BuildLogMessage(
@@ -284,6 +292,7 @@ inline void LogEventImpl(
     const TLogger& logger,
     ELogLevel level,
     ::TSourceLocation sourceLocation,
+    TLoggingAnchor* anchor,
     TSharedRef message)
 {
     auto event = CreateLogEvent(loggingContext, logger, level);
@@ -292,6 +301,7 @@ inline void LogEventImpl(
     event.Family = ELogFamily::PlainText;
     event.SourceFile = sourceLocation.File;
     event.SourceLine = sourceLocation.Line;
+    event.Anchor = anchor;
     logger.Write(std::move(event));
     if (Y_UNLIKELY(event.Level >= ELogLevel::Alert)) {
         OnCriticalLogEvent(logger, event);

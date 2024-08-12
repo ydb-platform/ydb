@@ -5,6 +5,7 @@
 #include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <ydb/library/yql/public/udf/udf_helpers.h>
 
 #include <ydb/library/yql/utils/sort.h>
 
@@ -517,6 +518,226 @@ Y_UNIT_TEST_SUITE(TMiniKQLSortTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(res.size(), n);
         UNIT_ASSERT(copy == res);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TMiniKQLStreamKeyExtractorCacheTest) {
+    static thread_local size_t echoCounter;
+
+    SIMPLE_UDF(TEchoU64, ui64(ui64)) {
+        Y_UNUSED(valueBuilder);
+        echoCounter++;
+        return args[0];
+    }
+
+    SIMPLE_MODULE(TCountCallsModule, TEchoU64);
+
+    Y_UNIT_TEST(TestStreamTopSort) {
+        echoCounter = 0;
+        constexpr ui64 total = 999ULL;
+
+        std::uniform_real_distribution<ui64> urdist;
+        std::default_random_engine rand;
+        rand.seed(std::time(nullptr));
+
+        std::vector<ui64> test;
+        test.reserve(total);
+        std::generate_n(std::back_inserter(test), total, [&]() { return urdist(rand) % 100ULL; });
+
+        TSetup<false> setup;
+        NYql::NUdf::AddToStaticUdfRegistry<TCountCallsModule>();
+        auto mutableRegistry = setup.FunctionRegistry->Clone();
+        FillStaticModules(*mutableRegistry);
+        setup.FunctionRegistry = mutableRegistry;
+        setup.PgmBuilder.Reset(new TProgramBuilder(*setup.Env, *setup.FunctionRegistry));
+        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
+
+        std::array<TRuntimeNode, total> data;
+        std::transform(test.cbegin(), test.cend(), data.begin(), [&](const ui64& v) {
+            return pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<ui64>(v)});
+        });
+
+        constexpr ui64 n = 17ULL;
+        const auto echoUdf = pgmBuilder.Udf("CountCalls.EchoU64");
+        const auto tupleType = pgmBuilder.NewTupleType({pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)});
+        const auto ascending = pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<bool>(false)});
+        const auto list = pgmBuilder.NewList(tupleType, data);
+        const auto extractor = [&pgmBuilder, echoUdf](TRuntimeNode item) {
+            return pgmBuilder.NewTuple({ pgmBuilder.Apply(echoUdf, {pgmBuilder.Nth(item, 0U)})});
+        };
+        const auto limit = pgmBuilder.NewDataLiteral<ui64>(n);
+        const auto pgmRoot = pgmBuilder.TopSort(pgmBuilder.Iterator(list, {}), limit, ascending, extractor);
+        const auto graph = setup.BuildGraph(pgmRoot);
+        const auto& value = graph->GetValue();
+
+        NYql::FastPartialSort(test.begin(), test.begin() + n, test.end(), std::greater<ui64>());
+        test.resize(n);
+
+        std::vector<ui64> res;
+        res.reserve(n);
+        for (NUdf::TUnboxedValue item; NUdf::EFetchStatus::Ok == value.Fetch(item);) {
+            res.emplace_back(item.GetElement(0U).template Get<ui64>());
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(res.size(), n);
+        UNIT_ASSERT(res == test);
+        UNIT_ASSERT_VALUES_EQUAL(echoCounter, total);
+    }
+
+    Y_UNIT_TEST(TestStreamTop) {
+        echoCounter = 0;
+        constexpr ui64 total = 999ULL;
+
+        std::uniform_real_distribution<ui64> urdist;
+        std::default_random_engine rand;
+        rand.seed(std::time(nullptr));
+
+        std::vector<ui64> test;
+        test.reserve(total);
+        std::generate_n(std::back_inserter(test), total, [&]() { return urdist(rand) % 100ULL; });
+
+        TSetup<false> setup;
+        NYql::NUdf::AddToStaticUdfRegistry<TCountCallsModule>();
+        auto mutableRegistry = setup.FunctionRegistry->Clone();
+        FillStaticModules(*mutableRegistry);
+        setup.FunctionRegistry = mutableRegistry;
+        setup.PgmBuilder.Reset(new TProgramBuilder(*setup.Env, *setup.FunctionRegistry));
+        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
+
+        std::array<TRuntimeNode, total> data;
+        std::transform(test.cbegin(), test.cend(), data.begin(), [&](const ui64& v) {
+            return pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<ui64>(v)});
+        });
+
+        constexpr ui64 n = 17ULL;
+        const auto echoUdf = pgmBuilder.Udf("CountCalls.EchoU64");
+        const auto tupleType = pgmBuilder.NewTupleType({pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)});
+        const auto ascending = pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<bool>(false)});
+        const auto list = pgmBuilder.NewList(tupleType, data);
+        const auto extractor = [&pgmBuilder, echoUdf](TRuntimeNode item) {
+            return pgmBuilder.NewTuple({ pgmBuilder.Apply(echoUdf, {pgmBuilder.Nth(item, 0U)})});
+        };
+        const auto limit = pgmBuilder.NewDataLiteral<ui64>(n);
+        const auto pgmRoot = pgmBuilder.Top(pgmBuilder.Iterator(list, {}), limit, ascending, extractor);
+        const auto graph = setup.BuildGraph(pgmRoot);
+        const auto& value = graph->GetValue();
+
+        NYql::FastPartialSort(test.begin(), test.begin() + n, test.end(), std::greater<ui64>());
+        test.resize(n);
+
+        std::vector<ui64> res;
+        res.reserve(n);
+        for (NUdf::TUnboxedValue item; NUdf::EFetchStatus::Ok == value.Fetch(item);) {
+            res.emplace_back(item.GetElement(0U).template Get<ui64>());
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(res.size(), n);
+        UNIT_ASSERT(res == test);
+        UNIT_ASSERT_VALUES_EQUAL(echoCounter, total);
+    }
+
+    Y_UNIT_TEST(TestFlowTopSort) {
+        echoCounter = 0;
+        constexpr ui64 total = 999ULL;
+
+        std::uniform_real_distribution<ui64> urdist;
+        std::default_random_engine rand;
+        rand.seed(std::time(nullptr));
+
+        std::vector<ui64> test;
+        test.reserve(total);
+        std::generate_n(std::back_inserter(test), total, [&]() { return urdist(rand) % 100ULL; });
+
+        TSetup<false> setup;
+        NYql::NUdf::AddToStaticUdfRegistry<TCountCallsModule>();
+        auto mutableRegistry = setup.FunctionRegistry->Clone();
+        FillStaticModules(*mutableRegistry);
+        setup.FunctionRegistry = mutableRegistry;
+        setup.PgmBuilder.Reset(new TProgramBuilder(*setup.Env, *setup.FunctionRegistry));
+        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
+
+        std::array<TRuntimeNode, total> data;
+        std::transform(test.cbegin(), test.cend(), data.begin(), [&](const ui64& v) {
+            return pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<ui64>(v)});
+        });
+
+        constexpr ui64 n = 17ULL;
+        const auto echoUdf = pgmBuilder.Udf("CountCalls.EchoU64");
+        const auto tupleType = pgmBuilder.NewTupleType({pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)});
+        const auto ascending = pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<bool>(false)});
+        const auto list = pgmBuilder.NewList(tupleType, data);
+        const auto extractor = [&pgmBuilder, echoUdf](TRuntimeNode item) {
+            return pgmBuilder.NewTuple({ pgmBuilder.Apply(echoUdf, {pgmBuilder.Nth(item, 0U)})});
+        };
+        const auto limit = pgmBuilder.NewDataLiteral<ui64>(n);
+        const auto pgmRoot = pgmBuilder.FromFlow(pgmBuilder.TopSort(pgmBuilder.ToFlow(list), limit, ascending, extractor));
+        const auto graph = setup.BuildGraph(pgmRoot);
+        const auto& value = graph->GetValue();
+
+        NYql::FastPartialSort(test.begin(), test.begin() + n, test.end(), std::greater<ui64>());
+        test.resize(n);
+
+        std::vector<ui64> res;
+        res.reserve(n);
+        for (NUdf::TUnboxedValue item; NUdf::EFetchStatus::Ok == value.Fetch(item);) {
+            res.emplace_back(item.GetElement(0U).template Get<ui64>());
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(res.size(), n);
+        UNIT_ASSERT(res == test);
+        UNIT_ASSERT_VALUES_EQUAL(echoCounter, total);
+    }
+
+    Y_UNIT_TEST(TestFlowTop) {
+        echoCounter = 0;
+        constexpr ui64 total = 999ULL;
+
+        std::uniform_real_distribution<ui64> urdist;
+        std::default_random_engine rand;
+        rand.seed(std::time(nullptr));
+
+        std::vector<ui64> test;
+        test.reserve(total);
+        std::generate_n(std::back_inserter(test), total, [&]() { return urdist(rand) % 100ULL; });
+
+        TSetup<false> setup;
+        NYql::NUdf::AddToStaticUdfRegistry<TCountCallsModule>();
+        auto mutableRegistry = setup.FunctionRegistry->Clone();
+        FillStaticModules(*mutableRegistry);
+        setup.FunctionRegistry = mutableRegistry;
+        setup.PgmBuilder.Reset(new TProgramBuilder(*setup.Env, *setup.FunctionRegistry));
+        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
+
+        std::array<TRuntimeNode, total> data;
+        std::transform(test.cbegin(), test.cend(), data.begin(), [&](const ui64& v) {
+            return pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<ui64>(v)});
+        });
+
+        constexpr ui64 n = 17ULL;
+        const auto echoUdf = pgmBuilder.Udf("CountCalls.EchoU64");
+        const auto tupleType = pgmBuilder.NewTupleType({pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)});
+        const auto ascending = pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<bool>(false)});
+        const auto list = pgmBuilder.NewList(tupleType, data);
+        const auto extractor = [&pgmBuilder, echoUdf](TRuntimeNode item) {
+            return pgmBuilder.NewTuple({ pgmBuilder.Apply(echoUdf, {pgmBuilder.Nth(item, 0U)})});
+        };
+        const auto limit = pgmBuilder.NewDataLiteral<ui64>(n);
+        const auto pgmRoot = pgmBuilder.FromFlow(pgmBuilder.Top(pgmBuilder.ToFlow(list), limit, ascending, extractor));
+        const auto graph = setup.BuildGraph(pgmRoot);
+        const auto& value = graph->GetValue();
+
+        NYql::FastPartialSort(test.begin(), test.begin() + n, test.end(), std::greater<ui64>());
+        test.resize(n);
+
+        std::vector<ui64> res;
+        res.reserve(n);
+        for (NUdf::TUnboxedValue item; NUdf::EFetchStatus::Ok == value.Fetch(item);) {
+            res.emplace_back(item.GetElement(0U).template Get<ui64>());
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(res.size(), n);
+        UNIT_ASSERT(res == test);
+        UNIT_ASSERT_VALUES_EQUAL(echoCounter, total);
     }
 }
 } // NMiniKQL

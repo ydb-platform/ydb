@@ -20,6 +20,10 @@ private:
         return AppData()->EnforceUserTokenRequirement;
     }
 
+    static bool GetEnforceUserTokenCheckRequirement() {
+        return AppData()->EnforceUserTokenCheckRequirement;
+    }
+
     static const TVector<TString>& GetAdministrationAllowedSIDs() {
         return AppData()->AdministrationAllowedSIDs;
     }
@@ -137,7 +141,23 @@ public:
 
 public:
     bool IsTokenRequired() const {
-        return GetEnforceUserTokenRequirement() || (RequireAdminAccess && !GetAdministrationAllowedSIDs().empty());
+        if (GetEnforceUserTokenRequirement()) {
+            return true;
+        }
+
+        // Admin access
+        if (RequireAdminAccess && !GetAdministrationAllowedSIDs().empty()) {
+            return true;
+        }
+
+         // Acts in case of !EnforceUserTokenRequirement: If user specify token,
+         // it is checked and required to be valid for futher usage of YDB.
+         // If user doesn't specify token, no checks are made.
+        if (GetEnforceUserTokenCheckRequirement() && IsTokenExists()) {
+            return true;
+        }
+
+        return false;
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -185,4 +205,3 @@ public:
 };
 
 }
-

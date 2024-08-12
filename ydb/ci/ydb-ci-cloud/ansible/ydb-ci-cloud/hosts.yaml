@@ -1,0 +1,5 @@
+bazel_remote_servers:
+  hosts:
+    cachesrv:
+      ansible_host: 158.160.147.211
+    

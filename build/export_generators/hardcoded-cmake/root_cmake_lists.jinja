@@ -1,8 +1,11 @@
 
 {% include '[generator]/disclaimer.jinja' -%}
 
-
 cmake_minimum_required(VERSION 3.15)
+if (POLICY CMP0132)
+  cmake_policy(SET CMP0132 NEW)
+endif()
+
 project({{project_name}} LANGUAGES{% for value in project_language_list %} {{value}}{% endfor %})
 
 set(BUILD_SHARED_LIBS Off)
@@ -23,8 +26,15 @@ cmake_policy(SET CMP0104 OLD)
 
 include(cmake/global_flags.cmake)
 include(cmake/global_vars.cmake)
-{% for path in includes %}include({{path}})
-{%endfor%}{% if use_conan %}
+{% if includes is defined -%}
+{%     for incl in includes -%}
+{%         if not(use_conan2) or (incl != "cmake/conan1_deprecated.cmake") -%}
+include({{ incl }})
+{%         endif -%}
+{%     endfor -%}
+{% endif -%}
+
+{%- if (use_conan) and not(use_conan2) %}
 if (CMAKE_CROSSCOMPILING)
   include(${PROJECT_BINARY_DIR}/conan_paths.cmake)
 else()
@@ -35,15 +45,22 @@ else()
     BUILD missing
     REMOTE conancenter
     SETTINGS ${settings}
-      ENV "CONAN_CMAKE_GENERATOR=${CMAKE_GENERATOR}"
-      CONF "tools.cmake.cmaketoolchain:generator=${CMAKE_GENERATOR}"
+    ENV "CONAN_CMAKE_GENERATOR=${CMAKE_GENERATOR}"
+    CONF "tools.cmake.cmaketoolchain:generator=${CMAKE_GENERATOR}"
   )
-endif(){% endif %}
-{% set platforms_count = platform_names|length -%}
-{% if platforms_count > 0 -%}
-{% for i in range(platforms_count) %}
-{% if i != 0 %}else{% endif %}if ({{ platforms[platform_names[i]] }})
-  include({{ platform_cmakelists[i] }})
-{%- endfor %}
 endif()
-{% endif -%}
+{%  endif -%}
+
+{%- if vanilla_protobuf %}
+
+set(vanilla_protobuf "yes")
+{%- endif %}
+
+{%  set platforms_count = platform_names|length -%}
+{%  if platforms_count > 0 -%}
+{%      for i in range(platforms_count) -%}
+{%          if i != 0 %}else{% endif %}if ({{ platforms[platform_names[i]] }})
+  include(CMakeLists.{{ platform_names[i] }}.txt)
+{%      endfor -%}
+endif()
+{%  endif %}

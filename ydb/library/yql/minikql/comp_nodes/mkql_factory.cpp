@@ -8,13 +8,15 @@
 #include "mkql_blocks.h"
 #include "mkql_block_agg.h"
 #include "mkql_block_coalesce.h"
+#include "mkql_block_container.h"
+#include "mkql_block_exists.h"
+#include "mkql_block_getelem.h"
 #include "mkql_block_if.h"
 #include "mkql_block_just.h"
 #include "mkql_block_logical.h"
 #include "mkql_block_compress.h"
 #include "mkql_block_skiptake.h"
 #include "mkql_block_top.h"
-#include "mkql_block_tuple.h"
 #include "mkql_callable.h"
 #include "mkql_chain_map.h"
 #include "mkql_chain1_map.h"
@@ -232,6 +234,8 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"JoinDict", &WrapJoinDict},
         {"GraceJoin", &WrapGraceJoin},
         {"GraceSelfJoin", &WrapGraceSelfJoin},
+        {"GraceJoinWithSpilling", &WrapGraceJoin},
+        {"GraceSelfJoinWithSpilling", &WrapGraceSelfJoin},
         {"MapJoinCore", &WrapMapJoinCore},
         {"CommonJoinCore", &WrapCommonJoinCore},
         {"CombineCore", &WrapCombineCore},
@@ -287,6 +291,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"AsScalar", &WrapAsScalar},
         {"ReplicateScalar", &WrapReplicateScalar},
         {"BlockCoalesce", &WrapBlockCoalesce},
+        {"BlockExists", &WrapBlockExists},
         {"BlockIf", &WrapBlockIf},
         {"BlockAnd", &WrapBlockAnd},
         {"BlockOr", &WrapBlockOr},
@@ -294,7 +299,9 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"BlockNot", &WrapBlockNot},
         {"BlockJust", &WrapBlockJust},
         {"BlockCompress", &WrapBlockCompress},
-        {"BlockAsTuple", &WrapBlockAsTuple},
+        {"BlockAsTuple", &WrapBlockAsContainer},
+        {"BlockAsStruct", &WrapBlockAsContainer},
+        {"BlockMember", &WrapBlockMember},
         {"BlockNth", &WrapBlockNth},
         {"BlockExpandChunked", &WrapBlockExpandChunked},
         {"BlockCombineAll", &WrapBlockCombineAll},
@@ -328,6 +335,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"WideSkipWhileInclusive", &WrapWideSkipWhileInclusive},
         {"WideCombiner", &WrapWideCombiner},
         {"WideLastCombiner", &WrapWideLastCombiner},
+        {"WideLastCombinerWithSpilling", &WrapWideLastCombinerWithSpilling},
         {"WideCondense1", &WrapWideCondense1},
         {"WideChopper", &WrapWideChopper},
         {"WideTop", &WrapWideTop},

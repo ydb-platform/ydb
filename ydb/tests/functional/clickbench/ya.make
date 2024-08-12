@@ -9,10 +9,11 @@ SIZE(MEDIUM)
 
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
-REQUIREMENTS(
-    ram:32
-    cpu:4
-)
+ENV(YDB_ENABLE_COLUMN_TABLES="true")
+
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:32)
+ENDIF()
 
 DEPENDS(
     ydb/apps/ydb

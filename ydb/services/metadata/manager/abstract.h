@@ -139,7 +139,7 @@ public:
     TOperationParsingResult BuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings,
         IOperationsManager::TInternalModificationContext& context) const {
         TOperationParsingResult result = DoBuildPatchFromSettings(settings, context);
-        if (result) {
+        if (result.IsSuccess()) {
             if (!settings.GetFeaturesExtractor().IsFinished()) {
                 return TConclusionStatus::Fail("undefined params: " + settings.GetFeaturesExtractor().GetRemainedParamsString());
             }

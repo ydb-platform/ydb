@@ -1,13 +1,13 @@
 #pragma once
 
 #include "flat_mem_iter.h"
-#include "flat_part_iter_multi.h"
+#include "flat_part_iter.h"
 #include "flat_range_cache.h"
 
 namespace NKikimr {
 namespace NTable {
 
-struct TTableItOps {
+struct TTableIterOps {
     static inline int CompareKeys(
             TArrayRef<const NScheme::TTypeInfoOrder> types,
             TArrayRef<const TCell> a,
@@ -25,19 +25,19 @@ struct TTableItOps {
         return 0;
     }
 
-    static inline void MoveNext(TMemIt& it) {
+    static inline void MoveNext(TMemIter& it) {
         it.Next();
     }
 
-    static inline EReady MoveNext(TRunIt& it) {
+    static inline EReady MoveNext(TRunIter& it) {
         return it.Next();
     }
 
-    static inline void Seek(TMemIt& it, TArrayRef<const TCell> key, ESeek seek) {
+    static inline void Seek(TMemIter& it, TArrayRef<const TCell> key, ESeek seek) {
         it.Seek(key, seek);
     }
 
-    static inline EReady Seek(TRunIt& it, TArrayRef<const TCell> key, ESeek seek) {
+    static inline EReady Seek(TRunIter& it, TArrayRef<const TCell> key, ESeek seek) {
         return it.Seek(key, seek);
     }
 
@@ -162,26 +162,26 @@ struct TTableItReverseOps {
             TArrayRef<const TCell> a,
             TArrayRef<const TCell> b) noexcept
     {
-        return -TTableItOps::CompareKeys(types, a, b);
+        return -TTableIterOps::CompareKeys(types, a, b);
     }
 
-    static void MoveNext(TMemIt& it) {
+    static void MoveNext(TMemIter& it) {
         it.Prev();
     }
 
-    static EReady MoveNext(TRunIt& it) {
+    static EReady MoveNext(TRunIter& it) {
         return it.Prev();
     }
 
-    static void Seek(TMemIt& it, TArrayRef<const TCell> key, ESeek seek) {
+    static void Seek(TMemIter& it, TArrayRef<const TCell> key, ESeek seek) {
         it.SeekReverse(key, seek);
     }
 
-    static EReady Seek(TRunIt& it, TArrayRef<const TCell> key, ESeek seek) {
+    static EReady Seek(TRunIter& it, TArrayRef<const TCell> key, ESeek seek) {
         return it.SeekReverse(key, seek);
     }
 
-    class TEraseCacheOps : public TTableItOps::TEraseCacheOpsCommon {
+    class TEraseCacheOps : public TTableIterOps::TEraseCacheOpsCommon {
     public:
         using TEraseCacheOpsCommon::TEraseCacheOpsCommon;
 

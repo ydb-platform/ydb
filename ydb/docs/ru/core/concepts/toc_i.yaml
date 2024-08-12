@@ -1,12 +1,11 @@
 items:
-- { name: Обзор,                                  href: index.md }
-- { name: Термины и определения,                  href: databases.md }
+- { name: Глоссарий,                  href: glossary.md }
 - { name: Соединение с БД,       href: connect.md }
 - name: Аутентификация
   href: auth.md
 - name: Модель данных и схема
+  href: datamodel/index.md
   include: { path: datamodel/toc_p.yaml, mode: link }
-- { name: Типы данных,                            href: datatypes.md, hidden: true } # Deprecated
 - { name: Транзакции,                             href: transactions.md }
 - { name: Вторичные индексы,                      href: secondary_indexes.md }
 - { name: Change Data Capture (CDC),              href: cdc.md, when: feature_changefeed }
@@ -17,9 +16,10 @@ items:
 - name: Федеративные запросы
   include: { path: federated_query/toc_p.yaml, mode: link }
 - name: Кластер YDB
+  href: cluster/index.md
   items:
-  - name: Обзор
-    href: cluster/index.md
+  - name: Топология
+    href: topology.md
   - name: Общая схема YDB
     href: cluster/common_scheme_ydb.md
   - name: Дисковая подсистема кластера

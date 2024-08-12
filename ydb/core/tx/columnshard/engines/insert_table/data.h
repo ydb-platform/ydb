@@ -33,6 +33,7 @@ public:
 
 private:
     YDB_READONLY(ui64, SchemaVersion, 0);
+
 public:
     std::optional<TString> GetBlobData() const {
         if (BlobDataGuard) {
@@ -55,8 +56,8 @@ public:
     TInsertedData(ui64 planStep, ui64 writeTxId, ui64 pathId, TString dedupId, const TBlobRange& blobRange,
         const NKikimrTxColumnShard::TLogicalMetadata& proto, const ui64 schemaVersion, const std::optional<TString>& blobData);
 
-    TInsertedData(ui64 writeTxId, ui64 pathId, TString dedupId, const TBlobRange& blobRange,
-        const NKikimrTxColumnShard::TLogicalMetadata& proto, const ui64 schemaVersion, const std::optional<TString>& blobData)
+    TInsertedData(ui64 writeTxId, ui64 pathId, TString dedupId, const TBlobRange& blobRange, const NKikimrTxColumnShard::TLogicalMetadata& proto,
+        const ui64 schemaVersion, const std::optional<TString>& blobData)
         : TInsertedData(0, writeTxId, pathId, dedupId, blobRange, proto, schemaVersion, blobData)
     {}
 
@@ -132,9 +133,13 @@ class TCommittedBlob {
 private:
     TBlobRange BlobRange;
     TSnapshot CommitSnapshot;
-    YDB_READONLY_DEF(ui64, SchemaVersion);
+    YDB_READONLY(ui64, SchemaVersion, 0);
+    YDB_READONLY(ui64, RecordsCount, 0);
+    YDB_READONLY(bool, IsDelete, false);
     YDB_READONLY_DEF(std::optional<NArrow::TReplaceKey>, First);
     YDB_READONLY_DEF(std::optional<NArrow::TReplaceKey>, Last);
+    YDB_READONLY_DEF(NArrow::TSchemaSubset, SchemaSubset);
+
 public:
     ui64 GetSize() const {
         return BlobRange.Size;
@@ -150,12 +155,16 @@ public:
         return *Last;
     }
 
-    TCommittedBlob(const TBlobRange& blobRange, const TSnapshot& snapshot, const ui64 schemaVersion, const std::optional<NArrow::TReplaceKey>& first, const std::optional<NArrow::TReplaceKey>& last)
+    TCommittedBlob(const TBlobRange& blobRange, const TSnapshot& snapshot, const ui64 schemaVersion, const ui64 recordsCount, const std::optional<NArrow::TReplaceKey>& first, 
+        const std::optional<NArrow::TReplaceKey>& last, const bool isDelete, const NArrow::TSchemaSubset& subset)
         : BlobRange(blobRange)
         , CommitSnapshot(snapshot)
         , SchemaVersion(schemaVersion)
+        , RecordsCount(recordsCount)
+        , IsDelete(isDelete)
         , First(first)
         , Last(last)
+        , SchemaSubset(subset)
     {}
 
     /// It uses trick then we place key with planStep:txId in container and find them later by BlobId only.

@@ -14,7 +14,12 @@ from typing import List, Optional, Union
 
 import attr
 
-from hypothesis.errors import Flaky, HypothesisException, StopTest
+from hypothesis.errors import (
+    FlakyReplay,
+    FlakyStrategyDefinition,
+    HypothesisException,
+    StopTest,
+)
 from hypothesis.internal import floats as flt
 from hypothesis.internal.compat import int_to_bytes
 from hypothesis.internal.conjecture.data import (
@@ -24,13 +29,20 @@ from hypothesis.internal.conjecture.data import (
     DataObserver,
     FloatKWargs,
     IntegerKWargs,
+    InvalidAt,
     IRKWargsType,
     IRType,
     IRTypeName,
     Status,
     StringKWargs,
 )
-from hypothesis.internal.floats import count_between_floats, float_to_int, int_to_float
+from hypothesis.internal.escalation import InterestingOrigin
+from hypothesis.internal.floats import (
+    count_between_floats,
+    float_to_int,
+    int_to_float,
+    sign_aware_lte,
+)
 
 
 class PreviouslyUnseenBehaviour(HypothesisException):
@@ -38,7 +50,7 @@ class PreviouslyUnseenBehaviour(HypothesisException):
 
 
 def inconsistent_generation():
-    raise Flaky(
+    raise FlakyStrategyDefinition(
         "Inconsistent data generation! Data generation behaved differently "
         "between different runs. Is your data generation depending on external "
         "state?"
@@ -57,6 +69,15 @@ class Killed:
 
     next_node = attr.ib()
 
+    def _repr_pretty_(self, p, cycle):
+        assert cycle is False
+        p.text("Killed")
+
+
+def _node_pretty(ir_type, value, kwargs, *, forced):
+    forced_marker = " [forced]" if forced else ""
+    return f"{ir_type} {value}{forced_marker} {kwargs}"
+
 
 @attr.s(slots=True)
 class Branch:
@@ -73,13 +94,32 @@ class Branch:
         assert max_children > 0
         return max_children
 
+    def _repr_pretty_(self, p, cycle):
+        assert cycle is False
+        for i, (value, child) in enumerate(self.children.items()):
+            if i > 0:
+                p.break_()
+            p.text(_node_pretty(self.ir_type, value, self.kwargs, forced=False))
+            with p.indent(2):
+                p.break_()
+                p.pretty(child)
+
 
 @attr.s(slots=True, frozen=True)
 class Conclusion:
     """Represents a transition to a finished state."""
 
-    status = attr.ib()
-    interesting_origin = attr.ib()
+    status: Status = attr.ib()
+    interesting_origin: Optional[InterestingOrigin] = attr.ib()
+
+    def _repr_pretty_(self, p, cycle):
+        assert cycle is False
+        o = self.interesting_origin
+        # avoid str(o), which can include multiple lines of context
+        origin = (
+            "" if o is None else f", {o.exc_type.__name__} at {o.filename}:{o.lineno}"
+        )
+        p.text(f"Conclusion ({self.status!r}{origin})")
 
 
 # The number of max children where, beyond this, it is practically impossible
@@ -184,7 +224,35 @@ def compute_max_children(ir_type, kwargs):
         return sum(len(intervals) ** k for k in range(min_size, max_size + 1))
 
     elif ir_type == "float":
-        return count_between_floats(kwargs["min_value"], kwargs["max_value"])
+        min_value = kwargs["min_value"]
+        max_value = kwargs["max_value"]
+        smallest_nonzero_magnitude = kwargs["smallest_nonzero_magnitude"]
+
+        count = count_between_floats(min_value, max_value)
+
+        # we have two intervals:
+        # a. [min_value, max_value]
+        # b. [-smallest_nonzero_magnitude, smallest_nonzero_magnitude]
+        #
+        # which could be subsets (in either order), overlapping, or disjoint. We
+        # want the interval difference a - b.
+
+        # next_down because endpoints are ok with smallest_nonzero_magnitude
+        min_point = max(min_value, -flt.next_down(smallest_nonzero_magnitude))
+        max_point = min(max_value, flt.next_down(smallest_nonzero_magnitude))
+
+        if min_point > max_point:
+            # case: disjoint intervals.
+            return count
+
+        count -= count_between_floats(min_point, max_point)
+        if sign_aware_lte(min_value, -0.0) and sign_aware_lte(-0.0, max_value):
+            # account for -0.0
+            count += 1
+        if sign_aware_lte(min_value, 0.0) and sign_aware_lte(0.0, max_value):
+            # account for 0.0
+            count += 1
+        return count
 
     raise NotImplementedError(f"unhandled ir_type {ir_type}")
 
@@ -202,20 +270,37 @@ def all_children(ir_type, kwargs):
         min_value = kwargs["min_value"]
         max_value = kwargs["max_value"]
         weights = kwargs["weights"]
-        # it's a bit annoying (but completely feasible) to implement the cases
-        # other than "both sides bounded" here. We haven't needed to yet because
-        # in practice we don't struggle with unbounded integer generation.
-        assert min_value is not None
-        assert max_value is not None
 
-        if weights is None:
-            yield from range(min_value, max_value + 1)
+        if min_value is None and max_value is None:
+            # full 128 bit range.
+            yield from range(-(2**127) + 1, 2**127 - 1)
+
+        elif min_value is not None and max_value is not None:
+            if weights is None:
+                yield from range(min_value, max_value + 1)
+            else:
+                # skip any values with a corresponding weight of 0 (can never be drawn).
+                for weight, n in zip(weights, range(min_value, max_value + 1)):
+                    if weight == 0:
+                        continue
+                    yield n
         else:
-            # skip any values with a corresponding weight of 0 (can never be drawn).
-            for weight, n in zip(weights, range(min_value, max_value + 1)):
-                if weight == 0:
-                    continue
-                yield n
+            # hard case: only one bound was specified. Here we probe either upwards
+            # or downwards with our full 128 bit generation, but only half of these
+            # (plus one for the case of generating zero) result in a probe in the
+            # direction we want. ((2**128 - 1) // 2) + 1 == a range of 2 ** 127.
+            #
+            # strictly speaking, I think this is not actually true: if
+            # max_value > shrink_towards then our range is ((-2**127) + 1, max_value),
+            # and it only narrows when max_value < shrink_towards. But it
+            # really doesn't matter for this case because (even half) unbounded
+            # integers generation is hit extremely rarely.
+            assert (min_value is None) ^ (max_value is None)
+            if min_value is None:
+                yield from range(max_value - (2**127) + 1, max_value)
+            else:
+                assert max_value is None
+                yield from range(min_value, min_value + (2**127) - 1)
 
     if ir_type == "boolean":
         p = kwargs["p"]
@@ -247,16 +332,30 @@ def all_children(ir_type, kwargs):
 
         min_value = kwargs["min_value"]
         max_value = kwargs["max_value"]
+        smallest_nonzero_magnitude = kwargs["smallest_nonzero_magnitude"]
+
+        # handle zeroes separately so smallest_nonzero_magnitude can think of
+        # itself as a complete interval (instead of a hole at ±0).
+        if sign_aware_lte(min_value, -0.0) and sign_aware_lte(-0.0, max_value):
+            yield -0.0
+        if sign_aware_lte(min_value, 0.0) and sign_aware_lte(0.0, max_value):
+            yield 0.0
 
         if flt.is_negative(min_value):
             if flt.is_negative(max_value):
-                # if both are negative, have to invert order
-                yield from floats_between(max_value, min_value)
+                # case: both negative.
+                max_point = min(max_value, -smallest_nonzero_magnitude)
+                # float_to_int increases as negative magnitude increases, so
+                # invert order.
+                yield from floats_between(max_point, min_value)
             else:
-                yield from floats_between(-0.0, min_value)
-                yield from floats_between(0.0, max_value)
+                # case: straddles midpoint (which is between -0.0 and 0.0).
+                yield from floats_between(-smallest_nonzero_magnitude, min_value)
+                yield from floats_between(smallest_nonzero_magnitude, max_value)
         else:
-            yield from floats_between(min_value, max_value)
+            # case: both positive.
+            min_point = max(min_value, smallest_nonzero_magnitude)
+            yield from floats_between(min_point, max_value)
 
 
 @attr.s(slots=True)
@@ -346,6 +445,8 @@ class TreeNode:
     #   be explored when generating novel prefixes)
     transition: Union[None, Branch, Conclusion, Killed] = attr.ib(default=None)
 
+    invalid_at: Optional[InvalidAt] = attr.ib(default=None)
+
     # A tree node is exhausted if every possible sequence of draws below it has
     # been explored. We only update this when performing operations that could
     # change the answer.
@@ -373,7 +474,7 @@ class TreeNode:
         Splits the tree so that it can incorporate a decision at the draw call
         corresponding to the node at position i.
 
-        Raises Flaky if node i was forced.
+        Raises FlakyStrategyDefinition if node i was forced.
         """
 
         if i in self.forced:
@@ -399,6 +500,8 @@ class TreeNode:
         del self.ir_types[i:]
         del self.values[i:]
         del self.kwargs[i:]
+        # we have a transition now, so we don't need to carry around invalid_at.
+        self.invalid_at = None
         assert len(self.values) == len(self.kwargs) == len(self.ir_types) == i
 
     def check_exhausted(self):
@@ -444,6 +547,26 @@ class TreeNode:
                     v.is_exhausted for v in self.transition.children.values()
                 )
         return self.is_exhausted
+
+    def _repr_pretty_(self, p, cycle):
+        assert cycle is False
+        indent = 0
+        for i, (ir_type, kwargs, value) in enumerate(
+            zip(self.ir_types, self.kwargs, self.values)
+        ):
+            with p.indent(indent):
+                if i > 0:
+                    p.break_()
+                p.text(_node_pretty(ir_type, value, kwargs, forced=i in self.forced))
+            indent += 2
+
+        with p.indent(indent):
+            if len(self.values) > 0:
+                p.break_()
+            if self.transition is not None:
+                p.pretty(self.transition)
+            else:
+                p.text("unknown")
 
 
 class DataTree:
@@ -634,7 +757,14 @@ class DataTree:
                     attempts = 0
                     while True:
                         if attempts <= 10:
-                            (v, buf) = self._draw(ir_type, kwargs, random=random)
+                            try:
+                                (v, buf) = self._draw(ir_type, kwargs, random=random)
+                            except StopTest:  # pragma: no cover
+                                # it is possible that drawing from a fresh data can
+                                # overrun BUFFER_SIZE, due to eg unlucky rejection sampling
+                                # of integer probes. Retry these cases.
+                                attempts += 1
+                                continue
                         else:
                             (v, buf) = self._draw_from_cache(
                                 ir_type, kwargs, key=id(current_node), random=random
@@ -660,9 +790,13 @@ class DataTree:
                 attempts = 0
                 while True:
                     if attempts <= 10:
-                        (v, buf) = self._draw(
-                            branch.ir_type, branch.kwargs, random=random
-                        )
+                        try:
+                            (v, buf) = self._draw(
+                                branch.ir_type, branch.kwargs, random=random
+                            )
+                        except StopTest:  # pragma: no cover
+                            attempts += 1
+                            continue
                     else:
                         (v, buf) = self._draw_from_cache(
                             branch.ir_type, branch.kwargs, key=id(branch), random=random
@@ -711,7 +845,10 @@ class DataTree:
         tree. This will likely change in future."""
         node = self.root
 
-        def draw(ir_type, kwargs, *, forced=None):
+        def draw(ir_type, kwargs, *, forced=None, convert_forced=True):
+            if ir_type == "float" and forced is not None and convert_forced:
+                forced = int_to_float(forced)
+
             draw_func = getattr(data, f"draw_{ir_type}")
             value = draw_func(**kwargs, forced=forced)
 
@@ -733,6 +870,13 @@ class DataTree:
                     t = node.transition
                     data.conclude_test(t.status, t.interesting_origin)
                 elif node.transition is None:
+                    if node.invalid_at is not None:
+                        (ir_type, kwargs, forced) = node.invalid_at
+                        try:
+                            draw(ir_type, kwargs, forced=forced, convert_forced=False)
+                        except StopTest:
+                            if data.invalid_at is not None:
+                                raise
                     raise PreviouslyUnseenBehaviour
                 elif isinstance(node.transition, Branch):
                     v = draw(node.transition.ir_type, node.transition.kwargs)
@@ -841,6 +985,10 @@ class DataTree:
         if child in children:
             children.remove(child)
 
+    def _repr_pretty_(self, p, cycle):
+        assert cycle is False
+        return p.pretty(self.root)
+
 
 class TreeRecordingObserver(DataObserver):
     def __init__(self, tree):
@@ -873,6 +1021,10 @@ class TreeRecordingObserver(DataObserver):
         self, value: bool, *, was_forced: bool, kwargs: BooleanKWargs
     ) -> None:
         self.draw_value("boolean", value, was_forced=was_forced, kwargs=kwargs)
+
+    def mark_invalid(self, invalid_at: InvalidAt) -> None:
+        if self.__current_node.transition is None:
+            self.__current_node.invalid_at = invalid_at
 
     def draw_value(
         self,
@@ -995,9 +1147,13 @@ class TreeRecordingObserver(DataObserver):
                 node.transition.status != Status.INTERESTING
                 or new_transition.status != Status.VALID
             ):
-                raise Flaky(
-                    f"Inconsistent test results! Test case was {node.transition!r} "
-                    f"on first run but {new_transition!r} on second"
+                old_origin = node.transition.interesting_origin
+                new_origin = new_transition.interesting_origin
+                raise FlakyReplay(
+                    f"Inconsistent results from replaying a test case!\n"
+                    f"  last: {node.transition.status.name} from {old_origin}\n"
+                    f"  this: {new_transition.status.name} from {new_origin}",
+                    (old_origin, new_origin),
                 )
         else:
             node.transition = new_transition

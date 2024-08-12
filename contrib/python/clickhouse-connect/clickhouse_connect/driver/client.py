@@ -1,6 +1,6 @@
 import io
 import logging
-from datetime import tzinfo, datetime
+from datetime import tzinfo
 
 import pytz
 
@@ -12,6 +12,7 @@ from clickhouse_connect import common
 from clickhouse_connect.common import version
 from clickhouse_connect.datatypes.registry import get_from_name
 from clickhouse_connect.datatypes.base import ClickHouseType
+from clickhouse_connect.driver import tzutil
 from clickhouse_connect.driver.common import dict_copy, StreamContext, coerce_int, coerce_bool
 from clickhouse_connect.driver.constants import CH_VERSION_WITH_PROTOCOL, PROTOCOL_VERSION_WITH_LOW_CARD
 from clickhouse_connect.driver.exceptions import ProgrammingError, OperationalError
@@ -19,7 +20,8 @@ from clickhouse_connect.driver.external import ExternalData
 from clickhouse_connect.driver.insert import InsertContext
 from clickhouse_connect.driver.summary import QuerySummary
 from clickhouse_connect.driver.models import ColumnDef, SettingDef, SettingStatus
-from clickhouse_connect.driver.query import QueryResult, to_arrow, QueryContext, arrow_buffer, quote_identifier
+from clickhouse_connect.driver.query import QueryResult, to_arrow, to_arrow_batches, QueryContext, arrow_buffer, \
+    quote_identifier
 
 io.DEFAULT_BUFFER_SIZE = 1024 * 256
 logger = logging.getLogger(__name__)
@@ -38,6 +40,8 @@ class Client(ABC):
     optional_transport_settings = set()
     database = None
     max_error_message = 0
+    apply_server_timezone = False
+    show_clickhouse_errors = True
 
     def __init__(self,
                  database: str,
@@ -45,7 +49,8 @@ class Client(ABC):
                  uri: str,
                  query_retries: int,
                  server_host_name: Optional[str],
-                 apply_server_timezone: Optional[Union[str, bool]]):
+                 apply_server_timezone: Optional[Union[str, bool]],
+                 show_clickhouse_errors: Optional[bool]):
         """
         Shared initialization of ClickHouse Connect client
         :param database: database name
@@ -54,17 +59,24 @@ class Client(ABC):
         """
         self.query_limit = coerce_int(query_limit)
         self.query_retries = coerce_int(query_retries)
+        if show_clickhouse_errors is not None:
+            self.show_clickhouse_errors = coerce_bool(show_clickhouse_errors)
         self.server_host_name = server_host_name
-        self.server_tz = pytz.UTC
+        self.server_tz, dst_safe = pytz.UTC, True
         self.server_version, server_tz = \
             tuple(self.command('SELECT version(), timezone()', use_database=False))
         try:
-            self.server_tz = pytz.timezone(server_tz)
+            server_tz = pytz.timezone(server_tz)
+            server_tz, dst_safe = tzutil.normalize_timezone(server_tz)
+            if apply_server_timezone is None:
+                apply_server_timezone = dst_safe
+            self.apply_server_timezone = apply_server_timezone == 'always' or coerce_bool(apply_server_timezone)
         except UnknownTimeZoneError:
             logger.warning('Warning, server is using an unrecognized timezone %s, will use UTC default', server_tz)
-        offsets_differ = datetime.now().astimezone().utcoffset() != datetime.now(tz=self.server_tz).utcoffset()
-        self.apply_server_timezone = apply_server_timezone == 'always' or (
-                coerce_bool(apply_server_timezone) and offsets_differ)
+
+        if not self.apply_server_timezone and not tzutil.local_tz_dst_safe:
+            logger.warning('local timezone %s may return unexpected times due to Daylight Savings Time/' +
+                           'Summer Time differences', tzutil.local_tz.tzname(None))
         readonly = 'readonly'
         if not self.min_version('19.17'):
             readonly = common.get_setting('readonly')
@@ -121,7 +133,10 @@ class Client(ABC):
 
     def _prep_query(self, context: QueryContext):
         if context.is_select and not context.has_limit and self.query_limit:
-            return f'{context.final_query}\n LIMIT {self.query_limit}'
+            limit = f'\n LIMIT {self.query_limit}'
+            if isinstance(context.query, bytes):
+                return context.final_query + limit.encode()
+            return context.final_query + limit
         return context.final_query
 
     def _check_tz_change(self, new_tz) -> Optional[tzinfo]:
@@ -268,6 +283,25 @@ class Client(ABC):
         :return: bytes representing raw ClickHouse return value based on format
         """
 
+    @abstractmethod
+    def raw_stream(self, query: str,
+                   parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
+                   settings: Optional[Dict[str, Any]] = None,
+                   fmt: str = None,
+                   use_database: bool = True,
+                   external_data: Optional[ExternalData] = None) -> io.IOBase:
+        """
+       Query method that returns the result as an io.IOBase iterator
+       :param query: Query statement/format string
+       :param parameters: Optional dictionary used to format the query
+       :param settings: Optional dictionary of ClickHouse settings (key/string values)
+       :param fmt: ClickHouse output format
+       :param use_database  Send the database parameter to ClickHouse so the command will be executed in the client
+        database context.
+       :param external_data  External data to send with the query
+       :return: io.IOBase stream/iterator for the result
+       """
+
     # pylint: disable=duplicate-code,too-many-arguments,unused-argument
     def query_np(self,
                  query: Optional[str] = None,
@@ -348,14 +382,14 @@ class Client(ABC):
         """
         Query method that returns the results as a StreamContext.  For parameter values, see the
         create_query_context method
-        :return: Pandas dataframe representing the result set
+        :return: Generator that yields a Pandas dataframe per block representing the result set
         """
         return self._context_query(locals(), use_numpy=True,
                                    as_pandas=True,
                                    streaming=True).df_stream
 
     def create_query_context(self,
-                             query: Optional[str] = None,
+                             query: Optional[Union[str, bytes]] = None,
                              parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
                              settings: Optional[Dict[str, Any]] = None,
                              query_formats: Optional[Dict[str, str]] = None,
@@ -462,6 +496,38 @@ class Client(ABC):
         :param external_data ClickHouse "external data" to send with query
         :return: PyArrow.Table
         """
+        settings = self._update_arrow_settings(settings, use_strings)
+        return to_arrow(self.raw_query(query,
+                                       parameters,
+                                       settings,
+                                       fmt='Arrow',
+                                       external_data=external_data))
+
+    def query_arrow_stream(self,
+                           query: str,
+                           parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
+                           settings: Optional[Dict[str, Any]] = None,
+                           use_strings: Optional[bool] = None,
+                           external_data: Optional[ExternalData] = None) -> StreamContext:
+        """
+        Query method that returns the results as a stream of Arrow tables
+        :param query: Query statement/format string
+        :param parameters: Optional dictionary used to format the query
+        :param settings: Optional dictionary of ClickHouse settings (key/string values)
+        :param use_strings:  Convert ClickHouse String type to Arrow string type (instead of binary)
+        :param external_data ClickHouse "external data" to send with query
+        :return: Generator that yields a PyArrow.Table for per block representing the result set
+        """
+        settings = self._update_arrow_settings(settings, use_strings)
+        return to_arrow_batches(self.raw_stream(query,
+                                                parameters,
+                                                settings,
+                                                fmt='ArrowStream',
+                                                external_data=external_data))
+
+    def _update_arrow_settings(self,
+                               settings: Optional[Dict[str, Any]],
+                               use_strings: Optional[bool]) -> Dict[str, Any]:
         settings = dict_copy(settings)
         if self.database:
             settings['database'] = self.database
@@ -473,11 +539,7 @@ class Client(ABC):
             if not str_status.is_writable:
                 raise OperationalError(f'Cannot change readonly {arrow_str_setting} to {use_strings}')
             settings[arrow_str_setting] = '1' if use_strings else '0'
-        return to_arrow(self.raw_query(query,
-                                       parameters,
-                                       settings,
-                                       fmt='Arrow',
-                                       external_data=external_data))
+        return settings
 
     @abstractmethod
     def command(self,

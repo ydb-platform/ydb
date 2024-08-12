@@ -82,26 +82,34 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
     std::shared_ptr<TReadContext> context = std::make_shared<TReadContext>(StoragesManager, ScanCountersPool,
         ReadMetadataRange, SelfId(), ResourceSubscribeActorId, ReadCoordinatorActorId, ComputeShardingPolicy);
     ScanIterator = ReadMetadataRange->StartScan(context);
-
-    // propagate self actor id // TODO: FlagSubscribeOnSession ?
-    Send(ScanComputeActorId, new NKqp::TEvKqpCompute::TEvScanInitActor(ScanId, ctx.SelfID, ScanGen, TabletId), IEventHandle::FlagTrackDelivery);
-
-    Become(&TColumnShardScan::StateScan);
+    auto startResult = ScanIterator->Start();
     StartInstant = TMonotonic::Now();
-    ContinueProcessing();
+    if (!startResult) {
+        ACFL_ERROR("event", "BootstrapError")("error", startResult.GetErrorMessage());
+        SendScanError("scanner_start_error:" + startResult.GetErrorMessage());
+        Finish(NColumnShard::TScanCounters::EStatusFinish::ProblemOnStart);
+    } else {
+
+        // propagate self actor id // TODO: FlagSubscribeOnSession ?
+        Send(ScanComputeActorId, new NKqp::TEvKqpCompute::TEvScanInitActor(ScanId, ctx.SelfID, ScanGen, TabletId), IEventHandle::FlagTrackDelivery);
+
+        Become(&TColumnShardScan::StateScan);
+        ContinueProcessing();
+    }
 }
 
-void TColumnShardScan::HandleScan(NConveyor::TEvExecution::TEvTaskProcessedResult::TPtr& ev) {
+void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResult::TPtr& ev) {
     --InFlightReads;
     auto g = Stats->MakeGuard("task_result");
-    if (ev->Get()->GetErrorMessage()) {
-        ACFL_ERROR("event", "TEvTaskProcessedResult")("error", ev->Get()->GetErrorMessage());
-        SendScanError("task_error:" + ev->Get()->GetErrorMessage());
+    auto result = ev->Get()->ExtractResult();
+    if (result.IsFail()) {
+        ACFL_ERROR("event", "TEvTaskProcessedResult")("error", result.GetErrorMessage());
+        SendScanError("task_error:" + result.GetErrorMessage());
         Finish(NColumnShard::TScanCounters::EStatusFinish::ConveyorInternalError);
     } else {
         ACFL_DEBUG("event", "TEvTaskProcessedResult");
-        auto t = static_pointer_cast<IDataTasksProcessor::ITask>(ev->Get()->GetResult());
-        Y_DEBUG_ABORT_UNLESS(dynamic_pointer_cast<IDataTasksProcessor::ITask>(ev->Get()->GetResult()));
+        auto t = static_pointer_cast<IApplyAction>(result.GetResult());
+        Y_DEBUG_ABORT_UNLESS(dynamic_pointer_cast<IDataTasksProcessor::ITask>(result.GetResult()));
         if (!ScanIterator->Finished()) {
             ScanIterator->Apply(t);
         }
@@ -114,7 +122,7 @@ void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev)
     Y_ABORT_UNLESS(!AckReceivedInstant);
     AckReceivedInstant = TMonotonic::Now();
 
-    Y_ABORT_UNLESS(ev->Get()->Generation == ScanGen);
+    AFL_VERIFY(ev->Get()->Generation == ScanGen)("ev_gen", ev->Get()->Generation)("scan_gen", ScanGen);
 
     ChunksLimiter = TChunksLimiter(ev->Get()->FreeSpace, ev->Get()->MaxChunksCount);
     Y_ABORT_UNLESS(ev->Get()->MaxChunksCount == 1);
@@ -201,7 +209,7 @@ bool TColumnShardScan::ProduceResults() noexcept {
         return false;
     }
 
-    std::optional<TPartialReadResult> resultOpt = resultConclusion.DetachResult();
+    std::shared_ptr<TPartialReadResult> resultOpt = resultConclusion.DetachResult();
     if (!resultOpt) {
         ACFL_DEBUG("stage", "no data is ready yet")("iterator", ScanIterator->DebugString());
         return false;
@@ -226,26 +234,27 @@ bool TColumnShardScan::ProduceResults() noexcept {
         if (shardedBatch.IsSharded()) {
             AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "compute_sharding_success")("count", shardedBatch.GetSplittedByShards().size())("info", ComputeShardingPolicy.DebugString());
             Result->SplittedBatches = shardedBatch.GetSplittedByShards();
-            Result->ArrowBatch = shardedBatch.GetRecordBatch();
         } else {
             if (ComputeShardingPolicy.IsEnabled()) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "compute_sharding_problems")("info", ComputeShardingPolicy.DebugString());
             }
-            Result->ArrowBatch = shardedBatch.GetRecordBatch();
         }
+        TMemoryProfileGuard mGuard("SCAN_PROFILE::RESULT::TO_KQP", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
+        Result->ArrowBatch = shardedBatch.GetRecordBatch();
         Rows += batch->num_rows();
-        Bytes += NArrow::GetBatchDataSize(batch);
-        ACFL_DEBUG("stage", "data_format")("batch_size", NArrow::GetBatchDataSize(batch))("num_rows", numRows)("batch_columns", JoinSeq(",", batch->schema()->field_names()));
+        Bytes += NArrow::GetTableDataSize(Result->ArrowBatch);
+        ACFL_DEBUG("stage", "data_format")("batch_size", NArrow::GetTableDataSize(Result->ArrowBatch))("num_rows", numRows)("batch_columns", JoinSeq(",", batch->schema()->field_names()));
     }
     if (CurrentLastReadKey) {
-        NArrow::NMerger::TSortableBatchPosition pNew(result.GetLastReadKey(), 0, result.GetLastReadKey()->schema()->field_names(), {}, false);
-        NArrow::NMerger::TSortableBatchPosition pOld(CurrentLastReadKey, 0, CurrentLastReadKey->schema()->field_names(), {}, false);
+        NArrow::NMerger::TSortableBatchPosition pNew(result.GetLastReadKey(), 0, result.GetLastReadKey()->schema()->field_names(), {}, ReadMetadataRange->IsDescSorted());
+        NArrow::NMerger::TSortableBatchPosition pOld(CurrentLastReadKey, 0, CurrentLastReadKey->schema()->field_names(), {}, ReadMetadataRange->IsDescSorted());
         AFL_VERIFY(pOld < pNew)("old", pOld.DebugJson().GetStringRobust())("new", pNew.DebugJson().GetStringRobust());
     }
     CurrentLastReadKey = result.GetLastReadKey();
 
     Result->LastKey = ConvertLastKey(result.GetLastReadKey());
     SendResult(false, false);
+    ScanIterator->OnSentDataFromInterval(result.GetNotFinishedIntervalIdx());
     ACFL_DEBUG("stage", "finished")("iterator", ScanIterator->DebugString());
     return true;
 }
@@ -261,12 +270,14 @@ void TColumnShardScan::ContinueProcessing() {
 
     if (ScanIterator) {
         // Switch to the next range if the current one is finished
-        if (ScanIterator->Finished() && ChunksLimiter.HasMore()) {
-            auto g = Stats->MakeGuard("Finish");
-            MakeResult();
-            SendResult(false, true);
-            ScanIterator.reset();
-            Finish(NColumnShard::TScanCounters::EStatusFinish::Success);
+        if (ScanIterator->Finished()) {
+            if (ChunksLimiter.HasMore()) {
+                auto g = Stats->MakeGuard("Finish");
+                MakeResult();
+                SendResult(false, true);
+                ScanIterator.reset();
+                Finish(NColumnShard::TScanCounters::EStatusFinish::Success);
+            }
         } else {
             while (true) {
                 TConclusion<bool> hasMoreData = ScanIterator->ReadNextInterval();
@@ -391,7 +402,7 @@ void TColumnShardScan::Finish(const NColumnShard::TScanCounters::EStatusFinish s
 
     Send(ColumnShardActorId, new NColumnShard::TEvPrivate::TEvReadFinished(RequestCookie, TxId));
     AFL_VERIFY(StartInstant);
-    ScanCountersPool.OnScanDuration(status, TMonotonic::Now() - *StartInstant);
+    ScanCountersPool.OnScanFinished(status, TMonotonic::Now() - *StartInstant);
     ReportStats();
     PassAway();
 }

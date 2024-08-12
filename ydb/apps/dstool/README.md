@@ -27,6 +27,12 @@ user@host:~/github$ git clone https://github.com/ydb-platform/ydb.git
 
 Follow the steps described at https://grpc.io/docs/languages/python/quickstart.
 
+Typical command to install the `grpc_tools` package:
+
+```bash
+pip3 install grpcio-tools 'protobuf<5.0.0,>=3.13.0'
+```
+
 ## Compile proto files for python
 
 ```bash

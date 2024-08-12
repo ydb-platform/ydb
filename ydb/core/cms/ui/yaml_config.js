@@ -340,8 +340,11 @@ class YamlConfigState {
     removeAllVolatileConfigs() {
         var cmd = {
             Request: {
-                cluster: this.cluster,
-                version: this.version,
+                identity: {
+                    cluster: this.cluster,
+                    version: this.version,
+                },
+                all: true
             },
         };
 
@@ -353,9 +356,11 @@ class YamlConfigState {
     removeVolatileConfig(id) {
         var cmd = {
             Request: {
-                cluster: this.cluster,
-                version: this.version,
-                ids: [id],
+                identity: {
+                    cluster: this.cluster,
+                    version: this.version,
+                },
+                ids: { ids: [id], },
             }
         };
 

@@ -12,6 +12,8 @@
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 #include <ydb/public/api/protos/ydb_monitoring.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/api/protos/draft/ydb_object_storage.pb.h>
 #include <ydb/public/api/protos/ydb_persqueue_cluster_discovery.pb.h>
 #include <ydb/public/api/protos/ydb_persqueue_v1.pb.h>
 #include <ydb/public/api/protos/ydb_federation_discovery.pb.h>
@@ -128,7 +130,8 @@ void TGRpcRequestBiStreamWrapper<TRpcId, TReq, TResp, RlMode>::RefreshToken(cons
 }
 
 template <ui32 TRpcId>
-void TRefreshTokenImpl<TRpcId>::ReplyUnauthenticated(const TString&) {
+void TRefreshTokenImpl<TRpcId>::ReplyUnauthenticated(const TString& msg) {
+    IssueManager_.RaiseIssue(NYql::TIssue(msg));
     RefreshTokenReplyUnauthenticated(From_, TActorId(), IssueManager_.GetIssues());
 }
 

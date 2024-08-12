@@ -1,3 +1,29 @@
+liburing-2.6 release
+
+- Add getsockopt and setsockopt socket commands
+- Add test cases to test/hardlink
+- Man page fixes
+- Add futex support, and test cases
+- Add waitid support, and test cases
+- Add read multishot, and test cases
+- Add support for IORING_SETUP_NO_SQARRAY
+- Use IORING_SETUP_NO_SQARRAY as the default
+- Add support for IORING_OP_FIXED_FD_INSTALL
+- Add io_uring_prep_fixed_fd_install() helper
+- Support for napi busy polling
+- Improve/add test cases
+- Man page fixes
+- Add sample 'proxy' example
+
+liburing-2.5 release
+
+- Add support for io_uring_prep_cmd_sock()
+- Add support for application allocated ring memory, for placing rings
+  in huge mem. Available through io_uring_queue_init_mem().
+- Add support for registered ring fds
+- Various documentation updates
+- Various fixes
+
 liburing-2.4 release
 
 - Add io_uring_{major,minor,check}_version() functions.
@@ -15,6 +41,7 @@ liburing-2.4 release
   io_uring_prep_socket_direct() factor in being called with
   IORING_FILE_INDEX_ALLOC for allocating a direct descriptor.
 - Add io_uring_prep_sendto() function.
+- Add io_uring_prep_cmd_sock() function.
 
 liburing-2.3 release
 

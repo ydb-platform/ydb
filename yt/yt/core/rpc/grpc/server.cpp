@@ -68,7 +68,7 @@ class TServer
 {
 public:
     explicit TServer(TServerConfigPtr config)
-        : TServerBase(GrpcLogger.WithTag("GrpcServerId: %v", TGuid::Create()))
+        : TServerBase(GrpcLogger().WithTag("GrpcServerId: %v", TGuid::Create()))
         , Config_(std::move(config))
         , ShutdownCookie_(RegisterShutdownCallback(
             "GrpcServer",
@@ -354,7 +354,7 @@ private:
             switch (cookie) {
                 case EServerCallCookie::Normal:
                 {
-                    const auto stage = [&] () {
+                    const auto stage = [&] {
                         auto guard = Guard(SpinLock_);
                         return Stage_;
                     }();

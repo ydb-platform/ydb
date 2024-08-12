@@ -60,7 +60,7 @@ TAutoPtr<IGraphTransformer> CreateKiLogicalOptProposalTransformer(TIntrusivePtr<
             if (auto maybeDatasink = node.Maybe<TCoCommit>().DataSink().Maybe<TKiDataSink>()) {
                 auto cluster = TString(maybeDatasink.Cast().Cluster());
 
-                ret = KiBuildQuery(node, ctx, sessionCtx->TablesPtr(), types, sessionCtx->Query().ConcurrentResults);
+                ret = KiBuildQuery(node, ctx, sessionCtx->GetDatabase(), sessionCtx->TablesPtr(), types, sessionCtx->Query().ConcurrentResults);
 
                 if (ret != inputNode) {
                     return ret;

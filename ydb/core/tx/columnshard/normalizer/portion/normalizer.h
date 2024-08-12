@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
+#include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
 
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
@@ -11,6 +12,9 @@
 #include <ydb/core/tx/columnshard/defs.h>
 
 
+namespace NKikimr::NColumnShard {
+    class TTablesManager;
+}
 namespace NKikimr::NOlap {
 
 template <class TConveyorTask>
@@ -62,7 +66,7 @@ public:
 
     void Start(const TNormalizationController& controller, const TNormalizationContext& nCtx) override {
         controller.GetCounters().CountObjects(Package.size());
-        auto readingAction = controller.GetStoragesManager()->GetInsertOperator()->StartReadingAction("CS::NORMALIZER");
+        auto readingAction = controller.GetStoragesManager()->GetInsertOperator()->StartReadingAction(NBlobOperations::EConsumer::NORMALIZER);
         ui64 memSize = 0;
         for (auto&& data : Package) {
             TConveyorTask::FillBlobRanges(readingAction, data);
@@ -74,4 +78,32 @@ public:
                     std::make_shared<TReadPortionsTask<TConveyorTask>>(nCtx, actions, std::move(Package), Schemas), 1, memSize, "CS::NORMALIZER", controller.GetTaskSubscription()));
     }
 };
+
+class TPortionsNormalizerBase : public TNormalizationController::INormalizerComponent {
+public:
+    TPortionsNormalizerBase(const TNormalizationController::TInitContext& info)
+        : DsGroupSelector(info.GetStorageInfo())
+    {}
+
+    TConclusionStatus InitColumns(
+        const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashMap<ui64, TPortionInfoConstructor>& portions);
+    TConclusionStatus InitIndexes(NIceDb::TNiceDb& db, THashMap<ui64, TPortionInfoConstructor>& portions);
+
+    virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(
+        const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override final;
+
+protected:
+    virtual INormalizerTask::TPtr BuildTask(std::vector<std::shared_ptr<TPortionInfo>>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const = 0;
+    virtual TConclusion<bool> DoInitImpl(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc)  = 0;
+
+    virtual bool CheckPortion(const NColumnShard::TTablesManager& tablesManager, const TPortionInfo& /*portionInfo*/) const = 0;
+
+    virtual std::set<ui32> GetColumnsFilter(const ISnapshotSchema::TPtr& schema) const {
+        return schema->GetPkColumnsIds();
+    }
+
+private:
+    NColumnShard::TBlobGroupSelector DsGroupSelector;
+};
+
 }

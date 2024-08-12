@@ -62,7 +62,7 @@ namespace NWriter {
             for (auto &glob : Writer.Grab())
                 Cone->Put(std::move(glob));
 
-            if (NTable::TLoader::NeedIn(type) || StickyFlatIndex && type == EPage::Index) {
+            if (NTable::TLoader::NeedIn(type) || StickyFlatIndex && type == EPage::FlatIndex) {
                 // Note: we mark flat index pages sticky after we load them
                 Sticky.emplace_back(pageId, std::move(raw));
             } else if (bool(Cache) && type == EPage::DataPage || type == EPage::BTreeIndex) {

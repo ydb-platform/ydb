@@ -37,6 +37,8 @@ For the purposes of this module, the following nomenclature is used:
 
 """
 
+from __future__ import annotations
+
 import itertools
 import os
 from fnmatch import fnmatchcase
@@ -44,31 +46,26 @@ from glob import glob
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
-    Dict,
     Iterable,
     Iterator,
-    List,
     Mapping,
-    Optional,
-    Tuple,
-    Union,
 )
 
 import _distutils_hack.override  # noqa: F401
 
+from ._path import StrPath
 from distutils import log
 from distutils.util import convert_path
 
-_Path = Union[str, os.PathLike]
 StrIter = Iterator[str]
 
 chain_iter = itertools.chain.from_iterable
 
 if TYPE_CHECKING:
-    from setuptools import Distribution  # noqa
+    from setuptools import Distribution
 
 
-def _valid_name(path: _Path) -> bool:
+def _valid_name(path: StrPath) -> bool:
     # Ignore invalid names that cannot be imported directly
     return os.path.basename(path).isidentifier()
 
@@ -92,16 +89,16 @@ class _Filter:
 class _Finder:
     """Base class that exposes functionality for module/package finders"""
 
-    ALWAYS_EXCLUDE: Tuple[str, ...] = ()
-    DEFAULT_EXCLUDE: Tuple[str, ...] = ()
+    ALWAYS_EXCLUDE: tuple[str, ...] = ()
+    DEFAULT_EXCLUDE: tuple[str, ...] = ()
 
     @classmethod
     def find(
         cls,
-        where: _Path = '.',
+        where: StrPath = '.',
         exclude: Iterable[str] = (),
         include: Iterable[str] = ('*',),
-    ) -> List[str]:
+    ) -> list[str]:
         """Return a list of all Python items (packages or modules, depending on
         the finder implementation) found within directory 'where'.
 
@@ -131,7 +128,7 @@ class _Finder:
         )
 
     @classmethod
-    def _find_iter(cls, where: _Path, exclude: _Filter, include: _Filter) -> StrIter:
+    def _find_iter(cls, where: StrPath, exclude: _Filter, include: _Filter) -> StrIter:
         raise NotImplementedError
 
 
@@ -143,7 +140,7 @@ class PackageFinder(_Finder):
     ALWAYS_EXCLUDE = ("ez_setup", "*__pycache__")
 
     @classmethod
-    def _find_iter(cls, where: _Path, exclude: _Filter, include: _Filter) -> StrIter:
+    def _find_iter(cls, where: StrPath, exclude: _Filter, include: _Filter) -> StrIter:
         """
         All the packages found in 'where' that pass the 'include' filter, but
         not the 'exclude' filter.
@@ -175,14 +172,14 @@ class PackageFinder(_Finder):
                 dirs.append(dir)
 
     @staticmethod
-    def _looks_like_package(path: _Path, _package_name: str) -> bool:
+    def _looks_like_package(path: StrPath, _package_name: str) -> bool:
         """Does a directory look like a package?"""
         return os.path.isfile(os.path.join(path, '__init__.py'))
 
 
 class PEP420PackageFinder(PackageFinder):
     @staticmethod
-    def _looks_like_package(_path: _Path, _package_name: str) -> bool:
+    def _looks_like_package(_path: StrPath, _package_name: str) -> bool:
         return True
 
 
@@ -192,7 +189,7 @@ class ModuleFinder(_Finder):
     """
 
     @classmethod
-    def _find_iter(cls, where: _Path, exclude: _Filter, include: _Filter) -> StrIter:
+    def _find_iter(cls, where: StrPath, exclude: _Filter, include: _Filter) -> StrIter:
         for file in glob(os.path.join(where, "*.py")):
             module, _ext = os.path.splitext(os.path.basename(file))
 
@@ -255,7 +252,7 @@ class FlatLayoutPackageFinder(PEP420PackageFinder):
     """Reserved package names"""
 
     @staticmethod
-    def _looks_like_package(_path: _Path, package_name: str) -> bool:
+    def _looks_like_package(_path: StrPath, package_name: str) -> bool:
         names = package_name.split('.')
         # Consider PEP 561
         root_pkg_is_valid = names[0].isidentifier() or names[0].endswith("-stubs")
@@ -292,7 +289,7 @@ class FlatLayoutModuleFinder(ModuleFinder):
     """Reserved top-level module names"""
 
 
-def _find_packages_within(root_pkg: str, pkg_dir: _Path) -> List[str]:
+def _find_packages_within(root_pkg: str, pkg_dir: StrPath) -> list[str]:
     nested = PEP420PackageFinder.find(pkg_dir)
     return [root_pkg] + [".".join((root_pkg, n)) for n in nested]
 
@@ -302,7 +299,7 @@ class ConfigDiscovery:
     (from other metadata/options, the file system or conventions)
     """
 
-    def __init__(self, distribution: "Distribution"):
+    def __init__(self, distribution: Distribution):
         self.dist = distribution
         self._called = False
         self._disabled = False
@@ -325,12 +322,12 @@ class ConfigDiscovery:
         self._skip_ext_modules = True
 
     @property
-    def _root_dir(self) -> _Path:
+    def _root_dir(self) -> StrPath:
         # The best is to wait until `src_root` is set in dist, before using _root_dir.
         return self.dist.src_root or os.curdir
 
     @property
-    def _package_dir(self) -> Dict[str, str]:
+    def _package_dir(self) -> dict[str, str]:
         if self.dist.package_dir is None:
             return {}
         return self.dist.package_dir
@@ -456,7 +453,7 @@ class ConfigDiscovery:
         self._ensure_no_accidental_inclusion(self.dist.py_modules, "modules")
         return bool(self.dist.py_modules)
 
-    def _ensure_no_accidental_inclusion(self, detected: List[str], kind: str):
+    def _ensure_no_accidental_inclusion(self, detected: list[str], kind: str):
         if len(detected) > 1:
             from inspect import cleandoc
 
@@ -496,7 +493,7 @@ class ConfigDiscovery:
         if name:
             self.dist.metadata.name = name
 
-    def _find_name_single_package_or_module(self) -> Optional[str]:
+    def _find_name_single_package_or_module(self) -> str | None:
         """Exactly one module or package"""
         for field in ('packages', 'py_modules'):
             items = getattr(self.dist, field, None) or []
@@ -506,7 +503,7 @@ class ConfigDiscovery:
 
         return None
 
-    def _find_name_from_packages(self) -> Optional[str]:
+    def _find_name_from_packages(self) -> str | None:
         """Try to find the root package that is not a PEP 420 namespace"""
         if not self.dist.packages:
             return None
@@ -523,7 +520,7 @@ class ConfigDiscovery:
         return None
 
 
-def remove_nested_packages(packages: List[str]) -> List[str]:
+def remove_nested_packages(packages: list[str]) -> list[str]:
     """Remove nested packages from a list of packages.
 
     >>> remove_nested_packages(["a", "a.b1", "a.b2", "a.b1.c1"])
@@ -541,7 +538,7 @@ def remove_nested_packages(packages: List[str]) -> List[str]:
     return top_level
 
 
-def remove_stubs(packages: List[str]) -> List[str]:
+def remove_stubs(packages: list[str]) -> list[str]:
     """Remove type stubs (:pep:`561`) from a list of packages.
 
     >>> remove_stubs(["a", "a.b", "a-stubs", "a-stubs.b.c", "b", "c-stubs"])
@@ -551,8 +548,8 @@ def remove_stubs(packages: List[str]) -> List[str]:
 
 
 def find_parent_package(
-    packages: List[str], package_dir: Mapping[str, str], root_dir: _Path
-) -> Optional[str]:
+    packages: list[str], package_dir: Mapping[str, str], root_dir: StrPath
+) -> str | None:
     """Find the parent package that is not a namespace."""
     packages = sorted(packages, key=len)
     common_ancestors = []
@@ -575,7 +572,7 @@ def find_parent_package(
 
 
 def find_package_path(
-    name: str, package_dir: Mapping[str, str], root_dir: _Path
+    name: str, package_dir: Mapping[str, str], root_dir: StrPath
 ) -> str:
     """Given a package name, return the path where it should be found on
     disk, considering the ``package_dir`` option.
@@ -608,7 +605,7 @@ def find_package_path(
     return os.path.join(root_dir, *parent.split("/"), *parts)
 
 
-def construct_package_dir(packages: List[str], package_path: _Path) -> Dict[str, str]:
+def construct_package_dir(packages: list[str], package_path: StrPath) -> dict[str, str]:
     parent_pkgs = remove_nested_packages(packages)
     prefix = Path(package_path).parts
     return {pkg: "/".join([*prefix, *pkg.split(".")]) for pkg in parent_pkgs}

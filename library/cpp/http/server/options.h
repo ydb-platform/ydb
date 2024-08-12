@@ -8,6 +8,8 @@
 #include <util/generic/vector.h>
 #include <util/datetime/base.h>
 
+class IOutputStream;
+
 class THttpServerOptions {
 public:
     inline THttpServerOptions(ui16 port = 17000) noexcept
@@ -151,6 +153,8 @@ public:
         return *this;
     }
 
+    void DebugPrint(IOutputStream& stream) const noexcept;
+
     struct TAddr {
         TString Addr;
         ui16 Port;
@@ -174,7 +178,7 @@ public:
     ui32 MaxConnections = 100;
     int ListenBacklog = SOMAXCONN;
     ui32 EpollMaxEvents = 1;
-    TDuration ClientTimeout;
+    TDuration ClientTimeout = TDuration::Minutes(1);
     size_t OutputBufferSize = 0;
     ui64 MaxInputContentLength = sizeof(size_t) <= 4 ? 2_GB : 64_GB;
     size_t MaxRequestsPerConnection = 0;  // If keep-alive is enabled, request limit before connection is closed

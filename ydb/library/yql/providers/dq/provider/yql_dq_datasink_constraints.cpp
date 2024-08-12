@@ -39,6 +39,7 @@ public:
             TDqCnUnionAll::CallableName(),
             TDqCnBroadcast::CallableName(),
             TDqCnMap::CallableName(),
+            TDqCnStreamLookup::CallableName(),
             TDqCnHashShuffle::CallableName(),
             TDqCnResult::CallableName(),
             TDqCnValue::CallableName()
@@ -47,6 +48,7 @@ public:
         AddHandler({TDqReplicate::CallableName()}, Hndl(&TDqDataSinkConstraintTransformer::HandleReplicate));
         AddHandler({
             TDqJoin::CallableName(),
+            TDqPhyGraceJoin::CallableName(),
             TDqPhyMapJoin::CallableName(),
             TDqPhyCrossJoin::CallableName(),
             TDqPhyJoinDict::CallableName(),

@@ -12,6 +12,8 @@ SRCS(
     folder.proto
     transitional/folder_service.proto
     folder_service.proto
+    cloud_service.proto
+    cloud.proto
 )
 
 USE_COMMON_GOOGLE_APIS(

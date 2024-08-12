@@ -15,7 +15,7 @@ using namespace NLogging;
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Used only for YT_LOG_FATAL below.
-static const TLogger Logger("TableClientKey");
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "TableClientKey");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -251,14 +251,9 @@ TOwningKeyBound::operator TKeyBound() const
     return result;
 }
 
-void FormatValue(TStringBuilderBase* builder, const TOwningKeyBound& keyBound, TStringBuf /*format*/)
+void FormatValue(TStringBuilderBase* builder, const TOwningKeyBound& keyBound, TStringBuf /*spec*/)
 {
     return keyBound.FormatValue(builder);
-}
-
-TString ToString(const TOwningKeyBound& keyBound)
-{
-    return ToStringViaBuilder(keyBound);
 }
 
 void PrintTo(const TOwningKeyBound& keyBound, ::std::ostream* os)
@@ -282,14 +277,9 @@ TOwningKeyBound TKeyBound::ToOwning() const
     return result;
 }
 
-void FormatValue(TStringBuilderBase* builder, const TKeyBound& keyBound, TStringBuf /*format*/)
+void FormatValue(TStringBuilderBase* builder, const TKeyBound& keyBound, TStringBuf /*spec*/)
 {
     return keyBound.FormatValue(builder);
-}
-
-TString ToString(const TKeyBound& keyBound)
-{
-    return ToStringViaBuilder(keyBound);
 }
 
 void PrintTo(const TKeyBound& keyBound, ::std::ostream* os)

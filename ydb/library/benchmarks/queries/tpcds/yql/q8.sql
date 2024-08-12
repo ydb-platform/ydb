@@ -1,9 +1,9 @@
 {% include 'header.sql.jinja' %}
 
 -- NB: Subquerys
-$bla1 = (      SELECT substring(cast(ca_zip as string),1,5) AS ca_zip
+$bla1 = (      SELECT substring(cast(ca_zip as string),0,5) AS ca_zip
       FROM {{customer_address}}
-      WHERE substring(cast(ca_zip as string),1,5) IN (
+      WHERE substring(cast(ca_zip as string),0,5) IN (
                           '47602','16704','35863','28577','83910','36201',
                           '58412','48162','28055','41419','80332',
                           '38607','77817','24891','16226','18410',
@@ -85,7 +85,7 @@ $bla1 = (      SELECT substring(cast(ca_zip as string),1,5) AS ca_zip
                           '28239','58032','18884','16791','21343',
                           '97462','18569','75660','15475'));
 $bla2 = (select A1.ca_zip as ca_zip
-      from (SELECT substring(cast(customer_address.ca_zip as string),1,5) ca_zip,count(*) cnt
+      from (SELECT substring(cast(customer_address.ca_zip as string),0,5) ca_zip,count(*) cnt
             FROM {{customer_address}} as customer_address
             cross join {{customer}} as customer
             WHERE ca_address_sk = c_current_addr_sk and
@@ -102,12 +102,12 @@ select  store.s_store_name
      cross join
      (select A2.ca_zip as ca_zip
      from (
-     select ca_zip from $bla1 bla1 left semi join $bla2 bla2 using (ca_zip)
+     select ca_zip from $bla1 bla1 right semi join $bla2 bla2 using (ca_zip)
       )A2) V1
  where ss_store_sk = s_store_sk
   and ss_sold_date_sk = d_date_sk
   and d_qoy = 2 and d_year = 1998
-  and (substring(cast(s_zip as string),1,2) = substring(V1.ca_zip,1,2))
+  and (substring(cast(s_zip as string),0,2) = substring(V1.ca_zip,0,2))
  group by store.s_store_name
  order by store.s_store_name
  limit 100;

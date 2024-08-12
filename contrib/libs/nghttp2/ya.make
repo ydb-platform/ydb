@@ -9,9 +9,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.60.0)
+VERSION(1.62.1)
 
-ORIGINAL_SOURCE(https://github.com/nghttp2/nghttp2/archive/v1.60.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/nghttp2/nghttp2/archive/v1.62.1.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/nghttp2/lib/includes

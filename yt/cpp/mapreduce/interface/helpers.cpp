@@ -1,0 +1,18 @@
+#include "helpers.h"
+
+#include <util/string/cast.h>
+
+#include <util/system/env.h>
+
+namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
+int GetJobFirstOutputTableFD()
+{
+    return FromString<int>(GetEnv("YT_FIRST_OUTPUT_TABLE_FD", "1"));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT

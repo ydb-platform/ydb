@@ -6,25 +6,36 @@
 
 $border = Date("1994-03-01");
 
-$join = (select
-        o.o_orderpriority as o_orderpriority,
-        o.o_orderdate as o_orderdate,
-        l.l_commitdate as l_commitdate,
-        l.l_receiptdate as l_receiptdate
-    from
-        {{orders}} as o
-        join any {{lineitem}} as l
-        on o.o_orderkey = l.l_orderkey);
-
+$o = (
 select
     o_orderpriority,
-    count(*) as order_count
-from $join
+    o_orderkey
+from
+    {{orders}}
 where
-    CAST(o_orderdate AS Timestamp) >= $border
-    and CAST(o_orderdate AS Timestamp) < DateTime::MakeDate(DateTime::ShiftMonths($border, 3))
-    and l_commitdate < l_receiptdate
+    o_orderdate >= $border
+    and o_orderdate < DateTime::MakeDate(DateTime::ShiftMonths($border, 3))
+);
+
+$l = (
+select
+    distinct l_orderkey
+from
+    {{lineitem}}
+where
+    l_commitdate < l_receiptdate
+);
+
+select
+    o.o_orderpriority as o_orderpriority,
+    count(*) as order_count
+from
+    $o as o
+join
+    $l as l
+on
+    o.o_orderkey = l.l_orderkey
 group by
-    o_orderpriority
+    o.o_orderpriority
 order by
     o_orderpriority;

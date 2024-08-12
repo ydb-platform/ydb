@@ -22,8 +22,8 @@ join
 on
     c.c_custkey = o.o_custkey
 where
-    cast(o.o_orderdate as timestamp) >= $border and
-    cast(o.o_orderdate as timestamp) < ($border + Interval("P90D"))
+    o.o_orderdate >= $border
+    and o.o_orderdate < ($border + Interval("P90D"))
 );
 $join2 = (
 select
@@ -67,7 +67,7 @@ on
 select
     c_custkey,
     c_name,
-    sum(l_extendedprice * (1 - l_discount)) as revenue,
+    sum(l_extendedprice * ($z1_12 - l_discount)) as revenue,
     c_acctbal,
     n_name,
     c_address,

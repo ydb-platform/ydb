@@ -7,7 +7,6 @@ import base64
 import itertools
 import json
 import logging
-import ntpath
 import optparse
 import os
 import posixpath
@@ -17,6 +16,8 @@ import sys
 import tempfile
 
 import six
+
+from functools import total_ordering
 
 logger = logging.getLogger(__name__ if __name__ != '__main__' else 'ymake_conf.py')
 
@@ -40,9 +41,10 @@ class WindowsVersion(object):
 ANDROID_API_DEFAULT = 21
 
 # This is default Linux SDK unless `-DOS_SDK` is specified in cmdline
-LINUX_SDK_DEFAULT = "ubuntu-14"
+LINUX_SDK_DEFAULT = "ubuntu-16"
 
 MACOS_VERSION_MIN = "11.0"
+MACOS_VERSION_MIN_AS_INT = "110000"
 IOS_VERSION_MIN = "13.0"
 WINDOWS_VERSION_MIN = WindowsVersion.Windows07
 
@@ -82,6 +84,7 @@ class ConfigureError(Exception):
     pass
 
 
+@total_ordering
 class Platform(object):
     def __init__(self, name, os, arch):
         """
@@ -115,7 +118,9 @@ class Platform(object):
         self.is_nds32 = self.arch in ('nds32le_elf_mculib_v5f',)
         self.is_tc32 = self.arch in ('tc32_elf',)
 
-        self.is_xtensa = self.arch in ('xtensa_hifi5',)
+        self.is_xtensa_hifi4 = self.arch == 'xtensa_hifi4'
+        self.is_xtensa_hifi5 = self.arch == 'xtensa_hifi5'
+        self.is_xtensa = self.is_xtensa_hifi4 or self.is_xtensa_hifi5
 
         self.armv7_float_abi = None
         if self.is_armv7:
@@ -220,6 +225,8 @@ class Platform(object):
             (self.is_power8le, 'ARCH_POWER8LE'),
             (self.is_power9le, 'ARCH_POWER9LE'),
             (self.is_riscv32, 'ARCH_RISCV32'),
+            (self.is_xtensa_hifi4, 'ARCH_XTENSA_HIFI4'),
+            (self.is_xtensa_hifi5, 'ARCH_XTENSA_HIFI5'),
             (self.is_xtensa, 'ARCH_XTENSA'),
             (self.is_nds32, 'ARCH_NDS32'),
             (self.is_tc32, 'ARCH_TC32'),
@@ -262,10 +269,7 @@ class Platform(object):
             return os
 
     def exe(self, *paths):
-        if self.is_windows:
-            return ntpath.join(*itertools.chain(paths[:-1], (paths[-1] + '.exe',)))
-        else:
-            return posixpath.join(*paths)
+        return posixpath.join(*paths)
 
     def __str__(self):
         return '{name}-{os}-{arch}'.format(name=self.name, os=self.os, arch=self.arch)
@@ -273,8 +277,8 @@ class Platform(object):
     def __eq__(self, other):
         return (self.name, self.os, self.arch) == (other.name, other.os, other.arch)
 
-    def __cmp__(self, other):
-        return cmp((self.name, self.os, self.arch), (other.name, other.os, other.arch))
+    def __lt__(self, other):
+        return (self.name, self.os, self.arch) < (other.name, other.os, other.arch)
 
     def __hash__(self):
         return hash((self.name, self.os, self.arch))
@@ -1028,6 +1032,9 @@ class ToolchainOptions(object):
     def version_at_least(self, *args):
         return args <= tuple(self.compiler_version_list)
 
+    def version_below(self, *args):
+        return args > tuple(self.compiler_version_list)
+
     def version_exactly(self, *args):
         if not args or len(args) > len(self.compiler_version_list):
             return False
@@ -1345,12 +1352,11 @@ class GnuToolchain(Toolchain):
             self.setup_apple_local_sdk(target)
 
     def setup_apple_arcadia_sdk(self, target):
-        if target.is_ios:
-            self.setup_xcode_sdk(project='build/platform/ios_sdk', var='${IOS_SDK_ROOT_RESOURCE_GLOBAL}')
+        if target.is_ios and not is_positive('DISABLE_YMAKE_CONF_CUSTOMIZATION'):
+            self.setup_xcode_sdk(project='build/internal/platform/ios_sdk', var='${IOS_SDK_ROOT_RESOURCE_GLOBAL}')
             self.platform_projects.append('build/internal/platform/macos_system_stl')
-        if target.is_macos:
+        if target.is_macos and not is_positive('DISABLE_YMAKE_CONF_CUSTOMIZATION'):
             self.setup_xcode_sdk(project='build/internal/platform/macos_sdk', var='${MACOS_SDK_RESOURCE_GLOBAL}')
-            self.platform_projects.append('build/internal/platform/macos_system_stl')
 
     def setup_apple_local_sdk(self, target):
         def get_output(*args):
@@ -1490,6 +1496,13 @@ class GnuCompiler(Compiler):
             '-D_LARGEFILE_SOURCE', '-D__STDC_CONSTANT_MACROS', '-D__STDC_FORMAT_MACROS',
         ])
 
+        if self.target.is_macos and self.tc.version_below(17):
+            # OS-versioning macros for Darwin-based OSes were generalized in
+            # https://github.com/llvm/llvm-project/commit/c8e2dd8c6f490b68e41fe663b44535a8a21dfeab
+            #
+            # This PR was released in llvm-17. Provide similar behaviour manually.
+            self.c_defines.append("-D__ENVIRONMENT_OS_VERSION_MIN_REQUIRED__=" + MACOS_VERSION_MIN_AS_INT)
+
         if not self.target.is_android:
             # There is no usable _FILE_OFFSET_BITS=64 support in Androids until API 21. And it's incomplete until at least API 24.
             # https://android.googlesource.com/platform/bionic/+/master/docs/32-bit-abi.md
@@ -1599,7 +1612,9 @@ class GnuCompiler(Compiler):
     def print_compiler(self):
         super(GnuCompiler, self).print_compiler()
 
-        emit('C_COMPILER_UNQUOTED', self.tc.c_compiler)
+        emit('C_COMPILER', '"{}"'.format(self.tc.c_compiler))
+        emit('C_COMPILER_OLD_UNQUOTED', self.tc.c_compiler)
+        emit('C_COMPILER_OLD', '${quo:C_COMPILER_OLD_UNQUOTED}')
         emit('OPTIMIZE', self.optimize)
         emit('WERROR_MODE', self.tc.werror_mode)
         emit('_C_FLAGS', self.c_flags)
@@ -1608,7 +1623,9 @@ class GnuCompiler(Compiler):
         append('C_DEFINES', self.c_defines)
         append('C_WARNING_OPTS', self.c_warnings)
         append('CXX_WARNING_OPTS', self.cxx_warnings)
-        emit('CXX_COMPILER_UNQUOTED', self.tc.cxx_compiler)
+        emit('CXX_COMPILER', '"{}"'.format(self.tc.cxx_compiler))
+        emit('CXX_COMPILER_OLD_UNQUOTED', format(self.tc.cxx_compiler))
+        emit('CXX_COMPILER_OLD', '${quo:CXX_COMPILER_OLD_UNQUOTED}')
         # TODO(somov): Убрать чтение настройки из os.environ
         emit('USE_ARC_PROFILE', 'yes' if preset('USE_ARC_PROFILE') or os.environ.get('USE_ARC_PROFILE') else 'no')
         emit('DEBUG_INFO_FLAGS', self.debug_info_flags)
@@ -1729,9 +1746,9 @@ class LD(Linker):
 
         self.ld_sdk = select(default=None, selectors=[
             # -platform_version <platform> <min_version> <sdk_version>
-            (target.is_macos, '-Wl,-platform_version,macos,11.0,11.0'),
-            (not target.is_iossim and target.is_ios, '-Wl,-platform_version,ios,11.0,13.1'),
-            (target.is_iossim, '-Wl,-platform_version,ios-simulator,14.0,14.5'),
+            (target.is_macos, '-Wl,-platform_version,macos,{MACOS_VERSION_MIN},11.0'.format(MACOS_VERSION_MIN=MACOS_VERSION_MIN)),
+            (not target.is_iossim and target.is_ios, '-Wl,-platform_version,ios,{IOS_VERSION_MIN},13.1'.format(IOS_VERSION_MIN=IOS_VERSION_MIN)),
+            (target.is_iossim, '-Wl,-platform_version,ios-simulator,{IOS_VERSION_MIN},14.5'.format(IOS_VERSION_MIN=IOS_VERSION_MIN)),
         ])
 
         if self.build.profiler_type == Profiler.GProf:
@@ -1793,9 +1810,12 @@ class MSVCToolchainOptions(ToolchainOptions):
 
         self.under_wine_compiler = self.params.get('wine', False)
         self.under_wine_tools = not build.host.is_windows
+        self.under_wine_link = self.under_wine_tools
+        self.under_wine_lib = self.under_wine_tools
         self.system_msvc = self.params.get('system_msvc', False)
         self.ide_msvs = self.params.get('ide_msvs', False)
         self.use_clang = self.params.get('use_clang', False)
+        self.use_msvc_linker = is_positive('USE_MSVC_LINKER')
         self.use_arcadia_toolchain = self.params.get('use_arcadia_toolchain', False)
 
         self.sdk_version = None
@@ -1864,8 +1884,22 @@ class MSVCToolchainOptions(ToolchainOptions):
             ])
 
             self.masm_compiler = win_path_fix(os.path.join(bindir, tools_name, asm_name))
-            self.link = win_path_fix(os.path.join(bindir, tools_name, 'link.exe'))
-            self.lib = win_path_fix(os.path.join(bindir, tools_name, 'lib.exe'))
+
+            if self.use_clang and not self.use_msvc_linker:
+                self.link = self.host.exe(self.name_marker, "bin", "lld-link")
+                self.under_wine_link = False
+            else:
+                self.link = win_path_fix(os.path.join(bindir, tools_name, 'link.exe'))
+                self.under_wine_link = self.under_wine_tools
+
+            if self.use_clang:
+                self.lib = self.host.exe(self.name_marker, "bin", "llvm-lib")
+                self.under_wine_lib = False
+            else:
+                self.lib = win_path_fix(os.path.join(bindir, tools_name, 'lib.exe'))
+                self.under_wine_lib = self.under_wine_tools
+
+            logger.debug("link {}; lib {}".format(self.link, self.lib))
 
 
 class MSVC(object):
@@ -1891,9 +1925,9 @@ class MSVCToolchain(MSVC, Toolchain):
         MSVC.__init__(self, tc, build)
 
         if self.tc.from_arcadia and not self.tc.ide_msvs:
-            self.platform_projects.append('build/internal/platform/msvc')
-            if tc.under_wine_compiler or tc.under_wine_tools:
-                self.platform_projects.append('build/platform/wine')
+            if not is_positive('DISABLE_YMAKE_CONF_CUSTOMIZATION'):
+                self.platform_projects.append('build/internal/platform/msvc')
+            self.platform_projects.append('build/platform/wine')
 
     def print_toolchain(self):
         super(MSVCToolchain, self).print_toolchain()
@@ -1905,6 +1939,10 @@ class MSVCToolchain(MSVC, Toolchain):
 
         if self.tc.under_wine_tools:
             emit('_UNDER_WINE_TOOLS', 'yes')
+        if self.tc.under_wine_link:
+            emit('_UNDER_WINE_LINK', 'yes')
+        if self.tc.under_wine_lib:
+            emit('_UNDER_WINE_LIB', 'yes')
         if self.tc.under_wine_compiler:
             emit('_UNDER_WINE_COMPILER', 'yes')
         if self.tc.use_clang:
@@ -2099,9 +2137,12 @@ class MSVCCompiler(MSVC, Compiler):
         if self.tc.use_arcadia_toolchain:
             emit('USE_ARCADIA_TOOLCHAIN', 'yes')
 
-        emit('CXX_COMPILER_UNQUOTED', self.tc.cxx_compiler)
-        emit('C_COMPILER_UNQUOTED', self.tc.c_compiler)
-        emit('MASM_COMPILER_UNQUOTED', self.tc.masm_compiler)
+        emit('CXX_COMPILER_UNQUOTED', '"{}"'.format(self.tc.cxx_compiler))
+        emit('CXX_COMPILER_OLD_UNQUOTED', self.tc.cxx_compiler)
+        emit('C_COMPILER_UNQUOTED', '"{}"'.format(self.tc.c_compiler))
+        emit('C_COMPILER_OLD_UNQUOTED', self.tc.c_compiler)
+        emit('MASM_COMPILER_UNQUOTED', '"{}"'.format(self.tc.masm_compiler))
+        emit('MASM_COMPILER_OLD_UNQUOTED', self.tc.masm_compiler)
         append('C_DEFINES', defines)
         append('C_WARNING_OPTS', c_warnings)
         emit('_CXX_DEFINES', cxx_defines)
@@ -2142,8 +2183,12 @@ class MSVCLinker(MSVC, Linker):
         linker = self.tc.link
         linker_lib = self.tc.lib
 
-        emit('_MSVC_LIB_UNQUOTED', linker_lib)
-        emit('_MSVC_LINK_UNQUOTED', linker)
+        emit('_MSVC_LIB', '"{}"'.format(linker_lib))
+        emit('_MSVC_LIB_OLD_UNQUOTED', linker_lib)
+        emit('_MSVC_LIB_OLD', '${quo:_MSVC_LIB_OLD_UNQUOTED}')
+        emit('_MSVC_LINK', '"{}"'.format(linker))
+        emit('_MSVC_LINK_OLD_UNQUOTED', linker)
+        emit('_MSVC_LINK_OLD', '${quo:_MSVC_LINK_OLD_UNQUOTED}')
 
         if self.build.is_release:
             emit('LINK_EXE_FLAGS_PER_TYPE', '$LINK_EXE_FLAGS_RELEASE')
@@ -2302,6 +2347,7 @@ class Cuda(object):
         self.have_cuda = Setting('HAVE_CUDA', auto=self.auto_have_cuda, convert=to_bool)
 
         self.cuda_root = Setting('CUDA_ROOT')
+        self.cuda_target_root = Setting('CUDA_TARGET_ROOT')
         self.cuda_version = Setting('CUDA_VERSION', auto=self.auto_cuda_version, convert=self.convert_major_version, rewrite=True)
         self.cuda_architectures = Setting('CUDA_ARCHITECTURES', auto=self.auto_cuda_architectures, rewrite=True)
         self.use_arcadia_cuda = Setting('USE_ARCADIA_CUDA', auto=self.auto_use_arcadia_cuda, convert=to_bool)
@@ -2328,6 +2374,9 @@ class Cuda(object):
             "--expt-relaxed-constexpr",
             # Allow to use newer compilers than CUDA Toolkit officially supports
             "--allow-unsupported-compiler",
+            # Set paths explicitly
+            "--dont-use-profile",
+            "--libdevice-directory=$CUDA_ROOT/nvvm/libdevice",
         ]
 
         if not self.have_cuda.value:
@@ -2338,6 +2387,13 @@ class Cuda(object):
 
         if self.use_arcadia_cuda.value:
             self.cuda_root.value = '$CUDA_RESOURCE_GLOBAL'
+
+            host, target = self.build.host_target
+
+            if host == target:
+                self.cuda_target_root.value = '$CUDA_RESOURCE_GLOBAL'
+            else:
+                self.cuda_target_root.value = '$CUDA_TARGET_RESOURCE_GLOBAL'
 
             if self.build.target.is_linux_x86_64 and self.build.tc.is_clang:
                 # TODO(somov): Эта настройка должна приезжать сюда автоматически из другого места
@@ -2359,6 +2415,7 @@ class Cuda(object):
         self.setup_vc_root()
 
         self.cuda_root.emit()
+        self.cuda_target_root.emit()
         self.cuda_version.emit()
         self.cuda_architectures.emit()
         self.use_arcadia_cuda.emit()
@@ -2369,19 +2426,21 @@ class Cuda(object):
         self.cuda_host_msvc_version.emit()
         self.cuda_nvcc_flags.emit()
 
-        emit('NVCC_UNQUOTED', self.build.host.exe('$CUDA_ROOT', 'bin', 'nvcc'))
-        emit('NVCC', '${quo:NVCC_UNQUOTED}')
+        emit('NVCC', '"{}"'.format(self.build.host.exe('$CUDA_ROOT', 'bin', 'nvcc')))
+        emit('NVCC_OLD_UNQUOTED', self.build.host.exe('$CUDA_ROOT', 'bin', 'nvcc'))
+        emit('NVCC_OLD', '${quo:NVCC_OLD_UNQUOTED}')
         emit('NVCC_FLAGS', self.nvcc_flags, '$CUDA_NVCC_FLAGS')
         emit('NVCC_OBJ_EXT', '.o' if not self.build.target.is_windows else '.obj')
+        emit('NVCC_ENV', format_env({'PATH': '$CUDA_ROOT/nvvm/bin:$CUDA_ROOT/bin'}))
 
     def print_macros(self):
         mtime = ' '
         if self.build.host_target[1].is_linux:
             mtime = ' --mtime ${tool:"tools/mtime0"} '
         if not self.cuda_use_clang.value:
-            cmd = '$YMAKE_PYTHON ${input:"build/scripts/compile_cuda.py"}' + mtime + '$NVCC $NVCC_STD $NVCC_FLAGS -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} --cflags $C_FLAGS_PLATFORM $CXXFLAGS $NVCC_STD $NVCC_CFLAGS $SRCFLAGS ${input;hide:"build/platform/cuda/cuda_runtime_include.h"} $CUDA_HOST_COMPILER_ENV ${kv;hide:"p CC"} ${kv;hide:"pc light-green"}'  # noqa E501
+            cmd = '$YMAKE_PYTHON ${input:"build/scripts/compile_cuda.py"}' + mtime + '$NVCC_OLD $NVCC_STD $NVCC_FLAGS -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} --cflags $C_FLAGS_PLATFORM $CXXFLAGS $NVCC_STD $NVCC_CFLAGS $SRCFLAGS ${input;hide:"build/platform/cuda/cuda_runtime_include.h"} $NVCC_ENV $CUDA_HOST_COMPILER_ENV ${kv;hide:"p CC"} ${kv;hide:"pc light-green"}'  # noqa E501
         else:
-            cmd = '$CXX_COMPILER --cuda-path=$CUDA_ROOT $C_FLAGS_PLATFORM -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} $CXXFLAGS $SRCFLAGS $TOOLCHAIN_ENV ${kv;hide:"p CU"} ${kv;hide:"pc green"}'  # noqa E501
+            cmd = '$CXX_COMPILER_OLD --cuda-path=$CUDA_ROOT $C_FLAGS_PLATFORM -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} $CXXFLAGS $SRCFLAGS $TOOLCHAIN_ENV ${kv;hide:"p CU"} ${kv;hide:"pc green"}'  # noqa E501
 
         emit('_SRC_CU_CMD', cmd)
         emit('_SRC_CU_PEERDIR', ' '.join(sorted(self.peerdirs)))
@@ -2395,12 +2454,14 @@ class Cuda(object):
             return False
 
         if host != target:
-            if not(host.is_linux_x86_64 and target.is_linux_armv8):
+            if not (host.is_linux_x86_64 and target.is_linux_armv8):
                 return False
             if not self.cuda_version.from_user:
                 return False
 
         if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2'):
+            return True
+        elif self.cuda_version.value in ('10.2',) and target.is_linux_armv8:
             return True
         else:
             raise ConfigureError('CUDA version {} is not supported in Arcadia'.format(self.cuda_version.value))
@@ -2492,7 +2553,7 @@ class Cuda(object):
             'Y_SDK_Root': '$WINDOWS_KITS_RESOURCE_GLOBAL',
         }
 
-        if not self.build.tc.ide_msvs:
+        if not self.build.tc.ide_msvs and not is_positive('DISABLE_YMAKE_CONF_CUSTOMIZATION'):
             self.peerdirs.append('build/internal/platform/msvc')
         self.cuda_host_compiler_env.value = format_env(env)
         self.cuda_host_msvc_version.value = vc_version

@@ -40,7 +40,7 @@ select item.i_brand_id brand_id, item.i_brand brand,time_dim.t_hour,time_dim.t_m
    and time_sk = time_dim.t_time_sk
    and (t_meal_time = 'breakfast' or t_meal_time = 'dinner')
  group by item.i_brand, item.i_brand_id,time_dim.t_hour,time_dim.t_minute
- order by ext_price desc, brand_id
+ order by ext_price desc, brand_id, time_dim.t_hour,time_dim.t_minute
  ;
 
 -- end query 1 in stream 0 using template query71.tpl

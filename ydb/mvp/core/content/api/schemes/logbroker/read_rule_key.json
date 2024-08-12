@@ -1,0 +1,25 @@
+{
+    "properties": {
+        "topic": {
+            "$ref": "#/definitions/Path"
+        },
+        "consumer": {
+            "$ref": "#/definitions/Path"
+        },
+        "modeType": {
+            "type": "string",
+            "enum": ["allOriginal", "mirrorToCluster"]
+        },
+        "allOriginal": {
+            "type": "object",
+            "description": "Set to empty object '{}' if allOriginal mode is required"
+        },
+        "mirrorToCluster": {
+            "$ref": "#/definitions/ClusterKey",
+            "description": "Set to cluster name to create mirror topic instance in, in lowercase, for example 'man'"
+        }
+    },
+    "title": "ReadRuleKey",
+    "type": "object",
+    "required": ["topic", "consumer", "modeType"]
+}

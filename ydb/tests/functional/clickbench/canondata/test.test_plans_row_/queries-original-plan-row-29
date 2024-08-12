@@ -16,12 +16,21 @@
                         "Plans": [
                             {
                                 "CTE Name": "precompute_0_0",
-                                "Node Type": "ConstantExpr",
+                                "Node Type": "ConstantExpr-ConstantExpr",
                                 "Operators": [
                                     {
-                                        "Inputs": [],
+                                        "Inputs": [
+                                            {
+                                                "InternalOperatorId": 1
+                                            }
+                                        ],
                                         "Iterator": "precompute_0_0",
                                         "Name": "Iterator"
+                                    },
+                                    {
+                                        "Inputs": [],
+                                        "Member": "precompute_0_0",
+                                        "Name": "Member"
                                     }
                                 ],
                                 "PlanNodeId": 6
@@ -80,12 +89,13 @@
                                                             "ResolutionWidth"
                                                         ],
                                                         "ReadRanges": [
-                                                            "EventTime (-\u221e, +\u221e)",
                                                             "CounterID (-\u221e, +\u221e)",
                                                             "EventDate (-\u221e, +\u221e)",
                                                             "UserID (-\u221e, +\u221e)",
+                                                            "EventTime (-\u221e, +\u221e)",
                                                             "WatchID (-\u221e, +\u221e)"
                                                         ],
+                                                        "Scan": "Parallel",
                                                         "Table": "clickbench/plans/row/hits"
                                                     }
                                                 ],
@@ -112,10 +122,10 @@
                                 "ResolutionWidth"
                             ],
                             "scan_by": [
-                                "EventTime (-\u221e, +\u221e)",
                                 "CounterID (-\u221e, +\u221e)",
                                 "EventDate (-\u221e, +\u221e)",
                                 "UserID (-\u221e, +\u221e)",
+                                "EventTime (-\u221e, +\u221e)",
                                 "WatchID (-\u221e, +\u221e)"
                             ],
                             "type": "FullScan"

@@ -44,7 +44,8 @@ namespace NSQLTranslation {
 
     using TIncrementMonCounterFunction = std::function<void(const TString&, const TString&)>;
 
-    enum class EV0Behavior {
+    // persisted
+    enum class EV0Behavior : ui32 {
         Silent = 0,
         Report,
         Disable
@@ -60,6 +61,8 @@ namespace NSQLTranslation {
         static TPtr MakeAlwaysDisallow();
 
         static TPtr MakeAlwaysAllow();
+
+        static TPtr Make(bool allow);
     };
 
     struct TTableBindingSettings {

@@ -4,7 +4,6 @@
 
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
-#include <ydb/core/grpc_services/rpc_long_tx.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/converter.h>
 #include <ydb/core/io_formats/arrow/csv_arrow.h>
@@ -41,15 +40,12 @@ class TUploadCounters: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
     NMonitoring::TDynamicCounters::TCounterPtr RequestsCount;
-    NMonitoring::TDynamicCounters::TCounterPtr RepliesCount;
     NMonitoring::THistogramPtr ReplyDuration;
 
     NMonitoring::TDynamicCounters::TCounterPtr RowsCount;
     NMonitoring::THistogramPtr PackageSize;
 
-    NMonitoring::TDynamicCounters::TCounterPtr FailsCount;
-    NMonitoring::THistogramPtr FailDuration;
-
+    THashMap<TString, NMonitoring::TDynamicCounters::TCounterPtr> CodesCount;
 public:
     TUploadCounters();
 
@@ -59,15 +55,7 @@ public:
         PackageSize->Collect(rowsCount);
     }
 
-    void OnReply( const TDuration d) const {
-        RepliesCount->Add(1);
-        ReplyDuration->Collect(d.MilliSeconds());
-    }
-
-    void OnFail(const TDuration d) const {
-        FailsCount->Add(1);
-        FailDuration->Collect(d.MilliSeconds());
-    }
+    void OnReply(const TDuration d, const ::Ydb::StatusIds::StatusCode code) const;
 };
 
 
@@ -111,8 +99,8 @@ public:
         }
         RowCost += TUpsertCost::OneRowCost(sz);
 
-        TConstArrayRef<TCell> keyCells(&cells[0], KeySize);
-        TConstArrayRef<TCell> valueCells(&cells[KeySize], cells.size() - KeySize);
+        TConstArrayRef<TCell> keyCells = cells.first(KeySize);
+        TConstArrayRef<TCell> valueCells = cells.subspan(KeySize);
 
         TSerializedCellVec serializedKey(keyCells);
         Rows.emplace_back(std::move(serializedKey), TSerializedCellVec::Serialize(valueCells));
@@ -131,6 +119,12 @@ private:
 }
 
 namespace NTxProxy {
+
+TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo,
+    const NLongTxService::TLongTxId& longTxId, const TString& dedupId,
+    const TString& databaseName, const TString& path,
+    std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult,
+    std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NYql::TIssues> issues);
 
 template <NKikimrServices::TActivity::EType DerivedActivityType>
 class TUploadRowsBase : public TActorBootstrapped<TUploadRowsBase<DerivedActivityType>> {
@@ -219,7 +213,7 @@ public:
     explicit TUploadRowsBase(TDuration timeout = TDuration::Max(), bool diskQuotaExceeded = false, NWilson::TSpan span = {})
         : TBase()
         , SchemeCache(MakeSchemeCacheID())
-        , LeaderPipeCache(MakePipePeNodeCacheID(false))
+        , LeaderPipeCache(MakePipePerNodeCacheID(false))
         , Timeout((timeout && timeout <= DEFAULT_TIMEOUT) ? timeout : DEFAULT_TIMEOUT)
         , Status(Ydb::StatusIds::SUCCESS)
         , DiskQuotaExceeded(diskQuotaExceeded)
@@ -265,8 +259,9 @@ protected:
     {
         NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, NotNullColumns);
         batchBuilder.Reserve(rows.size()); // TODO: ReserveData()
-        if (!batchBuilder.Start(YdbSchema)) {
-            errorMessage = "Cannot make Arrow batch from rows";
+        const auto startStatus = batchBuilder.Start(YdbSchema);
+        if (!startStatus.ok()) {
+            errorMessage = "Cannot make Arrow batch from rows: " + startStatus.ToString();
             return {};
         }
 
@@ -357,7 +352,11 @@ private:
     static bool SameDstType(NScheme::TTypeInfo type1, NScheme::TTypeInfo type2, bool allowConvert) {
         bool res = (type1 == type2);
         if (!res && allowConvert) {
-            res = (NArrow::GetArrowType(type1)->id() == NArrow::GetArrowType(type2)->id());
+            auto arrowType1 = NArrow::GetArrowType(type1);
+            auto arrowType2 = NArrow::GetArrowType(type2);
+            if (arrowType1.ok() && arrowType2.ok()) {
+                res = (arrowType1.ValueUnsafe()->id() == arrowType2.ValueUnsafe()->id());
+            }
         }
         return res;
     }
@@ -688,15 +687,19 @@ private:
                         return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << errorMessage, ctx);
                     }
                     if (!ColumnsToConvertInplace.empty()) {
-                        Batch = NArrow::InplaceConvertColumns(Batch, ColumnsToConvertInplace);
+                        auto convertResult = NArrow::InplaceConvertColumns(Batch, ColumnsToConvertInplace);
+                        if (!convertResult.ok()) {
+                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << "Cannot convert arrow batch inplace:" << convertResult.status().ToString(), ctx);
+                        }
+                        Batch = *convertResult;
                     }
                     // Explicit types conversion
                     if (!ColumnsToConvert.empty()) {
-                        Batch = NArrow::ConvertColumns(Batch, ColumnsToConvert);
-                        if (!Batch) {
-                            errorMessage = "Cannot upsert arrow batch: one of data types has no conversion";
-                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << errorMessage, ctx);
+                        auto convertResult = NArrow::ConvertColumns(Batch, ColumnsToConvert);
+                        if (!convertResult.ok()) {
+                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << "Cannot convert arrow batch:" << convertResult.status().ToString(), ctx);
                         }
+                        Batch = *convertResult;
                     }
                 } else {
                     // TUploadColumnsRPCPublic::ExtractBatch() - NOT converted JsonDocument, DynNumbers, ...
@@ -783,7 +786,7 @@ private:
                     LogPrefix() << "no data or conversion error", ctx);
             }
 
-            auto batch = NArrow::ExtractColumns(Batch, outputColumns);
+            auto batch = NArrow::TColumnOperator().NullIfAbsent().Extract(Batch, outputColumns);
             if (!batch) {
                 for (auto& columnName : outputColumns) {
                     if (Batch->schema()->GetFieldIndex(columnName) < 0) {
@@ -857,7 +860,7 @@ private:
         TBase::Become(&TThis::StateWaitWriteBatchResult);
         ui32 batchNo = 0;
         TString dedupId = ToString(batchNo);
-        NGRpcService::DoLongTxWriteSameMailbox(ctx, ctx.SelfID, LongTxId, dedupId,
+        DoLongTxWriteSameMailbox(ctx, ctx.SelfID, LongTxId, dedupId,
             GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues);
     }
 
@@ -1125,7 +1128,7 @@ private:
         TBase::Become(&TThis::StateWaitResults);
 
         // Sanity check: don't break when we don't have any shards for some reason
-        ReplyIfDone(ctx);
+        return ReplyIfDone(ctx);
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
@@ -1134,7 +1137,7 @@ private:
 
         ShardRepliesLeft.clear();
 
-        ReplyIfDone(ctx);
+        return ReplyIfDone(ctx);
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx) {
@@ -1143,7 +1146,7 @@ private:
         SetError(Ydb::StatusIds::UNAVAILABLE, Sprintf("Failed to connect to shard %" PRIu64, ev->Get()->TabletId));
         ShardRepliesLeft.erase(ev->Get()->TabletId);
 
-        ReplyIfDone(ctx);
+        return ReplyIfDone(ctx);
     }
 
     STFUNC(StateWaitResults) {
@@ -1213,7 +1216,7 @@ private:
         ShardRepliesLeft.erase(shardId);
         ShardUploadRetryStates.erase(shardId);
 
-        ReplyIfDone(ctx);
+        return ReplyIfDone(ctx);
     }
 
     void Handle(TEvDataShard::TEvOverloadReady::TPtr& ev, const TActorContext& ctx) {
@@ -1247,7 +1250,7 @@ private:
             RaiseIssue(NYql::TIssue(ErrorMessage));
         }
 
-        ReplyWithResult(Status, ctx);
+        return ReplyWithResult(Status, ctx);
     }
 
     void ReplyWithError(::Ydb::StatusIds::StatusCode status, const TString& message, const TActorContext& ctx) {
@@ -1256,11 +1259,11 @@ private:
         SetError(status, message);
 
         Y_DEBUG_ABORT_UNLESS(ShardRepliesLeft.empty());
-        ReplyIfDone(ctx);
+        return ReplyIfDone(ctx);
     }
 
     void ReplyWithResult(::Ydb::StatusIds::StatusCode status, const TActorContext& ctx) {
-        UploadCounters.OnReply(TAppData::TimeProvider->Now() - StartTime);
+        UploadCounters.OnReply(TAppData::TimeProvider->Now() - StartTime, status);
         SendResult(ctx, status);
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, LogPrefix() << "completed with status " << status);

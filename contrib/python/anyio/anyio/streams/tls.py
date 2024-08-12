@@ -3,9 +3,11 @@ from __future__ import annotations
 import logging
 import re
 import ssl
+import sys
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Callable, Mapping, Tuple, TypeVar
+from typing import Any, Tuple, TypeVar
 
 from .. import (
     BrokenResourceError,
@@ -16,7 +18,13 @@ from .. import (
 from .._core._typedattr import TypedAttributeSet, typed_attribute
 from ..abc import AnyByteStream, ByteStream, Listener, TaskGroup
 
+if sys.version_info >= (3, 11):
+    from typing import TypeVarTuple, Unpack
+else:
+    from typing_extensions import TypeVarTuple, Unpack
+
 T_Retval = TypeVar("T_Retval")
+PosArgsT = TypeVarTuple("PosArgsT")
 _PCTRTT = Tuple[Tuple[str, str], ...]
 _PCTRTTT = Tuple[_PCTRTT, ...]
 
@@ -31,8 +39,8 @@ class TLSAttribute(TypedAttributeSet):
     #: the selected cipher
     cipher: tuple[str, str, int] = typed_attribute()
     #: the peer certificate in dictionary form (see :meth:`ssl.SSLSocket.getpeercert`
-    #: for more information)
-    peer_certificate: dict[str, str | _PCTRTTT | _PCTRTT] | None = typed_attribute()
+    # for more information)
+    peer_certificate: None | (dict[str, str | _PCTRTTT | _PCTRTT]) = typed_attribute()
     #: the peer certificate in binary form
     peer_certificate_binary: bytes | None = typed_attribute()
     #: ``True`` if this is the server side of the connection
@@ -90,8 +98,9 @@ class TLSStream(ByteStream):
         :param hostname: host name of the peer (if host name checking is desired)
         :param ssl_context: the SSLContext object to use (if not provided, a secure
             default will be created)
-        :param standard_compatible: if ``False``, skip the closing handshake when closing the
-            connection, and don't raise an exception if the peer does the same
+        :param standard_compatible: if ``False``, skip the closing handshake when
+            closing the connection, and don't raise an exception if the peer does the
+            same
         :raises ~ssl.SSLError: if the TLS handshake fails
 
         """
@@ -124,7 +133,7 @@ class TLSStream(ByteStream):
         return wrapper
 
     async def _call_sslobject_method(
-        self, func: Callable[..., T_Retval], *args: object
+        self, func: Callable[[Unpack[PosArgsT]], T_Retval], *args: Unpack[PosArgsT]
     ) -> T_Retval:
         while True:
             try:
@@ -222,7 +231,9 @@ class TLSStream(ByteStream):
         return {
             **self.transport_stream.extra_attributes,
             TLSAttribute.alpn_protocol: self._ssl_object.selected_alpn_protocol,
-            TLSAttribute.channel_binding_tls_unique: self._ssl_object.get_channel_binding,
+            TLSAttribute.channel_binding_tls_unique: (
+                self._ssl_object.get_channel_binding
+            ),
             TLSAttribute.cipher: self._ssl_object.cipher,
             TLSAttribute.peer_certificate: lambda: self._ssl_object.getpeercert(False),
             TLSAttribute.peer_certificate_binary: lambda: self._ssl_object.getpeercert(
@@ -241,11 +252,12 @@ class TLSStream(ByteStream):
 @dataclass(eq=False)
 class TLSListener(Listener[TLSStream]):
     """
-    A convenience listener that wraps another listener and auto-negotiates a TLS session on every
-    accepted connection.
+    A convenience listener that wraps another listener and auto-negotiates a TLS session
+    on every accepted connection.
 
-    If the TLS handshake times out or raises an exception, :meth:`handle_handshake_error` is
-    called to do whatever post-mortem processing is deemed necessary.
+    If the TLS handshake times out or raises an exception,
+    :meth:`handle_handshake_error` is called to do whatever post-mortem processing is
+    deemed necessary.
 
     Supports only the :attr:`~TLSAttribute.standard_compatible` extra attribute.
 
@@ -281,7 +293,13 @@ class TLSListener(Listener[TLSStream]):
 
         # Log all except cancellation exceptions
         if not isinstance(exc, get_cancelled_exc_class()):
-            logging.getLogger(__name__).exception("Error during TLS handshake")
+            # CPython (as of 3.11.5) returns incorrect `sys.exc_info()` here when using
+            # any asyncio implementation, so we explicitly pass the exception to log
+            # (https://github.com/python/cpython/issues/108668). Trio does not have this
+            # issue because it works around the CPython bug.
+            logging.getLogger(__name__).exception(
+                "Error during TLS handshake", exc_info=exc
+            )
 
         # Only reraise base exceptions and cancellation exceptions
         if not isinstance(exc, Exception) or isinstance(exc, get_cancelled_exc_class()):

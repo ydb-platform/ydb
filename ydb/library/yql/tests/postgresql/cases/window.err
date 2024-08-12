@@ -1,8 +1,8 @@
 Registering pre-existing tables
-	INT4_TBL
-	tenk2
 	int4_tbl
+	INT4_TBL
 	tenk1
+	tenk2
 <sql-statement>
 --
 -- WINDOW FUNCTIONS

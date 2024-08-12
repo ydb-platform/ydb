@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet_1",
-                "PlanNodeId": 13,
+                "PlanNodeId": 15,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,22 +14,22 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 11
+                                        "ExternalPlanNodeId": 13
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 12,
+                        "PlanNodeId": 14,
                         "Plans": [
                             {
                                 "Node Type": "Merge",
-                                "PlanNodeId": 11,
+                                "PlanNodeId": 13,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-Aggregate",
+                                        "Node Type": "TopSort-CrossJoin",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -37,7 +37,49 @@
                                                         "InternalOperatorId": 1
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 9
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
                                                     },
                                                     {
                                                         "InternalOperatorId": 1
@@ -50,61 +92,20 @@
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 7
+                                                        "ExternalPlanNodeId": 11
+                                                    },
+                                                    {
+                                                        "ExternalPlanNodeId": 8
                                                     }
                                                 ],
-                                                "Name": "Aggregate"
+                                                "Name": "CrossJoin"
                                             }
                                         ],
-                                        "PlanNodeId": 10,
+                                        "PlanNodeId": 12,
                                         "Plans": [
                                             {
-                                                "Node Type": "Map",
-                                                "PlanNodeId": 9,
-                                                "PlanNodeType": "Connection",
-                                                "Plans": [
-                                                    {
-                                                        "Node Type": "Filter-TableFullScan",
-                                                        "Operators": [
-                                                            {
-                                                                "Inputs": [
-                                                                    {
-                                                                        "InternalOperatorId": 1
-                                                                    }
-                                                                ],
-                                                                "Name": "Filter",
-                                                                "Predicate": "item.e + item.d >= item.a + item.b - 10 And item.e + item.d <= item.c + 130"
-                                                            },
-                                                            {
-                                                                "Inputs": [],
-                                                                "Name": "TableFullScan",
-                                                                "ReadColumns": [
-                                                                    "a",
-                                                                    "b",
-                                                                    "c",
-                                                                    "d",
-                                                                    "e"
-                                                                ],
-                                                                "ReadRanges": [
-                                                                    "a (-\u221e, +\u221e)",
-                                                                    "b (-\u221e, +\u221e)",
-                                                                    "c (-\u221e, +\u221e)",
-                                                                    "d (-\u221e, +\u221e)",
-                                                                    "e (-\u221e, +\u221e)"
-                                                                ],
-                                                                "Table": "sqllogictest_select1-3.test_plan/t1"
-                                                            }
-                                                        ],
-                                                        "PlanNodeId": 8,
-                                                        "Tables": [
-                                                            "sqllogictest_select1-3.test_plan/t1"
-                                                        ]
-                                                    }
-                                                ]
-                                            },
-                                            {
                                                 "Node Type": "Broadcast",
-                                                "PlanNodeId": 7,
+                                                "PlanNodeId": 8,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
@@ -113,11 +114,65 @@
                                                         "Operators": [
                                                             {
                                                                 "Inputs": [],
-                                                                "Iterator": "precompute_0_0",
-                                                                "Name": "Iterator"
+                                                                "Name": "ToFlow",
+                                                                "ToFlow": "precompute_0_0"
                                                             }
                                                         ],
-                                                        "PlanNodeId": 6
+                                                        "PlanNodeId": 7
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "Node Type": "Map",
+                                                "PlanNodeId": 11,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "Filter",
+                                                        "Operators": [
+                                                            {
+                                                                "Inputs": [
+                                                                    {
+                                                                        "ExternalPlanNodeId": 9
+                                                                    }
+                                                                ],
+                                                                "Name": "Filter",
+                                                                "Predicate": "item.e + item.d >= item.a + item.b - 10 And item.e + item.d <= item.c + 130"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 10,
+                                                        "Plans": [
+                                                            {
+                                                                "Node Type": "TableFullScan",
+                                                                "Operators": [
+                                                                    {
+                                                                        "Inputs": [],
+                                                                        "Name": "TableFullScan",
+                                                                        "ReadColumns": [
+                                                                            "a",
+                                                                            "b",
+                                                                            "c",
+                                                                            "d",
+                                                                            "e"
+                                                                        ],
+                                                                        "ReadRanges": [
+                                                                            "a (-\u221e, +\u221e)",
+                                                                            "b (-\u221e, +\u221e)",
+                                                                            "c (-\u221e, +\u221e)",
+                                                                            "d (-\u221e, +\u221e)",
+                                                                            "e (-\u221e, +\u221e)"
+                                                                        ],
+                                                                        "ReadRangesPointPrefixLen": "0",
+                                                                        "Scan": "Parallel",
+                                                                        "Table": "sqllogictest_select1-3.test_plan/t1"
+                                                                    }
+                                                                ],
+                                                                "PlanNodeId": 9,
+                                                                "Tables": [
+                                                                    "sqllogictest_select1-3.test_plan/t1"
+                                                                ]
+                                                            }
+                                                        ]
                                                     }
                                                 ]
                                             }
@@ -138,7 +193,7 @@
             {
                 "Node Type": "Precompute_0",
                 "Parent Relationship": "InitPlan",
-                "PlanNodeId": 4,
+                "PlanNodeId": 5,
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
@@ -155,54 +210,64 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 2
+                                        "ExternalPlanNodeId": 3
                                     }
                                 ],
                                 "Limit": "1",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 3,
+                        "PlanNodeId": 4,
                         "Plans": [
                             {
                                 "Node Type": "UnionAll",
-                                "PlanNodeId": 2,
+                                "PlanNodeId": 3,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Aggregate-TableFullScan",
+                                        "Node Type": "Aggregate",
                                         "Operators": [
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 1
+                                                        "ExternalPlanNodeId": 1
                                                     }
                                                 ],
                                                 "Name": "Aggregate"
-                                            },
-                                            {
-                                                "Inputs": [],
-                                                "Name": "TableFullScan",
-                                                "ReadColumns": [
-                                                    "a",
-                                                    "b",
-                                                    "c",
-                                                    "d",
-                                                    "e"
-                                                ],
-                                                "ReadRanges": [
-                                                    "a (-\u221e, +\u221e)",
-                                                    "b (-\u221e, +\u221e)",
-                                                    "c (-\u221e, +\u221e)",
-                                                    "d (-\u221e, +\u221e)",
-                                                    "e (-\u221e, +\u221e)"
-                                                ],
-                                                "Table": "sqllogictest_select1-3.test_plan/t1"
                                             }
                                         ],
-                                        "PlanNodeId": 1,
-                                        "Tables": [
-                                            "sqllogictest_select1-3.test_plan/t1"
+                                        "PlanNodeId": 2,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "TableFullScan",
+                                                "Operators": [
+                                                    {
+                                                        "Inputs": [],
+                                                        "Name": "TableFullScan",
+                                                        "ReadColumns": [
+                                                            "a",
+                                                            "b",
+                                                            "c",
+                                                            "d",
+                                                            "e"
+                                                        ],
+                                                        "ReadRanges": [
+                                                            "a (-\u221e, +\u221e)",
+                                                            "b (-\u221e, +\u221e)",
+                                                            "c (-\u221e, +\u221e)",
+                                                            "d (-\u221e, +\u221e)",
+                                                            "e (-\u221e, +\u221e)"
+                                                        ],
+                                                        "ReadRangesPointPrefixLen": "0",
+                                                        "Scan": "Parallel",
+                                                        "Table": "sqllogictest_select1-3.test_plan/t1"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 1,
+                                                "Tables": [
+                                                    "sqllogictest_select1-3.test_plan/t1"
+                                                ]
+                                            }
                                         ]
                                     }
                                 ]

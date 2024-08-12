@@ -2,8 +2,8 @@ LIBRARY()
 
 SRCS(
     aliases.h
-    executor.h
-    executor.cpp
+    common.h
+    common.cpp
     persqueue_impl.h
     persqueue_impl.cpp
     persqueue.cpp

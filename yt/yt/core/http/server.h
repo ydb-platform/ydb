@@ -60,7 +60,7 @@ struct IServer
      */
     virtual void Stop() = 0;
 
-    //! Sets path matcher
+    //! Sets path matcher.
     /*!
      *  Must be called before adding callbacks.
      *  @see IRequestPathMatcher

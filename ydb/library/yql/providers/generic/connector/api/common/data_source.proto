@@ -34,6 +34,8 @@ enum EDataSourceKind {
     YDB = 4;
     MYSQL = 5;
     MS_SQL_SERVER = 6;
+    GREENPLUM = 7;
+    ORACLE = 8;
 }
 
 // EProtocol generalizes various kinds of network protocols supported by different databases.
@@ -61,6 +63,20 @@ message TS3DataSourceOptions {
     string bucket = 2;
 }
 
+// TGreenplumDataSourceOptions represents settings specific to Greenplum
+message TGreenplumDataSourceOptions {
+    // Greenplum schema
+    string schema = 1;
+}
+
+// TOracleDataSourceOptions represents settings specific to Oracle
+message TOracleDataSourceOptions {
+    // Oracle service_name - alias to SID of oracle INSTANCE, or SID, or PDB.
+    //  More about connection options in Oracle docs:
+    //  https://docs.oracle.com/en/database/other-databases/essbase/21/essoa/connection-string-formats.html
+    string service_name = 1;
+}
+
 // TDataSourceInstance helps to identify the instance of a data source to redirect request to.
 message TDataSourceInstance {
     // Data source kind
@@ -82,5 +98,7 @@ message TDataSourceInstance {
         TPostgreSQLDataSourceOptions pg_options = 7;
         TClickhouseDataSourceOptions ch_options = 8;
         TS3DataSourceOptions s3_options = 9;
+        TGreenplumDataSourceOptions gp_options = 10;
+        TOracleDataSourceOptions oracle_options = 11;
     }
 }

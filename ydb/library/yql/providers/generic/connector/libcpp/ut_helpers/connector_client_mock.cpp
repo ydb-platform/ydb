@@ -6,16 +6,28 @@ namespace NYql::NConnector::NTest {
 
     using namespace fmt::literals;
 
-#define DEFINE_SIMPLE_TYPE_SETTER(T, primitiveTypeId, value_name)         \
-    template <>                                                           \
-    void SetSimpleValue(const T& value, Ydb::TypedValue* proto) {         \
-        proto->mutable_type()->set_type_id(::Ydb::Type::primitiveTypeId); \
-        proto->mutable_value()->Y_CAT(set_, value_name)(value);           \
+    ::Ydb::Type MakeYdbType(::Ydb::Type::PrimitiveTypeId primitiveType, bool optional) {
+        ::Ydb::Type type;
+        if (optional) {
+            type.mutable_optional_type()->mutable_item()->Settype_id(primitiveType);
+        } else {
+            type.Settype_id(primitiveType);
+        }
+        return type;
+    }
+
+#define DEFINE_SIMPLE_TYPE_SETTER(T, primitiveTypeId, value_name)                     \
+    template <>                                                                       \
+    void SetSimpleValue(const T& value, Ydb::TypedValue* proto, bool optional) {      \
+        *proto->mutable_type() = MakeYdbType(::Ydb::Type::primitiveTypeId, optional); \
+        proto->mutable_value()->Y_CAT(set_, value_name)(value);                       \
     }
 
     DEFINE_SIMPLE_TYPE_SETTER(bool, BOOL, bool_value);
     DEFINE_SIMPLE_TYPE_SETTER(i32, INT32, int32_value);
     DEFINE_SIMPLE_TYPE_SETTER(ui32, UINT32, uint32_value);
+    DEFINE_SIMPLE_TYPE_SETTER(i64, INT64, int64_value);
+    DEFINE_SIMPLE_TYPE_SETTER(ui64, UINT64, uint64_value);
 
     void CreatePostgreSQLExternalDataSource(
         const std::shared_ptr<NKikimr::NKqp::TKikimrRunner>& kikimr,

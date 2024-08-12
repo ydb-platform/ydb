@@ -10,7 +10,18 @@ namespace NKikimr::NStorage {
             const bool noStaticGroup = !bsConfig.HasServiceSet() || !bsConfig.GetServiceSet().GroupsSize();
             if (noStaticGroup && bsConfig.HasAutoconfigSettings() && bsConfig.GetAutoconfigSettings().HasErasureSpecies()) {
                 try {
-                    AllocateStaticGroup(config);
+                    const auto& settings = bsConfig.GetAutoconfigSettings();
+
+                    const auto species = TBlobStorageGroupType::ErasureSpeciesByName(settings.GetErasureSpecies());
+                    if (species == TBlobStorageGroupType::ErasureSpeciesCount) {
+                        throw TExConfigError() << "invalid erasure specified for static group"
+                            << " Erasure# " << settings.GetErasureSpecies();
+                    }
+
+                    AllocateStaticGroup(config, 0 /*groupId*/, 1 /*groupGeneration*/, TBlobStorageGroupType(species),
+                        settings.GetGeometry(), settings.GetPDiskFilter(),
+                        settings.HasPDiskType() ? std::make_optional(settings.GetPDiskType()) : std::nullopt, {}, {}, 0,
+                        nullptr, false, true, false);
                     changes = true;
                     STLOG(PRI_DEBUG, BS_NODE, NWDC33, "Allocated static group", (Group, bsConfig.GetServiceSet().GetGroups(0)));
                 } catch (const TExConfigError& ex) {
@@ -39,9 +50,17 @@ namespace NKikimr::NStorage {
         return changes;
     }
 
-    void TDistributedConfigKeeper::AllocateStaticGroup(NKikimrBlobStorage::TStorageConfig *config) {
+    void TDistributedConfigKeeper::AllocateStaticGroup(NKikimrBlobStorage::TStorageConfig *config, ui32 groupId,
+            ui32 groupGeneration, TBlobStorageGroupType gtype, const NKikimrBlobStorage::TGroupGeometry& geometry,
+            const NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TPDiskFilter>& pdiskFilters,
+            std::optional<NKikimrBlobStorage::EPDiskType> pdiskType,
+            THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks,
+            const NBsController::TGroupMapper::TForbiddenPDisks& forbid, i64 requiredSpace,
+            NKikimrBlobStorage::TBaseConfig *baseConfig, bool convertToDonor, bool ignoreVSlotQuotaCheck,
+            bool isSelfHealReasonDecommit) {
+        using TPDiskId = NBsController::TPDiskId;
+
         NKikimrConfig::TBlobStorageConfig *bsConfig = config->MutableBlobStorageConfig();
-        const auto& settings = bsConfig->GetAutoconfigSettings();
 
         // build node location map
         THashMap<ui32, TNodeLocation> nodeLocations;
@@ -49,161 +68,414 @@ namespace NKikimr::NStorage {
             nodeLocations.try_emplace(node.GetNodeId(), node.GetLocation());
         }
 
-        // group mapper
-        const auto species = TBlobStorageGroupType::ErasureSpeciesByName(settings.GetErasureSpecies());
-        if (species == TBlobStorageGroupType::ErasureSpeciesCount) {
-            throw TExConfigError() << "invalid erasure specified for static group"
-                << " Erasure# " << settings.GetErasureSpecies();
-        }
-        NBsController::TGroupGeometryInfo geom(species, settings.GetGeometry());
-        NBsController::TGroupMapper mapper(geom);
+        struct TPDiskInfo {
+            NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk Record;
+            ui32 UsedSlots = 0;
+            bool Usable = true;
+            TString WhyUnusable;
+            i64 SpaceAvailable = 0;
+            bool AdjustSpaceAvailable = false;
+        };
 
-        // build host config map
-        THashMap<ui64, const NKikimrBlobStorage::TDefineHostConfig*> hostConfigs;
-        for (const auto& hc : settings.GetDefineHostConfig()) {
-            const bool inserted = hostConfigs.try_emplace(hc.GetHostConfigId(), &hc).second;
-            Y_ABORT_UNLESS(inserted);
-        }
+        THashMap<TPDiskId, TPDiskInfo> pdisks;
 
-        // find all drives
-        THashMap<NBsController::TPDiskId, NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk> pdiskMap;
-        const auto& defineBox = settings.GetDefineBox();
-        for (const auto& host : defineBox.GetHost()) {
-            const ui32 nodeId = host.GetEnforcedNodeId();
-            if (!nodeId) {
-                throw TExConfigError() << "EnforcedNodeId is not specified in DefineBox";
+        auto checkMatch = [&](NKikimrBlobStorage::EPDiskType type, bool sharedWithOs, bool readCentric, ui64 kind) {
+            if (type == pdiskType) {
+                return true;
             }
-
-            const auto it = hostConfigs.find(host.GetHostConfigId());
-            if (it == hostConfigs.end()) {
-                throw TExConfigError() << "no matching DefineHostConfig"
-                    << " HostConfigId# " << host.GetHostConfigId();
-            }
-            const auto& defineHostConfig = *it->second;
-
-            ui32 pdiskId = 1;
-            for (const auto& drive : defineHostConfig.GetDrive()) {
-                bool matching = false;
-                for (const auto& pdiskFilter : settings.GetPDiskFilter()) {
-                    bool m = true;
-                    for (const auto& p : pdiskFilter.GetProperty()) {
-                        bool pMatch = false;
-                        switch (p.GetPropertyCase()) {
-                            case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kType:
-                                pMatch = p.GetType() == drive.GetType();
-                                break;
-                            case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kSharedWithOs:
-                                pMatch = p.GetSharedWithOs() == drive.GetSharedWithOs();
-                                break;
-                            case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kReadCentric:
-                                pMatch = p.GetReadCentric() == drive.GetReadCentric();
-                                break;
-                            case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kKind:
-                                pMatch = p.GetKind() == drive.GetKind();
-                                break;
-                            case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::PROPERTY_NOT_SET:
-                                throw TExConfigError() << "invalid TPDiskFilter record";
-                        }
-                        if (!pMatch) {
-                            m = false;
+            for (const auto& pdiskFilter : pdiskFilters) {
+                bool m = true;
+                for (const auto& p : pdiskFilter.GetProperty()) {
+                    bool pMatch = false;
+                    switch (p.GetPropertyCase()) {
+                        case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kType:
+                            pMatch = p.GetType() == type;
                             break;
-                        }
+                        case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kSharedWithOs:
+                            pMatch = p.GetSharedWithOs() == sharedWithOs;
+                            break;
+                        case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kReadCentric:
+                            pMatch = p.GetReadCentric() == readCentric;
+                            break;
+                        case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kKind:
+                            pMatch = p.GetKind() == kind;
+                            break;
+                        case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::PROPERTY_NOT_SET:
+                            throw TExConfigError() << "invalid TPDiskFilter record";
                     }
-                    if (m) {
-                        matching = true;
+                    if (!pMatch) {
+                        m = false;
                         break;
                     }
                 }
-                if (matching) {
-                    const auto it = nodeLocations.find(nodeId);
-                    if (it == nodeLocations.end()) {
-                        throw TExConfigError() << "no location for node";
+                if (m) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        ui32 defaultMaxSlots = 16;
+
+        if (baseConfig) {
+            std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> pdiskSpaceColorBorder;
+            ui32 pdiskSpaceMarginPromille = 150;
+
+            if (baseConfig->HasSettings()) {
+                const auto& settings = baseConfig->GetSettings();
+                if (settings.DefaultMaxSlotsSize()) {
+                    defaultMaxSlots = settings.GetDefaultMaxSlots(0);
+                }
+                if (settings.PDiskSpaceColorBorderSize()) {
+                    pdiskSpaceColorBorder.emplace(settings.GetPDiskSpaceColorBorder(0));
+                }
+                if (settings.PDiskSpaceMarginPromilleSize()) {
+                    pdiskSpaceMarginPromille = settings.GetPDiskSpaceMarginPromille(0);
+                }
+            }
+
+            for (const auto& pdisk : baseConfig->GetPDisk()) {
+                if (!checkMatch(pdisk.GetType(), pdisk.GetSharedWithOs(), pdisk.GetReadCentric(), pdisk.GetKind())) {
+                    continue;
+                }
+
+                const TPDiskId pdiskId(pdisk.GetNodeId(), pdisk.GetPDiskId());
+                if (const auto [it, inserted] = pdisks.try_emplace(pdiskId); inserted) {
+                    TPDiskInfo& pdiskInfo = it->second;
+                    auto& r = pdiskInfo.Record;
+                    r.SetNodeID(pdiskId.NodeId);
+                    r.SetPDiskID(pdiskId.PDiskId);
+                    r.SetPath(pdisk.GetPath());
+                    r.SetPDiskGuid(pdisk.GetGuid());
+                    r.SetPDiskCategory(TPDiskCategory(static_cast<NPDisk::EDeviceType>(pdisk.GetType()),
+                        pdisk.GetKind()).GetRaw());
+                    if (pdisk.HasPDiskConfig()) {
+                        r.MutablePDiskConfig()->CopyFrom(pdisk.GetPDiskConfig());
                     }
 
-                    NBsController::TPDiskId fullPDiskId{nodeId, pdiskId};
-                    mapper.RegisterPDisk({
-                        .PDiskId = fullPDiskId,
-                        .Location = it->second,
-                        .Usable = true,
-                        .NumSlots = 0,
-                        .MaxSlots = 1,
-                        .Groups{},
-                        .SpaceAvailable = 0,
-                        .Operational = true,
-                        .Decommitted = false,
-                        .WhyUnusable{},
-                    });
+                    // this 'usable' logic repeats the one in BS_CONTROLLER
+                    if (pdisk.GetDriveStatus() != NKikimrBlobStorage::EDriveStatus::ACTIVE) {
+                        pdiskInfo.Usable = false;
+                        pdiskInfo.WhyUnusable += 'S';
+                    }
+                    const bool usableInTermsOfDecommission = 
+                        pdisk.GetDecommitStatus() == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE ||
+                        pdisk.GetDecommitStatus() == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_REJECTED && !isSelfHealReasonDecommit;
+                    if (!usableInTermsOfDecommission) {
+                        pdiskInfo.Usable = false;
+                        pdiskInfo.WhyUnusable += 'D';
+                    }
 
-                    const auto [pdiskIt, inserted] = pdiskMap.try_emplace(fullPDiskId);
-                    Y_ABORT_UNLESS(inserted);
-                    auto& pdisk = pdiskIt->second;
-                    pdisk.SetNodeID(nodeId);
-                    pdisk.SetPDiskID(pdiskId);
-                    pdisk.SetPath(drive.GetPath());
-                    pdisk.SetPDiskGuid(RandomNumber<ui64>());
-                    pdisk.SetPDiskCategory(TPDiskCategory(static_cast<NPDisk::EDeviceType>(drive.GetType()),
-                        drive.GetKind()).GetRaw());
-                    if (drive.HasPDiskConfig()) {
-                        pdisk.MutablePDiskConfig()->CopyFrom(drive.GetPDiskConfig());
+                    if (!ignoreVSlotQuotaCheck && pdiskInfo.Usable && pdisk.HasPDiskMetrics() && baseConfig->HasSettings()) {
+                        const auto& m = pdisk.GetPDiskMetrics();
+                        if (m.HasEnforcedDynamicSlotSize() && pdiskSpaceColorBorder >= NKikimrBlobStorage::TPDiskSpaceColor::YELLOW) {
+                            pdiskInfo.SpaceAvailable = m.GetEnforcedDynamicSlotSize() * (1000 - pdiskSpaceMarginPromille) / 1000;
+                        } else {
+                            pdiskInfo.SpaceAvailable = m.GetAvailableSize() - m.GetTotalSize() * pdiskSpaceMarginPromille / 1000;
+                            pdiskInfo.AdjustSpaceAvailable = true;
+                        }
+                    }
+                } else {
+                    Y_ABORT("duplicate PDisk record in TBaseConfig");
+                }
+            }
+
+            THashMap<ui32, ui64> maxGroupSlotSize;
+            for (const auto& vslot : baseConfig->GetVSlot()) {
+                if (vslot.HasVDiskMetrics()) {
+                    if (const auto& m = vslot.GetVDiskMetrics(); m.HasAllocatedSize()) {
+                        ui64& size = maxGroupSlotSize[vslot.GetGroupId()];
+                        size = Max(size, m.GetAllocatedSize());
                     }
                 }
-                ++pdiskId;
+            }
+
+            for (const auto& vslot : baseConfig->GetVSlot()) {
+                const auto& vslotId = vslot.GetVSlotId();
+                const TPDiskId pdiskId(vslotId.GetNodeId(), vslotId.GetPDiskId());
+                if (const auto it = pdisks.find(pdiskId); it != pdisks.end()) {
+                    TPDiskInfo& pdiskInfo = it->second;
+                    ++pdiskInfo.UsedSlots;
+                    if (pdiskInfo.AdjustSpaceAvailable && vslot.GetStatus() != "READY" && vslot.HasVDiskMetrics()) {
+                        if (const auto& m = vslot.GetVDiskMetrics(); m.HasAllocatedSize()) {
+                            pdiskInfo.SpaceAvailable += m.GetAllocatedSize() - maxGroupSlotSize[vslot.GetGroupId()];
+                        }
+                    }
+                }
             }
         }
 
-        NBsController::TGroupMapper::TGroupDefinition group;
-        const ui32 groupId = 0;
-        const ui32 groupGeneration = 1;
+        // then all existing drives from the current storage config; also extract group definition, if it exists
+        NBsController::TGroupMapper::TGroupDefinition groupDefinition;
+        THashMap<ui32, ui32> maxPDiskId;
+        THashMap<TPDiskId, ui32> maxVSlotId;
+        THashSet<TPDiskId> addedPDisks;
+        THashMap<TVDiskIdShort, NKikimrBlobStorage::TVDiskLocation> vdiskLocations;
+
+        if (bsConfig->HasServiceSet()) {
+            const auto& ss = bsConfig->GetServiceSet();
+
+            for (const auto& vdisk : ss.GetVDisks()) {
+                const TVDiskID vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
+                if (vdiskId.GroupID.GetRawId() == groupId) {
+                    vdiskLocations.emplace(vdiskId, vdisk.GetVDiskLocation());
+                }
+            }
+
+            std::vector<std::tuple<TPDiskId, i32>> usageIncr;
+
+            THashSet<TPDiskId> requiredPDiskIds;
+            for (const auto& group : ss.GetGroups()) {
+                if (group.GetGroupID() == groupId) {
+                    ui32 failRealmIdx = 0;
+                    Y_DEBUG_ABORT_UNLESS(groupDefinition.empty());
+                    groupDefinition.clear();
+
+                    for (const auto& r : group.GetRings()) {
+                        ui32 failDomainIdx = 0;
+                        auto& grDefRealm = groupDefinition.emplace_back();
+
+                        for (const auto& fd : r.GetFailDomains()) {
+                            ui32 vdiskIdx = 0;
+                            auto& grDefDomain = grDefRealm.emplace_back();
+
+                            for (const auto& v : fd.GetVDiskLocations()) {
+                                const TVDiskIdShort vdiskId(failRealmIdx, failDomainIdx, vdiskIdx);
+
+                                TPDiskId pdiskId(v.GetNodeID(), v.GetPDiskID());
+                                requiredPDiskIds.insert(pdiskId);
+
+                                if (const auto it = replacedDisks.find(vdiskId); it != replacedDisks.end()) {
+                                    usageIncr.emplace_back(pdiskId, -1); // drop usage count of current PDisk
+                                    std::swap(pdiskId, it->second);
+                                    if (pdiskId != TPDiskId()) {
+                                        usageIncr.emplace_back(pdiskId, +1); // and increase for the new PDisk
+                                    }
+                                    vdiskLocations.erase(vdiskId);
+                                }
+                                grDefDomain.emplace_back(pdiskId);
+
+                                ++vdiskIdx;
+                            }
+                            ++failDomainIdx;
+                        }
+                        ++failRealmIdx;
+                    }
+                }
+            }
+
+            for (const auto& pdisk : ss.GetPDisks()) {
+                const TPDiskId pdiskId(pdisk.GetNodeID(), pdisk.GetPDiskID());
+                if (requiredPDiskIds.contains(pdiskId)) {
+                    if (const auto [it, inserted] = pdisks.try_emplace(pdiskId); inserted) {
+                        auto& r = it->second.Record;
+                        r.CopyFrom(pdisk);
+                    }
+                }
+
+                auto& m = maxPDiskId[pdiskId.NodeId];
+                m = Max(m, pdiskId.PDiskId);
+
+                addedPDisks.insert(pdiskId);
+            }
+
+            for (const auto& [pdiskId, incr] : usageIncr) {
+                if (const auto it = pdisks.find(pdiskId); it != pdisks.end()) {
+                    it->second.UsedSlots += incr;
+                } else {
+                    Y_ABORT("missing PDiskId from group");
+                }
+            }
+
+            for (const auto& vdisk : ss.GetVDisks()) {
+                const auto& loc = vdisk.GetVDiskLocation();
+                const TPDiskId pdiskId(loc.GetNodeID(), loc.GetPDiskID());
+                if (const auto it = pdisks.find(pdiskId); it != pdisks.end()) {
+                    ++it->second.UsedSlots;
+                }
+
+                auto& m = maxVSlotId[pdiskId];
+                m = Max(m, loc.GetVDiskSlotID());
+            }
+        }
+
+        // build PDisk locator map (nodeId:path -> pdiskId)
+        THashSet<std::tuple<ui32, TString>> pdiskLocations;
+        for (const auto& [pdiskId, item] : pdisks) {
+            pdiskLocations.emplace(std::make_tuple(pdiskId.NodeId, item.Record.GetPath()));
+        }
+
+        // build host config map
+        auto processDrive = [&](const auto& node, const auto& drive) {
+            const ui32 nodeId = node.GetNodeId();
+            if (pdiskLocations.contains(std::make_tuple(nodeId, drive.GetPath()))) {
+                return;
+            }
+            if (checkMatch(drive.GetType(), drive.GetSharedWithOs(), drive.GetReadCentric(), drive.GetKind())) {
+                const TPDiskId pdiskId(nodeId, ++maxPDiskId[nodeId]);
+                if (const auto [it, inserted] = pdisks.try_emplace(pdiskId); inserted) {
+                    auto& r = it->second.Record;
+                    r.SetNodeID(pdiskId.NodeId);
+                    r.SetPDiskID(pdiskId.PDiskId);
+                    r.SetPath(drive.GetPath());
+                    r.SetPDiskGuid(RandomNumber<ui64>());
+                    r.SetPDiskCategory(TPDiskCategory(static_cast<NPDisk::EDeviceType>(drive.GetType()),
+                        drive.GetKind()));
+                    if (drive.HasPDiskConfig()) {
+                        r.MutablePDiskConfig()->CopyFrom(drive.GetPDiskConfig());
+                    }
+                } else {
+                    Y_ABORT("duplicate PDiskId");
+                }
+            }
+        };
+        EnumerateConfigDrives(*config, 0, processDrive, nullptr, true);
+
+        // group mapper
+        NBsController::TGroupGeometryInfo geom(gtype.GetErasure(), geometry);
+        NBsController::TGroupMapper mapper(geom);
+
+        for (const auto& [pdiskId, item] : pdisks) {
+            const auto it = nodeLocations.find(pdiskId.NodeId);
+            if (it == nodeLocations.end()) {
+                throw TExConfigError() << "no location for node";
+            }
+
+            ui32 maxSlots = defaultMaxSlots;
+            if (item.Record.HasPDiskConfig()) {
+                const auto& pdiskConfig = item.Record.GetPDiskConfig();
+                if (pdiskConfig.HasExpectedSlotCount()) {
+                    maxSlots = pdiskConfig.GetExpectedSlotCount();
+                }
+            }
+
+            mapper.RegisterPDisk({
+                .PDiskId = pdiskId,
+                .Location = it->second,
+                .Usable = item.Usable,
+                .NumSlots = item.UsedSlots,
+                .MaxSlots = maxSlots,
+                .Groups{},
+                .SpaceAvailable = item.SpaceAvailable,
+                .Operational = true,
+                .Decommitted = false,
+                .WhyUnusable = item.WhyUnusable,
+            });
+        }
+
+        auto dumpGroupDefinition = [&] {
+            TStringStream s;
+            for (const auto& r : groupDefinition) {
+                s << '{';
+                for (const auto& d : r) {
+                    s << '[';
+                    bool first = true;
+                    for (const auto& p : d) {
+                        s << (std::exchange(first, false) ? "" : " ") << p;
+                    }
+                    s << ']';
+                }
+                s << '}';
+            }
+            return s.Str();
+        };
+
         TString error;
-        if (!mapper.AllocateGroup(groupId, group, {}, {}, 0, false, error)) {
-            throw TExConfigError() << "group allocation failed"
-                << " Error# " << error;
+        if (!mapper.AllocateGroup(groupId, groupDefinition, replacedDisks, forbid, requiredSpace, false, error)) {
+            throw TExConfigError() << "group allocation failed Error# " << error
+                << " groupDefinition# " << dumpGroupDefinition();
         }
 
         auto *sSet = bsConfig->MutableServiceSet();
-        auto *sGroup = sSet->AddGroups();
-        sGroup->SetGroupID(groupId);
-        sGroup->SetGroupGeneration(groupGeneration);
-        sGroup->SetErasureSpecies(species);
 
-        THashSet<NBsController::TPDiskId> addedPDisks;
-
-        for (size_t realmIdx = 0; realmIdx < group.size(); ++realmIdx) {
-            const auto& realm = group[realmIdx];
-            auto *sRealm = sGroup->AddRings();
-
-            for (size_t domainIdx = 0; domainIdx < realm.size(); ++domainIdx) {
-                const auto& domain = realm[domainIdx];
-                auto *sDomain = sRealm->AddFailDomains();
-
-                for (size_t vdiskIdx = 0; vdiskIdx < domain.size(); ++vdiskIdx) {
-                    const NBsController::TPDiskId pdiskId = domain[vdiskIdx];
-
-                    const auto pdiskIt = pdiskMap.find(pdiskId);
-                    Y_ABORT_UNLESS(pdiskIt != pdiskMap.end());
-                    const auto& pdisk = pdiskIt->second;
-
-                    if (addedPDisks.insert(pdiskId).second) {
-                        sSet->AddPDisks()->CopyFrom(pdisk);
-                    }
-
-                    auto *sDisk = sSet->AddVDisks();
-
-                    VDiskIDFromVDiskID(TVDiskID(groupId, groupGeneration, realmIdx, domainIdx, vdiskIdx),
-                        sDisk->MutableVDiskID());
-
-                    auto *sLoc = sDisk->MutableVDiskLocation();
-                    sLoc->SetNodeID(pdiskId.NodeId);
-                    sLoc->SetPDiskID(pdiskId.PDiskId);
-                    sLoc->SetVDiskSlotID(0);
-                    sLoc->SetPDiskGuid(pdisk.GetPDiskGuid());
-
-                    sDisk->SetVDiskKind(NKikimrBlobStorage::TVDiskKind::Default);
-
-                    sDomain->AddVDiskLocations()->CopyFrom(*sLoc);
-                }
+        NKikimrBlobStorage::TGroupInfo *sGroup = nullptr;
+        for (size_t i = 0; i < sSet->GroupsSize(); ++i) {
+            if (const auto& group = sSet->GetGroups(i); group.GetGroupID() == groupId) {
+                sGroup = sSet->MutableGroups(i);
+                break;
             }
         }
+        if (!sGroup) {
+            sGroup = sSet->AddGroups();
+            sGroup->SetGroupID(groupId);
+            sGroup->SetErasureSpecies(gtype.GetErasure());
+        } else {
+            sGroup->ClearRings();
+        }
+        sGroup->SetGroupGeneration(groupGeneration);
+
+        TVDiskIdShort prev;
+        NKikimrBlobStorage::TGroupInfo::TFailRealm *sRealm = nullptr;
+        NKikimrBlobStorage::TGroupInfo::TFailRealm::TFailDomain *sDomain = nullptr;
+
+        THashMap<TVDiskIdShort, NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk::TDonor>> donors;
+
+        for (size_t i = 0; i < sSet->VDisksSize(); ++i) {
+            const auto& vdisk = sSet->GetVDisks(i);
+            const TVDiskID vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
+            if (vdiskId.GroupID.GetRawId() != groupId || vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
+                continue;
+            }
+            auto *m = sSet->MutableVDisks(i);
+            if (replacedDisks.contains(vdiskId)) {
+                if (m->HasDonorMode()) {
+                    // this disk is already a donor, nothing to do about it
+                } else if (convertToDonor) {
+                    // make this disk a donor
+                    auto *donorMode = m->MutableDonorMode();
+                    donorMode->SetNumFailRealms(groupDefinition.size());
+                    donorMode->SetNumFailDomainsPerFailRealm(groupDefinition.front().size());
+                    donorMode->SetNumVDisksPerFailDomain(groupDefinition.front().front().size());
+                    donorMode->SetErasureSpecies(sGroup->GetErasureSpecies());
+                    m->ClearDonors();
+                } else {
+                    m->SetEntityStatus(NKikimrBlobStorage::EEntityStatus::DESTROY);
+                    continue;
+                }
+                auto *donor = donors[vdiskId].Add();
+                donor->MutableVDiskId()->CopyFrom(m->GetVDiskID());
+                donor->MutableVDiskLocation()->CopyFrom(m->GetVDiskLocation());
+            } else {
+                m->MutableVDiskID()->SetGroupGeneration(groupGeneration);
+            }
+        }
+
+        NBsController::TGroupMapper::Traverse(groupDefinition, [&](TVDiskIdShort vdiskId, TPDiskId pdiskId) {
+            if (!sRealm || vdiskId.FailRealm != prev.FailRealm) {
+                sRealm = sGroup->AddRings();
+                sDomain = nullptr;
+            }
+            if (!sDomain || vdiskId.FailDomain != prev.FailDomain) {
+                sDomain = sRealm->AddFailDomains();
+            }
+            prev = vdiskId;
+
+            const auto pdiskIt = pdisks.find(pdiskId);
+            Y_ABORT_UNLESS(pdiskIt != pdisks.end());
+            const auto& pdisk = pdiskIt->second.Record;
+
+            if (addedPDisks.insert(pdiskId).second) {
+                sSet->AddPDisks()->CopyFrom(pdisk);
+            }
+
+            auto *sLoc = sDomain->AddVDiskLocations();
+            if (const auto it = vdiskLocations.find(vdiskId); it != vdiskLocations.end()) {
+                sLoc->CopyFrom(it->second);
+            } else {
+                sLoc->SetNodeID(pdiskId.NodeId);
+                sLoc->SetPDiskID(pdiskId.PDiskId);
+                sLoc->SetVDiskSlotID(++maxVSlotId[pdiskId]); // keep VDiskSlotID for unchanged items
+                sLoc->SetPDiskGuid(pdisk.GetPDiskGuid());
+
+                auto *sDisk = sSet->AddVDisks();
+                VDiskIDFromVDiskID(TVDiskID(TGroupId::FromValue(groupId), groupGeneration, vdiskId), sDisk->MutableVDiskID());
+                sDisk->SetVDiskKind(NKikimrBlobStorage::TVDiskKind::Default);
+                sDisk->MutableVDiskLocation()->CopyFrom(*sLoc);
+                if (const auto it = donors.find(vdiskId); it != donors.end()) {
+                    sDisk->MutableDonors()->Swap(&it->second);
+                }
+            }
+        });
     }
 
     void TDistributedConfigKeeper::GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,

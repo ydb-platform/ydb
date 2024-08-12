@@ -506,11 +506,6 @@ BEGIN;
 <sql-statement>
 SET LOCAL TIME ZONE 10.5;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: timezone
-    	SET LOCAL TIME ZONE 10.5;
-	^
 <sql-statement>
 select to_jsonb(timestamptz '2014-05-28 12:22:35.614298-04');
 </sql-statement>
@@ -528,11 +523,6 @@ select to_jsonb(timestamptz '2014-05-28 12:22:35.614298-04');
 <sql-statement>
 SET LOCAL TIME ZONE -8;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: timezone
-    	SET LOCAL TIME ZONE -8;
-	^
 <sql-statement>
 select to_jsonb(timestamptz '2014-05-28 12:22:35.614298-04');
 </sql-statement>
@@ -662,6 +652,14 @@ SELECT jsonb_agg(q)
     -stdin-:<main>:4:16: Error: alternative is not implemented yet : 138
     	               ARRAY[ROW(x.*,ARRAY[1,2,3]),
 	               ^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	--jsonb_agg
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	--jsonb_agg
+	^
 <sql-statement>
 SELECT jsonb_agg(q ORDER BY x, y)
   FROM rows q;
@@ -3931,6 +3929,14 @@ SELECT count(*) FROM (SELECT (jsonb_each(j)).key FROM testjsonb) AS wow;
     -stdin-:<main>:1:1: Error: alternative is not implemented yet : 360
     	SELECT count(*) FROM (SELECT (jsonb_each(j)).key FROM testjsonb) AS wow;
 	^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	SELECT count(*) FROM (SELECT (jsonb_each(j)).key FROM testjsonb) AS wow;
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	SELECT count(*) FROM (SELECT (jsonb_each(j)).key FROM testjsonb) AS wow;
+	^
 <sql-statement>
 SELECT key, count(*) FROM (SELECT (jsonb_each(j)).key FROM testjsonb) AS wow GROUP BY key ORDER BY count DESC, key;
 </sql-statement>
@@ -3938,6 +3944,14 @@ SELECT key, count(*) FROM (SELECT (jsonb_each(j)).key FROM testjsonb) AS wow GRO
 
     -stdin-:<main>:1:1: Error: alternative is not implemented yet : 360
     	SELECT key, count(*) FROM (SELECT (jsonb_each(j)).key FROM testjsonb) AS wow GROUP BY key ORDER BY count DESC, key;
+	^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	SELECT key, count(*) FROM (SELECT (jsonb_each(j)).key FROM testjsonb) AS wow GROUP BY key ORDER BY count DESC, key;
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	SELECT key, count(*) FROM (SELECT (jsonb_each(j)).key FROM testjsonb) AS wow GROUP BY key ORDER BY count DESC, key;
 	^
 <sql-statement>
 -- sort/hash

@@ -214,6 +214,7 @@ public:
     TDuration MaxChunkSessionDuration;
 
     TDuration OpenSessionBackoffTime;
+    int OpenSessionRetryCount;
 
     TDuration PrerequisiteTransactionProbePeriod;
 

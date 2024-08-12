@@ -15,7 +15,7 @@ public:
 class TCommandConnectionInfo : public TClientCommand {
 public:
     TCommandConnectionInfo();
-		
+
     virtual void Config(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
@@ -42,7 +42,7 @@ protected:
     void ConfigureProfile(const TString& profileName, std::shared_ptr<IProfileManager> profileManager,
                      TConfig& config, bool interactive, bool cmdLine);
 
-    TString ProfileName, Endpoint, Database, TokenFile, YcTokenFile, SaKeyFile,
+    TString ProfileName, Endpoint, Database, TokenFile, Oauth2KeyFile, YcTokenFile, SaKeyFile,
             IamTokenFile, IamEndpoint, User, PasswordFile, CaCertsFile;
 
     bool UseMetadataCredentials = false;

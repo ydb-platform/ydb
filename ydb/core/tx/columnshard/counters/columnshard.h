@@ -1,8 +1,11 @@
 #pragma once
 #include "common/owner.h"
+#include "initialization.h"
+#include "tx_progress.h"
+
+#include <ydb/core/tx/columnshard/counters/tablet_counters.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-
 #include <util/generic/hash_set.h>
 
 namespace NKikimr::NColumnShard {
@@ -13,7 +16,9 @@ enum class EWriteFailReason {
     LongTxDuplication /* "long_tx_duplication" */,
     NoTable /* "no_table" */,
     IncorrectSchema /* "incorrect_schema" */,
-    Overload /* "overload" */
+    Overload /* "overload" */,
+    OverlimitReadRawMemory /* "overlimit_read_raw_memory" */,
+    OverlimitReadBlobMemory /* "overlimit_read_blob_memory" */
 };
 
 class TCSCounters: public TCommonCountersOwner {
@@ -34,8 +39,12 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr FutureIndexationInputBytes;
     NMonitoring::TDynamicCounters::TCounterPtr IndexationInputBytes;
 
+    NMonitoring::TDynamicCounters::TCounterPtr IndexMetadataLimitBytes;
+
     NMonitoring::TDynamicCounters::TCounterPtr OverloadInsertTableBytes;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadInsertTableCount;
+    NMonitoring::TDynamicCounters::TCounterPtr OverloadMetadataBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr OverloadMetadataCount;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadShardTxBytes;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadShardTxCount;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadShardWritesBytes;
@@ -58,11 +67,16 @@ private:
     NMonitoring::THistogramPtr HistogramSuccessWriteMiddle6PutBlobsDurationMs;
     NMonitoring::THistogramPtr HistogramFailedWritePutBlobsDurationMs;
     NMonitoring::THistogramPtr HistogramWriteTxCompleteDurationMs;
+
     NMonitoring::TDynamicCounters::TCounterPtr WritePutBlobsCount;
     NMonitoring::TDynamicCounters::TCounterPtr WriteRequests;
     THashMap<EWriteFailReason, NMonitoring::TDynamicCounters::TCounterPtr> FailedWriteRequests;
     NMonitoring::TDynamicCounters::TCounterPtr SuccessWriteRequests;
+
 public:
+    const TCSInitialization Initialization;
+    TTxProgressCounters TxProgress;
+
     void OnStartWriteRequest() const {
         WriteRequests->Add(1);
     }
@@ -126,22 +140,27 @@ public:
         SplitCompactionGranulePortionsCount->SetValue(portionsCount);
     }
 
-    void OnOverloadInsertTable(const ui64 size) const {
+    void OnWriteOverloadInsertTable(const ui64 size) const {
         OverloadInsertTableBytes->Add(size);
         OverloadInsertTableCount->Add(1);
     }
 
-    void OnOverloadShardTx(const ui64 size) const {
+    void OnWriteOverloadMetadata(const ui64 size) const {
+        OverloadMetadataBytes->Add(size);
+        OverloadMetadataCount->Add(1);
+    }
+
+    void OnWriteOverloadShardTx(const ui64 size) const {
         OverloadShardTxBytes->Add(size);
         OverloadShardTxCount->Add(1);
     }
 
-    void OnOverloadShardWrites(const ui64 size) const {
+    void OnWriteOverloadShardWrites(const ui64 size) const {
         OverloadShardWritesBytes->Add(size);
         OverloadShardWritesCount->Add(1);
     }
 
-    void OnOverloadShardWritesSize(const ui64 size) const {
+    void OnWriteOverloadShardWritesSize(const ui64 size) const {
         OverloadShardWritesSizeBytes->Add(size);
         OverloadShardWritesSizeCount->Add(1);
     }
@@ -162,6 +181,10 @@ public:
 
     void IndexationInput(const ui64 size) const {
         IndexationInputBytes->Add(size);
+    }
+
+    void OnIndexMetadataLimit(const ui64 limit) const {
+        IndexMetadataLimitBytes->Set(limit);
     }
 
     void OnStartBackground() const {

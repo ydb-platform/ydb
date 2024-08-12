@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
         env.Send<TEvWorker::TEvHandshake>(writer, new TEvWorker::TEvHandshake());
 
         using TRecord = TEvWorker::TEvData::TRecord;
-        env.Send<TEvWorker::TEvPoll>(writer, new TEvWorker::TEvData({
+        env.Send<TEvWorker::TEvPoll>(writer, new TEvWorker::TEvData("TestSource", {
             TRecord(1, R"({"key":[1], "update":{"value":"10"}})"),
             TRecord(2, R"({"key":[2], "update":{"value":"20"}})"),
             TRecord(3, R"({"key":[3], "update":{"value":"30"}})"),
@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
     }
 
     Y_UNIT_TEST(SupportedTypes) {
-        TEnv env;
+        TEnv env(TFeatureFlags().SetEnableTableDatetime64(true));
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);
 
         env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
@@ -65,6 +65,11 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
                 {.Name = "utf8_value", .Type = "Utf8"},
                 {.Name = "json_value", .Type = "Json"},
                 {.Name = "jsondoc_value", .Type = "JsonDocument"},
+                {.Name = "uuid_value", .Type = "Uuid"},
+                {.Name = "date32_value", .Type = "Date32"},
+                {.Name = "datetime64_value", .Type = "Datetime64"},
+                {.Name = "timestamp64_value", .Type = "Timestamp64"},
+                {.Name = "interval64_value", .Type = "Interval64"},
             },
         }));
 
@@ -72,7 +77,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
         env.Send<TEvWorker::TEvHandshake>(writer, new TEvWorker::TEvHandshake());
 
         using TRecord = TEvWorker::TEvData::TRecord;
-        env.Send<TEvWorker::TEvPoll>(writer, new TEvWorker::TEvData({
+        env.Send<TEvWorker::TEvPoll>(writer, new TEvWorker::TEvData("TestSource", {
             TRecord(1, R"({"key":[1], "update":{"int32_value":-100500}})"),
             TRecord(2, R"({"key":[2], "update":{"uint32_value":100500}})"),
             TRecord(3, R"({"key":[3], "update":{"int64_value":-200500}})"),
@@ -91,6 +96,11 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
             TRecord(16, R"({"key":[16], "update":{"utf8_value":"lorem ipsum"}})"),
             TRecord(17, R"({"key":[17], "update":{"json_value":{"key": "value"}}})"),
             TRecord(18, R"({"key":[18], "update":{"jsondoc_value":{"key": "value"}}})"),
+            TRecord(19, R"({"key":[19], "update":{"uuid_value":"65df1ec1-a97d-47b2-ae56-3c023da6ee8c"}})"),
+            TRecord(20, R"({"key":[20], "update":{"date32_value":18486}})"),
+            TRecord(21, R"({"key":[21], "update":{"datetime64_value":1597235696}})"),
+            TRecord(22, R"({"key":[22], "update":{"timestamp64_value":1597235696123456}})"),
+            TRecord(23, R"({"key":[23], "update":{"interval64_value":-300500}})"),
         }));
     }
 }

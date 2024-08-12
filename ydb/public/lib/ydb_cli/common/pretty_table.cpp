@@ -1,12 +1,14 @@
 #include "pretty_table.h"
-#include "common.h"
 
 #include <library/cpp/colorizer/colors.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/xrange.h>
 #include <util/stream/format.h>
+#include <util/charset/utf8.h>
 
+#include <contrib/restricted/patched/replxx/src/utf8string.hxx>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
+
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -16,260 +18,140 @@ TPrettyTable::TRow::TRow(size_t nColumns)
 {
 }
 
+enum {
+    COLOR_BEGIN = '\033',
+    COLOR_END = 'm',
+};
+
 size_t TPrettyTable::TRow::ColumnWidth(size_t columnIndex) const {
     Y_ABORT_UNLESS(columnIndex < Columns.size());
-    enum {
-        TEXT,
-        COLOR,
-        UTF8,
-    } state = TEXT;
 
     size_t width = 0;
-    TStringBuf data;
-    for (const auto& line : Columns.at(columnIndex)) {
-        data = line;
 
-        // flag of first symbol in color
-        bool first = false;
-        // flag of enfing of color
-        bool endcolor = false;
-        int utf8Len = 0;
-        // count of visible chars
-        size_t curLen = 0;
-        for (char ch : data) {
-            switch (state) {
-                case TEXT:
-                    // begin of color
-                    if (ch == '\033') {
-                        state = COLOR;
-                        first = true;
-                        endcolor = false;
-                    // begin utf8
-                    } else  if ((ch & 0x80) != 0) {
-                        curLen++;
-                        utf8Len = 0;
-                        // if the first bit of the character is not 0, we met a multibyte
-                        // counting the number of single bits at the beginning of a byte
-                        while ((ch & 0x80) != 0) {
-                            utf8Len++;
-                            ch <<= 1;
-                        }
-                        state = UTF8;
-                    // common text
-                    } else {
-                        curLen++;
-                    }
-                    break;
-                case UTF8:
-                    // skip n chars
-                    utf8Len -= 1;
-                    if (utf8Len == 0) {
-                        curLen++;
-                        while ((ch & 0x80) != 0) {
-                            utf8Len++;
-                            ch <<= 1;
-                        }
-                        if (utf8Len != 0) {
-                            state = UTF8;
-                        } else {
-                            state = TEXT;
-                        }
-                    }
-                    break;
-                case COLOR:
-                    // first symbol must be [
-                    if (first) {
-                        if (ch != '[') {
-                            state = TEXT;
-                        }
-                        first = false;
-                    // at the end of color can be digits, m and ;
-                    } else if (endcolor) {
-                        if (ch != ';' && !isdigit(ch) && ch != 'm' ) {
-                            curLen++;
-                            state = TEXT;
-                        }
-                    // ending after ;
-                    } else {
-                        if (ch == ';') {
-                            endcolor = true;
-                        }
-                    }
-                    break;
+    for (const auto& column: Columns.at(columnIndex)) {
+        size_t printableSymbols = 0;
+
+        for (size_t i = 0; i < column.size();) {
+            if (column[i] == COLOR_BEGIN) {
+                while (i < column.size() && column[i] != COLOR_END) {
+                    ++i;
+                }
+
+                if (i < column.size() && column[i] == COLOR_END) {
+                    ++i;
+                }
+
+                continue;
             }
+
+
+            ++i;
+            while (i < column.size() && IsUTF8ContinuationByte(column[i])) {
+                ++i;
+            }
+            ++printableSymbols;
         }
 
-        width = Max(width, curLen);
+        width = Max(width, printableSymbols);
     }
 
     return width;
 }
 
-size_t TPrettyTable::TRow::PrintColumns(IOutputStream& o, const TVector<size_t>& widths, size_t offset, TString& oldColor) const {
-    bool next = false;
-    size_t firstColLen = 0;
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-    
-    for (size_t columnIndex : xrange(Columns.size())) {
-        enum {
-            TEXT,
-            COLOR,
-            UTF8,
-        } state = TEXT;
-        o << colors.Default();
-        if (columnIndex == 0) {
-            o << "│ ";
-            o << oldColor;
-        } else {
-            o << " │ ";
+class TColumnLinesPrinter {
+public:
+    TColumnLinesPrinter(
+        IOutputStream& o,
+        const TVector<TVector<TString>>& columns,
+        const TVector<size_t>& widths
+    )
+        : Output_(o)
+        , Columns_(columns)
+        , Widths_(widths)
+        , PrintedIndexByColumnIndex_(columns.size())
+    {}
+
+    bool HasNext() {
+        bool allColumnsPrinted = true; 
+
+        for (size_t i = 0; i < PrintedIndexByColumnIndex_.size(); ++i) {
+            if (!Columns_[i].empty() && Columns_[i][0].size() > PrintedIndexByColumnIndex_[i]) {
+                allColumnsPrinted = false;
+            }
+        }
+
+        return !allColumnsPrinted;
+    }
+
+    void Print() {        
+        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        
+        Output_ << colors.Default();
+        Output_ << "│ ";
+
+        for (size_t columnIndex : xrange(Columns_.size())) {
+            Output_ << colors.Default();
+            if (columnIndex != 0) {
+                Output_ << " │ ";
+            }
+
+            size_t printedSymbols = PrintColumnLine(columnIndex);
+            Output_ << TString(Widths_[columnIndex] - printedSymbols, ' ');
         }
         
-        if (size_t width = widths.at(columnIndex)) {
-            const auto& column = Columns.at(columnIndex);
-
-            TStringBuf data;
-            // count of visible chars
-            size_t curLen = 0;
-            // count of chars
-            size_t absCurLen = 0;
-            // flag of first symbol in color
-            bool first = false;
-            // flag of enfing of color
-            bool endcolor = false;
-
-            absCurLen = 0;
-            for (const auto& line : column) {
-                data = line;
-                TString s = "";
-                
-                data.Skip(offset);
-                // len of utf8 symbol
-                int utf8Len = 0;
-                
-                for (char ch : data) {
-                    if (next && columnIndex == 0) {
-                        break;
-                    }
-                    switch (state) {
-                        case TEXT:
-                            // begin of color
-                            if (ch == '\033') {
-                                
-                                state = COLOR;
-                                first = true;
-                                endcolor = false;
-                                o << s;
-                                s = ch;
-                            // begin utf8
-                            } else  if ((ch & 0x80) != 0) {
-                                o << s;
-                                s = "";
-                                utf8Len = 0;
-                                curLen++;
-                                // if the first bit of the character is not 0, we met a multibyte
-                                // counting the number of single bits at the beginning of a byte
-                                while ((ch & 0x80) != 0) {
-                                    utf8Len++;
-                                    ch <<= 1;
-                                }
-                                if (curLen + utf8Len > width) {
-                                    next = true;
-                                    curLen -= 1;
-                                    break;
-                                }
-                                o << data.SubStr(absCurLen, utf8Len);
-                                state = UTF8;
-                            // common text
-                            } else {
-                                curLen++;
-                                if (curLen > width) {
-                                    next = true;
-                                    curLen -= 1;
-                                    break;
-                                }
-                                s += ch; 
-                            }
-                            break;
-                        case UTF8:
-                            // skip n chars
-                            utf8Len -= 1;
-                            if (utf8Len == 0) {
-                                while ((ch & 0x80) != 0) {
-                                    utf8Len++;
-                                    ch <<= 1;
-                                }
-                                if (curLen + utf8Len > width) {
-                                    next = true;
-                                    curLen -= 1;
-                                    break;
-                                }
-                                curLen++;
-                                if (utf8Len != 0) {
-                                    o << data.SubStr(absCurLen, utf8Len);
-                                    state = UTF8;
-                                } else {
-                                    s = ch;
-                                    state = TEXT;
-                                }
-                            }
-                            break;
-                        case COLOR:
-                            // first symbol must be [
-                            if (first) {
-                                if (ch != '[') {
-                                    o << s;
-                                    s = ch;
-                                    state = TEXT;
-                                } else {
-                                    s += ch;
-                                }
-                                first = false;
-                            // at the end of color can be digits, m and ;
-                            } else if (endcolor) {
-                                if (ch != ';' && !isdigit(ch) && ch != 'm' ) {
-                                    o << s;
-                                    oldColor = s;
-                                    curLen++;
-                                    if (curLen > width) {
-                                        next = true;
-                                        curLen -= 1;
-                                        break;
-                                    }
-                                    s = ch;
-                                    state = TEXT;
-                                } else {
-                                    s += ch;
-                                }
-                            // ending after ;
-                            } else {
-                                if (ch == ';') {
-                                    endcolor = true;
-                                }
-                                s += ch;
-                            }
-                            
-                            break;
-                    }
-                    absCurLen++;
-                }
-                
-                if (s != "") {
-                    o << s;
-                }
-            }
-            o << TString(width - curLen, ' ');
-            if (columnIndex == 0) {
-                firstColLen = absCurLen - 1;
-            }
-        }
+        Output_ << colors.Default();
+        Output_ << " │" << Endl;
     }
-    
-    o << colors.Default();
-    o << " │" << Endl;
-    if (next) {
-        return firstColLen;
-    } else {
-        return 0;
+
+private:
+    /* return's printed symbols cnt */
+    size_t PrintColumnLine(size_t columnIndex) {
+        if (Columns_[columnIndex].empty()) {
+            return 0;
+        }
+
+        size_t printedSymbols = 0;
+        const auto& column = Columns_[columnIndex][0];
+
+        size_t i = PrintedIndexByColumnIndex_[columnIndex];
+
+        for (; i < column.size() && printedSymbols < Widths_[columnIndex];) {
+            if (column[i] == COLOR_BEGIN) {
+                while (i < column.size() && column[i] != COLOR_END) {
+                    Output_ << column[i++];
+                }
+
+                if (i < column.size() && column[i] == COLOR_END) {
+                    Output_ << column[i++];
+                }
+            
+                continue;
+            }
+
+
+            Output_ << column[i++];
+            while (i < column.size() && IsUTF8ContinuationByte(column[i])) {
+                Output_ << column[i++];
+            }
+            ++printedSymbols;
+        }
+
+        PrintedIndexByColumnIndex_[columnIndex] = i;
+        return printedSymbols;
+    }
+
+private:
+    IOutputStream& Output_;
+    const TVector<TVector<TString>>& Columns_;
+    const TVector<size_t>& Widths_;
+    TVector<size_t> PrintedIndexByColumnIndex_;
+};
+
+void TPrettyTable::TRow::PrintColumns(IOutputStream& o, const TVector<size_t>& widths) const {
+    TColumnLinesPrinter printer(o, Columns, widths);
+
+    while (printer.HasNext()) {
+        printer.Print();
     }
 }
 
@@ -324,14 +206,7 @@ void TPrettyTable::Print(IOutputStream& o) const {
     PrintDelim(o, widths, "┌", "┬", "┐");
     for (auto i : xrange(Rows.size())) {
         const auto& row = Rows.at(i);
-
-        size_t res = 1;
-        size_t offset = 0;
-        TString oldColor = "";
-        while (res != 0) {
-            res = row.PrintColumns(o, widths, offset, oldColor);
-            offset += res;
-        }
+        row.PrintColumns(o, widths);
 
         if (row.HasFreeText()) {
             PrintDelim(o, widths, "├", "┴", "┤", true);
@@ -358,7 +233,7 @@ TVector<size_t> TPrettyTable::CalcWidths() const {
     // adjust
     auto terminalWidth = GetTerminalWidth();
     size_t lineLength = terminalWidth ? *terminalWidth : Max<size_t>();
-    const size_t maxWidth = Max(Config.Width, lineLength) - ((Columns * 3) + 1);
+    const size_t maxWidth = Min(Config.Width ? Config.Width : lineLength, lineLength) - ((Columns * 3) + 1);
     size_t totalWidth = Accumulate(widths, (size_t)0);
     while (totalWidth > maxWidth) {
         auto it = MaxElement(widths.begin(), widths.end());

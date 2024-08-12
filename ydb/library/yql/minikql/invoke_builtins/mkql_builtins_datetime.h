@@ -118,6 +118,36 @@ NUdf::TDataType<NUdf::TTimestamp64>::TLayout FromScaledDate<NUdf::TDataType<NUdf
 }
 
 template<> inline
+TScaledDate ToScaledDate<NUdf::TDataType<NUdf::TTzDate32>>(typename NUdf::TDataType<NUdf::TTzDate32>::TLayout src) {
+    return src * DateScale;
+}
+
+template<> inline
+NUdf::TDataType<NUdf::TTzDate32>::TLayout FromScaledDate<NUdf::TDataType<NUdf::TTzDate32>>(TScaledDate src) {
+    return src / DateScale;
+}
+
+template<> inline
+TScaledDate ToScaledDate<NUdf::TDataType<NUdf::TTzDatetime64>>(typename NUdf::TDataType<NUdf::TTzDatetime64>::TLayout src) {
+    return src * DatetimeScale;
+}
+
+template<> inline
+NUdf::TDataType<NUdf::TTzDatetime64>::TLayout FromScaledDate<NUdf::TDataType<NUdf::TTzDatetime64>>(TScaledDate src) {
+    return src / DatetimeScale;
+}
+
+template<> inline
+TScaledDate ToScaledDate<NUdf::TDataType<NUdf::TTzTimestamp64>>(typename NUdf::TDataType<NUdf::TTzTimestamp64>::TLayout src) {
+    return src;
+}
+
+template<> inline
+NUdf::TDataType<NUdf::TTzTimestamp64>::TLayout FromScaledDate<NUdf::TDataType<NUdf::TTzTimestamp64>>(TScaledDate src) {
+    return src;
+}
+
+template<> inline
 TScaledDate ToScaledDate<NUdf::TDataType<NUdf::TInterval64>>(typename NUdf::TDataType<NUdf::TInterval64>::TLayout src) {
     return src;
 }
@@ -157,6 +187,17 @@ inline bool IsBadScaledDate(TScaledDate val) {
 }
 
 #ifndef MKQL_DISABLE_CODEGEN
+
+template<typename TLayout>
+inline Value* GenIsInt64Overflow(Value* value, LLVMContext &context, BasicBlock* block) {
+    if constexpr (std::is_same_v<ui64, TLayout>) {
+        const auto i64Max = ConstantInt::get(value->getType(), static_cast<ui64>(std::numeric_limits<i64>::max()));
+        return CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGT, value, i64Max, "ugt", block);
+    } else {
+        return ConstantInt::getFalse(context);
+    }
+}
+
 template<typename TDateType>
 inline Value* GenIsBadDateTime(Value* val, LLVMContext &context, BasicBlock* block) {
     static_assert(TDateType::Features & (NYql::NUdf::DateType | NYql::NUdf::TzDateType), "Date type expected");
@@ -322,6 +363,44 @@ Value* GenToScaledDate<NUdf::TDataType<NUdf::TTimestamp64>>(Value* value, LLVMCo
 template<> inline
 Value* GenFromScaledDate<NUdf::TDataType<NUdf::TTimestamp64>>(Value* value, LLVMContext &context, BasicBlock* block) {
     return StaticCast<TScaledDate, NUdf::TDataType<NUdf::TTimestamp64>::TLayout>(value, context, block);
+}
+
+template<> inline
+Value* GenToScaledDate<NUdf::TDataType<NUdf::TTzDate32>>(Value* value, LLVMContext &context, BasicBlock* block) {
+    const auto cast = StaticCast<NUdf::TDataType<NUdf::TTzDate32>::TLayout, TScaledDate>(value, context, block);
+    const auto mul = BinaryOperator::CreateMul(cast, ConstantInt::get(cast->getType(), DateScale), "mul", block);
+    return mul;
+}
+
+template<> inline
+Value* GenFromScaledDate<NUdf::TDataType<NUdf::TTzDate32>>(Value* value, LLVMContext &context, BasicBlock* block) {
+    const auto div = BinaryOperator::CreateSDiv(value, ConstantInt::get(value->getType(), DateScale), "div", block);
+    const auto cast = StaticCast<TScaledDate, NUdf::TDataType<NUdf::TTzDate32>::TLayout>(div, context, block);
+    return cast;
+}
+
+template<> inline
+Value* GenToScaledDate<NUdf::TDataType<NUdf::TTzDatetime64>>(Value* value, LLVMContext &context, BasicBlock* block) {
+    const auto cast = StaticCast<NUdf::TDataType<NUdf::TTzDatetime64>::TLayout, TScaledDate>(value, context, block);
+    const auto mul = BinaryOperator::CreateMul(cast, ConstantInt::get(cast->getType(), DatetimeScale), "mul", block);
+    return mul;
+}
+
+template<> inline
+Value* GenFromScaledDate<NUdf::TDataType<NUdf::TTzDatetime64>>(Value* value, LLVMContext &context, BasicBlock* block) {
+    const auto div = BinaryOperator::CreateSDiv(value, ConstantInt::get(value->getType(), DatetimeScale), "div", block);
+    const auto cast = StaticCast<TScaledDate, NUdf::TDataType<NUdf::TTzDatetime64>::TLayout>(div, context, block);
+    return cast;
+}
+
+template<> inline
+Value* GenToScaledDate<NUdf::TDataType<NUdf::TTzTimestamp64>>(Value* value, LLVMContext &context, BasicBlock* block) {
+    return StaticCast<NUdf::TDataType<NUdf::TTzTimestamp64>::TLayout, TScaledDate>(value, context, block);
+}
+
+template<> inline
+Value* GenFromScaledDate<NUdf::TDataType<NUdf::TTzTimestamp64>>(Value* value, LLVMContext &context, BasicBlock* block) {
+    return StaticCast<TScaledDate, NUdf::TDataType<NUdf::TTzTimestamp64>::TLayout>(value, context, block);
 }
 
 template<> inline

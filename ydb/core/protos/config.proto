@@ -21,6 +21,7 @@ import "ydb/core/protos/http_config.proto";
 import "ydb/core/protos/key.proto";
 import "ydb/core/protos/kqp.proto";
 import "ydb/core/protos/local.proto";
+import "ydb/core/protos/memory_controller_config.proto";
 import "ydb/core/protos/netclassifier.proto";
 import "ydb/core/protos/node_broker.proto";
 import "ydb/core/protos/pqconfig.proto";
@@ -69,7 +70,7 @@ message TActorSystemConfig {
         optional uint32 Threads = 2;
         optional uint64 SpinThreshold = 3;
         optional TAffinity Affinity = 4;
-        optional uint32 InjectMadSquirrels = 5;
+        optional uint32 InjectMadSquirrels = 5; // Obsolete, no more mad squirrels anymore
         optional string Name = 6;
         optional uint32 TimePerMailboxMicroSecs = 7;
         optional uint32 EventsPerMailbox = 8;
@@ -158,6 +159,8 @@ message TStaticNameserviceConfig {
     repeated string AcceptUUID = 3;
     optional bool SuppressVersionCheck = 4;
     optional ENameserviceType Type = 5;
+    optional bool KeepSocket = 6 [default = true];
+    optional bool ForceTcp = 7 [default = false];
 }
 
 message TDynamicNameserviceConfig {
@@ -230,11 +233,13 @@ message TDomainsConfig {
 
     message TSecurityConfig {
         optional bool EnforceUserTokenRequirement = 1 [default = false];
+        optional bool EnforceUserTokenCheckRequirement = 7 [default = false]; // Check if a token was specified // If not, or if the token was incorrect or access was denied, the request will be handled as if no token was provided
         repeated string MonitoringAllowedSIDs = 2;
         repeated string AdministrationAllowedSIDs = 3;
         repeated string DefaultUserSIDs = 4;
         optional string AllAuthenticatedUsers = 5;
         repeated string ViewerAllowedSIDs = 6;
+        repeated string RegisterDynamicNodeAllowedSIDs = 8;
 
         message TUser {
             optional string Name = 1;
@@ -275,6 +280,7 @@ message TBlobStorageConfig {
         optional string ErasureSpecies = 1;
         optional NKikimrBlobStorage.TGroupGeometry Geometry = 2;
         repeated NKikimrBlobStorage.TPDiskFilter PDiskFilter = 3;
+        optional NKikimrBlobStorage.EPDiskType PDiskType = 7;
 
         // some extra settings
         optional bool AutomaticBoxManagement = 4; // invoke BSC DefineHostConfig/DefineBox automatically
@@ -286,17 +292,17 @@ message TBlobStorageConfig {
 
     optional TAutoconfigSettings AutoconfigSettings = 6;
 
-    message TCostMetricsConfig {
+    message TVDiskPerformanceConfig {
         optional NKikimrBlobStorage.EPDiskType PDiskType = 1;
-        optional uint64 BurstThresholdNs = 2;
-        optional float DiskTimeAvailableScale = 3;
+        optional uint32 MinHugeBlobSizeInBytes = 4;
     }
 
-    message TCostMetricsSettings {
-        repeated TCostMetricsConfig VDiskTypes = 1;
+    message TVDiskPerformanceSettings {
+        repeated TVDiskPerformanceConfig VDiskTypes = 1;
     };
 
-    optional TCostMetricsSettings CostMetricsSettings = 7;
+    reserved 7;  // TCostMetricsSettings, moved to ICB
+    optional TVDiskPerformanceSettings VDiskPerformanceSettings = 8;
  }
 
 message TBlobStorageFormatConfig {
@@ -423,7 +429,13 @@ message TInterconnectConfig {
     optional NKikimrConfigUnits.TDuration LostConnectionDuration = 28;
     optional NKikimrConfigUnits.TDuration BatchPeriodDuration = 29;
 
+    optional NKikimrConfigUnits.TDuration FirstErrorSleep = 46;
+    optional NKikimrConfigUnits.TDuration MaxErrorSleep = 47;
+    optional double ErrorSleepRetryMultiplier = 48;
+
     optional uint32 OutgoingHandshakeInflightLimit = 43;
+
+    optional uint64 EventDelayMicrosec = 49;
 }
 
 message TChannelProfileConfig {
@@ -575,6 +587,18 @@ message TConveyorConfig {
     optional uint32 WorkersCount = 2;
     optional uint32 QueueSizeLimit = 3;
     optional double DefaultFractionOfThreadsCount = 4;
+    optional double WorkersCountDouble = 5;
+}
+
+message TLimiterConfig {
+    optional bool Enabled = 1 [default = true];
+    optional uint64 Limit = 2;
+    optional uint64 PeriodMilliSeconds = 3 [default = 1000];
+}
+
+message TGroupedMemoryLimiterConfig {
+    optional bool Enabled = 1 [default = true];
+    optional uint64 MemoryLimit = 2;
 }
 
 message TExternalIndexConfig {
@@ -983,6 +1007,8 @@ message TQueryServiceConfig {
     optional uint64 ScriptResultSizeLimit = 4 [default = 0]; // 0 = infinity
     optional uint64 ScriptResultRowsLimit = 5 [default = 0]; // 0 = infinity
     repeated string HostnamePatterns = 13; // List of hostname regexps for external data sources; disabled if empty
+    optional string QueryArtifactsCompressionMethod = 17;
+    optional uint64 QueryArtifactsCompressionMinSize = 18 [default = 10485760]; // default = 10 MiB
 
     optional NYql.TS3GatewayConfig S3 = 6;
     optional NYql.TYtGatewayConfig Yt = 15;
@@ -994,6 +1020,8 @@ message TQueryServiceConfig {
     optional NYql.TGenericGatewayConfig Generic = 11;
     optional TFinalizeScriptServiceConfig FinalizeScriptServiceConfig = 12;
     optional uint64 ProgressStatsPeriodMs = 14 [default = 0]; // 0 = disabled
+    optional uint32 QueryTimeoutDefaultSeconds = 19 [default = 1800];
+    optional bool EnableMatchRecognize = 20 [default = false];
 }
 
 // Config describes immediate controls and allows
@@ -1115,6 +1143,12 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1000000,
             DefaultValue: 1000 }];
+
+        optional uint64 ChangeRecordDebugPrint = 16 [(ControlOptions) = {
+            Description: "Enables debug printing of change records",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
     }
 
     message TTxLimitControls {
@@ -1204,12 +1238,86 @@ message TImmediateControlsConfig {
             DefaultValue: 8388608 }];
     }
 
+    message TVDiskControls {
+        optional uint64 EnableLocalSyncLogDataCutting = 1 [(ControlOptions) = {
+            Description: "Allow cutting large TEvLocalSyncLogData messages into smaller chunks",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+        optional uint64 EnableSyncLogChunkCompressionHDD = 2 [(ControlOptions) = {
+            Description: "Compress SyncLog chunks before writing to log, setting for HDD",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 1 }];
+        optional uint64 EnableSyncLogChunkCompressionSSD = 3 [(ControlOptions) = {
+            Description: "Compress SyncLog chunks before writing to log, setting for SSD",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+        optional uint64 MaxSyncLogChunksInFlightHDD = 4 [(ControlOptions) = {
+            Description: "Maximum number of SyncLog chunks written simultaneously to log, setting for HDD",
+            MinValue: 1,
+            MaxValue: 1024,
+            DefaultValue: 10 }];
+        optional uint64 MaxSyncLogChunksInFlightSSD = 5 [(ControlOptions) = {
+            Description: "Maximum number of SyncLog chunks written simultaneously to log, setting for SSD",
+            MinValue: 1,
+            MaxValue: 1024,
+            DefaultValue: 10 }];
+
+        optional uint64 BurstThresholdNsHDD = 6 [(ControlOptions) = {
+            Description: "Minumum operation queue size that is considered a burst, setting for HDD",
+            MinValue: 1,
+            MaxValue: 1000000000000,
+            DefaultValue: 200000000 }];
+        optional uint64 BurstThresholdNsSSD = 7 [(ControlOptions) = {
+            Description: "Minumum operation queue size that is considered a burst, setting for SSD",
+            MinValue: 1,
+            MaxValue: 1000000000000,
+            DefaultValue: 50000000 }];
+        optional uint64 BurstThresholdNsNVME = 8 [(ControlOptions) = {
+            Description: "Minumum operation queue size that is considered a burst, setting for NVME",
+            MinValue: 1,
+            MaxValue: 1000000000000,
+            DefaultValue: 32000000 }];
+        optional uint64 DiskTimeAvailableScaleHDD = 9 [(ControlOptions) = {
+            Description: "Scale coefficient DiskTimeAvailableScale metric, this parameter will be converted to float and divided by 1'000, setting for HDD",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 1000 }];
+        optional uint64 DiskTimeAvailableScaleSSD = 10 [(ControlOptions) = {
+            Description: "Scale coefficient for DiskTimeAvailableScale metric, this parameter will be converted to float and divided by 1'000, setting for SSD",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 1000 }];
+        optional uint64 DiskTimeAvailableScaleNVME = 11 [(ControlOptions) = {
+            Description: "Scale coefficient DiskTimeAvailableScale metric, this parameter will be converted to float and divided by 1'000, setting for NVME",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 1000 }];
+        optional uint64 DefaultHugeGarbagePerMille = 12 [(ControlOptions) = {
+            Description: "Default threshold of huge chunk garbage per mille which triggers huge chunk defragmentation",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 300 }];
+    }
+
+    message TTabletControls {
+        optional uint64 MaxCommitRedoMB = 1 [(ControlOptions) = {
+            Description: "Maximum redo size per commit in megabytes",
+            MinValue: 8,
+            MaxValue: 4096,
+            DefaultValue: 256 }];
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
     optional TSchemeShardControls SchemeShardControls = 4;
     optional TTCMallocControls TCMallocControls = 5;
     reserved 6;
+    optional TVDiskControls VDiskControls = 7;
+    optional TTabletControls TabletControls = 8;
 };
 
 message TMeteringConfig {
@@ -1336,7 +1444,7 @@ message THiveConfig {
     optional double MinPeriodBetweenReassign = 33 [default = 300.0]; // seconds
     optional double TabletRestartWatchPeriod = 34 [default = 3600.0]; // seconds
     optional double NodeRestartWatchPeriod = 35 [default = 3600.0]; // seconds
-    optional uint64 NodeDeletePeriod = 36 [default = 14400]; // seconds
+    optional uint64 NodeDeletePeriod = 36 [default = 3600]; // seconds
     repeated THiveTabletLimit DefaultTabletLimit = 37;
     repeated THiveTabletPreference DefaultTabletPreference = 38;
     optional uint64 SystemTabletCategoryId = 39 [default = 1];
@@ -1374,6 +1482,13 @@ message THiveConfig {
     optional double MinGroupUsageToBalance = 72 [default = 0.1];
     optional uint64 StorageBalancerInflight = 73 [default = 1];
     optional bool EnableDestroyOperations = 74 [default = false];
+    optional double NodeUsageRangeToKick = 75 [default = 0.2];
+    optional bool LessSystemTabletsMoves = 77 [default = true];
+    optional uint64 MaxPingsInFlight = 78 [default = 1000];
+}
+
+message TBlobCacheConfig {
+    optional uint64 MaxSizeBytes = 1 [default = 1073741824];
 }
 
 message TColumnShardConfig {
@@ -1388,19 +1503,34 @@ message TColumnShardConfig {
             TMinimalTablesCountPolicy MinimalTables = 1;
             TIdentityGroupsPolicy IdentityGroups = 2;
         }
-
     }
     optional TTablesStorageLayoutPolicy TablesStorageLayoutPolicy = 1;
     optional bool DisabledOnSchemeShard = 2 [default = true];
-    optional bool SkipOldGranules = 3 [default = true];
     optional bool IndexationEnabled = 4 [default = true];
     optional bool CompactionEnabled = 5 [default = true];
     optional bool TTLEnabled = 6 [default = true];
     optional bool WritingEnabled = 7 [default = true];
     optional uint32 WritingBufferDurationMs = 8 [default = 0];
-    optional bool UseChunkedMergeOnCompaction = 9 [default = true];
     optional uint64 CompactionMemoryLimit = 10 [default = 536870912];
     optional uint64 TieringsMemoryLimit = 11 [default = 536870912];
+    message TIndexMetadataMemoryLimit {
+        oneof Value {
+            double TotalRatio = 1 [default = 0.3];
+            uint64 AbsoluteValue = 2;
+        }
+    }
+
+    optional TIndexMetadataMemoryLimit IndexMetadataMemoryLimit = 12;
+    optional bool CleanupEnabled = 13 [default = true];
+
+    message TRepairInfo {
+        optional string ClassName = 1;
+        optional string Description = 2;
+    }
+    repeated TRepairInfo Repairs = 15;
+
+    optional uint32 MaxInFlightIntervalsOnRequest = 16;
+    optional uint32 MaxReadStaleness_ms = 18 [default = 300000];
 }
 
 message TSchemeShardConfig {
@@ -1421,6 +1551,9 @@ message TSchemeShardConfig {
     optional uint32 StatsMaxExecuteMs = 3 [default = 10];
 
     repeated TInFlightCounterConfig InFlightCounterConfig = 4;
+
+    // number of shards per table
+    optional uint32 MaxCdcInitialScanShardsInFlight = 5 [default = 10];
 }
 
 message TCompactionConfig {
@@ -1552,6 +1685,7 @@ message TTracingConfig {
         message TOpentelemetryBackend {
             optional string CollectorUrl = 1;
             optional string ServiceName = 2;
+            map<string, string> Headers = 3;
         }
 
 
@@ -1643,18 +1777,23 @@ message TClientCertificateAuthorization {
         repeated string Suffixes = 3;
     }
 
-    message TDynamicNodeDefinition {
+    message TClientCertificateDefinition {
         repeated TSubjectTerm SubjectTerms = 1;
         optional bool CanCheckNodeHostByCN = 2 [default = false];
+        repeated string MemberGroups = 3;
+        optional bool RequireSameIssuer = 4 [default = true];
     }
 
-    optional TDynamicNodeDefinition DynamicNodeAuthorization = 1;
+    repeated TClientCertificateDefinition ClientCertificateDefinitions = 1;
+    optional bool RequestClientCertificate = 2 [default = false];
+    optional string DefaultGroup = 3 [default = "DefaultClientAuth@cert"];
 }
 
 message TLocalPgWireConfig {
     optional int32 ListeningPort = 1 [default = 5432];
     optional string SslCertificate = 5;
     optional string Address = 6 [default = "::"];
+    optional bool TcpNotDelay = 7 [default = true];
 }
 
 message TKafkaProxyConfig {
@@ -1678,10 +1817,15 @@ message TKafkaProxyConfig {
     }
 
     optional TProxy Proxy = 7;
+    optional bool MeteringV2Enabled = 10 [default = false];
 }
 
 message TAwsCompatibilityConfig {
     optional string AwsRegion = 1;
+}
+
+message TMetadataCacheConfig {
+    optional uint64 RefreshPeriodMs = 1 [default = 15000];
 }
 
 message TLabel {
@@ -1762,6 +1906,11 @@ message TAppConfig {
     optional bool AllowEditYamlInUi = 75;
     optional TS3ProxyResolverConfig S3ProxyResolverConfig = 76;
     optional TBackgroundCleaningConfig BackgroundCleaningConfig = 77;
+    optional TBlobCacheConfig BlobCacheConfig = 78;
+    optional TLimiterConfig CompDiskLimiterConfig = 79;
+    optional TMetadataCacheConfig MetadataCacheConfig = 80;
+    optional TMemoryControllerConfig MemoryControllerConfig = 81;
+	optional TGroupedMemoryLimiterConfig GroupedMemoryLimiterConfig = 82;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

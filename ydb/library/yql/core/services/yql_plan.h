@@ -10,18 +10,12 @@ namespace NYql {
 
 struct TPlanSettings {
 
-    TPlanSettings& SetLimitInputPins(std::optional<ui32> val) {
-        LimitInputPins = std::move(val);
+    TPlanSettings& SetWithLimits(bool limits) {
+        WithLimits = limits;
         return *this;
     }
 
-    TPlanSettings& SetLimitOutputPins(std::optional<ui32> val) {
-        LimitOutputPins = std::move(val);
-        return *this;
-    }
-
-    std::optional<ui32> LimitInputPins = 10;
-    std::optional<ui32> LimitOutputPins = 10;
+    bool WithLimits = true;
 };
 
 class IPlanBuilder {

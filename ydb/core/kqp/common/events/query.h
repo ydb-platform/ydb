@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
@@ -39,6 +40,12 @@ struct TQueryRequestSettings {
         return *this;
     }
 
+    TQueryRequestSettings& SetOutputChunkMaxSize(ui64 size) {
+        OutputChunkMaxSize = size;
+        return *this;
+    }
+
+    ui64 OutputChunkMaxSize = 0;
     bool KeepSession = false;
     bool UseCancelAfter = true;
     ::Ydb::Query::Syntax Syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED;
@@ -60,7 +67,8 @@ public:
         const ::Ydb::Table::QueryStatsCollection::Mode collectStats,
         const ::Ydb::Table::QueryCachePolicy* queryCachePolicy,
         const ::Ydb::Operations::OperationParams* operationParams,
-        const TQueryRequestSettings& querySettings = TQueryRequestSettings());
+        const TQueryRequestSettings& querySettings = TQueryRequestSettings(),
+        const TString& poolId = "");
 
     TEvQueryRequest() = default;
 
@@ -315,8 +323,32 @@ public:
         return QuerySettings.SupportsStreamTrailingResult;
     }
 
+    ui64 GetOutputChunkMaxSize() const {
+        return RequestCtx ? QuerySettings.OutputChunkMaxSize : Record.GetRequest().GetOutputChunkMaxSize();
+    }
+
     TDuration GetProgressStatsPeriod() const {
         return ProgressStatsPeriod;
+    }
+
+    void SetPoolId(const TString& poolId) {
+        PoolId = poolId;
+        Record.MutableRequest()->SetPoolId(PoolId);
+    }
+
+    TString GetPoolId() const {
+        if (PoolId) {
+            return PoolId;
+        }
+        return Record.GetRequest().GetPoolId();
+    }
+
+    void SetPoolConfig(const NResourcePool::TPoolSettings& config) {
+        PoolConfig = config;
+    }
+
+    std::optional<NResourcePool::TPoolSettings> GetPoolConfig() const {
+        return PoolConfig;
     }
 
     mutable NKikimrKqp::TEvQueryRequest Record;
@@ -334,6 +366,7 @@ private:
     TString SessionId;
     TString YqlText;
     TString QueryId;
+    TString PoolId;
     NKikimrKqp::EQueryAction QueryAction;
     NKikimrKqp::EQueryType QueryType;
     const ::Ydb::Table::TransactionControl* TxControl = nullptr;
@@ -346,6 +379,7 @@ private:
     TDuration CancelAfter;
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     TDuration ProgressStatsPeriod;
+    std::optional<NResourcePool::TPoolSettings> PoolConfig;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

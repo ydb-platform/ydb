@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(4.24.0.20240302)
+VERSION(5.27.0.20240626)
 
 LICENSE(Apache-2.0)
 
@@ -42,6 +42,7 @@ RESOURCE_FILES(
     .dist-info/METADATA
     .dist-info/top_level.txt
     google-stubs/METADATA.toml
+    google-stubs/protobuf/py.typed
 )
 
 END()

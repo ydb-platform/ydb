@@ -1,4 +1,5 @@
 use_managed_peers_closure = true
+ignore_platforms = true
 
 [root]
 template="settings.gradle.kts.jinja"
@@ -6,7 +7,8 @@ copy=[
     "gradlew",
     "gradlew.bat",
     "gradle/wrapper/gradle-wrapper.jar",
-    "gradle/wrapper/gradle-wrapper.properties"
+    "gradle/wrapper/gradle-wrapper.properties",
+    ".idea/vcs.xml"
 ]
 
 [targets.jar]
@@ -56,6 +58,8 @@ runs-in_noparse="list"
 runs-out="list"
 runs-out_dir="list"
 runs-tool="list"
+
+javac-flags="list"
 
 [attrs.root]
 

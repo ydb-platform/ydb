@@ -5,12 +5,14 @@ import uuid
 import pytz
 
 from enum import Enum
+from io import IOBase
 from typing import Any, Tuple, Dict, Sequence, Optional, Union, Generator
 from datetime import date, datetime, tzinfo
 
 from pytz.exceptions import UnknownTimeZoneError
 
 from clickhouse_connect import common
+from clickhouse_connect.driver import tzutil
 from clickhouse_connect.driver.common import dict_copy, empty_gen, StreamContext
 from clickhouse_connect.driver.external import ExternalData
 from clickhouse_connect.driver.types import Matrix, Closable
@@ -38,7 +40,7 @@ class QueryContext(BaseQueryContext):
 
     # pylint: disable=duplicate-code,too-many-arguments,too-many-locals
     def __init__(self,
-                 query: str = '',
+                 query: Union[str, bytes] = '',
                  parameters: Optional[Dict[str, Any]] = None,
                  settings: Optional[Dict[str, Any]] = None,
                  query_formats: Optional[Dict[str, str]] = None,
@@ -169,13 +171,13 @@ class QueryContext(BaseQueryContext):
         elif self.apply_server_tz:
             active_tz = self.server_tz
         else:
-            active_tz = self.local_tz
+            active_tz = tzutil.local_tz
         if active_tz == pytz.UTC:
             return None
         return active_tz
 
     def updated_copy(self,
-                     query: Optional[str] = None,
+                     query: Optional[Union[str, bytes]] = None,
                      parameters: Optional[Dict[str, Any]] = None,
                      settings: Optional[Dict[str, Any]] = None,
                      query_formats: Optional[Dict[str, str]] = None,
@@ -216,7 +218,11 @@ class QueryContext(BaseQueryContext):
 
     def _update_query(self):
         self.final_query, self.bind_params = bind_query(self.query, self.parameters, self.server_tz)
-        self.uncommented_query = remove_sql_comments(self.final_query)
+        if isinstance(self.final_query, bytes):
+            # If we've embedded binary data in the query, all bets are off, and we check the original query for comments
+            self.uncommented_query = remove_sql_comments(self.query)
+        else:
+            self.uncommented_query = remove_sql_comments(self.final_query)
 
 
 class QueryResult(Closable):
@@ -338,7 +344,7 @@ class QueryResult(Closable):
 
 
 BS = '\\'
-must_escape = (BS, '\'', '`')
+must_escape = (BS, '\'', '`', '\t', '\n')
 
 
 def quote_identifier(identifier: str):
@@ -366,9 +372,36 @@ def bind_query(query: str, parameters: Optional[Union[Sequence, Dict[str, Any]]]
         query = query[:-1]
     if not parameters:
         return query, {}
+
+    binary_binds = None
+    if isinstance(parameters, dict):
+        binary_binds = {k: v for k, v in parameters.items() if k.startswith('$') and k.endswith('$') and len(k) > 1}
+        for key in binary_binds.keys():
+            del parameters[key]
     if external_bind_re.search(query) is None:
-        return finalize_query(query, parameters, server_tz), {}
-    return query, {f'param_{k}': format_bind_value(v, server_tz) for k, v in parameters.items()}
+        query, bound_params = finalize_query(query, parameters, server_tz), {}
+    else:
+        bound_params = {f'param_{k}': format_bind_value(v, server_tz) for k, v in parameters.items()}
+    if binary_binds:
+        binary_query = query.encode()
+        binary_indexes = {}
+        for k, v in binary_binds.items():
+            key = k.encode()
+            item_index = 0
+            while True:
+                item_index = binary_query.find(key, item_index)
+                if item_index == -1:
+                    break
+                binary_indexes[item_index + len(key)] = key, v
+                item_index += len(key)
+        query = b''
+        start = 0
+        for loc in sorted(binary_indexes.keys()):
+            key, value = binary_indexes[loc]
+            query += binary_query[start:loc] + value + key
+            start = loc
+        query += binary_query[start:]
+    return query, bound_params
 
 
 def format_str(value: str):
@@ -398,20 +431,24 @@ def format_query_value(value: Any, server_tz: tzinfo = pytz.UTC):
     if isinstance(value, date):
         return f"'{value.isoformat()}'"
     if isinstance(value, list):
-        return f"[{', '.join(format_query_value(x, server_tz) for x in value)}]"
+        return f"[{', '.join(str_query_value(x, server_tz) for x in value)}]"
     if isinstance(value, tuple):
-        return f"({', '.join(format_query_value(x, server_tz) for x in value)})"
+        return f"({', '.join(str_query_value(x, server_tz) for x in value)})"
     if isinstance(value, dict):
         if common.get_setting('dict_parameter_format') == 'json':
             return format_str(any_to_json(value).decode())
-        pairs = [format_query_value(k, server_tz) + ':' + format_query_value(v, server_tz)
+        pairs = [str_query_value(k, server_tz) + ':' + str_query_value(v, server_tz)
                  for k, v in value.items()]
         return f"{{{', '.join(pairs)}}}"
     if isinstance(value, Enum):
         return format_query_value(value.value, server_tz)
     if isinstance(value, (uuid.UUID, ipaddress.IPv4Address, ipaddress.IPv6Address)):
         return f"'{value}'"
-    return str(value)
+    return value
+
+
+def str_query_value(value: Any, server_tz: tzinfo = pytz.UTC):
+    return str(format_query_value(value, server_tz))
 
 
 # pylint: disable=too-many-branches
@@ -435,8 +472,7 @@ def format_bind_value(value: Any, server_tz: tzinfo = pytz.UTC, top_level: bool 
             return escape_str(value)
         return format_str(value)
     if isinstance(value, datetime):
-        if value.tzinfo is None:
-            value = value.replace(tzinfo=server_tz)
+        value = value.astimezone(server_tz)
         val = value.strftime('%Y-%m-%d %H:%M:%S')
         if top_level:
             return val
@@ -487,6 +523,12 @@ def to_arrow(content: bytes):
     pyarrow = check_arrow()
     reader = pyarrow.ipc.RecordBatchFileReader(content)
     return reader.read_all()
+
+
+def to_arrow_batches(buffer: IOBase) -> StreamContext:
+    pyarrow = check_arrow()
+    reader = pyarrow.ipc.open_stream(buffer)
+    return StreamContext(buffer, reader)
 
 
 def arrow_buffer(table) -> Tuple[Sequence[str], bytes]:

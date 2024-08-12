@@ -63,10 +63,8 @@ struct TListRequest {
 };
 
 bool operator<(const TListRequest& a, const TListRequest& b) {
-    const auto& lhs = a.S3Request.AuthInfo;
-    const auto& rhs = b.S3Request.AuthInfo;
-    return std::tie(lhs.Token, lhs.AwsAccessKey, lhs.AwsAccessSecret, lhs.AwsRegion, a.S3Request.Url, a.S3Request.Pattern) <
-           std::tie(rhs.Token, rhs.AwsAccessKey, rhs.AwsAccessSecret, rhs.AwsRegion, b.S3Request.Url, b.S3Request.Pattern);
+    return std::tie(a.S3Request.Credentials, a.S3Request.Url, a.S3Request.Pattern) <
+           std::tie(b.S3Request.Credentials, b.S3Request.Url, b.S3Request.Pattern);
 }
 
 using TPendingRequests = TMap<TListRequest, NThreading::TFuture<NS3Lister::TListResult>>;
@@ -88,6 +86,7 @@ public:
               State_->Configuration->RegexpCacheSize))
         , ListingStrategy_(MakeS3ListingStrategy(
               State_->Gateway,
+              State_->GatewayRetryPolicy,
               ListerFactory_,
               State_->Configuration->MinDesiredDirectoriesOfFilesPerQuery,
               State_->Configuration->MaxInflightListsPerQuery,
@@ -312,6 +311,9 @@ private:
             size_t readSize = 0;
             TExprNode::TListType pathNodes;
 
+            TStringBuilder path;
+            object.ForEachChild([&path](const TExprNode& child){ path << child.Head().Tail().Head().Content() << " "; });
+
             TMap<TMaybe<TVector<TExtraColumnValue>>, NS3Details::TPathList> pathsByExtraValues;
             const TGeneratedColumnsConfig* generatedColumnsConfig = nullptr;
             if (auto it = genColumnsByNode.find(node); it != genColumnsByNode.end()) {
@@ -499,12 +501,24 @@ private:
                     .Settings(ctx.NewList(object.Pos(), std::move(settings)))
                 .Done().Ptr();
 
+            auto row = Build<TCoArgument>(ctx, read.Pos())
+                .Name("row")
+                .Done();
+            auto emptyPredicate = Build<TCoLambda>(ctx, read.Pos())
+                .Args({row})
+                .Body<TCoBool>()
+                    .Literal().Build("true")
+                    .Build()
+                .Done().Ptr();
+            
             replaces.emplace(node, userSchema.back() ?
                 Build<TS3ReadObject>(ctx, read.Pos())
                     .World(read.World())
                     .DataSource(read.DataSource())
                     .Object(std::move(s3Object))
                     .RowType(std::move(userSchema.front()))
+                    .Path(ctx.NewAtom(object.Pos(), path))
+                    .FilterPredicate(emptyPredicate)
                     .ColumnOrder(std::move(userSchema.back()))
                 .Done().Ptr():
                 Build<TS3ReadObject>(ctx, read.Pos())
@@ -512,6 +526,8 @@ private:
                     .DataSource(read.DataSource())
                     .Object(std::move(s3Object))
                     .RowType(std::move(userSchema.front()))
+                    .Path(ctx.NewAtom(object.Pos(), path))
+                    .FilterPredicate(emptyPredicate)
                 .Done().Ptr());
         }
 
@@ -570,7 +586,7 @@ private:
         const auto& connect = State_->Configuration->Clusters.at(dataSource.Cluster().StringValue());
         const auto& token = State_->Configuration->Tokens.at(dataSource.Cluster().StringValue());
 
-        const auto authInfo = GetAuthInfo(State_->CredentialsFactory, token);
+        const auto& credentials = GetOrCreateCredentials(token);
         const TString url = connect.Url;
         auto s3ParseSettings = source.Input().Maybe<TS3ParseSettings>().Cast();
         TString filePattern;
@@ -602,7 +618,7 @@ private:
 
                 auto req = TListRequest{.S3Request{
                     .Url = url,
-                    .AuthInfo = authInfo,
+                    .Credentials = credentials,
                     .Pattern = NS3::NormalizePath(
                         TStringBuilder() << dir.Path << "/" << effectiveFilePattern),
                     .PatternType = NS3Lister::ES3PatternType::Wildcard,
@@ -726,7 +742,7 @@ private:
         const auto& connect = State_->Configuration->Clusters.at(read.DataSource().Cluster().StringValue());
         const auto& token = State_->Configuration->Tokens.at(read.DataSource().Cluster().StringValue());
 
-        const auto authInfo = GetAuthInfo(State_->CredentialsFactory, token);
+        const auto& credentials = GetOrCreateCredentials(token);
         const TString url = connect.Url;
 
         TGeneratedColumnsConfig config;
@@ -754,7 +770,7 @@ private:
                 State_->Configuration->UseConcurrentDirectoryLister.Get().GetOrElse(
                     State_->Configuration->AllowConcurrentListings);
             auto req = TListRequest{
-                .S3Request{.Url = url, .AuthInfo = authInfo},
+                .S3Request{.Url = url, .Credentials = credentials},
                 .FilePattern = effectiveFilePattern,
                 .Options{
                     .IsConcurrentListing = isConcurrentListingEnabled,
@@ -847,6 +863,10 @@ private:
                         entries.Directories.back().Path = req.S3Request.Pattern;
                         future = NThreading::MakeFuture<NS3Lister::TListResult>(std::move(entries));
                     } else {
+                        auto useRuntimeListing = State_->Configuration->UseRuntimeListing.Get().GetOrElse(false);
+                        if (useRuntimeListing && !req.Options.IsPartitionedDataset) {
+                            req.Options.MaxResultSet = 1;
+                        }
                         future = ListingStrategy_->List(req.S3Request, req.Options);
                     }
                     PendingRequests_[req] = future;
@@ -858,6 +878,14 @@ private:
         return true;
     }
 
+    TS3Credentials GetOrCreateCredentials(const TString& token) {
+        auto it = S3Credentials_.find(token);
+        if (it != S3Credentials_.end()) {
+            return it->second;
+        }
+        return S3Credentials_.insert({token, TS3Credentials(State_->CredentialsFactory, token)}).first->second;
+    }
+
     const TS3State::TPtr State_;
     const NS3Lister::IS3ListerFactory::TPtr ListerFactory_;
     const IS3ListingStrategy::TPtr ListingStrategy_;
@@ -865,6 +893,7 @@ private:
     TPendingRequests PendingRequests_;
     TNodeMap<TVector<TListRequest>> RequestsByNode_;
     TNodeMap<TGeneratedColumnsConfig> GenColumnsByNode_;
+    std::unordered_map<TString, TS3Credentials> S3Credentials_;
     NThreading::TFuture<void> AllFuture_;
 };
 

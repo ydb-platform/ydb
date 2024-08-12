@@ -10,6 +10,7 @@
 #include <ydb/library/yql/public/udf/udf_validate.h>
 #include <ydb/library/yql/core/credentials/yql_credentials.h>
 #include <ydb/library/yql/core/url_lister/interface/url_lister_manager.h>
+#include <ydb/library/yql/core/qplayer/storage/interface/yql_qstorage.h>
 #include <ydb/library/yql/ast/yql_expr.h>
 
 #include <library/cpp/yson/node/node.h>
@@ -84,6 +85,10 @@ public:
         Credentials = std::move(credentials);
     }
 
+    void SetQContext(const TQContext& qContext) {
+        QContext = qContext;
+    }
+
     void RegisterPackage(const TString& package) override;
     bool SetPackageDefaultVersion(const TString& package, ui32 version) override;
     const TExportTable* GetModule(const TString& module) const override;
@@ -111,6 +116,7 @@ private:
     IUrlLoader::TPtr UrlLoader;
     TMaybe<NYT::TNode> Parameters;
     TCredentials::TPtr Credentials;
+    TQContext QContext;
     TExprContext LibsContext;
     TSet<TString> KnownPackages;
     THashMap<TString, ui32> PackageVersions;
@@ -144,7 +150,73 @@ struct TYqlOperationOptions {
     TMaybe<NYT::TNode> ParametersYson;
 };
 
-using TColumnOrder = TVector<TString>;
+class TColumnOrder {
+public:
+    struct TOrderedItem {
+        TString LogicalName;
+        TString PhysicalName;
+        TOrderedItem(const TString& logical, const TString& physical) : LogicalName(logical), PhysicalName(physical) {}
+        TOrderedItem(TOrderedItem&&) = default;
+        TOrderedItem(const TOrderedItem&) = default;
+        TOrderedItem& operator=(const TOrderedItem&) = default;
+        bool operator==(const TOrderedItem& other) const {
+            return LogicalName == other.LogicalName && PhysicalName == other.PhysicalName;
+        }
+    };
+    TColumnOrder() = default;
+    TColumnOrder(const TColumnOrder&) = default;
+    TColumnOrder(TColumnOrder&&) = default;
+    TColumnOrder& operator=(const TColumnOrder&);
+    explicit TColumnOrder(const TVector<TString>& order);
+    TString AddColumn(const TString& name);
+
+    bool IsDuplicated(const TString& name) const;
+
+    void Shrink(size_t remain);
+
+    void Reserve(size_t);
+    void EraseIf(const std::function<bool(const TString&)>& fn);
+    void EraseIf(const std::function<bool(const TOrderedItem&)>& fn);
+    void Clear();
+
+    size_t Size() const;
+
+    TString Find(const TString&) const;
+
+    TVector<TOrderedItem>::const_pointer begin() const {
+        return Order_.cbegin();
+    }
+
+    TVector<TOrderedItem>::const_pointer end() const {
+        return Order_.cend();
+    }
+
+    const TOrderedItem& operator[](size_t i) const {
+        return Order_[i];
+    }
+
+    bool operator==(const TColumnOrder& other) const {
+        return Order_ == other.Order_;
+    }
+
+    const TOrderedItem& at(size_t i) const {
+        return Order_[i];
+    }
+
+    const TOrderedItem& front() const {
+        return Order_.front();
+    }
+
+    const TOrderedItem& back() const {
+        return Order_.back();
+    }
+private:
+    THashMap<TString, TString> GeneratedToOriginal_;
+    THashMap<TString, uint64_t> UseCount_;
+    // (name, generated_name)
+    TVector<TOrderedItem> Order_;
+};
+
 TString FormatColumnOrder(const TMaybe<TColumnOrder>& columnOrder, TMaybe<size_t> maxColumns = {});
 ui64 AddColumnOrderHash(const TMaybe<TColumnOrder>& columnOrder, ui64 hash);
 
@@ -185,7 +257,7 @@ enum class ECostBasedOptimizerType {
     Disable /* "disable" */,
     PG /* "pg" */,
     Native /* "native" */
-}; 
+};
 
 enum class EMatchRecognizeStreamingMode {
     Disable,
@@ -245,7 +317,10 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui32 EvaluateForLimit = 500;
     ui32 EvaluateParallelForLimit = 5000;
     ui32 EvaluateOrderByColumnLimit = 100;
+    ui32 PgIterateLimit = 500;
     bool PullUpFlatMapOverJoin = true;
+    bool FilterPushdownOverJoinOptionalSide = false;
+    bool RotateJoinTree = true;
     bool DeprecatedSQL = false;
     THashMap<std::tuple<TString, TString, const TTypeAnnotationNode*>, TUdfCachedInfo> UdfTypeCache; // (name,typecfg,type)->info
     bool UseTableMetaFromGraph = false;
@@ -259,8 +334,12 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui32 FolderSubDirsLimit = 1000;
     bool UseBlocks = false;
     EBlockEngineMode BlockEngineMode = EBlockEngineMode::Disable;
+    THashMap<TString, size_t> NoBlockRewriteCallableStats;
+    THashMap<TString, size_t> NoBlockRewriteTypeStats;
     TMaybe<bool> PgEmitAggApply;
     IArrowResolver::TPtr ArrowResolver;
+    TFileStoragePtr FileStorage;
+    TQContext QContext;
     ECostBasedOptimizerType CostBasedOptimizer = ECostBasedOptimizerType::Disable;
     bool MatchRecognize = false;
     EMatchRecognizeStreamingMode MatchRecognizeStreaming = EMatchRecognizeStreamingMode::Force;
@@ -271,6 +350,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool OrderedColumns = false;
     TColumnOrderStorage::TPtr ColumnOrderStorage = new TColumnOrderStorage;
     THashSet<TString> OptimizerFlags;
+    bool StreamLookupJoin = false;
 
     TMaybe<TColumnOrder> LookupColumnOrder(const TExprNode& node) const;
     IGraphTransformer::TStatus SetColumnOrder(const TExprNode& node, const TColumnOrder& columnOrder, TExprContext& ctx);
@@ -363,6 +443,14 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool IsBlockEngineEnabled() const {
         return BlockEngineMode != EBlockEngineMode::Disable || UseBlocks;
     }
+
+    void IncNoBlockCallable(TStringBuf callableName);
+    void IncNoBlockType(const TTypeAnnotationNode& type);
+    void IncNoBlockType(ETypeAnnotationKind kind);
+    void IncNoBlockType(NUdf::EDataSlot slot);
+
+    TVector<TString> GetTopNoBlocksCallables(size_t maxCount) const;
+    TVector<TString> GetTopNoBlocksTypes(size_t maxCount) const;
 };
 
 template <> inline

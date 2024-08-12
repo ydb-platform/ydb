@@ -93,7 +93,10 @@ private:
     void ReplyWithResult(StatusIds::StatusCode status,
                          const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message,
                          const TActorContext& ctx) {
-        Request_->SendResult(status, message);
+        NYql::TIssues issues;
+        IssuesFromMessage(message, issues);
+        Request_->RaiseIssues(issues);
+        Request_->ReplyWithYdbStatus(status);
         Die(ctx);
     }
 };

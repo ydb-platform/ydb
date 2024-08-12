@@ -1,4 +1,5 @@
 #include "yql_solomon_provider_impl.h"
+#include "yql_solomon_dq_integration.h"
 
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
@@ -24,6 +25,7 @@ public:
         , LoadMetaDataTransformer_(CreateSolomonLoadTableMetadataTransformer(State_))
         , TypeAnnotationTransformer_(CreateSolomonDataSourceTypeAnnotationTransformer(State_))
         , ExecutionTransformer_(CreateSolomonDataSourceExecTransformer(State_))
+        , DqIntegration_(CreateSolomonDqIntegration(State_))
     {
     }
 
@@ -35,13 +37,13 @@ public:
         return *ConfigurationTransformer_;
     }
 
-//    IGraphTransformer& GetIODiscoveryTransformer() override {
-//        return *IODiscoveryTransformer_;
-//    }
+   IGraphTransformer& GetIODiscoveryTransformer() override {
+       return *IODiscoveryTransformer_;
+   }
 
-//    IGraphTransformer& GetLoadTableMetadataTransformer() override {
-//        return *LoadMetaDataTransformer_;
-//    }
+   IGraphTransformer& GetLoadTableMetadataTransformer() override {
+       return *LoadMetaDataTransformer_;
+   }
 
     IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
         Y_UNUSED(instantOnly);
@@ -81,9 +83,14 @@ public:
     }
 
     bool CanPullResult(const TExprNode& node, TSyncMap& syncList, bool& canRef) override {
-        Y_UNUSED(node);
         Y_UNUSED(syncList);
         canRef = false;
+        if (node.IsCallable(TCoRight::CallableName())) {
+            const auto input = node.Child(0);
+            if (input->IsCallable(TSoReadObject::CallableName())) {
+                return true;
+            }
+        }
         return false;
     }
 
@@ -91,6 +98,29 @@ public:
         Y_UNUSED(ctx);
         YQL_CLOG(INFO, ProviderSolomon) << "RewriteIO";
         return node;
+    }
+
+    bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override {
+        Y_UNUSED(compact);
+
+        for (auto& child : node.Children()) {
+            children.push_back(child.Get());
+        }
+
+        if (TMaybeNode<TSoReadObject>(&node)) {
+            return true;
+        }
+        return false;
+    }
+
+    ui32 GetInputs(const TExprNode& node, TVector<TPinInfo>&, bool withLimits) override {
+        Y_UNUSED(node);
+        Y_UNUSED(withLimits);
+        return 0;
+    }
+
+    IDqIntegration* GetDqIntegration() override {
+        return DqIntegration_.Get();
     }
 
 private:
@@ -101,6 +131,7 @@ private:
     THolder<IGraphTransformer> LoadMetaDataTransformer_;
     THolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
     THolder<TExecTransformerBase> ExecutionTransformer_;
+    const THolder<IDqIntegration> DqIntegration_;
 };
 
 TIntrusivePtr<IDataProvider> CreateSolomonDataSource(TSolomonState::TPtr state) {

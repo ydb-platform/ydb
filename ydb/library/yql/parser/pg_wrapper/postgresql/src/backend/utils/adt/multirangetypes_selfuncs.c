@@ -6,7 +6,7 @@
  * Estimates are based on histograms of lower and upper bounds, and the
  * fraction of empty multiranges.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -34,7 +34,6 @@
 static double calc_multirangesel(TypeCacheEntry *typcache,
 								 VariableStatData *vardata,
 								 const MultirangeType *constval, Oid operator);
-static double default_multirange_selectivity(Oid operator);
 static double default_multirange_selectivity(Oid operator);
 static double calc_hist_selectivity(TypeCacheEntry *typcache,
 									VariableStatData *vardata,
@@ -221,7 +220,8 @@ multirangesel(PG_FUNCTION_ARGS)
 			upper.val = ((Const *) other)->constvalue;
 			upper.infinite = false;
 			upper.lower = false;
-			constrange = range_serialize(typcache->rngtype, &lower, &upper, false);
+			constrange = range_serialize(typcache->rngtype, &lower, &upper,
+										 false, NULL);
 			constmultirange = make_multirange(typcache->type_id, typcache->rngtype,
 											  1, &constrange);
 		}

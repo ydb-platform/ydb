@@ -163,7 +163,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
         }
 
         { // wrong schema: not supported PK
-            NYdb::NLogStore::TSchema logSchema(TestSchemaColumns(), {"json_payload", "resource_id"});
+            NYdb::NLogStore::TSchema logSchema(TestSchemaColumns(EPrimitiveType::Double), {"json_payload", "resource_id"});
             THashMap<TString, NYdb::NLogStore::TSchema> schemaPresets;
             schemaPresets["default"] = logSchema;
             NYdb::NLogStore::TLogStoreDescription storeDescr(4, schemaPresets);
@@ -333,9 +333,11 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             auto res = schemaClient.ListDirectory("/Root/LogStore/.sys").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
             auto children = res.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(children[0].Name, "store_primary_index_portion_stats");
-            UNIT_ASSERT_VALUES_EQUAL(children[1].Name, "store_primary_index_stats");
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(children[0].Name, "store_primary_index_granule_stats");
+            UNIT_ASSERT_VALUES_EQUAL(children[1].Name, "store_primary_index_optimizer_stats");
+            UNIT_ASSERT_VALUES_EQUAL(children[2].Name, "store_primary_index_portion_stats");
+            UNIT_ASSERT_VALUES_EQUAL(children[3].Name, "store_primary_index_stats");
         }
 
         {
@@ -352,9 +354,11 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             auto res = schemaClient.ListDirectory("/Root/LogStore/log1/.sys").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
             auto children = res.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(children[0].Name, "primary_index_portion_stats");
-            UNIT_ASSERT_VALUES_EQUAL(children[1].Name, "primary_index_stats");
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(children[0].Name, "primary_index_granule_stats");
+            UNIT_ASSERT_VALUES_EQUAL(children[1].Name, "primary_index_optimizer_stats");
+            UNIT_ASSERT_VALUES_EQUAL(children[2].Name, "primary_index_portion_stats");
+            UNIT_ASSERT_VALUES_EQUAL(children[3].Name, "primary_index_stats");
         }
 
         {

@@ -1,4 +1,4 @@
-OWNER(g:ymake)
+SUBSCRIBER(g:ymake)
 
 PY3_LIBRARY()
 
@@ -7,6 +7,7 @@ STYLE_PYTHON()
 PY_SRCS(
     TOP_LEVEL
     _common.py
+    _dart_fields.py
     _requirements.py
     _xsyn_includes.py
     bundle.py
@@ -48,5 +49,5 @@ RECURSE(
     lib/proxy
     lib/test_const
     lib/test_const/proxy
-    lib/tests/ruff
+    lib/tests/utils
 )

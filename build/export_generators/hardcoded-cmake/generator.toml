@@ -27,7 +27,7 @@ android-x86_64="ANDROID AND CMAKE_ANDROID_ARCH STREQUAL \"x86_64\""
 
 [root]
 templates=[
-    { path="conanfile.jinja", dest="conanfile.txt" },
+    { path="conanfile.py.jinja", dest="conanfile.py" },
     { path="root_cmake_lists.jinja", dest="CMakeLists.txt" },
     { path="root_global_vars.jinja", dest="cmake/global_vars.cmake" },
 ]
@@ -40,19 +40,28 @@ copy=[
     "cmake/global_flags.cmake",
 ]
 
+# DEPRECATED - remove after yexport release
+[common]
+template={ path="common_cmake_lists.jinja", dest="CMakeLists.txt" }
+
+# DEPRECATED - remove after yexport release
+[dir]
+template={ path="dir_cmake_lists.jinja", dest="CMakeLists{PLATFORM}.txt" }
+
+# WORKAROUND - used for all targets in hardcoded-cmake
+[targets.EMPTY]
+template={ path="dir_cmake_lists.jinja", dest="CMakeLists{PLATFORM}.txt" }
+merge_platform_template={ path="common_cmake_lists.jinja", dest="CMakeLists.txt" }
+
 [attrs.root]
 project_name="str"
 project_language_list="list"
-platform_flags="list"
-platform_cmakelists="list"
 platform_vars="list"
 includes="sorted_set"
 use_conan="bool"
 vanilla_protobuf="flag"
 
 [attrs.dir]
-prologue="str"
-epilogue="str"
 
 [attrs.target]
 is_interface="bool"
@@ -90,8 +99,8 @@ attrs=[
     "conan_require_tool",
     "old_conan_cmake_install",
 ]
-copy=["cmake/conan.cmake"]
-add_values=[{attr="includes", values=["cmake/conan.cmake"]}]
+copy=["cmake/conan1_deprecated.cmake", "cmake/conan_provider.cmake"]
+add_values=[{attr="includes", values=["cmake/conan1_deprecated.cmake"]}]
 
 [[rules]]
 attrs=[
@@ -101,7 +110,10 @@ attrs=[
     "target_proto_outs",
     "target_proto_addincls",
 ]
-copy=["cmake/protobuf.cmake"]
+copy=[
+    "cmake/protobuf.cmake",
+    "build/scripts/re_replace.py",
+]
 add_values=[{attr="includes", values=["cmake/protobuf.cmake"]}]
 
 [[rules]]
@@ -234,6 +246,10 @@ platforms=[
     "linux-ppc64le-cuda"
 ]
 copy=["cmake/conan-profiles/linux.ppc64le.profile"]
+
+[[rules]]
+platforms=["darwin-x86_64"]
+copy=["cmake/conan-profiles/macos.x86_64.profile"]
 
 [[rules]]
 platforms=["darwin-arm64"]

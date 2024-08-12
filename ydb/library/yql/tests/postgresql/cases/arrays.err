@@ -1,6 +1,6 @@
 Registering pre-existing tables
-	int8_tbl
 	tenk1
+	int8_tbl
 <sql-statement>
 --
 -- ARRAYS
@@ -1257,6 +1257,9 @@ SELECT
     -stdin-:<main>:6:6: Error: alternative is not implemented yet : 138
     	    (ARRAY[(0, 0), (1, 1)]),
 	     ^
+    -stdin-:<main>:2:5: Error: alternative is not implemented yet : 138
+    	    array_position(ids, (1, 1)),
+	    ^
 <sql-statement>
 -- operators
 SELECT a FROM arrtest WHERE b = ARRAY[[[113,142],[1,147]]];
@@ -1406,6 +1409,14 @@ SELECT array_agg(x) || array_agg(x) FROM (VALUES (ROW(1,2)), (ROW(3,4))) v(x);
     -stdin-:<main>:1:1: Error: alternative is not implemented yet : 138
     	SELECT array_agg(x) || array_agg(x) FROM (VALUES (ROW(1,2)), (ROW(3,4))) v(x);
 	^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	SELECT array_agg(x) || array_agg(x) FROM (VALUES (ROW(1,2)), (ROW(3,4))) v(x);
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	SELECT array_agg(x) || array_agg(x) FROM (VALUES (ROW(1,2)), (ROW(3,4))) v(x);
+	^
 <sql-statement>
 SELECT ROW(1,2) || array_agg(x) FROM (VALUES (ROW(3,4)), (ROW(5,6))) v(x);
 </sql-statement>
@@ -1414,6 +1425,9 @@ SELECT ROW(1,2) || array_agg(x) FROM (VALUES (ROW(3,4)), (ROW(5,6))) v(x);
     -stdin-:<main>:1:1: Error: alternative is not implemented yet : 138
     	SELECT ROW(1,2) || array_agg(x) FROM (VALUES (ROW(3,4)), (ROW(5,6))) v(x);
 	^
+    -stdin-:<main>:1:17: Error: alternative is not implemented yet : 138
+    	SELECT ROW(1,2) || array_agg(x) FROM (VALUES (ROW(3,4)), (ROW(5,6))) v(x);
+	                ^
 <sql-statement>
 SELECT * FROM array_op_test WHERE i @> '{32}' ORDER BY seqno;
 </sql-statement>
@@ -1642,106 +1656,1744 @@ select null::int >= any ('{}');
 -- cross-datatype
 select 33.4 = any (array[1,2,3]);
 </sql-statement>
-VERIFY failed (2024-03-25T09:26:20.097175Z): Value is not boxed
-  ydb/library/yql/public/udf/udf_value_inl.h:379
-  AsBoxed(): requirement IsBoxed() failed
-NPrivate::InternalPanicImpl(int, char const*, char const*, int, int, int, TBasicStringBuf<char, std::__y1::char_traits<char> >, char const*, unsigned long)+600 (0x99989F8)
-NPrivate::Panic(NPrivate::TStaticBuf const&, int, char const*, char const*, char const*, ...)+285 (0x998E95D)
-NYql::TPgResolvedCall<false>::DoCalculate(NKikimr::NMiniKQL::TComputationContext&) const+1131 (0xEBD844B)
-NKikimr::NMiniKQL::TMutableComputationNode<NYql::TPgResolvedCall<false> >::GetValue(NKikimr::NMiniKQL::TComputationContext&) const+31 (0xEBD7ADF)
-NYql::TFromPg<(NYql::NUdf::EDataSlot)0, false>::DoCalculate(NKikimr::NMiniKQL::TComputationContext&) const+25 (0xEBDB489)
-NKikimr::NMiniKQL::TMutableComputationNode<NYql::TFromPg<(NYql::NUdf::EDataSlot)0, false> >::GetValue(NKikimr::NMiniKQL::TComputationContext&) const+31 (0xEBDAFBF)
-??+0 (0x117D3052)
-NYql::TToPg<(NYql::NUdf::EDataSlot)0>::DoCalculate(NKikimr::NMiniKQL::TComputationContext&) const+25 (0xEBE00D9)
-NKikimr::NMiniKQL::TMutableComputationNode<NYql::TToPg<(NYql::NUdf::EDataSlot)0> >::GetValue(NKikimr::NMiniKQL::TComputationContext&) const+132 (0xEBDFC74)
-??+0 (0x7F4F21005654)
-??+0 (0x1117CB88)
-??+0 (0x117C4197)
-??+0 (0x117C357F)
-NKikimr::NMiniKQL::TArrayNode::DoCalculate(NKikimr::NMiniKQL::TComputationContext&) const+150 (0xF40B9F6)
-NKikimr::NMiniKQL::TMutableComputationNode<NKikimr::NMiniKQL::TArrayNode>::GetValue(NKikimr::NMiniKQL::TComputationContext&) const+31 (0xF40B2BF)
-NKikimr::NMiniKQL::TArrayNode::DoCalculate(NKikimr::NMiniKQL::TComputationContext&) const+150 (0xF40B9F6)
-NKikimr::NMiniKQL::TMutableComputationNode<NKikimr::NMiniKQL::TArrayNode>::GetValue(NKikimr::NMiniKQL::TComputationContext&) const+31 (0xF40B2BF)
-??+0 (0xF400BD7)
-NYql::TComputationGraphProxy::GetValue()+23 (0xF3E0137)
-NYql::NFile::TYtFileGateway::ExecuteResult(NYql::NFile::TSession&, NYson::TYsonWriter&, NYql::NNodes::TExprBase, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&, TVector<TBasicString<char, std::__y1::char_traits<char> >, std::__y1::allocator<TBasicString<char, std::__y1::char_traits<char> > > > const&) const+1930 (0xF3B390A)
-NYql::NFile::TYtFileGateway::ResOrPull(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&)+881 (0xF39E1E1)
-??+0 (0xE573A25)
-??+0 (0xE57705A)
-NYql::TExecTransformerBase::CallbackTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+1098 (0xE57B2DA)
-NYql::TAsyncCallbackTransformer<NYql::TExecTransformerBase>::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+37 (0xE576715)
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0xB0A99A8)
-??+0 (0xC6EE740)
-??+0 (0xC6E34EB)
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0xB0A99A8)
-??+0 (0xC7DA35F)
-??+0 (0xC7DEBD0)
-??+0 (0xC7D9E82)
-??+0 (0xC7DEA6C)
-??+0 (0xC7D9E82)
-??+0 (0xC7D6984)
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0xB0A99A8)
-??+0 (0xB0AA175)
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0xB0A99A8)
-NYql::AsyncTransformStepImpl(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool, bool, TBasicStringBuf<char, std::__y1::char_traits<char> > const&)+290 (0xB0A8412)
-NYql::AsyncTransform(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool)+66 (0xB0A8D72)
-NYql::TProgram::AsyncTransformWithFallback(bool)+81 (0xBFEFC11)
-??+0 (0xC001380)
-NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)+3119 (0xBFEDBDF)
-??+0 (0xBFEACBA)
-NYql::TProgram::Run(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)+129 (0xBFECF71)
-Main(int, char**)+6488 (0x9876608)
-main+343 (0x9878FD7)
-__libc_start_main+243 (0x7F4F20DBE083)
-??+0 (0x980A029)
-__GI_raise at ../sysdeps/unix/sysv/linux/raise.c:48:0
-__GI_abort at /build/glibc-wuryBv/glibc-2.31/stdlib/abort.c:79:0
-NPrivate::InternalPanicImpl(int, char const*, char const*, int, int, int, TBasicStringBuf<char, std::__y1::char_traits<char> >, char const*, unsigned long) at /-S/util/system/yassert.cpp:90:0
-NPrivate::Panic(NPrivate::TStaticBuf const&, int, char const*, char const*, char const*, ...) at /-S/util/system/yassert.cpp:55:0
-NYql::TPgResolvedCall<false>::DoCalculate(NKikimr::NMiniKQL::TComputationContext&) const at /-S/ydb/library/yql/parser/pg_wrapper/comp_factory.cpp:1145:0
-NKikimr::NMiniKQL::TMutableComputationNode<NYql::TPgResolvedCall<false> >::GetValue(NKikimr::NMiniKQL::TComputationContext&) const at /-S/ydb/library/yql/minikql/computation/mkql_computation_node_impl.h:214:0
-NYql::TFromPg<(NYql::NUdf::EDataSlot)0, false>::DoCalculate(NKikimr::NMiniKQL::TComputationContext&) const at /-S/ydb/library/yql/parser/pg_wrapper/comp_factory.cpp:2022:0
-NKikimr::NMiniKQL::TMutableComputationNode<NYql::TFromPg<(NYql::NUdf::EDataSlot)0, false> >::GetValue(NKikimr::NMiniKQL::TComputationContext&) const at /-S/ydb/library/yql/minikql/computation/mkql_computation_node_impl.h:214:0
-NKikimr::NMiniKQL::TBinaryComputationNode<NKikimr::NMiniKQL::(anonymous namespace)::TOrWrapper<true, true> >::GetValue(NKikimr::NMiniKQL::TComputationContext&) const at /-S/ydb/library/yql/minikql/computation/mkql_computation_node_impl.h:767:0
-NYql::TToPg<(NYql::NUdf::EDataSlot)0>::DoCalculate(NKikimr::NMiniKQL::TComputationContext&) const at /-S/ydb/library/yql/parser/pg_wrapper/comp_factory.cpp:2048:0
-NKikimr::NMiniKQL::TMutableComputationNode<NYql::TToPg<(NYql::NUdf::EDataSlot)0> >::GetValue(NKikimr::NMiniKQL::TComputationContext&) const at /-S/ydb/library/yql/minikql/computation/mkql_computation_node_impl.h:217:0
-??? at ???:0:0
-NKikimr::NMiniKQL::TCodegeneratorRootNode<NKikimr::NMiniKQL::TMutableCodegeneratorNode<NKikimr::NMiniKQL::(anonymous namespace)::TFoldWrapper>, true>::GetValue(NKikimr::NMiniKQL::TComputationContext&) const at /-B/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h:845:0
-NKikimr::NMiniKQL::(anonymous namespace)::TIfWrapper<false>::DoCalculate(NKikimr::NMiniKQL::TComputationContext&) const at /-B/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_if.cpp:28:0
-NKikimr::NMiniKQL::TMutableComputationNode<NKikimr::NMiniKQL::(anonymous namespace)::TIfWrapper<false> >::GetValue(NKikimr::NMiniKQL::TComputationContext&) const at /-S/ydb/library/yql/minikql/computation/mkql_computation_node_impl.h:214:0
-NKikimr::NMiniKQL::TArrayNode::DoCalculate(NKikimr::NMiniKQL::TComputationContext&) const at /-B/ydb/library/yql/minikql/computation/llvm14/mkql_computation_node_holders_codegen.cpp:244:0
-NKikimr::NMiniKQL::TMutableComputationNode<NKikimr::NMiniKQL::TArrayNode>::GetValue(NKikimr::NMiniKQL::TComputationContext&) const at /-S/ydb/library/yql/minikql/computation/mkql_computation_node_impl.h:214:0
-NKikimr::NMiniKQL::TArrayNode::DoCalculate(NKikimr::NMiniKQL::TComputationContext&) const at /-B/ydb/library/yql/minikql/computation/llvm14/mkql_computation_node_holders_codegen.cpp:244:0
-NKikimr::NMiniKQL::TMutableComputationNode<NKikimr::NMiniKQL::TArrayNode>::GetValue(NKikimr::NMiniKQL::TComputationContext&) const at /-S/ydb/library/yql/minikql/computation/mkql_computation_node_impl.h:214:0
-NKikimr::NMiniKQL::(anonymous namespace)::TComputationGraph::GetValue() at /-B/ydb/library/yql/minikql/computation/llvm14/mkql_computation_node_graph.cpp:623:0
-NYql::TComputationGraphProxy::GetValue() at /-S/ydb/library/yql/providers/yt/lib/lambda_builder/lambda_builder.cpp:116:0
-NYql::NFile::TYtFileGateway::ExecuteResult(NYql::NFile::TSession&, NYson::TYsonWriter&, NYql::NNodes::TExprBase, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&, TVector<TBasicString<char, std::__y1::char_traits<char> >, std::__y1::allocator<TBasicString<char, std::__y1::char_traits<char> > > > const&) const at /-S/ydb/library/yql/providers/yt/gateway/file/yql_yt_file.cpp:1201:0
-NYql::NFile::TYtFileGateway::ResOrPull(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&) at /-S/ydb/library/yql/providers/yt/gateway/file/yql_yt_file.cpp:644:0
-NYql::(anonymous namespace)::TYtDataSourceExecTransformer::HandleResOrPull(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&) at /-S/ydb/library/yql/providers/yt/provider/yql_yt_datasource_exec.cpp:181:0
-std::__y1::__function::__func<std::__y1::function<std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> NYql::TExecTransformerBase::Hndl<NYql::(anonymous namespace)::TYtDataSourceExecTransformer>(std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (NYql::(anonymous namespace)::TYtDataSourceExecTransformer::*)(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&))::'lambda'(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&), std::__y1::allocator<std::__y1::function<std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> NYql::TExecTransformerBase::Hndl<NYql::(anonymous namespace)::TYtDataSourceExecTransformer>(std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (NYql::(anonymous namespace)::TYtDataSourceExecTransformer::*)(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&))::'lambda'(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)>, std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)>::operator()(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:363:0
-NYql::TExecTransformerBase::CallbackTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/providers/common/transform/yql_exec.cpp:27:0
-NYql::TAsyncCallbackTransformer<NYql::TExecTransformerBase>::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/core/yql_graph_transformer.h:332:0
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/core/yql_graph_transformer.h:160:0
-NYql::IGraphTransformer::TStatus NYql::(anonymous namespace)::TResultCallableExecutionTransformer::HandleFillOrPull<NYql::NNodes::NGenerated::TResultStub<NYql::NNodes::TExprBase, NYql::NNodes::NGenerated::TResOrPullBaseStub<NYql::NNodes::TExprBase, NYql::NNodes::TCallable, NYql::NNodes::TCoAtom, NYql::NNodes::NGenerated::TCoNameValueTupleListStub<NYql::NNodes::TExprBase, NYql::NNodes::TListBase, NYql::NNodes::NGenerated::TCoNameValueTupleStub<NYql::NNodes::TExprBase, NYql::NNodes::TCoAtom> > > > >(NYql::NNodes::TExprBase, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, NYql::IDataProvider&) at /-S/ydb/library/yql/providers/result/provider/yql_result_provider.cpp:609:0
-NYql::(anonymous namespace)::TResultCallableExecutionTransformer::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/providers/result/provider/yql_result_provider.cpp:248:0
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/core/yql_graph_transformer.h:160:0
-NYql::(anonymous namespace)::TExecutionTransformer::ExecuteNode(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, unsigned int) at /-S/ydb/library/yql/core/yql_execution.cpp:274:0
-NYql::(anonymous namespace)::TExecutionTransformer::ExecuteChildren(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, unsigned int) at /-S/ydb/library/yql/core/yql_execution.cpp:340:0
-NYql::(anonymous namespace)::TExecutionTransformer::ExecuteNode(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, unsigned int) at /-S/ydb/library/yql/core/yql_execution.cpp:285:0
-NYql::(anonymous namespace)::TExecutionTransformer::ExecuteChildren(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, unsigned int) at /-S/ydb/library/yql/core/yql_execution.cpp:321:0
-NYql::(anonymous namespace)::TExecutionTransformer::ExecuteNode(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, unsigned int) at /-S/ydb/library/yql/core/yql_execution.cpp:285:0
-NYql::(anonymous namespace)::TExecutionTransformer::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/core/yql_execution.cpp:77:0
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/core/yql_graph_transformer.h:160:0
-NYql::(anonymous namespace)::TCompositeGraphTransformer::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/core/yql_graph_transformer.cpp:47:0
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/core/yql_graph_transformer.h:160:0
-NYql::AsyncTransformStepImpl(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool, bool, TBasicStringBuf<char, std::__y1::char_traits<char> > const&) at /-S/ydb/library/yql/core/yql_graph_transformer.cpp:312:0
-NYql::AsyncTransform(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool) at /-S/ydb/library/yql/core/yql_graph_transformer.cpp:364:0
-NYql::TProgram::AsyncTransformWithFallback(bool) at /-S/ydb/library/yql/core/facade/yql_facade.cpp:1153:0
-NThreading::TFuture<NThreading::NImpl::TFutureType<NThreading::NImpl::TFutureCallResult<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0, void>::TType>::TType> NThreading::TFuture<void>::Apply<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0>(NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0&&) const::'lambda'(NThreading::TFuture<void> const&)::operator()(NThreading::TFuture<void> const&) at /-S/library/cpp/threading/future/core/future-inl.h:726:0
-NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool) at /-S/ydb/library/yql/core/facade/yql_facade.cpp:1018:0
-NYql::IGraphTransformer::TStatus NYql::(anonymous namespace)::SyncExecution<TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool, TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*&, IOutputStream*&, IOutputStream*&, bool&>(NYql::TProgram*, NThreading::TFuture<NYql::IGraphTransformer::TStatus> (NYql::TProgram::*)(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool), TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*&, IOutputStream*&, IOutputStream*&, bool&) at /-S/ydb/library/yql/core/facade/yql_facade.cpp:69:0
-NYql::TProgram::Run(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool) at /-S/ydb/library/yql/core/facade/yql_facade.cpp:953:0
-Main(int, char**) at /-S/ydb/library/yql/tools/pgrun/pgrun.cpp:1301:0
-main at /-S/ydb/library/yql/tools/pgrun/pgrun.cpp:1341:0
-__libc_start_main at ../csu/libc-start.c:308:0
-??? at ???:0:0
+<sql-statement>
+select 33.4 > all (array[1,2,3]);
+</sql-statement>
+<sql-statement>
+-- errors
+select 33 * any ('{1,2,3}');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	-- errors
+	^
+        -stdin-:<main>:2:11: Error: At function: PgAnyResolvedOp
+        	select 33 * any ('{1,2,3}');
+	          ^
+            -stdin-:<main>:2:11: Error: Expected boolean operator result, but got: int4
+            	select 33 * any ('{1,2,3}');
+	          ^
+<sql-statement>
+select 33 * any (44);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select 33 * any (44);
+	^
+        -stdin-:<main>:1:11: Error: At function: PgAnyOp
+        	select 33 * any (44);
+	          ^
+            -stdin-:<main>:1:11: Error: ydb/library/yql/parser/pg_catalog/catalog.cpp:2143: Condition violated: `fromTypePtr'
+            	select 33 * any (44);
+	          ^
+<sql-statement>
+-- nulls
+select 33 = any (null::int[]);
+</sql-statement>
+<sql-statement>
+select null::int = any ('{1,2,3}');
+</sql-statement>
+<sql-statement>
+select 33 = any ('{1,null,3}');
+</sql-statement>
+<sql-statement>
+select 33 = any ('{1,null,33}');
+</sql-statement>
+<sql-statement>
+select 33 = all (null::int[]);
+</sql-statement>
+<sql-statement>
+select null::int = all ('{1,2,3}');
+</sql-statement>
+<sql-statement>
+select 33 = all ('{1,null,3}');
+</sql-statement>
+<sql-statement>
+select 33 = all ('{33,null,33}');
+</sql-statement>
+<sql-statement>
+-- nulls later in the bitmap
+SELECT -1 != ALL(ARRAY(SELECT NULLIF(g.i, 900) FROM generate_series(1,1000) g(i)));
+</sql-statement>
+<sql-statement>
+-- test indexes on arrays
+create temp table arr_tbl (f1 int[] unique);
+</sql-statement>
+<sql-statement>
+insert into arr_tbl values ('{1,2,3}');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	insert into arr_tbl values ('{1,2,3}');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "{1,2,3}"
+
+        	insert into arr_tbl values ('{1,2,3}');
+	^
+<sql-statement>
+insert into arr_tbl values ('{1,2}');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	insert into arr_tbl values ('{1,2}');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "{1,2}"
+
+        	insert into arr_tbl values ('{1,2}');
+	^
+<sql-statement>
+-- failure expected:
+insert into arr_tbl values ('{1,2,3}');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	-- failure expected:
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "{1,2,3}"
+
+        	-- failure expected:
+	^
+<sql-statement>
+insert into arr_tbl values ('{2,3,4}');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	insert into arr_tbl values ('{2,3,4}');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "{2,3,4}"
+
+        	insert into arr_tbl values ('{2,3,4}');
+	^
+<sql-statement>
+insert into arr_tbl values ('{1,5,3}');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	insert into arr_tbl values ('{1,5,3}');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "{1,5,3}"
+
+        	insert into arr_tbl values ('{1,5,3}');
+	^
+<sql-statement>
+insert into arr_tbl values ('{1,2,10}');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	insert into arr_tbl values ('{1,2,10}');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "{1,2,10}"
+
+        	insert into arr_tbl values ('{1,2,10}');
+	^
+<sql-statement>
+set enable_seqscan to off;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_seqscan
+    	set enable_seqscan to off;
+	^
+<sql-statement>
+set enable_bitmapscan to off;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_bitmapscan
+    	set enable_bitmapscan to off;
+	^
+<sql-statement>
+select * from arr_tbl where f1 > '{1,2,3}' and f1 <= '{1,5,3}';
+</sql-statement>
+<sql-statement>
+select * from arr_tbl where f1 >= '{1,2,3}' and f1 < '{1,5,3}';
+</sql-statement>
+<sql-statement>
+-- test ON CONFLICT DO UPDATE with arrays
+create temp table arr_pk_tbl (pk int4 primary key, f1 int[]);
+</sql-statement>
+<sql-statement>
+insert into arr_pk_tbl values (1, '{1,2,3}');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	insert into arr_pk_tbl values (1, '{1,2,3}');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "{1,2,3}"
+
+        	insert into arr_pk_tbl values (1, '{1,2,3}');
+	^
+<sql-statement>
+insert into arr_pk_tbl values (1, '{3,4,5}') on conflict (pk)
+  do update set f1[1] = excluded.f1[1], f1[3] = excluded.f1[3]
+  returning pk, f1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: InsertStmt: not supported onConflictClause
+    	insert into arr_pk_tbl values (1, '{3,4,5}') on conflict (pk)
+	^
+<sql-statement>
+insert into arr_pk_tbl(pk, f1[1:2]) values (1, '{6,7,8}') on conflict (pk)
+  do update set f1[1] = excluded.f1[1],
+    f1[2] = excluded.f1[2],
+    f1[3] = excluded.f1[3]
+  returning pk, f1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: InsertStmt: not supported onConflictClause
+    	insert into arr_pk_tbl(pk, f1[1:2]) values (1, '{6,7,8}') on conflict (pk)
+	^
+<sql-statement>
+-- note: if above selects don't produce the expected tuple order,
+-- then you didn't get an indexscan plan, and something is busted.
+reset enable_seqscan;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	-- note: if above selects don't produce the expected tuple order,
+	^
+<sql-statement>
+reset enable_bitmapscan;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	reset enable_bitmapscan;
+	^
+<sql-statement>
+-- test [not] (like|ilike) (any|all) (...)
+select 'foo' like any (array['%a', '%o']); -- t
+</sql-statement>
+<sql-statement>
+select 'foo' like any (array['%a', '%b']); -- f
+</sql-statement>
+<sql-statement>
+select 'foo' like all (array['f%', '%o']); -- t
+</sql-statement>
+<sql-statement>
+select 'foo' like all (array['f%', '%b']); -- f
+</sql-statement>
+<sql-statement>
+select 'foo' not like any (array['%a', '%b']); -- t
+</sql-statement>
+<sql-statement>
+select 'foo' not like all (array['%a', '%o']); -- f
+</sql-statement>
+<sql-statement>
+select 'foo' ilike any (array['%A', '%O']); -- t
+</sql-statement>
+<sql-statement>
+select 'foo' ilike all (array['F%', '%O']); -- t
+</sql-statement>
+<sql-statement>
+--
+-- General array parser tests
+--
+-- none of the following should be accepted
+select '{{1,{2}},{2,3}}'::text[];
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	--
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  malformed array literal: "{{1,{2}},{2,3}}"
+DETAIL:  Unexpected "{" character.
+
+        	--
+	^
+<sql-statement>
+select '{{},{}}'::text[];
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '{{},{}}'::text[];
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  malformed array literal: "{{},{}}"
+DETAIL:  Unexpected "}" character.
+
+        	select '{{},{}}'::text[];
+	^
+<sql-statement>
+select E'{{1,2},\\{2,3}}'::text[];
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select E'{{1,2},\\{2,3}}'::text[];
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  malformed array literal: "{{1,2},\{2,3}}"
+DETAIL:  Unexpected "\" character.
+
+        	select E'{{1,2},\\{2,3}}'::text[];
+	^
+<sql-statement>
+select '{{"1 2" x},{3}}'::text[];
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '{{"1 2" x},{3}}'::text[];
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  malformed array literal: "{{"1 2" x},{3}}"
+DETAIL:  Unexpected array element.
+
+        	select '{{"1 2" x},{3}}'::text[];
+	^
+<sql-statement>
+select '{}}'::text[];
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '{}}'::text[];
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  malformed array literal: "{}}"
+DETAIL:  Junk after closing right brace.
+
+        	select '{}}'::text[];
+	^
+<sql-statement>
+select '{ }}'::text[];
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '{ }}'::text[];
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  malformed array literal: "{ }}"
+DETAIL:  Junk after closing right brace.
+
+        	select '{ }}'::text[];
+	^
+<sql-statement>
+select array[];
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select array[];
+	^
+        -stdin-:<main>:1:8: Error: At function: PgArray
+        	select array[];
+	       ^
+            -stdin-:<main>:1:8: Error: Expected at least 1 argument(s), but got 0
+            	select array[];
+	       ^
+<sql-statement>
+-- none of the above should be accepted
+-- all of the following should be accepted
+select '{}'::text[];
+</sql-statement>
+<sql-statement>
+select '{{{1,2,3,4},{2,3,4,5}},{{3,4,5,6},{4,5,6,7}}}'::text[];
+</sql-statement>
+<sql-statement>
+select '{0 second  ,0 second}'::interval[];
+</sql-statement>
+<sql-statement>
+select '{ { "," } , { 3 } }'::text[];
+</sql-statement>
+<sql-statement>
+select '  {   {  "  0 second  "   ,  0 second  }   }'::text[];
+</sql-statement>
+<sql-statement>
+select '{
+           0 second,
+           @ 1 hour @ 42 minutes @ 20 seconds
+         }'::interval[];
+</sql-statement>
+<sql-statement>
+select array[]::text[];
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select array[]::text[];
+	^
+        -stdin-:<main>:1:17: Error: At function: PgCast
+        	select array[]::text[];
+	                ^
+            -stdin-:<main>:1:8: Error: At function: PgArray
+            	select array[]::text[];
+	       ^
+                -stdin-:<main>:1:8: Error: Expected at least 1 argument(s), but got 0
+                	select array[]::text[];
+	       ^
+<sql-statement>
+select '[0:1]={1.1,2.2}'::float8[];
+</sql-statement>
+<sql-statement>
+-- all of the above should be accepted
+-- tests for array aggregates
+CREATE TEMP TABLE arraggtest ( f1 INT[], f2 TEXT[][], f3 FLOAT[]);
+</sql-statement>
+<sql-statement>
+INSERT INTO arraggtest (f1, f2, f3) VALUES
+('{1,2,3,4}','{{grey,red},{blue,blue}}','{1.6, 0.0}');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO arraggtest (f1, f2, f3) VALUES
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "{1,2,3,4}"
+
+        	INSERT INTO arraggtest (f1, f2, f3) VALUES
+	^
+<sql-statement>
+INSERT INTO arraggtest (f1, f2, f3) VALUES
+('{1,2,3}','{{grey,red},{grey,blue}}','{1.6}');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO arraggtest (f1, f2, f3) VALUES
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "{1,2,3}"
+
+        	INSERT INTO arraggtest (f1, f2, f3) VALUES
+	^
+<sql-statement>
+SELECT max(f1), min(f1), max(f2), min(f2), max(f3), min(f3) FROM arraggtest;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT max(f1), min(f1), max(f2), min(f2), max(f3), min(f3) FROM arraggtest;
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: max
+        	SELECT max(f1), min(f1), max(f2), min(f2), max(f3), min(f3) FROM arraggtest;
+	^
+<sql-statement>
+INSERT INTO arraggtest (f1, f2, f3) VALUES
+('{3,3,2,4,5,6}','{{white,yellow},{pink,orange}}','{2.1,3.3,1.8,1.7,1.6}');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO arraggtest (f1, f2, f3) VALUES
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "{3,3,2,4,5,6}"
+
+        	INSERT INTO arraggtest (f1, f2, f3) VALUES
+	^
+<sql-statement>
+SELECT max(f1), min(f1), max(f2), min(f2), max(f3), min(f3) FROM arraggtest;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT max(f1), min(f1), max(f2), min(f2), max(f3), min(f3) FROM arraggtest;
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: max
+        	SELECT max(f1), min(f1), max(f2), min(f2), max(f3), min(f3) FROM arraggtest;
+	^
+<sql-statement>
+INSERT INTO arraggtest (f1, f2, f3) VALUES
+('{2}','{{black,red},{green,orange}}','{1.6,2.2,2.6,0.4}');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO arraggtest (f1, f2, f3) VALUES
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "{2}"
+
+        	INSERT INTO arraggtest (f1, f2, f3) VALUES
+	^
+<sql-statement>
+SELECT max(f1), min(f1), max(f2), min(f2), max(f3), min(f3) FROM arraggtest;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT max(f1), min(f1), max(f2), min(f2), max(f3), min(f3) FROM arraggtest;
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: max
+        	SELECT max(f1), min(f1), max(f2), min(f2), max(f3), min(f3) FROM arraggtest;
+	^
+<sql-statement>
+INSERT INTO arraggtest (f1, f2, f3) VALUES
+('{4,2,6,7,8,1}','{{red},{black},{purple},{blue},{blue}}',NULL);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO arraggtest (f1, f2, f3) VALUES
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "{4,2,6,7,8,1}"
+
+        	INSERT INTO arraggtest (f1, f2, f3) VALUES
+	^
+<sql-statement>
+SELECT max(f1), min(f1), max(f2), min(f2), max(f3), min(f3) FROM arraggtest;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT max(f1), min(f1), max(f2), min(f2), max(f3), min(f3) FROM arraggtest;
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: max
+        	SELECT max(f1), min(f1), max(f2), min(f2), max(f3), min(f3) FROM arraggtest;
+	^
+<sql-statement>
+INSERT INTO arraggtest (f1, f2, f3) VALUES
+('{}','{{pink,white,blue,red,grey,orange}}','{2.1,1.87,1.4,2.2}');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO arraggtest (f1, f2, f3) VALUES
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "{}"
+
+        	INSERT INTO arraggtest (f1, f2, f3) VALUES
+	^
+<sql-statement>
+SELECT max(f1), min(f1), max(f2), min(f2), max(f3), min(f3) FROM arraggtest;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT max(f1), min(f1), max(f2), min(f2), max(f3), min(f3) FROM arraggtest;
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: max
+        	SELECT max(f1), min(f1), max(f2), min(f2), max(f3), min(f3) FROM arraggtest;
+	^
+<sql-statement>
+-- A few simple tests for arrays of composite types
+create type comptype as (f1 int, f2 text);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 314
+    	-- A few simple tests for arrays of composite types
+	^
+<sql-statement>
+create table comptable (c1 comptype, c2 comptype[]);
+</sql-statement>
+<sql-statement>
+-- XXX would like to not have to specify row() construct types here ...
+insert into comptable
+  values (row(1,'foo'), array[row(2,'bar')::comptype, row(3,'baz')::comptype]);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 138
+    	-- XXX would like to not have to specify row() construct types here ...
+	^
+<sql-statement>
+-- check that implicitly named array type _comptype isn't a problem
+create type _comptype as enum('fooey');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 315
+    	-- check that implicitly named array type _comptype isn't a problem
+	^
+<sql-statement>
+select * from comptable;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.comptable
+    
+<sql-statement>
+select c2[2].f2 from comptable;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 360
+    	select c2[2].f2 from comptable;
+	^
+<sql-statement>
+drop type _comptype;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: DropStmt: alternative is not implemented yet : 373
+    	drop type _comptype;
+	^
+<sql-statement>
+drop table comptable;
+</sql-statement>
+<sql-statement>
+drop type comptype;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: DropStmt: alternative is not implemented yet : 373
+    	drop type comptype;
+	^
+<sql-statement>
+create or replace function unnest1(anyarray)
+returns setof anyelement as $$
+select $1[s] from generate_subscripts($1,1) g(s);
+$$ language sql immutable;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	create or replace function unnest1(anyarray)
+	^
+<sql-statement>
+create or replace function unnest2(anyarray)
+returns setof anyelement as $$
+select $1[s1][s2] from generate_subscripts($1,1) g1(s1),
+                   generate_subscripts($1,2) g2(s2);
+$$ language sql immutable;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	create or replace function unnest2(anyarray)
+	^
+<sql-statement>
+select * from unnest1(array[1,2,3]);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from unnest1(array[1,2,3]);
+	^
+        -stdin-:<main>:1:15: Error: At function: PgCall
+        	select * from unnest1(array[1,2,3]);
+	              ^
+            -stdin-:<main>:1:15: Error: No such proc: unnest1
+            	select * from unnest1(array[1,2,3]);
+	              ^
+<sql-statement>
+select * from unnest2(array[[1,2,3],[4,5,6]]);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from unnest2(array[[1,2,3],[4,5,6]]);
+	^
+        -stdin-:<main>:1:15: Error: At function: PgCall
+        	select * from unnest2(array[[1,2,3],[4,5,6]]);
+	              ^
+            -stdin-:<main>:1:15: Error: No such proc: unnest2
+            	select * from unnest2(array[[1,2,3],[4,5,6]]);
+	              ^
+<sql-statement>
+drop function unnest1(anyarray);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: DropStmt: alternative is not implemented yet : 386
+    	drop function unnest1(anyarray);
+	^
+<sql-statement>
+drop function unnest2(anyarray);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: DropStmt: alternative is not implemented yet : 386
+    	drop function unnest2(anyarray);
+	^
+<sql-statement>
+select array_fill(null::integer, array[3,3],array[2,2]);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select array_fill(null::integer, array[3,3],array[2,2]);
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select array_fill(null::integer, array[3,3],array[2,2]);
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc array_fill with given argument types: (int4,_int4,_int4)
+            	select array_fill(null::integer, array[3,3],array[2,2]);
+	       ^
+<sql-statement>
+select array_fill(null::integer, array[3,3]);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select array_fill(null::integer, array[3,3]);
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select array_fill(null::integer, array[3,3]);
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc array_fill with given argument types: (int4,_int4)
+            	select array_fill(null::integer, array[3,3]);
+	       ^
+<sql-statement>
+select array_fill(null::text, array[3,3],array[2,2]);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select array_fill(null::text, array[3,3],array[2,2]);
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select array_fill(null::text, array[3,3],array[2,2]);
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc array_fill with given argument types: (text,_int4,_int4)
+            	select array_fill(null::text, array[3,3],array[2,2]);
+	       ^
+<sql-statement>
+select array_fill(null::text, array[3,3]);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select array_fill(null::text, array[3,3]);
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select array_fill(null::text, array[3,3]);
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc array_fill with given argument types: (text,_int4)
+            	select array_fill(null::text, array[3,3]);
+	       ^
+<sql-statement>
+select array_fill(7, array[3,3],array[2,2]);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select array_fill(7, array[3,3],array[2,2]);
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select array_fill(7, array[3,3],array[2,2]);
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc array_fill with given argument types: (int4,_int4,_int4)
+            	select array_fill(7, array[3,3],array[2,2]);
+	       ^
+<sql-statement>
+select array_fill(7, array[3,3]);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select array_fill(7, array[3,3]);
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select array_fill(7, array[3,3]);
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc array_fill with given argument types: (int4,_int4)
+            	select array_fill(7, array[3,3]);
+	       ^
+<sql-statement>
+select array_fill('juhu'::text, array[3,3],array[2,2]);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select array_fill('juhu'::text, array[3,3],array[2,2]);
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select array_fill('juhu'::text, array[3,3],array[2,2]);
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc array_fill with given argument types: (text,_int4,_int4)
+            	select array_fill('juhu'::text, array[3,3],array[2,2]);
+	       ^
+<sql-statement>
+select array_fill('juhu'::text, array[3,3]);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select array_fill('juhu'::text, array[3,3]);
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select array_fill('juhu'::text, array[3,3]);
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc array_fill with given argument types: (text,_int4)
+            	select array_fill('juhu'::text, array[3,3]);
+	       ^
+<sql-statement>
+select a, a = '{}' as is_eq, array_dims(a)
+  from (select array_fill(42, array[0]) as a) ss;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select a, a = '{}' as is_eq, array_dims(a)
+	^
+        -stdin-:<main>:2:16: Error: At function: PgCall
+        	  from (select array_fill(42, array[0]) as a) ss;
+	               ^
+            -stdin-:<main>:2:16: Error: Unable to find an overload for proc array_fill with given argument types: (int4,_int4)
+            	  from (select array_fill(42, array[0]) as a) ss;
+	               ^
+<sql-statement>
+select a, a = '{}' as is_eq, array_dims(a)
+  from (select array_fill(42, '{}') as a) ss;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select a, a = '{}' as is_eq, array_dims(a)
+	^
+        -stdin-:<main>:2:16: Error: At function: PgCall
+        	  from (select array_fill(42, '{}') as a) ss;
+	               ^
+            -stdin-:<main>:2:16: Error: Unable to find an overload for proc array_fill with given argument types: (int4,unknown)
+            	  from (select array_fill(42, '{}') as a) ss;
+	               ^
+<sql-statement>
+select a, a = '{}' as is_eq, array_dims(a)
+  from (select array_fill(42, '{}', '{}') as a) ss;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select a, a = '{}' as is_eq, array_dims(a)
+	^
+        -stdin-:<main>:2:16: Error: At function: PgCall
+        	  from (select array_fill(42, '{}', '{}') as a) ss;
+	               ^
+            -stdin-:<main>:2:16: Error: Unable to find an overload for proc array_fill with given argument types: (int4,unknown,unknown)
+            	  from (select array_fill(42, '{}', '{}') as a) ss;
+	               ^
+<sql-statement>
+-- raise exception
+select array_fill(1, null, array[2,2]);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	-- raise exception
+	^
+        -stdin-:<main>:2:8: Error: At function: PgCall
+        	select array_fill(1, null, array[2,2]);
+	       ^
+            -stdin-:<main>:2:8: Error: Unable to find an overload for proc array_fill with given argument types: (int4,unknown,_int4)
+            	select array_fill(1, null, array[2,2]);
+	       ^
+<sql-statement>
+select array_fill(1, array[2,2], null);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select array_fill(1, array[2,2], null);
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select array_fill(1, array[2,2], null);
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc array_fill with given argument types: (int4,_int4,unknown)
+            	select array_fill(1, array[2,2], null);
+	       ^
+<sql-statement>
+select array_fill(1, array[2,2], '{}');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select array_fill(1, array[2,2], '{}');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select array_fill(1, array[2,2], '{}');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc array_fill with given argument types: (int4,_int4,unknown)
+            	select array_fill(1, array[2,2], '{}');
+	       ^
+<sql-statement>
+select array_fill(1, array[3,3], array[1,1,1]);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select array_fill(1, array[3,3], array[1,1,1]);
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select array_fill(1, array[3,3], array[1,1,1]);
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc array_fill with given argument types: (int4,_int4,_int4)
+            	select array_fill(1, array[3,3], array[1,1,1]);
+	       ^
+<sql-statement>
+select array_fill(1, array[1,2,null]);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select array_fill(1, array[1,2,null]);
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select array_fill(1, array[1,2,null]);
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc array_fill with given argument types: (int4,_int4)
+            	select array_fill(1, array[1,2,null]);
+	       ^
+<sql-statement>
+select array_fill(1, array[[1,2],[3,4]]);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select array_fill(1, array[[1,2],[3,4]]);
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select array_fill(1, array[[1,2],[3,4]]);
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc array_fill with given argument types: (int4,_int4)
+            	select array_fill(1, array[[1,2],[3,4]]);
+	       ^
+<sql-statement>
+select string_to_array('1|2|3', '|');
+</sql-statement>
+<sql-statement>
+select string_to_array('1|2|3|', '|');
+</sql-statement>
+<sql-statement>
+select string_to_array('1||2|3||', '||');
+</sql-statement>
+<sql-statement>
+select string_to_array('1|2|3', '');
+</sql-statement>
+<sql-statement>
+select string_to_array('', '|');
+</sql-statement>
+<sql-statement>
+select string_to_array('1|2|3', NULL);
+</sql-statement>
+<sql-statement>
+select string_to_array(NULL, '|') IS NULL;
+</sql-statement>
+<sql-statement>
+select string_to_array('abc', '');
+</sql-statement>
+<sql-statement>
+select string_to_array('abc', '', 'abc');
+</sql-statement>
+<sql-statement>
+select string_to_array('abc', ',');
+</sql-statement>
+<sql-statement>
+select string_to_array('abc', ',', 'abc');
+</sql-statement>
+<sql-statement>
+select string_to_array('1,2,3,4,,6', ',');
+</sql-statement>
+<sql-statement>
+select string_to_array('1,2,3,4,,6', ',', '');
+</sql-statement>
+<sql-statement>
+select string_to_array('1,2,3,4,*,6', ',', '*');
+</sql-statement>
+<sql-statement>
+select v, v is null as "is null" from string_to_table('1|2|3', '|') g(v);
+</sql-statement>
+<sql-statement>
+select v, v is null as "is null" from string_to_table('1|2|3|', '|') g(v);
+</sql-statement>
+<sql-statement>
+select v, v is null as "is null" from string_to_table('1||2|3||', '||') g(v);
+</sql-statement>
+<sql-statement>
+select v, v is null as "is null" from string_to_table('1|2|3', '') g(v);
+</sql-statement>
+<sql-statement>
+select v, v is null as "is null" from string_to_table('', '|') g(v);
+</sql-statement>
+<sql-statement>
+select v, v is null as "is null" from string_to_table('1|2|3', NULL) g(v);
+</sql-statement>
+<sql-statement>
+select v, v is null as "is null" from string_to_table(NULL, '|') g(v);
+</sql-statement>
+<sql-statement>
+select v, v is null as "is null" from string_to_table('abc', '') g(v);
+</sql-statement>
+<sql-statement>
+select v, v is null as "is null" from string_to_table('abc', '', 'abc') g(v);
+</sql-statement>
+<sql-statement>
+select v, v is null as "is null" from string_to_table('abc', ',') g(v);
+</sql-statement>
+<sql-statement>
+select v, v is null as "is null" from string_to_table('abc', ',', 'abc') g(v);
+</sql-statement>
+<sql-statement>
+select v, v is null as "is null" from string_to_table('1,2,3,4,,6', ',') g(v);
+</sql-statement>
+<sql-statement>
+select v, v is null as "is null" from string_to_table('1,2,3,4,,6', ',', '') g(v);
+</sql-statement>
+<sql-statement>
+select v, v is null as "is null" from string_to_table('1,2,3,4,*,6', ',', '*') g(v);
+</sql-statement>
+<sql-statement>
+select array_to_string(NULL::int4[], ',') IS NULL;
+</sql-statement>
+<sql-statement>
+select array_to_string('{}'::int4[], ',');
+</sql-statement>
+<sql-statement>
+select array_to_string(array[1,2,3,4,NULL,6], ',');
+</sql-statement>
+<sql-statement>
+select array_to_string(array[1,2,3,4,NULL,6], ',', '*');
+</sql-statement>
+<sql-statement>
+select array_to_string(array[1,2,3,4,NULL,6], NULL);
+</sql-statement>
+<sql-statement>
+select array_to_string(array[1,2,3,4,NULL,6], ',', NULL);
+</sql-statement>
+<sql-statement>
+select array_to_string(string_to_array('1|2|3', '|'), '|');
+</sql-statement>
+<sql-statement>
+select array_length(array[1,2,3], 1);
+</sql-statement>
+<sql-statement>
+select array_length(array[[1,2,3], [4,5,6]], 0);
+</sql-statement>
+<sql-statement>
+select array_length(array[[1,2,3], [4,5,6]], 1);
+</sql-statement>
+<sql-statement>
+select array_length(array[[1,2,3], [4,5,6]], 2);
+</sql-statement>
+<sql-statement>
+select array_length(array[[1,2,3], [4,5,6]], 3);
+</sql-statement>
+<sql-statement>
+select cardinality(NULL::int[]);
+</sql-statement>
+<sql-statement>
+select cardinality('{}'::int[]);
+</sql-statement>
+<sql-statement>
+select cardinality(array[1,2,3]);
+</sql-statement>
+<sql-statement>
+select cardinality('[2:4]={5,6,7}'::int[]);
+</sql-statement>
+<sql-statement>
+select cardinality('{{1,2}}'::int[]);
+</sql-statement>
+<sql-statement>
+select cardinality('{{1,2},{3,4},{5,6}}'::int[]);
+</sql-statement>
+<sql-statement>
+select cardinality('{{{1,9},{5,6}},{{2,3},{3,4}}}'::int[]);
+</sql-statement>
+<sql-statement>
+-- array_agg(anynonarray)
+select array_agg(unique1) from (select unique1 from tenk1 where unique1 < 15 order by unique1) ss;
+</sql-statement>
+<sql-statement>
+select array_agg(ten) from (select ten from tenk1 where unique1 < 15 order by unique1) ss;
+</sql-statement>
+<sql-statement>
+select array_agg(nullif(ten, 4)) from (select ten from tenk1 where unique1 < 15 order by unique1) ss;
+</sql-statement>
+<sql-statement>
+select array_agg(unique1) from tenk1 where unique1 < -15;
+</sql-statement>
+<sql-statement>
+-- array_agg(anyarray)
+select array_agg(ar)
+  from (values ('{1,2}'::int[]), ('{3,4}'::int[])) v(ar);
+</sql-statement>
+<sql-statement>
+select array_agg(distinct ar order by ar desc)
+  from (select array[i / 2] from generate_series(1,10) a(i)) b(ar);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: FuncCall: unsupported agg_order
+    	select array_agg(distinct ar order by ar desc)
+	       ^
+<sql-statement>
+select array_agg(ar)
+  from (select array_agg(array[i, i+1, i-1])
+        from generate_series(1,2) a(i)) b(ar);
+</sql-statement>
+<sql-statement>
+select array_agg(array[i+1.2, i+1.3, i+1.4]) from generate_series(1,3) g(i);
+</sql-statement>
+<sql-statement>
+select array_agg(array['Hello', i::text]) from generate_series(9,11) g(i);
+</sql-statement>
+<sql-statement>
+select array_agg(array[i, nullif(i, 3), i+1]) from generate_series(1,4) g(i);
+</sql-statement>
+<sql-statement>
+-- errors
+select array_agg('{}'::int[]) from generate_series(1,2);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- errors
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot accumulate empty arrays
+
+        	-- errors
+	^
+<sql-statement>
+select array_agg(null::int[]) from generate_series(1,2);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select array_agg(null::int[]) from generate_series(1,2);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot accumulate null arrays
+
+        	select array_agg(null::int[]) from generate_series(1,2);
+	^
+<sql-statement>
+select array_agg(ar)
+  from (values ('{1,2}'::int[]), ('{3}'::int[])) v(ar);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select array_agg(ar)
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot accumulate arrays of different dimensionality
+
+        	select array_agg(ar)
+	^
+<sql-statement>
+select unnest(array[1,2,3]);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select unnest(array[1,2,3]);
+	       ^
+<sql-statement>
+select * from unnest(array[1,2,3]);
+</sql-statement>
+<sql-statement>
+select unnest(array[1,2,3,4.5]::float8[]);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select unnest(array[1,2,3,4.5]::float8[]);
+	       ^
+<sql-statement>
+select unnest(array[1,2,3,4.5]::numeric[]);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select unnest(array[1,2,3,4.5]::numeric[]);
+	       ^
+<sql-statement>
+select unnest(array[1,2,3,null,4,null,null,5,6]);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select unnest(array[1,2,3,null,4,null,null,5,6]);
+	       ^
+<sql-statement>
+select unnest(array[1,2,3,null,4,null,null,5,6]::text[]);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select unnest(array[1,2,3,null,4,null,null,5,6]::text[]);
+	       ^
+<sql-statement>
+select abs(unnest(array[1,2,null,-3]));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:12: Error: Generator functions are not allowed in: SELECT
+    	select abs(unnest(array[1,2,null,-3]));
+	           ^
+<sql-statement>
+select array_remove(array[1,2,2,3], 2);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select array_remove(array[1,2,2,3], 2);
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select array_remove(array[1,2,2,3], 2);
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc array_remove with given argument types: (_int4,int4)
+            	select array_remove(array[1,2,2,3], 2);
+	       ^
+<sql-statement>
+select array_remove(array[1,2,2,3], 5);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select array_remove(array[1,2,2,3], 5);
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select array_remove(array[1,2,2,3], 5);
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc array_remove with given argument types: (_int4,int4)
+            	select array_remove(array[1,2,2,3], 5);
+	       ^
+<sql-statement>
+select array_remove(array[1,NULL,NULL,3], NULL);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select array_remove(array[1,NULL,NULL,3], NULL);
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select array_remove(array[1,NULL,NULL,3], NULL);
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc array_remove with given argument types: (_int4,unknown)
+            	select array_remove(array[1,NULL,NULL,3], NULL);
+	       ^
+<sql-statement>
+select array_remove(array['A','CC','D','C','RR'], 'RR');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select array_remove(array['A','CC','D','C','RR'], 'RR');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select array_remove(array['A','CC','D','C','RR'], 'RR');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc array_remove with given argument types: (_text,unknown)
+            	select array_remove(array['A','CC','D','C','RR'], 'RR');
+	       ^
+<sql-statement>
+select array_remove(array[1.0, 2.1, 3.3], 1);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select array_remove(array[1.0, 2.1, 3.3], 1);
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select array_remove(array[1.0, 2.1, 3.3], 1);
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc array_remove with given argument types: (_numeric,int4)
+            	select array_remove(array[1.0, 2.1, 3.3], 1);
+	       ^
+<sql-statement>
+select array_remove('{{1,2,2},{1,4,3}}', 2); -- not allowed
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select array_remove('{{1,2,2},{1,4,3}}', 2); -- not allowed
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select array_remove('{{1,2,2},{1,4,3}}', 2); -- not allowed
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc array_remove with given argument types: (unknown,int4)
+            	select array_remove('{{1,2,2},{1,4,3}}', 2); -- not allowed
+	       ^
+<sql-statement>
+select array_remove(array['X','X','X'], 'X') = '{}';
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select array_remove(array['X','X','X'], 'X') = '{}';
+	^
+        -stdin-:<main>:1:46: Error: At function: PgOp
+        	select array_remove(array['X','X','X'], 'X') = '{}';
+	                                             ^
+            -stdin-:<main>:1:8: Error: At function: PgCall
+            	select array_remove(array['X','X','X'], 'X') = '{}';
+	       ^
+                -stdin-:<main>:1:8: Error: Unable to find an overload for proc array_remove with given argument types: (_text,unknown)
+                	select array_remove(array['X','X','X'], 'X') = '{}';
+	       ^
+<sql-statement>
+select array_replace(array[1,2,5,4],5,3);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select array_replace(array[1,2,5,4],5,3);
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select array_replace(array[1,2,5,4],5,3);
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc array_replace with given argument types: (_int4,int4,int4)
+            	select array_replace(array[1,2,5,4],5,3);
+	       ^
+<sql-statement>
+select array_replace(array[1,2,5,4],5,NULL);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select array_replace(array[1,2,5,4],5,NULL);
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select array_replace(array[1,2,5,4],5,NULL);
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc array_replace with given argument types: (_int4,int4,unknown)
+            	select array_replace(array[1,2,5,4],5,NULL);
+	       ^
+<sql-statement>
+select array_replace(array[1,2,NULL,4,NULL],NULL,5);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select array_replace(array[1,2,NULL,4,NULL],NULL,5);
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select array_replace(array[1,2,NULL,4,NULL],NULL,5);
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc array_replace with given argument types: (_int4,unknown,int4)
+            	select array_replace(array[1,2,NULL,4,NULL],NULL,5);
+	       ^
+<sql-statement>
+select array_replace(array['A','B','DD','B'],'B','CC');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select array_replace(array['A','B','DD','B'],'B','CC');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select array_replace(array['A','B','DD','B'],'B','CC');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc array_replace with given argument types: (_text,unknown,unknown)
+            	select array_replace(array['A','B','DD','B'],'B','CC');
+	       ^
+<sql-statement>
+select array_replace(array[1,NULL,3],NULL,NULL);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select array_replace(array[1,NULL,3],NULL,NULL);
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select array_replace(array[1,NULL,3],NULL,NULL);
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc array_replace with given argument types: (_int4,unknown,unknown)
+            	select array_replace(array[1,NULL,3],NULL,NULL);
+	       ^
+<sql-statement>
+select array_replace(array['AB',NULL,'CDE'],NULL,'12');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select array_replace(array['AB',NULL,'CDE'],NULL,'12');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select array_replace(array['AB',NULL,'CDE'],NULL,'12');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc array_replace with given argument types: (_text,unknown,unknown)
+            	select array_replace(array['AB',NULL,'CDE'],NULL,'12');
+	       ^
+<sql-statement>
+-- array(select array-value ...)
+select array(select array[i,i/2] from generate_series(1,5) i);
+</sql-statement>
+<sql-statement>
+select array(select array['Hello', i::text] from generate_series(9,11) i);
+</sql-statement>
+<sql-statement>
+-- Insert/update on a column that is array of composite
+create temp table t1 (f1 int8_tbl[]);
+</sql-statement>
+<sql-statement>
+insert into t1 (f1[5].q1) values(42);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.t1
+    
+<sql-statement>
+select * from t1;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.t1
+    
+<sql-statement>
+update t1 set f1[5].q2 = 43;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+select * from t1;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.t1
+    
+<sql-statement>
+-- Check that arrays of composites are safely detoasted when needed
+create temp table src (f1 text);
+</sql-statement>
+<sql-statement>
+insert into src
+  select string_agg(random()::text,'') from generate_series(1,10000);
+</sql-statement>
+<sql-statement>
+create type textandtext as (c1 text, c2 text);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 314
+    	create type textandtext as (c1 text, c2 text);
+	^
+<sql-statement>
+create temp table dest (f1 textandtext[]);
+</sql-statement>
+<sql-statement>
+insert into dest select array[row(f1,f1)::textandtext] from src;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:43: Error: alternative is not implemented yet : 138
+    	insert into dest select array[row(f1,f1)::textandtext] from src;
+	                                          ^
+<sql-statement>
+select length(md5((f1[1]).c2)) from dest;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:15: Error: alternative is not implemented yet : 360
+    	select length(md5((f1[1]).c2)) from dest;
+	              ^
+<sql-statement>
+delete from src;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+select length(md5((f1[1]).c2)) from dest;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:15: Error: alternative is not implemented yet : 360
+    	select length(md5((f1[1]).c2)) from dest;
+	              ^
+<sql-statement>
+truncate table src;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 257
+    	truncate table src;
+	^
+<sql-statement>
+drop table src;
+</sql-statement>
+<sql-statement>
+select length(md5((f1[1]).c2)) from dest;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:15: Error: alternative is not implemented yet : 360
+    	select length(md5((f1[1]).c2)) from dest;
+	              ^
+<sql-statement>
+drop table dest;
+</sql-statement>
+<sql-statement>
+drop type textandtext;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: DropStmt: alternative is not implemented yet : 373
+    	drop type textandtext;
+	^
+<sql-statement>
+-- Tests for polymorphic-array form of width_bucket()
+-- this exercises the varwidth and float8 code paths
+SELECT
+    op,
+    width_bucket(op::numeric, ARRAY[1, 3, 5, 10.0]::numeric[]) AS wb_n1,
+    width_bucket(op::numeric, ARRAY[0, 5.5, 9.99]::numeric[]) AS wb_n2,
+    width_bucket(op::numeric, ARRAY[-6, -5, 2.0]::numeric[]) AS wb_n3,
+    width_bucket(op::float8, ARRAY[1, 3, 5, 10.0]::float8[]) AS wb_f1,
+    width_bucket(op::float8, ARRAY[0, 5.5, 9.99]::float8[]) AS wb_f2,
+    width_bucket(op::float8, ARRAY[-6, -5, 2.0]::float8[]) AS wb_f3
+FROM (VALUES
+  (-5.2),
+  (-0.0000000001),
+  (0.000000000001),
+  (1),
+  (1.99999999999999),
+  (2),
+  (2.00000000000001),
+  (3),
+  (4),
+  (4.5),
+  (5),
+  (5.5),
+  (6),
+  (7),
+  (8),
+  (9),
+  (9.99999999999999),
+  (10),
+  (10.0000000000001)
+) v(op);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	-- Tests for polymorphic-array form of width_bucket()
+	^
+        -stdin-:<main>:1:1: Error: At function: PgResultItem
+        	-- Tests for polymorphic-array form of width_bucket()
+	^
+            -stdin-:<main>:5:5: Error: At function: PgCall
+            	    width_bucket(op::numeric, ARRAY[1, 3, 5, 10.0]::numeric[]) AS wb_n1,
+	    ^
+                -stdin-:<main>:5:5: Error: Unable to find an overload for proc width_bucket with given argument types: (numeric,_numeric)
+                	    width_bucket(op::numeric, ARRAY[1, 3, 5, 10.0]::numeric[]) AS wb_n1,
+	    ^
+        -stdin-:<main>:1:1: Error: At function: PgResultItem
+        	-- Tests for polymorphic-array form of width_bucket()
+	^
+            -stdin-:<main>:6:5: Error: At function: PgCall
+            	    width_bucket(op::numeric, ARRAY[0, 5.5, 9.99]::numeric[]) AS wb_n2,
+	    ^
+                -stdin-:<main>:6:5: Error: Unable to find an overload for proc width_bucket with given argument types: (numeric,_numeric)
+                	    width_bucket(op::numeric, ARRAY[0, 5.5, 9.99]::numeric[]) AS wb_n2,
+	    ^
+        -stdin-:<main>:1:1: Error: At function: PgResultItem
+        	-- Tests for polymorphic-array form of width_bucket()
+	^
+            -stdin-:<main>:7:5: Error: At function: PgCall
+            	    width_bucket(op::numeric, ARRAY[-6, -5, 2.0]::numeric[]) AS wb_n3,
+	    ^
+                -stdin-:<main>:7:5: Error: Unable to find an overload for proc width_bucket with given argument types: (numeric,_numeric)
+                	    width_bucket(op::numeric, ARRAY[-6, -5, 2.0]::numeric[]) AS wb_n3,
+	    ^
+        -stdin-:<main>:1:1: Error: At function: PgResultItem
+        	-- Tests for polymorphic-array form of width_bucket()
+	^
+            -stdin-:<main>:8:5: Error: At function: PgCall
+            	    width_bucket(op::float8, ARRAY[1, 3, 5, 10.0]::float8[]) AS wb_f1,
+	    ^
+                -stdin-:<main>:8:5: Error: Unable to find an overload for proc width_bucket with given argument types: (float8,_float8)
+                	    width_bucket(op::float8, ARRAY[1, 3, 5, 10.0]::float8[]) AS wb_f1,
+	    ^
+        -stdin-:<main>:1:1: Error: At function: PgResultItem
+        	-- Tests for polymorphic-array form of width_bucket()
+	^
+            -stdin-:<main>:9:5: Error: At function: PgCall
+            	    width_bucket(op::float8, ARRAY[0, 5.5, 9.99]::float8[]) AS wb_f2,
+	    ^
+                -stdin-:<main>:9:5: Error: Unable to find an overload for proc width_bucket with given argument types: (float8,_float8)
+                	    width_bucket(op::float8, ARRAY[0, 5.5, 9.99]::float8[]) AS wb_f2,
+	    ^
+        -stdin-:<main>:1:1: Error: At function: PgResultItem
+        	-- Tests for polymorphic-array form of width_bucket()
+	^
+            -stdin-:<main>:10:5: Error: At function: PgCall
+            	    width_bucket(op::float8, ARRAY[-6, -5, 2.0]::float8[]) AS wb_f3
+	    ^
+                -stdin-:<main>:10:5: Error: Unable to find an overload for proc width_bucket with given argument types: (float8,_float8)
+                	    width_bucket(op::float8, ARRAY[-6, -5, 2.0]::float8[]) AS wb_f3
+	    ^
+<sql-statement>
+-- ensure float8 path handles NaN properly
+SELECT
+    op,
+    width_bucket(op, ARRAY[1, 3, 9, 'NaN', 'NaN']::float8[]) AS wb
+FROM (VALUES
+  (-5.2::float8),
+  (4::float8),
+  (77::float8),
+  ('NaN'::float8)
+) v(op);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	-- ensure float8 path handles NaN properly
+	^
+        -stdin-:<main>:4:5: Error: At function: PgCall
+        	    width_bucket(op, ARRAY[1, 3, 9, 'NaN', 'NaN']::float8[]) AS wb
+	    ^
+            -stdin-:<main>:4:5: Error: Unable to find an overload for proc width_bucket with given argument types: (float8,_float8)
+            	    width_bucket(op, ARRAY[1, 3, 9, 'NaN', 'NaN']::float8[]) AS wb
+	    ^
+<sql-statement>
+-- these exercise the generic fixed-width code path
+SELECT
+    op,
+    width_bucket(op, ARRAY[1, 3, 5, 10]) AS wb_1
+FROM generate_series(0,11) as op;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	-- these exercise the generic fixed-width code path
+	^
+        -stdin-:<main>:4:5: Error: At function: PgCall
+        	    width_bucket(op, ARRAY[1, 3, 5, 10]) AS wb_1
+	    ^
+            -stdin-:<main>:4:5: Error: Unable to find an overload for proc width_bucket with given argument types: (int4,_int4)
+            	    width_bucket(op, ARRAY[1, 3, 5, 10]) AS wb_1
+	    ^
+<sql-statement>
+SELECT width_bucket(now(),
+                    array['yesterday', 'today', 'tomorrow']::timestamptz[]);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT width_bucket(now(),
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT width_bucket(now(),
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc width_bucket with given argument types: (timestamptz,_timestamptz)
+            	SELECT width_bucket(now(),
+	       ^
+<sql-statement>
+-- corner cases
+SELECT width_bucket(5, ARRAY[3]);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	-- corner cases
+	^
+        -stdin-:<main>:2:8: Error: At function: PgCall
+        	SELECT width_bucket(5, ARRAY[3]);
+	       ^
+            -stdin-:<main>:2:8: Error: Unable to find an overload for proc width_bucket with given argument types: (int4,_int4)
+            	SELECT width_bucket(5, ARRAY[3]);
+	       ^
+<sql-statement>
+SELECT width_bucket(5, '{}');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT width_bucket(5, '{}');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT width_bucket(5, '{}');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc width_bucket with given argument types: (int4,unknown)
+            	SELECT width_bucket(5, '{}');
+	       ^
+<sql-statement>
+-- error cases
+SELECT width_bucket('5'::text, ARRAY[3, 4]::integer[]);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	-- error cases
+	^
+        -stdin-:<main>:2:8: Error: At function: PgCall
+        	SELECT width_bucket('5'::text, ARRAY[3, 4]::integer[]);
+	       ^
+            -stdin-:<main>:2:8: Error: Unable to find an overload for proc width_bucket with given argument types: (text,_int4)
+            	SELECT width_bucket('5'::text, ARRAY[3, 4]::integer[]);
+	       ^
+<sql-statement>
+SELECT width_bucket(5, ARRAY[3, 4, NULL]);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT width_bucket(5, ARRAY[3, 4, NULL]);
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT width_bucket(5, ARRAY[3, 4, NULL]);
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc width_bucket with given argument types: (int4,_int4)
+            	SELECT width_bucket(5, ARRAY[3, 4, NULL]);
+	       ^
+<sql-statement>
+SELECT width_bucket(5, ARRAY[ARRAY[1, 2], ARRAY[3, 4]]);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT width_bucket(5, ARRAY[ARRAY[1, 2], ARRAY[3, 4]]);
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT width_bucket(5, ARRAY[ARRAY[1, 2], ARRAY[3, 4]]);
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc width_bucket with given argument types: (int4,_int4)
+            	SELECT width_bucket(5, ARRAY[ARRAY[1, 2], ARRAY[3, 4]]);
+	       ^
+<sql-statement>
+-- trim_array
+SELECT arr, trim_array(arr, 2)
+FROM
+(VALUES ('{1,2,3,4,5,6}'::bigint[]),
+        ('{1,2}'),
+        ('[10:16]={1,2,3,4,5,6,7}'),
+        ('[-15:-10]={1,2,3,4,5,6}'),
+        ('{{1,10},{2,20},{3,30},{4,40}}')) v(arr);
+</sql-statement>
+<sql-statement>
+SELECT trim_array(ARRAY[1, 2, 3], -1); -- fail
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT trim_array(ARRAY[1, 2, 3], -1); -- fail
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  number of elements to trim must be between 0 and 3
+
+        	SELECT trim_array(ARRAY[1, 2, 3], -1); -- fail
+	^
+<sql-statement>
+SELECT trim_array(ARRAY[1, 2, 3], 10); -- fail
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT trim_array(ARRAY[1, 2, 3], 10); -- fail
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  number of elements to trim must be between 0 and 3
+
+        	SELECT trim_array(ARRAY[1, 2, 3], 10); -- fail
+	^
+<sql-statement>
+SELECT trim_array(ARRAY[]::int[], 1); -- fail
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT trim_array(ARRAY[]::int[], 1); -- fail
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT trim_array(ARRAY[]::int[], 1); -- fail
+	       ^
+            -stdin-:<main>:1:28: Error: At function: PgCast
+            	SELECT trim_array(ARRAY[]::int[], 1); -- fail
+	                           ^
+                -stdin-:<main>:1:19: Error: At function: PgArray
+                	SELECT trim_array(ARRAY[]::int[], 1); -- fail
+	                  ^
+                    -stdin-:<main>:1:19: Error: Expected at least 1 argument(s), but got 0
+                    	SELECT trim_array(ARRAY[]::int[], 1); -- fail
+	                  ^

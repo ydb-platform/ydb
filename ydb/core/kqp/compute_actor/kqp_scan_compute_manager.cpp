@@ -9,7 +9,7 @@ TShardState::TPtr TInFlightShards::Put(TShardState&& state) {
     MutableStatistics(state.TabletId).MutableStatistics(0).SetStartInstant(Now());
 
     TShardState::TPtr result = std::make_shared<TShardState>(std::move(state));
-    AFL_ENSURE(Shards.emplace(result->TabletId, result).second);
+    AFL_ENSURE(Shards.emplace(result->TabletId, result).second)("tablet_id", result->TabletId);
     return result;
 }
 
@@ -25,7 +25,7 @@ std::vector<std::unique_ptr<TComputeTaskData>> TShardScannerInfo::OnReceiveData(
         return {};
     }
     AFL_ENSURE(ActorId);
-    AFL_ENSURE(!DataChunksInFlightCount);
+    AFL_ENSURE(!DataChunksInFlightCount)("data_chunks_in_flightCount", DataChunksInFlightCount);
     std::vector<std::unique_ptr<TComputeTaskData>> result;
     if (data.SplittedBatches.size() > 1) {
         ui32 idx = 0;
@@ -38,7 +38,7 @@ std::vector<std::unique_ptr<TComputeTaskData>> TShardScannerInfo::OnReceiveData(
     } else {
         result.emplace_back(std::make_unique<TComputeTaskData>(selfPtr, std::make_unique<TEvScanExchange::TEvSendData>(std::move(data.Rows), TabletId)));
     }
-    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "receive_data")("count_chunks", result.size());
+    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "receive_data")("actor_id", ActorId)("count_chunks", result.size());
     DataChunksInFlightCount = result.size();
     return result;
 }

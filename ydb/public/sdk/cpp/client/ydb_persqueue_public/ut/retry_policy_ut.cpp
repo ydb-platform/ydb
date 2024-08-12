@@ -379,11 +379,11 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
     }
     Y_UNIT_TEST(RetryWithBatching) {
         auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
-        auto settings = setup->GetWriteSessionSettings();
         auto retryPolicy = std::make_shared<TYdbPqTestRetryPolicy>();
-        settings.BatchFlushInterval(TDuration::Seconds(1000)); // Batch on size, not on time.
-        settings.BatchFlushSizeBytes(100);
-        settings.RetryPolicy(retryPolicy);
+        auto settings = setup->GetWriteSessionSettings()
+            .BatchFlushInterval(TDuration::Seconds(1000)) // Batch on size, not on time.
+            .BatchFlushSizeBytes(100)
+            .RetryPolicy(retryPolicy);
         auto& client = setup->GetPersQueueClient();
         auto writer = client.CreateWriteSession(settings);
         auto event = *writer->GetEvent(true);
@@ -393,6 +393,8 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
         TString message = "1234567890";
         ui64 seqNo = 0;
         setup->KickTablets();
+        setup->WaitForTabletsDown();
+
         writer->Write(std::move(continueToken), message, ++seqNo);
         retryPolicy->ExpectBreakDown();
         retryPolicy->WaitForRetriesSync(3);

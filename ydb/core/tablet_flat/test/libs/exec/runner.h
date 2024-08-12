@@ -46,7 +46,7 @@ namespace NFake {
             auto *types = NTable::NTest::DbgRegistry();
             auto *app = new TAppData(0, 0, 0, 0, { }, types, nullptr, nullptr, nullptr);
 
-            Env.Initialize({ app, nullptr, nullptr });
+            Env.Initialize({ app, nullptr, nullptr, {} });
             Env.SetDispatchTimeout(DEFAULT_DISPATCH_TIMEOUT);
             Env.SetLogPriority(NKikimrServices::FAKE_ENV, NActors::NLog::PRI_INFO);
 
@@ -183,12 +183,12 @@ namespace NFake {
             { /*_ Shared page collection cache service, used by executor */
                 auto config = MakeHolder<TSharedPageCacheConfig>();
 
-                config->CacheConfig = new TCacheCacheConfig(conf.Shared, nullptr, nullptr, nullptr);
+                config->LimitBytes = conf.Shared;
                 config->TotalAsyncQueueInFlyLimit = conf.AsyncQueue;
                 config->TotalScanQueueInFlyLimit = conf.ScanQueue;
                 config->Counters = MakeIntrusive<TSharedPageCacheCounters>(Env.GetDynamicCounters());
 
-                auto *actor = CreateSharedPageCache(std::move(config), Env.GetMemObserver());
+                auto *actor = CreateSharedPageCache(std::move(config));
 
                 RunOn(3, MakeSharedPageCacheId(0), actor, EMail::ReadAsFilled);
             }

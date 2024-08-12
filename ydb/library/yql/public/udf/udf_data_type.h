@@ -13,6 +13,8 @@ namespace NUdf {
 
 using TDataTypeId = ui16;
 
+using TTimezoneId = ui16;
+
 enum EDataTypeFeatures : ui32 {
     CanCompare = 1u << 0,
     HasDeterministicCompare = 1u << 1,
@@ -149,6 +151,9 @@ class TDate32 {};
 class TDatetime64 {};
 class TTimestamp64 {};
 class TInterval64 {};
+class TTzDate32 {};
+class TTzDatetime64 {};
+class TTzTimestamp64 {};
 class TDecimal {};
 class TDyNumber {};
 
@@ -199,6 +204,9 @@ constexpr i32 MAX_YEAR32 = 148108; // non-inclusive
     XX(Datetime64, NYql::NProto::Datetime64, TDatetime64, CommonType | DateType | BigDateType, i64, 0) \
     XX(Timestamp64, NYql::NProto::Timestamp64, TTimestamp64, CommonType | DateType | BigDateType, i64, 0) \
     XX(Interval64, NYql::NProto::Interval64, TInterval64, CommonType | TimeIntervalType | BigDateType, i64, 0) \
+    XX(TzDate32, NYql::NProto::TzDate32, TTzDate32, CommonType | TzDateType | BigDateType, i32, 0) \
+    XX(TzDatetime64, NYql::NProto::TzDatetime64, TTzDatetime64, CommonType | TzDateType | BigDateType, i64, 0) \
+    XX(TzTimestamp64, NYql::NProto::TzTimestamp64, TTzTimestamp64, CommonType | TzDateType | BigDateType, i64, 0) \
 
 #define UDF_TYPE_ID(xName, xTypeId, xType, xFeatures, xLayoutType, xParamsCount)                 \
     template <>                                                                                  \
@@ -259,7 +267,8 @@ enum ECastOptions : TCastResultOptions {
     MayLoseData = 1U << 1U,
     AnywayLoseData = 1U << 2U,
 
-    Impossible = 1U << 3U
+    Impossible = 1U << 3U,
+    Undefined = 1U << 4U
 };
 
 TMaybe<TCastResultOptions> GetCastResult(EDataSlot source, EDataSlot target);

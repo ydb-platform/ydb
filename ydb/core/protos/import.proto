@@ -3,6 +3,8 @@ import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 
+import "google/protobuf/timestamp.proto";
+
 package NKikimrImport;
 option java_package = "ru.yandex.kikimr.proto";
 
@@ -11,10 +13,13 @@ message TImport {
     optional Ydb.StatusIds.StatusCode Status = 2;
     repeated Ydb.Issue.IssueMessage Issues = 3;
     optional Ydb.Import.ImportProgress.Progress Progress = 4;
+    optional google.protobuf.Timestamp StartTime = 7;
+    optional google.protobuf.Timestamp EndTime = 8;
     repeated Ydb.Import.ImportItemProgress ItemsProgress = 5;
     oneof Settings {
         Ydb.Import.ImportFromS3Settings ImportFromS3Settings = 6;
     }
+    optional string UserSID = 9;
 }
 
 message TCreateImportRequest {

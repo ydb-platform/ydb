@@ -1,3 +1,4 @@
+#include <flat_part_loader.h>
 #include <ydb/core/tablet_flat/test/libs/rows/cook.h>
 #include <ydb/core/tablet_flat/test/libs/rows/layout.h>
 #include <ydb/core/tablet_flat/test/libs/table/model/large.h>
@@ -142,11 +143,12 @@ namespace {
         TCheckResult result;
 
         TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection = new TTestPartPageCollection(part, 0);
-        TKeysEnv env(part.Get(), new TCache(pageCollection));
+        NTable::TLoader::TLoaderEnv env(new TCache(pageCollection));
+        env.ProvidePart(part.Get());
         TKeysLoader loader(part.Get(), &env);
 
         while (!(result.Run = loader.Do(screen))) {
-            if (auto fetch = env.GetFetches()) {
+            if (auto fetch = env.GetFetch()) {
                 UNIT_ASSERT_C(fetch->PageCollection.Get() == pageCollection.Get(),
                     "TLoader wants to fetch from an unexpected pageCollection");
                 UNIT_ASSERT_C(fetch->Pages, "TLoader wants a fetch, but there are no pages");
@@ -162,7 +164,7 @@ namespace {
                 UNIT_ASSERT_C(false, "TKeysLoader was stalled");
             }
         }
-        env.Check(false); /* On success there shouldn't be left loads */
+        env.EnsureNoNeedPages(); /* On success there shouldn't be left loads */
 
         const auto scrSize = screen ? screen->Size() : 1;
 
@@ -234,7 +236,7 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
             screen = new TScreen(std::move(holes));
         }
         auto result = RunLoaderTest(Part0(), screen);
-        UNIT_ASSERT_VALUES_EQUAL_C(result.Pages, (IsBTreeIndex() ? 70 : 1) + IndexTools::CountMainPages(*Part0()), // index + all data pages
+        UNIT_ASSERT_VALUES_EQUAL_C(result.Pages, (IsBTreeIndex() ? 84 : 1) + IndexTools::CountMainPages(*Part0()), // index + all data pages
             "Restoring slice bounds needed " << result.Pages << " extra pages");
     }
 
@@ -261,7 +263,7 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
             screen = new TScreen(std::move(holes));
         }
         auto result = RunLoaderTest(Part0(), screen);
-        UNIT_ASSERT_VALUES_EQUAL_C(result.Pages, (IsBTreeIndex() ? 70 : 1) + IndexTools::CountMainPages(*Part0()), // index + all data pages
+        UNIT_ASSERT_VALUES_EQUAL_C(result.Pages, (IsBTreeIndex() ? 84 : 1) + IndexTools::CountMainPages(*Part0()), // index + all data pages
             "Restoring slice bounds needed " << result.Pages << " extra pages");
     }
 
@@ -290,7 +292,7 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
             screen = new TScreen(std::move(holes));
         }
         auto result = RunLoaderTest(Part0(), screen);
-        UNIT_ASSERT_VALUES_EQUAL_C(result.Pages, (IsBTreeIndex() ? 70 : 1) + screen->Size(), // index + data pages
+        UNIT_ASSERT_VALUES_EQUAL_C(result.Pages, (IsBTreeIndex() ? 84  : 1) + screen->Size(), // index + data pages
             "Restoring slice bounds needed " << result.Pages <<
             " extra pages, expected " << screen->Size());
     }

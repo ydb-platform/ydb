@@ -35,7 +35,7 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "Limit-Filter-TableFullScan",
+                                                "Node Type": "TopSort-Filter-TableFullScan",
                                                 "Operators": [
                                                     {
                                                         "Inputs": [
@@ -44,7 +44,8 @@
                                                             }
                                                         ],
                                                         "Limit": "10",
-                                                        "Name": "Limit"
+                                                        "Name": "TopSort",
+                                                        "TopSortBy": "$4.EventTime"
                                                     },
                                                     {
                                                         "Inputs": [
@@ -63,12 +64,13 @@
                                                             "SearchPhrase"
                                                         ],
                                                         "ReadRanges": [
-                                                            "EventTime (-\u221e, +\u221e)",
                                                             "CounterID (-\u221e, +\u221e)",
                                                             "EventDate (-\u221e, +\u221e)",
                                                             "UserID (-\u221e, +\u221e)",
+                                                            "EventTime (-\u221e, +\u221e)",
                                                             "WatchID (-\u221e, +\u221e)"
                                                         ],
+                                                        "Scan": "Parallel",
                                                         "Table": "clickbench/plans/row/hits"
                                                     }
                                                 ],
@@ -98,10 +100,10 @@
                                 "SearchPhrase"
                             ],
                             "scan_by": [
-                                "EventTime (-\u221e, +\u221e)",
                                 "CounterID (-\u221e, +\u221e)",
                                 "EventDate (-\u221e, +\u221e)",
                                 "UserID (-\u221e, +\u221e)",
+                                "EventTime (-\u221e, +\u221e)",
                                 "WatchID (-\u221e, +\u221e)"
                             ],
                             "type": "FullScan"

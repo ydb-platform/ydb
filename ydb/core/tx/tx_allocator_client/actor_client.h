@@ -4,7 +4,9 @@
 
 #include <util/generic/vector.h>
 
+
 namespace NKikimr {
+struct TAppData;
 
 struct TEvTxAllocatorClient {
     enum EEv {
@@ -49,5 +51,6 @@ struct TEvTxAllocatorClient {
 }; // TTxAllocatorClientEvents
 
 IActor* CreateTxAllocatorClient(TVector<ui64> txAllocators);
+IActor* CreateTxAllocatorClient(const TAppData* appData);
 
 } // NKikimr

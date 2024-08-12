@@ -276,7 +276,7 @@ EMessageType GetMessageType(const TSharedRefArray& message)
     return header->Type;
 }
 
-bool ParseRequestHeader(
+bool TryParseRequestHeader(
     const TSharedRefArray& message,
     NProto::TRequestHeader* header)
 {
@@ -350,7 +350,7 @@ void MergeRequestHeaderExtensions(
 #undef XX
 }
 
-bool ParseRequestCancelationHeader(
+bool TryParseRequestCancelationHeader(
     const TSharedRefArray& message,
     NProto::TRequestCancelationHeader* header)
 {
@@ -361,7 +361,7 @@ bool ParseRequestCancelationHeader(
     return DeserializeFromProtoWithHeader(header, message[0]);
 }
 
-bool ParseStreamingPayloadHeader(
+bool TryParseStreamingPayloadHeader(
     const TSharedRefArray& message,
     NProto::TStreamingPayloadHeader * header)
 {
@@ -372,7 +372,7 @@ bool ParseStreamingPayloadHeader(
     return DeserializeFromProtoWithHeader(header, message[0]);
 }
 
-bool ParseStreamingFeedbackHeader(
+bool TryParseStreamingFeedbackHeader(
     const TSharedRefArray& message,
     NProto::TStreamingFeedbackHeader * header)
 {
@@ -384,6 +384,11 @@ bool ParseStreamingFeedbackHeader(
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+i64 GetMessageHeaderSize(const TSharedRefArray& message)
+{
+    return message.Size() >= 1 ? static_cast<i64>(message[0].Size()) : 0;
+}
 
 i64 GetMessageBodySize(const TSharedRefArray& message)
 {

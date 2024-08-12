@@ -1,0 +1,147 @@
+{
+  "post": {
+    "security": {
+      "Bearer": []
+    },
+    "consumes": [
+      "application/json"
+    ],
+    "produces": [
+      "application/json"
+    ],
+    "description": "Call GetShardIterator and GetRecords for specified shard",
+    "parameters": [
+      {
+        "description": "The location of the database",
+        "in": "path",
+        "name": "location",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "description": "The database of the data stream",
+        "in": "query",
+        "name": "databaseId",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "description": "The name of the data stream",
+        "in": "query",
+        "name": "name",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "default": 20,
+        "description": "Limit the number of records to get",
+        "in": "body",
+        "name": "limit",
+        "required": false,
+        "type": "number"
+      },
+      {
+        "description": "The metadata to get next/previous chunk; can not be used with shard",
+        "in": "body",
+        "name": "cookie",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "in": "body",
+        "name": "shard",
+        "description": "Specify which shard to read from and at what timestamp; can not be used with cookie",
+        "required": false,
+        "schema": {
+          "properties": {
+            "timestamp": {
+              "type": "number",
+              "required": false,
+              "description": "The timestamp to get records from; can not be used with sequenceNumber"
+            },
+            "sequenceNumber": {
+              "type": "string",
+              "required": false,
+              "description": "The sequence number to get records from; can not be used with timestamp"
+            },
+            "id": {
+              "type": "string",
+              "required": true,
+              "description": "The shard ID of the data stream to get records from; without timestamp/sequenceNumber the earliest possible records are obtained"
+            }
+          }
+        }
+      }
+    ],
+    "responses": {
+      "200": {
+        "description": "successfull operation",
+        "schema": {
+          "properties": {
+            "shard": {
+              "properties": {
+                "records": {
+                  "items": {
+                    "properties": {
+                      "timestamp": {
+                        "type": "number"
+                      },
+                      "data": {
+                        "type": "string"
+                      },
+                      "tradeType": {
+                        "type": "string"
+                      },
+                      "price": {
+                        "type": "string"
+                      },
+                      "quantity": {
+                        "type": "number"
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "partitionKey": {
+                        "type": "string"
+                      },
+                      "sequenceNumber": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "id": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "cookies": {
+              "properties": {
+                "next": {
+                  "type": "string"
+                },
+                "previous": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object",
+          "title": "get_datastream_records response"
+        }
+      },
+      "503": {
+        "description": "service unavailable (some errors occurred)"
+      }
+    },
+    "summary": "get records from the data stream",
+    "tags": [
+      "YDBC",
+      "YDS UI v1"
+    ]
+  }
+}

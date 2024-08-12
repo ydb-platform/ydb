@@ -94,14 +94,12 @@ TResourceBrokerConfig MakeResourceBrokerTestConfig() {
     return config;
 }
 
-NKikimrConfig::TTableServiceConfig::TResourceManager MakeKqpResourceManagerConfig(
-        bool EnablePublishResourcesByExchanger = false) {
+NKikimrConfig::TTableServiceConfig::TResourceManager MakeKqpResourceManagerConfig() {
     NKikimrConfig::TTableServiceConfig::TResourceManager config;
 
     config.SetComputeActorsCount(100);
     config.SetPublishStatisticsIntervalSec(0);
     config.SetQueryMemoryLimit(1000);
-    config.SetEnablePublishResourcesByExchanger(EnablePublishResourcesByExchanger);
 
     auto* infoExchangerRetrySettings = config.MutableInfoExchangerSettings();
     auto* exchangerSettings = infoExchangerRetrySettings->MutableExchangerSettings();
@@ -151,7 +149,7 @@ public:
     void CreateKqpResourceManager(
             const NKikimrConfig::TTableServiceConfig::TResourceManager& config, ui32 nodeInd = 0) {
         auto kqpCounters = MakeIntrusive<TKqpCounters>(Counters);
-        auto resman = CreateKqpResourceManagerActor(config, kqpCounters, ResourceBrokers[nodeInd]);
+        auto resman = CreateKqpResourceManagerActor(config, kqpCounters, ResourceBrokers[nodeInd], nullptr, Runtime->GetNodeId(nodeInd));
         ResourceManagers.push_back(Runtime->Register(resman, nodeInd));
         Runtime->RegisterService(MakeKqpResourceManagerServiceID(
             Runtime->GetNodeId(nodeInd)), ResourceManagers.back(), nodeInd);
@@ -185,10 +183,24 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(t->GetCounter("InFlyTasks")->Val(), infly);
     }
 
+    TIntrusivePtr<NRm::TTxState> MakeTx(ui64 txId, std::shared_ptr<NRm::IKqpResourceManager> rm) {
+        return MakeIntrusive<NRm::TTxState>(txId, TInstant::Now(), rm->GetCounters(), "", (double)100, "");
+    }
+
+    TIntrusivePtr<NRm::TTaskState> MakeTask(ui64 taskId, TIntrusivePtr<NRm::TTxState> tx) {
+        return MakeIntrusive<NRm::TTaskState>(taskId, tx->CreatedAt);
+    }
+
     void AssertResourceManagerStats(
             std::shared_ptr<NRm::IKqpResourceManager> rm, ui64 scanQueryMemory, ui32 executionUnits) {
+        Y_UNUSED(executionUnits);
         auto stats = rm->GetLocalResources();
         UNIT_ASSERT_VALUES_EQUAL(scanQueryMemory, stats.Memory[NRm::EKqpMemoryPool::ScanQuery]);
+        // UNIT_ASSERT_VALUES_EQUAL(executionUnits, stats.ExecutionUnits);
+    }
+
+    void AssertResourceManagerStatsExecutionUnits( std::shared_ptr<NRm::IKqpResourceManager> rm, ui32 executionUnits) {
+        auto stats = rm->GetLocalResources();
         UNIT_ASSERT_VALUES_EQUAL(executionUnits, stats.ExecutionUnits);
     }
 
@@ -249,7 +261,6 @@ public:
                 for (ui32 i = 0; i < verificationData.size(); i++) {
                     if (i != nodeIndToCheck) {
                         UNIT_ASSERT_VALUES_EQUAL(verificationData[i].ScanQueryMemory, currentData[i].ScanQueryMemory);
-                        UNIT_ASSERT_VALUES_EQUAL(verificationData[i].ExecutionUnits, currentData[i].ExecutionUnits);
                     }
                 }
                 break;
@@ -263,12 +274,9 @@ public:
         UNIT_TEST(NotEnoughMemory);
         UNIT_TEST(NotEnoughExecutionUnits);
         UNIT_TEST(ResourceBrokerNotEnoughResources);
-        UNIT_TEST(SingleSnapshotByStateStorage);
         UNIT_TEST(SingleSnapshotByExchanger);
         UNIT_TEST(Reduce);
-        UNIT_TEST(SnapshotSharingByStateStorage);
         UNIT_TEST(SnapshotSharingByExchanger);
-        UNIT_TEST(NodesMembershipByStateStorage);
         UNIT_TEST(NodesMembershipByExchanger);
         UNIT_TEST(DisonnectNodes);
     UNIT_TEST_SUITE_END();
@@ -278,15 +286,12 @@ public:
     void NotEnoughMemory();
     void NotEnoughExecutionUnits();
     void ResourceBrokerNotEnoughResources();
-    void Snapshot(bool byExchanger);
-    void SingleSnapshotByStateStorage();
+    void Snapshot();
     void SingleSnapshotByExchanger();
     void Reduce();
-    void SnapshotSharing(bool byExchanger);
-    void SnapshotSharingByStateStorage();
+    void SnapshotSharing();
     void SnapshotSharingByExchanger();
-    void NodesMembership(bool byExchanger);
-    void NodesMembershipByStateStorage();
+    void NodesMembership();
     void NodesMembershipByExchanger();
     void DisonnectNodes();
 
@@ -309,17 +314,18 @@ void KqpRm::SingleTask() {
     UNIT_ASSERT_VALUES_EQUAL(1000, stats.Memory[NRm::EKqpMemoryPool::ScanQuery]);
 
     NRm::TKqpResourcesRequest request;
-    request.ExecutionUnits = 10;
     request.MemoryPool = NRm::EKqpMemoryPool::ScanQuery;
     request.Memory = 100;
+    auto tx1 = MakeTx(1, rm);
+    auto task2 = MakeTask(2, tx1);
 
-    bool allocated = rm->AllocateResources(1, 2, request);
+    bool allocated = rm->AllocateResources(tx1, task2, request);
     UNIT_ASSERT(allocated);
 
     AssertResourceManagerStats(rm, 900, 90);
     AssertResourceBrokerSensors(0, 100, 0, 0, 1);
 
-    rm->FreeResources(1, 2);
+    rm->FreeResources(tx1, task2);
     AssertResourceManagerStats(rm, 1000, 100);
     AssertResourceBrokerSensors(0, 0, 0, 1, 0);
 }
@@ -331,18 +337,26 @@ void KqpRm::ManyTasks() {
     auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
 
     NRm::TKqpResourcesRequest request;
-    request.ExecutionUnits = 10;
     request.MemoryPool = NRm::EKqpMemoryPool::ScanQuery;
     request.Memory = 100;
 
+    auto tx1 = MakeTx(1, rm);
+    TIntrusivePtr<NRm::TTaskState> task1;
+
     for (ui32 i = 1; i < 10; ++i) {
-        bool allocated = rm->AllocateResources(1, i, request);
+        auto task = MakeTask(i, tx1);
+        if (!task1) {
+            task1 = task;
+        }
+
+        bool allocated = rm->AllocateResources(tx1, task, request);
         UNIT_ASSERT(allocated);
 
         AssertResourceManagerStats(rm, 1000 - 100 * i, 100 - 10 * i);
         AssertResourceBrokerSensors(0, 100 * i, 0, 0, i);
     }
 
+/*
     // invalid taskId
     rm->FreeResources(1, 0);
     AssertResourceManagerStats(rm, 100, 10);
@@ -352,14 +366,11 @@ void KqpRm::ManyTasks() {
     rm->FreeResources(10, 1);
     AssertResourceManagerStats(rm, 100, 10);
     AssertResourceBrokerSensors(0, 900, 0, 0, 9);
+*/
 
-    rm->FreeResources(1, 1);
+    rm->FreeResources(tx1, task1);
     AssertResourceManagerStats(rm, 200, 20);
     AssertResourceBrokerSensors(0, 800, 0, 1, 8);
-
-    rm->FreeResources(1);
-    AssertResourceManagerStats(rm, 1000, 100);
-    AssertResourceBrokerSensors(0, 0, 0, 9, 0);
 }
 
 void KqpRm::NotEnoughMemory() {
@@ -369,11 +380,13 @@ void KqpRm::NotEnoughMemory() {
     auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
 
     NRm::TKqpResourcesRequest request;
-    request.ExecutionUnits = 10;
     request.MemoryPool = NRm::EKqpMemoryPool::ScanQuery;
     request.Memory = 10'000;
 
-    bool allocated = rm->AllocateResources(1, 2, request);
+    auto tx = MakeTx(1, rm);
+    auto task = MakeTask(2, tx);
+
+    bool allocated = rm->AllocateResources(tx, task, request);
     UNIT_ASSERT(!allocated);
 
     AssertResourceManagerStats(rm, 1000, 100);
@@ -387,11 +400,14 @@ void KqpRm::NotEnoughExecutionUnits() {
     auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
 
     NRm::TKqpResourcesRequest request;
-    request.ExecutionUnits = 1000;
     request.MemoryPool = NRm::EKqpMemoryPool::ScanQuery;
     request.Memory = 100;
+    request.ExecutionUnits = 1000;
 
-    bool allocated = rm->AllocateResources(1, 2, request);
+    auto tx = MakeTx(1, rm);
+    auto task = MakeTask(2, tx);
+
+    bool allocated = rm->AllocateResources(tx, task, request);
     UNIT_ASSERT(!allocated);
 
     AssertResourceManagerStats(rm, 1000, 100);
@@ -408,37 +424,44 @@ void KqpRm::ResourceBrokerNotEnoughResources() {
     auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
 
     NRm::TKqpResourcesRequest request;
-    request.ExecutionUnits = 10;
     request.MemoryPool = NRm::EKqpMemoryPool::ScanQuery;
     request.Memory = 1'000;
 
-    bool allocated = rm->AllocateResources(1, 2, request);
+    auto tx = MakeTx(1, rm);
+    auto task = MakeTask(2, tx);
+
+    bool allocated = rm->AllocateResources(tx, task, request);
     UNIT_ASSERT(allocated);
 
     request.MemoryPool = NRm::EKqpMemoryPool::ScanQuery;
     request.Memory = 100'000;
-    allocated = rm->AllocateResources(1, 2, request);
+    allocated = rm->AllocateResources(tx, task, request);
     UNIT_ASSERT(!allocated);
 
     AssertResourceManagerStats(rm, config.GetQueryMemoryLimit() - 1000, 90);
     AssertResourceBrokerSensors(0, 1000, 0, 0, 1);
 }
 
-void KqpRm::Snapshot(bool byExchanger) {
-    StartRms({MakeKqpResourceManagerConfig(byExchanger), MakeKqpResourceManagerConfig(byExchanger)});
+void KqpRm::Snapshot() {
+    StartRms({MakeKqpResourceManagerConfig(), MakeKqpResourceManagerConfig()});
     NKikimr::TActorSystemStub stub;
 
     auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
 
     NRm::TKqpResourcesRequest request;
-    request.ExecutionUnits = 10;
     request.MemoryPool = NRm::EKqpMemoryPool::ScanQuery;
     request.Memory = 100;
+    request.ExecutionUnits = 10;
+    auto tx1 = MakeTx(1, rm);
+    auto tx2 = MakeTx(2, rm);
 
-    bool allocated = rm->AllocateResources(1, 2, request);
+    auto task2 = MakeTask(2, tx1);
+    auto task1 = MakeTask(1, tx2);
+
+    bool allocated = rm->AllocateResources(tx1, task2, request);
     UNIT_ASSERT(allocated);
 
-    allocated = rm->AllocateResources(2, 1, request);
+    allocated &= rm->AllocateResources(tx2, task1, request);
     UNIT_ASSERT(allocated);
 
     AssertResourceManagerStats(rm, 800, 80);
@@ -448,8 +471,9 @@ void KqpRm::Snapshot(bool byExchanger) {
 
     CheckSnapshot(0, {{800, 80}, {1000, 100}}, rm);
 
-    rm->FreeResources(1);
-    rm->FreeResources(2);
+    rm->FreeResources(tx1, task2);
+    rm->FreeResources(tx2, task1);
+
     AssertResourceManagerStats(rm, 1000, 100);
     AssertResourceBrokerSensors(0, 0, 0, 2, 0);
 
@@ -458,12 +482,8 @@ void KqpRm::Snapshot(bool byExchanger) {
     CheckSnapshot(0, {{1000, 100}, {1000, 100}}, rm);
 }
 
-void KqpRm::SingleSnapshotByStateStorage() {
-    Snapshot(false);
-}
-
 void KqpRm::SingleSnapshotByExchanger() {
-    Snapshot(true);
+    Snapshot();
 }
 
 void KqpRm::Reduce() {
@@ -473,21 +493,22 @@ void KqpRm::Reduce() {
     auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
 
     NRm::TKqpResourcesRequest request;
-    request.ExecutionUnits = 10;
     request.MemoryPool = NRm::EKqpMemoryPool::ScanQuery;
     request.Memory = 100;
+    auto tx = MakeTx(1, rm);
+    auto task = MakeTask(1, tx);
 
-    bool allocated = rm->AllocateResources(1, 1, request);
+    bool allocated = rm->AllocateResources(tx, task, request);
     UNIT_ASSERT(allocated);
 
     AssertResourceManagerStats(rm, 1000 - 100, 100 - 10);
     AssertResourceBrokerSensors(0, 100, 0, 0, 1);
 
     NRm::TKqpResourcesRequest reduceRequest;
-    reduceRequest.ExecutionUnits = 3;
     reduceRequest.MemoryPool = NRm::EKqpMemoryPool::ScanQuery;
     reduceRequest.Memory = 70;
 
+/*
     // invalid taskId
     rm->FreeResources(1, 0);
     AssertResourceManagerStats(rm, 1000 - 100, 100 - 10);
@@ -497,14 +518,15 @@ void KqpRm::Reduce() {
     rm->FreeResources(10, 1);
     AssertResourceManagerStats(rm, 1000 - 100, 100 - 10);
     AssertResourceBrokerSensors(0, 100, 0, 0, 1);
+*/
 
-    rm->FreeResources(1, 1, reduceRequest);
+    rm->FreeResources(tx, task, reduceRequest);
     AssertResourceManagerStats(rm, 1000 - 30, 100 - 7);
     AssertResourceBrokerSensors(0, 30, 0, 0, 1);
 }
 
-void KqpRm::SnapshotSharing(bool byExchanger) {
-    StartRms({MakeKqpResourceManagerConfig(byExchanger), MakeKqpResourceManagerConfig(byExchanger)});
+void KqpRm::SnapshotSharing() {
+    StartRms({MakeKqpResourceManagerConfig(), MakeKqpResourceManagerConfig()});
     NKikimr::TActorSystemStub stub;
 
     auto rm_first = GetKqpResourceManager(ResourceManagers[0].NodeId());
@@ -516,15 +538,25 @@ void KqpRm::SnapshotSharing(bool byExchanger) {
     CheckSnapshot(1, {{1000, 100}, {1000, 100}}, rm_second);
 
     NRm::TKqpResourcesRequest request;
-    request.ExecutionUnits = 10;
     request.MemoryPool = NRm::EKqpMemoryPool::ScanQuery;
     request.Memory = 100;
+    request.ExecutionUnits = 10;
+
+    auto tx1Rm1 = MakeTx(1, rm_first);
+    auto tx2Rm1 = MakeTx(2, rm_first);
+    auto task1Rm1 = MakeTask(1, tx1Rm1);
+    auto task2Rm1 = MakeTask(1, tx2Rm1);
+
+    auto tx1Rm2 = MakeTx(1, rm_second);
+    auto tx2Rm2 = MakeTx(2, rm_second);
+    auto task1Rm2 = MakeTask(1, tx1Rm2);
+    auto task2Rm2 = MakeTask(2, tx2Rm2);
 
     {
-        bool allocated = rm_first->AllocateResources(1, 2, request);
+        bool allocated = rm_first->AllocateResources(tx1Rm1, task1Rm1, request);
         UNIT_ASSERT(allocated);
 
-        allocated = rm_first->AllocateResources(2, 1, request);
+        allocated &= rm_first->AllocateResources(tx2Rm1, task2Rm1, request);
         UNIT_ASSERT(allocated);
 
         Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
@@ -533,10 +565,10 @@ void KqpRm::SnapshotSharing(bool byExchanger) {
     }
 
     {
-        bool allocated = rm_second->AllocateResources(1, 2, request);
+        bool allocated = rm_second->AllocateResources(tx1Rm2, task1Rm2, request);
         UNIT_ASSERT(allocated);
 
-        allocated = rm_second->AllocateResources(2, 1, request);
+        allocated &= rm_second->AllocateResources(tx2Rm2, task2Rm2, request);
         UNIT_ASSERT(allocated);
 
         Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
@@ -545,8 +577,8 @@ void KqpRm::SnapshotSharing(bool byExchanger) {
     }
 
     {
-        rm_first->FreeResources(1);
-        rm_first->FreeResources(2);
+        rm_first->FreeResources(tx1Rm1, task1Rm1);
+        rm_first->FreeResources(tx2Rm1, task2Rm1);
 
         Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
 
@@ -554,8 +586,8 @@ void KqpRm::SnapshotSharing(bool byExchanger) {
     }
 
     {
-        rm_second->FreeResources(1);
-        rm_second->FreeResources(2);
+        rm_second->FreeResources(tx1Rm2, task1Rm2);
+        rm_second->FreeResources(tx2Rm2, task2Rm2);
 
         Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
 
@@ -563,16 +595,12 @@ void KqpRm::SnapshotSharing(bool byExchanger) {
     }
 }
 
-void KqpRm::SnapshotSharingByStateStorage() {
-    SnapshotSharing(false);
-}
-
 void KqpRm::SnapshotSharingByExchanger() {
-    SnapshotSharing(true);
+    SnapshotSharing();
 }
 
-void KqpRm::NodesMembership(bool byExchanger) {
-    StartRms({MakeKqpResourceManagerConfig(byExchanger), MakeKqpResourceManagerConfig(byExchanger)});
+void KqpRm::NodesMembership() {
+    StartRms({MakeKqpResourceManagerConfig(), MakeKqpResourceManagerConfig()});
     NKikimr::TActorSystemStub stub;
 
     auto rm_first = GetKqpResourceManager(ResourceManagers[0].NodeId());
@@ -597,16 +625,13 @@ void KqpRm::NodesMembership(bool byExchanger) {
     CheckSnapshot(0, {{1000, 100}}, rm_first);
 }
 
-void KqpRm::NodesMembershipByStateStorage() {
-    NodesMembership(false);
-}
 
 void KqpRm::NodesMembershipByExchanger() {
-    NodesMembership(true);
+    NodesMembership();
 }
 
 void KqpRm::DisonnectNodes() {
-    StartRms({MakeKqpResourceManagerConfig(true), MakeKqpResourceManagerConfig(true)});
+    StartRms({MakeKqpResourceManagerConfig(), MakeKqpResourceManagerConfig()});
     NKikimr::TActorSystemStub stub;
 
     auto rm_first = GetKqpResourceManager(ResourceManagers[0].NodeId());

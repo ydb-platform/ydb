@@ -6,7 +6,7 @@ namespace NYql::NDqs {
 
 TSession::~TSession() {
     TGuard<TMutex> lock(Mutex);
-    for (auto actorId : Requests) {
+    for (auto [actorId, _] : ActorId2QueryNo) {
         ActorSystem->Send(actorId, new NActors::TEvents::TEvPoison());
     }
 }
@@ -14,13 +14,31 @@ TSession::~TSession() {
 void TSession::DeleteRequest(const NActors::TActorId& actorId)
 {
     TGuard<TMutex> lock(Mutex);
-    Requests.erase(actorId);
+    auto it = ActorId2QueryNo.find(actorId);
+    if (it != ActorId2QueryNo.end()) {
+        if (it->second) {
+            QueryNo2ActorId.erase(it->second);
+        }
+        ActorId2QueryNo.erase(it);
+    }
 }
 
-void TSession::AddRequest(const NActors::TActorId& actorId)
+void TSession::AddRequest(const NActors::TActorId& actorId, uint64_t querySeqNo)
 {
     TGuard<TMutex> lock(Mutex);
-    Requests.insert(actorId);
+    ActorId2QueryNo[actorId] = querySeqNo;
+    if (querySeqNo) {
+        QueryNo2ActorId[querySeqNo] = actorId;
+    }
+}
+
+NActors::TActorId TSession::FindActorId(uint64_t queryNo) {
+    TGuard<TMutex> lock(Mutex);
+    auto it = QueryNo2ActorId.find(queryNo);
+    if (it != QueryNo2ActorId.end()) {
+        return it->second;
+    }
+    return {};
 }
 
 TSessionStorage::TSessionStorage(

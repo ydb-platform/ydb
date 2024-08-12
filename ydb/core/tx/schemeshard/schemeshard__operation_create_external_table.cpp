@@ -273,12 +273,11 @@ private:
         context.SS->ExternalTables[externalTable->PathId] = externalTableInfo;
         context.SS->IncrementPathDbRefCount(externalTable->PathId);
 
-        context.SS->PersistPath(db, externalTable->PathId);
 
         if (!acl.empty()) {
             externalTable->ApplyACL(acl);
-            context.SS->PersistACL(db, externalTable);
         }
+        context.SS->PersistPath(db, externalTable->PathId);
 
         context.SS->PersistExternalDataSource(db, externalDataSourcePathId, externalDataSource);
         context.SS->PersistExternalTable(db, externalTable->PathId, externalTableInfo);

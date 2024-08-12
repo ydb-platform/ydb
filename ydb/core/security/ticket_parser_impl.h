@@ -1,12 +1,14 @@
 #pragma once
 #include "ticket_parser_log.h"
-#include "ldap_auth_provider.h"
+#include "ticket_parser_settings.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/core/security/certificate_check/cert_check.h>
+#include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -112,6 +114,14 @@ protected:
         TTokenRecordBase(const TTokenRecordBase&) = delete;
         TTokenRecordBase& operator =(const TTokenRecordBase&) = delete;
 
+        static constexpr const char* UnknownAuthType = "Unknown";
+        static constexpr const char* UnsupportedAuthType = "Unsupported";
+        static constexpr const char* BuiltinAuthType = "Builtin";
+        static constexpr const char* LoginAuthType = "Login";
+        static constexpr const char* AccessServiceAuthType = "AccessService";
+        static constexpr const char* ApiKeyAuthType = "ApiKey";
+        static constexpr const char* CertificateAuthType = "Certificate";
+
         TString Ticket;
         typename TDerived::ETokenType TokenType = TDerived::ETokenType::Unknown;
         NKikimr::TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature Signature;
@@ -191,23 +201,26 @@ protected:
         TString GetAuthType() const {
             switch (TokenType) {
                 case TDerived::ETokenType::Unknown:
-                    return "Unknown";
+                    return UnknownAuthType;
                 case TDerived::ETokenType::Unsupported:
-                    return "Unsupported";
+                    return UnsupportedAuthType;
                 case TDerived::ETokenType::Builtin:
-                    return "Builtin";
+                    return BuiltinAuthType;
                 case TDerived::ETokenType::Login:
-                    return "Login";
+                    return LoginAuthType;
                 case TDerived::ETokenType::AccessService:
-                    return "AccessService";
+                    return AccessServiceAuthType;
                 case TDerived::ETokenType::ApiKey:
-                    return "ApiKey";
+                    return ApiKeyAuthType;
+                case TDerived::ETokenType::Certificate:
+                    return CertificateAuthType;
             }
         }
 
         bool NeedsRefresh() const {
             switch (TokenType) {
                 case TDerived::ETokenType::Builtin:
+                case TDerived::ETokenType::Certificate:
                     return false;
                 case TDerived::ETokenType::Login:
                     return true;
@@ -233,6 +246,9 @@ protected:
             if (Signature.AccessKeyId) {
                 return MaskTicket(Signature.AccessKeyId);
             }
+            if (TokenType == TDerived::ETokenType::Certificate) {
+                return GetCertificateFingerprint(Ticket);
+            }
             return MaskTicket(Ticket);
         }
     };
@@ -243,6 +259,7 @@ protected:
     using IActorOps::Schedule;
 
     NKikimrProto::TAuthConfig Config;
+    const TCertificateChecker CertificateChecker;
     TDuration ExpireTime = TDuration::Hours(24); // after what time ticket will expired and removed from cache
 
     template <typename TTokenRecord>
@@ -276,6 +293,7 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsErrorsRetryable;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsErrorsPermanent;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsBuiltin;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsCertificate;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsLogin;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsAS;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsCacheHit;
@@ -386,25 +404,8 @@ private:
         resourcePath->set_type(type);
     }
 
-    template <>
-    static void AddResourcePath<nebius::iam::v1::AuthorizeCheck*>(nebius::iam::v1::AuthorizeCheck* pathsContainer, const TString& id, const TString& type) {
-        auto resourcePath = pathsContainer->mutable_resource_path()->add_path();
-        resourcePath->set_id(id);
-        Y_UNUSED(type);
-    }
-
-    template <typename TPathsContainerPtr>
-    static void AddContainerId(TPathsContainerPtr pathsContainer, const TString& id) {
-        Y_UNUSED(pathsContainer, id);
-    }
-
-    template <>
-    static void AddContainerId<nebius::iam::v1::AuthorizeCheck*>(nebius::iam::v1::AuthorizeCheck* pathsContainer, const TString& id) {
-        pathsContainer->set_container_id(id);
-    }
-
     template <typename TTokenRecord, typename TPathsContainerPtr>
-    void addResourcePaths(const TTokenRecord& record, const TString& permission, TPathsContainerPtr pathsContainer) const {
+    void AddResourcePaths(const TTokenRecord& record, const TString& permission, TPathsContainerPtr pathsContainer) const {
         if (const auto databaseId = record.GetAttributeValue(permission, "database_id"); databaseId) {
             AddResourcePath(pathsContainer, databaseId, "ydb.database");
         } else if (const auto serviceAccountId = record.GetAttributeValue(permission, "service_account_id"); serviceAccountId) {
@@ -422,9 +423,28 @@ private:
         if (const TString gizmoId = record.GetAttributeValue(permission, "gizmo_id"); gizmoId) {
             AddResourcePath(pathsContainer, gizmoId, "iam.gizmo");
         }
+    }
 
-        if (const TString containerId = record.GetAttributeValue(permission, "container_id"); containerId) {
-            AddContainerId(pathsContainer, containerId);
+    static void AddNebiusResourcePath(nebius::iam::v1::AuthorizeCheck* pathsContainer, const TString& id) {
+        pathsContainer->mutable_resource_path()->add_path()->set_id(id);
+    }
+
+    static void AddNebiusContainerId(nebius::iam::v1::AuthorizeCheck* pathsContainer, const TString& id) {
+        pathsContainer->set_container_id(id);
+    }
+
+    template <typename TTokenRecord>
+    void AddNebiusResourcePaths(const TTokenRecord& record, const TString& permission, nebius::iam::v1::AuthorizeCheck* pathsContainer) const {
+        // Use attribute "database_id" as our resource id
+        // IAM can link roles for resource
+        if (const auto databaseId = record.GetAttributeValue(permission, "database_id"); databaseId) {
+            AddNebiusResourcePath(pathsContainer, databaseId);
+        }
+
+        // Use attribute "folder_id" as container id that contains our database
+        // IAM can link roles for containers hierarchy
+        if (const auto folderId = record.GetAttributeValue(permission, "folder_id"); folderId) {
+            AddNebiusContainerId(pathsContainer, folderId);
         }
     }
 
@@ -435,7 +455,7 @@ private:
 
             auto request = CreateAccessServiceRequest<TEvAccessServiceAuthorizeRequest>(key, record);
             request->Request.set_permission(permissionName);
-            addResourcePaths(record, permissionName, &request->Request);
+            AddResourcePaths(record, permissionName, &request->Request);
             record.ResponsesLeft++;
             Send(AccessServiceValidatorV1, request.Release());
         }
@@ -447,7 +467,7 @@ private:
         TStringBuilder requestForPermissions;
         for (const auto& [permissionName, permissionRecord] : record.Permissions) {
             auto action = request->Request.mutable_actions()->add_items();
-            addResourcePaths(record, permissionName, action);
+            AddResourcePaths(record, permissionName, action);
             action->set_permission(permissionName);
             requestForPermissions << " " << permissionName;
         }
@@ -466,7 +486,7 @@ private:
             auto& check = (*request->Request.mutable_checks())[i];
             check.set_iam_token(record.Ticket);
             check.mutable_permission()->set_name(permissionName);
-            addResourcePaths(record, permissionName, &check);
+            AddNebiusResourcePaths(record, permissionName, &check);
             requestForPermissions << " " << permissionName;
             ++i;
         }
@@ -645,6 +665,33 @@ private:
     }
 
     template <typename TTokenRecord>
+    bool CanInitTokenFromCertificate(const TString& key, TTokenRecord& record) {
+        if (record.TokenType != TDerived::ETokenType::Certificate) {
+            return false;
+        }
+        CounterTicketsCertificate->Inc();
+        TCertificateChecker::TCertificateCheckResult certificateCheckResult = CertificateChecker.Check(record.Ticket);
+        if (!certificateCheckResult.Error.empty()) {
+            TEvTicketParser::TError error;
+            error.Message = "Cannot create token from certificate. " + certificateCheckResult.Error.Message;
+            error.Retryable = certificateCheckResult.Error.Retryable;
+            SetError(key, record, error);
+            return false;
+        }
+        NACLib::TUserToken::TUserTokenInitFields userTokenInitFields {
+            .OriginalUserToken = record.Ticket,
+            .UserSID = certificateCheckResult.UserSid,
+            .AuthType = record.GetAuthType()
+        };
+        auto userToken = MakeIntrusive<NACLib::TUserToken>(std::move(userTokenInitFields));
+        for (const auto& group : certificateCheckResult.Groups) {
+            userToken->AddGroupSID(group);
+        }
+        SetToken(key, record, userToken);
+        return true;
+    }
+
+    template <typename TTokenRecord>
     bool CanInitLoginToken(const TString& key, TTokenRecord& record) {
         if (UseLoginProvider && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::Login)) {
             TString database = Config.GetDomainLoginOnly() ? DomainName : record.Database;
@@ -751,10 +798,31 @@ private:
         }
     }
 
+    bool IsTicketCertificate(const TString& ticket) const {
+        static const TStringBuf CertificateBeginMark = "-----BEGIN";
+        static const TStringBuf CertificateEndMark = "-----END";
+        size_t eolPos = ticket.find('\n');
+        if (eolPos == TString::npos) {
+            return false;
+        }
+        if (TString firstLine = ticket.substr(0, eolPos); !firstLine.Contains(CertificateBeginMark)) {
+            return false;
+        }
+        if (ticket.rfind(CertificateEndMark) == TString::npos) {
+            return false;
+        }
+        return true;
+    }
+
     void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
         TStringBuf ticket;
         TStringBuf ticketType;
-        CrackTicket(ev->Get()->Ticket, ticket, ticketType);
+        if (IsTicketCertificate(ev->Get()->Ticket)) {
+            ticket = ev->Get()->Ticket;
+            ticketType = TDerived::TTokenRecord::CertificateAuthType;
+        } else {
+            CrackTicket(ev->Get()->Ticket, ticket, ticketType);
+        }
 
         TString key = GetKey(ev->Get());
         TActorId sender = ev->Sender;
@@ -1082,6 +1150,9 @@ private:
                                 if (permissionRecord.IsRequired()) {
                                     hasRequiredPermissionFailed = true;
                                     errorMessage << permissionIt->first << " for";
+                                    if (check.container_id()) {
+                                        errorMessage << ' ' << check.container_id();
+                                    }
                                     for (const auto& resourcePath : check.resource_path().path()) {
                                         errorMessage << ' ' << resourcePath.id();
                                     }
@@ -1497,7 +1568,6 @@ protected:
                 return TDerived::ETokenType::Unsupported;
             }
         }
-
         if (tokenType == "Bearer" || tokenType == "IAM") {
             if (AccessServiceEnabled()) {
                 return TDerived::ETokenType::AccessService;
@@ -1510,6 +1580,9 @@ protected:
             } else {
                 return TDerived::ETokenType::Unsupported;
             }
+        }
+        if (tokenType == "Certificate") {
+            return TDerived::ETokenType::Certificate;
         }
         return TDerived::ETokenType::Unknown;
     }
@@ -1603,7 +1676,8 @@ protected:
         }
 
         if (CanInitBuiltinToken(key, record) ||
-            CanInitLoginToken(key, record)) {
+            CanInitLoginToken(key, record) ||
+            CanInitTokenFromCertificate(key, record)) {
             return;
         }
 
@@ -1872,6 +1946,7 @@ protected:
         CounterTicketsErrorsRetryable = counters->GetCounter("TicketsErrorsRetryable", true);
         CounterTicketsErrorsPermanent = counters->GetCounter("TicketsErrorsPermanent", true);
         CounterTicketsBuiltin = counters->GetCounter("TicketsBuiltin", true);
+        CounterTicketsCertificate = counters->GetCounter("TicketsCertificate", true);
         CounterTicketsLogin = counters->GetCounter("TicketsLogin", true);
         CounterTicketsAS = counters->GetCounter("TicketsAS", true);
         CounterTicketsCacheHit = counters->GetCounter("TicketsCacheHit", true);
@@ -2037,8 +2112,15 @@ public:
         }
     }
 
-    TTicketParserImpl(const NKikimrProto::TAuthConfig& authConfig)
-        : Config(authConfig) {}
+    static TString ReadFile(const TString& fileName) {
+        TFileInput f(fileName);
+        return f.ReadAll();
+    }
+
+    TTicketParserImpl(const TTicketParserSettings& settings)
+        : Config(settings.AuthConfig)
+        , CertificateChecker(settings.CertificateAuthValues)
+    {}
 };
 
 }

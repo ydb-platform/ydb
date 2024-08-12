@@ -6,7 +6,7 @@
 
 $join1 = (
 select
-    l.l_extendedprice * (1 - l.l_discount) as volume,
+    l.l_extendedprice * ($z1_12 - l.l_discount) as volume,
     l.l_suppkey as l_suppkey,
     l.l_orderkey as l_orderkey
 from
@@ -54,7 +54,7 @@ join
     {{orders}} as o
 on
     o.o_orderkey = j.l_orderkey
-where cast(cast(o_orderdate as Timestamp) as Date) between Date('1995-01-01') and Date('1996-12-31')
+where o_orderdate between Date('1995-01-01') and Date('1996-12-31')
 );
 $join5 = (
 select
@@ -101,7 +101,7 @@ select
     o_year,
     sum(case
         when nation = 'MOZAMBIQUE' then volume
-        else 0
+        else $z0_12
     end) / sum(volume) as mkt_share
 from
     $join7 as all_nations

@@ -2,7 +2,8 @@
 #include "ydb_update.h"
 #include "ydb_version.h"
 
-#include <ydb/public/sdk/cpp/client/iam/iam.h>
+#include <ydb/public/sdk/cpp/client/iam/common/iam.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange/from_file.h>
 #include <ydb/public/lib/ydb_cli/common/ydb_updater.h>
 
 #include <filesystem>
@@ -28,6 +29,11 @@ void TClientCommandRoot::SetCredentialsGetter(TConfig& config) {
         if (config.UseStaticCredentials) {
             if (config.StaticCredentials.User) {
                 return CreateLoginCredentialsProviderFactory(config.StaticCredentials);
+            }
+        }
+        if (config.UseOauth2TokenExchange) {
+            if (config.Oauth2KeyFile) {
+                return CreateOauth2TokenExchangeFileCredentialsProviderFactory(config.Oauth2KeyFile, config.IamEndpoint);
             }
         }
         if (config.UseIamAuth) {
@@ -95,10 +101,11 @@ int TYCloudClientCommandRoot::Run(TConfig& config) {
 int NewYCloudClient(int argc, char** argv) {
     NYdb::NConsoleClient::TClientSettings settings;
     settings.EnableSsl = true;
-    settings.UseOAuthToken = true;
+    settings.UseAccessToken = true;
     settings.UseDefaultTokenFile = false;
     settings.UseIamAuth = true;
     settings.UseStaticCredentials = true;
+    settings.UseOauth2TokenExchange = true;
     settings.UseExportToYt = false;
     settings.MentionUserAccount = false;
     settings.YdbDir = "ydb";

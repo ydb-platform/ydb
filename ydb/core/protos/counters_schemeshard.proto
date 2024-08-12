@@ -147,7 +147,7 @@ enum ESimpleCounters {
     COUNTER_REPLICATION_CONTROLLER_COUNT = 119            [(CounterOpts) = {Name: "ReplicationControllers"}];
     COUNTER_IN_FLIGHT_OPS_TxCreateReplication = 120       [(CounterOpts) = {Name: "InFlightOps/CreateReplication"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterReplication = 121        [(CounterOpts) = {Name: "InFlightOps/AlterReplication"}];
-    COUNTER_IN_FLIGHT_OPS_TxDropReplication = 122         [(CounterOpts) = {Name: "InFlightOps/DropReplication"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropReplicationCascade = 122  [(CounterOpts) = {Name: "InFlightOps/DropReplicationCascade"}];
 
     COUNTER_COMPACTION_QUEUE_SIZE_SH = 123                [(CounterOpts) = {Name: "BackgroundCompactionQueueSizeBySearchHeight"}];
     COUNTER_COMPACTION_QUEUE_SIZE_DELETES = 124           [(CounterOpts) = {Name: "BackgroundCompactionQueueSizeByRowDeletes"}];
@@ -197,6 +197,29 @@ enum ESimpleCounters {
     COUNTER_GRAPHSHARD_COUNT = 158 [(CounterOpts) = {Name: "GraphShards"}];
 
     COUNTER_IN_FLIGHT_OPS_TxCopySequence = 159            [(CounterOpts) = {Name: "InFlightOps/CopySequence"}];
+
+    COUNTER_BACKUP_CONTROLLER_TABLET_COUNT = 160 [(CounterOpts) = {Name: "BackupControllers"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxDropReplication = 161         [(CounterOpts) = {Name: "InFlightOps/DropReplication"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxCreateContinuousBackup = 162          [(CounterOpts) = {Name: "InFlightOps/CreateContinuousBackup"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterContinuousBackup = 163          [(CounterOpts) = {Name: "InFlightOps/AlterContinuousBackup"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropContinuousBackup = 164           [(CounterOpts) = {Name: "InFlightOps/DropContinuousBackup"}];
+    
+    COUNTER_DISK_SPACE_TABLES_DATA_BYTES_ON_SSD = 165     [(CounterOpts) = {Name: "DiskSpaceTablesDataBytesOnSsd"}];
+    COUNTER_DISK_SPACE_TABLES_INDEX_BYTES_ON_SSD = 166    [(CounterOpts) = {Name: "DiskSpaceTablesIndexBytesOnSsd"}];
+    COUNTER_DISK_SPACE_TABLES_TOTAL_BYTES_ON_SSD = 167    [(CounterOpts) = {Name: "DiskSpaceTablesTotalBytesOnSsd"}];
+    COUNTER_DISK_SPACE_TABLES_DATA_BYTES_ON_HDD = 168     [(CounterOpts) = {Name: "DiskSpaceTablesDataBytesOnHdd"}];
+    COUNTER_DISK_SPACE_TABLES_INDEX_BYTES_ON_HDD = 169    [(CounterOpts) = {Name: "DiskSpaceTablesIndexBytesOnHdd"}];
+    COUNTER_DISK_SPACE_TABLES_TOTAL_BYTES_ON_HDD = 170    [(CounterOpts) = {Name: "DiskSpaceTablesTotalBytesOnHdd"}];
+    
+    COUNTER_DISK_SPACE_SOFT_QUOTA_BYTES_ON_SSD = 171      [(CounterOpts) = {Name: "DiskSpaceSoftQuotaBytesOnSsd"}];
+    COUNTER_DISK_SPACE_SOFT_QUOTA_BYTES_ON_HDD = 172      [(CounterOpts) = {Name: "DiskSpaceSoftQuotaBytesOnHdd"}];
+
+    COUNTER_RESOURCE_POOL_COUNT = 173                        [(CounterOpts) = {Name: "ResourcePoolCount"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateResourcePool = 174         [(CounterOpts) = {Name: "InFlightOps/CreateResourcePool"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropResourcePool = 175           [(CounterOpts) = {Name: "InFlightOps/DropResourcePool"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterResourcePool = 176          [(CounterOpts) = {Name: "InFlightOps/AlterResourcePool"}];
 }
 
 enum ECumulativeCounters {
@@ -282,7 +305,7 @@ enum ECumulativeCounters {
 
     COUNTER_FINISHED_OPS_TxCreateReplication = 70         [(CounterOpts) = {Name: "FinishedOps/CreateReplication"}];
     COUNTER_FINISHED_OPS_TxAlterReplication = 71          [(CounterOpts) = {Name: "FinishedOps/AlterReplication"}];
-    COUNTER_FINISHED_OPS_TxDropReplication = 72           [(CounterOpts) = {Name: "FinishedOps/DropReplication"}];
+    COUNTER_FINISHED_OPS_TxDropReplicationCascade = 72    [(CounterOpts) = {Name: "FinishedOps/DropReplicationCascade"}];
 
     COUNTER_BACKGROUND_COMPACTION_BORROWED = 73           [(CounterOpts) = {Name: "BackgroundCompactionBorrowed"}];
     COUNTER_BACKGROUND_COMPACTION_NOT_NEEDED = 74         [(CounterOpts) = {Name: "BackgroundCompactionNotNeeded"}];
@@ -318,6 +341,16 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxDropView = 96                [(CounterOpts) = {Name: "FinishedOps/DropView"}];
     COUNTER_FINISHED_OPS_TxAlterView = 97               [(CounterOpts) = {Name: "FinishedOps/AlterView"}];
     COUNTER_FINISHED_OPS_TxCopySequence = 98              [(CounterOpts) = {Name: "FinishedOps/TxCopySequence"}];
+
+    COUNTER_FINISHED_OPS_TxDropReplication = 99           [(CounterOpts) = {Name: "FinishedOps/DropReplication"}];
+
+    COUNTER_FINISHED_OPS_TxCreateContinuousBackup = 100           [(CounterOpts) = {Name: "FinishedOps/CreateContinuousBackup"}];
+    COUNTER_FINISHED_OPS_TxAlterContinuousBackup = 101            [(CounterOpts) = {Name: "FinishedOps/AlterContinuousBackup"}];
+    COUNTER_FINISHED_OPS_TxDropContinuousBackup = 102             [(CounterOpts) = {Name: "FinishedOps/DropContinuousBackup"}];
+
+    COUNTER_FINISHED_OPS_TxCreateResourcePool = 103  [(CounterOpts) = {Name: "FinishedOps/CreateResourcePool"}];
+    COUNTER_FINISHED_OPS_TxDropResourcePool = 104    [(CounterOpts) = {Name: "FinishedOps/DropResourcePool"}];
+    COUNTER_FINISHED_OPS_TxAlterResourcePool = 105   [(CounterOpts) = {Name: "FinishedOps/AlterResourcePool"}];
 }
 
 enum EPercentileCounters {

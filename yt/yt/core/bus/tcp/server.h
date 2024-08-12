@@ -4,6 +4,8 @@
 
 #include "packet.h"
 
+#include <yt/yt/core/misc/memory_usage_tracker.h>
+
 namespace NYT::NBus {
 
 ////////////////////////////////////////////////////////////////////////////////

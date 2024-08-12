@@ -11,7 +11,7 @@ This method of executing queries has the following unique features:
 
 {% node info %}
 
-From the *Scan Queries* interface, you can query [system tables](../../troubleshooting/system_views_db.md).
+From the *Scan Queries* interface, you can query [system tables](../../dev/system-views.md).
 
 {% endnote %}
 

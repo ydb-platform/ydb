@@ -1,9 +1,9 @@
 import sys
 
 TEMPLATE = """
-#include <yql/udfs/common/python/python_udf/python_udf.h>
+#include <@YQL_BASE_DIR@/udfs/common/python/python_udf/python_udf.h>
 
-#include <contrib/ydb/library/yql/public/udf/udf_registrator.h>
+#include <@YQL_BASE_DIR@/public/udf/udf_registrator.h>
 
 #if @WITH_LIBRA@
 #include <yql/udfs/quality/libra/module/module.h>
@@ -37,8 +37,8 @@ extern "C" UDF_API void SetBackTraceCallback(TBackTraceCallback callback) {
 
 
 def main():
-    assert len(sys.argv) == 6
-    flavor, module_name, package_name, path, libra_flag = sys.argv[1:]
+    assert len(sys.argv) == 7
+    flavor, module_name, package_name, path, libra_flag, yql_base_dir = sys.argv[1:]
     with open(path, 'w') as f:
         f.write(
             TEMPLATE.strip()
@@ -46,6 +46,7 @@ def main():
             .replace('@PACKAGE_NAME@', package_name)
             .replace('@FLAVOR@', flavor)
             .replace('@WITH_LIBRA@', libra_flag)
+            .replace('@YQL_BASE_DIR@', yql_base_dir)
         )
         f.write('\n')
 

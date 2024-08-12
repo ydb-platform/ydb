@@ -1,6 +1,6 @@
 // Copyright Kevlin Henney, 2000-2005.
 // Copyright Alexander Nasonov, 2006-2010.
-// Copyright Antony Polukhin, 2011-2023.
+// Copyright Antony Polukhin, 2011-2024.
 //
 // Distributed under the Boost Software License, Version 1.0. (See
 // accompanying file LICENSE_1_0.txt or copy at
@@ -72,40 +72,26 @@ namespace boost {
         {};
 
         template<typename Target, typename Source>
-        struct is_arithmetic_and_not_xchars
-        {
-            typedef boost::integral_constant<
-                bool,
-                !(boost::detail::is_character<Target>::value) &&
-                    !(boost::detail::is_character<Source>::value) &&
-                    boost::is_arithmetic<Source>::value &&
-                    boost::is_arithmetic<Target>::value
-                > type;
-
-            BOOST_STATIC_CONSTANT(bool, value = (
-                type::value
-            ));
-        };
+        using is_arithmetic_and_not_xchars = boost::integral_constant<
+            bool,
+            !(boost::detail::is_character<Target>::value) &&
+                !(boost::detail::is_character<Source>::value) &&
+                boost::is_arithmetic<Source>::value &&
+                boost::is_arithmetic<Target>::value
+        >;
 
         /*
          * is_xchar_to_xchar<Target, Source>::value is true,
          * Target and Souce are char types of the same size 1 (char, signed char, unsigned char).
          */
         template<typename Target, typename Source>
-        struct is_xchar_to_xchar
-        {
-            typedef boost::integral_constant<
-                bool,
-                sizeof(Source) == sizeof(Target) &&
-                     sizeof(Source) == sizeof(char) &&
-                     boost::detail::is_character<Target>::value &&
-                     boost::detail::is_character<Source>::value
-                > type;
-
-            BOOST_STATIC_CONSTANT(bool, value = (
-                type::value
-            ));
-        };
+        using is_xchar_to_xchar = boost::integral_constant<
+            bool,
+            sizeof(Source) == sizeof(Target) &&
+                 sizeof(Source) == sizeof(char) &&
+                 boost::detail::is_character<Target>::value &&
+                 boost::detail::is_character<Source>::value
+        >;
 
         template<typename Target, typename Source>
         struct is_char_array_to_stdstring
@@ -144,7 +130,7 @@ namespace boost {
         {
 // MSVC fail to forward an array (DevDiv#555157 "SILENT BAD CODEGEN triggered by perfect forwarding",
 // fixed in 2013 RTM).
-#if !defined(BOOST_NO_CXX11_RVALUE_REFERENCES) && (!defined(BOOST_MSVC) || BOOST_MSVC >= 1800)
+#if !defined(BOOST_MSVC) || BOOST_MSVC >= 1800
             template <class T>
             static inline bool try_convert(T&& arg, Target& result) {
                 result = static_cast<T&&>(arg); // eqaul to `result = std::forward<T>(arg);`
@@ -164,6 +150,10 @@ namespace boost {
         template <typename Target, typename Source>
         inline bool try_lexical_convert(const Source& arg, Target& result)
         {
+            static_assert(
+                !boost::is_volatile<Source>::value,
+                "Boost.LexicalCast does not support volatile input");
+
             typedef typename boost::detail::array_to_pointer_decay<Source>::type src;
 
             typedef boost::integral_constant<

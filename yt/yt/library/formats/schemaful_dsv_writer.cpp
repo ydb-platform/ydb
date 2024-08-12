@@ -102,7 +102,7 @@ public:
             : -1)
     {
         BlobOutput_ = GetOutputStream();
-        WriteColumnNamesHeader([this](TStringBuf buf, char c) {
+        WriteColumnNamesHeader([this] (TStringBuf buf, char c) {
             WriteRaw(buf);
             WriteRaw(c);
         });
@@ -186,7 +186,7 @@ public:
             IdToIndexInRow)
         , Output_(CreateBufferedSyncAdapter(stream))
     {
-        WriteColumnNamesHeader([this](TStringBuf buf, char c) {
+        WriteColumnNamesHeader([this] (TStringBuf buf, char c) {
             Output_->Write(buf);
             Output_->Write(c);
         });
@@ -246,6 +246,11 @@ public:
     TFuture<void> GetReadyEvent() override
     {
         return Result_;
+    }
+
+    std::optional<NCrypto::TMD5Hash> GetDigest() const override
+    {
+        return std::nullopt;
     }
 
 private:

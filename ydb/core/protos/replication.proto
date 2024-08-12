@@ -1,5 +1,6 @@
 import "ydb/core/scheme/protos/pathid.proto";
 import "ydb/public/api/protos/annotations/sensitive.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
 
 package NKikimrReplication;
 option java_package = "ru.yandex.kikimr.proto";
@@ -7,15 +8,22 @@ option java_package = "ru.yandex.kikimr.proto";
 message TStaticCredentials {
     optional string User = 1;
     optional string Password = 2 [(Ydb.sensitive) = true];
+    optional string PasswordSecretName = 3;
+}
+
+message TOAuthToken {
+    optional string Token = 1 [(Ydb.sensitive) = true];
+    optional string TokenSecretName = 2;
 }
 
 message TConnectionParams {
     optional string Endpoint = 1;
     optional string Database = 2;
+    optional bool EnableSsl = 5;
     // credentials
     oneof Credentials {
         TStaticCredentials StaticCredentials = 3;
-        string OAuthToken = 4 [(Ydb.sensitive) = true];
+        TOAuthToken OAuthToken = 4;
     }
 }
 
@@ -26,8 +34,14 @@ message TReplicationConfig {
 
     message TTargetSpecific {
         message TTarget {
+            // in/out
             optional string SrcPath = 1;
             optional string DstPath = 2;
+            optional string SrcStreamName = 3;
+            // out
+            optional uint64 Id = 4;
+            optional uint32 LagMilliSeconds = 5;
+            optional float InitialScanProgress = 6; // pencentage
         }
 
         repeated TTarget Targets = 1;
@@ -45,6 +59,37 @@ message TReplicationConfig {
     }
 
     optional bool InitialSync = 6;
+}
+
+message TReplicationState {
+    message TStandBy {
+        optional uint32 LagMilliSeconds = 1;
+        optional float InitialScanProgress = 2; // pencentage
+    }
+
+    message TPaused {
+    }
+
+    message TDone {
+        enum EFailoverMode {
+            FAILOVER_MODE_UNSPECIFIED = 0;
+            FAILOVER_MODE_CONSISTENT = 1;
+            FAILOVER_MODE_FORCE = 2;
+        }
+
+        optional EFailoverMode FailoverMode = 1;
+    }
+
+    message TError {
+        repeated Ydb.Issue.IssueMessage Issues = 1;
+    }
+
+    oneof State {
+        TStandBy StandBy = 1;
+        TPaused Paused = 2;
+        TDone Done = 3;
+        TError Error = 4;
+    }
 }
 
 message TOperationId {
@@ -70,9 +115,28 @@ message TEvCreateReplicationResult {
     optional EStatus Status = 3;
 }
 
+message TEvAlterReplication {
+    optional NKikimrProto.TPathID PathId = 1;
+    optional TOperationId OperationId = 2;
+    optional TReplicationState SwitchState = 3;
+    optional TReplicationConfig Config = 4;
+}
+
+message TEvAlterReplicationResult {
+    enum EStatus {
+        UNKNOWN = 0;
+        SUCCESS = 1;
+    }
+
+    optional TOperationId OperationId = 1;
+    optional uint64 Origin = 2;
+    optional EStatus Status = 3;
+}
+
 message TEvDropReplication {
     optional NKikimrProto.TPathID PathId = 1;
     optional TOperationId OperationId = 2;
+    optional bool Cascade = 3 [default = true];
 }
 
 message TEvDropReplicationResult {
@@ -85,6 +149,24 @@ message TEvDropReplicationResult {
     optional TOperationId OperationId = 1;
     optional uint64 Origin = 2;
     optional EStatus Status = 3;
+}
+
+message TEvDescribeReplication {
+    optional NKikimrProto.TPathID PathId = 1;
+    optional bool IncludeStats = 2;
+}
+
+message TEvDescribeReplicationResult {
+    enum EStatus {
+        UNKNOWN = 0;
+        SUCCESS = 1;
+        NOT_FOUND = 2;
+    }
+
+    optional EStatus Status = 1;
+    optional TConnectionParams ConnectionParams = 2;
+    repeated TReplicationConfig.TTargetSpecific.TTarget Targets = 3;
+    optional TReplicationState State = 4;
 }
 
 message TControllerIdentity {
@@ -136,4 +218,25 @@ message TEvRunWorker {
 message TEvStopWorker {
     optional TControllerIdentity Controller = 1;
     optional TWorkerIdentity Worker = 2;
+}
+
+message TEvWorkerStatus {
+    enum EStatus {
+        STATUS_UNSPECIFIED = 0;
+        STATUS_RUNNING = 1;
+        STATUS_STOPPED = 2;
+    }
+
+    enum EReason {
+        REASON_UNSPECIFIED = 0;
+        REASON_ACK = 1;
+        REASON_ERROR = 2;
+        REASON_INFO = 3;
+    }
+
+    optional TWorkerIdentity Worker = 1;
+    optional EStatus Status = 2;
+    optional EReason Reason = 3;
+    optional string ErrorDescription = 4;
+    optional uint32 LagMilliSeconds = 5;
 }

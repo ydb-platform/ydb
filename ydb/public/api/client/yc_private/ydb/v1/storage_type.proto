@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.ydb.v1;
+
+message StorageType {
+  string id = 1;
+  string device_type = 2;
+  string redundancy_type = 3;
+}

@@ -288,12 +288,12 @@ select '(0,0)'::point in ('(0,0,0,0)'::box, point(0,0));
     -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
     	-- However, if there's not a common supertype for the IN elements,
 	^
-        -stdin-:<main>:6:23: Error: At function: PgIn, At function: AsList
+        -stdin-:<main>:6:23: Error: At function: PgIn
         	select '(0,0)'::point in ('(0,0,0,0)'::box, point(0,0));
 	                      ^
-            -stdin-:<main>:6:23: Error: Cannot infer common type for types 603 and 600
+            -stdin-:<main>:6:40: Error: Cannot infer common type for types 600 and 603
             	select '(0,0)'::point in ('(0,0,0,0)'::box, point(0,0));
-	                      ^
+	                                       ^
 <sql-statement>
 --
 -- Tests for ScalarArrayOpExpr with a hashfn

@@ -1,3 +1,4 @@
+#include "pg_compat.h"
 #include "arrow.h"
 #include "arrow_impl.h"
 #include <ydb/library/yql/minikql/defs.h>
@@ -5,6 +6,8 @@
 #include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/arrow/arrow_util.h>
+#include <ydb/library/dynumber/dynumber.h>
+#include <ydb/library/yql/public/decimal/yql_decimal.h>
 #include <util/generic/singleton.h>
 
 #include <arrow/compute/cast.h>
@@ -15,6 +18,7 @@
 extern "C" {
 #include "utils/date.h"
 #include "utils/timestamp.h"
+#include "utils/fmgrprotos.h"
 }
 
 namespace NYql {
@@ -154,6 +158,35 @@ std::shared_ptr<arrow::Array> PgConvertString(const std::shared_ptr<arrow::Array
     std::shared_ptr<arrow::BinaryArray> ret;
     ARROW_OK(builder.Finish(&ret));
     return ret;
+}
+
+Numeric Uint64ToPgNumeric(ui64 value) {
+    if (value <= (ui64)Max<i64>()) {
+        return int64_to_numeric((i64)value);
+    }
+
+    auto ret1 = int64_to_numeric((i64)(value & ~(1ull << 63)));
+    auto bit = int64_to_numeric(Min<i64>());
+    bool haveError = false;
+    auto ret2 = numeric_sub_opt_error(ret1, bit, &haveError);
+    Y_ENSURE(!haveError);
+    pfree(ret1);
+    pfree(bit);
+    return ret2;
+}
+
+Numeric DecimalToPgNumeric(const NUdf::TUnboxedValuePod& value, ui8 precision, ui8 scale) {
+    const auto str = NYql::NDecimal::ToString(value.GetInt128(), precision, scale);
+    Y_ENSURE(str);
+    return (Numeric)DirectFunctionCall3Coll(numeric_in, DEFAULT_COLLATION_OID, 
+        PointerGetDatum(str), Int32GetDatum(0), Int32GetDatum(-1));
+}
+
+Numeric DyNumberToPgNumeric(const NUdf::TUnboxedValuePod& value) {
+    auto str = NKikimr::NDyNumber::DyNumberToString(value.AsStringRef());
+    Y_ENSURE(str);
+    return (Numeric)DirectFunctionCall3Coll(numeric_in, DEFAULT_COLLATION_OID,
+        PointerGetDatum(str->c_str()), Int32GetDatum(0), Int32GetDatum(-1));
 }
 
 Numeric PgFloatToNumeric(double item, ui64 scale, int digits) {

@@ -16,7 +16,6 @@ SRCS(
     cli_cmds_debug.cpp
     cli_cmds_disk.cpp
     cli_cmds_genconfig.cpp
-    cli_cmds_get.cpp
     cli_cmds_node.cpp
     cli_cmds_root.cpp
     cli_cmds_server.cpp
@@ -27,10 +26,11 @@ SRCS(
     cli_persqueue.cpp
     cli_persqueue_cluster_discovery.cpp
     cli_persqueue_stress.cpp
-    cli_load.cpp
     cli_minikql_compile_and_exec.cpp
     cli_scheme_cache_append.cpp
     cli_scheme_initroot.cpp
+    melancholic_gopher.cpp
+    melancholic_gopher.h
 )
 
 PEERDIR(
@@ -57,9 +57,8 @@ PEERDIR(
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/lib/deprecated/client
-    ydb/public/lib/ydb_cli/common
-    ydb/public/sdk/cpp/client/ydb_discovery
     ydb/public/sdk/cpp/client/ydb_driver
+    ydb/public/lib/ydb_cli/commands/ydb_discovery
 )
 
 YQL_LAST_ABI_VERSION()

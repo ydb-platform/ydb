@@ -693,7 +693,7 @@ class ClusterDetailsProvider(object):
     # PQ stuff
     @property
     def pq_config(self):
-        cfg = copy.deepcopy(self.__cluster_description.get("pq", {"enabled": False}))
+        cfg = copy.deepcopy(self.__cluster_description.get("pq", {"enabled": True}))
         cfg.pop("shared_cache_size_mb", "")
         return cfg
 

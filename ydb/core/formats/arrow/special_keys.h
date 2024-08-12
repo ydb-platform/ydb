@@ -35,6 +35,7 @@ public:
     }
 
     TString SerializeToString() const;
+    ui64 GetMemorySize() const;
 };
 
 class TFirstLastSpecialKeys: public TSpecialKeys {

@@ -7,6 +7,7 @@
 #include "blobstorage_pdisk_internal_interface.h"
 #include "blobstorage_pdisk_mon.h"
 #include "blobstorage_pdisk_request_id.h"
+#include "blobstorage_pdisk_impl_metadata.h"
 
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
@@ -209,7 +210,7 @@ public:
     void *Data;
     ui32 Size;
     ui64 Offset;
-    TCompletionAction *CompletionAction;
+    std::weak_ptr<TCompletionAction> CompletionAction;
     TReqId ReqId;
 
     TLogReadContinue(const NPDisk::TEvReadLogContinue::TPtr &ev, ui32 pdiskId, TAtomicBase /*reqIdx*/)
@@ -1004,6 +1005,95 @@ public:
     }
 };
 
+class TReadMetadata : public TRequestBase {
+public:
+    const TMainKey MainKey;
+    std::optional<TMetadataFormatSector> Format;
+
+    TReadMetadata(TActorId sender, const TMainKey& mainKey, TAtomicBase reqIdx)
+        : TRequestBase(sender, TReqId(TReqId::ReadMetadata, reqIdx), OwnerSystem, 0, NPriInternal::Other)
+        , MainKey(mainKey)
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestReadMetadata;
+    }
+
+    void Abort(TActorSystem *actorSystem) override {
+        actorSystem->Send(Sender, new TEvReadMetadataResult(EPDiskMetadataOutcome::ERROR, std::nullopt));
+    }
+};
+
+class TInitialReadMetadataResult : public TRequestBase {
+public:
+    const NMeta::TSlotKey Key;
+    std::optional<TString> ErrorReason;
+    TMetadataHeader Header;
+    TRcBuf Payload;
+
+    TInitialReadMetadataResult(NMeta::TSlotKey key, TAtomicBase reqIdx)
+        : TRequestBase({}, TReqId(TReqId::InitialReadMetadataResult, reqIdx), OwnerSystem, 0, NPriInternal::Other)
+        , Key(key)
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestInitialReadMetadataResult;
+    }
+};
+
+class TWriteMetadata : public TRequestBase {
+public:
+    TRcBuf Metadata;
+    TMainKey MainKey;
+
+    TWriteMetadata(TActorId sender, TRcBuf&& metadata, const TMainKey& mainKey, TAtomicBase reqIdx)
+        : TRequestBase(sender, TReqId(TReqId::WriteMetadata, reqIdx), OwnerSystem, 0, NPriInternal::Other)
+        , Metadata(std::move(metadata))
+        , MainKey(mainKey)
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestWriteMetadata;
+    }
+
+    void Abort(TActorSystem *actorSystem) override {
+        actorSystem->Send(Sender, new TEvWriteMetadataResult(EPDiskMetadataOutcome::ERROR, std::nullopt));
+    }
+};
+
+class TWriteMetadataResult : public TRequestBase {
+public:
+    const bool Success;
+
+    TWriteMetadataResult(bool success, TActorId sender, TAtomicBase reqIdx)
+        : TRequestBase(sender, TReqId(TReqId::WriteMetadataResult, reqIdx), OwnerSystem, 0, NPriInternal::Other)
+        , Success(success)
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestWriteMetadataResult;
+    }
+
+    void Abort(TActorSystem *actorSystem) override {
+        actorSystem->Send(Sender, new TEvWriteMetadataResult(EPDiskMetadataOutcome::ERROR, std::nullopt));
+    }
+};
+
+class TPushUnformattedMetadataSector : public TRequestBase {
+public:
+    const std::optional<TMetadataFormatSector> Format;
+    const bool WantEvent;
+
+    TPushUnformattedMetadataSector(const std::optional<TMetadataFormatSector>& format, bool wantEvent, TAtomicBase reqIdx)
+        : TRequestBase({}, TReqId(TReqId::PushUnformattedMetadataSector, reqIdx), OwnerSystem, 0, NPriInternal::Other)
+        , Format(format)
+        , WantEvent(wantEvent)
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestPushUnformattedMetadataSector;
+    }
+};
+
 } // NPDisk
 } // NKikimr
-

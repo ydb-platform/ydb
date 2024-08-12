@@ -49,11 +49,6 @@ TStringBuf ToStringBuf(const grpc_slice& slice)
         GRPC_SLICE_LENGTH(slice));
 }
 
-TString ToString(const grpc_slice& slice)
-{
-    return TString(ToStringBuf(slice));
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 TStringBuf TGrpcMetadataArray::Find(const char* key) const
@@ -73,7 +68,7 @@ THashMap<TString, TString> TGrpcMetadataArray::ToMap() const
     THashMap<TString, TString> result;
     for (size_t index = 0; index < Native_.count; ++index) {
         const auto& metadata = Native_.metadata[index];
-        result[ToString(metadata.key)] = ToString(metadata.value);
+        result[NYT::ToString(metadata.key)] = NYT::ToString(metadata.value);
     }
     return result;
 }
@@ -108,7 +103,7 @@ size_t TGrpcSlice::Size() const
 
 TString TGrpcSlice::AsString() const
 {
-    return NGrpc::ToString(Native_);
+    return NYT::ToString(Native_);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -612,3 +607,8 @@ void TGuardedGrpcCompletionQueue::Release()
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NRpc::NGrpc
+
+void FormatValue(NYT::TStringBuilderBase* builder, const grpc_slice& slice, TStringBuf spec)
+{
+    FormatValue(builder, NYT::NRpc::NGrpc::ToStringBuf(slice), spec);
+}

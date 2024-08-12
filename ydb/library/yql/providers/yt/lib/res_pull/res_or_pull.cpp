@@ -114,8 +114,11 @@ TSkiffExecuteResOrPull::TSkiffExecuteResOrPull(TMaybe<ui64> rowLimit, TMaybe<ui6
 {
     Specs.SetUseSkiff(optLLVM);
     Specs.Init(codecCtx, attrs);
+    YQL_ENSURE(Specs.Outputs.size() == 1);
 
-    SkiffWriter.SetSpecs(Specs, columns);
+    SkiffWriter.SetSpecs(Specs);
+
+    AlphabeticPermutation = CreateAlphabeticPositions(Specs.Outputs[0].RowType, columns);
 }
 
 TString TSkiffExecuteResOrPull::Finish() {
@@ -133,11 +136,33 @@ bool TSkiffExecuteResOrPull::WriteNext(const NYT::TNode& item) {
         }
     }
 
+    // For now this method is used only for the nodes that are lists of columns
+    // Feel free to extend it for other types (maps, for example) but make sure
+    // that the order of columns is correct.
+    YQL_ENSURE(item.GetType() == NYT::TNode::EType::List, "Expected list node");
+    const auto& listNode = item.UncheckedAsList();
+
+    const auto& permutation = *AlphabeticPermutation;
+    YQL_ENSURE(permutation.size() == listNode.size(), "Expected the same number of columns and values");
+
+    // TODO: Node is being copied here. This can be avoided by doing in-place swaps
+    // but it requires changing the signature of function to pass mutable node here.
+    // Note, that it can be implemented without actual change of the node by
+    // applying inverse permutation after the shuffle.
+    auto alphabeticItem = NYT::TNode::CreateList();
+    auto& alphabeticList = alphabeticItem.UncheckedAsList();
+    alphabeticList.reserve(listNode.size());
+    for (size_t index = 0; index < listNode.size(); ++index) {
+        alphabeticList.push_back(listNode[permutation[index]]);
+    }
+
     TStringStream err;
-    auto value = NCommon::ParseYsonNodeInResultFormat(HolderFactory, item, Specs.Outputs[0].RowType, &err);
+    auto value = NCommon::ParseYsonNodeInResultFormat(HolderFactory, alphabeticItem, Specs.Outputs[0].RowType, &err);
     if (!value) {
         throw yexception() << "Could not parse yson node with error: " << err.Str();
     }
+
+    // Call above produces rows in alphabetic order.
     SkiffWriter.AddRow(*value);
 
     return IsList;
@@ -160,14 +185,19 @@ void TSkiffExecuteResOrPull::WriteValue(const NUdf::TUnboxedValue& value, TType*
     }
 }
 
-bool TSkiffExecuteResOrPull::WriteNext(TMkqlIOCache& specsCache, const NYT::TNode& rec, ui32 tableIndex) {
+bool TSkiffExecuteResOrPull::WriteNext(TMkqlIOCache& specsCache, const NYT::TNode& rec, ui32 /*tableIndex*/) {
     if (!HasCapacity()) {
         Truncated = true;
         return false;
     }
 
+    // For now this method is used only for the nodes that are maps from column name
+    // to value. Feel free to extend it for other types (lists, for example) but
+    // make sure that the order of columns is correct.
+    YQL_ENSURE(rec.GetType() == NYT::TNode::EType::Map, "Expected map node");
+
     TStringStream err;
-    auto value = NCommon::ParseYsonNode(specsCache.GetHolderFactory(), rec, Specs.Outputs[tableIndex].RowType, &err);
+    auto value = NCommon::ParseYsonNode(specsCache.GetHolderFactory(), rec, Specs.Outputs[0].RowType, Specs.Outputs[0].NativeYtTypeFlags, &err);
     if (!value) {
         throw yexception() << "Could not parse yson node with error: " << err.Str();
     }
@@ -186,7 +216,7 @@ bool TSkiffExecuteResOrPull::WriteNext(TMkqlIOCache& specsCache, const NYT::TYaM
     NUdf::TUnboxedValue node;
     node = DecodeYamr(specsCache, tableIndex, rec);
     SkiffWriter.AddRow(node);
-    
+
     ++Row;
     return true;
 }
@@ -200,16 +230,57 @@ bool TSkiffExecuteResOrPull::WriteNext(TMkqlIOCache& specsCache, const NUdf::TUn
         return false;
     }
 
-    SkiffWriter.AddRow(rec);
+    YQL_ENSURE(rec.GetListLength() == AlphabeticPermutation->size());
+    TUnboxedValueVector alphabeticValues(rec.GetListLength());
+    for (size_t index = 0; index < rec.GetListLength(); ++index) {
+        alphabeticValues[index] = rec.GetElement((*AlphabeticPermutation)[index]);
+    }
+
+    NUdf::TUnboxedValue alphabeticRecord = HolderFactory.RangeAsArray(alphabeticValues.begin(), alphabeticValues.end());
+    SkiffWriter.AddRow(alphabeticRecord);
 
     ++Row;
     return true;
 }
 
 void TSkiffExecuteResOrPull::SetListResult() {
-    if (!IsList) {
-        IsList = true;
+    IsList = true;
+}
+
+TMaybe<TVector<ui32>> TSkiffExecuteResOrPull::CreateAlphabeticPositions(NKikimr::NMiniKQL::TType* inputType, const TVector<TString>& columns)
+{
+    if (inputType->GetKind() != TType::EKind::Struct) {
+        return Nothing();
     }
+    auto inputStruct = AS_TYPE(TStructType, inputType);
+
+    YQL_ENSURE(columns.empty() || columns.size() == inputStruct->GetMembersCount());
+
+    if (columns.empty()) {
+        TVector<ui32> positions(inputStruct->GetMembersCount());
+        for (size_t index = 0; index < positions.size(); ++index) {
+            positions[index] = index;
+        }
+        return positions;
+    }
+
+    TMap<TStringBuf, ui32> orders;
+    for (size_t index = 0; index < columns.size(); ++index) {
+        orders.emplace(columns[index], -1);
+    }
+    {
+        ui32 index = 0;
+        for (auto& [column, order] : orders) {
+            order = index++;
+        }
+    }
+
+    TVector<ui32> positions(columns.size());
+    for (size_t index = 0; index < columns.size(); ++index) {
+        positions[orders[columns[index]]] = index;
+    }
+
+    return positions;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////

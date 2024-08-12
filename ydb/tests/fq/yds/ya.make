@@ -1,6 +1,7 @@
 PY3TEST()
 
 FORK_SUBTESTS()
+
 SPLIT_FACTOR(50)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
@@ -12,7 +13,9 @@ PEERDIR(
     ydb/tests/tools/fq_runner
 )
 
-DEPENDS(ydb/tests/tools/pq_read)
+DEPENDS(
+    ydb/tests/tools/pq_read
+)
 
 PY_SRCS(
     conftest.py
@@ -28,6 +31,7 @@ TEST_SRCS(
     test_cpu_quota.py
     test_delete_read_rules_after_abort_by_system.py
     test_eval.py
+    test_invalid_consumer.py
     test_kill_pq_bill.py
     test_mem_alloc.py
     test_metrics_cleanup.py
@@ -48,6 +52,10 @@ TEST_SRCS(
     test_yq_streaming.py
 )
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:16)
+ENDIF()
+
 IF (SANITIZER_TYPE == "thread")
     TIMEOUT(2400)
     SIZE(LARGE)
@@ -56,7 +64,5 @@ ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
-
-REQUIREMENTS(ram:16)
 
 END()

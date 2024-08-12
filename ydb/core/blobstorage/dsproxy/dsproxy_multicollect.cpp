@@ -9,8 +9,7 @@ namespace NKikimr {
 // MULTI COLLECT request
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-class TBlobStorageGroupMultiCollectRequest
-        : public TBlobStorageGroupRequestActor<TBlobStorageGroupMultiCollectRequest> {
+class TBlobStorageGroupMultiCollectRequest : public TBlobStorageGroupRequestActor {
     struct TRequestInfo {
         bool IsReplied;
     };
@@ -72,50 +71,44 @@ class TBlobStorageGroupMultiCollectRequest
         }
     }
 
-    friend class TBlobStorageGroupRequestActor<TBlobStorageGroupMultiCollectRequest>;
-    void ReplyAndDie(NKikimrProto::EReplyStatus status) {
+    void ReplyAndDie(NKikimrProto::EReplyStatus status) override {
         std::unique_ptr<TEvBlobStorage::TEvCollectGarbageResult> ev(new TEvBlobStorage::TEvCollectGarbageResult(
             status, TabletId, RecordGeneration, PerGenerationCounter, Channel));
         ev->ErrorReason = ErrorReason;
         SendResponseAndDie(std::move(ev));
     }
 
-    std::unique_ptr<IEventBase> RestartQuery(ui32) {
+    std::unique_ptr<IEventBase> RestartQuery(ui32) override {
         Y_ABORT();
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::BS_PROXY_MULTICOLLECT_ACTOR;
+    ::NMonitoring::TDynamicCounters::TCounterPtr& GetActiveCounter() const override {
+        return Mon->ActiveMultiCollect;
     }
 
-    static const auto& ActiveCounter(const TIntrusivePtr<TBlobStorageGroupProxyMon>& mon) {
-        return mon->ActiveMultiCollect;
+    ERequestType GetRequestType() const override {
+        return ERequestType::CollectGarbage;
     }
 
-    TBlobStorageGroupMultiCollectRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-            const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
-            const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvCollectGarbage *ev, ui64 cookie,
-            NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
-        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId),
-                NKikimrServices::BS_PROXY_MULTICOLLECT, false, {}, now, storagePoolCounters, 0,
-                "DSProxy.MultiCollect", std::move(ev->ExecutionRelay))
-        , Iterations(ev->PerGenerationCounterStepSize())
-        , TabletId(ev->TabletId)
-        , RecordGeneration(ev->RecordGeneration)
-        , PerGenerationCounter(ev->PerGenerationCounter)
-        , Channel(ev->Channel)
-        , Keep(ev->Keep.Release())
-        , DoNotKeep(ev->DoNotKeep.Release())
-        , Deadline(ev->Deadline)
-        , CollectGeneration(ev->CollectGeneration)
-        , CollectStep(ev->CollectStep)
-        , Hard(ev->Hard)
-        , Collect(ev->Collect)
-        , Decommission(ev->Decommission)
+    TBlobStorageGroupMultiCollectRequest(TBlobStorageGroupMultiCollectParameters& params)
+        : TBlobStorageGroupRequestActor(params)
+        , Iterations(params.Common.Event->PerGenerationCounterStepSize())
+        , TabletId(params.Common.Event->TabletId)
+        , RecordGeneration(params.Common.Event->RecordGeneration)
+        , PerGenerationCounter(params.Common.Event->PerGenerationCounter)
+        , Channel(params.Common.Event->Channel)
+        , Keep(params.Common.Event->Keep.Release())
+        , DoNotKeep(params.Common.Event->DoNotKeep.Release())
+        , Deadline(params.Common.Event->Deadline)
+        , CollectGeneration(params.Common.Event->CollectGeneration)
+        , CollectStep(params.Common.Event->CollectStep)
+        , Hard(params.Common.Event->Hard)
+        , Collect(params.Common.Event->Collect)
+        , Decommission(params.Common.Event->Decommission)
         , FlagRequestsInFlight(0)
         , CollectRequestsInFlight(0)
-        , StartTime(now)
+        , StartTime(params.Common.Now)
     {
         Y_ABORT_UNLESS(Iterations > 1);
     }
@@ -176,7 +169,7 @@ public:
         }
     }
 
-    void Bootstrap() {
+    void Bootstrap() override {
         A_LOG_INFO_S("BPMC4", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
@@ -201,7 +194,7 @@ public:
         for (ui64 idx = 0; idx < Iterations - (Collect ? 1 : 0); ++idx) {
             SendRequest(idx, false);
         }
-        Become(&TThis::StateWait);
+        Become(&TBlobStorageGroupMultiCollectRequest::StateWait);
     }
 
     STATEFN(StateWait) {
@@ -214,12 +207,8 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupMultiCollectRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-        const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
-        const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvCollectGarbage *ev,
-        ui64 cookie, NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
-    return new TBlobStorageGroupMultiCollectRequest(info, state, source, mon, ev, cookie, std::move(traceId), now,
-            storagePoolCounters);
+IActor* CreateBlobStorageGroupMultiCollectRequest(TBlobStorageGroupMultiCollectParameters params) {
+    return new TBlobStorageGroupMultiCollectRequest(params);
 }
 
 }//NKikimr

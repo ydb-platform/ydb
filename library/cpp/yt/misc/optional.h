@@ -13,6 +13,16 @@ struct TOptionalTraits
 {
     using TOptional = std::optional<T>;
     using TValue = T;
+
+    static constexpr bool HasValue(const TOptional& opt)
+    {
+        return opt.has_value();
+    }
+
+    static constexpr TOptional Empty()
+    {
+        return std::nullopt;
+    }
 };
 
 template <class T>
@@ -20,6 +30,16 @@ struct TOptionalTraits<std::optional<T>>
 {
     using TOptional = std::optional<T>;
     using TValue = T;
+
+    static constexpr bool HasValue(const TOptional& opt)
+    {
+        return opt.has_value();
+    }
+
+    static constexpr TOptional Empty()
+    {
+        return std::nullopt;
+    }
 };
 
 template <class T>
@@ -27,6 +47,16 @@ struct TOptionalTraits<T*>
 {
     using TOptional = T*;
     using TValue = T*;
+
+    static constexpr bool HasValue(const TOptional& opt)
+    {
+        return opt != nullptr;
+    }
+
+    static constexpr TOptional Empty()
+    {
+        return nullptr;
+    }
 };
 
 template <class T>
@@ -34,6 +64,16 @@ struct TOptionalTraits<TIntrusivePtr<T>>
 {
     using TOptional = TIntrusivePtr<T>;
     using TValue = TIntrusivePtr<T>;
+
+    static bool HasValue(const TOptional& opt)
+    {
+        return opt.Get() != nullptr;
+    }
+
+    static constexpr TOptional Empty()
+    {
+        return TIntrusivePtr<T>{};
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -55,12 +95,6 @@ struct TStdOptionalTraits<std::optional<T>>
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
-
-template <class T>
-TString ToString(const std::optional<T>& nullable)
-{
-    return nullable ? ToString(*nullable) : "<Null>";
-}
 
 template <class T>
 struct THash<std::optional<T>>

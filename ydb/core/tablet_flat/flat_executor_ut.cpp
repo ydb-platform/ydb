@@ -1,3 +1,4 @@
+#include "flat_dbase_sz_env.h"
 #include "flat_executor_ut_common.h"
 
 namespace NKikimr {
@@ -312,13 +313,25 @@ private:
         return EScan::Feed;
     }
 
+    EScan PageFault() noexcept override {
+        PageFaults++;
+        return EScan::Feed;
+    }
+
     TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override
     {
         Y_ABORT_UNLESS((int)Abort == (int)abort);
 
         auto ctx = ActorContext();
         if (abort == EAbort::None) {
+            if (ExpectedRows != StoredRows) {
+                Cerr << "Expected " << ExpectedRows << " rows but got " << StoredRows << Endl;
+            }
             Y_ABORT_UNLESS(ExpectedRows == StoredRows);
+            if (ExpectedPageFaults != Max<ui64>() && ExpectedPageFaults != PageFaults) {
+                Cerr << "Expected " << ExpectedPageFaults << " page faults but got " << PageFaults << Endl;
+            }
+            Y_ABORT_UNLESS(ExpectedPageFaults == Max<ui64>() || ExpectedPageFaults == PageFaults);
         }
 
         Die(ctx);
@@ -328,12 +341,14 @@ private:
 
 public:
     TArrayRef<const TCell> LeadKey;
+    ui64 ExpectedPageFaults = Max<ui64>();
 
 private:
     TActorId Tablet;
     IDriver *Driver = nullptr;
     TIntrusiveConstPtr<TScheme> Scheme;
     ui64 StoredRows = 0;
+    ui64 PageFaults = 0;
     ui64 ExpectedRowId = 1;
     ui64 ExpectedRows = 0;
     bool Postponed = false;
@@ -375,6 +390,7 @@ struct TEvTestFlatTablet {
         NTable::EAbort Abort;
         const TRowVersion ReadVersion;
         const ui32 ExpectRows = 0;
+        ui64 ExpectedPageFaults = Max<ui64>();
 
         std::optional<std::pair<ui64, ui64>> ReadAhead;
         TArrayRef<const TCell> LeadKey;
@@ -452,6 +468,7 @@ class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFl
         auto rows = abort != NTable::EAbort::None ? 0 : ev->Get()->ExpectRows;
         Scan = new TDummyScan(SelfId(), postpone, abort, rows);
         Scan->LeadKey = ev->Get()->LeadKey;
+        Scan->ExpectedPageFaults = ev->Get()->ExpectedPageFaults;
         TScanOptions options;
         if (snap) {
             Y_ABORT_UNLESS(ev->Get()->ReadVersion.IsMax(), "Cannot combine multiple snapshot techniques");
@@ -608,60 +625,6 @@ Y_UNIT_TEST_SUITE(TFlatTableCompactionScan) {
         TAutoPtr<IEventHandle> handle;
         env->GrabEdgeEventRethrow<TEvTestFlatTablet::TEvScanFinished>(handle);
         env.SendSync(new TEvents::TEvPoison, false, true);
-    }
-
-    Y_UNIT_TEST(TestCompactionScanWIthReassignAndReboots) {
-        TMyEnvBase env;
-        TRowsModel data;
-
-        env->SetLogPriority(NKikimrServices::TABLET_FLATBOOT, NActors::NLog::PRI_DEBUG);
-
-        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
-            return new TTestFlatTablet(env.Edge, tablet, info);
-        });
-
-        env.WaitForWakeUp();
-
-        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
-        policy->InMemSizeToSnapshot = 40 * 1024 *1024;
-        policy->InMemStepsToSnapshot = 10;
-        policy->InMemForceStepsToSnapshot = 10;
-        policy->InMemForceSizeToSnapshot = 64 * 1024 * 1024;
-        policy->InMemResourceBrokerTask = NLocalDb::LegacyQueueIdToTaskName(0);
-        policy->ReadAheadHiThreshold = 100000;
-        policy->ReadAheadLoThreshold = 50000;
-        policy->Generations.push_back({100 * 1024 * 1024, 5, 5, 200 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(1), true});
-        policy->Generations.push_back({400 * 1024 * 1024, 5, 5, 800 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(2), false});
-        for (auto& gen : policy->Generations) {
-            gen.ExtraCompactionPercent = 0;
-            gen.ExtraCompactionMinSize = 0;
-            gen.ExtraCompactionExpPercent = 0;
-            gen.ExtraCompactionExpMaxSize = 0;
-            gen.UpliftPartSize = 0;
-        }
-
-        env.SendSync(data.MakeScheme(std::move(policy)));
-        env.SendSync(data.MakeRows(249));
-
-        env.SendSync(new TEvents::TEvPoison, false, true);
-        IActor *tabletActor = nullptr; // save tablet to get its actor id and avoid using tablet resolver which has outdated info
-        for (unsigned iter = 0; iter < 3; ++iter) {
-            struct TReassignedStarter : NFake::TStarter {
-                NFake::TStorageInfo* MakeTabletInfo(ui64 tablet) noexcept override {
-                    auto *info = TStarter::MakeTabletInfo(tablet);
-                    info->Channels[0].History.emplace_back(3, 3);
-                    return info;
-                }
-            };
-            TReassignedStarter starter;
-            env.FireTablet(env.Edge, env.Tablet, [&env, &tabletActor](const TActorId &tablet, TTabletStorageInfo *info) mutable {
-                return tabletActor = new TTestFlatTablet(env.Edge, tablet, info);
-            }, 0, &starter);
-            env.WaitForWakeUp();
-            env.SendEv(tabletActor->SelfId(), data.MakeRows(500));
-            env.SendEv(tabletActor->SelfId(), new TEvents::TEvPoison);
-        }
-        env.SendEv(tabletActor->SelfId(), new TEvents::TEvPoison);
     }
 }
 
@@ -5046,6 +5009,41 @@ Y_UNIT_TEST_SUITE(TFlatTableSnapshotWithCommits) {
 
 Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
 
+    struct TTxCalculateReadSize : public ITransaction {
+        ui32 Attempt = 0;
+        TVector<ui64>& ReadSizes;
+        ui64 MinKey, MaxKey;
+        
+        TTxCalculateReadSize(TVector<ui64>& readSizes, ui64 minKey, ui64 maxKey)
+            : ReadSizes(readSizes)
+            , MinKey(minKey)
+            , MaxKey(maxKey)
+        {
+            ReadSizes.clear();
+        }
+
+
+        bool Execute(TTransactionContext &txc, const TActorContext &) override
+        {
+            UNIT_ASSERT_LE(++Attempt, 10);
+
+            const auto minKey = NScheme::TInt64::TInstance(MinKey);
+            const auto maxKey = NScheme::TInt64::TInstance(MaxKey);
+            const TVector<NTable::TTag> tags{ { TRowsModel::ColumnKeyId, TRowsModel::ColumnValueId } };
+
+            auto sizeEnv = txc.DB.CreateSizeEnv();
+            txc.DB.CalculateReadSize(sizeEnv, TRowsModel::TableId, { minKey }, { maxKey }, tags, 0, 0, 0);
+            ReadSizes.push_back(sizeEnv.GetSize());
+
+            return txc.DB.Precharge(TRowsModel::TableId,  { minKey }, { maxKey }, tags, 0, 0, 0);
+        }
+
+        void Complete(const TActorContext &ctx) override
+        {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
     struct TTxPrechargeAndSeek : public ITransaction {
         ui32 Attempt = 0;
         bool Pinned = false;
@@ -5088,10 +5086,77 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
     };
 
     void ZeroSharedCache(TMyEnvBase &env) {
-        env.Env.GetMemObserver()->NotifyStat({1, 1, 1});
-        TDispatchOptions options;
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(NSharedCache::EvMem, 1));
-        env->DispatchEvents(options);
+        env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0));
+    }
+
+    Y_UNIT_TEST(CalculateReadSize_FlatIndex) {
+        TMyEnvBase env;
+        TRowsModel rows;
+        const ui32 rowsCount = 1024;
+
+        auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+        appData.FeatureFlags.SetEnableLocalDBFlatIndex(true);
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+        ZeroSharedCache(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy(), false));
+
+        env.SendSync(rows.MakeRows(rowsCount, 10*1024));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        TVector<ui64> sizes;
+        
+        env.SendSync(new NFake::TEvExecute{ new TTxCalculateReadSize(sizes, 0, 1) });
+        UNIT_ASSERT_VALUES_EQUAL(sizes, (TVector<ui64>{20566, 20566}));
+
+        env.SendSync(new NFake::TEvExecute{ new TTxCalculateReadSize(sizes, 100, 200) });
+        UNIT_ASSERT_VALUES_EQUAL(sizes, (TVector<ui64>{1048866, 1048866}));
+
+        env.SendSync(new NFake::TEvExecute{ new TTxCalculateReadSize(sizes, 300, 700) });
+        UNIT_ASSERT_VALUES_EQUAL(sizes, (TVector<ui64>{4133766, 4133766}));
+    }
+
+    Y_UNIT_TEST(CalculateReadSize_BTreeIndex) {
+        TMyEnvBase env;
+        TRowsModel rows;
+        const ui32 rowsCount = 1024;
+
+        auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(true);
+        appData.FeatureFlags.SetEnableLocalDBFlatIndex(false);
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+        ZeroSharedCache(env);
+
+        auto policy = MakeIntrusive<TCompactionPolicy>();
+        policy->MinBTreeIndexNodeSize = 128;
+        env.SendSync(rows.MakeScheme(std::move(policy)));
+
+        env.SendSync(rows.MakeRows(rowsCount, 10*1024));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        TVector<ui64> sizes;
+        
+        env.SendSync(new NFake::TEvExecute{ new TTxCalculateReadSize(sizes, 0, 1) });
+        UNIT_ASSERT_VALUES_EQUAL(sizes, (TVector<ui64>{0, 0, 0, 0, 20566, 20566}));
+
+        env.SendSync(new NFake::TEvExecute{ new TTxCalculateReadSize(sizes, 100, 200) });
+        UNIT_ASSERT_VALUES_EQUAL(sizes, (TVector<ui64>{0, 0, 0, 0, 1048866, 1048866}));
+
+        env.SendSync(new NFake::TEvExecute{ new TTxCalculateReadSize(sizes, 300, 700) });
+        UNIT_ASSERT_VALUES_EQUAL(sizes, (TVector<ui64>{0, 0, 0, 0, 4133766, 4133766}));
     }
 
     Y_UNIT_TEST(PrechargeAndSeek_FlatIndex) {
@@ -5163,7 +5228,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+        auto policy = MakeIntrusive<TCompactionPolicy>();
+        policy->MinBTreeIndexNodeSize = 128;
+        env.SendSync(rows.MakeScheme(std::move(policy)));
 
         env.SendSync(rows.MakeRows(10*1024, 10*1024));
         
@@ -5179,6 +5246,71 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
 
         // should have the same behaviour
         env.SendSync(new NFake::TEvExecute{ new TTxPrechargeAndSeek() }, true);
+
+        // If we didn't crash, then assume the test succeeded
+        env.SendSync(new TEvents::TEvPoison, false, true);
+    }
+
+    Y_UNIT_TEST(Scan_FlatIndex) {
+        TMyEnvBase env;
+        TRowsModel rows;
+        const ui32 rowsCount = 1024;
+
+        auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+        appData.FeatureFlags.SetEnableLocalDBFlatIndex(true);
+
+        env->SetLogPriority(NKikimrServices::TABLET_OPS_HOST, NActors::NLog::PRI_DEBUG);
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+        ZeroSharedCache(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy(), false));
+
+        env.SendSync(rows.MakeRows(rowsCount, 10*1024));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        { // no read ahead
+            auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount);
+            queueScan->ReadAhead = {1, 1};
+            queueScan->ExpectedPageFaults = 1025;
+            env.SendAsync(std::move(queueScan));
+            env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+        }
+
+        { // small read ahead
+            auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount);
+            queueScan->ReadAhead = {5*10*1024, 10*10*1024};
+            queueScan->ExpectedPageFaults = 171;
+            env.SendAsync(std::move(queueScan));
+            env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+        }
+
+        { // infinite read ahead
+            auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount);
+            queueScan->ReadAhead = {Max<ui64>(), Max<ui64>()};
+            env.SendAsync(std::move(queueScan));
+            queueScan->ExpectedPageFaults = 2;
+            env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+        }
+
+        for (ui64 leadKey = 1; ; leadKey += rowsCount / 10) {
+            ui64 expectedRowsCount = rowsCount >= leadKey ? rowsCount - leadKey + 1 : 0;
+            auto queueScan = new TEvTestFlatTablet::TEvQueueScan(expectedRowsCount);
+            queueScan->ReadAhead = {5*10*1024, 10*10*1024};
+            TVector<TCell> leadKey_ = {TCell::Make(leadKey)};
+            queueScan->LeadKey = leadKey_;
+            env.SendAsync(std::move(queueScan));
+            env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            if (!expectedRowsCount) {
+                break;
+            }
+        }
 
         // If we didn't crash, then assume the test succeeded
         env.SendSync(new TEvents::TEvPoison, false, true);
@@ -5201,7 +5333,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         env.WaitForWakeUp();
         ZeroSharedCache(env);
 
-        env.SendSync(rows.MakeScheme(new TCompactionPolicy(), false));
+        auto policy = MakeIntrusive<TCompactionPolicy>();
+        policy->MinBTreeIndexNodeSize = 128;
+        env.SendSync(rows.MakeScheme(std::move(policy)));
 
         env.SendSync(rows.MakeRows(rowsCount, 10*1024));
         
@@ -5211,6 +5345,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         { // no read ahead
             auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount);
             queueScan->ReadAhead = {1, 1};
+            queueScan->ExpectedPageFaults = 1028;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
         }
@@ -5218,6 +5353,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         { // small read ahead
             auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount);
             queueScan->ReadAhead = {5*10*1024, 10*10*1024};
+            queueScan->ExpectedPageFaults = 189;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
         }
@@ -5225,13 +5361,80 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         { // infinite read ahead
             auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount);
             queueScan->ReadAhead = {Max<ui64>(), Max<ui64>()};
+            queueScan->ExpectedPageFaults = 5;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
         }
 
         for (ui64 leadKey = 1; ; leadKey += rowsCount / 10) {
-            ui64 expectedRowsCount = rowsCount > leadKey ? rowsCount - leadKey + 1 : 0;
+            ui64 expectedRowsCount = rowsCount >= leadKey ? rowsCount - leadKey + 1 : 0;
             auto queueScan = new TEvTestFlatTablet::TEvQueueScan(expectedRowsCount);
+            queueScan->ReadAhead = {5*10*1024, 10*10*1024};
+            TVector<TCell> leadKey_ = {TCell::Make(leadKey)};
+            queueScan->LeadKey = leadKey_;
+            env.SendAsync(std::move(queueScan));
+            env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            if (!expectedRowsCount) {
+                break;
+            }
+        }
+
+        // If we didn't crash, then assume the test succeeded
+        env.SendSync(new TEvents::TEvPoison, false, true);
+    }
+
+    Y_UNIT_TEST(Scan_History_FlatIndex) {
+        TMyEnvBase env;
+        TRowsModel rows;
+        const ui32 rowsCount = 1024;
+
+        auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+        appData.FeatureFlags.SetEnableLocalDBFlatIndex(true);
+
+        env->SetLogPriority(NKikimrServices::TABLET_OPS_HOST, NActors::NLog::PRI_DEBUG);
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+        ZeroSharedCache(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy(), false));
+
+        env.SendSync(rows.RowTo(1).VersionTo(TRowVersion(1, 10)).MakeRows(rowsCount, 10*1024));
+        env.SendSync(rows.RowTo(1).VersionTo(TRowVersion(2, 20)).MakeRows(rowsCount, 10*1024));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        { // no read ahead
+            auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount, TRowVersion(2, 0));
+            queueScan->ReadAhead = {1, 1};
+            env.SendAsync(std::move(queueScan));
+            queueScan->ExpectedPageFaults = 2050;
+            env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+        }
+
+        { // small read ahead
+            auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount, TRowVersion(2, 0));
+            queueScan->ReadAhead = {5*10*1024, 10*10*1024};
+            queueScan->ExpectedPageFaults = 173;
+            env.SendAsync(std::move(queueScan));
+            env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+        }
+
+        { // infinite read ahead
+            auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount, TRowVersion(2, 0));
+            queueScan->ReadAhead = {Max<ui64>(), Max<ui64>()};
+            queueScan->ExpectedPageFaults = 4;
+            env.SendAsync(std::move(queueScan));
+            env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+        }
+
+        for (ui64 leadKey = 1; ; leadKey += rowsCount / 10) {
+            ui64 expectedRowsCount = rowsCount >= leadKey ? rowsCount - leadKey + 1 : 0;
+            auto queueScan = new TEvTestFlatTablet::TEvQueueScan(expectedRowsCount, TRowVersion(2, 0));
             queueScan->ReadAhead = {5*10*1024, 10*10*1024};
             TVector<TCell> leadKey_ = {TCell::Make(leadKey)};
             queueScan->LeadKey = leadKey_;
@@ -5263,7 +5466,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         env.WaitForWakeUp();
         ZeroSharedCache(env);
 
-        env.SendSync(rows.MakeScheme(new TCompactionPolicy(), false));
+        auto policy = MakeIntrusive<TCompactionPolicy>();
+        policy->MinBTreeIndexNodeSize = 128;
+        env.SendSync(rows.MakeScheme(std::move(policy)));
 
         env.SendSync(rows.RowTo(1).VersionTo(TRowVersion(1, 10)).MakeRows(rowsCount, 10*1024));
         env.SendSync(rows.RowTo(1).VersionTo(TRowVersion(2, 20)).MakeRows(rowsCount, 10*1024));
@@ -5274,6 +5479,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         { // no read ahead
             auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount, TRowVersion(2, 0));
             queueScan->ReadAhead = {1, 1};
+            queueScan->ExpectedPageFaults = 2056;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
         }
@@ -5281,6 +5487,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         { // small read ahead
             auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount, TRowVersion(2, 0));
             queueScan->ReadAhead = {5*10*1024, 10*10*1024};
+            queueScan->ExpectedPageFaults = 194;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
         }
@@ -5288,13 +5495,79 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         { // infinite read ahead
             auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount, TRowVersion(2, 0));
             queueScan->ReadAhead = {Max<ui64>(), Max<ui64>()};
+            queueScan->ExpectedPageFaults = 10;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
         }
 
         for (ui64 leadKey = 1; ; leadKey += rowsCount / 10) {
-            ui64 expectedRowsCount = rowsCount > leadKey ? rowsCount - leadKey + 1 : 0;
+            ui64 expectedRowsCount = rowsCount >= leadKey ? rowsCount - leadKey + 1 : 0;
             auto queueScan = new TEvTestFlatTablet::TEvQueueScan(expectedRowsCount, TRowVersion(2, 0));
+            queueScan->ReadAhead = {5*10*1024, 10*10*1024};
+            TVector<TCell> leadKey_ = {TCell::Make(leadKey)};
+            queueScan->LeadKey = leadKey_;
+            env.SendAsync(std::move(queueScan));
+            env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            if (!expectedRowsCount) {
+                break;
+            }
+        }
+
+        // If we didn't crash, then assume the test succeeded
+        env.SendSync(new TEvents::TEvPoison, false, true);
+    }
+
+    Y_UNIT_TEST(Scan_Groups_FlatIndex) {
+        TMyEnvBase env;
+        TRowsModel rows;
+        const ui32 rowsCount = 1024;
+
+        auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+        appData.FeatureFlags.SetEnableLocalDBFlatIndex(true);
+
+        env->SetLogPriority(NKikimrServices::TABLET_OPS_HOST, NActors::NLog::PRI_DEBUG);
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+        ZeroSharedCache(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy(), true));
+
+        env.SendSync(rows.MakeRows(rowsCount, 10*1024));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        { // no read ahead
+            auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount);
+            queueScan->ReadAhead = {1, 1};
+            queueScan->ExpectedPageFaults = 1029;
+            env.SendAsync(std::move(queueScan));
+            env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+        }
+
+        { // small read ahead
+            auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount);
+            queueScan->ReadAhead = {5*10*1024, 10*10*1024};
+            queueScan->ExpectedPageFaults = 173;
+            env.SendAsync(std::move(queueScan));
+            env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+        }
+
+        { // infinite read ahead
+            auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount);
+            queueScan->ReadAhead = {Max<ui64>(), Max<ui64>()};
+            queueScan->ExpectedPageFaults = 4;
+            env.SendAsync(std::move(queueScan));
+            env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+        }
+
+        for (ui64 leadKey = 1; ; leadKey += rowsCount / 10) {
+            ui64 expectedRowsCount = rowsCount >= leadKey ? rowsCount - leadKey + 1 : 0;
+            auto queueScan = new TEvTestFlatTablet::TEvQueueScan(expectedRowsCount);
             queueScan->ReadAhead = {5*10*1024, 10*10*1024};
             TVector<TCell> leadKey_ = {TCell::Make(leadKey)};
             queueScan->LeadKey = leadKey_;
@@ -5326,7 +5599,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         env.WaitForWakeUp();
         ZeroSharedCache(env);
 
-        env.SendSync(rows.MakeScheme(new TCompactionPolicy(), true));
+        auto policy = MakeIntrusive<TCompactionPolicy>();
+        policy->MinBTreeIndexNodeSize = 128;
+        env.SendSync(rows.MakeScheme(std::move(policy), true));
 
         env.SendSync(rows.MakeRows(rowsCount, 10*1024));
         
@@ -5336,6 +5611,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         { // no read ahead
             auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount);
             queueScan->ReadAhead = {1, 1};
+            queueScan->ExpectedPageFaults = 1032;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
         }
@@ -5343,6 +5619,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         { // small read ahead
             auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount);
             queueScan->ReadAhead = {5*10*1024, 10*10*1024};
+            queueScan->ExpectedPageFaults = 191;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
         }
@@ -5350,16 +5627,75 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         { // infinite read ahead
             auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount);
             queueScan->ReadAhead = {Max<ui64>(), Max<ui64>()};
+            queueScan->ExpectedPageFaults = 7;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
         }
 
         for (ui64 leadKey = 1; ; leadKey += rowsCount / 10) {
-            ui64 expectedRowsCount = rowsCount > leadKey ? rowsCount - leadKey + 1 : 0;
+            ui64 expectedRowsCount = rowsCount >= leadKey ? rowsCount - leadKey + 1 : 0;
             auto queueScan = new TEvTestFlatTablet::TEvQueueScan(expectedRowsCount);
             queueScan->ReadAhead = {5*10*1024, 10*10*1024};
             TVector<TCell> leadKey_ = {TCell::Make(leadKey)};
             queueScan->LeadKey = leadKey_;
+            env.SendAsync(std::move(queueScan));
+            env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            if (!expectedRowsCount) {
+                break;
+            }
+        }
+
+        // If we didn't crash, then assume the test succeeded
+        env.SendSync(new TEvents::TEvPoison, false, true);
+    }
+
+    Y_UNIT_TEST(Scan_Groups_BTreeIndex_Empty) {
+        TMyEnvBase env;
+        TRowsModel rows;
+        const ui32 rowsCount = 10;
+
+        auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(true);
+        appData.FeatureFlags.SetEnableLocalDBFlatIndex(false);
+
+        env->SetLogPriority(NKikimrServices::TABLET_OPS_HOST, NActors::NLog::PRI_DEBUG);
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+        ZeroSharedCache(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy(), true));
+
+        env.SendSync(rows.MakeRows(rowsCount, 10));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        { // no read ahead
+            auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount);
+            queueScan->ReadAhead = {1, 1};
+            queueScan->ExpectedPageFaults = 2;
+            env.SendAsync(std::move(queueScan));
+            env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+        }
+
+        { // read ahead
+            auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount);
+            queueScan->ReadAhead = {5*10*1024, 10*10*1024};
+            queueScan->ExpectedPageFaults = 2;
+            env.SendAsync(std::move(queueScan));
+            env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+        }
+
+        for (ui64 leadKey = 1; ; leadKey++) {
+            ui64 expectedRowsCount = rowsCount >= leadKey ? rowsCount - leadKey + 1 : 0;
+            auto queueScan = new TEvTestFlatTablet::TEvQueueScan(expectedRowsCount);
+            queueScan->ReadAhead = {5*10*1024, 10*10*1024};
+            TVector<TCell> leadKey_ = {TCell::Make(leadKey)};
+            queueScan->LeadKey = leadKey_;
+            queueScan->ExpectedPageFaults = expectedRowsCount ? 2 : 0;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
             if (!expectedRowsCount) {
@@ -5449,10 +5785,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorStickyPages) {
     };
     
     void ZeroSharedCache(TMyEnvBase &env) {
-        env.Env.GetMemObserver()->NotifyStat({1, 1, 1});
-        TDispatchOptions options;
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(NSharedCache::EvMem, 1));
-        env->DispatchEvents(options);
+        env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0));
     }
 
     Y_UNIT_TEST(TestNonSticky_FlatIndex) {
@@ -5889,7 +6222,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
         }
     };
 
-    Y_UNIT_TEST(EnableLocalDBBtreeIndex_Default) { // uses flat index
+    Y_UNIT_TEST(EnableLocalDBBtreeIndex_Default) { // uses b-tree index
         TMyEnvBase env;
         TRowsModel rows;
 
@@ -5911,8 +6244,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
         env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
         env.WaitFor<NFake::TEvCompacted>();
 
-        // all pages are always kept in shared cache
-        UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 290);
+        // all pages are always kept in shared cache (except flat index)
+        UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 334);
 
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) });
         UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
@@ -5925,7 +6258,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
         // after restart we have no pages in private cache
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) }, true);
         UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 288);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 330);
     }
 
     Y_UNIT_TEST(EnableLocalDBBtreeIndex_True) { // uses b-tree index
@@ -5963,7 +6296,46 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
         // after restart we have no pages in private cache
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) }, true);
         UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 332);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 330);
+    }
+
+    Y_UNIT_TEST(EnableLocalDBBtreeIndex_False) { // uses flat index
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        auto &appData = env->GetAppData();
+        
+        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+        auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
+        int readRows = 0, failedAttempts = 0;
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        auto policy = MakeIntrusive<TCompactionPolicy>();
+        policy->MinBTreeIndexNodeSize = 128;
+        env.SendSync(rows.MakeScheme(std::move(policy)));
+
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(1000, 950));
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(1000, 950));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        // all pages are always kept in shared cache
+        UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 290);
+
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) });
+        UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
+
+        // restart tablet
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        // after restart we have no pages in private cache
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) }, true);
+        UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 288);
     }
 
     Y_UNIT_TEST(EnableLocalDBBtreeIndex_True_EnableLocalDBFlatIndex_False) { // uses b-tree index
@@ -6002,7 +6374,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
         // after restart we have no pages in private cache
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) }, true);
         UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 332);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 330);
     }
 
     Y_UNIT_TEST(EnableLocalDBBtreeIndex_False_EnableLocalDBFlatIndex_False) { // uses flat index
@@ -6129,9 +6501,71 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
         // after restart we have no pages in private cache
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) }, true);
         UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 332);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 330);
     }
 
+}
+
+Y_UNIT_TEST_SUITE(TFlatTableExecutorReboot) {
+    Y_UNIT_TEST(TestSchemeGcAfterReassign) {
+        TMyEnvBase env;
+        TRowsModel data;
+
+        env->SetLogPriority(NKikimrServices::TABLET_FLATBOOT, NActors::NLog::PRI_DEBUG);
+        env->SetLogPriority(NKikimrServices::RESOURCE_BROKER, NActors::NLog::PRI_DEBUG);
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+
+        env.WaitForWakeUp();
+
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
+
+        env.SendSync(data.MakeScheme(std::move(policy)));
+        env.SendSync(data.MakeRows(250));
+        bool wasGc = false;
+        bool timeToStop = false;
+
+        env.Env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvCollectGarbage) {
+                auto* event = ev->Get<TEvBlobStorage::TEvCollectGarbage>();
+                if (event->Channel == 1) {
+                    wasGc = true;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        IActor *tabletActor = nullptr; // save tablet to get its actor id and avoid using tablet resolver which has outdated info
+        while (true) {
+            struct TReassignedStarter : NFake::TStarter {
+                NFake::TStorageInfo* MakeTabletInfo(ui64 tablet) noexcept override {
+                    auto *info = TStarter::MakeTabletInfo(tablet);
+                    info->Channels[1].History.emplace_back(3, 3);
+                    return info;
+                }
+            };
+            TReassignedStarter starter;
+            env.FireTablet(env.Edge, env.Tablet, [&env, &tabletActor](const TActorId &tablet, TTabletStorageInfo *info) mutable {
+                return tabletActor = new TTestFlatTablet(env.Edge, tablet, info);
+            }, 0, &starter);
+            env.WaitForWakeUp();
+            env.SendEv(tabletActor->SelfId(), new TEvTestFlatTablet::TEvQueueScan(data.Rows(), true));
+            env.WaitForWakeUp();
+            env.SendEv(tabletActor->SelfId(), new TEvTestFlatTablet::TEvStartQueuedScan());
+            TAutoPtr<IEventHandle> handle;
+            env->GrabEdgeEventRethrow<TEvTestFlatTablet::TEvScanFinished>(handle);
+            env.SendEv(tabletActor->SelfId(), new TEvents::TEvPoison);
+            env.WaitForGone();
+            // do 1 more iter after gc happened
+            if (timeToStop) {
+                break;
+            }
+            timeToStop = wasGc;
+        }
+    }
 }
 
 } // namespace NTabletFlatExecutor

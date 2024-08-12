@@ -1,9 +1,41 @@
 #include "schema.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
 
 namespace NKikimr {
 namespace NSysView {
+
+namespace {
+TVector<Schema::PgColumn> GetPgStaticTableColumns(const TString& schema, const TString& tableName) {
+    TVector<Schema::PgColumn> res;
+    auto columns = NYql::NPg::GetStaticColumns().FindPtr(NYql::NPg::TTableInfoKey{schema, tableName});
+    res.reserve(columns->size());
+    for (size_t i = 0; i < columns->size(); i++) {
+        const auto& column = columns->at(i);
+        res.emplace_back(i, column.UdtType, column.Name);
+    }
+    return res;
+}
+}
+
+Schema::PgColumn::PgColumn(NIceDb::TColumnId columnId, TStringBuf columnTypeName, TStringBuf columnName)
+    : _ColumnId(columnId)
+    , _ColumnTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(NYql::NPg::LookupType(TString(columnTypeName)).TypeId))
+    , _ColumnName(columnName)
+{}
+
+const TVector<Schema::PgColumn>& Schema::PgTablesSchemaProvider::GetColumns(TStringBuf tableName) const {
+    TString key(tableName);
+    Y_ENSURE(columnsStorage.contains(key));
+    return columnsStorage.at(key);
+}
+
+Schema::PgTablesSchemaProvider::PgTablesSchemaProvider() {
+    columnsStorage[TString(PgTablesName)] = GetPgStaticTableColumns("pg_catalog", "pg_tables");
+    columnsStorage[TString(InformationSchemaTablesName)] = GetPgStaticTableColumns("information_schema", "tables");
+    columnsStorage[TString(PgClassName)] = GetPgStaticTableColumns("pg_catalog", "pg_class");
+}
 
 bool MaybeSystemViewPath(const TVector<TString>& path) {
     auto length = path.size();
@@ -168,6 +200,33 @@ private:
         }
     };
 
+    void RegisterPgTablesSystemViews() {
+        auto registerView = [&](TStringBuf tableName, const TVector<Schema::PgColumn>& columns) {
+            auto& dsv  = DomainSystemViews[tableName];
+            auto& sdsv = SubDomainSystemViews[tableName];
+            for (const auto& column : columns) {
+                dsv.Columns[column._ColumnId + 1] = TSysTables::TTableColumnInfo(
+                    column._ColumnName, column._ColumnId + 1, column._ColumnTypeInfo, "", -1
+                );
+                sdsv.Columns[column._ColumnId + 1] = TSysTables::TTableColumnInfo(
+                    column._ColumnName, column._ColumnId + 1, column._ColumnTypeInfo, "", -1
+                );
+            }
+        };
+        registerView(
+            PgTablesName,
+            Singleton<Schema::PgTablesSchemaProvider>()->GetColumns(PgTablesName)
+        );
+        registerView(
+            InformationSchemaTablesName,
+            Singleton<Schema::PgTablesSchemaProvider>()->GetColumns(InformationSchemaTablesName)
+        );
+        registerView(
+            PgClassName,
+            Singleton<Schema::PgTablesSchemaProvider>()->GetColumns(PgClassName)
+        );
+    }
+
     template <typename Table>
     void RegisterSystemView(const TStringBuf& name) {
         TSchemaFiller<Table>::Fill(DomainSystemViews[name]);
@@ -192,8 +251,7 @@ private:
     void RegisterSystemViews() {
         RegisterSystemView<Schema::PartitionStats>(PartitionStatsName);
 
-        // 'nodes' table is currently switched off
-        // RegisterSystemView<Schema::Nodes>(NodesName);
+        RegisterSystemView<Schema::Nodes>(NodesName);
 
         RegisterSystemView<Schema::QueryStats>(TopQueriesByDuration1MinuteName);
         RegisterSystemView<Schema::QueryStats>(TopQueriesByDuration1HourName);
@@ -217,11 +275,17 @@ private:
 
         RegisterOlapStoreSystemView<Schema::PrimaryIndexStats>(StorePrimaryIndexStatsName);
         RegisterOlapStoreSystemView<Schema::PrimaryIndexPortionStats>(StorePrimaryIndexPortionStatsName);
+        RegisterOlapStoreSystemView<Schema::PrimaryIndexGranuleStats>(StorePrimaryIndexGranuleStatsName);
+        RegisterOlapStoreSystemView<Schema::PrimaryIndexOptimizerStats>(StorePrimaryIndexOptimizerStatsName);
         RegisterColumnTableSystemView<Schema::PrimaryIndexStats>(TablePrimaryIndexStatsName);
         RegisterColumnTableSystemView<Schema::PrimaryIndexPortionStats>(TablePrimaryIndexPortionStatsName);
+        RegisterColumnTableSystemView<Schema::PrimaryIndexGranuleStats>(TablePrimaryIndexGranuleStatsName);
+        RegisterColumnTableSystemView<Schema::PrimaryIndexOptimizerStats>(TablePrimaryIndexOptimizerStatsName);
 
         RegisterSystemView<Schema::TopPartitions>(TopPartitions1MinuteName);
         RegisterSystemView<Schema::TopPartitions>(TopPartitions1HourName);
+
+        RegisterPgTablesSystemViews();
     }
 
 private:

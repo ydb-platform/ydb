@@ -78,6 +78,7 @@ struct TConfig
     TString Prefix;
     TString ApiVersion;
     TString LogLevel;
+    TString LogPath;
 
     // Compression for data that is sent to YT cluster.
     EEncoding ContentEncoding;
@@ -197,6 +198,9 @@ struct TConfig
 
     /// Which implemetation of table writer to use.
     ETableWriterVersion TableWriterVersion = ETableWriterVersion::Auto;
+
+    /// Redirects stdout to stderr for jobs.
+    bool RedirectStdoutToStderr = false;
 
     static bool GetBool(const char* var, bool defaultValue = false);
     static int GetInt(const char* var, int defaultValue);

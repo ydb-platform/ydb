@@ -24,6 +24,8 @@
 
 #include <util/generic/size_literals.h>
 
+#include <ydb/core/protos/stream.pb.h>
+
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -214,6 +216,9 @@ private:
                 } else {
                     TStringStream str;
                     str << "Response version missmatched";
+                    if (msg->Record.HasReadTableResponseVersion()) {
+                        str << " , got: " << msg->Record.GetReadTableResponseVersion();
+                    }
                     LOG_ERROR(ctx, NKikimrServices::READ_TABLE_API,
                               "%s", str.Str().data());
                     const NYql::TIssue& issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, str.Str());
@@ -243,8 +248,11 @@ private:
                 return ReplyFinishStream(Ydb::StatusIds::UNAUTHORIZED, issueMessage, ctx);
             }
             case TEvTxUserProxy::TResultStatus::ResolveError: {
-                const NYql::TIssue& issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Got ResolveError response from TxProxy");
+                NYql::TIssue issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Got ResolveError response from TxProxy");
                 auto tmp = issueMessage.Add();
+                for (const auto& unresolved : msg->Record.GetUnresolvedKeys()) {
+                    issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(unresolved));
+                }
                 NYql::IssueToMessage(issue, tmp);
                 return ReplyFinishStream(Ydb::StatusIds::SCHEME_ERROR, issueMessage, ctx);
             }
@@ -525,6 +533,20 @@ private:
         settings.TablePath = req->path();
         settings.Ordered = req->ordered();
         settings.RequireResultSet = true;
+
+        // Right now assume return_not_null_data_as_optional is true by default
+        // Sometimes we well change this default
+        switch (req->return_not_null_data_as_optional()) {
+            case Ydb::FeatureFlag::DISABLED:
+                settings.DataFormat = NTxProxy::EReadTableFormat::YdbResultSetWithNotNullSupport;
+                break;
+            case Ydb::FeatureFlag::STATUS_UNSPECIFIED:
+            case Ydb::FeatureFlag::ENABLED:
+            default:
+                settings.DataFormat = NTxProxy::EReadTableFormat::YdbResultSet;
+                break;
+        }
+
         if (req->row_limit()) {
             settings.MaxRows = req->row_limit();
         }

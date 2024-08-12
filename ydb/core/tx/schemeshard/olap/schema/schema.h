@@ -1,11 +1,9 @@
 #pragma once
 #include <ydb/core/tx/schemeshard/olap/columns/update.h>
 #include <ydb/core/tx/schemeshard/olap/indexes/update.h>
-#include <ydb/core/tx/schemeshard/olap/statistics/update.h>
 #include <ydb/core/tx/schemeshard/olap/columns/schema.h>
 #include <ydb/core/tx/schemeshard/olap/indexes/schema.h>
 #include <ydb/core/tx/schemeshard/olap/options/schema.h>
-#include <ydb/core/tx/schemeshard/olap/statistics/schema.h>
 #include "update.h"
 
 namespace NKikimr::NSchemeShard {
@@ -16,17 +14,11 @@ namespace NKikimr::NSchemeShard {
         YDB_READONLY_DEF(TOlapColumnsDescription, Columns);
         YDB_READONLY_DEF(TOlapIndexesDescription, Indexes);
         YDB_READONLY_DEF(TOlapOptionsDescription, Options);
-        mutable TOlapStatisticsDescription Statistics;
 
         YDB_READONLY(ui32, NextColumnId, 1);
         YDB_READONLY(ui32, Version, 0);
-        YDB_READONLY_FLAG(CompositeMarks, true);
 
     public:
-        const TOlapStatisticsDescription& GetStatistics() const {
-            return Statistics;
-        }
-
         bool Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector& errors);
 
         void ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& tableSchema);

@@ -31,10 +31,8 @@ class TestMemAlloc(TestYdsBase):
             INNER JOIN (SELECT * FROM myyds.`{joined_topic}` LIMIT 2) AS S2
             ON S1.Data = S2.Data
             LIMIT 2
-            ''' \
-            .format(
-            input_topic=self.input_topic,
-            joined_topic="joined_topic"
+            '''.format(
+            input_topic=self.input_topic, joined_topic="joined_topic"
         )
 
         client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
@@ -63,8 +61,7 @@ class TestMemAlloc(TestYdsBase):
             --GROUP BY HOP(Just(CurrentUtcTimestamp()), "PT10S", "PT10S", "PT10S"), Data
             --LIMIT 1
             SELECT 1
-            ''' \
-            .format(
+            '''.format(
             input_topic=self.input_topic,
         )
 

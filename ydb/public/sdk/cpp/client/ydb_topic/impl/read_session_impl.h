@@ -1,19 +1,20 @@
 #pragma once
 
 #ifndef INCLUDE_READ_SESSION_IMPL_H
-//#error "Do not include this file directly. Use read_session_impl.ipp instead."
+#error "Do not include this file directly. Use read_session_impl.ipp instead."
 #endif
 
 #include "common.h"
-#include "callback_context.h"
 #include "counters_logger.h"
+
+#include <ydb/public/sdk/cpp/client/ydb_topic/include/read_session.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/include/read_session.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/callback_context.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 
@@ -26,20 +27,8 @@
 #include <deque>
 #include <vector>
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Templates declarations
 
 namespace NYdb::NTopic {
-
-template <bool UseMigrationProtocol>
-using TClientImpl = std::conditional_t<UseMigrationProtocol,
-    NYdb::NPersQueue::TPersQueueClient::TImpl,
-    NYdb::NTopic::TTopicClient::TImpl>;
-
-template <bool UseMigrationProtocol>
-using ECodecAlias = std::conditional_t<UseMigrationProtocol,
-    NYdb::NPersQueue::ECodec,
-    NYdb::NTopic::ECodec>;
 
 template <bool UseMigrationProtocol>
 using TClientMessage = std::conditional_t<UseMigrationProtocol,
@@ -154,7 +143,7 @@ public:
     }
 
     void DeferReadFromProcessor(const typename IProcessor<UseMigrationProtocol>::TPtr& processor, TServerMessage<UseMigrationProtocol>* dst, typename IProcessor<UseMigrationProtocol>::TReadCallback callback);
-    void DeferStartExecutorTask(const typename IAExecutor<UseMigrationProtocol>::TPtr& executor, typename IAExecutor<UseMigrationProtocol>::TFunction task);
+    void DeferStartExecutorTask(const typename IAExecutor<UseMigrationProtocol>::TPtr& executor, typename IAExecutor<UseMigrationProtocol>::TFunction&& task);
     void DeferAbortSession(TCallbackContextPtr<UseMigrationProtocol> cbContext, TASessionClosedEvent<UseMigrationProtocol>&& closeEvent);
     void DeferAbortSession(TCallbackContextPtr<UseMigrationProtocol> cbContext, EStatus statusCode, NYql::TIssues&& issues);
     void DeferAbortSession(TCallbackContextPtr<UseMigrationProtocol> cbContext, EStatus statusCode, const TString& message);
@@ -219,6 +208,8 @@ public:
                                 TDeferredActions<UseMigrationProtocol>& deferred);
     void PlanDecompressionTasks(double averageCompressionRatio,
                                 TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream);
+
+    void OnDestroyReadSession();
 
     bool IsReady() const {
         return SourceDataNotProcessed == 0;
@@ -316,6 +307,8 @@ private:
         i64 GetEstimatedDecompressedSize() const {
             return EstimatedDecompressedSize;
         }
+
+        void ClearParent();
 
     private:
         TDataDecompressionInfo::TPtr Parent;
@@ -500,7 +493,9 @@ struct TRawPartitionStreamEvent {
 template <bool UseMigrationProtocol>
 class TRawPartitionStreamEventQueue {
 public:
-    TRawPartitionStreamEventQueue() = default;
+    TRawPartitionStreamEventQueue(TCallbackContextPtr<UseMigrationProtocol> cbContext)
+        : CbContext(cbContext) {
+    };
 
     template <class... Ts>
     TRawPartitionStreamEvent<UseMigrationProtocol>& emplace_back(Ts&&... event)
@@ -561,6 +556,7 @@ private:
                                  std::deque<TRawPartitionStreamEvent<UseMigrationProtocol>>& queue);
 
 private:
+    TCallbackContextPtr<UseMigrationProtocol> CbContext;
     std::deque<TRawPartitionStreamEvent<UseMigrationProtocol>> Ready;
     std::deque<TRawPartitionStreamEvent<UseMigrationProtocol>> NotReady;
 };
@@ -594,6 +590,7 @@ public:
         , AssignId(assignId)
         , FirstNotReadOffset(readOffset)
         , CbContext(std::move(cbContext))
+        , EventsQueue(CbContext)
     {
         TAPartitionStream<true>::PartitionStreamId = partitionStreamId;
         TAPartitionStream<true>::TopicPath = std::move(topicPath);
@@ -614,6 +611,7 @@ public:
         , AssignId(static_cast<ui64>(assignId))
         , FirstNotReadOffset(static_cast<ui64>(readOffset))
         , CbContext(std::move(cbContext))
+        , EventsQueue(CbContext)
     {
         TAPartitionStream<false>::PartitionSessionId = partitionStreamId;
         TAPartitionStream<false>::TopicPath = std::move(topicPath);
@@ -636,6 +634,7 @@ public:
 
     void ConfirmCreate(TMaybe<ui64> readOffset, TMaybe<ui64> commitOffset);
     void ConfirmDestroy();
+    void ConfirmEnd(const std::vector<ui32>& childIds);
 
     void StopReading() /*override*/;
     void ResumeReading() /*override*/;
@@ -746,7 +745,7 @@ public:
     }
 
     TRawPartitionStreamEventQueue<UseMigrationProtocol> ExtractQueue() noexcept {
-        return std::move(EventsQueue);
+        return std::exchange(EventsQueue, TRawPartitionStreamEventQueue(CbContext));
     }
 
     static void GetDataEventImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
@@ -774,6 +773,7 @@ private:
 
     TMutex Lock;
 };
+
 
 template <bool UseMigrationProtocol>
 class TReadSessionEventsQueue: public TBaseSessionEventsQueue<TAReadSessionSettings<UseMigrationProtocol>,
@@ -834,7 +834,8 @@ public:
     }
 
     bool TryApplyCallbackToEventImpl(typename TParent::TEvent& event,
-                                     TDeferredActions<UseMigrationProtocol>& deferred);
+                                     TDeferredActions<UseMigrationProtocol>& deferred,
+                                     TCallbackContextPtr<UseMigrationProtocol>& cbContext);
     bool HasDataEventCallback() const;
     void ApplyCallbackToEventImpl(TADataReceivedEvent<UseMigrationProtocol>& event,
                                   TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>&& eventsInfo,
@@ -870,13 +871,19 @@ public:
 
     void ClearAllEvents();
 
+    void SetCallbackContext(TCallbackContextPtr<UseMigrationProtocol>& ctx)  {
+        CbContext = ctx;
+    }
+
 private:
     struct THandlersVisitor : public TParent::TBaseHandlersVisitor {
         THandlersVisitor(const TAReadSessionSettings<UseMigrationProtocol>& settings,
                          typename TParent::TEvent& event,
-                         TDeferredActions<UseMigrationProtocol>& deferred)
+                         TDeferredActions<UseMigrationProtocol>& deferred,
+                         TCallbackContextPtr<UseMigrationProtocol>& cbContext)
             : TParent::TBaseHandlersVisitor(settings, event)
-            , Deferred(deferred) {
+            , Deferred(deferred)
+            , CbContext(cbContext) {
         }
 
 #define DECLARE_HANDLER(type, handler, answer)                      \
@@ -891,23 +898,103 @@ private:
         }                                                           \
         /**/
 
-        DECLARE_HANDLER(typename TAReadSessionEvent<true>::TDataReceivedEvent, DataReceivedHandler_, true);
-        DECLARE_HANDLER(typename TAReadSessionEvent<true>::TCommitAcknowledgementEvent, CommitAcknowledgementHandler_, true);
-        DECLARE_HANDLER(typename TAReadSessionEvent<true>::TCreatePartitionStreamEvent, CreatePartitionStreamHandler_, true);
-        DECLARE_HANDLER(typename TAReadSessionEvent<true>::TDestroyPartitionStreamEvent, DestroyPartitionStreamHandler_, true);
-        DECLARE_HANDLER(typename TAReadSessionEvent<true>::TPartitionStreamStatusEvent, PartitionStreamStatusHandler_, true);
-        DECLARE_HANDLER(typename TAReadSessionEvent<true>::TPartitionStreamClosedEvent, PartitionStreamClosedHandler_, true);
+#define DECLARE_TEMPLATE_HANDLER(type_true, type_false, handler_true, handler_false)                            \
+        bool operator()(std::conditional_t<UseMigrationProtocol, type_true, type_false>&) {                     \
+            if (this->template PushHandler<std::conditional_t<UseMigrationProtocol, type_true, type_false>>(    \
+                std::move(TParent::TBaseHandlersVisitor::Event),                                                \
+                [this](){                                                                                       \
+                    if constexpr (UseMigrationProtocol) {                                                       \
+                        return this->Settings.EventHandlers_.handler_true;                                      \
+                    } else {                                                                                    \
+                        return this->Settings.EventHandlers_.handler_false;                                     \
+                    }                                                                                           \
+                }(),                                                                                            \
+                this->Settings.EventHandlers_.CommonHandler_)) {                                                \
+                return true;                                                                                    \
+            }                                                                                                   \
+            return false;                                                                                       \
+        }                                                                                                       \
+        /**/
 
-        DECLARE_HANDLER(typename TAReadSessionEvent<false>::TDataReceivedEvent, DataReceivedHandler_, true);
-        DECLARE_HANDLER(typename TAReadSessionEvent<false>::TCommitOffsetAcknowledgementEvent, CommitOffsetAcknowledgementHandler_, true);
-        DECLARE_HANDLER(typename TAReadSessionEvent<false>::TStartPartitionSessionEvent, StartPartitionSessionHandler_, true);
-        DECLARE_HANDLER(typename TAReadSessionEvent<false>::TStopPartitionSessionEvent, StopPartitionSessionHandler_, true);
-        DECLARE_HANDLER(typename TAReadSessionEvent<false>::TPartitionSessionStatusEvent, PartitionSessionStatusHandler_, true);
-        DECLARE_HANDLER(typename TAReadSessionEvent<false>::TPartitionSessionClosedEvent, PartitionSessionClosedHandler_, true);
-
+        DECLARE_TEMPLATE_HANDLER(typename TAReadSessionEvent<true>::TDataReceivedEvent,
+                                 typename TAReadSessionEvent<false>::TDataReceivedEvent,
+                                 DataReceivedHandler_,
+                                 DataReceivedHandler_);
+        DECLARE_TEMPLATE_HANDLER(typename TAReadSessionEvent<true>::TCommitAcknowledgementEvent,
+                                 typename TAReadSessionEvent<false>::TCommitOffsetAcknowledgementEvent,
+                                 CommitAcknowledgementHandler_,
+                                 CommitOffsetAcknowledgementHandler_);
+        DECLARE_TEMPLATE_HANDLER(typename TAReadSessionEvent<true>::TCreatePartitionStreamEvent,
+                                 typename TAReadSessionEvent<false>::TStartPartitionSessionEvent,
+                                 CreatePartitionStreamHandler_,
+                                 StartPartitionSessionHandler_);
+        DECLARE_TEMPLATE_HANDLER(typename TAReadSessionEvent<true>::TDestroyPartitionStreamEvent,
+                                 typename TAReadSessionEvent<false>::TStopPartitionSessionEvent,
+                                 DestroyPartitionStreamHandler_,
+                                 StopPartitionSessionHandler_);
+        DECLARE_TEMPLATE_HANDLER(typename TAReadSessionEvent<true>::TPartitionStreamStatusEvent,
+                                 typename TAReadSessionEvent<false>::TPartitionSessionStatusEvent,
+                                 PartitionStreamStatusHandler_,
+                                 PartitionSessionStatusHandler_);
         DECLARE_HANDLER(TASessionClosedEvent<UseMigrationProtocol>, SessionClosedHandler_, false); // Not applied
 
 #undef DECLARE_HANDLER
+#undef DECLARE_TEMPLATE_HANDLER
+
+        bool operator()(std::conditional_t<UseMigrationProtocol, typename TAReadSessionEvent<true>::TPartitionStreamClosedEvent, typename TAReadSessionEvent<false>::TPartitionSessionClosedEvent>&) {
+            auto specific = [this]() {
+                    if constexpr (UseMigrationProtocol) {
+                        return this->Settings.EventHandlers_.PartitionStreamClosedHandler_;
+                    } else {
+                        return this->Settings.EventHandlers_.PartitionSessionClosedHandler_;
+                    }
+                }();
+
+            if (!specific && !this->Settings.EventHandlers_.CommonHandler_) {
+                return false;
+            }
+
+            this->template PushCommonHandler<>(
+                std::move(TParent::TBaseHandlersVisitor::Event),
+                [specific = specific,
+                 common = this->Settings.EventHandlers_.CommonHandler_,
+                 cbContext = CbContext](auto& event) {
+                auto& e = std::get<std::conditional_t<UseMigrationProtocol, typename TAReadSessionEvent<true>::TPartitionStreamClosedEvent, typename TAReadSessionEvent<false>::TPartitionSessionClosedEvent>>(event);
+                if (specific) {
+                    specific(e);
+                } else if (common) {
+                    common(event);
+                }
+                if constexpr (!UseMigrationProtocol) {
+                    if (auto session = cbContext->LockShared()) {
+                        session->UnregisterPartition(e.GetPartitionSession()->GetPartitionId(), e.GetPartitionSession()->GetPartitionSessionId());
+                    }
+                }
+            });
+
+            return true;
+        }
+
+        template<bool E = !UseMigrationProtocol>
+        constexpr std::enable_if_t<E, bool>
+        operator()(typename TAReadSessionEvent<false>::TEndPartitionSessionEvent&) {
+            if (!this->Settings.EventHandlers_.EndPartitionSessionHandler_ && !this->Settings.EventHandlers_.CommonHandler_) {
+                return false;
+            }
+            this->template PushCommonHandler<>(
+                std::move(TParent::TBaseHandlersVisitor::Event),
+                [specific = this->Settings.EventHandlers_.EndPartitionSessionHandler_,
+                 common = this->Settings.EventHandlers_.CommonHandler_,
+                 cbContext = CbContext](TReadSessionEvent::TEvent& event) {
+                auto& e = std::get<TReadSessionEvent::TEndPartitionSessionEvent>(event);
+                if (specific) {
+                    specific(e);
+                } else if (common) {
+                    common(event);
+                }
+            });
+            return true;
+        }
 
         bool Visit() {
             return std::visit(*this, TParent::TBaseHandlersVisitor::Event);
@@ -918,6 +1005,7 @@ private:
         }
 
         TDeferredActions<UseMigrationProtocol>& Deferred;
+        TCallbackContextPtr<UseMigrationProtocol> CbContext;
     };
 
     TADataReceivedEvent<UseMigrationProtocol>
@@ -926,12 +1014,13 @@ private:
                          TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator); // Assumes that we're under lock.
 
     bool ApplyHandler(TReadSessionEventInfo<UseMigrationProtocol>& eventInfo, TDeferredActions<UseMigrationProtocol>& deferred) {
-        THandlersVisitor visitor(this->Settings, eventInfo.GetEvent(), deferred);
+        THandlersVisitor visitor(this->Settings, eventInfo.GetEvent(), deferred, CbContext);
         return visitor.Visit();
     }
 
 private:
     bool HasEventCallbacks;
+    TCallbackContextPtr<UseMigrationProtocol> CbContext;
 };
 
 }  // namespace NYdb::NTopic
@@ -984,8 +1073,7 @@ public:
         std::shared_ptr<TReadSessionEventsQueue<UseMigrationProtocol>> eventsQueue,
         NYdbGrpc::IQueueClientContextPtr clientContext,
         ui64 partitionStreamIdStart,
-        ui64 partitionStreamIdStep,
-        std::shared_ptr<std::unordered_map<ECodecAlias<UseMigrationProtocol>, THolder<ICodec>>> codecs
+        ui64 partitionStreamIdStep
     )
         : Settings(settings)
         , Database(database)
@@ -994,7 +1082,6 @@ public:
         , Log(log)
         , NextPartitionStreamId(partitionStreamIdStart)
         , PartitionStreamIdStep(partitionStreamIdStep)
-        , Codecs(std::move(codecs))
         , ConnectionFactory(std::move(connectionFactory))
         , EventsQueue(std::move(eventsQueue))
         , ClientContext(std::move(clientContext))
@@ -1009,11 +1096,17 @@ public:
     void Start();
     void ConfirmPartitionStreamCreate(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, TMaybe<ui64> readOffset, TMaybe<ui64> commitOffset);
     void ConfirmPartitionStreamDestroy(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream);
+    void ConfirmPartitionStreamEnd(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, const std::vector<ui32>& childIds);
     void RequestPartitionStreamStatus(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream);
     void Commit(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, ui64 startOffset, ui64 endOffset);
 
     void OnCreateNewDecompressionTask();
     void OnDecompressionInfoDestroy(i64 compressedSize, i64 decompressedSize, i64 messagesCount, i64 serverBytesSize);
+    void OnDecompressionInfoDestroyImpl(i64 compressedSize,
+                                        i64 decompressedSize,
+                                        i64 messagesCount,
+                                        i64 serverBytesSize,
+                                        TDeferredActions<UseMigrationProtocol>& deferred);
 
     void OnDataDecompressed(i64 sourceSize, i64 estimatedDecompressedSize, i64 decompressedSize, size_t messagesCount, i64 serverBytesSize = 0);
 
@@ -1056,11 +1149,14 @@ public:
         return Log;
     }
 
-    const ICodec* GetCodecImplOrThrow(ECodecAlias<UseMigrationProtocol> codecId) const {
-        if (!Codecs->contains(codecId)) {
-            throw yexception() << "codec with id " << ui32(codecId) << " not provided";
-        }
-        return Codecs->at(codecId).Get();
+    void RegisterParentPartition(ui32 partitionId, ui32 parentPartitionId, ui64 parentPartitionSessionId);
+    void UnregisterPartition(ui32 partitionId, ui64 partitionSessionId);
+    std::vector<ui64> GetParentPartitionSessions(ui32 partitionId, ui64 partitionSessionId);
+    bool AllParentSessionsHasBeenRead(ui32 partitionId, ui64 partitionSessionId);
+
+    void SetSelfContext(TPtr ptr) {
+        TEnableSelfContext<TSingleClusterReadSessionImpl<UseMigrationProtocol>>::SetSelfContext(std::move(ptr));
+        EventsQueue->SetCallbackContext(TEnableSelfContext<TSingleClusterReadSessionImpl<UseMigrationProtocol>>::SelfContext);
     }
 
 private:
@@ -1200,6 +1296,8 @@ private:
         {
         }
 
+        void OnDestroyReadSession();
+
         TDataDecompressionInfoPtr<UseMigrationProtocol> BatchInfo;
         TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> PartitionStream;
     };
@@ -1212,7 +1310,6 @@ private:
     TLog Log;
     ui64 NextPartitionStreamId;
     ui64 PartitionStreamIdStep;
-    std::shared_ptr<std::unordered_map<ECodecAlias<UseMigrationProtocol>, THolder<ICodec>>> Codecs;
     std::shared_ptr<IReadSessionConnectionProcessorFactory<UseMigrationProtocol>> ConnectionFactory;
     std::shared_ptr<TReadSessionEventsQueue<UseMigrationProtocol>> EventsQueue;
     NYdbGrpc::IQueueClientContextPtr ClientContext; // Common client context.
@@ -1245,6 +1342,14 @@ private:
     std::atomic<int> DecompressionTasksInflight = 0;
     i64 ReadSizeBudget;
     i64 ReadSizeServerDelta = 0;
+
+    struct TParentInfo {
+        ui32 PartitionId;
+        ui64 PartitionSessionId;
+    };
+
+    std::unordered_map<ui32, std::vector<TParentInfo>> HierarchyData;
+    std::unordered_set<ui64> ReadingFinishedData;
 };
 
 }  // namespace NYdb::NTopic

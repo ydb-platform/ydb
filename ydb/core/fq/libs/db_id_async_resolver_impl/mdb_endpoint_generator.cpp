@@ -16,6 +16,10 @@ namespace NFq {
     // Managed PostgreSQL provides the only port both for secure and insecure connections
     constexpr ui32 POSTGRESQL_PORT = 6432;
 
+    constexpr ui32 GREENPLUM_PORT = 6432;
+
+    constexpr ui32 MYSQL_PORT = 3306;
+
     // TMdbEndpointGeneratorLegacy implements behavior required by YQL legacy ClickHouse provider
     class TMdbEndpointGeneratorLegacy: public NYql::IMdbEndpointGenerator {
         TEndpoint ToEndpoint(const NYql::IMdbEndpointGenerator::TParams& params) const override {
@@ -71,7 +75,23 @@ namespace NFq {
                         case NYql::NConnector::NApi::EProtocol::NATIVE:
                             return TEndpoint(fixedHost, POSTGRESQL_PORT);
                         default:
-                            ythrow yexception() << "Unexpected protocol for PostgreSQL: " << NYql::NConnector::NApi::EProtocol_Name(params.Protocol);
+                            ythrow yexception() << "Unexpected protocol for PostgreSQL " << NYql::NConnector::NApi::EProtocol_Name(params.Protocol);
+                    }
+                case NYql::EDatabaseType::Greenplum:
+                    // https://cloud.yandex.ru/docs/managed-greenplum/operations/connect
+                    switch (params.Protocol) {
+                        case NYql::NConnector::NApi::EProtocol::NATIVE:
+                            return TEndpoint(fixedHost, GREENPLUM_PORT);
+                        default:
+                            ythrow yexception() << "Unexpected protocol for Greenplum: " << NYql::NConnector::NApi::EProtocol_Name(params.Protocol);
+                    }
+                case NYql::EDatabaseType::MySQL:
+                    // https://cloud.yandex.ru/docs/managed-mysql/operations/connect
+                    switch (params.Protocol) {
+                        case NYql::NConnector::NApi::EProtocol::NATIVE:
+                            return TEndpoint(fixedHost, MYSQL_PORT);
+                        default:
+                            ythrow yexception() << "Unexpected protocol for MySQL: " << NYql::NConnector::NApi::EProtocol_Name(params.Protocol);
                     }
                 default:
                     ythrow yexception() << "Unexpected database type: " << ToString(params.DatabaseType);

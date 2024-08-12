@@ -1,0 +1,79 @@
+{%- macro MacrosesWithMergeArgs(target_name, list_of_dict, macro_suffix, macro_field, args_field) -%}
+{%-     set macros = list_of_dict|map(attribute=macro_field)|unique -%}
+{%-     for macro in macros -%}
+{%-         set args = list_of_dict|selectattr(macro_field, 'eq', macro)|map(attribute=args_field)|sum -%}
+{%-         if args|length %}
+{{ macro }}({{ target_name }}{{ macro_suffix }}
+{%-             for arg in args %}
+  {{ arg }}
+{%-             endfor %}
+)
+{%          endif %}
+{%-     endfor -%}
+{%- endmacro -%}
+
+{%- macro Macroses(target_name, list_of_dict, macro_field, args_field, excludes) -%}
+{%-     set macros = list_of_dict|map(attribute=macro_field)|unique -%}
+{%-     for macro in macros -%}
+{%-         if (excludes|length == 0) or not (macro in excludes) -%}
+{%-             set merge_args = list_of_dict|selectattr(macro_field, 'eq', macro)|selectattr('merge_args') -%}
+{%-             if merge_args|length %}
+{{ MacrosesWithMergeArgs(target_name, list_of_dict|selectattr(macro_field, 'eq', macro), '', macro_field, args_field) }}
+{%-             else -%}
+{%-                 set macroses = list_of_dict|selectattr(macro_field, 'eq', macro) -%}
+{%-                 for macros in macroses %}
+{{ macros.macro }}({{ target_name }}{{ macro_suffix }}
+{%-                 if macros.args|length %}
+{%-                     for arg in macros.args %}
+  {{ arg }}
+{%-                     endfor %}
+{%                  endif -%}
+)
+{%                  endfor -%}
+{%-             endif -%}
+{%-         endif -%}
+{%-     endfor -%}
+{%- endmacro -%}
+
+{%- macro RenderTargetOptions(target_name, prefix, options, only_option, exclude_options) -%}
+{%-     if only_option != "" -%}
+{%-         set selected_options = options|selectattr('option', 'eq', only_option) -%}
+{%-     elif exclude_options|length -%}
+{%-         set selected_options = options|rejectattr('option', 'in', exclude_options) -%}
+{%-     else -%}
+{%-         set selected_options = options -%}
+{%-     endif -%}
+{%-     if selected_options|length -%}
+{{ MacrosesWithMergeArgs(target_name, selected_options, prefix, 'option', 'args') }}
+{%-     endif -%}
+{%- endmacro -%}
+
+
+{%- macro TargetOptions(target_name, is_really_fake_module, target_options, only_option, exclude_options) -%}
+{%-     if (target_options.interfaces is defined) -%}
+{{ RenderTargetOptions(target_name, ' INTERFACE', target_options.interfaces, only_option, exclude_options) }}
+{%-     endif -%}
+
+{%-     if (target_options.publics is defined) -%}
+{%-         if is_really_fake_module -%}
+{%-             set prefix = ' INTERFACE' -%}
+{%-         else -%}
+{%-             set prefix = ' PUBLIC' -%}
+{%-         endif -%}
+{{ RenderTargetOptions(target_name, prefix, target_options.publics, only_option, exclude_options) }}
+{%-     endif -%}
+
+{%-     if not(is_really_fake_module) and (target_options.privates is defined) -%}
+{{ RenderTargetOptions(target_name, ' PRIVATE', target_options.privates, only_option, exclude_options) }}
+{%-     endif -%}
+{%- endmacro -%}
+
+{%- if target is defined -%}
+{%-     set current_target = target -%}
+{%-     include '[generator]/target_cmake_lists.jinja' -%}
+{%- endif -%}
+{%- if extra_targets is defined -%}
+{%-     for current_target in extra_targets -%}
+{%-         include '[generator]/target_cmake_lists.jinja' -%}
+{%-     endfor -%}
+{%- endif -%}

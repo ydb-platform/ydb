@@ -54,6 +54,7 @@ PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/federated_query
     ydb/core/kqp/finalize_script_service
+    ydb/core/kqp/proxy_service
     ydb/core/metering
     ydb/core/mind
     ydb/core/mind/address_classification
@@ -63,6 +64,7 @@ PEERDIR(
     ydb/core/persqueue
     ydb/core/protos
     ydb/core/security
+    ydb/core/security/ldap_auth_provider
     ydb/core/statistics/aggregator
     ydb/core/sys_view/processor
     ydb/core/sys_view/service
@@ -83,6 +85,7 @@ PEERDIR(
     ydb/library/persqueue/topic_parser
     ydb/library/security
     ydb/library/yql/minikql/comp_nodes/llvm14
+    ydb/library/yql/providers/s3/actors_factory
     ydb/library/yql/providers/yt/codec/codegen
     ydb/library/yql/providers/yt/comp_nodes/llvm14
     ydb/library/yql/public/udf/service/exception_policy
@@ -98,15 +101,15 @@ PEERDIR(
     ydb/services/discovery
     ydb/services/ext_index/service
     ydb/core/tx/conveyor/service
+    ydb/core/tx/limiter/grouped_memory/usage
     ydb/services/fq
     ydb/services/kesus
     ydb/services/persqueue_cluster_discovery
     ydb/services/persqueue_v1
     ydb/services/rate_limiter
+    ydb/services/replication
     ydb/services/monitoring
     ydb/services/metadata/ds_table
-    ydb/services/bg_tasks/ds_table
-    ydb/services/bg_tasks
     ydb/services/ydb
 
     ydb/core/http_proxy

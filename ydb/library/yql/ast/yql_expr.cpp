@@ -1178,8 +1178,9 @@ namespace {
         if (typeExpr.size() != 1U)
             return false;
 
+        auto typePos = node.GetChild(2)->GetPosition();
         auto parameterExpr = ctx.ProcessNode(node,
-            ctx.Expr.NewCallable(node.GetPosition(), "Parameter", {
+            ctx.Expr.NewCallable(typePos, "Parameter", {
                 ctx.Expr.NewAtom(node.GetPosition(), nameStr),
                 std::move(typeExpr.front())
             }));
@@ -1708,6 +1709,7 @@ namespace {
         size_t Order = 0ULL;
         bool RefAtoms = false;
         bool AllowFreeArgs = false;
+        bool NormalizeAtomFlags = false;
         TNodeMap<size_t> FreeArgs;
         std::unique_ptr<TMemoryPool> Pool;
         std::vector<TFrameContext> Frames;
@@ -1832,10 +1834,11 @@ namespace {
             case TExprNode::Atom:
                 {
                     auto quote = AnnotateAstNode(&TAstNode::QuoteAtom, nullptr, annotationFlags, pool, ctx.RefAtoms);
+                    auto flags = ctx.NormalizeAtomFlags ? TNodeFlags::ArbitraryContent : node.Flags();
                     auto content = AnnotateAstNode(
                         ctx.RefAtoms ?
-                            TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), node.Content(), pool, node.Flags()) :
-                            TAstNode::NewAtom(ctx.Expr.GetPosition(node.Pos()), node.Content(), pool, node.Flags()),
+                            TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), node.Content(), pool, flags) :
+                            TAstNode::NewAtom(ctx.Expr.GetPosition(node.Pos()), node.Content(), pool, flags),
                         &node, annotationFlags, pool, ctx.RefAtoms);
 
                     res = TAstNode::NewList(ctx.Expr.GetPosition(node.Pos()), pool, quote, content);
@@ -2225,16 +2228,9 @@ namespace {
         }
     }
 
-    template <class TPMap>
-    bool GatherParentsImpl(const TExprNode& node, TPMap& parentsMap, TNodeSet& visited, bool withLeaves) {
-        if (node.Type() == TExprNode::Arguments) {
+    bool GatherParentsImpl(const TExprNode& node, TParentsMap& parentsMap, TNodeSet& visited) {
+        if (node.Type() == TExprNode::Arguments || node.Type() == TExprNode::Atom || node.Type() == TExprNode::World) {
             return false;
-        }
-
-        if (!withLeaves) {
-            if (node.Type() == TExprNode::Atom || node.Type() == TExprNode::World) {
-                return false;
-            }
         }
 
         if (!visited.emplace(&node).second) {
@@ -2242,7 +2238,7 @@ namespace {
         }
 
         node.ForEachChild([&](const TExprNode& child) {
-            if (GatherParentsImpl<TPMap>(child, parentsMap, visited, withLeaves)) {
+            if (GatherParentsImpl(child, parentsMap, visited)) {
                 parentsMap[&child].emplace(&node);
             }
         });
@@ -2712,6 +2708,7 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, c
     TVisitNodeContext ctx(exprContext);
     ctx.RefAtoms = settings.RefAtoms;
     ctx.AllowFreeArgs = settings.AllowFreeArgs;
+    ctx.NormalizeAtomFlags = settings.NormalizeAtomFlags;
     ctx.Pool = std::make_unique<TMemoryPool>(4096);
     ctx.Frames.push_back(TFrameContext());
     ctx.CurrentFrame = &ctx.Frames.front();
@@ -2776,6 +2773,13 @@ TExprNode::TPtr TExprContext::RenameNode(const TExprNode& node, const TStringBuf
 TExprNode::TPtr TExprContext::ShallowCopy(const TExprNode& node) {
     YQL_ENSURE(node.Type() != TExprNode::Lambda);
     const auto newNode = node.Clone(AllocateNextUniqueId());
+    ExprNodes.emplace_back(newNode.Get());
+    return newNode;
+}
+
+TExprNode::TPtr TExprContext::ShallowCopyWithPosition(const TExprNode& node, TPositionHandle pos) {
+    YQL_ENSURE(node.Type() != TExprNode::Lambda);
+    const auto newNode = node.CloneWithPosition(AllocateNextUniqueId(), pos);
     ExprNodes.emplace_back(newNode.Get());
     return newNode;
 }
@@ -3271,6 +3275,20 @@ ui32 TPgExprType::GetFlags(ui32 typeId) {
     return ret;
 }
 
+ui64 TPgExprType::GetPgExtensionsMask(ui32 typeId) {
+    auto descPtr = &NPg::LookupType(typeId);
+    return MakePgExtensionMask(descPtr->ExtensionIndex);
+}
+
+ui64 MakePgExtensionMask(ui32 extensionIndex) {
+    if (!extensionIndex) {
+        return 0;
+    }
+    
+    YQL_ENSURE(extensionIndex <= 64);
+    return 1ull << (extensionIndex - 1);
+}
+
 TExprContext::TExprContext(ui64 nextUniqueId)
     : StringPool(4096)
     , NextUniqueId(nextUniqueId)
@@ -3625,16 +3643,10 @@ bool CompareExprTreeParts(const TExprNode& one, const TExprNode& two, const TNod
     return CompareExpressions(l, r, map, level, visited);
 }
 
-void GatherParents(const TExprNode& node, TParentsMap& parentsMap, bool withLeaves) {
+void GatherParents(const TExprNode& node, TParentsMap& parentsMap) {
     parentsMap.clear();
     TNodeSet visisted;
-    GatherParentsImpl<TParentsMap>(node, parentsMap, visisted, withLeaves);
-}
-
-void GatherParentsMulti(const TExprNode& node, TParentsMultiMap& parentsMap, bool withLeaves) {
-    parentsMap.clear();
-    TNodeSet visisted;
-    GatherParentsImpl<TParentsMultiMap>(node, parentsMap, visisted, withLeaves);
+    GatherParentsImpl(node, parentsMap, visisted);
 }
 
 void CheckCounts(const TExprNode& root) {

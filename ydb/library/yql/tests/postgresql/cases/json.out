@@ -298,6 +298,8 @@ SELECT array_to_json('{{1,5},{99,100}}'::int[]);
 (1 row)
 
 BEGIN;
+SET LOCAL TIME ZONE 10.5;
+SET LOCAL TIME ZONE -8;
 COMMIT;
 -- non-numeric output
 SELECT row_to_json(q)

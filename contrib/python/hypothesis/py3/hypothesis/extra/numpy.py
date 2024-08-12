@@ -10,6 +10,7 @@
 
 import importlib
 import math
+import types
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -219,7 +220,11 @@ def from_dtype(
             # it here because we'd have to guard against equivalents in arrays()
             # regardless and drawing scalars is a valid use-case.
             res = st.sampled_from(TIME_RESOLUTIONS)
-        result = st.builds(dtype.type, st.integers(-(2**63), 2**63 - 1), res)
+        if allow_nan is not False:
+            elems = st.integers(-(2**63), 2**63 - 1) | st.just("NaT")
+        else:  # NEP-7 defines the NaT value as integer -(2**63)
+            elems = st.integers(-(2**63) + 1, 2**63 - 1)
+        result = st.builds(dtype.type, elems, res)
     else:
         raise InvalidArgument(f"No strategy inference for {dtype}")
     return result.map(dtype.type)
@@ -519,6 +524,11 @@ def arrays(
     hundreds or more elements, having a fill value is essential if you want
     your tests to run in reasonable time.
     """
+    # Our dtype argument might be a union, e.g. `np.float64 | np.complex64`; we handle
+    # that by turning it into a strategy up-front.
+    if type(dtype) in (getattr(types, "UnionType", object()), Union):
+        dtype = st.one_of(*(from_dtype(np.dtype(d)) for d in dtype.__args__))  # type: ignore
+
     # We support passing strategies as arguments for convenience, or at least
     # for legacy reasons, but don't want to pay the perf cost of a composite
     # strategy (i.e. repeated argument handling and validation) when it's not
@@ -1099,7 +1109,7 @@ def basic_indices(
     allow_newaxis: bool = False,
     allow_ellipsis: bool = True,
 ) -> st.SearchStrategy[BasicIndex]:
-    """Return a strategy for :doc:`basic indexes <numpy:reference/arrays.indexing>` of
+    """Return a strategy for :doc:`basic indexes <numpy:reference/routines.indexing>` of
     arrays with the specified shape, which may include dimensions of size zero.
 
     It generates tuples containing some mix of integers, :obj:`python:slice`
@@ -1275,7 +1285,7 @@ def _unpack_generic(thing):
 
 def _unpack_dtype(dtype):
     dtype_args = getattr(dtype, "__args__", ())
-    if dtype_args:
+    if dtype_args and type(dtype) not in (getattr(types, "UnionType", object()), Union):
         assert len(dtype_args) == 1
         if isinstance(dtype_args[0], TypeVar):
             # numpy.dtype[+ScalarType]
@@ -1287,22 +1297,22 @@ def _unpack_dtype(dtype):
     return dtype
 
 
-def _dtype_and_shape_from_args(args):
+def _dtype_from_args(args):
     if len(args) <= 1:
         # Zero args: ndarray, _SupportsArray
         # One arg: ndarray[type], _SupportsArray[type]
-        shape = Any
         dtype = _unpack_dtype(args[0]) if args else Any
     else:
         # Two args: ndarray[shape, type], NDArray[*]
         assert len(args) == 2
-        shape = args[0]
-        assert shape is Any
+        assert args[0] is Any
         dtype = _unpack_dtype(args[1])
-    return (
-        scalar_dtypes() if dtype is Any else np.dtype(dtype),
-        array_shapes(max_dims=2) if shape is Any else shape,
-    )
+
+    if dtype is Any:
+        return scalar_dtypes()
+    elif type(dtype) in (getattr(types, "UnionType", object()), Union):
+        return dtype
+    return np.dtype(dtype)
 
 
 def _from_type(thing: Type[Ex]) -> Optional[st.SearchStrategy[Ex]]:
@@ -1390,8 +1400,8 @@ def _from_type(thing: Type[Ex]) -> Optional[st.SearchStrategy[Ex]]:
         )
 
     if real_thing in [np.ndarray, _SupportsArray]:
-        dtype, shape = _dtype_and_shape_from_args(args)
-        return arrays(dtype, shape)  # type: ignore[return-value]
+        dtype = _dtype_from_args(args)
+        return arrays(dtype, array_shapes(max_dims=2))  # type: ignore[return-value]
 
     # We didn't find a type to resolve, continue
     return None

@@ -118,6 +118,10 @@ public:
         return ClientLost_.load();
     }
 
+    bool IsStreamCall() const override {
+        return bool(StreamAdaptor_);
+    }
+
     TString GetPeer() const override {
         // Decode URL-encoded square brackets
         auto ip = TString(this->Context.peer());

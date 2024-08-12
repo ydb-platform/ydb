@@ -9,6 +9,8 @@
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
+#include <ydb/core/protos/pqconfig.pb.h>
+
 namespace NYql {
 
 using namespace NNodes;
@@ -47,6 +49,9 @@ struct TKikimrData {
         DataSinkNames.insert(TKiCreateTopic::CallableName());
         DataSinkNames.insert(TKiAlterTopic::CallableName());
         DataSinkNames.insert(TKiDropTopic::CallableName());
+        DataSinkNames.insert(TKiCreateReplication::CallableName());
+        DataSinkNames.insert(TKiAlterReplication::CallableName());
+        DataSinkNames.insert(TKiDropReplication::CallableName());
         DataSinkNames.insert(TKiCreateUser::CallableName());
         DataSinkNames.insert(TKiModifyPermissions::CallableName());
         DataSinkNames.insert(TKiAlterUser::CallableName());
@@ -65,6 +70,10 @@ struct TKikimrData {
         DataSinkNames.insert(TKiEffects::CallableName());
         DataSinkNames.insert(TPgDropObject::CallableName());
         DataSinkNames.insert(TKiReturningList::CallableName());
+        DataSinkNames.insert(TKiCreateSequence::CallableName());
+        DataSinkNames.insert(TKiDropSequence::CallableName());
+        DataSinkNames.insert(TKiAlterSequence::CallableName());
+        DataSinkNames.insert(TKiAnalyzeTable::CallableName());
 
         CommitModes.insert(CommitModeFlush);
         CommitModes.insert(CommitModeRollback);
@@ -101,6 +110,9 @@ struct TKikimrData {
             TYdbOperation::CreateTopic |
             TYdbOperation::AlterTopic |
             TYdbOperation::DropTopic |
+            TYdbOperation::CreateReplication |
+            TYdbOperation::AlterReplication |
+            TYdbOperation::DropReplication |
             TYdbOperation::CreateUser |
             TYdbOperation::AlterUser |
             TYdbOperation::DropUser |
@@ -405,6 +417,14 @@ bool TKikimrKey::Extract(const TExprNode& key) {
             return false;
         }
         Target = nameNode->Child(0)->Content();
+    } else if (tagName == "replication") {
+        KeyType = Type::Replication;
+        const TExprNode* nameNode = key.Child(0)->Child(1);
+        if (!nameNode->IsCallable("String")) {
+            Ctx.AddError(TIssue(Ctx.GetPosition(key.Pos()), "Expected String as replication key."));
+            return false;
+        }
+        Target = nameNode->Child(0)->Content();
     } else if(tagName == "permission") {
         KeyType = Type::Permission;
         Target = key.Child(0)->Child(1)->Child(0)->Content();
@@ -531,6 +551,7 @@ TVector<NKqpProto::TKqpTableOp> TableOperationsToProto(const TKiOperationList& o
     return protoOps;
 }
 
+// Is used only for key types now
 template<typename TProto>
 void FillLiteralProtoImpl(const NNodes::TCoDataCtor& literal, TProto& proto) {
     auto type = literal.Ref().GetTypeAnn();
@@ -562,11 +583,16 @@ void FillLiteralProtoImpl(const NNodes::TCoDataCtor& literal, TProto& proto) {
         case EDataSlot::Datetime:
             protoValue.SetUint32(FromString<ui32>(value));
             break;
+        case EDataSlot::Int8:
         case EDataSlot::Int32:
+        case EDataSlot::Date32:
             protoValue.SetInt32(FromString<i32>(value));
             break;
         case EDataSlot::Int64:
         case EDataSlot::Interval:
+        case EDataSlot::Datetime64:
+        case EDataSlot::Timestamp64:
+        case EDataSlot::Interval64:
             protoValue.SetInt64(FromString<i64>(value));
             break;
         case EDataSlot::Uint64:
@@ -578,7 +604,17 @@ void FillLiteralProtoImpl(const NNodes::TCoDataCtor& literal, TProto& proto) {
             protoValue.SetBytes(value.Data(), value.Size());
             break;
         case EDataSlot::Utf8:
+        case EDataSlot::Json:
             protoValue.SetText(ToString(value));
+            break;
+        case EDataSlot::Double:
+            protoValue.SetDouble(FromString<double>(value));
+            break;
+        case EDataSlot::Float:
+            protoValue.SetFloat(FromString<float>(value));
+            break;
+        case EDataSlot::Yson:
+            protoValue.SetBytes(ToString(value));
             break;
         case EDataSlot::Decimal: {
             const auto paramsDataType = type->Cast<TDataExprParamsType>();
@@ -609,8 +645,56 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, NKqpProto::TKqpPhyLite
     FillLiteralProtoImpl(literal, proto);
 }
 
-void FillLiteralProto(const NNodes::TCoDataCtor& literal, NKikimrMiniKQL::TResult& proto) {
-    FillLiteralProtoImpl(literal, proto);
+bool IsPgNullExprNode(const NNodes::TExprBase& maybeLiteral) {
+    return maybeLiteral.Ptr()->IsCallable() &&
+        maybeLiteral.Ptr()->Content() == "PgCast" && maybeLiteral.Ptr()->ChildrenSize() >= 1 &&
+        maybeLiteral.Ptr()->Child(0)->IsCallable() && maybeLiteral.Ptr()->Child(0)->Content() == "Null";
+}
+
+std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TTypeAnnotationNode* valueType, Ydb::TypedValue& proto)
+{
+    if (auto maybeJust = maybeLiteral.Maybe<TCoJust>()) {
+        maybeLiteral = maybeJust.Cast().Input();
+    }
+
+    if (auto literal = maybeLiteral.Maybe<TCoDataCtor>()) {
+        FillLiteralProto(literal.Cast(), proto);
+        return std::nullopt;
+    }
+
+    const bool isPgNull = IsPgNullExprNode(maybeLiteral);
+    if (maybeLiteral.Maybe<TCoPgConst>() || isPgNull) {
+        YQL_ENSURE(valueType);
+        auto actualPgType = valueType->Cast<TPgExprType>();
+        YQL_ENSURE(actualPgType);
+
+        auto* typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(actualPgType->GetId());
+        if (!typeDesc) {
+            return TStringBuilder() << "Failed to parse default expr typename " << actualPgType->GetName();
+        }
+
+        if (isPgNull) {
+            proto.mutable_value()->set_null_flag_value(NProtoBuf::NULL_VALUE);
+        } else {
+            YQL_ENSURE(maybeLiteral.Maybe<TCoPgConst>());
+            auto pgConst = maybeLiteral.Cast<TCoPgConst>();
+            TString content = TString(pgConst.Value().Value());
+            auto parseResult = NKikimr::NPg::PgNativeBinaryFromNativeText(content, typeDesc);
+            if (parseResult.Error) {
+                return TStringBuilder() << "Failed to parse default expr for typename " << actualPgType->GetName()
+                    << ", error reason: " << *parseResult.Error;
+            }
+
+            proto.mutable_value()->set_bytes_value(parseResult.Str);
+        }
+
+        auto* pg = proto.mutable_type()->mutable_pg_type();
+        pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
+        pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
+        return std::nullopt;
+    }
+
+    return TStringBuilder() << "Unsupported type of literal: " << maybeLiteral.Ptr()->Content();
 }
 
 void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto)
@@ -623,8 +707,7 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto
     auto slot = type->Cast<TDataExprType>()->GetSlot();
     auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
 
-    YQL_ENSURE(NKikimr::NScheme::NTypeIds::IsYqlType(typeId) &&
-        NKikimr::NSchemeShard::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId)));
+    YQL_ENSURE(NKikimr::NScheme::NTypeIds::IsYqlType(typeId));
 
     auto& protoType = *proto.mutable_type();
     auto& protoValue = *proto.mutable_value();
@@ -643,11 +726,16 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto
         case EDataSlot::Datetime:
             protoValue.set_uint32_value(FromString<ui32>(value));
             break;
+        case EDataSlot::Int8:
         case EDataSlot::Int32:
+        case EDataSlot::Date32:
             protoValue.set_int32_value(FromString<i32>(value));
             break;
         case EDataSlot::Int64:
         case EDataSlot::Interval:
+        case EDataSlot::Datetime64:
+        case EDataSlot::Timestamp64:
+        case EDataSlot::Interval64:
             protoValue.set_int64_value(FromString<i64>(value));
             break;
         case EDataSlot::Uint64:
@@ -659,7 +747,17 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto
             protoValue.set_bytes_value(value.Data(), value.Size());
             break;
         case EDataSlot::Utf8:
+        case EDataSlot::Json:
             protoValue.set_text_value(ToString(value));
+            break;
+        case EDataSlot::Double:
+            protoValue.set_double_value(FromString<double>(value));
+            break;
+        case EDataSlot::Float:
+            protoValue.set_float_value(FromString<float>(value));
+            break;
+        case EDataSlot::Yson:
+            protoValue.set_bytes_value(ToString(value));
             break;
         case EDataSlot::Decimal: {
             const auto paramsDataType = type->Cast<TDataExprParamsType>();
@@ -732,6 +830,39 @@ void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperat
 void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperation op, TVector<NKqpProto::TKqpTableInfo>& infos) {
     TableDescriptionToTableInfoImpl(desc, op, std::back_inserter(infos));
 }
+
+Ydb::Table::VectorIndexSettings_Distance VectorIndexSettingsParseDistance(std::string_view distance) {
+    if (distance == "cosine")
+        return Ydb::Table::VectorIndexSettings::DISTANCE_COSINE;
+    else if (distance == "manhattan")
+        return Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN;
+    else if (distance == "euclidean")
+        return Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN;
+    else 
+        YQL_ENSURE(false, "Wrong index setting distance: " << distance);
+};
+
+Ydb::Table::VectorIndexSettings_Similarity VectorIndexSettingsParseSimilarity(std::string_view similarity) {
+    if (similarity == "cosine")
+        return Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE;
+    else if (similarity == "inner_product")
+        return Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT;
+    else
+        YQL_ENSURE(false, "Wrong index setting similarity: " << similarity);
+};
+
+Ydb::Table::VectorIndexSettings_VectorType VectorIndexSettingsParseVectorType(std::string_view vectorType) {
+    if (vectorType == "float")
+        return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT;
+    else if (vectorType == "uint8")
+        return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
+    else if (vectorType == "int8")
+        return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8;
+    else if (vectorType == "bit")
+        return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT;
+    else
+        YQL_ENSURE(false, "Wrong index setting vector_type: " << vectorType);
+};
 
 const THashSet<TStringBuf>& KikimrDataSourceFunctions() {
     return Singleton<TKikimrData>()->DataSourceNames;

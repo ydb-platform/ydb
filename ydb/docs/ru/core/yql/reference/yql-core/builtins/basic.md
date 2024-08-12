@@ -89,6 +89,8 @@
 
 {% include [x](_includes/basic/staticzip.md) %}
 
+{% include [x](_includes/basic/staticfold.md) %}
+
 {% include [x](_includes/basic/aggr_factory.md) %}
 
 {% if tech %}

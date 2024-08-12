@@ -75,6 +75,14 @@ class TYtUploader: public TActorBootstrapped<TYtUploader> {
             return ESimpleLogicalValueType::Timestamp;
         case NScheme::NTypeIds::Interval:
             return ESimpleLogicalValueType::Interval;
+        case NScheme::NTypeIds::Date32:
+            return ESimpleLogicalValueType::Date32;
+        case NScheme::NTypeIds::Datetime64:
+            return ESimpleLogicalValueType::Datetime64;
+        case NScheme::NTypeIds::Timestamp64:
+            return ESimpleLogicalValueType::Timestamp64;
+        case NScheme::NTypeIds::Interval64:
+            return ESimpleLogicalValueType::Interval64;
         case NScheme::NTypeIds::Utf8:
             return ESimpleLogicalValueType::Utf8;
         case NScheme::NTypeIds::Yson:
@@ -511,6 +519,12 @@ class TYtBuffer: public IBuffer {
                 case NScheme::NTypeIds::Timestamp:
                     return MakeUnversionedUint64Value(cell.AsValue<ui64>(), id);
                 case NScheme::NTypeIds::Interval:
+                    return MakeUnversionedInt64Value(cell.AsValue<i64>(), id);
+                case NScheme::NTypeIds::Date32:
+                    return MakeUnversionedInt64Value(cell.AsValue<i32>(), id);
+                case NScheme::NTypeIds::Datetime64:
+                case NScheme::NTypeIds::Timestamp64:
+                case NScheme::NTypeIds::Interval64:
                     return MakeUnversionedInt64Value(cell.AsValue<i64>(), id);
                 case NScheme::NTypeIds::Decimal:
                     buffer = NDataShard::DecimalToString(cell.AsValue<std::pair<ui64, i64>>());

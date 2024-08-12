@@ -17,10 +17,6 @@ PEERDIR(
 
 END()
 
-RECURSE(
-    proto
-)
-
 RECURSE_FOR_TESTS(
     ut
 )

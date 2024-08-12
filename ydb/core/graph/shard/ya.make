@@ -1,10 +1,5 @@
 LIBRARY()
 
-OWNER(
-    xenoxeno
-    g:kikimr
-)
-
 SRCS(
     backends.cpp
     backends.h

@@ -15,20 +15,21 @@ struct TKqpCompileResult {
 
     TKqpCompileResult(const TString& uid, const Ydb::StatusIds::StatusCode& status, const NYql::TIssues& issues,
             ETableReadType maxReadType, TMaybe<TKqpQueryId> query = {}, std::shared_ptr<NYql::TAstParseResult> ast = {},
-            bool needToSplit = false)
+            bool needToSplit = false, const TMaybe<TString>& commandTagName = {})
         : Status(status)
         , Issues(issues)
         , Query(std::move(query))
         , Uid(uid)
         , MaxReadType(maxReadType)
         , Ast(std::move(ast))
-        , NeedToSplit(needToSplit) {}
+        , NeedToSplit(needToSplit)
+        , CommandTagName(commandTagName) {}
 
     static std::shared_ptr<TKqpCompileResult> Make(const TString& uid, const Ydb::StatusIds::StatusCode& status,
         const NYql::TIssues& issues, ETableReadType maxReadType, TMaybe<TKqpQueryId> query = {},
-        std::shared_ptr<NYql::TAstParseResult> ast = {}, bool needToSplit = false)
+        std::shared_ptr<NYql::TAstParseResult> ast = {}, bool needToSplit = false, const TMaybe<TString>& commandTagName = {})
     {
-        return std::make_shared<TKqpCompileResult>(uid, status, issues, maxReadType, std::move(query), std::move(ast), needToSplit);
+        return std::make_shared<TKqpCompileResult>(uid, status, issues, maxReadType, std::move(query), std::move(ast), needToSplit, commandTagName);
     }
 
     Ydb::StatusIds::StatusCode Status;
@@ -41,6 +42,7 @@ struct TKqpCompileResult {
     bool AllowCache = true;
     std::shared_ptr<NYql::TAstParseResult> Ast;
     bool NeedToSplit = false;
+    TMaybe<TString> CommandTagName = {};
 
     std::shared_ptr<const TPreparedQueryHolder> PreparedQuery;
 };

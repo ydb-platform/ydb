@@ -17,13 +17,13 @@ TCompactionLogicState::TSnapRequest::~TSnapRequest()
 TCompactionLogicState::TTableInfo::~TTableInfo()
 {}
 
-TCompactionLogic::TCompactionLogic(THolder<NSharedCache::ISharedPageCacheMemTableObserver> sharedPageCacheMemTableObserver,
+TCompactionLogic::TCompactionLogic(NTable::IMemTableMemoryConsumersCollection *memTableMemoryConsumersCollection,
                                    NUtil::ILogger *logger,
                                    NTable::IResourceBroker *broker,
                                    NTable::ICompactionBackend *backend,
                                    TAutoPtr<TCompactionLogicState> state,
                                    TString taskNameSuffix)
-    : SharedPageCacheMemTableObserver(std::move(sharedPageCacheMemTableObserver))
+    : MemTableMemoryConsumersCollection(memTableMemoryConsumersCollection)
     , Logger(logger)
     , Broker(broker)
     , Backend(backend)
@@ -151,6 +151,12 @@ ui64 TCompactionLogic::PrepareForceCompaction(ui32 table, EForceCompaction mode)
     if (!tableInfo)
         return 0;
 
+    if (auto logl = Logger->Log(NUtil::ELnLev::Debug)) {
+        logl << "TCompactionLogic PrepareForceCompaction for " << Backend->OwnerTabletId()
+            << " table " << table << ", mode " << mode << ", forced state " << tableInfo->ForcedCompactionState
+            << ", forced mode " << tableInfo->ForcedCompactionMode;
+    }
+
     if (mode == EForceCompaction::Borrowed) {
         // Note: we also schedule mem table compaction below, because tx status may have borrowed data
         tableInfo->Strategy->ScheduleBorrowedCompaction();
@@ -211,9 +217,9 @@ void TCompactionLogic::TriggerSharedPageCacheMemTableCompaction(ui32 table, ui64
         } else {
             // there was a race and we finished some compaction while our message was waiting
             // so let's notify that we completed it
-            Y_DEBUG_ABORT_UNLESS(tableInfo->SharedPageCacheMemTableRegistration);
-            if (auto& registration = tableInfo->SharedPageCacheMemTableRegistration) {
-                SharedPageCacheMemTableObserver->CompactionComplete(registration);
+            Y_DEBUG_ABORT_UNLESS(tableInfo->MemTableMemoryConsumer);
+            if (auto& consumer = tableInfo->MemTableMemoryConsumer) {
+                MemTableMemoryConsumersCollection->CompactionComplete(consumer);
             }
         }
     }    
@@ -287,8 +293,8 @@ TReflectSchemeChangesResult TCompactionLogic::ReflectSchemeChanges()
                 table.Strategy->AllowBorrowedGarbageCompaction();
             }
 
-            if (!table.SharedPageCacheMemTableRegistration) {
-                SharedPageCacheMemTableObserver->Register(info.Id);
+            if (!table.MemTableMemoryConsumer) {
+                MemTableMemoryConsumersCollection->Register(info.Id);
             }
         } else {
             Y_ABORT_UNLESS(table.Strategy);
@@ -308,14 +314,14 @@ TReflectSchemeChangesResult TCompactionLogic::ReflectSchemeChanges()
     return result;
 }
 
-void TCompactionLogic::ProvideSharedPageCacheMemTableRegistration(ui32 table, TIntrusivePtr<NSharedCache::ISharedPageCacheMemTableRegistration> registration)
+void TCompactionLogic::ProvideMemTableMemoryConsumer(ui32 table, TIntrusivePtr<NMemory::IMemoryConsumer> memTableMemoryConsumer)
 {
     auto *tableInfo = State->Tables.FindPtr(table);
     if (tableInfo) {
-        registration->SetConsumption(tableInfo->InMem.EstimatedSize);
+        memTableMemoryConsumer->SetConsumption(tableInfo->InMem.EstimatedSize);
 
-        Y_DEBUG_ABORT_UNLESS(!tableInfo->SharedPageCacheMemTableRegistration);
-        tableInfo->SharedPageCacheMemTableRegistration = std::move(registration);
+        Y_DEBUG_ABORT_UNLESS(!tableInfo->MemTableMemoryConsumer);
+        tableInfo->MemTableMemoryConsumer = std::move(memTableMemoryConsumer);
     }
 }
 
@@ -331,12 +337,10 @@ THolder<NTable::ICompactionStrategy> TCompactionLogic::CreateStrategy(
         ui32 tableId,
         NKikimrSchemeOp::ECompactionStrategy strategy)
 {
-    Y_UNUSED(Logger);
-
     switch (strategy) {
         case NKikimrSchemeOp::CompactionStrategyGenerational:
             return NTable::CreateGenCompactionStrategy(
-                    tableId, Backend, Broker, Time, TaskNameSuffix);
+                    tableId, Backend, Broker, Time, Logger, TaskNameSuffix);
 
         default:
             Y_ABORT("Unsupported strategy %s", NKikimrSchemeOp::ECompactionStrategy_Name(strategy).c_str());
@@ -346,7 +350,7 @@ THolder<NTable::ICompactionStrategy> TCompactionLogic::CreateStrategy(
 void TCompactionLogic::StopTable(TCompactionLogicState::TTableInfo &table)
 {
     // Note: should be called even without table.SharedPageCacheMemTableRegistration
-    SharedPageCacheMemTableObserver->Unregister(table.TableId);
+    MemTableMemoryConsumersCollection->Unregister(table.TableId);
 
     if (table.Strategy) {
         // Strategy will cancel all pending and running compactions
@@ -432,10 +436,10 @@ void TCompactionLogic::UpdateInMemStatsStep(ui32 table, ui32 steps, ui64 size) {
     mem.EstimatedSize = size;
     mem.Steps += steps;
 
-    if (auto& registration = info->SharedPageCacheMemTableRegistration) {
-        registration->SetConsumption(size);
+    if (auto& consumer = info->MemTableMemoryConsumer) {
+        consumer->SetConsumption(size);
         if (steps == 0) {
-            SharedPageCacheMemTableObserver->CompactionComplete(registration);
+            MemTableMemoryConsumersCollection->CompactionComplete(consumer);
         }
     }
 

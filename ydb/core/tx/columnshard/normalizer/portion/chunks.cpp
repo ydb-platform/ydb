@@ -8,14 +8,15 @@
 
 namespace NKikimr::NOlap {
 
-class TChunksNormalizer::TNormalizerResult : public INormalizerChanges {
+class TChunksNormalizer::TNormalizerResult: public INormalizerChanges {
     std::vector<TChunksNormalizer::TChunkInfo> Chunks;
+    std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> Schemas;
 public:
     TNormalizerResult(std::vector<TChunksNormalizer::TChunkInfo>&& chunks)
-        : Chunks(std::move(chunks))
-    {}
+        : Chunks(std::move(chunks)) {
+    }
 
-    bool Apply(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
+    bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
 
@@ -28,11 +29,15 @@ public:
             const auto& key = chunkInfo.GetKey();
 
             db.Table<Schema::IndexColumns>().Key(key.GetIndex(), key.GetGranule(), key.GetColumnIdx(),
-            key.GetPlanStep(), key.GetTxId(), key.GetPortion(), key.GetChunk()).Update(
-                NIceDb::TUpdate<Schema::IndexColumns::Metadata>(metaProto.SerializeAsString())
-            );
+                key.GetPlanStep(), key.GetTxId(), key.GetPortion(), key.GetChunk()).Update(
+                    NIceDb::TUpdate<Schema::IndexColumns::Metadata>(metaProto.SerializeAsString())
+                );
         }
         return true;
+    }
+
+    ui64 GetSize() const override {
+        return Chunks.size();
     }
 };
 
@@ -44,7 +49,7 @@ private:
     std::vector<TChunksNormalizer::TChunkInfo> Chunks;
     TNormalizationContext NormContext;
 protected:
-    virtual bool DoExecute() override {
+    virtual TConclusionStatus DoExecute(const std::shared_ptr<NConveyor::ITask>& /*taskPtr*/) override {
         for (auto&& chunkInfo : Chunks) {
             const auto& blobRange = chunkInfo.GetBlobRange();
 
@@ -54,16 +59,17 @@ protected:
             Y_ABORT_UNLESS(!!columnLoader);
 
             TPortionInfo::TAssembleBlobInfo assembleBlob(blobData);
+            assembleBlob.SetExpectedRecordsCount(chunkInfo.GetRecordsCount());
             auto batch = assembleBlob.BuildRecordBatch(*columnLoader);
             Y_ABORT_UNLESS(!!batch);
 
-            chunkInfo.MutableUpdate().SetNumRows(batch->num_rows());
-            chunkInfo.MutableUpdate().SetRawBytes(NArrow::GetBatchDataSize(batch));
+            chunkInfo.MutableUpdate().SetNumRows(batch->GetRecordsCount());
+            chunkInfo.MutableUpdate().SetRawBytes(batch->GetRawSizeVerified());
         }
 
         auto changes = std::make_shared<TChunksNormalizer::TNormalizerResult>(std::move(Chunks));
-        TActorContext::AsActorContext().Send(NormContext.GetColumnshardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(changes));
-        return true;
+        TActorContext::AsActorContext().Send(NormContext.GetShardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(changes));
+        return TConclusionStatus::Success();
     }
 
 public:
@@ -91,7 +97,7 @@ void TChunksNormalizer::TChunkInfo::InitSchema(const NColumnShard::TTablesManage
     Schema = tm.GetPrimaryIndexSafe().GetVersionedIndex().GetSchema(NOlap::TSnapshot(Key.GetPlanStep(), Key.GetTxId()));
 }
 
-TConclusion<std::vector<INormalizerTask::TPtr>> TChunksNormalizer::Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
+TConclusion<std::vector<INormalizerTask::TPtr>> TChunksNormalizer::DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
     using namespace NColumnShard;
     NIceDb::TNiceDb db(txc.DB);
 
@@ -131,7 +137,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TChunksNormalizer::Init(const TN
 
     TTablesManager tablesManager(controller.GetStoragesManager(), 0);
     if (!tablesManager.InitFromDB(db)) {
-        ACFL_ERROR("normalizer", "TChunksNormalizer")("error", "can't initialize tables manager");
+        ACFL_TRACE("normalizer", "TChunksNormalizer")("error", "can't initialize tables manager");
         return TConclusionStatus::Fail("Can't load index");
     }
 
@@ -151,7 +157,6 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TChunksNormalizer::Init(const TN
     if (package.size() > 0) {
         tasks.emplace_back(std::make_shared<TPortionsNormalizerTask<TRowsAndBytesChangesTask>>(std::move(package)));
     }
-    AtomicSet(ActiveTasksCount, tasks.size());
     return tasks;
 }
 

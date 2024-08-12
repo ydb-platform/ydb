@@ -1,0 +1,11 @@
+quotas:
+  - ydb.dedicatedComputeCores.count
+  - ydb.dedicatedComputeMemory.size
+  - ydb.dedicatedComputeNodes.count
+  - ydb.dedicatedDatabases.count
+  - ydb.dedicatedStorageGroups.count
+  - ydb.schemaOperationsPerDay.count
+  - ydb.schemaOperationsPerMinute.count
+  - ydb.serverlessDatabases.count
+  - ydb.serverlessRequestUnitsPerSecond.count
+  - ydb.serverlessStorage.size

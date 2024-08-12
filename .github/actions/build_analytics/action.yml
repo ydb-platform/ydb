@@ -1,0 +1,66 @@
+name: build_analytics
+description: Gather and send build analytics 
+inputs:
+  build_preset:
+    type: string
+    default: ""
+  build_target:
+    type: string
+    default: ""
+  secs:
+    type: string
+    default: ""
+  vars:
+    type: string
+    default: ""
+runs:
+  using: "composite"
+  steps:
+    - name: Prepare s3cmd
+      uses: ./.github/actions/s3cmd
+      with:
+        s3_bucket: ${{ fromJSON( inputs.vars ).AWS_BUCKET }}
+        s3_endpoint: ${{ fromJSON( inputs.vars ).AWS_ENDPOINT }}
+        s3_key_id: ${{ fromJSON( inputs.secs ).AWS_KEY_ID }}
+        s3_key_secret: ${{ fromJSON( inputs.secs ).AWS_KEY_VALUE }}
+        folder_prefix: ya-
+        build_preset: ${{ inputs.build_preset }}
+
+    - name: Run analytics tools
+      shell: bash
+      run: |
+        set -ex
+        # FIXME: target name may be not the same as dir name
+        export TARGET_NAME=`basename ${{ inputs.build_target }}`
+        export TARGET_DIR=${{ inputs.build_target }}
+        export build_preset="${{ inputs.build_preset }}" 
+        export build_target="${{ inputs.build_target }}" 
+        ./ya tool bloat --linker-map $TARGET_DIR/$TARGET_NAME.map.lld --input $TARGET_DIR/$TARGET_NAME --save-html ya_bloat_html --save-json bloat.json
+        ./ydb/ci/build_bloat/template_bloat.py -j bloat.json -o template_bloat -t template_bloat_html
+        ./ydb/ci/build_bloat/main.py --build-dir . --html-dir-cpp html_cpp_impact --html-dir-headers html_headers_impact
+        ./ydb/ci/build_bloat/ydb_upload.py --html-dir-cpp html_cpp_impact --html-dir-headers html_headers_impact
+
+    - name: Upload results
+      shell: bash
+      run: |
+        set -ex
+        s3cmd sync -r --acl-public --stats --no-progress --no-mime-magic --guess-mime-type --no-check-md5 "ya_bloat_html/" "$S3_BUCKET_PATH/ya_bloat_html/"
+        echo "[ya bloat tool]($S3_URL_PREFIX/ya_bloat_html/index.html) (better use Safari, because it is too large for Chrome)" >> $GITHUB_STEP_SUMMARY
+
+        s3cmd sync -r --acl-public --stats --no-progress --no-mime-magic --guess-mime-type --no-check-md5 "template_bloat.by_size.txt" "$S3_BUCKET_PATH/template_bloat.by_size.txt"
+        TEMPLATE_BLOAT_BY_SIZE_URL=$S3_URL_PREFIX/template_bloat.by_size.txt
+
+        s3cmd sync -r --acl-public --stats --no-progress --no-mime-magic --guess-mime-type --no-check-md5 "template_bloat.by_count.txt" "$S3_BUCKET_PATH/template_bloat.by_count.txt"
+        TEMPLATE_BLOAT_BY_COUNT_URL=$S3_URL_PREFIX/template_bloat.by_count.txt
+
+        s3cmd sync -r --acl-public --stats --no-progress --no-mime-magic --guess-mime-type --no-check-md5 "template_bloat_html/" "$S3_BUCKET_PATH/template_bloat_html/"
+        TEMPLATE_BLOAT_TREEMAP_URL=$S3_URL_PREFIX/template_bloat_html/index.html
+
+        echo "[template bloat]($TEMPLATE_BLOAT_TREEMAP_URL) ([sorted by size]($TEMPLATE_BLOAT_BY_SIZE_URL), [sorted by count]($TEMPLATE_BLOAT_BY_COUNT_URL))" >> $GITHUB_STEP_SUMMARY
+
+        s3cmd sync -r --acl-public --stats --no-progress --no-mime-magic --guess-mime-type --no-check-md5 "html_cpp_impact/" "$S3_BUCKET_PATH/html_cpp_impact/"
+        echo "[cpp compilation time]($S3_URL_PREFIX/html_cpp_impact/index.html)" >> $GITHUB_STEP_SUMMARY
+        
+        s3cmd sync -r --acl-public --stats --no-progress --no-mime-magic --guess-mime-type --no-check-md5 "html_headers_impact/" "$S3_BUCKET_PATH/html_headers_impact/"
+        echo "[headers impact]($S3_URL_PREFIX/html_headers_impact/index.html)" >> $GITHUB_STEP_SUMMARY
+

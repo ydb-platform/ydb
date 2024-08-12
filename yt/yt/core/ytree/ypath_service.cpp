@@ -56,9 +56,11 @@ struct TCacheKey
             TRef::AreBitwiseEqual(RequestBody, other.RequestBody);
     }
 
-    friend TString ToString(const TCacheKey& key)
+    friend void FormatValue(TStringBuilderBase* builder, const TCacheKey& key, TStringBuf /*spec*/)
     {
-        return Format("{%v %v %x}",
+        Format(
+            builder,
+            "{%v %v %x}",
             key.Method,
             key.Path,
             key.RequestBodyHash);
@@ -600,7 +602,7 @@ private:
 
     bool DoInvoke(const IYPathServiceContextPtr& context) override
     {
-        Invoker_->Invoke(BIND([=, this, this_ = MakeStrong(this)] () {
+        Invoker_->Invoke(BIND([=, this, this_ = MakeStrong(this)] {
             ExecuteVerb(UnderlyingService_, context);
         }));
         return true;
@@ -703,10 +705,10 @@ public:
         , CacheKey_(std::move(cacheKey))
     {
         underlyingContext->GetAsyncResponseMessage()
-            .Subscribe(BIND([weakThis = MakeWeak(this)] (const TErrorOr<TSharedRefArray>& responseMessageOrError) {
+            .Subscribe(BIND([this, weakThis = MakeWeak(this)] (const TErrorOr<TSharedRefArray>& responseMessageOrError) {
                 if (auto this_ = weakThis.Lock()) {
                     if (responseMessageOrError.IsOK()) {
-                        this_->TryAddResponseToCache(responseMessageOrError.Value());
+                        TryAddResponseToCache(responseMessageOrError.Value());
                     }
                 }
             }));
@@ -820,7 +822,7 @@ void ReplyErrorOrValue(const IYPathServiceContextPtr& context, const TErrorOr<TS
 bool TCachedYPathService::DoInvoke(const IYPathServiceContextPtr& context)
 {
     if (IsCacheEnabled_ && IsCacheValid_) {
-        WorkerInvoker_->Invoke(BIND([this, context, this_ = MakeStrong(this)]() {
+        WorkerInvoker_->Invoke(BIND([this, context, this_ = MakeStrong(this)] {
             try {
                 auto cacheSnapshot = CurrentCacheSnapshot_.Acquire();
                 YT_VERIFY(cacheSnapshot);

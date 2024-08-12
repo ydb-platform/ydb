@@ -4,9 +4,9 @@ items:
 - name: Добавление групп хранения
   href: adding_storage_groups.md
 - name: Перемещение State Storage
-  href: ../../administration/state-storage-move.md
+  href: ../../devops/manual/state-storage-move.md
 - name: Перемещение статической группы
-  href: ../../administration/static-group-move.md
+  href: ../../devops/manual/static-group-move.md
 - name: Безопасный рестарт и выключение узлов
   href: node_restarting.md
 - name: Включение и выключение Scrubbing
@@ -14,7 +14,7 @@ items:
 - name: Работа с SelfHeal
   href: selfheal.md
 - name: Декомиссия части кластера
-  href: ../../administration/decommissioning.md
+  href: ../../devops/manual/decommissioning.md
 - name: Перевоз VDisk'ов
   href: moving_vdisks.md
 - name: Замена FQDN узла

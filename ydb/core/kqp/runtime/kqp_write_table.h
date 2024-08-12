@@ -10,30 +10,62 @@
 namespace NKikimr {
 namespace NKqp {
 
-class IPayloadSerializer : public TThrRefBase {
+class IShardedWriteController : public TThrRefBase {
 public:
-    virtual void AddData(NMiniKQL::TUnboxedValueBatch&& data, bool close) = 0;
+    virtual void OnPartitioningChanged(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry) = 0;
+    virtual void OnPartitioningChanged(
+        const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
+        NSchemeCache::TSchemeCacheRequest::TEntry&& partitionsEntry) = 0;
 
-    virtual bool IsClosed() = 0;
-    virtual bool IsEmpty() = 0;
-    virtual bool IsFinished() = 0;
+    virtual void AddData(NMiniKQL::TUnboxedValueBatch&& data) = 0;
+    virtual void Close() = 0;
 
+    virtual TVector<ui64> GetPendingShards() const = 0;
+
+    struct TMessageMetadata {
+        ui64 Cookie = 0;
+        ui64 OperationsCount = 0;
+        bool IsFinal = false;
+        ui64 SendAttempts = 0;
+    };
+    virtual std::optional<TMessageMetadata> GetMessageMetadata(ui64 shardId) = 0;
+
+    struct TSerializationResult {
+        i64 TotalDataSize = 0;
+        TVector<ui64> PayloadIndexes;
+    };
+
+    virtual TSerializationResult SerializeMessageToPayload(ui64 shardId, NKikimr::NEvents::TDataEvents::TEvWrite& evWrite) = 0;
     virtual NKikimrDataEvents::EDataFormat GetDataFormat() = 0;
     virtual std::vector<ui32> GetWriteColumnIds() = 0;
 
-    using TBatches = THashMap<ui64, std::deque<TString>>;
+    virtual std::optional<i64> OnMessageAcknowledged(ui64 shardId, ui64 cookie) = 0;
+    virtual void OnMessageSent(ui64 shardId, ui64 cookie) = 0;
 
-    virtual TBatches FlushBatches(const bool force = false) = 0;
+    virtual void ResetRetries(ui64 shardId, ui64 cookie) = 0;
 
-    virtual i64 GetMemory() = 0;
+    virtual i64 GetMemory() const = 0;
+
+    virtual bool IsClosed() const = 0;
+    virtual bool IsFinished() const = 0;
+
+    virtual bool IsReady() const = 0;
 };
 
-using IPayloadSerializerPtr = TIntrusivePtr<IPayloadSerializer>;
+using IShardedWriteControllerPtr = TIntrusivePtr<IShardedWriteController>;
 
-IPayloadSerializerPtr CreateColumnShardPayloadSerializer(
-    const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
-    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-    const NMiniKQL::TTypeEnvironment& typeEnv);
+
+struct TShardedWriteControllerSettings {
+    i64 MemoryLimitTotal;
+    i64 MemoryLimitPerMessage;
+    i64 MaxBatchesPerMessage;
+};
+
+IShardedWriteControllerPtr CreateShardedWriteController(
+    const TShardedWriteControllerSettings& settings,
+    TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
+    const NMiniKQL::TTypeEnvironment& typeEnv,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
 
 }
 }

@@ -21,23 +21,16 @@ public:
 
     bool BeforeLambdasSpecific(const TExprNode::TPtr& input, TExprContext& ctx) override {
         bool matched = true;
-        bool hasDqSource = false;
 
-        if (TDqReadWrapBase::Match(input.Get()) || (hasDqSource = TDqSourceWrapBase::Match(input.Get()))) {
-            auto node = hasDqSource
-                ? input
-                : input->Child(TDqReadWrapBase::idx_Input);
-            auto dataSourceChildIndex = 1;
-            YQL_ENSURE(node->ChildrenSize() > 1);
-            YQL_ENSURE(node->Child(dataSourceChildIndex)->IsCallable("DataSource"));
-            auto dataSourceName = node->Child(dataSourceChildIndex)->Child(0)->Content();
-            auto datasource = State->TypeCtx->DataSourceMap.FindPtr(dataSourceName);
-            YQL_ENSURE(datasource);
-            if (auto dqIntegration = (*datasource)->GetDqIntegration()) {
-                auto stat = dqIntegration->ReadStatistics(node, ctx);
-                if (stat) {
-                    State->TypeCtx->SetStats(input.Get(), std::move(std::make_shared<TOptimizerStatistics>(*stat)));
-                }
+        if (TDqReadWrapBase::Match(input.Get())) {
+            if (auto stat = GetStats(input->Child(TDqReadWrapBase::idx_Input), ctx)) {
+                State->TypeCtx->SetStats(input.Get(), stat);
+            }
+        } else if (TDqSourceWrapBase::Match(input.Get())) {
+            if (auto stat = GetStats(input, ctx)) {
+                State->TypeCtx->SetStats(input.Get(), stat);
+                // This node can be split, so to preserve the statistics, we also expose it to settings
+                State->TypeCtx->SetStats(input->Child(TDqSourceWrapBase::idx_Settings), stat);
             }
         } else {
             matched = false;
@@ -52,6 +45,21 @@ public:
     }
 
 private:
+    std::shared_ptr<TOptimizerStatistics> GetStats(const TExprNode::TPtr& node, TExprContext& ctx) {
+        auto dataSourceChildIndex = 1;
+        YQL_ENSURE(node->ChildrenSize() > 1);
+        YQL_ENSURE(node->Child(dataSourceChildIndex)->IsCallable("DataSource"));
+        auto dataSourceName = node->Child(dataSourceChildIndex)->Child(0)->Content();
+        auto datasource = State->TypeCtx->DataSourceMap.FindPtr(dataSourceName);
+        if (auto dqIntegration = (*datasource)->GetDqIntegration()) {
+            auto stat = dqIntegration->ReadStatistics(node, ctx);
+            if (stat) {
+                return std::make_shared<TOptimizerStatistics>(std::move(*stat));
+            }
+        }
+        return {};
+    }
+
     TDqStatePtr State;
 };
 

@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet",
-                "PlanNodeId": 4,
+                "PlanNodeId": 5,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,50 +14,59 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 2
+                                        "ExternalPlanNodeId": 3
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 3,
+                        "PlanNodeId": 4,
                         "Plans": [
                             {
                                 "Node Type": "UnionAll",
-                                "PlanNodeId": 2,
+                                "PlanNodeId": 3,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-TableRangeScan",
+                                        "Node Type": "Limit",
                                         "Operators": [
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 1
+                                                        "ExternalPlanNodeId": 1
                                                     }
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "Limit"
-                                            },
-                                            {
-                                                "Inputs": [],
-                                                "Name": "TableRangeScan",
-                                                "ReadColumns": [
-                                                    "stringu1",
-                                                    "unique1"
-                                                ],
-                                                "ReadLimit": "1001",
-                                                "ReadRange": [
-                                                    "unique1 (980, +\u221e)",
-                                                    "unique2 (-\u221e, +\u221e)"
-                                                ],
-                                                "Table": "postgres_select.test_plan/onek2"
                                             }
                                         ],
-                                        "PlanNodeId": 1,
-                                        "Tables": [
-                                            "postgres_select.test_plan/onek2"
+                                        "PlanNodeId": 2,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "TableRangeScan",
+                                                "Operators": [
+                                                    {
+                                                        "Inputs": [],
+                                                        "Name": "TableRangeScan",
+                                                        "ReadColumns": [
+                                                            "stringu1",
+                                                            "unique1"
+                                                        ],
+                                                        "ReadLimit": "1001",
+                                                        "ReadRange": [
+                                                            "unique1 (980, +\u221e)",
+                                                            "unique2 (-\u221e, +\u221e)"
+                                                        ],
+                                                        "Scan": "Sequential",
+                                                        "Table": "postgres_select.test_plan/onek2"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 1,
+                                                "Tables": [
+                                                    "postgres_select.test_plan/onek2"
+                                                ]
+                                            }
                                         ]
                                     }
                                 ]

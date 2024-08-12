@@ -25,7 +25,7 @@ The table is created automatically during the first [INSERT INTO](insert_into.md
 
 The `CREATE TABLE` call creates a {% if concept_table %}[table]({{ concept_table }}){% else %}table{% endif %} with the specified data schema{% if feature_map_tables %} and key columns (`PRIMARY KEY`){% endif %}. {% if feature_secondary_index == true %}It lets you define secondary indexes on the created table.{% endif %}
 
-    CREATE TABLE table_name (
+    CREATE [TEMPORARY | TEMP] TABLE table_name (
         column1 type1,
 {% if feature_not_null == true %}        column2 type2 NOT NULL,{% else %}        column2 type2,{% endif %}
         ...
@@ -111,6 +111,18 @@ CREATE TABLE my_table (
     PRIMARY KEY (a)
 )
 ```
+{% endif %}
+
+{% if feature_temp_tables %}
+{% if feature_olap_tables %}#{%endif%}## Creating a temporary table {#temporary_tables}
+```sql
+CREATE TEMPORARY TABLE table_name (
+    ...
+);
+```
+
+{% include [temp-table-description.md](../../../../_includes/temp-table-description.md) %}
+
 {% endif %}
 
 {% if feature_map_tables and concept_table %}

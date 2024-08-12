@@ -64,6 +64,8 @@ TEngineLogsCounters::TEngineLogsCounters()
 
     GranuleOptimizerLocked = TBase::GetDeriviative("Optimizer/Granules/Locked");
 
+    IndexMetadataUsageBytes = TBase::GetValue("IndexMetadata/Usage/Bytes");
+
     StatUsageForTTLCount = TBase::GetDeriviative("Ttl/StatUsageForTTLCount/Count");
     ChunkUsageForTTLCount = TBase::GetDeriviative("Ttl/ChunkUsageForTTLCount/Count");
 }
@@ -81,11 +83,20 @@ void TEngineLogsCounters::OnActualizationTask(const ui32 evictCount, const ui32 
 void TEngineLogsCounters::TPortionsInfoGuard::OnNewPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) const {
     const ui32 producedId = (ui32)(portion->HasRemoveSnapshot() ? NOlap::NPortion::EProduced::INACTIVE : portion->GetMeta().Produced);
     Y_ABORT_UNLESS(producedId < BlobGuards.size());
+    THashSet<NOlap::TUnifiedBlobId> blobIds;
     for (auto&& i : portion->GetRecords()) {
-        BlobGuards[producedId]->Add(i.GetBlobRange().Size, i.GetBlobRange().Size);
+        const auto blobId = portion->GetBlobId(i.GetBlobRange().GetBlobIdxVerified());
+        if (blobIds.emplace(blobId).second) {
+            BlobGuards[producedId]->Add(blobId.BlobSize(), blobId.BlobSize());
+        }
     }
     for (auto&& i : portion->GetIndexes()) {
-        BlobGuards[producedId]->Add(i.GetBlobRange().Size, i.GetBlobRange().Size);
+        if (i.HasBlobRange()) {
+            const auto blobId = portion->GetBlobId(i.GetBlobRangeVerified().GetBlobIdxVerified());
+            if (blobIds.emplace(blobId).second) {
+                BlobGuards[producedId]->Add(blobId.BlobSize(), blobId.BlobSize());
+            }
+        }
     }
     PortionRecordCountGuards[producedId]->Add(portion->GetRecordsCount(), 1);
     PortionSizeGuards[producedId]->Add(portion->GetTotalBlobBytes(), 1);
@@ -94,11 +105,20 @@ void TEngineLogsCounters::TPortionsInfoGuard::OnNewPortion(const std::shared_ptr
 void TEngineLogsCounters::TPortionsInfoGuard::OnDropPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) const {
     const ui32 producedId = (ui32)(portion->HasRemoveSnapshot() ? NOlap::NPortion::EProduced::INACTIVE : portion->GetMeta().Produced);
     Y_ABORT_UNLESS(producedId < BlobGuards.size());
+    THashSet<NOlap::TUnifiedBlobId> blobIds;
     for (auto&& i : portion->GetRecords()) {
-        BlobGuards[producedId]->Sub(i.GetBlobRange().Size, i.GetBlobRange().Size);
+        const auto blobId = portion->GetBlobId(i.GetBlobRange().GetBlobIdxVerified());
+        if (blobIds.emplace(blobId).second) {
+            BlobGuards[producedId]->Sub(blobId.BlobSize(), blobId.BlobSize());
+        }
     }
     for (auto&& i : portion->GetIndexes()) {
-        BlobGuards[producedId]->Sub(i.GetBlobRange().Size, i.GetBlobRange().Size);
+        if (i.HasBlobRange()) {
+            const auto blobId = portion->GetBlobId(i.GetBlobRangeVerified().GetBlobIdxVerified());
+            if (blobIds.emplace(blobId).second) {
+                BlobGuards[producedId]->Sub(blobId.BlobSize(), blobId.BlobSize());
+            }
+        }
     }
     PortionRecordCountGuards[producedId]->Sub(portion->GetRecordsCount(), 1);
     PortionSizeGuards[producedId]->Sub(portion->GetTotalBlobBytes(), 1);
@@ -112,6 +132,7 @@ NKikimr::NColumnShard::TBaseGranuleDataClassSummary TBaseGranuleDataClassSummary
     AFL_VERIFY(result.ColumnPortionsSize >= 0);
     result.PortionsCount = PortionsCount + item.PortionsCount;
     result.RecordsCount = RecordsCount + item.RecordsCount;
+    result.MetadataMemoryPortionsSize = MetadataMemoryPortionsSize + item.MetadataMemoryPortionsSize;
     return result;
 }
 

@@ -1,4 +1,3 @@
-pragma UseBlocks;
 pragma AnsiLike;
 pragma warning("disable", "4510");
 

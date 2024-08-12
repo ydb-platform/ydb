@@ -15,10 +15,11 @@ namespace NFq {
 class TRetryPolicyItem {
 public:
     TRetryPolicyItem() = default;
-    TRetryPolicyItem(ui64 retryCount, const TDuration& retryPeriod, const TDuration& backoffPeriod)
-    : RetryCount(retryCount), RetryPeriod(retryPeriod), BackoffPeriod(backoffPeriod)
+    TRetryPolicyItem(ui64 retryCount, ui64 retryLimit, const TDuration& retryPeriod, const TDuration& backoffPeriod)
+    : RetryCount(retryCount), RetryLimit(retryLimit), RetryPeriod(retryPeriod), BackoffPeriod(backoffPeriod)
     { }
     ui64 RetryCount = 0;
+    ui64 RetryLimit = 0;
     TDuration RetryPeriod = TDuration::Zero();
     TDuration BackoffPeriod = TDuration::Zero();
 };
@@ -32,11 +33,14 @@ public:
     ui64 RetryCount = 0;
     TInstant RetryCounterUpdatedAt = TInstant::Zero();
     double RetryRate = 0.0;
+    TString LastError;
 };
 
 bool IsTerminalStatus(FederatedQuery::QueryMeta::ComputeStatus status);
 
 bool IsAbortedStatus(FederatedQuery::QueryMeta::ComputeStatus status);
+
+bool IsFailedStatus(FederatedQuery::QueryMeta::ComputeStatus status);
 
 bool IsBillablelStatus(FederatedQuery::QueryMeta::ComputeStatus status, NYql::NDqProto::StatusIds::StatusCode statusCode);
 

@@ -57,7 +57,7 @@ public:
             .EndMap()))
         , ServiceName_(std::move(serviceName))
         , PeerDiscovery_(std::move(peerDiscovery))
-        , Logger(RpcClientLogger.WithTag(
+        , Logger(RpcClientLogger().WithTag(
             "ChannelId: %v, Endpoint: %v, Service: %v",
             TGuid::Create(),
             EndpointDescription_,
@@ -101,12 +101,12 @@ public:
                       ? session->GetFinished()
                       : ViablePeerRegistry_->GetPeersAvailable();
         YT_LOG_DEBUG_IF(!future.IsSet(), "Channel requested, waiting on peers to become available");
-        return future.Apply(BIND([this_ = MakeWeak(this), request, hedgingOptions] {
-            if (auto strongThis = this_.Lock()) {
-                auto channel = strongThis->PickViableChannel(request, hedgingOptions);
+        return future.Apply(BIND([this, weakThis = MakeWeak(this), request, hedgingOptions] {
+            if (auto this_ = weakThis.Lock()) {
+                auto channel = PickViableChannel(request, hedgingOptions);
                 if (!channel) {
                     // Not very likely but possible in theory.
-                    THROW_ERROR strongThis->MakeNoAlivePeersError();
+                    THROW_ERROR MakeNoAlivePeersError();
                 }
                 return channel;
             } else {
@@ -262,7 +262,7 @@ private:
         THashSet<TString> RequestedAddresses_;
         THashSet<TString> RequestingAddresses_;
 
-        constexpr static int MaxDiscoveryErrorsToKeep = 100;
+        static constexpr int MaxDiscoveryErrorsToKeep = 100;
         std::deque<TError> PeerDiscoveryErrors_;
 
         void DoRun()
@@ -475,7 +475,7 @@ private:
     public:
         TPeerPoller(TImpl* owner, TString peerAddress)
             : Owner_(owner)
-            , Logger(owner->Logger.WithTag("Address: %v", peerAddress))
+            , Logger(owner->Logger().WithTag("Address: %v", peerAddress))
             , PeerAddress_(std::move(peerAddress))
         { }
 
@@ -848,7 +848,7 @@ private:
         ViablePeerRegistry_->UnregisterPeer(address);
     }
 
-    TError MaybeTransformChannelError(TError error)
+    TError TransformChannelError(TError error)
     {
         auto guard = ReaderGuard(SpinLock_);
 
@@ -886,9 +886,9 @@ private:
             Config_->AcknowledgementTimeout,
             BIND(&TImpl::OnChannelFailed, MakeWeak(this), address),
             BIND(&IsChannelFailureError),
-            BIND([this_ = MakeWeak(this)] (TError error) {
-                if (auto strongThis = this_.Lock()) {
-                    return strongThis->MaybeTransformChannelError(std::move(error));
+            BIND([this, weakThis = MakeWeak(this)] (TError error) {
+                if (auto this_ = weakThis.Lock()) {
+                    return TransformChannelError(std::move(error));
                 } else {
                     return error;
                 }

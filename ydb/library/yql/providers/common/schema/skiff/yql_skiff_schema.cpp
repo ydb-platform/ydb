@@ -79,6 +79,9 @@ struct TSkiffTypeLoader {
         case NUdf::EDataSlot::TzDate:
         case NUdf::EDataSlot::TzDatetime:
         case NUdf::EDataSlot::TzTimestamp:
+        case NUdf::EDataSlot::TzDate32:
+        case NUdf::EDataSlot::TzDatetime64:
+        case NUdf::EDataSlot::TzTimestamp64:
             return NYT::TNode()("wire_type", "string32");
         case NUdf::EDataSlot::Decimal:
             ythrow yexception() << "Decimal type without parameters.";

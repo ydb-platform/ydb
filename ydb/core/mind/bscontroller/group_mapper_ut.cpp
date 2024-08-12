@@ -1,5 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
-
+#include <ydb/core/base/blobstorage_common.h>
 #include "layout_helpers.h"
 #include "group_geometry_info.h"
 #include "group_mapper.h"
@@ -297,7 +297,7 @@ public:
         if (!result.Disks.empty()) {
             status = ESanitizeResult::FAIL;
             for (auto vdisk : result.Disks) {
-                auto target = mapper.TargetMisplacedVDisk(groupId, group.Group, vdisk,
+                auto target = mapper.TargetMisplacedVDisk(TGroupId::FromValue(groupId), group.Group, vdisk,
                     std::move(forbid), 0, requireOperational, error);
                 if (target) {
                     status = ESanitizeResult::SUCCESS;
@@ -551,8 +551,8 @@ public:
 Y_UNIT_TEST_SUITE(TGroupMapperTest) {
 
     Y_UNIT_TEST(MapperSequentialCalls) {
-        TTestContext globalContext(3, 4, 20, 5, 4);
-        TTestContext localContext(3, 4, 20, 5, 4);
+        TTestContext globalContext(3, 3, 4, 3, 4);
+        TTestContext localContext(3, 3, 4, 3, 4);
 
         TGroupMapper globalMapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::Erasure4Plus2Block, 1, 8, 2));
         globalContext.PopulateGroupMapper(globalMapper, 16);

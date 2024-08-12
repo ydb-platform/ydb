@@ -11,6 +11,7 @@
 #include <ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec.h>
 #include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
+#include <ydb/library/yql/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
@@ -26,6 +27,8 @@
 #include <ydb/library/yql/public/purecalc/common/transformations/extract_used_columns.h>
 #include <ydb/library/yql/public/purecalc/common/transformations/output_columns_filter.h>
 #include <ydb/library/yql/public/purecalc/common/transformations/replace_table_reads.h>
+#include <ydb/library/yql/public/purecalc/common/transformations/root_to_blocks.h>
+#include <ydb/library/yql/public/purecalc/common/transformations/utils.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <util/stream/trace.h>
 
@@ -38,6 +41,8 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     , FuncRegistry_(std::move(options.FuncRegistry))
     , UserData_(std::move(options.UserData))
     , LLVMSettings_(std::move(options.LLVMSettings))
+    , BlockEngineMode_(options.BlockEngineMode)
+    , ExprOutputStream_(options.ExprOutputStream)
     , CountersProvider_(options.CountersProvider_)
     , NativeYtTypeFlags_(options.NativeYtTypeFlags_)
     , DeterministicTimeProviderSeed_(options.DeterministicTimeProviderSeed_)
@@ -64,6 +69,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
 
         InputTypes_.push_back(structType);
         OriginalInputTypes_.push_back(originalStructType);
+        RawInputTypes_.push_back(originalStructType);
 
         auto& columnsSet = AllColumns_.emplace_back();
         for (const auto* structItem : structType->GetItems()) {
@@ -89,18 +95,30 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
         OutputType_ = nullptr;
     }
 
+    RawOutputType_ = OutputType_;
+
     // Translate
 
     if (options.TranslationMode_ == ETranslationMode::Mkql) {
         SerializedProgram_ = TString{options.Query};
     } else {
         ExprRoot_ = Compile(options.Query, options.TranslationMode_,
-            options.ModuleResolver, options.SyntaxVersion_, options.Modules, options.OutputSpec, processorMode);
+            options.ModuleResolver, options.SyntaxVersion_, options.Modules,
+            options.InputSpec, options.OutputSpec, processorMode);
+
+        RawOutputType_ = GetSequenceItemType(ExprRoot_->Pos(), ExprRoot_->GetTypeAnn(), true, ExprContext_);
 
         // Deduce output type if it wasn't provided by output spec
 
         if (!OutputType_) {
-            OutputType_ = GetSequenceItemType(ExprRoot_->Pos(), ExprRoot_->GetTypeAnn(), true, ExprContext_);
+            OutputType_ = RawOutputType_;
+            // XXX: Tweak the obtained expression type, is the spec supports blocks:
+            // 1. Remove "_yql_block_length" attribute, since it's for internal usage.
+            // 2. Strip block container from the type to store its internal type.
+            if (options.OutputSpec.AcceptsBlocks()) {
+                Y_ENSURE(OutputType_->GetKind() == ETypeAnnotationKind::Struct);
+                OutputType_ = UnwrapBlockStruct(OutputType_->Cast<TStructExprType>(), ExprContext_);
+            }
         }
         if (!OutputType_) {
             ythrow TCompileError("", ExprContext_.IssueManager.GetIssues().ToString()) << "cannot deduce output schema";
@@ -115,6 +133,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     IModuleResolver::TPtr moduleResolver,
     ui16 syntaxVersion,
     const THashMap<TString, TString>& modules,
+    const TInputSpecBase& inputSpec,
     const TOutputSpecBase& outputSpec,
     EProcessorMode processorMode
 ) {
@@ -132,8 +151,10 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         CreateDeterministicTimeProvider(*DeterministicTimeProviderSeed_) :
         CreateDefaultTimeProvider();
     typeContext->UdfResolver = NCommon::CreateSimpleUdfResolver(FuncRegistry_.Get());
+    typeContext->ArrowResolver = MakeSimpleArrowResolver(*FuncRegistry_.Get());
     typeContext->UserDataStorage = MakeIntrusive<TUserDataStorage>(nullptr, UserData_, nullptr, nullptr);
     typeContext->Modules = moduleResolver;
+    typeContext->BlockEngineMode = BlockEngineMode_;
     auto configProvider = CreateConfigProvider(*typeContext, nullptr, "");
     typeContext->AddDataSource(ConfigProviderName, configProvider);
     typeContext->Initialize(ExprContext_);
@@ -162,6 +183,17 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         settings.ModuleMapping = modules;
         settings.EnableGenericUdfs = true;
         settings.File = "generated.sql";
+        settings.Flags = {
+            "AnsiOrderByLimitInUnionAll",
+            "AnsiRankForNullableKeys",
+            "DisableAnsiOptionalAs",
+            "DisableCoalesceJoinKeysOnQualifiedAll",
+            "DisableUnorderedSubqueries",
+            "FlexibleTypes"
+        };
+        if (BlockEngineMode_ != EBlockEngineMode::Disable) {
+            settings.Flags.insert("EmitAggApply");
+        }
         for (const auto& [key, block] : UserData_) {
             TStringBuf alias(key.Alias());
             if (block.Usage.Test(EUserDataBlockUsage::Library) && !alias.StartsWith("/lib")) {
@@ -223,6 +255,8 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
             UserData_,
             {},
             {},
+            {},
+            valueNode->GetTypeAnn(),
             valueNode->GetTypeAnn(),
             LLVMSettings_,
             CountersProvider_,
@@ -241,21 +275,27 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         return IGraphTransformer::TStatus::Ok;
     });
 
+    const TString& selfName = TString(inputSpec.ProvidesBlocks()
+                            ? PurecalcBlockInputCallableName
+                            : PurecalcInputCallableName);
+
     TTransformationPipeline pipeline(typeContext);
 
-    pipeline.Add(MakeTableReadsReplacer(InputTypes_.size(), UseSystemColumns_),
+    pipeline.Add(MakeTableReadsReplacer(InputTypes_, UseSystemColumns_, processorMode, selfName),
                  "ReplaceTableReads", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
                  "Replace reads from tables");
     pipeline.AddServiceTransformers();
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FuncRegistry_, calcTransformer.Get());
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotationTransformer(MakeTypeAnnotationTransformer(typeContext, InputTypes_, processorMode));
+    pipeline.AddTypeAnnotationTransformer(MakeTypeAnnotationTransformer(typeContext, InputTypes_, RawInputTypes_, processorMode, selfName));
     pipeline.AddPostTypeAnnotation();
     pipeline.Add(CreateFunctorTransformer(
         [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
             return OptimizeExpr(input, output, [](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
-                if (node->IsCallable("Unordered") && node->Child(0)->IsCallable(PurecalcInputCallableName)) {
+                if (node->IsCallable("Unordered") && node->Child(0)->IsCallable({
+                    PurecalcInputCallableName, PurecalcBlockInputCallableName
+                })) {
                     return node->ChildPtr(0);
                 }
                 return node;
@@ -276,7 +316,10 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     pipeline.Add(MakeOutputColumnsFilter(outputSpec.GetOutputColumnsFilter()),
                  "Filter", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
                  "Filter output columns");
-    pipeline.Add(MakeOutputAligner(OutputType_, processorMode),
+    pipeline.Add(MakeRootToBlocks(outputSpec.AcceptsBlocks(), processorMode),
+                 "RootToBlocks", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
+                 "Rewrite the root if the output spec accepts blocks");
+    pipeline.Add(MakeOutputAligner(OutputType_, outputSpec.AcceptsBlocks(), processorMode),
                  "Convert", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
                  "Align return type of the program to output schema");
     pipeline.AddCommonOptimization();
@@ -302,9 +345,19 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         ythrow TCompileError("", ExprContext_.IssueManager.GetIssues().ToString()) << "Failed to optimize";
     }
 
-    if (ETraceLevel::TRACE_DETAIL <= StdDbgLevel()) {
-        Cdbg << "After optimization:" << Endl;
-        ConvertToAst(*exprRoot, ExprContext_, 0, true).Root->PrettyPrintTo(Cdbg, TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote | TAstPrintFlags::AdaptArbitraryContent);
+    IOutputStream* exprOut = nullptr;
+    if (ExprOutputStream_) {
+        exprOut = ExprOutputStream_;
+    } else if (ETraceLevel::TRACE_DETAIL <= StdDbgLevel()) {
+        exprOut = &Cdbg;
+    }
+
+    if (exprOut) {
+        *exprOut << "After optimization:" << Endl;
+        ConvertToAst(*exprRoot, ExprContext_, 0, true).Root
+            ->PrettyPrintTo(*exprOut, TAstPrintFlags::PerLine
+                                    | TAstPrintFlags::ShortQuote
+                                    | TAstPrintFlags::AdaptArbitraryContent);
     }
     return exprRoot;
 }
@@ -451,7 +504,9 @@ void TWorkerFactory<TBase>::ReturnWorker(IWorker* worker) {
             UserData_,                                                                  \
             InputTypes_,                                                                \
             OriginalInputTypes_,                                                        \
+            RawInputTypes_,                                                             \
             OutputType_,                                                                \
+            RawOutputType_,                                                             \
             LLVMSettings_,                                                              \
             CountersProvider_,                                                          \
             NativeYtTypeFlags_,                                                         \

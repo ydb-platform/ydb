@@ -37,6 +37,10 @@ SELECT (timestamp with time zone 'today' = (timestamp with time zone 'yesterday'
 SELECT (timestamp with time zone 'today' = (timestamp with time zone 'tomorrow' - interval '1 day')) as "True";
 SELECT (timestamp with time zone 'tomorrow' = (timestamp with time zone 'yesterday' + interval '2 days')) as "True";
 SELECT (timestamp with time zone 'tomorrow' > 'now') as "True";
+-- timestamp with time zone, interval arithmetic around DST change
+-- (just for fun, let's use an intentionally nonstandard POSIX zone spec)
+SET TIME ZONE 'CST7CDT,M4.1.0,M10.5.0';
+RESET TIME ZONE;
 SELECT CAST(interval '02:03' AS time) AS "02:03:00";
 SELECT time '01:30' + interval '02:01' AS "03:31:00";
 SELECT time '01:30' - interval '02:01' AS "23:29:00";
@@ -83,10 +87,12 @@ SELECT '2020-10-05'::timestamp > '2202020-10-05'::date as f;
 SELECT '2202020-10-05'::date::timestamptz;  -- fail
 SELECT '2202020-10-05'::date > '2020-10-05'::timestamptz as t;
 SELECT '2020-10-05'::timestamptz > '2202020-10-05'::date as f;
+SET TimeZone = 'UTC-2';
 SELECT '4714-11-24 BC'::date < '2020-10-05'::timestamptz as t;
 SELECT '2020-10-05'::timestamptz >= '4714-11-24 BC'::date as t;
 SELECT '4714-11-24 BC'::timestamp < '2020-10-05'::timestamptz as t;
 SELECT '2020-10-05'::timestamptz >= '4714-11-24 BC'::timestamp as t;
+RESET TimeZone;
 --
 -- Formats
 --
@@ -135,5 +141,11 @@ SELECT to_date('2016-02-30', 'YYYY-MM-DD');
 SELECT to_date('2015-02-29', 'YYYY-MM-DD');
 SELECT to_date('2015 366', 'YYYY DDD');
 SELECT to_date('2016 367', 'YYYY DDD');
+--
+-- Check behavior with SQL-style fixed-GMT-offset time zone (cf bug #8572)
+--
+SET TIME ZONE 'America/New_York';
+SET TIME ZONE '-1.5';
 SELECT to_char('2012-12-12 12:00'::timestamptz, 'YYYY-MM-DD SSSS');
 SELECT to_char('2012-12-12 12:00'::timestamptz, 'YYYY-MM-DD SSSSS');
+RESET TIME ZONE;

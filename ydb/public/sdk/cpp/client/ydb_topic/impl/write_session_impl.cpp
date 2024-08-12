@@ -1,8 +1,7 @@
 #include "write_session_impl.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/log_lazy.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/trace_lazy.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/log_lazy.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/trace_lazy.h>
 
 #include <library/cpp/string_utils/url/url.h>
 
@@ -19,6 +18,34 @@ namespace NYdb::NTopic {
 const TDuration UPDATE_TOKEN_PERIOD = TDuration::Hours(1);
 // Error code from file ydb/public/api/protos/persqueue_error_codes_v1.proto
 const ui64 WRITE_ERROR_PARTITION_INACTIVE = 500029;
+
+namespace {
+
+using TTxId = std::pair<std::string_view, std::string_view>;
+using TTxIdOpt = std::optional<TTxId>;
+
+TTxIdOpt GetTransactionId(const Ydb::Topic::StreamWriteMessage_WriteRequest& request)
+{
+    Y_ABORT_UNLESS(request.messages_size());
+
+    if (!request.has_tx()) {
+        return std::nullopt;
+    }
+
+    const Ydb::Topic::TransactionIdentity& tx = request.tx();
+    return TTxId(tx.session(), tx.id());
+}
+
+TTxIdOpt GetTransactionId(const NTable::TTransaction* tx)
+{
+    if (!tx) {
+        return std::nullopt;
+    }
+
+    return TTxId(tx->GetSession().GetId(), tx->GetId());
+}
+
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TWriteSessionImpl
@@ -72,24 +99,22 @@ void TWriteSessionImpl::Start(const TDuration& delay) {
         EventsQueue = std::make_shared<TWriteSessionEventsQueue>(Settings);
     }
 
-    ++ConnectionAttemptsDone;
     if (!Started) {
         with_lock(Lock) {
             HandleWakeUpImpl();
         }
         InitWriter();
     }
-    Started = true;
-    if (Settings.DirectWriteToPartition_ && (Settings.PartitionId_.Defined() || DirectWriteToPartitionId.Defined())) {
-        with_lock (Lock) {
+    with_lock (Lock) {
+        ++ConnectionAttemptsDone;
+        Started = true;
+        if (Settings.DirectWriteToPartition_ && (Settings.PartitionId_.Defined() || DirectWriteToPartitionId.Defined())) {
             PreferredPartitionLocation = {};
-            return ConnectToPreferredPartitionLocation(delay);
+            ConnectToPreferredPartitionLocation(delay);
+            return;
         }
     }
-    else
-    {
-        return Connect(delay);
-    }
+    Connect(delay);
 }
 
 // Returns true if we need to switch to another DirectWriteToPartitionId.
@@ -138,7 +163,6 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStat
         LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session is aborting and will not restart");
         return result;
     }
-    LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "Got error. " << status.ToDebugString());
     SessionEstablished = false;
 
     // Keep DirectWriteToPartitionId value on temporary errors.
@@ -160,10 +184,11 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStat
     if (nextDelay) {
         result.StartDelay = *nextDelay;
         result.DoRestart = true;
-        LOG_LAZY(DbDriverState->Log, TLOG_WARNING, LogPrefix() << "Write session will restart in " << result.StartDelay);
+        LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Got error. " << status.ToDebugString());
+        LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Write session will restart in " << result.StartDelay);
         ResetForRetryImpl();
-
     } else {
+        LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "Got error. " << status.ToDebugString());
         LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "Write session will not restart after a fatal error");
         result.DoStop = true;
         CheckHandleResultImpl(result);
@@ -206,6 +231,8 @@ void TWriteSessionImpl::ConnectToPreferredPartitionLocation(const TDuration& del
         AbortImpl();
         return;
     }
+
+    ++ConnectionGeneration;
 
     prevDescribePartitionContext = std::exchange(DescribePartitionContext, describePartitionContext);
     Y_ASSERT(DescribePartitionContext);
@@ -266,7 +293,15 @@ void TWriteSessionImpl::OnDescribePartition(const TStatus& status, const Ydb::To
 
     if (!status.IsSuccess()) {
         with_lock (Lock) {
-            handleResult = OnErrorImpl({status.GetStatus(), MakeIssueWithSubIssues("Failed to get partition location", status.GetIssues())});
+            if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED) {
+                Settings.DirectWriteToPartition_ = false;
+                handleResult = OnErrorImpl({
+                    EStatus::UNAVAILABLE,
+                    MakeIssueWithSubIssues("The server does not support direct write, fallback to in-direct write", status.GetIssues())
+                });
+            } else {
+                handleResult = OnErrorImpl({status.GetStatus(), MakeIssueWithSubIssues("Failed to get partition location", status.GetIssues())});
+            }
         }
         ProcessHandleResult(handleResult);
         return;
@@ -540,19 +575,20 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
         LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Start write session. Will connect to nodeId: " << PreferredPartitionLocation.Endpoint.NodeId);
 
         ++ConnectionGeneration;
-        auto subclient = Client;
-        connectionFactory = subclient->CreateWriteSessionConnectionProcessorFactory();
-        auto clientContext = subclient->CreateContext();
-        ConnectionFactory = connectionFactory;
-
-        ClientContext = std::move(clientContext);
-        ServerMessage = std::make_shared<TServerMessage>();
 
         if (!ClientContext) {
-            AbortImpl();
-            // Grpc and WriteSession is closing right now.
-            return;
+            ClientContext = Client->CreateContext();
+            if (!ClientContext) {
+                AbortImpl();
+                // Grpc and WriteSession is closing right now.
+                return;
+            }
         }
+
+        ServerMessage = std::make_shared<TServerMessage>();
+
+        connectionFactory = Client->CreateWriteSessionConnectionProcessorFactory();
+        ConnectionFactory = connectionFactory;
 
         connectContext = ClientContext->CreateContext();
         if (delay)
@@ -574,6 +610,10 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
             Cancel(prevConnectDelayContext);
         }
         Cancel(prevConnectTimeoutContext);
+
+        if (Processor) {
+            Processor->Cancel();
+        }
 
         reqSettings = TRpcRequestSettings::Make(Settings, PreferredPartitionLocation.Endpoint);
 
@@ -795,6 +835,11 @@ void TWriteSessionImpl::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t co
             }
         }
     }
+
+    for (auto& event : processResult.Events) {
+        EventsQueue->PushEvent(std::move(event));
+    }
+
     if (doRead)
         ReadFromProcessor();
 
@@ -807,9 +852,6 @@ void TWriteSessionImpl::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t co
         if (processResult.HandleResult.DoStop) {
             CloseImpl(std::move(errorStatus));
         }
-    }
-    for (auto& event : processResult.Events) {
-        EventsQueue->PushEvent(std::move(event));
     }
     if (needSetValue) {
         InitSeqNoPromise.SetValue(*processResult.InitSeqNo);
@@ -1192,6 +1234,11 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
         TBlock block{};
         for (; block.OriginalSize < MaxBlockSize && i != CurrentBatch.Messages.size(); ++i) {
             auto& currMessage = CurrentBatch.Messages[i];
+
+            // If MaxBlockSize or MaxBlockMessageCount values are ever changed from infinity and 1 correspondingly,
+            // create a new block, if the existing one is non-empty AND (adding another message will overflow it OR
+            //                                                           its codec is different from the codec of the next message).
+
             auto id = currMessage.Id;
             auto createTs = currMessage.CreatedAt;
 
@@ -1264,41 +1311,63 @@ void TWriteSessionImpl::UpdateTokenIfNeededImpl() {
 
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: try to update token");
 
-    if (!DbDriverState->CredentialsProvider || UpdateTokenInProgress || !SessionEstablished)
+    if (!DbDriverState->CredentialsProvider || UpdateTokenInProgress || !SessionEstablished) {
         return;
-    TClientMessage clientMessage;
-    auto* updateRequest = clientMessage.mutable_update_token_request();
+    }
+
     auto token = DbDriverState->CredentialsProvider->GetAuthInfo();
-    if (token == PrevToken)
+    if (token == PrevToken) {
         return;
-    UpdateTokenInProgress = true;
-    updateRequest->set_token(token);
-    PrevToken = token;
+    }
 
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: updating token");
 
+    UpdateTokenInProgress = true;
+    PrevToken = token;
+
+    TClientMessage clientMessage;
+    clientMessage.mutable_update_token_request()->set_token(token);
     Processor->Write(std::move(clientMessage));
+}
+
+bool TWriteSessionImpl::TxIsChanged(const Ydb::Topic::StreamWriteMessage_WriteRequest* writeRequest) const
+{
+    Y_ABORT_UNLESS(writeRequest);
+
+    if (!writeRequest->messages_size()) {
+        return false;
+    }
+
+    Y_ABORT_UNLESS(!OriginalMessagesToSend.empty());
+
+    return GetTransactionId(*writeRequest) != GetTransactionId(OriginalMessagesToSend.front().Tx);
 }
 
 void TWriteSessionImpl::SendImpl() {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
-    // External cycle splits ready blocks into multiple gRPC messages. Current gRPC message size hard limit is 64MiB
-    while(IsReadyToSendNextImpl()) {
+    // External cycle splits ready blocks into multiple gRPC messages. Current gRPC message size hard limit is 64MiB.
+    while (IsReadyToSendNextImpl()) {
         TClientMessage clientMessage;
         auto* writeRequest = clientMessage.mutable_write_request();
-
-        // Sent blocks while we can without messages reordering
+        ui32 prevCodec = 0;
+        // Send blocks while we can without messages reordering.
         while (IsReadyToSendNextImpl() && clientMessage.ByteSizeLong() < GetMaxGrpcMessageSize()) {
             const auto& block = PackedMessagesToSend.top();
             Y_ABORT_UNLESS(block.Valid);
+            if (writeRequest->messages_size() > 0 && prevCodec != block.CodecID) {
+                break;
+            }
+            if (TxIsChanged(writeRequest)) {
+                break;
+            }
+            prevCodec = block.CodecID;
             writeRequest->set_codec(static_cast<i32>(block.CodecID));
             Y_ABORT_UNLESS(block.MessageCount == 1);
             for (size_t i = 0; i != block.MessageCount; ++i) {
                 Y_ABORT_UNLESS(!OriginalMessagesToSend.empty());
 
                 auto& message = OriginalMessagesToSend.front();
-
                 auto* msgData = writeRequest->add_messages();
 
                 if (message.Tx) {
@@ -1309,26 +1378,23 @@ void TWriteSessionImpl::SendImpl() {
                 msgData->set_seq_no(GetSeqNoImpl(message.Id));
                 *msgData->mutable_created_at() = ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(message.CreatedAt.MilliSeconds());
 
-                if (!message.MessageMeta.empty()) {
-                    for (auto& [k, v] : message.MessageMeta) {
-                        auto* pair = msgData->add_metadata_items();
-                        pair->set_key(k);
-                        pair->set_value(v);
-                    }
+                for (auto& [k, v] : message.MessageMeta) {
+                    auto* pair = msgData->add_metadata_items();
+                    pair->set_key(k);
+                    pair->set_value(v);
                 }
                 SentOriginalMessages.emplace(std::move(message));
                 OriginalMessagesToSend.pop();
 
                 msgData->set_uncompressed_size(block.OriginalSize);
-                if (block.Compressed)
+                if (block.Compressed) {
                     msgData->set_data(block.Data.data(), block.Data.size());
-                else {
+                } else {
                     for (auto& buffer: block.OriginalDataRefs) {
                         msgData->set_data(buffer.data(), buffer.size());
                     }
                 }
             }
-
 
             TBlock moveBlock;
             moveBlock.Move(block);

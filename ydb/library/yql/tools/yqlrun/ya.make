@@ -1,12 +1,14 @@
 IF (YQL_PACKAGED)
+    PACKAGE()
 
     FROM_SANDBOX(
         FILE {FILE_RESOURCE_ID} OUT_NOAUTO
-            yqlrun EXECUTABLE
+            yqlrun
+            EXECUTABLE
     )
 
+    END()
 ELSE()
-
     PROGRAM(yqlrun)
 
     ALLOCATOR(J)
@@ -32,6 +34,7 @@ ELSE()
         ydb/library/yql/core/file_storage
         ydb/library/yql/core/file_storage/proto
         ydb/library/yql/core/file_storage/http_download
+        ydb/library/yql/core/pg_ext
         ydb/library/yql/core/services/mounts
         ydb/library/yql/minikql/comp_nodes/llvm14
         ydb/library/yql/protos
@@ -61,5 +64,4 @@ ELSE()
     )
 
     END()
-
 ENDIF()

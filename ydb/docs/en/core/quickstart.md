@@ -1,8 +1,8 @@
 # {{ ydb-short-name }} Quick Start
 
-In this guide, you will install a single-node local [{{ ydb-short-name }} cluster](concepts/databases.md#cluster) and execute simple queries against your [database](concepts/databases.md#database).
+In this guide, you will install a single-node local [{{ ydb-short-name }} cluster](concepts/glossary.md#cluster) and execute simple queries against your [database](concepts/glossary.md#database).
 
-Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk devices without any filesystem. However, for simplicity, this guide emulates disks in RAM or using a file in a regular filesystem. Thus, this setup is unsuitable for any production usage or even benchmarks. See the [cluster management documentation](cluster/index.md) to learn how to run {{ ydb-short-name }} in a production environment.
+Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk devices without any filesystem. However, for simplicity, this guide emulates disks in RAM or using a file in a regular filesystem. Thus, this setup is unsuitable for any production usage or even benchmarks. See the [documentation for DevOps Engineers](devops/index.md) to learn how to run {{ ydb-short-name }} in a production environment.
 
 ## Install and start {{ ydb-short-name }} {#install}
 
@@ -29,7 +29,7 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
       ```
 
       This will download and unpack the archive containing the `ydbd` executable, libraries, configuration files, and scripts needed to start and stop the local cluster.
-      
+
       The script is executed entirely with the current user privileges (notice the lack of `sudo`). Therefore, it can't do much on the system. You can check which exactly commands it runs by opening the same URL in your browser.
 
    3. Start the cluster in one of the following storage modes:
@@ -80,23 +80,60 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
       mkdir ydb_data
       mkdir ydb_certs
       ```
-   2. Pull the current version of the Docker image:
 
-      ```bash
-      docker pull {{ ydb_local_docker_image }}:{{ ydb_local_docker_image_tag }}
-      ```
-
-   3. Run the Docker container:
+   2. Run the Docker container:
 
       ```bash
       docker run -d --rm --name ydb-local -h localhost \
+        --platform linux/amd64 \
         -p 2135:2135 -p 2136:2136 -p 8765:8765 \
         -v $(pwd)/ydb_certs:/ydb_certs -v $(pwd)/ydb_data:/ydb_data \
         -e GRPC_TLS_PORT=2135 -e GRPC_PORT=2136 -e MON_PORT=8765 \
+        -e YDB_USE_IN_MEMORY_PDISKS=true \
         {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
       ```
 
       If the container starts successfully, you'll see the container's ID. The container might take a few minutes to initialize. The database will not be available until container initialization is complete.
+
+      The `YDB_USE_IN_MEMORY_PDISKS` setting makes all data volatile, stored only in RAM. Currently, data persistence by turning it off is supported only on x86_64 processors.
+
+- Minikube
+
+   1. Install the Kubernetes CLI [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl) and [Helm 3](https://helm.sh/docs/intro/install/) package manager.
+
+   2. Install and run [Minikube](https://kubernetes.io/ru/docs/tasks/tools/install-minikube/).
+
+   3. Clone the repository with [{{ ydb-short-name }} Kubernetes Operator](https://github.com/ydb-platform/ydb-kubernetes-operator):
+
+      ```bash
+      git clone https://github.com/ydb-platform/ydb-kubernetes-operator && cd ydb-kubernetes-operator
+      ```
+
+   4. Install the {{ ydb-short-name }} controller in the cluster:
+
+      ```bash
+      helm upgrade --install ydb-operator deploy/ydb-operator --set metrics.enabled=false
+      ```
+
+   5. Apply the manifest for creating a {{ ydb-short-name }} cluster:
+
+      ```bash
+      kubectl apply -f samples/minikube/storage.yaml
+      ```
+
+   6. Wait for `kubectl get storages.ydb.tech` to become `Ready`.
+
+   7. Apply the manifest for creating a database:
+
+      ```bash
+      kubectl apply -f samples/minikube/database.yaml
+      ```
+
+   8. Wait for `kubectl get databases.ydb.tech` to become `Ready`.
+
+   9. After processing the manifest, a StatefulSet object that describes a set of dynamic nodes is created. The created database will be accessible from inside the Kubernetes cluster by the `database-minikube-sample` DNS name on port 2135.
+
+   10. To continue, get access to port 8765 from outside Kubernetes using `kubectl port-forward database-minikube-sample-0 8765`.
 
 {% endlist %}
 
@@ -143,7 +180,7 @@ As you can see, it is a simple key-value table. Let's walk through the query ste
 * Each SQL statement kind like `CREATE TABLE` has more detailed explanation in [YQL reference](yql/reference/index.md).
 * `example` is the table name identifier, while `key` and `value` are column name identifiers. It is recommended to use simple names for identifiers like these, but if you need one that contains non-trivial symbols, wrap the name in backticks.
 * `UInt64` and `String` are data type names. `String` represents a binary string, and `UInt64` is a 64-bit unsigned integer. Thus, our example table stores string values identified by unsigned integer keys. More details [about data types](yql/reference/types/index.md).
-* `PRIMARY KEY` is one of the fundamental concepts of SQL that has a significant impact on both application logic and performance. Following the SQL standard, the primary key also implies an unique constraint, meaning the table cannot have multiple rows with equal primary keys. In this example table, it's quite straightforward which column should be chosen as the primary key, which we specify as `(key)` in round brackets after the respective keyword. In real-world scenarios, tables often have dozens of columns, and primary keys can be compound (consisting of multiple columns in a specified order), making choosing the right primary key more of an art. If you are interested in this topic, there's a [guide on choosing the primary key for maximizing performance](best_practices/pk_scalability.md). YDB tables are required to have a primary key.
+* `PRIMARY KEY` is one of the fundamental concepts of SQL that has a significant impact on both application logic and performance. Following the SQL standard, the primary key also implies an unique constraint, meaning the table cannot have multiple rows with equal primary keys. In this example table, it's quite straightforward which column should be chosen as the primary key, which we specify as `(key)` in round brackets after the respective keyword. In real-world scenarios, tables often have dozens of columns, and primary keys can be compound (consisting of multiple columns in a specified order), making choosing the right primary key more of an art. If you are interested in this topic, there's a [guide on choosing the primary key for maximizing performance](dev/primary-key/row-oriented.md). YDB tables are required to have a primary key.
 
 ## Add sample data
 
@@ -218,6 +255,8 @@ Stop the local {{ ydb-short-name }} cluster after you have finished experimentin
    ~/ydbd/stop.sh
    ```
 
+   Optionally, you can then clean up your filesystem by removing your working directory with the `rm -rf ~/ydbd` command. All data inside the local {{ ydb-short-name }} cluster will be lost.
+
 - Docker
 
    To stop the Docker container with the local cluster, run the following command:
@@ -226,9 +265,27 @@ Stop the local {{ ydb-short-name }} cluster after you have finished experimentin
    docker kill ydb-local
    ```
 
-{% endlist %}
+   Optionally, you can then clean up your filesystem by removing your working directory with the `rm -rf ~/ydbd` command. All data inside the local {{ ydb-short-name }} cluster will be lost.
 
-Optionally, you can then clean up your filesystem by removing your working directory with the `rm -rf ~/ydbd` command. All data inside the local {{ ydb-short-name }} cluster will be lost.
+- Minikube
+
+   To delete the {{ ydb-short-name }} database, it is enough to delete the Database resource associated with it:
+
+   ```bash
+   kubectl delete database.ydb.tech database-minikube-sample
+   ```
+   To delete the {{ ydb-short-name }} cluster, execute the following commands (all data will be lost):
+
+   ```bash
+   kubectl delete storage.ydb.tech storage-minikube-sample
+   ```
+   To remove the {{ ydb-short-name }} controller from the Kubernetes cluster, delete the release created by Helm:
+
+   ```bash
+   helm delete ydb-operator
+   ```
+
+{% endlist %}
 
 ## Done! What's next?
 

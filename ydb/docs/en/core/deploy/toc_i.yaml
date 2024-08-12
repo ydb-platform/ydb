@@ -3,6 +3,7 @@ items:
   href: manual/deploy-ydb-on-premises.md
 - name: Configuration
   href: configuration/config.md
-- name: BlobStorage production configurations
-  href: ../administration/production-storage-config.md
+- include:
+  mode: link
+  path: manual/toc_p.yaml
 

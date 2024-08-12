@@ -165,7 +165,7 @@ const TMeteringSink::FlushParameters TMeteringSink::GetFlushParameters(const EMe
 
     case EMeteringJson::UsedStorageV1: {
         ui64 duration = (now - lastFlush).MilliSeconds();
-        ui64 avgUsage = CurrentUsedStorage_ * 1_MB * 1000 / duration;
+        ui64 avgUsage = duration > 0 ? CurrentUsedStorage_ * 1_MB * 1000 / duration : 0;
 
         CurrentUsedStorage_ = 0;
 

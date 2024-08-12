@@ -1,0 +1,25 @@
+{
+    "title" : "Status",
+    "type": "object",
+    "required" : ["code"],
+    "properties": {
+        "code" : {
+            "type": "integer",
+            "description" : "HTTP status code closest to real internal (gRPC, YDB etc.) status code"
+        },
+        "status": {
+            "type": "string",
+            "description" : "String representation of HTTP status code closest to real internal (gRPC, YDB etc.) status code"
+        },
+        "message": {
+            "type": "string"
+        },
+        "details" : {
+            "type": "array",
+            "description": "Additional status information",
+            "items": {
+                "type": "object"
+            }
+        }
+    }
+}

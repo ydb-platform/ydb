@@ -51,7 +51,7 @@ where i_color = 'snow'
 group by c_last_name
         ,c_first_name
         ,s_store_name
-having sum(netpaid) > 0.05*$avg_netpaid
+having sum(netpaid) > $z0_05_35*$avg_netpaid
 order by c_last_name
         ,c_first_name
         ,s_store_name
@@ -66,7 +66,7 @@ where i_color = 'chiffon'
 group by c_last_name
         ,c_first_name
         ,s_store_name
-having sum(netpaid) > 0.05*$avg_netpaid
+having sum(netpaid) > $z0_05_35*$avg_netpaid
 order by c_last_name
         ,c_first_name
         ,s_store_name

@@ -4,7 +4,7 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
@@ -91,24 +91,65 @@ struct TEvPrivate {
 } // namespace
 
 class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqComputeActorAsyncOutput {
+    struct TMetrics {
+        TMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters)
+            : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
+            , Counters(counters) {
+            SubGroup = Counters->GetSubgroup("sink", "PqSink");
+            auto sink = SubGroup->GetSubgroup("tx_id", TxId);
+            auto task = sink->GetSubgroup("task_id", ToString(taskId));
+            LastAckLatency = task->GetCounter("LastAckLatencyMs");
+            InFlyCheckpoints = task->GetCounter("InFlyCheckpoints");
+            InFlyData = task->GetCounter("InFlyData");
+            AlreadyWritten = task->GetCounter("AlreadyWritten");
+            FirstContinuationTokenMs = task->GetCounter("FirstContinuationTokenMs");
+        }
+
+        ~TMetrics() {
+            SubGroup->RemoveSubgroup("id", TxId);
+        }
+
+        TString TxId;
+        ::NMonitoring::TDynamicCounterPtr Counters;
+        ::NMonitoring::TDynamicCounterPtr SubGroup;
+        ::NMonitoring::TDynamicCounters::TCounterPtr LastAckLatency;
+        ::NMonitoring::TDynamicCounters::TCounterPtr InFlyCheckpoints;
+        ::NMonitoring::TDynamicCounters::TCounterPtr InFlyData;
+        ::NMonitoring::TDynamicCounters::TCounterPtr AlreadyWritten;
+        ::NMonitoring::TDynamicCounters::TCounterPtr FirstContinuationTokenMs;
+    };
+
+    struct TAckInfo {
+        TAckInfo(i64 messageSize, const TInstant& startTime)
+            : MessageSize(messageSize)
+            , StartTime(startTime)
+        {}
+
+        i64 MessageSize = 0;
+        TInstant StartTime;
+    };
+
 public:
     TDqPqWriteActor(
         ui64 outputIndex,
         TCollectStatsLevel statsLevel,
         const TTxId& txId,
+        ui64 taskId,
         NPq::NProto::TDqPqTopicSink&& sinkParams,
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         IDqComputeActorAsyncOutput::ICallbacks* callbacks,
+        const ::NMonitoring::TDynamicCounterPtr& counters,
         i64 freeSpace)
         : TActor<TDqPqWriteActor>(&TDqPqWriteActor::StateFunc)
         , OutputIndex(outputIndex)
         , TxId(txId)
+        , Metrics(txId, taskId, counters)
         , SinkParams(std::move(sinkParams))
         , Driver(std::move(driver))
         , CredentialsProviderFactory(credentialsProviderFactory)
         , Callbacks(callbacks)
-        , LogPrefix(TStringBuilder() << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", PQ sink. ")
+        , LogPrefix(TStringBuilder() << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", TaskId: " << taskId << ", PQ sink. ")
         , FreeSpace(freeSpace)
         , TopicClient(Driver, GetTopicClientSettings())
     { 
@@ -162,6 +203,7 @@ public:
             }
 
             FreeSpace -= messageSize;
+            Metrics.InFlyData->Inc();
             Buffer.push(std::move(data));
             return true;
         })) {
@@ -170,9 +212,13 @@ public:
 
         if (checkpoint) {
             if (Buffer.empty() && WaitingAcks.empty()) {
+                SINK_LOG_D("Send checkpoint state immediately");
                 Callbacks->OnAsyncOutputStateSaved(BuildState(*checkpoint), OutputIndex, *checkpoint);
             } else {
-                DeferredCheckpoints.emplace(NextSeqNo + Buffer.size() - 1, *checkpoint);
+                ui64 seqNo = NextSeqNo + Buffer.size() - 1;
+                SINK_LOG_D("Defer sending the checkpoint, seqNo: " << seqNo);
+                Metrics.InFlyCheckpoints->Inc();
+                DeferredCheckpoints.emplace(seqNo, *checkpoint);
             }
         }
 
@@ -188,12 +234,12 @@ public:
         }
     };
 
-    void LoadState(const NDqProto::TSinkState& state) override {
+    void LoadState(const TSinkState& state) override {
         Y_ABORT_UNLESS(NextSeqNo == 1);
-        const auto& data = state.GetData().GetStateData();
-        if (data.GetVersion() == StateVersion) { // Current version
+        const auto& data = state.Data;
+        if (data.Version == StateVersion) { // Current version
             NPq::NProto::TDqPqTopicSinkState stateProto;
-            YQL_ENSURE(stateProto.ParseFromString(data.GetBlob()), "Serialized state is corrupted");
+            YQL_ENSURE(stateProto.ParseFromString(data.Blob), "Serialized state is corrupted");
             SINK_LOG_D("Load state: " << stateProto);
             SourceId = stateProto.GetSourceId();
             ConfirmedSeqNo = stateProto.GetConfirmedSeqNo();
@@ -201,7 +247,7 @@ public:
             EgressStats.Bytes = stateProto.GetEgressBytes();
             return;
         }
-        ythrow yexception() << "Invalid state version " << data.GetVersion();
+        ythrow yexception() << "Invalid state version " << data.Version;
     }
 
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override {
@@ -308,7 +354,7 @@ private:
         return !events.empty();
     }
 
-    NDqProto::TSinkState BuildState(const NDqProto::TCheckpoint& checkpoint) {
+    TSinkState BuildState(const NDqProto::TCheckpoint& checkpoint) {
         NPq::NProto::TDqPqTopicSinkState stateProto;
         stateProto.SetSourceId(GetSourceId());
         stateProto.SetConfirmedSeqNo(ConfirmedSeqNo);
@@ -316,19 +362,18 @@ private:
         TString serializedState;
         YQL_ENSURE(stateProto.SerializeToString(&serializedState));
 
-        NDqProto::TSinkState sinkState;
-        auto* data = sinkState.MutableData()->MutableStateData();
-        data->SetVersion(StateVersion);
-        data->SetBlob(serializedState);
-        SINK_LOG_T("Save checkpoint " << checkpoint << " state: " << stateProto << ". Sink state: " << sinkState);
+        TSinkState sinkState;
+        auto& data = sinkState.Data;
+        data.Version = StateVersion;
+        data.Blob = serializedState;
+        SINK_LOG_T("Save checkpoint " << checkpoint << " state: " << stateProto);
         return sinkState;
     }
 
     void WriteNextMessage(NYdb::NTopic::TContinuationToken&& token) {
-        SINK_LOG_T("Write data: \"" << Buffer.front() << "\" with seq no " << NextSeqNo);
         WriteSession->Write(std::move(token), Buffer.front(), NextSeqNo++);
         auto itemSize = GetItemSize(Buffer.front());
-        WaitingAcks.push(itemSize);
+        WaitingAcks.emplace(itemSize, TInstant::Now());
         EgressStats.Bytes += itemSize;
         Buffer.pop();
     }
@@ -348,6 +393,7 @@ private:
 
         std::optional<TIssues> operator()(NYdb::NTopic::TWriteSessionEvent::TAcksEvent& ev) {
             if (ev.Acks.empty()) {
+                LOG_D(Self.LogPrefix << "Empty ack");
                 return std::nullopt;
             }
 
@@ -362,14 +408,23 @@ private:
                     return issues;
                 }
 
-                Self.FreeSpace += Self.WaitingAcks.front();
+                if (it->State == NYdb::NTopic::TWriteSessionEvent::TWriteAck::EEventState::EES_ALREADY_WRITTEN) {
+                    Self.Metrics.AlreadyWritten->Inc();
+                }
+
+                const auto& ackInfo = Self.WaitingAcks.front();
+                Self.Metrics.LastAckLatency->Set((TInstant::Now() - ackInfo.StartTime).MilliSeconds());
+                Self.Metrics.InFlyData->Dec();
+                Self.FreeSpace += ackInfo.MessageSize;
                 Self.WaitingAcks.pop();
 
                 if (!Self.DeferredCheckpoints.empty() && std::get<0>(Self.DeferredCheckpoints.front()) == it->SeqNo) {
                     Self.ConfirmedSeqNo = it->SeqNo;
                     const auto& checkpoint = std::get<1>(Self.DeferredCheckpoints.front());
+                    LOG_D(Self.LogPrefix << "Send a deferred checkpoint, seqNo: " << it->SeqNo);
                     Self.Callbacks->OnAsyncOutputStateSaved(Self.BuildState(checkpoint), Self.OutputIndex, checkpoint);
                     Self.DeferredCheckpoints.pop();
+                    Self.Metrics.InFlyCheckpoints->Dec();
                 }
             }
             Self.ConfirmedSeqNo = ev.Acks.back().SeqNo;
@@ -379,6 +434,10 @@ private:
 
         std::optional<TIssues> operator()(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent& ev) {
             //Y_ABORT_UNLESS(!Self.ContinuationToken);
+
+            if (*Self.Metrics.FirstContinuationTokenMs == 0) {
+                Self.Metrics.FirstContinuationTokenMs->Set((TInstant::Now() - Self.StartTime).MilliSeconds());
+            }
 
             if (!Self.Buffer.empty()) {
                 Self.WriteNextMessage(std::move(ev.ContinuationToken));
@@ -399,9 +458,11 @@ private:
     }
 
 private:
+    TInstant StartTime = TInstant::Now();
     const ui64 OutputIndex;
     TDqAsyncStats EgressStats;
     const TTxId TxId;
+    TMetrics Metrics;
     const NPq::NProto::TDqPqTopicSink SinkParams;
     NYdb::TDriver Driver;
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
@@ -419,7 +480,7 @@ private:
     NThreading::TFuture<void> EventFuture;
     bool ShouldNotifyNewFreeSpace = false;
     std::queue<TString> Buffer;
-    std::queue<i64> WaitingAcks; // Size of items which are waiting for acks (used to update free space)
+    std::queue<TAckInfo> WaitingAcks; // Size of items which are waiting for acks (used to update free space)
     std::queue<std::tuple<ui64, NDqProto::TCheckpoint>> DeferredCheckpoints;
 };
 
@@ -428,10 +489,12 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
     ui64 outputIndex,
     TCollectStatsLevel statsLevel,
     TTxId txId,
+    ui64 taskId,
     const THashMap<TString, TString>& secureParams,
     NYdb::TDriver driver,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     IDqComputeActorAsyncOutput::ICallbacks* callbacks,
+    const ::NMonitoring::TDynamicCounterPtr& counters,
     i64 freeSpace)
 {
     const TString& tokenName = settings.GetToken().GetName();
@@ -442,17 +505,19 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
         outputIndex,
         statsLevel,
         txId,
+        taskId,
         std::move(settings),
         std::move(driver),
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
         callbacks,
+        counters,
         freeSpace);
     return {actor, actor};
 }
 
-void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) {
+void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const ::NMonitoring::TDynamicCounterPtr& counters) {
     factory.RegisterSink<NPq::NProto::TDqPqTopicSink>("PqSink",
-        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory)](
+        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters](
             NPq::NProto::TDqPqTopicSink&& settings,
             IDqAsyncIoFactory::TSinkArguments&& args)
         {
@@ -462,10 +527,12 @@ void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver dri
                 args.OutputIndex,
                 args.StatsLevel,
                 args.TxId,
+                args.TaskId,
                 args.SecureParams,
                 driver,
                 credentialsFactory,
-                args.Callback
+                args.Callback,
+                counters
             );
         });
 }

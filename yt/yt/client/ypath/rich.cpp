@@ -128,7 +128,7 @@ auto RunAttributeAccessor(const TRichYPath& path, const TString& key, TFunc acce
 template <class T>
 T GetAttribute(const TRichYPath& path, const TString& key, const T& defaultValue)
 {
-    return RunAttributeAccessor(path, key, [&] () {
+    return RunAttributeAccessor(path, key, [&] {
         return path.Attributes().Get(key, defaultValue);
     });
 }
@@ -136,14 +136,14 @@ T GetAttribute(const TRichYPath& path, const TString& key, const T& defaultValue
 template <class T>
 typename TOptionalTraits<T>::TOptional FindAttribute(const TRichYPath& path, const TString& key)
 {
-    return RunAttributeAccessor(path, key, [&] () {
+    return RunAttributeAccessor(path, key, [&] {
         return path.Attributes().Find<T>(key);
     });
 }
 
 TYsonString FindAttributeYson(const TRichYPath& path, const TString& key)
 {
-    return RunAttributeAccessor(path, key, [&] () {
+    return RunAttributeAccessor(path, key, [&] {
         return path.Attributes().FindYson(key);
     });
 }
@@ -206,6 +206,16 @@ void TRichYPath::SetForeign(bool value)
     Attributes().Set("foreign", value);
 }
 
+bool TRichYPath::GetReadViaExecNode() const
+{
+    return GetAttribute(*this, "read_via_exec_node", false);
+}
+
+void TRichYPath::SetReadViaExecNode(bool value)
+{
+    Attributes().Set("read_via_exec_node", value);
+}
+
 std::optional<std::vector<TString>> TRichYPath::GetColumns() const
 {
     if (Attributes().Contains("channel")) {
@@ -234,8 +244,8 @@ std::vector<NChunkClient::TLegacyReadRange> TRichYPath::GetRanges() const
         return std::vector<TLegacyReadRange>({
             TLegacyReadRange(
                 optionalLowerLimit.value_or(TLegacyReadLimit()),
-                optionalUpperLimit.value_or(TLegacyReadLimit())
-            )});
+                optionalUpperLimit.value_or(TLegacyReadLimit())),
+            });
     } else {
         return optionalRanges.value_or(std::vector<TLegacyReadRange>({TLegacyReadRange()}));
     }
@@ -679,10 +689,10 @@ TString ConvertToString(const TRichYPath& path, EYsonFormat ysonFormat)
     return builder.Flush();
 }
 
-TString ToString(const TRichYPath& path)
+void FormatValue(TStringBuilderBase* builder, const TRichYPath& path, TStringBuf spec)
 {
     // NB: we intentionally use Text format since string-representation of rich ypath should be readable.
-    return ConvertToString(path, EYsonFormat::Text);
+    FormatValue(builder, ConvertToString(path, EYsonFormat::Text), spec);
 }
 
 std::vector<TRichYPath> Normalize(const std::vector<TRichYPath>& paths)
@@ -768,6 +778,7 @@ const std::vector<TString>& GetWellKnownRichYPathAttributes()
         "cluster",
         "clusters",
         "create",
+        "read_via_exec_node",
     };
     return WellKnownAttributes;
 }

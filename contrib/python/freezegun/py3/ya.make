@@ -4,7 +4,7 @@ PY3_LIBRARY()
 
 PROVIDES(freezegun)
 
-VERSION(1.4.0)
+VERSION(1.5.1)
 
 LICENSE(Apache-2.0)
 
@@ -17,10 +17,8 @@ NO_LINT()
 PY_SRCS(
     TOP_LEVEL
     freezegun/__init__.py
-    freezegun/__init__.pyi
     freezegun/_async.py
     freezegun/api.py
-    freezegun/api.pyi
     freezegun/config.py
 )
 

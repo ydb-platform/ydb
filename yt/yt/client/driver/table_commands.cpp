@@ -7,6 +7,9 @@
 
 #include <yt/yt/client/chaos_client/replication_card_serialization.h>
 
+#include <yt/yt/client/formats/config.h>
+#include <yt/yt/client/formats/parser.h>
+
 #include <yt/yt/client/table_client/adapters.h>
 #include <yt/yt/client/table_client/blob_reader.h>
 #include <yt/yt/client/table_client/columnar_statistics.h>
@@ -18,9 +21,6 @@
 #include <yt/yt/client/table_client/wire_protocol.h>
 
 #include <yt/yt/client/tablet_client/table_mount_cache.h>
-
-#include <yt/yt/client/formats/config.h>
-#include <yt/yt/client/formats/parser.h>
 
 #include <yt/yt/client/ypath/public.h>
 
@@ -110,7 +110,7 @@ void TReadTableCommand::DoExecute(ICommandContextPtr context)
         BuildYsonMapFragmentFluently(consumer)
             .Item("approximate_row_count").Value(reader->GetTotalRowCount())
             .Item("omitted_inaccessible_columns").Value(reader->GetOmittedInaccessibleColumns())
-            .DoIf(reader->GetTotalRowCount() > 0, [&](auto fluent) {
+            .DoIf(reader->GetTotalRowCount() > 0, [&] (auto fluent) {
                 fluent
                     .Item("start_row_index").Value(reader->GetStartRowIndex());
             });
@@ -130,7 +130,7 @@ void TReadTableCommand::DoExecute(ICommandContextPtr context)
         ControlAttributes,
         0);
 
-    auto finally = Finally([&] () {
+    auto finally = Finally([&] {
         auto dataStatistics = reader->GetDataStatistics();
         YT_LOG_DEBUG("Command statistics (RowCount: %v, WrittenSize: %v, "
             "ReadUncompressedDataSize: %v, ReadCompressedDataSize: %v, "
@@ -291,7 +291,7 @@ void TWriteTableCommand::DoExecute(ICommandContextPtr context)
         context->GetInputFormat(),
         &valueConsumer));
 
-    PipeInputToOutput(context->Request().InputStream, &output, MaxRowBufferSize);
+    PipeInputToOutput(context->Request().InputStream, &output);
 
     WaitFor(valueConsumer.Flush())
         .ThrowOnError();
@@ -419,8 +419,10 @@ void TPartitionTablesCommand::Register(TRegistrar registrar)
     registrar.Parameter("paths", &TThis::Paths);
     registrar.Parameter("partition_mode", &TThis::PartitionMode)
         .Default(ETablePartitionMode::Unordered);
-    registrar.Parameter("data_weight_per_partition", &TThis::DataWeightPerPartition);
+    registrar.Parameter("data_weight_per_partition", &TThis::DataWeightPerPartition)
+        .GreaterThan(0);
     registrar.Parameter("max_partition_count", &TThis::MaxPartitionCount)
+        .GreaterThan(0)
         .Default();
     registrar.Parameter("enable_key_guarantee", &TThis::EnableKeyGuarantee)
         .Default(false);
@@ -804,6 +806,13 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
             return command->Options.ExecutionBackend;
         })
         .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<TVersionedReadOptions>(
+        "versioned_read_options",
+        [] (TThis* command) -> auto& {
+            return command->Options.VersionedReadOptions;
+        })
+        .Optional(/*init*/ false);
 }
 
 bool TSelectRowsCommand::HasResponseParameters() const
@@ -817,6 +826,15 @@ void TSelectRowsCommand::DoExecute(ICommandContextPtr context)
 
     if (PlaceholderValues) {
         Options.PlaceholderValues = ConvertToYsonString(PlaceholderValues);
+
+        YT_LOG_DEBUG("Query: %v, Timestamp: %v, PlaceholderValues: %v",
+            Query,
+            Options.Timestamp,
+            Options.PlaceholderValues);
+    } else {
+        YT_LOG_DEBUG("Query: %v, Timestamp: %v",
+            Query,
+            Options.Timestamp);
     }
 
     auto result = WaitFor(clientBase->SelectRows(Query, Options))
@@ -875,7 +893,7 @@ static std::vector<TUnversionedRow> ParseRows(
         context->GetInputFormat(),
         valueConsumer));
 
-    PipeInputToOutput(context->Request().InputStream, &output, 64_KB);
+    PipeInputToOutput(context->Request().InputStream, &output);
     return valueConsumer->GetRows();
 }
 

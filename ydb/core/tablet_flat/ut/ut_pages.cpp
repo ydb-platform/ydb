@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(NPage) {
         conf.Group(0).Codec = NPage::ECodec::LZ4;
         conf.Group(0).ForceCompression = true; /* required for this UT only */
 
-        TCheckIt wrap(TPartCook(lay, conf).Add(foo).Finish(), { });
+        TCheckIter wrap(TPartCook(lay, conf).Add(foo).Finish(), { });
 
         wrap.To(1).Has(foo).To(2).NoKey(bar);
 
@@ -76,7 +76,7 @@ Y_UNIT_TEST_SUITE(NPage) {
 
             TPartEggs eggs{ nullptr, MassZ.Model->Scheme, { std::move(part) } };
 
-            TWreck<TCheckIt, TPartEggs>(MassZ, 666).Do(EWreck::Cached, eggs);
+            TWreck<TCheckIter, TPartEggs>(MassZ, 666).Do(EWreck::Cached, eggs);
         }
     }
 

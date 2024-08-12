@@ -1,0 +1,133 @@
+{
+    "get": {
+        "tags": ["RTMR"],
+        "produces": ["application/json"],
+        "summary": "Lists data sources",
+        "parameters": [{
+            "name": "installation",
+            "in": "path",
+            "description": "RTMR installation",
+            "required": true,
+            "type": "string"
+        },{
+            "name": "location",
+            "in": "query",
+            "description": "RTMR location",
+            "required": false,
+            "type": "string"
+        },{
+            "name": "task",
+            "in": "query",
+            "description": "list sources for task only",
+            "type": "string"
+        },{
+            "name": "pool",
+            "in": "query",
+            "description": "list sources for specified pool@account only (requires account parameter if set)",
+            "type": "string"
+        },{
+            "name": "account",
+            "in": "query",
+            "description": "list sources for specified account only",
+            "type": "string"
+        },{
+            "name": "source",
+            "in": "query",
+            "description": "get data for specific source",
+            "type": "string"
+        }],
+        "responses": {
+            "200": {
+                "description": "OK",
+                "schema": {
+                    "type": "object",
+                    "title": "ListSourcesResult",
+                    "required": ["locations"],
+                    "properties": {
+                        "locations": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["location", "sources"],
+                                "properties": {
+                                    "location": {
+                                        "type": "string"
+                                    },
+                                    "sources": {
+                                        "title" : "SourcesList",
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "title" : "Source",
+                                            "required": ["account", "pool", "task"],
+                                            "properties": {
+                                                "account": {
+                                                    "type": "string"
+                                                },
+                                                "pool": {
+                                                    "type": "string"
+                                                },
+                                                "task": {
+                                                    "type": "string"
+                                                },
+                                                "owner": {
+                                                    "type": "string"
+                                                },
+                                                "my": {
+                                                    "type": "boolean"
+                                                },
+                                                "logbroker": {
+                                                    "description": "input data from LB cluster location",
+                                                    "type": "string"
+                                                },
+                                                "topic": {
+                                                    "description": "input data from LB topic",
+                                                    "type": "string"
+                                                },
+                                                "logType": {
+                                                    "description": "used for solomon subcomponent label in rtmr pusher",
+                                                    "type": "string"
+                                                },
+                                                "format": {
+                                                    "description": "input data format",
+                                                    "type": "string"
+                                                },
+                                                "client": {
+                                                    "description": "client id",
+                                                    "type": "string"
+                                                },
+                                                "timeLag": {
+                                                    "type": "string"
+                                                },
+                                                "table": {
+                                                    "description": "output data to RTMR table",
+                                                    "type": "string"
+                                                },
+                                                "flowConsumed": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "flowLimit": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "flowCurrentLimit": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "inputBytes": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -58,21 +58,21 @@ public:
         AFL_VERIFY(!!Cursor);
         return Cursor;
     }
-
-    bool TryNextCursor(const ui32 packIdx, const std::shared_ptr<TSharedBlobsManager>& sharedBlobsManager, const TVersionedIndex& index) {
+/*
+    bool TryNextCursor(const ui32 packIdx, const std::shared_ptr<IStoragesManager>& storagesManager, const TVersionedIndex& index) {
         AFL_VERIFY(Cursor);
         if (packIdx != Cursor->GetPackIdx()) {
             return false;
         }
-        Cursor->Next(sharedBlobsManager, index);
+        Cursor->Next(storagesManager, index);
         return true;
     }
-
+*/
     [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> AckFinished(NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& selfPtr);
     [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> AckData(NColumnShard::TColumnShard* self, const ui32 receivedPackIdx, const std::shared_ptr<TSourceSession>& selfPtr);
     [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> AckLinks(NColumnShard::TColumnShard* self, const TTabletId tabletId, const ui32 packIdx, const std::shared_ptr<TSourceSession>& selfPtr);
 
-    void ActualizeDestination(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager);
+    void ActualizeDestination(const NColumnShard::TColumnShard& shard, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager);
 
     NKikimrColumnShardDataSharingProto::TSourceSession SerializeDataToProto() const {
         NKikimrColumnShardDataSharingProto::TSourceSession result;

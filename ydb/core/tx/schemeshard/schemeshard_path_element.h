@@ -6,6 +6,7 @@
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/actors/core/actorid.h>
 
 #include <library/cpp/json/json_value.h>
 
@@ -79,10 +80,15 @@ struct TPathElement : TSimpleRefCount<TPathElement> {
     TSpaceLimits FileStoreSpaceHDD;
     ui64 DocumentApiVersion = 0;
     NJson::TJsonValue AsyncReplication;
+    bool IsAsyncReplica = false;
 
     // Number of references to this path element in the database
     size_t DbRefCount = 0;
     size_t AllChildrenCount = 0;
+
+    TActorId TempDirOwnerActorId; // Only for EPathType::EPathTypeDir.
+                                  // Not empty if dir must be deleted after loosing connection with TempDirOwnerActorId actor.
+                                  // See schemeshard__background_cleaning.cpp.
 
 private:
     ui64 AliveChildrenCount = 0;
@@ -125,7 +131,10 @@ public:
     bool IsCreateFinished() const;
     bool IsExternalTable() const;
     bool IsExternalDataSource() const;
+    bool IsIncrementalBackupTable() const;
     bool IsView() const;
+    bool IsTemporary() const;
+    bool IsResourcePool() const;
     TVirtualTimestamp GetCreateTS() const;
     TVirtualTimestamp GetDropTS() const;
     void SetDropped(TStepId step, TTxId txId);
@@ -152,6 +161,7 @@ public:
     void ChangeFileStoreSpaceBegin(TFileStoreSpace newSpace, TFileStoreSpace oldSpace);
     void ChangeFileStoreSpaceCommit(TFileStoreSpace newSpace, TFileStoreSpace oldSpace);
     bool CheckFileStoreSpaceChange(TFileStoreSpace newSpace, TFileStoreSpace oldSpace, TString& errStr);
+    void SetAsyncReplica();
     bool HasRuntimeAttrs() const;
     void SerializeRuntimeAttrs(google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TUserAttribute>* userAttrs) const;
 };

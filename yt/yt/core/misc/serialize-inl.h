@@ -605,14 +605,14 @@ struct TDefaultSerializer
 struct TRangeSerializer
 {
     template <class C>
-    static void Save(C& context, TRef value)
+    Y_FORCE_INLINE static void Save(C& context, TRef value)
     {
         auto* output = context.GetOutput();
         output->Write(value.Begin(), value.Size());
     }
 
     template <class C>
-    static void Load(C& context, const TMutableRef& value)
+    Y_FORCE_INLINE static void Load(C& context, const TMutableRef& value)
     {
         auto* input = context.GetInput();
         ReadRef(*input, value);
@@ -623,13 +623,13 @@ struct TRangeSerializer
 struct TPodSerializer
 {
     template <class T, class C>
-    static void Save(C& context, const T& value)
+    Y_FORCE_INLINE static void Save(C& context, const T& value)
     {
         TRangeSerializer::Save(context, TRef::FromPod(value));
     }
 
     template <class T, class C>
-    static void Load(C& context, T& value)
+    Y_FORCE_INLINE static void Load(C& context, T& value)
     {
         SERIALIZATION_DUMP_SUSPEND(context) {
             TRangeSerializer::Load(context, TMutableRef::FromPod(value));

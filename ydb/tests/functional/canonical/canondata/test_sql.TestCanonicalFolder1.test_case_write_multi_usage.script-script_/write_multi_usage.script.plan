@@ -10,8 +10,8 @@
                 "PlanNodeType": "Query",
                 "Plans": [
                     {
-                        "Node Type": "ResultSet_0",
-                        "PlanNodeId": 8,
+                        "Node Type": "ResultSet_1",
+                        "PlanNodeId": 5,
                         "PlanNodeType": "ResultSet",
                         "Plans": [
                             {
@@ -20,53 +20,67 @@
                                     {
                                         "Inputs": [
                                             {
-                                                "ExternalPlanNodeId": 6
+                                                "ExternalPlanNodeId": 3
                                             }
                                         ],
                                         "Limit": "1001",
                                         "Name": "Limit"
                                     }
                                 ],
-                                "PlanNodeId": 7,
+                                "PlanNodeId": 4,
                                 "Plans": [
                                     {
                                         "Node Type": "Merge",
-                                        "PlanNodeId": 6,
+                                        "PlanNodeId": 3,
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "Limit-TableFullScan",
+                                                "Node Type": "Limit",
                                                 "Operators": [
                                                     {
                                                         "Inputs": [
                                                             {
-                                                                "InternalOperatorId": 1
+                                                                "ExternalPlanNodeId": 1
                                                             }
                                                         ],
                                                         "Limit": "1001",
                                                         "Name": "Limit"
-                                                    },
-                                                    {
-                                                        "Inputs": [],
-                                                        "Name": "TableFullScan",
-                                                        "ReadColumns": [
-                                                            "Name",
-                                                            "Value"
-                                                        ],
-                                                        "ReadLimit": "1001",
-                                                        "ReadRanges": [
-                                                            "Name (-\u221e, +\u221e)"
-                                                        ],
-                                                        "Table": "base_write_multi_usage_script_script/Temp"
                                                     }
                                                 ],
-                                                "PlanNodeId": 5,
-                                                "Tables": [
-                                                    "base_write_multi_usage_script_script/Temp"
+                                                "PlanNodeId": 2,
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "TableFullScan",
+                                                        "Operators": [
+                                                            {
+                                                                "Inputs": [],
+                                                                "Name": "TableFullScan",
+                                                                "ReadColumns": [
+                                                                    "Amount",
+                                                                    "Comment",
+                                                                    "Group",
+                                                                    "Name"
+                                                                ],
+                                                                "ReadLimit": "1001",
+                                                                "ReadRanges": [
+                                                                    "Group (-\u221e, +\u221e)",
+                                                                    "Name (-\u221e, +\u221e)"
+                                                                ],
+                                                                "ReadRangesPointPrefixLen": "0",
+                                                                "Scan": "Sequential",
+                                                                "Table": "base_write_multi_usage_script_script/Input1"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 1,
+                                                        "Tables": [
+                                                            "base_write_multi_usage_script_script/Input1"
+                                                        ]
+                                                    }
                                                 ]
                                             }
                                         ],
                                         "SortColumns": [
+                                            "Group (Asc)",
                                             "Name (Asc)"
                                         ]
                                     }
@@ -75,8 +89,8 @@
                         ]
                     },
                     {
-                        "Node Type": "ResultSet_1",
-                        "PlanNodeId": 4,
+                        "Node Type": "ResultSet_0",
+                        "PlanNodeId": 10,
                         "PlanNodeType": "ResultSet",
                         "Plans": [
                             {
@@ -85,57 +99,63 @@
                                     {
                                         "Inputs": [
                                             {
-                                                "ExternalPlanNodeId": 2
+                                                "ExternalPlanNodeId": 8
                                             }
                                         ],
                                         "Limit": "1001",
                                         "Name": "Limit"
                                     }
                                 ],
-                                "PlanNodeId": 3,
+                                "PlanNodeId": 9,
                                 "Plans": [
                                     {
                                         "Node Type": "Merge",
-                                        "PlanNodeId": 2,
+                                        "PlanNodeId": 8,
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "Limit-TableFullScan",
+                                                "Node Type": "Limit",
                                                 "Operators": [
                                                     {
                                                         "Inputs": [
                                                             {
-                                                                "InternalOperatorId": 1
+                                                                "ExternalPlanNodeId": 6
                                                             }
                                                         ],
                                                         "Limit": "1001",
                                                         "Name": "Limit"
-                                                    },
-                                                    {
-                                                        "Inputs": [],
-                                                        "Name": "TableFullScan",
-                                                        "ReadColumns": [
-                                                            "Amount",
-                                                            "Comment",
-                                                            "Group",
-                                                            "Name"
-                                                        ],
-                                                        "ReadLimit": "1001",
-                                                        "ReadRanges": [
-                                                            "Group (-\u221e, +\u221e)",
-                                                            "Name (-\u221e, +\u221e)"
-                                                        ],
-                                                        "Table": "base_write_multi_usage_script_script/Input1"
                                                     }
                                                 ],
-                                                "PlanNodeId": 1,
-                                                "Tables": [
-                                                    "base_write_multi_usage_script_script/Input1"
+                                                "PlanNodeId": 7,
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "TableFullScan",
+                                                        "Operators": [
+                                                            {
+                                                                "Inputs": [],
+                                                                "Name": "TableFullScan",
+                                                                "ReadColumns": [
+                                                                    "Name",
+                                                                    "Value"
+                                                                ],
+                                                                "ReadLimit": "1001",
+                                                                "ReadRanges": [
+                                                                    "Name (-\u221e, +\u221e)"
+                                                                ],
+                                                                "ReadRangesPointPrefixLen": "0",
+                                                                "Scan": "Sequential",
+                                                                "Table": "base_write_multi_usage_script_script/Temp"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 6,
+                                                        "Tables": [
+                                                            "base_write_multi_usage_script_script/Temp"
+                                                        ]
+                                                    }
                                                 ]
                                             }
                                         ],
                                         "SortColumns": [
-                                            "Group (Asc)",
                                             "Name (Asc)"
                                         ]
                                     }
@@ -190,7 +210,7 @@
                 "Plans": [
                     {
                         "Node Type": "Effect",
-                        "PlanNodeId": 11,
+                        "PlanNodeId": 12,
                         "Plans": [
                             {
                                 "CTE Name": "precompute_0_1",
@@ -211,7 +231,7 @@
                                         "Name": "Iterator"
                                     }
                                 ],
-                                "PlanNodeId": 10,
+                                "PlanNodeId": 11,
                                 "Tables": [
                                     "base_write_multi_usage_script_script/Temp"
                                 ]
@@ -220,7 +240,7 @@
                     },
                     {
                         "Node Type": "Effect",
-                        "PlanNodeId": 9,
+                        "PlanNodeId": 10,
                         "Plans": [
                             {
                                 "CTE Name": "precompute_0_0",
@@ -241,7 +261,7 @@
                                         "Name": "Iterator"
                                     }
                                 ],
-                                "PlanNodeId": 8,
+                                "PlanNodeId": 9,
                                 "Tables": [
                                     "base_write_multi_usage_script_script/Input1"
                                 ]
@@ -251,12 +271,12 @@
                     {
                         "Node Type": "Precompute_0_0",
                         "Parent Relationship": "InitPlan",
-                        "PlanNodeId": 6,
+                        "PlanNodeId": 7,
                         "PlanNodeType": "Materialize",
                         "Plans": [
                             {
                                 "Node Type": "Stage",
-                                "PlanNodeId": 5
+                                "PlanNodeId": 6
                             }
                         ],
                         "Subplan Name": "CTE precompute_0_0"
@@ -264,37 +284,44 @@
                     {
                         "Node Type": "Precompute_0_1",
                         "Parent Relationship": "InitPlan",
-                        "PlanNodeId": 4,
+                        "PlanNodeId": 5,
                         "PlanNodeType": "Materialize",
                         "Plans": [
                             {
                                 "Node Type": "Collect",
-                                "PlanNodeId": 3,
+                                "PlanNodeId": 4,
                                 "Plans": [
                                     {
                                         "Node Type": "UnionAll",
-                                        "PlanNodeId": 2,
+                                        "PlanNodeId": 3,
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "TableRangeScan",
-                                                "Operators": [
+                                                "Node Type": "Stage",
+                                                "PlanNodeId": 2,
+                                                "Plans": [
                                                     {
-                                                        "Inputs": [],
-                                                        "Name": "TableRangeScan",
-                                                        "ReadColumns": [
-                                                            "Amount"
+                                                        "Node Type": "TableRangeScan",
+                                                        "Operators": [
+                                                            {
+                                                                "Inputs": [],
+                                                                "Name": "TableRangeScan",
+                                                                "ReadColumns": [
+                                                                    "Amount"
+                                                                ],
+                                                                "ReadRange": [
+                                                                    "Group (2)",
+                                                                    "Name (-\u221e, +\u221e)"
+                                                                ],
+                                                                "Scan": "Parallel",
+                                                                "Table": "base_write_multi_usage_script_script/Input1"
+                                                            }
                                                         ],
-                                                        "ReadRange": [
-                                                            "Group (2)",
-                                                            "Name (-\u221e, +\u221e)"
-                                                        ],
-                                                        "Table": "base_write_multi_usage_script_script/Input1"
+                                                        "PlanNodeId": 1,
+                                                        "Tables": [
+                                                            "base_write_multi_usage_script_script/Input1"
+                                                        ]
                                                     }
-                                                ],
-                                                "PlanNodeId": 1,
-                                                "Tables": [
-                                                    "base_write_multi_usage_script_script/Input1"
                                                 ]
                                             }
                                         ]

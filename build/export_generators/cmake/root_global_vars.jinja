@@ -1,0 +1,22 @@
+{% include '[generator]/disclaimer.jinja' -%}
+
+{%  if platform_names|length -%}
+{%-     for platform_name in platform_names %}
+{%          if not loop.first %}else{% endif %}if ({{ platform_conditions[platform_name] }})
+{%-         if platform_attrs[platform_name].platform_vars is defined -%}
+{%-             set platform_vars = platform_attrs[platform_name].platform_vars -%}
+{%-             set platform_var_names = keys(platform_vars) -%}
+{%              for platform_var_name in platform_var_names %}
+  set({{ platform_var_name }} {{ platform_vars[platform_var_name] }})
+{%-             endfor -%}
+{%-         endif -%}
+{%-         if "windows" in platform_name %}
+  set(ENV{PYTHONIOENCODING} utf-8)
+  set(ENV{PYTHONUTF8} 1)
+{%-         endif %}
+{%-     endfor %}
+endif()
+
+{%  endif %}
+
+{%- include "[generator]/debug.jinja" ignore missing -%}

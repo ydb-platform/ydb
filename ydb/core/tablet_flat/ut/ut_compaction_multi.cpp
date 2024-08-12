@@ -28,7 +28,7 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
         UNIT_ASSERT_C(eggs.Parts.size() > 3,
             "Compaction produced " << eggs.Parts.size() << " parts");
 
-        TCheckIt(eggs, { }).IsTheSame(mass.Saved);
+        TCheckIter(eggs, { }).IsTheSame(mass.Saved);
     }
 
     void RunMainEdgeTest(
@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
                 UNIT_ASSERT_VALUES_EQUAL(born.Parts.size(), attempt ? 2u : 1u);
                 UNIT_ASSERT_VALUES_EQUAL(born.At(0)->Store->PageCollectionBytes(0), lastPartSize);
 
-                TCheckIt(born, { }).IsTheSame(rows).Is(EReady::Gone);
+                TCheckIter(born, { }).IsTheSame(rows).Is(EReady::Gone);
             }
 
             --conf.MainPageCollectionEdge;
@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
                     "Produced part with size " << lastPartSize
                     << " expected no more than " << conf.MainPageCollectionEdge);
 
-                TCheckIt(born, { }).IsTheSame(rows).Is(EReady::Gone);
+                TCheckIter(born, { }).IsTheSame(rows).Is(EReady::Gone);
 
                 // The first part must gen one less row than the last time
                 auto size = rows.end() - rows.begin();
@@ -98,10 +98,10 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
                 // The first part must get one less row than the last time
                 TPartEggs egg1{ nullptr, born.Scheme, { born.At(0) } };
                 TPartEggs egg2{ nullptr, born.Scheme, { born.At(1) } };
-                TCheckIt(egg1, { })
+                TCheckIter(egg1, { })
                     .IsTheSame(rows.begin(), rows.begin() + split)
                     .Is(EReady::Gone);
-                TCheckIt(egg2, { })
+                TCheckIter(egg2, { })
                     .IsTheSame(rows.begin() + split, rows.end())
                     .Is(EReady::Gone);
 
@@ -173,7 +173,7 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
                 << " maximum of " << conf.MainPageCollectionEdge << " allowed");
         }
 
-        TCheckIt(born, { }).IsTheSame(mass.Saved).Is(EReady::Gone);
+        TCheckIter(born, { }).IsTheSame(mass.Saved).Is(EReady::Gone);
     }
 
     Y_UNIT_TEST(MainPageCollectionOverflow)

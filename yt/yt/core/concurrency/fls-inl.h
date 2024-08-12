@@ -21,7 +21,7 @@ using TFlsSlotDtor = void(*)(TFls::TCookie cookie);
 int AllocateFlsSlot(TFlsSlotDtor dtor);
 TFls* GetPerThreadFls();
 
-extern YT_THREAD_LOCAL(TFls*) CurrentFls;
+YT_DECLARE_THREAD_LOCAL(TFls*, CurrentFls);
 
 } // namespace NDetail
 
@@ -44,7 +44,7 @@ Y_FORCE_INLINE TFls::TCookie TFls::Get(int index) const
 
 inline TFls* GetCurrentFls()
 {
-    auto* fls = NDetail::CurrentFls;
+    auto* fls = NDetail::CurrentFls();
     if (Y_UNLIKELY(!fls)) {
         fls = NDetail::GetPerThreadFls();
     }

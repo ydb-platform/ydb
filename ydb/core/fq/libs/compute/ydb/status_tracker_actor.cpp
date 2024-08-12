@@ -5,12 +5,12 @@
 #include <ydb/core/fq/libs/compute/common/metrics.h>
 #include <ydb/core/fq/libs/compute/common/retry_actor.h>
 #include <ydb/core/fq/libs/compute/common/run_actor_params.h>
-#include <ydb/core/fq/libs/compute/ydb/events/events.h>
 #include <ydb/core/fq/libs/compute/ydb/control_plane/compute_database_control_plane_service.h>
+#include <ydb/core/fq/libs/compute/ydb/events/events.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/util/backoff.h>
-#include <ydb/library/services/services.pb.h>
 
+#include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/providers/common/metrics/service_counters.h>
 
@@ -69,7 +69,14 @@ public:
         }
     };
 
-    TStatusTrackerActor(const TRunActorParams& params, const TActorId& parent, const TActorId& connector, const TActorId& pinger, const NYdb::TOperation::TOperationId& operationId, std::unique_ptr<IPlanStatProcessor>&& processor, const ::NYql::NCommon::TServiceCounters& queryCounters)
+    TStatusTrackerActor(const TRunActorParams& params,
+                        const TActorId& parent,
+                        const TActorId& connector,
+                        const TActorId& pinger,
+                        const NYdb::TOperation::TOperationId& operationId,
+                        std::unique_ptr<IPlanStatProcessor>&& processor,
+                        const ::NYql::NCommon::TServiceCounters& queryCounters,
+                        const ::NFq::TStatusCodeByScopeCounters::TPtr& failedStatusCodeCounters)
         : TBase(queryCounters, "StatusTracker")
         , Params(params)
         , Parent(parent)
@@ -79,6 +86,7 @@ public:
         , Builder(params.Config.GetCommon(), std::move(processor))
         , Counters(GetStepCountersSubgroup())
         , BackoffTimer(20, 1000)
+        , FailedStatusCodeCounters(failedStatusCodeCounters)
     {}
 
     static constexpr char ActorName[] = "FQ_STATUS_TRACKER";
@@ -226,7 +234,7 @@ public:
     }
 
     void UpdateCpuQuota(double cpuUsage) {
-        TDuration duration = TDuration::MicroSeconds(QueryStats.total_duration_us());
+        TDuration duration = QueryStats.GetTotalDuration();
         if (cpuUsage && duration) {
             Send(NFq::ComputeDatabaseControlPlaneServiceActorId(), new TEvYdbCompute::TEvCpuQuotaAdjust(Params.Scope.ToString(), duration, cpuUsage)); 
         }
@@ -234,6 +242,7 @@ public:
 
     void Failed() {
         LOG_I("Execution status: Failed, Status: " << Status << ", StatusCode: " << NYql::NDqProto::StatusIds::StatusCode_Name(StatusCode) << " Issues: " << Issues.ToOneLineString());
+        FailedStatusCodeCounters->IncByScopeAndStatusCode(Params.Scope.ToString(), StatusCode, Issues);
         OnPingRequestStart();
 
         Fq::Private::PingTaskRequest pingTaskRequest = Builder.Build(QueryStats, Issues, std::nullopt, StatusCode);
@@ -273,8 +282,9 @@ private:
     NYdb::EStatus Status = NYdb::EStatus::SUCCESS;
     NYdb::NQuery::EExecStatus ExecStatus = NYdb::NQuery::EExecStatus::Unspecified;
     NYql::NDqProto::StatusIds::StatusCode StatusCode = NYql::NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_UNSPECIFIED;
-    Ydb::TableStats::QueryStats QueryStats;
+    NYdb::NQuery::TExecStats QueryStats;
     NKikimr::TBackoffTimer BackoffTimer;
+    NFq::TStatusCodeByScopeCounters::TPtr FailedStatusCodeCounters;
     FederatedQuery::QueryMeta::ComputeStatus ComputeStatus = FederatedQuery::QueryMeta::RUNNING;
     TInstant StartTime;
 };
@@ -285,8 +295,9 @@ std::unique_ptr<NActors::IActor> CreateStatusTrackerActor(const TRunActorParams&
                                                           const TActorId& pinger,
                                                           const NYdb::TOperation::TOperationId& operationId,
                                                           std::unique_ptr<IPlanStatProcessor>&& processor,
-                                                          const ::NYql::NCommon::TServiceCounters& queryCounters) {
-    return std::make_unique<TStatusTrackerActor>(params, parent, connector, pinger, operationId, std::move(processor), queryCounters);
+                                                          const ::NYql::NCommon::TServiceCounters& queryCounters,
+                                                          const NFq::TStatusCodeByScopeCounters::TPtr& failedStatusCodeCounters) {
+    return std::make_unique<TStatusTrackerActor>(params, parent, connector, pinger, operationId, std::move(processor), queryCounters, failedStatusCodeCounters);
 }
 
 }

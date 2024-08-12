@@ -19,6 +19,7 @@
 
 #include <library/cpp/yt/misc/property.h>
 
+#include <util/system/compiler.h>
 #include <util/system/getpid.h>
 
 #include <util/generic/size_literals.h>
@@ -56,12 +57,12 @@ public:
     constexpr bool operator == (E rhs) const;
 
     constexpr bool operator == (TErrorCode rhs) const;
+
 private:
     int Value_;
 };
 
 void FormatValue(TStringBuilderBase* builder, TErrorCode code, TStringBuf spec);
-TString ToString(TErrorCode code);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -166,6 +167,7 @@ public:
     TInstant GetDatetime() const;
 
     bool HasTracingAttributes() const;
+    void SetTracingAttributes(NTracing::TTracingAttributes tracingAttributes);
     NTracing::TTraceId GetTraceId() const;
     NTracing::TSpanId GetSpanId() const;
 
@@ -186,9 +188,15 @@ public:
 
     bool IsOK() const;
 
-    void ThrowOnError() const;
+    template <class... TArgs>
+    void ThrowOnError(TArgs&&... args) const;
 
+    template <CInvocable<bool(const TError&)> TFilter>
+    std::optional<TError> FindMatching(const TFilter& filter) const;
+    template <CInvocable<bool(TErrorCode)> TFilter>
+    std::optional<TError> FindMatching(const TFilter& filter) const;
     std::optional<TError> FindMatching(TErrorCode code) const;
+    std::optional<TError> FindMatching(const THashSet<TErrorCode>& codes) const;
 
     template <class... TArgs>
         requires std::constructible_from<TError, TArgs...>
@@ -225,9 +233,13 @@ public:
 
     template <CErrorNestable TValue>
     TError&& operator << (TValue&& operand) &&;
-
     template <CErrorNestable TValue>
     TError operator << (TValue&& operand) const &;
+
+    template <CErrorNestable TValue>
+    TError&& operator << (const std::optional<TValue>& operand) &&;
+    template <CErrorNestable TValue>
+    TError operator << (const std::optional<TValue>& operand) const &;
 
 private:
     class TImpl;
@@ -274,7 +286,6 @@ void Deserialize(
     const NYTree::INodePtr& node);
 
 void FormatValue(TStringBuilderBase* builder, const TError& error, TStringBuf spec);
-TString ToString(const TError& error);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -396,16 +407,21 @@ public:
     TErrorOr<T>& operator = (TErrorOr<T>&& other) noexcept
         requires std::is_nothrow_move_assignable_v<T>;
 
-    const T& Value() const &;
-    T& Value() &;
-    T&& Value() &&;
+    const T& Value() const & Y_LIFETIME_BOUND;
+    T& Value() & Y_LIFETIME_BOUND;
+    T&& Value() && Y_LIFETIME_BOUND;
 
-    const T& ValueOrThrow() const &;
-    T& ValueOrThrow() &;
-    T&& ValueOrThrow() &&;
+    template <class... TArgs>
+    const T& ValueOrThrow(TArgs&&... args) const & Y_LIFETIME_BOUND;
 
-    const T& ValueOrDefault(const T& defaultValue) const &;
-    T& ValueOrDefault(T& defaultValue) &;
+    template <class... TArgs>
+    T& ValueOrThrow(TArgs&&... args) & Y_LIFETIME_BOUND;
+
+    template <class... TArgs>
+    T&& ValueOrThrow(TArgs&&... args) && Y_LIFETIME_BOUND;
+
+    const T& ValueOrDefault(const T& defaultValue Y_LIFETIME_BOUND) const & Y_LIFETIME_BOUND;
+    T& ValueOrDefault(T& defaultValue Y_LIFETIME_BOUND) & Y_LIFETIME_BOUND;
     constexpr T ValueOrDefault(T&& defaultValue) const &;
     constexpr T ValueOrDefault(T&& defaultValue) &&;
 
@@ -415,9 +431,6 @@ private:
 
 template <class T>
 void FormatValue(TStringBuilderBase* builder, const TErrorOr<T>& error, TStringBuf spec);
-
-template <class T>
-TString ToString(const TErrorOr<T>& valueOrError);
 
 ////////////////////////////////////////////////////////////////////////////////
 

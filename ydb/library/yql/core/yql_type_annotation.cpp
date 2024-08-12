@@ -16,6 +16,8 @@ namespace NYql {
 
 using namespace NKikimr;
 
+const TString ModuleResolverComponent = "ModuleResolver";
+
 bool TTypeAnnotationContext::Initialize(TExprContext& ctx) {
     if (!InitializeResult) {
         InitializeResult = DoInitialize(ctx);
@@ -54,15 +56,182 @@ void TTypeAnnotationContext::Reset() {
     ExpectedConstraints.clear();
     ExpectedColumnOrders.clear();
     StatisticsMap.clear();
+    NoBlockRewriteCallableStats.clear();
+    NoBlockRewriteTypeStats.clear();
+}
+
+void TTypeAnnotationContext::IncNoBlockCallable(TStringBuf callableName) {
+    ++NoBlockRewriteCallableStats[callableName];
+}
+
+void TTypeAnnotationContext::IncNoBlockType(const TTypeAnnotationNode& type) {
+    if (type.GetKind() == ETypeAnnotationKind::Data) {
+        IncNoBlockType(type.Cast<TDataExprType>()->GetSlot());
+    } else {
+        IncNoBlockType(type.GetKind());
+    }
+}
+
+void TTypeAnnotationContext::IncNoBlockType(ETypeAnnotationKind kind) {
+    ++NoBlockRewriteTypeStats[ToString(kind)];
+}
+
+void TTypeAnnotationContext::IncNoBlockType(NUdf::EDataSlot slot) {
+    ++NoBlockRewriteTypeStats[ToString(slot)];
+}
+
+namespace {
+
+template<typename T>
+TVector<T> GetMaxByCount(const THashMap<T, size_t>& stats, size_t maxCount) {
+    TVector<T> result;
+    result.reserve(stats.size());
+    for (auto& [key, _] : stats) {
+        result.push_back(key);
+    }
+    size_t n = std::min(maxCount, stats.size());
+    std::partial_sort(result.begin(), result.begin() + n, result.end(),
+        [&stats](const T& l, const T& r) {
+            const auto& cntLeft = stats.find(l)->second;
+            const auto& cntRight = stats.find(r)->second;
+            if (cntLeft != cntRight) {
+                return cntLeft < cntRight;
+            }
+            return l < r;
+        });
+    result.resize(n);
+    return result;
+}
+
+}
+
+TVector<TString> TTypeAnnotationContext::GetTopNoBlocksCallables(size_t maxCount) const {
+    return GetMaxByCount(NoBlockRewriteCallableStats, maxCount);
+}
+
+TVector<TString> TTypeAnnotationContext::GetTopNoBlocksTypes(size_t maxCount) const {
+    return GetMaxByCount(NoBlockRewriteTypeStats, maxCount);
+}
+
+TString TColumnOrder::Find(const TString& name) const {
+    auto it = GeneratedToOriginal_.find(name);
+    if (it == GeneratedToOriginal_.end()) {
+        return name;
+    }
+    return it->second;
+}
+
+TColumnOrder& TColumnOrder::operator=(const TColumnOrder& rhs) {
+    GeneratedToOriginal_ = rhs.GeneratedToOriginal_;
+    Order_ = rhs.Order_;
+    UseCount_ = rhs.UseCount_;
+    return *this;
+}
+
+TColumnOrder::TColumnOrder(const TVector<TString>& order) {
+    Reserve(order.size());
+    for (auto& e: order) {
+        AddColumn(e);
+    }
+}
+
+TString TColumnOrder::AddColumn(const TString& name) {
+    auto lcase = to_lower(name);
+    if (uint64_t count = ++UseCount_[lcase]; count > 1) {
+        TString generated = name + "_generated_" + ToString(count);
+        GeneratedToOriginal_[generated] = name;
+        Order_.emplace_back(name, generated);
+        ++UseCount_[to_lower(generated)];
+        return generated;
+    }
+    Order_.emplace_back(name, name);
+    GeneratedToOriginal_[name] = name;
+    return name;
+}
+
+bool TColumnOrder::IsDuplicated(const TString& name) const {
+    auto it = UseCount_.find(to_lower(name));
+    return it != UseCount_.end() && it->second > 1;
+}
+
+void TColumnOrder::Shrink(size_t remain) {
+    for (size_t i = remain; i < Order_.size(); ++i) {
+        auto logicalLcase = to_lower(Order_[i].LogicalName);
+        if (!--UseCount_[logicalLcase]) {
+            UseCount_.erase(logicalLcase);
+        }
+        auto physicalLcase = to_lower(Order_[i].PhysicalName);
+        if (!--UseCount_[physicalLcase]) {
+            UseCount_.erase(physicalLcase);
+        }
+        GeneratedToOriginal_.erase(Order_[i].PhysicalName);
+    }
+    while (Order_.size() > remain) {
+        Order_.pop_back(); // No default ctor, can't call .resize()
+    }
+}
+
+void TColumnOrder::Reserve(size_t count) {
+    Order_.reserve(count);
+}
+
+void TColumnOrder::Clear() {
+    Order_.clear();
+    GeneratedToOriginal_.clear();
+    UseCount_.clear();
+}
+
+void TColumnOrder::EraseIf(const std::function<bool(const TString&)>& fn) {
+    TColumnOrder newOrder;
+    for (const auto& e: Order_) {
+        if (!fn(e.LogicalName)) {
+            newOrder.AddColumn(e.LogicalName);
+        }
+    }
+    std::swap(*this, newOrder);
+}
+
+void TColumnOrder::EraseIf(const std::function<bool(const TOrderedItem&)>& fn) {
+    TColumnOrder newOrder;
+    for (const auto& e: Order_) {
+        if (!fn(e)) {
+            newOrder.AddColumn(e.LogicalName);
+        }
+    }
+    std::swap(*this, newOrder);
+}
+
+size_t TColumnOrder::Size() const {
+    return Order_.size();
 }
 
 TString FormatColumnOrder(const TMaybe<TColumnOrder>& columnOrder, TMaybe<size_t> maxColumns) {
     TStringStream ss;
     if (columnOrder) {
-        if (maxColumns.Defined() && columnOrder->size() > *maxColumns) {
-            ss << "[" << JoinRange(", ", columnOrder->begin(), columnOrder->begin() + *maxColumns) << ", ... ]";
+        if (maxColumns.Defined() && columnOrder->Size() > *maxColumns) {
+            size_t i = 0;
+            ss << "[";
+            for (auto& [e, gen_e]: *columnOrder) {
+                if (i++ >= *maxColumns) {
+                    break;
+                }
+                ss << "(" << e << "->" << gen_e << ")";
+                if (++i != columnOrder->Size()) {
+                    ss << ", ";
+                }
+            }
+            ss << ", ... ]";
         } else {
-            ss << "[" << JoinSeq(", ", *columnOrder) << "]";
+            ss << "[";
+            size_t i = 0;
+            for (auto& [e, gen_e]: *columnOrder) {
+                
+                ss << "(" << e << "->" << gen_e << ")";
+                if (++i != columnOrder->Size()) {
+                    ss << ", ";
+                }
+            }
+            ss << "]";
         }
     } else {
         ss << "default";
@@ -75,8 +244,8 @@ ui64 AddColumnOrderHash(const TMaybe<TColumnOrder>& columnOrder, ui64 hash) {
         return hash;
     }
 
-    hash = CombineHashes(hash, NumericHash(columnOrder->size()));
-    for (auto& col : *columnOrder) {
+    hash = CombineHashes(hash, NumericHash(columnOrder->Size()));
+    for (auto& [col, gen_col] : *columnOrder) {
         hash = CombineHashes(hash, THash<TString>()(col));
     }
 
@@ -123,8 +292,8 @@ IGraphTransformer::TStatus TTypeAnnotationContext::SetColumnOrder(const TExprNod
 
     TSet<TStringBuf> allColumns = GetColumnsOfStructOrSequenceOfStruct(*nodeType);
 
-    for (auto& col : columnOrder) {
-        auto it = allColumns.find(col);
+    for (auto& [col, gen_col] : columnOrder) {
+        auto it = allColumns.find(gen_col);
         if (it == allColumns.end()) {
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
                 TStringBuilder() << "Unable to set column order " << FormatColumnOrder(columnOrder) << " for node "
@@ -257,24 +426,26 @@ bool TModuleResolver::AddFromFile(const std::string_view& file, TExprContext& ct
     }
 
     TString body;
-    switch (block->Type) {
-    case EUserDataType::RAW_INLINE_DATA:
-        body = block->Data;
-        break;
-    case EUserDataType::PATH:
-        body = TFileInput(block->Data).ReadAll();
-        break;
-    case EUserDataType::URL:
-        if (!UrlLoader) {
-            ctx.AddError(TIssue(pos, TStringBuilder() << "Unable to load file \"" << file
-                << "\" from url, because url loader is not available"));
-            return false;
-        }
+    if (!QContext.CanRead()) {
+        switch (block->Type) {
+        case EUserDataType::RAW_INLINE_DATA:
+            body = block->Data;
+            break;
+        case EUserDataType::PATH:
+            body = TFileInput(block->Data).ReadAll();
+            break;
+        case EUserDataType::URL:
+            if (!UrlLoader) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Unable to load file \"" << file
+                    << "\" from url, because url loader is not available"));
+                return false;
+            }
 
-        body = UrlLoader->Load(block->Data, block->UrlToken);
-        break;
-    default:
-        throw yexception() << "Unknown block type " << block->Type;
+            body = UrlLoader->Load(block->Data, block->UrlToken);
+            break;
+        default:
+            throw yexception() << "Unknown block type " << block->Type;
+        }
     }
 
     return AddFromMemory(fullName, moduleName, isYql, body, ctx, syntaxVersion, packageVersion, pos);
@@ -308,6 +479,18 @@ bool TModuleResolver::AddFromMemory(const std::string_view& file, const TString&
 }
 
 bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& moduleName, bool isYql, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos, std::vector<TString>* exports, std::vector<TString>* imports) {
+    auto query = body;
+    if (QContext.CanRead()) {
+        auto item = QContext.GetReader()->Get({ModuleResolverComponent, fullName}).GetValueSync();
+        if (!item) {
+            throw yexception() << "Missing replay data";
+        }
+
+        query = item->Value;
+    } else if (QContext.CanWrite()) {
+        QContext.GetWriter()->Put({ModuleResolverComponent, fullName}, query).GetValueSync();
+    }
+
     const auto addSubIssues = [&fullName](TIssue&& issue, const TIssues& issues) {
         std::for_each(issues.begin(), issues.end(), [&](const TIssue& i) {
             issue.AddSubIssue(MakeIntrusive<TIssue>(TPosition(i.Position.Column, i.Position.Row, fullName), i.GetMessage()));
@@ -317,7 +500,7 @@ bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& modu
 
     TAstParseResult astRes;
     if (isYql) {
-        astRes = ParseAst(body, nullptr, fullName);
+        astRes = ParseAst(query, nullptr, fullName);
         if (!astRes.IsOk()) {
             ctx.AddError(addSubIssues(TIssue(pos, TStringBuilder() << "Failed to parse YQL: " << fullName), astRes.Issues));
             return false;
@@ -331,7 +514,7 @@ bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& modu
         settings.SyntaxVersion = syntaxVersion;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Silent;
         settings.FileAliasPrefix = FileAliasPrefix;
-        astRes = SqlToYql(body, settings);
+        astRes = SqlToYql(query, settings);
         if (!astRes.IsOk()) {
             ctx.AddError(addSubIssues(TIssue(pos, TStringBuilder() << "Failed to parse SQL: " << fullName), astRes.Issues));
             return false;

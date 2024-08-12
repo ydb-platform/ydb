@@ -5,6 +5,7 @@
 #include <ydb/library/yql/public/udf/arrow/block_reader.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
+#include <ydb/library/yql/minikql/mkql_type_ops.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/yson/detail.h>
@@ -14,6 +15,7 @@
 #include <arrow/array/data.h>
 #include <arrow/type.h>
 #include <arrow/type_traits.h>
+#include <arrow/compute/cast.h>
 
 namespace NYql::NDqs {
 
@@ -153,6 +155,10 @@ public:
 
     const char* Data() {
         return Data_;
+    }
+    
+    size_t Available() const {
+        return Available_;
     }
 private:
     const char* Data_;
@@ -313,9 +319,47 @@ public:
             return ReadYson(buf);
         }
     }
-private:
-    const TVector<std::unique_ptr<IYsonBlockReader>> Children_;
-    TVector<NUdf::TBlockItem> Items_;
+};
+
+template<typename T, bool Nullable, bool Native>
+class TYsonTzDateBlockReader final : public IYsonBlockReaderWithNativeFlag<Native> {
+public:
+    NUdf::TBlockItem GetItem(TYsonReaderDetails& buf) override final {
+        if constexpr (Nullable) {
+            return this->GetNullableItem(buf);
+        }
+        return GetNotNull(buf);
+    }
+
+    NUdf::TBlockItem GetNotNull(TYsonReaderDetails& buf) override final {
+        using TLayout = typename NUdf::TDataType<T>::TLayout;
+        size_t length = sizeof(TLayout) + sizeof(NUdf::TTimezoneId);
+        Y_ASSERT(buf.Available() == length);
+
+        TLayout date;
+        NUdf::TTimezoneId tz;
+
+        if constexpr (std::is_same_v<T, NUdf::TTzDate>) {
+            DeserializeTzDate({buf.Data(), length}, date, tz);
+        } else if constexpr (std::is_same_v<T, NUdf::TTzDatetime>) {
+            DeserializeTzDatetime({buf.Data(), length}, date, tz);
+        } else if constexpr (std::is_same_v<T, NUdf::TTzTimestamp>) {
+            DeserializeTzTimestamp({buf.Data(), length}, date, tz);
+        } else if constexpr (std::is_same_v<T, NUdf::TTzDate32>) {
+            DeserializeTzDate32({buf.Data(), length}, date, tz);
+        } else if constexpr (std::is_same_v<T, NUdf::TTzDatetime64>) {
+            DeserializeTzDatetime64({buf.Data(), length}, date, tz);
+        } else if constexpr (std::is_same_v<T, NUdf::TTzTimestamp64>) {
+            DeserializeTzTimestamp64({buf.Data(), length}, date, tz);
+        } else {
+            static_assert(sizeof(T) == 0, "Unsupported tz date type");
+        }
+
+        buf.Skip(length);
+        NUdf::TBlockItem res {date};
+        res.SetTimezoneId(tz);
+        return res;
+    }
 };
 
 namespace {
@@ -373,9 +417,6 @@ public:
         buf.Next();
         return NUdf::TBlockItem(T(buf.NextDouble()));
     }
-private:
-    const TVector<std::unique_ptr<IYsonBlockReader>> Children_;
-    TVector<NUdf::TBlockItem> Items_;
 };
 
 template<bool Native>
@@ -437,6 +478,18 @@ struct TYsonBlockReaderTraits {
     static std::unique_ptr<TResult> MakeResource(bool isOptional) {
         Y_UNUSED(isOptional);
         ythrow yexception() << "Yson reader not implemented for block resources";
+    }   
+
+    template<typename TTzDate>
+    static std::unique_ptr<TResult> MakeTzDate(bool isOptional) {
+        Y_UNUSED(isOptional);
+        if (isOptional) {
+            using TTzDateReader = TYsonTzDateBlockReader<TTzDate, true, Native>;
+            return std::make_unique<TTzDateReader>();
+        } else {
+            using TTzDateReader = TYsonTzDateBlockReader<TTzDate, false, Native>;
+            return std::make_unique<TTzDateReader>();
+        }
     }   
 };
 
@@ -569,10 +622,16 @@ public:
                 return DictYsonConverter_.Convert(block);
             }
         } else {
-            if (block->type->Equals(Settings_.ArrowType)) {
+            auto blockType = block->type;
+            auto noConvert = blockType->Equals(Settings_.ArrowType);
+            if (noConvert) {
                 return block;
+            } else if (arrow::Type::UINT8 == Settings_.ArrowType->id() && arrow::Type::BOOL == blockType->id()) {
+                auto result = arrow::compute::Cast(arrow::Datum(*block), Settings_.ArrowType);
+                Y_ENSURE(result.ok());
+                return *result;
             } else {
-                YQL_ENSURE(arrow::Type::BINARY == block->type->id());
+                YQL_ENSURE(arrow::Type::BINARY == blockType->id());
                 return YsonConverter_.Convert(block);
             }
         }

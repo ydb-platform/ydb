@@ -55,7 +55,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
         EngineBay.SetIsImmediateTx();
 
     if (usesMvccSnapshot)
-        EngineBay.SetIsRepeatableSnapshot();
+        EngineBay.SetUsesMvccSnapshot();
 
     if (Tx.HasReadTableTransaction()) {
         auto &tx = Tx.GetReadTableTransaction();
@@ -235,7 +235,7 @@ bool TValidatedDataTx::ReValidateKeys(const NTable::TScheme& scheme)
 
     if (IsKqpTx()) {
         const auto& userDb = EngineBay.GetUserDb();
-        TKeyValidator::TValidateOptions options(userDb.GetLockTxId(), userDb.GetLockNodeId(), userDb.GetIsRepeatableSnapshot(), userDb.GetIsImmediateTx(), userDb.GetIsWriteTx(), scheme);
+        TKeyValidator::TValidateOptions options(userDb.GetLockTxId(), userDb.GetLockNodeId(), userDb.GetUsesMvccSnapshot(), userDb.GetIsImmediateTx(), userDb.GetIsWriteTx(), scheme);
         auto [result, error] = EngineBay.GetKeyValidator().ValidateKeys(options);
         if (result != EResult::Ok) {
             ErrStr = std::move(error);
@@ -410,7 +410,7 @@ TValidatedDataTx::TPtr TActiveTransaction::BuildDataTx(TDataShard *self,
     if (!DataTx) {
         Y_ABORT_UNLESS(TxBody);
         DataTx = std::make_shared<TValidatedDataTx>(self, txc, ctx, GetStepOrder(),
-                                                    GetReceivedAt(), TxBody, IsMvccSnapshotRepeatable());
+                                                    GetReceivedAt(), TxBody, IsMvccSnapshotRead());
         if (DataTx->HasStreamResponse())
             SetStreamSink(DataTx->GetSink());
     }
@@ -639,7 +639,7 @@ ERestoreDataStatus TActiveTransaction::RestoreTxData(
 
     bool extractKeys = DataTx->IsTxInfoLoaded();
     DataTx = std::make_shared<TValidatedDataTx>(self, txc, ctx, GetStepOrder(),
-                                                GetReceivedAt(), TxBody, IsMvccSnapshotRepeatable());
+                                                GetReceivedAt(), TxBody, IsMvccSnapshotRead());
     if (DataTx->Ready() && extractKeys) {
         DataTx->ExtractKeys(true);
     }

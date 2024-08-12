@@ -15,7 +15,6 @@ NYT::NYPath::TRichYPath ConvertYPathFromOld(const NYT::TRichYPath& richYPath) {
 std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString& token, const TString& clusterName, const ui64 timeout, bool unordered, const TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>& tables, NYT::TNode samplingSpec) {
     auto connectionConfig = NYT::New<NYT::NApi::NRpcProxy::TConnectionConfig>();
     connectionConfig->ClusterUrl = clusterName;
-    connectionConfig->DefaultTotalStreamingTimeout = TDuration::MilliSeconds(timeout);
     connectionConfig->EnableRetries = true;
     connectionConfig->DefaultPingPeriod = TDuration::MilliSeconds(5000);
 
@@ -30,7 +29,7 @@ std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString&
     Y_ABORT_UNLESS(client);
     auto apiServiceProxy = client->CreateApiServiceProxy();
 
-    TVector<NYT::TFuture<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr>> waitFor;
+    TVector<NYT::NApi::NRpcProxy::TApiServiceProxy::TReqReadTablePtr> requests;
 
     size_t inputIdx = 0;
     TVector<size_t> originalIndexes;
@@ -44,6 +43,7 @@ std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString&
 
         auto request = apiServiceProxy.ReadTable();
         client->InitStreamingRequest(*request);
+        request->ServerAttachmentsStreamingParameters().WriteTimeout = TDuration::MilliSeconds(timeout);
         request->ClientAttachmentsStreamingParameters().ReadTimeout = TDuration::MilliSeconds(timeout);
 
         TString ppath;
@@ -72,26 +72,24 @@ std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString&
         }
 
         ConfigureTransaction(request, richYPath);
-
         // Get skiff format yson string
         TStringStream fmt;
         format.Config.Save(&fmt);
         request->set_format(fmt.Str());
 
-        waitFor.emplace_back(std::move(CreateRpcClientInputStream(std::move(request)).ApplyUnique(BIND([](NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr&& stream) {
+        requests.emplace_back(std::move(request));
+    }
+    return std::make_unique<TSettingsHolder>(std::move(connection), std::move(client), std::move(requests), std::move(originalIndexes));
+}
+
+NYT::TFuture<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr> CreateInputStream(NYT::NApi::NRpcProxy::TApiServiceProxy::TReqReadTablePtr request) {
+    return CreateRpcClientInputStream(std::move(request)).ApplyUnique(BIND([](NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr&& stream) {
             // first packet contains meta, skip it
             return stream->Read().ApplyUnique(BIND([stream = std::move(stream)](NYT::TSharedRef&&) {
                 return std::move(stream);
             }));
-        }))));
-    }
-    TVector<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr> rawInputs;
-    auto result = NYT::NConcurrency::WaitFor(NYT::AllSucceeded(waitFor));
-    if (!result.IsOK()) {
-        Cerr << "YT RPC Reader exception:\n";
-    }
-    result.ValueOrThrow().swap(rawInputs);
-    return std::make_unique<TSettingsHolder>(std::move(connection), std::move(client), std::move(rawInputs), std::move(originalIndexes));
+        }));
 }
+
 
 }

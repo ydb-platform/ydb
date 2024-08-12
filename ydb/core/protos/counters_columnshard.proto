@@ -49,6 +49,7 @@ enum ESimpleCounters {
     COUNTER_EVICTED_BYTES = 39                              [(CounterOpts) = {Name: "Index/EvictedBytes"}];
     COUNTER_EVICTED_RAW_BYTES = 40                          [(CounterOpts) = {Name: "Index/EvictedBytesRaw"}];
     COUNTER_WRITES_IN_FLY = 41                              [(CounterOpts) = {Name: "WritesInFly"}];
+    COUNTER_TX_COMPLETE_LAG = 42                            [(CounterOpts) = {Name: "TxCompleteLag"}];
 }
 
 enum ECumulativeCounters {
@@ -64,8 +65,8 @@ enum ECumulativeCounters {
     COUNTER_PLAN_STEP_ACCEPTED = 9                          [(CounterOpts) = {Name: "PlanStepAccepted"}];
     COUNTER_SCANNED_ROWS = 10                               [(CounterOpts) = {Name: "ScannedRows"}];
     COUNTER_SCANNED_BYTES = 11                              [(CounterOpts) = {Name: "ScannedBytes"}];
-    COUNTER_UPSERT_BLOBS_WRITTEN = 12                       [(CounterOpts) = {Name: "UpsertBlobsWritten"}];
-    COUNTER_UPSERT_BYTES_WRITTEN = 13                       [(CounterOpts) = {Name: "UpsertBytesWritten"}];
+    COUNTER_OPERATIONS_BLOBS_WRITTEN = 12                   [(CounterOpts) = {Name: "OperationsBlobsWritten"}];
+    COUNTER_OPERATIONS_BYTES_WRITTEN = 13                   [(CounterOpts) = {Name: "OperationsBytesWritten"}];
     COUNTER_INDEXING_BLOBS_WRITTEN = 14                     [(CounterOpts) = {Name: "IndexingBlobsWritten"}];
     COUNTER_INDEXING_BYTES_WRITTEN = 15                     [(CounterOpts) = {Name: "IndexingBytesWritten"}];
     COUNTER_COMPACTION_BLOBS_WRITTEN = 16                   [(CounterOpts) = {Name: "CompactionBlobsWritten"}];
@@ -134,6 +135,10 @@ enum ECumulativeCounters {
     COUNTER_READING_EXPORTED_BLOBS = 79                     [(CounterOpts) = {Name: "ReadingExportedBlobs"}];
     COUNTER_READING_EXPORTED_BYTES = 80                     [(CounterOpts) = {Name: "ReadingExportedBytes"}];
     COUNTER_READING_EXPORTED_RANGES = 81                    [(CounterOpts) = {Name: "ReadingExportedRanges"}];
+    COUNTER_PLANNED_TX_COMPLETED = 82                       [(CounterOpts) = {Name: "PlannedTxCompleted"}];
+    COUNTER_IMMEDIATE_TX_COMPLETED = 83                     [(CounterOpts) = {Name: "ImmediateTxCompleted"}];
+    COUNTER_ROWS_ERASED = 84                                [(CounterOpts) = {Name: "RowsErased"}];
+    COUNTER_OPERATIONS_ROWS_WRITTEN = 85                    [(CounterOpts) = {Name: "OperationsRowsWritten"}];
 }
 
 enum EPercentileCounters {
@@ -189,4 +194,11 @@ enum ETxTypes {
     TXTYPE_DATA_SHARING_APPLY_LINKS_MODIFICATION = 27       [(TxTypeOpts) = {Name: "TxDataSharingApplyLinksModification"}];
     TXTYPE_DATA_SHARING_WRITE_SOURCE_CURSOR = 28            [(TxTypeOpts) = {Name: "TxDataSharingWriteSourceCursor"}];
     TXTYPE_EXPORT_SAVE_CURSOR = 29                          [(TxTypeOpts) = {Name: "TxExportSaveCursor"}];
+    TXTYPE_REMOVE_BACKGROUND_SESSION = 30                   [(TxTypeOpts) = {Name: "TxRemoveBackgroundSession"}];
+    TXTYPE_ADD_BACKGROUND_SESSION = 31                      [(TxTypeOpts) = {Name: "TxAddBackgroundSession"}];
+    TXTYPE_SAVE_BACKGROUND_SESSION_PROGRESS = 32            [(TxTypeOpts) = {Name: "TxSaveBackgroundSessionProgress"}];
+    TXTYPE_SAVE_BACKGROUND_SESSION_STATE = 33               [(TxTypeOpts) = {Name: "TxSaveBackgroundSessionState"}];
+    TXTYPE_GC_START = 34                                    [(TxTypeOpts) = {Name: "TxGarbageCollectionStart"}];
+    TXTYPE_APPLY_NORMALIZER = 35                            [(TxTypeOpts) = {Name: "TxApplyNormalizer"}];
+    TXTYPE_START_INTERNAL_SCAN = 36                         [(TxTypeOpts) = {Name: "TxStartInternalScan"}];
 }

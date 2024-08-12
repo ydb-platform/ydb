@@ -38,6 +38,24 @@ public:
     static TResult DateCore(ui16 value) {
         return value * ui32(86400) * TResult(ScaleAfterSeconds);
     }
+    
+    template<typename TTzDate>
+    static TResult TzBlockCore(TBlockItem tzDate);
+
+    template<>
+    static TResult TzBlockCore<TTzDate>(TBlockItem tzDate) {
+        return DateCore(tzDate.Get<ui16>());
+    }
+
+    template<>
+    static TResult TzBlockCore<TTzDatetime>(TBlockItem tzDate) {
+        return DatetimeCore(tzDate.Get<ui32>());
+    }
+
+    template<>
+    static TResult TzBlockCore<TTzTimestamp>(TBlockItem tzDate) {
+        return TimestampCore(tzDate.Get<ui64>());
+    }
 
     static TResult DatetimeCore(ui32 value) {
         return value * TResult(ScaleAfterSeconds);
@@ -54,6 +72,12 @@ public:
     static const TStringRef& Name() {
         static auto name = TStringRef(TFuncName, std::strlen(TFuncName));
         return name;
+    }
+    
+    template<typename TTzDate, typename TOutput>
+    static auto MakeTzBlockExec() {
+        using TReader = TTzDateBlockReader<TTzDate, /*Nullable*/ false>;
+        return UnaryPreallocatedReaderExecImpl<TReader, TOutput, TzBlockCore<TTzDate>>;
     }
 
     static bool DeclareSignature(
@@ -135,8 +159,12 @@ public:
             if (!typesOnly) {
                 if (typeId == TDataType<TDate>::Id || typeId == TDataType<TTzDate>::Id) {
                     if (block) {
+                        const auto exec = (typeId == TDataType<TTzDate>::Id)
+                            ? MakeTzBlockExec<TTzDate, TResult>()
+                            : UnaryPreallocatedExecImpl<ui16, TResult, DateCore>;
+
                         builder.Implementation(new TSimpleArrowUdfImpl(argBlockTypes, outputType, block.IsScalar(),
-                            UnaryPreallocatedExecImpl<ui16, TResult, DateCore>, builder, TString(name), arrow::compute::NullHandling::INTERSECTION));
+                            exec, builder, TString(name), arrow::compute::NullHandling::INTERSECTION));
                     } else {
                         builder.Implementation(new TUnaryOverOptionalImpl<ui16, TResult, DateCore>());
                     }
@@ -144,8 +172,12 @@ public:
 
                 if (typeId == TDataType<TDatetime>::Id || typeId == TDataType<TTzDatetime>::Id) {
                     if (block) {
+                        const auto exec = (typeId == TDataType<TTzDatetime>::Id)
+                            ? MakeTzBlockExec<TTzDatetime, TResult>()
+                            : UnaryPreallocatedExecImpl<ui32, TResult, DatetimeCore>;
+
                         builder.Implementation(new TSimpleArrowUdfImpl(argBlockTypes, outputType, block.IsScalar(),
-                            UnaryPreallocatedExecImpl<ui32, TResult, DatetimeCore>, builder, TString(name), arrow::compute::NullHandling::INTERSECTION));
+                            exec, builder, TString(name), arrow::compute::NullHandling::INTERSECTION));
                     } else {
                         builder.Implementation(new TUnaryOverOptionalImpl<ui32, TResult, DatetimeCore>());
                     }
@@ -153,8 +185,12 @@ public:
 
                 if (typeId == TDataType<TTimestamp>::Id || typeId == TDataType<TTzTimestamp>::Id) {
                     if (block) {
+                        const auto exec = (typeId == TDataType<TTzTimestamp>::Id)
+                            ? MakeTzBlockExec<TTzTimestamp, TResult>()
+                            : UnaryPreallocatedExecImpl<ui64, TResult, TimestampCore>;
+
                         builder.Implementation(new TSimpleArrowUdfImpl(argBlockTypes, outputType, block.IsScalar(),
-                            UnaryPreallocatedExecImpl<ui64, TResult, TimestampCore>, builder, TString(name), arrow::compute::NullHandling::INTERSECTION));
+                            exec, builder, TString(name), arrow::compute::NullHandling::INTERSECTION));
                     } else {
                         builder.Implementation(new TUnaryOverOptionalImpl<ui64, TResult, TimestampCore>());
                     }
@@ -519,6 +555,7 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
             builder.UserType(userType);
             builder.Args()->Add<TUserDataType>().Flags(ICallablePayload::TArgumentFlags::AutoMap);
             builder.Returns(builder.Resource(TMResourceName));
+            builder.IsStrict();
 
             if (!typesOnly) {
                 builder.Implementation(new TSplit<TUserDataType>(builder.GetSourcePosition()));
@@ -657,9 +694,16 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
     SIMPLE_STRICT_UDF(TMakeTzDate, TTzDate(TAutoMap<TResource<TMResourceName>>)) {
         auto& builder = valueBuilder->GetDateBuilder();
         auto& storage = Reference(args[0]);
-        TUnboxedValuePod result(storage.ToDate(builder, true));
-        result.SetTimezoneId(storage.TimezoneId);
-        return result;
+        try {
+            TUnboxedValuePod result(storage.ToDate(builder, true));
+            result.SetTimezoneId(storage.TimezoneId);
+            return result;
+        } catch (const std::exception& e) {
+            UdfTerminate((TStringBuilder() << Pos_ << "Timestamp "
+                                           << storage.ToString()
+                                           << " cannot be casted to TzDate"
+            ).data());
+        }
     }
 
     SIMPLE_STRICT_UDF(TMakeTzDatetime, TTzDatetime(TAutoMap<TResource<TMResourceName>>)) {

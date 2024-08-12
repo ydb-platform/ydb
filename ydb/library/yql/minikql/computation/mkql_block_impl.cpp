@@ -55,6 +55,16 @@ arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& poo
         return arrow::Datum(std::make_shared<arrow::StructScalar>(arrowValue, arrowType));
     }
 
+    if (type->IsStruct()) {
+        auto structType = AS_TYPE(TStructType, type);
+        std::vector<std::shared_ptr<arrow::Scalar>> arrowValue;
+        for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
+            arrowValue.emplace_back(DoConvertScalar(structType->GetMemberType(i), value.GetElement(i), pool).scalar());
+        }
+
+        return arrow::Datum(std::make_shared<arrow::StructScalar>(arrowValue, arrowType));
+    }
+
     if (type->IsTuple()) {
         auto tupleType = AS_TYPE(TTupleType, type);
         std::vector<std::shared_ptr<arrow::Scalar>> arrowValue;
@@ -108,6 +118,59 @@ arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& poo
             auto type = (slot == NUdf::EDataSlot::String || slot == NUdf::EDataSlot::Yson || slot == NUdf::EDataSlot::JsonDocument) ? arrow::binary() : arrow::utf8();
             std::shared_ptr<arrow::Scalar> scalar = std::make_shared<arrow::BinaryScalar>(buffer, type);
             return arrow::Datum(scalar);
+        }
+        case NUdf::EDataSlot::TzDate: {
+            auto items = arrow::StructScalar::ValueType{ 
+                std::make_shared<arrow::UInt16Scalar>(value.template Get<ui16>()),
+                std::make_shared<arrow::UInt16Scalar>(value.GetTimezoneId())
+            };
+
+            return arrow::Datum(std::make_shared<arrow::StructScalar>(items, MakeTzDateArrowType<NUdf::EDataSlot::TzDate>()));
+        }
+        case NUdf::EDataSlot::TzDatetime: {
+            auto items = arrow::StructScalar::ValueType{ 
+                std::make_shared<arrow::UInt32Scalar>(value.template Get<ui32>()),
+                std::make_shared<arrow::UInt16Scalar>(value.GetTimezoneId())
+            };
+
+            return arrow::Datum(std::make_shared<arrow::StructScalar>(items, MakeTzDateArrowType<NUdf::EDataSlot::TzDatetime>()));
+        }
+        case NUdf::EDataSlot::TzTimestamp: {
+            auto items = arrow::StructScalar::ValueType{ 
+                std::make_shared<arrow::UInt64Scalar>(value.template Get<ui64>()),
+                std::make_shared<arrow::UInt16Scalar>(value.GetTimezoneId())
+            };
+
+            return arrow::Datum(std::make_shared<arrow::StructScalar>(items, MakeTzDateArrowType<NUdf::EDataSlot::TzTimestamp>()));
+        }
+        case NUdf::EDataSlot::TzDate32: {
+            auto items = arrow::StructScalar::ValueType{ 
+                std::make_shared<arrow::Int32Scalar>(value.template Get<i32>()),
+                std::make_shared<arrow::UInt16Scalar>(value.GetTimezoneId())
+            };
+
+            return arrow::Datum(std::make_shared<arrow::StructScalar>(items, MakeTzDateArrowType<NUdf::EDataSlot::TzDate32>()));
+        }
+        case NUdf::EDataSlot::TzDatetime64: {
+            auto items = arrow::StructScalar::ValueType{ 
+                std::make_shared<arrow::Int64Scalar>(value.template Get<i64>()),
+                std::make_shared<arrow::UInt16Scalar>(value.GetTimezoneId())
+            };
+
+            return arrow::Datum(std::make_shared<arrow::StructScalar>(items, MakeTzDateArrowType<NUdf::EDataSlot::TzDatetime64>()));
+        }
+        case NUdf::EDataSlot::TzTimestamp64: {
+            auto items = arrow::StructScalar::ValueType{ 
+                std::make_shared<arrow::Int64Scalar>(value.template Get<i64>()),
+                std::make_shared<arrow::UInt16Scalar>(value.GetTimezoneId())
+            };
+
+            return arrow::Datum(std::make_shared<arrow::StructScalar>(items, MakeTzDateArrowType<NUdf::EDataSlot::TzTimestamp64>()));
+        }        
+        case NUdf::EDataSlot::Decimal: {
+            std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(16, &pool)));
+            *reinterpret_cast<NYql::NDecimal::TInt128*>(buffer->mutable_data()) = value.GetInt128();
+            return arrow::Datum(std::make_shared<TPrimitiveDataType<NYql::NDecimal::TInt128>::TScalarResult>(buffer));
         }
         default:
             MKQL_ENSURE(false, "Unsupported data slot " << slot);
@@ -197,7 +260,7 @@ NUdf::TUnboxedValuePod TBlockFuncNode::DoCalculate(TComputationContext& ctx) con
     std::vector<arrow::Datum> argDatums;
     for (ui32 i = 0; i < ArgsNodes.size(); ++i) {
         argDatums.emplace_back(TArrowBlock::From(ArgsNodes[i]->GetValue(ctx)).GetDatum());
-        Y_DEBUG_ABORT_UNLESS(ArgsValuesDescr[i] == argDatums.back().descr());
+        ARROW_DEBUG_CHECK_DATUM_TYPES(ArgsValuesDescr[i], argDatums.back().descr());
     }
 
     if (ScalarOutput) {

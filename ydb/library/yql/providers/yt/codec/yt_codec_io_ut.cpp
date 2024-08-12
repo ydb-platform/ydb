@@ -37,7 +37,7 @@ public:
         Prepare();
     }
 
-    bool Retry(const TMaybe<ui32>& /*rangeIndex*/, const TMaybe<ui64>& rowIndex) override {
+    bool Retry(const TMaybe<ui32>& /*rangeIndex*/, const TMaybe<ui64>& rowIndex, const std::exception_ptr& /*error*/) override {
         if (0 == Retries) {
             return false;
         }

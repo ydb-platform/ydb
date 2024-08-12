@@ -18,7 +18,9 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 
 @pytest.fixture
 def kikimr(request):
-    kikimr_conf = StreamingOverKikimrConfig(cloud_mode=True, node_count={"/cp": TenantConfig(1), "/compute": TenantConfig(1)})
+    kikimr_conf = StreamingOverKikimrConfig(
+        cloud_mode=True, node_count={"/cp": TenantConfig(1), "/compute": TenantConfig(1)}
+    )
     kikimr = StreamingOverKikimr(kikimr_conf)
     kikimr.start_mvp_mock_server()
     kikimr.start()
@@ -28,17 +30,10 @@ def kikimr(request):
 
 
 class TestRecoveryMatchRecognize(TestYdsBase):
-
     @classmethod
     def setup_class(cls):
         # for retry
         cls.retry_conf = retry.RetryConf().upto(seconds=30).waiting(0.1)
-
-    def get_ca_count(self, kikimr, node_index):
-        result = kikimr.control_plane.get_sensors(node_index, "utils").find_sensor(
-            {"activity": "DQ_COMPUTE_ACTOR", "sensor": "ActorsAliveByActivity", "execpool": "User"}
-        )
-        return result if result is not None else 0
 
     def dump_workers(self, kikimr, worker_count, ca_count, wait_time=yatest_common.plain_or_under_sanitizer(30, 150)):
         deadline = time.time() + wait_time
@@ -48,7 +43,7 @@ class TestRecoveryMatchRecognize(TestYdsBase):
             list = []
             for node_index in kikimr.control_plane.kikimr_cluster.nodes:
                 wc = kikimr.control_plane.get_worker_count(node_index)
-                cc = self.get_ca_count(kikimr, node_index)
+                cc = kikimr.control_plane.get_ca_count(node_index)
                 wcs += wc
                 ccs += cc
                 list.append([node_index, wc, cc])
@@ -82,8 +77,17 @@ class TestRecoveryMatchRecognize(TestYdsBase):
         kikimr.compute_plane.kikimr_cluster.nodes[node_to_restart].start()
         kikimr.compute_plane.wait_bootstrap(node_to_restart)
 
-    def recovery_impl(self, kikimr, client, yq_version, sql_template, test_name, messages_before_restart, messages_after_restart, expected):
-
+    def recovery_impl(
+        self,
+        kikimr,
+        client,
+        yq_version,
+        sql_template,
+        test_name,
+        messages_before_restart,
+        messages_after_restart,
+        expected,
+    ):
         self.init_topics(f"{test_name}_{yq_version}")
 
         sql = sql_template.format(self.input_topic, self.output_topic)
@@ -117,7 +121,6 @@ class TestRecoveryMatchRecognize(TestYdsBase):
     @yq_v1
     @pytest.mark.parametrize("kikimr", [(None, None, None)], indirect=["kikimr"])
     def test_time_order_recoverer(self, kikimr, client, yq_version, request):
-
         sql = R'''
             PRAGMA dq.MaxTasksPerStage="2";
 
@@ -143,26 +146,30 @@ class TestRecoveryMatchRecognize(TestYdsBase):
                 DEFINE
                     ALL_TRUE as True)'''
 
-        messages_before_restart = [
-            '{"dt":1696849942400002}',
-            '{"dt":1696849942000001}']
+        messages_before_restart = ['{"dt":1696849942400002}', '{"dt":1696849942000001}']
         messages_after_restart = [
             '{"dt":1696849942800000}',
             '{"dt":1696849943200003}',
             '{"dt":1696849943300003}',
             '{"dt":1696849943600003}',
-            '{"dt":1696849943900003}']
-        expected = [
-            '{"dt":1696849942000001}',
-            '{"dt":1696849942400002}',
-            '{"dt":1696849942800000}']
+            '{"dt":1696849943900003}',
+        ]
+        expected = ['{"dt":1696849942000001}', '{"dt":1696849942400002}', '{"dt":1696849942800000}']
 
-        self.recovery_impl(kikimr, client, yq_version, sql, request.node.name, messages_before_restart, messages_after_restart, expected)
+        self.recovery_impl(
+            kikimr,
+            client,
+            yq_version,
+            sql,
+            request.node.name,
+            messages_before_restart,
+            messages_after_restart,
+            expected,
+        )
 
     @yq_v1
     @pytest.mark.parametrize("kikimr", [(None, None, None)], indirect=["kikimr"])
     def test_match_recognize(self, kikimr, client, yq_version, request):
-
         sql = R'''
             PRAGMA dq.MaxTasksPerStage="2";
 
@@ -200,14 +207,22 @@ class TestRecoveryMatchRecognize(TestYdsBase):
             '{"dt": 1696849942000001, "str": "A" }',
             '{"dt": 1696849942500001, "str": "B" }',
             '{"dt": 1696849943000001, "str": "C" }',
-            '{"dt": 1696849943600001, "str": "D" }']       # push A+B from TimeOrderRecoverer to MatchRecognize
+            '{"dt": 1696849943600001, "str": "D" }',
+        ]  # push A+B from TimeOrderRecoverer to MatchRecognize
 
         # Before restart:
         #    A + B : in MatchRecognize
         #    C + D : in TimeOrderRecoverer
 
-        messages_after_restart = [
-            '{"dt": 1696849944100001, "str": "E" }']
-        expected = [
-            '{"a_str":"A","b_str":"B","c_str":"C","dt_begin":1696849942000001,"dt_end":1696849943000001}']
-        self.recovery_impl(kikimr, client, yq_version, sql, request.node.name, messages_before_restart, messages_after_restart, expected)
+        messages_after_restart = ['{"dt": 1696849944100001, "str": "E" }']
+        expected = ['{"a_str":"A","b_str":"B","c_str":"C","dt_begin":1696849942000001,"dt_end":1696849943000001}']
+        self.recovery_impl(
+            kikimr,
+            client,
+            yq_version,
+            sql,
+            request.node.name,
+            messages_before_restart,
+            messages_after_restart,
+            expected,
+        )

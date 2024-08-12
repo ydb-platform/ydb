@@ -108,7 +108,7 @@ TManager::TManager(const ui64 tabletId, const NActors::TActorId& tabletActorId, 
 
 NArrow::NSerialization::TSerializerContainer ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compressionProto) {
     NArrow::NSerialization::TSerializerContainer container;
-    AFL_VERIFY(container.DeserializeFromProto(compressionProto));
+    container.DeserializeFromProto(compressionProto).Validate();
     return container;
 }
 

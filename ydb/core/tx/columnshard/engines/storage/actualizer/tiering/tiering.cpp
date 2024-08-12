@@ -1,6 +1,7 @@
 #include "tiering.h"
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
 #include <ydb/core/tx/columnshard/engines/changes/actualization/construction/context.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
@@ -19,23 +20,24 @@ std::shared_ptr<NKikimr::NOlap::ISnapshotSchema> TTieringActualizer::GetTargetSc
 }
 
 std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::BuildActualizationInfo(const TPortionInfo& portion, const TInstant now) const {
-    std::shared_ptr<ISnapshotSchema> portionSchema = VersionedIndex.GetSchema(portion.GetMinSnapshot());
+    std::shared_ptr<ISnapshotSchema> portionSchema = portion.GetSchema(VersionedIndex);
     std::shared_ptr<ISnapshotSchema> targetSchema = GetTargetSchema(portionSchema);
     const TString& currentTierName = portion.GetTierNameDef(IStoragesManager::DefaultStorageId);
 
     if (Tiering) {
         AFL_VERIFY(TieringColumnId);
-        auto statOperator = portionSchema->GetIndexInfo().GetStatistics(NStatistics::TIdentifier(NStatistics::EType::Max, {*TieringColumnId}));
+        auto indexMeta = portionSchema->GetIndexInfo().GetIndexMax(*TieringColumnId);
         std::shared_ptr<arrow::Scalar> max;
-        if (!statOperator) {
+        if (!indexMeta) {
             max = portion.MaxValue(*TieringColumnId);
             if (!max) {
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "scalar_less_not_max");
                 return {};
             }
         } else {
-            NYDBTest::TControllers::GetColumnShardController()->OnStatisticsUsage(statOperator);
-            max = statOperator.GetScalarVerified(portion.GetMeta().GetStatisticsStorage());
+            NYDBTest::TControllers::GetColumnShardController()->OnStatisticsUsage(NIndexes::TIndexMetaContainer(indexMeta));
+            const std::vector<TString> data = portion.GetIndexInplaceDataVerified(indexMeta->GetIndexId());
+            max = indexMeta->GetMaxScalarVerified(data, portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId)->type());
         }
         auto tieringInfo = Tiering->GetTierToMove(max, now);
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("tiering_info", tieringInfo.DebugString());
@@ -83,9 +85,9 @@ void TTieringActualizer::DoAddPortion(const TPortionInfo& portion, const TAddExt
     if (!info) {
         return;
     }
-    AFL_VERIFY(PortionIdByWaitDuration[info->GetAddress()].AddPortion(*info, portion.GetPortionId(), addContext.GetNow() - StartInstant));
+    AFL_VERIFY(PortionIdByWaitDuration[info->GetAddress()].AddPortion(*info, portion.GetPortionId(), addContext.GetNow()));
     auto address = info->GetAddress();
-    TFindActualizationInfo findId(std::move(address), info->GetWaitDuration() + (addContext.GetNow() - StartInstant));
+    TFindActualizationInfo findId(std::move(address), info->GetWaitInstant(addContext.GetNow()));
     AFL_VERIFY(PortionsInfo.emplace(portion.GetPortionId(), std::move(findId)).second);
 }
 
@@ -105,12 +107,16 @@ void TTieringActualizer::DoRemovePortion(const ui64 portionId) {
 void TTieringActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& /*internalContext*/) {
     THashSet<ui64> portionIds;
     for (auto&& [address, addressPortions] : PortionIdByWaitDuration) {
+        if (addressPortions.GetPortions().size() && tasksContext.GetActualInstant() < addressPortions.GetPortions().begin()->first) {
+            Counters.SkipEvictionForLimit->Add(1);
+            continue;
+        }
         if (!tasksContext.IsRWAddressAvailable(address)) {
             Counters.SkipEvictionForLimit->Add(1);
             continue;
         }
-        for (auto&& [duration, portions] : addressPortions.GetPortions()) {
-            if (duration - (tasksContext.Now - StartInstant) > TDuration::Zero()) {
+        for (auto&& [wInstant, portions] : addressPortions.GetPortions()) {
+            if (tasksContext.GetActualInstant() < wInstant) {
                 break;
             }
             bool limitEnriched = false;
@@ -122,9 +128,9 @@ void TTieringActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, co
                         continue;
                     }
                 }
-                auto info = BuildActualizationInfo(*portion, tasksContext.Now);
+                auto info = BuildActualizationInfo(*portion, tasksContext.GetActualInstant());
                 AFL_VERIFY(info);
-                auto portionScheme = VersionedIndex.GetSchema(portion->GetMinSnapshot());
+                auto portionScheme = portion->GetSchema(VersionedIndex);
                 TPortionEvictionFeatures features(portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
                 features.SetTargetTierName(info->GetTargetTierName());
 
@@ -140,32 +146,32 @@ void TTieringActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, co
             }
         }
     }
+    if (portionIds.size()) {
+        ui64 waitDurationEvict = 0;
+        ui64 waitQueueEvict = 0;
+        ui64 waitDurationDelete = 0;
+        ui64 waitQueueDelete = 0;
+        for (auto&& i : PortionIdByWaitDuration) {
+            std::shared_ptr<NColumnShard::TValueAggregationClient> waitDurationSignal;
+            std::shared_ptr<NColumnShard::TValueAggregationClient> queueSizeSignal;
+            if (i.first.WriteIs(NTiering::NCommon::DeleteTierName)) {
+                i.second.CorrectSignals(waitQueueDelete, waitDurationDelete, tasksContext.GetActualInstant());
+            } else {
+                i.second.CorrectSignals(waitQueueEvict, waitDurationEvict, tasksContext.GetActualInstant());
+            }
+        }
+        Counters.DifferenceWaitToDelete->SetValue(waitDurationDelete);
+        Counters.DifferenceWaitToEvict->SetValue(waitDurationEvict);
+        Counters.QueueSizeToDelete->SetValue(waitQueueDelete);
+        Counters.QueueSizeToEvict->SetValue(waitQueueEvict);
+    }
     for (auto&& i : portionIds) {
         RemovePortion(i);
     }
 
-    ui64 waitDurationEvict = 0;
-    ui64 waitQueueEvict = 0;
-    ui64 waitDurationDelete = 0;
-    ui64 waitQueueDelete = 0;
-    for (auto&& i : PortionIdByWaitDuration) {
-        std::shared_ptr<NColumnShard::TValueAggregationClient> waitDurationSignal;
-        std::shared_ptr<NColumnShard::TValueAggregationClient> queueSizeSignal;
-        if (i.first.WriteIs(NTiering::NCommon::DeleteTierName)) {
-            i.second.CorrectSignals(waitQueueDelete, waitDurationDelete, tasksContext.Now - StartInstant);
-        } else {
-            i.second.CorrectSignals(waitQueueEvict, waitDurationEvict, tasksContext.Now - StartInstant);
-        }
-    }
-    Counters.DifferenceWaitToDelete->SetValue(waitDurationDelete);
-    Counters.DifferenceWaitToEvict->SetValue(waitDurationEvict);
-    Counters.QueueSizeToDelete->SetValue(waitQueueDelete);
-    Counters.QueueSizeToEvict->SetValue(waitQueueEvict);
-
 }
 
 void TTieringActualizer::Refresh(const std::optional<TTiering>& info, const TAddExternalContext& externalContext) {
-    StartInstant = externalContext.GetNow();
     Tiering = info;
     if (Tiering) {
         TieringColumnId = VersionedIndex.GetLastSchema()->GetColumnId(Tiering->GetTtlColumn());

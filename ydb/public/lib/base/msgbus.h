@@ -49,8 +49,6 @@ enum {
     MTYPE_CLIENT_OLD_FLAT_DESCRIBE_REQUEST = 10435, // deprecated
     MTYPE_CLIENT_OLD_FLAT_DESCRIBE_RESPONSE = 10436, // deprecated
     MTYPE_CLIENT_CREATE_TABLET = 10437,
-    MTYPE_CLIENT_LOAD_REQUEST = 10438,
-    MTYPE_CLIENT_LOAD_RESPONSE = 10439,
     MTYPE_CLIENT_DIRECT_REQUEST_JOB_EXECUTION_STATUS = 10440, // deprecated
     MTYPE_CLIENT_PERSQUEUE = 10441,
     MTYPE_CLIENT_DB_SCHEMA = 10443,
@@ -62,8 +60,6 @@ enum {
     MTYPE_CLIENT_DB_BATCH = 10449,
     MTYPE_CLIENT_FLAT_DESCRIBE_REQUEST = 10450,
     MTYPE_CLIENT_LOCAL_SCHEME_TX = 10453,
-    MTYPE_CLIENT_GET_REQUEST = 10454,
-    MTYPE_CLIENT_GET_RESPONSE = 10455,
     MTYPE_CLIENT_DB_QUERY = 10456,
     MTYPE_CLIENT_TABLET_COUNTERS_REQUEST = 10457,
     MTYPE_CLIENT_CANCEL_BACKUP = 10458,
@@ -79,7 +75,7 @@ enum {
     MTYPE_CLIENT_CHOOSE_PROXY = 10468,
     MTYPE_CLIENT_SQS_REQUEST = 10469,
     MTYPE_CLIENT_SQS_RESPONSE = 10470,
-    MTYPE_CLIENT_WHOAMI = 10471,
+    MTYPE_CLIENT_DEPRECATED_10471 = 10471,
     MTYPE_CLIENT_STREAM_REQUEST = 10472,
     MTYPE_CLIENT_S3_LISTING_REQUEST = 10474,
     MTYPE_CLIENT_S3_LISTING_RESPONSE = 10475,
@@ -91,7 +87,7 @@ enum {
     MTYPE_CLIENT_TEST_SHARD_CONTROL = 10481,
     MTYPE_CLIENT_DS_LOAD_REQUEST = 10482, // deprecated
     MTYPE_CLIENT_DS_LOAD_RESPONSE = 10483, // deprecated
-    MTYPE_CLIENT_LOGIN_REQUEST = 10484,
+    /*MTYPE_CLIENT_LOGIN_REQUEST*/ MTYPE_CLIENT_DEPRECATED_10484 = 10484,
 };
 
 template <typename InstanceType, class TBufferRecord, int MType>
@@ -124,14 +120,6 @@ struct TBusSchemeOperationStatus : TBusMessage<TBusSchemeOperationStatus, NKikim
 struct TBusSchemeDescribe : TBusMessage<TBusSchemeDescribe, NKikimrClient::TSchemeDescribe, MTYPE_CLIENT_FLAT_DESCRIBE_REQUEST> {};
 struct TBusOldFlatDescribeRequest : TBusMessage<TBusOldFlatDescribeRequest, NKikimrClient::TSchemeDescribe, MTYPE_CLIENT_OLD_FLAT_DESCRIBE_REQUEST> {};
 struct TBusOldFlatDescribeResponse : TBusMessage<TBusOldFlatDescribeResponse, NKikimrClient::TFlatDescribeResponse, MTYPE_CLIENT_OLD_FLAT_DESCRIBE_RESPONSE> {};
-struct TBusBsTestLoadRequest : TBusMessage<TBusBsTestLoadRequest, NKikimrClient::TBsTestLoadRequest, MTYPE_CLIENT_LOAD_REQUEST> {};
-struct TBusBsTestLoadResponse : TBusMessage<TBusBsTestLoadResponse, NKikimrClient::TBsTestLoadResponse, MTYPE_CLIENT_LOAD_RESPONSE> {};
-struct TBusBsGetRequest : TBusMessage<TBusBsGetRequest, NKikimrClient::TBsGetRequest, MTYPE_CLIENT_GET_REQUEST> {};
-struct TBusBsGetResponse : TBusMessage<TBusBsGetResponse, NKikimrClient::TBsGetResponse, MTYPE_CLIENT_GET_RESPONSE> {};
-struct TBusDbSchema : TBusMessage<TBusDbSchema, NKikimrClient::TJSON, MTYPE_CLIENT_DB_SCHEMA> {};
-struct TBusDbOperation : TBusMessage<TBusDbOperation, NKikimrClient::TJSON, MTYPE_CLIENT_DB_OPERATION> {};
-struct TBusDbResponse : TBusMessage<TBusDbResponse, NKikimrClient::TJSON, MTYPE_CLIENT_DB_RESPONSE> {};
-struct TBusDbBatch : TBusMessage<TBusDbBatch, NKikimrClient::TJSON, MTYPE_CLIENT_DB_BATCH> {};
 struct TBusBlobStorageConfigRequest : TBusMessage<TBusBlobStorageConfigRequest, NKikimrClient::TBlobStorageConfigRequest, MTYPE_CLIENT_BLOB_STORAGE_CONFIG_REQUEST> {};
 struct TBusDrainNode : TBusMessage<TBusDrainNode, NKikimrClient::TDrainNodeRequest, MTYPE_CLIENT_DRAIN_NODE> {};
 struct TBusFillNode : TBusMessage<TBusFillNode, NKikimrClient::TFillNodeRequest, MTYPE_CLIENT_FILL_NODE> {};
@@ -143,13 +131,11 @@ struct TBusCmsResponse : TBusMessage<TBusCmsResponse, NKikimrClient::TCmsRespons
 struct TBusChooseProxy : TBusMessage<TBusChooseProxy, NKikimrClient::TChooseProxyRequest, MTYPE_CLIENT_CHOOSE_PROXY> {};
 struct TBusSqsRequest : TBusMessage<TBusSqsRequest, NKikimrClient::TSqsRequest, MTYPE_CLIENT_SQS_REQUEST> {};
 struct TBusSqsResponse : TBusMessage<TBusSqsResponse, NKikimrClient::TSqsResponse, MTYPE_CLIENT_SQS_RESPONSE> {};
-struct TBusWhoAmI : TBusMessage<TBusWhoAmI, NKikimrClient::TWhoAmI, MTYPE_CLIENT_WHOAMI> {};
 struct TBusStreamRequest : TBusMessage<TBusStreamRequest, NKikimrClient::TRequest, MTYPE_CLIENT_STREAM_REQUEST> {};
 struct TBusInterconnectDebug : TBusMessage<TBusInterconnectDebug, NKikimrClient::TInterconnectDebug, MTYPE_CLIENT_INTERCONNECT_DEBUG> {};
 struct TBusConsoleRequest : TBusMessage<TBusConsoleRequest, NKikimrClient::TConsoleRequest, MTYPE_CLIENT_CONSOLE_REQUEST> {};
 struct TBusConsoleResponse : TBusMessage<TBusConsoleResponse, NKikimrClient::TConsoleResponse, MTYPE_CLIENT_CONSOLE_RESPONSE> {};
 struct TBusTestShardControlRequest : TBusMessage<TBusTestShardControlRequest, NKikimrClient::TTestShardControlRequest, MTYPE_CLIENT_TEST_SHARD_CONTROL> {};
-struct TBusLoginRequest : TBusMessage<TBusLoginRequest, NKikimrClient::TLoginRequest, MTYPE_CLIENT_LOGIN_REQUEST> {};
 
 class TBusResponseStatus : public TBusResponse {
 public:
@@ -217,14 +203,6 @@ public:
         RegisterType(new TBusSchemeDescribe);
         RegisterType(new TBusOldFlatDescribeRequest);
         RegisterType(new TBusOldFlatDescribeResponse);
-        RegisterType(new TBusBsTestLoadRequest);
-        RegisterType(new TBusBsTestLoadResponse);
-        RegisterType(new TBusBsGetRequest);
-        RegisterType(new TBusBsGetResponse);
-        RegisterType(new TBusDbSchema);
-        RegisterType(new TBusDbOperation);
-        RegisterType(new TBusDbResponse);
-        RegisterType(new TBusDbBatch);
         RegisterType(new TBusBlobStorageConfigRequest);
         RegisterType(new TBusDrainNode);
         RegisterType(new TBusFillNode);
@@ -234,13 +212,11 @@ public:
         RegisterType(new TBusCmsRequest);
         RegisterType(new TBusCmsResponse);
         RegisterType(new TBusChooseProxy);
-        RegisterType(new TBusWhoAmI);
         RegisterType(new TBusStreamRequest);
         RegisterType(new TBusInterconnectDebug);
         RegisterType(new TBusConsoleRequest);
         RegisterType(new TBusConsoleResponse);
         RegisterType(new TBusTestShardControlRequest);
-        RegisterType(new TBusLoginRequest);
     }
 
     const static ui32 DefaultPort = 2134;

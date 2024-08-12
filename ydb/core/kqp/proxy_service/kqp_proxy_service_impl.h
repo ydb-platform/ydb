@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
@@ -183,6 +184,7 @@ public:
         const_cast<TKqpSessionInfo*>(sessionInfo)->QueryText = TString();
         const_cast<TKqpSessionInfo*>(sessionInfo)->State = TKqpSessionInfo::IDLE;
         auto curNow = TInstant::Now();
+        const_cast<TKqpSessionInfo*>(sessionInfo)->QueryStartAt = TInstant::Zero();
         const_cast<TKqpSessionInfo*>(sessionInfo)->StateChangeAt = curNow;
     }
 
@@ -278,7 +280,7 @@ public:
 
     TKqpSessionInfo* PickSessionToShutdown(bool force, ui32 minReasonableToKick) {
         auto& sessions = force ? ReadySessions.at(0) : ReadySessions.at(1);
-        if (sessions.size() >= minReasonableToKick) {
+        if (!sessions.empty() && sessions.size() >= minReasonableToKick) {
             ui64 idx = RandomProvider->GenRand() % sessions.size();
             return StartShutdownSession(sessions[idx]);
         }
@@ -412,6 +414,42 @@ private:
             }
         }
     }
+};
+
+class TResourcePoolsCache {
+    struct TPoolInfo {
+        NResourcePool::TPoolSettings Config;
+        std::optional<NACLib::TSecurityObject> SecurityObject;
+    };
+
+public:
+    std::optional<TPoolInfo> GetPoolInfo(const TString& database, const TString& poolId) const {
+        auto it = PoolsCache.find(GetPoolKey(database, poolId));
+        if (it == PoolsCache.end()) {
+            return std::nullopt;
+        }
+        return it->second;
+    }
+
+    void UpdatePoolInfo(const TString& database, const TString& poolId, const std::optional<NResourcePool::TPoolSettings>& config, const std::optional<NACLib::TSecurityObject>& securityObject) {
+        const TString& poolKey = GetPoolKey(database, poolId);
+        if (!config) {
+            PoolsCache.erase(poolKey);
+            return;
+        }
+
+        auto& poolInfo = PoolsCache[poolKey];
+        poolInfo.Config = *config;
+        poolInfo.SecurityObject = securityObject;
+    }
+
+private:
+    static TString GetPoolKey(const TString& database, const TString& poolId) {
+        return CanonizePath(TStringBuilder() << database << "/" << poolId);
+    }
+
+private:
+    std::unordered_map<TString, TPoolInfo> PoolsCache;
 };
 
 }  // namespace NKikimr::NKqp

@@ -15,7 +15,7 @@ from(select *
                  from {{store_sales}} ss1
                  where ss_store_sk = 366
                  group by ss_item_sk
-                 having avg(ss_net_profit) > 0.9*$avg_net_profit)V1)V11
+                 having avg(ss_net_profit) > $z0_9*$avg_net_profit)V1)V11
      where rnk  < 11) asceding
      cross join
     (select *
@@ -24,7 +24,7 @@ from(select *
                  from {{store_sales}} ss1
                  where ss_store_sk = 366
                  group by ss_item_sk
-                 having avg(ss_net_profit) > 0.9*$avg_net_profit)V2)V21
+                 having avg(ss_net_profit) > $z0_9*$avg_net_profit)V2)V21
      where rnk  < 11) descending
      cross join
 {{item}} i1 cross join

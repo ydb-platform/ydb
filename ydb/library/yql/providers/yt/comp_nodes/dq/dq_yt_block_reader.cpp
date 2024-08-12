@@ -94,31 +94,31 @@ public:
 private:
     template<typename X>
     void PushInternal(X&& val, bool imm) {
-        NYT::TPromise<void> promise;
-        {
-            std::lock_guard _(Mtx_);
-            if (!Awaiting_.empty()) {
-                Awaiting_.front().Set(std::move(val));
-                Awaiting_.pop();
-                return;
+        for (;;) {
+            NYT::TPromise<void> promise;
+            {
+                std::lock_guard guard(Mtx_);
+                if (!Awaiting_.empty()) {
+                    Awaiting_.front().Set(std::move(val));
+                    Awaiting_.pop();
+                    return;
+                }
+                if (!imm && Ready_.size() >= Limit_) {
+                    promise = NYT::NewPromise<void>();
+                    BlockedPushes_.push(promise);
+                } else {
+                    Ready_.emplace(std::move(val));
+                    return;
+                }
             }
-            if (!imm && Ready_.size() >= Limit_) {
-                promise = NYT::NewPromise<void>();
-                BlockedPushes_.push(promise);
-            } else {
-                Ready_.emplace(std::move(val));
-                return;
-            }
+            YQL_ENSURE(NYT::NConcurrency::WaitFor(promise.ToFuture()).IsOK());
         }
-        YQL_ENSURE(NYT::NConcurrency::WaitFor(promise.ToFuture()).IsOK());
-        std::lock_guard _(Mtx_);
-        Ready_.emplace(std::move(val));
     }
 
     TPoisonOr GetInternal() {
         NYT::TPromise<TPoisonOr> awaiter;
         {
-            std::lock_guard _(Mtx_);
+            std::lock_guard guard(Mtx_);
             if (!BlockedPushes_.empty()) {
                 BlockedPushes_.front().Set();
                 BlockedPushes_.pop();
@@ -279,10 +279,16 @@ private:
 
 class TLocalListener : public arrow::ipc::Listener {
 public:
-    TLocalListener(std::shared_ptr<TListener> consumer, std::shared_ptr<std::vector<TType*>> columnTypes, std::shared_ptr<std::vector<std::shared_ptr<arrow::DataType>>> arrowTypes, arrow::MemoryPool& pool, const NUdf::IPgBuilder* pgBuilder, bool isNative, NKikimr::NMiniKQL::IStatsRegistry* jobStats) 
+    TLocalListener(std::shared_ptr<TListener> consumer
+        , std::unordered_map<std::string, ui32>& columnOrderMapping
+        , std::shared_ptr<std::vector<TType*>> columnTypes
+        , std::shared_ptr<std::vector<std::shared_ptr<arrow::DataType>>> arrowTypes
+        , arrow::MemoryPool& pool, const NUdf::IPgBuilder* pgBuilder
+        , bool isNative, NKikimr::NMiniKQL::IStatsRegistry* jobStats) 
         : Consumer_(consumer)
         , ColumnTypes_(columnTypes)
         , JobStats_(jobStats)
+        , ColumnOrderMapping(columnOrderMapping)
     {
         ColumnConverters_.reserve(columnTypes->size());
         for (size_t i = 0; i < columnTypes->size(); ++i) {
@@ -304,10 +310,19 @@ public:
         YQL_ENSURE(batch);
         MKQL_ADD_STAT(JobStats_, BlockCount, 1);
         std::vector<arrow::Datum> result;
-        result.reserve(ColumnConverters_.size());
+        YQL_ENSURE((size_t)batch->num_columns() == ColumnConverters_.size());
+        result.resize(ColumnConverters_.size());
+        size_t matchedColumns = 0;
         for (size_t i = 0; i < ColumnConverters_.size(); ++i) {
-            result.emplace_back(ColumnConverters_[i]->Convert(batch->column(i)->data()));
+            auto columnIdxIt = ColumnOrderMapping.find(batch->schema()->field_names()[i]);
+            if (ColumnOrderMapping.end() == columnIdxIt) {
+                continue;
+            }
+            ++matchedColumns;
+            auto columnIdx =  columnIdxIt->second;
+            result[columnIdx] = std::move(ColumnConverters_[columnIdx]->Convert(batch->column(i)->data()));
         }
+        Y_ENSURE(matchedColumns == ColumnOrderMapping.size());
         Consumer_->HandleResult(std::make_shared<TResultBatch>(batch->num_rows(), std::move(result)));
         return arrow::Status::OK();
     }
@@ -326,6 +341,7 @@ private:
     std::shared_ptr<std::vector<TType*>> ColumnTypes_;
     NKikimr::NMiniKQL::IStatsRegistry* JobStats_;
     std::vector<std::unique_ptr<IYtColumnConverter>> ColumnConverters_;
+    std::unordered_map<std::string, ui32>& ColumnOrderMapping;
 };
 
 class TSource : public TNonCopyable {
@@ -335,7 +351,7 @@ public:
         size_t inflight, TType* type, std::shared_ptr<std::vector<std::shared_ptr<arrow::DataType>>> types, const THolderFactory& holderFactory, NKikimr::NMiniKQL::IStatsRegistry* jobStats)
         : HolderFactory(holderFactory)
         , Settings_(std::move(settings))
-        , Inputs_(std::move(Settings_->RawInputs))
+        , Inputs_(Settings_->Requests.size())
         , Listener_(std::make_shared<TListener>(Inputs_.size(), inflight))
         , JobStats_(jobStats)
     {
@@ -349,10 +365,9 @@ public:
 
         LocalListeners_.reserve(Inputs_.size());
         for (size_t i = 0; i < Inputs_.size(); ++i) {
-            InputsQueue_.emplace(i);
             auto& decoder = Settings_->Specs->Inputs[Settings_->OriginalIndexes[i]];
             bool native = decoder->NativeYtTypeFlags && !decoder->FieldsVec[i].ExplicitYson;
-            LocalListeners_.emplace_back(std::make_shared<TLocalListener>(Listener_, ptr, types, *Settings_->Pool, Settings_->PgBuilder, native, jobStats));
+            LocalListeners_.emplace_back(std::make_shared<TLocalListener>(Listener_, Settings_->ColumnNameMapping, ptr, types, *Settings_->Pool, Settings_->PgBuilder, native, jobStats));
             LocalListeners_.back()->Init(LocalListeners_.back());
         }
         BlockBuilder_.Init(ptr, *Settings_->Pool, Settings_->PgBuilder);
@@ -362,21 +377,38 @@ public:
     void RunRead() {
         size_t inputIdx;
         {
-            std::lock_guard _(Mtx_);
+            std::lock_guard guard(Mtx_);
             if (InputsQueue_.empty()) {
-                return;
+                if (NextFreeInputIdx >= Inputs_.size()) {
+                    return;
+                }
+                inputIdx = NextFreeInputIdx++;
+            } else {
+                inputIdx = InputsQueue_.front();
+                InputsQueue_.pop();
             }
-            inputIdx = InputsQueue_.front();
-            InputsQueue_.pop();
         }
-
+        if (!Inputs_[inputIdx]) {
+            CreateInputStream(Settings_->Requests[inputIdx]).SubscribeUnique(BIND([self = Self_, inputIdx] (NYT::TErrorOr<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr>&& stream) {
+                self->Pool_->GetInvoker()->Invoke(BIND([inputIdx, self, stream = std::move(stream)]() mutable {
+                    try {
+                        self->Inputs_[inputIdx] = std::move(stream.ValueOrThrow());
+                        self->InputDone(inputIdx);
+                        self->RunRead();
+                    } catch (...) {
+                        self->Listener_->HandleError(CurrentExceptionMessage());
+                    }
+                }));
+            }));
+            return;
+        }
         Inputs_[inputIdx]->Read().SubscribeUnique(BIND([inputIdx = inputIdx, self = Self_](NYT::TErrorOr<NYT::TSharedRef>&& res) {
             self->Pool_->GetInvoker()->Invoke(BIND([inputIdx, self, res = std::move(res)]() mutable {
                 try {
                     self->Accept(inputIdx, std::move(res));
                     self->RunRead();
-                } catch (std::exception& e) {
-                    self->Listener_->HandleError(e.what());
+                } catch (...) {
+                    self->Listener_->HandleError(CurrentExceptionMessage());
                 }
             }));
         }));
@@ -400,7 +432,7 @@ public:
         NYT::TSharedRef currentPayload = NYT::NApi::NRpcProxy::DeserializeRowStreamBlockEnvelope(res.Value(), &descriptor, &statistics);
         if (descriptor.rowset_format() != NYT::NApi::NRpcProxy::NProto::RF_ARROW) {
             if (currentPayload.Size()) {
-                std::lock_guard _(FallbackMtx_);
+                std::lock_guard guard(FallbackMtx_);
                 Fallbacks_.push({inputIdx, currentPayload});
             } else {
                 InputDone(inputIdx);
@@ -425,7 +457,7 @@ public:
 
     // Return input back to queue
     void InputDone(auto input) {
-        std::lock_guard _(Mtx_);
+        std::lock_guard guard(Mtx_);
         InputsQueue_.emplace(input);
     }
 
@@ -434,7 +466,7 @@ public:
             size_t inputIdx = 0;
             NYT::TSharedRef payload;
             {
-                std::lock_guard _(FallbackMtx_);
+                std::lock_guard guard(FallbackMtx_);
                 if (Fallbacks_.size()) {
                     inputIdx = Fallbacks_.front().first;
                     payload = Fallbacks_.front().second;
@@ -515,6 +547,7 @@ private:
     TPtr Self_;
     size_t Inflight_;
     NKikimr::NMiniKQL::IStatsRegistry* JobStats_;
+    size_t NextFreeInputIdx = 0;
 };
 
 class TReaderState: public TComputationValue<TReaderState> {
@@ -534,18 +567,23 @@ public:
             return NUdf::EFetchStatus::Finish;
         }
         YQL_ENSURE(width == Width_ + 1);
-        auto batch = Source_->Next();
-        if (!batch) {
-            GotFinish_ = 1;
-            Source_->Finish();
-            return NUdf::EFetchStatus::Finish;
+        try {
+            auto batch = Source_->Next();
+            if (!batch) {
+                GotFinish_ = 1;
+                Source_->Finish();
+                return NUdf::EFetchStatus::Finish;
+            }
+            
+            for (size_t i = 0; i < Width_; ++i) {
+                YQL_ENSURE(batch->Columns[i].type()->Equals(Types_->at(i)));
+                output[i] = Source_->HolderFactory.CreateArrowBlock(std::move(batch->Columns[i]));
+            }
+            output[Width_] = Source_->HolderFactory.CreateArrowBlock(arrow::Datum(ui64(batch->RowsCnt)));
+        } catch (...) {
+            Cerr << "YT RPC Reader exception:\n";
+            throw;
         }
-        
-        for (size_t i = 0; i < Width_; ++i) {
-            YQL_ENSURE(batch->Columns[i].type()->Equals(Types_->at(i)));
-            output[i] = Source_->HolderFactory.CreateArrowBlock(std::move(batch->Columns[i]));
-        }
-        output[Width_] = Source_->HolderFactory.CreateArrowBlock(arrow::Datum(ui64(batch->RowsCnt)));
         return NUdf::EFetchStatus::Ok;
     }
 
@@ -565,8 +603,9 @@ public:
     TDqYtReadBlockWrapper(const TComputationNodeFactoryContext& ctx, const TString& clusterName,
         const TString& token, const NYT::TNode& inputSpec, const NYT::TNode& samplingSpec,
         const TVector<ui32>& inputGroups,
-        TType* itemType, const TVector<TString>& tableNames, TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>&& tables, NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight,
-        size_t timeout) : TBaseComputation(ctx.Mutables, EValueRepresentation::Boxed)
+        TType* itemType, const TVector<TString>& tableNames, TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>&& tables,
+        NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight, size_t timeout, const TVector<ui64>& tableOffsets)
+        : TBaseComputation(ctx.Mutables, EValueRepresentation::Boxed)
         , Width_(AS_TYPE(TStructType, itemType)->GetMembersCount())
         , CodecCtx_(ctx.Env, ctx.FunctionRegistry, &ctx.HolderFactory)
         , ClusterName_(clusterName)
@@ -581,6 +620,7 @@ public:
         // TODO() Enable range indexes + row indexes
         Specs_.SetUseSkiff("", 0);
         Specs_.Init(CodecCtx_, inputSpec, inputGroups, tableNames, itemType, {}, {}, jobStats);
+        Specs_.SetTableOffsets(tableOffsets);
     }
 
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
@@ -592,9 +632,12 @@ public:
         settings->Pool = arrow::default_memory_pool();
         settings->PgBuilder = &ctx.Builder->GetPgBuilder();
         auto types = std::make_shared<std::vector<std::shared_ptr<arrow::DataType>>>(Width_);
+        TVector<TString> columnNames;
         for (size_t i = 0; i < Width_; ++i) {
+            columnNames.emplace_back(AS_TYPE(TStructType, Type_)->GetMemberName(i));
             YQL_ENSURE(ConvertArrowType(AS_TYPE(TStructType, Type_)->GetMemberType(i), types->at(i)), "Can't convert type to arrow");
         }
+        settings->SetColumns(columnNames);
         auto source = std::make_shared<TSource>(std::move(settings), Inflight_, Type_, types, ctx.HolderFactory, JobStats_);
         source->SetSelfAndRun(source);
         return ctx.HolderFactory.Create<TReaderState>(source, Width_, types);
@@ -619,9 +662,10 @@ private:
 IComputationNode* CreateDqYtReadBlockWrapper(const TComputationNodeFactoryContext& ctx, const TString& clusterName,
         const TString& token, const NYT::TNode& inputSpec, const NYT::TNode& samplingSpec,
         const TVector<ui32>& inputGroups,
-        TType* itemType, const TVector<TString>& tableNames, TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>&& tables, NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight,
-        size_t timeout) 
+        TType* itemType, const TVector<TString>& tableNames, TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>&& tables,
+        NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight, size_t timeout, const TVector<ui64>& tableOffsets) 
 {
-    return new TDqYtReadBlockWrapper(ctx, clusterName, token, inputSpec, samplingSpec, inputGroups, itemType, tableNames, std::move(tables), jobStats, inflight, timeout);
+    return new TDqYtReadBlockWrapper(ctx, clusterName, token, inputSpec, samplingSpec, inputGroups, itemType,
+                                                tableNames, std::move(tables), jobStats, inflight, timeout, tableOffsets);
 }
 }

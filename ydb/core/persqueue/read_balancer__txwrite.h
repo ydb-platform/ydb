@@ -11,17 +11,31 @@ namespace NPQ {
 using namespace NTabletFlatExecutor;
 using namespace NPQRBPrivate;
 
+struct TPartInfo {
+    ui32 PartitionId;
+    ui32 Group;
+    ui64 TabletId;
+    NKikimrPQ::TPartitionKeyRange KeyRange;
+
+    TPartInfo(const ui32 partitionId, const ui64 tabletId, const ui32 group, const NKikimrPQ::TPartitionKeyRange& keyRange)
+        : PartitionId(partitionId)
+        , Group(group)
+        , TabletId(tabletId)
+        , KeyRange(keyRange)
+    {}
+};
+
 struct TPersQueueReadBalancer::TTxWrite : public ITransaction {
     TPersQueueReadBalancer * const Self;
-    TVector<ui32> DeletedPartitions;
-    TVector<TPartInfo> NewPartitions;
-    TVector<std::pair<ui64, TTabletInfo>> NewTablets;
-    TVector<std::pair<ui32, ui32>> NewGroups;
-    TVector<std::pair<ui64, TTabletInfo>> ReallocatedTablets;
+    std::vector<ui32> DeletedPartitions;
+    std::vector<TPartInfo> NewPartitions;
+    std::vector<std::pair<ui64, TTabletInfo>> NewTablets;
+    std::vector<std::pair<ui32, ui32>> NewGroups;
+    std::vector<std::pair<ui64, TTabletInfo>> ReallocatedTablets;
 
-    TTxWrite(TPersQueueReadBalancer *self, TVector<ui32>&& deletedPartitions, TVector<TPartInfo>&& newPartitions,
-                 TVector<std::pair<ui64, TTabletInfo>>&& newTablets, TVector<std::pair<ui32, ui32>>&& newGroups,
-                 TVector<std::pair<ui64, TTabletInfo>>&& reallocatedTablets)
+    TTxWrite(TPersQueueReadBalancer *self, std::vector<ui32>&& deletedPartitions, std::vector<TPartInfo>&& newPartitions,
+                 std::vector<std::pair<ui64, TTabletInfo>>&& newTablets, std::vector<std::pair<ui32, ui32>>&& newGroups,
+                 std::vector<std::pair<ui64, TTabletInfo>>&& reallocatedTablets)
         : Self(self)
         , DeletedPartitions(std::move(deletedPartitions))
         , NewPartitions(std::move(newPartitions))
@@ -79,7 +93,6 @@ struct TPersQueueReadBalancer::TTxWrite : public ITransaction {
         }
         Self->WaitingResponse.clear();
 
-        Self->NoGroupsInBase = false;
         if (!Self->Inited) {
             Self->Inited = true;
             Self->InitDone(ctx);

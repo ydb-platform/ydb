@@ -1,11 +1,11 @@
 <tmp_path>/program.sql:<main>: Warning: Type annotation
 
-    <tmp_path>/program.sql:<main>:4:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    <tmp_path>/program.sql:<main>:3:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
     	select key+1t from Input;
 	^
-        <tmp_path>/program.sql:<main>:4:11: Warning: At function: +
+        <tmp_path>/program.sql:<main>:3:11: Warning: At function: +
         	select key+1t from Input;
 	          ^
-            <tmp_path>/program.sql:<main>:4:11: Warning: Integral type implicit bitcast: Uint8 and Int8
+            <tmp_path>/program.sql:<main>:3:11: Warning: Integral type implicit bitcast: Uint8 and Int8
             	select key+1t from Input;
 	          ^

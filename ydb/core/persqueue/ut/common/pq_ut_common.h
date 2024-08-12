@@ -88,7 +88,7 @@ struct TTestContext {
     THolder<TTestActorRuntime> Runtime;
     TActorId Edge;
     THashMap<ui32, ui32> MsgSeqNoMap;
-
+    bool EnableDetailedPQLog = ENABLE_DETAILED_PQ_LOG;
 
     TTestContext() {
         TabletId = MakeTabletID(false, 1);
@@ -98,12 +98,13 @@ struct TTestContext {
         TabletIds.push_back(BalancerTabletId);
     }
 
-    static void SetupLogging(TTestActorRuntime& runtime)  {
-        NActors::NLog::EPriority pqPriority = ENABLE_DETAILED_PQ_LOG ? NLog::PRI_DEBUG : NLog::PRI_INFO;
+    static void SetupLogging(TTestActorRuntime& runtime, bool enableDetailedPQLog)  {
+        NActors::NLog::EPriority pqPriority = enableDetailedPQLog ? NLog::PRI_DEBUG : NLog::PRI_INFO;
         NActors::NLog::EPriority priority = ENABLE_DETAILED_KV_LOG ? NLog::PRI_DEBUG : NLog::PRI_ERROR;
         NActors::NLog::EPriority otherPriority = NLog::PRI_INFO;
 
         runtime.SetLogPriority(NKikimrServices::PERSQUEUE, pqPriority);
+        runtime.SetLogPriority(NKikimrServices::PERSQUEUE_READ_BALANCER, pqPriority);
 
         runtime.SetLogPriority(NKikimrServices::SYSTEM_VIEWS, pqPriority);
         runtime.SetLogPriority(NKikimrServices::KEYVALUE, priority);
@@ -126,9 +127,8 @@ struct TTestContext {
 
     static bool RequestTimeoutFilter(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration duration, TInstant& deadline) {
         if (event->GetTypeRewrite() == TEvents::TSystem::Wakeup) {
-            TActorId actorId = event->GetRecipientRewrite();
-            IActor *actor = runtime.FindActor(actorId);
-            if (actor && actor->GetActivityType() == NKikimrServices::TActivity::PERSQUEUE_ANS_ACTOR) {
+            Cerr << "Captured TEvents::TSystem::Wakeup to " << runtime.FindActorName(event->GetRecipientRewrite()) << Endl;
+            if (runtime.FindActorName(event->GetRecipientRewrite()) == "PERSQUEUE_ANS_ACTOR") {
                 return true;
             }
         }
@@ -165,7 +165,7 @@ struct TTestContext {
         TAppPrepare appData;
         appData.SetEnablePersistentQueryStats(enableDbCounters);
         appData.SetEnableDbCounters(enableDbCounters);
-        SetupLogging(*Runtime);
+        SetupLogging(*Runtime, EnableDetailedPQLog);
         SetupTabletServices(*Runtime, &appData);
         setup(*Runtime);
 
@@ -197,7 +197,7 @@ struct TTestContext {
     void Prepare() {
         Runtime.Reset(new TTestBasicRuntime);
         Runtime->SetScheduledLimit(200);
-        SetupLogging(*Runtime);
+        SetupLogging(*Runtime, EnableDetailedPQLog);
         SetupTabletServices(*Runtime);
         CreateTestBootstrapper(*Runtime,
             CreateTestTabletInfo(TabletId, PQTabletType, TErasureType::ErasureNone),

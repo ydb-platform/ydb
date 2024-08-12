@@ -11,6 +11,25 @@ namespace NKikimr::NOlap::NBlobOperations {
 
 class TStorageCounters;
 
+enum class EConsumer {
+    TTL = 0,
+    GENERAL_COMPACTION,
+    INDEXATION,
+    CLEANUP_TABLES,
+    CLEANUP_PORTIONS,
+    CLEANUP_INSERT_TABLE,
+    CLEANUP_SHARED_BLOBS,
+    EXPORT,
+    SCAN,
+    GC,
+    WRITING,
+    WRITING_BUFFER,
+    WRITING_OPERATOR,
+    NORMALIZER,
+
+    COUNT
+};
+
 class TConsumerCounters: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
@@ -25,10 +44,11 @@ public:
 class TStorageCounters: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
+    std::vector<std::shared_ptr<TConsumerCounters>> Consumers;
 public:
     TStorageCounters(const TString& storageId);
 
-    std::shared_ptr<TConsumerCounters> GetConsumerCounter(const TString& consumerId);
+    std::shared_ptr<TConsumerCounters> GetConsumerCounter(const EConsumer consumer);
 
 };
 

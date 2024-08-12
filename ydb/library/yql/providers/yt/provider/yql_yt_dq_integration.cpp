@@ -8,6 +8,7 @@
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
 #include <ydb/library/yql/providers/yt/lib/yson_helpers/yson_helpers.h>
+#include <ydb/library/yql/providers/yt/proto/source.pb.h>
 
 #include <ydb/library/yql/providers/common/dq/yql_dq_integration_impl.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
@@ -34,10 +35,112 @@
 
 namespace NYql {
 
-static const THashSet<TStringBuf> UNSUPPORTED_YT_PRAGMAS = {"maxrowweight",  "layerpaths", "operationspec"};
+static const THashSet<TStringBuf> UNSUPPORTED_YT_PRAGMAS = {"maxrowweight",  "layerpaths", "dockerimage", "operationspec"};
 static const THashSet<TStringBuf> POOL_TREES_WHITELIST = {"physical",  "cloud", "cloud_default"};
 
 using namespace NNodes;
+
+namespace {
+    void BlockReaderAddInfo(TExprContext& ctx, const TPosition& pos, const TString& msg) {
+        ctx.IssueManager.RaiseIssue(YqlIssue(pos, EYqlIssueCode::TIssuesIds_EIssueCode_INFO, "Can't use block reader: " + msg));
+    }
+
+    bool CheckBlockReaderSupportedTypes(const TSet<TString>& list, const TSet<NUdf::EDataSlot>& dataTypesSupported, const TStructExprType* types, TExprContext& ctx, const TPosition& pos) {
+        TSet<ETypeAnnotationKind> supported;
+        for (const auto &e: list) {
+            if (e == "pg") {
+                supported.insert(ETypeAnnotationKind::Pg);
+            } else if (e == "tuple") {
+                supported.emplace(ETypeAnnotationKind::Tuple);
+            } else if (e == "struct") {
+                supported.emplace(ETypeAnnotationKind::Struct);
+            } else if (e == "dict") {
+                supported.emplace(ETypeAnnotationKind::Dict);
+            } else if (e == "list") {
+                supported.emplace(ETypeAnnotationKind::List);
+            } else if (e == "variant") {
+                supported.emplace(ETypeAnnotationKind::Variant);
+            } else {
+                // Unknown type
+                BlockReaderAddInfo(ctx, pos, TStringBuilder() << "unknown type: " << e);
+                return false;
+            }
+        }
+        if (dataTypesSupported.size()) {
+            supported.emplace(ETypeAnnotationKind::Data);
+        }
+        auto checkType = [&] (const TTypeAnnotationNode* type) {
+             if (type->GetKind() == ETypeAnnotationKind::Data) {
+                if (!supported.contains(ETypeAnnotationKind::Data)) {
+                    BlockReaderAddInfo(ctx, pos, TStringBuilder() << "unsupported data types");
+                    return false;
+                }
+                if (!dataTypesSupported.contains(type->Cast<TDataExprType>()->GetSlot())) {
+                    BlockReaderAddInfo(ctx, pos, TStringBuilder() << "unsupported data type: " << type->Cast<TDataExprType>()->GetSlot());
+                    return false;
+                }
+            } else if (type->GetKind() == ETypeAnnotationKind::Pg) {
+                if (!supported.contains(ETypeAnnotationKind::Pg)) {
+                    BlockReaderAddInfo(ctx, pos, TStringBuilder() << "unsupported pg");
+                    return false;
+                }
+                auto name = type->Cast<TPgExprType>()->GetName();
+                if (name == "float4" && !dataTypesSupported.contains(NUdf::EDataSlot::Float)) {
+                    BlockReaderAddInfo(ctx, pos, TStringBuilder() << "PgFloat4 unsupported yet since float is no supported");
+                    return false;
+                }
+            } else {
+                BlockReaderAddInfo(ctx, pos, TStringBuilder() << "unsupported annotation kind: " << type->GetKind());
+                return false;
+            }
+            return true;
+        };
+
+        TVector<const TTypeAnnotationNode*> stack;
+
+        for (auto sub: types->GetItems()) {
+            auto subT = sub->GetItemType();
+            stack.push_back(subT);
+        }
+        while (!stack.empty()) {
+            auto el = stack.back();
+            stack.pop_back();
+            if (el->GetKind() == ETypeAnnotationKind::Optional) {
+                stack.push_back(el->Cast<TOptionalExprType>()->GetItemType());
+                continue;
+            }
+            if (!supported.contains(el->GetKind())) {
+                BlockReaderAddInfo(ctx, pos, TStringBuilder() << "unsupported " << el->GetKind());
+                return false;
+            }
+            if (el->GetKind() == ETypeAnnotationKind::Tuple) {
+                for (auto e: el->Cast<TTupleExprType>()->GetItems()) {
+                    stack.push_back(e);
+                }
+                continue;
+            } else if (el->GetKind() == ETypeAnnotationKind::Struct) {
+                for (auto e: el->Cast<TStructExprType>()->GetItems()) {
+                    stack.push_back(e->GetItemType());
+                }
+                continue;
+            } else if (el->GetKind() == ETypeAnnotationKind::List) {
+                stack.push_back(el->Cast<TListExprType>()->GetItemType());
+                continue;
+            } else if (el->GetKind() == ETypeAnnotationKind::Dict) {
+                stack.push_back(el->Cast<TDictExprType>()->GetKeyType());
+                stack.push_back(el->Cast<TDictExprType>()->GetPayloadType());
+                continue;
+            } else if (el->GetKind() == ETypeAnnotationKind::Variant) {
+                stack.push_back(el->Cast<TVariantExprType>()->GetUnderlyingType());
+                continue;
+            }
+            if (!checkType(el)) {
+                return false;
+            }
+        }
+        return true;
+    }
+};
 
 class TYtDqIntegration: public TDqIntegrationBase {
 public:
@@ -118,7 +221,7 @@ public:
         }
 
         if (auto maxChunks = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ); canFallback && chunksCount > maxChunks) {
-            throw TFallbackError() << "DQ cannot execute the query. Cause: table with too many chunks";
+            throw TFallbackError() << DqFallbackErrorMessageWrap( TStringBuilder() << "table with too many chunks: " << chunksCount << " > " << maxChunks);
         }
 
         if (hasErasure) {
@@ -162,7 +265,7 @@ public:
                 .Config(State_->Configuration->Snapshot())
                 .Paths(std::move(paths)));
             if (!res.Success()) {
-                const auto message = TStringBuilder() << "DQ cannot execute the query. Cause: failed to partition table";
+                const auto message = DqFallbackErrorMessageWrap("failed to partition table");
                 YQL_CLOG(ERROR, ProviderDq) << message;
                 auto issue = YqlIssue(TPosition(), TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, message);
                 for (auto& subIssue: res.Issues()) {
@@ -193,7 +296,7 @@ public:
             TVector<TVector<ui64>> groupIdColumnarStats = EstimateColumnStats(ctx, cluster, {groupIdPathInfos}, sumAllTableSizes);
             ui64 parts = (sumAllTableSizes + dataSizePerJob - 1) / dataSizePerJob;
             if (canFallback && hasErasure && parts > maxTasks) {
-                std::string_view message = "DQ cannot execute the query. Cause: too big table with erasure codec";
+                auto message = DqFallbackErrorMessageWrap("too big table with erasure codec");
                 YQL_CLOG(INFO, ProviderDq) << message;
                 throw TFallbackError() << message;
             }
@@ -242,13 +345,24 @@ public:
         return maxDataSizePerJob;
     }
 
-    void AddInfo(TExprContext& ctx, const TString& message, bool skipIssues) {
-        if (!skipIssues) {
-            YQL_CLOG(INFO, ProviderDq) << message;
-            TIssue info("DQ cannot execute the query. Cause: " + message);
-            info.Severity = TSeverityIds::S_INFO;
-            ctx.IssueManager.RaiseIssue(info);
+    void AddMessage(TExprContext& ctx, const TString& message, bool skipIssues, bool riseError) {
+        if (skipIssues && !riseError) {
+            return;
         }
+
+        TIssue issue(DqFallbackErrorMessageWrap(message));
+        if (riseError) {
+            YQL_CLOG(ERROR, ProviderDq) << message;
+            issue.Severity = TSeverityIds::S_ERROR;
+        } else {
+            YQL_CLOG(INFO, ProviderDq) << message;
+            issue.Severity = TSeverityIds::S_INFO;
+        }
+        ctx.IssueManager.RaiseIssue(issue);
+    }
+
+    void AddInfo(TExprContext& ctx, const TString& message, bool skipIssues) {
+        AddMessage(ctx, message, skipIssues, false);
     }
 
     bool CheckPragmas(const TExprNode& node, TExprContext& ctx, bool skipIssues) override {
@@ -293,13 +407,13 @@ public:
         } else if (auto maybeRead = TMaybeNode<TYtReadTable>(&node)) {
             auto cluster = maybeRead.Cast().DataSource().Cluster().StringValue();
             if (!State_->Configuration->_EnableDq.Get(cluster).GetOrElse(true)) {
-                AddInfo(ctx, TStringBuilder() << "disabled for cluster " << cluster, skipIssues);
+                AddMessage(ctx, TStringBuilder() << "disabled for cluster " << cluster, skipIssues, State_->PassiveExecution);
                 return false;
             }
             const auto canUseYtPartitioningApi = State_->Configuration->_EnableYtPartitioning.Get(cluster).GetOrElse(false);
             ui64 chunksCount = 0ull;
             for (auto section: maybeRead.Cast().Input()) {
-                if (HasSettingsExcept(maybeRead.Cast().Input().Item(0).Settings().Ref(), DqReadSupportedSettings)) {
+                if (HasSettingsExcept(maybeRead.Cast().Input().Item(0).Settings().Ref(), DqReadSupportedSettings) || HasNonEmptyKeyFilter(maybeRead.Cast().Input().Item(0))) {
                     TStringBuilder info;
                     info << "unsupported path settings: ";
                     if (maybeRead.Cast().Input().Item(0).Settings().Size() > 0) {
@@ -309,40 +423,45 @@ public:
                             }
                         }
                     }
-                    AddInfo(ctx, info, skipIssues);
+                    AddMessage(ctx, info, skipIssues, State_->PassiveExecution);
+                    return false;
+                }
+                auto sampleSetting = GetSetting(section.Settings().Ref(), EYtSettingType::Sample);
+                if (sampleSetting && sampleSetting->Child(1)->Child(0)->Content() == "system") {
+                    AddMessage(ctx, "system sampling", skipIssues, State_->PassiveExecution);
                     return false;
                 }
                 for (auto path: section.Paths()) {
                     if (!path.Table().Maybe<TYtTable>()) {
-                        AddInfo(ctx, "non-table path", skipIssues);
+                        AddMessage(ctx, "non-table path", skipIssues, State_->PassiveExecution);
                         return false;
                     } else {
                         auto pathInfo = TYtPathInfo(path);
                         auto tableInfo = pathInfo.Table;
                         auto epoch = TEpochInfo::Parse(path.Table().Maybe<TYtTable>().CommitEpoch().Ref());
                         if (!tableInfo->Stat) {
-                            AddInfo(ctx, "table without statistics", skipIssues);
+                            AddMessage(ctx, "table without statistics", skipIssues, State_->PassiveExecution);
                             return false;
                         } else if (!tableInfo->RowSpec) {
-                            AddInfo(ctx, "table without row spec", skipIssues);
+                            AddMessage(ctx, "table without row spec", skipIssues, State_->PassiveExecution);
                             return false;
                         } else if (!tableInfo->Meta) {
-                            AddInfo(ctx, "table without meta", skipIssues);
+                            AddMessage(ctx, "table without meta", skipIssues, State_->PassiveExecution);
                             return false;
                         } else if (tableInfo->IsAnonymous) {
-                            AddInfo(ctx, "anonymous table", skipIssues);
+                            AddMessage(ctx, "anonymous table", skipIssues, State_->PassiveExecution);
                             return false;
                         } else if ((!epoch.Empty() && *epoch.Get() > 0)) {
-                            AddInfo(ctx, "table with non-empty epoch", skipIssues);
+                            AddMessage(ctx, "table with non-empty epoch", skipIssues, State_->PassiveExecution);
                             return false;
                         } else if (NYql::HasSetting(tableInfo->Settings.Ref(), EYtSettingType::WithQB)) {
-                            AddInfo(ctx, "table with QB2 premapper", skipIssues);
+                            AddMessage(ctx, "table with QB2 premapper", skipIssues, State_->PassiveExecution);
                             return false;
                         } else if (pathInfo.Ranges && !canUseYtPartitioningApi) {
-                            AddInfo(ctx, "table with ranges", skipIssues);
+                            AddMessage(ctx, "table with ranges", skipIssues, State_->PassiveExecution);
                             return false;
                         } else if (tableInfo->Meta->IsDynamic && !canUseYtPartitioningApi) {
-                            AddInfo(ctx, "dynamic table", skipIssues);
+                            AddMessage(ctx, "dynamic table", skipIssues, State_->PassiveExecution);
                             return false;
                         }
 
@@ -351,7 +470,7 @@ public:
                 }
             }
             if (auto maxChunks = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ); chunksCount > maxChunks) {
-                AddInfo(ctx, "table with too many chunks", skipIssues);
+                AddMessage(ctx,  TStringBuilder() << "table with too many chunks: " << chunksCount << " > " << maxChunks, skipIssues, State_->PassiveExecution);
                 return false;
             }
             return true;
@@ -371,24 +490,41 @@ public:
             return false;
         }
 
+        auto supportedTypes = State_->Configuration->BlockReaderSupportedTypes.Get(maybeRead.Cast().DataSource().Cluster().StringValue()).GetOrElse(DEFAULT_BLOCK_READER_SUPPORTED_TYPES);
+        auto supportedDataTypes = State_->Configuration->BlockReaderSupportedDataTypes.Get(maybeRead.Cast().DataSource().Cluster().StringValue()).GetOrElse(DEFAULT_BLOCK_READER_SUPPORTED_DATA_TYPES);
         const auto structType = GetSeqItemType(maybeRead.Raw()->GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back())->Cast<TStructExprType>();
+        if (!CheckBlockReaderSupportedTypes(supportedTypes, supportedDataTypes, structType, ctx, ctx.GetPosition(node.Pos()))) {
+            return false;
+        }
+
         TVector<const TTypeAnnotationNode*> subTypeAnn(Reserve(structType->GetItems().size()));
         for (const auto& type: structType->GetItems()) {
             subTypeAnn.emplace_back(type->GetItemType());
         }
 
         if (!State_->Types->ArrowResolver) {
+            BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), "no arrow resolver provided");
             return false;
         }
 
         if (State_->Types->ArrowResolver->AreTypesSupported(ctx.GetPosition(node.Pos()), subTypeAnn, ctx) != IArrowResolver::EStatus::OK) {
+            BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), "arrow resolver don't support these types");
             return false;
         }
 
         const TYtSectionList& sectionList = wrap.Input().Cast<TYtReadTable>().Input();
         for (size_t i = 0; i < sectionList.Size(); ++i) {
             auto section = sectionList.Item(i);
+            auto paths = section.Paths();
+            for (const auto& path : section.Paths()) {
+                auto meta = TYtTableBaseInfo::GetMeta(path.Table());
+                if (meta->Attrs.contains("schema_mode") && meta->Attrs["schema_mode"] == "weak") {
+                    BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), "can't use block reader on tables with weak schema");
+                    return false;
+                }
+            }
             if (!NYql::GetSettingAsColumnList(section.Settings().Ref(), EYtSettingType::SysColumns).empty()) {
+                BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), "system column");
                 return false;
             }
         }
@@ -397,7 +533,7 @@ public:
 
     TMaybe<TOptimizerStatistics> ReadStatistics(const TExprNode::TPtr& read, TExprContext& ctx) override {
         Y_UNUSED(ctx);
-        TOptimizerStatistics stat(0, 0);
+        TOptimizerStatistics stat;
         if (auto maybeRead = TMaybeNode<TYtReadTable>(read)) {
             auto input = maybeRead.Cast().Input();
             for (auto section: input) {
@@ -458,14 +594,14 @@ public:
                             }
                             if (tableInfo->Stat) {
                                 chunksCount += tableInfo->Stat->ChunkCount;
+                                if (chunksCount > maxChunks) {
+                                    AddErrorWrap(ctx, node_->Pos(),  TStringBuilder() << "table with too many chunks: " << chunksCount << " > " << maxChunks);
+                                    return Nothing();
+                                }
                             }
                         }
                         groupIdPathInfo.back().emplace_back(pathInfo);
                     }
-                }
-                if (chunksCount > maxChunks) {
-                    AddErrorWrap(ctx, node_->Pos(), "table with too many chunks");
-                    return Nothing();
                 }
                 clusterToNodesAndErasure[cluster].push_back({node_, hasErasure});
             } else {
@@ -500,7 +636,7 @@ public:
     }
 
     void AddErrorWrap(TExprContext& ctx, const NYql::TPositionHandle& where, const TString& cause) {
-        ctx.AddError(YqlIssue(ctx.GetPosition(where), TIssuesIds::DQ_OPTIMIZE_ERROR, TStringBuilder() << "DQ cannot execute the query. Cause: " << cause));
+        ctx.AddError(YqlIssue(ctx.GetPosition(where), TIssuesIds::DQ_OPTIMIZE_ERROR, DqFallbackErrorMessageWrap(cause)));
     }
 
     TExprNode::TPtr WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext& ctx) override {
@@ -518,6 +654,28 @@ public:
         }
         return read;
     }
+
+    void FillLookupSourceSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sourceType) override {
+        const TDqLookupSourceWrap wrap(&node);
+        auto table = wrap.Input().Cast<TYtTable>();
+        TYtTableBaseInfo::TPtr tableInfo{TYtTableBaseInfo::Parse(table)};
+        auto codecSpec = tableInfo->GetCodecSpecNode({});
+        TString rowSpec = NodeToYsonString(codecSpec, NYT::NYson::EYsonFormat::Text);
+
+        NYt::NSource::TLookupSource source;
+        source.SetCluster(table.Cluster().StringValue());
+        source.SetTable(table.Name().StringValue());
+        source.SetRowSpec(rowSpec);
+        YQL_CLOG(INFO, ProviderYt)
+            << "Filling lookup source settings"
+            << ": cluster: " << source.cluster()
+            << ", table: " << source.table()
+            << ", RowSpec: " << rowSpec
+        ;
+        settings.PackFrom(source);
+        sourceType = "yt";
+    }
+
 
     TMaybe<bool> CanWrite(const TExprNode& node, TExprContext& ctx) override {
         if (auto maybeWrite = TMaybeNode<TYtWriteTable>(&node)) {
@@ -703,6 +861,10 @@ public:
         }), "YtSubstTables", TIssuesIds::DEFAULT_ERROR);
 
         pipeline->Add(CreateYtPeepholeTransformer(TYtState::TPtr(State_), providerParams), "YtPeepHole", TIssuesIds::DEFAULT_ERROR);
+    }
+
+    static TString DqFallbackErrorMessageWrap(const TString& message) {
+        return "DQ cannot execute the query. Cause: " + message;
     }
 
 private:

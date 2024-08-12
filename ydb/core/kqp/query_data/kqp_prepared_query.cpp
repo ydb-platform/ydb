@@ -201,6 +201,13 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
                     tablesSet.insert(source.GetReadRangesSource().GetTable().GetPath());
                 }
             }
+            for (const auto& sink : stage.GetSinks()) {
+                if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                    NKikimrKqp::TKqpTableSinkSettings settings;
+                    YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+                    tablesSet.insert(settings.GetTable().GetPath());
+                }
+            }
         }
     }
 
@@ -245,6 +252,18 @@ void TPreparedQueryHolder::FillTables(const google::protobuf::RepeatedPtrField< 
             if (source.HasReadRangesSource()) {
                 auto& info = GetInfo(MakeTableId(source.GetReadRangesSource().GetTable()));
                 for (auto& column : source.GetReadRangesSource().GetColumns()) {
+                    info->AddColumn(column.GetName());
+                }
+            }
+        }
+
+        for (const auto& sink : stage.GetSinks()) {
+            if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                NKikimrKqp::TKqpTableSinkSettings settings;
+                YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+
+                auto& info = GetInfo(MakeTableId(settings.GetTable()));
+                for (auto& column : settings.GetColumns()) {
                     info->AddColumn(column.GetName());
                 }
             }

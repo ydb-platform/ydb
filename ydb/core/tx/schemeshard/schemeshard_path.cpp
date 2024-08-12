@@ -391,6 +391,11 @@ const TPath::TChecker& TPath::TChecker::NotAsyncReplicaTable(EStatus status) con
         return *this;
     }
 
+    // do not treat incr backup tables as async replica
+    if (Path->IsIncrementalBackupTable()) {
+        return *this;
+    }
+
     return Fail(status, TStringBuilder() << "path is an async replica table"
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
@@ -848,7 +853,39 @@ const TPath::TChecker& TPath::TChecker::IsView(EStatus status) const {
     return Fail(status, TStringBuilder() << "path is not a view"
         << " (" << BasicPathInfo(Path.Base()) << ")"
     );
+}
 
+const TPath::TChecker& TPath::TChecker::FailOnRestrictedCreateInTempZone(bool allowCreateInTemporaryDir, EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (allowCreateInTemporaryDir) {
+        return *this;
+    }
+
+    for (const auto& element : Path.Elements) {
+        if (element->IsTemporary()) {
+            return Fail(status, TStringBuilder() << "path is temporary"
+                << " (" << BasicPathInfo(Path.Base()) << ")"
+            );
+        }
+    }
+
+    return *this;
+}
+
+const TPath::TChecker& TPath::TChecker::IsResourcePool(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsResourcePool()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a resource pool"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
 const TPath::TChecker& TPath::TChecker::PathShardsLimit(ui64 delta, EStatus status) const {
@@ -1564,20 +1601,22 @@ bool TPath::IsInsideCdcStreamPath() const {
         return false;
     }
 
-    ++item;
-    for (; item != Elements.rend(); ++item) {
-        if (!(*item)->IsDirectory() && !(*item)->IsSubDomainRoot()) {
-            return false;
-        }
-    }
-
     return true;
 }
 
-bool TPath::IsTableIndex() const {
+bool TPath::IsTableIndex(const TMaybe<NKikimrSchemeOp::EIndexType>& type) const {
     Y_ABORT_UNLESS(IsResolved());
 
-    return Base()->IsTableIndex();
+    if (!Base()->IsTableIndex()) {
+        return false;
+    }
+
+    if (!type.Defined()) {
+        return true;
+    }
+
+    Y_ABORT_UNLESS(SS->Indexes.contains(Base()->PathId));
+    return SS->Indexes.at(Base()->PathId)->Type == *type;
 }
 
 bool TPath::IsBackupTable() const {

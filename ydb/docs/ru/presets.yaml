@@ -1,2 +1,120 @@
 default:
   lang: ru
+  pub-cover-size: 700x400
+  team:
+    babich:
+      name: Михаил Бабич
+      position: Старший разработчик
+      profile: https://www.linkedin.com/in/mikhail-babich-807700270/
+    bondar:
+      name: Олег Бондарь
+      position: CPO YDB
+      profile: https://www.linkedin.com/in/olegbondar2000/
+    cherednik:
+      name: Даниил Чередник
+      position: Старший разработчик
+      profile: https://www.linkedin.com/in/daniil-c-1110165b/
+    dmitriev:
+      name: Алексей Дмитриев 
+      position: Технический менеджер
+      profile: https://www.linkedin.com/in/алексей-дмитриев-7914b535/ 
+    gorshenin:
+      name: Александр Горшенин
+      position: Ведущий разработчик
+      profile: https://www.linkedin.com/in/agorshenin268/   
+    gorbunov:
+      name: Максим Горбунов
+      position: Руководитель группы эксплуатации
+      profile: https://www.linkedin.com/in/maksim-gorbunov-20283a55/
+    gridnev:
+      name: Виталий Гриднев
+      position: Ведущий разработчик
+      profile: https://www.linkedin.com/in/gridnevvvit/
+    fomichev: 
+      name: Андрей Фомичев
+      position: Руководитель YDB
+      profile: https://www.linkedin.com/in/andrey-fomichev/  
+    stankevichus:
+      name: Алексей Станкевичус 
+      position: Руководитель групп разработки распределенного хранилища YDB  
+      profile: https://github.com/the-ancient-1
+    sokolov:
+      name: Иван Соколов 
+      position: Руководитель службы видеохостинга (Внешний Дзен) 
+      profile:
+    surin:
+      name: Михаил Сурин
+      position:
+      profile:
+    sidorina:
+      name: Юлия Сидорина
+      position: Разработчик YDB
+      profile: https://www.linkedin.com/in/yuliya-sidorina-a17ab6220/
+    smirnov:
+      name: Александр Смирнов
+      position: Технический эксперт
+      profile: https://www.linkedin.com/in/alexander-smirnov-bb990434/
+    novozhilova:
+      name: Софья Новожилова 
+      position: занимается развитием аналитического направления платформы YDB
+      profile:
+    nizametdinov:
+      name: Ильназ Низаметдинов
+      position: Руководитель группы
+      profile: https://www.linkedin.com/in/nilnaz
+    myasnikov:
+      name: Алексей Мясников
+      position: руководитель команды разработки клиентских библиотек YDB
+      profile: https://github.com/asmyasnikov
+    kita:
+      name: Максим Кита
+      position: Разработчик
+      profile:     
+    kulin:
+      name: Тимофей Кулин
+      position: Разработчик
+      profile: https://github.com/rekby
+    kriukov:
+      name: Александр Крюков
+      position: Разработчик
+      profile: https://www.linkedin.com/in/kruall/
+    kuznetcov:
+      name: Владислав Кузнецов
+      position: Старший разработчик
+      profile: https://www.linkedin.com/in/vlad-kuznetcov-a8a012276/
+    kovalenko:
+      name: Антон Коваленко
+      position: Технический менеджер
+      profile: https://www.linkedin.com/in/kovalad/
+    ivanov:
+      name: Евгений Иванов
+      position: Старший разработчик
+      profile: https://www.linkedin.com/in/eivanov89/  
+    prudaev:
+      name: Александр Прудаев
+      position: Старший разработчик
+      profile: https://www.linkedin.com/in/alexander-prudaev-44ba4383/
+    puchin:
+      name: Сергей Пучин
+      position: Руководитель группы
+      profile: https://www.linkedin.com/in/sergei-puchin-9486b621/
+    rykov:
+      name: Андрей Рыков
+      position: Старший разработчик
+      profile: https://www.linkedin.com/in/andrei-rykov-5936b4222/
+    tarasov:
+      name: Егор Тарасов
+      position: DevOps инженер
+      profile: https://www.linkedin.com/in/jorres-tarasov/
+    zivaykin:
+      name: Александр Зевайкин
+      position: Технический лидер
+      profile:   
+    zverev:
+      name: Евгений Зверев
+      position: Разработчик
+      profile:     
+    zinal:
+      name: Максим Зиналь
+      profile: https://www.linkedin.com/in/maxzinal
+      position: Архитектор YDB       

@@ -267,6 +267,45 @@ extern "C" void ReadTzTimestamp(void* vbuf, void* vpod) {
     (new (vpod) NUdf::TUnboxedValuePod(data))->SetTimezoneId(tzId);
 }
 
+extern "C" void ReadTzDate32(void* vbuf, void* vpod) {
+    NCommon::TInputBuf& buf = *(NCommon::TInputBuf*)vbuf;
+    ui32 size;
+    buf.ReadMany((char*)&size, sizeof(size));
+    ui32 data;
+    buf.ReadMany((char*)&data, sizeof(data));
+    ui16 tzId;
+    buf.ReadMany((char*)&tzId, sizeof(tzId));
+    i32 value = SwapBytes(0x80 ^ data);
+    tzId = SwapBytes(tzId);
+    (new (vpod) NUdf::TUnboxedValuePod(value))->SetTimezoneId(tzId);
+}
+
+extern "C" void ReadTzDatetime64(void* vbuf, void* vpod) {
+    NCommon::TInputBuf& buf = *(NCommon::TInputBuf*)vbuf;
+    ui32 size;
+    buf.ReadMany((char*)&size, sizeof(size));
+    ui64 data;
+    buf.ReadMany((char*)&data, sizeof(data));
+    ui16 tzId;
+    buf.ReadMany((char*)&tzId, sizeof(tzId));
+    i64 value = SwapBytes(0x80 ^ data);
+    tzId = SwapBytes(tzId);
+    (new (vpod) NUdf::TUnboxedValuePod(value))->SetTimezoneId(tzId);
+}
+
+extern "C" void ReadTzTimestamp64(void* vbuf, void* vpod) {
+    NCommon::TInputBuf& buf = *(NCommon::TInputBuf*)vbuf;
+    ui32 size;
+    buf.ReadMany((char*)&size, sizeof(size));
+    ui64 data;
+    buf.ReadMany((char*)&data, sizeof(data));
+    ui16 tzId;
+    buf.ReadMany((char*)&tzId, sizeof(tzId));
+    i64 value = SwapBytes(0x80 ^ data);
+    tzId = SwapBytes(tzId);
+    (new (vpod) NUdf::TUnboxedValuePod(value))->SetTimezoneId(tzId);
+}
+
 extern "C" void WriteTzDate(void* vbuf, ui16 value, ui16 tzId) {
     value = SwapBytes(value);
     tzId = SwapBytes(tzId);
@@ -294,6 +333,36 @@ extern "C" void WriteTzTimestamp(void* vbuf, ui64 value, ui16 tzId) {
     const ui32 size = sizeof(value) + sizeof(tzId);
     buf.WriteMany((const char*)&size, sizeof(size));
     buf.WriteMany((const char*)&value, sizeof(value));
+    buf.WriteMany((const char*)&tzId, sizeof(tzId));
+}
+
+extern "C" void WriteTzDate32(void* vbuf, i32 value, ui16 tzId) {
+    ui32 data = 0x80 ^ SwapBytes((ui32)value);
+    tzId = SwapBytes(tzId);
+    NCommon::TOutputBuf& buf = *(NCommon::TOutputBuf*)vbuf;
+    const ui32 size = sizeof(data) + sizeof(tzId);
+    buf.WriteMany((const char*)&size, sizeof(size));
+    buf.WriteMany((const char*)&data, sizeof(data));
+    buf.WriteMany((const char*)&tzId, sizeof(tzId));
+}
+
+extern "C" void WriteTzDatetime64(void* vbuf, i64 value, ui16 tzId) {
+    ui64 data = 0x80 ^ SwapBytes((ui64)value);
+    tzId = SwapBytes(tzId);
+    NCommon::TOutputBuf& buf = *(NCommon::TOutputBuf*)vbuf;
+    const ui32 size = sizeof(data) + sizeof(tzId);
+    buf.WriteMany((const char*)&size, sizeof(size));
+    buf.WriteMany((const char*)&data, sizeof(data));
+    buf.WriteMany((const char*)&tzId, sizeof(tzId));
+}
+
+extern "C" void WriteTzTimestamp64(void* vbuf, i64 value, ui16 tzId) {
+    ui64 data = 0x80 ^ SwapBytes((ui64)value);
+    tzId = SwapBytes(tzId);
+    NCommon::TOutputBuf& buf = *(NCommon::TOutputBuf*)vbuf;
+    const ui32 size = sizeof(data) + sizeof(tzId);
+    buf.WriteMany((const char*)&size, sizeof(size));
+    buf.WriteMany((const char*)&data, sizeof(data));
     buf.WriteMany((const char*)&tzId, sizeof(tzId));
 }
 

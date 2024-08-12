@@ -244,7 +244,7 @@ TEST(TArithmeticFormulaTest, Equality)
     auto fn1 = MakeArithmeticFormula("1");
     auto fn2 = MakeArithmeticFormula("2");
 
-    auto assertComparison = [](const TArithmeticFormula& lhs, const TArithmeticFormula& rhs, bool equal) {
+    auto assertComparison = [] (const TArithmeticFormula& lhs, const TArithmeticFormula& rhs, bool equal) {
         if (equal) {
             EXPECT_TRUE(lhs == rhs);
             EXPECT_EQ(lhs.GetHash(), rhs.GetHash());

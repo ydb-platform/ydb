@@ -78,13 +78,13 @@ public:
 class TPartitionHistogramWrapper {
 private:
     bool IsSupportivePartition;
-    THolder<NKikimr::NPQ::TPercentileCounter> Histogram;
+    std::unique_ptr<NKikimr::NPQ::TPercentileCounter> Histogram;
     TMap<ui32, ui64> Values;
     bool Inited = false;
 
 public:
     TPartitionHistogramWrapper() = default;
-    void Setup(bool isSupportivePartition, NKikimr::NPQ::TPercentileCounter* histogram);
+    void Setup(bool isSupportivePartition, std::unique_ptr<NKikimr::NPQ::TPercentileCounter>&& histogram);
     void IncFor(ui64 key, ui64 value = 1);
     TVector<ui64> GetValues() const;
     template<class TIterable>
@@ -97,7 +97,35 @@ public:
             iter++;
         }
     }
+    const TVector<ui64>& GetRanges() const;
     operator bool() const;
+};
+
+
+class TMultiBucketCounter {
+private:
+    struct TBucket {
+        ui64 Range;
+        double AvgValue = 0;
+        ui64 ValuesCount = 0;
+        TBucket() = default;
+        explicit TBucket(ui64 range)
+            : Range(range)
+            , AvgValue(0)
+            , ValuesCount(0)
+        {}
+    };
+    TVector<TBucket> Buckets;
+    ui64 TimeReference;
+
+    ui64 InsertWithHint(double value, ui64 count, ui64 hint) noexcept;
+
+public:
+    TMultiBucketCounter(const TVector<ui64>& buckets, ui64 multiplier, ui64 timeRef);
+    void UpdateTimestamp(ui64 newTimeReference);
+    void Insert(i64 value, ui64 count) noexcept;
+    TVector<std::pair<double, ui64>> GetValues(bool allowZeroes = false) const noexcept;
+
 };
 
 }// NPQ

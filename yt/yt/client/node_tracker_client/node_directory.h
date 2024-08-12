@@ -67,6 +67,9 @@ public:
 
     void Persist(const TStreamPersistenceContext& context);
 
+    friend void SerializeFragment(const TNodeDescriptor& descriptor, NYson::IYsonConsumer* consumer);
+    friend void DeserializeFragment(TNodeDescriptor& descriptor, NYTree::INodePtr node);
+
 private:
     TAddressMap Addresses_;
     TString DefaultAddress_;
@@ -88,7 +91,6 @@ bool operator == (const TNodeDescriptor& lhs, const TNodeDescriptor& rhs);
 bool operator == (const TNodeDescriptor& lhs, const NProto::TNodeDescriptor& rhs);
 
 void FormatValue(TStringBuilderBase* builder, const TNodeDescriptor& descriptor, TStringBuf spec);
-TString ToString(const TNodeDescriptor& descriptor);
 
 // Accessors for some well-known addresses.
 std::optional<TString> FindDefaultAddress(const TAddressMap& addresses);

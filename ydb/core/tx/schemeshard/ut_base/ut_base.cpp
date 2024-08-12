@@ -1,8 +1,6 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 
-#include <ydb/core/base/compile_time_flags.h>
-
 #include <util/generic/size_literals.h>
 #include <util/string/cast.h>
 
@@ -2004,8 +2002,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             }
         )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
 
-        //no key in index descr
+        //no directory
         TestCreateIndexedTable(runtime, txId++, "/MyRoot/USER_0", R"(
+                TableDescription {
+                  Name: "Table2"
+                  Columns { Name: "key"   Type: "Uint64" }
+                  Columns { Name: "value0" Type: "Utf8" }
+                  KeyColumnNames: ["key"]
+                }
+                IndexDescription {
+                  Name: "UserDefinedIndexByValue0"
+                }
+            )", {NKikimrScheme::StatusPathDoesNotExist});
+
+        //no key in index descr
+        TestCreateIndexedTable(runtime, txId++, "/MyRoot/DirA", R"(
                 TableDescription {
                   Name: "Table2"
                   Columns { Name: "key"   Type: "Uint64" }
@@ -2692,8 +2703,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestEnv env(runtime);
         ui64 txId = 123;
 
-        runtime.GetAppData().AllowColumnFamiliesForTest = true;
-
         TestCreateTable(runtime, ++txId, "/MyRoot", R"_(
                         Name: "Table1"
                         Columns { Name: "key1"       Type: "Uint32"}
@@ -3252,8 +3261,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
-
-        runtime.GetAppData().AllowColumnFamiliesForTest = true;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
                             Name: "Table"
@@ -4696,8 +4703,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        runtime.GetAppData().AllowColumnFamiliesForTest = true;
-
         TestAlterSubDomain(runtime, ++txId,  "/", R"(
                             StoragePools {
                               Name: "pool-1"
@@ -5056,8 +5061,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        runtime.GetAppData().AllowColumnFamiliesForTest = true;
-
         TestAlterSubDomain(runtime, ++txId,  "/", R"(
                             StoragePools {
                               Name: "pool-1"
@@ -5219,8 +5222,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
-
-        runtime.GetAppData().AllowColumnFamiliesForTest = true;
 
         TestAlterSubDomain(runtime, ++txId,  "/", R"(
                             StoragePools {
@@ -9899,9 +9900,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             : KeyColumnTypes(keyColumnTypes.begin(), keyColumnTypes.end())
         {}
 
-        TString FindSplitKey(const TVector<TVector<TString>>& histogramKeys) const {
-            NKikimrTableStats::THistogram histogram = FillHistogram(histogramKeys);
-            TSerializedCellVec splitKey = ChooseSplitKeyByHistogram(histogram, KeyColumnTypes);
+        TString FindSplitKey(const TVector<TVector<TString>>& histogramKeys, TVector<ui64> histogramValues = {}, ui64 total = 0) const {
+            if (histogramValues.empty() && !histogramKeys.empty()) {
+                for (size_t i = 0; i < histogramKeys.size(); i++) {
+                    histogramValues.push_back(i + 1);
+                }
+                total = histogramKeys.size() + 1;
+            }
+
+            NKikimrTableStats::THistogram histogram = FillHistogram(histogramKeys, histogramValues);
+            TSerializedCellVec splitKey = ChooseSplitKeyByHistogram(histogram, total, KeyColumnTypes);
             return PrintKey(splitKey);
         }
 
@@ -9951,11 +9959,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             return NKikimr::TSerializedCellVec(cells);
         }
 
-        NKikimrTableStats::THistogram FillHistogram(const TVector<TVector<TString>>& keys) const {
+        NKikimrTableStats::THistogram FillHistogram(const TVector<TVector<TString>>& keys, const TVector<ui64>& values) const {
             NKikimrTableStats::THistogram histogram;
-            for (const auto& k : keys) {
-                TSerializedCellVec sk(MakeCells(k));
-                histogram.AddBuckets()->SetKey(sk.GetBuffer());
+            for (auto i : xrange(keys.size())) {
+                TSerializedCellVec sk(MakeCells(keys[i]));
+                auto bucket = histogram.AddBuckets();
+                bucket->SetKey(sk.GetBuffer());
+                bucket->SetValue(values[i]);
             }
             return histogram;
         }
@@ -10072,7 +10082,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                                   { "2", "f", "42" },
                                                   { "3", "cccccccccccccccccccccccc", "42" }
                                               });
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 2, Utf8 : d, Uint32 : NULL)");
+            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 2, Utf8 : c, Uint32 : NULL)");
         }
 
         {
@@ -10088,6 +10098,140 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                                   { "3", "ccc", "42" }
                                               });
             UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 2, Utf8 : bbb, Uint32 : NULL)");
+        }
+
+        {
+            TString splitKey =
+                    schemaHelper.FindSplitKey({});
+            UNIT_ASSERT_VALUES_EQUAL(splitKey, "()");
+        }
+
+        {
+            TString splitKey =
+                    schemaHelper.FindSplitKey({
+                                                  { "0", "a", "1" },
+                                              }, {
+                                                  53,
+                                              }, 100);
+            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 0, Utf8 : a, Uint32 : 1)");
+        }
+
+        {
+            TString splitKey =
+                    schemaHelper.FindSplitKey({
+                                                  { "0", "a", "1" },
+                                              }, {
+                                                  25,
+                                              }, 100);
+            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 0, Utf8 : a, Uint32 : 1)");
+        }
+
+        {
+            TString splitKey =
+                    schemaHelper.FindSplitKey({
+                                                  { "0", "a", "1" },
+                                              }, {
+                                                  75,
+                                              }, 100);
+            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 0, Utf8 : a, Uint32 : 1)");
+        }
+
+        {
+            TString splitKey =
+                    schemaHelper.FindSplitKey({
+                                                  { "0", "a", "1" },
+                                              }, {
+                                                  24,
+                                              }, 100);
+            UNIT_ASSERT_VALUES_EQUAL(splitKey, "()");
+        }
+
+        {
+            TString splitKey =
+                    schemaHelper.FindSplitKey({
+                                                  { "0", "a", "1" },
+                                              }, {
+                                                  76,
+                                              }, 100);
+            UNIT_ASSERT_VALUES_EQUAL(splitKey, "()");
+        }
+
+        {
+            TString splitKey =
+                    schemaHelper.FindSplitKey({
+                                                  { "0", "a", "1" },
+                                                  { "1", "a", "1" },
+                                                  { "2", "a", "2" },
+                                                  { "3", "a", "3" },
+                                                  { "4", "a", "4" },
+                                                  { "5", "a", "5" },
+                                                  { "6", "a", "1" },
+                                                  { "7", "a", "2" },
+                                                  { "8", "a", "42" },
+                                              }, {
+                                                  1,
+                                                  2,
+                                                  3,
+                                                  4,
+                                                  5,
+                                                  6,
+                                                  7,
+                                                  8,
+                                                  9
+                                              }, 10);
+            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 4, Utf8 : NULL, Uint32 : NULL)");
+        }
+
+        {
+            TString splitKey =
+                    schemaHelper.FindSplitKey({
+                                                  { "0", "a", "1" },
+                                                  { "1", "a", "1" },
+                                                  { "2", "a", "2" },
+                                                  { "3", "a", "3" },
+                                                  { "4", "a", "4" },
+                                                  { "5", "a", "5" },
+                                                  { "6", "a", "1" },
+                                                  { "7", "a", "2" },
+                                                  { "8", "a", "42" },
+                                              }, {
+                                                  1,
+                                                  2,
+                                                  3,
+                                                  4,
+                                                  5,
+                                                  6,
+                                                  30,
+                                                  40,
+                                                  70
+                                              }, 100);
+            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 7, Utf8 : NULL, Uint32 : NULL)");
+        }
+
+        {
+            TString splitKey =
+                    schemaHelper.FindSplitKey({
+                                                  { "0", "a", "1" },
+                                                  { "1", "a", "1" },
+                                                  { "2", "a", "2" },
+                                                  { "3", "a", "3" },
+                                                  { "4", "a", "4" },
+                                                  { "5", "a", "5" },
+                                                  { "6", "a", "1" },
+                                                  { "7", "a", "2" },
+                                                  { "8", "a", "42" },
+                                              }, {
+                                                  30,
+                                                  40,
+                                                  70,
+                                                  90,
+                                                  91,
+                                                  92,
+                                                  93,
+                                                  94,
+                                                  95
+                                              }, 100);
+            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 1, Utf8 : NULL, Uint32 : NULL)");
         }
     }
 
@@ -10477,45 +10621,27 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             NLs::NoMaxPartitionsCount
                             });
 
-        // request without token
+        // request direct alter of forbidden fields of indexImplTable
         TestAlterTable(runtime, ++txId, "/MyRoot/table/indexByValue/", R"(
-                        Name: "indexImplTable"
-                        PartitionConfig {
-                            PartitioningPolicy {
-                                MinPartitionsCount: 1
-                                SizeToSplit: 100502
-                                FastSplitSettings {
-                                    SizeThreshold: 100502
-                                    RowCountThreshold: 100502
-                                }
-                            }
+                Name: "indexImplTable"
+                KeyColumnNames: ["key", "value"]
+                PartitionConfig {
+                    PartitioningPolicy {
+                        MinPartitionsCount: 1
+                        SizeToSplit: 100502
+                        FastSplitSettings {
+                            SizeThreshold: 100502
+                            RowCountThreshold: 100502
                         }
-                    )", {NKikimrScheme::StatusNameConflict});
-
-        {  // request with not a super user token
-            auto request = AlterTableRequest(++txId, "/MyRoot/table/indexByValue/", R"(
-                        Name: "indexImplTable"
-                        PartitionConfig {
-                            PartitioningPolicy {
-                                MinPartitionsCount: 1
-                                SizeToSplit: 100501
-                                FastSplitSettings {
-                                    SizeThreshold: 100501
-                                    RowCountThreshold: 100501
-                                }
-                            }
-                        }
-               )");
-
-            auto wellCookedToken = NACLib::TUserToken(TVector<TString>{"not-a-root@builtin"});
-            request->Record.SetUserToken(wellCookedToken.SerializeAsString());
-            TActorId sender = runtime.AllocateEdgeActor();
-            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, request);
-            TestModificationResults(runtime, txId, {TEvSchemeShard::EStatus::StatusNameConflict});
-        }
+                    }
+                }
+            )",
+            {TEvSchemeShard::EStatus::StatusNameConflict}
+        );
+        env.TestWaitNotification(runtime, txId);
 
         {
-            auto request = AlterTableRequest(++txId, "/MyRoot/table/indexByValue/", R"(
+            TestAlterTable(runtime, ++txId, "/MyRoot/table/indexByValue/", R"(
                         Name: "indexImplTable"
                         PartitionConfig {
                             PartitioningPolicy {
@@ -10527,13 +10653,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                 }
                             }
                         }
-               )");
-            auto wellCookedToken = NACLib::TUserToken(TVector<TString>{"true-root@builtin"});
-            request->Record.SetUserToken(wellCookedToken.SerializeAsString());
-            TActorId sender = runtime.AllocateEdgeActor();
-            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, request);
-            TestModificationResults(runtime, txId, {TEvSchemeShard::EStatus::StatusAccepted});
-
+               )"
+            );
             env.TestWaitNotification(runtime, txId);
         }
 
@@ -10949,6 +11070,74 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         )");
         env.TestWaitNotification(runtime, txId);
         AssertReserve("/MyRoot/Topic2", 3 * 17);
+    }
+
+    Y_UNIT_TEST(TopicWithAutopartitioningReserveSize) {
+        TTestEnvOptions opts;
+        opts.EnableTopicSplitMerge(true);
+        opts.EnablePQConfigTransactionsAtSchemeShard(true);
+
+        TTestBasicRuntime runtime;
+
+        TTestEnv env(runtime, opts);
+        ui64 txId = 100;
+
+        const auto AssertReserve = [&] (TString path, ui64 expectedReservedStorage) {
+            TestDescribeResult(DescribePath(runtime, path),
+                               {NLs::Finished,
+                                NLs::TopicReservedStorage(expectedReservedStorage)});
+        };
+
+        // create with WriteSpeedInBytesPerSecond
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic1"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig {
+                PartitionConfig {
+                    LifetimeSeconds: 13
+                    WriteSpeedInBytesPerSecond : 19
+                }
+                MeteringMode: METERING_MODE_RESERVED_CAPACITY
+                PartitionStrategy {
+                    MinPartitionCount: 1
+                    MaxPartitionCount: 7
+                    PartitionStrategyType: CAN_SPLIT_AND_MERGE
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        AssertReserve("/MyRoot/Topic1", 1 * 13 * 19);
+
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic1"
+            Split {
+                Partition: 0
+                SplitBoundary: 'A'
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        AssertReserve("/MyRoot/Topic1", 2 * 13 * 19); // There are only 2 active partitions
+
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic1"
+            Split {
+                Partition: 1
+                SplitBoundary: '0'
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        AssertReserve("/MyRoot/Topic1", 3 * 13 * 19); // There are only 3 active partitions
+
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic1"
+            Merge {
+                Partition: 2
+                AdjacentPartition: 4
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        AssertReserve("/MyRoot/Topic1", 2 * 13 * 19); // There are only 2 active partitions
     }
 
     Y_UNIT_TEST(FindSubDomainPathId) {

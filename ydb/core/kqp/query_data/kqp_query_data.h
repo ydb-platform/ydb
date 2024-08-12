@@ -166,7 +166,7 @@ struct TTimeAndRandomProvider {
 
 class TTxAllocatorState: public TTimeAndRandomProvider {
 public:
-    NKikimr::NMiniKQL::TScopedAlloc Alloc;
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     NKikimr::NMiniKQL::TTypeEnvironment TypeEnv;
     NKikimr::NMiniKQL::TMemoryUsageInfo MemInfo;
     NKikimr::NMiniKQL::THolderFactory HolderFactory;

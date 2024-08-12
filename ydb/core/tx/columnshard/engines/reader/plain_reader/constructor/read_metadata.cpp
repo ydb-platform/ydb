@@ -10,6 +10,8 @@ std::unique_ptr<TScanIteratorBase> TReadMetadata::StartScan(const std::shared_pt
 
 TConclusionStatus TReadMetadata::Init(const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor) {
     SetPKRangesFilter(readDescription.PKRangesFilter);
+    InitShardingInfo(readDescription.PathId);
+    TxId = readDescription.TxId;
 
     /// @note We could have column name changes between schema versions:
     /// Add '1:foo', Drop '1:foo', Add '2:foo'. Drop should hide '1:foo' from reads.

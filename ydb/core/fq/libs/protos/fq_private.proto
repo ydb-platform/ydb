@@ -164,6 +164,9 @@ message PingTaskRequest {
     string execution_id = 36;
     NYql.NDqProto.StatusIds.StatusCode pending_status_code = 37;
     bool dump_raw_statistics = 38;
+    repeated Ydb.ValuePair flat_stats = 39;
+    int32 current_load = 40;
+    string timeline = 41;
 }
 
 message PingTaskResult {

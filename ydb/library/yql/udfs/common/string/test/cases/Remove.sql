@@ -7,5 +7,8 @@ SELECT
     String::RemoveFirst(value, "as") AS first2,
     String::RemoveLast(value, "as") AS last2,
     String::RemoveFirst(value, "") AS first3,
-    String::RemoveLast(value, "") AS last3
+    String::RemoveLast(value, "") AS last3,
+    String::RemoveAll(value, "`") AS hwruall,
+    String::RemoveFirst(value, "`") AS hwrufirst,
+    String::RemoveLast(value, "`") AS hwrulast,
 FROM Input;

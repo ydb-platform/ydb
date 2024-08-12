@@ -2,7 +2,7 @@
 
 #include "registry.h" 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/protos/ssa.pb.h>
+#include <ydb/core/formats/arrow/protos/ssa.pb.h>
 #include <ydb/core/formats/arrow/program.h>
 #include <ydb/core/formats/arrow/custom_registry.h>
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
@@ -90,19 +90,12 @@ public:
         }
     }
 
-    std::shared_ptr<NArrow::TColumnFilter> ApplyEarlyFilter(std::shared_ptr<arrow::Table>& batch, const bool useFilter) const {
-        if (Program) {
-            return Program->ApplyEarlyFilter(batch, useFilter);
-        } else {
-            return nullptr;
-        }
-    }
-
-    inline arrow::Status ApplyProgram(std::shared_ptr<arrow::RecordBatch>& batch) const {
+    template <class TDataContainer>
+    inline arrow::Status ApplyProgram(std::shared_ptr<TDataContainer>& batch) const {
         if (Program) {
             return Program->ApplyTo(batch, NArrow::GetCustomExecContext());
         } else if (OverrideProcessingColumnsVector) {
-            batch = NArrow::ExtractColumnsValidate(batch, *OverrideProcessingColumnsVector);
+            batch = NArrow::TColumnOperator().VerifyIfAbsent().Extract(batch, *OverrideProcessingColumnsVector);
         }
         return arrow::Status::OK();
     }

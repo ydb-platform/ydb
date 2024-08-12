@@ -25,10 +25,10 @@ TConclusionStatus TChunkMeta::DeserializeFromProto(const TChunkAddress& address,
 }
 
 TChunkMeta::TChunkMeta(const TColumnChunkLoadContext& context, const TSimpleColumnInfo& columnInfo) {
-    AFL_VERIFY(DeserializeFromProto(context.GetAddress(), context.GetMetaProto(), columnInfo));
+    DeserializeFromProto(context.GetAddress(), context.GetMetaProto(), columnInfo).Validate();
 }
 
-TChunkMeta::TChunkMeta(const std::shared_ptr<arrow::Array>& column, const TSimpleColumnInfo& columnInfo)
+TChunkMeta::TChunkMeta(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column, const TSimpleColumnInfo& columnInfo)
     : TBase(column, columnInfo.GetNeedMinMax(), columnInfo.GetIsSorted())
 {
 }
@@ -52,7 +52,8 @@ TColumnRecord::TColumnRecord(const TBlobRangeLink16::TLinkId blobLinkId, const T
 {
 }
 
-TColumnRecord::TColumnRecord(const TChunkAddress& address, const std::shared_ptr<arrow::Array>& column, const TSimpleColumnInfo& columnInfo)
+TColumnRecord::TColumnRecord(
+    const TChunkAddress& address, const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column, const TSimpleColumnInfo& columnInfo)
     : Meta(column, columnInfo)
     , ColumnId(address.GetColumnId())
     , Chunk(address.GetChunk())

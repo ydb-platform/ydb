@@ -1,17 +1,14 @@
 IF (YQL_PACKAGED)
     PACKAGE()
 
-    FROM_SANDBOX(
-        FILE {FILE_RESOURCE_ID} OUT_NOAUTO
-            libdatetime2_udf.so
-    )
+    FROM_SANDBOX(FILE {FILE_RESOURCE_ID} OUT_NOAUTO libdatetime2_udf.so)
 
     END()
 ELSE()
     YQL_UDF_YDB(datetime2_udf)
     YQL_ABI_VERSION(
         2
-        35
+        37
         0
     )
     SRCS(

@@ -7,6 +7,7 @@
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_execution.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 
@@ -269,6 +270,8 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
                 YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>());
                 auto index = Build<TCoIndex>(ctx, node.Pos());
                 bool inferName = false;
+                TCoNameValueTupleList tableSettings = Build<TCoNameValueTupleList>(ctx, node.Pos()).Done();
+                TCoNameValueTupleList indexSettings = Build<TCoNameValueTupleList>(ctx, node.Pos()).Done();
                 TMaybe<TCoAtomList> columnList;
                 for (const auto& item : tuple.Value().Cast<TCoNameValueTupleList>()) {
                     const auto& indexItemName = item.Name().Value();
@@ -286,10 +289,18 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
                         index.Columns(item.Value().Cast<TCoAtomList>());
                     } else if (indexItemName == "dataColumns") {
                         index.DataColumns(item.Value().Cast<TCoAtomList>());
+                    } else if (indexItemName == "tableSettings") {
+                        tableSettings = item.Value().Cast<TCoNameValueTupleList>();
+                    } else if (indexItemName == "indexSettings") {
+                        indexSettings = item.Value().Cast<TCoNameValueTupleList>();
                     } else {
                         YQL_ENSURE(false, "unknown index item");
                     }
                 }
+
+                index.TableSettings(tableSettings);
+                index.IndexSettings(indexSettings);
+
                 if (inferName) {
                     YQL_ENSURE(columnList);
                     index.Name(InferIndexName(*columnList, ctx));
@@ -386,6 +397,56 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     return ret;
 }
 
+TWriteSequenceSettings ParseSequenceSettings(NNodes::TExprList node, TExprContext& ctx) {
+    TMaybeNode<TCoAtom> mode;
+    TMaybeNode<TCoAtom> valueType;
+    TMaybeNode<TCoAtom> temporary;
+    TMaybeNode<TCoAtom> ownedBy;
+
+    TVector<TCoNameValueTuple> sequenceSettings;
+
+    TVector<TCoNameValueTuple> other;
+
+    const static std::unordered_set<TString> sequenceSettingNames =
+        {"start", "increment", "cache", "minvalue", "maxvalue", "cycle"};
+
+    for (auto child : node) {
+        if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
+            auto tuple = maybeTuple.Cast();
+            auto name = tuple.Name().Value();
+
+            if (name == "mode") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                mode = tuple.Value().Cast<TCoAtom>();
+            } else if (name == "as") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                valueType = tuple.Value().Cast<TCoAtom>();
+            } else if (name == "temporary")  {
+                temporary = Build<TCoAtom>(ctx, node.Pos()).Value("true").Done();
+            } else if (sequenceSettingNames.contains(TString(name))) {
+                sequenceSettings.push_back(tuple);
+            } else {
+                other.push_back(tuple);
+            }
+        }
+    }
+
+    const auto& sequenceSettingsList = Build<TCoNameValueTupleList>(ctx, node.Pos())
+        .Add(sequenceSettings)
+        .Done();
+
+    const auto& otherSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
+        .Add(other)
+        .Done();
+
+    TWriteSequenceSettings ret(otherSettings);
+    ret.Mode = mode;
+    ret.ValueType = valueType;
+    ret.Temporary = temporary;
+    ret.SequenceSettings = sequenceSettingsList;
+    return ret;
+}
+
 TWriteTopicSettings ParseWriteTopicSettings(TExprList node, TExprContext& ctx) {
     Y_UNUSED(ctx);
     TMaybeNode<TCoAtom> mode;
@@ -471,6 +532,70 @@ TWriteTopicSettings ParseWriteTopicSettings(TExprList node, TExprContext& ctx) {
     ret.TopicSettings = builtSettings;
     ret.AlterConsumers = builtAlterCons;
     ret.DropConsumers = builtDropCons;
+
+    return ret;
+}
+
+TWriteReplicationSettings ParseWriteReplicationSettings(TExprList node, TExprContext& ctx) {
+    TMaybeNode<TCoAtom> mode;
+    TVector<TCoReplicationTarget> targets;
+    TVector<TCoNameValueTuple> settings;
+    TVector<TCoNameValueTuple> other;
+
+    for (auto child : node) {
+        if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
+            auto tuple = maybeTuple.Cast();
+            auto name = tuple.Name().Value();
+
+            if (name == "mode") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                mode = tuple.Value().Cast<TCoAtom>();
+            } else if (name == "targets") {
+                YQL_ENSURE(tuple.Value().Maybe<TExprList>());
+                for (const auto& target : tuple.Value().Cast<TExprList>()) {
+                    auto builtTarget = Build<TCoReplicationTarget>(ctx, node.Pos());
+
+                    YQL_ENSURE(target.Maybe<TCoNameValueTupleList>());
+                    for (const auto& item : target.Cast<TCoNameValueTupleList>()) {
+                        auto itemName = item.Name().Value();
+                        if (itemName == "remote") {
+                            builtTarget.RemotePath(item.Value().Cast<TCoAtom>());
+                        } else if (itemName == "local") {
+                            builtTarget.LocalPath(item.Value().Cast<TCoAtom>());
+                        } else {
+                            YQL_ENSURE(false, "unknown target item");
+                        }
+                    }
+
+                    targets.push_back(builtTarget.Done());
+                }
+            } else if (name == "settings") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>());
+                for (const auto& item : tuple.Value().Cast<TCoNameValueTupleList>()) {
+                    settings.push_back(item);
+                }
+            } else {
+                other.push_back(tuple);
+            }
+        }
+    }
+
+    const auto& builtTargets = Build<TCoReplicationTargetList>(ctx, node.Pos())
+        .Add(targets)
+        .Done();
+
+    const auto& builtSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
+        .Add(settings)
+        .Done();
+
+    const auto& builtOther = Build<TCoNameValueTupleList>(ctx, node.Pos())
+        .Add(other)
+        .Done();
+
+    TWriteReplicationSettings ret(builtOther);
+    ret.Mode = mode;
+    ret.Targets = builtTargets;
+    ret.ReplicationSettings = builtSettings;
 
     return ret;
 }
@@ -718,10 +843,40 @@ bool FillUsedFilesImpl(
     const TTypeAnnotationContext& types,
     TExprContext& ctx,
     const TUserDataTable& crutches,
-    TNodeSet& visited)
+    TNodeSet& visited,
+    ui64& usedPgExtensions,
+    bool needFullPgCatalog)
 {
     if (!visited.insert(&node).second) {
         return true;
+    }
+
+    if (node.GetTypeAnn()) {
+        usedPgExtensions |= node.GetTypeAnn()->GetUsedPgExtensions();
+    }
+    
+    if (node.IsCallable("PgResolvedCall")) {
+        auto procId = FromString<ui32>(node.Child(1)->Content());
+        const auto& proc = NPg::LookupProc(procId);
+        usedPgExtensions |= MakePgExtensionMask(proc.ExtensionIndex);
+    }
+
+    if (node.IsCallable("PgResolvedOp")) {
+        auto operId = FromString<ui32>(node.Child(1)->Content());
+        const auto& oper = NPg::LookupOper(operId);
+        const auto& proc = NPg::LookupProc(oper.ProcId);
+        usedPgExtensions |= MakePgExtensionMask(proc.ExtensionIndex);
+    }
+
+    if (node.IsCallable({"PgAnyResolvedOp", "PgAllResolvedOp"})) {
+        auto operId = FromString<ui32>(node.Child(1)->Content());
+        const auto& oper = NPg::LookupOper(operId);
+        const auto& proc = NPg::LookupProc(oper.ProcId);
+        usedPgExtensions |= MakePgExtensionMask(proc.ExtensionIndex);
+    }
+
+    if (node.IsCallable("PgTableContent")) {
+        needFullPgCatalog = true;
     }
 
     if (node.IsCallable("FilePath") || node.IsCallable("FileContent")) {
@@ -832,7 +987,8 @@ bool FillUsedFilesImpl(
 
     bool childrenOk = true;
     for (auto& child : node.Children()) {
-        childrenOk = FillUsedFilesImpl(*child, files, types, ctx, crutches, visited) && childrenOk;
+        childrenOk = FillUsedFilesImpl(*child, files, types, ctx, crutches, visited,
+            usedPgExtensions, needFullPgCatalog) && childrenOk;
     }
 
     return childrenOk;
@@ -907,6 +1063,43 @@ void FillSecureParams(
     }
 }
 
+bool AddPgFile(bool isPath, const TString& pathOrContent, const TString& md5, const TString& alias, TUserDataTable& files, 
+    const TTypeAnnotationContext& types, TPositionHandle pos, TExprContext& ctx) {
+
+    TUserDataBlock block;
+    block.Data = pathOrContent;
+    if (isPath) {
+        block.Type = EUserDataType::PATH;
+        block.Usage.Set(EUserDataBlockUsage::Path);
+        block.Usage.Set(EUserDataBlockUsage::PgExt);
+    } else {
+        block.Type = EUserDataType::RAW_INLINE_DATA;
+        block.Usage.Set(EUserDataBlockUsage::Content);
+    }
+
+    auto key = TUserDataKey::File(alias);
+    if (const auto foundBlock = types.UserDataStorage->FindUserDataBlock(key)) {
+        files[key] = *foundBlock;
+        YQL_ENSURE(!isPath || foundBlock->FrozenFile);
+    } else {
+        // Check alias clash with user files
+        if (files.contains(TUserDataStorage::ComposeUserDataKey(alias))) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "File " << alias << " clashes with one of the user's files"));
+            return false;
+        }
+
+        // CreateFakeFileLink calculates md5 for file, let's do it once if needed
+        if (isPath) {
+            block.FrozenFile = CreateFakeFileLink(block.Data, md5);
+        }
+
+        files[key] = block;
+        types.UserDataStorage->AddUserDataBlock(key, block);
+    }
+
+    return true;
+}
+
 bool FillUsedFiles(
     const TExprNode& node,
     TUserDataTable& files,
@@ -914,7 +1107,42 @@ bool FillUsedFiles(
     TExprContext& ctx,
     const TUserDataTable& crutches) {
     TNodeSet visited;
-    return FillUsedFilesImpl(node, files, types, ctx, crutches, visited);
+    ui64 usedPgExtensions = 0;
+    bool needFullPgCatalog = false;
+    auto ret = FillUsedFilesImpl(node, files, types, ctx, crutches, visited, usedPgExtensions, needFullPgCatalog);
+    if (!ret) {
+        return false;
+    }
+
+    auto remainingPgExtensions = usedPgExtensions;
+    TSet<ui32> filter;
+    for (ui32 extensionIndex = 1; remainingPgExtensions && (extensionIndex <= 64); ++extensionIndex) {
+        auto mask = MakePgExtensionMask(extensionIndex);
+        if (!(mask & usedPgExtensions)) {
+            continue;
+        }
+
+        filter.insert(extensionIndex);
+        remainingPgExtensions &= ~mask;
+        const auto& e = NPg::LookupExtension(extensionIndex);
+        needFullPgCatalog = true;
+        auto alias = TFsPath(e.LibraryPath).GetName();
+        if (!AddPgFile(true, e.LibraryPath, e.LibraryMD5, alias, files, types, node.Pos(), ctx)) {
+            return false;
+        }
+    }
+    
+    Y_ENSURE(remainingPgExtensions == 0);
+    if (!needFullPgCatalog) {
+        return true;
+    }
+
+    TString content = NPg::ExportExtensions(filter);
+    if (!AddPgFile(false, content, "", TString(PgCatalogFileName), files, types, node.Pos(), ctx)) {
+        return false;
+    }
+
+    return true;
 }
 
 std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> FreezeUsedFiles(const TExprNode& node, TUserDataTable& files, const TTypeAnnotationContext& types, TExprContext& ctx, const std::function<bool(const TString&)>& urlDownloadFilter, const TUserDataTable& crutches) {
@@ -1382,13 +1610,49 @@ bool ValidateCompressionForOutput(std::string_view format, std::string_view comp
     return false;
 }
 
-bool ValidateFormatForInput(std::string_view format, TExprContext& ctx) {
-    if (format.empty() || IsIn(FormatsForInput, format)) {
+bool ValidateFormatForInput(
+    std::string_view format,
+    const TStructExprType* schemaStructRowType,
+    const std::function<bool(TStringBuf)>& excludeFields,
+    TExprContext& ctx) {
+    if (format.empty()) {
         return true;
     }
-    ctx.AddError(TIssue(TStringBuilder() << "Unknown format: " << format
-        << ". Use one of: " << JoinSeq(", ", FormatsForInput)));
-    return false;
+
+    if (!IsIn(FormatsForInput, format)) {
+        ctx.AddError(TIssue(TStringBuilder() << "Unknown format: " << format
+            << ". Use one of: " << JoinSeq(", ", FormatsForInput)));
+        return false;
+    }
+
+    if (schemaStructRowType && format == TStringBuf("raw")) {
+        ui64 realSchemaColumnsCount = 0;
+
+        for (const TItemExprType* item : schemaStructRowType->GetItems()) {
+            if (excludeFields && excludeFields(item->GetName())) {
+                continue;
+            }
+            const TTypeAnnotationNode* rowType = item->GetItemType();
+            if (rowType->GetKind() == ETypeAnnotationKind::Optional) {
+                rowType = rowType->Cast<TOptionalExprType>()->GetItemType();
+            }
+
+            if (rowType->GetKind() != ETypeAnnotationKind::Data
+                || !IsDataTypeString(rowType->Cast<TDataExprType>()->GetSlot())) {
+                ctx.AddError(TIssue(TStringBuilder() << "Only string type column in schema supported in raw format (you have '"
+                    << item->GetName() << " " << FormatType(rowType) << "' field)"));
+                return false;
+            }
+            ++realSchemaColumnsCount;
+        }
+
+        if (realSchemaColumnsCount != 1) {
+            ctx.AddError(TIssue(TStringBuilder() << "Only one column in schema supported in raw format (you have "
+                << realSchemaColumnsCount << " fields)"));
+            return false;
+        }
+    }
+    return true;
 }
 
 bool ValidateFormatForOutput(std::string_view format, TExprContext& ctx) {
@@ -1493,30 +1757,30 @@ bool RenamePgSelectColumns(
     if (auto targetColumnsOption = GetSetItemOption(node, "target_columns")) {
         auto targetColumns = GetSetItemOptionValue(TExprBase(targetColumnsOption));
         for (const auto& child : targetColumns->ChildrenList()) {
-            insertColumnOrder.emplace_back(child->Content());
+            insertColumnOrder.AddColumn(TString(child->Content()));
         }
     } else {
         YQL_ENSURE(tableColumnOrder);
         insertColumnOrder = *tableColumnOrder;
     }
     YQL_ENSURE(selectorColumnOrder);
-    if (selectorColumnOrder->size() > insertColumnOrder.size()) {
+    if (selectorColumnOrder->Size() > insertColumnOrder.Size()) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << Sprintf(
             "%s have %zu columns, INSERT INTO expects: %zu",
             optionName.Data(),
-            selectorColumnOrder->size(),
-            insertColumnOrder.size()
+            selectorColumnOrder->Size(),
+            insertColumnOrder.Size()
         )));
         return false;
     }
 
-    if (selectorColumnOrder == insertColumnOrder) {
+    if (*selectorColumnOrder == insertColumnOrder) {
         output = node.Ptr();
         return true;
     }
 
     TVector<const TItemExprType*> rowTypeItems;
-    rowTypeItems.reserve(selectorColumnOrder->size());
+    rowTypeItems.reserve(selectorColumnOrder->Size());
     const TTypeAnnotationNode* inputType;
     switch (node.Ref().GetTypeAnn()->GetKind()) {
         case ETypeAnnotationKind::List:
@@ -1533,13 +1797,13 @@ bool RenamePgSelectColumns(
         .Done();
     auto structBuilder = Build<TCoAsStruct>(ctx, node.Pos());
 
-    for (size_t i = 0; i < selectorColumnOrder->size(); i++) {
+    for (size_t i = 0; i < selectorColumnOrder->Size(); i++) {
         const auto& columnName = selectorColumnOrder->at(i);
         structBuilder.Add<TCoNameValueTuple>()
-            .Name().Build(insertColumnOrder.at(i))
+            .Name().Build(insertColumnOrder.at(i).PhysicalName)
             .Value<TCoMember>()
                 .Struct(rowArg)
-                .Name().Build(columnName)
+                .Name().Build(columnName.PhysicalName)
             .Build()
         .Build();
     }

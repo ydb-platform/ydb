@@ -1,5 +1,7 @@
 items:
-#- name: Overview
-#  href: concepts.md
 - name: Deployment
   href: deploy-ydb-on-premises.md
+- name: Deployment with Federated Query
+  href: deploy-ydb-federated-query.md
+- name: Connector deployment
+  href: connector.md

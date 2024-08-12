@@ -216,10 +216,16 @@ public:
         YT_UNIMPLEMENTED();
     }
 
+    const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override
+    {
+        return MemoryUsageTracker_;
+    }
+
 private:
     const TChannelConfigPtr Config_;
     const TString EndpointAddress_;
     const IAttributeDictionaryPtr EndpointAttributes_;
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_ = GetNullMemoryUsageTracker();
 
     TSingleShotCallbackList<void(const TError&)> Terminated_;
 
@@ -246,7 +252,6 @@ private:
             , Request_(std::move(request))
             , ResponseHandler_(std::move(responseHandler))
             , GuardedCompletionQueue_(TDispatcher::Get()->PickRandomGuardedCompletionQueue())
-            , Logger(GrpcLogger)
         {
             YT_LOG_DEBUG("Sending request (RequestId: %v, Method: %v.%v, Timeout: %v)",
                 Request_->GetRequestId(),
@@ -264,13 +269,13 @@ private:
                 auto methodSlice = BuildGrpcMethodString();
                 Call_ = TGrpcCallPtr(grpc_channel_create_call(
                     Owner_->Channel_.Unwrap(),
-                    nullptr,
-                    0,
+                    /*parent_call*/ nullptr,
+                    /*propagation_mask*/ 0,
                     completionQueueGuard->Unwrap(),
                     methodSlice,
-                    nullptr,
+                    /*host*/ nullptr,
                     GetDeadline(),
-                    nullptr));
+                    /*reserved*/ nullptr));
                 grpc_slice_unref(methodSlice);
 
                 Tracer_ = New<TGrpcCallTracer>();
@@ -442,16 +447,15 @@ private:
         const TSendOptions Options_;
         const IClientRequestPtr Request_;
 
+        const NLogging::TLogger& Logger = GrpcLogger();
+
         YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ResponseHandlerLock_);
         IClientResponseHandlerPtr ResponseHandler_;
 
         // Completion queue must be accessed under read lock
         // in order to prohibit creating new requests after shutting completion queue down.
         TGuardedGrpcCompletionQueue* GuardedCompletionQueue_;
-        const NLogging::TLogger& Logger;
-
         NYT::NTracing::TTraceContextHandler TraceContext_;
-
         TGrpcCallPtr Call_;
         TGrpcCallTracerPtr Tracer_;
         TSharedRefArray RequestBody_;

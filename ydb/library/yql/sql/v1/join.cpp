@@ -218,7 +218,7 @@ protected:
                 return false;
             }
 
-            op = dynamic_cast<const TCallNode*>(expr.Get());
+            op = expr->GetCallNode();
             YQL_ENSURE(op, "Invalid JOIN equal operation node");
             YQL_ENSURE(op->GetArgs().size() == 2, "Invalid JOIN equal operation arguments");
         }
@@ -441,7 +441,7 @@ bool TJoinBase::DoInit(TContext& ctx, ISource* initSrc) {
                 TNodePtr cur = conjQueue.front();
                 conjQueue.pop_front();
                 if (cur->GetOpName() == "And") {
-                    auto conj = dynamic_cast<const TCallNode*>(cur.Get());
+                    auto conj = cur->GetCallNode();
                     YQL_ENSURE(conj, "Invalid And operation node");
                     conjQueue.insert(conjQueue.begin(), conj->GetArgs().begin(), conj->GetArgs().end());
                 } else if (!InitKeysOrFilters(ctx, idx, cur)) {
@@ -503,6 +503,10 @@ public:
                 linkOptions = L(linkOptions, Q(Y(Q("forceSortedMerge"))));
             } else if (TJoinLinkSettings::EStrategy::StreamLookup == descr.LinkSettings.Strategy) {
                 linkOptions = L(linkOptions, Q(Y(Q("forceStreamLookup"))));
+            } else if (TJoinLinkSettings::EStrategy::ForceMap == descr.LinkSettings.Strategy) {
+                linkOptions = L(linkOptions, Q(Y(Q("join_algo"), Q("MapJoin"))));
+            } else if (TJoinLinkSettings::EStrategy::ForceGrace == descr.LinkSettings.Strategy) {
+                linkOptions = L(linkOptions, Q(Y(Q("join_algo"), Q("GraceJoin"))));
             }
             if (leftAny) {
                 linkOptions = L(linkOptions, Q(Y(Q("left"), Q("any"))));

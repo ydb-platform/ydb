@@ -113,7 +113,7 @@ public:
         const TTagRegistry& tagRegistry,
         NYTree::TFluentAny fluent) const;
 
-    void DumpCube(NProto::TCube* cube) const;
+    void DumpCube(NProto::TCube* cube, const std::vector<TTagId>& extraTags) const;
 
 private:
     const int WindowSize_;

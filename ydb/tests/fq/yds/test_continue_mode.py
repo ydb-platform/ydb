@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import logging
+import os
+import pytest
 import time
 
 import ydb.public.api.protos.draft.fq_pb2 as fq
@@ -20,6 +22,7 @@ def assert_issues_contain(text, issues):
 
 class TestContinueMode(TestYdsBase):
     @yq_v1
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
     def test_continue_from_offsets(self, kikimr, client):
         client.create_yds_connection(name="yds", database_id="FakeDatabaseId")
 
@@ -40,8 +43,9 @@ class TestContinueMode(TestYdsBase):
             INSERT INTO yds.`{output_topic_1}`
             SELECT Data FROM yds.`{input_topic_1}`;'''
 
-        query_id = client.create_query("continue-from-offsets-query", sql,
-                                       type=fq.QueryContent.QueryType.STREAMING).result.query_id
+        query_id = client.create_query(
+            "continue-from-offsets-query", sql, type=fq.QueryContent.QueryType.STREAMING
+        ).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
         kikimr.compute_plane.wait_zero_checkpoint(query_id)
 
@@ -50,8 +54,9 @@ class TestContinueMode(TestYdsBase):
 
         assert read_stream(output_topic_1, len(data), consumer_name=consumer_1) == data
 
-        kikimr.compute_plane.wait_completed_checkpoints(query_id,
-                                                        kikimr.compute_plane.get_completed_checkpoints(query_id) + 1)
+        kikimr.compute_plane.wait_completed_checkpoints(
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
+        )
 
         client.abort_query(query_id)
         client.wait_query(query_id)
@@ -75,7 +80,8 @@ class TestContinueMode(TestYdsBase):
             describe_result = client.describe_query(query_id).result
             logging.debug("Describe result: {}".format(describe_result))
             assert describe_result.query.meta.has_saved_checkpoints, "Expected has_saved_checkpoints flag: {}".format(
-                describe_result.query.meta)
+                describe_result.query.meta
+            )
 
         def find_text(issues, text):
             for issue in issues:
@@ -90,26 +96,38 @@ class TestContinueMode(TestYdsBase):
             logging.debug("Describe result: {}".format(describe_result))
             if find_text(describe_result.query.transient_issue if transient else describe_result.query.issue, text):
                 return True
-            assert deadline and deadline > time.time(), "Text \"{}\" is expected to be found in{} issues, but was not found. Describe query result:\n{}" \
-                .format(text, " transient" if transient else "", describe_result)
+            assert (
+                deadline and deadline > time.time()
+            ), "Text \"{}\" is expected to be found in{} issues, but was not found. Describe query result:\n{}".format(
+                text, " transient" if transient else "", describe_result
+            )
             return False
 
         assert_has_saved_checkpoints()
 
         # 1. Not forced mode. Expect to fail
-        client.modify_query(query_id, "continue-from-offsets-query", sql2,
-                            type=fq.QueryContent.QueryType.STREAMING,
-                            state_load_mode=fq.StateLoadMode.EMPTY,
-                            streaming_disposition=StreamingDisposition.from_last_checkpoint())
+        client.modify_query(
+            query_id,
+            "continue-from-offsets-query",
+            sql2,
+            type=fq.QueryContent.QueryType.STREAMING,
+            state_load_mode=fq.StateLoadMode.EMPTY,
+            streaming_disposition=StreamingDisposition.from_last_checkpoint(),
+        )
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
         assert_has_issues(
-            "Topic `continue_2_input` is not found in previous query. Use force mode to ignore this issue")
+            "Topic `continue_2_input` is not found in previous query. Use force mode to ignore this issue"
+        )
 
         # 2. Forced mode. Expect to run.
-        client.modify_query(query_id, "continue-from-offsets-query", sql2,
-                            type=fq.QueryContent.QueryType.STREAMING,
-                            state_load_mode=fq.StateLoadMode.EMPTY,
-                            streaming_disposition=StreamingDisposition.from_last_checkpoint(True))
+        client.modify_query(
+            query_id,
+            "continue-from-offsets-query",
+            sql2,
+            type=fq.QueryContent.QueryType.STREAMING,
+            state_load_mode=fq.StateLoadMode.EMPTY,
+            streaming_disposition=StreamingDisposition.from_last_checkpoint(True),
+        )
         client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
         transient_issues_deadline = time.time() + yatest_common.plain_or_under_sanitizer(60, 300)
         msg = "Topic `continue_2_input` is not found in previous query. Query will use fresh offsets for its partitions"
@@ -118,11 +136,13 @@ class TestContinueMode(TestYdsBase):
                 break
             else:
                 time.sleep(0.3)
-        kikimr.compute_plane.wait_completed_checkpoints(query_id,
-                                                        kikimr.compute_plane.get_completed_checkpoints(query_id) + 1)
+        kikimr.compute_plane.wait_completed_checkpoints(
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
+        )
 
-        restored_metric = kikimr.compute_plane.get_checkpoint_coordinator_metric(query_id,
-                                                                                 "RestoredStreamingOffsetsFromCheckpoint")
+        restored_metric = kikimr.compute_plane.get_checkpoint_coordinator_metric(
+            query_id, "RestoredStreamingOffsetsFromCheckpoint"
+        )
         assert restored_metric == 1
 
         data_3 = ["5", "6"]
@@ -130,8 +150,9 @@ class TestContinueMode(TestYdsBase):
 
         assert sorted(read_stream(output_topic_2, 4, consumer_name=consumer_2)) == ["3", "4", "5", "6"]
 
-        kikimr.compute_plane.wait_completed_checkpoints(query_id,
-                                                        kikimr.compute_plane.get_completed_checkpoints(query_id) + 1)
+        kikimr.compute_plane.wait_completed_checkpoints(
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
+        )
 
         assert_has_saved_checkpoints()
 
@@ -147,9 +168,9 @@ class TestContinueMode(TestYdsBase):
         n = 100
         while n:
             n -= 1
-            restored_metric = kikimr.compute_plane.get_checkpoint_coordinator_metric(query_id,
-                                                                                     "RestoredFromSavedCheckpoint",
-                                                                                     expect_counters_exist=False)
+            restored_metric = kikimr.compute_plane.get_checkpoint_coordinator_metric(
+                query_id, "RestoredFromSavedCheckpoint", expect_counters_exist=False
+            )
             if restored_metric >= 1:
                 break
             time.sleep(0.3)
@@ -158,6 +179,7 @@ class TestContinueMode(TestYdsBase):
         assert_has_saved_checkpoints()
 
     @yq_v1
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
     def test_deny_disposition_from_checkpoint_in_create_query(self, client):
         client.create_yds_connection(name="yds_create", database_id="FakeDatabaseId")
 
@@ -174,12 +196,15 @@ class TestContinueMode(TestYdsBase):
             sql,
             type=fq.QueryContent.QueryType.STREAMING,
             streaming_disposition=StreamingDisposition.from_last_checkpoint(),
-            check_issues=False)
+            check_issues=False,
+        )
         assert response.issues
-        assert_issues_contain("Streaming disposition \"from_last_checkpoint\" is not allowed in CreateQuery request",
-                              response.issues)
+        assert_issues_contain(
+            "Streaming disposition \"from_last_checkpoint\" is not allowed in CreateQuery request", response.issues
+        )
 
     @yq_v1
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
     def test_deny_state_load_mode_from_checkpoint_in_modify_query(self, kikimr, client):
         client.create_yds_connection(name="yds_modify", database_id="FakeDatabaseId")
 
@@ -192,9 +217,8 @@ class TestContinueMode(TestYdsBase):
             SELECT Data FROM yds_modify.`{self.input_topic}`;'''
 
         response = client.create_query(
-            "deny_state_load_mode_from_checkpoint_in_modify_query",
-            sql,
-            type=fq.QueryContent.QueryType.STREAMING)
+            "deny_state_load_mode_from_checkpoint_in_modify_query", sql, type=fq.QueryContent.QueryType.STREAMING
+        )
 
         query_id = response.result.query_id
 
@@ -204,11 +228,15 @@ class TestContinueMode(TestYdsBase):
         client.abort_query(query_id)
         client.wait_query(query_id)
 
-        response = client.modify_query(query_id, "deny_state_load_mode_from_checkpoint_in_modify_query", sql,
-                                       type=fq.QueryContent.QueryType.STREAMING,
-                                       state_load_mode=fq.StateLoadMode.FROM_LAST_CHECKPOINT,
-                                       streaming_disposition=StreamingDisposition.from_last_checkpoint(),
-                                       check_issues=False)
+        response = client.modify_query(
+            query_id,
+            "deny_state_load_mode_from_checkpoint_in_modify_query",
+            sql,
+            type=fq.QueryContent.QueryType.STREAMING,
+            state_load_mode=fq.StateLoadMode.FROM_LAST_CHECKPOINT,
+            streaming_disposition=StreamingDisposition.from_last_checkpoint(),
+            check_issues=False,
+        )
 
         assert response.issues
         assert_issues_contain("State load mode \"FROM_LAST_CHECKPOINT\" is not supported", response.issues)

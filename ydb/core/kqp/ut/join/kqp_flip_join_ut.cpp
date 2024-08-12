@@ -5,6 +5,41 @@ namespace NKikimr::NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
+TKikimrRunner GetKikimrRunnerWithStats() {
+    static TString STATS = R"(
+            {
+                "/Root/FJ_Table_1":
+                {
+                    "n_rows": 4
+                },
+                "/Root/FJ_Table_2":
+                {
+                    "n_rows": 2
+                },
+                "/Root/FJ_Table_3":
+                {
+                    "n_rows": 4
+                },
+                 "/Root/FJ_Table_4":
+                {
+                    "n_rows": 3
+                }
+            }
+        )";
+
+    TVector<NKikimrKqp::TKqpSetting> settings;
+
+    NKikimrKqp::TKqpSetting setting;
+    setting.SetName("OverrideStatistics");
+    setting.SetValue(STATS);
+    settings.push_back(setting);
+
+    TKikimrSettings serverSettings;
+    serverSettings.SetKqpSettings(settings);
+
+    return TKikimrRunner(serverSettings);
+}
+
 static void CreateSampleTables(TSession session) {
     UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
             CREATE TABLE `/Root/FJ_Table_1` (
@@ -52,7 +87,7 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
     // simple inner join, only 2 tables
     Y_UNIT_TEST(Inner_1) {
-        TKikimrRunner kikimr;
+        auto kikimr = GetKikimrRunnerWithStats();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -69,13 +104,15 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
         auto result = ExecQueryAndTestResult(session, query, NoParams,
             R"([[["Value11"];["Value21"]];[["Value12"];["Value22"]]])");
 
-        AssertTableReads(result, "/Root/FJ_Table_1", 4);
+        Cerr << result.GetQueryPlan() << Endl;
+
+        AssertTableReads(result, "/Root/FJ_Table_1", 2);
         AssertTableReads(result, "/Root/FJ_Table_2", 2);
     }
 
     // hierarchy of joins, flip on the last layer
     Y_UNIT_TEST(Inner_2) {
-        TKikimrRunner kikimr;
+        auto kikimr = GetKikimrRunnerWithStats();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -93,13 +130,13 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
             R"([[["Value31"];["Value21"];["Value4_101"]]])");
 
         AssertTableReads(result, "/Root/FJ_Table_2", 2);
-        AssertTableReads(result, "/Root/FJ_Table_3", 4);
+        AssertTableReads(result, "/Root/FJ_Table_3", 1);
         AssertTableReads(result, "/Root/FJ_Table_4", 1);
     }
 
     // hierarchy of joins, flip on the top layer
     Y_UNIT_TEST(Inner_3) {
-        TKikimrRunner kikimr;
+        auto kikimr = GetKikimrRunnerWithStats();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -122,12 +159,12 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
         AssertTableReads(result, "/Root/FJ_Table_1", 4);
         AssertTableReads(result, "/Root/FJ_Table_2", 2);
-        AssertTableReads(result, "/Root/FJ_Table_3", 4);
+        AssertTableReads(result, "/Root/FJ_Table_3", 2);
     }
 
     // simple left semi join, only 2 tables
     Y_UNIT_TEST(LeftSemi_1) {
-        TKikimrRunner kikimr;
+        auto kikimr = GetKikimrRunnerWithStats();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -149,7 +186,7 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
     // hierarchy of joins, flip on the last layer
     Y_UNIT_TEST(LeftSemi_2) {
-        TKikimrRunner kikimr;
+        auto kikimr = GetKikimrRunnerWithStats();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -166,14 +203,14 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
         auto result = ExecQueryAndTestResult(session, query, NoParams, R"([[[1];["Value11"]];[[2];["Value12"]]])");
         
-        AssertTableReads(result, "/Root/FJ_Table_1", 2);
+        AssertTableReads(result, "/Root/FJ_Table_1", 3);
         AssertTableReads(result, "/Root/FJ_Table_2", 2);
         AssertTableReads(result, "/Root/FJ_Table_3", 4);
     }
 
     // hierarchy of joins, flip on the top layer
     Y_UNIT_TEST(LeftSemi_3) {
-        TKikimrRunner kikimr;
+        auto kikimr = GetKikimrRunnerWithStats();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -201,7 +238,7 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
     // simple right semi join, only 2 tables
     Y_UNIT_TEST(RightSemi_1) {
-        TKikimrRunner kikimr;
+        auto kikimr = GetKikimrRunnerWithStats();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -222,7 +259,7 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
     // hierarchy of joins, flip on the last layer
     Y_UNIT_TEST(RightSemi_2) {
-        TKikimrRunner kikimr;
+        auto kikimr = GetKikimrRunnerWithStats();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -246,7 +283,7 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
     // hierarchy of joins, flip on the top layer
     Y_UNIT_TEST(RightSemi_3) {
-        TKikimrRunner kikimr;
+        auto kikimr = GetKikimrRunnerWithStats();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -274,7 +311,7 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
     // simple right join, only 2 tables
     Y_UNIT_TEST(Right_1) {
-        TKikimrRunner kikimr;
+        auto kikimr = GetKikimrRunnerWithStats();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -295,7 +332,7 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
     // hierarchy of joins, flip on the last layer
     Y_UNIT_TEST(Right_2) {
-        TKikimrRunner kikimr;
+        auto kikimr = GetKikimrRunnerWithStats();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -347,7 +384,7 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
     // simple right only join, only 2 tables
     Y_UNIT_TEST(RightOnly_1) {
-        TKikimrRunner kikimr;
+        auto kikimr = GetKikimrRunnerWithStats();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -368,7 +405,7 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
     // hierarchy of joins, flip on the last layer
     Y_UNIT_TEST(RightOnly_2) {
-        TKikimrRunner kikimr;
+        auto kikimr = GetKikimrRunnerWithStats();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -395,7 +432,7 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
     // hierarchy of joins, flip on the top layer
     Y_UNIT_TEST(RightOnly_3) {
-        TKikimrRunner kikimr;
+        auto kikimr = GetKikimrRunnerWithStats();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

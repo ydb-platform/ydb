@@ -1,22 +1,28 @@
 #pragma once
 
 #include "config.h"
+#include "executor_pool_jail.h"
 #include "harmonizer.h"
 #include "executor_pool.h"
 #include "executor_pool_shared.h"
+#include "mon_stats.h"
+#include <memory>
 
 namespace NActors {
     struct TActorSystemSetup;
+    class TExecutorPoolJail;
 
     class TCpuManager : public TNonCopyable {
         const ui32 ExecutorPoolCount;
         TArrayHolder<TAutoPtr<IExecutorPool>> Executors;
         std::unique_ptr<IHarmonizer> Harmonizer;
         std::unique_ptr<TSharedExecutorPool> Shared;
+        std::unique_ptr<TExecutorPoolJail> Jail;
         TCpuManagerConfig Config;
 
     public:
         explicit TCpuManager(THolder<TActorSystemSetup>& setup);
+        ~TCpuManager();
 
         void Setup();
         void PrepareStart(TVector<NSchedulerQueue::TReader*>& scheduleReaders, TActorSystem* actorSystem);
@@ -42,6 +48,8 @@ namespace NActors {
         }
 
         void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy, TVector<TExecutorThreadStats>& sharedStatsCopy) const;
+        void GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const;
+        void GetExecutorPoolStates(std::vector<TExecutorPoolState> &states) const;
 
         THarmonizerStats GetHarmonizerStats() const {
             if (Harmonizer) {

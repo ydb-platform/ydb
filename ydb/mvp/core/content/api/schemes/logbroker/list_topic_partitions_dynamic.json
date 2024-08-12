@@ -1,0 +1,159 @@
+
+{
+    "get": {
+        "tags": ["LB UI v2"],
+        "security": { "Bearer": [] },
+        "produces": ["application/json"],
+        "summary": "Lists topic partitions consumed by specific consumer with dynamic properties collected from all clusters",
+        "parameters": [{
+            "name": "installation",
+            "in": "path",
+            "description": "Logbroker installation, such as logbroker and logbroker-prestable",
+            "required": true,
+            "type" : "string"
+        },{
+            "name": "topicPath",
+            "in": "query",
+            "description": "Path for a topic",
+            "required": true,
+            "type": "string"
+        },{
+            "name": "consumerPath",
+            "in": "query",
+            "description": "Path for a consumer",
+            "required": true,
+            "type": "string"
+        }],
+        "responses": {
+            "200": {
+                "description": "OK",
+                "schema": {
+                    "title" : "TResponse",
+                    "type" : "object",
+                    "properties": {
+                        "error": {
+                            "$ref": "#/definitions/TError"
+                        },
+                        "items": {
+                            "title" : "TListing",
+                            "type": "array",
+                            "items": {
+                                "title" : "TTopicPartition",
+                                "type": "object",
+                                "properties": {
+                                    "error": {
+                                        "$ref": "#/definitions/TError"
+                                    },
+                                    "properties": {
+                                        "title": "TTopicParitionProperties",
+                                        "type": "object",
+                                        "required" : [
+                                            "partitionId",
+                                            "targetCluster",
+                                            "originalCluster",
+                                            "partitionHost",
+                                            "startOffset",
+                                            "endOffset",
+                                            "committedOffset",
+                                            "diskSize"
+                                        ],
+                                        "properties": {
+                                            "partitionId" : {
+                                                "type" : "integer",
+                                                "format" : "int64",
+                                                "description" : "Topic parition identifier"
+                                            },
+                                            "consumerHost": {
+                                                "type" : "string",
+                                                "description" : "Reading consumer host"
+                                            },
+                                            "proxyHost":{
+                                                "type": "string"
+                                            },
+                                            "partitionHost" : {
+                                                "type" : "string",
+                                                "description" : "Parition node host"
+                                            },
+                                            "readSessionId" : {
+                                                "type" : "string",
+                                                "description": "Read session identifier"
+                                            },
+                                            "startOffset" : {
+                                                "type" : "integer",
+                                                "format": "int64"
+                                            },
+                                            "endOffset" : {
+                                                "type" : "integer",
+                                                "format": "int64"
+                                            },
+                                            "committedOffset" : {
+                                                "type" : "integer",
+                                                "format": "int64"
+                                            },
+                                            "targetCluster" : {
+                                                "type": "string"
+                                            },
+                                            "originalCluster" : {
+                                                "type" : "string"
+                                            },
+                                            "diskSize" : {
+                                                "type": "integer",
+                                                "format": "int64",
+                                                "description": "Topic partition size in bytes"
+                                            }
+                                        }
+                                    },
+                                    "writeStatistics" : {
+                                        "title": "TTopicPartitionWriteStatistics",
+                                        "type" : "object",
+                                        "properties" : {
+                                            "writeSpeed": {
+                                                "description": "Sum of all producers write speed to this topic partition",
+                                                "$ref": "#/definitions/TIoAverageSpeed"
+                                            },
+                                            "writeIdleTime" : {
+                                                "type" : "string",
+                                                "description" : "Write idle time in ISO 8601 Duration format"
+                                            },
+                                            "writeTimeLag" : {
+                                                "type" : "string",
+                                                "description" : "Max message write lag during last minute in ISO 8601 Duration format TODO: Max?"
+                                            }
+                                        }
+                                    },
+                                    "readStatistics" : {
+                                        "title" : "TTopicPartitionReadStatistics",
+                                        "type" : "object",
+                                        "properties" : {
+                                            "readSpeed": {
+                                                "description" : "Consumer read speed",
+                                                "$ref": "#/definitions/TIoAverageSpeed"
+                                            },
+                                            "readIdleTime" : {
+                                                "type" : "string",
+                                                "description" : "Topic partition read idle time ISO 8601 Duration format"
+                                            },
+                                            "readTimeLag" : {
+                                                "type" : "string",
+                                                "description" : "Last message read lag in ISO 8601 Duration format"
+                                            },
+                                            "writeTimeLag" : {
+                                                "type": "string",
+                                                "description" : "Max messages write lag that were read by this topic partition consumer during one minute before last read in ISO 8601 Duration format"
+                                            },
+                                            "unreadMessagesCount" : {
+                                                "type" : "integer",
+                                                "format" : "int64",
+                                                "description" : "Unread messages count"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

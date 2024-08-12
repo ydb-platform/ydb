@@ -7,18 +7,20 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const NLogging::TLogger Logger("HandleChannelFailureTest");
-
-////////////////////////////////////////////////////////////////////////////////
-
 template <class TImpl>
 class THandleChannelFailureTestBase
     : public ::testing::Test
 {
 public:
-    IServerPtr CreateServer(const TTestServerHost& serverHost, IMemoryUsageTrackerPtr memoryUsageTracker)
+    TTestServerHostPtr CreateTestServerHost(
+        NTesting::TPortHolder port,
+        std::vector<IServicePtr> services,
+        TTestNodeMemoryTrackerPtr memoryUsageTracker)
     {
-        return TImpl::CreateServer(serverHost.GetPort(), memoryUsageTracker);
+        return TImpl::CreateTestServerHost(
+            std::move(port),
+            std::move(services),
+            std::move(memoryUsageTracker));
     }
 
     IChannelPtr CreateChannel(const TString& address)
@@ -36,35 +38,50 @@ TYPED_TEST_SUITE(THandleChannelFailureTest, TWithoutUds);
 
 TYPED_TEST(THandleChannelFailureTest, HandleChannelFailureTest)
 {
-    TTestServerHost outerServer;
-    TTestServerHost innerServer;
-
-    outerServer.InitilizeAddress();
-    innerServer.InitilizeAddress();
-
-    auto finally = Finally([&] {
-        outerServer.TearDown();
-        innerServer.TearDown();
-    });
-
     auto workerPool = NConcurrency::CreateThreadPool(4, "Worker");
 
-    outerServer.InitializeServer(
-        this->CreateServer(outerServer, New<TTestNodeMemoryTracker>(32_MB)),
-        workerPool->GetInvoker(),
-        /*secure*/ false,
-        BIND([&] (const TString& address) {
-            return this->CreateChannel(address);
-        }));
+    auto outerMemoryUsageTracker = New<TTestNodeMemoryTracker>(32_MB);
+    auto innerMemoryUsageTracker = New<TTestNodeMemoryTracker>(32_MB);
 
-    innerServer.InitializeServer(
-        this->CreateServer(innerServer, New<TTestNodeMemoryTracker>(32_MB)),
-        workerPool->GetInvoker(),
-        /*secure*/ false,
-        /*createChannel*/ {});
+    auto outerServices = std::vector<IServicePtr>{
+        CreateTestService(
+            workerPool->GetInvoker(),
+            false,
+            BIND([&] (const TString& address) {
+                return this->CreateChannel(address);
+            }),
+            outerMemoryUsageTracker),
+        CreateNoBaggageService(workerPool->GetInvoker())
+    };
+
+    auto innerServices = std::vector<IServicePtr>{
+        CreateTestService(
+            workerPool->GetInvoker(),
+            false,
+            BIND([&] (const TString& address) {
+                return this->CreateChannel(address);
+            }),
+            innerMemoryUsageTracker),
+        CreateNoBaggageService(workerPool->GetInvoker())
+    };
+
+    TTestServerHostPtr outerHost = this->CreateTestServerHost(
+        NTesting::GetFreePort(),
+        outerServices,
+        outerMemoryUsageTracker);
+
+    TTestServerHostPtr innerHost = this->CreateTestServerHost(
+        NTesting::GetFreePort(),
+        innerServices,
+        innerMemoryUsageTracker);
+
+    auto finally = Finally([&] {
+        outerHost->TearDown();
+        innerHost->TearDown();
+    });
 
     {
-        auto channel = this->CreateChannel(outerServer.GetAddress());
+        auto channel = this->CreateChannel(outerHost->GetAddress());
         TTestProxy proxy(channel);
         auto req = proxy.GetChannelFailureError();
         auto error = req->Invoke().Get();
@@ -77,7 +94,7 @@ TYPED_TEST(THandleChannelFailureTest, HandleChannelFailureTest)
         int failCount = 0;
 
         auto channel = CreateFailureDetectingChannel(
-            this->CreateChannel(outerServer.GetAddress()),
+            this->CreateChannel(outerHost->GetAddress()),
             /*acknowledgementTimeout*/ std::nullopt,
             BIND([&] (const IChannelPtr& /*channel*/, const TError& error) {
                 ++failCount;
@@ -97,7 +114,7 @@ TYPED_TEST(THandleChannelFailureTest, HandleChannelFailureTest)
         int failCount = 0;
 
         auto channel = CreateFailureDetectingChannel(
-            this->CreateChannel(outerServer.GetAddress()),
+            this->CreateChannel(outerHost->GetAddress()),
             /*acknowledgementTimeout*/ std::nullopt,
             BIND([&] (const IChannelPtr& /*channel*/, const TError& error) {
                 ++failCount;
@@ -106,7 +123,7 @@ TYPED_TEST(THandleChannelFailureTest, HandleChannelFailureTest)
 
         TTestProxy proxy(channel);
         auto req = proxy.GetChannelFailureError();
-        req->set_redirection_address(innerServer.GetAddress());
+        req->set_redirection_address(innerHost->GetAddress());
         auto error = req->Invoke().Get();
         ASSERT_FALSE(error.IsOK());
         ASSERT_TRUE(error.FindMatching(NRpc::EErrorCode::Unavailable));

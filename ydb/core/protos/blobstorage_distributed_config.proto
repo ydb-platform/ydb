@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 import "ydb/core/protos/config.proto";
+import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/library/actors/protos/interconnect.proto";
 
 package NKikimrBlobStorage;
@@ -64,6 +65,7 @@ message TEvNodeConfigReversePush {
     uint32 RootNodeId = 1; // current tree root as known by the sender, always nonzero
     bool Rejected = 2; // is the request rejected due to cyclic graph?
     TStorageConfig CommittedStorageConfig = 3; // last known committed storage configuration
+    bool RecurseConfigUpdate = 4;
 }
 
 // Remove node from bound list.
@@ -80,6 +82,7 @@ message TEvNodeConfigScatter {
     }
 
     optional uint64 Cookie = 1;
+    optional fixed64 TaskId = 4; // random (and not necessarily unique) identifier
 
     oneof Request {
         TCollectConfigs CollectConfigs = 2;
@@ -106,6 +109,8 @@ message TEvNodeConfigGather {
         repeated TNode Nodes = 1;
         repeated TPersistentConfig CommittedConfigs = 2;
         repeated TPersistentConfig ProposedConfigs = 3;
+        repeated TDiskIdentifier NoMetadata = 4;
+        repeated TDiskIdentifier Errors = 5;
     }
 
     message TProposeStorageConfig {
@@ -133,6 +138,7 @@ message TEvNodeConfigGather {
     }
 
     optional uint64 Cookie = 1;
+    optional bool Aborted = 4;
 
     oneof Response {
         TCollectConfigs CollectConfigs = 2;
@@ -146,8 +152,49 @@ message TEvNodeConfigInvokeOnRoot {
         TStorageConfig Config = 1;
     }
 
+    message TQueryConfig
+    {}
+
+    message TReassignGroupDisk {
+        NKikimrBlobStorage.TVDiskID VDiskId = 1; // which one to reassign
+        optional NKikimrBlobStorage.TPDiskId PDiskId = 2; // where to put it (optional)
+        bool ConvertToDonor = 3; // convert the current disk to donor?
+        bool IgnoreGroupFailModelChecks = 4;
+        bool IgnoreDegradedGroupsChecks = 5;
+        bool IgnoreVSlotQuotaCheck = 6;
+        bool IsSelfHealReasonDecommit = 7;
+    }
+
+    // Regenerate configuration so the slain VDisk is no more reported as DESTROY one in the list.
+    message TStaticVDiskSlain {
+        NKikimrBlobStorage.TVDiskID VDiskId = 1;
+        NKikimrBlobStorage.TVSlotId VSlotId = 2;
+    }
+
+    message TDropDonor {
+        NKikimrBlobStorage.TVDiskID VDiskId = 1;
+        NKikimrBlobStorage.TVSlotId VSlotId = 2;
+    }
+
+    message TReassignStateStorageNode {
+        uint32 From = 1;
+        uint32 To = 2; // or zero to pick up automatically
+        bool StateStorage = 3;
+        bool StateStorageBoard = 4;
+        bool SchemeBoard = 5;
+    }
+
+    message TAdvanceGeneration
+    {}
+
     oneof Request {
         TUpdateConfig UpdateConfig = 1;
+        TQueryConfig QueryConfig = 2;
+        TReassignGroupDisk ReassignGroupDisk = 3;
+        TStaticVDiskSlain StaticVDiskSlain = 4;
+        TDropDonor DropDonor = 5;
+        TReassignStateStorageNode ReassignStateStorageNode = 6;
+        TAdvanceGeneration AdvanceGeneration = 7;
     }
 }
 
@@ -165,14 +212,23 @@ message TEvNodeConfigInvokeOnRootResult {
         uint32 NodeId = 2;
     }
 
-    message TUpdateConfig {
+    message TQueryConfig {
+        TStorageConfig Config = 1;
+        TStorageConfig CurrentProposedStorageConfig = 2;
     }
 
     EStatus Status = 1;
     optional string ErrorReason = 2;
     TScepter Scepter = 3;
 
+    reserved 4, 6, 7, 8, 9;
+
     oneof Response {
-        TUpdateConfig UpdateConfig = 4;
+        TQueryConfig QueryConfig = 5;
     }
+}
+
+message TEvNodeWardenDynamicConfigPush {
+    TStorageConfig Config = 1;
+    bool NoQuorum = 2;
 }

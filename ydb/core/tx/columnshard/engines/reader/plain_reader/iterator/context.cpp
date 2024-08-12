@@ -1,153 +1,301 @@
 #include "context.h"
 #include "source.h"
 
+#include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
+
 namespace NKikimr::NOlap::NReader::NPlain {
 
-std::shared_ptr<NArrow::NMerger::TMergePartialStream> TSpecialReadContext::BuildMerger() const {
-    return std::make_shared<NArrow::NMerger::TMergePartialStream>(ReadMetadata->GetReplaceKey(), ProgramInputColumns->GetSchema(), CommonContext->IsReverse(), IIndexInfo::GetSpecialColumnNames());
+std::unique_ptr<NArrow::NMerger::TMergePartialStream> TSpecialReadContext::BuildMerger() const {
+    return std::make_unique<NArrow::NMerger::TMergePartialStream>(
+        ReadMetadata->GetReplaceKey(), ProgramInputColumns->GetSchema(), CommonContext->IsReverse(), IIndexInfo::GetSnapshotColumnNames());
 }
 
-ui64 TSpecialReadContext::GetMemoryForSources(const std::map<ui32, std::shared_ptr<IDataSource>>& sources, const bool isExclusive) {
+ui64 TSpecialReadContext::GetMemoryForSources(const THashMap<ui32, std::shared_ptr<IDataSource>>& sources) {
     ui64 result = 0;
+    bool hasSequentialReadSources = false;
     for (auto&& i : sources) {
-        auto fetchingPlan = GetColumnsFetchingPlan(i.second, isExclusive);
+        auto fetchingPlan = GetColumnsFetchingPlan(i.second);
         AFL_VERIFY(i.second->GetIntervalsCount());
-        result += fetchingPlan->PredictRawBytes(i.second) / i.second->GetIntervalsCount();
+        const ui64 sourceMemory = std::max<ui64>(1, i.second->GetResourceGuardsMemory() / i.second->GetIntervalsCount());
+        if (!i.second->IsSourceInMemory()) {
+            hasSequentialReadSources = true;
+        }
+        result += sourceMemory;
     }
     AFL_VERIFY(result);
-    return result;
-}
-
-std::shared_ptr<NKikimr::NOlap::NReader::NPlain::IFetchingStep> TSpecialReadContext::GetColumnsFetchingPlan(const std::shared_ptr<IDataSource>& source, const bool exclusiveSource) const {
-    const bool needSnapshots = !exclusiveSource || ReadMetadata->GetRequestSnapshot() < source->GetRecordSnapshotMax();
-    const bool partialUsageByPK = ReadMetadata->GetPKRangesFilter().IsPortionInPartialUsage(source->GetStartReplaceKey(), source->GetFinishReplaceKey(), ReadMetadata->GetIndexInfo());
-    const bool useIndexes = (IndexChecker ? source->HasIndexes(IndexChecker->GetIndexIds()) : false);
-    auto result = CacheFetchingScripts[needSnapshots ? 1 : 0][exclusiveSource ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0];
-    if (!result) {
-        return std::make_shared<TBuildFakeSpec>(source->GetRecordsCountVerified(), "fake");
+    if (hasSequentialReadSources) {
+        result += ReadSequentiallyBufferSize;
     }
     return result;
 }
 
-std::shared_ptr<NKikimr::NOlap::NReader::NPlain::IFetchingStep> TSpecialReadContext::BuildColumnsFetchingPlan(const bool needSnapshots, const bool exclusiveSource, const bool partialUsageByPredicateExt, const bool useIndexes) const {
-    std::shared_ptr<IFetchingStep> result = std::make_shared<TFakeStep>();
-    std::shared_ptr<IFetchingStep> current = result;
+std::shared_ptr<TFetchingScript> TSpecialReadContext::GetColumnsFetchingPlan(const std::shared_ptr<IDataSource>& source) const {
+    const bool needSnapshots = !source->GetExclusiveIntervalOnly() || ReadMetadata->GetRequestSnapshot() < source->GetRecordSnapshotMax() ||
+                               !source->IsSourceInMemory();
+    bool partialUsageByPK = false;
+    {
+        const TPKRangeFilter::EUsageClass usage =
+            ReadMetadata->GetPKRangesFilter().IsPortionInPartialUsage(source->GetStartReplaceKey(), source->GetFinishReplaceKey());
+        switch (usage) {
+            case TPKRangeFilter::EUsageClass::PartialUsage:
+                partialUsageByPK = true;
+                break;
+            case TPKRangeFilter::EUsageClass::DontUsage:
+                partialUsageByPK = true;
+                break;
+            case TPKRangeFilter::EUsageClass::FullUsage:
+                partialUsageByPK = false;
+                break;
+        }
+    }
+    const bool useIndexes = (IndexChecker ? source->HasIndexes(IndexChecker->GetIndexIds()) : false);
+    const bool isWholeExclusiveSource = source->GetExclusiveIntervalOnly() && source->IsSourceInMemory();
+    const bool hasDeletions = source->GetHasDeletions();
+    bool needShardingFilter = false;
+    if (!!ReadMetadata->GetRequestShardingInfo()) {
+        auto ver = source->GetShardingVersionOptional();
+        if (!ver || *ver < ReadMetadata->GetRequestShardingInfo()->GetSnapshotVersion()) {
+            needShardingFilter = true;
+        }
+    }
+    if (auto result = CacheFetchingScripts[needSnapshots ? 1 : 0][isWholeExclusiveSource ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0]
+                                          [needShardingFilter ? 1 : 0][hasDeletions ? 1 : 0]) {
+        //        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("SS", needSnapshots)("PK", partialUsageByPK)("IDX", useIndexes)("SHARDING", needShardingFilter)
+        //            ("EXCL", source->GetExclusiveIntervalOnly())("MEM", source->IsSourceInMemory())("result", result->DebugString());
+        return result;
+    }
+    {
+        std::shared_ptr<TFetchingScript> result = std::make_shared<TFetchingScript>(*this);
+        result->SetBranchName("FAKE");
+        result->AddStep(std::make_shared<TBuildFakeSpec>(source->GetRecordsCount()));
+        return result;
+    }
+}
+
+class TColumnsAccumulator {
+private:
+    TColumnsSet FetchingReadyColumns;
+    TColumnsSet AssemblerReadyColumns;
+    std::shared_ptr<TColumnsSet> GuaranteeNotOptional;
+
+public:
+    TColumnsAccumulator(const std::shared_ptr<TColumnsSet>& guaranteeNotOptional)
+        : GuaranteeNotOptional(guaranteeNotOptional) {
+    }
+
+    bool AddFetchingStep(TFetchingScript& script, const TColumnsSet& columns, const EStageFeaturesIndexes& stage) {
+        auto actualColumns = columns - FetchingReadyColumns;
+        FetchingReadyColumns = FetchingReadyColumns + columns;
+        if (!actualColumns.IsEmpty()) {
+            auto actualSet = std::make_shared<TColumnsSet>(actualColumns);
+            script.AddStep(std::make_shared<TAllocateMemoryStep>(actualSet, stage));
+            script.AddStep(std::make_shared<TColumnBlobsFetchingStep>(actualSet));
+            return true;
+        }
+        return false;
+    }
+    bool AddAssembleStep(TFetchingScript& script, const TColumnsSet& columns, const TString& purposeId, const bool optional) {
+        auto actualColumns = columns - AssemblerReadyColumns;
+        AssemblerReadyColumns = AssemblerReadyColumns + columns;
+        if (!actualColumns.IsEmpty()) {
+            auto actualSet = std::make_shared<TColumnsSet>(actualColumns);
+            if (optional) {
+                const auto notOptionalColumnIds = GuaranteeNotOptional->Intersect(*actualSet);
+                if (notOptionalColumnIds.size()) {
+                    std::shared_ptr<TColumnsSet> cross = actualSet->BuildSamePtr(notOptionalColumnIds);
+                    script.AddStep(std::make_shared<TAssemblerStep>(cross, purposeId));
+                    *actualSet = *actualSet - *cross;
+                }
+                if (!actualSet->IsEmpty()) {
+                    script.AddStep(std::make_shared<TOptionalAssemblerStep>(actualSet, purposeId));
+                }
+            } else {
+                script.AddStep(std::make_shared<TAssemblerStep>(actualSet, purposeId));
+            }
+            return true;
+        }
+        return false;
+    }
+};
+
+std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(const bool needSnapshots, const bool exclusiveSource,
+    const bool partialUsageByPredicateExt, const bool useIndexes, const bool needFilterSharding, const bool needFilterDeletion) const {
+    std::shared_ptr<TFetchingScript> result = std::make_shared<TFetchingScript>(*this);
     const bool partialUsageByPredicate = partialUsageByPredicateExt && PredicateColumns->GetColumnsCount();
-    if (!!IndexChecker && useIndexes) {
-        current = current->AttachNext(std::make_shared<TIndexBlobsFetchingStep>(std::make_shared<TIndexesSet>(IndexChecker->GetIndexIds())));
-        current = current->AttachNext(std::make_shared<TApplyIndexStep>(IndexChecker));
+    if (!!IndexChecker && useIndexes && exclusiveSource) {
+        result->AddStep(std::make_shared<TIndexBlobsFetchingStep>(std::make_shared<TIndexesSet>(IndexChecker->GetIndexIds())));
+        result->AddStep(std::make_shared<TApplyIndexStep>(IndexChecker));
+    }
+    bool hasFilterSharding = false;
+    TColumnsAccumulator acc(MergeColumns);
+    if (needFilterSharding && !ShardingColumns->IsEmpty()) {
+        hasFilterSharding = true;
+        TColumnsSet columnsFetch = *ShardingColumns;
+        if (!exclusiveSource) {
+            columnsFetch = columnsFetch + *PKColumns + *SpecColumns;
+        }
+        acc.AddFetchingStep(*result, columnsFetch, EStageFeaturesIndexes::Filter);
+        acc.AddAssembleStep(*result, columnsFetch, "SPEC_SHARDING", false);
+        result->AddStep(std::make_shared<TShardingFilter>());
     }
     if (!EFColumns->GetColumnsCount() && !partialUsageByPredicate) {
+        result->SetBranchName("simple");
         TColumnsSet columnsFetch = *FFColumns;
+        if (needFilterDeletion) {
+            columnsFetch = columnsFetch + *DeletionColumns;
+        }
         if (needSnapshots) {
             columnsFetch = columnsFetch + *SpecColumns;
         }
         if (!exclusiveSource) {
             columnsFetch = columnsFetch + *PKColumns + *SpecColumns;
+        } else {
+            if (columnsFetch.GetColumnsCount() == 1 && SpecColumns->Contains(columnsFetch) && !hasFilterSharding) {
+                return nullptr;
+            }
         }
-        if (columnsFetch.GetColumnsCount()) {
-            current = current->AttachNext(std::make_shared<TColumnBlobsFetchingStep>(std::make_shared<TColumnsSet>(columnsFetch), "simple"));
-            current = current->AttachNext(std::make_shared<TAssemblerStep>(std::make_shared<TColumnsSet>(columnsFetch), "LAST"));
+        if (columnsFetch.GetColumnsCount() || hasFilterSharding || needFilterDeletion) {
+            acc.AddFetchingStep(*result, columnsFetch, EStageFeaturesIndexes::Fetching);
+            if (!exclusiveSource) {
+                acc.AddAssembleStep(*result, *PKColumns + *SpecColumns, "LAST_PK", false);
+            }
+            if (needFilterDeletion) {
+                acc.AddAssembleStep(*result, *DeletionColumns, "SPEC_DELETION", false);
+                result->AddStep(std::make_shared<TDeletionFilter>());
+            }
+            acc.AddAssembleStep(*result, columnsFetch, "LAST", true);
         } else {
             return nullptr;
         }
     } else if (exclusiveSource) {
+        result->SetBranchName("exclusive");
         TColumnsSet columnsFetch = *EFColumns;
+        if (needFilterDeletion) {
+            columnsFetch = columnsFetch + *DeletionColumns;
+        }
         if (needSnapshots || FFColumns->Cross(*SpecColumns)) {
             columnsFetch = columnsFetch + *SpecColumns;
         }
         if (partialUsageByPredicate) {
             columnsFetch = columnsFetch + *PredicateColumns;
         }
-        AFL_VERIFY(columnsFetch.GetColumnsCount());
-        current = current->AttachNext(std::make_shared<TColumnBlobsFetchingStep>(std::make_shared<TColumnsSet>(columnsFetch), "ef"));
 
-        if (needSnapshots || FFColumns->Cross(*SpecColumns)) {
-            current = current->AttachNext(std::make_shared<TAssemblerStep>(SpecColumns, "SPEC"));
-            current = current->AttachNext(std::make_shared<TSnapshotFilter>());
-            columnsFetch = columnsFetch - *SpecColumns;
-        }
-        if (partialUsageByPredicate) {
-            current = current->AttachNext(std::make_shared<TAssemblerStep>(PredicateColumns, "PREDICATE"));
-            current = current->AttachNext(std::make_shared<TPredicateFilter>());
-            columnsFetch = columnsFetch - *PredicateColumns;
-        }
-        if (columnsFetch.GetColumnsCount()) {
-            current = current->AttachNext(std::make_shared<TAssemblerStep>(std::make_shared<TColumnsSet>(columnsFetch), "EF"));
-        }
-        for (auto&& i : ReadMetadata->GetProgram().GetSteps()) {
-            if (!i->IsFilterOnly()) {
-                break;
-            }
-            current = current->AttachNext(std::make_shared<TFilterProgramStep>(i));
-        }
-        TColumnsSet columnsAdditionalFetch = *FFColumns - *EFColumns - *SpecColumns;
-        if (partialUsageByPredicate) {
-            columnsAdditionalFetch = columnsAdditionalFetch - *PredicateColumns;
-        }
-        if (columnsAdditionalFetch.GetColumnsCount()) {
-            current = current->AttachNext(std::make_shared<TColumnBlobsFetchingStep>(std::make_shared<TColumnsSet>(columnsAdditionalFetch)));
-            current = current->AttachNext(std::make_shared<TAssemblerStep>(std::make_shared<TColumnsSet>(columnsAdditionalFetch), "LAST"));
-        }
-    } else {
-        TColumnsSet columnsFetch = *MergeColumns + *EFColumns;
         AFL_VERIFY(columnsFetch.GetColumnsCount());
-        current = current->AttachNext(std::make_shared<TColumnBlobsFetchingStep>(std::make_shared<TColumnsSet>(columnsFetch), "full"));
-        current = current->AttachNext(std::make_shared<TAssemblerStep>(SpecColumns, "SPEC"));
-        if (needSnapshots) {
-            current = current->AttachNext(std::make_shared<TSnapshotFilter>());
+        acc.AddFetchingStep(*result, columnsFetch, EStageFeaturesIndexes::Filter);
+
+        if (needFilterDeletion) {
+            acc.AddAssembleStep(*result, *DeletionColumns, "SPEC_DELETION", false);
+            result->AddStep(std::make_shared<TDeletionFilter>());
         }
-        current = current->AttachNext(std::make_shared<TAssemblerStep>(PKColumns, "PK"));
+        if (needSnapshots || FFColumns->Cross(*SpecColumns)) {
+            acc.AddAssembleStep(*result, *SpecColumns, "SPEC", false);
+            result->AddStep(std::make_shared<TSnapshotFilter>());
+        }
         if (partialUsageByPredicate) {
-            current = current->AttachNext(std::make_shared<TPredicateFilter>());
-        }
-        const TColumnsSet columnsFetchEF = columnsFetch - *SpecColumns - *PKColumns;
-        if (columnsFetchEF.GetColumnsCount()) {
-            current = current->AttachNext(std::make_shared<TAssemblerStep>(std::make_shared<TColumnsSet>(columnsFetchEF), "EF"));
+            acc.AddAssembleStep(*result, *PredicateColumns, "PREDICATE", false);
+            result->AddStep(std::make_shared<TPredicateFilter>());
         }
         for (auto&& i : ReadMetadata->GetProgram().GetSteps()) {
+            if (i->GetFilterOriginalColumnIds().empty()) {
+                break;
+            }
+            TColumnsSet stepColumnIds(i->GetFilterOriginalColumnIds(), ReadMetadata->GetResultSchema());
+            acc.AddAssembleStep(*result, stepColumnIds, "EF", true);
+            result->AddStep(std::make_shared<TFilterProgramStep>(i));
             if (!i->IsFilterOnly()) {
                 break;
             }
-            current = current->AttachNext(std::make_shared<TFilterProgramStep>(i));
         }
-        const TColumnsSet columnsAdditionalFetch = *FFColumns - *EFColumns - *SpecColumns - *PKColumns - *PredicateColumns;
-        if (columnsAdditionalFetch.GetColumnsCount()) {
-            current = current->AttachNext(std::make_shared<TColumnBlobsFetchingStep>(std::make_shared<TColumnsSet>(columnsAdditionalFetch)));
-            current = current->AttachNext(std::make_shared<TAssemblerStep>(std::make_shared<TColumnsSet>(columnsAdditionalFetch), "LAST"));
+        if (GetReadMetadata()->Limit) {
+            result->AddStep(std::make_shared<TFilterCutLimit>(GetReadMetadata()->Limit, GetReadMetadata()->IsDescSorted()));
         }
+        acc.AddFetchingStep(*result, *FFColumns, EStageFeaturesIndexes::Fetching);
+        acc.AddAssembleStep(*result, *FFColumns, "LAST", true);
+    } else {
+        result->SetBranchName("merge");
+        TColumnsSet columnsFetch = *MergeColumns + *EFColumns;
+        if (needFilterDeletion) {
+            columnsFetch = columnsFetch + *DeletionColumns;
+        }
+        AFL_VERIFY(columnsFetch.GetColumnsCount());
+        acc.AddFetchingStep(*result, columnsFetch, EStageFeaturesIndexes::Filter);
+
+        acc.AddAssembleStep(*result, *SpecColumns, "SPEC", false);
+        acc.AddAssembleStep(*result, *PKColumns, "PK", false);
+        if (needFilterDeletion) {
+            acc.AddAssembleStep(*result, *DeletionColumns, "SPEC_DELETION", false);
+            result->AddStep(std::make_shared<TDeletionFilter>());
+        }
+        if (needSnapshots) {
+            result->AddStep(std::make_shared<TSnapshotFilter>());
+        }
+        if (partialUsageByPredicate) {
+            result->AddStep(std::make_shared<TPredicateFilter>());
+        }
+        for (auto&& i : ReadMetadata->GetProgram().GetSteps()) {
+            if (i->GetFilterOriginalColumnIds().empty()) {
+                break;
+            }
+            TColumnsSet stepColumnIds(i->GetFilterOriginalColumnIds(), ReadMetadata->GetResultSchema());
+            acc.AddAssembleStep(*result, stepColumnIds, "EF", true);
+            result->AddStep(std::make_shared<TFilterProgramStep>(i));
+            if (!i->IsFilterOnly()) {
+                break;
+            }
+        }
+        acc.AddFetchingStep(*result, *FFColumns, EStageFeaturesIndexes::Fetching);
+        acc.AddAssembleStep(*result, *FFColumns, "LAST", true);
     }
-    return result->GetNextStep();
+    return result;
 }
 
 TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
-    : CommonContext(commonContext)
-{
+    : CommonContext(commonContext) {
+
+    std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> stages = { 
+        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures("FILTER", 0.70 * TGlobalLimits::ScanMemoryLimit),
+        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures("FETCHING", 0.15 * TGlobalLimits::ScanMemoryLimit),
+        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures("MERGE", 0.15 * TGlobalLimits::ScanMemoryLimit)
+    };
+    ProcessMemoryGuard =
+        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildProcessGuard(CommonContext->GetReadMetadata()->GetTxId(), stages);
     ReadMetadata = dynamic_pointer_cast<const TReadMetadata>(CommonContext->GetReadMetadata());
     Y_ABORT_UNLESS(ReadMetadata);
     Y_ABORT_UNLESS(ReadMetadata->SelectInfo);
 
-    auto readSchema = ReadMetadata->GetLoadSchema(ReadMetadata->GetRequestSnapshot());
-    SpecColumns = std::make_shared<TColumnsSet>(TIndexInfo::GetSpecialColumnIdsSet(), ReadMetadata->GetIndexInfo(), readSchema);
+    auto readSchema = ReadMetadata->GetResultSchema();
+    SpecColumns = std::make_shared<TColumnsSet>(TIndexInfo::GetSnapshotColumnIdsSet(), readSchema);
     IndexChecker = ReadMetadata->GetProgram().GetIndexChecker();
     {
         auto predicateColumns = ReadMetadata->GetPKRangesFilter().GetColumnIds(ReadMetadata->GetIndexInfo());
         if (predicateColumns.size()) {
-            PredicateColumns = std::make_shared<TColumnsSet>(predicateColumns, ReadMetadata->GetIndexInfo(), readSchema);
+            PredicateColumns = std::make_shared<TColumnsSet>(predicateColumns, readSchema);
         } else {
             PredicateColumns = std::make_shared<TColumnsSet>();
         }
     }
     {
+        std::set<ui32> columnIds = { NPortion::TSpecialColumns::SPEC_COL_DELETE_FLAG_INDEX };
+        DeletionColumns = std::make_shared<TColumnsSet>(columnIds, ReadMetadata->GetResultSchema());
+    }
+
+    if (!!ReadMetadata->GetRequestShardingInfo()) {
+        auto shardingColumnIds =
+            ReadMetadata->GetIndexInfo().GetColumnIdsVerified(ReadMetadata->GetRequestShardingInfo()->GetShardingInfo()->GetColumnNames());
+        ShardingColumns = std::make_shared<TColumnsSet>(shardingColumnIds, ReadMetadata->GetResultSchema());
+    } else {
+        ShardingColumns = std::make_shared<TColumnsSet>();
+    }
+    {
         auto efColumns = ReadMetadata->GetEarlyFilterColumnIds();
         if (efColumns.size()) {
-            EFColumns = std::make_shared<TColumnsSet>(efColumns, ReadMetadata->GetIndexInfo(), readSchema);
+            EFColumns = std::make_shared<TColumnsSet>(efColumns, readSchema);
         } else {
             EFColumns = std::make_shared<TColumnsSet>();
         }
     }
     if (ReadMetadata->HasProcessingColumnIds()) {
-        FFColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetProcessingColumnIds(), ReadMetadata->GetIndexInfo(), readSchema);
+        FFColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetProcessingColumnIds(), readSchema);
         if (SpecColumns->Contains(*FFColumns) && !EFColumns->IsEmpty()) {
             FFColumns = std::make_shared<TColumnsSet>(*EFColumns + *SpecColumns);
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("ff_modified", FFColumns->DebugString());
@@ -164,27 +312,43 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
         ProgramInputColumns = FFColumns;
     }
 
-    PKColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetPKColumnIds(), ReadMetadata->GetIndexInfo(), readSchema);
+    PKColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetPKColumnIds(), readSchema);
     MergeColumns = std::make_shared<TColumnsSet>(*PKColumns + *SpecColumns);
 
+    const auto GetBit = [](const ui32 val, const ui32 pos) -> ui32 {
+        return (val & (1 << pos)) ? 1 : 0;
+    };
+
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("columns_context_info", DebugString());
-    CacheFetchingScripts[0][0][0][0] = BuildColumnsFetchingPlan(false, false, false, false);
-    CacheFetchingScripts[0][1][0][0] = BuildColumnsFetchingPlan(false, true, false, false);
-    CacheFetchingScripts[1][0][0][0] = BuildColumnsFetchingPlan(true, false, false, false);
-    CacheFetchingScripts[1][1][0][0] = BuildColumnsFetchingPlan(true, true, false, false);
-    CacheFetchingScripts[0][0][1][0] = BuildColumnsFetchingPlan(false, false, true, false);
-    CacheFetchingScripts[0][1][1][0] = BuildColumnsFetchingPlan(false, true, true, false);
-    CacheFetchingScripts[1][0][1][0] = BuildColumnsFetchingPlan(true, false, true, false);
-    CacheFetchingScripts[1][1][1][0] = BuildColumnsFetchingPlan(true, true, true, false);
-
-    CacheFetchingScripts[0][0][0][1] = BuildColumnsFetchingPlan(false, false, false, true);
-    CacheFetchingScripts[0][1][0][1] = BuildColumnsFetchingPlan(false, true, false, true);
-    CacheFetchingScripts[1][0][0][1] = BuildColumnsFetchingPlan(true, false, false, true);
-    CacheFetchingScripts[1][1][0][1] = BuildColumnsFetchingPlan(true, true, false, true);
-    CacheFetchingScripts[0][0][1][1] = BuildColumnsFetchingPlan(false, false, true, true);
-    CacheFetchingScripts[0][1][1][1] = BuildColumnsFetchingPlan(false, true, true, true);
-    CacheFetchingScripts[1][0][1][1] = BuildColumnsFetchingPlan(true, false, true, true);
-    CacheFetchingScripts[1][1][1][1] = BuildColumnsFetchingPlan(true, true, true, true);
+    for (ui32 i = 0; i < (1 << 6); ++i) {
+        CacheFetchingScripts[GetBit(i, 0)][GetBit(i, 1)][GetBit(i, 2)][GetBit(i, 3)][GetBit(i, 4)][GetBit(i, 5)] =
+            BuildColumnsFetchingPlan(GetBit(i, 0), GetBit(i, 1), GetBit(i, 2), GetBit(i, 3), GetBit(i, 4), GetBit(i, 5));
+    }
 }
 
+TString TSpecialReadContext::DebugString() const {
+    TStringBuilder sb;
+    sb << "ef=" << EFColumns->DebugString() << ";"
+       << "sharding=" << ShardingColumns->DebugString() << ";"
+       << "pk=" << PKColumns->DebugString() << ";"
+       << "ff=" << FFColumns->DebugString() << ";"
+       << "program_input=" << ProgramInputColumns->DebugString() << ";";
+    return sb;
 }
+
+TString TSpecialReadContext::ProfileDebugString() const {
+    TStringBuilder sb;
+    const auto GetBit = [](const ui32 val, const ui32 pos) -> ui32 {
+        return (val & (1 << pos)) ? 1 : 0;
+    };
+
+    for (ui32 i = 0; i < (1 << 6); ++i) {
+        auto script = CacheFetchingScripts[GetBit(i, 0)][GetBit(i, 1)][GetBit(i, 2)][GetBit(i, 3)][GetBit(i, 4)][GetBit(i, 5)];
+        if (script) {
+            sb << script->DebugString() << ";";
+        }
+    }
+    return sb;
+}
+
+}   // namespace NKikimr::NOlap::NReader::NPlain

@@ -275,7 +275,6 @@ private:
     }
 
     void CheckUsageMaybeReply(const TString& subjectType, const TString& subjectId, TQuotaCache& cache, const TEvQuotaService::TQuotaGetRequest::TPtr& ev) {
-
         bool pended = false;
         auto& infoMap = QuotaInfoMap[subjectType];
         if (!ev->Get()->AllowStaleUsage) {
@@ -472,7 +471,15 @@ private:
             }
         );
 
-        Exec(DbPool, executable, TablePathPrefix);
+        Exec(DbPool, executable, TablePathPrefix).Apply([this, executable, actorSystem=NActors::TActivationContext::ActorSystem(), subjectType, subjectId, callback, selfId=SelfId()](const auto& future) {
+            actorSystem->Send(selfId, new TEvents::TEvCallback([this, executable, subjectType, subjectId, callback, future]() {
+                auto issues = GetIssuesFromYdbStatus(executable, future);
+                if (issues) {
+                    LOG_E("ReadQuota finished with error: " << issues->ToOneLineString());
+                    this->ReadQuota(subjectType, subjectId, callback); // TODO: endless retry possible
+                }
+            }));
+        });
     }
 
     void SendQuota(NActors::TActorId receivedId, ui64 cookie, const TString& subjectType, const TString& subjectId, TQuotaCache& cache) {
@@ -624,7 +631,7 @@ private:
                     if (itQ != cache.UsageMap.end()) {
                         auto& cached = itQ->second;
                         cached.SyncInProgress = false;
-                        if (cached.ChangedAfterSync) {
+                        if (cached.ChangedAfterSync) { // this check will be processed in a separate event
                             LOG_T(cached.Usage.ToString(executer.State.SubjectType, executer.State.SubjectId, executer.State.MetricName) << " RESYNC");
                             this->SyncQuota(executer.State.SubjectType, executer.State.SubjectId, executer.State.MetricName, cached);
                         }
@@ -633,7 +640,28 @@ private:
             }
         );
 
-        Exec(DbPool, executable, TablePathPrefix);
+        Exec(DbPool, executable, TablePathPrefix).Apply([this, executable, subjectId, subjectType, metricName, actorSystem=NActors::TActivationContext::ActorSystem(), selfId=SelfId()](const auto& future) {
+            actorSystem->Send(selfId, new TEvents::TEvCallback([this, executable, subjectId, subjectType, metricName, future]() {
+                auto issues = GetIssuesFromYdbStatus(executable, future);
+                if (issues) {
+                    LOG_E("SyncQuota finished with error: " << issues->ToOneLineString());
+                    auto& subjectMap = this->QuotaCacheMap[subjectType];
+                    auto it = subjectMap.find(subjectId);
+                    if (it != subjectMap.end()) {
+                        auto& cache = it->second;
+                        auto itQ = cache.UsageMap.find(metricName);
+                        if (itQ != cache.UsageMap.end()) {
+                            auto& cached = itQ->second;
+                            cached.SyncInProgress = false;
+                            LOG_T(cached.Usage.ToString(metricName, subjectId, metricName) << " RESYNC after error");
+                            this->SyncQuota(subjectType, subjectId, metricName, cached); // TODO: endless retry possible
+                        }
+                    }
+                }
+            }));
+
+
+        });
     }
 
     void UpdateQuota(const TString& subjectType, const TString& subjectId, const TString& metricName, TQuotaUsage& usage) {
@@ -656,6 +684,12 @@ private:
         auto metricName = ev->Get()->MetricName;
         auto& subjectMap = QuotaCacheMap[subjectType];
         auto it = subjectMap.find(subjectId);
+
+        if (!ev->Get()->Success) {
+            LOG_E("TQuotaUsageResponse error for subject type: " << subjectType << ", subject id: " << subjectId << ", metrics name: " << metricName << ", issues: " << ev->Get()->Issues.ToOneLineString());
+            Send(ev->Sender, new TEvQuotaService::TQuotaUsageRequest(subjectType, subjectId, metricName)); // retry. TODO: it may be useful to report the error to the user
+            return;
+        }
 
         if (it == subjectMap.end()) {
             // if quotas are not cached - ignore usage update

@@ -13,6 +13,7 @@ namespace NMiniKQL {
 
 namespace {
 
+constexpr ui32 StateVersion = 1;
 const TStatKey Hop_NewHopsCount("Hop_NewHopsCount", true);
 const TStatKey Hop_ThrownEventsCount("Hop_ThrownEventsCount", true);
 
@@ -55,45 +56,44 @@ public:
 
         NUdf::TUnboxedValue Save() const override {
             MKQL_ENSURE(Ready.empty(), "Inconsistent state to save, not all elements are fetched");
+            TOutputSerializer out(EMkqlStateType::SIMPLE_BLOB, StateVersion, Ctx);
 
-            TString out;
-            WriteUi32(out, Buckets.size());
+            out.Write<ui32>(Buckets.size());
             for (const auto& bucket : Buckets) {
-                WriteBool(out, bucket.HasValue);
+                out(bucket.HasValue);
                 if (bucket.HasValue) {
                     Self->InSave->SetValue(Ctx, NUdf::TUnboxedValue(bucket.Value));
                     if (Self->StateType) {
-                        WriteUnboxedValue(out, Self->Packer.RefMutableObject(Ctx, false, Self->StateType), Self->OutSave->GetValue(Ctx));
+                        out.WriteUnboxedValue(Self->Packer.RefMutableObject(Ctx, false, Self->StateType), Self->OutSave->GetValue(Ctx));
                     }
                 }
             }
 
-            WriteUi64(out, HopIndex);
-            WriteBool(out, Started);
-            WriteBool(out, Finished);
-
-            auto strRef = NUdf::TStringRef(out.data(), out.size());
-            return MakeString(strRef);
+            out(HopIndex, Started, Finished);
+            return out.MakeState();
         }
 
         void Load(const NUdf::TStringRef& state) override {
-            TStringBuf in(state.Data(), state.Size());
+            TInputSerializer in(state, EMkqlStateType::SIMPLE_BLOB);
 
-            auto size = ReadUi32(in);
+            const auto loadStateVersion = in.GetStateVersion();
+            if (loadStateVersion != StateVersion) {
+                THROW yexception() << "Invalid state version " << loadStateVersion;
+            }
+
+            auto size = in.Read<ui32>();
             Buckets.resize(size);
             for (auto& bucket : Buckets) {
-                bucket.HasValue = ReadBool(in);
+                bucket.HasValue = in.Read<bool>();
                 if (bucket.HasValue) {
                     if (Self->StateType) {
-                        Self->InLoad->SetValue(Ctx, ReadUnboxedValue(in, Self->Packer.RefMutableObject(Ctx, false, Self->StateType), Ctx));
+                        Self->InLoad->SetValue(Ctx, in.ReadUnboxedValue(Self->Packer.RefMutableObject(Ctx, false, Self->StateType), Ctx));
                     }
                     bucket.Value = Self->OutLoad->GetValue(Ctx);
                 }
             }
 
-            HopIndex = ReadUi64(in);
-            Started = ReadBool(in);
-            Finished = ReadBool(in);
+            in(HopIndex, Started, Finished);
         }
 
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {

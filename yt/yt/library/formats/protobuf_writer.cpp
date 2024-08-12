@@ -302,7 +302,7 @@ Y_FORCE_INLINE void WriteProtobufEnum(
 
     extractor.ExtractEnum(&visitor, type);
 
-    auto getEnumerationName = [&] () {
+    auto getEnumerationName = [&] {
         return type->EnumerationDescription
             ? type->EnumerationDescription->GetEnumerationName()
             : "<unknown>";
@@ -678,7 +678,7 @@ public:
 
         int parentEmbeddingIndex = 0;
 
-        std::function<int(int)> EmitMessage = [&](int parentEmbeddingIndex) {
+        std::function<int(int)> EmitMessage = [&] (int parentEmbeddingIndex) {
             auto& embeddingDescription = embeddings[parentEmbeddingIndex];
             auto& blob = EmbeddedBuffers[parentEmbeddingIndex];
 

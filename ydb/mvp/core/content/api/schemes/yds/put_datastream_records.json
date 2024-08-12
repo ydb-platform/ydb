@@ -1,0 +1,105 @@
+{
+  "post": {
+    "consumes": [
+      "application/json"
+    ],
+    "description": "Call PutRecords",
+    "produces": [
+      "application/json"
+    ],
+    "parameters": [
+      {
+        "description": "The location of the database",
+        "in": "path",
+        "name": "location",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "description": "The id of the database",
+        "in": "query",
+        "name": "databaseId",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "description": "The stream name",
+        "in": "query",
+        "name": "name",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "description": "The records associated with the request",
+        "in": "body",
+        "name": "records",
+        "required": true,
+        "schema": {
+          "items": {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "string"
+              },
+              "explicitHashKey": {
+                "type": "string"
+              },
+              "partitionKey": {
+                "type": "string"
+              }
+            }
+          },
+          "type": "array"
+        }
+      }
+    ],
+    "responses": {
+      "200": {
+        "description": "successfull operation",
+        "schema": {
+          "type": "object",
+          "title": "PutRecords Response",
+          "properties": {
+            "encryptionType": {
+              "type": "string",
+              "description": "The encryption type used on the records"
+            },
+            "failedRecordCount": {
+              "type": "number",
+              "description": "The number of unsuccessfully processed records in a PutRecords request, not returned if zero"
+            },
+            "records": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "errorCode": {
+                    "type": "string",
+                    "description": "not returned if empty"
+                  },
+                  "errorMessage": {
+                    "type": "string",
+                    "description": "not returned if empty"
+                  },
+                  "sequenceNumber": {
+                    "type": "string"
+                  },
+                  "shardId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "503": {
+        "description": "service unavailable (some errors occurred)"
+      }
+    },
+    "summary": "put records to data stream",
+    "tags": [
+      "YDBC"
+    ]
+  }
+}

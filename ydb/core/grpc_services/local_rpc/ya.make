@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    local_rpc.cpp
     local_rpc.h
 )
 

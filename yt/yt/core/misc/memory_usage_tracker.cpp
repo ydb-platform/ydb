@@ -29,7 +29,43 @@ public:
 
     void SetLimit(i64 /*size*/) override
     { }
+
+    i64 GetLimit()  const override
+    {
+        return std::numeric_limits<i64>::max();
+    }
+
+    i64 GetUsed() const override
+    {
+        return 0;
+    }
+
+    i64 GetFree() const override
+    {
+        return std::numeric_limits<i64>::max();
+    }
+
+    bool IsExceeded() const override
+    {
+        return false;
+    }
+
+    TSharedRef Track(
+        TSharedRef reference,
+        bool /*keepExistingTracking*/) override
+    {
+        return reference;
+    }
+
+    TErrorOr<TSharedRef> TryTrack(
+        TSharedRef reference,
+        bool /*keepExistingTracking*/) override
+    {
+        return reference;
+    }
 };
+
+////////////////////////////////////////////////////////////////////////////////
 
 IMemoryUsageTrackerPtr GetNullMemoryUsageTracker()
 {
@@ -160,7 +196,7 @@ i64 TMemoryUsageTrackerGuard::GetSize() const
 
 void TMemoryUsageTrackerGuard::SetSize(i64 size)
 {
-    auto ignoredError = SetSizeGeneric(size, [&] (i64 delta) {
+    auto ignoredError = SetSizeImpl(size, [&] (i64 delta) {
         Tracker_->Acquire(delta);
         return TError{};
     });
@@ -170,12 +206,12 @@ void TMemoryUsageTrackerGuard::SetSize(i64 size)
 
 TError TMemoryUsageTrackerGuard::TrySetSize(i64 size)
 {
-    return SetSizeGeneric(size, [&] (i64 delta) {
+    return SetSizeImpl(size, [&] (i64 delta) {
         return Tracker_->TryAcquire(delta);
     });
 }
 
-TError TMemoryUsageTrackerGuard::SetSizeGeneric(i64 size, auto acquirer)
+TError TMemoryUsageTrackerGuard::SetSizeImpl(i64 size, auto acquirer)
 {
     if (!Tracker_) {
         return {};
@@ -197,9 +233,14 @@ TError TMemoryUsageTrackerGuard::SetSizeGeneric(i64 size, auto acquirer)
     return {};
 }
 
-void TMemoryUsageTrackerGuard::IncrementSize(i64 sizeDelta)
+void TMemoryUsageTrackerGuard::IncreaseSize(i64 sizeDelta)
 {
     SetSize(Size_ + sizeDelta);
+}
+
+void TMemoryUsageTrackerGuard::DecreaseSize(i64 sizeDelta)
+{
+    SetSize(Size_ - sizeDelta);
 }
 
 TMemoryUsageTrackerGuard TMemoryUsageTrackerGuard::TransferMemory(i64 size)
@@ -316,6 +357,45 @@ void TMemoryTrackedBlob::Clear()
 {
     Blob_.Clear();
     Guard_.SetSize(Blob_.Capacity());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TErrorOr<TSharedRef> TryTrackMemory(
+    const IMemoryUsageTrackerPtr& tracker,
+    TSharedRef reference,
+    bool keepExistingTracking)
+{
+    if (!tracker || !reference) {
+        return reference;
+    }
+    return tracker->TryTrack(std::move(reference), keepExistingTracking);
+}
+
+TSharedRef TrackMemory(
+    const IMemoryUsageTrackerPtr& tracker,
+    TSharedRef reference,
+    bool keepExistingTracking)
+{
+    if (!tracker || !reference) {
+        return reference;
+    }
+    return tracker->Track(std::move(reference), keepExistingTracking);
+}
+
+TSharedRefArray TrackMemory(
+    const IMemoryUsageTrackerPtr& tracker,
+    TSharedRefArray array,
+    bool keepExistingTracking)
+{
+    if (!tracker || !array) {
+        return array;
+    }
+    TSharedRefArrayBuilder builder(array.Size());
+    for (const auto& part : array) {
+        builder.Add(tracker->Track(part, keepExistingTracking));
+    }
+    return builder.Finish();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

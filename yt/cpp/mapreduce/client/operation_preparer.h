@@ -80,6 +80,7 @@ public:
     const TUserJobSpec& GetSpec() const;
     bool ShouldMountSandbox() const;
     ui64 GetTotalFileSize() const;
+    bool ShouldRedirectStdoutToStderr() const;
 
 private:
     TOperationPreparer& OperationPreparer_;
@@ -94,6 +95,8 @@ private:
     TString ClassName_;
     TString Command_;
     ui64 TotalFileSize_ = 0;
+
+    bool IsCommandJob_ = false;
 
 private:
     TString GetFileStorage() const;

@@ -3,6 +3,7 @@
 #include "common.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange/from_file.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/colorizer/colors.h>
@@ -60,7 +61,7 @@ public:
                 return Value;
             }
 
-            bool  GetIsSet() const {
+            bool GetIsSet() const {
                 return IsSet;
             }
 
@@ -103,8 +104,10 @@ public:
         TMap<TString, TVector<TConnectionParam>> ConnectionParams;
         bool EnableSsl = false;
         bool IsNetworkIntensive = false;
+        TString Oauth2KeyFile;
 
         EVerbosityLevel VerbosityLevel = EVerbosityLevel::NONE;
+        size_t HelpCommandVerbosiltyLevel = 1; // No options -h or one - 1, -hh - 2, -hhh - 3 etc
 
         bool JsonUi64AsText = false;
         bool JsonBinaryAsBase64 = false;
@@ -124,9 +127,10 @@ public:
         TString ChosenAuthMethod;
 
         TString ProfileFile;
-        bool UseOAuthToken = true;
+        bool UseAccessToken = true;
         bool UseIamAuth = false;
         bool UseStaticCredentials = false;
+        bool UseOauth2TokenExchange = false;
         bool UseExportToYt = true;
         // Whether a command needs a connection to YDB
         bool NeedToConnect = true;
@@ -142,11 +146,17 @@ public:
             , InitialArgV(argv)
             , Opts(nullptr)
             , ParseResult(nullptr)
+            , HelpCommandVerbosiltyLevel(ParseHelpCommandVerbosilty(argc, argv))
             , TabletId(0)
         {
             CredentialsGetter = [](const TClientCommand::TConfig& config) {
                 if (config.SecurityToken) {
                     return CreateOAuthCredentialsProviderFactory(config.SecurityToken);
+                }
+                if (config.UseOauth2TokenExchange) {
+                    if (config.Oauth2KeyFile) {
+                        return CreateOauth2TokenExchangeFileCredentialsProviderFactory(config.Oauth2KeyFile, config.IamEndpoint);
+                    }
                 }
                 return CreateInsecureCredentialsProviderFactory();
             };
@@ -155,6 +165,8 @@ public:
         bool HasHelpCommand() const {
             return HasArgs({ "--help" }) || HasArgs({ "-h" }) || HasArgs({ "-?" }) || HasArgs({ "--help-ex" });
         }
+
+        static size_t ParseHelpCommandVerbosilty(int argc, char** argv);
 
         bool IsVerbose() const {
             return VerbosityLevel != EVerbosityLevel::NONE;
@@ -294,6 +306,8 @@ public:
         RenderEntryType type = BEGIN
     );
 
+    void Hide();
+
 protected:
     virtual void Config(TConfig& config);
     virtual void SaveParseResult(TConfig& config);
@@ -313,12 +327,14 @@ private:
     void CheckForExecutableOptions(TConfig& config);
 
     constexpr static int DESCRIPTION_ALIGNMENT = 28;
+    bool Hidden = false;
 };
 
 class TClientCommandTree : public TClientCommand {
 public:
     TClientCommandTree(const TString& name, const std::initializer_list<TString>& aliases = std::initializer_list<TString>(), const TString& description = TString());
     void AddCommand(std::unique_ptr<TClientCommand> command);
+    void AddHiddenCommand(std::unique_ptr<TClientCommand> command);
     virtual void Prepare(TConfig& config) override;
     void RenderCommandsDescription(
         TStringStream& stream,

@@ -7,7 +7,7 @@
 #include <yt/yt/core/net/local_address.h>
 
 #include <yt/yt/core/misc/checksum.h>
-#include <yt/yt/core/misc/memory_reference_tracker.h>
+#include <yt/yt/core/misc/memory_usage_tracker.h>
 
 #include <yt/yt/core/profiling/timing.h>
 
@@ -27,7 +27,7 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = RpcClientLogger;
+static constexpr auto& Logger = RpcClientLogger;
 static const auto LightInvokerDurationWarningThreshold = TDuration::MilliSeconds(10);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -40,7 +40,8 @@ TClientContext::TClientContext(
     TFeatureIdFormatter featureIdFormatter,
     bool responseIsHeavy,
     TAttachmentsOutputStreamPtr requestAttachmentsStream,
-    TAttachmentsInputStreamPtr responseAttachmentsStream)
+    TAttachmentsInputStreamPtr responseAttachmentsStream,
+    IMemoryUsageTrackerPtr memoryUsageTracker)
     : RequestId_(requestId)
     , TraceContext_(std::move(traceContext))
     , Service_(std::move(service))
@@ -49,6 +50,7 @@ TClientContext::TClientContext(
     , ResponseHeavy_(responseIsHeavy)
     , RequestAttachmentsStream_(std::move(requestAttachmentsStream))
     , ResponseAttachmentsStream_(std::move(responseAttachmentsStream))
+    , MemoryUsageTracker_(std::move(memoryUsageTracker))
 { }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -81,6 +83,7 @@ TClientRequest::TClientRequest(const TClientRequest& other)
     , RequestCodec_(other.RequestCodec_)
     , ResponseCodec_(other.ResponseCodec_)
     , GenerateAttachmentChecksums_(other.GenerateAttachmentChecksums_)
+    , MemoryUsageTracker_(other.MemoryUsageTracker_)
     , Channel_(other.Channel_)
     , StreamingEnabled_(other.StreamingEnabled_)
     , SendBaggage_(other.SendBaggage_)
@@ -347,7 +350,8 @@ TClientContextPtr TClientRequest::CreateClientContext()
         FeatureIdFormatter_,
         ResponseHeavy_,
         RequestAttachmentsStream_,
-        ResponseAttachmentsStream_);
+        ResponseAttachmentsStream_,
+        MemoryUsageTracker_ ? MemoryUsageTracker_ : Channel_->GetChannelMemoryTracker());
 }
 
 void TClientRequest::OnPullRequestAttachmentsStream()
@@ -616,17 +620,16 @@ void TClientResponse::Deserialize(TSharedRefArray responseMessage)
     }
 
     auto compressedAttachments = MakeRange(ResponseMessage_.Begin() + 2, ResponseMessage_.End());
+    auto memoryUsageTracker = ClientContext_->GetMemoryUsageTracker();
+
     if (attachmentCodecId == NCompression::ECodec::None) {
-        Attachments_.clear();
-        Attachments_.reserve(compressedAttachments.Size());
-        for (auto& attachment : compressedAttachments) {
-            struct TCopiedAttachmentTag
-            { };
-            auto copiedAttachment = TSharedMutableRef::MakeCopy<TCopiedAttachmentTag>(attachment);
-            Attachments_.push_back(std::move(copiedAttachment));
-        }
+        Attachments_ = compressedAttachments.ToVector();
     } else {
         Attachments_ = DecompressAttachments(compressedAttachments, attachmentCodecId);
+    }
+
+    for (auto& attachment : Attachments_) {
+        attachment = TrackMemory(memoryUsageTracker, attachment);
     }
 }
 

@@ -83,6 +83,9 @@ void TFakeNodeWhiteboardService::Handle(TEvBlobStorage::TEvControllerConfigReque
                 success = success && pattern[0];
                 resp->Record.MutableResponse()->AddStatus()->SetSuccess(pattern[0]);
                 pattern.erase(pattern.begin());
+                if (!success) {
+                    break;
+                }
             } else {
                 resp->Record.MutableResponse()->AddStatus()->SetSuccess(true);
             }
@@ -486,6 +489,7 @@ static void SetupServices(TTestActorRuntime &runtime, const TTestEnvOpts &option
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableBootstrapConfig()->CopyFrom(TFakeNodeWhiteboardService::BootstrapConfig);
     appConfig.MutableFeatureFlags()->SetEnableCMSRequestPriorities(options.EnableCMSRequestPriorities);
+    appConfig.MutableFeatureFlags()->SetEnableSingleCompositeActionGroup(options.EnableSingleCompositeActionGroup);
     runtime.AddLocalService(
         MakeConfigsDispatcherID(
             runtime.GetNodeId(0)),

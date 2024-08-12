@@ -130,7 +130,8 @@ class YQv2Extension(ExtensionPoint):
     def apply_to_kikimr_conf(self, request, configuration):
         extra_feature_flags = [
             'enable_external_data_sources',
-            'enable_script_execution_operations'
+            'enable_script_execution_operations',
+            'enable_external_source_schema_inference',
         ]
         if self.is_replace_if_exists:
             extra_feature_flags.append('enable_replace_if_exists_for_external_entities')
@@ -272,6 +273,7 @@ class ConnectorExtension(ExtensionPoint):
         kikimr.control_plane.fq_config['common']['disable_ssl_for_generic_data_sources'] = True
         kikimr.control_plane.fq_config['control_plane_storage']['available_connection'].append('POSTGRESQL_CLUSTER')
         kikimr.control_plane.fq_config['control_plane_storage']['available_connection'].append('CLICKHOUSE_CLUSTER')
+        kikimr.control_plane.fq_config['control_plane_storage']['available_connection'].append('YDB_DATABASE')
 
         generic = {
             'connector': {
@@ -284,6 +286,7 @@ class ConnectorExtension(ExtensionPoint):
         }
 
         kikimr.compute_plane.fq_config['gateways']['generic'] = generic  # v1
+        kikimr.control_plane.fq_config['gateways']['generic'] = generic  # v1
         kikimr.compute_plane.qs_config['generic'] = generic  # v2
 
 
@@ -306,8 +309,29 @@ class MDBExtension(ExtensionPoint):
         kikimr.compute_plane.qs_config['generic']['mdb_gateway'] = self.endpoint
 
         kikimr.compute_plane.fq_config['common']['mdb_transform_host'] = False
-        kikimr.compute_plane.fq_config['common']['mdb_gateway'] = self.endpoint     # v2
-        kikimr.compute_plane.fq_config['gateways']['generic']['mdb_gateway'] = self.endpoint   # v1
+        kikimr.compute_plane.fq_config['common']['mdb_gateway'] = self.endpoint
+        kikimr.compute_plane.fq_config['gateways']['generic']['mdb_gateway'] = self.endpoint
+
+        kikimr.control_plane.fq_config['common']['mdb_transform_host'] = False
+        kikimr.control_plane.fq_config['common']['mdb_gateway'] = self.endpoint
+        kikimr.control_plane.fq_config['gateways']['generic']['mdb_gateway'] = self.endpoint
+
+
+class YdbMvpExtension(ExtensionPoint):
+
+    def __init__(self, mvp_external_ydb_endpoint):
+        self.mvp_external_ydb_endpoint = mvp_external_ydb_endpoint
+        super().__init__()
+
+    def is_applicable(self, request):
+        return True
+
+    def apply_to_kikimr_conf(self, request, configuration):
+        configuration.mvp_external_ydb_endpoint = self.mvp_external_ydb_endpoint
+
+    def apply_to_kikimr(self, request, kikimr):
+        if 'generic' in kikimr.compute_plane.qs_config:
+            kikimr.compute_plane.qs_config['generic']['ydb_mvp_endpoint'] = kikimr.control_plane.fq_config['common']['ydb_mvp_cloud_endpoint']
 
 
 class TokenAccessorExtension(ExtensionPoint):
@@ -336,6 +360,10 @@ class TokenAccessorExtension(ExtensionPoint):
         kikimr.control_plane.fq_config['token_accessor']['endpoint'] = self.endpoint
         kikimr.control_plane.fq_config['token_accessor']['use_ssl'] = self.use_ssl
         kikimr.control_plane.fq_config['token_accessor']['hmac_secret_file'] = self.hmac_secret_file
+
+        kikimr.compute_plane.fq_config['token_accessor']['enabled'] = True
+        kikimr.compute_plane.fq_config['token_accessor']['endpoint'] = self.endpoint
+        kikimr.compute_plane.fq_config['token_accessor']['use_ssl'] = self.use_ssl
 
 
 @contextmanager

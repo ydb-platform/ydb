@@ -3,7 +3,7 @@
  * fmgr.c
  *	  The Postgres function manager.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -23,6 +23,7 @@
 #include "lib/stringinfo.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
+#include "nodes/miscnodes.h"
 #include "nodes/nodeFuncs.h"
 #include "pgstat.h"
 #include "utils/acl.h"
@@ -150,7 +151,6 @@ fmgr_info_cxt_security(Oid functionId, FmgrInfo *finfo, MemoryContext mcxt,
 	HeapTuple	procedureTuple;
 	Form_pg_proc procedureStruct;
 	Datum		prosrcdatum;
-	bool		isnull;
 	char	   *prosrc;
 
 	/*
@@ -226,10 +226,8 @@ fmgr_info_cxt_security(Oid functionId, FmgrInfo *finfo, MemoryContext mcxt,
 			 * internal function is stored in prosrc (it doesn't have to be
 			 * the same as the name of the alias!)
 			 */
-			prosrcdatum = SysCacheGetAttr(PROCOID, procedureTuple,
-										  Anum_pg_proc_prosrc, &isnull);
-			if (isnull)
-				elog(ERROR, "null prosrc");
+			prosrcdatum = SysCacheGetAttrNotNull(PROCOID, procedureTuple,
+												 Anum_pg_proc_prosrc);
 			prosrc = TextDatumGetCString(prosrcdatum);
 			fbp = fmgr_lookupByName(prosrc);
 			if (fbp == NULL)
@@ -284,7 +282,6 @@ fmgr_symbol(Oid functionId, char **mod, char **fn)
 {
 	HeapTuple	procedureTuple;
 	Form_pg_proc procedureStruct;
-	bool		isnull;
 	Datum		prosrcattr;
 	Datum		probinattr;
 
@@ -307,25 +304,19 @@ fmgr_symbol(Oid functionId, char **mod, char **fn)
 	switch (procedureStruct->prolang)
 	{
 		case INTERNALlanguageId:
-			prosrcattr = SysCacheGetAttr(PROCOID, procedureTuple,
-										 Anum_pg_proc_prosrc, &isnull);
-			if (isnull)
-				elog(ERROR, "null prosrc");
+			prosrcattr = SysCacheGetAttrNotNull(PROCOID, procedureTuple,
+												Anum_pg_proc_prosrc);
 
 			*mod = NULL;		/* core binary */
 			*fn = TextDatumGetCString(prosrcattr);
 			break;
 
 		case ClanguageId:
-			prosrcattr = SysCacheGetAttr(PROCOID, procedureTuple,
-										 Anum_pg_proc_prosrc, &isnull);
-			if (isnull)
-				elog(ERROR, "null prosrc for C function %u", functionId);
+			prosrcattr = SysCacheGetAttrNotNull(PROCOID, procedureTuple,
+												Anum_pg_proc_prosrc);
 
-			probinattr = SysCacheGetAttr(PROCOID, procedureTuple,
-										 Anum_pg_proc_probin, &isnull);
-			if (isnull)
-				elog(ERROR, "null probin for C function %u", functionId);
+			probinattr = SysCacheGetAttrNotNull(PROCOID, procedureTuple,
+												Anum_pg_proc_probin);
 
 			/*
 			 * No need to check symbol presence / API version here, already
@@ -360,7 +351,6 @@ fmgr_info_C_lang(Oid functionId, FmgrInfo *finfo, HeapTuple procedureTuple)
 	CFuncHashTabEntry *hashentry;
 	PGFunction	user_fn;
 	const Pg_finfo_record *inforec;
-	bool		isnull;
 
 	/*
 	 * See if we have the function address cached already
@@ -384,16 +374,12 @@ fmgr_info_C_lang(Oid functionId, FmgrInfo *finfo, HeapTuple procedureTuple)
 		 * While in general these columns might be null, that's not allowed
 		 * for C-language functions.
 		 */
-		prosrcattr = SysCacheGetAttr(PROCOID, procedureTuple,
-									 Anum_pg_proc_prosrc, &isnull);
-		if (isnull)
-			elog(ERROR, "null prosrc for C function %u", functionId);
+		prosrcattr = SysCacheGetAttrNotNull(PROCOID, procedureTuple,
+											Anum_pg_proc_prosrc);
 		prosrcstring = TextDatumGetCString(prosrcattr);
 
-		probinattr = SysCacheGetAttr(PROCOID, procedureTuple,
-									 Anum_pg_proc_probin, &isnull);
-		if (isnull)
-			elog(ERROR, "null probin for C function %u", functionId);
+		probinattr = SysCacheGetAttrNotNull(PROCOID, procedureTuple,
+											Anum_pg_proc_probin);
 		probinstring = TextDatumGetCString(probinattr);
 
 		/* Look up the function itself */
@@ -580,20 +566,6 @@ record_C_func(HeapTuple procedureTuple,
 	entry->fn_tid = procedureTuple->t_self;
 	entry->user_fn = user_fn;
 	entry->inforec = inforec;
-}
-
-/*
- * clear_external_function_hash: remove entries for a library being closed
- *
- * Presently we just zap the entire hash table, but later it might be worth
- * the effort to remove only the entries associated with the given handle.
- */
-void
-clear_external_function_hash(void *filehandle)
-{
-	if (CFuncHash)
-		hash_destroy(CFuncHash);
-	CFuncHash = NULL;
 }
 
 
@@ -1563,6 +1535,115 @@ InputFunctionCall(FmgrInfo *flinfo, char *str, Oid typioparam, int32 typmod)
 }
 
 /*
+ * Call a previously-looked-up datatype input function, with non-exception
+ * handling of "soft" errors.
+ *
+ * This is basically like InputFunctionCall, but the converted Datum is
+ * returned into *result while the function result is true for success or
+ * false for failure.  Also, the caller may pass an ErrorSaveContext node.
+ * (We declare that as "fmNodePtr" to avoid including nodes.h in fmgr.h.)
+ *
+ * If escontext points to an ErrorSaveContext, any "soft" errors detected by
+ * the input function will be reported by filling the escontext struct and
+ * returning false.  (The caller can choose to test SOFT_ERROR_OCCURRED(),
+ * but checking the function result instead is usually cheaper.)
+ *
+ * If escontext does not point to an ErrorSaveContext, errors are reported
+ * via ereport(ERROR), so that there is no functional difference from
+ * InputFunctionCall; the result will always be true if control returns.
+ */
+bool
+InputFunctionCallSafe(FmgrInfo *flinfo, char *str,
+					  Oid typioparam, int32 typmod,
+					  fmNodePtr escontext,
+					  Datum *result)
+{
+	LOCAL_FCINFO(fcinfo, 3);
+
+	if (str == NULL && flinfo->fn_strict)
+	{
+		*result = (Datum) 0;	/* just return null result */
+		return true;
+	}
+
+	InitFunctionCallInfoData(*fcinfo, flinfo, 3, InvalidOid, escontext, NULL);
+
+	fcinfo->args[0].value = CStringGetDatum(str);
+	fcinfo->args[0].isnull = false;
+	fcinfo->args[1].value = ObjectIdGetDatum(typioparam);
+	fcinfo->args[1].isnull = false;
+	fcinfo->args[2].value = Int32GetDatum(typmod);
+	fcinfo->args[2].isnull = false;
+
+	*result = FunctionCallInvoke(fcinfo);
+
+	/* Result value is garbage, and could be null, if an error was reported */
+	if (SOFT_ERROR_OCCURRED(escontext))
+		return false;
+
+	/* Otherwise, should get null result if and only if str is NULL */
+	if (str == NULL)
+	{
+		if (!fcinfo->isnull)
+			elog(ERROR, "input function %u returned non-NULL",
+				 flinfo->fn_oid);
+	}
+	else
+	{
+		if (fcinfo->isnull)
+			elog(ERROR, "input function %u returned NULL",
+				 flinfo->fn_oid);
+	}
+
+	return true;
+}
+
+/*
+ * Call a directly-named datatype input function, with non-exception
+ * handling of "soft" errors.
+ *
+ * This is like InputFunctionCallSafe, except that it is given a direct
+ * pointer to the C function to call.  We assume that that function is
+ * strict.  Also, the function cannot be one that needs to
+ * look at FmgrInfo, since there won't be any.
+ */
+bool
+DirectInputFunctionCallSafe(PGFunction func, char *str,
+							Oid typioparam, int32 typmod,
+							fmNodePtr escontext,
+							Datum *result)
+{
+	LOCAL_FCINFO(fcinfo, 3);
+
+	if (str == NULL)
+	{
+		*result = (Datum) 0;	/* just return null result */
+		return true;
+	}
+
+	InitFunctionCallInfoData(*fcinfo, NULL, 3, InvalidOid, escontext, NULL);
+
+	fcinfo->args[0].value = CStringGetDatum(str);
+	fcinfo->args[0].isnull = false;
+	fcinfo->args[1].value = ObjectIdGetDatum(typioparam);
+	fcinfo->args[1].isnull = false;
+	fcinfo->args[2].value = Int32GetDatum(typmod);
+	fcinfo->args[2].isnull = false;
+
+	*result = (*func) (fcinfo);
+
+	/* Result value is garbage, and could be null, if an error was reported */
+	if (SOFT_ERROR_OCCURRED(escontext))
+		return false;
+
+	/* Otherwise, shouldn't get null result */
+	if (fcinfo->isnull)
+		elog(ERROR, "input function %p returned NULL", (void *) func);
+
+	return true;
+}
+
+/*
  * Call a previously-looked-up datatype output function.
  *
  * Do not call this on NULL datums.
@@ -2068,8 +2149,8 @@ CheckFunctionValidatorAccess(Oid validatorOid, Oid functionOid)
 						langStruct->lanvalidator)));
 
 	/* first validate that we have permissions to use the language */
-	aclresult = pg_language_aclcheck(procStruct->prolang, GetUserId(),
-									 ACL_USAGE);
+	aclresult = object_aclcheck(LanguageRelationId, procStruct->prolang, GetUserId(),
+								ACL_USAGE);
 	if (aclresult != ACLCHECK_OK)
 		aclcheck_error(aclresult, OBJECT_LANGUAGE,
 					   NameStr(langStruct->lanname));
@@ -2079,7 +2160,7 @@ CheckFunctionValidatorAccess(Oid validatorOid, Oid functionOid)
 	 * execute it, there should be no possible side-effect of
 	 * compiling/validation that execution can't have.
 	 */
-	aclresult = pg_proc_aclcheck(functionOid, GetUserId(), ACL_EXECUTE);
+	aclresult = object_aclcheck(ProcedureRelationId, functionOid, GetUserId(), ACL_EXECUTE);
 	if (aclresult != ACLCHECK_OK)
 		aclcheck_error(aclresult, OBJECT_FUNCTION, NameStr(procStruct->proname));
 

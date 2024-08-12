@@ -1,15 +1,16 @@
 #pragma once
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
+#include <ydb/public/lib/ydb_cli/common/progress_bar.h>
 #include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/library/workload/workload_query_generator.h>
-
+#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb/library/workload/abstract/workload_query_generator.h>
 #include <library/cpp/histogram/hdr/histogram.h>
+#include <library/cpp/object_factory/object_factory.h>
 #include <util/datetime/base.h>
 #include <util/system/spinlock.h>
 
 #include <memory>
-#include <string>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -28,7 +29,6 @@ public:
     );
 
     virtual void Config(TConfig& config) override;
-    NTable::TSession GetSession();
 
 protected:
     void PrepareForRun(TConfig& config);
@@ -67,49 +67,71 @@ protected:
     std::atomic_uint64_t WindowRetryCount;
     std::atomic_uint64_t TotalErrors;
     std::atomic_uint64_t WindowErrors;
-
-protected:
-    int InitTables(NYdbWorkload::IWorkloadQueryGenerator& workloadGen);
-    int CleanTables(const NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config);
 };
 
-class TWorkloadCommandBase: public TWorkloadCommand {
+class TWorkloadCommandRun : public TWorkloadCommand {
 public:
-    TWorkloadCommandBase(
-        const TString& name,
-        const TString& key,
-        const NYdbWorkload::TWorkloadParams::ECommandType commandType,
-        const TString& description = TString());
+    TWorkloadCommandRun(NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload);
     virtual void Config(TConfig& config) override;
+    virtual int Run(TConfig& config) override;
 
-protected:
-    NYdbWorkload::TWorkloadParams::ECommandType CommandType;
-    THolder<NYdbWorkload::TWorkloadParams> Params;
+private:
+    NYdbWorkload::TWorkloadParams& Params;
     int Type = 0;
 };
 
-class TWorkloadCommandInit : public TWorkloadCommandBase {
+class TWorkloadCommandBase: public TYdbCommand {
 public:
-    TWorkloadCommandInit(const TString& key);
+    TWorkloadCommandBase(
+        const TString& name,
+        NYdbWorkload::TWorkloadParams& params,
+        const NYdbWorkload::TWorkloadParams::ECommandType commandType,
+        const TString& description = TString(),
+        int type = 0);
     virtual void Config(TConfig& config) override;
-    virtual int Run(TConfig& config) override;
+    virtual int Run(TConfig& config) override final;
+
+protected:
+    virtual int DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config) = 0;
+    void CleanTables(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config);
+
+    NYdbWorkload::TWorkloadParams::ECommandType CommandType;
+    NYdbWorkload::TWorkloadParams& Params;
+    THolder<NYdb::TDriver> Driver;
+    THolder<NTable::TTableClient> TableClient;
+    THolder<NTopic::TTopicClient> TopicClient;
+    THolder<NScheme::TSchemeClient> SchemeClient;
+    THolder<NQuery::TQueryClient> QueryClient;
+    int Type = 0;
 };
 
-class TWorkloadCommandRun : public TWorkloadCommandBase {
+class TWorkloadCommandInit final: public TWorkloadCommandBase {
 public:
-    TWorkloadCommandRun(const TString& key, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload);
-    virtual int Run(TConfig& config) override;
+    TWorkloadCommandInit(NYdbWorkload::TWorkloadParams& params);
+    virtual void Config(TConfig& config) override;
+
+private:
+    NTable::TSession GetSession();
+    int DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config) override;
+    bool Clear = false;
 };
 
-class TWorkloadCommandClean : public TWorkloadCommandBase {
+class TWorkloadCommandClean final: public TWorkloadCommandBase {
 public:
-    TWorkloadCommandClean(const TString& key);
-    virtual int Run(TConfig& config) override;
+    TWorkloadCommandClean(NYdbWorkload::TWorkloadParams& params);
+
+protected:
+    int DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config) override;
 };
 
-class TWorkloadCommandRoot : public TClientCommandTree {
+class TWorkloadCommandRoot final: public TClientCommandTree {
 public:
     TWorkloadCommandRoot(const TString& key);
+    virtual void Config(TConfig& config) override;
+
+private:
+    std::unique_ptr<TClientCommand> CreateRunCommand(const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload);
+    THolder<NYdbWorkload::TWorkloadParams> Params;
 };
 
 }

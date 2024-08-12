@@ -1,7 +1,5 @@
 UNITTEST_FOR(util)
 
-SUBSCRIBER(g:util-subscribers)
-
 FORK_TESTS()
 
 SRCS(
@@ -14,6 +12,7 @@ SRCS(
     generic/buffer_ut.cpp
     generic/cast_ut.cpp
     generic/deque_ut.cpp
+    generic/enum_range_ut.cpp
     generic/explicit_type_ut.cpp
     generic/flags_ut.cpp
     generic/function_ref_ut.cpp

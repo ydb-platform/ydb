@@ -12,6 +12,7 @@
 
 #include <util/generic/hash_set.h>
 #include <util/string/join.h>
+#include <util/string/cast.h>
 
 #include <tcmalloc/malloc_extension.h>
 
@@ -45,7 +46,7 @@ Y_WEAK std::optional<TString> FindTagValue(
 {
     Y_UNUSED(tags);
     Y_UNUSED(key);
-    return ToString(NullMemoryTag);
+    return ::ToString(NullMemoryTag);
 }
 
 Y_WEAK void StartAllocationTagsCleanupThread(TDuration /*cleanupInterval*/)

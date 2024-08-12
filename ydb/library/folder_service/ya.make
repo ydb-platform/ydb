@@ -16,5 +16,4 @@ END()
 
 RECURSE(
     mock
-    proto
 )

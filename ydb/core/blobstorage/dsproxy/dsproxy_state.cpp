@@ -240,6 +240,7 @@ namespace NKikimr {
             StopGetBatchingEvent = static_cast<TEventHandle<TEvStopBatchingGetRequests>*>(
                     new IEventHandle(SelfId(), SelfId(), new TEvStopBatchingGetRequests));
             ApplyGroupInfo(std::exchange(Info, {}), std::exchange(StoragePoolCounters, {}));
+            CheckDeadlines();
         }
     }
 
@@ -255,7 +256,7 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupProxy::PassAway() {
-        for (const TActorId actorId : ActiveRequests) {
+        for (const auto& [actorId, _] : ActiveRequests) {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, {}, nullptr, 0));
         }
         if (Sessions) { // may be null if not properly configured yet
@@ -301,7 +302,7 @@ namespace NKikimr {
             bool limited = IsLimitedKeyless || !fullIfPossible;
             IsFullMonitoring = IsLimitedKeyless || fullIfPossible;
 
-            TString name = Sprintf("%09" PRIu32, GroupId);
+            TString name = Sprintf("%09" PRIu32, GroupId.GetRawId());
             TIntrusivePtr<::NMonitoring::TDynamicCounters> group = GetServiceCounters(
                     AppData()->Counters, "dsproxy")->GetSubgroup("blobstorageproxy", name);
             TIntrusivePtr<::NMonitoring::TDynamicCounters> percentileGroup = GetServiceCounters(
@@ -311,7 +312,7 @@ namespace NKikimr {
 
             Mon.Reset(new TBlobStorageGroupProxyMon(group, percentileGroup, overviewGroup, Info, NodeMon, limited));
             BSProxyCtx.Reset(new TBSProxyContext(group->GetSubgroup("subsystem", "memproxy")));
-            MonActor = RegisterWithSameMailbox(CreateBlobStorageGroupProxyMon(Mon, GroupId, Info, SelfId()));
+            MonActor = RegisterWithSameMailbox(CreateBlobStorageGroupProxyMon(Mon, GroupId.GetRawId(), Info, SelfId()));
         }
     }
 

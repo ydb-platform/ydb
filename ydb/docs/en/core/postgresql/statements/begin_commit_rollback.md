@@ -1,6 +1,6 @@
 # BEGIN, COMMIT, ROLLBACK (working with Transactions)
 
-{% include [../_includes/alert_preview.md)](../_includes/alert_preview.md) %}
+{% include [alert_preview](../_includes/alert_preview.md) %}
 
 **Transactions** are a method of grouping one or more database operation into a single unit of work. A transaction may consist of one or several SQL statements and is used to ensure the consistency of data. A transaction guarantees that either all or none of the included SQL statements will be executed. Transactions are managed by the commands `BEGIN`, `COMMIT`, `ROLLBACK`.
 
@@ -15,7 +15,6 @@ Let's review each of the commands:
 
 Suppose you need to make changes to different rows in a table for different columns so that the transaction is combined into a single unit of work and has the guarantees of [ACID](https://en.wikipedia.org/wiki/ACID). Such a record may look like this:
 
-{% include [example.md](../../../_includes/postgresql/transactions/example.md) %}
+{% include [example](../_includes/transactions/example.md) %}
 
-
-{% include [../_includes/alert_locks.md](../_includes/alert_locks.md) %}
+{% include [alert_locks](../_includes/alert_locks.md) %}

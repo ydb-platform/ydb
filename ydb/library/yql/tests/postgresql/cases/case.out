@@ -175,6 +175,11 @@ SELECT * FROM CASE_TBL WHERE COALESCE(f,i) = 4;
  4 |  
 (1 row)
 
+SELECT * FROM CASE_TBL WHERE NULLIF(f,i) = 2;
+ i | f 
+---+---
+(0 rows)
+
 SELECT COALESCE(a.f, b.i, b.j)
   FROM CASE_TBL a, CASE2_TBL b;
  coalesce 
@@ -203,6 +208,37 @@ SELECT COALESCE(a.f, b.i, b.j)
      20.2
     -30.3
        -6
+(24 rows)
+
+SELECT NULLIF(a.i,b.i) AS "NULLIF(a.i,b.i)",
+  NULLIF(b.i, 4) AS "NULLIF(b.i,4)"
+  FROM CASE_TBL a, CASE2_TBL b;
+ NULLIF(a.i,b.i) | NULLIF(b.i,4) 
+-----------------+---------------
+                 |             1
+               2 |             1
+               3 |             1
+               4 |             1
+               1 |             2
+                 |             2
+               3 |             2
+               4 |             2
+               1 |             3
+               2 |             3
+                 |             3
+               4 |             3
+               1 |             2
+                 |             2
+               3 |             2
+               4 |             2
+                 |             1
+               2 |             1
+               3 |             1
+               4 |             1
+               1 |              
+               2 |              
+               3 |              
+               4 |              
 (24 rows)
 
 --

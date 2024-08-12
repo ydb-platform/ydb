@@ -13,6 +13,7 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
     void DropStream() {
         switch (Kind) {
         case TReplication::ETargetKind::Table:
+        case TReplication::ETargetKind::IndexTable:
             Send(YdbProxy, new TEvYdbProxy::TEvAlterTableRequest(SrcPath, NYdb::NTable::TAlterTableSettings()
                 .AppendDropChangefeeds(StreamName)));
             break;
@@ -91,7 +92,7 @@ private:
 
 }; // TStreamRemover
 
-IActor* CreateStreamRemover(TReplication::TPtr replication, ui64 targetId, const TActorContext& ctx) {
+IActor* CreateStreamRemover(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
     return CreateStreamRemover(ctx.SelfID, replication->GetYdbProxy(),

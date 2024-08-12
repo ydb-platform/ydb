@@ -9,7 +9,7 @@ namespace NKikimr {
 // STATUS request
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-class TBlobStorageGroupStatusRequest : public TBlobStorageGroupRequestActor<TBlobStorageGroupStatusRequest> {
+class TBlobStorageGroupStatusRequest : public TBlobStorageGroupRequestActor {
     const TInstant Deadline;
 
     TStorageStatusFlags StatusFlags;
@@ -19,7 +19,7 @@ class TBlobStorageGroupStatusRequest : public TBlobStorageGroupRequestActor<TBlo
     std::optional<float> ApproximateFreeSpaceShare;
 
     void Handle(TEvBlobStorage::TEvVStatusResult::TPtr &ev) {
-        ProcessReplyFromQueue(ev);
+        ProcessReplyFromQueue(ev->Get());
         const NKikimrBlobStorage::TEvVStatusResult& record = ev->Get()->Record;
         Y_ABORT_UNLESS(record.HasStatus());
         const NKikimrProto::EReplyStatus status = record.GetStatus();
@@ -57,8 +57,7 @@ class TBlobStorageGroupStatusRequest : public TBlobStorageGroupRequestActor<TBlo
         }
     }
 
-    friend class TBlobStorageGroupRequestActor<TBlobStorageGroupStatusRequest>;
-    void ReplyAndDie(NKikimrProto::EReplyStatus status) {
+    void ReplyAndDie(NKikimrProto::EReplyStatus status) override {
         auto result = std::make_unique<TEvBlobStorage::TEvStatusResult>(status, StatusFlags.Raw);
         if (ApproximateFreeSpaceShare) {
             result->ApproximateFreeSpaceShare = *ApproximateFreeSpaceShare;
@@ -68,7 +67,7 @@ class TBlobStorageGroupStatusRequest : public TBlobStorageGroupRequestActor<TBlo
         SendResponseAndDie(std::move(result));
     }
 
-    std::unique_ptr<IEventBase> RestartQuery(ui32 counter) {
+    std::unique_ptr<IEventBase> RestartQuery(ui32 counter) override {
         ++*Mon->NodeMon->RestartStatus;
         auto ev = std::make_unique<TEvBlobStorage::TEvStatus>(Deadline);
         ev->RestartCounter = counter;
@@ -76,28 +75,23 @@ class TBlobStorageGroupStatusRequest : public TBlobStorageGroupRequestActor<TBlo
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::BS_PROXY_STATUS_ACTOR;;
+    ::NMonitoring::TDynamicCounters::TCounterPtr& GetActiveCounter() const override {
+        return Mon->ActiveStatus;
     }
 
-    static const auto& ActiveCounter(const TIntrusivePtr<TBlobStorageGroupProxyMon>& mon) {
-        return mon->ActiveStatus;
+    ERequestType GetRequestType() const override {
+        return ERequestType::Status;
     }
 
-    TBlobStorageGroupStatusRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-            const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
-            const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvStatus *ev,
-            ui64 cookie, NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
-        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId),
-                NKikimrServices::BS_PROXY_STATUS, false, {}, now, storagePoolCounters,
-                ev->RestartCounter, "DSProxy.Status", std::move(ev->ExecutionRelay))
-        , Deadline(ev->Deadline)
+    TBlobStorageGroupStatusRequest(TBlobStorageGroupStatusParameters& params)
+        : TBlobStorageGroupRequestActor(params)
+        , Deadline(params.Common.Event->Deadline)
         , Requests(0)
         , Responses(0)
         , QuorumTracker(Info.Get())
     {}
 
-    void Bootstrap() {
+    void Bootstrap() override {
         A_LOG_INFO_S("DSPS05", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
@@ -117,7 +111,7 @@ public:
             ++Requests;
         }
 
-        Become(&TThis::StateWait);
+        Become(&TBlobStorageGroupStatusRequest::StateWait);
 
         if (Requests == 0) {
             ReplyAndDie(NKikimrProto::OK);
@@ -134,11 +128,8 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupStatusRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-        const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
-        const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvStatus *ev,
-        ui64 cookie, NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
-    return new TBlobStorageGroupStatusRequest(info, state, source, mon, ev, cookie, std::move(traceId), now, storagePoolCounters);
+IActor* CreateBlobStorageGroupStatusRequest(TBlobStorageGroupStatusParameters params) {
+    return new TBlobStorageGroupStatusRequest(params);
 }
 
 } // NKikimr

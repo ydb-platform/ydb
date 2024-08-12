@@ -126,11 +126,11 @@ class ResultFormatter:
                         row[i] = row[i][0]
 
             for i in doubles:
-                if row[i] != 'NULL':
+                if row[i] != 'NULL' and row[i] is not None:
                     row[i] = self._format_double(float(row[i]))
 
             for i in dates:
-                if row[i] != 'NULL':
+                if row[i] != 'NULL' and row[i] is not None:
                     row[i] = self._format_date(float(row[i]))
 
     def format(self, res):

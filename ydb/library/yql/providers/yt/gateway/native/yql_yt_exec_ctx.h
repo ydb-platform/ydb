@@ -74,12 +74,13 @@ struct TInputInfo {
 struct TOutputInfo {
     TOutputInfo() = default;
     TOutputInfo(const TString& name, const TString& path, const NYT::TNode& codecSpec, const NYT::TNode& attrSpec,
-        const NYT::TSortColumns& sortedBy)
+        const NYT::TSortColumns& sortedBy, NYT::TNode columnGroups)
         : Name(name)
         , Path(path)
         , Spec(codecSpec)
         , AttrSpec(attrSpec)
         , SortedBy(sortedBy)
+        , ColumnGroups(std::move(columnGroups))
     {
     }
     TString Name;
@@ -87,6 +88,7 @@ struct TOutputInfo {
     NYT::TNode Spec;
     NYT::TNode AttrSpec;
     NYT::TSortColumns SortedBy;
+    NYT::TNode ColumnGroups;
 };
 
 class TExecContextBase: public TThrRefBase {
@@ -126,7 +128,10 @@ protected:
     static TString GetSpecImpl(const TVector<TTableType>& tables, size_t beginIdx, size_t endIdx, NYT::TNode initialOutSpec, bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags, bool intermediateInput);
 
     NThreading::TFuture<void> MakeOperationWaiter(const NYT::IOperationPtr& op, const TMaybe<ui32>& publicId) const {
-        return Session_->OpTracker_->MakeOperationWaiter(op, publicId, YtServer_, Cluster_, Session_->ProgressWriter_, Session_->StatWriter_);
+        if (const auto& opTracker = Session_->OpTracker_) {
+            return opTracker->MakeOperationWaiter(op, publicId, YtServer_, Cluster_, Session_->ProgressWriter_, Session_->StatWriter_);
+        }
+        return NThreading::MakeErrorFuture<void>(std::make_exception_ptr(yexception() << "Cannot run operations in session without operation tracker"));
     }
 
     TString GetAuth(const TYtSettings::TConstPtr& config) const;
@@ -278,6 +283,7 @@ public:
             }
             return res.Apply([queue = self->Session_->Queue_, unlock = lock.DeferRelease()](const auto& f) {
                 if (f.HasException()) {
+                    unlock(f);
                     f.TryRethrow();
                 }
                 return queue->Async([unlock = std::move(unlock), f]() {

@@ -1074,7 +1074,7 @@ private:
             Y_ABORT_UNLESS(ReadActive, "Unexpected Read done callback");
             Y_ABORT_UNLESS(!ReadFinished, "Unexpected ReadFinished flag");
 
-            if (!ok || Cancelled || WriteFinished) {
+            if (!ok || Cancelled) {
                 ReadFinished = true;
                 if (!WriteActive) {
                     WriteFinished = true;
@@ -1123,9 +1123,6 @@ private:
             if (!ok || Cancelled) {
                 WriteActive = false;
                 WriteFinished = true;
-                if (!ReadActive) {
-                    ReadFinished = true;
-                }
                 if (ReadFinished) {
                     Stream->Finish(&Status, OnFinishedTag.Prepare());
                 }

@@ -17,9 +17,42 @@ struct IMemoryUsageTracker
     virtual bool Acquire(i64 size) = 0;
     virtual void Release(i64 size) = 0;
     virtual void SetLimit(i64 size) = 0;
+    virtual i64 GetLimit() const = 0;
+    virtual i64 GetUsed() const = 0;
+    virtual i64 GetFree() const = 0;
+    virtual bool IsExceeded() const = 0;
+
+    //! Tracks memory used by references.
+    /*!
+    * Memory tracking is implemented by specific shared ref holders.
+    * #Track returns reference with a holder that wraps the old one and also
+    * enables accounting memory in memory tracker's internal state.
+
+    * Subsequent #Track calls for this reference drop memory reference tracker's
+    * holder unless #keepExistingTracking is true.
+    */
+    virtual TSharedRef Track(
+        TSharedRef reference,
+        bool keepHolder = false) = 0;
+    virtual TErrorOr<TSharedRef> TryTrack(
+        TSharedRef reference,
+        bool keepHolder) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IMemoryUsageTracker)
+
+/////////////////////////////////////////////////////////////////////////////
+
+struct IReservingMemoryUsageTracker
+    : public IMemoryUsageTracker
+{
+    virtual void ReleaseUnusedReservation() = 0;
+    virtual TError TryReserve(i64 size) = 0;
+};
+
+DEFINE_REFCOUNTED_TYPE(IReservingMemoryUsageTracker)
+
+////////////////////////////////////////////////////////////////////////////////
 
 IMemoryUsageTrackerPtr GetNullMemoryUsageTracker();
 
@@ -60,7 +93,8 @@ public:
     i64 GetSize() const;
     void SetSize(i64 size);
     TError TrySetSize(i64 size);
-    void IncrementSize(i64 sizeDelta);
+    void IncreaseSize(i64 sizeDelta);
+    void DecreaseSize(i64 sizeDelta);
     TMemoryUsageTrackerGuard TransferMemory(i64 size);
 
 private:
@@ -70,7 +104,7 @@ private:
     i64 Granularity_ = 0;
 
     void MoveFrom(TMemoryUsageTrackerGuard&& other);
-    TError SetSizeGeneric(i64 size, auto acquirer);
+    TError SetSizeImpl(i64 size, auto acquirer);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -122,6 +156,23 @@ private:
         TBlob&& blob,
         TMemoryUsageTrackerGuard&& guard);
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+TErrorOr<TSharedRef> TryTrackMemory(
+    const IMemoryUsageTrackerPtr& tracker,
+    TSharedRef reference,
+    bool keepExistingTracking = false);
+
+TSharedRef TrackMemory(
+    const IMemoryUsageTrackerPtr& tracker,
+    TSharedRef reference,
+    bool keepExistingTracking = false);
+
+TSharedRefArray TrackMemory(
+    const IMemoryUsageTrackerPtr& tracker,
+    TSharedRefArray array,
+    bool keepExistingTracking = false);
 
 ////////////////////////////////////////////////////////////////////////////////
 

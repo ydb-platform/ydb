@@ -57,6 +57,7 @@ private:
                 auto primarySchema = NYT::FromProto<NTableClient::TTableSchemaPtr>(rsp->schema());
                 tableInfo->Schemas[ETableSchemaKind::Primary] = primarySchema;
                 tableInfo->Schemas[ETableSchemaKind::Write] = primarySchema->ToWrite();
+                tableInfo->Schemas[ETableSchemaKind::WriteViaQueueProducer] = primarySchema->ToWriteViaQueueProducer();
                 tableInfo->Schemas[ETableSchemaKind::VersionedWrite] = primarySchema->ToVersionedWrite();
                 tableInfo->Schemas[ETableSchemaKind::Delete] = primarySchema->ToDelete();
                 tableInfo->Schemas[ETableSchemaKind::Query] = primarySchema->ToQuery();
@@ -79,9 +80,8 @@ private:
                     FromProto(tabletInfo.Get(), protoTabletInfo);
                     tabletInfo->TableId = tableId;
                     tabletInfo->UpdateTime = Now();
-                    tabletInfo->Owners.push_back(MakeWeak(tableInfo));
 
-                    tabletInfo = TabletInfoCache_.Insert(std::move(tabletInfo));
+                    TabletInfoOwnerCache_.Insert(tabletInfo->TabletId, MakeWeak(tableInfo));
                     tableInfo->Tablets.push_back(tabletInfo);
                     if (tabletInfo->State == ETabletState::Mounted) {
                         tableInfo->MountedTablets.push_back(tabletInfo);
@@ -102,6 +102,9 @@ private:
                     TIndexInfo indexInfo{
                         .TableId = FromProto<NObjectClient::TObjectId>(protoIndexInfo.index_table_id()),
                         .Kind = FromProto<ESecondaryIndexKind>(protoIndexInfo.index_kind()),
+                        .Predicate = protoIndexInfo.has_predicate()
+                            ? std::make_optional(FromProto<TString>(protoIndexInfo.predicate()))
+                            : std::nullopt,
                     };
                     THROW_ERROR_EXCEPTION_UNLESS(TEnumTraits<ESecondaryIndexKind>::FindLiteralByValue(indexInfo.Kind).has_value(),
                         "Unsupported secondary index kind %Qlv (client not up-to-date)",

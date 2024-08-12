@@ -1,12 +1,16 @@
 #pragma once
-#include <contrib/libs/apache/arrow/cpp/src/arrow/table.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/log.h>
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/table.h>
 
 namespace NKikimr::NOlap {
 
@@ -14,17 +18,23 @@ class TFetchedData {
 protected:
     using TBlobs = THashMap<TChunkAddress, TPortionInfo::TAssembleBlobInfo>;
     YDB_ACCESSOR_DEF(TBlobs, Blobs);
-    YDB_READONLY_DEF(std::shared_ptr<arrow::Table>, Table);
+    YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Table);
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, Filter);
     YDB_READONLY(bool, UseFilter, false);
+
 public:
     TFetchedData(const bool useFilter)
-        : UseFilter(useFilter)
-    {
-
+        : UseFilter(useFilter) {
     }
 
-    void SyncTableColumns(const std::vector<std::shared_ptr<arrow::Field>>& fields);
+    ui32 GetFilteredCount(const ui32 recordsCount, const ui32 defLimit) const {
+        if (!Filter) {
+            return std::min(defLimit, recordsCount);
+        }
+        return Filter->GetFilteredCount().value_or(recordsCount);
+    }
+
+    void SyncTableColumns(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ISnapshotSchema& schema);
 
     std::shared_ptr<NArrow::TColumnFilter> GetAppliedFilter() const {
         return UseFilter ? Filter : nullptr;
@@ -49,18 +59,14 @@ public:
         }
     }
 
-    void AddNulls(THashMap<TChunkAddress, ui32>&& blobs) {
+    void AddDefaults(THashMap<TChunkAddress, TPortionInfo::TAssembleBlobInfo>&& blobs) {
         for (auto&& i : blobs) {
-            AFL_VERIFY(Blobs.emplace(i.first, i.second).second);
+            AFL_VERIFY(Blobs.emplace(i.first, std::move(i.second)).second);
         }
     }
 
-    bool IsEmptyFilter() const {
-        return Filter && Filter->IsTotalDenyFilter();
-    }
-
     bool IsEmpty() const {
-        return IsEmptyFilter() || (Table && !Table->num_rows());
+        return (Filter && Filter->IsTotalDenyFilter()) || (Table && !Table->num_rows());
     }
 
     void AddFilter(const std::shared_ptr<NArrow::TColumnFilter>& filter) {
@@ -68,6 +74,31 @@ public:
             return;
         }
         return AddFilter(*filter);
+    }
+
+    void CutFilter(const ui32 recordsCount, const ui32 limit, const bool reverse) {
+        auto filter = std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter());
+        ui32 recordsCountImpl = Filter ? Filter->GetFilteredCount().value_or(recordsCount) : recordsCount;
+        if (recordsCountImpl < limit) {
+            return;
+        }
+        if (reverse) {
+            filter->Add(false, recordsCountImpl - limit);
+            filter->Add(true, limit);
+        } else {
+            filter->Add(true, limit);
+            filter->Add(false, recordsCountImpl - limit);
+        }
+        if (Filter) {
+            if (UseFilter) {
+                AddFilter(*filter);
+            } else {
+                AddFilter(Filter->CombineSequentialAnd(*filter));
+            }
+        } else {
+            AddFilter(*filter);
+        }
+        
     }
 
     void AddFilter(const NArrow::TColumnFilter& filter) {
@@ -83,8 +114,18 @@ public:
         }
     }
 
-    void AddBatch(const std::shared_ptr<arrow::RecordBatch>& batch) {
-        return AddBatch(arrow::Table::Make(batch->schema(), batch->columns(), batch->num_rows()));
+    void AddBatch(const std::shared_ptr<NArrow::TGeneralContainer>& table) {
+        AFL_VERIFY(table);
+        if (UseFilter) {
+            AddBatch(table->BuildTableVerified());
+        } else {
+            if (!Table) {
+                Table = table;
+            } else {
+                auto mergeResult = Table->MergeColumnsStrictly(*table);
+                AFL_VERIFY(mergeResult.IsSuccess())("error", mergeResult.GetErrorMessage());
+            }
+        }
     }
 
     void AddBatch(const std::shared_ptr<arrow::Table>& table) {
@@ -93,25 +134,28 @@ public:
             AFL_VERIFY(Filter->Apply(tableLocal));
         }
         if (!Table) {
-            Table = tableLocal;
+            Table = std::make_shared<NArrow::TGeneralContainer>(tableLocal);
         } else {
-            AFL_VERIFY(NArrow::MergeBatchColumns({Table, tableLocal}, Table));
+            auto mergeResult = Table->MergeColumnsStrictly(NArrow::TGeneralContainer(tableLocal));
+            AFL_VERIFY(mergeResult.IsSuccess())("error", mergeResult.GetErrorMessage());
         }
     }
-
 };
 
 class TFetchedResult {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, Batch);
+    YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Batch);
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, NotAppliedFilter);
+
 public:
     TFetchedResult(std::unique_ptr<TFetchedData>&& data)
-        : NotAppliedFilter(data->GetNotAppliedFilter()) {
-        if (data->GetTable()) {
-            Batch = NArrow::ToBatch(data->GetTable(), true);
-        }
+        : Batch(data->GetTable())
+        , NotAppliedFilter(data->GetNotAppliedFilter()) {
+    }
+
+    bool IsEmpty() const {
+        return !Batch || Batch->num_rows() == 0 || (NotAppliedFilter && NotAppliedFilter->IsTotalDenyFilter());
     }
 };
 
-}
+}   // namespace NKikimr::NOlap

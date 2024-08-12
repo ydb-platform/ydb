@@ -821,7 +821,7 @@ Y_UNIT_TEST_SUITE(DBase) {
         me.WriteVer({4, 50}).Put(table, *me.SchemedCookRow(table).Col(9_u64, 9_u64));
         me.Commit();
 
-        UNIT_ASSERT_VALUES_EQUAL(dumpCache(), "TKeyRangeCache{ }");
+        UNIT_ASSERT_VALUES_EQUAL(dumpCache(), "TKeyRangeCache{ [{1}, {9}) }");
 
         // Verify we can only see 2 last rows at v3/50 (erased range shouldn't be cached incorrectly)
         me.To(24).ReadVer({3, 50}).IterData(table)
@@ -829,7 +829,7 @@ Y_UNIT_TEST_SUITE(DBase) {
             .Next().Is(*me.SchemedCookRow(table).Col(18_u64, 18_u64))
             .Next().Is(EReady::Gone);
 
-        UNIT_ASSERT_VALUES_EQUAL(dumpCache(), "TKeyRangeCache{ [{1}, {8}], [{10}, {16}] }");
+        UNIT_ASSERT_VALUES_EQUAL(dumpCache(), "TKeyRangeCache{ [{1}, {9}), [{10}, {16}] }");
 
         // Verify we can see all 3 rows at v5/50 (bug would cause as to skip over the key 9)
         me.To(25).ReadVer({5, 50}).IterData(table)
@@ -837,6 +837,106 @@ Y_UNIT_TEST_SUITE(DBase) {
             .Next().Is(*me.SchemedCookRow(table).Col(17_u64, 17_u64))
             .Next().Is(*me.SchemedCookRow(table).Col(18_u64, 18_u64))
             .Next().Is(EReady::Gone);
+    }
+
+    void TestEraseCacheWithUncommittedChanges(bool compact) {
+        TDbExec me;
+
+        const ui32 table = 1;
+        me.To(10)
+            .Begin()
+            .Apply(*TAlter()
+                .AddTable("me_1", table)
+                .AddColumn(table, "key", 1, ETypes::Uint64, false)
+                .AddColumn(table, "val", 2, ETypes::Uint64, false, Cimple(0_u64))
+                .AddColumnToKey(table, 1)
+                .SetEraseCache(table, true, 2, 8192))
+            .Commit();
+
+        auto dumpCache = [&]() -> TString {
+            if (auto* cache = me->DebugGetTableErasedKeysCache(table)) {
+                TStringStream stream;
+                stream << cache->DumpRanges();
+                return stream.Str();
+            } else {
+                return nullptr;
+            }
+        };
+
+        // Write a bunch of rows at v1/50
+        me.To(20).Begin();
+        for (ui64 i = 1; i <= 18; ++i) {
+            if (i != 9) {
+                me.WriteVer({1, 50}).Put(table, *me.SchemedCookRow(table).Col(i, i));
+            }
+        }
+        me.Commit();
+        if (compact) {
+            me.Compact(table, false);
+        }
+
+        // Erase a bunch of rows at v2/50
+        me.To(21).Begin();
+        for (ui64 i = 1; i <= 16; ++i) {
+            if (i != 9) {
+                me.WriteVer({2, 50}).Add(table, *me.SchemedCookRow(table).Col(i), ERowOp::Erase);
+            }
+        }
+        me.Commit();
+        if (compact) {
+            me.Compact(table, false);
+        }
+
+        // Verify we can only see 2 last rows at v3/50 (all other are deleted)
+        me.To(22).ReadVer({3, 50}).IterData(table)
+            .Seek({ }, ESeek::Lower).Is(*me.SchemedCookRow(table).Col(17_u64, 17_u64))
+            .Next().Is(*me.SchemedCookRow(table).Col(18_u64, 18_u64))
+            .Next().Is(EReady::Gone);
+
+        UNIT_ASSERT_VALUES_EQUAL(dumpCache(), "TKeyRangeCache{ [{1}, {16}] }");
+
+        // Write an uncommitted row in tx 123
+        me.To(23).Begin();
+        me.WriteTx(123).Put(table, *me.SchemedCookRow(table).Col(9_u64, 9_u64));
+        me.Commit();
+        if (compact) {
+            me.Compact(table, false);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(dumpCache(), "TKeyRangeCache{ [{1}, {9}) }");
+
+        // Verify we can only see all 3 rows in tx 123 and erase cache is correct
+        me.To(24).ReadTx(123).IterData(table)
+            .Seek({ }, ESeek::Lower).Is(*me.SchemedCookRow(table).Col(9_u64, 9_u64))
+            .Next().Is(*me.SchemedCookRow(table).Col(17_u64, 17_u64))
+            .Next().Is(*me.SchemedCookRow(table).Col(18_u64, 18_u64))
+            .Next().Is(EReady::Gone);
+
+        UNIT_ASSERT_VALUES_EQUAL(dumpCache(), "TKeyRangeCache{ [{1}, {9}), [{10}, {16}] }");
+
+        // Rollback tx 123
+        me.To(25).Begin();
+        me.RemoveTx(table, 123);
+        me.Commit();
+        if (compact) {
+            me.Compact(table, false);
+        }
+
+        // Verify we can only see 2 last rows at v3/50 (all other are deleted)
+        me.To(26).ReadVer({3, 50}).IterData(table)
+            .Seek({ }, ESeek::Lower).Is(*me.SchemedCookRow(table).Col(17_u64, 17_u64))
+            .Next().Is(*me.SchemedCookRow(table).Col(18_u64, 18_u64))
+            .Next().Is(EReady::Gone);
+
+        UNIT_ASSERT_VALUES_EQUAL(dumpCache(), "TKeyRangeCache{ [{1}, {16}] }");
+    }
+
+    Y_UNIT_TEST(EraseCacheWithUncommittedChanges) {
+        TestEraseCacheWithUncommittedChanges(false);
+    }
+
+    Y_UNIT_TEST(EraseCacheWithUncommittedChangesCompacted) {
+        TestEraseCacheWithUncommittedChanges(true);
     }
 
     Y_UNIT_TEST(AlterAndUpsertChangesVisibility) {

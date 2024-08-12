@@ -14,6 +14,9 @@
 #include <ydb/core/control/immediate_control_board_impl.h>
 
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/utils.h>
+#include <ydb/services/lib/sharding/sharding.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 #include <ydb/core/tablet_flat/flat_table_column.h>
@@ -23,6 +26,7 @@
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/util/counted_leaky_bucket.h>
+#include <ydb/core/util/pb.h>
 
 #include <ydb/library/login/protos/login.pb.h>
 
@@ -30,9 +34,9 @@
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/protos/filestore_config.pb.h>
 #include <ydb/core/protos/follower_group.pb.h>
+#include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
-#include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
@@ -43,6 +47,8 @@
 #include <util/generic/queue.h>
 #include <util/generic/vector.h>
 #include <util/generic/guid.h>
+
+#include <ydb/core/protos/pqconfig.pb.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -225,6 +231,12 @@ struct TPartitionStats {
     ui64 RowCount = 0;
     ui64 DataSize = 0;
     ui64 IndexSize = 0;
+
+    struct TStoragePoolStats {
+        ui64 DataSize = 0;
+        ui64 IndexSize = 0;
+    };
+    THashMap<TString, TStoragePoolStats> StoragePoolsStats;
 
     TInstant LastAccessTime;
     TInstant LastUpdateTime;
@@ -424,21 +436,25 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     TMap<TTxId, TBackupRestoreResult> BackupHistory;
     TMap<TTxId, TBackupRestoreResult> RestoreHistory;
 
-    TString PreSerializedPathDescription;
-    TString PreSerializedPathDescriptionWithoutRangeKey;
+    // Preserialized TDescribeSchemeResult with PathDescription.TablePartitions field filled
+    TString PreserializedTablePartitions;
+    TString PreserializedTablePartitionsNoKeys;
+    // Preserialized TDescribeSchemeResult with PathDescription.Table.SplitBoundary field filled
+    TString PreserializedTableSplitBoundaries;
 
     THashMap<TShardIdx, NKikimrSchemeOp::TPartitionConfig> PerShardPartitionConfig;
 
     const NKikimrSchemeOp::TPartitionConfig& PartitionConfig() const { return TableDescription.GetPartitionConfig(); }
     NKikimrSchemeOp::TPartitionConfig& MutablePartitionConfig() { return *TableDescription.MutablePartitionConfig(); }
 
-    bool HasReplicationConfig() { return TableDescription.HasReplicationConfig(); }
-    const NKikimrSchemeOp::TTableReplicationConfig& ReplicationConfig() { return TableDescription.GetReplicationConfig(); }
+    bool HasReplicationConfig() const { return TableDescription.HasReplicationConfig(); }
+    const NKikimrSchemeOp::TTableReplicationConfig& ReplicationConfig() const { return TableDescription.GetReplicationConfig(); }
     NKikimrSchemeOp::TTableReplicationConfig& MutableReplicationConfig() { return *TableDescription.MutableReplicationConfig(); }
 
     bool IsAsyncReplica() const {
         switch (TableDescription.GetReplicationConfig().GetMode()) {
-            case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE:
+            case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE: [[fallthrough]];
+            case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_RESTORE_INCREMENTAL_BACKUP:
                 return false;
             default:
                 return true;
@@ -542,6 +558,7 @@ public:
         const NScheme::TTypeRegistry& typeRegistry,
         const TSchemeLimits& limits, const TSubDomainInfo& subDomain,
         bool pgTypesEnabled,
+        bool datetime64TypesEnabled,
         TString& errStr, const THashSet<TString>& localSequences = {});
 
     static ui32 ShardsToCreate(const NKikimrSchemeOp::TTableDescription& descr) {
@@ -878,154 +895,6 @@ public:
     }
 };
 
-class TColumnTablesLayout;
-
-struct TOlapStoreInfo : TSimpleRefCount<TOlapStoreInfo> {
-private:
-    TString Name;
-    ui64 NextSchemaPresetId = 1;
-    ui64 NextTtlSettingsPresetId = 1;
-    NKikimrSchemeOp::TColumnStorageConfig StorageConfig;
-    NKikimrSchemeOp::TColumnStoreDescription Description;
-    ui64 AlterVersion = 0;
-public:
-    using TPtr = TIntrusivePtr<TOlapStoreInfo>;
-
-    class ILayoutPolicy {
-    protected:
-        virtual bool DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result, bool& isNewGroup) const = 0;
-    public:
-        using TPtr = std::shared_ptr<ILayoutPolicy>;
-        virtual ~ILayoutPolicy() = default;
-        bool Layout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result, bool& isNewGroup) const;
-    };
-
-    class TMinimalTablesCountLayout: public ILayoutPolicy {
-    protected:
-        virtual bool DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result, bool& isNewGroup) const override;
-    };
-
-    class TIdentityGroupsLayout: public ILayoutPolicy {
-    protected:
-        virtual bool DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result, bool& isNewGroup) const override;
-    };
-
-    TPtr AlterData;
-
-    const NKikimrSchemeOp::TColumnStoreDescription& GetDescription() const {
-        return Description;
-    }
-
-    NKikimrSchemeOp::TColumnStoreSharding Sharding;
-    TMaybe<NKikimrSchemeOp::TAlterColumnStore> AlterBody;
-
-    TVector<TShardIdx> ColumnShards;
-
-    THashMap<ui32, TOlapStoreSchemaPreset> SchemaPresets;
-    THashMap<TString, ui32> SchemaPresetByName;
-
-    THashSet<TPathId> ColumnTables;
-    THashSet<TPathId> ColumnTablesUnderOperation;
-    TAggregatedStats Stats;
-
-    TOlapStoreInfo() = default;
-    TOlapStoreInfo(ui64 alterVersion,
-            NKikimrSchemeOp::TColumnStoreSharding&& sharding,
-            TMaybe<NKikimrSchemeOp::TAlterColumnStore>&& alterBody = Nothing());
-
-    static TOlapStoreInfo::TPtr BuildStoreWithAlter(const TOlapStoreInfo& initialStore, const NKikimrSchemeOp::TAlterColumnStore& alterBody);
-
-    const NKikimrSchemeOp::TColumnStorageConfig& GetStorageConfig() const {
-        return StorageConfig;
-    }
-
-    const TVector<TShardIdx>& GetColumnShards() const {
-        return ColumnShards;
-    }
-
-    ui64 GetAlterVersion() const {
-        return AlterVersion;
-    }
-
-    void ApplySharding(const TVector<TShardIdx>& shardsIndexes) {
-        Y_ABORT_UNLESS(ColumnShards.size() == shardsIndexes.size());
-        Sharding.ClearColumnShards();
-        for (ui64 i = 0; i < ColumnShards.size(); ++i) {
-            const auto& idx = shardsIndexes[i];
-            ColumnShards[i] = idx;
-            auto* shardInfoProto = Sharding.AddColumnShards();
-            shardInfoProto->SetOwnerId(idx.GetOwnerId());
-            shardInfoProto->SetLocalId(idx.GetLocalId().GetValue());
-        }
-    }
-    void SerializeDescription(NKikimrSchemeOp::TColumnStoreDescription& descriptionProto) const;
-    void ParseFromLocalDB(const NKikimrSchemeOp::TColumnStoreDescription& descriptionProto);
-    bool ParseFromRequest(const NKikimrSchemeOp::TColumnStoreDescription& descriptionProto, IErrorCollector& errors);
-    bool UpdatePreset(const TString& presetName, const TOlapSchemaUpdate& schemaUpdate, IErrorCollector& errors);
-
-    const TAggregatedStats& GetStats() const {
-        return Stats;
-    }
-
-    ILayoutPolicy::TPtr GetTablesLayoutPolicy() const;
-
-    void UpdateShardStats(TShardIdx shardIdx, const TPartitionStats& newStats) {
-        Stats.Aggregated.PartCount = ColumnShards.size();
-        Stats.PartitionStats[shardIdx]; // insert if none
-        Stats.UpdateShardStats(shardIdx, newStats);
-    }
-};
-
-struct TColumnTableInfo : TSimpleRefCount<TColumnTableInfo> {
-    using TPtr = TIntrusivePtr<TColumnTableInfo>;
-
-    ui64 AlterVersion = 0;
-    TPtr AlterData;
-
-    NKikimrSchemeOp::TColumnTableDescription Description;
-    NKikimrSchemeOp::TColumnTableSharding Sharding;
-    TMaybe<NKikimrSchemeOp::TColumnStoreSharding> StandaloneSharding;
-    TMaybe<NKikimrSchemeOp::TAlterColumnTable> AlterBody;
-
-    TMaybe<TPathId> OlapStorePathId; // PathId of the table store
-
-    TVector<ui64> ColumnShards; // Current list of column shards
-    TVector<TShardIdx> OwnedColumnShards;
-    TAggregatedStats Stats;
-
-    TColumnTableInfo() = default;
-    TColumnTableInfo(ui64 alterVersion, NKikimrSchemeOp::TColumnTableDescription&& description,
-            NKikimrSchemeOp::TColumnTableSharding&& sharding,
-            TMaybe<NKikimrSchemeOp::TColumnStoreSharding>&& standaloneSharding,
-            TMaybe<NKikimrSchemeOp::TAlterColumnTable>&& alterBody = Nothing());
-
-    void SetOlapStorePathId(const TPathId& pathId) {
-        OlapStorePathId = pathId;
-        Description.MutableColumnStorePathId()->SetOwnerId(pathId.OwnerId);
-        Description.MutableColumnStorePathId()->SetLocalId(pathId.LocalPathId);
-    }
-
-    static TColumnTableInfo::TPtr BuildTableWithAlter(const TColumnTableInfo& initialTable, const NKikimrSchemeOp::TAlterColumnTable& alterBody);
-
-    bool IsStandalone() const {
-        return !OwnedColumnShards.empty();
-    }
-
-    const TAggregatedStats& GetStats() const {
-        return Stats;
-    }
-
-    void UpdateShardStats(const TShardIdx shardIdx, const TPartitionStats& newStats) {
-        Stats.Aggregated.PartCount = ColumnShards.size();
-        Stats.PartitionStats[shardIdx]; // insert if none
-        Stats.UpdateShardStats(shardIdx, newStats);
-    }
-
-    void UpdateTableStats(const TPathId& pathId, const TPartitionStats& newStats) {
-        Stats.UpdateTableStats(pathId, newStats);
-    }
-};
-
 struct TTopicStats {
     TMessageSeqNo SeqNo;
 
@@ -1257,6 +1126,7 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
     TTabletId BalancerTabletID = InvalidTabletId;
     TShardIdx BalancerShardIdx = InvalidShardIdx;
     THashMap<ui32, TTopicTabletInfo::TTopicPartitionInfo*> Partitions;
+    size_t ActivePartitionCount = 0;
 
     TString PreSerializedPathDescription; // Cached path description
     TString PreSerializedPartitionsDescription; // Cached partition description
@@ -1322,11 +1192,38 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
         return Shards.size();
     }
 
+    TVector<std::pair<TShardIdx, TTopicTabletInfo::TTopicPartitionInfo*>> GetPartitions() {
+        TVector<std::pair<TShardIdx, TTopicTabletInfo::TTopicPartitionInfo*>> partitions;
+        partitions.reserve(TotalPartitionCount);
+
+        for (auto& [shardIdx, tabletInfo] : Shards) {
+            for (const auto& partitionInfo : tabletInfo->Partitions) {
+                partitions.push_back({shardIdx, partitionInfo.Get()});
+            }
+        }
+
+        std::sort(partitions.begin(), partitions.end(), [](const auto& lhs, const auto& rhs) {
+            return lhs.second->PqId < rhs.second->PqId;
+        });
+
+        return partitions;
+    }
+
+    NKikimrPQ::TPQTabletConfig GetTabletConfig() const {
+        NKikimrPQ::TPQTabletConfig tabletConfig;
+        if (!TabletConfig.empty()) {
+            bool parseOk = ParseFromStringNoSizeLimit(tabletConfig, TabletConfig);
+            Y_ABORT_UNLESS(parseOk, "Previously serialized pq tablet config cannot be parsed");
+        }
+        return tabletConfig;
+    }
+
     void PrepareAlter(TTopicInfo::TPtr alterData) {
         Y_ABORT_UNLESS(alterData, "No alter data at Alter prepare");
         alterData->AlterVersion = AlterVersion + 1;
         Y_ABORT_UNLESS(alterData->TotalGroupCount);
         Y_ABORT_UNLESS(alterData->TotalPartitionCount);
+        Y_ABORT_UNLESS(0 < alterData->ActivePartitionCount && alterData->ActivePartitionCount <= alterData->TotalPartitionCount);
         Y_ABORT_UNLESS(alterData->NextPartitionId);
         Y_ABORT_UNLESS(alterData->MaxPartsPerTablet);
         alterData->KeySchema = KeySchema;
@@ -1340,9 +1237,10 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
         TotalGroupCount = AlterData->TotalGroupCount;
         NextPartitionId = AlterData->NextPartitionId;
         TotalPartitionCount = AlterData->TotalPartitionCount;
+        ActivePartitionCount = AlterData->ActivePartitionCount;
         MaxPartsPerTablet = AlterData->MaxPartsPerTablet;
         if (!AlterData->TabletConfig.empty())
-            TabletConfig = AlterData->TabletConfig;
+            TabletConfig = std::move(AlterData->TabletConfig);
         ++AlterVersion;
         Y_ABORT_UNLESS(BalancerTabletID == AlterData->BalancerTabletID || !HasBalancer());
         Y_ABORT_UNLESS(AlterData->HasBalancer());
@@ -1423,6 +1321,12 @@ struct TSchemeQuotas : public TVector<TSchemeQuota> {
     mutable size_t LastKnownSize = 0;
 };
 
+enum class EUserFacingStorageType {
+    Ssd,
+    Hdd,
+    Ignored
+};
+
 struct IQuotaCounters {
     virtual void ChangeStreamShardsCount(i64 delta) = 0;
     virtual void ChangeStreamShardsQuota(i64 delta) = 0;
@@ -1431,10 +1335,12 @@ struct IQuotaCounters {
     virtual void ChangeDiskSpaceTablesDataBytes(i64 delta) = 0;
     virtual void ChangeDiskSpaceTablesIndexBytes(i64 delta) = 0;
     virtual void ChangeDiskSpaceTablesTotalBytes(i64 delta) = 0;
+    virtual void AddDiskSpaceTables(EUserFacingStorageType storageType, ui64 data, ui64 index) = 0;
     virtual void ChangeDiskSpaceTopicsTotalBytes(ui64 value) = 0;
     virtual void ChangeDiskSpaceQuotaExceeded(i64 delta) = 0;
     virtual void ChangeDiskSpaceHardQuotaBytes(i64 delta) = 0;
     virtual void ChangeDiskSpaceSoftQuotaBytes(i64 delta) = 0;
+    virtual void AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType, ui64 addend) = 0;
 };
 
 struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
@@ -1452,14 +1358,29 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
             ui64 DataSize = 0;
             ui64 UsedReserveSize = 0;
         } Topics;
+
+        struct TStoragePoolUsage {
+            ui64 DataSize = 0;
+            ui64 IndexSize = 0;
+        };
+        THashMap<TString, TStoragePoolUsage> StoragePoolsUsage;
     };
 
     struct TDiskSpaceQuotas {
         ui64 HardQuota;
         ui64 SoftQuota;
 
+        struct TQuotasPair {
+            ui64 HardQuota;
+            ui64 SoftQuota;
+        };
+        THashMap<TString, TQuotasPair> StoragePoolsQuotas;
+
         explicit operator bool() const {
-            return HardQuota || SoftQuota;
+            return HardQuota || SoftQuota || AnyOf(StoragePoolsQuotas, [](const auto& storagePoolQuota) {
+                    return storagePoolQuota.second.HardQuota || storagePoolQuota.second.SoftQuota;
+                }
+            );
         }
     };
 
@@ -1592,6 +1513,13 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
             return InvalidTabletId;
         }
         return TTabletId(ProcessingParams.GetStatisticsAggregator());
+    }
+
+    TTabletId GetTenantBackupControllerID() const {
+        if (!ProcessingParams.HasBackupController()) {
+            return InvalidTabletId;
+        }
+        return TTabletId(ProcessingParams.GetBackupController());
     }
 
     TTabletId GetTenantGraphShardID() const {
@@ -1744,40 +1672,9 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return TDuration::Seconds(DatabaseQuotas->ttl_min_run_internal_seconds());
     }
 
-    TDiskSpaceQuotas GetDiskSpaceQuotas() const {
-        ui64 hardQuota = DatabaseQuotas ? DatabaseQuotas->data_size_hard_quota() : 0;
-        ui64 softQuota = DatabaseQuotas ? DatabaseQuotas->data_size_soft_quota() : 0;
+    static void CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& quotas);
 
-        if (hardQuota || softQuota) {
-            if (!softQuota) {
-                softQuota = hardQuota;
-            } else if (!hardQuota) {
-                hardQuota = softQuota;
-            }
-        }
-
-        return TDiskSpaceQuotas{ hardQuota, softQuota };
-    }
-
-    static void CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& quotas) {
-        if (quotas.HardQuota != 0) {
-            counters->ChangeDiskSpaceHardQuotaBytes(quotas.HardQuota);
-        }
-        if (quotas.SoftQuota != 0) {
-            counters->ChangeDiskSpaceSoftQuotaBytes(quotas.SoftQuota);
-        }
-    }
-
-    static void CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& prev, const TDiskSpaceQuotas& next) {
-        i64 hardDelta = i64(next.HardQuota) - i64(prev.HardQuota);
-        if (hardDelta != 0) {
-            counters->ChangeDiskSpaceHardQuotaBytes(hardDelta);
-        }
-        i64 softDelta = i64(next.SoftQuota) - i64(prev.SoftQuota);
-        if (softDelta != 0) {
-            counters->ChangeDiskSpaceSoftQuotaBytes(softDelta);
-        }
-    }
+    static void CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& prev, const TDiskSpaceQuotas& next);
 
     static void CountStreamShardsQuota(IQuotaCounters* counters, const i64 delta) {
         counters->ChangeStreamShardsQuota(delta);
@@ -1795,48 +1692,13 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         counters->ChangeStreamReservedStorageQuota(next - prev);
     }
 
+    TDiskSpaceQuotas GetDiskSpaceQuotas() const;
 
-    /**
-     * Checks current disk usage against disk quotas
-     *
-     * Returns true when DiskQuotaExceeded value has changed and needs to be
-     * persisted and pushed to scheme board.
-     */
-    bool CheckDiskSpaceQuotas(IQuotaCounters* counters) {
-        auto quotas = GetDiskSpaceQuotas();
-        if (!quotas) {
-            if (DiskQuotaExceeded) {
-                counters->ChangeDiskSpaceQuotaExceeded(-1);
-                DiskQuotaExceeded = false;
-                ++DomainStateVersion;
-                return true;
-            }
-            return false;
-        }
-
-        ui64 totalUsage = TotalDiskSpaceUsage();
-        if (totalUsage > quotas.HardQuota) {
-            if (!DiskQuotaExceeded) {
-                counters->ChangeDiskSpaceQuotaExceeded(+1);
-                DiskQuotaExceeded = true;
-                ++DomainStateVersion;
-                return true;
-            }
-            return false;
-        }
-
-        if (totalUsage < quotas.SoftQuota) {
-            if (DiskQuotaExceeded) {
-                counters->ChangeDiskSpaceQuotaExceeded(-1);
-                DiskQuotaExceeded = false;
-                ++DomainStateVersion;
-                return true;
-            }
-            return false;
-        }
-
-        return false;
-    }
+    /*
+    Checks current disk usage against disk quotas.
+    Returns true when DiskQuotaExceeded value has changed and needs to be persisted and pushed to scheme board.
+    */
+    bool CheckDiskSpaceQuotas(IQuotaCounters* counters);
 
     ui64 TotalDiskSpaceUsage() {
         return DiskSpaceUsage.Tables.TotalSize + (AppData()->FeatureFlags.GetEnableTopicDiskSubDomainQuota() ? GetPQAccountStorage() : 0);
@@ -2000,24 +1862,9 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         CoordinatorSelector = new TCoordinators(ProcessingParams);
     }
 
-    void AggrDiskSpaceUsage(IQuotaCounters* counters, const TPartitionStats& newAggr, const TPartitionStats& oldAggr = {}) {
-        DiskSpaceUsage.Tables.DataSize += (newAggr.DataSize - oldAggr.DataSize);
-        counters->ChangeDiskSpaceTablesDataBytes(newAggr.DataSize - oldAggr.DataSize);
+    void AggrDiskSpaceUsage(IQuotaCounters* counters, const TPartitionStats& newAggr, const TPartitionStats& oldAggr = {});
 
-        DiskSpaceUsage.Tables.IndexSize += (newAggr.IndexSize - oldAggr.IndexSize);
-        counters->ChangeDiskSpaceTablesIndexBytes(newAggr.IndexSize - oldAggr.IndexSize);
-
-        i64 oldTotalBytes = DiskSpaceUsage.Tables.TotalSize;
-        DiskSpaceUsage.Tables.TotalSize = DiskSpaceUsage.Tables.DataSize + DiskSpaceUsage.Tables.IndexSize;
-        i64 newTotalBytes = DiskSpaceUsage.Tables.TotalSize;
-        counters->ChangeDiskSpaceTablesTotalBytes(newTotalBytes - oldTotalBytes);
-    }
-
-    void AggrDiskSpaceUsage(const TTopicStats& newAggr, const TTopicStats& oldAggr = {}) {
-        auto& topics = DiskSpaceUsage.Topics;
-        topics.DataSize += (newAggr.DataSize - oldAggr.DataSize);
-        topics.UsedReserveSize += (newAggr.UsedReserveSize - oldAggr.UsedReserveSize);
-    }
+    void AggrDiskSpaceUsage(const TTopicStats& newAggr, const TTopicStats& oldAggr = {});
 
     const TDiskSpaceUsage& GetDiskSpaceUsage() const {
         return DiskSpaceUsage;
@@ -2525,7 +2372,12 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
         alterData->IndexKeys.assign(config.GetKeyColumnNames().begin(), config.GetKeyColumnNames().end());
         Y_ABORT_UNLESS(alterData->IndexKeys.size());
         alterData->IndexDataColumns.assign(config.GetDataColumnNames().begin(), config.GetDataColumnNames().end());
+
         alterData->State = config.HasState() ? config.GetState() : EState::EIndexStateReady;
+
+        if (config.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+            alterData->SpecializedIndexDescription = config.GetVectorIndexKmeansTreeDescription();
+        }
 
         return result;
     }
@@ -2538,6 +2390,8 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
     TVector<TString> IndexDataColumns;
 
     TTableIndexInfo::TPtr AlterData = nullptr;
+
+    std::variant<std::monostate, NKikimrSchemeOp::TVectorIndexKmeansTreeDescription> SpecializedIndexDescription;
 };
 
 struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
@@ -2554,8 +2408,6 @@ struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
             : Status(status)
         {}
     };
-
-    static constexpr ui32 MaxInProgressShards = 10;
 
     TCdcStreamInfo(ui64 version, EMode mode, EFormat format, bool vt, const TDuration& rt, const TString& awsRegion, EState state)
         : AlterVersion(version)
@@ -2786,6 +2638,9 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     ui64 SnapshotStep = 0;
     ui64 SnapshotTxId = 0;
 
+    TInstant StartTime = TInstant::Zero();
+    TInstant EndTime = TInstant::Zero();
+
     explicit TExportInfo(
             const ui64 id,
             const TString& uid,
@@ -2931,6 +2786,9 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
 
     TSet<TActorId> Subscribers;
 
+    TInstant StartTime = TInstant::Zero();
+    TInstant EndTime = TInstant::Zero();
+
     explicit TImportInfo(
             const ui64 id,
             const TString& uid,
@@ -3071,6 +2929,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     TString ImplTablePath;
     NTableIndex::TTableColumns ImplTableColumns;
+    TVector<NKikimrSchemeOp::TTableDescription> ImplTableDescriptions;
+
+    std::variant<std::monostate, NKikimrSchemeOp::TVectorIndexKmeansTreeDescription> SpecializedIndexDescription;
 
     EState State = EState::Invalid;
     TString Issue;
@@ -3210,6 +3071,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         indexInfo->IndexName = row.template GetValue<Schema::IndexBuild::IndexName>();
         indexInfo->IndexType = row.template GetValue<Schema::IndexBuild::IndexType>();
+
+        // TODO load indexInfo->ImplTableDescriptions
 
         indexInfo->State = TIndexBuildInfo::EState(
             row.template GetValue<Schema::IndexBuild::State>());
@@ -3402,11 +3265,22 @@ struct TViewInfo : TSimpleRefCount<TViewInfo> {
     TString QueryText;
 };
 
+struct TResourcePoolInfo : TSimpleRefCount<TResourcePoolInfo> {
+    using TPtr = TIntrusivePtr<TResourcePoolInfo>;
+
+    ui64 AlterVersion = 0;
+    NKikimrSchemeOp::TResourcePoolProperties Properties;
+};
+
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
     const THashMap<ui32, TTableInfo::TColumn>& sourceColumns,
     const THashMap<ui32, TTableInfo::TColumn>& alterColumns,
     const THashMap<TString, ui32>& colName2Id,
     const TSubDomainInfo& subDomain, TString& errStr);
+
+std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceName, const TString& dataType,
+    const NKikimr::NScheme::TTypeRegistry& typeRegistry, bool pgTypesEnabled, TString& errStr);
+
 }
 
 }

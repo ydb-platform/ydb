@@ -169,12 +169,12 @@ BOOST_DLLEXPORT void iserializer<Archive, T>::load_object_data(
     void *x,
     const unsigned int file_version
 ) const {
-    // note: we now comment this out. Before we permited archive
+    // note: we now comment this out. Before we permitted archive
     // version # to be very large.  Now we don't.  To permit
     // readers of these old archives, we have to suppress this
     // code.  Perhaps in the future we might re-enable it but
     // permit its suppression with a runtime switch.
-    #if 0
+    #if 1
     // trap case where the program cannot handle the current version
     if(file_version > static_cast<const unsigned int>(version()))
         boost::serialization::throw_exception(
@@ -184,7 +184,7 @@ BOOST_DLLEXPORT void iserializer<Archive, T>::load_object_data(
             )
         );
     #endif
-    // make sure call is routed through the higest interface that might
+    // make sure call is routed through the highest interface that might
     // be specialized by the user.
     boost::serialization::serialize_adl(
         boost::serialization::smart_cast_reference<Archive &>(ar),
@@ -308,7 +308,7 @@ private:
         const unsigned int file_version
     ) const BOOST_OVERRIDE BOOST_USED;
 public:
-    // this should alway be a singleton so make the constructor protected
+    // this should always be a singleton so make the constructor protected
     pointer_iserializer();
     ~pointer_iserializer() BOOST_OVERRIDE;
 };
@@ -392,7 +392,7 @@ struct load_non_pointer_type {
         template<class T>
         static void invoke(Archive & ar, const T & t){
             // short cut to user's serializer
-            // make sure call is routed through the higest interface that might
+            // make sure call is routed through the highest interface that might
             // be specialized by the user.
             boost::serialization::serialize_adl(
                 ar,
@@ -589,7 +589,7 @@ struct load_array_type {
                     boost::archive::archive_exception::array_size_too_short
                 )
             );
-        // explict template arguments to pass intel C++ compiler
+        // explicit template arguments to pass intel C++ compiler
         ar >> serialization::make_array<
             value_type,
             boost::serialization::collection_size_type

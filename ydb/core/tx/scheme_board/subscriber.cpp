@@ -342,6 +342,7 @@ namespace {
     struct TEvPrivate {
         enum EEv {
             EvReplicaMissing = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
+            EvSwitchReplica,
 
             EvEnd,
         };
@@ -610,9 +611,14 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
     NJson::TJsonMap MonAttributes() const override {
         return {
             {"Parent", TMonitorableActor<TDerived>::PrintActorIdAttr(NKikimrServices::TActivity::SCHEME_BOARD_SUBSCRIBER_ACTOR, Parent)},
-            {"Replica", TMonitorableActor<TDerived>::PrintActorIdAttr(NKikimrServices::TActivity::SCHEME_BOARD_REPLICA_ACTOR, Replica)},
+            {"ReplicaIndex", TStringBuilder() << ReplicaIndex << '/' << TotalReplicas},
             {"Path", ToString(Path)},
         };
+    }
+
+    void HandleSwitchReplica(STATEFN_SIG) {
+        Replica = ev->Sender;
+        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, ReplicaSubscriber, this->SelfId(), nullptr, 0));
     }
 
 public:
@@ -626,10 +632,14 @@ public:
 
     explicit TSubscriberProxy(
             const TActorId& parent,
+            const ui32 replicaIndex,
+            const ui32 totalReplicas,
             const TActorId& replica,
             const TPath& path,
             const ui64 domainOwnerId)
         : Parent(parent)
+        , ReplicaIndex(replicaIndex)
+        , TotalReplicas(totalReplicas)
         , Replica(replica)
         , Path(path)
         , DomainOwnerId(domainOwnerId)
@@ -656,6 +666,8 @@ public:
             hFunc(TEvents::TEvGone, Handle);
             hFunc(TEvPrivate::TEvReplicaMissing, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
+
+            fFunc(TEvPrivate::EvSwitchReplica, HandleSwitchReplica);
         }
     }
 
@@ -667,6 +679,8 @@ public:
 
             CFunc(TEvents::TEvWakeup::EventType, Bootstrap);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
+
+            fFunc(TEvPrivate::EvSwitchReplica, HandleSwitchReplica);
         }
     }
 
@@ -674,7 +688,9 @@ public:
 
 private:
     const TActorId Parent;
-    const TActorId Replica;
+    const ui32 ReplicaIndex;
+    const ui32 TotalReplicas;
+    TActorId Replica;
     const TPath Path;
     const ui64 DomainOwnerId;
 
@@ -778,7 +794,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         DelayedSyncRequest = 0;
 
         Y_ABORT_UNLESS(PendingSync.empty());
-        for (const auto& proxy : Proxies) {
+        for (const auto& [proxy, replica] : Proxies) {
             this->Send(proxy, new NInternalEvents::TEvSyncVersionRequest(Path), 0, CurrentSyncRequest);
             PendingSync.emplace(proxy);
         }
@@ -946,13 +962,26 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         const auto& replicas = ev->Get()->Replicas;
 
         if (replicas.empty()) {
+            Y_ABORT_UNLESS(Proxies.empty());
             SBS_LOG_E("Subscribe on unconfigured SchemeBoard");
             this->Become(&TDerived::StateCalm);
             return;
         }
 
-        for (const auto& replica : replicas) {
-            Proxies.emplace(this->RegisterWithSameMailbox(new TProxyDerived(this->SelfId(), replica, Path, DomainOwnerId)));
+        Y_ABORT_UNLESS(Proxies.empty() || Proxies.size() == replicas.size());
+
+        if (Proxies.empty()) {
+            for (size_t i = 0; i < replicas.size(); ++i) {
+                Proxies.emplace_back(this->RegisterWithSameMailbox(new TProxyDerived(this->SelfId(), i, replicas.size(),
+                    replicas[i], Path, DomainOwnerId)), replicas[i]);
+            }
+        } else {
+            for (size_t i = 0; i < replicas.size(); ++i) {
+                if (auto& [proxy, replica] = Proxies[i]; replica != replicas[i]) {
+                    TActivationContext::Send(new IEventHandle(TEvPrivate::EvSwitchReplica, 0, proxy, replicas[i], nullptr, 0));
+                    replica = replicas[i];
+                }
+            }
         }
 
         this->Become(&TDerived::StateWork);
@@ -1011,9 +1040,12 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     }
 
     void PassAway() override {
-        for (const auto& proxy : Proxies) {
+        for (const auto& [proxy, replica] : Proxies) {
             this->Send(proxy, new TEvents::TEvPoisonPill());
         }
+
+        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, MakeStateStorageProxyID(),
+            this->SelfId(), nullptr, 0));
 
         TMonitorableActor<TDerived>::PassAway();
     }
@@ -1050,7 +1082,7 @@ public:
         TMonitorableActor<TDerived>::Bootstrap();
 
         const TActorId proxy = MakeStateStorageProxyID();
-        this->Send(proxy, new TEvStateStorage::TEvResolveSchemeBoard(Path), IEventHandle::FlagTrackDelivery);
+        this->Send(proxy, new TEvStateStorage::TEvResolveSchemeBoard(Path, true), IEventHandle::FlagTrackDelivery);
         this->Become(&TDerived::StateResolve);
     }
 
@@ -1069,6 +1101,8 @@ public:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(TEvStateStorage::TEvResolveReplicasList, Handle);
+
             hFunc(NInternalEvents::TEvNotify, Handle);
             hFunc(NInternalEvents::TEvSyncRequest, Handle); // from owner (cache)
             hFunc(NInternalEvents::TEvSyncVersionResponse, Handle); // from proxies
@@ -1094,7 +1128,7 @@ private:
     const TPath Path;
     const ui64 DomainOwnerId;
 
-    TSet<TActorId> Proxies;
+    std::vector<std::tuple<TActorId, TActorId>> Proxies;
     TMap<TActorId, TState> States;
     TMap<TActorId, TNotifyResponse> InitialResponses;
     TMaybe<TState> State;

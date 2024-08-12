@@ -1,7 +1,8 @@
 #pragma once
 
-#include <ydb/core/kqp/provider/yql_kikimr_results.h>
-#include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/common/simple/query_ast.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/yql/core/pg_settings/guc_settings.h>
 
 namespace NKikimr {
@@ -84,7 +85,7 @@ NSQLTranslation::EBindingsMode RemapBindingsMode(NKikimrConfig::TTableServiceCon
 NYql::EKikimrQueryType ConvertType(NKikimrKqp::EQueryType type);
 
 NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui16>& sqlVersion, bool& deprecatedSQL,
-    NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder, bool& keepInCache);
+    NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder, bool& keepInCache, TMaybe<TString>& commandTagName);
 
 TVector<TQueryAst> ParseStatements(const TString& queryText, const TMaybe<Ydb::Query::Syntax>& syntax, bool isSql, TKqpTranslationSettingsBuilder& settingsBuilder, bool perStatementExecution);
 

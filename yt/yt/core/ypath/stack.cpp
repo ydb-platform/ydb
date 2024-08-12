@@ -86,6 +86,13 @@ TString TYPathStack::ToString(const TYPathStack::TEntry& item)
         });
 }
 
+void TYPathStack::Reset()
+{
+    PreviousPathLengths_.clear();
+    Path_.clear();
+    Items_.clear();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NYPath

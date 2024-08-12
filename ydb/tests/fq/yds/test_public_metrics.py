@@ -34,18 +34,42 @@ class TestPublicMetrics(TestYdsBase):
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
         metrics = kikimr.compute_plane.get_sensors(1, "yq_public")
-        assert metrics.find_sensor(
-            {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.running_tasks"}) == 0
-        assert metrics.find_sensor(
-            {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.cpu_usage_us"}) > 0
-        assert metrics.find_sensor({"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id,
-                                    "name": "query.memory_usage_bytes"}) > 0
-        assert metrics.find_sensor(
-            {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.input_bytes"}) > 0
-        assert metrics.find_sensor(
-            {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.output_bytes"}) is None
-        assert metrics.find_sensor(
-            {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.uptime_seconds"}) >= 0
+        assert (
+            metrics.find_sensor(
+                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.running_tasks"}
+            )
+            == 0
+        )
+        assert (
+            metrics.find_sensor(
+                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.cpu_usage_us"}
+            )
+            > 0
+        )
+        assert (
+            metrics.find_sensor(
+                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.memory_usage_bytes"}
+            )
+            > 0
+        )
+        assert (
+            metrics.find_sensor(
+                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.input_bytes"}
+            )
+            > 0
+        )
+        assert (
+            metrics.find_sensor(
+                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.output_bytes"}
+            )
+            is None
+        )
+        assert (
+            metrics.find_sensor(
+                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.uptime_seconds"}
+            )
+            >= 0
+        )
 
     @yq_v1
     @pytest.mark.parametrize("stats_mode", ["STATS_MODE_FULL"])
@@ -77,18 +101,42 @@ class TestPublicMetrics(TestYdsBase):
         client.wait_query_status(query_id, fq.QueryMeta.ABORTED_BY_USER)
 
         metrics = kikimr.compute_plane.get_sensors(1, "yq_public")
-        assert metrics.find_sensor(
-            {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.running_tasks"}) == 0
-        assert metrics.find_sensor(
-            {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.cpu_usage_us"}) > 0
-        assert metrics.find_sensor({"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id,
-                                    "name": "query.memory_usage_bytes"}) > 0
-        assert metrics.find_sensor(
-            {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.input_bytes"}) > 0
-        assert metrics.find_sensor(
-            {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.output_bytes"}) > 0
-        assert metrics.find_sensor(
-            {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.uptime_seconds"}) >= 0
+        assert (
+            metrics.find_sensor(
+                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.running_tasks"}
+            )
+            == 0
+        )
+        assert (
+            metrics.find_sensor(
+                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.cpu_usage_us"}
+            )
+            > 0
+        )
+        assert (
+            metrics.find_sensor(
+                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.memory_usage_bytes"}
+            )
+            > 0
+        )
+        assert (
+            metrics.find_sensor(
+                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.input_bytes"}
+            )
+            > 0
+        )
+        assert (
+            metrics.find_sensor(
+                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.output_bytes"}
+            )
+            > 0
+        )
+        assert (
+            metrics.find_sensor(
+                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.uptime_seconds"}
+            )
+            >= 0
+        )
         # TODO: rows must be fixed in YQ-2592
         # assert metrics.find_sensor({"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id,
         #                             "name": "query.source_input_records"}) > 0

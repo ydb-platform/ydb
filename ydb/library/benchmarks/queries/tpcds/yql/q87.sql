@@ -4,7 +4,7 @@
 $bla1 = (select distinct
        COALESCE(c_last_name,'') as c_last_name,
        COALESCE(c_first_name,'') as c_first_name,
-       COALESCE(d_date, cast(0 as Date)) as d_date
+       COALESCE(cast(d_date as date), cast(0 as Date)) as d_date
        from {{store_sales}} as store_sales
        cross join {{date_dim}} as date_dim
        cross join  {{customer}} as customer
@@ -15,7 +15,7 @@ $bla1 = (select distinct
 $bla2 = ((select distinct
        COALESCE(c_last_name,'') as c_last_name,
        COALESCE(c_first_name,'') as c_first_name,
-       COALESCE(d_date, cast(0 as Date)) as d_date
+       COALESCE(cast(d_date as date), cast(0 as Date)) as d_date
        from {{catalog_sales}} as catalog_sales
        cross join {{date_dim}} as date_dim
        cross join {{customer}} as customer
@@ -26,7 +26,7 @@ $bla2 = ((select distinct
       (select distinct
        COALESCE(c_last_name,'') as c_last_name,
        COALESCE(c_first_name,'') as c_first_name,
-       COALESCE(d_date, cast(0 as Date)) as d_date
+       COALESCE(cast(d_date as date), cast(0 as Date)) as d_date
        from {{web_sales}} as web_sales
        cross join {{date_dim}} as date_dim
        cross join {{customer}} as customer

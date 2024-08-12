@@ -7,10 +7,24 @@
 
 /ydb/library/yql/ @ydb-platform/yql
 /ydb/library/yql/dq @ydb-platform/yql @ydb-platform/qp
+/ydb/library/yql/providers/common/http_gateway @ydb-platform/fq
+/ydb/library/yql/providers/common/db_id_async_resolver @ydb-platform/fq
 /ydb/library/yql/providers/generic @ydb-platform/fq
 /ydb/library/yql/providers/pq @ydb-platform/fq
 /ydb/library/yql/providers/s3 @ydb-platform/fq
 /ydb/library/yql/providers/solomon @ydb-platform/fq
 
+/ydb/library/yql/yt @Krock21 @Krisha11 @zlobober @gritukan
+
 /ydb/services/fq/ @ydb-platform/fq
 
+/ydb/core/kafka_proxy @ydb-platform/Topics
+/ydb/core/persqueue @ydb-platform/Topics
+/ydb/services/datastreams @ydb-platform/Topics
+/ydb/services/deprecated/persqueue_v0 @ydb-platform/Topics
+/ydb/services/persqueue_v1 @ydb-platform/Topics
+
+/ydb/core/config/ut @ydb-platform/core
+
+/ydb/core/viewer @ydb-platform/ui-backend
+/ydb/core/protos/node_whiteboard.proto @ydb-platform/ui-backend

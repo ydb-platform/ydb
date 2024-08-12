@@ -22,14 +22,27 @@ TTopicSdkTestSetup::TTopicSdkTestSetup(const TString& testCaseName, const NKikim
     }
 }
 
+void TTopicSdkTestSetup::CreateTopicWithAutoscale(const TString& path, const TString& consumer, size_t partitionCount, size_t maxPartitionCount) {
+    CreateTopic(path, consumer, partitionCount, maxPartitionCount);
+}
+
 void TTopicSdkTestSetup::CreateTopic(const TString& path, const TString& consumer, size_t partitionCount, std::optional<size_t> maxPartitionCount)
 {
     TTopicClient client(MakeDriver());
 
     TCreateTopicSettings topics;
-    TPartitioningSettings partitions(partitionCount, maxPartitionCount.value_or(partitionCount));
+    topics
+        .BeginConfigurePartitioningSettings()
+        .MinActivePartitions(partitionCount)
+        .MaxActivePartitions(maxPartitionCount.value_or(partitionCount));
 
-    topics.PartitioningSettings(partitions);
+    if (maxPartitionCount.has_value() && maxPartitionCount.value() > partitionCount) {
+        topics
+            .BeginConfigurePartitioningSettings()
+            .BeginConfigureAutoPartitioningSettings()
+            .Strategy(EAutoPartitioningStrategy::ScaleUp);
+    }
+
     TConsumerSettings<TCreateTopicSettings> consumers(topics, consumer);
     topics.AppendConsumers(consumers);
 

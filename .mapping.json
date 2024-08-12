@@ -1,0 +1,13 @@
+{
+  "build/mapping.conf.json":"devtools/ya/opensource/mapping.conf.json",
+  "build/scripts":"build/export_generators/hardcoded-cmake/build/scripts",
+  "build/scripts/create_recursive_library_for_cmake.py":"build/export_generators/hardcoded-cmake/build/scripts/create_recursive_library_for_cmake.py",
+  "build/scripts/export_script_gen.py":"build/export_generators/hardcoded-cmake/build/scripts/export_script_gen.py",
+  "build/scripts/gather_swig_java.cmake":"build/export_generators/hardcoded-cmake/build/scripts/gather_swig_java.cmake",
+  "build/scripts/generate_vcs_info.py":"build/export_generators/hardcoded-cmake/build/scripts/generate_vcs_info.py",
+  "build/scripts/re_replace.py":"build/export_generators/hardcoded-cmake/build/scripts/re_replace.py",
+  "build/scripts/split_unittest.py":"build/export_generators/hardcoded-cmake/build/scripts/split_unittest.py",
+  "build/ya.conf.json":"devtools/ya/opensource/ya.conf.json",
+  "ya":"devtools/ya/opensource/ya",
+  "ya.conf":"devtools/ya/opensource/ya.conf"
+}

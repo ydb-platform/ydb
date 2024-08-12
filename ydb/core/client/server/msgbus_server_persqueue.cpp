@@ -65,7 +65,7 @@ TProcessingResult ProcessMetaCacheSingleTopicsResponse(
                 MSTATUS_ERROR,
                 NPersQueue::NErrorCode::UNKNOWN_TOPIC,
                 Sprintf("path '%s' has unknown/invalid root prefix '%s', Marker# PQ14",
-                        fullPath.c_str(), entry.Path[0].c_str()),
+                        fullPath.c_str(), entry.Path.empty() ? "" :entry.Path[0].c_str()),
                 true
             };
         }

@@ -81,6 +81,15 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         return ev;
     }
 
+    template <typename C>
+    TVector<ui64> MakeTabletIds(const C& partitions) {
+        TVector<ui64> tabletIds;
+        for (const auto& x : partitions) {
+            tabletIds.push_back(x.GetDatashardId());
+        }
+        return tabletIds;
+    }
+
     TVector<ui64> Prepare(TTestActorRuntime& runtime, const TString& mainTablePath, const TVector<ui32>& recordIds, bool block = false) {
         ui64 mainTableId = 0;
         TVector<ui64> mainTabletIds;
@@ -88,12 +97,8 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
 
         {
             auto tableDesc = DescribePath(runtime, mainTablePath, true, true);
-            const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
-
             mainTableId = tableDesc.GetPathId();
-            for (const auto& partition : tablePartitions) {
-                mainTabletIds.push_back(partition.GetDatashardId());
-            }
+            mainTabletIds = MakeTabletIds(tableDesc.GetPathDescription().GetTablePartitions());
         }
 
         for (ui32 i : recordIds) {
@@ -183,22 +188,42 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         return writtenToMainTable;
     }
 
+    enum ESplitOp {
+        SPLIT_OP_MAIN = 0x01,
+        SPLIT_OP_INDEX = 0x02,
+        SPLIT_OP_BOTH = 0x03,
+    };
+
     template <typename T>
-    void SplitWithReboots(
+    void SplitWithReboots(ESplitOp op,
             const std::function<void(T&, TTestActorRuntime&)>& init,
-            const std::function<void(T&, TTestActorRuntime&, const TVector<ui64>& tablets)>& split)
+            const std::function<ui64(T&, TTestActorRuntime&, const TString&, const TVector<ui64>&)>& split)
     {
         T t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TVector<ui64> mainTabletIds;
+            TVector<ui64> indexTabletIds;
+
             {
                 TInactiveZone inactive(activeZone);
+                runtime.SetLogPriority(NKikimrServices::CHANGE_EXCHANGE, NActors::NLog::PRI_DEBUG);
 
                 init(t, runtime);
+
+                auto indexDesc = DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndex/indexImplTable", true, true);
+                indexTabletIds = MakeTabletIds(indexDesc.GetPathDescription().GetTablePartitions());
                 mainTabletIds = Prepare(runtime, "/MyRoot/Table", {1, 10, 100});
             }
 
-            split(t, runtime, mainTabletIds);
+            TVector<ui64> txIds;
+            if (op & SPLIT_OP_MAIN) {
+                txIds.push_back(split(t, runtime, "/MyRoot/Table", mainTabletIds));
+            }
+            if (op & SPLIT_OP_INDEX) {
+                txIds.push_back(split(t, runtime, "/MyRoot/Table/UserDefinedIndex/indexImplTable", indexTabletIds));
+            }
+            t.TestEnv->TestWaitNotification(runtime, txIds);
+
             {
                 TInactiveZone inactive(activeZone);
 
@@ -219,10 +244,10 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
     }
 
     template <typename T>
-    void SplitWithReboots(const std::function<void(T&, TTestActorRuntime&)>& init) {
-        SplitWithReboots<T>(init, [](T& t, TTestActorRuntime& runtime, const TVector<ui64>& tablets) {
+    void SplitWithReboots(ESplitOp op, const std::function<void(T&, TTestActorRuntime&)>& init) {
+        SplitWithReboots<T>(op, init, [](T& t, TTestActorRuntime& runtime, const TString& path, const TVector<ui64>& tablets) {
             UNIT_ASSERT_VALUES_EQUAL(tablets.size(), 1);
-            TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", Sprintf(R"(
+            TestSplitTable(runtime, ++t.TxId, path, Sprintf(R"(
                 SourceTabletId: %lu
                 SplitBoundary {
                   KeyPrefix {
@@ -230,12 +255,50 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
                   }
                 }
             )", tablets[0]));
+            return t.TxId;
+        });
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS(SplitMainWithReboots) {
+        SplitWithReboots<T>(SPLIT_OP_MAIN, [](T& t, TTestActorRuntime& runtime) {
+            TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
+                TableDescription {
+                  Name: "Table"
+                  Columns { Name: "key" Type: "Uint32" }
+                  Columns { Name: "indexed" Type: "Uint32" }
+                  KeyColumnNames: ["key"]
+                }
+                IndexDescription {
+                  Name: "UserDefinedIndex"
+                  KeyColumnNames: ["indexed"]
+                  Type: EIndexTypeGlobalAsync
+                }
+            )");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(SplitWithReboots) {
-        SplitWithReboots<T>([](T& t, TTestActorRuntime& runtime) {
+    Y_UNIT_TEST_WITH_REBOOTS(SplitIndexWithReboots) {
+        SplitWithReboots<T>(SPLIT_OP_INDEX, [](T& t, TTestActorRuntime& runtime) {
+            TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
+                TableDescription {
+                  Name: "Table"
+                  Columns { Name: "key" Type: "Uint32" }
+                  Columns { Name: "indexed" Type: "Uint32" }
+                  KeyColumnNames: ["key"]
+                }
+                IndexDescription {
+                  Name: "UserDefinedIndex"
+                  KeyColumnNames: ["indexed"]
+                  Type: EIndexTypeGlobalAsync
+                }
+            )");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+        });
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS(SplitBothWithReboots) {
+        SplitWithReboots<T>(SPLIT_OP_BOTH, [](T& t, TTestActorRuntime& runtime) {
             TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
                 TableDescription {
                   Name: "Table"
@@ -254,7 +317,7 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(CdcAndSplitWithReboots) {
-        SplitWithReboots<T>([](T& t, TTestActorRuntime& runtime) {
+        SplitWithReboots<T>(SPLIT_OP_MAIN, [](T& t, TTestActorRuntime& runtime) {
             TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
                 TableDescription {
                   Name: "Table"
@@ -283,19 +346,19 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
     }
 
     template <typename T>
-    void MergeWithReboots(const std::function<void(T&, TTestActorRuntime&)>& init) {
-        SplitWithReboots<T>(init, [](T& t, TTestActorRuntime& runtime, const TVector<ui64>& tablets) {
+    void MergeWithReboots(ESplitOp op, const std::function<void(T&, TTestActorRuntime&)>& init) {
+        SplitWithReboots<T>(op, init, [](T& t, TTestActorRuntime& runtime, const TString& path, const TVector<ui64>& tablets) {
             UNIT_ASSERT_VALUES_EQUAL(tablets.size(), 2);
-            TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", Sprintf(R"(
+            TestSplitTable(runtime, ++t.TxId, path, Sprintf(R"(
                 SourceTabletId: %lu
                 SourceTabletId: %lu
             )", tablets[0], tablets[1]));
-            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            return t.TxId;
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(MergeWithReboots) {
-        MergeWithReboots<T>([](T& t, TTestActorRuntime& runtime) {
+    Y_UNIT_TEST_WITH_REBOOTS(MergeMainWithReboots) {
+        MergeWithReboots<T>(SPLIT_OP_MAIN, [](T& t, TTestActorRuntime& runtime) {
             TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
                 TableDescription {
                   Name: "Table"
@@ -323,8 +386,80 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
+    Y_UNIT_TEST_WITH_REBOOTS(MergeIndexWithReboots) {
+        MergeWithReboots<T>(SPLIT_OP_INDEX, [](T& t, TTestActorRuntime& runtime) {
+            TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
+                TableDescription {
+                  Name: "Table"
+                  Columns { Name: "key" Type: "Uint32" }
+                  Columns { Name: "indexed" Type: "Uint32" }
+                  KeyColumnNames: ["key"]
+                }
+                IndexDescription {
+                  Name: "UserDefinedIndex"
+                  KeyColumnNames: ["indexed"]
+                  Type: EIndexTypeGlobalAsync
+                  IndexImplTableDescriptions: [ {
+                    SplitBoundary {
+                      KeyPrefix {
+                        Tuple { Optional { Uint32: 50 } }
+                      }
+                    }
+                    PartitionConfig {
+                      PartitioningPolicy {
+                        MinPartitionsCount: 1
+                      }
+                    }
+                  } ]
+                }
+            )");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+        });
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS(MergeBothWithReboots) {
+        MergeWithReboots<T>(SPLIT_OP_BOTH, [](T& t, TTestActorRuntime& runtime) {
+            TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
+                TableDescription {
+                  Name: "Table"
+                  Columns { Name: "key" Type: "Uint32" }
+                  Columns { Name: "indexed" Type: "Uint32" }
+                  KeyColumnNames: ["key"]
+                  SplitBoundary {
+                    KeyPrefix {
+                      Tuple { Optional { Uint32: 50 } }
+                    }
+                  }
+                  PartitionConfig {
+                    PartitioningPolicy {
+                      MinPartitionsCount: 1
+                    }
+                  }
+                }
+                IndexDescription {
+                  Name: "UserDefinedIndex"
+                  KeyColumnNames: ["indexed"]
+                  Type: EIndexTypeGlobalAsync
+                  IndexImplTableDescriptions: [ {
+                    SplitBoundary {
+                      KeyPrefix {
+                        Tuple { Optional { Uint32: 50 } }
+                      }
+                    }
+                    PartitionConfig {
+                      PartitioningPolicy {
+                        MinPartitionsCount: 1
+                      }
+                    }
+                  } ]
+                }
+            )");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+        });
+    }
+
     Y_UNIT_TEST_WITH_REBOOTS(CdcAndMergeWithReboots) {
-        MergeWithReboots<T>([](T& t, TTestActorRuntime& runtime) {
+        MergeWithReboots<T>(SPLIT_OP_MAIN, [](T& t, TTestActorRuntime& runtime) {
             TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
                 TableDescription {
                   Name: "Table"

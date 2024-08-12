@@ -45,6 +45,7 @@ public:
         AddHandler(0, &TDqJoin::Match, HNDL(SuppressSortOnJoinInput));
         AddHandler(0, &TDqJoin::Match, HNDL(RewriteRightJoinToLeft));
         AddHandler(0, &TDqJoin::Match, HNDL(RewriteLeftPureJoin<false>));
+        AddHandler(0, &TDqJoin::Match, HNDL(RewriteStreamLookupJoin));
         AddHandler(0, &TDqJoin::Match, HNDL(BuildJoin<false>));
         AddHandler(0, &TCoAssumeSorted::Match, HNDL(BuildSortStage<false>));
         AddHandler(0, &TCoOrderedLMap::Match, HNDL(PushOrderedLMapToStage<false>));
@@ -204,12 +205,58 @@ protected:
         return DqRewriteLeftPureJoin(node, ctx, *getParents(), IsGlobal);
     }
 
+    TMaybeNode<TExprBase> RewriteStreamLookupJoin(TExprBase node, TExprContext& ctx) {
+        const auto join = node.Cast<TDqJoin>();
+        if (join.JoinAlgo().StringValue() != "StreamLookupJoin") {
+            return node;
+        }
+
+        const auto pos = node.Pos();
+        const auto left = join.LeftInput().Maybe<TDqConnection>();
+        if (!left) {
+            return node;
+        }
+        auto cn = Build<TDqCnStreamLookup>(ctx, pos)
+            .Output(left.Output().Cast())
+            .LeftLabel(join.LeftLabel().Cast<NNodes::TCoAtom>())
+            .RightInput(join.RightInput())
+            .RightLabel(join.RightLabel().Cast<NNodes::TCoAtom>())
+            .JoinKeys(join.JoinKeys())
+            .JoinType(join.JoinType())
+            .LeftJoinKeyNames(join.LeftJoinKeyNames())
+            .RightJoinKeyNames(join.RightJoinKeyNames())
+            .TTL(ctx.NewAtom(pos, 300)) //TODO configure me
+            .MaxCachedRows(ctx.NewAtom(pos, 1'000'000)) //TODO configure me
+            .MaxDelay(ctx.NewAtom(pos, 1'000'000)) //Configure me
+        .Done();
+
+        auto lambda = Build<TCoLambda>(ctx, pos)
+            .Args({"stream"})
+            .Body("stream")
+            .Done();
+        const auto stage = Build<TDqStage>(ctx, pos)
+            .Inputs()
+                .Add(cn)
+                .Build()
+            .Program(lambda)
+            .Settings(TDqStageSettings().BuildNode(ctx, pos))
+            .Done();
+
+        return Build<TDqCnUnionAll>(ctx, pos)
+            .Output()
+                .Stage(stage)
+                .Index().Build("0")
+                .Build()
+            .Done();
+    }
+
     template <bool IsGlobal>
     TMaybeNode<TExprBase> BuildJoin(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
         const auto join = node.Cast<TDqJoin>();
         const TParentsMap* parentsMap = getParents();
         const auto mode = Config->HashJoinMode.Get().GetOrElse(EHashJoinMode::Off);
-        return DqBuildJoin(join, ctx, optCtx, *parentsMap, IsGlobal, /* pushLeftStage = */ false /* TODO */, mode);
+        const auto useGraceJoin = Config->UseGraceJoinCoreForMap.Get().GetOrElse(false);
+        return DqBuildJoin(join, ctx, optCtx, *parentsMap, IsGlobal, /* pushLeftStage = */ false /* TODO */, mode, true, useGraceJoin);
     }
 
     template <bool IsGlobal>

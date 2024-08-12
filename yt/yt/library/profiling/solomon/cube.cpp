@@ -731,11 +731,14 @@ int TCube<T>::ReadSensorValues(
 }
 
 template <class T>
-void TCube<T>::DumpCube(NProto::TCube *cube) const
+void TCube<T>::DumpCube(NProto::TCube *cube, const std::vector<TTagId>& extraTags) const
 {
     for (const auto& [tagIds, window] : Projections_) {
         auto projection = cube->add_projections();
         for (auto tagId : tagIds) {
+            projection->add_tag_ids(tagId);
+        }
+        for (auto tagId : extraTags) {
             projection->add_tag_ids(tagId);
         }
 

@@ -78,7 +78,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const NLogging::TLogger Logger("ProtobufInterop");
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "ProtobufInterop");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -132,14 +132,15 @@ bool IsMapKeyType(FieldDescriptor::Type type)
 TString ToUnderscoreCase(const TString& protobufName)
 {
     TStringBuilder builder;
-    for (auto ch : protobufName) {
-        if (isupper(ch)) {
-            if (builder.GetLength() > 0 && builder.GetBuffer()[builder.GetLength() - 1] != '_') {
+    for (size_t i = 0; i < protobufName.size(); ++i) {
+        if (isupper(protobufName[i])) {
+            size_t length = builder.GetLength();
+            if (length && builder.GetBuffer()[length - 1] != '_' && !isupper(protobufName[i - 1])) {
                 builder.AppendChar('_');
             }
-            builder.AppendChar(tolower(ch));
+            builder.AppendChar(tolower(protobufName[i]));
         } else {
-            builder.AppendChar(ch);
+            builder.AppendChar(protobufName[i]);
         }
     }
     return builder.Flush();
@@ -540,20 +541,20 @@ public:
         }
 
         switch (GetType()) {
-            case FieldDescriptor::TYPE_INT32:
             case FieldDescriptor::TYPE_FIXED32:
             case FieldDescriptor::TYPE_UINT32:
                 consumer->OnStringScalar("uint32");
                 break;
-            case FieldDescriptor::TYPE_INT64:
             case FieldDescriptor::TYPE_FIXED64:
             case FieldDescriptor::TYPE_UINT64:
                 consumer->OnStringScalar("uint64");
                 break;
+            case FieldDescriptor::TYPE_INT32:
             case FieldDescriptor::TYPE_SINT32:
             case FieldDescriptor::TYPE_SFIXED32:
                 consumer->OnStringScalar("int32");
                 break;
+            case FieldDescriptor::TYPE_INT64:
             case FieldDescriptor::TYPE_SINT64:
             case FieldDescriptor::TYPE_SFIXED64:
                 consumer->OnStringScalar("int64");

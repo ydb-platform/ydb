@@ -13,7 +13,7 @@ public:
 
     /// If header is true read column names from first line after skipRows. Parse columns as strings in this case.
     /// @note It's possible to skip header with skipRows and use typed columns instead.
-    TArrowCSV(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns, bool header = false, const std::set<std::string>& notNullColumns = {});
+    static arrow::Result<TArrowCSV> Create(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns, bool header = false, const std::set<std::string>& notNullColumns = {});
 
     std::shared_ptr<arrow::RecordBatch> ReadNext(const TString& csv, TString& errString);
     std::shared_ptr<arrow::RecordBatch> ReadSingleBatch(const TString& csv, TString& errString);
@@ -50,6 +50,13 @@ public:
     void SetNullValue(const TString& null = "");
 
 private:
+    struct TColumnInfo {
+        TString Name;
+        std::shared_ptr<arrow::DataType> ArrowType;
+        std::shared_ptr<arrow::DataType>CsvArrowType;
+    };
+    using TColummns = TVector<TColumnInfo>;
+    TArrowCSV(const TColummns& columns, bool header, const std::set<std::string>& notNullColumns);
     arrow::csv::ReadOptions ReadOptions;
     arrow::csv::ParseOptions ParseOptions;
     arrow::csv::ConvertOptions ConvertOptions;

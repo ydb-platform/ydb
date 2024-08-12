@@ -25,9 +25,9 @@ public:
 
 #define UPDATE_CELL(VALUE, COLUMN) \
             if (const auto& x = stats.VALUE) { \
-                db.Table<Schema::GroupLatencies>().Key(groupId).Update(NIceDb::TUpdate<Schema::GroupLatencies::COLUMN>(x->MicroSeconds())); \
+                db.Table<Schema::GroupLatencies>().Key(groupId.GetRawId()).Update(NIceDb::TUpdate<Schema::GroupLatencies::COLUMN>(x->MicroSeconds())); \
             } else { \
-                db.Table<Schema::GroupLatencies>().Key(groupId).Update(NIceDb::TNull<Schema::GroupLatencies::COLUMN>()); \
+                db.Table<Schema::GroupLatencies>().Key(groupId.GetRawId()).Update(NIceDb::TNull<Schema::GroupLatencies::COLUMN>()); \
             }
 
             UPDATE_CELL(PutTabletLog, PutTabletLogLatencyUs);

@@ -1,7 +1,10 @@
 #pragma once
 #include "common/owner.h"
+#include "common/histogram.h"
+#include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/columnshard/resources/memory.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/counters.h>
+#include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NKikimr::NColumnShard {
@@ -9,21 +12,23 @@ namespace NKikimr::NColumnShard {
 class TScanAggregations: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
-    std::shared_ptr<NOlap::TMemoryAggregation> ReadBlobs;
-    std::shared_ptr<NOlap::TMemoryAggregation> GranulesProcessing;
-    std::shared_ptr<NOlap::TMemoryAggregation> GranulesReady;
     std::shared_ptr<NOlap::TMemoryAggregation> ResultsReady;
+    std::shared_ptr<NOlap::TMemoryAggregation> RequestedResourcesMemory;
     std::shared_ptr<TValueAggregationClient> ScanDuration;
     std::shared_ptr<TValueAggregationClient> BlobsWaitingDuration;
 public:
     TScanAggregations(const TString& moduleId)
         : TBase(moduleId)
-        , GranulesProcessing(std::make_shared<NOlap::TMemoryAggregation>(moduleId, "InFlight/Granules/Processing"))
         , ResultsReady(std::make_shared<NOlap::TMemoryAggregation>(moduleId, "InFlight/Results/Ready"))
+        , RequestedResourcesMemory(std::make_shared<NOlap::TMemoryAggregation>(moduleId, "InFlight/Resources/Requested"))
         , ScanDuration(TBase::GetValueAutoAggregationsClient("ScanDuration"))
         , BlobsWaitingDuration(TBase::GetValueAutoAggregationsClient("BlobsWaitingDuration"))
     {
 
+    }
+
+    std::shared_ptr<NOlap::TMemoryAggregation> GetRequestedResourcesMemory() const {
+        return RequestedResourcesMemory;
     }
 
     void OnBlobWaitingDuration(const TDuration d, const TDuration fullScanDuration) const {
@@ -31,9 +36,6 @@ public:
         ScanDuration->SetValue(fullScanDuration.MicroSeconds());
     }
 
-    const std::shared_ptr<NOlap::TMemoryAggregation>& GetGranulesProcessing() const {
-        return GranulesProcessing;
-    }
     const std::shared_ptr<NOlap::TMemoryAggregation>& GetResultsReady() const {
         return ResultsReady;
     }
@@ -41,6 +43,17 @@ public:
 
 class TScanCounters: public TCommonCountersOwner {
 public:
+    enum class EIntervalStatus {
+        Undefined = 0,
+        WaitResources,
+        WaitSources,
+        WaitMergerStart,
+        WaitMergerContinue,
+        WaitPartialReply,
+
+        COUNT
+    };
+
     enum class EStatusFinish {
         Success /* "Success" */ = 0,
         ConveyorInternalError /* "ConveyorInternalError" */,
@@ -50,9 +63,56 @@ public:
         Deadline /* "Deadline" */,
         UndeliveredEvent /* "UndeliveredEvent" */,
         CannotAddInFlight /* "CannotAddInFlight" */,
+        ProblemOnStart /*ProblemOnStart*/,
 
         COUNT
     };
+
+    class TScanIntervalState {
+    private:
+        std::vector<NMonitoring::TDynamicCounters::TCounterPtr> ValuesByStatus;
+    public:
+        TScanIntervalState(const TScanCounters& counters) {
+            ValuesByStatus.resize((ui32)EIntervalStatus::COUNT);
+            for (auto&& i : GetEnumAllValues<EIntervalStatus>()) {
+                if (i == EIntervalStatus::COUNT) {
+                    continue;
+                }
+                ValuesByStatus[(ui32)i] = counters.CreateSubGroup("status", ::ToString(i)).GetValue("Intervals/Count");
+            }
+        }
+        void Add(const EIntervalStatus status) const {
+            AFL_VERIFY((ui32)status < ValuesByStatus.size());
+            ValuesByStatus[(ui32)status]->Add(1);
+        }
+        void Remove(const EIntervalStatus status) const {
+            AFL_VERIFY((ui32)status < ValuesByStatus.size());
+            ValuesByStatus[(ui32)status]->Sub(1);
+        }
+    };
+
+    class TScanIntervalStateGuard {
+    private:
+        EIntervalStatus Status = EIntervalStatus::Undefined;
+        const std::shared_ptr<TScanIntervalState> BaseCounters;
+    public:
+        TScanIntervalStateGuard(const std::shared_ptr<TScanIntervalState>& baseCounters)
+            : BaseCounters(baseCounters)
+        {
+            BaseCounters->Add(Status);
+        }
+
+        ~TScanIntervalStateGuard() {
+            BaseCounters->Remove(Status);
+        }
+
+        void SetStatus(const EIntervalStatus status) {
+            BaseCounters->Remove(Status);
+            Status = status;
+            BaseCounters->Add(Status);
+        }
+    };
+
 private:
     using TBase = TCommonCountersOwner;
     NMonitoring::TDynamicCounters::TCounterPtr ProcessingOverload;
@@ -68,6 +128,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr AckWaitingDuration;
 
     std::vector<NMonitoring::THistogramPtr> ScanDurationByStatus;
+    std::vector<NMonitoring::TDynamicCounters::TCounterPtr> ScansFinishedByStatus;
 
     NMonitoring::TDynamicCounters::TCounterPtr NoScanRecords;
     NMonitoring::TDynamicCounters::TCounterPtr NoScanIntervals;
@@ -75,8 +136,16 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr LinearScanIntervals;
     NMonitoring::TDynamicCounters::TCounterPtr LogScanRecords;
     NMonitoring::TDynamicCounters::TCounterPtr LogScanIntervals;
+    std::shared_ptr<TScanIntervalState> ScanIntervalState;
 
+    NMonitoring::THistogramPtr HistogramIntervalMemoryRequiredOnFail;
+    NMonitoring::THistogramPtr HistogramIntervalMemoryReduceSize;
+    NMonitoring::THistogramPtr HistogramIntervalMemoryRequiredAfterReduce;
 public:
+
+    TScanIntervalStateGuard CreateIntervalStateGuard() const {
+        return TScanIntervalStateGuard(ScanIntervalState);
+    }
 
     std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters> ResourcesSubscriberCounters;
 
@@ -118,6 +187,18 @@ public:
 
     TScanCounters(const TString& module = "Scan");
 
+    void OnOptimizedIntervalMemoryFailed(const ui64 memoryRequired) const {
+        HistogramIntervalMemoryRequiredOnFail->Collect(memoryRequired / (1024.0 * 1024.0 * 1024.0));
+    }
+
+    void OnOptimizedIntervalMemoryReduced(const ui64 memoryReduceVolume) const {
+        HistogramIntervalMemoryReduceSize->Collect(memoryReduceVolume / (1024.0 * 1024.0 * 1024.0));
+    }
+
+    void OnOptimizedIntervalMemoryRequired(const ui64 memoryRequired) const {
+        HistogramIntervalMemoryRequiredAfterReduce->Collect(memoryRequired / (1024.0 * 1024.0));
+    }
+
     void OnNoScanInterval(const ui32 recordsCount) const {
         NoScanRecords->Add(recordsCount);
         NoScanIntervals->Add(1);
@@ -133,9 +214,10 @@ public:
         LogScanIntervals->Add(1);
     }
 
-    void OnScanDuration(const EStatusFinish status, const TDuration d) const {
+    void OnScanFinished(const EStatusFinish status, const TDuration d) const {
         AFL_VERIFY((ui32)status < ScanDurationByStatus.size());
         ScanDurationByStatus[(ui32)status]->Collect(d.MilliSeconds());
+        ScansFinishedByStatus[(ui32)status]->Add(1);
     }
 
     void AckWaitingInfo(const TDuration d) const {
@@ -178,6 +260,8 @@ public:
     }
 
     TScanAggregations BuildAggregations();
+
+    void FillStats(::NKikimrTableStats::TTableStats& output) const;
 };
 
 class TCounterGuard: TNonCopyable {

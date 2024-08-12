@@ -1,4 +1,4 @@
 RECURSE(
-    surg
     perf
+    surg
 )

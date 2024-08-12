@@ -17,6 +17,27 @@ using namespace NLogging;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
+bool WillOverflowMul(i64 lhs, i64 rhs)
+{
+    i64 result;
+    return __builtin_mul_overflow(lhs, rhs, &result);
+}
+
+i64 ClampingAdd(i64 lhs, i64 rhs, i64 max)
+{
+    i64 result;
+    if (__builtin_add_overflow(lhs, rhs, &result) || result > max) {
+        return max;
+    }
+    return result;
+}
+
+} // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
 DECLARE_REFCOUNTED_STRUCT(TThrottlerRequest)
 
 struct TThrottlerRequest
@@ -38,7 +59,7 @@ DEFINE_REFCOUNTED_TYPE(TThrottlerRequest)
 ////////////////////////////////////////////////////////////////////////////////
 
 class TReconfigurableThroughputThrottler
-    : public IReconfigurableThroughputThrottler
+    : public ITestableReconfigurableThroughputThrottler
 {
 public:
     TReconfigurableThroughputThrottler(
@@ -224,6 +245,11 @@ public:
         return Available_.load();
     }
 
+    void SetLastUpdated(TInstant lastUpdated) override
+    {
+        LastUpdated_.store(lastUpdated);
+    }
+
 private:
     const TLogger Logger;
 
@@ -306,6 +332,27 @@ private:
         return request->Promise;
     }
 
+    static i64 GetDeltaAvailable(TInstant current, TInstant lastUpdated, double limit)
+    {
+        auto timePassed = current - lastUpdated;
+
+        if (limit > 1) {
+            constexpr auto maxRepresentableMilliSeconds = static_cast<double>(TDuration::Max().MilliSeconds());
+            auto maxValidMilliSecondsPassed = maxRepresentableMilliSeconds / limit;
+
+            if (timePassed.MilliSeconds() > maxValidMilliSecondsPassed) {
+                // NB(coteeq): Actual timePassed will overflow multiplication below,
+                // so we have nothing better than to just shrink this duration.
+                timePassed = TDuration::MilliSeconds(maxValidMilliSecondsPassed);
+            }
+        }
+
+        auto deltaAvailable = static_cast<i64>(timePassed.MilliSeconds() * limit / 1000);
+        YT_VERIFY(deltaAvailable >= 0);
+
+        return deltaAvailable;
+    }
+
     void DoReconfigure(std::optional<double> limit, TDuration period)
     {
         VERIFY_THREAD_AFFINITY_ANY();
@@ -320,19 +367,20 @@ private:
         TDelayedExecutor::CancelAndClear(UpdateCookie_);
         auto now = GetInstant();
         if (limit && *limit > 0) {
+            YT_VERIFY(!WillOverflowMul(period.MilliSeconds(), *limit));
             auto lastUpdated = LastUpdated_.load();
-            auto maxAvailable = static_cast<i64>(Period_.load().SecondsFloat()) * *limit;
+            auto maxAvailable = period.MilliSeconds() * *limit / 1000;
 
             if (lastUpdated == TInstant::Zero()) {
                 Available_ = maxAvailable;
                 LastUpdated_ = now;
             } else {
-                auto millisecondsPassed = (now - lastUpdated).MilliSeconds();
-                auto deltaAvailable = static_cast<i64>(millisecondsPassed * *limit / 1000);
-                auto newAvailable = Available_.load() + deltaAvailable;
-                if (newAvailable > maxAvailable) {
+                auto deltaAvailable = GetDeltaAvailable(now, lastUpdated, *limit);
+
+                auto newAvailable = ClampingAdd(Available_.load(), deltaAvailable, maxAvailable);
+                YT_VERIFY(newAvailable <= maxAvailable);
+                if (newAvailable == maxAvailable) {
                     LastUpdated_ = now;
-                    newAvailable = maxAvailable;
                 } else {
                     LastUpdated_ = lastUpdated + TDuration::MilliSeconds(deltaAvailable * 1000 / *limit);
                     // Just in case.
@@ -358,10 +406,12 @@ private:
         auto limit = Limit_.load();
         YT_VERIFY(limit >= 0);
 
-        auto delay = Max<i64>(0, -Available_ * 1000 / limit);
+        // Reconfigure clears the update cookie, so infinity is fine.
+        auto delay = limit ? TDuration::MilliSeconds(Max<i64>(0, -Available_ * 1000 / limit)) : TDuration::Max();
+
         UpdateCookie_ = TDelayedExecutor::Submit(
             BIND_NO_PROPAGATE(&TReconfigurableThroughputThrottler::Update, MakeWeak(this)),
-            TDuration::MilliSeconds(delay));
+            delay);
     }
 
     void TryUpdateAvailable()
@@ -375,12 +425,13 @@ private:
         auto current = GetInstant();
         auto lastUpdated = LastUpdated_.load();
 
-        auto millisecondsPassed = (current - lastUpdated).MilliSeconds();
-        auto deltaAvailable = static_cast<i64>(millisecondsPassed * limit / 1000);
+        auto deltaAvailable = GetDeltaAvailable(current, lastUpdated, limit);
 
         if (deltaAvailable == 0) {
             return;
         }
+        // The delta computed above is zero if the limit is zero.
+        YT_VERIFY(limit > 0);
 
         current = lastUpdated + TDuration::MilliSeconds(deltaAvailable * 1000 / limit);
 
@@ -389,10 +440,7 @@ private:
             auto throughputPerPeriod = static_cast<i64>(period.SecondsFloat() * limit);
 
             while (true) {
-                auto newAvailable = available + deltaAvailable;
-                if (newAvailable > throughputPerPeriod) {
-                    newAvailable = throughputPerPeriod;
-                }
+                auto newAvailable = ClampingAdd(available, deltaAvailable, /*max*/ throughputPerPeriod);
                 if (Available_.compare_exchange_weak(available, newAvailable)) {
                     break;
                 }
@@ -428,7 +476,7 @@ private:
                     request->Amount,
                     waitTime);
 
-                if (limit) {
+                if (limit >= 0) {
                     Available_ -= request->Amount;
                 }
                 readyList.push_back(request);
@@ -612,9 +660,9 @@ public:
             asyncResults.push_back(throttler->Throttle(amount));
         }
 
-        return AllSucceeded(asyncResults).Apply(BIND([weakThis = MakeWeak(this), amount] (const TError& /*error*/ ) {
+        return AllSucceeded(asyncResults).Apply(BIND([this, weakThis = MakeWeak(this), amount] (const TError& /*error*/ ) {
             if (auto this_ = weakThis.Lock()) {
-                this_->SelfQueueSize_ -= amount;
+                SelfQueueSize_ -= amount;
             }
         }));
     }

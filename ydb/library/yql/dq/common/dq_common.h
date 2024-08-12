@@ -11,6 +11,9 @@ using TTxId = std::variant<ui64, TString>;
 
 using TLogFunc = std::function<void(const TString& message)>;
 
+using TWakeUpCallback = std::function<void()>;
+using TErrorCallback = std::function<void(const TString& error)>;
+
 template <ui32 TEventSpaceBegin, ui32 TEventSpaceDiff = 0>
 struct TBaseDqResManEvents {
     enum {

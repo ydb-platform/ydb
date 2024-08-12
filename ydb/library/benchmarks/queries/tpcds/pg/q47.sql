@@ -44,8 +44,8 @@ with v1 as(
   select  *
  from v2
  where  d_year = 1999 and
-        avg_monthly_sales > 0::numeric and
-        case when avg_monthly_sales > 0::numeric then abs(sum_sales - avg_monthly_sales) / avg_monthly_sales else null::numeric end > 0.1::numeric
+        avg_monthly_sales > 0 and
+        case when avg_monthly_sales > 0 then abs(sum_sales - avg_monthly_sales) / avg_monthly_sales else null end > 0.1
  order by sum_sales - avg_monthly_sales, nsum
  limit 100;
 

@@ -158,8 +158,14 @@ struct TResurrectChunkLocationsResult
     std::vector<TGuid> LocationUuids;
 };
 
+struct TMasterConsistentState
+{
+    i64 SequenceNumber;
+    int SegmentId;
+};
+
 using TCellIdToSnapshotIdMap = THashMap<NHydra::TCellId, int>;
-using TCellIdToSequenceNumberMap = THashMap<NHydra::TCellId, i64>;
+using TCellIdToConsistentStateMap = THashMap<NHydra::TCellId, TMasterConsistentState>;
 
 struct TAddMaintenanceOptions
     : public TTimeoutOptions
@@ -205,7 +211,7 @@ struct IAdminClient
     virtual TFuture<TCellIdToSnapshotIdMap> BuildMasterSnapshots(
         const TBuildMasterSnapshotsOptions& options = {}) = 0;
 
-    virtual TFuture<TCellIdToSequenceNumberMap> GetMasterConsistentState(
+    virtual TFuture<TCellIdToConsistentStateMap> GetMasterConsistentState(
         const TGetMasterConsistentStateOptions& options = {}) = 0;
 
     virtual TFuture<void> ExitReadOnly(

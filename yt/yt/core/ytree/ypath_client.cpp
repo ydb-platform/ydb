@@ -261,10 +261,10 @@ TYPathMaybeRef GetOriginalRequestTargetYPath(const NRpc::NProto::TRequestHeader&
         : TYPathMaybeRef(ypathExt.target_path());
 }
 
-void SetRequestTargetYPath(NRpc::NProto::TRequestHeader* header, TYPath path)
+void SetRequestTargetYPath(NRpc::NProto::TRequestHeader* header, TYPathBuf path)
 {
     auto* ypathExt = header->MutableExtension(NProto::TYPathHeaderExt::ypath_header_ext);
-    ypathExt->set_target_path(std::move(path));
+    ypathExt->set_target_path(ToProto<TString>(path));
 }
 
 bool IsRequestMutating(const NRpc::NProto::TRequestHeader& header)
@@ -343,7 +343,7 @@ TFuture<TSharedRefArray> ExecuteVerb(
     }
 
     NRpc::NProto::TRequestHeader requestHeader;
-    YT_VERIFY(ParseRequestHeader(requestMessage, &requestHeader));
+    YT_VERIFY(TryParseRequestHeader(requestMessage, &requestHeader));
     SetRequestTargetYPath(&requestHeader, suffixPath);
 
     auto updatedRequestMessage = SetRequestHeader(requestMessage, requestHeader);
@@ -385,7 +385,7 @@ void ExecuteVerb(
 
     auto requestMessage = context->GetRequestMessage();
     auto requestHeader = std::make_unique<NRpc::NProto::TRequestHeader>();
-    YT_VERIFY(ParseRequestHeader(requestMessage, requestHeader.get()));
+    YT_VERIFY(TryParseRequestHeader(requestMessage, requestHeader.get()));
     SetRequestTargetYPath(requestHeader.get(), suffixPath);
     context->SetRequestHeader(std::move(requestHeader));
 
@@ -593,7 +593,7 @@ void SetNodeByYPath(
 
     TString currentToken;
     TString currentLiteralValue;
-    auto nextSegment = [&] () {
+    auto nextSegment = [&] {
         tokenizer.Skip(NYPath::ETokenType::Ampersand);
         tokenizer.Expect(NYPath::ETokenType::Slash);
         tokenizer.Advance();
@@ -694,7 +694,7 @@ void ForceYPath(
 
     TString currentToken;
     TString currentLiteralValue;
-    auto nextSegment = [&] () {
+    auto nextSegment = [&] {
         tokenizer.Skip(NYPath::ETokenType::Ampersand);
         tokenizer.Expect(NYPath::ETokenType::Slash);
         tokenizer.Advance();

@@ -10,12 +10,12 @@
 #pragma once
 
 #define PYBIND11_VERSION_MAJOR 2
-#define PYBIND11_VERSION_MINOR 11
+#define PYBIND11_VERSION_MINOR 13
 #define PYBIND11_VERSION_PATCH 1
 
 // Similar to Python's convention: https://docs.python.org/3/c-api/apiabiversion.html
 // Additional convention: 0xD = dev
-#define PYBIND11_VERSION_HEX 0x020B0100
+#define PYBIND11_VERSION_HEX 0x020D0100
 
 // Define some generic pybind11 helper macros for warning management.
 //
@@ -116,6 +116,14 @@
 #            endif
 #        endif
 #    endif
+#endif
+
+#if defined(PYBIND11_CPP20)
+#    define PYBIND11_CONSTINIT constinit
+#    define PYBIND11_DTOR_CONSTEXPR constexpr
+#else
+#    define PYBIND11_CONSTINIT
+#    define PYBIND11_DTOR_CONSTEXPR
 #endif
 
 // Compiler version assertions
@@ -264,7 +272,6 @@ PYBIND11_WARNING_DISABLE_MSVC(4505)
 #endif
 
 #include <Python.h>
-// Reminder: WITH_THREAD is always defined if PY_VERSION_HEX >= 0x03070000
 #include <frameobject.h>
 #include <pythread.h>
 
@@ -283,6 +290,10 @@ PYBIND11_WARNING_DISABLE_MSVC(4505)
 
 #if defined(copysign)
 #    undef copysign
+#endif
+
+#if defined(PYBIND11_NUMPY_1_ONLY)
+#    define PYBIND11_INTERNAL_NUMPY_1_ONLY_DETECTED
 #endif
 
 #if defined(PYPY_VERSION) && !defined(PYBIND11_SIMPLE_GIL_MANAGEMENT)
@@ -433,7 +444,7 @@ PYBIND11_WARNING_POP
             return nullptr;                                                                       \
         }                                                                                         \
         catch (const std::exception &e) {                                                         \
-            PyErr_SetString(PyExc_ImportError, e.what());                                         \
+            ::pybind11::set_error(PyExc_ImportError, e.what());                                   \
             return nullptr;                                                                       \
         }
 
@@ -500,7 +511,7 @@ PYBIND11_WARNING_POP
             });
         }
 \endrst */
-#define PYBIND11_MODULE(name, variable)                                                           \
+#define PYBIND11_MODULE(name, variable, ...)                                                      \
     static ::pybind11::module_::module_def PYBIND11_CONCAT(pybind11_module_def_, name)            \
         PYBIND11_MAYBE_UNUSED;                                                                    \
     PYBIND11_MAYBE_UNUSED                                                                         \
@@ -509,7 +520,10 @@ PYBIND11_WARNING_POP
         PYBIND11_CHECK_PYTHON_VERSION                                                             \
         PYBIND11_ENSURE_INTERNALS_READY                                                           \
         auto m = ::pybind11::module_::create_extension_module(                                    \
-            PYBIND11_TOSTRING(name), nullptr, &PYBIND11_CONCAT(pybind11_module_def_, name));      \
+            PYBIND11_TOSTRING(name),                                                              \
+            nullptr,                                                                              \
+            &PYBIND11_CONCAT(pybind11_module_def_, name),                                         \
+            ##__VA_ARGS__);                                                                       \
         try {                                                                                     \
             PYBIND11_CONCAT(pybind11_init_, name)(m);                                             \
             return m.ptr();                                                                       \
@@ -961,8 +975,7 @@ using is_template_base_of
     = decltype(is_template_base_of_impl<Base>::check((intrinsic_t<T> *) nullptr));
 #else
 struct is_template_base_of
-    : decltype(is_template_base_of_impl<Base>::check((intrinsic_t<T> *) nullptr)) {
-};
+    : decltype(is_template_base_of_impl<Base>::check((intrinsic_t<T> *) nullptr)){};
 #endif
 
 /// Check if T is an instantiation of the template `Class`. For example:
@@ -1144,14 +1157,14 @@ struct overload_cast_impl {
     }
 
     template <typename Return, typename Class>
-    constexpr auto operator()(Return (Class::*pmf)(Args...), std::false_type = {}) const noexcept
-        -> decltype(pmf) {
+    constexpr auto operator()(Return (Class::*pmf)(Args...),
+                              std::false_type = {}) const noexcept -> decltype(pmf) {
         return pmf;
     }
 
     template <typename Return, typename Class>
-    constexpr auto operator()(Return (Class::*pmf)(Args...) const, std::true_type) const noexcept
-        -> decltype(pmf) {
+    constexpr auto operator()(Return (Class::*pmf)(Args...) const,
+                              std::true_type) const noexcept -> decltype(pmf) {
         return pmf;
     }
 };

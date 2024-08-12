@@ -140,8 +140,7 @@ namespace NKikimr {
                 Y_UNUSED(subsMerger);
                 bool allowKeepFlags = HullCtx->AllowKeepFlags;
                 NGc::TKeepStatus keep = barriersEssence->Keep(dbIt.GetCurKey(), dbMerger.GetMemRec(),
-                                                              dbMerger.GetMemRecsMerged(), allowKeepFlags,
-                                                              AllowGarbageCollection);
+                    {subsMerger, dbMerger}, allowKeepFlags, AllowGarbageCollection);
                 Stat.Update(dbIt.GetCurKey(), keep);
                 if (keep.KeepIndex) {
                     IndexKeepMap.Set(Stat.ItemsTotal - 1);

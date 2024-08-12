@@ -181,11 +181,13 @@ TGenCompactionStrategy::TGenCompactionStrategy(
         ICompactionBackend* backend,
         IResourceBroker* broker,
         ITimeProvider* time,
+        NUtil::ILogger* logger,
         TString taskNameSuffix)
     : Table(table)
     , Backend(backend)
     , Broker(broker)
     , Time(time)
+    , Logger(logger)
     , TaskNameSuffix(std::move(taskNameSuffix))
 {
 }
@@ -302,7 +304,6 @@ void TGenCompactionStrategy::Stop() {
     ForcedState = EForcedState::None;
     ForcedMemCompactionId = 0;
     ForcedGeneration = 0;
-    MaxOverloadFactor = 0.0;
 
     CurrentForcedGenCompactionId = 0;
     NextForcedGenCompactionId = 0;
@@ -341,10 +342,6 @@ void TGenCompactionStrategy::ReflectRemovedRowVersions() {
     if (Generations && MaybeAutoStartForceCompaction()) {
         CheckGeneration(1);
     }
-}
-
-float TGenCompactionStrategy::GetOverloadFactor() {
-    return MaxOverloadFactor;
 }
 
 ui64 TGenCompactionStrategy::GetBackingSize() {
@@ -409,18 +406,28 @@ ui64 TGenCompactionStrategy::BeginMemCompaction(TTaskId taskId, TSnapEdge edge, 
 }
 
 bool TGenCompactionStrategy::ScheduleBorrowedCompaction() {
-    // Find if we actually have borrowed parts
     const ui64 ownerTabletId = Backend->OwnerTabletId();
-    bool haveBorrowed = false;
+    if (auto logl = Logger->Log(NUtil::ELnLev::Debug)) {
+        logl << "TGenCompactionStrategy ScheduleBorrowedCompaction for " << ownerTabletId;
+    }
+    
+    // Find if we actually have borrowed parts
+    bool hasBorrowed = false;
     for (const auto& pr : KnownParts) {
         if (pr.first.TabletID() != ownerTabletId) {
-            haveBorrowed = true;
+            hasBorrowed = true;
             Y_ABORT_UNLESS(pr.second == 255,
                 "Borrowed part %s not in final parts", pr.first.ToString().c_str());
         }
     }
 
-    if (!haveBorrowed || ForcedState != EForcedState::None || FinalState.State != EState::Free || FinalCompactionId != 0) {
+    if (!hasBorrowed || ForcedState != EForcedState::None || FinalState.State != EState::Free || FinalCompactionId != 0) {
+        if (auto logl = Logger->Log(NUtil::ELnLev::Debug)) {
+            logl << "TGenCompactionStrategy ScheduleBorrowedCompaction for " << ownerTabletId
+                << " nothing to compact"
+                << " has borrowed " << hasBorrowed << ", parts " << KnownParts.size()
+                << ", forced state " << ForcedState << ", final state " << FinalState.State << ", id " << FinalCompactionId;
+        }
         return false;
     }
 
@@ -437,6 +444,10 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
     auto* params = CheckedCast<TGenCompactionParams*>(rawParams.Get());
     ui32 generation = params->Generation;
     Y_ABORT_UNLESS(generation <= Generations.size() || generation == 255, "Unexpected CompactionFinished generation");
+    if (auto logl = Logger->Log(NUtil::ELnLev::Debug)) {
+        logl << "TGenCompactionStrategy CompactionFinished for " << Backend->OwnerTabletId()
+            << ": compaction " << compactionId << ", generation " << generation;
+    }
 
     if (generation == 0) {
         Y_ABORT_UNLESS(compactionId == MemCompactionId,
@@ -879,6 +890,11 @@ void TGenCompactionStrategy::OutputHtml(IOutputStream& out) {
 }
 
 void TGenCompactionStrategy::BeginGenCompaction(TTaskId taskId, ui32 generation) {
+    if (auto logl = Logger->Log(NUtil::ELnLev::Debug)) {
+        logl << "TGenCompactionStrategy BeginGenCompaction for " << Backend->OwnerTabletId()
+            << ": task " << taskId << ", generation " << generation;
+    }
+
     // Special mode for final parts compaction
     if (generation == 255) {
         Y_ABORT_UNLESS(FinalState.State == EState::Pending);
@@ -893,6 +909,11 @@ void TGenCompactionStrategy::BeginGenCompaction(TTaskId taskId, ui32 generation)
 
         if (FinalCompactionId != 0) {
             // Another final compaction is already compacting final parts for us
+            if (auto logl = Logger->Log(NUtil::ELnLev::Debug)) {
+                logl << "TGenCompactionStrategy BeginGenCompaction for " << Backend->OwnerTabletId()
+                    << ": task " << taskId << ", generation " << generation
+                    << " Cancel: another final compaction " << FinalCompactionId << " is already compacting final parts for us";
+            }
             cancelFinal();
             return;
         }
@@ -902,12 +923,22 @@ void TGenCompactionStrategy::BeginGenCompaction(TTaskId taskId, ui32 generation)
             auto& gen = Generations.back();
             if (gen.State != EState::Free) {
                 // The last generation will compact final parts for us
+                if (auto logl = Logger->Log(NUtil::ELnLev::Debug)) {
+                    logl << "TGenCompactionStrategy BeginGenCompaction for " << Backend->OwnerTabletId()
+                        << ": task " << taskId << ", generation " << generation
+                        << " Cancel: the last " << gen.Task.CompactionId << " " << gen.State << " generation will compact final parts for us";
+                }
                 cancelFinal();
                 return;
             }
         } else {
             if (MemCompactionId != 0) {
                 // The last generation is compacting final parts for us
+                if (auto logl = Logger->Log(NUtil::ELnLev::Debug)) {
+                    logl << "TGenCompactionStrategy BeginGenCompaction for " << Backend->OwnerTabletId()
+                        << ": task " << taskId << ", generation " << generation
+                        << " Cancel: the last mem " << MemCompactionId << " generation will compact final parts for us";
+                }
                 cancelFinal();
                 return;
             }
@@ -979,6 +1010,11 @@ void TGenCompactionStrategy::SubmitTask(
         TGenCompactionStrategy::TCompactionTask& task, TString type, ui32 priority, ui32 generation)
 {
     Y_ABORT_UNLESS(task.TaskId == 0, "Task is already submitted");
+    if (auto logl = Logger->Log(NUtil::ELnLev::Debug)) {
+        logl << "TGenCompactionStrategy SubmitTask for " << Backend->OwnerTabletId()
+            << ": type " << type << ", priority " << priority << ", generation " << generation;
+    }
+
     task.SubmissionTimestamp = Time->Now();
     task.Priority = priority;
 
@@ -1088,6 +1124,12 @@ void TGenCompactionStrategy::CheckGeneration(ui32 generation) {
     CheckOverload(generation);
 
     auto& gen = Generations[generation - 1];
+
+    if (auto logl = Logger->Log(NUtil::ELnLev::Debug)) {
+        logl << "TGenCompactionStrategy CheckGeneration for " << Backend->OwnerTabletId()
+            << " generation " << generation << ", state " << gen.State 
+            << ", final id " << FinalCompactionId << ", final level " << FinalCompactionLevel;
+    }
 
     if (gen.State != EState::Free && gen.State != EState::PendingBackground) {
         return;
@@ -1201,6 +1243,10 @@ ui64 TGenCompactionStrategy::PrepareCompaction(
         TExtraState& extra)
 {
     Y_ABORT_UNLESS(generation <= Generations.size() || generation == 255);
+    if (auto logl = Logger->Log(NUtil::ELnLev::Debug)) {
+        logl << "TGenCompactionStrategy PrepareCompaction for " << Backend->OwnerTabletId()
+            << ": task " << taskId << ", edge " << edge.Head << "/" << edge.TxStamp << ", generation " << generation;
+    }
 
     auto params = MakeHolder<TGenCompactionParams>();
     params->Table = Table;
@@ -1299,6 +1345,10 @@ ui64 TGenCompactionStrategy::PrepareCompaction(
     }
 
     ui64 compactionId = Backend->BeginCompaction(std::move(params));
+    if (auto logl = Logger->Log(NUtil::ELnLev::Debug)) {
+        logl << "TGenCompactionStrategy PrepareCompaction for " << Backend->OwnerTabletId()
+            << " started compaction " << compactionId << " generation " << generation;
+    }
 
     if (generation == Generations.size() || generation == 255) {
         Y_ABORT_UNLESS(FinalCompactionId == 0, "Multiple final compactions not allowed");
@@ -1314,11 +1364,19 @@ ui64 TGenCompactionStrategy::PrepareCompaction(
                     case EState::PendingBackground:
                         // The task is scheduled, make sure to cancel it
                         Y_ABORT_UNLESS(FinalState.Task.TaskId != 0);
+                        if (auto logl = Logger->Log(NUtil::ELnLev::Debug)) {
+                            logl << "TGenCompactionStrategy PrepareCompaction for " << Backend->OwnerTabletId()
+                                << " cancel pending compaction " << FinalState.Task.CompactionId;
+                        }
                         Broker->CancelTask(FinalState.Task.TaskId);
                         break;
                     case EState::Compacting:
                         // Compaction is running, cancel it
                         Y_ABORT_UNLESS(FinalState.Task.CompactionId != 0);
+                        if (auto logl = Logger->Log(NUtil::ELnLev::Debug)) {
+                            logl << "TGenCompactionStrategy PrepareCompaction for " << Backend->OwnerTabletId()
+                                << " cancel running compaction " << FinalState.Task.CompactionId;
+                        }
                         Backend->CancelCompaction(FinalState.Task.CompactionId);
                         break;
                 }
@@ -1372,9 +1430,9 @@ void TGenCompactionStrategy::UpdateStats() {
 }
 
 void TGenCompactionStrategy::UpdateOverload() {
-    MaxOverloadFactor = 0.0;
+    OverloadFactor = 0.0;
     for (const auto& gen : Generations) {
-        MaxOverloadFactor = Max(MaxOverloadFactor, gen.OverloadFactor);
+        OverloadFactor = Max(OverloadFactor, gen.OverloadFactor);
     }
 }
 

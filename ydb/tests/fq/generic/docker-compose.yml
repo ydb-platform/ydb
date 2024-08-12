@@ -1,28 +1,42 @@
-version: '3.4'
 services:
-  postgresql:
-    image: "postgres:15-bullseye@sha256:3411b9f2e5239cd7867f34fcf22fe964230f7d447a71d63c283e3593d3f84085"
-    # to be able to run tests by different users on the same machine we set prefix to ${USER}
-    container_name: ${USER}_ydb_tests_fq_generic_postgresql
-    environment:
-      POSTGRES_DB: db
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-    volumes:
-      - ./postgresql:/docker-entrypoint-initdb.d
-    command: -p 6432
   clickhouse:
-    image: "clickhouse/clickhouse-server:23-alpine@sha256:b078c1cd294632afa2aeba3530e7ba2e568513da23304354f455a25fab575c06"
-    container_name: ${USER}_ydb_tests_fq_generic_clickhouse
+    container_name: tests-fq-generic-clickhouse
     environment:
       CLICKHOUSE_DB: db
-      CLICKHOUSE_USER: user
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_PASSWORD: password
+      CLICKHOUSE_USER: user
+    image: clickhouse/clickhouse-server:23-alpine@sha256:b078c1cd294632afa2aeba3530e7ba2e568513da23304354f455a25fab575c06
     volumes:
-      - ./clickhouse:/docker-entrypoint-initdb.d
-  connector:
-    image: "ghcr.io/ydb-platform/fq-connector-go:v0.1.1-rc.2@sha256:e5c2d86bce9cb43420eed0ed534afe760fb90ad41229dbbf34af28023b219af3"
-    container_name: ${USER}_ydb_tests_fq_generic_connector
+    - ./clickhouse:/docker-entrypoint-initdb.d
+  fq-connector-go:
+    command: |
+      sh -c "
+        echo \"$$(dig tests-fq-generic-ydb +short) tests-fq-generic-ydb\" >> /etc/hosts; cat /etc/hosts;
+        /opt/ydb/bin/fq-connector-go server -c /opt/ydb/cfg/fq-connector-go.yaml"
+    container_name: tests-fq-generic-fq-connector-go
+    image: ghcr.io/ydb-platform/fq-connector-go:v0.5.0@sha256:6d3cec43478bef88dda195cd38c10e4df719c8ce6d13c9bd288c7ec40410e9d8
     ports:
-      - '50051'
+    - "2130"
+  postgresql:
+    command: -p 6432
+    container_name: tests-fq-generic-postgresql
+    environment:
+      POSTGRES_DB: db
+      POSTGRES_PASSWORD: password
+      POSTGRES_USER: user
+    image: postgres:15-bullseye@sha256:3411b9f2e5239cd7867f34fcf22fe964230f7d447a71d63c283e3593d3f84085
+    volumes:
+    - ./postgresql:/docker-entrypoint-initdb.d
+  ydb:
+    container_name: tests-fq-generic-ydb
+    environment:
+      POSTGRES_PASSWORD: password
+      POSTGRES_USER: user
+      YDB_DEFAULT_LOG_LEVEL: DEBUG
+    hostname: tests-fq-generic-ydb
+    image: ghcr.io/ydb-platform/local-ydb:latest@sha256:9045e00afec1923dc3277564c7b2f829087c2115f45f18e1d38b80bb89f98be6
+    volumes:
+    - ./ydb/init_ydb:/init_ydb
+    - ./ydb/01_basic.sh:/01_basic.sh
+version: "3.4"

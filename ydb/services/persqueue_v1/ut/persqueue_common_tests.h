@@ -20,7 +20,7 @@
 
 #include <util/string/join.h>
 
-#include <grpc++/client_context.h>
+#include <grpcpp/client_context.h>
 
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
@@ -51,7 +51,7 @@ public:
     {}
 
     TPersQueueV1TestServer CreateServer() {
-        return TPersQueueV1TestServer(false, TenantModeEnabled);
+        return TPersQueueV1TestServer({.TenantModeEnabled=TenantModeEnabled});
     }
 
     TPersQueueV1TestServerWithRateLimiter CreateServerWithRateLimiter() {
@@ -223,7 +223,7 @@ public:
         const TString validToken = "test_user@" BUILTIN_ACL_DOMAIN;
         // TODO: Why test fails with 'BUILTIN_ACL_DOMAIN' as domain in invalid token?
         TVector<TString> invalidTokens = {TString(), "test_user", "test_user@invalid_domain"};
-        server.ModifyTopicACL(server.GetFullTopicPath(), {{validToken, {"ydb.generic.write"}}});
+        server.ModifyTopicACLAndWait(server.GetFullTopicPath(), {{validToken, {"ydb.generic.write"}}});
 
         for (const auto &invalidToken : invalidTokens) {
             Cerr << "Invalid token under test is '" << invalidToken << "'" << Endl;

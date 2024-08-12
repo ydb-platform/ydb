@@ -138,7 +138,9 @@ public:
     virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling) const = 0;
     virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem) const = 0;
 
-    virtual std::function<void()> GetWakeupCallback() const = 0;
+    virtual TWakeUpCallback GetWakeupCallback() const = 0;
+    virtual TErrorCallback GetErrorCallback() const = 0;
+    virtual TTxId GetTxId() const = 0;
 };
 
 class TDqTaskRunnerExecutionContextBase : public IDqTaskRunnerExecutionContext {
@@ -160,7 +162,15 @@ public:
         return {};
     };
 
-    std::function<void()> GetWakeupCallback() const override {
+    TWakeUpCallback GetWakeupCallback() const override {
+        return {};
+    }
+
+    TErrorCallback GetErrorCallback() const override {
+        return {};
+    }
+
+    TTxId GetTxId() const override {
         return {};
     }
 
@@ -347,6 +357,10 @@ public:
         return Task_->GetRequestContext();
     }
 
+    bool GetEnableSpilling() const {
+        return Task_->HasEnableSpilling() && Task_->GetEnableSpilling();
+    }
+
 private:
 
     // external callback to retrieve parameter value.
@@ -373,7 +387,7 @@ public:
     virtual IDqAsyncInputBuffer::TPtr GetSource(ui64 inputIndex) = 0;
     virtual IDqOutputChannel::TPtr GetOutputChannel(ui64 channelId) = 0;
     virtual IDqAsyncOutputBuffer::TPtr GetSink(ui64 outputIndex) = 0;
-    virtual std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr> GetInputTransform(ui64 inputIndex) = 0;
+    virtual std::optional<std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr>> GetInputTransform(ui64 inputIndex) = 0;
     virtual std::pair<IDqAsyncOutputBuffer::TPtr, IDqOutputConsumer::TPtr> GetOutputTransform(ui64 outputIndex) = 0;
 
     virtual IRandomProvider* GetRandomProvider() const = 0;
@@ -405,7 +419,7 @@ public:
 };
 
 TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(
-    NKikimr::NMiniKQL::TScopedAlloc& alloc, 
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, 
     const TDqTaskRunnerContext& ctx, 
     const TDqTaskRunnerSettings& settings,
     const TLogFunc& logFunc

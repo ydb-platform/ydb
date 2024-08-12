@@ -3,6 +3,7 @@
 #include "scheduler.h"
 #include "private.h"
 
+#include <yt/yt/core/actions/invoker_util.h>
 #include <yt/yt/core/misc/relaxed_mpsc_queue.h>
 #include <yt/yt/core/misc/singleton.h>
 
@@ -17,7 +18,7 @@ namespace NYT::NConcurrency {
 static constexpr auto CoalescingInterval = TDuration::MicroSeconds(100);
 static constexpr auto LateWarningThreshold = TDuration::Seconds(1);
 
-static const auto& Logger = ConcurrencyLogger;
+static constexpr auto& Logger = ConcurrencyLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -59,6 +60,41 @@ struct TDelayedExecutorEntry
 DEFINE_REFCOUNTED_TYPE(TDelayedExecutorEntry)
 
 ////////////////////////////////////////////////////////////////////////////////
+
+//! (arkady-e1ppa) MO's/Fence explanation:
+/*
+    We want for shutdown to guarantee that no callback is left in any queue
+    once it is over. Otherwise, memory leak or a deadlock of Poller/GrpcServer
+    (or someone else who blocks thread until some callback is run) will occur.
+
+    We model our queue with Enqueue being RMW^rel(Queue_, x, y) and Dequeue
+    being RMW^acq(Queue_, x, y), where x is what we have read and y is what we
+    have observed. Missing callback would imply that in Submit method enqueueing |CB|
+    we have observed Stopping_ |false| (e.g. TThread::Start (c) returned |true|)
+    but also in ThreadMain during the SubmitQueue drain (f) we have not observed the
+    |CB|. Execution is schematically listed below:
+        T1(Submit)                          T2(Shutdown)
+    RMW^rel(Queue_, empty, CB) (a)       W^rel(Stopping_, true)        (d)
+            |sequenced-before                   |simply hb
+    Fence^sc                   (b)       Fence^sc                      (e)
+            |sequenced-before                   |sequenced-before
+    R^acq(Stopping_, false)    (c)       RMW^acq(Queue_, empty, empty) (f)
+
+    Since (c) reads |false| it must be reading from Stopping_ ctor which is
+    W^na(Stopping_, false) which preceedes (d) in modification order. Thus
+    (c) must read-from some modification preceding (d) in modification order (ctor)
+    and therefore (c) -cob-> (d) (coherence ordered before).
+    Likewise, (f) reads |empty| which can only be read from Queue_ ctor or
+    prior Dequeue both of which preceede (a) in modification order (ctor is obvious;
+    former Dequeue by assumption that no one has read |CB| ever: if some (a) was
+    prior to some Dequeue in modification order, |CB| would inevitably be read).
+    So, (f) -cob-> (a). For fences we now have to relations:
+    (b) -sb-> (c) -cob-> (d) -simply hb-> (e) => (b) -S-> (e)
+    (e) -sb-> (f) -cob-> (a) -sb-> (b) => (e) -S-> (b)
+    Here sb is sequenced-before and S is sequentially-consistent total ordering.
+    We have formed a loop in S thus contradicting the assumption.
+*/
+
 
 class TDelayedExecutorImpl
 {
@@ -139,9 +175,11 @@ public:
     {
         YT_VERIFY(callback);
         auto entry = New<TDelayedExecutorEntry>(std::move(callback), deadline, std::move(invoker));
-        PollerThread_->EnqueueSubmission(entry);
+        PollerThread_->EnqueueSubmission(entry); // <- (a)
 
-        if (!PollerThread_->Start()) {
+        std::atomic_thread_fence(std::memory_order::seq_cst); // <- (b)
+
+        if (!PollerThread_->Start()) { // <- (c)
             if (auto callback = TakeCallback(entry)) {
                 callback(/*aborted*/ true);
             }
@@ -213,6 +251,43 @@ private:
         NProfiling::TCounter CanceledCallbacksCounter_ = ConcurrencyProfiler.Counter("/delayed_executor/canceled_callbacks");
         NProfiling::TCounter StaleCallbacksCounter_ = ConcurrencyProfiler.Counter("/delayed_executor/stale_callbacks");
 
+        class TCallbackGuard
+        {
+        public:
+            TCallbackGuard(TCallback<void(bool)> callback, bool aborted) noexcept
+                : Callback_(std::move(callback))
+                , Aborted_(aborted)
+            { }
+
+            TCallbackGuard(TCallbackGuard&& other) = default;
+
+            TCallbackGuard(const TCallbackGuard&) = delete;
+
+            TCallbackGuard& operator=(const TCallbackGuard&) = delete;
+            TCallbackGuard& operator=(TCallbackGuard&&) = delete;
+
+            void operator()()
+            {
+                auto callback = std::move(Callback_);
+                YT_VERIFY(callback);
+                callback.Run(Aborted_);
+            }
+
+            ~TCallbackGuard()
+            {
+                if (Callback_) {
+                    YT_LOG_DEBUG("Aborting delayed executor callback");
+
+                    auto callback = std::move(Callback_);
+                    callback(/*aborted*/ true);
+                }
+            }
+
+        private:
+            TCallback<void(bool)> Callback_;
+            bool Aborted_;
+        };
+
 
         void StartPrologue() override
         {
@@ -240,6 +315,13 @@ private:
                 ProcessQueues();
 
                 if (IsStopping()) {
+                    // We have Stopping_.store(true) in simply happens-before relation.
+                    // Assume Stopping_.store(true, release) is (d).
+                    // NB(arkady-e1ppa): At the time of writing it is seq_cst
+                    // actually, but
+                    // 1. We don't need it to be for correctness hehe
+                    // 2. It won't help us here anyway
+                    // 3. It might be changed as it could be suboptimal.
                     break;
                 }
 
@@ -250,6 +332,8 @@ private:
                     : TInstant::Max();
                 EventCount_->Wait(cookie, deadline);
             }
+
+            std::atomic_thread_fence(std::memory_order::seq_cst); // <- (e)
 
             // Perform graceful shutdown.
 
@@ -267,7 +351,7 @@ private:
             // Now we handle the queued callbacks similarly.
             {
                 TDelayedExecutorEntryPtr entry;
-                while (SubmitQueue_.TryDequeue(&entry)) {
+                while (SubmitQueue_.TryDequeue(&entry)) { // <- (f)
                     runAbort(entry);
                 }
             }
@@ -349,7 +433,11 @@ private:
         void RunCallback(const TDelayedExecutorEntryPtr& entry, bool abort)
         {
             if (auto callback = TakeCallback(entry)) {
-                (entry->Invoker ? entry->Invoker : DelayedInvoker_)->Invoke(BIND_NO_PROPAGATE(std::move(callback), abort));
+                const auto& invoker = entry->Invoker
+                    ? entry->Invoker
+                    : DelayedInvoker_;
+                invoker
+                    ->Invoke(BIND_NO_PROPAGATE(TCallbackGuard(std::move(callback), abort)));
             }
         }
     };

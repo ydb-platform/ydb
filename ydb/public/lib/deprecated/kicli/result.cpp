@@ -31,11 +31,6 @@ template <> const NKikimrClient::TResponse& TResult::GetResult<NKikimrClient::TR
     return static_cast<NMsgBusProxy::TBusResponse*>(Reply.Get())->Record;
 }
 
-template <> const NKikimrClient::TBsTestLoadResponse& TResult::GetResult<NKikimrClient::TBsTestLoadResponse>() const {
-    Y_ABORT_UNLESS(GetType() == NMsgBusProxy::MTYPE_CLIENT_LOAD_RESPONSE, "Unexpected response type: %d", GetType());
-    return static_cast<NMsgBusProxy::TBusBsTestLoadResponse*>(Reply.Get())->Record;
-}
-
 NMsgBusProxy::EResponseStatus TResult::GetStatus() const {
     if (TransportStatus != NBus::MESSAGE_OK) {
         switch (TransportStatus) {
@@ -152,6 +147,12 @@ template <> TString TReadTableResult::ValueToString<TFormatCSV>(const YdbOld::Va
                 return TDuration::MicroSeconds(static_cast<ui64>(val)).ToString();
             return TString("-") + TDuration::MicroSeconds(static_cast<ui64>(-val)).ToString();
         }
+    case NScheme::NTypeIds::Date32:
+        return ToString(value.int32_value());
+    case NScheme::NTypeIds::Datetime64:
+    case NScheme::NTypeIds::Timestamp64:
+    case NScheme::NTypeIds::Interval64:
+        return ToString(value.int64_value());
     case NScheme::NTypeIds::Decimal:
         {
             NYql::NDecimal::TInt128 val;

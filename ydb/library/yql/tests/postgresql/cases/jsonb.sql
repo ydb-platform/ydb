@@ -64,6 +64,8 @@ SELECT '{
 -- make sure jsonb is passed through json generators without being escaped
 SELECT array_to_json(ARRAY [jsonb '{"a":1}', jsonb '{"b":[2,3]}']);
 BEGIN;
+SET LOCAL TIME ZONE 10.5;
+SET LOCAL TIME ZONE -8;
 COMMIT;
 -- jsonb extraction functions
 CREATE TEMP TABLE test_jsonb (

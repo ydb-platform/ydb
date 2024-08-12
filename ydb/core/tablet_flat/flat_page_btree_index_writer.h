@@ -50,7 +50,7 @@ namespace NKikimr::NTable::NPage {
         }
 
         void AddChild(TChild child) {
-            Y_ABORT_UNLESS(child.ErasedRowCount == 0 || !IsShortChildFormat(), "Short format can't have ErasedRowCount");
+            Y_ABORT_UNLESS(child.GetErasedRowCount() == 0 || !IsShortChildFormat(), "Short format can't have ErasedRowCount");
             Children.push_back(child);
         }
 
@@ -97,7 +97,7 @@ namespace NKikimr::NTable::NPage {
             Ptr = buf.mutable_begin();
             End = buf.end();
 
-            WriteUnaligned<TLabel>(Advance(sizeof(TLabel)), TLabel::Encode(EPage::BTreeIndex, 0, pageSize));
+            WriteUnaligned<TLabel>(Advance(sizeof(TLabel)), TLabel::Encode(EPage::BTreeIndex, TBtreeIndexNode::FormatVersion, pageSize));
 
             auto &header = Place<THeader>();
             header.KeysCount = Keys.size();
@@ -249,7 +249,9 @@ namespace NKikimr::NTable::NPage {
         void PlaceChild(const TChild& child) noexcept
         {
             if (IsShortChildFormat()) {
-                Place<TShortChild>() = TShortChild{child.PageId, child.RowCount, child.DataSize};
+                Y_DEBUG_ABORT_UNLESS(child.GetGroupDataSize() == 0);
+                Y_DEBUG_ABORT_UNLESS(child.GetErasedRowCount() == 0);
+                Place<TShortChild>() = TShortChild{child.GetPageId(), child.GetRowCount(), child.GetDataSize()};
             } else {
                 Place<TChild>() = child;
             }
@@ -375,14 +377,15 @@ namespace NKikimr::NTable::NPage {
         }
 
         void AddShortChild(TShortChild child) {
-            AddChild(TChild{child.PageId, child.RowCount, child.DataSize, 0});
+            AddChild(TChild{child.GetPageId(), child.GetRowCount(), child.GetDataSize(), 0, 0});
         }
 
         void AddChild(TChild child) {
             // aggregate in order to perform search by row id from any leaf node
-            child.RowCount = (ChildRowCount += child.RowCount);
-            child.DataSize = (ChildSize += child.DataSize);
-            child.ErasedRowCount = (ChildErasedRowCount += child.ErasedRowCount);
+            child.RowCount_ = (ChildRowCount += child.GetRowCount());
+            child.DataSize_ = (ChildDataSize += child.GetDataSize());
+            child.GroupDataSize_ = (ChildGroupDataSize += child.GetGroupDataSize());
+            child.ErasedRowCount_ = (ChildErasedRowCount += child.GetErasedRowCount());
 
             Levels[0].PushChild(child);
         }
@@ -423,7 +426,8 @@ namespace NKikimr::NTable::NPage {
             Levels = { TLevel() };
             ChildRowCount = 0;
             ChildErasedRowCount = 0;
-            ChildSize = 0;
+            ChildDataSize = 0;
+            ChildGroupDataSize = 0;
         }
 
     private:
@@ -474,7 +478,8 @@ namespace NKikimr::NTable::NPage {
                 Levels.emplace_back();
                 Y_ABORT_UNLESS(Levels.size() < Max<ui32>(), "Levels size is out of bounds");
             }
-            Levels[levelIndex + 1].PushChild(TChild{pageId, lastChild.RowCount, lastChild.DataSize, lastChild.ErasedRowCount});
+            lastChild.PageId_ = pageId;
+            Levels[levelIndex + 1].PushChild(lastChild);
             if (!last) {
                 Levels[levelIndex + 1].PushKey(Levels[levelIndex].PopKey());
             }
@@ -509,7 +514,8 @@ namespace NKikimr::NTable::NPage {
 
         TRowId ChildRowCount = 0;
         TRowId ChildErasedRowCount = 0;
-        ui64 ChildSize = 0;
+        ui64 ChildDataSize = 0;
+        ui64 ChildGroupDataSize = 0;
     };
 
 }

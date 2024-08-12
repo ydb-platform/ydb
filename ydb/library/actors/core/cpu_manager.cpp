@@ -1,4 +1,6 @@
 #include "cpu_manager.h"
+#include "executor_pool_jail.h"
+#include "mon_stats.h"
 #include "probes.h"
 
 #include "executor_pool_basic.h"
@@ -18,9 +20,16 @@ namespace NActors {
         }
     }
 
+    TCpuManager::~TCpuManager() {
+    }
+
     void TCpuManager::Setup() {
         TAffinity available;
         available.Current();
+
+        if (Config.Jail) {
+            Jail = std::make_unique<TExecutorPoolJail>(ExecutorPoolCount, *Config.Jail);
+        }
 
         std::vector<i16> poolsWithSharedThreads;
         for (TBasicExecutorPoolConfig& cfg : Config.Basic) {
@@ -127,13 +136,13 @@ namespace NActors {
             if (cfg.PoolId == poolId) {
                 if (cfg.HasSharedThread) {
                     auto *sharedPool = static_cast<TSharedExecutorPool*>(Shared.get());
-                    auto *pool = new TBasicExecutorPool(cfg, Harmonizer.get());
+                    auto *pool = new TBasicExecutorPool(cfg, Harmonizer.get(), Jail.get());
                     if (pool) {
                         pool->AddSharedThread(sharedPool->GetSharedThread(poolId));
                     }
                     return pool;
                 } else {
-                    return new TBasicExecutorPool(cfg, Harmonizer.get());
+                    return new TBasicExecutorPool(cfg, Harmonizer.get(), Jail.get());
                 }
             }
         }
@@ -161,6 +170,19 @@ namespace NActors {
         }
         if (Shared) {
             Shared->GetSharedStats(poolId, sharedStatsCopy);
+        }
+    }
+
+    void TCpuManager::GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const {
+        if (static_cast<ui32>(poolId) < ExecutorPoolCount) {
+            Executors[poolId]->GetExecutorPoolState(state);
+        }
+    }
+
+    void TCpuManager::GetExecutorPoolStates(std::vector<TExecutorPoolState> &states) const {
+        states.resize(ExecutorPoolCount);
+        for (i16 poolId = 0; poolId < static_cast<ui16>(ExecutorPoolCount); ++poolId) {
+            GetExecutorPoolState(poolId, states[poolId]);
         }
     }
 

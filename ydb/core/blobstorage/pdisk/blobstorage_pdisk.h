@@ -173,7 +173,7 @@ struct TEvYardInitResult : public TEventLocal<TEvYardInitResult, TEvBlobStorage:
     TEvYardInitResult(const NKikimrProto::EReplyStatus status, const TString &errorReason)
         : Status(status)
         , StatusFlags(0)
-        , PDiskParams(new TPDiskParams(0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+        , PDiskParams(new TPDiskParams(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, DEVICE_TYPE_ROT))
         , ErrorReason(errorReason)
     {
         Y_ABORT_UNLESS(status != NKikimrProto::OK, "Single-parameter constructor is for error responses only");
@@ -183,7 +183,7 @@ struct TEvYardInitResult : public TEventLocal<TEvYardInitResult, TEvBlobStorage:
             ui64 writeSpeedBps, ui64 readBlockSize, ui64 writeBlockSize,
             ui64 bulkWriteBlockSize, ui32 chunkSize, ui32 appendBlockSize,
             TOwner owner, TOwnerRound ownerRound, TStatusFlags statusFlags, TVector<TChunkIdx> ownedChunks,
-            const TString &errorReason)
+            EDeviceType trueMediaType, const TString &errorReason)
         : Status(status)
         , StatusFlags(statusFlags)
         , PDiskParams(new TPDiskParams(
@@ -196,8 +196,8 @@ struct TEvYardInitResult : public TEventLocal<TEvYardInitResult, TEvBlobStorage:
                     writeSpeedBps,
                     readBlockSize,
                     writeBlockSize,
-                    bulkWriteBlockSize
-                    ))
+                    bulkWriteBlockSize,
+                    trueMediaType))
         , OwnedChunks(std::move(ownedChunks))
         , ErrorReason(errorReason)
     {}
@@ -1319,9 +1319,11 @@ struct TEvCheckSpaceResult : public TEventLocal<TEvCheckSpaceResult, TEvBlobStor
     ui32 NumSlots; // number of VSlots over PDisk
     double Occupancy = 0;
     TString ErrorReason;
+    TStatusFlags LogStatusFlags;
 
     TEvCheckSpaceResult(NKikimrProto::EReplyStatus status, TStatusFlags statusFlags, ui32 freeChunks,
-            ui32 totalChunks, ui32 usedChunks, ui32 numSlots, const TString &errorReason)
+            ui32 totalChunks, ui32 usedChunks, ui32 numSlots, const TString &errorReason,
+            TStatusFlags logStatusFlags = {})
         : Status(status)
         , StatusFlags(statusFlags)
         , FreeChunks(freeChunks)
@@ -1329,6 +1331,7 @@ struct TEvCheckSpaceResult : public TEventLocal<TEvCheckSpaceResult, TEvBlobStor
         , UsedChunks(usedChunks)
         , NumSlots(numSlots)
         , ErrorReason(errorReason)
+        , LogStatusFlags(logStatusFlags)
     {}
 
     TString ToString() const {
@@ -1340,6 +1343,7 @@ struct TEvCheckSpaceResult : public TEventLocal<TEvCheckSpaceResult, TEvBlobStor
         str << " UsedChunks# " << UsedChunks;
         str << " NumSlots# " << NumSlots;
         str << " ErrorReason# \"" << ErrorReason << "\"";
+        str << " LogStatusFlags# " << StatusFlagsToString(LogStatusFlags);
         str << "}";
         return str.Str();
     }
@@ -1521,8 +1525,9 @@ struct TEvReadMetadataResult : TEventLocal<TEvReadMetadataResult, TEvBlobStorage
     TRcBuf Metadata;
     std::optional<ui64> PDiskGuid;
 
-    TEvReadMetadataResult(EPDiskMetadataOutcome outcome)
+    TEvReadMetadataResult(EPDiskMetadataOutcome outcome, std::optional<ui64> pdiskGuid)
         : Outcome(outcome)
+        , PDiskGuid(pdiskGuid)
     {}
 
     TEvReadMetadataResult(TRcBuf&& metadata, std::optional<ui64> pdiskGuid)

@@ -101,7 +101,7 @@ SELECT c, count(*) FROM test_missing_target GROUP BY 3;
         -stdin-:<main>:3:54: Error: GROUP BY: position 3 is not in select list
         	SELECT c, count(*) FROM test_missing_target GROUP BY 3;
 	                                                     ^
--stdin-:<main>: Fatal: ydb/library/yql/ast/yql_expr.h:1769: no children
+-stdin-:<main>: Fatal: ydb/library/yql/ast/yql_expr.h:1785: no children
 
 <sql-statement>
 --   group w/o existing GROUP BY and ORDER BY target under ambiguous condition

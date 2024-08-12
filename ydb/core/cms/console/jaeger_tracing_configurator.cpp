@@ -210,21 +210,6 @@ TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::Get
         }
     }
 
-    // If external_throttling section is absent we want to allow all requests to be traced
-    if (cfg.GetExternalThrottling().empty()){
-        TExternalThrottlingRule<TWithTag<TThrottlingSettings>> rule {
-            .Throttler = TWithTag<TThrottlingSettings> {
-                .Value = TThrottlingSettings {
-                    .MaxTracesPerMinute = Max<ui64>(),
-                    .MaxTracesBurst = 0,
-                },
-                .Tag = tag++,
-            },
-        };
-
-        settings.ExternalThrottlingRules[static_cast<size_t>(ERequestType::UNSPECIFIED)].Global.push_back(rule);
-    }
-
     return settings;
 }
 

@@ -1,6 +1,6 @@
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2022 The OpenLDAP Foundation.
+ * Copyright 1998-2024 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -13,10 +13,10 @@
  */
 
 static const char copyright[] =
-"Copyright 1998-2022 The OpenLDAP Foundation.  All rights reserved.\n"
+"Copyright 1998-2024 The OpenLDAP Foundation.  All rights reserved.\n"
 "COPYING RESTRICTIONS APPLY\n";
 
 static const char __Version[] =
-"@(#) $OpenLDAP: liblber.la 2.6.7 (" __DATE__ " " __TIME__ ") $\n"
+"@(#) $OpenLDAP: liblber.la 2.6.8 (" __DATE__ " " __TIME__ ") $\n"
 "\topenldap\n";
 

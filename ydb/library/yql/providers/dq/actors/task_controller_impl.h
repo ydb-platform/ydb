@@ -84,11 +84,11 @@ public:
     }
 
     ~TTaskControllerImpl() override {
-        // we want to clear TaskCount instantly to use with real-time monitoring
+        // we want to clear Tasks instantly to use with real-time monitoring
         // all other counters will be kept for some time to upload to Monitoring
         // and removed together
         auto aggrStats = AggregateQueryStatsByStage(TaskStat, Stages, CollectFull());
-        aggrStats.SetCounter(TaskStat.GetCounterName("TaskRunner", {{"Stage", "Total"}}, "TaskCount"), 0);
+        aggrStats.SetCounter(TaskStat.GetCounterName("TaskRunner", {{"Stage", "Total"}}, "Tasks"), 0);
         ExportStats(aggrStats, 0);
     }
 
@@ -295,9 +295,9 @@ private:
                     } else if (name == "EgressRows" && taskLevelCounter) {
                         publicCounterName = "query.sink_output_records";
                         isDeriv = true;
-                    } else if (name == "TaskCount") {
+                    } else if (name == "Tasks") {
                         publicCounterName = "query.running_tasks";
-                        isDeriv = true;
+                        isDeriv = false;
                     } else if (name == "MultiHop_LateThrownEventsCount") {
                         publicCounterName = "query.late_events";
                         isDeriv = true;
@@ -600,7 +600,7 @@ private:
 
 public:
     void OnQueryResult(TEvQueryResponse::TPtr& ev) {
-        YQL_ENSURE(!ev->Get()->Record.HasResultSet() && ev->Get()->Record.GetYson().empty());
+        YQL_ENSURE(!ev->Get()->Record.SampleSize());
         FinalStat().FlushCounters(ev->Get()->Record);
         if (!Issues.Empty()) {
             IssuesToMessage(Issues.ToIssues(), ev->Get()->Record.MutableIssues());

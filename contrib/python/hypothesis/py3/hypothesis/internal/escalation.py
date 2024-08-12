@@ -18,13 +18,7 @@ from pathlib import Path
 from typing import Dict, NamedTuple, Optional, Type
 
 import hypothesis
-from hypothesis.errors import (
-    DeadlineExceeded,
-    HypothesisException,
-    StopTest,
-    UnsatisfiedAssumption,
-    _Trimmable,
-)
+from hypothesis.errors import _Trimmable
 from hypothesis.internal.compat import BaseExceptionGroup
 from hypothesis.utils.dynamicvariables import DynamicVariable
 
@@ -54,30 +48,10 @@ def belongs_to(package):
     return accept
 
 
-PREVENT_ESCALATION = os.getenv("HYPOTHESIS_DO_NOT_ESCALATE") == "true"
-
 FILE_CACHE: Dict[bytes, bool] = {}
 
 
 is_hypothesis_file = belongs_to(hypothesis)
-
-HYPOTHESIS_CONTROL_EXCEPTIONS = (DeadlineExceeded, StopTest, UnsatisfiedAssumption)
-
-
-def escalate_hypothesis_internal_error():
-    if PREVENT_ESCALATION:
-        return
-
-    _, e, tb = sys.exc_info()
-
-    if getattr(e, "hypothesis_internal_never_escalate", False):
-        return
-
-    filepath = None if tb is None else traceback.extract_tb(tb)[-1][0]
-    if is_hypothesis_file(filepath) and not isinstance(
-        e, (HypothesisException, *HYPOTHESIS_CONTROL_EXCEPTIONS)
-    ):
-        raise
 
 
 def get_trimmed_traceback(exception=None):
@@ -87,9 +61,12 @@ def get_trimmed_traceback(exception=None):
     else:
         tb = exception.__traceback__
     # Avoid trimming the traceback if we're in verbose mode, or the error
-    # was raised inside Hypothesis
+    # was raised inside Hypothesis. Additionally, the environment variable
+    # HYPOTHESIS_NO_TRACEBACK_TRIM is respected if nonempty, because verbose
+    # mode is prohibitively slow when debugging strategy recursion errors.
     if (
         tb is None
+        or os.environ.get("HYPOTHESIS_NO_TRACEBACK_TRIM", None)
         or hypothesis.settings.default.verbosity >= hypothesis.Verbosity.debug
         or is_hypothesis_file(traceback.extract_tb(tb)[-1][0])
         and not isinstance(exception, _Trimmable)

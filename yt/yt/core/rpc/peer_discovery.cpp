@@ -43,7 +43,7 @@ private:
     TPeerDiscoveryResponse ConvertResponse(const TIntrusivePtr<TTypedClientResponse<NProto::TRspDiscover>>& rsp)
     {
         if (Hook_) {
-            Hook_->OnResponse(rsp.Get());
+            Hook_->HandleResponse(rsp.Get());
         }
 
         return TPeerDiscoveryResponse{

@@ -26,14 +26,14 @@ TCommandTable::TCommandTable()
 {
     //AddCommand(std::make_unique<TCommandCreateTable>());
     AddCommand(std::make_unique<TCommandDropTable>());
-    AddCommand(std::make_unique<TCommandQuery>());
+    AddCommand(std::make_unique<TCommandTableQuery>());
     AddCommand(std::make_unique<TCommandReadTable>());
     AddCommand(std::make_unique<TCommandIndex>());
     AddCommand(std::make_unique<TCommandAttribute>());
     AddCommand(std::make_unique<TCommandTtl>());
 }
 
-TCommandQuery::TCommandQuery()
+TCommandTableQuery::TCommandTableQuery()
     : TClientCommandTree("query", {}, "Query operations")
 {
     AddCommand(std::make_unique<TCommandExecuteQuery>());
@@ -102,6 +102,10 @@ namespace {
         {"Datetime", EPrimitiveType::Datetime},
         {"Timestamp", EPrimitiveType::Timestamp},
         {"Interval", EPrimitiveType::Interval},
+        {"Date32", EPrimitiveType::Date32},
+        {"Datetime64", EPrimitiveType::Datetime64},
+        {"Timestamp64", EPrimitiveType::Timestamp64},
+        {"Interval64", EPrimitiveType::Interval64},
         {"TzDate", EPrimitiveType::TzDate},
         {"TzDatetime", EPrimitiveType::TzDatetime},
         {"TzTimestamp", EPrimitiveType::TzTimestamp},
@@ -355,7 +359,7 @@ void TCommandExecuteQuery::Config(TConfig& config) {
     config.Opts->AddLongOption("flame-graph", "Builds resource usage flame graph, based on statistics info")
             .RequiredArgument("PATH").StoreResult(&FlameGraphPath);
     config.Opts->AddCharOption('s', "Collect statistics in basic mode").StoreTrue(&BasicStats);
-    config.Opts->AddLongOption("tx-mode", "Transaction mode (for data queries only) [serializable-rw, online-ro, stale-ro]")
+    config.Opts->AddLongOption("tx-mode", "Transaction mode (for generic & data queries) [serializable-rw, online-ro, stale-ro, notx (generic queries only)]")
         .RequiredArgument("[String]").DefaultValue("serializable-rw").StoreResult(&TxMode);
     config.Opts->AddLongOption('q', "query", "Text of query to execute").RequiredArgument("[String]").StoreResult(&Query);
     config.Opts->AddLongOption('f', "file", "Path to file with query text to execute")
@@ -440,18 +444,15 @@ int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
     if (TxMode) {
         if (TxMode == "serializable-rw") {
             txSettings = NTable::TTxSettings::SerializableRW();
+        } else if (TxMode == "online-ro")  {
+            txSettings = NTable::TTxSettings::OnlineRO();
+        } else if (TxMode == "stale-ro") {
+            txSettings = NTable::TTxSettings::StaleRO();
         } else {
-            if (TxMode == "online-ro") {
-                txSettings = NTable::TTxSettings::OnlineRO();
-            } else {
-                if (TxMode == "stale-ro") {
-                    txSettings = NTable::TTxSettings::StaleRO();
-                } else {
-                    throw TMisuseException() << "Unknown transaction mode.";
-                }
-            }
+            throw TMisuseException() << "Unknown transaction mode.";
         }
     }
+
     NTable::TTableClient client(CreateDriver(config));
     NTable::TAsyncDataQueryResult asyncResult;
 
@@ -519,7 +520,7 @@ void TCommandExecuteQuery::PrintDataQueryResponse(NTable::TDataQueryResult& resu
         Cout << Endl << "Statistics:" << Endl << stats->ToString();
         PrintFlameGraph(stats->GetPlan());
     }
-    if( FlameGraphPath && !stats.Defined())
+    if (FlameGraphPath && !stats.Defined())
     {
         Cout << Endl << "Flame graph is available for full or profile stats only" << Endl;
     }
@@ -555,13 +556,16 @@ namespace {
         NQuery::TExecuteQuerySettings>;
 
     template <typename TClient>
-    auto GetSettings(const TString& collectStatsMode, const bool basicStats) {
+    auto GetSettings(const TString& collectStatsMode, const bool basicStats, std::optional<TDuration> timeout) {
         if constexpr (std::is_same_v<TClient, NTable::TTableClient>) {
             const auto defaultStatsMode = basicStats
                 ? NTable::ECollectQueryStatsMode::Basic
                 : NTable::ECollectQueryStatsMode::None;
             NTable::TStreamExecScanQuerySettings settings;
             settings.CollectQueryStats(ParseQueryStatsModeOrThrow(collectStatsMode, defaultStatsMode));
+            if (timeout.has_value()) {
+                settings.ClientTimeout(*timeout);
+            }
             return settings;
         } else if constexpr (std::is_same_v<TClient, NQuery::TQueryClient>) {
             const auto defaultStatsMode = basicStats
@@ -569,6 +573,9 @@ namespace {
                 : NQuery::EStatsMode::None;
             NQuery::TExecuteQuerySettings settings;
             settings.StatsMode(ParseQueryStatsModeOrThrow(collectStatsMode, defaultStatsMode));
+            if (timeout.has_value()) {
+                settings.ClientTimeout(*timeout);
+            }
             return settings;
         }
         Y_UNREACHABLE();
@@ -579,7 +586,22 @@ namespace {
         TClient client,
         const TString& query,
         const TSettings<TClient>& settings,
-        const std::optional<TParams>& params = std::nullopt) {
+        const TString& TxMode = "",
+        const std::optional<TParams>& params = std::nullopt
+    ) {
+        NQuery::TTxSettings txSettings;
+        if (TxMode) {
+            if (TxMode == "serializable-rw") {
+                txSettings = NQuery::TTxSettings::SerializableRW();
+            } else if (TxMode == "online-ro")  {
+                txSettings = NQuery::TTxSettings::OnlineRO();
+            } else if (TxMode == "stale-ro") {
+                txSettings = NQuery::TTxSettings::StaleRO();
+            } else if (TxMode != "notx") {
+                throw TMisuseException() << "Unknown transaction mode.";
+            }
+        }
+
         if constexpr (std::is_same_v<TClient, NTable::TTableClient>) {
             if (params) {
                 return client.StreamExecuteScanQuery(
@@ -597,14 +619,14 @@ namespace {
             if (params) {
                 return client.StreamExecuteQuery(
                     query,
-                    NQuery::TTxControl::BeginTx().CommitTx(),
+                    (TxMode == "notx" ? NQuery::TTxControl::NoTx() : NQuery::TTxControl::BeginTx(txSettings).CommitTx()),
                     *params,
                     settings
                 );
             } else {
                 return client.StreamExecuteQuery(
                     query,
-                    NQuery::TTxControl::BeginTx().CommitTx(),
+                    (TxMode == "notx" ? NQuery::TTxControl::NoTx() : NQuery::TTxControl::BeginTx(txSettings).CommitTx()),
                     settings
                 );
             }
@@ -655,7 +677,11 @@ int TCommandExecuteQuery::ExecuteScanQuery(TConfig& config) {
 template <typename TClient>
 int TCommandExecuteQuery::ExecuteQueryImpl(TConfig& config) {
     TClient client(CreateDriver(config));
-    const auto settings = GetSettings<TClient>(CollectStatsMode, BasicStats);
+    std::optional<TDuration> optTimeout;
+    if (OperationTimeout) {
+        optTimeout = TDuration::MilliSeconds(FromString<ui64>(OperationTimeout));
+    }
+    const auto settings = GetSettings<TClient>(CollectStatsMode, BasicStats, optTimeout);
 
     TAsyncPartIterator<TClient> asyncResult;
     SetInterruptHandlers();
@@ -671,6 +697,7 @@ int TCommandExecuteQuery::ExecuteQueryImpl(TConfig& config) {
                     client,
                     Query,
                     settings,
+                    TxMode,
                     paramBuilder->Build()
                 );
                 return result.Apply([promise](const auto& result) mutable {
@@ -692,7 +719,8 @@ int TCommandExecuteQuery::ExecuteQueryImpl(TConfig& config) {
             auto result = StreamExecuteQuery(
                 client,
                 Query,
-                settings
+                settings,
+                TxMode
             );
             return result.Apply([promise](const auto& result) mutable {
                 promise.SetValue(result.GetValue());
@@ -840,9 +868,15 @@ int TCommandExplain::Run(TConfig& config) {
 
     TString planJson;
     TString ast;
+    std::optional<TDuration> timeout;
+    if (OperationTimeout) {
+        timeout = TDuration::MilliSeconds(FromString<ui64>(OperationTimeout));
+    }
+
     if (QueryType == "scan") {
         NTable::TTableClient client(CreateDriver(config));
         NTable::TStreamExecScanQuerySettings settings;
+        settings.ClientTimeout(timeout.value_or(TDuration()));
 
         if (Analyze) {
             settings.CollectQueryStats(NTable::ECollectQueryStatsMode::Full);
@@ -888,6 +922,7 @@ int TCommandExplain::Run(TConfig& config) {
     } else if (QueryType == "generic") {
         NQuery::TQueryClient client(CreateDriver(config));
         NQuery::TExecuteQuerySettings settings;
+        settings.ClientTimeout(timeout.value_or(TDuration()));
 
         if (Analyze) {
             settings.StatsMode(NQuery::EStatsMode::Full);
@@ -927,7 +962,7 @@ int TCommandExplain::Run(TConfig& config) {
         auto result = GetSession(config).ExecuteDataQuery(
             Query,
             NTable::TTxControl::BeginTx(NTable::TTxSettings::SerializableRW()).CommitTx(),
-            settings
+            FillSettings(settings)
         ).ExtractValueSync();
         ThrowOnError(result);
         planJson = result.GetQueryPlan();

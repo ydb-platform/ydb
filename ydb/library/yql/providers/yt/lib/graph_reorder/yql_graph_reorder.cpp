@@ -311,8 +311,7 @@ IGraphTransformer::TStatus TDependencyUpdater::ReorderGraph(const TExprNode::TPt
                         }
                     }
 
-                    if (newWorld) {
-                        oldReadDeps[read.Get()] = read->ChildPtr(0);
+                    if (newWorld && oldReadDeps.emplace(read.Get(), read->ChildPtr(0)).second) {
                         read->ChildRef(0) = newWorld;
                     }
                 }

@@ -5,7 +5,7 @@ import shutil
 import tempfile
 import time
 import itertools
-from pkg_resources import resource_string
+from importlib_resources import read_binary
 from google.protobuf import text_format
 
 import ydb.tests.library.common.yatest_common as yatest_common
@@ -68,6 +68,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.mon_port = port_allocator.mon_port
         self.ic_port = port_allocator.ic_port
         self.grpc_ssl_port = port_allocator.grpc_ssl_port
+        self.pgwire_port = port_allocator.pgwire_port
         self.sqs_port = None
         if configurator.sqs_service_enabled:
             self.sqs_port = port_allocator.sqs_port
@@ -77,10 +78,15 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
         if configurator.use_log_files:
             self.__log_file = tempfile.NamedTemporaryFile(dir=self.cwd, prefix="logfile_", suffix=".log", delete=False)
+            kwargs = {}
         else:
             self.__log_file = None
+            kwargs = {
+                "stdout_file": "/dev/stdout",
+                "stderr_file": "/dev/stderr"
+                }
 
-        daemon.Daemon.__init__(self, self.command, cwd=self.cwd, timeout=180, stderr_on_error_lines=240)
+        daemon.Daemon.__init__(self, self.command, cwd=self.cwd, timeout=180, stderr_on_error_lines=240, **kwargs)
         self.__binary_path = None
 
     @property
@@ -172,6 +178,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "--grpc-port=%s" % self.grpc_port,
                 "--mon-port=%d" % self.mon_port,
                 "--ic-port=%d" % self.ic_port,
+                "--pgwire-port=%d" % self.pgwire_port,
             ]
         )
 
@@ -346,12 +353,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         logger.info("Cluster started and initialized")
 
         if bs_needed:
-            self.client.add_config_item(
-                resource_string(
-                    __name__,
-                    "resources/default_profile.txt"
-                )
-            )
+            self.client.add_config_item(read_binary(__name__, "resources/default_profile.txt"))
 
     def __run_node(self, node_id):
         """
@@ -421,10 +423,13 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         for i in slots:
             i.stop()
 
-    def __stop_node(self, node):
+    def __stop_node(self, node, kill=False):
         ret = None
         try:
-            node.stop()
+            if kill:
+                node.kill()
+            else:
+                node.stop()
         except daemon.DaemonError as exceptions:
             ret = exceptions
         else:
@@ -434,16 +439,16 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 shutil.rmtree(self.__common_udfs_dir, ignore_errors=True)
         return ret
 
-    def stop(self):
+    def stop(self, kill=False):
         saved_exceptions = []
 
         for slot in self.slots.values():
-            exception = self.__stop_node(slot)
+            exception = self.__stop_node(slot, kill)
             if exception is not None:
                 saved_exceptions.append(exception)
 
         for node in self.nodes.values():
-            exception = self.__stop_node(node)
+            exception = self.__stop_node(node, kill)
             if exception is not None:
                 saved_exceptions.append(exception)
 

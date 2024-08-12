@@ -9,12 +9,14 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
+#include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
+
 namespace NYdb::NQuery {
 
 using namespace NThreading;
 
 static void SetTxSettings(const TTxSettings& txSettings, Ydb::Query::TransactionSettings* proto) {
-    switch (txSettings.Mode_) {
+    switch (txSettings.GetMode()) {
         case TTxSettings::TS_SERIALIZABLE_RW:
             proto->mutable_serializable_read_write();
             break;
@@ -207,6 +209,7 @@ TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> StreamExecuteQueryIm
     auto request = MakeRequest<Ydb::Query::ExecuteQueryRequest>();
     request.set_exec_mode(::Ydb::Query::ExecMode(settings.ExecMode_));
     request.set_stats_mode(::Ydb::Query::StatsMode(settings.StatsMode_));
+    request.set_pool_id(settings.PoolId_);
     request.mutable_query_content()->set_text(query);
     request.mutable_query_content()->set_syntax(::Ydb::Query::Syntax(settings.Syntax_));
     if (session.Defined()) {
@@ -217,6 +220,10 @@ TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> StreamExecuteQueryIm
 
     if (settings.ConcurrentResultSets_) {
         request.set_concurrent_result_sets(*settings.ConcurrentResultSets_);
+    }
+
+    if (settings.OutputChunkMaxSize_) {
+        request.set_response_part_limit_bytes(*settings.OutputChunkMaxSize_);
     }
 
     if (txControl.HasTx()) {

@@ -133,7 +133,7 @@ public:
 
 private:
     TNodePtr DoClone() const override {
-        return new TMatchRecognizeNavigate(GetPos(), Name, Args);
+        return new TMatchRecognizeNavigate(GetPos(), Name, CloneContainer(Args));
     }
 
     bool DoInit(TContext& ctx, ISource* src) override;

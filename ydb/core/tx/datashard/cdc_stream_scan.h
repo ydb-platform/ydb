@@ -9,6 +9,10 @@
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
 
+namespace NKikimrTxDataShard {
+    class TEvCdcStreamScanResponse_TStats;
+}
+
 namespace NKikimr::NDataShard {
 
 class TCdcStreamScanManager {
@@ -16,6 +20,8 @@ public:
     struct TStats {
         ui64 RowsProcessed = 0;
         ui64 BytesProcessed = 0;
+
+        void Serialize(NKikimrTxDataShard::TEvCdcStreamScanResponse_TStats& proto) const;
     };
 
 private:
@@ -39,6 +45,8 @@ public:
 
     void Complete(const TPathId& streamPathId);
     void Complete(ui64 txId);
+    bool IsCompleted(const TPathId& streamPathId) const;
+    const TStats& GetCompletedStats(const TPathId& streamPathId) const;
 
     TScanInfo* Get(const TPathId& streamPathId);
     const TScanInfo* Get(const TPathId& streamPathId) const;
@@ -57,6 +65,7 @@ public:
 
 private:
     THashMap<TPathId, TScanInfo> Scans;
+    THashMap<TPathId, TStats> CompletedScans;
     THashMap<ui64, TPathId> TxIdToPathId;
 };
 

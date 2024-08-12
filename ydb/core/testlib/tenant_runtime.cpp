@@ -820,6 +820,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
     TAppPrepare app;
 
     app.FeatureFlags = Extension.GetFeatureFlags();
+    app.ImmediateControlsConfig = Extension.GetImmediateControlsConfig();
     app.ClearDomainsAndHive();
 
     ui32 planResolution = 500;
@@ -854,7 +855,9 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
         app.AddHive(Config.HiveId);
     }
 
-    for (size_t i = 0; i< Config.Nodes.size(); ++i) {
+    app.InitIcb(Config.Nodes.size());
+
+    for (size_t i = 0; i < Config.Nodes.size(); ++i) {
         AddLocalService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(GetNodeId(i)),
                         TActorSetupCmd(new TFakeNodeWhiteboardService, TMailboxType::Simple, 0), i);
     }

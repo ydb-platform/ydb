@@ -1,6 +1,7 @@
 import json
 import os
 import pytest
+import re
 import yatest.common
 
 from yql_utils import get_param as yql_get_param
@@ -105,20 +106,47 @@ def get_cfg_file(cfg, case):
         return case + '.cfg'
 
 
+def validate_cfg(result):
+    for r in result:
+        assert r[0] in (
+            "in",
+            "out",
+            "udf",
+            "providers",
+            "res",
+            "canonize_peephole",
+            "canonize_lineage",
+            "peephole_use_blocks",
+            "with_final_result_issues",
+            "xfail",
+            "pragma",
+            "canonize_yt",
+            "file",
+            "http_file",
+            "yt_file",
+            "os",
+            "param",
+            ), "Unknown command in .cfg: %s" % (r[0])
+
+
 def get_config(suite, case, cfg, data_path=None):
     if data_path is None:
         data_path = DATA_PATH
     result = []
     try:
         default_cfg = get_cfg_file('default.txt', case)
-        inherit = ['canonize_peephole', 'canonize_lineage']
+        inherit = ['canonize_peephole', 'canonize_lineage', 'peephole_use_blocks']
         with open(os.path.join(data_path, suite, default_cfg)) as cfg_file_content:
-            result = [line.strip().split() for line in cfg_file_content.readlines() if line.strip() and line.strip().split()[0] in inherit]
-    except BaseException:
+            result = [line.strip().split() for line in cfg_file_content.readlines() if line.strip() and line.strip().split()[0]]
+        validate_cfg(result)
+        result = [r for r in result if r[0] in inherit]
+    except IOError:
         pass
     cfg_file = get_cfg_file(cfg, case)
     with open(os.path.join(data_path, suite, cfg_file)) as cfg_file_content:
-        return [line.strip().split() for line in cfg_file_content.readlines() if line.strip()] + result
+        result = [line.strip().split() for line in cfg_file_content.readlines() if line.strip()] + result
+    validate_cfg(result)
+    return result
 
 
 def load_json_file_strip_comments(path):
@@ -225,3 +253,13 @@ def normalize_table(csv, fields_order=None):
         normalized += '\n' + ';'.join(normalized_cells)
 
     return normalized.strip()
+
+def replace_vars(sql_query, var_tag):
+    """
+    Sql can contain comment like /* yt_local_var: VAR_NAME=VAR_VALUE */
+    it will replace VAR_NAME with VAR_VALUE within sql query
+    """
+    vars = re.findall(r"\/\* {}: (.*)=(.*) \*\/".format(var_tag), sql_query)
+    for var_name, var_value in vars:
+        sql_query = re.sub(re.escape(var_name.strip()), var_value.strip(), sql_query)
+    return sql_query

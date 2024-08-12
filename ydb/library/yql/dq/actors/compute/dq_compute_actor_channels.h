@@ -14,6 +14,7 @@ namespace NYql::NDq {
 
 class TDqComputeActorChannels : public NActors::TActor<TDqComputeActorChannels> {
 public:
+    friend struct TChannelsTestFixture;
     struct TPeerState: NNonCopyable::TMoveOnly {
     private:
         static const ui32 InterconnectHeadersSize = 96;

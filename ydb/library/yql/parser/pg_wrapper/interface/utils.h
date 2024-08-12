@@ -7,7 +7,7 @@
 
 namespace NYql {
 
-TMaybe<ui32> ConvertToPgType(NKikimr::NUdf::EDataSlot slot);
+ui32 ConvertToPgType(NKikimr::NUdf::EDataSlot slot);
 TMaybe<NKikimr::NUdf::EDataSlot> ConvertFromPgType(ui32 typeId);
 
 bool ParsePgIntervalModifier(const TString& str, i32& ret);

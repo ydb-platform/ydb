@@ -351,14 +351,6 @@ public:
         ProcessYdbStatusCode(status);
     };
 
-    void SendResult(
-            Ydb::StatusIds::StatusCode status,
-            const google::protobuf::RepeatedPtrField<NKikimr::NGRpcService::TYdbIssueMessageType>& message) override {
-
-        Y_UNUSED(message);
-        ProcessYdbStatusCode(status);
-    };
-
     const Ydb::Operations::OperationParams& operation_params() const {
         return DummyParams;
     }

@@ -1,6 +1,6 @@
 import "ydb/core/tx/columnshard/common/protos/blob_range.proto";
 import "ydb/core/tx/columnshard/common/protos/snapshot.proto";
-import "ydb/core/protos/tx_columnshard.proto";
+import "ydb/core/tx/columnshard/engines/protos/portion_info.proto";
 
 package NKikimrColumnShardDataSharingProto;
 
@@ -14,7 +14,10 @@ message TColumnRecord {
 message TIndexChunk {
     optional uint32 IndexId = 1;
     optional uint32 ChunkIdx = 2;
-    optional NKikimrColumnShardProto.TBlobRangeLink16 BlobRange = 3;
+    oneof DataImplementation {
+        NKikimrColumnShardProto.TBlobRangeLink16 BlobRange = 3;
+        string BlobData = 5;
+    }
 
     message TMeta {
         optional uint32 RecordsCount = 1;
@@ -26,12 +29,13 @@ message TIndexChunk {
 message TPortionInfo {
     optional uint64 PathId = 1;
     optional uint64 PortionId = 2;
-    optional NKikimrColumnShardProto.TSnapshot MinSnapshot = 3;
+    optional NKikimrColumnShardProto.TSnapshot MinSnapshotDeprecated = 3;
     optional NKikimrColumnShardProto.TSnapshot RemoveSnapshot = 4;
     optional NKikimrTxColumnShard.TIndexPortionMeta Meta = 5;
     repeated TColumnRecord Records = 6;
     repeated TIndexChunk Indexes = 7;
     repeated NKikimrColumnShardProto.TUnifiedBlobId BlobIds = 8;
+    optional uint64 SchemaVersion = 9;
 }
 
 message TPathIdData {

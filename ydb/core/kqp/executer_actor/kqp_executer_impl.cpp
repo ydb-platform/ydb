@@ -49,7 +49,7 @@ void TEvKqpExecuter::TEvTxResponse::TakeResult(ui32 idx, NDq::TDqSerializedBatch
 
 TEvKqpExecuter::TEvTxResponse::~TEvTxResponse() {
     if (!TxResults.empty() && Y_LIKELY(AllocState)) {
-        with_lock(AllocState->Alloc) {
+        with_lock(*AllocState->Alloc) {
             TxResults.crop(0);
         }
     }
@@ -78,18 +78,20 @@ TActorId ReportToRl(ui64 ru, const TString& database, const TString& userToken,
 
 IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
-    const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
-    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
-    NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, TPreparedQueryHolder::TConstPtr preparedQuery,
-    const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, const TActorId& creator,
-    TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
+    const NKikimrConfig::TTableServiceConfig tableServiceConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
+    TPreparedQueryHolder::TConstPtr preparedQuery, const TActorId& creator,
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     const bool enableOlapSink, const bool useEvWrite, ui32 statementResultIndex,
-    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup)
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings)
 {
     if (request.Transactions.empty()) {
         // commit-only or rollback-only data transaction
-        YQL_ENSURE(request.LocksOp == ELocksOp::Commit || request.LocksOp == ELocksOp::Rollback);
-        return CreateKqpDataExecuter(std::move(request), database, userToken, counters, false, aggregation, executerRetriesConfig, std::move(asyncIoFactory), chanTransportVersion, creator, maximalSecretsSnapshotWaitTime, userRequestContext, enableOlapSink, useEvWrite, statementResultIndex, federatedQuerySetup);
+        return CreateKqpDataExecuter(
+            std::move(request), database, userToken, counters, false, tableServiceConfig,
+            std::move(asyncIoFactory), creator, 
+            userRequestContext, enableOlapSink, useEvWrite, statementResultIndex, 
+            federatedQuerySetup, /*GUCSettings*/nullptr
+        );
     }
 
     TMaybe<NKqpProto::TKqpPhyTx::EType> txsType;
@@ -107,13 +109,27 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     switch (*txsType) {
         case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
         case NKqpProto::TKqpPhyTx::TYPE_DATA:
-            return CreateKqpDataExecuter(std::move(request), database, userToken, counters, false, aggregation, executerRetriesConfig, std::move(asyncIoFactory), chanTransportVersion, creator, maximalSecretsSnapshotWaitTime, userRequestContext, enableOlapSink, useEvWrite, statementResultIndex, federatedQuerySetup);
+            return CreateKqpDataExecuter(
+                std::move(request), database, userToken, counters, false, tableServiceConfig,
+                std::move(asyncIoFactory), creator, 
+                userRequestContext, enableOlapSink, useEvWrite, statementResultIndex, 
+                federatedQuerySetup, /*GUCSettings*/nullptr
+            );
 
         case NKqpProto::TKqpPhyTx::TYPE_SCAN:
-            return CreateKqpScanExecuter(std::move(request), database, userToken, counters, aggregation, executerRetriesConfig, preparedQuery, chanTransportVersion, maximalSecretsSnapshotWaitTime, userRequestContext, statementResultIndex);
+            return CreateKqpScanExecuter(
+                std::move(request), database, userToken, counters,
+                tableServiceConfig, preparedQuery, userRequestContext, 
+                statementResultIndex
+            );
 
         case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
-            return CreateKqpDataExecuter(std::move(request), database, userToken, counters, true, aggregation, executerRetriesConfig, std::move(asyncIoFactory), chanTransportVersion, creator, maximalSecretsSnapshotWaitTime, userRequestContext, enableOlapSink, useEvWrite, statementResultIndex, federatedQuerySetup);
+            return CreateKqpDataExecuter(
+                std::move(request), database, userToken, counters, true,
+                tableServiceConfig, std::move(asyncIoFactory), creator,
+                userRequestContext, enableOlapSink, useEvWrite, statementResultIndex,
+                federatedQuerySetup, GUCSettings
+            );
 
         default:
             YQL_ENSURE(false, "Unsupported physical tx type: " << (ui32)*txsType);

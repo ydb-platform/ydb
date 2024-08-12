@@ -2,6 +2,7 @@
 #include "yql_yt_op_hash.h"
 #include "yql_yt_op_settings.h"
 
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/lib/hash/yql_hash_builder.h>
 #include <ydb/library/yql/utils/log/log.h>
@@ -48,6 +49,37 @@ TYtNodeHashCalculator::TYtNodeHashCalculator(const TYtState::TPtr& state, const 
         return TString();
     };
 
+    Hashers[TDqStage::CallableName()] = [this] (const TExprNode& node, TArgIndex& argIndex, ui32 frameLevel) {
+        THashBuilder builder;
+        builder << node.Content();
+        for (size_t i = 0; i < node.ChildrenSize(); ++i) {
+            // skip _logical_id setting from hashing
+            if (i == TDqStageBase::idx_Settings) {
+                for (size_t j = 0; j < node.Child(i)->ChildrenSize(); ++j) {
+                    if((node.Child(i)->Child(j)->Type() == TExprNode::List)
+                        && node.Child(i)->Child(j)->ChildrenSize() > 0
+                        && (node.Child(i)->Child(j)->Child(0)->Content() = NDq::TDqStageSettings::LogicalIdSettingName)) {
+                        continue;
+                    }
+                    if (auto partHash = GetHashImpl(*node.Child(i)->Child(j), argIndex, frameLevel)) {
+                        builder << partHash;
+                    }
+                    else {
+                        return TString();
+                    }
+                }
+            } else {
+                if (auto partHash = GetHashImpl(*node.Child(i), argIndex, frameLevel)) {
+                    builder << partHash;
+                }
+                else {
+                    return TString();
+                }
+            }
+        }
+        return builder.Finish();
+    };
+
     Hashers[TYtOutput::CallableName()] = [this] (const TExprNode& node, TArgIndex& argIndex, ui32 frameLevel) {
         return GetOutputHash(node, argIndex, frameLevel);
     };
@@ -89,6 +121,10 @@ TString TYtNodeHashCalculator::MakeSalt(const TYtSettings::TConstPtr& config, co
         for (const auto& path : *val) {
             builder << path;
         }
+    }
+    if (auto val = config->DockerImage.Get(cluster)) {
+        update = true;
+        builder << *val;
     }
     if (auto val = config->NativeYtTypeCompatibility.Get(cluster)) {
         update = true;
@@ -168,6 +204,9 @@ TString TYtNodeHashCalculator::GetOutTableHash(const TExprNode& node, TArgIndex&
         }
         if (auto replicationFactor = Configuration->TemporaryReplicationFactor.Get(Cluster)) {
             builder << *replicationFactor;
+        }
+        if (auto optimizeFor = Configuration->OptimizeFor.Get(Cluster)) {
+            builder << *optimizeFor;
         }
     }
 

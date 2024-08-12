@@ -43,20 +43,27 @@ STFUNC(TController::StateInit) {
 STFUNC(TController::StateWork) {
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvController::TEvCreateReplication, Handle);
+        HFunc(TEvController::TEvAlterReplication, Handle);
         HFunc(TEvController::TEvDropReplication, Handle);
+        HFunc(TEvController::TEvDescribeReplication, Handle);
         HFunc(TEvPrivate::TEvDropReplication, Handle);
         HFunc(TEvPrivate::TEvDiscoveryTargetsResult, Handle);
         HFunc(TEvPrivate::TEvAssignStreamName, Handle);
         HFunc(TEvPrivate::TEvCreateStreamResult, Handle);
         HFunc(TEvPrivate::TEvDropStreamResult, Handle);
         HFunc(TEvPrivate::TEvCreateDstResult, Handle);
+        HFunc(TEvPrivate::TEvAlterDstResult, Handle);
         HFunc(TEvPrivate::TEvDropDstResult, Handle);
+        HFunc(TEvPrivate::TEvResolveSecretResult, Handle);
         HFunc(TEvPrivate::TEvResolveTenantResult, Handle);
         HFunc(TEvPrivate::TEvUpdateTenantNodes, Handle);
-        HFunc(TEvPrivate::TEvRunWorkers, Handle);
+        HFunc(TEvPrivate::TEvProcessQueues, Handle);
+        HFunc(TEvPrivate::TEvRemoveWorker, Handle);
+        HFunc(TEvPrivate::TEvDescribeTargetsResult, Handle);
         HFunc(TEvDiscovery::TEvDiscoveryData, Handle);
         HFunc(TEvDiscovery::TEvError, Handle);
         HFunc(TEvService::TEvStatus, Handle);
+        HFunc(TEvService::TEvWorkerStatus, Handle);
         HFunc(TEvService::TEvRunWorker, Handle);
         HFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
     default:
@@ -106,6 +113,11 @@ void TController::Handle(TEvController::TEvCreateReplication::TPtr& ev, const TA
     RunTxCreateReplication(ev, ctx);
 }
 
+void TController::Handle(TEvController::TEvAlterReplication::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    RunTxAlterReplication(ev, ctx);
+}
+
 void TController::Handle(TEvController::TEvDropReplication::TPtr& ev, const TActorContext& ctx) {
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
     RunTxDropReplication(ev, ctx);
@@ -114,6 +126,16 @@ void TController::Handle(TEvController::TEvDropReplication::TPtr& ev, const TAct
 void TController::Handle(TEvPrivate::TEvDropReplication::TPtr& ev, const TActorContext& ctx) {
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
     RunTxDropReplication(ev, ctx);
+}
+
+void TController::Handle(TEvController::TEvDescribeReplication::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    RunTxDescribeReplication(ev, ctx);
+}
+
+void TController::Handle(TEvPrivate::TEvDescribeTargetsResult::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    RunTxDescribeReplication(ev, ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvDiscoveryTargetsResult::TPtr& ev, const TActorContext& ctx) {
@@ -141,9 +163,19 @@ void TController::Handle(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorC
     RunTxCreateDstResult(ev, ctx);
 }
 
+void TController::Handle(TEvPrivate::TEvAlterDstResult::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    RunTxAlterDstResult(ev, ctx);
+}
+
 void TController::Handle(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx) {
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
     RunTxDropDstResult(ev, ctx);
+}
+
+void TController::Handle(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    RunTxResolveSecretResult(ev, ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx) {
@@ -247,13 +279,13 @@ void TController::DeleteSession(ui32 nodeId, const TActorContext& ctx) {
         worker.ClearSession();
 
         if (worker.HasCommand()) {
-            WorkersToRun.insert(id);
+            BootQueue.insert(id);
         }
     }
 
     Sessions.erase(nodeId);
     CloseSession(nodeId, ctx);
-    ScheduleRunWorkers();
+    ScheduleProcessQueues();
 }
 
 void TController::CloseSession(ui32 nodeId, const TActorContext& ctx) {
@@ -276,21 +308,256 @@ void TController::Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& c
     auto& session = Sessions[nodeId];
     session.SetReady();
 
-    for (const auto& workerIdentity : ev->Get()->Record.GetWorkers()) {
-        const auto id = TWorkerId::Parse(workerIdentity);
-
-        auto it = Workers.find(id);
-        if (it == Workers.end()) {
-            it = Workers.emplace(id, TWorkerInfo()).first;
+    for (const auto& protoId : ev->Get()->Record.GetWorkers()) {
+        const auto id = TWorkerId::Parse(protoId);
+        if (!IsValidWorker(id)) {
+            StopQueue.emplace(id, nodeId);
+            continue;
         }
 
-        auto& worker = it->second;
-        if (worker.HasSession() && Sessions.contains(worker.GetSession())) {
-            StopWorker(worker.GetSession(), id);
+        auto* worker = GetOrCreateWorker(id);
+        if (worker->HasSession()) {
+            if (const auto sessionId = worker->GetSession(); sessionId != nodeId) {
+                Y_ABORT_UNLESS(Sessions.contains(sessionId));
+                Sessions[sessionId].DetachWorker(id);
+                StopQueue.emplace(id, sessionId);
+            }
         }
 
         session.AttachWorker(id);
+        worker->AttachSession(nodeId);
+    }
+
+    ScheduleProcessQueues();
+}
+
+void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+
+    const auto nodeId = ev->Sender.NodeId();
+    if (!Sessions.contains(nodeId)) {
+        return;
+    }
+
+    auto& session = Sessions[nodeId];
+    const auto& record = ev->Get()->Record;
+    const auto id = TWorkerId::Parse(record.GetWorker());
+
+    switch (record.GetStatus()) {
+    case NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING:
+        if (!session.HasWorker(id)) {
+            StopQueue.emplace(id, nodeId);
+        } else if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_INFO) {
+            UpdateLag(id, TDuration::MilliSeconds(record.GetLagMilliSeconds()));
+        }
+        break;
+    case NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED:
+        if (!MaybeRemoveWorker(id, ctx)) {
+            if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_ERROR) {
+                RunTxWorkerError(id, record.GetErrorDescription(), ctx);
+            } else {
+                session.DetachWorker(id);
+                if (IsValidWorker(id)) {
+                    auto* worker = GetOrCreateWorker(id);
+                    worker->ClearSession();
+                    if (worker->HasCommand()) {
+                        BootQueue.insert(id);
+                    }
+                }
+            }
+        }
+        break;
+    default:
+        CLOG_W(ctx, "Unknown worker status"
+            << ": value# " << static_cast<int>(record.GetStatus()));
+        break;
+    }
+
+    ScheduleProcessQueues();
+}
+
+void TController::UpdateLag(const TWorkerId& id, TDuration lag) {
+    auto replication = Find(id.ReplicationId());
+    if (!replication) {
+        return;
+    }
+
+    auto* target = replication->FindTarget(id.TargetId());
+    if (!target) {
+        return;
+    }
+
+    target->UpdateLag(id.WorkerId(), lag);
+}
+
+void TController::Handle(TEvService::TEvRunWorker::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+
+    auto& record = ev->Get()->Record;
+    const auto id = TWorkerId::Parse(record.GetWorker());
+    auto* cmd = record.MutableCommand();
+
+    if (!IsValidWorker(id)) {
+        return;
+    }
+
+    auto* worker = GetOrCreateWorker(id, cmd);
+    if (!worker->HasCommand()) {
+        worker->SetCommand(cmd);
+    }
+
+    if (!worker->HasSession()) {
+        BootQueue.insert(id);
+    }
+
+    ScheduleProcessQueues();
+}
+
+bool TController::IsValidWorker(const TWorkerId& id) const {
+    auto replication = Find(id.ReplicationId());
+    if (!replication) {
+        return false;
+    }
+
+    if (replication->GetState() != TReplication::EState::Ready) {
+        return false;
+    }
+
+    auto* target = replication->FindTarget(id.TargetId());
+    if (!target) {
+        return false;
+    }
+
+    if (target->GetDstState() != TReplication::EDstState::Ready) {
+        return false;
+    }
+
+    if (target->GetStreamState() != TReplication::EStreamState::Ready) {
+        return false;
+    }
+
+    return true;
+}
+
+TWorkerInfo* TController::GetOrCreateWorker(const TWorkerId& id, NKikimrReplication::TRunWorkerCommand* cmd) {
+    auto it = Workers.find(id);
+    if (it == Workers.end()) {
+        it = Workers.emplace(id, cmd).first;
+    }
+
+    auto replication = Find(id.ReplicationId());
+    Y_ABORT_UNLESS(replication);
+
+    auto* target = replication->FindTarget(id.TargetId());
+    Y_ABORT_UNLESS(target);
+
+    target->AddWorker(id.WorkerId());
+    return &it->second;
+}
+
+void TController::ScheduleProcessQueues() {
+    if (ProcessQueuesScheduled || (!BootQueue && !StopQueue)) {
+        return;
+    }
+
+    Schedule(TDuration::MilliSeconds(100), new TEvPrivate::TEvProcessQueues());
+    ProcessQueuesScheduled = true;
+}
+
+void TController::Handle(TEvPrivate::TEvProcessQueues::TPtr&, const TActorContext& ctx) {
+    CLOG_D(ctx, "Process queues"
+        << ": boot# " << BootQueue.size()
+        << ": stop# " << StopQueue.size());
+
+    ProcessBootQueue(ctx);
+    ProcessStopQueue(ctx);
+
+    ProcessQueuesScheduled = false;
+    ScheduleProcessQueues();
+}
+
+void TController::ProcessBootQueue(const TActorContext&) {
+    ui32 i = 0;
+    for (auto iter = BootQueue.begin(); iter != BootQueue.end() && i < ProcessBatchLimit;) {
+        const auto id = *iter;
+        if (!IsValidWorker(id)) {
+            BootQueue.erase(iter++);
+            continue;
+        }
+
+        auto it = Workers.find(id);
+        if (it == Workers.end()) {
+            BootQueue.erase(iter++);
+            continue;
+        }
+
+        auto& worker = it->second;
+        if (worker.HasSession()) {
+            BootQueue.erase(iter++);
+            continue;
+        }
+
+        auto replication = Find(id.ReplicationId());
+        Y_ABORT_UNLESS(replication);
+
+        const auto& tenant = replication->GetTenant();
+        if (!tenant || !NodesManager.HasTenant(tenant) || !NodesManager.HasNodes(tenant)) {
+            ++iter;
+            continue;
+        }
+
+        const auto nodeId = NodesManager.GetRandomNode(tenant);
+        if (!Sessions.contains(nodeId) || !Sessions[nodeId].IsReady()) {
+            ++iter;
+            continue;
+        }
+
+        Y_ABORT_UNLESS(worker.HasCommand());
+        BootWorker(nodeId, id, *worker.GetCommand());
         worker.AttachSession(nodeId);
+
+        BootQueue.erase(iter++);
+        ++i;
+    }
+}
+
+void TController::BootWorker(ui32 nodeId, const TWorkerId& id, const NKikimrReplication::TRunWorkerCommand& cmd) {
+    LOG_D("Boot worker"
+        << ": nodeId# " << nodeId
+        << ", workerId# " << id);
+
+    Y_ABORT_UNLESS(Sessions.contains(nodeId));
+    auto& session = Sessions[nodeId];
+
+    auto ev = MakeHolder<TEvService::TEvRunWorker>();
+    auto& record = ev->Record;
+
+    auto& controller = *record.MutableController();
+    controller.SetTabletId(TabletID());
+    controller.SetGeneration(Executor()->Generation());
+    id.Serialize(*record.MutableWorker());
+    record.MutableCommand()->CopyFrom(cmd);
+
+    Send(MakeReplicationServiceId(nodeId), std::move(ev));
+    session.AttachWorker(id);
+}
+
+void TController::ProcessStopQueue(const TActorContext& ctx) {
+    ui32 i = 0;
+    for (auto iter = StopQueue.begin(); iter != StopQueue.end() && i < ProcessBatchLimit;) {
+        const auto& id = iter->first;
+        auto sessionId = iter->second;
+
+        if (!Sessions.contains(sessionId) || !Sessions[sessionId].IsReady()) {
+            MaybeRemoveWorker(id, ctx);
+            StopQueue.erase(iter++);
+            continue;
+        }
+
+        StopWorker(sessionId, id);
+
+        StopQueue.erase(iter++);
+        ++i;
     }
 }
 
@@ -314,107 +581,56 @@ void TController::StopWorker(ui32 nodeId, const TWorkerId& id) {
     session.DetachWorker(id);
 }
 
-void TController::Handle(TEvService::TEvRunWorker::TPtr& ev, const TActorContext& ctx) {
+void TController::Handle(TEvPrivate::TEvRemoveWorker::TPtr& ev, const TActorContext& ctx) {
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
 
-    auto& record = ev->Get()->Record;
-    const auto id = TWorkerId::Parse(record.GetWorker());
-    auto* cmd = record.MutableCommand();
+    const auto& id = ev->Get()->Id;
+    RemoveQueue.insert(id);
 
     auto it = Workers.find(id);
     if (it == Workers.end()) {
-        it = Workers.emplace(id, TWorkerInfo(cmd)).first;
+        return RemoveWorker(id, ctx);
     }
 
     auto& worker = it->second;
-    if (!worker.HasCommand()) {
-        worker.SetCommand(cmd);
-    }
-
     if (!worker.HasSession()) {
-        WorkersToRun.insert(id);
+        return RemoveWorker(id, ctx);
     }
 
-    ScheduleRunWorkers();
+    StopQueue.emplace(id, worker.GetSession());
+    ScheduleProcessQueues();
 }
 
-void TController::ScheduleRunWorkers() {
-    if (RunWorkersScheduled || !WorkersToRun) {
+void TController::RemoveWorker(const TWorkerId& id, const TActorContext& ctx) {
+    LOG_D("Remove worker"
+        << ": workerId# " << id);
+
+    Y_ABORT_UNLESS(RemoveQueue.contains(id));
+
+    RemoveQueue.erase(id);
+    Workers.erase(id);
+
+    auto replication = Find(id.ReplicationId());
+    if (!replication) {
         return;
     }
 
-    Schedule(TDuration::MilliSeconds(100), new TEvPrivate::TEvRunWorkers());
-    RunWorkersScheduled = true;
-}
-
-void TController::Handle(TEvPrivate::TEvRunWorkers::TPtr&, const TActorContext& ctx) {
-    CLOG_D(ctx, "Run workers"
-        << ": queue# " << WorkersToRun.size());
-
-    static constexpr ui32 limit = 100;
-    ui32 i = 0;
-
-    for (auto iter = WorkersToRun.begin(); iter != WorkersToRun.end() && i < limit;) {
-        const auto id = *iter;
-
-        auto it = Workers.find(id);
-        Y_ABORT_UNLESS(it != Workers.end());
-
-        auto& worker = it->second;
-        if (worker.HasSession()) {
-            WorkersToRun.erase(iter++);
-            continue;
-        }
-
-        auto replication = Find(id.ReplicationId());
-        if (!replication) {
-            WorkersToRun.erase(iter++);
-            continue;
-        }
-
-        const auto& tenant = replication->GetTenant();
-        if (!tenant || !NodesManager.HasTenant(tenant)) {
-            ++iter;
-            continue;
-        }
-
-        const auto nodeId = NodesManager.GetRandomNode(tenant);
-        if (!Sessions.contains(nodeId) || !Sessions[nodeId].IsReady()) {
-            ++iter;
-            continue;
-        }
-
-        Y_ABORT_UNLESS(worker.HasCommand());
-        RunWorker(nodeId, id, *worker.GetCommand());
-        worker.AttachSession(nodeId);
-
-        WorkersToRun.erase(iter++);
-        ++i;
+    auto* target = replication->FindTarget(id.TargetId());
+    if (!target) {
+        return;
     }
 
-    RunWorkersScheduled = false;
-    ScheduleRunWorkers();
+    target->RemoveWorker(id.WorkerId());
+    target->Progress(ctx);
 }
 
-void TController::RunWorker(ui32 nodeId, const TWorkerId& id, const NKikimrReplication::TRunWorkerCommand& cmd) {
-    LOG_D("Run worker"
-        << ": nodeId# " << nodeId
-        << ", workerId# " << id);
+bool TController::MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ctx) {
+    if (!RemoveQueue.contains(id)) {
+        return false;
+    }
 
-    Y_ABORT_UNLESS(Sessions.contains(nodeId));
-    auto& session = Sessions[nodeId];
-
-    auto ev = MakeHolder<TEvService::TEvRunWorker>();
-    auto& record = ev->Record;
-
-    auto& controller = *record.MutableController();
-    controller.SetTabletId(TabletID());
-    controller.SetGeneration(Executor()->Generation());
-    id.Serialize(*record.MutableWorker());
-    record.MutableCommand()->CopyFrom(cmd);
-
-    Send(MakeReplicationServiceId(nodeId), std::move(ev));
-    session.AttachWorker(id);
+    RemoveWorker(id, ctx);
+    return true;
 }
 
 void TController::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx) {
@@ -428,7 +644,7 @@ void TController::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const T
     }
 }
 
-TReplication::TPtr TController::Find(ui64 id) {
+TReplication::TPtr TController::Find(ui64 id) const {
     auto it = Replications.find(id);
     if (it == Replications.end()) {
         return nullptr;
@@ -437,7 +653,7 @@ TReplication::TPtr TController::Find(ui64 id) {
     return it->second;
 }
 
-TReplication::TPtr TController::Find(const TPathId& pathId) {
+TReplication::TPtr TController::Find(const TPathId& pathId) const {
     auto it = ReplicationsByPathId.find(pathId);
     if (it == ReplicationsByPathId.end()) {
         return nullptr;

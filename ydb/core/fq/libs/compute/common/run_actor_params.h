@@ -14,6 +14,7 @@
 #include <ydb/library/yql/providers/dq/worker_manager/interface/counters.h>
 #include <ydb/library/yql/providers/pq/cm_client/client.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_gateway.h>
+#include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 
 #include <ydb/public/lib/fq/scope.h>
 
@@ -73,9 +74,11 @@ struct TRunActorParams { // TODO2 : Change name
         const Fq::Private::TaskResources& resources,
         const TString& executionId,
         const TString& operationId,
-        const NFq::NConfig::TYdbStorageConfig& computeConnection,
+        const ::NFq::NConfig::TYdbStorageConfig& computeConnection,
         TDuration resultTtl,
-        std::map<TString, Ydb::TypedValue>&& queryParameters
+        std::map<TString, Ydb::TypedValue>&& queryParameters,
+        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
+        const ::NFq::NConfig::TWorkloadManagerConfig& workloadManager
     );
 
     TRunActorParams(const TRunActorParams& params) = default;
@@ -135,9 +138,11 @@ struct TRunActorParams { // TODO2 : Change name
     Fq::Private::TaskResources Resources;
     TString ExecutionId;
     NYdb::TOperation::TOperationId OperationId;
-    NFq::NConfig::TYdbStorageConfig ComputeConnection;
+    ::NFq::NConfig::TYdbStorageConfig ComputeConnection;
     TDuration ResultTtl;
     std::map<TString, Ydb::TypedValue> QueryParameters;
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory;
+    ::NFq::NConfig::TWorkloadManagerConfig WorkloadManager;
 };
 
 } /* NFq */

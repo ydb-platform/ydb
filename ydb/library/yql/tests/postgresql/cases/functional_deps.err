@@ -416,7 +416,7 @@ ALTER TABLE products ADD PRIMARY KEY (product_id);
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	ALTER TABLE products ADD PRIMARY KEY (product_id);
 	^
 <sql-statement>
@@ -513,7 +513,7 @@ ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	-- fail
 	^
 <sql-statement>
@@ -542,7 +542,7 @@ ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT; -- fail
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT; -- fail
 	^
 <sql-statement>
@@ -550,7 +550,7 @@ ALTER TABLE articles_in_category DROP CONSTRAINT articles_in_category_pkey RESTR
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	ALTER TABLE articles_in_category DROP CONSTRAINT articles_in_category_pkey RESTRICT; --fail
 	^
 <sql-statement>
@@ -582,7 +582,7 @@ ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT; -- fail
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT; -- fail
 	^
 <sql-statement>
@@ -607,7 +607,7 @@ ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT; -- fail
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT; -- fail
 	^
 <sql-statement>
@@ -643,7 +643,7 @@ ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT;
 	^
 <sql-statement>

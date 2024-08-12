@@ -1,6 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/library/yql/public/udf/arrow/block_builder.h>
+#include <ydb/library/yql/public/udf/arrow/memory_pool.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
@@ -18,7 +19,7 @@ struct TArrayBuilderTestData {
         , Env(Alloc)
         , PgmBuilder(Env, *FunctionRegistry)
         , MemInfo("Memory")
-        , ArrowPool(arrow::default_memory_pool())
+        , ArrowPool(GetYqlMemoryPool())
     {
     }
 
@@ -65,6 +66,9 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
         struct TWithDtor {
             int Payload;
             std::shared_ptr<int> DestructorCallsCnt;
+            TWithDtor(int payload, std::shared_ptr<int> destructorCallsCnt): 
+                Payload(payload), DestructorCallsCnt(std::move(destructorCallsCnt)) {
+            }
             ~TWithDtor() {
                 *DestructorCallsCnt = *DestructorCallsCnt + 1;
             }
@@ -172,6 +176,30 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
         UNIT_ASSERT_VALUES_EQUAL(resource2->GetResourceTag(), ResourceName);
     }
 
+    Y_UNIT_TEST(TestTzDateBuilder_Layout) {
+        TArrayBuilderTestData data;
+        const auto tzDateType = data.PgmBuilder.NewDataType(EDataSlot::TzDate);
+        const auto arrayBuilder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), tzDateType, 
+            *data.ArrowPool, MAX_BLOCK_SIZE, /* pgBuilder */ nullptr);
+
+        auto makeTzDate = [] (ui16 val, ui16 tz) {
+            TUnboxedValuePod tzDate {val};
+            tzDate.SetTimezoneId(tz);
+            return tzDate;
+        };
+
+        TVector<TUnboxedValuePod> dates{makeTzDate(1234, 1), makeTzDate(1234, 2), makeTzDate(45678, 333)};
+        for (auto date: dates) {
+            arrayBuilder->Add(date);
+        }
+        
+        const auto datum = arrayBuilder->Build(true);
+        UNIT_ASSERT(datum.is_array());
+        UNIT_ASSERT_VALUES_EQUAL(datum.length(), dates.size());
+        const auto childData = datum.array()->child_data;
+        UNIT_ASSERT_VALUES_EQUAL_C(childData.size(), 2, "Expected date and timezone children");
+    }
+
     Y_UNIT_TEST(TestResourceStringValueBuilderReader) {
         TArrayBuilderTestData data;
         const auto resourceType = data.PgmBuilder.NewResourceType(ResourceName);
@@ -189,5 +217,70 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(item1AfterRead.GetStringRefFromValue(), "test");
         UNIT_ASSERT_VALUES_EQUAL(item2AfterRead.GetStringRefFromValue(), "234");
+    }
+
+    Y_UNIT_TEST(TestBuilderAllocatedSize) {
+        TArrayBuilderTestData data;
+        const auto optStringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, true);
+        const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
+        const auto structType = data.PgmBuilder.NewStructType({{ "a", optStringType }, { "b", int64Type }});
+        const auto optStructType = data.PgmBuilder.NewOptionalType(structType);
+        const auto doubleOptStructType = data.PgmBuilder.NewOptionalType(optStructType);
+
+        size_t itemSize = NMiniKQL::CalcMaxBlockItemSize(doubleOptStructType);
+        size_t blockLen = NMiniKQL::CalcBlockLen(itemSize);
+        Y_ENSURE(blockLen > 8);
+
+        size_t bigStringSize = NMiniKQL::MaxBlockSizeInBytes / 8;
+        size_t hugeStringSize = NMiniKQL::MaxBlockSizeInBytes * 2;
+
+        const TString bString(bigStringSize, 'a');
+        TBlockItem strItem1(bString);
+        TBlockItem intItem1(1);
+        TBlockItem sItems1[] = { strItem1, intItem1 };
+        TBlockItem sItem1(sItems1);
+
+        const TBlockItem bigItem = sItem1.MakeOptional();
+
+        const TString hString(hugeStringSize, 'b');
+        TBlockItem strItem2(hString);
+        TBlockItem intItem2(2);
+        TBlockItem sItems2[] = { strItem2, intItem2 };
+        TBlockItem sItem2(sItems2);
+
+        const TBlockItem hugeItem = sItem2.MakeOptional();
+
+        const size_t stringAllocStep = 
+            arrow::BitUtil::RoundUpToMultipleOf64(blockLen + 1) +        // String NullMask
+            arrow::BitUtil::RoundUpToMultipleOf64((blockLen + 1) * 4) +  // String Offsets
+            NMiniKQL::MaxBlockSizeInBytes;                               // String Data
+        const size_t initialAllocated =
+            stringAllocStep +
+            arrow::BitUtil::RoundUpToMultipleOf64((blockLen + 1) * 8) +  // Int64 Data
+            2 * arrow::BitUtil::RoundUpToMultipleOf64(blockLen + 1);     // Double Optional
+
+
+        size_t totalAllocated = 0;
+        auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), doubleOptStructType, *data.ArrowPool, blockLen, nullptr, &totalAllocated);
+        UNIT_ASSERT_VALUES_EQUAL(totalAllocated, initialAllocated);
+
+        for (ui32 i = 0; i < 8; ++i) {
+            builder->Add(bigItem);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(totalAllocated, initialAllocated);
+        // string data block is fully used here
+
+        size_t beforeBlockBoundary = totalAllocated;
+        builder->Add(bigItem);
+        UNIT_ASSERT_VALUES_EQUAL(totalAllocated, beforeBlockBoundary + stringAllocStep);
+
+        // string data block is partially used
+        size_t beforeHugeString = totalAllocated;
+        builder->Add(hugeItem);
+        UNIT_ASSERT_VALUES_EQUAL(totalAllocated, beforeHugeString + stringAllocStep + hugeStringSize - NMiniKQL::MaxBlockSizeInBytes);
+
+        totalAllocated = 0;
+        builder->Build(false);
+        UNIT_ASSERT_VALUES_EQUAL(totalAllocated, initialAllocated);
     }
 }

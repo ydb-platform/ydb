@@ -96,13 +96,13 @@ public:
         const TPullQueueOptions& options),
         (queuePath, offset, partitionIndex, rowBatchReadOptions, options))
 
-    DELEGATE_METHOD(TFuture<NQueueClient::IQueueRowsetPtr>, PullConsumer, (
+    DELEGATE_METHOD(TFuture<NQueueClient::IQueueRowsetPtr>, PullQueueConsumer, (
         const NYPath::TRichYPath& consumerPath,
         const NYPath::TRichYPath& queuePath,
         std::optional<i64> offset,
         int partitionIndex,
         const NQueueClient::TQueueRowBatchReadOptions& rowBatchReadOptions,
-        const TPullConsumerOptions& options),
+        const TPullQueueConsumerOptions& options),
         (consumerPath, queuePath, offset, partitionIndex, rowBatchReadOptions, options))
 
     DELEGATE_METHOD(TFuture<void>, RegisterQueueConsumer, (
@@ -123,6 +123,20 @@ public:
         const std::optional<NYPath::TRichYPath>& consumerPath,
         const TListQueueConsumerRegistrationsOptions& options),
         (queuePath, consumerPath, options))
+
+    DELEGATE_METHOD(TFuture<TCreateQueueProducerSessionResult>, CreateQueueProducerSession, (
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
+        const TCreateQueueProducerSessionOptions& options),
+        (producerPath, queuePath, sessionId, options))
+
+    DELEGATE_METHOD(TFuture<void>, RemoveQueueProducerSession, (
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
+        const TRemoveQueueProducerSessionOptions& options),
+        (producerPath, queuePath, sessionId, options))
 
     // Cypress
     DELEGATE_METHOD(TFuture<NYson::TYsonString>, GetNode, (
@@ -540,6 +554,13 @@ public:
         const TAbortJobOptions& options),
         (jobId, options))
 
+    DELEGATE_METHOD(TFuture<void>, DumpJobProxyLog, (
+        NJobTrackerClient::TJobId jobId,
+        NJobTrackerClient::TOperationId operationId,
+        const NYPath::TYPath& path,
+        const TDumpJobProxyLogOptions& options),
+        (jobId, operationId, path, options))
+
     // Metadata
     DELEGATE_METHOD(TFuture<TClusterMeta>, GetClusterMeta, (
         const TGetClusterMetaOptions& options),
@@ -558,7 +579,7 @@ public:
         const TBuildMasterSnapshotsOptions& options),
         (options))
 
-    DELEGATE_METHOD(TFuture<TCellIdToSequenceNumberMap>, GetMasterConsistentState, (
+    DELEGATE_METHOD(TFuture<TCellIdToConsistentStateMap>, GetMasterConsistentState, (
         const TGetMasterConsistentStateOptions& options),
         (options))
 
@@ -808,10 +829,16 @@ public:
         const TPausePipelineOptions& options),
         (pipelinePath, options))
 
-    DELEGATE_METHOD(TFuture<TPipelineStatus>, GetPipelineStatus, (
+    DELEGATE_METHOD(TFuture<TPipelineState>, GetPipelineState, (
         const NYPath::TYPath& pipelinePath,
-        const TGetPipelineStatusOptions& options),
+        const TGetPipelineStateOptions& options),
         (pipelinePath, options))
+
+    DELEGATE_METHOD(TFuture<TGetFlowViewResult>, GetFlowView, (
+        const NYPath::TYPath& pipelinePath,
+        const NYPath::TYPath& viewPath,
+        const TGetFlowViewOptions& options),
+        (pipelinePath, viewPath, options))
 
     #undef DELEGATE_METHOD
 

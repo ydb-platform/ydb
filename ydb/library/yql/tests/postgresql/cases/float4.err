@@ -655,6 +655,14 @@ select float4send(flt) as ibits,
     -stdin-:<main>:23:31: Error: Unknown type: xfloat4
     	  from (select bits::integer::xfloat4::float4 as flt
 	                              ^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	-- float4: seeeeeee emmmmmmm mmmmmmmm mmmmmmmm
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	-- float4: seeeeeee emmmmmmm mmmmmmmm mmmmmmmm
+	^
 <sql-statement>
 with testdata(bits) as (values
   (x'00000000'),
@@ -827,6 +835,14 @@ select float4send(flt) as ibits,
     -stdin-:<main>:163:31: Error: Unknown type: xfloat4
     	  from (select bits::integer::xfloat4::float4 as flt
 	                              ^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	with testdata(bits) as (values
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	with testdata(bits) as (values
+	^
 <sql-statement>
 -- clean up, lest opr_sanity complain
 drop type xfloat4 cascade;

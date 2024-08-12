@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(Worker) {
             return CreateLocalTableWriter(tablePathId);
         };
 
-        auto worker = env.GetRuntime().Register(CreateWorker(std::move(createReaderFn), std::move(createWriterFn)));
+        auto worker = env.GetRuntime().Register(CreateWorker(env.GetSender(), std::move(createReaderFn), std::move(createWriterFn)));
         Y_UNUSED(worker);
 
         UNIT_ASSERT(WriteTopic(env, "/Root/topic", R"({"key":[1], "update":{"value":"10"}})"));

@@ -40,6 +40,13 @@ void TPeriodicExecutorBase<TInvocationTimePolicy>::Start()
 }
 
 template <CInvocationTimePolicy TInvocationTimePolicy>
+bool TPeriodicExecutorBase<TInvocationTimePolicy>::IsStarted() const
+{
+    auto guard = Guard(SpinLock_);
+    return Started_;
+}
+
+template <CInvocationTimePolicy TInvocationTimePolicy>
 void TPeriodicExecutorBase<TInvocationTimePolicy>::DoStop(TGuard<NThreading::TSpinLock>& guard)
 {
     if (!Started_) {
@@ -151,14 +158,14 @@ void TPeriodicExecutorBase<TInvocationTimePolicy>::PostCallback()
 {
     GuardedInvoke(
         Invoker_,
-        [weakThis = MakeWeak(this)] {
-            if (auto strongThis = weakThis.Lock()) {
-                strongThis->RunCallback();
+        [this, weakThis = MakeWeak(this)] {
+            if (auto this_ = weakThis.Lock()) {
+                RunCallback();
             }
         },
-        [weakThis = MakeWeak(this)] {
-            if (auto strongThis = weakThis.Lock()) {
-                strongThis->OnCallbackCancelled();
+        [this, weakThis = MakeWeak(this)] {
+            if (auto this_ = weakThis.Lock()) {
+                OnCallbackCancelled();
             }
         });
 }

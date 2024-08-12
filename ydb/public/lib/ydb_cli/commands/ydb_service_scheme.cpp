@@ -136,7 +136,7 @@ void TCommandDescribe::Config(TConfig& config) {
     // Table options
     config.Opts->AddLongOption("partition-boundaries", "[Table] Show partition key boundaries").StoreTrue(&ShowKeyShardBoundaries)
         .AddLongName("shard-boundaries");
-    config.Opts->AddLongOption("stats", "[Table|Topic] Show table/topic statistics").StoreTrue(&ShowStats);
+    config.Opts->AddLongOption("stats", "[Table|Topic|Replication] Show table/topic/replication statistics").StoreTrue(&ShowStats);
     config.Opts->AddLongOption("partition-stats", "[Table|Topic] Show partition statistics").StoreTrue(&ShowPartitionStats);
 
     AddDeprecatedJsonOption(config, "(Deprecated, will be removed soon. Use --format option instead) [Table] Output in json format");
@@ -177,6 +177,8 @@ int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescrib
         return DescribeTopic(driver);
     case NScheme::ESchemeEntryType::CoordinationNode:
         return DescribeCoordinationNode(driver);
+    case NScheme::ESchemeEntryType::Replication:
+        return DescribeReplication(driver);
     default:
         return DescribeEntryDefault(entry);
     }
@@ -266,7 +268,7 @@ namespace {
 
 }
 
-int TCommandDescribe::PrintTopicResponsePretty(const NYdb::NTopic::TTopicDescription& description) {
+int TCommandDescribe::PrintTopicResponsePretty(const NYdb::NTopic::TTopicDescription& description) const {
     Cout << Endl << "RetentionPeriod: " << description.GetRetentionPeriod().Hours() << " hours";
     if (description.GetRetentionStorageMb().Defined()) {
         Cout << Endl << "StorageRetention: " << *description.GetRetentionStorageMb() << " MB";
@@ -291,41 +293,43 @@ int TCommandDescribe::PrintTopicResponsePretty(const NYdb::NTopic::TTopicDescrip
     return EXIT_SUCCESS;
 }
 
-int TCommandDescribe::PrintTopicResponseProtoJsonBase64(
-        const NYdb::NTopic::
-                TDescribeTopicResult& result) {
+template <typename T>
+static int PrintProtoJsonBase64(const T& msg) {
+    using namespace google::protobuf::util;
+
     TString json;
-    google::protobuf::util::JsonPrintOptions jsonOpts;
-    jsonOpts.preserve_proto_field_names = true;
-    auto convertStatus = google::protobuf::util::MessageToJsonString(
-            TProtoAccessor::GetProto(result.GetTopicDescription()),
-            &json,
-            jsonOpts
-    );
-    if (convertStatus.ok()) {
-        Cout << json << Endl;
-    } else {
-        Cerr << "Error occurred while converting result proto to json" << Endl;
+    JsonPrintOptions opts;
+    opts.preserve_proto_field_names = true;
+    const auto status = MessageToJsonString(msg, &json, opts);
+
+    if (!status.ok()) {
+        Cerr << "Error occurred while converting proto to json: " << status.message().ToString() << Endl;
         return EXIT_FAILURE;
     }
+
+    Cout << json << Endl;
     return EXIT_SUCCESS;
 }
 
-int TCommandDescribe::PrintTopicResponse(const NYdb::NTopic::TDescribeTopicResult& result) {
-    switch (OutputFormat) {
+template <typename T>
+using TPrettyPrinter = int(TCommandDescribe::*)(const T&) const;
+
+template <typename T>
+static int PrintDescription(TCommandDescribe* self, EOutputFormat format, const T& value, TPrettyPrinter<T> prettyFunc) {
+    switch (format) {
         case EOutputFormat::Default:
         case EOutputFormat::Pretty:
-            PrintTopicResponsePretty(result.GetTopicDescription());
-            break;
+            return std::invoke(prettyFunc, self, value);
         case EOutputFormat::Json:
             Cerr << "Warning! Option --json is deprecated and will be removed soon. "
                  << "Use \"--format proto-json-base64\" option instead." << Endl;
             [[fallthrough]];
         case EOutputFormat::ProtoJsonBase64:
-            return PrintTopicResponseProtoJsonBase64(result);
+            return PrintProtoJsonBase64(TProtoAccessor::GetProto(value));
         default:
-            throw TMisuseException() << "This command doesn't support " << OutputFormat << " output format";
+            throw TMisuseException() << "This command doesn't support " << format << " output format";
     }
+
     return EXIT_SUCCESS;
 }
 
@@ -334,9 +338,11 @@ int TCommandDescribe::DescribeTopic(TDriver& driver) {
     NYdb::NTopic::TDescribeTopicSettings settings;
     settings.IncludeStats(ShowStats || ShowPartitionStats);
 
-    auto describeResult = topicClient.DescribeTopic(Path, settings).GetValueSync();
-    ThrowOnError(describeResult);
-    return PrintTopicResponse(describeResult);
+    auto result = topicClient.DescribeTopic(Path, settings).GetValueSync();
+    ThrowOnError(result);
+
+    const auto& desc = result.GetTopicDescription();
+    return PrintDescription(this, OutputFormat, desc, &TCommandDescribe::PrintTopicResponsePretty);
 }
 
 int TCommandDescribe::DescribeTable(TDriver& driver) {
@@ -353,7 +359,9 @@ int TCommandDescribe::DescribeTable(TDriver& driver) {
         )
     ).GetValueSync();
     ThrowOnError(result);
-    return PrintTableResponse(result);
+
+    auto desc = result.GetTableDescription();
+    return PrintDescription(this, OutputFormat, desc, &TCommandDescribe::PrintTableResponsePretty);
 }
 
 int TCommandDescribe::DescribeColumnTable(TDriver& driver) {
@@ -368,24 +376,9 @@ int TCommandDescribe::DescribeColumnTable(TDriver& driver) {
         )
     ).GetValueSync();
     ThrowOnError(result);
-    return PrintTableResponse(result);
-}
 
-int TCommandDescribe::PrintCoordinationNodeResponse(const NYdb::NCoordination::TDescribeNodeResult& result) const {
-    switch (OutputFormat) {
-    case EOutputFormat::Default:
-    case EOutputFormat::Pretty:
-        return PrintCoordinationNodeResponsePretty(result.GetResult());
-    case EOutputFormat::Json:
-        Cerr << "Warning! Option --json is deprecated and will be removed soon. "
-            << "Use \"--format proto-json-base64\" option instead." << Endl;
-        [[fallthrough]];
-    case EOutputFormat::ProtoJsonBase64:
-        return PrintCoordinationNodeResponseProtoJsonBase64(result.GetResult());
-    default:
-        throw TMisuseException() << "This command doesn't support " << OutputFormat << " output format";
-    }
-    return EXIT_SUCCESS;
+    auto desc = result.GetTableDescription();
+    return PrintDescription(this, OutputFormat, desc, &TCommandDescribe::PrintTableResponsePretty);
 }
 
 int TCommandDescribe::PrintCoordinationNodeResponsePretty(const NYdb::NCoordination::TNodeDescription& result) const {
@@ -401,28 +394,107 @@ int TCommandDescribe::PrintCoordinationNodeResponsePretty(const NYdb::NCoordinat
     return EXIT_SUCCESS;
 }
 
-int TCommandDescribe::PrintCoordinationNodeResponseProtoJsonBase64(const NYdb::NCoordination::TNodeDescription& result) const {
-    TString json;
-    google::protobuf::util::JsonPrintOptions jsonOpts;
-    jsonOpts.preserve_proto_field_names = true;
-    auto convertStatus = google::protobuf::util::MessageToJsonString(
-        NYdb::TProtoAccessor::GetProto(result),
-        &json,
-        jsonOpts
-    );
-    if (convertStatus.ok()) {
-        Cout << json << Endl;
-        return EXIT_SUCCESS;
-    }
-    Cerr << "Error occurred while converting result proto to json: " << TString(convertStatus.message().ToString()) << Endl;
-    return EXIT_FAILURE;
-}
-
 int TCommandDescribe::DescribeCoordinationNode(const TDriver& driver) {
     NCoordination::TClient client(driver);
-    NCoordination::TDescribeNodeResult description = client.DescribeNode(Path).GetValueSync();
+    auto result = client.DescribeNode(Path).GetValueSync();
 
-    return PrintCoordinationNodeResponse(description);
+    const auto& desc = result.GetResult();
+    return PrintDescription(this, OutputFormat, desc, &TCommandDescribe::PrintCoordinationNodeResponsePretty);
+}
+
+template <typename T, typename U>
+static TString ValueOr(const std::optional<T>& value, const U& orValue) {
+    if (value) {
+        return TStringBuilder() << *value;
+    } else {
+        return TStringBuilder() << orValue;
+    }
+}
+
+template <typename U>
+static TString ProgressOr(const std::optional<float>& value, const U& orValue) {
+    if (value) {
+        return TStringBuilder() << FloatToString(*value, PREC_POINT_DIGITS, 2) << "%";
+    } else {
+        return TStringBuilder() << orValue;
+    }
+}
+
+int TCommandDescribe::PrintReplicationResponsePretty(const NYdb::NReplication::TDescribeReplicationResult& result) const {
+    const auto& desc = result.GetReplicationDescription();
+
+    Cout << Endl << "State: ";
+    switch (desc.GetState()) {
+    case NReplication::TReplicationDescription::EState::Running:
+        if (const auto& stats = desc.GetRunningState().GetStats(); ShowStats) {
+            if (const auto& progress = stats.GetInitialScanProgress(); progress && *progress < 100) {
+                Cout << "Initial scan (" << FloatToString(*progress, PREC_POINT_DIGITS, 2) << "%)";
+            } else if (const auto& lag = stats.GetLag()) {
+                Cout << "Standby (lag: " << *lag << ")";
+            } else {
+                Cout << desc.GetState();
+            }
+        } else {
+            Cout << desc.GetState();
+        }
+        break;
+    case NReplication::TReplicationDescription::EState::Error:
+        Cout << "Error: " << desc.GetErrorState().GetIssues().ToOneLineString();
+        break;
+    default:
+        break;
+    }
+
+    const auto& connParams = desc.GetConnectionParams();
+    Cout << Endl << "Endpoint: " << connParams.GetDiscoveryEndpoint();
+    Cout << Endl << "Database: " << connParams.GetDatabase();
+
+    switch (connParams.GetCredentials()) {
+    case NReplication::TConnectionParams::ECredentials::Static:
+        Cout << Endl << "User: " << connParams.GetStaticCredentials().User;
+        Cout << Endl << "Password (SECRET): " << connParams.GetStaticCredentials().PasswordSecretName;
+        break;
+    case NReplication::TConnectionParams::ECredentials::OAuth:
+        Cout << Endl << "OAuth token (SECRET): " << connParams.GetOAuthCredentials().TokenSecretName;
+        break;
+    }
+
+    if (const auto& items = desc.GetItems()) {
+        TVector<TString> columnNames = { "#", "Source", "Destination", "Changefeed" };
+        if (ShowStats) {
+            columnNames.push_back("Lag");
+            columnNames.push_back("Progress");
+        }
+
+        TPrettyTable table(columnNames, TPrettyTableConfig().WithoutRowDelimiters());
+        for (const auto& item : items) {
+            auto& row = table.AddRow()
+                .Column(0, item.Id)
+                .Column(1, item.SrcPath)
+                .Column(2, item.DstPath)
+                .Column(3, ValueOr(item.SrcChangefeedName, "n/a"));
+            if (ShowStats) {
+                row
+                    .Column(4, ValueOr(item.Stats.GetLag(), "n/a"))
+                    .Column(5, ProgressOr(item.Stats.GetInitialScanProgress(), "n/a"));
+            }
+        }
+        Cout << Endl << "Items:" << Endl << table;
+    }
+
+    Cout << Endl;
+    return EXIT_SUCCESS;
+}
+
+int TCommandDescribe::DescribeReplication(const TDriver& driver) {
+    NReplication::TReplicationClient client(driver);
+    auto settings = NReplication::TDescribeReplicationSettings()
+        .IncludeStats(ShowStats);
+
+    auto result = client.DescribeReplication(Path, settings).ExtractValueSync();
+    ThrowOnError(result);
+
+    return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintReplicationResponsePretty);
 }
 
 namespace {
@@ -486,12 +558,18 @@ namespace {
             TPrettyTableConfig().WithoutRowDelimiters());
 
         for (const auto& changefeed : changefeeds) {
-            table.AddRow()
+            auto& row = table.AddRow()
                 .Column(0, changefeed.GetName())
                 .Column(1, changefeed.GetMode())
                 .Column(2, changefeed.GetFormat())
-                .Column(3, changefeed.GetState())
                 .Column(4, changefeed.GetVirtualTimestamps() ? "on" : "off");
+            if (changefeed.GetState() == NTable::EChangefeedState::InitialScan && changefeed.GetInitialScanProgress()) {
+                const float percentage = changefeed.GetInitialScanProgress()->GetProgress();
+                row.Column(3, TStringBuilder() << changefeed.GetState()
+                    << " (" << FloatToString(percentage, PREC_POINT_DIGITS, 2) << "%)");
+            } else {
+                row.Column(3, changefeed.GetState());
+            }
         }
 
         Cout << Endl << "Changefeeds:" << Endl << table;
@@ -753,26 +831,7 @@ namespace {
     }
 }
 
-int TCommandDescribe::PrintTableResponse(NTable::TDescribeTableResult& result) {
-    NTable::TTableDescription tableDescription = result.GetTableDescription();
-    switch (OutputFormat) {
-    case EOutputFormat::Default:
-    case EOutputFormat::Pretty:
-        PrintResponsePretty(tableDescription);
-        break;
-    case EOutputFormat::Json:
-        Cerr << "Warning! Option --json is deprecated and will be removed soon. "
-            << "Use \"--format proto-json-base64\" option instead." << Endl;
-        [[fallthrough]];
-    case EOutputFormat::ProtoJsonBase64:
-        return PrintResponseProtoJsonBase64(tableDescription);
-    default:
-        throw TMisuseException() << "This command doesn't support " << OutputFormat << " output format";
-    }
-    return EXIT_SUCCESS;
-}
-
-void TCommandDescribe::PrintResponsePretty(const NTable::TTableDescription& tableDescription) {
+int TCommandDescribe::PrintTableResponsePretty(const NTable::TTableDescription& tableDescription) const {
     PrintColumns(tableDescription);
     PrintIndexes(tableDescription);
     PrintChangefeeds(tableDescription);
@@ -793,23 +852,7 @@ void TCommandDescribe::PrintResponsePretty(const NTable::TTableDescription& tabl
     if (ShowKeyShardBoundaries || ShowPartitionStats) {
         PrintPartitionInfo(tableDescription, ShowKeyShardBoundaries, ShowPartitionStats);
     }
-}
 
-int TCommandDescribe::PrintResponseProtoJsonBase64(const NTable::TTableDescription& tableDescription) {
-    TString json;
-    google::protobuf::util::JsonPrintOptions jsonOpts;
-    jsonOpts.preserve_proto_field_names = true;
-    auto convertStatus = google::protobuf::util::MessageToJsonString(
-        NYdb::TProtoAccessor::GetProto(tableDescription),
-        &json,
-        jsonOpts
-    );
-    if (convertStatus.ok()) {
-        Cout << json << Endl;
-    } else {
-        Cerr << "Error occurred while converting result proto to json" << Endl;
-        return EXIT_FAILURE;
-    }
     return EXIT_SUCCESS;
 }
 

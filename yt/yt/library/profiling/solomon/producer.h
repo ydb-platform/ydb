@@ -84,11 +84,15 @@ public:
 
     void Profile(const TProfiler& profiler);
 
+    void SetCollectionBatchSize(int batchSize);
+
 private:
     THashSet<TProducerStatePtr> Producers_;
 
     TProfiler SelfProfiler_;
     TEventTimer ProducerCollectDuration_;
+
+    int BatchSize_ = DefaultProducerCollectionBatchSize;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

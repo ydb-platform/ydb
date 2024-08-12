@@ -1,3 +1,5 @@
+#include "schemeshard__operation_drop_cdc_stream.h"
+
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
@@ -7,6 +9,8 @@
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 
 namespace NKikimr::NSchemeShard {
+
+namespace NCdc {
 
 namespace {
 
@@ -146,9 +150,12 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotAsyncReplicaTable()
-                .IsCommonSensePath()
                 .IsUnderOperation()
                 .IsUnderTheSameOperation(OperationId.GetTxId());
+
+            if (checks && !tablePath.IsInsideTableIndexPath()) {
+                checks.IsCommonSensePath();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -328,9 +335,12 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotAsyncReplicaTable()
-                .IsCommonSensePath()
                 .NotUnderDeleting()
                 .NotUnderOperation();
+
+            if (checks && !tablePath.IsInsideTableIndexPath()) {
+                checks.IsCommonSensePath();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -433,35 +443,12 @@ private:
 
 } // anonymous
 
-ISubOperation::TPtr CreateDropCdcStreamImpl(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TDropCdcStream>(id, tx);
-}
-
-ISubOperation::TPtr CreateDropCdcStreamImpl(TOperationId id, TTxState::ETxState state) {
-    return MakeSubOperation<TDropCdcStream>(id, state);
-}
-
-ISubOperation::TPtr CreateDropCdcStreamAtTable(TOperationId id, const TTxTransaction& tx, bool dropSnapshot) {
-    return MakeSubOperation<TDropCdcStreamAtTable>(id, tx, dropSnapshot);
-}
-
-ISubOperation::TPtr CreateDropCdcStreamAtTable(TOperationId id, TTxState::ETxState state, bool dropSnapshot) {
-    return MakeSubOperation<TDropCdcStreamAtTable>(id, state, dropSnapshot);
-}
-
-TVector<ISubOperation::TPtr> CreateDropCdcStream(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
-    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStream);
-
-    LOG_D("CreateDropCdcStream"
-        << ": opId# " << opId
-        << ", tx# " << tx.ShortDebugString());
-
-    const auto& op = tx.GetDropCdcStream();
-    const auto& tableName = op.GetTableName();
-    const auto& streamName = op.GetStreamName();
-
-    const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
-
+std::variant<TStreamPaths, ISubOperation::TPtr> DoDropStreamPathChecks(
+        const TOperationId& opId,
+        const TPath& workingDirPath,
+        const TString& tableName,
+        const TString& streamName)
+{
     const auto tablePath = workingDirPath.Child(tableName);
     {
         const auto checks = tablePath.Check();
@@ -473,12 +460,15 @@ TVector<ISubOperation::TPtr> CreateDropCdcStream(TOperationId opId, const TTxTra
             .NotDeleted()
             .IsTable()
             .NotAsyncReplicaTable()
-            .IsCommonSensePath()
             .NotUnderDeleting()
             .NotUnderOperation();
 
+        if (checks && !tablePath.IsInsideTableIndexPath()) {
+            checks.IsCommonSensePath();
+        }
+
         if (!checks) {
-            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+            return CreateReject(opId, checks.GetStatus(), checks.GetError());
         }
     }
 
@@ -496,27 +486,38 @@ TVector<ISubOperation::TPtr> CreateDropCdcStream(TOperationId opId, const TTxTra
             .NotUnderOperation();
 
         if (!checks) {
-            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+            return CreateReject(opId, checks.GetStatus(), checks.GetError());
         }
     }
 
+    return TStreamPaths{tablePath, streamPath};
+}
+
+ISubOperation::TPtr DoDropStreamChecks(
+        const TOperationId& opId,
+        const TPath& tablePath,
+        const TTxId lockTxId,
+        TOperationContext& context)
+{
+
     TString errStr;
-    if (!context.SS->CheckApplyIf(tx, errStr)) {
-        return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, errStr)};
-    }
-
-    Y_ABORT_UNLESS(context.SS->CdcStreams.contains(streamPath.Base()->PathId));
-    auto stream = context.SS->CdcStreams.at(streamPath.Base()->PathId);
-
-    const auto lockTxId = stream->State == TCdcStreamInfo::EState::ECdcStreamStateScan
-        ? streamPath.Base()->CreateTxId
-        : InvalidTxId;
     if (!context.SS->CheckLocks(tablePath.Base()->PathId, lockTxId, errStr)) {
-        return {CreateReject(opId, NKikimrScheme::StatusMultipleModifications, errStr)};
+        return CreateReject(opId, NKikimrScheme::StatusMultipleModifications, errStr);
     }
 
-    TVector<ISubOperation::TPtr> result;
+    return nullptr;
+}
 
+void DoDropStream(
+        TVector<ISubOperation::TPtr>& result,
+        const NKikimrSchemeOp::TDropCdcStream& op,
+        const TOperationId& opId,
+        const TPath& workingDirPath,
+        const TPath& tablePath,
+        const TPath& streamPath,
+        const TTxId lockTxId,
+        TOperationContext& context)
+{
     {
         auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamAtTable);
         outTx.MutableDropCdcStream()->CopyFrom(op);
@@ -536,6 +537,14 @@ TVector<ISubOperation::TPtr> CreateDropCdcStream(TOperationId opId, const TTxTra
         outTx.MutableLockGuard()->SetOwnerTxId(ui64(lockTxId));
 
         result.push_back(DropLock(NextPartId(opId, result), outTx));
+    }
+
+    if (workingDirPath.IsTableIndex()) {
+        auto outTx = TransactionTemplate(workingDirPath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
+        outTx.MutableAlterTableIndex()->SetName(workingDirPath.LeafName());
+        outTx.MutableAlterTableIndex()->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
+
+        result.push_back(CreateAlterTableIndex(NextPartId(opId, result), outTx));
     }
 
     {
@@ -565,6 +574,66 @@ TVector<ISubOperation::TPtr> CreateDropCdcStream(TOperationId opId, const TTxTra
 
         result.push_back(CreateDropPQ(NextPartId(opId, result), outTx));
     }
+}
+
+} // namespace NCdc
+
+using namespace NCdc;
+
+ISubOperation::TPtr CreateDropCdcStreamImpl(TOperationId id, const TTxTransaction& tx) {
+    return MakeSubOperation<TDropCdcStream>(id, tx);
+}
+
+ISubOperation::TPtr CreateDropCdcStreamImpl(TOperationId id, TTxState::ETxState state) {
+    return MakeSubOperation<TDropCdcStream>(id, state);
+}
+
+ISubOperation::TPtr CreateDropCdcStreamAtTable(TOperationId id, const TTxTransaction& tx, bool dropSnapshot) {
+    return MakeSubOperation<TDropCdcStreamAtTable>(id, tx, dropSnapshot);
+}
+
+ISubOperation::TPtr CreateDropCdcStreamAtTable(TOperationId id, TTxState::ETxState state, bool dropSnapshot) {
+    return MakeSubOperation<TDropCdcStreamAtTable>(id, state, dropSnapshot);
+}
+
+TVector<ISubOperation::TPtr> CreateDropCdcStream(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStream);
+
+    LOG_D("CreateDropCdcStream"
+        << ": opId# " << opId
+        << ", tx# " << tx.ShortDebugString());
+
+    const auto& op = tx.GetDropCdcStream();
+    const auto& tableName = op.GetTableName();
+    const auto& streamName = op.GetStreamName();
+
+    const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
+
+    const auto checksResult = DoDropStreamPathChecks(opId, workingDirPath, tableName, streamName);
+    if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
+        return {std::get<ISubOperation::TPtr>(checksResult)};
+    }
+
+    const auto [tablePath, streamPath] = std::get<TStreamPaths>(checksResult);
+
+    TString errStr;
+    if (!context.SS->CheckApplyIf(tx, errStr)) {
+        return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, errStr)};
+    }
+
+    Y_ABORT_UNLESS(context.SS->CdcStreams.contains(streamPath.Base()->PathId));
+    auto stream = context.SS->CdcStreams.at(streamPath.Base()->PathId);
+
+    const auto lockTxId = stream->State == TCdcStreamInfo::EState::ECdcStreamStateScan
+        ? streamPath.Base()->CreateTxId
+        : InvalidTxId;
+    if (const auto reject = DoDropStreamChecks(opId, tablePath, lockTxId, context); reject) {
+        return {reject};
+    }
+
+    TVector<ISubOperation::TPtr> result;
+
+    DoDropStream(result, op, opId, workingDirPath, tablePath, streamPath, lockTxId, context);
 
     return result;
 }

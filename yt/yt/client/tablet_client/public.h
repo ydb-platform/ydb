@@ -10,6 +10,12 @@ namespace NYT::NTabletClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NProto {
+
+class TLockMask;
+
+} // namespace NProto
+
 DEFINE_ENUM(ETabletState,
     // Individual states
     ((Mounting)        (0))
@@ -85,6 +91,7 @@ YT_DEFINE_ERROR_ENUM(
     ((CellHasNoAssignedPeers)                 (1737))
     ((TableSchemaIncompatible)                (1738))
     ((BundleIsBanned)                         (1739))
+    ((TabletServantIsNotActive)               (1740))
 );
 
 DEFINE_ENUM(EInMemoryMode,
@@ -218,8 +225,14 @@ DEFINE_ENUM(ESecondaryIndexKind,
 );
 
 DEFINE_ENUM(ERowMergerType,
-    (Legacy)
+    ((Legacy)               (0))
+    ((Watermark)            (1))
+    ((New)                  (2))
 );
+
+extern const TString CustomRuntimeDataWatermarkKey;
+struct TWatermarkRuntimeDataConfig;
+struct TWatermarkRuntimeData;
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:6:20: Error: At function: YtWriteTable!, Setting column_groups
+    	with column_groups="{g1=[a;a;b];def=#}"
+	                   ^
+        <tmp_path>/program.sql:<main>:6:20: Error: Duplicate column "a"
+        	with column_groups="{g1=[a;a;b];def=#}"
+	                   ^

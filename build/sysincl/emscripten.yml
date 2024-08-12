@@ -261,6 +261,7 @@
   - sys/socket.h:           contrib/restricted/emscripten/system/lib/libc/musl/include/sys/socket.h
   - sys/soundcard.h:        contrib/restricted/emscripten/system/lib/libc/musl/include/sys/soundcard.h
   - sys/statfs.h:           contrib/restricted/emscripten/system/lib/libc/musl/include/sys/statfs.h
+  - sys/socketvar.h:        contrib/restricted/emscripten/system/include/compat/sys/socketvar.h
 
   - sys/stat.h:
      - contrib/restricted/emscripten/system/include/compat/sys/stat.h
@@ -347,3 +348,4 @@
 
   - stdc-predef.h: contrib/restricted/emscripten/system/lib/libc/musl/include/stdc-predef.h
 
+  - cxxabi.h: contrib/libs/cxxsupp/libcxxabi/include/cxxabi.h

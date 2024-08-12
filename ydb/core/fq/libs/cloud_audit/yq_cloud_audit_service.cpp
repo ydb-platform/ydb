@@ -65,7 +65,11 @@ std::string MapConnectionType(const FederatedQuery::ConnectionSetting::Connectio
         return "Monitoring";
     case FederatedQuery::ConnectionSetting::ConnectionCase::kPostgresqlCluster:
         return "PostgreSQLCluster";
-    default:
+    case FederatedQuery::ConnectionSetting::ConnectionCase::kGreenplumCluster:
+        return "GreenplumCluster";
+    case FederatedQuery::ConnectionSetting::ConnectionCase::kMysqlCluster:
+        return "MySQLCluster";
+    case FederatedQuery::ConnectionSetting::ConnectionCase::CONNECTION_NOT_SET:
         Y_ENSURE(false, "Invalid connection case " << i32(connectionCase));
     }
 }
@@ -76,8 +80,8 @@ std::string MapBindingType(const FederatedQuery::BindingSetting::BindingCase& bi
         return "YdbDataStreams";
     case FederatedQuery::BindingSetting::BindingSetting::kObjectStorage:
         return "ObjectStorage";
-    default:
-        Y_ENSURE(false, "Invalid connection case " << i32(bindingCase));
+    case FederatedQuery::BindingSetting::BindingSetting::BINDING_NOT_SET:
+        Y_ENSURE(false, "Invalid binding case " << i32(bindingCase));
     }
 }
 
@@ -131,14 +135,16 @@ void FillResponse(TEvent& cloudEvent, const NYql::TIssues& issues) {
     cloudEvent.set_event_status(issues.Empty()
         ? yandex::cloud::events::EventStatus::DONE
         : yandex::cloud::events::EventStatus::ERROR);
-
-    // response field must always be filled
-    cloudEvent.mutable_response();
-
+    
+    // response and error fields are mutually exclusive
+    // exactly one of them is required
     if (issues) {
+        cloudEvent.clear_response();
         auto* error = cloudEvent.mutable_error();
         error->set_code(grpc::StatusCode::UNKNOWN);
         error->set_message(issues.ToString());
+    } else {
+        cloudEvent.mutable_response();
     }
 }
 

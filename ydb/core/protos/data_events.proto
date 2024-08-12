@@ -27,6 +27,16 @@ message TKqpLocks {
         Rollback = 3; // Rollback buffered changes and erase locks
     }
     optional ELocksOp Op = 4;
+
+    // An optional arbiter for readsets. When specified, all sending shards
+    // send the commit decision to a single arbiter shard, and all receiving
+    // shards wait for the commit decision from a single arbiter shard. The
+    // shard marked as the arbiter is responsible in aggregating all commit
+    // decisions from sending shards and sending the final commit decision to
+    // receiving shards.
+    // This may only be used with generic readsets without any other data and
+    // currently limited to volatile transactions.
+    optional uint64 ArbiterShard = 5;
 }
 
 message TTableId {
@@ -41,6 +51,17 @@ message TTabletInfo {
     optional uint64 Step = 3;
     optional NActorsProto.TActorId ActorId = 4;
     optional bool IsFollower = 5;
+}
+
+message TMvccSnapshot {
+    optional uint64 Step = 10;
+    optional uint64 TxId = 11;
+    // When true (the default) reads from the specified snapshot are expected
+    // to be repeatable, i.e. future reads with the same snapshot version must
+    // observe the same data. For non-repeatable reads (or writes) the above
+    // version is the minimum MVCC version for the operation, shards may use
+    // a higher MVCC version when appropriate.
+    optional bool RepeatableRead = 12 [default = true];
 }
 
 enum EDataFormat {
@@ -86,6 +107,11 @@ message TEvWrite {
 
     // Other params
     optional uint64 OverloadSubscribe = 7;
+
+    // Writes are performed "over" the specified snapshot when specified
+    // This mostly affects the minimum MVCC version of the resulting write
+    optional TMvccSnapshot MvccSnapshot = 8;
+    optional uint32 GranuleShardingVersionId = 9;
 }
 
 message TEvWriteResult {
@@ -96,7 +122,7 @@ message TEvWriteResult {
         STATUS_ABORTED = 3;
         STATUS_INTERNAL_ERROR = 4;
         STATUS_OVERLOADED = 5;
-        STATUS_CANCELLED = 6;        
+        STATUS_CANCELLED = 6;
         STATUS_BAD_REQUEST = 7;
         STATUS_SCHEME_CHANGED = 8;
         STATUS_LOCKS_BROKEN = 9;

@@ -193,14 +193,21 @@ namespace NKikimr {
                 auto syncState = GetCurrent().SyncState;
                 auto msg = std::make_unique<TEvLocalSyncData>(vdisk, syncState, data);
 
+                if (Ctx->SyncerCtx->Config->EnableLocalSyncLogDataCutting) {
+                    std::unique_ptr<IActor> actor(CreateLocalSyncDataCutter(Ctx->SyncerCtx->Config,
+                            Ctx->SyncerCtx->VCtx, Ctx->SyncerCtx->SkeletonId, parentId, std::move(msg)));
+                    return TSjOutcome::Actor(std::move(actor), true);
+                } else {
+
 #ifdef UNPACK_LOCALSYNCDATA
-                std::unique_ptr<IActor> actor(CreateLocalSyncDataExtractor(Ctx->SyncerCtx->VCtx, Ctx->SyncerCtx->SkeletonId,
-                        parentId, std::move(msg)));
-                return TSjOutcome::Actor(actor.Release(), true);
+                    std::unique_ptr<IActor> actor(CreateLocalSyncDataExtractor(Ctx->SyncerCtx->VCtx, Ctx->SyncerCtx->SkeletonId,
+                            parentId, std::move(msg)));
+                    return TSjOutcome::Actor(actor.Release(), true);
 #else
-                Y_UNUSED(parentId);
-                return TSjOutcome::Event(Ctx->SyncerCtx->SkeletonId, std::move(msg));
+                    Y_UNUSED(parentId);
+                    return TSjOutcome::Event(Ctx->SyncerCtx->SkeletonId, std::move(msg));
 #endif
+                }
             } else {
                 if (!EndOfStream) {
                     Ctx->SyncerCtx->VCtx->Logger(NActors::NLog::PRI_ERROR, BS_SYNCER,
@@ -331,14 +338,22 @@ namespace NKikimr {
                 // SyncState position.
                 Phase = EWaitLocal;
                 auto msg = std::make_unique<TEvLocalSyncData>(vdisk, OldSyncState, data);
+
+                if (Ctx->SyncerCtx->Config->EnableLocalSyncLogDataCutting) {
+                    std::unique_ptr<IActor> actor(CreateLocalSyncDataCutter(Ctx->SyncerCtx->Config,
+                            Ctx->SyncerCtx->VCtx, Ctx->SyncerCtx->SkeletonId, parentId, std::move(msg)));
+                    return TSjOutcome::Actor(std::move(actor), true);
+                } else {
+                    auto msg = std::make_unique<TEvLocalSyncData>(vdisk, OldSyncState, data);
 #ifdef UNPACK_LOCALSYNCDATA
-                std::unique_ptr<IActor> actor(CreateLocalSyncDataExtractor(Ctx->SyncerCtx->VCtx, Ctx->SyncerCtx->SkeletonId,
-                        parentId, std::move(msg)));
-                return TSjOutcome::Actor(actor.Release(), true);
+                    std::unique_ptr<IActor> actor(CreateLocalSyncDataExtractor(Ctx->SyncerCtx->VCtx, Ctx->SyncerCtx->SkeletonId,
+                            parentId, std::move(msg)));
+                    return TSjOutcome::Actor(actor.Release(), true);
 #else
-                Y_UNUSED(parentId);
-                return TSjOutcome::Event(Ctx->SyncerCtx->SkeletonId, std::move(msg));
+                    Y_UNUSED(parentId);
+                    return TSjOutcome::Event(Ctx->SyncerCtx->SkeletonId, std::move(msg));
 #endif
+                }
             } else {
                 if (!EndOfStream) {
                     Ctx->SyncerCtx->VCtx->Logger(NActors::NLog::PRI_ERROR, BS_SYNCER,

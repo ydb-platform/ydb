@@ -37,7 +37,7 @@ TExprBase DqRewriteTakeSortToTopSort(TExprBase node, TExprContext& ctx, const TP
     }
     auto take = node.Cast<TCoTake>();
 
-    if (!IsDqPureExpr(take.Count())) {
+    if (!IsDqCompletePureExpr(take.Count())) {
         return node;
     }
 
@@ -51,7 +51,7 @@ TExprBase DqRewriteTakeSortToTopSort(TExprBase node, TExprContext& ctx, const TP
             return node;
         }
 
-        if (!IsDqPureExpr(maybeSkip.Cast().Count())) {
+        if (!IsDqCompletePureExpr(maybeSkip.Cast().Count())) {
             return node;
         }
     }
@@ -152,7 +152,7 @@ TExprBase DqEnforceCompactPartition(TExprBase node, TExprList frames, TExprConte
     return node;
 }
 
-TExprBase DqExpandWindowFunctions(TExprBase node, TExprContext& ctx, bool enforceCompact) {
+TExprBase DqExpandWindowFunctions(TExprBase node, TExprContext& ctx, TTypeAnnotationContext& typesCtx, bool enforceCompact) {
     if (node.Maybe<TCoCalcOverWindowBase>() || node.Maybe<TCoCalcOverWindowGroup>()) {
         if (enforceCompact) {
             auto calcs = ExtractCalcsOverWindow(node.Ptr(), ctx);
@@ -169,7 +169,7 @@ TExprBase DqExpandWindowFunctions(TExprBase node, TExprContext& ctx, bool enforc
             }
         }
 
-        return TExprBase(ExpandCalcOverWindow(node.Ptr(), ctx));
+        return TExprBase(ExpandCalcOverWindow(node.Ptr(), ctx, typesCtx));
     } else {
         return node;
     }

@@ -55,7 +55,7 @@ void TFakeActor::InitAsyncInput(IDqComputeActorAsyncInput* dqAsyncInput, IActor*
     DqAsyncInputAsActor = dqAsyncInputAsActor;
 }
 
-void TFakeActor::Terminate() {
+void TFakeActor::Terminate(std::shared_ptr<std::atomic<bool>> done) {
     if (DqAsyncInputActorId) {
         DqAsyncInput->PassAway();
 
@@ -71,6 +71,7 @@ void TFakeActor::Terminate() {
         DqAsyncOutput = nullptr;
         DqAsyncOutputAsActor = nullptr;
     }
+    done->store(true);
 }
 
 TFakeActor::TAsyncOutputCallbacks& TFakeActor::GetAsyncOutputCallbacks() {
@@ -101,9 +102,14 @@ TFakeCASetup::TFakeCASetup()
 }
 
 TFakeCASetup::~TFakeCASetup() {
-    Execute([](TFakeActor& actor) {
-        actor.Terminate();
+    auto shouldStop = std::make_shared<std::atomic<bool>>(); 
+    Execute([shouldStop](TFakeActor& actor) {
+        actor.Terminate(shouldStop);
     });
+
+    while (!*shouldStop) {
+        Sleep(TDuration::MilliSeconds(200));
+    }
 }
 
 void TFakeCASetup::AsyncOutputWrite(const TWriteValueProducer valueProducer, TMaybe<NDqProto::TCheckpoint> checkpoint, bool finish) {
@@ -115,21 +121,21 @@ void TFakeCASetup::AsyncOutputWrite(const TWriteValueProducer valueProducer, TMa
     });
 }
 
-void TFakeCASetup::SaveSourceState(NDqProto::TCheckpoint checkpoint, NDqProto::TSourceState& state) {
+void TFakeCASetup::SaveSourceState(NDqProto::TCheckpoint checkpoint, TSourceState& state) {
     Execute([&state, &checkpoint](TFakeActor& actor) {
         Y_ASSERT(actor.DqAsyncInput);
         actor.DqAsyncInput->SaveState(checkpoint, state);
     });
 }
 
-void TFakeCASetup::LoadSource(const NDqProto::TSourceState& state) {
+void TFakeCASetup::LoadSource(const TSourceState& state) {
     Execute([&state](TFakeActor& actor) {
         Y_ASSERT(actor.DqAsyncInput);
         actor.DqAsyncInput->LoadState(state);
     });
 }
 
-void TFakeCASetup::LoadSink(const NDqProto::TSinkState& state) {
+void TFakeCASetup::LoadSink(const TSinkState& state) {
     Execute([&state](TFakeActor& actor) {
         Y_ASSERT(actor.DqAsyncOutput);
         actor.DqAsyncOutput->LoadState(state);

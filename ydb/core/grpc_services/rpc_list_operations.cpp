@@ -11,6 +11,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
+#include <ydb/core/tx/schemeshard/olap/bg_tasks/events/global.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
 
@@ -41,6 +42,8 @@ class TListOperationsRPC: public TRpcOperationRequestActor<TListOperationsRPC, T
             return "[ListIndexBuilds]";
         case TOperationId::SCRIPT_EXECUTION:
             return "[ListScriptExecutions]";
+        case TOperationId::SS_BG_TASKS:
+            return "[SchemeShardTasks]";
         default:
             return "[Untagged]";
         }
@@ -50,6 +53,8 @@ class TListOperationsRPC: public TRpcOperationRequestActor<TListOperationsRPC, T
         const auto& request = *GetProtoRequest();
 
         switch (ParseKind(GetProtoRequest()->kind())) {
+        case TOperationId::SS_BG_TASKS:
+            return new NSchemeShard::NBackground::TEvListRequest(DatabaseName, request.page_size(), request.page_token());
         case TOperationId::EXPORT:
             return new TEvExport::TEvListExportsRequest(DatabaseName, request.page_size(), request.page_token(), request.kind());
         case TOperationId::IMPORT:
@@ -117,6 +122,24 @@ class TListOperationsRPC: public TRpcOperationRequestActor<TListOperationsRPC, T
         Reply(response);
     }
 
+    void Handle(NSchemeShard::NBackground::TEvListResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+
+        LOG_D("Handle TEvSchemeShard::TEvBGTasksListResponse: record# " << record.ShortDebugString());
+
+        TResponse response;
+
+        response.set_status(record.GetStatus());
+        if (record.GetIssues().size()) {
+            response.mutable_issues()->CopyFrom(record.GetIssues());
+        }
+        for (const auto& entry : record.GetEntries()) {
+            *response.add_operations() = entry;
+        }
+        response.set_next_page_token(record.GetNextPageToken());
+        Reply(response);
+    }
+
     void SendListScriptExecutions() {
         Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvListScriptExecutionOperations(DatabaseName, GetProtoRequest()->page_size(), GetProtoRequest()->page_token()));
     }
@@ -144,6 +167,7 @@ public:
         case TOperationId::EXPORT:
         case TOperationId::IMPORT:
         case TOperationId::BUILD_INDEX:
+        case TOperationId::SS_BG_TASKS:
             break;
         case TOperationId::SCRIPT_EXECUTION:
             SendListScriptExecutions();
@@ -160,6 +184,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExport::TEvListExportsResponse, Handle);
             hFunc(TEvImport::TEvListImportsResponse, Handle);
+            hFunc(NSchemeShard::NBackground::TEvListResponse, Handle);
             hFunc(TEvIndexBuilder::TEvListResponse, Handle);
             hFunc(NKqp::TEvListScriptExecutionOperationsResponse, Handle);
         default:
@@ -171,6 +196,11 @@ public:
 
 void DoListOperationsRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TListOperationsRPC(p.release()));
+}
+
+template<>
+IActor* TEvListOperationsRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestNoOpCtx* msg) {
+    return new TListOperationsRPC(msg);
 }
 
 } // namespace NGRpcService

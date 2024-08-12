@@ -5,6 +5,32 @@
 #include <ydb/core/base/cputime.h>
 #include <ydb/core/protos/sys_view.pb.h>
 
+namespace {
+
+THashMap<ui32, TString> MapChannelsToStoragePoolKinds(const NActors::TActorContext& ctx,
+                                                      const NKikimr::TStoragePools& pools,
+                                                      const NKikimr::TChannelsBindings& bindings
+) {
+    THashMap<TString, TString> nameToKindMap(pools.size());
+    for (const auto& pool : pools) {
+        nameToKindMap.emplace(pool.GetName(), pool.GetKind());
+    }
+    THashMap<ui32, TString> channelsMapping(bindings.size());
+    for (ui32 channel = 0u; channel < bindings.size(); ++channel) {
+        if (const auto* poolKind = nameToKindMap.FindPtr(bindings[channel].GetStoragePoolName())) {
+            channelsMapping.emplace(channel, *poolKind);
+        } else {
+            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "MapChannelsToStoragePoolKinds: the subdomain has no info about the storage pool named "
+                            << bindings[channel].GetStoragePoolName()
+            );
+        }
+    }
+    return channelsMapping;
+}
+
+}
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -93,7 +119,7 @@ public:
     void ScheduleNextBatch(const TActorContext& ctx) override;
 
     template <typename T>
-    TPartitionStats PrepareStats(const TActorContext& ctx, const T& rec) const;
+    TPartitionStats PrepareStats(const TActorContext& ctx, const T& rec, const THashMap<ui32, TString>& channelsMapping = {}) const;
 };
 
 
@@ -125,7 +151,10 @@ THolder<TProposeRequest> MergeRequest(
 }
 
 template <typename T>
-TPartitionStats TTxStoreTableStats::PrepareStats(const TActorContext& ctx, const T& rec) const {
+TPartitionStats TTxStoreTableStats::PrepareStats(const TActorContext& ctx,
+                                                 const T& rec,
+                                                 const THashMap<ui32, TString>& channelsMapping
+) const {
     const auto& tableStats = rec.GetTableStats();
     const auto& tabletMetrics = rec.GetTabletMetrics();
 
@@ -137,6 +166,18 @@ TPartitionStats TTxStoreTableStats::PrepareStats(const TActorContext& ctx, const
     newStats.IndexSize = tableStats.GetIndexSize();
     newStats.LastAccessTime = TInstant::MilliSeconds(tableStats.GetLastAccessTime());
     newStats.LastUpdateTime = TInstant::MilliSeconds(tableStats.GetLastUpdateTime());
+    for (const auto& channelStats : tableStats.GetChannels()) {
+        if (const auto* poolKind = channelsMapping.FindPtr(channelStats.GetChannel())) {
+            auto& [dataSize, indexSize] = newStats.StoragePoolsStats[*poolKind];
+            dataSize += channelStats.GetDataSize();
+            indexSize += channelStats.GetIndexSize();
+        } else {
+            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "PrepareStats: SchemeShard has no info on DataShard "
+                            << rec.GetDatashardId() << " channel " << channelStats.GetChannel() << " binding"
+            );
+        }
+    }
 
     newStats.ImmediateTxCompleted = tableStats.GetImmediateTxCompleted();
     newStats.PlannedTxCompleted = tableStats.GetPlannedTxCompleted();
@@ -205,6 +246,18 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     }
 
     TShardIdx shardIdx = Self->TabletIdToShardIdx[datashardId];
+    const auto* shardInfo = Self->ShardInfos.FindPtr(shardIdx);
+    if (!shardInfo) {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "No ShardInfo by shardIdx " << shardIdx << " of shard " << datashardId;
+        );
+        return true;
+    }
+
+    auto subDomainInfo = Self->ResolveDomainInfo(pathId);
+    const auto channelsMapping = MapChannelsToStoragePoolKinds(ctx,
+                                                               subDomainInfo->EffectiveStoragePools(),
+                                                               shardInfo->BindedChannels);
 
     LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "TTxStoreTableStats.PersistSingleStats: main stats from"
@@ -212,12 +265,14 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
                     << ", pathId: " << pathId << ", pathId map=" << Self->PathsById[pathId]->Name
                     << ", is column=" << isColumnTable << ", is olap=" << isOlapStore);
 
-    const TPartitionStats newStats = PrepareStats(ctx, rec);
+    const TPartitionStats newStats = PrepareStats(ctx, rec, channelsMapping);
 
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-               "Add stats from shard with datashardId(TabletID)=" << datashardId << ", pathId " << pathId.LocalPathId
-                                                                  << ": RowCount " << newStats.RowCount << ", DataSize "
-                                                                  << newStats.DataSize);
+               "Add stats from shard with datashardId(TabletID)=" << datashardId 
+                    << ", pathId " << pathId.LocalPathId
+                    << ": RowCount " << newStats.RowCount 
+                    << ", DataSize " << newStats.DataSize
+                    << (newStats.HasBorrowedData ? ", with borrowed parts" : ""));
 
     NIceDb::TNiceDb db(txc.DB);
 
@@ -290,7 +345,6 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 
     if (updateSubdomainInfo) {
         auto subDomainId = Self->ResolvePathIdForDomain(pathId);
-        auto subDomainInfo = Self->ResolveDomainInfo(pathId);
         subDomainInfo->AggrDiskSpaceUsage(Self, newAggrStats, oldAggrStats);
         if (subDomainInfo->CheckDiskSpaceQuotas(Self)) {
             Self->PersistSubDomainState(db, subDomainId, *subDomainInfo);
@@ -379,8 +433,6 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         return true;
     }
 
-    ui64 dataSizeResolution = 0; // Datashard will use default resolution
-    ui64 rowCountResolution = 0; // Datashard will use default resolution
     bool collectKeySample = false;
     if (table->ShouldSplitBySize(dataSize, forceShardSplitSettings)) {
         // We would like to split by size and do this no matter how many partitions there are
@@ -421,13 +473,9 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     // Request histograms from the datashard
     LOG_DEBUG(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
              "Requesting full stats from datashard %" PRIu64, rec.GetDatashardId());
-    PendingMessages.emplace_back(
-        item.Ev->Sender,
-        new TEvDataShard::TEvGetTableStats(
-            pathId.LocalPathId,
-            dataSizeResolution,
-            rowCountResolution,
-            collectKeySample));
+    auto request = new TEvDataShard::TEvGetTableStats(pathId.LocalPathId);
+    request->Record.SetCollectKeySample(collectKeySample);
+    PendingMessages.emplace_back(item.Ev->Sender, request);
 
     return true;
 }
@@ -468,6 +516,12 @@ void TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const T
                                                      << " dataSize " << dataSize
                                                      << " rowCount " << rowCount
                                                      << " cpuUsage " << tabletMetrics.GetCPU()/10000.0);
+
+    LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Got periodic table stats at tablet " << TabletID()
+                                                     << " from shard " << datashardId
+                                                     << " pathId " << pathId
+                                                     << " raw table stats:\n" << tableStats.ShortDebugString());
 
     TStatsId statsId(pathId, datashardId);
 

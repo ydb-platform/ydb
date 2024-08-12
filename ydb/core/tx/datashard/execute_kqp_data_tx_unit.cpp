@@ -189,7 +189,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         };
 
         auto [validated, brokenLocks] = op->HasVolatilePrepareFlag()
-            ? KqpValidateVolatileTx(tabletId, sysLocks, kqpLocks, useGenericReadSets, 
+            ? KqpValidateVolatileTx(tabletId, sysLocks, kqpLocks, useGenericReadSets,
                 txId, tx->DelayedInReadSets(), awaitingDecisions, outReadSets)
             : KqpValidateLocks(tabletId, sysLocks, kqpLocks, useGenericReadSets, inReadSets);
 
@@ -217,14 +217,9 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
         auto allocGuard = tasksRunner.BindAllocator(txc.GetMemoryLimit() - dataTx->GetTxSize());
 
-        NKqp::NRm::TKqpResourcesRequest req;
-        req.MemoryPool = NKqp::NRm::EKqpMemoryPool::DataQuery;
-        req.Memory = txc.GetMemoryLimit();
-        ui64 taskId = dataTx->GetFirstKqpTaskId();
-        NKqp::GetKqpResourceManager()->NotifyExternalResourcesAllocated(txId, taskId, req);
-
+        NKqp::GetKqpResourceManager()->GetCounters()->RmExternalMemory->Add(txc.GetMemoryLimit());
         Y_DEFER {
-            NKqp::GetKqpResourceManager()->NotifyExternalResourcesFreed(txId, taskId);
+            NKqp::GetKqpResourceManager()->GetCounters()->RmExternalMemory->Sub(txc.GetMemoryLimit());
         };
 
         LOG_T("Operation " << *op << " (execute_kqp_data_tx) at " << tabletId
@@ -242,6 +237,8 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         }
 
         LWTRACK(ProposeTransactionKqpDataExecute, op->Orbit);
+
+        const bool isArbiter = op->HasVolatilePrepareFlag() && KqpLocksIsArbiter(tabletId, kqpLocks);
 
         KqpCommitLocks(tabletId, kqpLocks, sysLocks, writeVersion, tx->GetDataTx()->GetUserDb());
 
@@ -353,7 +350,12 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                 participants,
                 dataTx->GetVolatileChangeGroup(),
                 dataTx->GetVolatileCommitOrdered(),
+                isArbiter,
                 txc);
+        }
+
+        if (dataTx->GetPerformedUserReads()) {
+            op->SetPerformedUserReads(true);
         }
 
         if (op->HasVolatilePrepareFlag()) {

@@ -6,14 +6,13 @@
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/persqueue/pq_rl_helpers.h>
+#include <ydb/core/persqueue/write_id.h>
 
 #include <variant>
 
 #include "partition_chooser.h"
 
 namespace NKikimr::NPQ {
-
-constexpr ui64 INVALID_WRITE_ID = Max<ui64>();
 
 struct TEvPartitionWriter {
     enum EEv {
@@ -36,7 +35,7 @@ struct TEvPartitionWriter {
         struct TSuccess {
             TString OwnerCookie;
             TSourceIdInfo SourceIdInfo;
-            ui64 WriteId = INVALID_WRITE_ID;
+            TMaybe<TWriteId> WriteId;
 
             TString ToString() const;
         };
@@ -53,7 +52,7 @@ struct TEvPartitionWriter {
         std::variant<TSuccess, TError> Result;
 
         TEvInitResult(const TString& sessionId, const TString& txId,
-                      const TString& ownerCookie, const TSourceIdInfo& sourceIdInfo, ui64 writeId)
+                      const TString& ownerCookie, const TSourceIdInfo& sourceIdInfo, const TMaybe<TWriteId>& writeId)
             : SessionId(sessionId)
             , TxId(txId)
             , Result(TSuccess{ownerCookie, sourceIdInfo, writeId})
@@ -151,6 +150,11 @@ struct TEvPartitionWriter {
     };
 
     struct TEvDisconnected: public TEventLocal<TEvDisconnected, EvDisconnected> {
+        TEvDisconnected(TEvWriteResponse::EErrorCode errorCode)
+            : ErrorCode(errorCode) {
+        }
+
+        const TEvWriteResponse::EErrorCode ErrorCode;
     };
 
     struct TEvTxWriteRequest : public TEventLocal<TEvTxWriteRequest, EvTxWriteRequest> {

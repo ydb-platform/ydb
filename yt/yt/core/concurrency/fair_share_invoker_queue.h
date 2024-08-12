@@ -40,10 +40,9 @@ public:
 
     const IInvokerPtr& GetInvoker(int bucketIndex, int queueIndex) const;
 
-    void Shutdown();
-
-    void DrainProducer();
-    void DrainConsumer();
+    // See TInvokerQueue::Shutdown/OnConsumerFinished.
+    void Shutdown(bool graceful = false);
+    void OnConsumerFinished();
 
     bool IsRunning() const;
 
@@ -53,7 +52,7 @@ public:
     void Reconfigure(std::vector<double> weights);
 
 private:
-    constexpr static i64 UnitWeight = 1'000;
+    static constexpr i64 UnitWeight = 1'000;
 
     struct TBucket
     {

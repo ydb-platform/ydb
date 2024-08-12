@@ -1,0 +1,19 @@
+{%- if current_target.target_commands is defined -%}
+{%-     for target_command in current_target.target_commands %}
+{{ target_command.macro }}(
+{%-         if target_command.args|length -%}
+{%-             for arg in target_command.args %}
+  {{ arg }}
+{%-             endfor -%}
+{%-         endif %}
+{%-         if target_command.args_escaped|length %}
+  "
+{%-             for arg_escaped in target_command.args_escaped -%}
+{{ arg_escaped|replace('\\', '\\\\')|replace('"', '\\"')|replace(';', '\\;') }}
+{%-             if not loop.last -%};{%- endif -%}
+{%-             endfor -%}
+"
+{%-         endif %}
+)
+{%      endfor -%}
+{%- endif -%}

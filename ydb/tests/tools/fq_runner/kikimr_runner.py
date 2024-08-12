@@ -39,6 +39,7 @@ class BaseTenant(abc.ABC):
             port_allocator,  # KikimrPortManagerPortAllocator
             config_generator  # KikimrConfigGenerator
     ):
+        self.bootstraped_nodes = set()
         self.node_count = node_count
         self.tenant_name = tenant_name
         self.port_allocator = port_allocator
@@ -51,7 +52,7 @@ class BaseTenant(abc.ABC):
 
     def stop(self):
         if self.kikimr_cluster:
-            self.kikimr_cluster.stop()
+            self.kikimr_cluster.stop(kill=False)
 
     def endpoint(self, node_index=None):
         return "localhost:{}".format(
@@ -161,13 +162,21 @@ class BaseTenant(abc.ABC):
         }
         rate_limiter_config['limiters'] = [{'coordination_node_path': 'rate_limiter'}]
 
-    def get_metering(self, node_index=None):
+    def get_metering(self, meterings_expected, node_index=None):
         result = []
         if node_index is None:
             for n in self.kikimr_cluster.nodes:
-                result += self.get_metering(n)
+                result += self.get_metering(meterings_expected, n)
         else:
-            with open(self.kikimr_cluster.nodes[node_index].cwd + "/metering.bill") as f:
+            max_waiting_time_sec = 5
+            deadline = time.time() + max_waiting_time_sec
+            bill_fname = self.kikimr_cluster.nodes[node_index].cwd + "/metering.bill"
+            while time.time() < deadline:
+                meterings_loaded = sum(1 for _ in open(bill_fname))
+                if meterings_loaded >= meterings_expected:
+                    break
+
+            with open(bill_fname) as f:
                 for line in f:
                     metering = json.loads(line)
                     result.append(metering["usage"]["quantity"])
@@ -203,6 +212,16 @@ class BaseTenant(abc.ABC):
         result = self.get_sensors(node_index, "yq").find_sensor(
             {"subsystem": "worker_manager", "sensor": "ActiveWorkers"})
         return result if result is not None else 0
+
+    def wait_worker_count(self, node_index, activity, expected_count, timeout=yatest_common.plain_or_under_sanitizer(30, 150)):
+        deadline = time.time() + timeout
+        while True:
+            count = self.get_actor_count(node_index, activity)
+            if count >= expected_count:
+                break
+            assert time.time() < deadline, "Wait actor count failed"
+            time.sleep(yatest_common.plain_or_under_sanitizer(0.5, 2))
+        pass
 
     def get_mkql_limit(self, node_index):
         result = self.get_sensors(node_index, "yq").find_sensor(
@@ -240,6 +259,12 @@ class BaseTenant(abc.ABC):
         )
         return result if result is not None else 0
 
+    def ensure_is_alive(self):
+        for n in self.kikimr_cluster.nodes:
+            if n not in self.bootstraped_nodes:
+                self.wait_bootstrap(n)
+            assert self.get_actor_count(n, "GRPC_PROXY") > 0, "Node {} died".format(n)
+
     def wait_bootstrap(self, node_index=None, wait_time=yatest_common.plain_or_under_sanitizer(90, 400)):
         if node_index is None:
             for n in self.kikimr_cluster.nodes:
@@ -256,6 +281,7 @@ class BaseTenant(abc.ABC):
                     time.sleep(yatest_common.plain_or_under_sanitizer(0.3, 2))
                     continue
                 break
+            self.bootstraped_nodes.add(node_index)
             logging.debug("Node {} has been bootstrapped".format(node_index))
 
     def wait_discovery(self, node_index=None, wait_time=yatest_common.plain_or_under_sanitizer(30, 150)):
@@ -472,12 +498,9 @@ class YqTenant(BaseTenant):
         if self.compute_services:
             # yq services
             fq_config['pinger']['ping_period'] = "5s"  # == "10s" / 2
-            if self.control_services:
-                fq_config['private_api']['loopback'] = True
-            else:
-                fq_config['private_api']['task_service_endpoint'] = "localhost:" + str(
-                    control_plane.port_allocator.get_node_port_allocator(1).grpc_port)
-                fq_config['private_api']['task_service_database'] = control_plane.tenant_name
+            fq_config['private_api']['task_service_endpoint'] = "localhost:" + str(
+                control_plane.port_allocator.get_node_port_allocator(1).grpc_port)
+            fq_config['private_api']['task_service_database'] = control_plane.tenant_name
             if len(self.config_generator.dc_mapping) > 0:
                 fq_config['nodes_manager']['use_data_center'] = True
             fq_config['enable_task_counters'] = True
@@ -533,7 +556,8 @@ class StreamingOverKikimrConfig:
                  node_count=1,  # Union[int, dict[str, TenantConfig]]
                  tenant_mapping=None,  # dict[str, str]
                  cloud_mapping=None,  # dict
-                 dc_mapping=None  # dict
+                 dc_mapping=None,  # dict
+                 mvp_external_ydb_endpoint=None  # str
                  ):
         if tenant_mapping is None:
             tenant_mapping = {}
@@ -546,6 +570,7 @@ class StreamingOverKikimrConfig:
         self.tenant_mapping = tenant_mapping
         self.cloud_mapping = cloud_mapping
         self.dc_mapping = dc_mapping
+        self.mvp_external_ydb_endpoint = mvp_external_ydb_endpoint
 
 
 class StreamingOverKikimr(object):
@@ -556,7 +581,7 @@ class StreamingOverKikimr(object):
             configuration = StreamingOverKikimrConfig()
         self.uuid = str(uuid.uuid4())
         self.mvp_mock_port = PortManager().get_port()
-        self.mvp_mock_server = Process(target=MvpMockServer(self.mvp_mock_port).serve_forever)
+        self.mvp_mock_server = Process(target=MvpMockServer(self.mvp_mock_port,  configuration.mvp_external_ydb_endpoint).serve_forever)
         self.tenants = {}
         _tenant_mapping = configuration.tenant_mapping.copy()
         if isinstance(configuration.node_count, dict):

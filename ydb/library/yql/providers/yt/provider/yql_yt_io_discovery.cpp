@@ -191,6 +191,9 @@ public:
                     else if (key.GetWalkFolderArgs()) {
                         return ctx.ChangeChild(readNode.Ref(), 2, InitializeWalkFolders(std::move(key), cluster, keyPos, ctx));
                     }
+                    else if (key.GetWalkFolderImplArgs()) {
+                        PendingWalkFoldersKeys_.insert(key.GetWalkFolderImplArgs()->StateKey);
+                    }
                     else if (!key.IsAnonymous()) {
                         if (PendingCanonizations_.insert(std::make_pair(std::make_pair(cluster, key.GetPath()), paths.size())).second) {
                             paths.push_back(IYtGateway::TCanonizeReq()
@@ -209,13 +212,18 @@ public:
             PendingCanonizations_.clear();
             PendingFolders_.clear();
             PendingRanges_.clear();
-            PendingWalkFolders_.clear();
+
+            for (const auto& key : PendingWalkFoldersKeys_) {
+                State_->WalkFoldersState.erase(key);
+            }
+            PendingWalkFoldersKeys_.clear();
+
             YQL_CLOG(INFO, ProviderYt) << "YtIODiscovery - finish, status: " << (TStatus::ELevel)status.Level;
             return status;
         }
         
         if (PendingRanges_.empty() && PendingFolders_.empty() 
-            && PendingCanonizations_.empty() && PendingWalkFolders_.empty()) {
+            && PendingCanonizations_.empty() && PendingWalkFoldersKeys_.empty()) {
             YQL_CLOG(INFO, ProviderYt) << "YtIODiscovery - finish, status: " << (TStatus::ELevel)status.Level;
             return status;
         }
@@ -343,6 +351,11 @@ public:
                 PendingRanges_.clear();
                 CanonizeFuture_ = {};
                 CanonizationRangesFoldersFuture_ = {};
+
+                for (const auto& key : PendingWalkFoldersKeys_) {
+                    State_->WalkFoldersState.erase(key);
+                }
+                PendingWalkFoldersKeys_.clear();
 
                 return TStatus::Error;
             }
@@ -503,6 +516,7 @@ public:
                         pathInfo.Ranges = MakeIntrusive<TYtRangesInfo>();
                         pathInfo.Ranges->Parse(*oneTable.Ranges, ctx, key.GetNode()->Pos());
                     }
+                    pathInfo.AdditionalAttributes = oneTable.AdditionalAttributes;
                     tables.push_back(pathInfo.ToExprNode(ctx, key.GetNode()->Pos(), tableInfo.ToExprNode(ctx, key.GetNode()->Pos())));
                 }
             }
@@ -537,11 +551,9 @@ public:
         CanonizeFuture_ = {};
         CanonizationRangesFoldersFuture_ = {};
 
-        if (!PendingWalkFolders_.empty()) {
+        if (status == TStatus::Ok && !PendingWalkFoldersKeys_.empty()) {
             const auto walkFoldersStatus = RewriteWalkFoldersOnAsyncOrEvalChanges(output, ctx);
-            if (walkFoldersStatus != TStatus::Ok) {
-                return walkFoldersStatus;
-            }
+            return walkFoldersStatus;
         }
 
         YQL_CLOG(INFO, ProviderYt) << "YtIODiscovery DoApplyAsyncChanges - finish";
@@ -553,6 +565,8 @@ public:
         PendingRanges_.clear();
         PendingFolders_.clear();
         PendingCanonizations_.clear();
+        PendingWalkFoldersKeys_.clear();
+
         CanonizeFuture_ = {};
         CanonizationRangesFoldersFuture_ = {};
     }
@@ -665,12 +679,13 @@ private:
         auto& args = key.GetWalkFolderArgs().GetRef();
 
         TWalkFoldersImpl walkFolders {State_->SessionId, cluster, State_->Configuration->Snapshot(), 
-                         pos, std::move(args), State_->Gateway};
+                         pos, args, State_->Gateway};
         YQL_CLOG(INFO, ProviderYt) << "Initialized WalkFolders from " << cluster << ".`" 
             << args.InitialFolder.Prefix << "`" << " with root attributes cnt: " 
             << args.InitialFolder.Attributes.size();
         const auto instanceKey = ctx.NextUniqueId;
-        PendingWalkFolders_.emplace(instanceKey, std::move(walkFolders));
+        State_->WalkFoldersState.emplace(instanceKey, std::move(walkFolders));
+        PendingWalkFoldersKeys_.insert(instanceKey);
 
         auto walkFoldersImplNode = Build<TYtWalkFoldersImpl>(ctx, key.GetNode()->Pos())
             .ProcessStateKey()
@@ -686,29 +701,24 @@ private:
     }
     
     TStatus RewriteWalkFoldersOnAsyncOrEvalChanges(TExprNode::TPtr& output, TExprContext& ctx) {
-        Y_ENSURE(!PendingWalkFolders_.empty());
-
-        const auto currImplKey = PendingWalkFolders_.begin()->first;
         TStatus walkFoldersStatus = IGraphTransformer::TStatus::Ok;
 
-        auto status = VisitInputKeys(output, ctx, [this, &ctx, currImplKey, &walkFoldersStatus] (TYtRead readNode, TYtInputKeys&& keys) -> TExprNode::TPtr {
+        auto status = VisitInputKeys(output, ctx, [this, &ctx, &walkFoldersStatus] (TYtRead readNode, TYtInputKeys&& keys) -> TExprNode::TPtr {
             if (keys.GetType() == TYtKey::EType::WalkFoldersImpl) {
                 YQL_CLOG(INFO, ProviderYt) << "YtIODiscovery - DoApplyAsyncChanges WalkFoldersImpl handling start";
 
                 auto parsedKey = keys.ExtractKeys().front();
                 if (!parsedKey.GetWalkFolderImplArgs()) {
-                    YQL_CLOG(INFO, ProviderYt) << "Failed to parse WalkFolderImpl args";
+                    YQL_CLOG(ERROR, ProviderYt) << "Failed to parse WalkFolderImpl args";
                     return {};
                 }
-
-                const auto instanceKey = parsedKey.GetWalkFolderImplArgs()->StateKey;
-                if (instanceKey != currImplKey) {
+                const ui64 instanceKey = parsedKey.GetWalkFolderImplArgs()->StateKey;
+                if (*PendingWalkFoldersKeys_.begin() != instanceKey) {
                     return readNode.Ptr();
                 }
 
-                auto walkFoldersInstanceIt = PendingWalkFolders_.find(currImplKey);
-                YQL_ENSURE(!walkFoldersInstanceIt.IsEnd(), "Failed to find walkFoldersInstance with key: " << instanceKey);
-
+                auto walkFoldersInstanceIt = this->State_->WalkFoldersState.find(instanceKey);
+                YQL_ENSURE(!walkFoldersInstanceIt.IsEnd());
                 auto& walkFoldersImpl = walkFoldersInstanceIt->second;
 
                 Y_ENSURE(walkFoldersImpl.GetAnyOpFuture().HasValue(), 
@@ -723,7 +733,8 @@ private:
 
                 if (walkFoldersImpl.IsFinished()) {
                     YQL_CLOG(INFO, ProviderYt) << "Building result expr for WalkFolders with key: " << instanceKey;
-                    PendingWalkFolders_.erase(currImplKey);
+                    this->State_->WalkFoldersState.erase(instanceKey);
+                    PendingWalkFoldersKeys_.erase(instanceKey);
 
                     auto type = Build<TCoStructType>(ctx, readNode.Pos())
                         .Add<TExprList>()
@@ -770,7 +781,7 @@ private:
                     return readNode.Ptr();
                 }
 
-                YQL_CLOG(DEBUG, ProviderYt) << "State expr ast: " << ConvertToAst(*nextState, ctx, {}).Root->ToString();
+                YQL_CLOG(TRACE, ProviderYt) << "State expr ast: " << ConvertToAst(*nextState, ctx, {}).Root->ToString();
 
                 auto walkFoldersImplNode = ctx.ChangeChild(*parsedKey.GetNode(), 0, std::move(nextState));
                 return ctx.ChangeChild(readNode.Ref(), 2, std::move(walkFoldersImplNode));
@@ -855,12 +866,21 @@ private:
         }
         return res;
     }
-
+    
+    TWalkFoldersImpl& GetCurrentWalkFoldersInstance() const {
+        Y_ENSURE(!PendingWalkFoldersKeys_.empty());
+        const auto key = PendingWalkFoldersKeys_.begin();
+        auto stateIt = State_->WalkFoldersState.find(*key);
+        YQL_ENSURE(stateIt != State_->WalkFoldersState.end());
+        return stateIt->second; 
+    }
+    
     TMaybe<NThreading::TFuture<void>> MaybeGetWalkFoldersFuture() const {
         // inflight 1
-        return !PendingWalkFolders_.empty() 
-            ? MakeMaybe(PendingWalkFolders_.begin()->second.GetAnyOpFuture()) 
-            : Nothing();
+        if (!PendingWalkFoldersKeys_.empty()) {
+            return GetCurrentWalkFoldersInstance().GetAnyOpFuture();
+        }
+        return Nothing();
     }
 
 private:
@@ -869,7 +889,7 @@ private:
     THashMap<std::pair<TString, TYtKey::TRange>, std::pair<TPosition, NThreading::TFuture<IYtGateway::TTableRangeResult>>> PendingRanges_;
     THashMap<std::pair<TString, TYtKey::TFolderList>, std::pair<TPosition, NThreading::TFuture<IYtGateway::TFolderResult>>> PendingFolders_;
     THashMap<std::pair<TString, TString>, size_t> PendingCanonizations_; // cluster, original table path -> positions in canon result
-    THashMap<ui64, TWalkFoldersImpl> PendingWalkFolders_;
+    TSet<ui64> PendingWalkFoldersKeys_;
     NThreading::TFuture<IYtGateway::TCanonizePathsResult> CanonizeFuture_;
     NThreading::TFuture<void> CanonizationRangesFoldersFuture_;
 

@@ -10,17 +10,17 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+import io
+import http.client
 import json as jsonutils
 
 from requests.adapters import HTTPAdapter
 from requests.cookies import MockRequest, MockResponse
 from requests.cookies import RequestsCookieJar
 from requests.cookies import merge_cookies, cookiejar_from_dict
-from requests.packages.urllib3.response import HTTPResponse
 from requests.utils import get_encoding_from_headers
-import six
+from urllib3.response import HTTPResponse
 
-from requests_mock import compat
 from requests_mock import exceptions
 
 _BODY_ARGS = frozenset(['raw', 'body', 'content', 'text', 'json'])
@@ -100,8 +100,7 @@ def _extract_cookies(request, response, cookies):
     """
     # This will add cookies set manually via the Set-Cookie or Set-Cookie2
     # header but this only allows 1 cookie to be set.
-    http_message = compat._FakeHTTPMessage(response.headers)
-    response.cookies.extract_cookies(MockResponse(http_message),
+    response.cookies.extract_cookies(MockResponse(response.raw.headers),
                                      MockRequest(request))
 
     # This allows you to pass either a CookieJar or a dictionary to request_uri
@@ -110,7 +109,7 @@ def _extract_cookies(request, response, cookies):
         merge_cookies(response.cookies, cookies)
 
 
-class _IOReader(six.BytesIO):
+class _IOReader(io.BytesIO):
     """A reader that makes a BytesIO look like a HTTPResponse.
 
     A HTTPResponse will return an empty string when you read from it after
@@ -120,20 +119,19 @@ class _IOReader(six.BytesIO):
 
     def read(self, *args, **kwargs):
         if self.closed:
-            return six.b('')
+            return b''
 
         # if the file is open, but you asked for zero bytes read you should get
         # back zero without closing the stream.
         if len(args) > 0 and args[0] == 0:
-            return six.b('')
+            return b''
 
-        # not a new style object in python 2
-        result = six.BytesIO.read(self, *args, **kwargs)
+        result = io.BytesIO.read(self, *args, **kwargs)
 
         # when using resp.iter_content(None) it'll go through a different
         # request path in urllib3. This path checks whether the object is
         # marked closed instead of the return value. see gh124.
-        if result == six.b(''):
+        if result == b'':
             self.close()
 
         return result
@@ -172,9 +170,9 @@ def create_response(request, **kwargs):
     headers = kwargs.pop('headers', {})
     encoding = None
 
-    if content is not None and not isinstance(content, six.binary_type):
+    if content is not None and not isinstance(content, bytes):
         raise TypeError('Content should be binary data')
-    if text is not None and not isinstance(text, six.string_types):
+    if text is not None and not isinstance(text, str):
         raise TypeError('Text should be string data')
 
     if json is not None:
@@ -187,13 +185,12 @@ def create_response(request, **kwargs):
         body = _IOReader(content)
     if not raw:
         status = kwargs.get('status_code', _DEFAULT_STATUS)
-        reason = kwargs.get('reason',
-                            six.moves.http_client.responses.get(status))
+        reason = kwargs.get('reason', http.client.responses.get(status))
 
         raw = HTTPResponse(status=status,
                            reason=reason,
                            headers=headers,
-                           body=body or _IOReader(six.b('')),
+                           body=body or _IOReader(b''),
                            decode_content=False,
                            enforce_content_length=False,
                            preload_content=False,
@@ -241,11 +238,11 @@ class _MatcherResponse(object):
         text = self._params.get('text')
 
         if content is not None and not (callable(content) or
-                                        isinstance(content, six.binary_type)):
+                                        isinstance(content, bytes)):
             raise TypeError('Content should be a callback or binary data')
 
         if text is not None and not (callable(text) or
-                                     isinstance(text, six.string_types)):
+                                     isinstance(text, str)):
             raise TypeError('Text should be a callback or string data')
 
     def get_response(self, request):
@@ -273,7 +270,7 @@ class _MatcherResponse(object):
                                text=_call(self._params.get('text')),
                                content=_call(self._params.get('content')),
                                body=_call(self._params.get('body')),
-                               raw=self._params.get('raw'),
+                               raw=_call(self._params.get('raw')),
                                json_encoder=self._params.get('json_encoder'),
                                status_code=context.status_code,
                                reason=context.reason,

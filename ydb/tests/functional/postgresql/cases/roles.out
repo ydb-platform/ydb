@@ -1,0 +1,6 @@
+SELECT rolname FROM pg_roles;
+ rolname
+-----
+   postgres
+   root
+(2 rows)

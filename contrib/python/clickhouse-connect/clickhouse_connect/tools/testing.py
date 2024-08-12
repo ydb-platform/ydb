@@ -1,7 +1,7 @@
 from typing import Sequence, Optional, Union, Dict, Any
 
 from clickhouse_connect.driver import Client
-from clickhouse_connect.driver.query import format_query_value, quote_identifier
+from clickhouse_connect.driver.query import quote_identifier, str_query_value
 
 
 class TableContext:
@@ -44,8 +44,7 @@ class TableContext:
         if self.settings:
             create_cmd += ' SETTINGS '
             for key, value in self.settings.items():
-
-                create_cmd += f'{key} = {format_query_value(value)}, '
+                create_cmd += f'{key} = {str_query_value(value)}, '
             if create_cmd.endswith(', '):
                 create_cmd = create_cmd[:-2]
         self.client.command(create_cmd)

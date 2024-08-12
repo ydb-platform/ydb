@@ -1,6 +1,7 @@
+#include <ydb/public/sdk/cpp/client/ydb_topic/include/client.h>
+
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/scheme_helpers/helpers.h>
 
@@ -221,15 +222,48 @@ const TVector<NScheme::TPermissions>& TTopicDescription::GetEffectivePermissions
 
 TPartitioningSettings::TPartitioningSettings(const Ydb::Topic::PartitioningSettings& settings)
     : MinActivePartitions_(settings.min_active_partitions())
+    , MaxActivePartitions_(settings.max_active_partitions())
     , PartitionCountLimit_(settings.partition_count_limit())
+    , AutoPartitioningSettings_(settings.auto_partitioning_settings())
 {}
 
 ui64 TPartitioningSettings::GetMinActivePartitions() const {
     return MinActivePartitions_;
 }
 
+ui64 TPartitioningSettings::GetMaxActivePartitions() const {
+    return MaxActivePartitions_;
+}
+
 ui64 TPartitioningSettings::GetPartitionCountLimit() const {
     return PartitionCountLimit_;
+}
+
+TAutoPartitioningSettings TPartitioningSettings::GetAutoPartitioningSettings() const {
+    return AutoPartitioningSettings_;
+}
+
+TAutoPartitioningSettings::TAutoPartitioningSettings(const Ydb::Topic::AutoPartitioningSettings& settings)
+    : Strategy_(static_cast<EAutoPartitioningStrategy>(settings.strategy()))
+    , StabilizationWindow_(TDuration::Seconds(settings.partition_write_speed().stabilization_window().seconds()))
+    , DownUtilizationPercent_(settings.partition_write_speed().down_utilization_percent())
+    , UpUtilizationPercent_(settings.partition_write_speed().up_utilization_percent())
+{}
+
+EAutoPartitioningStrategy TAutoPartitioningSettings::GetStrategy() const {
+    return Strategy_;
+}
+
+TDuration TAutoPartitioningSettings::GetStabilizationWindow() const {
+    return StabilizationWindow_;
+}
+
+ui32 TAutoPartitioningSettings::GetUpUtilizationPercent() const {
+    return UpUtilizationPercent_;
+}
+
+ui32 TAutoPartitioningSettings::GetDownUtilizationPercent() const {
+    return DownUtilizationPercent_;
 }
 
 TTopicStats::TTopicStats(const Ydb::Topic::DescribeTopicResult::TopicStats& topicStats)
@@ -361,12 +395,21 @@ TPartitionInfo::TPartitionInfo(const Ydb::Topic::DescribeTopicResult::PartitionI
     for (const auto& partId : partitionInfo.parent_partition_ids()) {
         ParentPartitionIds_.push_back(partId);
     }
+
     if (partitionInfo.has_partition_stats()) {
         PartitionStats_ = TPartitionStats{partitionInfo.partition_stats()};
     }
 
     if (partitionInfo.has_partition_location()) {
         PartitionLocation_ = TPartitionLocation{partitionInfo.partition_location()};
+    }
+
+    if (partitionInfo.has_key_range() && partitionInfo.key_range().has_from_bound()) {
+        FromBound_ = TString(partitionInfo.key_range().from_bound());
+    }
+
+    if (partitionInfo.has_key_range() && partitionInfo.key_range().has_to_bound()) {
+        ToBound_ = TString(partitionInfo.key_range().to_bound());
     }
 }
 
@@ -403,6 +446,14 @@ const TMaybe<TPartitionLocation>& TPartitionInfo::GetPartitionLocation() const {
     return PartitionLocation_;
 }
 
+const TVector<ui64> TPartitionInfo::GetChildPartitionIds() const {
+    return ChildPartitionIds_;
+}
+
+const TVector<ui64> TPartitionInfo::GetParentPartitionIds() const {
+    return ParentPartitionIds_;
+}
+
 bool TPartitionInfo::GetActive() const {
     return Active_;
 }
@@ -411,19 +462,20 @@ ui64 TPartitionInfo::GetPartitionId() const {
     return PartitionId_;
 }
 
+const TMaybe<TString>& TPartitionInfo::GetFromBound() const {
+    return FromBound_;
+}
+
+const TMaybe<TString>& TPartitionInfo::GetToBound() const {
+    return ToBound_;
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TTopicClient
 
 TTopicClient::TTopicClient(const TDriver& driver, const TTopicClientSettings& settings)
     : Impl_(std::make_shared<TImpl>(CreateInternalInterface(driver), settings))
 {
-    ProvideCodec(ECodec::GZIP, MakeHolder<TGzipCodec>());
-    ProvideCodec(ECodec::LZOP, MakeHolder<TUnsupportedCodec>());
-    ProvideCodec(ECodec::ZSTD, MakeHolder<TZstdCodec>());
-}
-
-void TTopicClient::ProvideCodec(ECodec codecId, THolder<ICodec>&& codecImpl) {
-    return Impl_->ProvideCodec(codecId, std::move(codecImpl));
 }
 
 TAsyncStatus TTopicClient::CreateTopic(const TString& path, const TCreateTopicSettings& settings) {
@@ -467,10 +519,6 @@ std::shared_ptr<IWriteSession> TTopicClient::CreateWriteSession(const TWriteSess
 TAsyncStatus TTopicClient::CommitOffset(const TString& path, ui64 partitionId, const TString& consumerName, ui64 offset,
     const TCommitOffsetSettings& settings) {
     return Impl_->CommitOffset(path, partitionId, consumerName, offset, settings);
-}
-
-void TTopicClient::OverrideCodec(ECodec codecId, THolder<ICodec>&& codecImpl) {
-    return Impl_->OverrideCodec(codecId, std::move(codecImpl));
 }
 
 }  // namespace NYdb::NTopic

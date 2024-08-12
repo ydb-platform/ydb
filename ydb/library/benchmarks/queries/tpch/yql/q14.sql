@@ -6,11 +6,11 @@
 
 $border = Date("1994-08-01");
 select
-    100.00 * sum(case
-        when StartsWith(p.p_type, 'PROMO')
-            then l.l_extendedprice * (1 - l.l_discount)
-        else 0
-    end) / sum(l.l_extendedprice * (1 - l.l_discount)) as promo_revenue
+    $z100_35 * sum(case
+        when p.p_type like 'PROMO%'
+            then l.l_extendedprice * ($z1_12 - l.l_discount)
+        else $z0_12
+    end) / sum(l.l_extendedprice * ($z1_12 - l.l_discount)) as promo_revenue
 from
     {{lineitem}} as l
 join
@@ -18,5 +18,5 @@ join
 on
     l.l_partkey = p.p_partkey
 where
-    cast(l.l_shipdate as timestamp) >= $border
-    and cast(l.l_shipdate as timestamp) < ($border + Interval("P31D"));
+    l.l_shipdate >= $border
+    and l.l_shipdate < ($border + Interval("P31D"));

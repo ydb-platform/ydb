@@ -2,10 +2,15 @@
 
 -- NB: Subquerys
 -- start query 1 in stream 0 using template query63.tpl and seed 1819994127
+
+$todecimal = ($x) -> {
+  return cast(cast($x as string?) as decimal(7,2))
+};
+
 select  *
 from (select item.i_manager_id i_manager_id
-             ,sum(ss_sales_price) sum_sales
-             ,avg(sum(ss_sales_price)) over (partition by item.i_manager_id) avg_monthly_sales
+             ,sum($todecimal(ss_sales_price)) sum_sales
+             ,avg(sum($todecimal(ss_sales_price))) over (partition by item.i_manager_id) avg_monthly_sales
       from {{item}} as item
           cross join {{store_sales}} as store_sales
           cross join {{date_dim}} as date_dim
@@ -23,7 +28,7 @@ from (select item.i_manager_id i_manager_id
               and i_brand in ('amalgimporto #1','edu packscholar #1','exportiimporto #1',
 		                 'importoamalg #1')))
 group by item.i_manager_id, date_dim.d_moy) tmp1
-where case when avg_monthly_sales > 0 then abs (sum_sales - avg_monthly_sales) / avg_monthly_sales else null end > 0.1
+where case when avg_monthly_sales > 0 then abs (sum_sales - avg_monthly_sales) / avg_monthly_sales else null end > cast("0.1" as decimal(7,2))
 order by i_manager_id
         ,avg_monthly_sales
         ,sum_sales

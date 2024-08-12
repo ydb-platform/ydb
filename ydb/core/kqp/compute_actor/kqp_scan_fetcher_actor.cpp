@@ -4,7 +4,6 @@
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
-#include <ydb/core/protos/ssa.pb.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 
@@ -107,7 +106,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanInitActor::TPtr& 
     }
     auto& msg = ev->Get()->Record;
     auto scanActorId = ActorIdFromProto(msg.GetScanActorId());
-    InFlightShards.RegisterScannerActor(msg.GetTabletId(), scanActorId);
+    InFlightShards.RegisterScannerActor(msg.GetTabletId(), msg.GetGeneration(), scanActorId);
 }
 
 void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
@@ -115,7 +114,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
         return;
     }
     auto state = InFlightShards.GetShardStateByActorId(ev->Sender);
-    if (!state) {
+    if (!state || state->Generation != ev->Get()->Generation) {
         return;
     }
     AFL_ENSURE(state->State == EShardState::Running)("state", state->State)("actor_id", state->ActorId)("ev_sender", ev->Sender);
@@ -153,8 +152,19 @@ void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanError::TPtr& ev) 
             return;
         }
     }
+    if (state->Generation != ev->Get()->Record.GetGeneration()) {
+        return;
+    }
 
     if (state->State == EShardState::Starting) {
+        ++TotalRetries;
+        if (TotalRetries >= MAX_TOTAL_SHARD_RETRIES) {
+            CA_LOG_E("TKqpScanFetcherActor: broken tablet for this request " << state->TabletId
+                << ", retries limit exceeded (" << state->TotalRetries << "/" << TotalRetries << ")");
+            SendGlobalFail(NDqProto::COMPUTE_STATE_FAILURE, YdbStatusToDqStatus(status), issues);
+            return PassAway();
+        }
+
         if (FindSchemeErrorInIssues(status, issues)) {
             return EnqueueResolveShard(state);
         }

@@ -1,6 +1,6 @@
 PY3TEST()
 
-OWNER(g:ymake)
+SUBSCRIBER(g:ymake)
 
 TEST_SRCS(
     test_common.py

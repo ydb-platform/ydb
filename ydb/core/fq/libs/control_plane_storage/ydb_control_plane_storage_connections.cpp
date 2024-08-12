@@ -228,7 +228,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
             if (event.IsExactNameMatch) {
                 filters.push_back("`" NAME_COLUMN_NAME "` = $filter_name");
             } else {
-                filters.push_back("`" NAME_COLUMN_NAME "` LIKE '%' || $filter_name || '%'");
+                filters.push_back("FIND(`" NAME_COLUMN_NAME "`, $filter_name) IS NOT NULL");
             }
         }
 

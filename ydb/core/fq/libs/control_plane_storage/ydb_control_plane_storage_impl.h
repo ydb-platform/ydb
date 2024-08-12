@@ -36,6 +36,7 @@
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/exceptions/exceptions.h>
+#include <ydb/core/fq/libs/metrics/status_code_counters.h>
 #include <ydb/core/fq/libs/quota_manager/events/events.h>
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
@@ -580,6 +581,7 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
     };
 
     TCounters Counters;
+    TStatusCodeByScopeCounters::TPtr FailedStatusCodeCounters;
 
     ::NFq::TYqSharedResources::TPtr YqSharedResources;
 
@@ -606,6 +608,7 @@ public:
         const TString& tenantName)
         : TControlPlaneStorageUtils(config, s3Config, common, computeConfig)
         , Counters(counters, *Config)
+        , FailedStatusCodeCounters(MakeIntrusive<TStatusCodeByScopeCounters>("FinalFailedStatusCode", counters->GetSubgroup("component", "QueryDiagnostic")))
         , YqSharedResources(yqSharedResources)
         , CredProviderFactory(credProviderFactory)
         , TenantName(tenantName)
@@ -916,6 +919,10 @@ private:
         std::shared_ptr<TResponseTasks> responseTasks,
         const TVector<TValidationQuery>& validators = {},
         TTxSettings transactionMode = TTxSettings::SerializableRW());
+
+    ui64 GetExecutionLimitMills(
+        FederatedQuery::QueryContent_QueryType queryType,
+        const TMaybe<TQuotaMap>& quotas);
 };
 
 }

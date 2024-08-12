@@ -2,6 +2,7 @@
 #include <yt/yt/core/test_framework/framework.h>
 
 #include <yt/yt/core/misc/error.h>
+#include <yt/yt/core/misc/error_helpers.h>
 
 #include <yt/yt/core/yson/string.h>
 
@@ -279,7 +280,7 @@ TEST(TErrorTest, BitshiftOverloadsImplicitLeftOperand)
     };
     IterateTestOverEveryRightOperand<
         decltype(adlResolutionTester),
-        /*LeftOperandHasUserDefinedOverload=*/ true>(adlResolutionTester);
+        /*LeftOperandHasUserDefinedOverload*/ true>(adlResolutionTester);
 
     // Make sure no ambiguous calls.
     auto genericErrorOrTester = [] (auto&& arg) {
@@ -478,6 +479,25 @@ TEST(TErrorTest, FormatCtor)
     EXPECT_EQ("Some error hello", TError("Some error %v", "hello").GetMessage());
 }
 
+TEST(TErrorTest, FindRecursive)
+{
+    auto inner = TError("Inner")
+        << TErrorAttribute("inner_attr", 42);
+    auto error = TError("Error")
+        << inner
+        << TErrorAttribute("attr", 8);
+
+    auto attr = FindAttribute<int>(error, "attr");
+    EXPECT_TRUE(attr);
+    EXPECT_EQ(*attr, 8);
+
+    EXPECT_FALSE(FindAttribute<int>(error, "inner_attr"));
+
+    auto innerAttr = FindAttributeRecursive<int>(error, "inner_attr");
+    EXPECT_TRUE(innerAttr);
+    EXPECT_EQ(*innerAttr, 42);
+}
+
 TEST(TErrorTest, TruncateSimple)
 {
     auto error = TError("Some error")
@@ -653,6 +673,29 @@ TEST(TErrorTest, TruncateWhitelistInnerErrorsRValue)
     EXPECT_EQ("Some long long attr", truncatedInnerError.Attributes().Get<TString>("attr2"));
 }
 
+TEST(TErrorTest, TruncateWhitelistSaveInnerError)
+{
+    auto genericInner = TError("GenericInner");
+    auto whitelistedInner = TError("Inner")
+        << TErrorAttribute("whitelisted_key", 42);
+
+    auto error = TError("Error")
+        << (genericInner << TErrorAttribute("foo", "bar"))
+        << whitelistedInner
+        << genericInner;
+
+    error = std::move(error).Truncate(1, 20, {
+        "whitelisted_key"
+    });
+    EXPECT_TRUE(!error.IsOK());
+    EXPECT_EQ(error.InnerErrors().size(), 2u);
+    EXPECT_EQ(error.InnerErrors()[0], whitelistedInner);
+    EXPECT_EQ(error.InnerErrors()[1], genericInner);
+
+    EXPECT_TRUE(FindAttributeRecursive<int>(error, "whitelisted_key"));
+    EXPECT_FALSE(FindAttributeRecursive<int>(error, "foo"));
+}
+
 TEST(TErrorTest, YTExceptionToError)
 {
     try {
@@ -670,7 +713,7 @@ TEST(TErrorTest, CompositeYTExceptionToError)
         try {
             throw TSimpleException("inner message");
         } catch (const std::exception& ex) {
-            throw TCompositeException(ex, "outer message");
+            throw TSimpleException(ex, "outer message");
         }
     } catch (const std::exception& ex) {
         TError outerError(ex);
@@ -680,6 +723,37 @@ TEST(TErrorTest, CompositeYTExceptionToError)
         const auto& innerError = outerError.InnerErrors()[0];
         EXPECT_EQ(NYT::EErrorCode::Generic, innerError.GetCode());
         EXPECT_EQ("inner message", innerError.GetMessage());
+    }
+}
+
+TEST(TErrorTest, YTExceptionWithAttributesToError)
+{
+    try {
+        throw TSimpleException("message")
+            << TExceptionAttribute{"Int64 value", static_cast<i64>(42)}
+            << TExceptionAttribute{"double value", 7.77}
+            << TExceptionAttribute{"bool value", false}
+            << TExceptionAttribute{"String value", "FooBar"};
+    } catch (const std::exception& ex) {
+        TError error(ex);
+        EXPECT_EQ(NYT::EErrorCode::Generic, error.GetCode());
+        EXPECT_EQ("message", error.GetMessage());
+
+        auto i64value = error.Attributes().Find<i64>("Int64 value");
+        EXPECT_TRUE(i64value);
+        EXPECT_EQ(*i64value, static_cast<i64>(42));
+
+        auto doubleValue = error.Attributes().Find<double>("double value");
+        EXPECT_TRUE(doubleValue);
+        EXPECT_EQ(*doubleValue, 7.77);
+
+        auto boolValue = error.Attributes().Find<bool>("bool value");
+        EXPECT_TRUE(boolValue);
+        EXPECT_EQ(*boolValue, false);
+
+        auto stringValue = error.Attributes().Find<TString>("String value");
+        EXPECT_TRUE(stringValue);
+        EXPECT_EQ(*stringValue, "FooBar");
     }
 }
 
@@ -758,7 +832,7 @@ TEST(TErrorTest, SimpleLoadAfterSave)
 
 TEST(TErrorTest, AttributeSerialization)
 {
-    auto getWeededText = [](const TError& err) {
+    auto getWeededText = [] (const TError& err) {
         std::vector<TString> lines;
         for (const auto& line : StringSplitter(ToString(err)).Split('\n')) {
             if (!line.Contains("origin") && !line.Contains("datetime")) {

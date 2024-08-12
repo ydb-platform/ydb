@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from distutils.util import convert_path
 from distutils import log
 from distutils.errors import DistutilsOptionError
@@ -17,7 +19,7 @@ class rotate(Command):
         ('keep=', 'k', "number of matching distributions to keep"),
     ]
 
-    boolean_options = []
+    boolean_options: list[str] = []
 
     def initialize_options(self):
         self.match = None

@@ -92,10 +92,12 @@ private:
 
 class TQueryPlanPrinter {
 public:
-    TQueryPlanPrinter(EOutputFormat format, bool analyzeMode = false, IOutputStream& output = Cout)
+    TQueryPlanPrinter(EOutputFormat format, bool analyzeMode = false, IOutputStream& output = Cout, size_t maxWidth = 0)
         : Format(format)
         , AnalyzeMode(analyzeMode)
-        , Output(output) {}
+        , Output(output)
+        , MaxWidth(maxWidth)
+        {}
 
     void Print(const TString& plan);
 
@@ -112,6 +114,7 @@ private:
     EOutputFormat Format;
     bool AnalyzeMode;
     IOutputStream& Output;
+    size_t MaxWidth;
 };
 
 }

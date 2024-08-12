@@ -3,6 +3,7 @@ import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_scheme.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/annotations/validation.proto";
 
 import "google/protobuf/duration.proto";
@@ -43,7 +44,7 @@ message OffsetsRange {
 // In-session reauthentication and reauthorization, lets user increase session lifetime.
 // Client should wait for UpdateTokenResponse before sending next UpdateTokenRequest.
 message UpdateTokenRequest {
-    string token = 1;
+    string token = 1 [(Ydb.sensitive) = true];
 }
 
 message UpdateTokenResponse {
@@ -167,7 +168,7 @@ message StreamWriteMessage {
                 // Explicit partition id to write to.
                 int64 partition_id = 6;
                 // Explicit partition location to write to.
-                PartitionWithGeneration partition_with_generation = 8;                
+                PartitionWithGeneration partition_with_generation = 8;
             }
             // Message metadata. Overall size is limited to 4096 symbols (all keys and values combined).
             repeated MetadataItem metadata_items = 7 [(Ydb.size).le = 1000];
@@ -306,6 +307,7 @@ message StreamReadMessage {
             StopPartitionSessionRequest stop_partition_session_request = 9;
 
             UpdatePartitionSession update_partition_session = 10;
+            EndPartitionSession end_partition_session = 11;
         }
     }
 
@@ -320,6 +322,8 @@ message StreamReadMessage {
         string reader_name = 3;
         // Direct reading from a partition node.
         bool direct_read = 4;
+        // Indicates that the SDK supports auto partitioning.
+        bool auto_partitioning_support = 5;
 
         message TopicReadSettings {
             // Topic path.
@@ -485,7 +489,7 @@ message StreamReadMessage {
         PartitionLocation partition_location = 4;
     }
 
-    // Signal for server that cient is ready to recive data for partition.
+    // Signal for server that client is ready to recive data for partition.
     message StartPartitionSessionResponse {
         // Partition session identifier of partition to start read.
         int64 partition_session_id = 1;
@@ -534,7 +538,7 @@ message StreamReadMessage {
 
         // Flag of graceful stop, used only when InitRequest.direct_read is true
         // Client must pass this value unchanged from the StopPartitionSessionRequest.
-        // Server can sent two StopPartitionSessionRequests, the first with graceful=true, the second with graceful=false. The client must answer both of them. 
+        // Server can sent two StopPartitionSessionRequests, the first with graceful=true, the second with graceful=false. The client must answer both of them.
         bool graceful = 2;
     }
 
@@ -558,27 +562,44 @@ message StreamReadMessage {
         int64 direct_read_id = 2;
     }
 
+    // Signal from server that client has finished reading the partition and all messages have been read.
+    // Once a partition has been finished no further messages will ever arrive to that partition.
+    // This command is a hint to the client to commit offsets, after which the child partitions will be balanced independently in different reading sessions.
+    // Unlike StopPartitionSessionRequest, the client does not have to close the reading session.
+    // Client should not send a response to the command.
+    message EndPartitionSession {
+        // Partition session identifier.
+        int64 partition_session_id = 1;
+
+        // Ids of partitions which were merged with the ended partition.
+        repeated int64 adjacent_partition_ids = 2;
+        // Ids of partitions which was formed when the ended partition was split or merged.
+        repeated int64 child_partition_ids = 3;
+    }
 }
 
 // Messages for bidirectional streaming rpc StreamDirectRead
 message StreamDirectReadMessage {
 
-    // Client-server message for direct read session. 
-    //     InitDirectRead - command from client to create and start a direct read session.
-    //     StartDirectReadPartitionSession - command from client to create and start a direct read partition session.
-    //     UpdateTokenRequest - request to update auth token    
+    // Client-server message for direct read session.
+    //     InitRequest - command from client to create and start a direct read session.
+    //     StartDirectReadPartitionSessionRequest - command from client to create and start a direct read partition session.
+    //         Client signals it is ready to get data from partition.
+    //     UpdateTokenRequest - request to update auth token
     message FromClient {
         oneof client_message {
-            InitDirectRead init_direct_read = 1;
-            StartDirectReadPartitionSession start_direct_read_partition_session = 2;
-            UpdateTokenRequest update_token_request = 3;            
+            InitRequest init_request = 1;
+            StartDirectReadPartitionSessionRequest start_direct_read_partition_session_request = 2;
+            UpdateTokenRequest update_token_request = 3;
         }
     }
 
-    // Server-client message for direct read session. 
+    // Server-client message for direct read session.
+    //     InitResponse - correct handshake response.
+    //     StartDirectReadPartitionSessionResponse - Response to StartDirectReadPartitionSessionRequest.
     //     DirectReadResponse - portion of message data.
     //     StopDirectReadPartitionSession - command from server to stop a direct read partition session.
-    //     UpdateTokenResponse - acknowledgment of token update.    
+    //     UpdateTokenResponse - acknowledgment of token update.
     message FromServer {
         // Server status of response.
         Ydb.StatusIds.StatusCode status = 1;
@@ -586,8 +607,9 @@ message StreamDirectReadMessage {
         // Issues if any.
         repeated Ydb.Issue.IssueMessage issues = 2;
 
-
         oneof server_message {
+            InitResponse init_response = 6;
+            StartDirectReadPartitionSessionResponse start_direct_read_partition_session_response = 7;
             StopDirectReadPartitionSession stop_direct_read_partition_session = 3;
             DirectReadResponse direct_read_response = 4;
             UpdateTokenResponse update_token_response = 5;
@@ -596,7 +618,7 @@ message StreamDirectReadMessage {
 
     // Command from client to create and start a direct read session.
     // Server should not send a response to the command.
-    message InitDirectRead {
+    message InitRequest {
         // Read session identifier.
         string session_id = 1;
         // Topics that will be read by this session.
@@ -610,9 +632,12 @@ message StreamDirectReadMessage {
         }
     }
 
+    // Response to the handshake.
+    message InitResponse {
+    }
+
     // Command from client to create and start a direct read partition session.
-    // Server should not send a response to the command.
-    message StartDirectReadPartitionSession {
+    message StartDirectReadPartitionSessionRequest {
         // Partition session identifier.
         int64 partition_session_id = 1;
 
@@ -621,6 +646,15 @@ message StreamDirectReadMessage {
 
         // Partition generation.
         int64 generation = 3;
+    }
+
+    // Signal for server that client is ready to receive data for partition.
+    message StartDirectReadPartitionSessionResponse {
+        // Partition session identifier of partition to start read.
+        int64 partition_session_id = 1;
+
+        // Partition generation.
+        int64 generation = 2;
     }
 
     // Command from server to stop a direct read partition session.
@@ -634,21 +668,23 @@ message StreamDirectReadMessage {
 
         // Partition session identifier.
         int64 partition_session_id = 3;
-    }
 
+        // Partition generation.
+        int64 generation = 4;
+    }
 
     // Messages that have been read directly from the partition node.
     // It's a response to StreamRead.ReadRequest
     message DirectReadResponse {
         // Partition session identifier.
         int64 partition_session_id = 1;
-        
+
         // Read request identifier.
         int64 direct_read_id = 2;
 
         // Messages data
         StreamReadMessage.ReadResponse.PartitionData partition_data = 3;
-    }    
+    }
 }
 
 message TransactionIdentity {
@@ -796,14 +832,57 @@ message AlterConsumer {
     map<string, string> alter_attributes = 6;
 }
 
+enum AutoPartitioningStrategy {
+    // The auto partitioning algorithm is not specified. The default value will be used.
+    AUTO_PARTITIONING_STRATEGY_UNSPECIFIED = 0;
+    // The auto partitioning is disabled.
+    AUTO_PARTITIONING_STRATEGY_DISABLED = 1;
+    // The auto partitioning algorithm will increase partitions count depending on the load characteristics.
+    // The auto partitioning algorithm will never decrease the number of partitions.
+    AUTO_PARTITIONING_STRATEGY_SCALE_UP = 2;
+    // The auto partitioning algorithm will both increase and decrease partitions count depending on the load characteristics.
+    AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN = 3;
+    // The auto partitioning is paused.
+    AUTO_PARTITIONING_STRATEGY_PAUSED = 4;
+}
+
 // Partitioning settings for topic.
 message PartitioningSettings {
-    // Minimum partition count auto merge would stop working at.
+    // Auto merge would stop working when the partitions count reaches min_active_partitions
     // Zero value means default - 1.
     int64 min_active_partitions = 1 [(Ydb.value) = ">= 0"];
+    // Auto split would stop working when the partitions count reaches max_active_partitions
+    // Zero value means default - 1.
+    int64 max_active_partitions = 3 [(Ydb.value) = ">= 0"];
     // Limit for total partition count, including active (open for write) and read-only partitions.
     // Zero value means default - 100.
-    int64 partition_count_limit = 2 [(Ydb.value) = ">= 0"];
+    // Use max_active_partitions
+    int64 partition_count_limit = 2 [(Ydb.value) = ">= 0", deprecated = true];
+    // Settings for the partitions count auto partitioning.
+    AutoPartitioningSettings auto_partitioning_settings = 4;
+}
+
+message AutoPartitioningSettings {
+    // Strategy of auto partitioning.
+    AutoPartitioningStrategy strategy = 1;
+    // Partition write speed auto partitioning options.
+    AutoPartitioningWriteSpeedStrategy partition_write_speed = 2;
+}
+
+message AutoPartitioningWriteSpeedStrategy {
+    //Partition will be auto partitioned up (divided into 2 partitions)
+    //after write speed to the partition exceeds up_utilization_percent (in percentage of maximum write speed to the partition) for the period of time stabilization_window
+
+    //Partition will become a candidate to the auto partitioned down
+    //after write speed doesn’t reach down_utilization_percent (in percentage of maximum write speed to the partition) for the period of time stabilization_window
+    //This candidate partition will be auto partitioned down when other neighbour partition will become a candidate to the auto partitioning down and not earlier than a retention period.
+
+    // Zero value means default - 300.
+    google.protobuf.Duration stabilization_window = 1;
+    // Zero value means default - 90.
+    int32 up_utilization_percent = 2 [(Ydb.value) = ">= 0"];
+    // Zero value means default - 30.
+    int32 down_utilization_percent = 3 [(Ydb.value) = ">= 0"];
 }
 
 // Partitioning settings for topic.
@@ -811,9 +890,37 @@ message AlterPartitioningSettings {
     // Minimum partition count auto merge would stop working at.
     // Zero value means default - 1.
     optional int64 set_min_active_partitions = 1 [(Ydb.value) = ">= 0"];
+    // Maximum partition count auto merge would stop working at.
+    // Zero value means default - 1.
+    optional int64 set_max_active_partitions = 3 [(Ydb.value) = ">= 0"];
     // Limit for total partition count, including active (open for write) and read-only partitions.
     // Zero value means default - 100.
-    optional int64 set_partition_count_limit = 2 [(Ydb.value) = ">= 0"];
+    // Use set_max_active_partitions
+    optional int64 set_partition_count_limit = 2 [(Ydb.value) = ">= 0", deprecated = true];
+    // Settings for auto partitioning the partition number
+    optional AlterAutoPartitioningSettings alter_auto_partitioning_settings = 4;
+}
+
+message AlterAutoPartitioningSettings {
+    // Strategy of auto partitioning
+    optional AutoPartitioningStrategy set_strategy = 1;
+    // Auto partitioning write speed options.
+    optional AlterAutoPartitioningWriteSpeedStrategy set_partition_write_speed = 2;
+}
+
+message AlterAutoPartitioningWriteSpeedStrategy {
+    // The time of exceeding the threshold value, after which the partition will be
+    // auto partitioning.
+    // Zero value means default - 300.
+    optional google.protobuf.Duration set_stabilization_window = 1;
+    // The threshold value of the write speed to the partition as a percentage, when exceeded,
+    // the partition will be auto split.
+    // Zero value means default - 90.
+    optional int32 set_up_utilization_percent = 2 [(Ydb.value) = ">= 0"];
+    // The threshold value of the write speed to the partition as a percentage, if it is not reached,
+    // the partition will be auto merged.
+    // Zero value means default - 30.
+    optional int32 set_down_utilization_percent = 3 [(Ydb.value) = ">= 0"];
 }
 
 // Metering mode specifies the method used to determine consumption of resources by the topic.
@@ -843,7 +950,7 @@ message CreateTopicRequest {
     // How long data in partition should be stored. Must be greater than 0 and less than limit for this database.
     // Default limit - 36 hours.
     google.protobuf.Duration retention_period = 4;
-    
+
     // How much data in partition should be stored. Must be greater than 0 and less than limit for this database.
     // Zero value means infinite limit.
     int64 retention_storage_mb = 5 [(Ydb.value) = ">= 0"];
@@ -914,6 +1021,13 @@ message DescribeTopicResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
+message PartitionKeyRange {
+    // Inclusive left border. Emptiness means -inf.
+    optional bytes from_bound = 1;
+    // Exclusive right border. Emptiness means +inf.
+    optional bytes to_bound = 2;
+}
+
 // Describe topic result message that will be inside DescribeTopicResponse.operation.
 message DescribeTopicResult {
     // Description of scheme object.
@@ -923,7 +1037,7 @@ message DescribeTopicResult {
 
     // Settings for partitioning
     PartitioningSettings partitioning_settings = 2;
-    
+
     // Partitions description.
     repeated PartitionInfo partitions = 3;
 
@@ -932,7 +1046,7 @@ message DescribeTopicResult {
     //
     // How long data in partition should be stored.
     google.protobuf.Duration retention_period = 4;
-    
+
     // How much data in partition should be stored.
     // Zero value means infinite limit.
     int64 retention_storage_mb = 5;
@@ -943,7 +1057,7 @@ message DescribeTopicResult {
     // Writes with codec not from this list are forbidden.
     // If empty, codec compatibility check for the topic is disabled.
     SupportedCodecs supported_codecs = 7;
-    
+
     // Partition write speed in bytes per second.
     // Zero value means default limit: 1 MB per second.
     int64 partition_write_speed_bytes_per_second = 8;
@@ -982,6 +1096,8 @@ message DescribeTopicResult {
 
         // Partition location, filled only when include_location in request is true.
         PartitionLocation partition_location = 6;
+
+        PartitionKeyRange key_range = 7;
     }
 
     message TopicStats {
@@ -1135,7 +1251,7 @@ message AlterTopicRequest {
     // How long data in partition should be stored. Must be greater than 0 and less than limit for this database.
     // Default limit - 36 hours.
     google.protobuf.Duration set_retention_period = 4;
-    
+
     // How much data in partition should be stored. Must be greater than 0 and less than limit for this database.
     optional int64 set_retention_storage_mb = 5 [(Ydb.value) = ">= 0"];
 
@@ -1148,7 +1264,7 @@ message AlterTopicRequest {
 
     // Partition write speed in bytes per second. Must be less than database limit. Default limit - 1 MB/s.
     optional int64 set_partition_write_speed_bytes_per_second = 8 [(Ydb.value) = ">= 0"];
-    
+
     // Burst size for write in partition, in bytes. Must be less than database limit. Default limit - 1 MB.
     optional int64 set_partition_write_burst_bytes = 9 [(Ydb.value) = ">= 0"];
 

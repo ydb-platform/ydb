@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/storage_pools.h>
+#include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/tablet_flat/flat_stat_table.h>
@@ -251,19 +252,23 @@ struct TUserTable : public TThrRefBase {
     };
 
     struct TTableIndex {
-        using EIndexType = NKikimrSchemeOp::EIndexType;
+        using EType = NKikimrSchemeOp::EIndexType;
+        using EState = NKikimrSchemeOp::EIndexState;
 
-        TString Name;
-        EIndexType Type;
+        EType Type;
+        EState State;
         TVector<ui32> KeyColumnIds;
         TVector<ui32> DataColumnIds;
 
         TTableIndex() = default;
 
         TTableIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc, const TMap<ui32, TUserColumn>& columns)
-            : Name(indexDesc.GetName())
-            , Type(indexDesc.GetType())
+            : Type(indexDesc.GetType())
+            , State(indexDesc.GetState())
         {
+            if (Type != EType::EIndexTypeGlobalAsync) {
+                return;
+            }
             THashMap<TStringBuf, ui32> nameToId;
             for (const auto& [id, column] : columns) {
                 Y_DEBUG_ABORT_UNLESS(!nameToId.contains(column.Name));
@@ -281,6 +286,10 @@ struct TUserTable : public TThrRefBase {
 
             fillColumnIds(indexDesc.GetKeyColumnNames(),  KeyColumnIds);
             fillColumnIds(indexDesc.GetDataColumnNames(), DataColumnIds);
+        }
+
+        static void Rename(NKikimrSchemeOp::TIndexDescription& indexDesc, const TString& newName) {
+            indexDesc.SetName(newName);
         }
     };
 
@@ -336,6 +345,11 @@ struct TUserTable : public TThrRefBase {
         bool HasStrongConsistency() const {
             return Consistency == NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_STRONG;
         }
+
+        void Serialize(NKikimrSchemeOp::TTableReplicationConfig& proto) const {
+            proto.SetMode(Mode);
+            proto.SetConsistency(Consistency);
+        }
     };
 
     struct TStats {
@@ -352,6 +366,7 @@ struct TUserTable : public TThrRefBase {
         TInstant StatsUpdateTime;
         ui64 DataSizeResolution = 0;
         ui64 RowCountResolution = 0;
+        ui32 HistogramBucketsCount = 0;
         ui64 BackgroundCompactionRequests = 0;
         ui64 BackgroundCompactionCount = 0;
         ui64 CompactBorrowedCount = 0;
@@ -392,6 +407,30 @@ struct TUserTable : public TThrRefBase {
     bool IsBackup = false;
 
     TMap<TPathId, TTableIndex> Indexes;
+
+    template <typename TCallback>
+    void ForAsyncIndex(const TPathId& pathId, TCallback&& callback) const {
+        if (AsyncIndexCount == 0) {
+            return;
+        }
+        auto it = Indexes.find(pathId);
+        if (it != Indexes.end() && it->second.Type == TTableIndex::EType::EIndexTypeGlobalAsync) {
+            callback(it->second);
+        }
+    }
+
+    template <typename TCallback>
+    void ForEachAsyncIndex(TCallback&& callback) const {
+        if (AsyncIndexCount == 0) {
+            return;
+        }
+        for (const auto& [pathId, index] : Indexes) {
+            if (index.Type == TTableIndex::EType::EIndexTypeGlobalAsync) {
+                callback(pathId, index);
+            }
+        }
+    }
+
     TMap<TPathId, TCdcStream> CdcStreams;
     ui32 AsyncIndexCount = 0;
     ui32 JsonCdcStreamCount = 0;
@@ -400,7 +439,7 @@ struct TUserTable : public TThrRefBase {
     mutable TStats Stats;
     mutable bool StatsUpdateInProgress = false;
     mutable bool StatsNeedUpdate = true;
-    mutable NTable::TDatabase::TChg LastTableChange{ 0, NTable::TEpoch::Zero() };
+    mutable NTable::TDatabase::TChangeCounter LastTableChange;
     mutable TMonotonic LastTableChangeTimestamp;
 
     ui32 SpecialColTablet = Max<ui32>();
@@ -442,6 +481,7 @@ struct TUserTable : public TThrRefBase {
     bool ResetTableSchemaVersion();
 
     void AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc);
+    void SwitchIndexState(const TPathId& indexPathId, TTableIndex::EState state);
     void DropIndex(const TPathId& indexPathId);
     bool HasAsyncIndexes() const;
 

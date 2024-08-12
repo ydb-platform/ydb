@@ -15,7 +15,7 @@ select  *
        cross join {{warehouse}} as warehouse
        cross join {{item}} as item
        cross join {{date_dim}} as date_dim
-   where i_current_price between 0.99 and 1.49
+   where i_current_price between $z0_99 and $z1_49
      and i_item_sk          = inv_item_sk
      and inv_warehouse_sk   = w_warehouse_sk
      and inv_date_sk    = d_date_sk

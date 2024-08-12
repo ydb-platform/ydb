@@ -37,12 +37,12 @@ public:
         return SortedRanges.end();
     }
 
-    bool IsPortionInUsage(const TPortionInfo& info, const TIndexInfo& indexInfo) const;
-    bool IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end, const TIndexInfo& indexInfo) const;
+    bool IsPortionInUsage(const TPortionInfo& info) const;
+    TPKRangeFilter::EUsageClass IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const;
 
     NArrow::TColumnFilter BuildFilter(const arrow::Datum& data) const;
 
-    bool Add(std::shared_ptr<NOlap::TPredicate> f, std::shared_ptr<NOlap::TPredicate> t, const TIndexInfo* indexInfo) Y_WARN_UNUSED_RESULT;
+    [[nodiscard]] bool Add(std::shared_ptr<NOlap::TPredicate> f, std::shared_ptr<NOlap::TPredicate> t, const TIndexInfo* indexInfo);
 
     std::set<std::string> GetColumnNames() const {
         std::set<std::string> result;

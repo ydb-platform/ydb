@@ -22,9 +22,8 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 @pytest.fixture
 def kikimr():
     kikimr_conf = StreamingOverKikimrConfig(
-        cloud_mode=True,
-        node_count={"/cp": TenantConfig(1),
-                    "/compute": TenantConfig(8)})
+        cloud_mode=True, node_count={"/cp": TenantConfig(1), "/compute": TenantConfig(8)}
+    )
     kikimr = StreamingOverKikimr(kikimr_conf)
     # control
     kikimr.control_plane.fq_config['control_plane_storage']['mapping'] = {"common_tenant_name": ["/compute"]}
@@ -50,17 +49,12 @@ def run_with_sleep(args):
 
 
 class TestRecovery(TestYdsBase):
-
     @retry.retry_intrusive
     def get_graph_master_node_id(self, query_id):
         for node_index in self.kikimr.compute_plane.kikimr_cluster.nodes:
             if self.kikimr.compute_plane.get_task_count(node_index, query_id) > 0:
                 return node_index
         assert False, "No active graphs found"
-
-    def get_ca_count(self, node_index):
-        result = self.kikimr.compute_plane.get_sensors(node_index, "utils").find_sensor({"activity": "DQ_COMPUTE_ACTOR", "sensor": "ActorsAliveByActivity", "execpool": "User"})
-        return result if result is not None else 0
 
     def dump_workers(self, worker_count, ca_count, wait_time=yatest_common.plain_or_under_sanitizer(30, 150)):
         deadline = time.time() + wait_time
@@ -70,7 +64,7 @@ class TestRecovery(TestYdsBase):
             list = []
             for node_index in self.kikimr.compute_plane.kikimr_cluster.nodes:
                 wc = self.kikimr.compute_plane.get_worker_count(node_index)
-                cc = self.get_ca_count(node_index)
+                cc = self.kikimr.compute_plane.get_ca_count(node_index)
                 wcs += wc
                 ccs += cc
                 list.append([node_index, wc, cc])
@@ -102,8 +96,7 @@ class TestRecovery(TestYdsBase):
             INSERT INTO myyds.`{output_topic}`
             SELECT STREAM
                 *
-            FROM myyds.`{input_topic}`;'''\
-        .format(
+            FROM myyds.`{input_topic}`;'''.format(
             input_topic=self.input_topic,
             output_topic=self.output_topic,
         )
@@ -187,9 +180,15 @@ class TestRecovery(TestYdsBase):
             else:
                 d[n] = 1
 
-        zero_checkpoints_metric = kikimr.compute_plane.get_checkpoint_coordinator_metric(query_id, "StartedFromEmptyCheckpoint")
-        restored_metric = kikimr.compute_plane.get_checkpoint_coordinator_metric(query_id, "RestoredFromSavedCheckpoint")
-        assert restored_metric >= 1, "RestoredFromSavedCheckpoint: {}, StartedFromEmptyCheckpoint: {}".format(restored_metric, zero_checkpoints_metric)
+        zero_checkpoints_metric = kikimr.compute_plane.get_checkpoint_coordinator_metric(
+            query_id, "StartedFromEmptyCheckpoint"
+        )
+        restored_metric = kikimr.compute_plane.get_checkpoint_coordinator_metric(
+            query_id, "RestoredFromSavedCheckpoint"
+        )
+        assert restored_metric >= 1, "RestoredFromSavedCheckpoint: {}, StartedFromEmptyCheckpoint: {}".format(
+            restored_metric, zero_checkpoints_metric
+        )
 
         client.abort_query(query_id)
         client.wait_query(query_id)

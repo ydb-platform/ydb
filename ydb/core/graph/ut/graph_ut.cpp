@@ -410,15 +410,15 @@ Y_UNIT_TEST_SUITE(Graph) {
             TAutoPtr<IEventHandle> handle;
             NGraph::TEvGraph::TEvMetricsResult* response = runtime.GrabEdgeEventRethrow<NGraph::TEvGraph::TEvMetricsResult>(handle);
             Ctest << response->Record.ShortDebugString() << Endl;
-            UNIT_ASSERT_VALUES_EQUAL(response->Record.TimeSize(), 26);
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.TimeSize(), 20);
             UNIT_ASSERT_VALUES_EQUAL(response->Record.GetTime(0), 79);
-            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetTime(1), 80);
-            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetTime(2), 89);
-            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetTime(3), 94);
-            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetTime(4), 99);
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetTime(1), 89);
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetTime(2), 94);
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetTime(3), 99);
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetTime(4), 104);
             UNIT_ASSERT(abs(response->Record.GetData(0).GetValues(0) - 14.5) < 0.1);
-            UNIT_ASSERT(abs(response->Record.GetData(0).GetValues(1) - 20.0) < 0.1);
-            UNIT_ASSERT(abs(response->Record.GetData(0).GetValues(2) - 23.6) < 0.1);
+            UNIT_ASSERT(abs(response->Record.GetData(0).GetValues(1) - 24.5) < 0.1);
+            UNIT_ASSERT(abs(response->Record.GetData(0).GetValues(2) - 32) < 0.1);
         }
     }
 

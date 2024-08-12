@@ -55,10 +55,6 @@ class TestRecovery(TestYdsBase):
                 return node_index
         assert False, "No active graphs found"
 
-    def get_ca_count(self, node_index):
-        result = self.kikimr.control_plane.get_sensors(node_index, "utils").find_sensor({"activity": "DQ_COMPUTE_ACTOR", "sensor": "ActorsAliveByActivity", "execpool": "User"})
-        return result if result is not None else 0
-
     def dump_workers(self, worker_count, ca_count, wait_time=yatest_common.plain_or_under_sanitizer(30, 150)):
         deadline = time.time() + wait_time
         while True:
@@ -67,7 +63,7 @@ class TestRecovery(TestYdsBase):
             list = []
             for node_index in self.kikimr.control_plane.kikimr_cluster.nodes:
                 wc = self.kikimr.control_plane.get_worker_count(node_index)
-                cc = self.get_ca_count(node_index)
+                cc = self.kikimr.control_plane.get_ca_count(node_index)
                 wcs += wc
                 ccs += cc
                 list.append([node_index, wc, cc])
@@ -98,8 +94,7 @@ class TestRecovery(TestYdsBase):
             INSERT INTO myyds.`{output_topic}`
             SELECT STREAM
                 *
-            FROM myyds.`{input_topic}`;'''\
-            .format(
+            FROM myyds.`{input_topic}`;'''.format(
             input_topic=self.input_topic,
             output_topic=self.output_topic,
         )
@@ -150,7 +145,9 @@ class TestRecovery(TestYdsBase):
                     HOP(DateTime::FromMilliseconds(CAST(Unwrap(t) as Uint32)), "PT0.01S", "PT0.01S", "PT0.01S"));'''
         client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
 
-        query_id = client.create_query("test_program_state_recovery", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
+        query_id = client.create_query(
+            "test_program_state_recovery", sql, type=fq.QueryContent.QueryType.STREAMING
+        ).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
         logging.debug("Uuid = {}".format(kikimr.uuid))
         master_node_index = self.get_graph_master_node_id(query_id)
@@ -159,7 +156,9 @@ class TestRecovery(TestYdsBase):
 
         self.write_stream([f'{{"time" = {i};}}' for i in range(100, 115, 2)])
 
-        kikimr.compute_plane.wait_completed_checkpoints(query_id, self.kikimr.compute_plane.get_completed_checkpoints(query_id) + 1)
+        kikimr.compute_plane.wait_completed_checkpoints(
+            query_id, self.kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
+        )
 
         # restart node with CA
         node_to_restart = None
@@ -215,8 +214,7 @@ class TestRecovery(TestYdsBase):
             INSERT INTO myyds.`{output_topic}`
             SELECT STREAM
                 *
-            FROM myyds.`{input_topic}`;'''\
-        .format(
+            FROM myyds.`{input_topic}`;'''.format(
             input_topic=self.input_topic,
             output_topic=self.output_topic,
         )
@@ -297,9 +295,15 @@ class TestRecovery(TestYdsBase):
                 d[n] = 1
         assert len(d) == 30
 
-        zero_checkpoints_metric = kikimr.control_plane.get_checkpoint_coordinator_metric(query_id, "StartedFromEmptyCheckpoint")
-        restored_metric = kikimr.control_plane.get_checkpoint_coordinator_metric(query_id, "RestoredFromSavedCheckpoint")
-        assert restored_metric >= 1, "RestoredFromSavedCheckpoint: {}, StartedFromEmptyCheckpoint: {}".format(restored_metric, zero_checkpoints_metric)
+        zero_checkpoints_metric = kikimr.control_plane.get_checkpoint_coordinator_metric(
+            query_id, "StartedFromEmptyCheckpoint"
+        )
+        restored_metric = kikimr.control_plane.get_checkpoint_coordinator_metric(
+            query_id, "RestoredFromSavedCheckpoint"
+        )
+        assert restored_metric >= 1, "RestoredFromSavedCheckpoint: {}, StartedFromEmptyCheckpoint: {}".format(
+            restored_metric, zero_checkpoints_metric
+        )
 
         client.abort_query(query_id)
         client.wait_query(query_id)
@@ -310,22 +314,43 @@ class TestRecovery(TestYdsBase):
         # action = "closepeersocket"
         # action = "poisonsession"
         action = "closeinputsession"
-        return [param_constants.kikimr_driver_path(),
-                "-s", "{}:{}".format(s1.host, s1.grpc_port),
-                "admin", "debug", "interconnect", action,
-                "--node", str(s2.node_id)]
+        return [
+            param_constants.kikimr_driver_path(),
+            "-s",
+            "{}:{}".format(s1.host, s1.grpc_port),
+            "admin",
+            "debug",
+            "interconnect",
+            action,
+            "--node",
+            str(s2.node_id),
+        ]
 
     def slowpoke_args(self, node):
         s = self.kikimr.control_plane.kikimr_cluster.nodes[node]
-        return [param_constants.kikimr_driver_path(),
-                "-s", "{}:{}".format(s.host, s.grpc_port),
-                "admin", "debug", "interconnect", "slowpoke",
-                "--pool-id", "4",
-                "--duration", "30s",
-                "--sleep-min", yatest_common.plain_or_under_sanitizer("10ms", "50ms"),
-                "--sleep-max", yatest_common.plain_or_under_sanitizer("100ms", "500ms"),
-                "--reschedule-min", "10ms", "--reschedule-max", "100ms",
-                "--num-actors", "2"]
+        return [
+            param_constants.kikimr_driver_path(),
+            "-s",
+            "{}:{}".format(s.host, s.grpc_port),
+            "admin",
+            "debug",
+            "interconnect",
+            "slowpoke",
+            "--pool-id",
+            "4",
+            "--duration",
+            "30s",
+            "--sleep-min",
+            yatest_common.plain_or_under_sanitizer("10ms", "50ms"),
+            "--sleep-max",
+            yatest_common.plain_or_under_sanitizer("100ms", "500ms"),
+            "--reschedule-min",
+            "10ms",
+            "--reschedule-max",
+            "100ms",
+            "--num-actors",
+            "2",
+        ]
 
     def start_close_ic_sessions_processes(self):
         pool = multiprocessing.Pool()
@@ -362,8 +387,7 @@ class TestRecovery(TestYdsBase):
                 FROM myyds.`{input_topic_1}` AS S1
                 INNER JOIN (SELECT * FROM myyds.`{input_topic_2}`) AS S2
                 ON S1.Data = S2.Data
-        '''\
-        .format(
+        '''.format(
             input_topic_1=input_topic_1,
             input_topic_2=input_topic_2,
             output_topic=self.output_topic,
@@ -374,7 +398,9 @@ class TestRecovery(TestYdsBase):
         folder_id = "my_folder"
         # automatic query will not clean up metrics after failure
         client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
-        query_id = client.create_query("disconnected", sql, type=fq.QueryContent.QueryType.STREAMING, automatic=True).result.query_id
+        query_id = client.create_query(
+            "disconnected", sql, type=fq.QueryContent.QueryType.STREAMING, automatic=True
+        ).result.query_id
         automatic_id = "automatic_" + folder_id
 
         client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
@@ -391,3 +417,47 @@ class TestRecovery(TestYdsBase):
             time.sleep(yatest_common.plain_or_under_sanitizer(0.5, 2))
 
         close_ic_sessions_future.wait()
+
+    @yq_v1
+    def test_program_state_recovery_error_if_no_states(self, client, kikimr):
+        for node_index in kikimr.control_plane.kikimr_cluster.nodes:
+            kikimr.control_plane.wait_bootstrap(node_index)
+        for node_index in kikimr.control_plane.kikimr_cluster.nodes:
+            kikimr.control_plane.wait_discovery(node_index)
+        self.init_topics("error_if_no_states", partitions_count=1)
+
+        sql = R'''
+            INSERT INTO myyds.`{output_topic}`
+            SELECT STREAM * FROM myyds.`{input_topic}`;'''.format(
+            input_topic=self.input_topic,
+            output_topic=self.output_topic,
+        )
+        client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
+
+        query_id = client.create_query(
+            "error_if_no_states", sql, type=fq.QueryContent.QueryType.STREAMING
+        ).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
+        kikimr.compute_plane.wait_zero_checkpoint(query_id)
+        kikimr.compute_plane.wait_completed_checkpoints(
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
+        )
+
+        for node_index in kikimr.control_plane.kikimr_cluster.nodes:
+            kikimr.control_plane.kikimr_cluster.nodes[node_index].stop()
+
+        session = kikimr.driver.table_client.session().create()
+        checkpoint_table_prefix = "/local/CheckpointCoordinatorStorage_" + kikimr.uuid + '/states'
+        session.transaction().execute(f"DELETE FROM `{checkpoint_table_prefix}`", commit_tx=True)
+
+        for node_index in kikimr.control_plane.kikimr_cluster.nodes:
+            kikimr.control_plane.kikimr_cluster.nodes[node_index].start()
+        for node_index in kikimr.control_plane.kikimr_cluster.nodes:
+            kikimr.control_plane.wait_bootstrap(node_index)
+
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        describe_result = client.describe_query(query_id).result
+        logging.debug("Describe result: {}".format(describe_result))
+        describe_string = "{}".format(describe_result)
+        assert r"Can\'t restore: STORAGE_ERROR" in describe_string
+        assert r"Checkpoint is not found" in describe_string

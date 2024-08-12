@@ -2,13 +2,9 @@
 
 PY3_LIBRARY()
 
-VERSION(7.0.2)
+VERSION(8.0.0)
 
 LICENSE(Apache-2.0)
-
-PEERDIR(
-    library/python/resource
-)
 
 NO_LINT()
 
@@ -21,8 +17,10 @@ PY_SRCS(
     importlib_metadata/_functools.py
     importlib_metadata/_itertools.py
     importlib_metadata/_meta.py
-    importlib_metadata/_py39compat.py
     importlib_metadata/_text.py
+    importlib_metadata/compat/__init__.py
+    importlib_metadata/compat/py311.py
+    importlib_metadata/compat/py39.py
     importlib_metadata/diagnose.py
 )
 

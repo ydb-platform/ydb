@@ -2,70 +2,57 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_federated_topic/impl/federated_topic_impl.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/impl/write_session.h>
-
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/write_session.h>
 
 #include <deque>
 
 namespace NYdb::NFederatedTopic {
 
-class TFederatedWriteSession : public NTopic::IWriteSession,
-                               public NTopic::TContinuationTokenIssuer,
-                               public std::enable_shared_from_this<TFederatedWriteSession> {
+std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabaseByHashImpl(
+    NTopic::TFederatedWriteSessionSettings const& settings,
+    std::vector<std::shared_ptr<TDbInfo>> const& dbInfos);
+
+std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabaseImpl(
+    NTopic::TFederatedWriteSessionSettings const& settings,
+    std::vector<std::shared_ptr<TDbInfo>> const& dbInfos, TString const& selfLocation);
+
+class TFederatedWriteSessionImpl : public NTopic::TContinuationTokenIssuer,
+                                   public NTopic::TEnableSelfContext<TFederatedWriteSessionImpl> {
+    friend class TFederatedWriteSession;
     friend class TFederatedTopicClient::TImpl;
 
 public:
-    struct TDeferredWrite {
-        explicit TDeferredWrite(std::shared_ptr<NTopic::IWriteSession> writer)
-            : Writer(std::move(writer)) {
-        }
 
-        void DoWrite() {
-            if (Token.Empty() && Message.Empty()) {
-                return;
-            }
-            Y_ABORT_UNLESS(Token.Defined() && Message.Defined());
-            return Writer->Write(std::move(*Token), std::move(*Message));
-        }
+    TFederatedWriteSessionImpl(const TFederatedWriteSessionSettings& settings,
+                               std::shared_ptr<TGRpcConnectionsImpl> connections,
+                               const TFederatedTopicClientSettings& clientSetttings,
+                               std::shared_ptr<TFederatedDbObserver> observer,
+                               std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> codecs,
+                               NTopic::IExecutor::TPtr subsessionHandlersExecutor);
 
-        std::shared_ptr<NTopic::IWriteSession> Writer;
-        TMaybe<NTopic::TContinuationToken> Token;
-        TMaybe<NTopic::TWriteMessage> Message;
-    };
+    ~TFederatedWriteSessionImpl() = default;
 
-    TFederatedWriteSession(const TFederatedWriteSessionSettings& settings,
-                          std::shared_ptr<TGRpcConnectionsImpl> connections,
-                          const TFederatedTopicClientSettings& clientSetttings,
-                          std::shared_ptr<TFederatedDbObserver> observer,
-                          std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> codecs);
+    NThreading::TFuture<void> WaitEvent();
+    TMaybe<NTopic::TWriteSessionEvent::TEvent> GetEvent(bool block);
+    TVector<NTopic::TWriteSessionEvent::TEvent> GetEvents(bool block, TMaybe<size_t> maxEventsCount);
 
-    ~TFederatedWriteSession() = default;
+    NThreading::TFuture<ui64> GetInitSeqNo();
 
-    NThreading::TFuture<void> WaitEvent() override;
-    TMaybe<NTopic::TWriteSessionEvent::TEvent> GetEvent(bool block) override;
-    TVector<NTopic::TWriteSessionEvent::TEvent> GetEvents(bool block, TMaybe<size_t> maxEventsCount) override;
+    void Write(NTopic::TContinuationToken&& continuationToken, NTopic::TWriteMessage&& message);
 
-    virtual NThreading::TFuture<ui64> GetInitSeqNo() override;
+    void WriteEncoded(NTopic::TContinuationToken&& continuationToken, NTopic::TWriteMessage&& params);
 
-    virtual void Write(NTopic::TContinuationToken&& continuationToken, NTopic::TWriteMessage&& message) override;
+    void Write(NTopic::TContinuationToken&&, TStringBuf, TMaybe<ui64> seqNo = Nothing(),
+                       TMaybe<TInstant> createTimestamp = Nothing());
 
-    virtual void WriteEncoded(NTopic::TContinuationToken&& continuationToken, NTopic::TWriteMessage&& params) override;
+    void WriteEncoded(NTopic::TContinuationToken&&, TStringBuf, NTopic::ECodec, ui32,
+                              TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing());
 
-    virtual void Write(NTopic::TContinuationToken&&, TStringBuf, TMaybe<ui64> seqNo = Nothing(),
-                       TMaybe<TInstant> createTimestamp = Nothing()) override;
-
-    virtual void WriteEncoded(NTopic::TContinuationToken&&, TStringBuf, NTopic::ECodec, ui32,
-                              TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()) override;
-
-    bool Close(TDuration timeout) override;
-
-    inline NTopic::TWriterCounters::TPtr GetCounters() override {Y_ABORT("Unimplemented"); } //ToDo - unimplemented;
+    bool Close(TDuration timeout);
 
 private:
 
-    class TWrappedWriteMessage {
-    public:
+    struct TWrappedWriteMessage {
         const TString Data;
         NTopic::TWriteMessage Message;
         TWrappedWriteMessage(NTopic::TWriteMessage&& message)
@@ -74,31 +61,38 @@ private:
         {
             Message.Data = Data;
         }
-    };    
+    };
 
 private:
     void Start();
-    void OpenSubSessionImpl(std::shared_ptr<TDbInfo> db);
 
-    std::shared_ptr<TDbInfo> SelectDatabaseImpl();
+    std::shared_ptr<NTopic::IWriteSession> OpenSubsessionImpl(std::shared_ptr<TDbInfo> db);
+    std::shared_ptr<NTopic::IWriteSession> UpdateFederationStateImpl();
+    std::shared_ptr<NTopic::IWriteSession> OnFederationStateUpdateImpl();
 
-    void OnFederatedStateUpdateImpl();
-    void ScheduleFederatedStateUpdateImpl(TDuration delay);
+    void ScheduleFederationStateUpdateImpl(TDuration delay);
 
     void WriteInternal(NTopic::TContinuationToken&&, TWrappedWriteMessage&& message);
-    bool PrepareDeferredWrite(TDeferredWrite& deferred);
+    bool MaybeWriteImpl();
 
     void CloseImpl(EStatus statusCode, NYql::TIssues&& issues);
+    void CloseImpl(NTopic::TSessionClosedEvent const& ev);
 
-    TStringBuilder GetLogPrefix() const;
+    bool MessageQueuesAreEmptyImpl() const;
+
+    void IssueTokenIfAllowed();
+
+    TStringBuilder GetLogPrefixImpl() const;
 
 private:
     // For subsession creation
     const NTopic::TFederatedWriteSessionSettings Settings;
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
-    const NTopic::TTopicClientSettings SubClientSetttings;
+    const NTopic::TTopicClientSettings SubclientSettings;
     std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> ProvidedCodecs;
+    NTopic::IExecutor::TPtr SubsessionHandlersExecutor;
 
+    NTopic::IRetryPolicy::IRetryState::TPtr RetryState;
     std::shared_ptr<TFederatedDbObserver> Observer;
     NThreading::TFuture<void> AsyncInit;
     std::shared_ptr<TFederatedDbState> FederationState;
@@ -113,6 +107,7 @@ private:
 
     TAdaptiveLock Lock;
 
+    size_t SubsessionGeneration = 0;
     std::shared_ptr<NTopic::IWriteSession> Subsession;
 
     std::shared_ptr<NTopic::TWriteSessionEventsQueue> ClientEventsQueue;
@@ -123,8 +118,68 @@ private:
     std::deque<TWrappedWriteMessage> OriginalMessagesToGetAck;
     i64 BufferFreeSpace;
 
-    // Exiting.
-    bool Closing = false;
+    enum class State {
+        CREATED,  // The session has not been started.
+        WORKING,  // Start method has been called.
+        CLOSING,  // Close method has been called, but the session may still send some messages.
+        CLOSED    // The session is closed, either due to the user request or some server error.
+    };
+    State SessionState{State::CREATED};
+    NThreading::TPromise<void> MessageQueuesHaveBeenEmptied;
+    NThreading::TPromise<void> HasBeenClosed;
+};
+
+class TFederatedWriteSession : public NTopic::IWriteSession,
+                               public NTopic::TContextOwner<TFederatedWriteSessionImpl> {
+    friend class TFederatedTopicClient::TImpl;
+
+public:
+
+    TFederatedWriteSession(const TFederatedWriteSessionSettings& settings,
+                           std::shared_ptr<TGRpcConnectionsImpl> connections,
+                           const TFederatedTopicClientSettings& clientSettings,
+                           std::shared_ptr<TFederatedDbObserver> observer,
+                           std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> codecs,
+                           NTopic::IExecutor::TPtr subsessionHandlersExecutor)
+        : TContextOwner(settings, std::move(connections), clientSettings, std::move(observer), codecs, subsessionHandlersExecutor) {}
+
+    NThreading::TFuture<void> WaitEvent() override {
+        return TryGetImpl()->WaitEvent();
+    }
+    TMaybe<NTopic::TWriteSessionEvent::TEvent> GetEvent(bool block) override {
+        return TryGetImpl()->GetEvent(block);
+    }
+    TVector<NTopic::TWriteSessionEvent::TEvent> GetEvents(bool block, TMaybe<size_t> maxEventsCount) override {
+        return TryGetImpl()->GetEvents(block, maxEventsCount);
+    }
+    NThreading::TFuture<ui64> GetInitSeqNo() override {
+        return TryGetImpl()->GetInitSeqNo();
+    }
+    void Write(NTopic::TContinuationToken&& continuationToken, NTopic::TWriteMessage&& message) override {
+        TryGetImpl()->Write(std::move(continuationToken), std::move(message));
+    }
+    void WriteEncoded(NTopic::TContinuationToken&& continuationToken, NTopic::TWriteMessage&& params) override {
+        TryGetImpl()->WriteEncoded(std::move(continuationToken), std::move(params));
+    }
+    void Write(NTopic::TContinuationToken&& continuationToken, TStringBuf data, TMaybe<ui64> seqNo = Nothing(),
+                       TMaybe<TInstant> createTimestamp = Nothing()) override {
+        TryGetImpl()->Write(std::move(continuationToken), data, seqNo, createTimestamp);
+    }
+    void WriteEncoded(NTopic::TContinuationToken&& continuationToken, TStringBuf data, NTopic::ECodec codec, ui32 originalSize,
+                      TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()) override {
+        TryGetImpl()->WriteEncoded(std::move(continuationToken), data, codec, originalSize, seqNo, createTimestamp);
+    }
+    bool Close(TDuration timeout) override {
+        return TryGetImpl()->Close(timeout);
+    }
+
+    inline NTopic::TWriterCounters::TPtr GetCounters() override {Y_ABORT("Unimplemented"); } //ToDo - unimplemented;
+
+private:
+
+    void Start() {
+        TryGetImpl()->Start();
+    }
 };
 
 } // namespace NYdb::NFederatedTopic

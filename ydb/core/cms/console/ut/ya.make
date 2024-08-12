@@ -4,7 +4,10 @@ FORK_SUBTESTS()
 
 TIMEOUT(600)
 SIZE(MEDIUM)
-REQUIREMENTS(ram:16)
+
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:16)
+ENDIF()
 
 PEERDIR(
     library/cpp/getopt
@@ -25,6 +28,7 @@ SRCS(
     log_settings_configurator_ut.cpp
     modifications_validator_ut.cpp
     net_classifier_updater_ut.cpp
+    jaeger_tracing_configurator_ut.cpp
 )
 
 END()

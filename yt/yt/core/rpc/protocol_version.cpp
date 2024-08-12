@@ -39,11 +39,6 @@ void FormatValue(TStringBuilderBase* builder, TProtocolVersion version, TStringB
     builder->AppendFormat("%v.%v", version.Major, version.Minor);
 }
 
-TString ToString(TProtocolVersion version)
-{
-    return ToStringViaBuilder(version);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NRpc

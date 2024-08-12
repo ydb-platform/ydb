@@ -1,0 +1,7 @@
+- name: restart-bazel-remote
+  ansible.builtin.systemd_service:
+    name: "bazel-remote@{{ item.name }}"
+    enabled: true
+    state: restarted
+  loop: "{{ bazel_remote_instances }}"
+  

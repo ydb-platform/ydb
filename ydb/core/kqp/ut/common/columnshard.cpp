@@ -1,5 +1,6 @@
 #include "columnshard.h"
 #include <ydb/core/testlib/cs_helper.h>
+#include <ydb/core/base/tablet_pipecache.h>
 
 extern "C" {
 #include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
@@ -124,17 +125,33 @@ namespace NKqp {
             }
         }
         for (auto shard : shards) {
-            Kikimr.GetTestServer().GetRuntime()->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
+            Kikimr.GetTestServer().GetRuntime()->Send(MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
                     new TEvents::TEvPoisonPill(), shard, false));
+        }
+    }
+
+    void TTestHelper::WaitTabletDeletionInHive(ui64 tabletId, TDuration duration) {
+        auto deadline = TInstant::Now() + duration;
+        while (GetKikimr().GetTestClient().TabletExistsInHive(&GetRuntime(), tabletId) && TInstant::Now() <= deadline) {
+            Cerr << "WaitTabletDeletionInHive: wait until " << tabletId << " is deleted" << Endl;
+            Sleep(TDuration::Seconds(1));
         }
     }
 
     TString TTestHelper::TColumnSchema::BuildQuery() const {
         TStringBuilder str;
         str << Name << ' ';
-        if (NScheme::NTypeIds::Pg == Type) {
+        switch (Type) {
+        case NScheme::NTypeIds::Pg:
             str << NPg::PgTypeNameFromTypeDesc(TypeDesc);
-        } else {
+            break;
+        case NScheme::NTypeIds::Decimal: {
+            TTypeBuilder builder;
+            builder.Decimal(TDecimalType(22, 9));
+            str << builder.Build();
+            break;
+        }
+        default:
             str << NScheme::GetTypeName(Type);
         }
         if (!NullableFlag) {
@@ -216,6 +233,12 @@ namespace NKqp {
             return arrow::field(name, arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), nullable);
         case NScheme::NTypeIds::Interval:
             return arrow::field(name, arrow::duration(arrow::TimeUnit::TimeUnit::MICRO), nullable);
+        case NScheme::NTypeIds::Date32:
+            return arrow::field(name, arrow::int32(), nullable);
+        case NScheme::NTypeIds::Datetime64:
+        case NScheme::NTypeIds::Timestamp64:
+        case NScheme::NTypeIds::Interval64:
+            return arrow::field(name, arrow::int64(), nullable);
         case NScheme::NTypeIds::JsonDocument:
             return arrow::field(name, arrow::binary(), nullable);
         case NScheme::NTypeIds::Pg:

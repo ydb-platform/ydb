@@ -28,7 +28,7 @@ ydbd admin bs config invoke --proto 'Command { ReassignGroupDisk { GroupId: <Sto
 
 If SelfHeal is disabled or fails to move VDisks automatically, you'll have to run this operation manually:
 
-1. Go to [monitoring](../../maintenance/embedded_monitoring/ydb_monitoring.md) and make sure that the VDisk has actually failed.
+1. Go to [monitoring](../../reference/embedded-ui/ydb-monitoring.md) and make sure that the VDisk has actually failed.
 1. Get the appropriate `[NodeId:PDiskId]` using [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md):
 
    ```bash
@@ -45,7 +45,7 @@ If SelfHeal is disabled or fails to move VDisks automatically, you'll have to ru
 
 To enable the VDisk back after reassignment:
 
-1. Go to [monitoring](../../maintenance/embedded_monitoring/ydb_monitoring.md) and make sure that the VDisk is actually operable.
+1. Go to [monitoring](../../reference/embedded-ui/ydb-monitoring.md) and make sure that the VDisk is actually operable.
 1. Get the appropriate `[NodeId:PDiskId]` using [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md):
 
    ```bash

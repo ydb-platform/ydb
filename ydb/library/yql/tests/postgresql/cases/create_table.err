@@ -599,7 +599,7 @@ ALTER TABLE remember_node_subid ALTER c TYPE bigint;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	ALTER TABLE remember_node_subid ALTER c TYPE bigint;
 	^
 <sql-statement>
@@ -1080,7 +1080,7 @@ alter table partitioned drop column a;  -- fail
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table partitioned drop column a;  -- fail
 	^
 <sql-statement>
@@ -1131,7 +1131,7 @@ alter table partitioned drop column a;  -- fail
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table partitioned drop column a;  -- fail
 	^
 <sql-statement>
@@ -2132,7 +2132,7 @@ ALTER TABLE parted ADD CONSTRAINT check_b CHECK (b >= 0);
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	-- Once check_b is added to the parent, it should be made non-local for part_b
 	^
 <sql-statement>
@@ -2144,7 +2144,7 @@ ALTER TABLE part_b DROP CONSTRAINT check_a;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	-- Neither check_a nor check_b are droppable from part_b
 	^
 <sql-statement>
@@ -2152,7 +2152,7 @@ ALTER TABLE part_b DROP CONSTRAINT check_b;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	ALTER TABLE part_b DROP CONSTRAINT check_b;
 	^
 <sql-statement>
@@ -2163,7 +2163,7 @@ ALTER TABLE parted DROP CONSTRAINT check_a, DROP CONSTRAINT check_b;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	-- And dropping it from parted should leave no trace of them on part_b, unlike
 	^
 <sql-statement>
@@ -2761,7 +2761,7 @@ alter table defcheck_def drop c;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table defcheck_def drop c;
 	^
 <sql-statement>
@@ -2769,7 +2769,7 @@ alter table defcheck attach partition defcheck_def default;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table defcheck attach partition defcheck_def default;
 	^
 <sql-statement>
@@ -2777,7 +2777,7 @@ alter table defcheck_def add check (b <= 0 and b is not null);
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table defcheck_def add check (b <= 0 and b is not null);
 	^
 <sql-statement>
@@ -2825,7 +2825,7 @@ alter table part_column_drop drop column useless_1;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table part_column_drop drop column useless_1;
 	^
 <sql-statement>
@@ -2833,7 +2833,7 @@ alter table part_column_drop drop column useless_2;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table part_column_drop drop column useless_2;
 	^
 <sql-statement>
@@ -2841,7 +2841,7 @@ alter table part_column_drop drop column useless_3;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table part_column_drop drop column useless_3;
 	^
 <sql-statement>

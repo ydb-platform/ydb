@@ -4,9 +4,31 @@
 namespace NKikimr {
 namespace NTable {
 
-TKeyRangeCache::TKeyRangeCache(const TKeyCellDefaults& keyDefaults, const TKeyRangeCacheConfig& config)
+TKeyRangeCacheNeedGCList::~TKeyRangeCacheNeedGCList()
+{ }
+
+void TKeyRangeCacheNeedGCList::Add(TKeyRangeCache* cache) {
+    TListItem* item = static_cast<TListItem*>(cache);
+    if (item->Empty()) {
+        List.PushBack(item);
+    }
+}
+
+void TKeyRangeCacheNeedGCList::RunGC() {
+    while (List) {
+        auto* item = List.Front();
+        // Note: we call CollectGarbage while item is still in the list
+        // This way item is not re-added by internal invalidations
+        item->CollectGarbage();
+        List.Remove(item);
+    }
+}
+
+TKeyRangeCache::TKeyRangeCache(const TKeyCellDefaults& keyDefaults, const TKeyRangeCacheConfig& config,
+        const TIntrusivePtr<TKeyRangeCacheNeedGCList>& gcList)
     : KeyCellDefaults(keyDefaults)
     , Config(config)
+    , GCList(gcList)
     , Pool(new TSpecialMemoryPool())
     , Entries(TKeyRangeEntryCompare(KeyCellDefaults.Types), TAllocator(&UsedHeapMemory))
 { }
@@ -50,6 +72,9 @@ TArrayRef<TCell> TKeyRangeCache::AllocateKey(TArrayRef<const TCell> key) {
     }
 
     ++Stats_.Allocations;
+    if (GCList) {
+        GCList->Add(this);
+    }
 
     auto copy = AllocateArrayCopy(Pool.Get(), key);
     for (TCell& cell : copy) {
@@ -66,6 +91,9 @@ void TKeyRangeCache::DeallocateKey(TArrayRef<TCell> key) {
     }
 
     ++Stats_.Deallocations;
+    if (GCList) {
+        GCList->Add(this);
+    }
 
     size_t index = key.size() - 1;
     do {
@@ -104,6 +132,9 @@ TKeyRangeCache::const_iterator TKeyRangeCache::Merge(const_iterator left, const_
     Entries.erase(right);
     DeallocateKey(rightCopy.FromKey);
     ExtendRight(left, rightCopy.ToKey, rightCopy.ToInclusive, ::Max(rightCopy.MaxVersion, version));
+    if (GCList) {
+        GCList->Add(this);
+    }
     return left;
 }
 
@@ -112,6 +143,9 @@ TKeyRangeCache::const_iterator TKeyRangeCache::Add(TKeyRangeEntry entry) {
     Y_DEBUG_ABORT_UNLESS(res.second);
     TKeyRangeEntryLRU& newEntry = const_cast<TKeyRangeEntryLRU&>(*res.first);
     Fresh.PushBack(&newEntry);
+    if (GCList) {
+        GCList->Add(this);
+    }
     return res.first;
 }
 
@@ -121,6 +155,24 @@ void TKeyRangeCache::Invalidate(const_iterator it) {
     Entries.erase(it);
     DeallocateKey(entryCopy.FromKey);
     DeallocateKey(entryCopy.ToKey);
+    if (GCList) {
+        GCList->Add(this);
+    }
+}
+
+void TKeyRangeCache::InvalidateKey(const_iterator it, TArrayRef<const TCell> key) {
+    Y_DEBUG_ABORT_UNLESS(it != end());
+    TKeyRangeEntryLRU& entry = const_cast<TKeyRangeEntryLRU&>(*it);
+    int cmp = Entries.key_comp().CompareKeys(entry.FromKey, key);
+    Y_DEBUG_ABORT_UNLESS(cmp <= 0);
+    if (cmp == 0) {
+        Y_DEBUG_ABORT_UNLESS(entry.FromInclusive);
+        Invalidate(it);
+        return;
+    }
+    DeallocateKey(entry.ToKey);
+    entry.ToKey = AllocateKey(key);
+    entry.ToInclusive = false;
 }
 
 void TKeyRangeCache::Touch(const_iterator it) {

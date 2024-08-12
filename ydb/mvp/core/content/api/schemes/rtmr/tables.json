@@ -1,0 +1,132 @@
+{
+    "get": {
+        "tags": ["RTMR"],
+        "produces": ["application/json"],
+        "summary": "Lists tables",
+        "parameters": [{
+            "name": "installation",
+            "in": "path",
+            "description": "RTMR installation",
+            "required": true,
+            "type": "string"
+        },{
+            "name": "location",
+            "in": "query",
+            "description": "RTMR location",
+            "required": false,
+            "type": "string"
+        },{
+            "name": "task",
+            "in": "query",
+            "description": "list tables for task only",
+            "type": "string"
+        },{
+            "name": "pool",
+            "in": "query",
+            "description": "list tables for specified pool@account only (requires account parameter if set)",
+            "type": "string"
+        },{
+            "name": "account",
+            "in": "query",
+            "description": "list tables for specified account only",
+            "type": "string"
+        },{
+            "name": "table",
+            "in": "query",
+            "description": "get data for specified table",
+            "type": "string"
+        }],
+        "responses": {
+            "200": {
+                "description": "OK",
+                "schema": {
+                    "type": "object",
+                    "title": "ListTablesResult",
+                    "required": ["locations"],
+                    "properties": {
+                        "locations": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["location", "tables"],
+                                "properties": {
+                                    "location": {
+                                        "type": "string"
+                                    },
+                                    "tables": {
+                                        "title" : "TablesList",
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "title" : "Table",
+                                            "required": ["account", "pool", "task", "table"],
+                                            "properties": {
+                                                "account": {
+                                                    "type": "string"
+                                                },
+                                                "pool": {
+                                                    "type": "string"
+                                                },
+                                                "task": {
+                                                    "type": "string"
+                                                },
+                                                "table": {
+                                                    "type": "string"
+                                                },
+                                                "owner": {
+                                                    "type": "string"
+                                                },
+                                                "my": {
+                                                    "type": "boolean"
+                                                },
+                                                "storageConsumed": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "storageLimit": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "keys": {
+                                                    "type": "integer",
+                                                    "format": "int64"
+                                                },
+                                                "rows": {
+                                                    "type": "integer",
+                                                    "format": "int64"
+                                                },
+                                                "acl": {
+                                                    "title" : "ACL",
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "object",
+                                                        "title" : "ACE",
+                                                        "required": ["subject", "type", "permissions"],
+                                                        "properties": {
+                                                            "subject": {
+                                                                "type": "string"
+                                                            },
+                                                            "type": {
+                                                                "type": "string"
+                                                            },
+                                                            "permissions": {
+                                                                "type": "array",
+                                                                "items": {
+                                                                    "type": "string"
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

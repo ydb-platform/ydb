@@ -4,7 +4,6 @@
 #include "mkql_spiller_factory.h"
 
 #include <ydb/library/yql/minikql/defs.h>
-#include <ydb/library/yql/minikql/arrow/mkql_memory_pool.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/yql/minikql/mkql_node_visitor.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
@@ -46,33 +45,25 @@ struct TComputationOpts {
 };
 
 struct TComputationOptsFull: public TComputationOpts {
-    TComputationOptsFull(IStatsRegistry* stats, TAllocState& allocState, IRandomProvider& randomProvider,
-            ITimeProvider& timeProvider, NUdf::EValidatePolicy validatePolicy, const NUdf::ISecureParamsProvider* secureParamsProvider)
+    TComputationOptsFull(IStatsRegistry* stats, TAllocState& allocState, const TTypeEnvironment& typeEnv, IRandomProvider& randomProvider,
+            ITimeProvider& timeProvider, NUdf::EValidatePolicy validatePolicy, const NUdf::ISecureParamsProvider* secureParamsProvider, NUdf::ICountersProvider* countersProvider)
         : TComputationOpts(stats)
         , AllocState(allocState)
-        , RandomProvider(randomProvider)
-        , TimeProvider(timeProvider)
-        , ValidatePolicy(validatePolicy)
-        , SecureParamsProvider(secureParamsProvider)
-    {}
-
-    TComputationOptsFull(IStatsRegistry* stats, TTypeEnvironment* typeEnv, IRandomProvider& randomProvider,
-            ITimeProvider& timeProvider, NUdf::EValidatePolicy validatePolicy, const NUdf::ISecureParamsProvider* secureParamsProvider)
-        : TComputationOpts(stats)
-        , AllocState(typeEnv->GetAllocator().Ref())
         , TypeEnv(typeEnv)
         , RandomProvider(randomProvider)
         , TimeProvider(timeProvider)
         , ValidatePolicy(validatePolicy)
         , SecureParamsProvider(secureParamsProvider)
+        , CountersProvider(countersProvider)
     {}
 
     TAllocState& AllocState;
-    TTypeEnvironment* TypeEnv = nullptr;
+    const TTypeEnvironment& TypeEnv;
     IRandomProvider& RandomProvider;
     ITimeProvider& TimeProvider;
     NUdf::EValidatePolicy ValidatePolicy;
-    const NUdf::ISecureParamsProvider* SecureParamsProvider;
+    const NUdf::ISecureParamsProvider *const SecureParamsProvider;
+    NUdf::ICountersProvider *const CountersProvider;
 };
 
 struct TWideFieldsInitInfo {
@@ -120,9 +111,12 @@ struct TComputationContext : public TComputationContextLLVM {
     bool ExecuteLLVM = false;
     arrow::MemoryPool& ArrowMemoryPool;
     std::vector<NUdf::TUnboxedValue*> WideFields;
-    TTypeEnvironment* TypeEnv = nullptr;
+    const TTypeEnvironment& TypeEnv;
     const TComputationMutables Mutables;
     std::shared_ptr<ISpillerFactory> SpillerFactory;
+    const NUdf::ITypeInfoHelper::TPtr TypeInfoHelper;
+    NUdf::ICountersProvider *const CountersProvider;
+    const NUdf::ISecureParamsProvider *const SecureParamsProvider;
 
     TComputationContext(const THolderFactory& holderFactory,
         const NUdf::IValueBuilder* builder,
@@ -392,13 +386,8 @@ struct TComputationPatternOpts {
     NUdf::ICountersProvider* CountersProvider = nullptr;
     const NUdf::ISecureParamsProvider* SecureParamsProvider = nullptr;
 
-    /// \todo split and exclude
     TComputationOptsFull ToComputationOptions(IRandomProvider& randomProvider, ITimeProvider& timeProvider, TAllocState* allocStatePtr = nullptr) const {
-        return TComputationOptsFull(Stats, allocStatePtr ? *allocStatePtr : AllocState, randomProvider, timeProvider, ValidatePolicy, SecureParamsProvider);
-    }
-
-    TComputationOptsFull ToComputationOptions(IRandomProvider& randomProvider, ITimeProvider& timeProvider, TTypeEnvironment* typeEnv) const {
-        return TComputationOptsFull(Stats, typeEnv, randomProvider, timeProvider, ValidatePolicy, SecureParamsProvider);
+        return TComputationOptsFull(Stats, allocStatePtr ? *allocStatePtr : AllocState, Env, randomProvider, timeProvider, ValidatePolicy, SecureParamsProvider, CountersProvider);
     }
 };
 

@@ -1,0 +1,1 @@
+INCLUDE(ya.make.prebuilt)

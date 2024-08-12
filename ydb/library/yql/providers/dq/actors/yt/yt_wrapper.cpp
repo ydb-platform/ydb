@@ -180,7 +180,7 @@ namespace NYql {
                 ythrow yexception() << "request complete";
             }
 
-            YQL_CLOG(DEBUG, ProviderDq) << "Store " << blob.Size() << " bytes ";
+            YQL_CLOG(DEBUG, ProviderDq) << "Store " << blob.Size() << " bytes to " << this_->LocalPath;
             if (blob.Size() == 0) {
                 TString buf;
                 buf.ReserveAndResize(32);

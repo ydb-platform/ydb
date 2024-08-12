@@ -4,7 +4,7 @@ Once a network connection is established, the server starts to accept client req
 
 The following authentication modes are supported:
 
-* Anonymous access is enabled by default and available immediately when you [install the cluster](../deploy/index.md).
+* Anonymous access is enabled by default and available immediately when you [install the cluster](../devops/index.md).
 * [Authentication through a third-party IAM provider](#iam), for example, [Yandex Identity and Access Management]{% if lang == "en" %}(https://cloud.yandex.com/en/docs/iam/){% endif %}{% if lang == "ru" %}(https://cloud.yandex.ru/docs/iam/){% endif %}.
 * Authentication by [username and password](#static-credentials).
 
@@ -15,6 +15,7 @@ The following authentication modes are supported:
 * **Refresh Token**: [OAuth token](https://auth0.com/blog/refresh-tokens-what-are-they-and-when-to-use-them/) of a user's personal account set as a parameter for the client (SDK or CLI), which the client periodically sends to the IAM API in the background to rotate a token (obtain a new one) to pass in requests.
 * **Service Account Key**: Service account attributes and a signature key set as parameters for the client (SDK or CLI), which the client periodically sends to the IAM API in the background to rotate a token (obtain a new one) to pass in requests.
 * **Metadata**: Client (SDK or CLI) periodically accesses a local service to rotate a token (obtain a new one) to pass in requests.
+* **OAuth 2.0 token exchange** - The client (SDK or CLI) exchanges a token of another type for an access token using the [OAuth 2.0 token exchange protocol](https://www.rfc-editor.org/rfc/rfc8693), then it uses the access token in {{ ydb-short-name }} API requests.
 
 Any owner of a valid token can get access to perform operations; therefore, the principal objective of the security system is to ensure that a token remains private and to protect it from being compromised.
 
@@ -54,7 +55,7 @@ Authentication by username and password includes the following steps:
 
 To enable username/password authentication, use `true` in the `enforce_user_token_requirement` key of the cluster's [configuration file](../deploy/configuration/config.md#auth).
 
-To learn how to manage roles and users, see [{#T}](../cluster/access.md).
+To learn how to manage roles and users, see [{#T}](../security/access-management.md).
 
 <!-- ### API получения токенов IAM {#token-refresh-api}
 

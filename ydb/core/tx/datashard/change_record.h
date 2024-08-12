@@ -3,10 +3,14 @@
 #include "datashard_user_table.h"
 
 #include <ydb/core/change_exchange/change_record.h>
+#include <ydb/core/change_exchange/change_sender_resolver.h>
+#include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/services/lib/sharding/sharding.h>
 
 #include <util/generic/maybe.h>
+#include <util/string/join.h>
 
 namespace NKikimrChangeExchange {
     class TChangeRecord;
@@ -20,6 +24,8 @@ class TChangeRecord: public NChangeExchange::TChangeRecordBase {
     friend class TChangeRecordBuilder;
 
 public:
+    using TPtr = TIntrusivePtr<TChangeRecord>;
+
     ui64 GetGroup() const override { return Group; }
     ui64 GetStep() const override { return Step; }
     ui64 GetTxId() const override { return TxId; }
@@ -119,6 +125,31 @@ public:
 
 }
 
+namespace NKikimr {
+
+template <>
+struct TChangeRecordContainer<NDataShard::TChangeRecord>
+    : public TBaseChangeRecordContainer
+{
+    TChangeRecordContainer() = default;
+
+    explicit TChangeRecordContainer(TVector<NDataShard::TChangeRecord::TPtr>&& records)
+        : Records(std::move(records))
+    {}
+
+    TVector<NDataShard::TChangeRecord::TPtr> Records;
+
+    TString Out() override {
+        return TStringBuilder() << "[" << JoinSeq(",", Records) << "]";
+    }
+};
+
+}
+
 Y_DECLARE_OUT_SPEC(inline, NKikimr::NDataShard::TChangeRecord, out, value) {
     return value.Out(out);
+}
+
+Y_DECLARE_OUT_SPEC(inline, NKikimr::NDataShard::TChangeRecord::TPtr, out, value) {
+    return value->Out(out);
 }

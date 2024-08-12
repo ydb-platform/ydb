@@ -597,6 +597,7 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
     // look into extracted keys for these transactions.
     bool haveKeys = !op->IsKqpScanTransaction();
 
+    bool isLocking = op->LockTxId();
     bool isGlobalReader = op->IsGlobalReader();
     bool isGlobalWriter = op->IsGlobalWriter();
 
@@ -642,7 +643,8 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
                 if (!tooManyKeys && ++keysCount > MAX_REORDER_TX_KEYS) {
                     tooManyKeys = true;
                 }
-                if (vk.IsWrite) {
+                // Note: locking write behaves like a read (waits for all earlier writes)
+                if (vk.IsWrite && !isLocking) {
                     haveWrites = true;
                     if (!tooManyKeys && !isGlobalWriter) {
                         Parent.TmpWrite.emplace_back(tableId, k.Range);
@@ -779,20 +781,21 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
         }
     }
 
-    TRowVersion snapshot = TRowVersion::Max();
-    bool snapshotRepeatable = false;
-    if (op->IsMvccSnapshotRead()) {
-        snapshot = op->GetMvccSnapshot();
-        snapshotRepeatable = op->IsMvccSnapshotRepeatable();
-    } else if (op->IsImmediate() && (op->IsReadTable() || op->IsDataTx() && !haveWrites && !isGlobalWriter && !commitWriteLock)) {
-        snapshot = readVersion;
-        op->SetMvccSnapshot(snapshot, /* repeatable */ false);
+    // Locking writes are uncommitted, not externally visible and behave like reads
+    if (isLocking) {
+        Y_ABORT_UNLESS(!haveWrites);
+        if (isGlobalWriter) {
+            isGlobalWriter = false;
+            isGlobalReader = true;
+        }
     }
 
-    if (snapshotRepeatable) {
-        // Repeatable snapshot writes are uncommitted, not externally visible, and don't conflict with anything
-        isGlobalWriter = false;
-        haveWrites = false;
+    TRowVersion snapshot = TRowVersion::Max();
+    if (op->IsMvccSnapshotRead()) {
+        snapshot = op->GetMvccSnapshot();
+    } else if (op->IsImmediate() && (op->IsReadTable() || (op->IsDataTx() || op->IsWriteTx()) && !haveWrites && !isGlobalWriter && !commitWriteLock)) {
+        snapshot = readVersion;
+        op->SetMvccSnapshot(snapshot, /* repeatable */ false);
     }
 
     auto onImmediateConflict = [&](TOperation& conflict) {

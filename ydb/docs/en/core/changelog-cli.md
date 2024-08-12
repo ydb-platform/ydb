@@ -1,5 +1,52 @@
 # {{ ydb-short-name }} CLI changelog
 
+## Version 2.10.0 {#2-10-0}
+
+Released on June 24, 2024. To update to version **2.10.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+
+**Features:**
+
+* Added the `ydb sql` command that runs over QueryService and can execute any DML/DDL command.
+* Added `notx` support for the `--tx-mode` option in `ydb table query execute`.
+* Added start and end times for long-running operation descriptions (export, import).
+* Added replication description support in the `ydb scheme describe` and `ydb scheme ls` commands.
+* Added big datetime types support: `Date32`, `Datetime64`, `Timestamp64`, `Interval64`.
+* `ydb workload` commands rework:
+   * Added the `--clear` option to the `init` subcommand, allowing tables from previous runs to be removed before workload initialization.
+   * Added the `ydb workload * import` command to prepopulate tables with initial content before executing benchmarks.
+
+**Backward incompatible changes:**
+
+* `ydb workload` commands rework:
+   * The `--path` option was moved to a specific workload level. For example: `ydb workload tpch --path some/tables/path init ...`.
+   * The `--store=s3` option was changed to `--store=external-s3` in the `init` subcommand.
+
+
+**Bug fixes:**
+
+* Fixed colors in the `PrettyTable` format
+
+## Version 2.9.0 {#2-9-0}
+
+Released on April 25, 2024. To update to version **2.9.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+
+**Features:**
+
+* Improved query logical plan tables: added colors, more information, fixed some bugs.
+* The verbose option `-v`` is supported for `ydb workload` commands to provide debug information.
+* Added an option to run `ydb workload tpch` with an S3 source to measure [federated queries](concepts/federated_query/index.md) performance.
+* Added the `--rate` option for `ydb workload` commands to control the transactions (or requests) per second limit.
+* Added the `--use-virtual-addressing` option for S3 import/export, allowing the switch to [virtual hosting of buckets](https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html) for the S3 path layout.
+* Improved `ydb scheme ls` performance due to listing directories in parallel.
+
+**Bug fixes:**
+
+* Resolved an issue where extra characters were truncated during line transfers in CLI tables.
+* Fixed invalid memory access in `tools restore`.
+* Fixed the issue of the `--timeout` option being ignored in generic and scan queries, as well as in the import command.
+* Added a 60-second timeout to version checks and CLI binary downloads to prevent infinite waiting.
+* Minor bug fixes.
+
 ## Version 2.8.0 {#2-8-0}
 
 Released on January 12, 2024. To update to version **2.8.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
@@ -137,7 +184,7 @@ Release date: May 1, 2023. To update to version **2.3.0**, select the [Downloads
 **Features:**
 
 * Added the interactive mode of query execution. To switch to the interactive mode, run [ydb yql](reference/ydb-cli/yql.md) without arguments. This mode is experimental: backward compatibility is not guaranteed yet.
-* Added the [ydb index rename](reference/ydb-cli/commands/secondary_index.md#rename) command for [atomic replacement](best_practices/secondary_indexes.md#atomic-index-replacement) or renaming of a secondary index.
+* Added the [ydb index rename](reference/ydb-cli/commands/secondary_index.md#rename) command for [atomic replacement](dev/secondary-indexes.md#atomic-index-replacement) or renaming of a secondary index.
 * Added the `ydb workload topic` command for generating the load that reads messages from topics and writes messages to topics.
 * Added the [--recursive](reference/ydb-cli/commands/dir.md#rmdir-options) option for the `ydb scheme rmdir` command. Use it to delete a directory recursively, with all its content.
 * Added support for the `topic` and `coordination node` types in the [ydb scheme describe](reference/ydb-cli/commands/scheme-describe.md) command.

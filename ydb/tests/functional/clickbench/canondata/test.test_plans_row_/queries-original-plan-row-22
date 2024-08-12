@@ -11,7 +11,7 @@
                 "Plans": [
                     {
                         "Node Type": "ResultSet",
-                        "PlanNodeId": 12,
+                        "PlanNodeId": 11,
                         "PlanNodeType": "ResultSet",
                         "Plans": [
                             {
@@ -20,18 +20,18 @@
                                     {
                                         "Inputs": [
                                             {
-                                                "ExternalPlanNodeId": 10
+                                                "ExternalPlanNodeId": 9
                                             }
                                         ],
                                         "Limit": "10",
                                         "Name": "Limit"
                                     }
                                 ],
-                                "PlanNodeId": 11,
+                                "PlanNodeId": 10,
                                 "Plans": [
                                     {
                                         "Node Type": "Merge",
-                                        "PlanNodeId": 10,
+                                        "PlanNodeId": 9,
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
@@ -40,7 +40,7 @@
                                                     {
                                                         "Inputs": [
                                                             {
-                                                                "ExternalPlanNodeId": 8
+                                                                "ExternalPlanNodeId": 7
                                                             }
                                                         ],
                                                         "Limit": "10",
@@ -48,11 +48,14 @@
                                                         "TopSortBy": "argument.Count0"
                                                     }
                                                 ],
-                                                "PlanNodeId": 9,
+                                                "PlanNodeId": 8,
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Map",
-                                                        "PlanNodeId": 8,
+                                                        "KeyColumns": [
+                                                            "SearchPhrase"
+                                                        ],
+                                                        "Node Type": "HashShuffle",
+                                                        "PlanNodeId": 7,
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
@@ -61,42 +64,29 @@
                                                                     {
                                                                         "Inputs": [
                                                                             {
-                                                                                "ExternalPlanNodeId": 6
+                                                                                "ExternalPlanNodeId": 5
                                                                             },
                                                                             {
-                                                                                "ExternalPlanNodeId": 4
+                                                                                "ExternalPlanNodeId": 3
                                                                             }
                                                                         ],
                                                                         "Name": "Union"
                                                                     }
                                                                 ],
-                                                                "PlanNodeId": 7,
+                                                                "PlanNodeId": 6,
                                                                 "Plans": [
                                                                     {
-                                                                        "KeyColumns": [
-                                                                            "SearchPhrase"
-                                                                        ],
-                                                                        "Node Type": "HashShuffle",
-                                                                        "PlanNodeId": 6,
+                                                                        "Node Type": "UnionAll",
+                                                                        "PlanNodeId": 5,
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
                                                                             {
-                                                                                "Node Type": "Aggregate-Filter-TableFullScan",
+                                                                                "Node Type": "Filter-TableFullScan",
                                                                                 "Operators": [
                                                                                     {
-                                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1),_yql_agg_2: MIN(item.URL,state._yql_agg_2),_yql_agg_3: MIN(item.Title,state._yql_agg_3)}",
-                                                                                        "GroupBy": "item.SearchPhrase",
                                                                                         "Inputs": [
                                                                                             {
                                                                                                 "InternalOperatorId": 1
-                                                                                            }
-                                                                                        ],
-                                                                                        "Name": "Aggregate"
-                                                                                    },
-                                                                                    {
-                                                                                        "Inputs": [
-                                                                                            {
-                                                                                                "InternalOperatorId": 2
                                                                                             }
                                                                                         ],
                                                                                         "Name": "Filter",
@@ -112,16 +102,19 @@
                                                                                             "UserID"
                                                                                         ],
                                                                                         "ReadRanges": [
-                                                                                            "EventTime (-\u221e, +\u221e)",
                                                                                             "CounterID (-\u221e, +\u221e)",
                                                                                             "EventDate (-\u221e, +\u221e)",
                                                                                             "UserID (-\u221e, +\u221e)",
+                                                                                            "EventTime (-\u221e, +\u221e)",
                                                                                             "WatchID (-\u221e, +\u221e)"
                                                                                         ],
+                                                                                        "Scan": "Parallel",
                                                                                         "Table": "clickbench/plans/row/hits"
                                                                                     }
                                                                                 ],
-                                                                                "PlanNodeId": 5,
+                                                                                "Parent Relationship": "InitPlan",
+                                                                                "PlanNodeId": 4,
+                                                                                "Subplan Name": "CTE Filter-TableFullScan_9",
                                                                                 "Tables": [
                                                                                     "clickbench/plans/row/hits"
                                                                                 ]
@@ -129,11 +122,8 @@
                                                                         ]
                                                                     },
                                                                     {
-                                                                        "KeyColumns": [
-                                                                            "SearchPhrase"
-                                                                        ],
-                                                                        "Node Type": "HashShuffle",
-                                                                        "PlanNodeId": 4,
+                                                                        "Node Type": "UnionAll",
+                                                                        "PlanNodeId": 3,
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
                                                                             {
@@ -144,70 +134,23 @@
                                                                                         "GroupBy": "item.SearchPhrase",
                                                                                         "Inputs": [
                                                                                             {
-                                                                                                "ExternalPlanNodeId": 2
+                                                                                                "ExternalPlanNodeId": 1
                                                                                             }
                                                                                         ],
                                                                                         "Name": "Aggregate"
                                                                                     }
                                                                                 ],
-                                                                                "PlanNodeId": 3,
+                                                                                "PlanNodeId": 2,
                                                                                 "Plans": [
                                                                                     {
+                                                                                        "CTE Name": "Filter-TableFullScan_9",
                                                                                         "KeyColumns": [
                                                                                             "SearchPhrase",
                                                                                             "UserID"
                                                                                         ],
                                                                                         "Node Type": "HashShuffle",
-                                                                                        "PlanNodeId": 2,
-                                                                                        "PlanNodeType": "Connection",
-                                                                                        "Plans": [
-                                                                                            {
-                                                                                                "Node Type": "Aggregate-Filter-TableFullScan",
-                                                                                                "Operators": [
-                                                                                                    {
-                                                                                                        "Aggregation": "state",
-                                                                                                        "GroupBy": "",
-                                                                                                        "Inputs": [
-                                                                                                            {
-                                                                                                                "InternalOperatorId": 1
-                                                                                                            }
-                                                                                                        ],
-                                                                                                        "Name": "Aggregate"
-                                                                                                    },
-                                                                                                    {
-                                                                                                        "Inputs": [
-                                                                                                            {
-                                                                                                                "InternalOperatorId": 2
-                                                                                                            }
-                                                                                                        ],
-                                                                                                        "Name": "Filter",
-                                                                                                        "Predicate": "item.Title StringContains \"Google\" And Not item.URL StringContains \".google.\" And item.SearchPhrase != \"\""
-                                                                                                    },
-                                                                                                    {
-                                                                                                        "Inputs": [],
-                                                                                                        "Name": "TableFullScan",
-                                                                                                        "ReadColumns": [
-                                                                                                            "SearchPhrase",
-                                                                                                            "Title",
-                                                                                                            "URL",
-                                                                                                            "UserID"
-                                                                                                        ],
-                                                                                                        "ReadRanges": [
-                                                                                                            "EventTime (-\u221e, +\u221e)",
-                                                                                                            "CounterID (-\u221e, +\u221e)",
-                                                                                                            "EventDate (-\u221e, +\u221e)",
-                                                                                                            "UserID (-\u221e, +\u221e)",
-                                                                                                            "WatchID (-\u221e, +\u221e)"
-                                                                                                        ],
-                                                                                                        "Table": "clickbench/plans/row/hits"
-                                                                                                    }
-                                                                                                ],
-                                                                                                "PlanNodeId": 1,
-                                                                                                "Tables": [
-                                                                                                    "clickbench/plans/row/hits"
-                                                                                                ]
-                                                                                            }
-                                                                                        ]
+                                                                                        "PlanNodeId": 1,
+                                                                                        "PlanNodeType": "Connection"
                                                                                     }
                                                                                 ]
                                                                             }
@@ -242,26 +185,10 @@
                                 "UserID"
                             ],
                             "scan_by": [
-                                "EventTime (-\u221e, +\u221e)",
                                 "CounterID (-\u221e, +\u221e)",
                                 "EventDate (-\u221e, +\u221e)",
                                 "UserID (-\u221e, +\u221e)",
-                                "WatchID (-\u221e, +\u221e)"
-                            ],
-                            "type": "FullScan"
-                        },
-                        {
-                            "columns": [
-                                "SearchPhrase",
-                                "Title",
-                                "URL",
-                                "UserID"
-                            ],
-                            "scan_by": [
                                 "EventTime (-\u221e, +\u221e)",
-                                "CounterID (-\u221e, +\u221e)",
-                                "EventDate (-\u221e, +\u221e)",
-                                "UserID (-\u221e, +\u221e)",
                                 "WatchID (-\u221e, +\u221e)"
                             ],
                             "type": "FullScan"

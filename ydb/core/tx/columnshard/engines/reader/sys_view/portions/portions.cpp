@@ -20,8 +20,33 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
 
     auto tierName = portion.GetTierNameDef(NBlobOperations::TGlobal::DefaultStorageId);
     NArrow::Append<arrow::StringType>(*builders[10], arrow::util::string_view(tierName.data(), tierName.size()));
-    auto statInfo = portion.GetMeta().GetStatisticsStorage().SerializeToProto().DebugString();
+    NJson::TJsonValue statReport = NJson::JSON_ARRAY;
+    for (auto&& i : portion.GetIndexes()) {
+        if (!i.HasBlobData()) {
+            continue;
+        }
+        auto schema = portion.GetSchema(ReadMetadata->GetIndexVersions());
+        auto indexMeta = schema->GetIndexInfo().GetIndexVerified(i.GetEntityId());
+        statReport.AppendValue(indexMeta->SerializeDataToJson(i, schema->GetIndexInfo()));
+    }
+    auto statInfo = statReport.GetStringRobust();
     NArrow::Append<arrow::StringType>(*builders[11], arrow::util::string_view(statInfo.data(), statInfo.size()));
+}
+
+ui32 TStatsIterator::PredictRecordsCount(const NAbstract::TGranuleMetaView& granule) const {
+    return std::min<ui32>(10000, granule.GetPortions().size());
+}
+
+bool TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, NAbstract::TGranuleMetaView& granule) const {
+    ui64 recordsCount = 0;
+    while (auto portion = granule.PopFrontPortion()) {
+        recordsCount += 1;
+        AppendStats(builders, *portion);
+        if (recordsCount >= 10000) {
+            break;
+        }
+    }
+    return granule.GetPortions().size();
 }
 
 std::unique_ptr<TScanIteratorBase> TReadStatsMetadata::StartScan(const std::shared_ptr<TReadContext>& readContext) const {
@@ -36,7 +61,7 @@ std::shared_ptr<NAbstract::TReadStatsMetadata> TConstructor::BuildMetadata(const
     auto* index = self->GetIndexOptional();
     return std::make_shared<TReadStatsMetadata>(index ? index->CopyVersionedIndexPtr() : nullptr, self->TabletID(),
         IsReverse ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC,
-        read.GetProgram(), index ? index->GetVersionedIndex().GetSchema(read.GetSnapshot()) : nullptr, read.GetSnapshot());
+        read.GetProgram(), index ? index->GetVersionedIndex().GetLastSchema() : nullptr, read.GetSnapshot());
 }
 
 }

@@ -22,10 +22,10 @@ static void BuildPathsFromTree(const google::protobuf::RepeatedPtrField<NYql::NS
     }
     for (const auto& path : children) {
         const size_t prevSize = currentPath.size();
-        currentPath += path.GetName();
+        currentPath += path.GetName() != "/" ? path.GetName() : "";
         if (path.GetRead()) {
             auto isDirectory = path.GetIsDirectory();
-            auto readPath = isDirectory ? currentPath + "/" : currentPath;
+            auto readPath = isDirectory && path.GetName() != "/" ? currentPath + "/" : currentPath;
             paths.emplace_back(TPath{readPath, path.GetSize(), path.GetIsDirectory(), nextPathIndex++});
         }
         BuildPathsFromTree(path.GetChildren(), paths, currentPath, currentDepth + 1, nextPathIndex);

@@ -70,34 +70,34 @@ namespace NKikimr {
             // issue request for a specific disk; returns true if the request was issued and not yet completed, otherwise
             // false
 
-            // find the slowest disk and mark it
-            switch (blackboard.AccelerationMode) {
-                case TBlackboard::AccelerationModeSkipOneSlowest: {
-                    i32 worstSubgroupIdx = -1;
-                    ui64 worstPredictedNs = 0;
-                    ui64 nextToWorstPredictedNs = 0;
-                    state.GetWorstPredictedDelaysNs(info, *blackboard.GroupQueues,
-                            HandleClassToQueueId(blackboard.GetHandleClass),
-                            &worstPredictedNs, &nextToWorstPredictedNs, &worstSubgroupIdx);
+            if (info.GetTotalVDisksNum() > 1) {
+                // find the slowest disk and mark it
+                switch (blackboard.AccelerationMode) {
+                    case TBlackboard::AccelerationModeSkipOneSlowest: {
+                        TDiskDelayPredictions worstDisks;
+                        state.GetWorstPredictedDelaysNs(info, *blackboard.GroupQueues,
+                                HandleClassToQueueId(blackboard.GetHandleClass), 1,
+                                &worstDisks);
 
-                    // Check if the slowest disk exceptionally slow, or just not very fast
-                    i32 slowDiskSubgroupIdx = -1;
-                    if (nextToWorstPredictedNs > 0 && worstPredictedNs > nextToWorstPredictedNs * 2) {
-                        slowDiskSubgroupIdx = worstSubgroupIdx;
-                    }
+                        // Check if the slowest disk exceptionally slow, or just not very fast
+                        i32 slowDiskSubgroupIdx = -1;
+                        if (worstDisks[1].PredictedNs > 0 && worstDisks[0].PredictedNs > worstDisks[1].PredictedNs * 2) {
+                            slowDiskSubgroupIdx = worstDisks[1].DiskIdx;
+                        }
 
-                    // Mark single slow disk
-                    for (size_t diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {
-                        state.Disks[diskIdx].IsSlow = false;
+                        // Mark single slow disk
+                        for (size_t diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {
+                            state.Disks[diskIdx].IsSlow = false;
+                        }
+                        if (slowDiskSubgroupIdx >= 0) {
+                            state.Disks[slowDiskSubgroupIdx].IsSlow = true;
+                        }
+                        break;
                     }
-                    if (slowDiskSubgroupIdx >= 0) {
-                        state.Disks[slowDiskSubgroupIdx].IsSlow = true;
-                    }
-                    break;
+                    case TBlackboard::AccelerationModeSkipMarked:
+                        // The slowest disk is already marked!
+                        break;
                 }
-                case TBlackboard::AccelerationModeSkipMarked:
-                    // The slowest disk is already marked!
-                    break;
             }
 
             // create an array defining order in which we traverse the disks

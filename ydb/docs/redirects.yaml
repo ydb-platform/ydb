@@ -19,6 +19,28 @@ common:
     to: /quickstart.md
   - from: /getting_started/self_hosted/ydb_minikube.md
     to: /quickstart.md
+  - from: /getting_started/index.md
+    to: /quickstart.md
+  - from: /getting_started/quickstart/index.md
+    to: /quickstart.md
+  - from: /cluster/topology.md
+    to: /concepts/topology.md
+  - from: /getting_started/yql.md
+    to: /yql/reference/index.md
+  - from: /concepts/datatypes.md
+    to: /yql/reference/types/index.md
+  - from: /public-talks/index.md
+    to: /public-materials/videos.md
+  - from: /concepts/databases.md
+    to: /concepts/glossary.md
+
+# DevOps-related redirects
+  - from: /getting_started/kubernetes.md
+    to: /devops/kubernetes/initial-deployment.md
+  - from: /getting_started/ansible.md
+    to: /devops/ansible/initial-deployment.md
+  - from: /troubleshooting/system_views_cluster.md
+    to: /devops/manual/system-views.md
   - from: /ops/devslice-user-guide-k8s-baremetal-host.md
     to: /ops/devslice-setup-kikimr-slice.md
   - from: /deploy/orchestrated/concepts.md
@@ -29,16 +51,162 @@ common:
     to: /devops/kubernetes/initial-deployment.md
   - from: /deploy/orchestrated/operate.md
     to: /devops/kubernetes/initial-deployment.md
-  - from: /getting_started/index.md
-    to: /quickstart.md
-  - from: /getting_started/kubernetes.md
-    to: /devops/kubernetes/initial-deployment.md
-  - from: /getting_started/ansible.md
-    to: /devops/ansible/initial-deployment.md
-  - from: /getting_started/yql.md
-    to: /yql/reference/index.md
+  - from: /cluster/system-requirements.md
+    to: /devops/system-requirements.md
+  - from: /cluster/index.md
+    to: /devops/index.md
+  - from: /cluster/logs.md
+    to: /devops/manual/logging.md
+  - from: /administration/grafana-dashboards.md
+    to: /reference/observability/metrics/grafana-dashboards.md
+  - from: /administration/production-storage-config.md
+    to: /deploy/configuration/config.md
+  - from: /administration/decommissioning.md
+    to: /devops/manual/decommissioning.md
+  - from: /deploy/manual/decommissioning.md
+    to: /devops/manual/decommissioning.md
+  - from: /administration/monitoring.md
+    to: /devops/manual/monitoring.md
+  - from: /deploy/manual/monitoring.md
+    to: /devops/manual/monitoring.md
+  - from: /administration/state-storage-move.md
+    to: /devops/manual/state-storage-move.md
+  - from: /deploy/manual/static-group-move.md
+    to: /devops/manual/static-group-move.md
+  - from: /administration/upgrade.md
+    to: /devops/manual/upgrade.md
+  - from: /deploy/manual/upgrade.md
+    to: /devops/manual/upgrade.md
+  - from: /maintenance/backup_and_recovery.md
+    to: /devops/manual/backup-and-recovery.md
+  - from: /deploy/index.md
+    to: /devops/index.md
 
-# Redirects for ydb-dstoo
+# Dev-related redirects
+  - from: /db/index.md
+    to: /dev/index.md
+  - from: /troubleshooting/system_views.md
+    to: /dev/system-views.md
+  - from: /troubleshooting/system_views_db.md
+    to: /dev/system-views.md
+  - from: /operations/manage-users-attr.md
+    to: /dev/custom-attributes.md
+  - from: /operations/query_plans_optimization.md
+    to: /dev/query-plans-optimization.md
+  - from: /best_practices/cdc.md
+    to: /dev/cdc.md
+  - from: /best_practices/pk-olap-scalability.md
+    to: /dev/primary-key/row-oriented.md
+  - from: /best_practices/pk-olap-scalability.md
+    to: /dev/primary-key/column-oriented.md
+  - from: /best_practices/schema_design.md
+    to: /dev/primary-key/index.md
+  - from: /best_practices/secondary_indexes.md
+    to: /dev/secondary-indexes.md
+  - from: /best_practices/table_sharding.md
+    to:  /dev/primary-key/index.md
+  - from: /best_practices/batch_upload.md
+    to: /dev/batch-upload.md
+  - from: /best_practices/paging.md
+    to: /dev/paging.md
+  - from: /best_practices/timeouts.md
+    to: /dev/timeouts.md
+  - from: /yql/tutorial/alter_table.md
+    to: /dev/yql-tutorial/alter_table.md
+  - from: /yql/tutorial/basic_aggregation.md
+    to: /dev/yql-tutorial/basic_aggregation.md
+  - from: /yql/tutorial/basic_filter_and_sort.md
+    to: /dev/yql-tutorial/basic_filter_and_sort.md
+  - from: /yql/tutorial/conditional_values.md
+    to: /dev/yql-tutorial/conditional_values.md
+  - from: /yql/tutorial/create_demo_tables.md
+    to: /dev/yql-tutorial/create_demo_tables.md
+  - from: /yql/tutorial/delete.md
+    to: /dev/yql-tutorial/delete.md
+  - from: /yql/tutorial/delete_table.md
+    to: /dev/yql-tutorial/delete_table.md
+  - from: /yql/tutorial/fill_tables_with_data.md
+    to: /dev/yql-tutorial/fill_tables_with_data.md
+  - from: /yql/tutorial/index.md
+    to: /dev/yql-tutorial/index.md
+  - from: /yql/tutorial/insert_into.md
+    to: /dev/yql-tutorial/insert_into.md
+  - from: /yql/tutorial/join_tables.md
+    to: /dev/yql-tutorial/join_tables.md
+  - from: /yql/tutorial/replace_into.md
+    to: /dev/yql-tutorial/replace_into.md
+  - from: /yql/tutorial/select_all_columns.md
+    to: /dev/yql-tutorial/select_all_columns.md
+  - from: /yql/tutorial/select_specific_columns.md
+    to: /dev/yql-tutorial/select_specific_columns.md
+  - from: /yql/tutorial/update.md
+    to: /dev/yql-tutorial/update.md
+  - from: /yql/tutorial/upsert_into.md
+    to: /dev/yql-tutorial/upsert_into.md
+  - from: /reference/ydb-sdk/example/archive/example-go-v1.md
+    to: /dev/example-app/go/index.md
+  - from: /reference/ydb-sdk/example/archive/example-go-v2.md
+    to: /dev/example-app/go/index.md
+  - from: /reference/ydb-sdk/example/example-cpp.md
+    to: /dev/example-app/example-cpp.md
+  - from: /reference/ydb-sdk/example/example-dotnet.md
+    to: /dev/example-app/example-dotnet.md
+  - from: /reference/ydb-sdk/example/example-nodejs.md
+    to: /dev/example-app/example-nodejs.md
+  - from: /reference/ydb-sdk/example/example-php.md
+    to: /dev/example-app/example-php.md
+  - from: /reference/ydb-sdk/example/go/index.md
+    to: /dev/example-app/go/index.md
+  - from: /reference/ydb-sdk/example/index.md
+    to: /dev/example-app/index.md
+  - from: /reference/ydb-sdk/example/java/index.md
+    to: /dev/example-app/java/index.md
+  - from: /reference/ydb-sdk/example/python/index.md
+    to: /dev/example-app/python/index.md
+
+# Security-related redirects
+  - from: /cluster/access.md
+    to: /security/acess-management.md
+  - from: /cluster/audit-log.md
+    to: /security/audit-log.md
+  - from: /cluster/short-access-control-notation.md
+    to: /security/short-access-control-notation.md
+
+# Contributors-related redirects
+  - from: /development/build-ya.md
+    to: /contributor/build-ya.md
+  - from: /development/datashard-locks-and-change-visibility.md
+    to: /contributor/datashard-locks-and-change-visibility.md
+  - from: /development/index.md
+    to: /contributor/index.md
+  - from: /development/load-actors-key-value.md
+    to: /contributor/load-actors-key-value.md
+  - from: /development/load-actors-kqp.md
+    to: /contributor/load-actors-kqp.md
+  - from: /development/load-actors-memory.md
+    to: /contributor/load-actors-memory.md
+  - from: /development/load-actors-overview.md
+    to: /contributor/load-actors-overview.md
+  - from: /development/load-actors-pdisk-log.md
+    to: /contributor/load-actors-pdisk-log.md
+  - from: /development/load-actors-pdisk-read.md
+    to: /contributor/load-actors-pdisk-read.md
+  - from: /development/load-actors-pdisk-write.md
+    to: /contributor/load-actors-pdisk-write.md
+  - from: /development/load-actors-stop.md
+    to: /contributor/load-actors-stop.md
+  - from: /development/load-actors-storage.md
+    to: /contributor/load-actors-storage.md
+  - from: /development/load-actors-vdisk.md
+    to: /contributor/load-actors-vdisk.md
+  - from: /development/localdb-uncommitted-txs.md
+    to: /contributor/localdb-uncommitted-txs.md
+  - from: /development/manage-releases.md
+    to: /contributor/manage-releases.md
+  - from: /development/suggest-change.md
+    to: /contributor/suggest-change.md
+
+# Redirects for ydb-dstool
   - from: /administration/ydb-dstool-device-list.md
     to: /reference/ydb-dstool/device-list.md
   - from: /administration/ydb-dstool-global-options.md
@@ -48,7 +216,69 @@ common:
   - from: /administration/ydb-dstool-setup.md
     to: /reference/ydb-dstool/install.md
 
-# Redirect from export_import to export-import   
+# Redirects for Embedded UI
+  - from: /maintenance/embedded_monitoring/ydb_monitoring.md
+    to: /reference/embedded-ui/ydb-monitoring.md
+  - from: /maintenance/embedded_monitoring/overview.md
+    to: /reference/embedded-ui/overview.md
+  - from: /maintenance/embedded_monitoring/hive.md
+    to: /reference/embedded-ui/hive.md
+  - from: /maintenance/embedded_monitoring/logs.md
+    to: /reference/embedded-ui/logs.md
+  - from: /maintenance/embedded_monitoring/interconnect_overview.md
+    to: /reference/embedded-ui/interconnect-overview.md
+  - from: /maintenance/embedded_monitoring/charts.md
+    to: /reference/embedded-ui/charts.md
+  - from: /maintenance/embedded_monitoring/index.md
+    to: /reference/embedded-ui/index.md
+
+# Redirects for recipes
+  - from: reference/ydb-sdk/recipes/auth-access-token.md
+    to: recipes/ydb-sdk/auth-access-token.md
+  - from: reference/ydb-sdk/recipes/auth-anonymous.md
+    to: recipes/ydb-sdk/auth-anonymous.md
+  - from: reference/ydb-sdk/recipes/auth-env.md
+    to: recipes/ydb-sdk/auth-env.md
+  - from: reference/ydb-sdk/recipes/auth-metadata.md
+    to: recipes/ydb-sdk/auth-metadata.md
+  - from: reference/ydb-sdk/recipes/auth-service-account.md
+    to: recipes/ydb-sdk/auth-service-account.md
+  - from: reference/ydb-sdk/recipes/auth-static.md
+    to: recipes/ydb-sdk/auth-static.md
+  - from: reference/ydb-sdk/recipes/auth.md
+    to: recipes/ydb-sdk/auth.md
+  - from: reference/ydb-sdk/recipes/balancing-prefer-local.md
+    to: recipes/ydb-sdk/balancing-prefer-local.md
+  - from: reference/ydb-sdk/recipes/balancing-prefer-location.md
+    to: recipes/ydb-sdk/balancing-prefer-location.md
+  - from: reference/ydb-sdk/recipes/balancing-random-choice.md
+    to: recipes/ydb-sdk/balancing-random-choice.md
+  - from: reference/ydb-sdk/recipes/balancing.md
+    to: recipes/ydb-sdk/balancing.md
+  - from: reference/ydb-sdk/recipes/bulk-upsert.md
+    to: recipes/ydb-sdk/bulk-upsert.md
+  - from: reference/ydb-sdk/recipes/debug-jaeger.md
+    to: recipes/ydb-sdk/debug-jaeger.md
+  - from: reference/ydb-sdk/recipes/debug-logs.md
+    to: recipes/ydb-sdk/debug-logs.md
+  - from: reference/ydb-sdk/recipes/debug-prometheus.md
+    to: recipes/ydb-sdk/debug-prometheus.md
+  - from: reference/ydb-sdk/recipes/debug.md
+    to: recipes/ydb-sdk/debug.md
+  - from: reference/ydb-sdk/recipes/index.md
+    to: recipes/ydb-sdk/index.md
+  - from: reference/ydb-sdk/recipes/init.md
+    to: recipes/ydb-sdk/init.md
+  - from: reference/ydb-sdk/recipes/retry.md
+    to: recipes/ydb-sdk/retry.md
+  - from: reference/ydb-sdk/recipes/session-pool-limit.md
+    to: recipes/ydb-sdk/session-pool-limit.md
+  - from: reference/ydb-sdk/recipes/tx-control.md
+    to: recipes/ydb-sdk/tx-control.md
+  - from: reference/ydb-sdk/recipes/upsert.md
+    to: recipes/ydb-sdk/upsert.md
+
+# Redirects from export_import to export-import   
   - from: /reference/ydb-cli/export_import/s3_conn.md
     to: /reference/ydb-cli/export-import/auth-s3.md
   - from: /reference/ydb-cli/export_import/s3_export.md
@@ -71,3 +301,5 @@ ru:
     to: /concepts/datamodel/table.md
   - from: /postgresql/index.md
     to: /postgresql/intro.md
+  - from: /db/terraform.md
+    to: /dev/terraform.md

@@ -199,10 +199,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
     // Test to reproduce bug from KIKIMR-10192
     Y_UNIT_TEST(TestLogSpliceNonceJump) {
-        if constexpr (!KIKIMR_PDISK_ENABLE_CUT_LOG_FROM_THE_MIDDLE) {
-            return;
-        }
-
         TActorTestContext testCtx({
             .IsBad = false,
             .DiskSize = 1ull << 30,
@@ -234,7 +230,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             // initiate log splicing, expect transition to be
             // 1 -> 2 -> ... -> 6
             NPDisk::TPDisk *pdisk = testCtx.GetPDisk();
-            UNIT_ASSERT(KIKIMR_PDISK_ENABLE_CUT_LOG_FROM_THE_MIDDLE);
             UNIT_ASSERT(pdisk->LogChunks.size() == 6);
             intensiveVDisk.CutLogAllButOne();
             // 1 -> 6
@@ -255,10 +250,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
     // Test to reproduce bug with multiple chunk splices from
     Y_UNIT_TEST(TestMultipleLogSpliceNonceJump) {
-        if constexpr (!KIKIMR_PDISK_ENABLE_CUT_LOG_FROM_THE_MIDDLE) {
-            return;
-        }
-
         TActorTestContext testCtx({
             .IsBad = false,
             .DiskSize = 1ull << 30,
@@ -299,7 +290,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             // initiate log splicing, expect transition to be
             // 1 -> 2 -> ... -> 9
             NPDisk::TPDisk *pdisk = testCtx.GetPDisk();
-            UNIT_ASSERT(KIKIMR_PDISK_ENABLE_CUT_LOG_FROM_THE_MIDDLE);
             UNIT_ASSERT_C(pdisk->LogChunks.size() == 9, pdisk->LogChunks.size());
             intensiveVDisk.CutLogAllButOne();
             // 1 -> 2 -> 6
@@ -315,7 +305,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             // initiate log splicing, expect transition to be
             // 1 -> 2 -> ... -> 6
             NPDisk::TPDisk *pdisk = testCtx.GetPDisk();
-            UNIT_ASSERT(KIKIMR_PDISK_ENABLE_CUT_LOG_FROM_THE_MIDDLE);
             UNIT_ASSERT(pdisk->LogChunks.size() == 6);
             moderateVDisk.CutLogAllButOne();
             // 1 -> 2 -> 6
@@ -503,32 +492,37 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
         vdisk.SendEvLogSync();
-        testCtx.Send(new TEvBlobStorage::TEvRestartPDisk(testCtx.GetPDisk()->PDiskId, testCtx.MainKey, nullptr));
-        const auto evInitRes = testCtx.Recv<TEvBlobStorage::TEvRestartPDiskResult>();
+
+        testCtx.GracefulPDiskRestart();
+
         vdisk.InitFull();
         vdisk.SendEvLogSync();
     }
 
     Y_UNIT_TEST(PDiskRestartManyLogWrites) {
         TActorTestContext testCtx({ false });
-        testCtx.TestCtx.SectorMap->ImitateIoErrorProbability = 1e-4;
 
         const TVDiskID vDiskID(0, 1, 0, 0, 0);
         const auto evInitRes = testCtx.TestResponse<NPDisk::TEvYardInitResult>(
                 new NPDisk::TEvYardInit(2, vDiskID, testCtx.TestCtx.PDiskGuid),
                 NKikimrProto::OK);
 
-        //ui32 errors = 0;
         ui32 lsn = 2;
         TRcBuf logData = TRcBuf(PrepareData(4096));
+
         for (ui32 i = 0; i < 1000; ++i) {
             testCtx.Send(new NPDisk::TEvLog(evInitRes->PDiskParams->Owner, evInitRes->PDiskParams->OwnerRound, 0,
                         logData, TLsnSeg(lsn, lsn), nullptr));
             if (i == 100) {
-                testCtx.Send(new TEvBlobStorage::TEvRestartPDisk(testCtx.GetPDisk()->PDiskId, testCtx.MainKey, nullptr));
+                testCtx.GracefulPDiskRestart(false);
+            }
+            if (i == 600) {
+                const auto evInitRes = testCtx.Recv<TEvBlobStorage::TEvNotifyWardenPDiskRestarted>();
+                UNIT_ASSERT_VALUES_EQUAL(NKikimrProto::EReplyStatus::OK, evInitRes->Status);
             }
             ++lsn;
         }
+
         for (ui32 i = 0; i < 100;) {
             const auto logRes = testCtx.Recv<NPDisk::TEvLogResult>();
             i += logRes->Results.size();
@@ -538,7 +532,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 Ctest << "TEvLogResult status is error" << Endl;
             }
         }
-        testCtx.Recv<TEvBlobStorage::TEvRestartPDiskResult>();
     }
 
     Y_UNIT_TEST(CommitDeleteChunks) {
@@ -555,10 +548,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
     // Test to reproduce bug from
     Y_UNIT_TEST(TestLogSpliceChunkReserve) {
-        if constexpr (!KIKIMR_PDISK_ENABLE_CUT_LOG_FROM_THE_MIDDLE) {
-            return;
-        }
-
         TActorTestContext testCtx({
             .IsBad = false,
             .DiskSize = 1ull << 30,
@@ -928,8 +917,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         while (writeLog() == NKikimrProto::OK) {}
         UNIT_ASSERT_VALUES_EQUAL(writeLog(), NKikimrProto::OUT_OF_SPACE);
 
-        testCtx.Send(new TEvBlobStorage::TEvRestartPDisk(testCtx.GetPDisk()->PDiskId, testCtx.MainKey, nullptr));
-        testCtx.Recv<TEvBlobStorage::TEvRestartPDiskResult>();
+        testCtx.GracefulPDiskRestart();
 
         vdisk.InitFull();
         vdisk.SendEvLogSync();
@@ -943,8 +931,8 @@ Y_UNIT_TEST_SUITE(PDiskCompatibilityInfo) {
     using TCurrent = NKikimrConfig::TCurrentCompatibilityInfo;
     THolder<NPDisk::TEvYardInitResult> RestartPDisk(TActorTestContext& testCtx, ui32 pdiskId, TVDiskMock& vdisk, TCurrent* newInfo) {
         TCompatibilityInfoTest::Reset(newInfo);
-        testCtx.Send(new TEvBlobStorage::TEvRestartPDisk(pdiskId, testCtx.MainKey, nullptr));
-        testCtx.Recv<TEvBlobStorage::TEvRestartPDiskResult>();
+        Y_UNUSED(pdiskId);
+        testCtx.GracefulPDiskRestart();
         testCtx.Send(new NPDisk::TEvYardInit(vdisk.OwnerRound.fetch_add(1), vdisk.VDiskID, testCtx.TestCtx.PDiskGuid));
         return testCtx.Recv<NPDisk::TEvYardInitResult>();
     }

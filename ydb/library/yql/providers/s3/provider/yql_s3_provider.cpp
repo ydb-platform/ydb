@@ -14,7 +14,8 @@ TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway
         TIntrusivePtr<TTypeAnnotationContext> typeCtx,
         const TOperationProgressWriter& progressWriter,
         const TYqlOperationOptions& operationOptions,
-        THiddenQueryAborter)
+        THiddenQueryAborter hiddenAborter,
+        const TQContext& qContext)
     {
         Y_UNUSED(sessionId);
         Y_UNUSED(userName);
@@ -22,6 +23,8 @@ TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway
         Y_UNUSED(randomProvider);
         Y_UNUSED(progressWriter);
         Y_UNUSED(operationOptions);
+        Y_UNUSED(hiddenAborter);
+        Y_UNUSED(qContext);
 
         auto state = MakeIntrusive<TS3State>();
 

@@ -781,13 +781,6 @@ public:
         , Locks_(MakeAtomicShared<TVector<TAdaptiveLock>>(writer->GetTableCount()))
     { }
 
-    ~TTableWriterBase() override
-    {
-        if (Locks_.RefCount() == 1) {
-            NDetail::FinishOrDie(this, /*autoFinish*/ true, "TTableWriterBase");
-        }
-    }
-
     void Abort()
     {
         Writer_->Abort();

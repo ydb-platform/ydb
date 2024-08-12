@@ -18,13 +18,15 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     const ::Ydb::Table::QueryStatsCollection::Mode collectStats,
     const ::Ydb::Table::QueryCachePolicy* queryCachePolicy,
     const ::Ydb::Operations::OperationParams* operationParams,
-    const TQueryRequestSettings& querySettings)
+    const TQueryRequestSettings& querySettings,
+    const TString& poolId)
     : RequestCtx(ctx)
     , RequestActorId(requestActorId)
     , Database(CanonizePath(ctx->GetDatabaseName().GetOrElse("")))
     , SessionId(sessionId)
     , YqlText(std::move(yqlText))
     , QueryId(std::move(queryId))
+    , PoolId(poolId)
     , QueryAction(queryAction)
     , QueryType(queryType)
     , TxControl(txControl)
@@ -84,6 +86,10 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
             Record.MutableRequest()->SetPreparedQuery(QueryId);
         }
 
+        if (!PoolId.empty()) {
+            Record.MutableRequest()->SetPoolId(PoolId);
+        }
+
         Record.MutableRequest()->SetSessionId(SessionId);
         Record.MutableRequest()->SetAction(QueryAction);
         Record.MutableRequest()->SetType(QueryType);
@@ -93,6 +99,7 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
             Record.MutableRequest()->SetTimeoutMs(OperationTimeout.MilliSeconds());
         }
         Record.MutableRequest()->SetIsInternalCall(RequestCtx->IsInternalCall());
+        Record.MutableRequest()->SetOutputChunkMaxSize(QuerySettings.OutputChunkMaxSize);
 
         RequestCtx.reset();
     }

@@ -40,10 +40,11 @@ class TDqComputeStorageActor : public NActors::TActorBootstrapped<TDqComputeStor
     // void promise that completes when block is removed
     using TDeletingBlobInfo = NThreading::TPromise<void>;
 public:
-    TDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback)
+    TDqComputeStorageActor(TTxId txId, const TString& spillerName, TWakeUpCallback wakeupCallback, TErrorCallback errorCallback)
         : TxId_(txId),
         SpillerName_(spillerName),
-        WakeupCallback_(wakeupCallback)
+        WakeupCallback_(wakeupCallback),
+        ErrorCallback_(errorCallback)
     {
     }
 
@@ -60,14 +61,19 @@ public:
         return this;
     }
 
-
 protected:
 
-    void FailOnError() {
-        if (Error_) {
-            LOG_E("Error: " << *Error_);
-            Send(SpillingActorId_, new TEvents::TEvPoison);
-        }
+    void FailWithError(const TString& error) {
+        if (!ErrorCallback_) Y_ABORT("Error: %s", error.c_str());
+
+        LOG_E("Error: " << error);
+        ErrorCallback_(error);
+        SendInternal(SpillingActorId_, new TEvents::TEvPoison);
+        PassAway();
+    }
+
+    void SendInternal(const TActorId& recipient, IEventBase* ev, TEventFlags flags = IEventHandle::FlagTrackDelivery) {
+        if (!Send(recipient, ev, flags)) FailWithError("Event was not sent");
     }
 
 private:
@@ -88,7 +94,7 @@ private:
     }
 
     void HandleWork(TEvents::TEvPoison::TPtr&) {
-        Send(SpillingActorId_, new TEvents::TEvPoison);
+        SendInternal(SpillingActorId_, new TEvents::TEvPoison);
         PassAway();
     }
 
@@ -96,7 +102,7 @@ private:
         auto& msg = *ev->Get();
         ui64 size = msg.Blob_.size();
 
-        Send(SpillingActorId_, new TEvDqSpilling::TEvWrite(NextBlobId, std::move(msg.Blob_)));
+        SendInternal(SpillingActorId_, new TEvDqSpilling::TEvWrite(NextBlobId, std::move(msg.Blob_)));
 
         WritingBlobs_.emplace(NextBlobId, std::make_pair(size, std::move(msg.Promise_)));
         WritingBlobsSize_ += size;
@@ -117,7 +123,7 @@ private:
         TLoadingBlobInfo loadingBlobInfo = std::make_pair(removeBlobAfterRead, std::move(msg.Promise_));
         LoadingBlobs_.emplace(msg.Key_, std::move(loadingBlobInfo));
 
-        Send(SpillingActorId_, new TEvDqSpilling::TEvRead(msg.Key_, removeBlobAfterRead));
+        SendInternal(SpillingActorId_, new TEvDqSpilling::TEvRead(msg.Key_, removeBlobAfterRead));
     }
 
     void HandleWork(TEvDelete::TPtr& ev) {
@@ -130,7 +136,7 @@ private:
 
         DeletingBlobs_.emplace(msg.Key_, std::move(msg.Promise_));
 
-        Send(SpillingActorId_, new TEvDqSpilling::TEvRead(msg.Key_, true));
+        SendInternal(SpillingActorId_, new TEvDqSpilling::TEvRead(msg.Key_, true));
     }
 
     void HandleWork(TEvDqSpilling::TEvWriteResult::TPtr& ev) {
@@ -140,11 +146,7 @@ private:
 
         auto it = WritingBlobs_.find(msg.BlobId);
         if (it == WritingBlobs_.end()) {
-            LOG_E("Got unexpected TEvWriteResult, blobId: " << msg.BlobId);
-
-            Error_ = "Internal error";
-
-            Send(SpillingActorId_, new TEvents::TEvPoison);
+            FailWithError(TStringBuilder() << "[TEvWriteResult] Got unexpected TEvWriteResult, blobId: " << msg.BlobId);
             return;
         }
 
@@ -177,11 +179,7 @@ private:
 
         auto it = LoadingBlobs_.find(msg.BlobId);
         if (it == LoadingBlobs_.end()) {
-            LOG_E("Got unexpected TEvReadResult, blobId: " << msg.BlobId);
-
-            Error_ = "Internal error";
-
-            Send(SpillingActorId_, new TEvents::TEvPoison);
+            FailWithError(TStringBuilder() << "[TEvReadResult] Got unexpected TEvReadResult, blobId: " << msg.BlobId);
             return;
         }
 
@@ -202,9 +200,7 @@ private:
 
     void HandleWork(TEvDqSpilling::TEvError::TPtr& ev) {
         auto& msg = *ev->Get();
-        LOG_D("[TEvError] " << msg.Message);
-
-        Error_.ConstructInPlace(msg.Message);
+        FailWithError(TStringBuilder() << "[TEvError] " << msg.Message);
     }
 
     bool HandleDelete(TKey blobId, ui64 size) {
@@ -241,24 +237,22 @@ private:
 
     TMap<TKey, TDeletingBlobInfo> DeletingBlobs_;
 
-    TMaybe<TString> Error_;
-
     TKey NextBlobId = 0;
 
     TString SpillerName_;
 
     bool IsInitialized_ = false;
 
-    std::function<void()> WakeupCallback_;
+    TWakeUpCallback WakeupCallback_;
+    TErrorCallback ErrorCallback_;
 
     TSet<TKey> StoredBlobs_;
-
 };
 
 } // anonymous namespace
 
-IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback) {
-    return new TDqComputeStorageActor(txId, spillerName, wakeupCallback);
+IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, TWakeUpCallback wakeupCallback, TErrorCallback errorCallback) {
+    return new TDqComputeStorageActor(txId, spillerName, wakeupCallback, errorCallback);
 }
 
 } // namespace NYql::NDq 

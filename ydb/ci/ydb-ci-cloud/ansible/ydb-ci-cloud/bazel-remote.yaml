@@ -1,0 +1,6 @@
+---
+- name: install bazel-remote
+  hosts: bazel_remote_servers
+  become: true
+  roles:
+    - bazel-remote

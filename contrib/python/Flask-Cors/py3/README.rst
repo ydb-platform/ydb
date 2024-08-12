@@ -6,10 +6,10 @@ Flask-CORS
 
 A Flask extension for handling Cross Origin Resource Sharing (CORS), making cross-origin AJAX possible.
 
-This package has a simple philosophy: when you want to enable CORS, you wish to enable it for all use cases on a domain. 
-This means no mucking around with different allowed headers, methods, etc. 
+This package has a simple philosophy: when you want to enable CORS, you wish to enable it for all use cases on a domain.
+This means no mucking around with different allowed headers, methods, etc.
 
-By default, submission of cookies across domains is disabled due to the security implications. 
+By default, submission of cookies across domains is disabled due to the security implications.
 Please see the documentation for how to enable credential'ed requests, and please make sure you add some sort of `CSRF <http://en.wikipedia.org/wiki/Cross-site_request_forgery>`__ protection before doing so!
 
 Installation
@@ -24,14 +24,14 @@ Install the extension with using pip, or easy\_install.
 Usage
 -----
 
-This package exposes a Flask extension which by default enables CORS support on all routes, for all origins and methods. 
-It allows parameterization of all CORS headers on a per-resource level. 
+This package exposes a Flask extension which by default enables CORS support on all routes, for all origins and methods.
+It allows parameterization of all CORS headers on a per-resource level.
 The package also contains a decorator, for those who prefer this approach.
 
 Simple Usage
 ~~~~~~~~~~~~
 
-In the simplest case, initialize the Flask-Cors extension with default arguments in order to allow CORS for all domains on all routes. 
+In the simplest case, initialize the Flask-Cors extension with default arguments in order to allow CORS for all domains on all routes.
 See the full list of options in the `documentation <https://flask-cors.corydolphin.com/en/latest/api.html#extension>`__.
 
 .. code:: python
@@ -50,7 +50,7 @@ See the full list of options in the `documentation <https://flask-cors.corydolph
 Resource specific CORS
 ^^^^^^^^^^^^^^^^^^^^^^
 
-Alternatively, you can specify CORS options on a resource and origin level of granularity by passing a dictionary as the `resources` option, mapping paths to a set of options. 
+Alternatively, you can specify CORS options on a resource and origin level of granularity by passing a dictionary as the `resources` option, mapping paths to a set of options.
 See the full list of options in the `documentation <https://flask-cors.corydolphin.com/en/latest/api.html#extension>`__.
 
 .. code:: python
@@ -65,8 +65,8 @@ See the full list of options in the `documentation <https://flask-cors.corydolph
 Route specific CORS via decorator
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-This extension also exposes a simple decorator to decorate flask routes with. 
-Simply add ``@cross_origin()`` below a call to Flask's ``@app.route(..)`` to allow CORS on a given route. 
+This extension also exposes a simple decorator to decorate flask routes with.
+Simply add ``@cross_origin()`` below a call to Flask's ``@app.route(..)`` to allow CORS on a given route.
 See the full list of options in the `decorator documentation <https://flask-cors.corydolphin.com/en/latest/api.html#decorator>`__.
 
 .. code:: python
@@ -94,7 +94,7 @@ If things aren't working as you expect, enable logging to help understand what i
 Tests
 -----
 
-A simple set of tests is included in ``test/``. 
+A simple set of tests is included in ``test/``.
 To run, install nose, and simply invoke ``nosetests`` or ``python setup.py test`` to exercise the tests.
 
 If nosetests does not work for you, due to it no longer working with newer python versions.
@@ -103,8 +103,8 @@ You can use pytest to run the tests instead.
 Contributing
 ------------
 
-Questions, comments or improvements? 
-Please create an issue on `Github <https://github.com/corydolphin/flask-cors>`__, tweet at `@corydolphin <https://twitter.com/corydolphin>`__ or send me an email. 
+Questions, comments or improvements?
+Please create an issue on `Github <https://github.com/corydolphin/flask-cors>`__, tweet at `@corydolphin <https://twitter.com/corydolphin>`__ or send me an email.
 I do my best to include every contribution proposed in any way that I can.
 
 Credits
@@ -112,7 +112,7 @@ Credits
 
 This Flask extension is based upon the `Decorator for the HTTP Access Control <https://web.archive.org/web/20190128010149/http://flask.pocoo.org/snippets/56/>`__ written by Armin Ronacher.
 
-.. |Build Status| image:: https://api.travis-ci.org/corydolphin/flask-cors.svg?branch=master
+.. |Build Status| image:: https://github.com/corydolphin/flask-cors/actions/workflows/unittests.yaml/badge.svg
    :target: https://travis-ci.org/corydolphin/flask-cors
 .. |Latest Version| image:: https://img.shields.io/pypi/v/Flask-Cors.svg
    :target: https://pypi.python.org/pypi/Flask-Cors/

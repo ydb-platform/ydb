@@ -1,0 +1,63 @@
+package NMvp;
+
+message TJwtInfo {
+    optional string Name = 1;
+    optional string Endpoint = 2;
+    optional string AccountId = 3;
+    optional string KeyId = 4;
+    optional string PublicKey = 5;
+    optional string PrivateKey = 6;
+    optional string Audience = 7 [default = "https://iam.api.cloud.yandex.net/iam/v1/tokens"];
+}
+
+message TOAuthInfo {
+    optional string Name = 1;
+    optional string Endpoint = 2;
+    optional string Token = 3;
+}
+
+message TSecretInfo {
+    optional string Name = 1;
+    optional string Secret = 2;
+}
+
+message TMetadataTokenInfo {
+    optional string Name = 1;
+    optional string Endpoint = 2 [default = "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token"];
+}
+
+message TStaticCredentialsInfo {
+    optional string Name = 1;
+    optional string Login = 2;
+    optional string Password = 3;
+    optional string Endpoint = 4;
+}
+
+message TStaffApiUserTokenInfo {
+    optional string Name = 1;
+    optional string Token = 2;
+}
+
+enum EAccessServiceType {
+    yandex_v2 = 1;
+    nebius_v1 = 2;
+};
+
+message TTokensConfig {
+    optional string StaffApiUserToken = 1; // Ydb auth config
+    repeated TJwtInfo JwtInfo = 2; // JWT data for TTokensConfig
+    repeated TOAuthInfo OAuthInfo = 3; // OAuth data for TTokensConfig
+    repeated TSecretInfo SecretInfo = 4; // Secrets for OpenId client
+    repeated TMetadataTokenInfo MetadataTokenInfo = 5; // IAM token from metadata
+    repeated TStaticCredentialsInfo StaticCredentialsInfo = 6; // Data for create token from static credentials
+    optional TStaffApiUserTokenInfo StaffApiUserTokenInfo = 7; // OAuth token for staff api
+    optional EAccessServiceType AccessServiceType = 8; // Access Service Type for algorithm selection
+}
+
+message TOpenIdClientConfig {
+    optional string SecretName = 1;
+    optional string SessionServiceEndpoint = 2;
+    optional string SessionServiceTokenName = 3;
+    optional string AuthorizationServerAddress = 4;
+    repeated string AllowedProxyHosts = 5;
+}

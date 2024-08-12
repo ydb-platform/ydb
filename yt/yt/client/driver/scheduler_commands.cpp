@@ -25,7 +25,7 @@ using namespace NJobTrackerClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static inline const NLogging::TLogger JobShellStructuredLogger("JobShell");
+YT_DEFINE_GLOBAL(const NLogging::TLogger, JobShellStructuredLogger, "JobShell");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -592,7 +592,7 @@ void TPollJobShellCommand::DoExecute(ICommandContextPtr context)
         .ValueOrThrow();
 
     if (response.LoggingContext) {
-        LogStructuredEventFluently(JobShellStructuredLogger, NLogging::ELogLevel::Info)
+        LogStructuredEventFluently(JobShellStructuredLogger(), NLogging::ELogLevel::Info)
             .Do([&] (TFluentMap fluent) {
                 fluent.GetConsumer()->OnRaw(response.LoggingContext);
             })
@@ -622,6 +622,23 @@ void TAbortJobCommand::Register(TRegistrar registrar)
 void TAbortJobCommand::DoExecute(ICommandContextPtr context)
 {
     WaitFor(context->GetClient()->AbortJob(JobId, Options))
+        .ThrowOnError();
+
+    ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TDumpJobProxyLogCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("job_id", &TThis::JobId);
+    registrar.Parameter("operation_id", &TThis::OperationId);
+    registrar.Parameter("path", &TThis::Path);
+}
+
+void TDumpJobProxyLogCommand::DoExecute(ICommandContextPtr context)
+{
+    WaitFor(context->GetClient()->DumpJobProxyLog(JobId, OperationId, Path))
         .ThrowOnError();
 
     ProduceEmptyOutput(context);

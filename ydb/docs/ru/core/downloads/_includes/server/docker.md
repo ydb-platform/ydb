@@ -1,5 +1,9 @@
 Версия |  Дата выпуска | Скачать | Список изменений
 :--- | :--- | :--- | :---
+**v24.1**
+v.24.1.18 | 31.07.24 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.1.18`
+**v23.4**
+v.23.4.11 | 14.05.24 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:23.4.11`
 **v23.3**
 v.23.3.17 | 14.12.23 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:23.3.17`
 v.23.3.13 | 12.10.23 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:23.3.13` | [См. список](../../../changelog-server.md#23-3)

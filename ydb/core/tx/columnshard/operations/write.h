@@ -3,6 +3,7 @@
 #include <ydb/core/tx/data_events/write_data.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/engines/defs.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
 
@@ -44,13 +45,15 @@ namespace NKikimr::NColumnShard {
         YDB_READONLY(ui64, Cookie, 0);
         YDB_READONLY_DEF(TVector<TWriteId>, GlobalWriteIds);
         YDB_ACCESSOR(EOperationBehaviour, Behaviour, EOperationBehaviour::Undefined);
-
+        YDB_READONLY_DEF(std::optional<ui32>, GranuleShardingVersionId);
+        YDB_READONLY(NEvWrite::EModificationType, ModificationType, NEvWrite::EModificationType::Upsert);
     public:
         using TPtr = std::shared_ptr<TWriteOperation>;
 
-        TWriteOperation(const TWriteId writeId, const ui64 lockId, const ui64 cookie, const EOperationStatus& status, const TInstant createdAt);
+        TWriteOperation(const TWriteId writeId, const ui64 lockId, const ui64 cookie, const EOperationStatus& status, const TInstant createdAt, const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType);
 
-        void Start(TColumnShard& owner, const ui64 tableId, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source, const TActorContext& ctx);
+        void Start(TColumnShard& owner, const ui64 tableId, const NEvWrite::IDataContainer::TPtr& data, 
+            const NActors::TActorId& source, const std::shared_ptr<NOlap::ISnapshotSchema>& schema, const TActorContext& ctx);
         void OnWriteFinish(NTabletFlatExecutor::TTransactionContext& txc, const TVector<TWriteId>& globalWriteIds);
         void Commit(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot) const;
         void Abort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const;
@@ -78,7 +81,7 @@ namespace NKikimr::NColumnShard {
         void LinkTransaction(const ui64 lockId, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
         std::optional<ui64> GetLockForTx(const ui64 lockId) const;
 
-        TWriteOperation::TPtr RegisterOperation(const ui64 lockId, const ui64 cookie);
+        TWriteOperation::TPtr RegisterOperation(const ui64 lockId, const ui64 cookie, const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType);
         static EOperationBehaviour GetBehaviour(const NEvents::TDataEvents::TEvWrite& evWrite);
 
     private:

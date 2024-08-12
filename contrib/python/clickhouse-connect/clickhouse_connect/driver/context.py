@@ -1,9 +1,6 @@
 import logging
 import re
-from datetime import datetime
 from typing import Optional, Dict, Union, Any
-
-import pytz
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +9,6 @@ _empty_map = {}
 
 # pylint: disable=too-many-instance-attributes
 class BaseQueryContext:
-    local_tz: pytz.timezone
 
     def __init__(self,
                  settings: Optional[Dict[str, Any]] = None,
@@ -60,13 +56,3 @@ class BaseQueryContext:
             if type_pattern.match(ch_type):
                 return fmt
         return None
-
-
-def _init_context_cls():
-    local_tz = datetime.now().astimezone().tzinfo
-    if local_tz.tzname(datetime.now()) in ('UTC', 'GMT', 'Universal', 'GMT-0', 'Zulu', 'Greenwich'):
-        local_tz = pytz.UTC
-    BaseQueryContext.local_tz = local_tz
-
-
-_init_context_cls()

@@ -18,6 +18,7 @@ import io
 import math
 import sys
 import time
+import traceback
 import types
 import unittest
 import warnings
@@ -57,9 +58,10 @@ from hypothesis.errors import (
     DeadlineExceeded,
     DidNotReproduce,
     FailedHealthCheck,
-    Flaky,
+    FlakyFailure,
+    FlakyReplay,
     Found,
-    HypothesisDeprecationWarning,
+    HypothesisException,
     HypothesisWarning,
     InvalidArgument,
     NoSuchExample,
@@ -77,15 +79,18 @@ from hypothesis.internal.compat import (
 )
 from hypothesis.internal.conjecture.data import ConjectureData, Status
 from hypothesis.internal.conjecture.engine import BUFFER_SIZE, ConjectureRunner
-from hypothesis.internal.conjecture.junkdrawer import ensure_free_stackframes
+from hypothesis.internal.conjecture.junkdrawer import (
+    ensure_free_stackframes,
+    gc_cumulative_time,
+)
 from hypothesis.internal.conjecture.shrinker import sort_key
 from hypothesis.internal.entropy import deterministic_PRNG
 from hypothesis.internal.escalation import (
     InterestingOrigin,
     current_pytest_item,
-    escalate_hypothesis_internal_error,
     format_exception,
     get_trimmed_traceback,
+    is_hypothesis_file,
 )
 from hypothesis.internal.healthcheck import fail_health_check
 from hypothesis.internal.observability import (
@@ -786,7 +791,6 @@ class StateForActualGivenExecution:
         self.explain_traces = defaultdict(set)
         self._start_timestamp = time.time()
         self._string_repr = ""
-        self._jsonable_arguments = {}
         self._timing_features = {}
 
     @property
@@ -794,6 +798,15 @@ class StateForActualGivenExecution:
         return getattr(
             current_pytest_item.value, "nodeid", None
         ) or get_pretty_function_description(self.wrapped_test)
+
+    def _should_trace(self):
+        _trace_obs = TESTCASE_CALLBACKS and OBSERVABILITY_COLLECT_COVERAGE
+        _trace_failure = (
+            self.failed_normally
+            and not self.failed_due_to_deadline
+            and {Phase.shrink, Phase.explain}.issubset(self.settings.phases)
+        )
+        return _trace_obs or _trace_failure
 
     def execute_once(
         self,
@@ -821,21 +834,34 @@ class StateForActualGivenExecution:
         self._string_repr = ""
         text_repr = None
         if self.settings.deadline is None and not TESTCASE_CALLBACKS:
-            test = self.test
+
+            @proxies(self.test)
+            def test(*args, **kwargs):
+                with ensure_free_stackframes():
+                    return self.test(*args, **kwargs)
+
         else:
 
             @proxies(self.test)
             def test(*args, **kwargs):
                 arg_drawtime = math.fsum(data.draw_times.values())
+                arg_stateful = math.fsum(data._stateful_run_times.values())
+                arg_gctime = gc_cumulative_time()
                 start = time.perf_counter()
                 try:
-                    result = self.test(*args, **kwargs)
+                    with ensure_free_stackframes():
+                        result = self.test(*args, **kwargs)
                 finally:
                     finish = time.perf_counter()
                     in_drawtime = math.fsum(data.draw_times.values()) - arg_drawtime
-                    runtime = datetime.timedelta(seconds=finish - start - in_drawtime)
+                    in_stateful = (
+                        math.fsum(data._stateful_run_times.values()) - arg_stateful
+                    )
+                    in_gctime = gc_cumulative_time() - arg_gctime
+                    runtime = finish - start - in_drawtime - in_stateful - in_gctime
                     self._timing_features = {
-                        "execute:test": finish - start - in_drawtime,
+                        "execute:test": runtime,
+                        "overall:gc": in_gctime,
                         **data.draw_times,
                         **data._stateful_run_times,
                     }
@@ -843,8 +869,10 @@ class StateForActualGivenExecution:
                 if (current_deadline := self.settings.deadline) is not None:
                     if not is_final:
                         current_deadline = (current_deadline // 4) * 5
-                    if runtime >= current_deadline:
-                        raise DeadlineExceeded(runtime, self.settings.deadline)
+                    if runtime >= current_deadline.total_seconds():
+                        raise DeadlineExceeded(
+                            datetime.timedelta(seconds=runtime), self.settings.deadline
+                        )
                 return result
 
         def run(data):
@@ -913,7 +941,7 @@ class StateForActualGivenExecution:
                     ),
                 )
                 self._string_repr = printer.getvalue()
-                self._jsonable_arguments = {
+                data._observability_arguments = {
                     **dict(enumerate(map(to_jsonable, args))),
                     **{k: to_jsonable(v) for k, v in kwargs.items()},
                 }
@@ -972,11 +1000,26 @@ class StateForActualGivenExecution:
                 )
             else:
                 report("Failed to reproduce exception. Expected: \n" + traceback)
-            raise Flaky(
+            raise FlakyFailure(
                 f"Hypothesis {text_repr} produces unreliable results: "
-                "Falsified on the first call but did not on a subsequent one"
-            ) from exception
+                "Falsified on the first call but did not on a subsequent one",
+                [exception],
+            )
         return result
+
+    def _flaky_replay_to_failure(
+        self, err: FlakyReplay, context: BaseException
+    ) -> FlakyFailure:
+        interesting_examples = [
+            self._runner.interesting_examples[io]
+            for io in err._interesting_origins
+            if io
+        ]
+        exceptions = [
+            ie.extra_information._expected_exception for ie in interesting_examples
+        ]
+        exceptions.append(context)  # the offending assume (or whatever)
+        return FlakyFailure(err.reason, exceptions)
 
     def _execute_once_for_engine(self, data: ConjectureData) -> None:
         """Wrapper around ``execute_once`` that intercepts test failure
@@ -988,35 +1031,7 @@ class StateForActualGivenExecution:
         """
         trace: Trace = set()
         try:
-            # this is actually covered by our tests, but only on >= 3.12.
-            if (
-                sys.version_info[:2] >= (3, 12)
-                and sys.monitoring.get_tool(MONITORING_TOOL_ID) is not None
-            ):  # pragma: no cover
-                warnings.warn(
-                    "avoiding tracing test function because tool id "
-                    f"{MONITORING_TOOL_ID} is already taken by tool "
-                    f"{sys.monitoring.get_tool(MONITORING_TOOL_ID)}.",
-                    HypothesisWarning,
-                    # I'm not sure computing a correct stacklevel is reasonable
-                    # given the number of entry points here.
-                    stacklevel=1,
-                )
-
-            _can_trace = (
-                (sys.version_info[:2] < (3, 12) and sys.gettrace() is None)
-                or (
-                    sys.version_info[:2] >= (3, 12)
-                    and sys.monitoring.get_tool(MONITORING_TOOL_ID) is None
-                )
-            ) and not PYPY
-            _trace_obs = TESTCASE_CALLBACKS and OBSERVABILITY_COLLECT_COVERAGE
-            _trace_failure = (
-                self.failed_normally
-                and not self.failed_due_to_deadline
-                and {Phase.shrink, Phase.explain}.issubset(self.settings.phases)
-            )
-            if _can_trace and (_trace_obs or _trace_failure):  # pragma: no cover
+            if self._should_trace() and Tracer.can_trace():  # pragma: no cover
                 # This is in fact covered by our *non-coverage* tests, but due to the
                 # settrace() contention *not* by our coverage tests.  Ah well.
                 with Tracer() as tracer:
@@ -1038,13 +1053,17 @@ class StateForActualGivenExecution:
         except UnsatisfiedAssumption as e:
             # An "assume" check failed, so instead we inform the engine that
             # this test run was invalid.
-            data.mark_invalid(e.reason)
+            try:
+                data.mark_invalid(e.reason)
+            except FlakyReplay as err:
+                # This was unexpected, meaning that the assume was flaky.
+                # Report it as such.
+                raise self._flaky_replay_to_failure(err, e) from None
         except StopTest:
             # The engine knows how to handle this control exception, so it's
             # OK to re-raise it.
             raise
         except (
-            HypothesisDeprecationWarning,
             FailedHealthCheck,
             *skip_exceptions_to_reraise(),
         ):
@@ -1052,9 +1071,12 @@ class StateForActualGivenExecution:
             # engine, so we re-raise them.
             raise
         except failure_exceptions_to_catch() as e:
-            # If the error was raised by Hypothesis-internal code, re-raise it
-            # as a fatal error instead of treating it as a test failure.
-            escalate_hypothesis_internal_error()
+            # If an unhandled (i.e., non-Hypothesis) error was raised by
+            # Hypothesis-internal code, re-raise it as a fatal error instead
+            # of treating it as a test failure.
+            filepath = traceback.extract_tb(e.__traceback__)[-1][0]
+            if is_hypothesis_file(filepath) and not isinstance(e, HypothesisException):
+                raise
 
             if data.frozen:
                 # This can happen if an error occurred in a finally
@@ -1085,19 +1107,28 @@ class StateForActualGivenExecution:
             # Conditional here so we can save some time constructing the payload; in
             # other cases (without coverage) it's cheap enough to do that regardless.
             if TESTCASE_CALLBACKS:
-                if self.failed_normally or self.failed_due_to_deadline:
-                    phase = "shrink"
-                elif runner := getattr(self, "_runner", None):
+                if runner := getattr(self, "_runner", None):
                     phase = runner._current_phase
                 else:  # pragma: no cover  # in case of messing with internals
-                    phase = "unknown"
+                    if self.failed_normally or self.failed_due_to_deadline:
+                        phase = "shrink"
+                    else:
+                        phase = "unknown"
+                backend_desc = f", using backend={self.settings.backend!r}" * (
+                    self.settings.backend != "hypothesis"
+                    and not getattr(runner, "_switch_to_hypothesis_provider", False)
+                )
+                data._observability_args = data.provider.realize(
+                    data._observability_args
+                )
+                self._string_repr = data.provider.realize(self._string_repr)
                 tc = make_testcase(
                     start_timestamp=self._start_timestamp,
                     test_name_or_nodeid=self.test_identifier,
                     data=data,
-                    how_generated=f"generated during {phase} phase",
+                    how_generated=f"during {phase} phase{backend_desc}",
                     string_repr=self._string_repr,
-                    arguments={**self._jsonable_arguments, **data._observability_args},
+                    arguments=data._observability_args,
                     timing=self._timing_features,
                     coverage=tractable_coverage_report(trace) or None,
                     phase=phase,
@@ -1152,6 +1183,23 @@ class StateForActualGivenExecution:
                 rep = get_pretty_function_description(self.test)
                 raise Unsatisfiable(f"Unable to satisfy assumptions of {rep}")
 
+        # If we have not traced executions, warn about that now (but only when
+        # we'd expect to do so reliably, i.e. on CPython>=3.12)
+        if (
+            sys.version_info[:2] >= (3, 12)
+            and not PYPY
+            and self._should_trace()
+            and not Tracer.can_trace()
+        ):  # pragma: no cover
+            # actually covered by our tests, but only on >= 3.12
+            warnings.warn(
+                "avoiding tracing test function because tool id "
+                f"{MONITORING_TOOL_ID} is already taken by tool "
+                f"{sys.monitoring.get_tool(MONITORING_TOOL_ID)}.",
+                HypothesisWarning,
+                stacklevel=3,
+            )
+
         if not self.falsifying_examples:
             return
         elif not (self.settings.report_multiple_bugs and pytest_shows_exceptiongroups):
@@ -1190,12 +1238,28 @@ class StateForActualGivenExecution:
                             info._expected_traceback,
                         ),
                     )
-            except (UnsatisfiedAssumption, StopTest) as e:
-                err = Flaky(
+            except StopTest as e:
+                # Link the expected exception from the first run. Not sure
+                # how to access the current exception, if it failed
+                # differently on this run. In fact, in the only known
+                # reproducer, the StopTest is caused by OVERRUN before the
+                # test is even executed. Possibly because all initial examples
+                # failed until the final non-traced replay, and something was
+                # exhausted? Possibly a FIXME, but sufficiently weird to
+                # ignore for now.
+                err = FlakyFailure(
+                    "Inconsistent results: An example failed on the "
+                    "first run but now succeeds (or fails with another "
+                    "error, or is for some reason not runnable).",
+                    [info._expected_exception or e],  # (note: e is a BaseException)
+                )
+                errors_to_report.append((fragments, err))
+            except UnsatisfiedAssumption as e:  # pragma: no cover  # ironically flaky
+                err = FlakyFailure(
                     "Unreliable assumption: An example which satisfied "
                     "assumptions on the first run now fails it.",
+                    [e],
                 )
-                err.__cause__ = err.__context__ = e
                 errors_to_report.append((fragments, err))
             except BaseException as e:
                 # If we have anything for explain-mode, this is the time to report.
@@ -1217,7 +1281,7 @@ class StateForActualGivenExecution:
                     "status": "passed" if sys.exc_info()[0] else "failed",
                     "status_reason": str(origin or "unexpected/flaky pass"),
                     "representation": self._string_repr,
-                    "arguments": self._jsonable_arguments,
+                    "arguments": ran_example._observability_args,
                     "how_generated": "minimal failing example",
                     "features": {
                         **{

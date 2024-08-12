@@ -14,7 +14,7 @@ enum ESimpleCounters {
     COUNTER_IMMEDIATE_TX_IN_FLY = 4                                [(CounterOpts) = {Name: "ImmediateTxInFly"}];
     COUNTER_IMMEDIATE_TX_DELAYED = 5                               [(CounterOpts) = {Name: "ImmediateTxDelayed"}];
     COUNTER_SCAN_TX_COMPLETE_LAG = 6                               [(CounterOpts) = {Name: "ScanTxCompleteLag"}];
-    COUNTER_PROPOSE_QUEUE_SIZE = 7                                 [(CounterOpts) = {Name: "ProposeQueueSize"}];
+    COUNTER_TOTAL_PROPOSE_QUEUE_SIZE = 7                           [(CounterOpts) = {Name: "TotalProposeQueueSize"}];
     COUNTER_SPLIT_SRC_WAIT_TX_IN_FLY = 8                           [(CounterOpts) = {Name: "SplitSrcWaitTxInFly"}];
     COUNTER_SPLIT_SRC_WAIT_IMMEDIATE_TX_IN_FLY = 9                 [(CounterOpts) = {Name: "SplitSrcWaitImmediateTxInFly"}];
     COUNTER_MVCC_STATE_CHANGE_WAIT_TX_IN_FLY = 10                  [(CounterOpts) = {Name: "MvccStateChangeWaitTxInFly"}];
@@ -27,6 +27,11 @@ enum ESimpleCounters {
     COUNTER_CHANGE_RECORDS_REQUESTED = 17                          [(CounterOpts) = {Name: "ChangeRecordsRequested"}];
     COUNTER_CHANGE_DELIVERY_LAG = 18                               [(CounterOpts) = {Name: "ChangeDeliveryLag"}];
     COUNTER_CHANGE_DATA_LAG = 19                                   [(CounterOpts) = {Name: "ChangeDataLag"}];
+    COUNTER_MEADIATOR_STATE_QUEUE_SIZE = 20                        [(CounterOpts) = {Name: "MediatorStateQueueSize"}];
+    COUNTER_PROPOSE_QUEUE_SIZE = 21                                [(CounterOpts) = {Name: "ProposeQueueSize"}];
+    COUNTER_DELAYED_PROPOSE_QUEUE_SIZE = 22                        [(CounterOpts) = {Name: "DelayedProposeQueueSize"}];
+    COUNTER_WAITING_TX_QUEUE_SIZE = 23                             [(CounterOpts) = {Name: "WaitingTxQueueSize"}];
+    COUNTER_CHANGE_QUEUE_RESERVED_CAPACITY = 24                    [(CounterOpts) = {Name: "ChangeQueueReservedCapacity"}];
 }
 
 enum ECumulativeCounters {
@@ -485,4 +490,5 @@ enum ETxTypes {
     TXTYPE_CLEANUP_VOLATILE = 80                          [(TxTypeOpts) = {Name: "TxCleanupVolatile"}];
     TXTYPE_PLAN_PREDICTED_TXS = 81                        [(TxTypeOpts) = {Name: "TxPlanPredictedTxs"}];
     TXTYPE_WRITE = 82                                     [(TxTypeOpts) = {Name: "TxWrite"}];
+    TXTYPE_REMOVE_SCHEMA_SNAPSHOTS = 83                   [(TxTypeOpts) = {Name: "TxRemoveSchemaSnapshots"}];
 }

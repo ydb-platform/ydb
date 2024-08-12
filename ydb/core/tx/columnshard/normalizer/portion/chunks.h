@@ -12,8 +12,21 @@ namespace NKikimr::NColumnShard {
 
 namespace NKikimr::NOlap {
 
-    class TChunksNormalizer : public INormalizerComponent {
+    class TChunksNormalizer : public TNormalizationController::INormalizerComponent {
     public:
+
+        static TString GetClassNameStatic() {
+            return ::ToString(ENormalizerSequentialId::Chunks);
+        }
+
+        virtual std::optional<ENormalizerSequentialId> DoGetEnumSequentialId() const override {
+            return ENormalizerSequentialId::Chunks;
+        }
+
+        virtual TString GetClassName() const override {
+            return GetClassNameStatic();
+        }
+
         class TNormalizerResult;
 
         class TKey {
@@ -61,6 +74,10 @@ namespace NKikimr::NOlap {
                 , CLContext(rowset, dsGroupSelector)
             {}
 
+            ui32 GetRecordsCount() const {
+                return CLContext.GetMetaProto().GetNumRows();
+            }
+
             const TBlobRange& GetBlobRange() const {
                 return CLContext.GetBlobRange();
             }
@@ -83,17 +100,13 @@ namespace NKikimr::NOlap {
             }
         };
 
+        static inline INormalizerComponent::TFactory::TRegistrator<TChunksNormalizer> Registrator = INormalizerComponent::TFactory::TRegistrator<TChunksNormalizer>(GetClassNameStatic());
     public:
-        TChunksNormalizer(TTabletStorageInfo* info)
-            : DsGroupSelector(info)
+        TChunksNormalizer(const TNormalizationController::TInitContext& info)
+            : DsGroupSelector(info.GetStorageInfo())
         {}
 
-        virtual const TString& GetName() const override {
-            const static TString name = "TChunksNormalizer";
-            return name;
-        }
-
-        virtual TConclusion<std::vector<INormalizerTask::TPtr>> Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
+        virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
 
     private:
         NColumnShard::TBlobGroupSelector DsGroupSelector;

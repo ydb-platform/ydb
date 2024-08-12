@@ -1,9 +1,7 @@
 #include "json_change_record.h"
 
-#include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/io_formats/cell_maker/cell_maker.h>
-
-#include <util/memory/pool.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 
 namespace NKikimr::NReplication::NService {
 
@@ -31,6 +29,10 @@ NChangeExchange::IChangeRecord::EKind TChangeRecord::GetKind() const {
     return JsonBody.Has("resolved")
         ? EKind::CdcHeartbeat
         : EKind::CdcDataChange;
+}
+
+TString TChangeRecord::GetSourceId() const {
+    return SourceId;
 }
 
 static bool ParseKey(TVector<TCell>& cells,
@@ -67,11 +69,12 @@ static bool ParseValue(TVector<NTable::TTag>& tags, TVector<TCell>& cells,
     return true;
 }
 
-void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& record) const {
+void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges_TChange& record, TSerializationContext& ctx) const {
+    auto& pool = ctx.MemoryPool;
+    pool.Clear();
     record.SetSourceOffset(GetOrder());
     // TODO: fill WriteTxId
 
-    TMemoryPool pool(256);
     TString error;
 
     if (JsonBody.Has("key") && JsonBody["key"].IsArray()) {
@@ -104,9 +107,13 @@ void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges::TC
     }
 }
 
-TConstArrayRef<TCell> TChangeRecord::GetKey() const {
+void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges_TChange& record) const {
+    TSerializationContext ctx;
+    Serialize(record, ctx);
+}
+
+TConstArrayRef<TCell> TChangeRecord::GetKey(TMemoryPool& pool) const {
     if (!Key) {
-        TMemoryPool pool(256);
         TString error;
 
         if (JsonBody.Has("key") && JsonBody["key"].IsArray()) {
@@ -124,6 +131,11 @@ TConstArrayRef<TCell> TChangeRecord::GetKey() const {
 
     Y_ABORT_UNLESS(Key);
     return *Key;
+}
+
+TConstArrayRef<TCell> TChangeRecord::GetKey() const {
+    TMemoryPool pool(256);
+    return GetKey(pool);
 }
 
 }

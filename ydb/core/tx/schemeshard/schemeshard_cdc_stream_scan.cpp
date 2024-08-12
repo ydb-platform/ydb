@@ -172,7 +172,7 @@ private:
         }
 
         while (!streamInfo->PendingShards.empty()) {
-            if (streamInfo->InProgressShards.size() >= streamInfo->MaxInProgressShards) {
+            if (streamInfo->InProgressShards.size() >= Self->MaxCdcInitialScanShardsInFlight) {
                 break;
             }
 

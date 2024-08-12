@@ -27,8 +27,12 @@ java {
 }
 
 dependencies {
-{%- for library in target.consumer %}
-    api({{ library.classpath }})
+{%- for library in target.consumer -%}
+{%      set classpath = library.classpath -%}
+{%      if classpath|replace('"','') == classpath -%}
+{%          set classpath = '"' + classpath + '"' -%}
+{%      endif %}
+    api({{ classpath }})
 {%- endfor %}
 {%  if target.proto_namespace %}
     protobuf(files(File(buildProtoDir, "{{ target.proto_namespace }}")))

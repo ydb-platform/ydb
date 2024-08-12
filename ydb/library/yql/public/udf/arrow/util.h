@@ -4,6 +4,7 @@
 
 #include <util/generic/vector.h>
 
+#include <arrow/compute/api.h>
 #include <arrow/datum.h>
 #include <arrow/memory_pool.h>
 #include <arrow/util/bit_util.h>
@@ -41,6 +42,7 @@ inline bool IsNull(const arrow::ArrayData& data, size_t index) {
 }
 
 ui64 GetSizeOfArrowBatchInBytes(const arrow::RecordBatch& batch);
+ui64 GetSizeOfArrowExecBatchInBytes(const arrow::compute::ExecBatch& batch);
 
 class TResizeableBuffer : public arrow::ResizableBuffer {
 public:
@@ -156,6 +158,10 @@ public:
 
     inline size_t Length() const {
         return Len;
+    }
+
+    inline size_t Capacity() const {
+        return Buffer ? size_t(Buffer->capacity()) : 0;
     }
 
     inline T* MutableData() {

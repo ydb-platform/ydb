@@ -30,7 +30,7 @@ class TBusServer
 {
 public:
     explicit TBusServer(IBusServerPtr busServer)
-        : TServerBase(RpcServerLogger.WithTag("BusServerId: %v", TGuid::Create()))
+        : TServerBase(RpcServerLogger().WithTag("BusServerId: %v", TGuid::Create()))
         , BusServer_(std::move(busServer))
     { }
 
@@ -88,7 +88,7 @@ private:
     void OnRequestMessage(TSharedRefArray message, IBusPtr replyBus)
     {
         auto header = std::make_unique<NProto::TRequestHeader>();
-        if (!ParseRequestHeader(message, header.get())) {
+        if (!TryParseRequestHeader(message, header.get())) {
             // Unable to reply, no request id is known.
             // Let's just drop the message.
             YT_LOG_ERROR("Error parsing request header");
@@ -147,7 +147,7 @@ private:
     void OnRequestCancelationMessage(TSharedRefArray message)
     {
         NProto::TRequestCancelationHeader header;
-        if (!ParseRequestCancelationHeader(message, &header)) {
+        if (!TryParseRequestCancelationHeader(message, &header)) {
             // Unable to reply, no request id is known.
             // Let's just drop the message.
             YT_LOG_ERROR("Error parsing request cancelation header");
@@ -181,7 +181,7 @@ private:
     void OnStreamingPayloadMessage(TSharedRefArray message)
     {
         NProto::TStreamingPayloadHeader header;
-        if (!ParseStreamingPayloadHeader(message, &header)) {
+        if (!TryParseStreamingPayloadHeader(message, &header)) {
             // Unable to reply, no request id is known.
             // Let's just drop the message.
             YT_LOG_ERROR("Error parsing request streaming payload header");
@@ -242,7 +242,7 @@ private:
     void OnStreamingFeedbackMessage(TSharedRefArray message)
     {
         NProto::TStreamingFeedbackHeader header;
-        if (!ParseStreamingFeedbackHeader(message, &header)) {
+        if (!TryParseStreamingFeedbackHeader(message, &header)) {
             // Unable to reply, no request id is known.
             // Let's just drop the message.
             YT_LOG_ERROR("Error parsing request streaming feedback header");

@@ -115,8 +115,7 @@ template <class T>
 #define MAKE_PREDICATE_MATCHER(type, arg, capture, predicate) \
     MakePredicateMatcher<type>( \
         PP_DEPAREN(capture) (type arg) { return (predicate); }, \
-        #predicate \
-    )
+        #predicate)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -142,15 +141,13 @@ template <class T>
     EXPECT_CALL_WITH_MESSAGE( \
         mock, \
         RPC_MOCK_CALL(mock, method), \
-        #method \
-    )
+        #method)
 
 #define EXPECT_RPC_CALL_WITH_PREDICATE(mock, method, capture, predicate) \
     EXPECT_CALL_WITH_MESSAGE( \
         mock, \
         RPC_MOCK_CALL_WITH_PREDICATE(mock, method, capture, predicate), \
-        #method "(" #predicate ")" \
-    )
+        #method "(" #predicate ")")
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -164,8 +161,7 @@ template <class T>
     ON_CALL_WITH_MESSAGE( \
         mock, \
         RPC_MOCK_CALL(mock, method), \
-        #method \
-    )
+        #method)
 
 ////////////////////////////////////////////////////////////////////////////////
 

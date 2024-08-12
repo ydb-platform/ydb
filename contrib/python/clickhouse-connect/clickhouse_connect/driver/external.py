@@ -35,7 +35,7 @@ class ExternalFile:
                 self.file_name = file_name
                 if file_name != path_name and path_base != self.name:
                     logger.warning('External data name %s and file_path %s use different names', file_name, path_name)
-        elif data:
+        elif data is not None:
             if not file_name:
                 raise ProgrammingError('Name is required for query external data')
             self.data = data
@@ -43,16 +43,16 @@ class ExternalFile:
             self.file_name = file_name
         else:
             raise ProgrammingError('Either data or file_path must be specified for external data')
+        self.structure = None
+        self.types = None
         if types:
             if structure:
                 raise ProgrammingError('Only types or structure should be specified for external data, not both')
-            self.structure = None
             if isinstance(types, str):
                 self.types = types
             else:
                 self.types = ','.join(types)
         elif structure:
-            self.types = None
             if isinstance(structure, str):
                 self.structure = structure
             else:
@@ -85,7 +85,7 @@ class ExternalData:
                  structure: Optional[Union[str, Sequence[str]]] = None,
                  mime_type: Optional[str] = None):
         self.files: list[ExternalFile] = []
-        if file_path or data:
+        if file_path or data is not None:
             first_file = ExternalFile(file_path=file_path,
                                       file_name=file_name,
                                       data=data,

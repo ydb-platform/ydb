@@ -14,7 +14,11 @@ enum class EDatabaseType {
     DataStreams,
     ObjectStorage,
     PostgreSQL,
-    YT
+    YT,
+    MySQL,
+    Greenplum,
+    MsSQLServer,
+    Oracle
 };
 
 inline EDatabaseType DatabaseTypeFromDataSourceKind(NConnector::NApi::EDataSourceKind dataSourceKind) {
@@ -25,6 +29,14 @@ inline EDatabaseType DatabaseTypeFromDataSourceKind(NConnector::NApi::EDataSourc
             return EDatabaseType::ClickHouse;
         case NConnector::NApi::EDataSourceKind::YDB:
             return EDatabaseType::Ydb;
+        case NConnector::NApi::EDataSourceKind::MYSQL:
+            return EDatabaseType::MySQL;
+        case NConnector::NApi::EDataSourceKind::GREENPLUM:
+            return EDatabaseType::Greenplum;
+        case NConnector::NApi::EDataSourceKind::MS_SQL_SERVER:
+          return EDatabaseType::MsSQLServer;
+        case NConnector::NApi::EDataSourceKind::ORACLE:
+          return EDatabaseType::Oracle;
         default:
             ythrow yexception() << "Unknown data source kind: " << NConnector::NApi::EDataSourceKind_Name(dataSourceKind);
     }
@@ -38,6 +50,14 @@ inline NConnector::NApi::EDataSourceKind DatabaseTypeToDataSourceKind(EDatabaseT
             return  NConnector::NApi::EDataSourceKind::CLICKHOUSE;
         case EDatabaseType::Ydb:
             return  NConnector::NApi::EDataSourceKind::YDB;
+        case EDatabaseType::MySQL:
+            return NConnector::NApi::EDataSourceKind::MYSQL;
+        case EDatabaseType::Greenplum:
+            return  NConnector::NApi::EDataSourceKind::GREENPLUM;
+        case EDatabaseType::MsSQLServer:
+            return NConnector::NApi::EDataSourceKind::MS_SQL_SERVER;
+        case EDatabaseType::Oracle:
+            return NConnector::NApi::EDataSourceKind::ORACLE;
         default:
             ythrow yexception() << "Unknown database type: " << ToString(databaseType);
     }

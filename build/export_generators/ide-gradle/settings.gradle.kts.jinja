@@ -1,9 +1,9 @@
-rootProject.name = "{{ projectName }}"
+rootProject.name = "{{ project_name }}"
 
 {% for subdir in subdirs -%}
 {%-    set classname = subdir | replace("/", ":") -%}
 include(":{{ classname }}")
-project(":{{ classname }}").projectDir = file("{{ exportRoot }}/{{ subdir }}")
+project(":{{ classname }}").projectDir = file("{{ export_root }}/{{ subdir }}")
 {% endfor -%}
 
 {%- include "[generator]/debug.jinja" ignore missing -%}

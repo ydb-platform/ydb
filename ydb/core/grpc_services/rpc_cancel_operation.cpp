@@ -153,5 +153,10 @@ void DoCancelOperationRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilit
     f.RegisterActor(new TCancelOperationRPC(p.release()));
 }
 
+template<>
+IActor* TEvCancelOperationRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestNoOpCtx* msg) {
+    return new TCancelOperationRPC(msg);
+}
+
 } // namespace NGRpcService
 } // namespace NKikimr

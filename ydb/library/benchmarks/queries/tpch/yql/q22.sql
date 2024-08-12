@@ -8,31 +8,44 @@ $customers = (
 select
     c_acctbal,
     c_custkey,
-    Substring(c_phone, 0u, 2u) as cntrycode
+    Substring(CAST(c_phone AS STRING), 0u, 2u) as cntrycode
 from
     {{customer}}
-where (Substring(c_phone, 0u, 2u) = '31' or Substring(c_phone, 0u, 2u) = '29' or Substring(c_phone, 0u, 2u) = '30' or Substring(c_phone, 0u, 2u) = '26' or Substring(c_phone, 0u, 2u) = '28' or Substring(c_phone, 0u, 2u) = '25' or Substring(c_phone, 0u, 2u) = '15')
 );
+
+$c = (
+select
+    c_acctbal,
+    c_custkey,
+    cntrycode
+from
+    $customers
+where
+    cntrycode = '31' or cntrycode = '29' or cntrycode = '30' or cntrycode = '26' or cntrycode = '28' or cntrycode = '25' or cntrycode = '15'
+);
+
 $avg = (
 select
     avg(c_acctbal) as a
 from
-    $customers
+    $c
 where
-    c_acctbal > 0.00
+    c_acctbal > $z0_12
 );
+
 $join1 = (
 select
     c.c_acctbal as c_acctbal,
     c.c_custkey as c_custkey,
     c.cntrycode as cntrycode
 from
-    $customers as c
+    $c as c
 cross join
     $avg as a
 where
     c.c_acctbal > a.a
 );
+
 $join2 = (
 select
     j.cntrycode as cntrycode,

@@ -9,7 +9,7 @@ namespace NKikimr::NOlap::NReader::NPlain {
 class TReadyResults {
 private:
     const NColumnShard::TConcreteScanCounters Counters;
-    std::deque<TPartialReadResult> Data;
+    std::deque<std::shared_ptr<TPartialReadResult>> Data;
     i64 RecordsCount = 0;
 public:
     TString DebugString() const {
@@ -19,7 +19,7 @@ public:
             << "records_count:" << RecordsCount << ";"
             ;
         if (Data.size()) {
-            sb << "schema=" << Data.front().GetResultBatch().schema()->ToString() << ";";
+            sb << "schema=" << Data.front()->GetResultBatch().schema()->ToString() << ";";
         }
         return sb;
     }
@@ -28,17 +28,19 @@ public:
     {
 
     }
-    TPartialReadResult& emplace_back(TPartialReadResult&& v) {
-        RecordsCount += v.GetResultBatch().num_rows();
+    const std::shared_ptr<TPartialReadResult>& emplace_back(std::shared_ptr<TPartialReadResult>&& v) {
+        AFL_VERIFY(!!v);
+        RecordsCount += v->GetResultBatch().num_rows();
         Data.emplace_back(std::move(v));
         return Data.back();
     }
-    std::optional<TPartialReadResult> pop_front() {
+    std::shared_ptr<TPartialReadResult> pop_front() {
         if (Data.empty()) {
             return {};
         }
         auto result = std::move(Data.front());
-        RecordsCount -= result.GetResultBatch().num_rows();
+        AFL_VERIFY(RecordsCount >= result->GetResultBatch().num_rows());
+        RecordsCount -= result->GetResultBatch().num_rows();
         Data.pop_front();
         return result;
     }
@@ -58,9 +60,16 @@ private:
     std::shared_ptr<IDataReader> IndexedData;
     ui64 ItemsRead = 0;
     const i64 MaxRowsInBatch = 5000;
+    virtual void DoOnSentDataFromInterval(const ui32 intervalIdx) const override;
+
 public:
     TColumnShardScanIterator(const std::shared_ptr<TReadContext>& context, const TReadMetadata::TConstPtr& readMetadata);
     ~TColumnShardScanIterator();
+
+    virtual TConclusionStatus Start() override {
+        AFL_VERIFY(IndexedData);
+        return IndexedData->Start();
+    }
 
     virtual std::optional<ui32> GetAvailableResultsCount() const override {
         return ReadyResults.size();
@@ -77,13 +86,13 @@ public:
             ;
     }
 
-    virtual void Apply(IDataTasksProcessor::ITask::TPtr task) override;
+    virtual void Apply(const std::shared_ptr<IApplyAction>& task) override;
 
     bool Finished() const  override {
         return IndexedData->IsFinished() && ReadyResults.empty();
     }
 
-    TConclusion<std::optional<TPartialReadResult>> GetBatch() override;
+    virtual TConclusion<std::shared_ptr<TPartialReadResult>> GetBatch() override;
     virtual void PrepareResults() override;
 
     virtual TConclusion<bool> ReadNextInterval() override;

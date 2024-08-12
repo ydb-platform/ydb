@@ -45,7 +45,7 @@ TColumnConstraints::TColumnConstraints(TNodePtr defaultExpr, bool nullable)
 
 
 TColumnSchema::TColumnSchema(TPosition pos, const TString& name, const TNodePtr& type, bool nullable,
-        TVector<TIdentifier> families, bool serial, TNodePtr defaultExpr)
+        TVector<TIdentifier> families, bool serial, TNodePtr defaultExpr, ETypeOfChange typeOfChange)
     : Pos(pos)
     , Name(name)
     , Type(type)
@@ -53,6 +53,7 @@ TColumnSchema::TColumnSchema(TPosition pos, const TString& name, const TNodePtr&
     , Families(families)
     , Serial(serial)
     , DefaultExpr(defaultExpr)
+    , TypeOfChange(typeOfChange)
 {
 }
 
@@ -218,6 +219,11 @@ bool INode::Init(TContext& ctx, ISource* src) {
     return true;
 }
 
+bool INode::InitReference(TContext& ctx) {
+    Y_UNUSED(ctx);
+    return true;
+}
+
 bool INode::DoInit(TContext& ctx, ISource* src) {
     Y_UNUSED(ctx);
     Y_UNUSED(src);
@@ -308,6 +314,62 @@ bool INode::HasSkip() const {
     return false;
 }
 
+TColumnNode* INode::GetColumnNode() {
+    return nullptr;
+}
+
+const TColumnNode* INode::GetColumnNode() const {
+    return nullptr;
+}
+
+TTupleNode* INode::GetTupleNode() {
+    return nullptr;
+}
+
+const TTupleNode* INode::GetTupleNode() const {
+    return nullptr;
+}
+
+TCallNode* INode::GetCallNode() {
+    return nullptr;
+}
+
+const TCallNode* INode::GetCallNode() const {
+    return nullptr;
+}
+
+TStructNode* INode::GetStructNode() {
+    return nullptr;
+}
+
+const TStructNode* INode::GetStructNode() const {
+    return nullptr;
+}
+
+TAccessNode* INode::GetAccessNode() {
+    return nullptr;
+}
+
+const TAccessNode* INode::GetAccessNode() const {
+    return nullptr;
+}
+
+TLambdaNode* INode::GetLambdaNode() {
+    return nullptr;
+}
+
+const TLambdaNode* INode::GetLambdaNode() const {
+    return nullptr;
+}
+
+TUdfNode* INode::GetUdfNode() {
+    return nullptr;
+}
+
+const TUdfNode* INode::GetUdfNode() const {
+    return nullptr;
+}
+
 void INode::VisitTree(const TVisitFunc& func) const {
     TVisitNodeSet visited;
     VisitTree(func, visited);
@@ -352,10 +414,224 @@ void INode::DoAdd(TNodePtr node) {
     Y_DEBUG_ABORT_UNLESS(false, "Node is not expandable");
 }
 
+bool IProxyNode::IsNull() const {
+    return Inner->IsNull();
+}
+
+bool IProxyNode::IsLiteral() const {
+    return Inner->IsNull();
+}
+
+TString IProxyNode::GetLiteralType() const {
+    return Inner->GetLiteralType();
+}
+
+TString IProxyNode::GetLiteralValue() const {
+    return Inner->GetLiteralValue();
+}
+
+bool IProxyNode::IsIntegerLiteral() const {
+    return Inner->IsIntegerLiteral();
+}
+
+INode::TPtr IProxyNode::ApplyUnaryOp(TContext& ctx, TPosition pos, const TString& opName) const {
+    return Inner->ApplyUnaryOp(ctx, pos, opName);
+}
+
+bool IProxyNode::IsAsterisk() const {
+    return Inner->IsAsterisk();
+}
+
+const TString* IProxyNode::SubqueryAlias() const {
+    return Inner->SubqueryAlias();
+}
+
+TString IProxyNode::GetOpName() const {
+    return Inner->GetOpName();
+}
+
+const TString* IProxyNode::GetLiteral(const TString& type) const {
+    return Inner->GetLiteral(type);
+}
+
+const TString* IProxyNode::GetColumnName() const {
+    return Inner->GetColumnName();
+}
+
+void IProxyNode::AssumeColumn() {
+    Inner->AssumeColumn();
+}
+
+const TString* IProxyNode::GetSourceName() const {
+    return Inner->GetSourceName();
+}
+
+const TString* IProxyNode::GetAtomContent() const {
+    return Inner->GetAtomContent();
+}
+
+bool IProxyNode::IsOptionalArg() const {
+    return Inner->IsOptionalArg();
+}
+
+size_t IProxyNode::GetTupleSize() const {
+    return Inner->GetTupleSize();
+}
+
+INode::TPtr IProxyNode::GetTupleElement(size_t index) const {
+    return Inner->GetTupleElement(index);
+}
+
+ITableKeys* IProxyNode::GetTableKeys() {
+    return Inner->GetTableKeys();
+}
+
+ISource* IProxyNode::GetSource() {
+    return Inner->GetSource();
+}
+
+TVector<INode::TPtr>* IProxyNode::ContentListPtr() {
+    return Inner->ContentListPtr();
+}
+
+TAggregationPtr IProxyNode::GetAggregation() const {
+    return Inner->GetAggregation();
+}
+
+void IProxyNode::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) {
+    Inner->CollectPreaggregateExprs(ctx, src, exprs);
+}
+
+INode::TPtr IProxyNode::WindowSpecFunc(const TPtr& type) const {
+    return Inner->WindowSpecFunc(type);
+}
+
+bool IProxyNode::SetViewName(TContext& ctx, TPosition pos, const TString& view) {
+    return Inner->SetViewName(ctx, pos, view);
+}
+
+bool IProxyNode::SetPrimaryView(TContext& ctx, TPosition pos) {
+    return Inner->SetPrimaryView(ctx, pos);
+}
+
+bool IProxyNode::UsedSubquery() const {
+    return Inner->UsedSubquery();
+}
+
+bool IProxyNode::IsSelect() const {
+    return Inner->IsSelect();
+}
+
+bool IProxyNode::HasSelectResult() const {
+    return Inner->HasSelectResult();
+}
+
+const TString* IProxyNode::FuncName() const {
+    return Inner->FuncName();
+}
+
+const TString* IProxyNode::ModuleName() const {
+    return Inner->ModuleName();
+}
+
+bool IProxyNode::HasSkip() const {
+    return Inner->HasSkip();
+}
+
+TColumnNode* IProxyNode::GetColumnNode() {
+    return Inner->GetColumnNode();
+}
+
+const TColumnNode* IProxyNode::GetColumnNode() const {
+    return static_cast<const INode*>(Inner.Get())->GetColumnNode();
+}
+
+TTupleNode* IProxyNode::GetTupleNode() {
+    return Inner->GetTupleNode();
+}
+
+const TTupleNode* IProxyNode::GetTupleNode() const {
+    return static_cast<const INode*>(Inner.Get())->GetTupleNode();
+}
+
+TCallNode* IProxyNode::GetCallNode() {
+    return Inner->GetCallNode();
+}
+
+const TCallNode* IProxyNode::GetCallNode() const {
+    return static_cast<const INode*>(Inner.Get())->GetCallNode();
+}
+
+TStructNode* IProxyNode::GetStructNode() {
+    return Inner->GetStructNode();
+}
+
+const TStructNode* IProxyNode::GetStructNode() const {
+    return static_cast<const INode*>(Inner.Get())->GetStructNode();
+}
+
+TAccessNode* IProxyNode::GetAccessNode() {
+    return Inner->GetAccessNode();
+}
+
+const TAccessNode* IProxyNode::GetAccessNode() const {
+    return static_cast<const INode*>(Inner.Get())->GetAccessNode();
+}
+
+TLambdaNode* IProxyNode::GetLambdaNode() {
+    return Inner->GetLambdaNode();
+}
+
+const TLambdaNode* IProxyNode::GetLambdaNode() const {
+    return static_cast<const INode*>(Inner.Get())->GetLambdaNode();
+}
+
+TUdfNode* IProxyNode::GetUdfNode() {
+    return Inner->GetUdfNode();
+}
+
+const TUdfNode* IProxyNode::GetUdfNode() const {
+    return static_cast<const INode*>(Inner.Get())->GetUdfNode();
+}
+
+void IProxyNode::DoUpdateState() const {
+    static_assert(static_cast<int>(ENodeState::End) == 9, "Need to support new states here");
+    State.Set(ENodeState::CountHint, Inner->GetCountHint());
+    State.Set(ENodeState::Const, Inner->IsConstant());
+    State.Set(ENodeState::MaybeConst, Inner->MaybeConstant());
+    State.Set(ENodeState::Aggregated, Inner->IsAggregated());
+    State.Set(ENodeState::AggregationKey, Inner->IsAggregationKey());
+    State.Set(ENodeState::OverWindow, Inner->IsOverWindow());
+}
+
+void IProxyNode::DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const {
+    Inner->VisitTree(func, visited);
+}
+
+bool IProxyNode::InitReference(TContext& ctx) {
+    return Inner->InitReference(ctx);
+}
+
+bool IProxyNode::DoInit(TContext& ctx, ISource* src) {
+    return Inner->Init(ctx, src);
+}
+
+void IProxyNode::DoAdd(TPtr node) {
+    Inner->Add(node);
+}
+
 void MergeHints(TTableHints& base, const TTableHints& overrides) {
     for (auto& i : overrides) {
         base[i.first] = i.second;
     }
+}
+
+TTableHints CloneContainer(const TTableHints& hints) {
+    TTableHints result;
+    for (auto& [name, nodes] : hints) {
+        result.emplace(std::make_pair(name, CloneContainer(nodes)));
+    }
+    return result;
 }
 
 TAstAtomNode::TAstAtomNode(TPosition pos, const TString& content, ui32 flags, bool isOptionalArg)
@@ -632,6 +908,14 @@ bool TCallNode::DoInit(TContext& ctx, ISource* src) {
     return true;
 }
 
+TCallNode* TCallNode::GetCallNode() {
+    return this;
+}
+
+const TCallNode* TCallNode::GetCallNode() const {
+    return this;
+}
+
 TCallNodeImpl::TCallNodeImpl(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args)
     : TCallNode(pos, opName, minArgs, maxArgs, args)
 {}
@@ -694,7 +978,7 @@ TCallDirectRow::TCallDirectRow(TPosition pos, const TString& opName, const TVect
 {}
 
 bool TCallDirectRow::DoInit(TContext& ctx, ISource* src) {
-    if (!src) {
+    if (!src || (ctx.CompactNamedExprs && src->IsFake())) {
         ctx.Error(Pos) << "Unable to use function: " << OpName << " without source";
         return false;
     }
@@ -759,6 +1043,48 @@ TWinRowNumber::TWinRowNumber(TPosition pos, const TString& opName, i32 minArgs, 
     : TWinAggrEmulation(pos, opName, minArgs, maxArgs, args)
 {}
 
+TWinCumeDist::TWinCumeDist(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args)
+    : TWinAggrEmulation(pos, opName, minArgs, maxArgs, args)
+{}
+
+bool TWinCumeDist::DoInit(TContext& ctx, ISource* src) {
+    if (!ValidateArguments(ctx)) {
+        return false;
+    }
+
+    YQL_ENSURE(Args.size() == 0);
+    TVector<TNodePtr> optionsElements;
+    if (ctx.AnsiCurrentRow) {
+        optionsElements.push_back(BuildTuple(Pos, { BuildQuotedAtom(Pos, "ansi", NYql::TNodeFlags::Default) }));
+    }
+    Args.push_back(BuildTuple(Pos, optionsElements));
+
+    MinArgs = MaxArgs = 1;
+    if (!TWinAggrEmulation::DoInit(ctx, src)) {
+        return false;
+    }
+
+    YQL_ENSURE(Args.size() == 1);
+    return true;
+}
+
+TWinNTile::TWinNTile(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args)
+    : TWinAggrEmulation(pos, opName, minArgs, maxArgs, args)
+{
+    FakeSource = BuildFakeSource(pos);
+}
+
+bool TWinNTile::DoInit(TContext& ctx, ISource* src) {
+    if (Args.size() >= 1 && !Args[0]->Init(ctx, FakeSource.Get())) {
+        return false;
+    }
+
+    if (!TWinAggrEmulation::DoInit(ctx, src)) {
+        return false;
+    }
+    return true;
+}
+
 TWinLeadLag::TWinLeadLag(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args)
     : TWinAggrEmulation(pos, opName, minArgs, maxArgs, args)
 {}
@@ -797,7 +1123,12 @@ bool TExternalFunctionConfig::DoInit(TContext& ctx, ISource* src) {
 }
 
 INode::TPtr TExternalFunctionConfig::DoClone() const {
-    return {};
+    TFunctionConfig cloned;
+    for (auto& [name, node] : Config) {
+        cloned[name] = SafeClone(node);
+    }
+
+    return new TExternalFunctionConfig(GetPos(), cloned);
 }
 
 bool TWinRank::DoInit(TContext& ctx, ISource* src) {
@@ -834,7 +1165,7 @@ bool TWinRank::DoInit(TContext& ctx, ISource* src) {
 
     if (Args.empty()) {
         for (const auto& spec: orderSpec) {
-            Args.push_back(spec->OrderExpr->Clone());
+            Args.push_back(spec->Clone()->OrderExpr);
         }
 
         if (Args.size() != 1) {
@@ -1002,7 +1333,7 @@ bool MaybeAutogenerated(const TString& name) {
 
 }
 
-bool TColumns::IsColumnPossible(TContext& ctx, const TString& name) {
+bool TColumns::IsColumnPossible(TContext& ctx, const TString& name) const {
     if (All || Real.contains(name) || Artificial.contains(name)) {
         return true;
     }
@@ -1032,11 +1363,15 @@ bool TColumns::IsColumnPossible(TContext& ctx, const TString& name) {
     return false;
 }
 
+TSortSpecification::TSortSpecification(const TNodePtr& orderExpr, bool ascending)
+    : OrderExpr(orderExpr->Clone())
+    , Ascending(ascending)
+    , CleanOrderExpr(orderExpr->Clone())
+{
+}
+
 TSortSpecificationPtr TSortSpecification::Clone() const {
-    auto res = MakeIntrusive<TSortSpecification>();
-    res->OrderExpr = OrderExpr->Clone();
-    res->Ascending = Ascending;
-    return res;
+    return MakeIntrusive<TSortSpecification>(CleanOrderExpr, Ascending);
 }
 
 TFrameBoundPtr TFrameBound::Clone() const {
@@ -1068,6 +1403,14 @@ TWindowSpecificationPtr TWindowSpecification::Clone() const {
     res->Session = SafeClone(Session);
     res->Frame = Frame->Clone();
     return res;
+}
+
+TWinSpecs CloneContainer(const TWinSpecs& specs) {
+    TWinSpecs newSpecs;
+    for (auto cur: specs) {
+        newSpecs.emplace(cur.first, cur.second->Clone());
+    }
+    return newSpecs;
 }
 
 TLegacyHoppingWindowSpecPtr TLegacyHoppingWindowSpec::Clone() const {
@@ -1113,6 +1456,14 @@ const TString* TColumnNode::GetColumnName() const {
 
 const TString* TColumnNode::GetSourceName() const {
     return UseSourceAsColumn ? &Empty : &Source;
+}
+
+TColumnNode* TColumnNode::GetColumnNode() {
+    return this;
+}
+
+const TColumnNode* TColumnNode::GetColumnNode () const {
+    return this;
 }
 
 bool TColumnNode::DoInit(TContext& ctx, ISource* src) {
@@ -1183,6 +1534,10 @@ void TColumnNode::SetUseSource() {
 
 bool TColumnNode::IsUseSourceAsColumn() const {
     return UseSourceAsColumn;
+}
+
+bool TColumnNode::IsUseSource() const {
+    return UseSource;
 }
 
 bool TColumnNode::IsReliable() const {
@@ -1581,7 +1936,7 @@ public:
     }
 
     TPtr DoClone() const override {
-        return {};
+        return new TInvalidLiteralNode(GetPos());
     }
 };
 
@@ -1863,6 +2218,14 @@ const TVector<TNodePtr>& TTupleNode::Elements() const {
     return Exprs;
 }
 
+TTupleNode* TTupleNode::GetTupleNode() {
+    return this;
+}
+
+const TTupleNode* TTupleNode::GetTupleNode() const {
+    return this;
+}
+
 bool TTupleNode::DoInit(TContext& ctx, ISource* src) {
     auto node(Y());
     for (auto& expr: Exprs) {
@@ -1934,6 +2297,14 @@ TNodePtr TStructNode::DoClone() const {
     return new TStructNode(Pos, CloneContainer(Exprs), CloneContainer(Labels), Ordered);
 }
 
+TStructNode* TStructNode::GetStructNode() {
+    return this;
+}
+
+const TStructNode* TStructNode::GetStructNode() const {
+    return this;
+}
+
 void TStructNode::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) {
     for (auto& expr : Exprs) {
         expr->CollectPreaggregateExprs(ctx, src, exprs);
@@ -1975,7 +2346,7 @@ TAstNode* TListOfNamedNodes::Translate(TContext& ctx) const {
 }
 
 TNodePtr TListOfNamedNodes::DoClone() const {
-    return {};
+    return new TListOfNamedNodes(GetPos(), CloneContainer(Exprs));
 }
 
 void TListOfNamedNodes::DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const {
@@ -2010,7 +2381,7 @@ TString TArgPlaceholderNode::GetName() const {
 }
 
 TNodePtr TArgPlaceholderNode::DoClone() const {
-    return {};
+    return new TArgPlaceholderNode(GetPos(), Name);
 }
 
 TNodePtr BuildArgPlaceholder(TPosition pos, const TString& name) {
@@ -2029,7 +2400,7 @@ public:
     {
         Y_DEBUG_ABORT_UNLESS(Ids.size() > 1);
         Y_DEBUG_ABORT_UNLESS(Ids[0].Expr);
-        auto column = dynamic_cast<TColumnNode*>(Ids[0].Expr.Get());
+        auto column = Ids[0].Expr->GetColumnNode();
         if (column) {
             ui32 idx = 1;
             TString source;
@@ -2072,6 +2443,14 @@ public:
         return Ids[0].Expr->GetSourceName();
     }
 
+    TAccessNode* GetAccessNode() override {
+        return this;
+    }
+
+    const TAccessNode* GetAccessNode() const override {
+        return this;
+    }
+
     bool DoInit(TContext& ctx, ISource* src) override {
         auto expr = Ids[0].Expr;
         const TPosition pos(expr->GetPos());
@@ -2088,7 +2467,7 @@ public:
             }
         }
         ui32 idx = 1;
-        auto column = dynamic_cast<TColumnNode*>(expr.Get());
+        auto column = expr->GetColumnNode();
         if (column) {
             const bool useSourceAsColumn = column->IsUseSourceAsColumn();
             ColumnOnly &= !useSourceAsColumn;
@@ -2319,7 +2698,7 @@ bool ValidateAllNodesForAggregation(TContext& ctx, const TVector<TNodePtr>& node
                     return false;
                 }
 
-                if (dynamic_cast<const TColumnNode*>(&current) || dynamic_cast<const TAccessNode*>(&current)) {
+                if (current.GetColumnNode() || current.GetAccessNode()) {
                     found = &current;
                     return false;
                 }
@@ -2356,9 +2735,15 @@ public:
     {
         Add("bind", AstNode(module), BuildQuotedAtom(pos, alias));
     }
+private:
+    TBindNode(const TBindNode& other)
+        : TAstListNode(other.GetPos())
+    {
+        Nodes = CloneContainer(other.Nodes);
+    }
 
     TPtr DoClone() const final {
-        return {};
+        return new TBindNode(*this);
     }
 };
 
@@ -2386,9 +2771,23 @@ public:
         }
     }
 
-protected:
+    TLambdaNode* GetLambdaNode() override {
+        return this;
+    }
+
+    const TLambdaNode* GetLambdaNode() const override {
+        return this;
+    }
+
+private:
+    TLambdaNode(const TLambdaNode& other)
+        : TAstListNode(other.GetPos())
+    {
+        Nodes = CloneContainer(other.Nodes);
+    }
+
     TPtr DoClone() const final {
-        return {};
+        return new TLambdaNode(*this);
     }
 
     void DoUpdateState() const final {
@@ -2518,7 +2917,7 @@ TUdfNode::TUdfNode(TPosition pos, const TVector<TNodePtr>& args)
         // If there aren't any named args, args are passed as vector of positional args,
         // else Args has length 2: tuple for positional args and struct for named args,
         // so let's construct tuple of args there. Other type checks will within DoInit call.
-        if (TTupleNode* as_tuple = dynamic_cast<TTupleNode*>(Args[0].Get()); !as_tuple) {
+        if (!Args[0]->GetTupleNode()) {
             Args = {BuildTuple(pos, args)};
         }
     }
@@ -2531,7 +2930,7 @@ bool TUdfNode::DoInit(TContext& ctx, ISource* src) {
         return false;
     }
 
-    TTupleNode* as_tuple = dynamic_cast<TTupleNode*>(Args[0].Get());
+    TTupleNode* as_tuple = Args[0]->GetTupleNode();
 
     if (!as_tuple || as_tuple->GetTupleSize() < 1) {
         ctx.Error(Pos) << "Udf: first argument must be a callable, like Foo::Bar";
@@ -2553,7 +2952,7 @@ bool TUdfNode::DoInit(TContext& ctx, ISource* src) {
     for (size_t i = 1; i < as_tuple->GetTupleSize(); ++i) {
         // TODO(): support named args in GetFunctionArgColumnStatus
         TNodePtr current = as_tuple->GetTupleElement(i);
-        if (TAccessNode* as_access = dynamic_cast<TAccessNode*>(current.Get()); as_access) {
+        if (TAccessNode* as_access = current->GetAccessNode(); as_access) {
             external.push_back(Y("DataType", Q(as_access->GetParts()[1].Name)));
             continue;
         }
@@ -2566,10 +2965,10 @@ bool TUdfNode::DoInit(TContext& ctx, ISource* src) {
         return true;
     }
 
-    if (TStructNode* named_args = dynamic_cast<TStructNode*>(Args[1].Get()); named_args) {
+    if (TStructNode* named_args = Args[1]->GetStructNode(); named_args) {
         for (const auto &arg: named_args->GetExprs()) {
             if (arg->GetLabel() == "TypeConfig") {
-                TypeConfig = MakeAtomFromExpression(ctx, arg);
+                TypeConfig = MakeAtomFromExpression(Pos, ctx, arg);
             } else if (arg->GetLabel() == "RunConfig") {
                 RunConfig = arg;
             }
@@ -2597,6 +2996,14 @@ TNodePtr TUdfNode::GetRunConfig() const {
 
 const TDeferredAtom& TUdfNode::GetTypeConfig() const {
     return TypeConfig;
+}
+
+TUdfNode* TUdfNode::GetUdfNode() {
+    return this;
+}
+
+const TUdfNode* TUdfNode::GetUdfNode() const {
+    return this;
 }
 
 TAstNode* TUdfNode::Translate(TContext& ctx) const {
@@ -2804,7 +3211,7 @@ TNodePtr GroundWithExpr(const TNodePtr& ground, const TNodePtr& expr) {
     return ground ? expr->Y("block", expr->Q(expr->L(ground, expr->Y("return", expr)))) : expr;
 }
 
-TSourcePtr TryMakeSourceFromExpression(TContext& ctx, const TString& currService, const TDeferredAtom& currCluster,
+TSourcePtr TryMakeSourceFromExpression(TPosition pos, TContext& ctx, const TString& currService, const TDeferredAtom& currCluster,
     TNodePtr node, const TString& view) {
     if (currCluster.Empty()) {
         ctx.Error() << "No cluster name given and no default cluster is selected";
@@ -2818,25 +3225,29 @@ TSourcePtr TryMakeSourceFromExpression(TContext& ctx, const TString& currService
         return BuildTableSource(node->GetPos(), table);
     }
 
-    if (dynamic_cast<TLambdaNode*>(node.Get())) {
+    if (node->GetLambdaNode()) {
         ctx.Error() << "Lambda is not allowed to be used as source. Did you forget to call a subquery template?";
         return nullptr;
     }
 
-    auto wrappedNode = node->Y("EvaluateAtom", node);
+    auto wrappedNode = new TAstListNodeImpl(pos, { 
+        new TAstAtomNodeImpl(pos, "EvaluateAtom", TNodeFlags::Default),
+        node
+    });
+
     TNodePtr tableKey = BuildTableKey(node->GetPos(), currService, currCluster, TDeferredAtom(wrappedNode, ctx), {view});
     TTableRef table(ctx.MakeName("table"), currService, currCluster, tableKey);
     table.Options = BuildInputOptions(node->GetPos(), GetContextHints(ctx));
     return BuildTableSource(node->GetPos(), table);
 }
 
-void MakeTableFromExpression(TContext& ctx, TNodePtr node, TDeferredAtom& table, const TString& prefix) {
+void MakeTableFromExpression(TPosition pos, TContext& ctx, TNodePtr node, TDeferredAtom& table, const TString& prefix) {
     if (auto literal = node->GetLiteral("String")) {
         table = TDeferredAtom(node->GetPos(), prefix + *literal);
         return;
     }
 
-    if (auto access = dynamic_cast<TAccessNode*>(node.Get())) {
+    if (auto access = node->GetAccessNode()) {
         auto ret = access->TryMakeTable();
         if (ret) {
             table = TDeferredAtom(node->GetPos(), prefix + *ret);
@@ -2848,11 +3259,15 @@ void MakeTableFromExpression(TContext& ctx, TNodePtr node, TDeferredAtom& table,
         node = node->Y("Concat", node->Y("String", node->Q(prefix)), node);
     }
 
-    auto wrappedNode = node->Y("EvaluateAtom", node);
+    auto wrappedNode = new TAstListNodeImpl(pos, { 
+        new TAstAtomNodeImpl(pos, "EvaluateAtom", TNodeFlags::Default),
+        node
+    });
+
     table = TDeferredAtom(wrappedNode, ctx);
 }
 
-TDeferredAtom MakeAtomFromExpression(TContext& ctx, TNodePtr node, const TString& prefix) {
+TDeferredAtom MakeAtomFromExpression(TPosition pos, TContext& ctx, TNodePtr node, const TString& prefix) {
     if (auto literal = node->GetLiteral("String")) {
         return TDeferredAtom(node->GetPos(), prefix + *literal);
     }
@@ -2861,13 +3276,17 @@ TDeferredAtom MakeAtomFromExpression(TContext& ctx, TNodePtr node, const TString
         node = node->Y("Concat", node->Y("String", node->Q(prefix)), node);
     }
 
-    auto wrappedNode = node->Y("EvaluateAtom", node);
+    auto wrappedNode = new TAstListNodeImpl(pos, { 
+        new TAstAtomNodeImpl(pos, "EvaluateAtom", TNodeFlags::Default),
+        node
+    });
+
     return TDeferredAtom(wrappedNode, ctx);
 }
 
 class TTupleResultNode: public INode {
 public:
-    TTupleResultNode(TNodePtr&& tuple, int ensureTupleSize)
+    TTupleResultNode(TNodePtr&& tuple, size_t ensureTupleSize)
         : INode(tuple->GetPos())
         , Node(std::move(tuple))
         , EnsureTupleSize(ensureTupleSize)
@@ -2889,7 +3308,7 @@ public:
     }
 
     TPtr DoClone() const final {
-        return {};
+        return new TTupleResultNode(Node->Clone(), EnsureTupleSize);
     }
 
     void DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const final {
@@ -2898,12 +3317,117 @@ public:
     }
 protected:
     TNodePtr Node;
-    const int EnsureTupleSize;
+    const size_t EnsureTupleSize;
 };
 
-TNodePtr BuildTupleResult(TNodePtr tuple, int ensureTupleSize) {
+TNodePtr BuildTupleResult(TNodePtr tuple, size_t ensureTupleSize) {
     return new TTupleResultNode(std::move(tuple), ensureTupleSize);
 }
 
+class TNamedExprReferenceNode: public IProxyNode {
+public:
+    TNamedExprReferenceNode(TNodePtr parent, const TString& name, TMaybe<size_t> tupleIndex)
+        : IProxyNode(parent->GetPos(), parent)
+        , Name(name)
+        , TupleIndex(tupleIndex)
+    {
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) final {
+        Y_UNUSED(src);
+        if (!IProxyNode::DoInit(ctx, nullptr) || !IProxyNode::InitReference(ctx)) {
+            return false;
+        }
+
+        Node = BuildAtom(GetPos(), Name, TNodeFlags::Default);
+        if (TupleIndex.Defined()) {
+            Node = Y("Nth", Node, Q(ToString(*TupleIndex)));
+        }
+
+        return true;
+    }
+
+    TAstNode* Translate(TContext& ctx) const override {
+        YQL_ENSURE(Node, "Init() should be done before Translate()");
+        return Node->Translate(ctx);
+    }
+
+    TPtr DoClone() const final {
+        // do not clone Inner here
+        return new TNamedExprReferenceNode(Inner, Name, TupleIndex);
+    }
+
+private:
+    const TString Name;
+    const TMaybe<size_t> TupleIndex;
+    TNodePtr Node;
+};
+
+TNodePtr BuildNamedExprReference(TNodePtr parent, const TString& name, TMaybe<size_t> tupleIndex) {
+    YQL_ENSURE(parent);
+    return new TNamedExprReferenceNode(parent, name, tupleIndex);
+}
+
+class TNamedExprNode: public IProxyNode {
+public:
+    TNamedExprNode(TNodePtr parent)
+        : IProxyNode(parent->GetPos(), parent)
+        , FakeSource(BuildFakeSource(parent->GetPos()))
+        , Referenced(false)
+    {
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) final {
+        YQL_ENSURE(!Referenced, "Refrence is initialized before named expr itself");
+        Y_UNUSED(src);
+        if (ctx.ValidateUnusedExprs) {
+            return IProxyNode::DoInit(ctx, FakeSource.Get());
+        }
+        // do actual init in InitReference()
+        return true;
+    }
+
+    bool InitReference(TContext& ctx) final {
+        Referenced = true;
+        return IProxyNode::DoInit(ctx, FakeSource.Get());
+    }
+
+    TAstNode* Translate(TContext& ctx) const override {
+        if (ctx.ValidateUnusedExprs || Referenced) {
+            return Inner->Translate(ctx);
+        }
+        auto unused = BuildQuotedAtom(GetPos(), "unused", TNodeFlags::Default);
+        return unused->Translate(ctx);
+    }
+
+    TPtr DoClone() const final {
+        return new TNamedExprNode(Inner->Clone());
+    }
+
+private:
+    const TSourcePtr FakeSource;
+    bool Referenced;
+};
+
+TNodePtr BuildNamedExpr(TNodePtr parent) {
+    YQL_ENSURE(parent);
+    return new TNamedExprNode(parent);
+}
+
+bool TVectorIndexSettings::Validate(TContext& ctx) const {
+    if (Metric.index() == 0) {
+        ctx.Error() << "either distance or similarity should be set";
+        return false;
+    } 
+    if (!VectorType) {
+        ctx.Error() << "vector_type should be set";
+        return false;
+    }
+    if (!VectorDimension) {
+        ctx.Error() << "vector_dimension should be set";
+        return false;
+    }
+    return true;
+}
 
 } // namespace NSQLTranslationV1

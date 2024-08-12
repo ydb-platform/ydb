@@ -1,10 +1,5 @@
 PROGRAM(ydb_query_replay)
 
-OWNER(
-    gvit
-    g:kikimr
-)
-
 ALLOCATOR(LF)
 
 YQL_LAST_ABI_VERSION()

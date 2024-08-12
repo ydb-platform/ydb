@@ -7,6 +7,7 @@
 #include <ydb/core/sys_view/nodes/nodes.h>
 #include <ydb/core/sys_view/query_stats/query_stats.h>
 #include <ydb/core/sys_view/query_stats/query_metrics.h>
+#include <ydb/core/sys_view/pg_tables/pg_tables.h>
 #include <ydb/core/sys_view/sessions/sessions.h>
 #include <ydb/core/sys_view/storage/pdisks.h>
 #include <ydb/core/sys_view/storage/vslots.h>
@@ -210,6 +211,17 @@ THolder<NActors::IActor> CreateSystemViewScan(const NActors::TActorId& ownerId, 
         tableId.SysViewInfo == TopPartitions1HourName)
     {
         return CreateTopPartitionsScan(ownerId, scanId, tableId, tableRange, columns);
+    }
+
+    if (tableId.SysViewInfo == PgTablesName) {
+        return CreatePgTablesScan(ownerId, scanId, tableId, tableRange, columns);
+    }
+
+    if (tableId.SysViewInfo == InformationSchemaTablesName) {
+        return CreateInformationSchemaTablesScan(ownerId, scanId, tableId, tableRange, columns);
+    }
+        if (tableId.SysViewInfo == PgClassName) {
+        return CreatePgClassScan(ownerId, scanId, tableId, tableRange, columns);
     }
 
     return {};

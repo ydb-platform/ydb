@@ -13,9 +13,12 @@ namespace NYql {
 
 class TKeySelectorBuilder {
 public:
-    TKeySelectorBuilder(TPositionHandle pos, TExprContext& ctx, bool useNativeDescSort, const TTypeAnnotationNode* itemType = nullptr);
+    TKeySelectorBuilder(TPositionHandle pos, TExprContext& ctx, bool useNativeDescSort,
+        const TTypeAnnotationNode* itemType = nullptr);
 
-    void ProcessKeySelector(const TExprNode::TPtr& keySelectorLambda, const TExprNode::TPtr& sortDirections = {});
+    void ProcessKeySelector(const TExprNode::TPtr& keySelectorLambda,
+        const TExprNode::TPtr& sortDirections = {},
+        bool unordered = false);
     void ProcessConstraint(const TSortedConstraintNode& sortConstraint);
     void ProcessRowSpec(const TYqlRowSpecInfo& rowSpec);
 
@@ -47,8 +50,8 @@ public:
 
 private:
     template <bool ComputedTuple, bool SingleColumn>
-    void AddColumn(const TExprNode::TPtr& rootLambda, const TExprNode::TPtr& keyNode, bool ascending, size_t columnIndex, const TExprNode::TPtr& structArg);
-    void AddColumn(const TStringBuf memberName, const TTypeAnnotationNode* columnType, bool ascending);
+    void AddColumn(const TExprNode::TPtr& rootLambda, const TExprNode::TPtr& keyNode, bool ascending, size_t columnIndex, const TExprNode::TPtr& structArg, bool unordered);
+    void AddColumn(const TStringBuf memberName, const TTypeAnnotationNode* columnType, bool ascending, bool unordered);
 
 private:
     TPositionHandle Pos_;

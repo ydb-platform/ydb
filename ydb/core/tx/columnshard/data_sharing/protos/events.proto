@@ -6,10 +6,6 @@ import "ydb/core/tx/columnshard/data_sharing/protos/initiator.proto";
 
 package NKikimrColumnShardDataSharingProto;
 
-message TEvProposeFromInitiator {
-    optional TDestinationSession Session = 1;
-}
-
 message TEvConfirmFromInitiator {
     optional string SessionId = 1;
 }

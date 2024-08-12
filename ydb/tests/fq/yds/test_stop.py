@@ -20,7 +20,7 @@ class TestStop(TestYdsBase):
     @pytest.mark.parametrize(
         "query_type",
         [fq.QueryContent.QueryType.ANALYTICS, fq.QueryContent.QueryType.STREAMING],
-        ids=["analytics", "streaming"]
+        ids=["analytics", "streaming"],
     )
     def test_stop_query(self, kikimr, client, query_type):
         self.init_topics("select_stop_" + str(query_type), create_output=False)

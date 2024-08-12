@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet",
-                "PlanNodeId": 14,
+                "PlanNodeId": 16,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,18 +14,18 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 12
+                                        "ExternalPlanNodeId": 14
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 13,
+                        "PlanNodeId": 15,
                         "Plans": [
                             {
                                 "Node Type": "Merge",
-                                "PlanNodeId": 12,
+                                "PlanNodeId": 14,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
@@ -34,7 +34,7 @@
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 10
+                                                        "ExternalPlanNodeId": 12
                                                     }
                                                 ],
                                                 "Limit": "1001",
@@ -42,14 +42,14 @@
                                                 "TopSortBy": "argument.t1.q2"
                                             }
                                         ],
-                                        "PlanNodeId": 11,
+                                        "PlanNodeId": 13,
                                         "Plans": [
                                             {
                                                 "KeyColumns": [
                                                     "t1.q2"
                                                 ],
                                                 "Node Type": "HashShuffle",
-                                                "PlanNodeId": 10,
+                                                "PlanNodeId": 12,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
@@ -69,58 +69,66 @@
                                                                 "Condition": "q2 = q1",
                                                                 "Inputs": [
                                                                     {
-                                                                        "ExternalPlanNodeId": 8
+                                                                        "ExternalPlanNodeId": 10
                                                                     },
                                                                     {
-                                                                        "ExternalPlanNodeId": 6
+                                                                        "ExternalPlanNodeId": 7
                                                                     }
                                                                 ],
                                                                 "Name": "LeftJoin (MapJoin)"
                                                             }
                                                         ],
-                                                        "PlanNodeId": 9,
+                                                        "PlanNodeId": 11,
                                                         "Plans": [
                                                             {
                                                                 "Node Type": "Map",
-                                                                "PlanNodeId": 8,
+                                                                "PlanNodeId": 10,
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "TableFullScan",
-                                                                        "Operators": [
+                                                                        "Node Type": "Stage",
+                                                                        "PlanNodeId": 9,
+                                                                        "Plans": [
                                                                             {
-                                                                                "Inputs": [],
-                                                                                "Name": "TableFullScan",
-                                                                                "ReadColumns": [
-                                                                                    "q1",
-                                                                                    "q2"
+                                                                                "Node Type": "TableFullScan",
+                                                                                "Operators": [
+                                                                                    {
+                                                                                        "Inputs": [],
+                                                                                        "Name": "TableFullScan",
+                                                                                        "ReadColumns": [
+                                                                                            "q1",
+                                                                                            "q2"
+                                                                                        ],
+                                                                                        "ReadRanges": [
+                                                                                            "q1 (-\u221e, +\u221e)",
+                                                                                            "q2 (-\u221e, +\u221e)"
+                                                                                        ],
+                                                                                        "ReadRangesPointPrefixLen": "0",
+                                                                                        "Scan": "Parallel",
+                                                                                        "Table": "postgres_jointest/join-group-by-with-null.test_plan/int8_tbl"
+                                                                                    }
                                                                                 ],
-                                                                                "ReadRanges": [
-                                                                                    "q1 (-\u221e, +\u221e)",
-                                                                                    "q2 (-\u221e, +\u221e)"
-                                                                                ],
-                                                                                "Table": "postgres_jointest/join-group-by-with-null.test_plan/int8_tbl"
+                                                                                "PlanNodeId": 8,
+                                                                                "Tables": [
+                                                                                    "postgres_jointest/join-group-by-with-null.test_plan/int8_tbl"
+                                                                                ]
                                                                             }
-                                                                        ],
-                                                                        "PlanNodeId": 7,
-                                                                        "Tables": [
-                                                                            "postgres_jointest/join-group-by-with-null.test_plan/int8_tbl"
                                                                         ]
                                                                     }
                                                                 ]
                                                             },
                                                             {
                                                                 "Node Type": "Broadcast",
-                                                                "PlanNodeId": 6,
+                                                                "PlanNodeId": 7,
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "Collect",
-                                                                        "PlanNodeId": 5,
+                                                                        "Node Type": "Stage",
+                                                                        "PlanNodeId": 6,
                                                                         "Plans": [
                                                                             {
                                                                                 "Node Type": "UnionAll",
-                                                                                "PlanNodeId": 4,
+                                                                                "PlanNodeId": 5,
                                                                                 "PlanNodeType": "Connection",
                                                                                 "Plans": [
                                                                                     {
@@ -129,49 +137,59 @@
                                                                                             {
                                                                                                 "Inputs": [
                                                                                                     {
-                                                                                                        "ExternalPlanNodeId": 2
+                                                                                                        "ExternalPlanNodeId": 3
                                                                                                     }
                                                                                                 ],
                                                                                                 "Limit": "10",
                                                                                                 "Name": "Limit"
                                                                                             }
                                                                                         ],
-                                                                                        "PlanNodeId": 3,
+                                                                                        "PlanNodeId": 4,
                                                                                         "Plans": [
                                                                                             {
                                                                                                 "Node Type": "UnionAll",
-                                                                                                "PlanNodeId": 2,
+                                                                                                "PlanNodeId": 3,
                                                                                                 "PlanNodeType": "Connection",
                                                                                                 "Plans": [
                                                                                                     {
-                                                                                                        "Node Type": "Limit-TableFullScan",
+                                                                                                        "Node Type": "Limit",
                                                                                                         "Operators": [
                                                                                                             {
                                                                                                                 "Inputs": [
                                                                                                                     {
-                                                                                                                        "InternalOperatorId": 1
+                                                                                                                        "ExternalPlanNodeId": 1
                                                                                                                     }
                                                                                                                 ],
                                                                                                                 "Limit": "10",
                                                                                                                 "Name": "Limit"
-                                                                                                            },
-                                                                                                            {
-                                                                                                                "Inputs": [],
-                                                                                                                "Name": "TableFullScan",
-                                                                                                                "ReadColumns": [
-                                                                                                                    "q1",
-                                                                                                                    "q2"
-                                                                                                                ],
-                                                                                                                "ReadRanges": [
-                                                                                                                    "q1 (-\u221e, +\u221e)",
-                                                                                                                    "q2 (-\u221e, +\u221e)"
-                                                                                                                ],
-                                                                                                                "Table": "postgres_jointest/join-group-by-with-null.test_plan/int8_tbl"
                                                                                                             }
                                                                                                         ],
-                                                                                                        "PlanNodeId": 1,
-                                                                                                        "Tables": [
-                                                                                                            "postgres_jointest/join-group-by-with-null.test_plan/int8_tbl"
+                                                                                                        "PlanNodeId": 2,
+                                                                                                        "Plans": [
+                                                                                                            {
+                                                                                                                "Node Type": "TableFullScan",
+                                                                                                                "Operators": [
+                                                                                                                    {
+                                                                                                                        "Inputs": [],
+                                                                                                                        "Name": "TableFullScan",
+                                                                                                                        "ReadColumns": [
+                                                                                                                            "q1",
+                                                                                                                            "q2"
+                                                                                                                        ],
+                                                                                                                        "ReadRanges": [
+                                                                                                                            "q1 (-\u221e, +\u221e)",
+                                                                                                                            "q2 (-\u221e, +\u221e)"
+                                                                                                                        ],
+                                                                                                                        "ReadRangesPointPrefixLen": "0",
+                                                                                                                        "Scan": "Parallel",
+                                                                                                                        "Table": "postgres_jointest/join-group-by-with-null.test_plan/int8_tbl"
+                                                                                                                    }
+                                                                                                                ],
+                                                                                                                "PlanNodeId": 1,
+                                                                                                                "Tables": [
+                                                                                                                    "postgres_jointest/join-group-by-with-null.test_plan/int8_tbl"
+                                                                                                                ]
+                                                                                                            }
                                                                                                         ]
                                                                                                     }
                                                                                                 ]

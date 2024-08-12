@@ -22,7 +22,7 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = RpcClientLogger;
+static constexpr auto& Logger = RpcClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -390,6 +390,11 @@ public:
     int GetInflightRequestCount() override
     {
         YT_UNIMPLEMENTED();
+    }
+
+    const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override
+    {
+        return PrimaryChannel_->GetChannelMemoryTracker();
     }
 
 private:

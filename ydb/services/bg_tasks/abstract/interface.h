@@ -3,6 +3,8 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/conclusion/status.h>
+#include <ydb/library/conclusion/result.h>
 
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/json/json_reader.h>
@@ -137,16 +139,12 @@ public:
 
     template <class T>
     const T& GetAsSafe() const {
-        auto result = std::dynamic_pointer_cast<T>(Object);
-        Y_ABORT_UNLESS(!!result);
-        return *result;
+        return *GetObjectPtrVerifiedAs<T>();
     }
 
     template <class T>
     T& GetAsSafe() {
-        auto result = std::dynamic_pointer_cast<T>(Object);
-        Y_ABORT_UNLESS(!!result);
-        return *result;
+        return *GetObjectPtrVerifiedAs<T>();
     }
 
     std::shared_ptr<IInterface> GetObjectPtr() const {
@@ -156,6 +154,13 @@ public:
     std::shared_ptr<IInterface> GetObjectPtrVerified() const {
         AFL_VERIFY(Object);
         return Object;
+    }
+
+    template <class T>
+    std::shared_ptr<T> GetObjectPtrVerifiedAs() const {
+        auto result = std::dynamic_pointer_cast<T>(Object);
+        Y_ABORT_UNLESS(!!result);
+        return result;
     }
 
     const IInterface& GetObjectVerified() const {
@@ -239,6 +244,37 @@ public:
     }
 };
 
+template <class TProto, class IBaseInterface>
+class TInterfaceProtoAdapter: public IBaseInterface {
+private:
+    using TBase = IBaseInterface;
+    virtual TConclusionStatus DoDeserializeFromProto(const TProto& proto) = 0;
+    virtual TProto DoSerializeToProto() const = 0;
+protected:
+    using TProtoStorage = TProto;
+    virtual TConclusionStatus DoDeserializeFromString(const TString& data) override final {
+        TProto proto;
+        if (!proto.ParseFromArray(data.data(), data.size())) {
+            return TConclusionStatus::Fail("cannot parse proto string as " + TypeName<TProto>());
+        }
+        return DoDeserializeFromProto(proto);
+    }
+    virtual TString DoSerializeToString() const override final {
+        TProto proto = DoSerializeToProto();
+        return proto.SerializeAsString();
+    }
+public:
+    using TBase::TBase;
+
+    TConclusionStatus DeserializeFromProto(const TProto& proto) {
+        return DoDeserializeFromProto(proto);
+    }
+    TProto SerializeToProto() const {
+        return DoSerializeToProto();
+    }
+};
+
+
 class TDefaultJsonContainerPolicy {
 public:
     static TString GetClassName(const NJson::TJsonValue& jsonInfo) {
@@ -303,6 +339,7 @@ template <class IInterface, class TOperatorPolicy = TDefaultProtoContainerPolicy
 class TInterfaceProtoContainer: public TCommonInterfaceContainer<IInterface> {
 private:
     using TProto = typename IInterface::TProto;
+    using TSelf = TInterfaceProtoContainer<IInterface, TOperatorPolicy>;
 protected:
     using TBase = TCommonInterfaceContainer<IInterface>;
     using TFactory = typename TBase::TFactory;
@@ -327,6 +364,14 @@ public:
         return true;
     }
 
+    static TConclusion<TSelf> BuildFromProto(const TProto& data) {
+        TSelf result;
+        if (!result.DeserializeFromProto(data)) {
+            return TConclusionStatus::Fail("cannot parse interface from proto: " + data.DebugString());
+        }
+        return result;
+    }
+
     TProto SerializeToProto() const {
         TProto result;
         if (!Object) {
@@ -345,6 +390,21 @@ public:
         }
         Object->SerializeToProto(result);
         TOperatorPolicy::SetClassName(result, Object->GetClassName());
+    }
+
+    TString SerializeToString() const {
+        return SerializeToProto().SerializeAsString();
+    }
+
+    TConclusionStatus DeserializeFromString(const TString& data) {
+        TProto proto;
+        if (!proto.ParseFromArray(data.data(), data.size())) {
+            return TConclusionStatus::Fail("cannot parse string as proto");
+        }
+        if (!DeserializeFromProto(proto)) {
+            return TConclusionStatus::Fail("cannot parse proto in container");
+        }
+        return TConclusionStatus::Success();
     }
 };
 

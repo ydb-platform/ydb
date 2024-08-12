@@ -16,8 +16,9 @@ class TYqlTypeYsonSaverBase {
 public:
     typedef NYson::TYsonConsumerBase TConsumer;
 
-    TYqlTypeYsonSaverBase(TConsumer& writer)
+    TYqlTypeYsonSaverBase(TConsumer& writer, bool extendedForm)
         : Writer(writer)
+        , ExtendedForm(extendedForm)
     {
     }
 
@@ -37,6 +38,7 @@ protected:
 
 protected:
     NYson::TYsonConsumerBase& Writer;
+    const bool ExtendedForm;
 };
 
 
@@ -45,8 +47,8 @@ class TYqlTypeYsonSaverImpl: public TYqlTypeYsonSaverBase {
     typedef TYqlTypeYsonSaverImpl<TDerived> TSelf;
 
 public:
-    TYqlTypeYsonSaverImpl(TConsumer& writer)
-        : TYqlTypeYsonSaverBase(writer)
+    TYqlTypeYsonSaverImpl(TConsumer& writer, bool extendedForm)
+        : TYqlTypeYsonSaverBase(writer, extendedForm)
     {
     }
 
@@ -62,7 +64,7 @@ protected:
         Writer.OnListItem();
         Writer.OnStringScalar(taggedType.GetTag());
         Writer.OnListItem();
-        TSelf baseType(Writer);
+        TSelf baseType(Writer, ExtendedForm);
         baseType.Save(taggedType.GetBaseType());
         Writer.OnEndList();
     }
@@ -78,7 +80,7 @@ protected:
             Writer.OnListItem();
             Writer.OnStringScalar(structType.GetMemberName(i));
             Writer.OnListItem();
-            TSelf value(Writer);
+            TSelf value(Writer, ExtendedForm);
             value.Save(structType.GetMemberType(i));
             Writer.OnEndList();
         }
@@ -90,7 +92,7 @@ protected:
     void SaveListType(const TListType& listType) {
         SaveTypeHeader("ListType");
         Writer.OnListItem();
-        TSelf item(Writer);
+        TSelf item(Writer, ExtendedForm);
         item.Save(listType.GetItemType());
         Writer.OnEndList();
     }
@@ -99,7 +101,7 @@ protected:
     void SaveStreamType(const TStreamType& streamType) {
         SaveTypeHeader("StreamType");
         Writer.OnListItem();
-        TSelf item(Writer);
+        TSelf item(Writer, ExtendedForm);
         item.Save(streamType.GetItemType());
         Writer.OnEndList();
     }
@@ -108,7 +110,7 @@ protected:
     void SaveOptionalType(const TOptionalType& optionalType) {
         SaveTypeHeader("OptionalType");
         Writer.OnListItem();
-        TSelf item(Writer);
+        TSelf item(Writer, ExtendedForm);
         item.Save(optionalType.GetItemType());
         Writer.OnEndList();
     }
@@ -117,10 +119,10 @@ protected:
     void SaveDictType(const TDictType& dictType) {
         SaveTypeHeader("DictType");
         Writer.OnListItem();
-        TSelf key(Writer);
+        TSelf key(Writer, ExtendedForm);
         key.Save(dictType.GetKeyType());
         Writer.OnListItem();
-        TSelf val(Writer);
+        TSelf val(Writer, ExtendedForm);
         val.Save(dictType.GetPayloadType());
         Writer.OnEndList();
     }
@@ -132,7 +134,7 @@ protected:
         Writer.OnBeginList();
         for (ui32 i = 0, e = tupleType.GetElementsCount(); i < e; ++i) {
             Writer.OnListItem();
-            TSelf element(Writer);
+            TSelf element(Writer, ExtendedForm);
             element.Save(tupleType.GetElementType(i));
         }
         Writer.OnEndList();
@@ -160,7 +162,7 @@ protected:
         Writer.OnListItem();
         Writer.OnBeginList();
         Writer.OnListItem();
-        TSelf ret(Writer);
+        TSelf ret(Writer, ExtendedForm);
         ret.Save(callableType.GetReturnType());
         Writer.OnEndList();
         // args
@@ -170,7 +172,7 @@ protected:
             Writer.OnListItem();
             Writer.OnBeginList();
             Writer.OnListItem();
-            TSelf arg(Writer);
+            TSelf arg(Writer, ExtendedForm);
             arg.Save(callableType.GetArgumentType(i));
             if (!callableType.GetArgumentName(i).empty()) {
                 Writer.OnListItem();
@@ -193,7 +195,7 @@ protected:
     void SaveVariantType(const TVariantType& variantType) {
         SaveTypeHeader("VariantType");
         Writer.OnListItem();
-        TSelf item(Writer);
+        TSelf item(Writer, ExtendedForm);
         item.Save(variantType.GetUnderlyingType());
         Writer.OnEndList();
     }

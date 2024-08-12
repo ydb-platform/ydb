@@ -2,6 +2,51 @@
 
 # Список изменений {{ ydb-short-name }} CLI
 
+## Версия 2.10.0 {#2-10-0}
+
+Дата выхода 24 июня 2024. Для обновления до версии **2.10.0** перейдите в раздел [Загрузки](downloads/index.md#ydb-cli).
+
+**Функциональность:**
+
+* Добавлена команда `ydb sql`, работающая поверх QueryService, позволяющая выполнять любые DML/DDL команды.
+* Добавлен режим `notx` для опции `--tx-mode` в команде `ydb table query execute`.
+* Добавлены времена начала и конца в описании длительных операций (export, import).
+* Добавлена поддержка описания объектов типа replication в командах `ydb scheme describe` и `ydb scheme ls`.
+* Добавлена поддержка типов big datetime: `Date32`, `Datetime64`, `Timestamp64`, `Interval64`.
+* Переработана команда `ydb workload`:
+   * Добавлена опция `--clear` в подкоманде `init`, позволяющая удалить все существующие таблицы перед созданием новых.
+   * Добавлена команда `ydb workload * import` для заполнения таблиц начальным контентом перед началом нагрузки. 
+
+**Изменения с потерей обратной совместимости:**
+* Переработана команда `ydb workload`:
+   * Опция `--path` перемещена на уровень конкретного типа нагрузки. Например: `ydb workload tpch --path some/tables/path init ...`.
+   * Значение опции `--store=s3` переименовано в `--store=external-s3` в подкоманде `init`.
+
+**Исправления ошибок:**
+
+* Исправлена работа с цветовыми схемами в формате `PrettyTable`
+
+## Версия 2.9.0 {#2-9-0}
+
+Дата выхода 25 апреля 2024. Для обновления до версии **2.9.0** перейдите в раздел [Загрузки](downloads/index.md#ydb-cli).
+
+**Функциональность:**
+
+* Улучшены таблицы с логическими планами запросов: стали информативнее, добавлены цвета, исправлены некоторые ошибки.
+* Для команды `ydb workload` поддержана опция `-v`, включающая вывод отладочной информации.
+* Добавлена возможность запустить `ydb workload tpch --store s3` с источником s3 для измерения производительности федеративных запросов.
+* Добавлена опция `--rate` для команды `ydb workload` для ограничения количества транзакций (запросов) в секунду.
+* Добавлена опция `--use-virtual-addressing` для импорта/экспорта s3, позволяющая переключить режим [virtual hosting of buckets](https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html) для схемы путей s3.
+* Улучшена производительность команды `ydb scheme ls` параллельным запуском листингов директорий.
+
+**Исправления ошибок:**
+
+* Исправлено обрезание лишних символов при переносе строк в таблицах CLI
+* Исправлена ошибка обращения к памяти в команде `tools restore`.
+* Исправлено игнорирование опции `--timeout` в generic и scan запросах.
+* Добавлен таймаут 60s на проверку версии и скачивание бинарного файла CLI для избежания бесконечного ожидания.
+* Исправлен ряд незначительных ошибок: опечатки, обработка пустых файлов и т.д.
+
 ## Версия 2.8.0 {#2-8-0}
 
 Дата выхода 12 января 2024. Для обновления до версии **2.8.0** перейдите в раздел [Загрузки](downloads/index.md#ydb-cli).
@@ -10,9 +55,9 @@
 
 * Добавлены команды управления конфигурациями кластера [ydb admin config](reference/ydb-cli/configs.md) и [ydb admin volatile-config](reference/ydb-cli/configs.md).
 
-* Добавлена поддержка загрузки PostgreSQL-совместимых типов командой [ydb import file csv|tsv|json](reference/ydb-cli/export_import/import-file.md). Только для строковых таблиц.
+* Добавлена поддержка загрузки PostgreSQL-совместимых типов командой [ydb import file csv|tsv|json](reference/ydb-cli/export-import/import-file.md). Только для строковых таблиц.
 
-* Добавлена поддержка загрузки директории из S3-совместимого хранилища в команде [ydb import s3](reference/ydb-cli/export_import/s3_import.md). Пока доступна только под Linux и Mac OS.
+* Добавлена поддержка загрузки директории из S3-совместимого хранилища в команде [ydb import s3](reference/ydb-cli/export-import/import-s3.md). Пока доступна только под Linux и Mac OS.
 
 * Добавлена поддержка вывода результата выполнения команд [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb yql](reference/ydb-cli/yql.md) и [ydb scripting yql](reference/ydb-cli/scripting-yql.md) в формате [Apache Parquet](https://parquet.apache.org/docs/).
 
@@ -90,17 +135,17 @@
 
 **Исправления ошибок:**
 
-* Исправлена потеря строк при загрузке командой [ydb import file json](reference/ydb-cli/export_import/import-file.md).
+* Исправлена потеря строк при загрузке командой [ydb import file json](reference/ydb-cli/export-import/import-file.md).
 
 * Исправлен неучет статистики во время прогрева команд [ydb workload topic run write|read|full](reference/ydb-cli/workload-topic.md#run-write).
 
 * Исправлен неполный вывод статистики в командах [ydb scripting yql](reference/ydb-cli/scripting-yql.md) и [ydb yql](reference/ydb-cli/yql.md).
 
-* Исправлен неправильный вывод progress bar'a в командах [ydb tools dump](reference/ydb-cli/export_import/tools_dump.md) и [ydb tools restore](reference/ydb-cli/export_import/tools_restore.md).
+* Исправлен неправильный вывод progress bar'a в командах [ydb tools dump](reference/ydb-cli/export-import/tools-dump.md) и [ydb tools restore](reference/ydb-cli/export-import/tools-restore.md).
 
-* Исправлена ошибка загрузки больших файлов с заголовком в команде [ydb import file csv|tsv](reference/ydb-cli/export_import/import-file.md).
+* Исправлена ошибка загрузки больших файлов с заголовком в команде [ydb import file csv|tsv](reference/ydb-cli/export-import/import-file.md).
 
-* Исправлено зависание команды [ydb tools restore --import-data](reference/ydb-cli/export_import/tools_restore.md#optional).
+* Исправлено зависание команды [ydb tools restore --import-data](reference/ydb-cli/export-import/tools-restore.md#optional).
 
 * Исправлена ошибка `Unknown value Rejected` при выполнении команды [ydb operation list buildindex](reference/ydb-cli/operation-list.md).
 
@@ -110,17 +155,17 @@
 
 **Функциональность:**
 
-* Для команды `ydb import file` добавлен параметр [--timeout](reference/ydb-cli/export_import/import-file.md#optional), задающий время, в течение которого должна быть выполнена операция на сервере.
-* Добавлен индикатор прогресса в командах [ydb scheme rmdir --recursive](reference/ydb-cli/commands/dir.md#rmdir) и [ydb import file](reference/ydb-cli/export_import/import-file.md).
+* Для команды `ydb import file` добавлен параметр [--timeout](reference/ydb-cli/export-import/import-file.md#optional), задающий время, в течение которого должна быть выполнена операция на сервере.
+* Добавлен индикатор прогресса в командах [ydb scheme rmdir --recursive](reference/ydb-cli/commands/dir.md#rmdir) и [ydb import file](reference/ydb-cli/export-import/import-file.md).
 * Добавлена команда [ydb workload kv run read-rows](reference/ydb-cli/workload-kv.md#read-rows-kv), которая нагружает базу запросами на чтение строк, используя новый экспериментальный API вызов ReadRows (реализован только в ветке [main](https://github.com/ydb-platform/ydb)), выполняющий более быстрое чтение по ключу, чем [select](reference/ydb-cli/workload-kv.md#select-kv).
 * В [ydb workload topic](reference/ydb-cli/workload-topic.md) добавлены новые параметры `--warmup-time`, `--percentile`, `--topic`, задающие время прогрева теста, процентиль в выводе статистики и имя топика соответственно.
 * Добавлена команда [ydb workload tpch](reference/ydb-cli/workload-tpch.md) для запуска нагрузочного теста TPC-H.
-* Добавлен флаг `--ordered` в команде [ydb tools dump](reference/ydb-cli/export_import/tools_dump.md), сохраняющий порядок по первичному ключу в таблицах.
+* Добавлен флаг `--ordered` в команде [ydb tools dump](reference/ydb-cli/export-import/tools-dump.md), сохраняющий порядок по первичному ключу в таблицах.
 
 **Производительность:**
 
-* Увеличена скорость загрузки данных в команде `ydb import file` за счет добавления параллельной загрузки. Число потоков задается новым параметром [--threads](reference/ydb-cli/export_import/import-file.md#optional).
-* Увеличена производительность команды [ydb import file json](reference/ydb-cli/export_import/import-file.md), за счет уменьшения числа копирований данных.
+* Увеличена скорость загрузки данных в команде `ydb import file` за счет добавления параллельной загрузки. Число потоков задается новым параметром [--threads](reference/ydb-cli/export-import/import-file.md#optional).
+* Увеличена производительность команды [ydb import file json](reference/ydb-cli/export-import/import-file.md), за счет уменьшения числа копирований данных.
 
 ## Версия 2.4.0 {#2-4-0}
 
@@ -128,7 +173,7 @@
 
 **Функциональность:**
 
-* Добавлена возможность загрузки нескольких файлов командой [ydb import file](reference/ydb-cli/export_import/import-file.md).
+* Добавлена возможность загрузки нескольких файлов командой [ydb import file](reference/ydb-cli/export-import/import-file.md).
 * Добавлена поддержка удаления колоночных таблиц для команды [ydb scheme rmdir --recursive](reference/ydb-cli/commands/dir.md#rmdir).
 * Повышена стабильность работы команды [ydb workload topic](reference/ydb-cli/workload-topic.md).
 
@@ -139,13 +184,13 @@
 **Функциональность:**
 
 * Добавлен интерактивный режим выполнения запросов. Для перехода в интерактивный режим выполните команду [ydb yql](reference/ydb-cli/yql.md) без аргументов. Режим экспериментальный, обратная совместимость пока не гарантируется.
-* Добавлена команда [ydb index rename](reference/ydb-cli/commands/secondary_index.md#rename) для [атомарной замены](best_practices/secondary_indexes.md#atomic-index-replacement) или переименования вторичного индекса.
+* Добавлена команда [ydb index rename](reference/ydb-cli/commands/secondary_index.md#rename) для [атомарной замены](dev/secondary-indexes.md#atomic-index-replacement) или переименования вторичного индекса.
 * Добавлена команда `ydb workload topic` для запуска нагрузки, которая читает и записывает сообщения в топики.
 * Для команды `ydb scheme rmdir` добавлен параметр [--recursive](reference/ydb-cli/commands/dir.md#rmdir-options), который позволяет рекурсивно удалить директорию вместе со всем содержимым.
 * Для команды [ydb scheme describe](reference/ydb-cli/commands/scheme-describe.md) добавлена поддержка типов `topic` и `coordination node`.
 * Для команды `ydb topic consumer` добавлен параметр [--commit](reference/ydb-cli/topic-read.md#osnovnye-opcionalnye-parametry) для подтверждения прочитанных сообщений.
-* Для команды `ydb import file csv|tsv` добавлен параметр [--columns](reference/ydb-cli/export_import/import-file.md#optional), с помощью которого можно указать список колонок вместо заголовка в файле.
-* Для команды `ydb import file csv|tsv` добавлен параметр [--newline-delimited](reference/ydb-cli/export_import/import-file.md#optional), который подтверждает отсутствие символа переноса строки в данных. Использование этого параметра ускоряет импорт за счет параллельного чтения из нескольких секций файла.
+* Для команды `ydb import file csv|tsv` добавлен параметр [--columns](reference/ydb-cli/export-import/import-file.md#optional), с помощью которого можно указать список колонок вместо заголовка в файле.
+* Для команды `ydb import file csv|tsv` добавлен параметр [--newline-delimited](reference/ydb-cli/export-import/import-file.md#optional), который подтверждает отсутствие символа переноса строки в данных. Использование этого параметра ускоряет импорт за счет параллельного чтения из нескольких секций файла.
 
 **Исправления ошибок:**
 
@@ -172,8 +217,8 @@
 **Улучшения:**
 
 * Добавлена поддержка параметра `--stats` команды [ydb scheme describe](reference/ydb-cli/commands/scheme-describe.md) для колоночных таблиц.
-* Добавлена поддержка файлов в формате Parquet для импорта командой [ydb import](reference/ydb-cli/export_import/import-file.md).
-* Поддержаны дополнительное логирование и ретраи для команды [ydb import](reference/ydb-cli/export_import/import-file.md).
+* Добавлена поддержка файлов в формате Parquet для импорта командой [ydb import](reference/ydb-cli/export-import/import-file.md).
+* Поддержаны дополнительное логирование и ретраи для команды [ydb import](reference/ydb-cli/export-import/import-file.md).
 
 ## Версия 2.1.0 {#2-1-0}
 
@@ -186,7 +231,7 @@
 * Для команды [ydb scheme ls](reference/ydb-cli/commands/scheme-ls.md) добавлен параметр `-1`, включающая режим вывода по одному объекту на строку.
 * URL сервиса IAM теперь можно сохранять в профиле.
 * Добавлена возможность использовать аутентификацию по логину и паролю без указания пароля.
-* Добавлена поддержка профилей AWS в команде [ydb export s3](reference/ydb-cli/export_import/s3_conn.md#auth).
+* Добавлена поддержка профилей AWS в команде [ydb export s3](reference/ydb-cli/export-import/auth-s3.md#auth).
 * Добавлена возможность создания профиля используя `stdin`. Например, можно передать вывод команды [YC CLI](https://cloud.yandex.ru/docs/cli/) `yc ydb database get information` на вход команде `ydb config profile create`.
 
 **Исправления ошибок:**
@@ -230,5 +275,5 @@
 
 **Функциональность:**
 
-* Добавлена возможность сжатия данных при экспорте в S3-совместимое хранилище (см. параметр `--compression` команды [ydb export s3](reference/ydb-cli/export_import/s3_export.md)).
+* Добавлена возможность сжатия данных при экспорте в S3-совместимое хранилище (см. параметр `--compression` команды [ydb export s3](reference/ydb-cli/export-import/export-s3.md)).
 * Добавлена возможность управления автоматической проверкой доступности новой версии {{ ydb-short-name }} CLI (см. параметры `--disable-checks` и `--enable-checks` команды [ydb version](reference/ydb-cli/version.md)).

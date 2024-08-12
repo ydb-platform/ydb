@@ -9,10 +9,11 @@ namespace NTable{
             ICompactionBackend* backend,
             IResourceBroker* broker,
             ITimeProvider* time,
+            NUtil::ILogger* logger,
             TString taskNameSuffix)
     {
         return MakeHolder<NCompGen::TGenCompactionStrategy>(
-                table, backend, broker, time, std::move(taskNameSuffix));
+                table, backend, broker, time, logger, std::move(taskNameSuffix));
     }
 
 }

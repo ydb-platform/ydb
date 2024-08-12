@@ -8,14 +8,23 @@ meta:
   title: YDB Documentation
 links:
   - title: Getting started
-    description: Deploy your cluster and perform basic operations with data
+    description: Deploy your first YDB instance to experiment with
     href: quickstart
   - title: Concepts
     description: How YDB works, its features and available usage modes
     href: concepts/
-  - title: Recommendations
-    description: A set of recommendations for practical service use
-    href: best_practices/
+  - title: For DevOps
+    description: How to run production YDB clusters
+    href: devops/
+  - title: For Developers
+    description: How to develop applications working with YDB
+    href: dev/
+  - title: For Security Engineers
+    description: How to secure YDB clusters
+    href: security/
+  - title: For Contributors
+    description: How to contribute to YDB core and satellite projects
+    href: contributor/
   - title: YQL reference guide
     description: Description of YQL syntax and built-in functions
     href: yql/reference/
@@ -25,12 +34,6 @@ links:
   - title: Working with the SDK
     description: YDB SDK reference
     href: reference/ydb-sdk/
-  - title: Working with PostgreSQL 
-    description: Compatibility with PostgreSQL
-    href: postgresql/  
-  - title: Managing databases
-    description: Configuring, maintaining, monitoring, and performing diagnostics of YDB databases
-    href: db/
-  - title: Managing a cluster
-    description: Configuring, maintaining, monitoring, and performing diagnostics of YDB clusters
-    href: cluster/
+  - title: PostgreSQL compatibility
+    description: Integrate with PostgreSQL ecosystem
+    href: postgresql/intro/

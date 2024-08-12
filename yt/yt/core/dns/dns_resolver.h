@@ -17,7 +17,6 @@ struct TDnsResolveOptions
 };
 
 void FormatValue(TStringBuilderBase* builder, const TDnsResolveOptions options, TStringBuf spec);
-TString ToString(const TDnsResolveOptions& options);
 
 ////////////////////////////////////////////////////////////////////////////////
 

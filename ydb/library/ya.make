@@ -1,7 +1,7 @@
 RECURSE(
     accessor
-    actors
     aclib
+    actors
     arrow_clickhouse
     arrow_kernels
     arrow_parquet
@@ -14,9 +14,10 @@ RECURSE(
     grpc
     http_proxy
     keys
-    login
     logger
+    login
     mkql_proto
+    minsketch
     naming_conventions
     ncloud
     pdisk_io
@@ -31,8 +32,8 @@ RECURSE(
     time_series_vec
     wilson_ids
     workload
-    yaml_config
     workload
+    yaml_config
     yaml_config
     ycloud
     yql

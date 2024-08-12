@@ -115,7 +115,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             break;
 
         default:
-            Y_DEBUG_ABORT_UNLESS(false, "Unknown import kind");
+            Y_DEBUG_ABORT("Unknown import kind");
         }
 
         Y_ABORT_UNLESS(importInfo != nullptr);
@@ -124,6 +124,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         Self->PersistCreateImport(db, importInfo);
 
         importInfo->State = TImportInfo::EState::Waiting;
+        importInfo->StartTime = TAppData::TimeProvider->Now();
         Self->PersistImportState(db, importInfo);
 
         Self->Imports[id] = importInfo;
@@ -194,7 +195,8 @@ private:
                 TPath::TChecker checks = path.Check();
                 checks
                     .IsAtLocalSchemeShard()
-                    .HasResolvedPrefix();
+                    .HasResolvedPrefix()
+                    .FailOnRestrictedCreateInTempZone();
 
                 if (path.IsResolved()) {
                     checks
@@ -510,6 +512,10 @@ private:
             default:
                 break;
             }
+        }
+
+        if (importInfo->State == EState::Cancelled) {
+            importInfo->EndTime = TAppData::TimeProvider->Now();
         }
     }
 
@@ -1004,6 +1010,7 @@ private:
 
         if (AllOf(importInfo->Items, &TImportInfo::TItem::IsDone)) {
             importInfo->State = EState::Done;
+            importInfo->EndTime = TAppData::TimeProvider->Now();
         }
 
         Self->PersistImportItemState(db, importInfo, itemIdx);

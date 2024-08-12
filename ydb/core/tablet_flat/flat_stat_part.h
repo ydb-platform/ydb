@@ -95,7 +95,7 @@ public:
         LastRowId = Groups[0]->GetRowId();
         auto ready = Groups[0]->Next();
         if (ready == EReady::Page) {
-            Y_DEBUG_ABORT_UNLESS(false, "Shouldn't really happen");
+            Y_DEBUG_ABORT("Shouldn't really happen");
             return ready;
         }
 
@@ -110,7 +110,7 @@ public:
             while (Groups[groupIndex]->IsValid() && Groups[groupIndex]->GetRowId() < nextRowId) {
                 // eagerly include all data up to the next row id
                 if (Groups[groupIndex]->Next() == EReady::Page) {
-                    Y_DEBUG_ABORT_UNLESS(false, "Shouldn't really happen");
+                    Y_DEBUG_ABORT("Shouldn't really happen");
                     ready = EReady::Page;
                     break;
                 }
@@ -125,7 +125,7 @@ public:
             while (HistoricGroups[0]->IsValid() && (!HistoricGroups[0]->GetKeyCellsCount() || HistoricGroups[0]->GetKeyCell(0).AsValue<TRowId>() < nextRowId)) {
                 // eagerly include all history up to the next row id
                 if (HistoricGroups[0]->Next() == EReady::Page) {
-                    Y_DEBUG_ABORT_UNLESS(false, "Shouldn't really happen");
+                    Y_DEBUG_ABORT("Shouldn't really happen");
                     ready = EReady::Page;
                     break;
                 }
@@ -138,7 +138,7 @@ public:
                 while (HistoricGroups[groupIndex]->IsValid() && HistoricGroups[groupIndex]->GetRowId() < nextHistoryRowId) {
                     // eagerly include all data up to the next row id
                     if (HistoricGroups[groupIndex]->Next() == EReady::Page) {
-                        Y_DEBUG_ABORT_UNLESS(false, "Shouldn't really happen");
+                        Y_DEBUG_ABORT("Shouldn't really happen");
                         ready = EReady::Page;
                         break;
                     }
@@ -190,17 +190,12 @@ private:
         if (!IsValid())
             return;
 
-        ui32 keyIdx = 0;
         // Add columns that are present in the part
-        if (ui32 keyCellsCount = Groups[0]->GetKeyCellsCount()) {
-            for (;keyIdx < keyCellsCount; ++keyIdx) {
-                CurrentKey.push_back(Groups[0]->GetKeyCell(keyIdx));
-            }
-        }
+        Groups[0]->GetKeyCells(CurrentKey);
 
         // Extend with default values if needed
-        for (;keyIdx < KeyDefaults->Defs.size(); ++keyIdx) {
-            CurrentKey.push_back(KeyDefaults->Defs[keyIdx]);
+        for (ui32 index = CurrentKey.size(); index < KeyDefaults->Defs.size(); ++index) {
+            CurrentKey.push_back(KeyDefaults->Defs[index]);
         }
     }
 
@@ -257,8 +252,8 @@ private:
     TSmallVec<TCell> CurrentKey;
     ui64 LastRowId = 0;
     
-    TVector<THolder<IStatsPartGroupIterator>> Groups;
-    TVector<THolder<IStatsPartGroupIterator>> HistoricGroups;
+    TVector<THolder<IStatsPartGroupIter>> Groups;
+    TVector<THolder<IStatsPartGroupIter>> HistoricGroups;
     TIntrusiveConstPtr<TScreen> Screen;
     TIntrusiveConstPtr<TFrames> Small;    /* Inverted index for small blobs   */
     TIntrusiveConstPtr<TFrames> Large;    /* Inverted index for large blobs   */

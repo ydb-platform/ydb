@@ -58,7 +58,7 @@ public:
         if (TableHelper.Initialize(ctx, SourceId)) {
             return true;
         }
-        StartIdle();        
+        StartIdle();
         TThis::ReplyError(ErrorCode::BAD_REQUEST, "Bad SourceId", ctx);
         return false;
     }
@@ -67,6 +67,7 @@ public:
         auto ctx = TActivationContext::ActorContextFor(SelfId());
         TableHelper.CloseKqpSession(ctx);
         PartitionHelper.Close(ctx);
+        TActorBootstrapped<TDerived>::PassAway();
     }
 
     bool NeedTable(const NActors::TActorContext& ctx) {
@@ -78,7 +79,7 @@ protected:
     void InitTable(const NActors::TActorContext& ctx) {
         TThis::Become(&TThis::StateInitTable);
         const auto& pqConfig = AppData(ctx)->PQConfig;
-        TRACE("InitTable: SourceId="<< SourceId 
+        TRACE("InitTable: SourceId="<< SourceId
               << " TopicsAreFirstClassCitizen=" << pqConfig.GetTopicsAreFirstClassCitizen()
               << " UseSrcIdMetaMappingInFirstClass=" <<pqConfig.GetUseSrcIdMetaMappingInFirstClass());
         if (SourceId && pqConfig.GetTopicsAreFirstClassCitizen() && pqConfig.GetUseSrcIdMetaMappingInFirstClass()) {
@@ -259,14 +260,14 @@ protected:
 
 protected:
     void StartIdle() {
-        TThis::Become(&TThis::StateIdle);        
+        TThis::Become(&TThis::StateIdle);
         DEBUG("Start idle");
     }
 
     void HandleIdle(TEvPartitionChooser::TEvRefreshRequest::TPtr&, const TActorContext& ctx) {
         if (PartitionPersisted) {
             SendUpdateRequests(ctx);
-        }        
+        }
     }
 
     STATEFN(StateIdle)  {
@@ -293,6 +294,10 @@ protected:
 
 protected:
     void ReplyResult(const NActors::TActorContext& ctx) {
+        if (ResultWasSent) {
+            return;
+        }
+        ResultWasSent = true;
         DEBUG("ReplyResult: Partition=" << Partition->PartitionId << ", SeqNo=" << SeqNo);
         ctx.Send(Parent, new TEvPartitionChooser::TEvChooseResult(Partition->PartitionId, Partition->TabletId, SeqNo));
     }
@@ -303,7 +308,7 @@ protected:
 
         TThis::Die(ctx);
     }
-    
+
 
 protected:
     const TActorId Parent;
@@ -317,6 +322,7 @@ protected:
     TPartitionHelper<TPipeCreator> PartitionHelper;
 
     bool PartitionPersisted = false;
+    bool ResultWasSent = false;
 
     std::optional<ui64> SeqNo = 0;
 };

@@ -551,7 +551,8 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-                .IsCommonSensePath();
+                .IsCommonSensePath()
+                .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
 
             if (checks) {
                 if (parentPath->IsTable()) {
@@ -702,11 +703,10 @@ public:
         context.SS->ChangeTxState(db, OperationId, txState.State);
         context.OnComplete.ActivateTx(OperationId);
 
-        context.SS->PersistPath(db, dstPath->PathId);
         if (!acl.empty()) {
             dstPath->ApplyACL(acl);
-            context.SS->PersistACL(db, dstPath.Base());
         }
+        context.SS->PersistPath(db, dstPath->PathId);
 
         context.SS->Sequences[pathId] = sequenceInfo;
         context.SS->PersistSequence(db, pathId, *sequenceInfo);

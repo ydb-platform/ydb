@@ -4,6 +4,9 @@
 #include <ydb/core/tx/columnshard/engines/insert_table/insert_table.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 
+namespace NKikimr::NOlap {
+    class TPortionInfo;
+}
 namespace NKikimr::NOlap::NReader {
 
 class TScanIteratorBase;
@@ -35,14 +38,27 @@ private:
     TProgramContainer Program;
     std::shared_ptr<TVersionedIndex> IndexVersionsPointer;
     TSnapshot RequestSnapshot;
+    std::optional<TGranuleShardingInfo> RequestShardingInfo;
+
 protected:
     std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
+    ui64 TxId = 0;
+
+public:
+    using TConstPtr = std::shared_ptr<const TReadMetadataBase>;
+
+    ui64 GetTxId() const {
+        return TxId;
+    }
+
     const TVersionedIndex& GetIndexVersions() const {
         AFL_VERIFY(IndexVersionsPointer);
         return *IndexVersionsPointer;
     }
-public:
-    using TConstPtr = std::shared_ptr<const TReadMetadataBase>;
+
+    const std::optional<TGranuleShardingInfo>& GetRequestShardingInfo() const {
+        return RequestShardingInfo;
+    }
 
     void SetPKRangesFilter(const TPKRangesFilter& value) {
         Y_ABORT_UNLESS(IsSorted() && value.IsReverse() == IsDescSorted());
@@ -55,19 +71,15 @@ public:
         return *PKRangesFilter;
     }
 
-    ISnapshotSchema::TPtr GetSnapshotSchema(const TSnapshot& version) const {
-        if (version >= RequestSnapshot) {
-            return ResultIndexSchema;
-        }
-        return GetIndexVersions().GetSchema(version);
+    ISnapshotSchema::TPtr GetResultSchema() const {
+        return ResultIndexSchema;
     }
 
-    ISnapshotSchema::TPtr GetLoadSchema(const std::optional<TSnapshot>& version = {}) const {
-        if (!version) {
-            return ResultIndexSchema;
-        }
-        return GetIndexVersions().GetSchema(*version);
+    bool HasGuaranteeExclusivePK() const {
+        return GetIndexInfo().GetExternalGuaranteeExclusivePK();
     }
+
+    ISnapshotSchema::TPtr GetLoadSchemaVerified(const TPortionInfo& porition) const;
 
     std::shared_ptr<arrow::Schema> GetBlobSchema(const ui64 version) const {
         return GetIndexVersions().GetSchema(version)->GetIndexInfo().ArrowSchema();
@@ -78,6 +90,11 @@ public:
             return GetIndexVersions().GetSchema(*version)->GetIndexInfo();
         }
         return ResultIndexSchema->GetIndexInfo();
+    }
+
+    void InitShardingInfo(const ui64 pathId) {
+        AFL_VERIFY(!RequestShardingInfo);
+        RequestShardingInfo = IndexVersionsPointer->GetShardingInfoOptional(pathId, RequestSnapshot);
     }
 
     TReadMetadataBase(const std::shared_ptr<TVersionedIndex> index, const ESorting sorting, const TProgramContainer& ssaProgram, const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot)

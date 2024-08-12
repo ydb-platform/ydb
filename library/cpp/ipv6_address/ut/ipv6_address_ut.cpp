@@ -6,12 +6,14 @@ class TIpv6AddressTest: public TTestBase {
     UNIT_TEST_SUITE(TIpv6AddressTest);
     UNIT_TEST(ParseHostAndMayBePortFromString_data);
     UNIT_TEST(CheckAddressValidity)
+    UNIT_TEST(CheckToStringConversion)
     UNIT_TEST_SUITE_END();
 
 private:
     void ParseHostAndMayBePortFromString_data();
     void CheckAddressValidity();
     void HashCompileTest();
+    void CheckToStringConversion();
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TIpv6AddressTest);
@@ -104,6 +106,24 @@ void TIpv6AddressTest::CheckAddressValidity() {
 
     static_assert(Get127001() == TIpv6Address(0x7F000001, TIpv6Address::Ipv4));
     static_assert(Get1() == TIpv6Address(0, 0, 0, 0, 0, 0, 0, 1));
+}
+
+void TIpv6AddressTest::CheckToStringConversion() {
+    {
+        TString ipPort = "[2aa2::786b]:789";
+        bool ok;
+        auto result = ParseHostAndMayBePortFromString(ipPort, 80, ok);
+        auto hostAddressAndPort = std::get<THostAddressAndPort>(result);
+        UNIT_ASSERT_EQUAL(hostAddressAndPort.ToString({}), ipPort);
+        UNIT_ASSERT_EQUAL(hostAddressAndPort.ToString(), ipPort);
+    }
+    {
+        TString ipPort = "[2aa2::786b%25]:789";
+        bool ok;
+        auto result = ParseHostAndMayBePortFromString(ipPort, 80, ok);
+        auto hostAddressAndPort = std::get<THostAddressAndPort>(result);
+        UNIT_ASSERT_EQUAL(hostAddressAndPort.ToString({.PrintScopeId = true}), ipPort);
+    }
 }
 
 void TIpv6AddressTest::HashCompileTest() {

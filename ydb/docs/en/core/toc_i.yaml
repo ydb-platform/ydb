@@ -4,35 +4,51 @@ items:
 - name: Quick start
   href: quickstart.md
 - name: Concepts
+  href: concepts/index.md
   include:
     mode: link
     path: concepts/toc_p.yaml
 - name: For DevOps
+  href: devops/index.md
   include:
     mode: link
     path: devops/toc_p.yaml
-
-
-- { name: Tutorials,                             include: { mode: link, path: operations/toc_p.yaml } }
-- { name: Recommendations,                       include: { mode: link, path: best_practices/toc_p.yaml } }
-- { name: Managing databases,                    include: { mode: link, path: db/toc_p.yaml } }
-- { name: Managing a cluster,                    include: { mode: link, path: cluster/toc_p.yaml } }
-
+- name: For Developers
+  href: dev/index.md
+  include:
+    mode: link
+    path: dev/toc_p.yaml
+- name: For Security Engineers
+  href: security/index.md
+  include:
+    mode: link
+    path: security/toc_p.yaml
+- name: For Contributors
+  href: contributor/index.md
+  include:
+    mode: link
+    path: contributor/toc_p.yaml
 - name: Reference
   include:
     mode: link
     path: reference/toc_p.yaml
-
-
+- name: Recipes
+  href: recipes/index.md
+  include:
+    mode: link
+    path: recipes/toc_p.yaml
 - name: Questions and answers
+  href: faq/index.md
   include:
     mode: link
     path: faq/toc_p.yaml
-- name: For contributors
+- name: Public materials
   include:
     mode: link
-    path: development/toc_p.yaml
-- include: { mode: link, path: downloads/toc_p.yaml }
-- name: Public talks
-  href: public-talks.md
-- { name: Changelog,                                     include: { mode: link, path: toc_changelog.yaml } }
+    path: public-materials/toc_p.yaml
+- name: Downloads
+  href: downloads/index.md
+- name: Changelog
+  include:
+    mode: link
+    path: toc_changelog.yaml

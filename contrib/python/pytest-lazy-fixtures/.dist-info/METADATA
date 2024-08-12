@@ -1,0 +1,172 @@
+Metadata-Version: 2.1
+Name: pytest-lazy-fixtures
+Version: 1.0.7
+Summary: Allows you to use fixtures in @pytest.mark.parametrize.
+Home-page: https://github.com/dev-petrov/pytest-lazy-fixtures
+License: MIT
+Keywords: tests,pytest,lazy,fixture
+Author: Petrov Anton
+Author-email: antonp2@yandex.ru
+Requires-Python: >=3.8,<4.0
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Requires-Dist: pytest (>=7)
+Project-URL: Repository, https://github.com/dev-petrov/pytest-lazy-fixtures
+Description-Content-Type: text/markdown
+
+# pytest-lazy-fixtures
+
+[![codecov](https://codecov.io/gh/dev-petrov/pytest-lazy-fixtures/branch/master/graph/badge.svg)](https://codecov.io/gh/dev-petrov/pytest-lazy-fixtures)
+[![CI](https://github.com/dev-petrov/pytest-lazy-fixtures/workflows/CI/badge.svg)](https://github.com/dev-petrov/pytest-lazy-fixtures/actions/workflows/ci-test.yml)
+[![PyPI version](https://badge.fury.io/py/pytest-lazy-fixtures.svg)](https://badge.fury.io/py/pytest-lazy-fixtures)
+
+Use your fixtures in `@pytest.mark.parametrize`.
+
+This project was inspired by [pytest-lazy-fixture](https://github.com/TvoroG/pytest-lazy-fixture).
+
+Improvements that have been made in this project:
+
+1. You can use fixtures in any data structures
+2. You can access the attributes of fixtures
+3. You can use functions in fixtures
+
+## Installation
+
+```shell
+pip install pytest-lazy-fixtures
+```
+
+## Usage
+
+To use your fixtures inside `@pytest.mark.parametrize` you can use `lf` (`lazy_fixture`) or `pytest.lazy_fixtures`.
+
+```python
+import pytest
+from pytest_lazy_fixtures import lf
+
+@pytest.fixture()
+def one():
+    return 1
+
+@pytest.mark.parametrize('arg1,arg2', [('val1', lf('one'))])
+def test_func(arg1, arg2):
+    assert arg2 == 1
+
+@pytest.mark.parametrize('arg1,arg2', [('val1', pytest.lazy_fixtures('one'))])
+def test_func(arg1, arg2):
+    assert arg2 == 1
+```
+
+`lf` can be used with any data structures. For example, in the following example, `lf` is used in the dictionary:
+
+```python
+import pytest
+from pytest_lazy_fixtures import lf
+
+@pytest.fixture()
+def one():
+    return 1
+
+@pytest.mark.parametrize('arg1,arg2', [('val1', {"value": lf('one')})])
+def test_func(arg1, arg2):
+    assert arg2 == {"value": 1}
+```
+
+You can also specify getting an attribute through a dot:
+
+```python
+import pytest
+from pytest_lazy_fixtures import lf
+
+class Entity:
+    def __init__(self, value):
+        self.value = value
+
+@pytest.fixture()
+def one():
+    return Entity(1)
+
+@pytest.mark.parametrize('arg1,arg2', [('val1', lf('one.value'))])
+def test_func(arg1, arg2):
+    assert arg2 == 1
+```
+
+And there is some useful wrapper called `lfc` (`lazy_fixture_callable`) or `pytest.lazy_fixtures_callable`.
+It can work with any callable and your fixtures, e.g.
+
+```python
+import pytest
+from pytest_lazy_fixtures import lf, lfc
+
+class Entity:
+    def __init__(self, value):
+        self.value = value
+
+    def __str__(self) -> str:
+        return str(self.value)
+
+    def sum(self, value: int) -> int:
+        return self.value + value
+
+@pytest.fixture()
+def entity():
+    return Entity(1)
+
+@pytest.fixture()
+def two():
+    return 2
+
+@pytest.fixture()
+def three():
+    return 3
+
+@pytest.fixture()
+def entity_format():
+    def _entity_format(entity: Entity):
+        return {"value": entity.value}
+
+    return _entity_format
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        lfc(
+            "There is two lazy fixture args, {} and {}! And one kwarg {field}! And also simple value {simple}".format,
+            lf("entity"),
+            lf("two"),
+            field=lf("three"),
+            simple="value",
+        ),
+    ],
+)
+def test_lazy_fixture_callable_with_func(message):
+    assert message == "There is two lazy fixture args, 1 and 2! And one kwarg 3! And also simple value value"
+
+
+@pytest.mark.parametrize("formatted", [lfc("entity_format", lf("entity"))])
+def test_lazy_fixture_callable_with_lf(formatted, entity):
+    assert formatted == {"value": entity.value}
+
+
+@pytest.mark.parametrize("result", [lfc("entity.sum", lf("two"))])
+def test_lazy_fixture_callable_with_attr_lf(result):
+    assert result == 3
+```
+
+## Contributing
+
+Contributions are very welcome. Tests can be run with `pytest`.
+
+## License
+
+Distributed under the terms of the `MIT` license, `pytest-lazy-fixtures` is free and open source software
+
+## Issues
+
+If you encounter any problems, please file an issue along with a detailed description.
+

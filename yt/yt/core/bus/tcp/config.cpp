@@ -24,6 +24,9 @@ void TTcpDispatcherConfig::Register(TRegistrar registrar)
     registrar.Parameter("thread_pool_size", &TThis::ThreadPoolSize)
         .Default(8);
 
+    registrar.Parameter("thread_pool_polling_period", &TThis::ThreadPoolPollingPeriod)
+        .Default(TDuration::MilliSeconds(10));
+
     registrar.Parameter("network_bandwidth", &TThis::NetworkBandwidth)
         .Default();
 
@@ -42,6 +45,7 @@ TTcpDispatcherConfigPtr TTcpDispatcherConfig::ApplyDynamic(
 {
     auto mergedConfig = CloneYsonStruct(MakeStrong(this));
     UpdateYsonStructField(mergedConfig->ThreadPoolSize, dynamicConfig->ThreadPoolSize);
+    UpdateYsonStructField(mergedConfig->ThreadPoolPollingPeriod, dynamicConfig->ThreadPoolPollingPeriod);
     UpdateYsonStructField(mergedConfig->Networks, dynamicConfig->Networks);
     UpdateYsonStructField(mergedConfig->MultiplexingBands, dynamicConfig->MultiplexingBands);
     UpdateYsonStructField(mergedConfig->BusCertsDirectoryPath, dynamicConfig->BusCertsDirectoryPath);
@@ -56,6 +60,9 @@ void TTcpDispatcherDynamicConfig::Register(TRegistrar registrar)
     registrar.Parameter("thread_pool_size", &TThis::ThreadPoolSize)
         .Optional()
         .GreaterThan(0);
+
+    registrar.Parameter("thread_pool_polling_period", &TThis::ThreadPoolPollingPeriod)
+        .Optional();
 
     registrar.Parameter("network_bandwidth", &TThis::NetworkBandwidth)
         .Default();

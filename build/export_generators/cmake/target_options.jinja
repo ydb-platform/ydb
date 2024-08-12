@@ -1,0 +1,15 @@
+{%- set OPTIONS_ORDER_BEFORE_LINKS = ['target_compile_options', 'target_include_directories'] -%}
+{%- set OPTIONS_ORDER_AFTER_LINKS = ['target_link_options'] -%}
+
+{%- for OPTION in OPTIONS_ORDER_BEFORE_LINKS -%}
+{{  TargetOptions(name, is_really_fake_module, current_target.target_options, OPTION, []) }}
+{%- endfor -%}
+
+{%- include "[generator]/target_links.jinja" -%}
+
+{%- for OPTION in OPTIONS_ORDER_AFTER_LINKS -%}
+{{  TargetOptions(name, is_really_fake_module, current_target.target_options, OPTION, []) }}
+{%- endfor -%}
+
+{#- Then all other options -#}
+{{  TargetOptions(name, is_really_fake_module, current_target.target_options, "", OPTIONS_ORDER_BEFORE_LINKS + OPTIONS_ORDER_AFTER_LINKS) }}

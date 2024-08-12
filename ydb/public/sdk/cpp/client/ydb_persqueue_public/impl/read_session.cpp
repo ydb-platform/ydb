@@ -1,6 +1,12 @@
 #include "read_session.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/log_lazy.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/log_lazy.h>
+
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
+#undef INCLUDE_YDB_INTERNAL_H
+
+#include <util/generic/guid.h>
 
 namespace NYdb::NPersQueue {
 
@@ -202,8 +208,7 @@ void TReadSession::CreateClusterSessionsImpl(TDeferredActions& deferred) {
             EventsQueue,
             context,
             partitionStreamIdStart++,
-            clusterSessionsCount,
-            Client->GetProvidedCodecs()
+            clusterSessionsCount
         ));
 
         clusterSessionInfo.Session = CbContexts.back()->TryGet();
@@ -558,7 +563,7 @@ void TReadSessionEvent::TCreatePartitionStreamEvent::Confirm(TMaybe<ui64> readOf
     }
 }
 
-TReadSessionEvent::TDestroyPartitionStreamEvent::TDestroyPartitionStreamEvent(TPartitionStream::TPtr partitionStream, bool committedOffset)
+TReadSessionEvent::TDestroyPartitionStreamEvent::TDestroyPartitionStreamEvent(TPartitionStream::TPtr partitionStream, ui64 committedOffset)
     : PartitionStream(std::move(partitionStream))
     , CommittedOffset(committedOffset)
 {
@@ -664,13 +669,6 @@ TString TReadSessionEvent::TPartitionStreamClosedEvent::DebugString() const {
                             << " PartitionId: " << GetPartitionStream()->GetPartitionId()
                             << " Reason: " << GetReason()
                             << " }";
-}
-
-TString TSessionClosedEvent::DebugString() const {
-    return
-        TStringBuilder() << "SessionClosed { Status: " << GetStatus()
-                         << " Issues: \"" << IssuesSingleLineString(GetIssues())
-                         << "\" }";
 }
 
 TReadSessionEvent::TPartitionStreamStatusEvent::TPartitionStreamStatusEvent(TPartitionStream::TPtr partitionStream, ui64 committedOffset, ui64 readOffset, ui64 endOffset, TInstant writeWatermark)
@@ -930,25 +928,5 @@ void TDeferredCommit::TImpl::Commit() {
     }
     Offsets.clear();
 }
-
-#define HISTOGRAM_SETUP NMonitoring::ExplicitHistogram({0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100})
-
-TReaderCounters::TReaderCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) {
-    Errors = counters->GetCounter("errors", true);
-    CurrentSessionLifetimeMs = counters->GetCounter("currentSessionLifetimeMs", false);
-    BytesRead = counters->GetCounter("bytesRead", true);
-    MessagesRead = counters->GetCounter("messagesRead", true);
-    BytesReadCompressed = counters->GetCounter("bytesReadCompressed", true);
-    BytesInflightUncompressed = counters->GetCounter("bytesInflightUncompressed", false);
-    BytesInflightCompressed = counters->GetCounter("bytesInflightCompressed", false);
-    BytesInflightTotal = counters->GetCounter("bytesInflightTotal", false);
-    MessagesInflight = counters->GetCounter("messagesInflight", false);
-
-    TotalBytesInflightUsageByTime = counters->GetHistogram("totalBytesInflightUsageByTime", HISTOGRAM_SETUP);
-    UncompressedBytesInflightUsageByTime = counters->GetHistogram("uncompressedBytesInflightUsageByTime", HISTOGRAM_SETUP);
-    CompressedBytesInflightUsageByTime = counters->GetHistogram("compressedBytesInflightUsageByTime", HISTOGRAM_SETUP);
-}
-
-#undef HISTOGRAM_SETUP
 
 }  // namespace NYdb::NPersQueue

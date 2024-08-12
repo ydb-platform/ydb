@@ -2,7 +2,7 @@
 #comment
 (let mr_source (DataSource 'yt 'plato))
 (let x (Read! world mr_source 
-(Key '('table (MrTableRange '""))) 
+(Key '('table (MrTableRange '"" (lambda '($i) (And (>= $i (String '"Input1")) (<= $i (String '"Input~")))) '""))) 
 '('key 'subkey 'value) '()))
 (let world (Left! x))
 (let table (Right! x))

@@ -137,6 +137,14 @@ void FromProto(
     const NProto::TQueryStatistics& protoStatistics);
 
 void ToProto(
+    NProto::TVersionedReadOptions* protoOptions,
+    const NTableClient::TVersionedReadOptions& options);
+
+void FromProto(
+    NTableClient::TVersionedReadOptions* options,
+    const NProto::TVersionedReadOptions& protoOptions);
+
+void ToProto(
     NProto::TOperation* protoOperation,
     const NApi::TOperation& operation);
 
@@ -275,7 +283,10 @@ NQueryTrackerClient::EQueryState ConvertQueryStateFromProto(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool IsRetriableError(const TError& error, bool retryProxyBanned = true);
+bool IsRetriableError(
+    const TError& error,
+    bool retryProxyBanned = true,
+    bool retrySequoiaErrorsOnly = false);
 
 ////////////////////////////////////////////////////////////////////////////////
 

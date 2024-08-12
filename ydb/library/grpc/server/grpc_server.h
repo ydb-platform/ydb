@@ -16,7 +16,7 @@
 #include <util/system/mutex.h>
 #include <util/thread/factory.h>
 
-#include <grpc++/grpc++.h>
+#include <grpcpp/grpcpp.h>
 
 namespace NYdbGrpc {
 

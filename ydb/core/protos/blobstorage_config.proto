@@ -35,6 +35,11 @@ message TDefineHostConfig {
     // host-wide default configuration for every PDisk
     NKikimrBlobStorage.TPDiskConfig DefaultHostPDiskConfig = 4;
 
+    // some syntactic sugar -- one drive type per path
+    repeated string Rot = 5;
+    repeated string Ssd = 6;
+    repeated string Nvme = 7;
+
     // item's generation to prevent concurrent modification
     uint64 ItemConfigGeneration = 100;
 }
@@ -246,18 +251,13 @@ message TQueryBaseConfig {
 message TReadSettings {
 }
 
-message TPDiskId {
-    uint32 NodeId = 1;
-    uint32 PDiskId = 2;
-}
-
 message TReassignGroupDisk {
     uint32 GroupId = 1;
     uint32 GroupGeneration = 2;
     uint32 FailRealmIdx = 3;
     uint32 FailDomainIdx = 4;
     uint32 VDiskIdx = 5;
-    TPDiskId TargetPDiskId = 6; // optional; when not specified, selected automatically
+    NKikimrBlobStorage.TPDiskId TargetPDiskId = 6; // optional; when not specified, selected automatically
     bool SuppressDonorMode = 7; // when set, donor mode is not used even if it is enabled through BSC
     reserved 8;
 }
@@ -400,6 +400,10 @@ message TWipeVDisk {
     NKikimrBlobStorage.TVDiskID VDiskId = 2;
 }
 
+message TRestartPDisk {
+    NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
+}
+
 message TSetScrubPeriodicity {
     uint32 ScrubPeriodicity = 1; // in seconds; 0 = disable
 }
@@ -532,6 +536,7 @@ message TConfigRequest {
             TReadSettings ReadSettings = 43;
             TCancelVirtualGroup CancelVirtualGroup = 44;
             TSetVDiskReadOnly SetVDiskReadOnly = 47;
+            TRestartPDisk RestartPDisk = 48;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;
@@ -575,6 +580,9 @@ message TConfigRequest {
 
     // is this command originated by self-heal decommission?
     bool IsSelfHealReasonDecommit = 12;
+
+    // requesting user identifier
+    string UserSID = 13;
 }
 
 enum ETriStateBool {
@@ -676,6 +684,7 @@ message TBaseConfig {
     repeated TGroup Group = 3;
     repeated TNode Node = 4;
     repeated TDevice Device = 5;
+    TUpdateSettings Settings = 6;
 }
 
 message TMoveCommand {
@@ -767,4 +776,7 @@ message TConfigResponse {
     bool Success = 2;
     string ErrorDescription = 3;
     uint64 ConfigTxSeqNo = 4;
+    repeated uint32 GroupsGetDegraded = 5;
+    repeated uint32 GroupsGetDisintegrated = 6;
+    repeated uint32 GroupsGetDisintegratedByExpectedStatus = 7;
 }

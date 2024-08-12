@@ -2,6 +2,10 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <ydb/library/yql/parser/pg_wrapper/interface/parser.h>
+
+#include <util/system/tempfile.h>
+
 using namespace NSQLTranslation;
 
 Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
@@ -66,7 +70,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
             (let world (Configure! world (DataSource 'config) 'OrderedColumns))
             (let read0 (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"input"))) (Void) '()))
             (let world (Left! read0))
-            (let world (Write! world (DataSink '"yt" '"plato") (Key '('table (String '"input"))) (Void) '('('pg_delete (PgSelect '('('set_items '((PgSetItem '('('result '((PgResultItem '"" (Void) (lambda '() (PgStar))))) '('from '('((Right! read0) '"input" '()))) '('join_ops '('())))))) '('set_ops '('push))))) '('mode 'delete))))
+            (let world (Write! world (DataSink '"yt" '"plato") (Key '('table (String '"input"))) (Void) '('('pg_delete (PgSelect '('('set_items '((PgSetItem '('('result '((PgResultItem '"" (Void) (lambda '() (PgStar))))) '('from '('((Right! read0) '"input" '()))) '('join_ops '('('('push)))))))) '('set_ops '('push))))) '('mode 'delete))))
             (let world (CommitAll! world))
             (return world)
         )
@@ -166,7 +170,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         )";
         const auto expectedAst = NYql::ParseAst(program);
         UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
-    }    
+    }
 
     Y_UNIT_TEST(CreateTableStmt_PKAndNotNull) {
         auto res = PgSqlToYql("CREATE TABLE t (a int PRIMARY KEY NOT NULL, b text)");
@@ -259,6 +263,98 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
                 (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '()) '('temporary))))
                 (let world (CommitAll! world))
                 (return world)
+            )
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
+    Y_UNIT_TEST(CreateSeqStmt) {
+        auto res = PgSqlToYql(
+            "CREATE TEMP SEQUENCE IF NOT EXISTS seq AS integer START WITH 10 INCREMENT BY 2 NO MINVALUE NO MAXVALUE CACHE 3;");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TString program = R"(
+            ((let world (Configure! world (DataSource 'config) 'OrderedColumns))
+            (let world (Write! world (DataSink '"kikimr" '"")
+            (Key '('pgObject (String '"seq") (String 'pgSequence))) (Void) '(
+                '('mode 'create_if_not_exists) '('temporary) '('"as" '"int4")
+                '('"start" '10) '('"increment" '2) '('"cache" '3))))
+            (let world (CommitAll! world)) (return world))
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
+    Y_UNIT_TEST(DropSequenceStmt) {
+        auto res = PgSqlToYql("DROP SEQUENCE IF EXISTS seq;");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+        TString program = R"(
+            (
+                (let world (Configure! world (DataSource 'config) 'OrderedColumns)) (let world (Write! world (DataSink '"kikimr" '"") (Key '('pgObject (String '"seq") (String 'pgSequence))) (Void) '('('mode 'drop_if_exists))))
+                (let world (CommitAll! world))
+                (return world)
+            )
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
+    Y_UNIT_TEST(AlterSequenceStmt) {
+        auto res = PgSqlToYql("ALTER SEQUENCE IF EXISTS seq AS integer START WITH 10 INCREMENT BY 2 NO MINVALUE NO MAXVALUE CACHE 3;");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+        TString program = R"(
+            (
+                (let world (Configure! world (DataSource 'config) 'OrderedColumns))
+                (let world (Write! world (DataSink '"kikimr" '"")
+                 (Key '('pgObject (String '"seq") (String 'pgSequence)))
+                 (Void) '('('mode 'alter_if_exists) '('"as" '"int4") '('"start" '10) '('"increment" '2) '('"cache" '3))))
+                 (let world (CommitAll! world)) (return world)
+            )
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
+    Y_UNIT_TEST(AlterTableSetDefaultNextvalStmt) {
+        auto res = PgSqlToYql("ALTER TABLE public.t ALTER COLUMN id SET DEFAULT nextval('seq');");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+        TString program = R"(
+            (
+                (let world (Configure! world (DataSource 'config) 'OrderedColumns)) 
+                (let world (Write! world (DataSink '"kikimr" '"") 
+                    (Key '('tablescheme (String '"t"))) (Void) '('('mode 'alter) '('actions '('('alterColumns '('('"id" '('setDefault '('nextval 'seq)))))))))) 
+                (let world (CommitAll! world)) (return world)
+            )
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
+    Y_UNIT_TEST(AlterTableStmtWithCast) {
+        auto res = PgSqlToYql("ALTER TABLE public.t ALTER COLUMN id SET DEFAULT nextval('seq'::regclass);");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+        TString program = R"(
+            (
+                (let world (Configure! world (DataSource 'config) 'OrderedColumns)) 
+                (let world (Write! world (DataSink '"kikimr" '"") 
+                    (Key '('tablescheme (String '"t"))) (Void) '('('mode 'alter) '('actions '('('alterColumns '('('"id" '('setDefault '('nextval 'seq)))))))))) 
+                (let world (CommitAll! world)) (return world)
+            )
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
+    Y_UNIT_TEST(AlterTableDropDefaultStmt) {
+        auto res = PgSqlToYql("ALTER TABLE public.t ALTER COLUMN id DROP DEFAULT;");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+        TString program = R"(
+            (
+                (let world (Configure! world (DataSource 'config) 'OrderedColumns)) 
+                (let world (Write! world (DataSink '"kikimr" '"") 
+                    (Key '('tablescheme (String '"t"))) (Void) '('('mode 'alter) '('actions '('('alterColumns '('('"id" '('setDefault '('Null))))))))))
+                (let world (CommitAll! world)) (return world)
             )
         )";
         const auto expectedAst = NYql::ParseAst(program);
@@ -426,7 +522,7 @@ SELECT COUNT(*) FROM public.t;");
                         '('result '((PgResultItem '"" (Void) (lambda '() (PgStar)))
                             (PgResultItem '"kind" (Void) (lambda '() (PgConst '"test" (PgType 'unknown))))))
                         '('from '('((Right! read0) '"input" '())))
-                        '('join_ops '('()))
+                        '('join_ops '('('('push))))
                         '('where (PgWhere (Void) (lambda '() (PgOp '"=" (PgColumnRef '"kind") (PgConst '"testtest" (PgType 'unknown)))))) '('unknowns_allowed)))))
                         '('set_ops '('push)))
                     )
@@ -482,7 +578,7 @@ SELECT COUNT(*) FROM public.t;");
             settings);
         UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
         UNIT_ASSERT(res.Root);
-        
+
         res = SqlToYqlWithMode(
             R"(select oid,
 typinput::int4 as typinput,
@@ -514,7 +610,7 @@ from pg_catalog.pg_type)",
             settings);
         UNIT_ASSERT(res.IsOk());
         UNIT_ASSERT(res.Root);
-        
+
         res = SqlToYqlWithMode(
             R"(select set_config('search_path', 'public', false);)",
             NSQLTranslation::ESqlMode::QUERY,
@@ -536,5 +632,110 @@ from pg_catalog.pg_type)",
             settings);
         UNIT_ASSERT(res.IsOk());
         UNIT_ASSERT(res.Root);
+    }
+}
+
+Y_UNIT_TEST_SUITE(PgExtensions) {
+    using namespace NYql;
+
+    Y_UNIT_TEST(Empty) {
+        NPg::ClearExtensions();
+        UNIT_ASSERT_VALUES_EQUAL(NPg::ExportExtensions(), "");
+        NPg::ImportExtensions("", true, nullptr);
+    }
+
+    Y_UNIT_TEST(ProcsAndType) {
+        NPg::ClearExtensions();
+        NPg::TExtensionDesc desc;
+        TTempFileHandle h;
+        TStringBuf sql = R"(
+            CREATE OR REPLACE FUNCTION mytype_in(cstring)
+                RETURNS mytype
+                AS '$libdir/MyExt','mytype_in_func'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE OR REPLACE FUNCTION mytype_out(mytype)
+                RETURNS cstring
+                AS '$libdir/MyExt','mytype_out_func'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE TYPE mytype (
+                alignment = double,
+                internallength = 65,
+                input = mytype_in,
+                output = mytype_out
+            );
+        )";
+
+        h.Write(sql.Data(), sql.Size());
+        desc.Name = "MyExt";
+        desc.InstallName = "$libdir/MyExt";
+        desc.SqlPaths.push_back(h.Name());
+        NPg::RegisterExtensions({desc}, true, *NSQLTranslationPG::CreateExtensionSqlParser(), nullptr);
+        auto validate = [&]() {
+            const auto& type = NPg::LookupType("mytype");
+            UNIT_ASSERT_VALUES_EQUAL(type.Category, 'U');
+            UNIT_ASSERT_VALUES_EQUAL(type.TypeLen, 65);
+            UNIT_ASSERT_VALUES_EQUAL(type.TypeAlign, 'd');
+            const auto& arrType = NPg::LookupType("_mytype");
+            UNIT_ASSERT_VALUES_EQUAL(arrType.ElementTypeId, type.TypeId);
+            const auto& inProc = NPg::LookupProc("mytype_in", { NPg::LookupType("cstring").TypeId });
+            UNIT_ASSERT_VALUES_EQUAL(inProc.ArgTypes.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(inProc.Src, "mytype_in_func");
+            UNIT_ASSERT(inProc.IsStrict);
+            const auto& outProc = NPg::LookupProc("mytype_out", { NPg::LookupType("mytype").TypeId });
+            UNIT_ASSERT_VALUES_EQUAL(outProc.ArgTypes.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(outProc.Src, "mytype_out_func");
+            UNIT_ASSERT(outProc.IsStrict);
+            UNIT_ASSERT_VALUES_EQUAL(type.InFuncId, inProc.ProcId);
+            UNIT_ASSERT_VALUES_EQUAL(type.OutFuncId, outProc.ProcId);
+        };
+
+        validate();
+        auto exported = NPg::ExportExtensions();
+        NPg::ClearExtensions();
+        NPg::ImportExtensions(exported, true, nullptr);
+        validate();
+    }
+
+    Y_UNIT_TEST(InsertValues) {
+        NPg::ClearExtensions();
+        NPg::TExtensionDesc desc;
+        TTempFileHandle h;
+        TStringBuf sql = R"(
+            CREATE TABLE mytable(
+                foo int4,
+                bar text,
+                baz double
+            );
+
+            INSERT INTO mytable(bar, foo, baz)
+            VALUES ('a', 1, null),('b', null, -3.4);
+        )";
+
+        h.Write(sql.Data(), sql.Size());
+        desc.Name = "MyExt";
+        desc.InstallName = "$libdir/MyExt";
+        desc.SqlPaths.push_back(h.Name());
+        NPg::RegisterExtensions({desc}, true, *NSQLTranslationPG::CreateExtensionSqlParser(), nullptr);
+        auto validate = [&]() {
+            const auto& table = NPg::LookupStaticTable({"pg_catalog","mytable"});
+            UNIT_ASSERT(table.Kind == NPg::ERelKind::Relation);
+            size_t remap[2];
+            size_t rowStep;
+            const auto& data = *NPg::ReadTable({"pg_catalog", "mytable"}, {"foo", "bar"}, remap, rowStep);
+            UNIT_ASSERT_VALUES_EQUAL(rowStep, 3);
+            UNIT_ASSERT_VALUES_EQUAL(data.size(), 2 * rowStep);
+            UNIT_ASSERT_VALUES_EQUAL(data[rowStep * 0 + remap[0]], "1");
+            UNIT_ASSERT_VALUES_EQUAL(data[rowStep * 0 + remap[1]], "a");
+            UNIT_ASSERT(!data[rowStep * 1 + remap[0]].Defined());
+            UNIT_ASSERT_VALUES_EQUAL(data[rowStep * 1 + remap[1]], "b");
+        };
+
+        validate();
+        auto exported = NPg::ExportExtensions();
+        NPg::ClearExtensions();
+        NPg::ImportExtensions(exported, true, nullptr);
+        validate();
     }
 }

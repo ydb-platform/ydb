@@ -390,16 +390,16 @@ TNodePtr BuildWriteColumns(TPosition pos, TScopedStatePtr scoped, const TTableRe
     return new TWriteColumnsNode(pos, scoped, table, mode, std::move(values), std::move(options));
 }
 
-TNodePtr BuildUpdateColumns(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, TSourcePtr values, TSourcePtr source) {
+TNodePtr BuildUpdateColumns(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, TSourcePtr values, TSourcePtr source, TNodePtr options) {
     YQL_ENSURE(values, "Invalid values node");
-    TIntrusivePtr<TWriteColumnsNode> writeNode = new TWriteColumnsNode(pos, scoped, table, EWriteColumnMode::Update);
+    TIntrusivePtr<TWriteColumnsNode> writeNode = new TWriteColumnsNode(pos, scoped, table, EWriteColumnMode::Update, nullptr, options);
     writeNode->ResetSource(std::move(source));
     writeNode->ResetUpdate(std::move(values));
     return writeNode;
 }
 
-TNodePtr BuildDelete(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, TSourcePtr source) {
-    TIntrusivePtr<TWriteColumnsNode> writeNode = new TWriteColumnsNode(pos, scoped, table, EWriteColumnMode::Delete);
+TNodePtr BuildDelete(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, TSourcePtr source, TNodePtr options) {
+    TIntrusivePtr<TWriteColumnsNode> writeNode = new TWriteColumnsNode(pos, scoped, table, EWriteColumnMode::Delete, nullptr, options);
     writeNode->ResetSource(std::move(source));
     return writeNode;
 }
@@ -428,7 +428,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return {};
+        return new TEraseColumnsNode(GetPos(), Columns);
     }
 
 private:

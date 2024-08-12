@@ -5,6 +5,7 @@
 
 #include <ydb/core/tx/data_events/write_data.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/write.h>
+#include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
 #include <ydb/core/tx/columnshard/counters/common/object_counter.h>
 #include <ydb/core/tx/columnshard/engines/portion_info.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
@@ -51,14 +52,18 @@ public:
 class TWritingBlob {
 private:
     std::vector<TWideSerializedBatch*> Ranges;
-    YDB_READONLY_DEF(TString, BlobData);
+    std::vector<TString> BlobData;
+    ui64 BlobSize = 0;
+    bool Extracted = false;
 public:
     TWritingBlob() = default;
     bool AddData(TWideSerializedBatch& batch) {
-        if (BlobData.size() + batch.GetSplittedBlobs().GetSize() < 8 * 1024 * 1024) {
+        AFL_VERIFY(!Extracted);
+        if (BlobSize + batch.GetSplittedBlobs().GetSize() < 8 * 1024 * 1024) {
             Ranges.emplace_back(&batch);
-            batch.SetRange(TBlobRange(TUnifiedBlobId(0, 0, 0, 0, 0, 0, BlobData.size() + batch.GetSplittedBlobs().GetSize()), BlobData.size(), batch.GetSplittedBlobs().GetSize()));
-            BlobData += batch.GetSplittedBlobs().GetData();
+            BlobSize += batch.GetSplittedBlobs().GetSize();
+            batch.SetRange(TBlobRange(TUnifiedBlobId(0, 0, 0, 0, 0, 0, BlobSize), BlobData.size(), batch.GetSplittedBlobs().GetSize()));
+            BlobData.emplace_back(batch.GetSplittedBlobs().GetData());
             return true;
         } else {
             AFL_VERIFY(BlobData.size());
@@ -72,30 +77,58 @@ public:
         }
     }
 
+    TString ExtractBlobData();
+
     ui64 GetSize() const {
-        return BlobData.size();
+        return BlobSize;
     }
 };
 
 class TWriteAggregation {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<NEvWrite::TWriteData>, WriteData);
+    NEvWrite::TWriteMeta WriteMeta;
+    YDB_READONLY(ui64, SchemaVersion, 0);
+    YDB_READONLY(ui64, Size, 0);
+    YDB_READONLY(ui64, Rows, 0);
     YDB_ACCESSOR_DEF(std::vector<TWideSerializedBatch>, SplittedBlobs);
     YDB_READONLY_DEF(TVector<TWriteId>, WriteIds);
+    YDB_READONLY_DEF(std::shared_ptr<NOlap::IBlobsWritingAction>, BlobsAction);
+    YDB_READONLY_DEF(NArrow::TSchemaSubset, SchemaSubset);
+
 public:
+    const NEvWrite::TWriteMeta& GetWriteMeta() const {
+        return WriteMeta;
+    }
+
+    NEvWrite::TWriteMeta& MutableWriteMeta() {
+        return WriteMeta;
+    }
+
     void AddWriteId(const TWriteId& id) {
         WriteIds.emplace_back(id);
     }
 
-    TWriteAggregation(const std::shared_ptr<NEvWrite::TWriteData>& writeData, std::vector<NArrow::TSerializedBatch>&& splittedBlobs)
-        : WriteData(writeData) {
+    TWriteAggregation(const NEvWrite::TWriteData& writeData, std::vector<NArrow::TSerializedBatch>&& splittedBlobs)
+        : WriteMeta(writeData.GetWriteMeta())
+        , SchemaVersion(writeData.GetData()->GetSchemaVersion())
+        , Size(writeData.GetSize())
+        , BlobsAction(writeData.GetBlobsAction())
+        , SchemaSubset(writeData.GetSchemaSubsetVerified())
+    {
         for (auto&& s : splittedBlobs) {
             SplittedBlobs.emplace_back(std::move(s), *this);
         }
+        for (const auto& batch : SplittedBlobs) {
+            Rows += batch->GetRowsCount();
+        }
     }
 
-    TWriteAggregation(const std::shared_ptr<NEvWrite::TWriteData>& writeData)
-        : WriteData(writeData) {
+    TWriteAggregation(const NEvWrite::TWriteData& writeData)
+        : WriteMeta(writeData.GetWriteMeta())
+        , SchemaVersion(writeData.GetData()->GetSchemaVersion()) 
+        , Size(writeData.GetSize())
+        , BlobsAction(writeData.GetBlobsAction()) {
+        AFL_VERIFY(!writeData.GetSchemaSubset());
     }
 };
 
@@ -113,7 +146,7 @@ public:
     {
         AFL_VERIFY(BlobsAction);
         for (auto&& aggr : Aggregations) {
-            SumSize += aggr->GetWriteData()->GetSize();
+            SumSize += aggr->GetSize();
         }
     }
 
@@ -134,7 +167,7 @@ public:
                 for (auto&& s : Aggregations[i]->GetSplittedBlobs()) {
                     if (--linksCount[s.GetRange().BlobId] == 0) {
                         if (!DeclareRemoveAction) {
-                            DeclareRemoveAction = bOperator->StartDeclareRemovingAction("WRITING_BUFFER");
+                            DeclareRemoveAction = bOperator->StartDeclareRemovingAction(NBlobOperations::EConsumer::WRITING_BUFFER);
                         }
                         DeclareRemoveAction->DeclareRemove(bOperator->GetSelfTabletId(), s.GetRange().BlobId);
                     }

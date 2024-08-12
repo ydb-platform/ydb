@@ -4,6 +4,8 @@
 
 #include <library/cpp/yt/small_containers/compact_vector.h>
 
+#include <util/generic/hash_set.h>
+
 #include <limits>
 
 namespace NYT {
@@ -12,31 +14,31 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 
 // Some compile-time sanity checks.
-static_assert(TFormatTraits<int>::HasCustomFormatValue);
-static_assert(TFormatTraits<double>::HasCustomFormatValue);
-static_assert(TFormatTraits<void*>::HasCustomFormatValue);
-static_assert(TFormatTraits<const char*>::HasCustomFormatValue);
-static_assert(TFormatTraits<TStringBuf>::HasCustomFormatValue);
-static_assert(TFormatTraits<TString>::HasCustomFormatValue);
-static_assert(TFormatTraits<std::span<int>>::HasCustomFormatValue);
-static_assert(TFormatTraits<std::vector<int>>::HasCustomFormatValue);
+static_assert(CFormattable<int>);
+static_assert(CFormattable<double>);
+static_assert(CFormattable<void*>);
+static_assert(CFormattable<const char*>);
+static_assert(CFormattable<TStringBuf>);
+static_assert(CFormattable<TString>);
+static_assert(CFormattable<std::span<int>>);
+static_assert(CFormattable<std::vector<int>>);
 
 // N.B. TCompactVector<int, 1> is not buildable on Windows
-static_assert(TFormatTraits<TCompactVector<int, 2>>::HasCustomFormatValue);
-static_assert(TFormatTraits<std::set<int>>::HasCustomFormatValue);
-static_assert(TFormatTraits<std::map<int, int>>::HasCustomFormatValue);
-static_assert(TFormatTraits<std::multimap<int, int>>::HasCustomFormatValue);
-static_assert(TFormatTraits<THashSet<int>>::HasCustomFormatValue);
-static_assert(TFormatTraits<THashMap<int, int>>::HasCustomFormatValue);
-static_assert(TFormatTraits<THashMultiSet<int>>::HasCustomFormatValue);
-static_assert(TFormatTraits<std::pair<int, int>>::HasCustomFormatValue);
-static_assert(TFormatTraits<std::optional<int>>::HasCustomFormatValue);
-static_assert(TFormatTraits<TDuration>::HasCustomFormatValue);
-static_assert(TFormatTraits<TInstant>::HasCustomFormatValue);
+static_assert(CFormattable<TCompactVector<int, 2>>);
+static_assert(CFormattable<std::set<int>>);
+static_assert(CFormattable<std::map<int, int>>);
+static_assert(CFormattable<std::multimap<int, int>>);
+static_assert(CFormattable<THashSet<int>>);
+static_assert(CFormattable<THashMap<int, int>>);
+static_assert(CFormattable<THashMultiSet<int>>);
+static_assert(CFormattable<std::pair<int, int>>);
+static_assert(CFormattable<std::optional<int>>);
+static_assert(CFormattable<TDuration>);
+static_assert(CFormattable<TInstant>);
 
 struct TUnformattable
 { };
-static_assert(!TFormatTraits<TUnformattable>::HasCustomFormatValue);
+static_assert(!CFormattable<TUnformattable>);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -206,6 +208,19 @@ TEST(TFormatTest, LazyMultiValueFormatter)
         s,
         MakeFormattableView(range, TDefaultFormatter{}));
     EXPECT_EQ("int: 1, string: hello, range: [1, 2, 3]", Format("%v", lazyFormatter));
+}
+
+TEST(TFormatTest, VectorArg)
+{
+    std::vector<TString> params = {"a", "b", "c"};
+
+    EXPECT_EQ(FormatVector("a is %v, b is %v, c is %v", params), "a is a, b is b, c is c");
+}
+
+TEST(TFormatTest, RuntimeFormat)
+{
+    TString format = "Hello %v";
+    EXPECT_EQ(Format(TRuntimeFormat(format), "World"), "Hello World");
 }
 
 ////////////////////////////////////////////////////////////////////////////////

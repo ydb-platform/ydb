@@ -1,16 +1,16 @@
 #pragma once
 
+#include <ydb/library/protobuf_printer/security_printer.h>
+
 #include <library/cpp/logger/priority.h>
 
 #include <util/generic/ptr.h>
 #include <util/system/env.h>
 
-#include <google/protobuf/text_format.h>
-
 
 namespace NYdbGrpc {
 
-static bool LogBodyEnabled = "BODY" == GetEnv("YDB_GRPC_SERVER_LOGGING");    
+static bool LogBodyEnabled = "BODY" == GetEnv("YDB_GRPC_SERVER_LOGGING");
 
 class TLogger: public TThrRefBase {
 protected:
@@ -46,15 +46,11 @@ using TLoggerPtr = TIntrusivePtr<TLogger>;
         logger->Write(ELogPriority::TLOG_INFO, format, __VA_ARGS__); \
     } else { }
 
-
-inline TString FormatMessage(const NProtoBuf::Message& message, bool ok = true) {
+template <typename TMsg>
+inline TString FormatMessage(const TMsg& message, bool ok = true) {
     if (ok) {
         if (LogBodyEnabled) {
-            TString text;
-            google::protobuf::TextFormat::Printer printer;
-            printer.SetSingleLineMode(true);
-            printer.PrintToString(message, &text);
-            return text;
+            return NKikimr::SecureDebugString<TMsg>(message);
         } else {
             return "<hidden>";
         }

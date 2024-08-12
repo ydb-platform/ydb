@@ -84,7 +84,7 @@ class TReadRowsRPC : public TActorBootstrapped<TReadRowsRPC> {
 public:
     explicit TReadRowsRPC(std::unique_ptr<IRequestNoOpCtx> request)
         : Request(std::move(request))
-        , PipeCache(MakePipePeNodeCacheID(true))
+        , PipeCache(MakePipePerNodeCacheID(true))
         , Span(TWilsonGrpc::RequestActor, Request->GetWilsonTraceId(), "ReadRowsRpc")
     {}
 

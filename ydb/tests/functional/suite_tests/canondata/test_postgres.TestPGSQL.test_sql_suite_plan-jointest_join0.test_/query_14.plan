@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet",
-                "PlanNodeId": 14,
+                "PlanNodeId": 15,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,18 +14,18 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 12
+                                        "ExternalPlanNodeId": 13
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 13,
+                        "PlanNodeId": 14,
                         "Plans": [
                             {
                                 "Node Type": "UnionAll",
-                                "PlanNodeId": 12,
+                                "PlanNodeId": 13,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
@@ -44,29 +44,29 @@
                                                 "Condition": "id = yy_1.id",
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 10
+                                                        "ExternalPlanNodeId": 11
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 8
+                                                        "ExternalPlanNodeId": 9
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
                                             }
                                         ],
-                                        "PlanNodeId": 11,
+                                        "PlanNodeId": 12,
                                         "Plans": [
                                             {
                                                 "Node Type": "Broadcast",
-                                                "PlanNodeId": 8,
+                                                "PlanNodeId": 9,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
-                                                        "PlanNodeId": 7,
+                                                        "Node Type": "Stage",
+                                                        "PlanNodeId": 8,
                                                         "Plans": [
                                                             {
                                                                 "Node Type": "UnionAll",
-                                                                "PlanNodeId": 6,
+                                                                "PlanNodeId": 7,
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
@@ -75,7 +75,7 @@
                                                                             {
                                                                                 "Inputs": [
                                                                                     {
-                                                                                        "ExternalPlanNodeId": 4
+                                                                                        "ExternalPlanNodeId": 5
                                                                                     },
                                                                                     {
                                                                                         "Other": "ConstantExpression"
@@ -84,59 +84,67 @@
                                                                                 "Name": "FullJoin (JoinDict)"
                                                                             }
                                                                         ],
-                                                                        "PlanNodeId": 5,
+                                                                        "PlanNodeId": 6,
                                                                         "Plans": [
                                                                             {
                                                                                 "KeyColumns": [
                                                                                     "unique1"
                                                                                 ],
                                                                                 "Node Type": "HashShuffle",
-                                                                                "PlanNodeId": 4,
+                                                                                "PlanNodeId": 5,
                                                                                 "PlanNodeType": "Connection",
                                                                                 "Plans": [
                                                                                     {
-                                                                                        "Node Type": "Collect",
-                                                                                        "PlanNodeId": 3,
+                                                                                        "Node Type": "Stage",
+                                                                                        "PlanNodeId": 4,
                                                                                         "Plans": [
                                                                                             {
                                                                                                 "Node Type": "UnionAll",
-                                                                                                "PlanNodeId": 2,
+                                                                                                "PlanNodeId": 3,
                                                                                                 "PlanNodeType": "Connection",
                                                                                                 "Plans": [
                                                                                                     {
-                                                                                                        "Node Type": "TableFullScan",
-                                                                                                        "Operators": [
+                                                                                                        "Node Type": "Stage",
+                                                                                                        "PlanNodeId": 2,
+                                                                                                        "Plans": [
                                                                                                             {
-                                                                                                                "Inputs": [],
-                                                                                                                "Name": "TableFullScan",
-                                                                                                                "ReadColumns": [
-                                                                                                                    "even",
-                                                                                                                    "fivethous",
-                                                                                                                    "four",
-                                                                                                                    "hundred",
-                                                                                                                    "odd",
-                                                                                                                    "string4",
-                                                                                                                    "stringu1",
-                                                                                                                    "stringu2",
-                                                                                                                    "ten",
-                                                                                                                    "tenthous",
-                                                                                                                    "thousand",
-                                                                                                                    "twenty",
-                                                                                                                    "two",
-                                                                                                                    "twothousand",
-                                                                                                                    "unique1",
-                                                                                                                    "unique2"
+                                                                                                                "Node Type": "TableFullScan",
+                                                                                                                "Operators": [
+                                                                                                                    {
+                                                                                                                        "Inputs": [],
+                                                                                                                        "Name": "TableFullScan",
+                                                                                                                        "ReadColumns": [
+                                                                                                                            "even",
+                                                                                                                            "fivethous",
+                                                                                                                            "four",
+                                                                                                                            "hundred",
+                                                                                                                            "odd",
+                                                                                                                            "string4",
+                                                                                                                            "stringu1",
+                                                                                                                            "stringu2",
+                                                                                                                            "ten",
+                                                                                                                            "tenthous",
+                                                                                                                            "thousand",
+                                                                                                                            "twenty",
+                                                                                                                            "two",
+                                                                                                                            "twothousand",
+                                                                                                                            "unique1",
+                                                                                                                            "unique2"
+                                                                                                                        ],
+                                                                                                                        "ReadRanges": [
+                                                                                                                            "unique1 (-\u221e, +\u221e)",
+                                                                                                                            "unique2 (-\u221e, +\u221e)"
+                                                                                                                        ],
+                                                                                                                        "ReadRangesPointPrefixLen": "0",
+                                                                                                                        "Scan": "Parallel",
+                                                                                                                        "Table": "postgres_jointest/join0.test_plan/tenk1"
+                                                                                                                    }
                                                                                                                 ],
-                                                                                                                "ReadRanges": [
-                                                                                                                    "unique1 (-\u221e, +\u221e)",
-                                                                                                                    "unique2 (-\u221e, +\u221e)"
-                                                                                                                ],
-                                                                                                                "Table": "postgres_jointest/join0.test_plan/tenk1"
+                                                                                                                "PlanNodeId": 1,
+                                                                                                                "Tables": [
+                                                                                                                    "postgres_jointest/join0.test_plan/tenk1"
+                                                                                                                ]
                                                                                                             }
-                                                                                                        ],
-                                                                                                        "PlanNodeId": 1,
-                                                                                                        "Tables": [
-                                                                                                            "postgres_jointest/join0.test_plan/tenk1"
                                                                                                         ]
                                                                                                     }
                                                                                                 ]
@@ -155,19 +163,12 @@
                                             },
                                             {
                                                 "Node Type": "Map",
-                                                "PlanNodeId": 10,
+                                                "PlanNodeId": 11,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "ConstantExpr",
-                                                        "Operators": [
-                                                            {
-                                                                "Inputs": [],
-                                                                "Iterator": "[{id: 1}]",
-                                                                "Name": "Iterator"
-                                                            }
-                                                        ],
-                                                        "PlanNodeId": 9
+                                                        "Node Type": "Stage",
+                                                        "PlanNodeId": 10
                                                     }
                                                 ]
                                             }

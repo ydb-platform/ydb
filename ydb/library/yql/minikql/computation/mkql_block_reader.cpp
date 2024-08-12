@@ -40,6 +40,29 @@ public:
 };
 
 template <bool Nullable>
+class TFixedSizeBlockItemConverter<NYql::NDecimal::TInt128, Nullable> : public IBlockItemConverter {
+public:
+    NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const final {
+        Y_UNUSED(holderFactory);
+        if constexpr (Nullable) {
+            if (!item) {
+                return {};
+            }
+        }
+        return NUdf::TUnboxedValuePod(item.GetInt128());
+    }
+
+    TBlockItem MakeItem(const NUdf::TUnboxedValuePod& value) const final {
+        if constexpr (Nullable) {
+            if (!value) {
+                return {};
+            }
+        }
+        return TBlockItem(value.GetInt128());
+    }
+};
+
+template <bool Nullable>
 class TResourceBlockItemConverter : public IBlockItemConverter {
 public:
     NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const final {
@@ -195,6 +218,37 @@ private:
     mutable TVector<TBlockItem> Items;
 };
 
+template <typename TTzDate, bool Nullable>
+class TTzDateBlockItemConverter : public IBlockItemConverter {
+public:
+    using TLayout = typename NYql::NUdf::TDataType<TTzDate>::TLayout;
+
+    NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const final {
+        Y_UNUSED(holderFactory);
+        if constexpr (Nullable) {
+            if (!item) {
+                return {};
+            }
+        }
+
+        NUdf::TUnboxedValuePod value {item.Get<TLayout>()};
+        value.SetTimezoneId(item.GetTimezoneId());
+        return value;
+    }
+
+    TBlockItem MakeItem(const NUdf::TUnboxedValuePod& value) const final {
+        if constexpr (Nullable) {
+            if (!value) {
+                return {};
+            }
+        }
+
+        TBlockItem item {value.Get<TLayout>()};
+        item.SetTimezoneId(value.GetTimezoneId());
+        return item;
+    }
+};
+
 class TExternalOptionalBlockItemConverter : public IBlockItemConverter {
 public:
     TExternalOptionalBlockItemConverter(std::unique_ptr<IBlockItemConverter>&& inner)
@@ -229,6 +283,8 @@ struct TConverterTraits {
     template <typename TStringType, bool Nullable, NUdf::EDataSlot TOriginal = NUdf::EDataSlot::String, NUdf::EPgStringType PgString = NUdf::EPgStringType::None>
     using TStrings = TStringBlockItemConverter<TStringType, Nullable, PgString>;
     using TExtOptional = TExternalOptionalBlockItemConverter;
+    template<typename TTzDate, bool Nullable>
+    using TTzDateConverter = TTzDateBlockItemConverter<TTzDate, Nullable>;
 
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         if (desc.PassByValue) {
@@ -256,6 +312,15 @@ struct TConverterTraits {
             return std::make_unique<TResourceBlockItemConverter<true>>();
         } else {
             return std::make_unique<TResourceBlockItemConverter<false>>();
+        }
+    }
+
+    template<typename TTzDate>
+    static std::unique_ptr<TResult> MakeTzDate(bool isOptional) {
+        if (isOptional) {
+            return std::make_unique<TTzDateConverter<TTzDate, true>>();
+        } else {
+            return std::make_unique<TTzDateConverter<TTzDate, false>>();
         }
     }
 };

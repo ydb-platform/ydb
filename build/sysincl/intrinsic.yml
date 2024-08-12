@@ -1,9 +1,12 @@
 - includes:
   - Intrin.h
+  - altivec.h
   - ammintrin.h
   - arm_acle.h
   - arm_fp16.h
   - arm_neon.h
+  - arm_neon_sve_bridge.h
+  - arm_sve.h
   - arm64_neon.h
   - armintr.h
   - avx2intrin.h
@@ -31,6 +34,7 @@
   - intrin0.h
   - intrinsics.h
   - lzcntintrin.h
+  - mm_malloc.h
   - mm3dnow.h
   - mmintrin.h
   - msa.h
@@ -38,12 +42,15 @@
   - pmmintrin.h
   - popcntintrin.h
   - prfchwintrin.h
+  - quadmath.h
   - rdseedintrin.h
   - rtmintrin.h
   - s390intrin.h
+  - stdfix.h
   - smmintrin.h
   - tbmintrin.h
   - tmmintrin.h
+  - varargs.h
   - wmmintrin.h
   - x86intrin.h
   - xmmintrin.h

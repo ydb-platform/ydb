@@ -1,25 +1,21 @@
-#include <ydb/core/blobstorage/base/blobstorage_events.h>
-
 #include "viewer_request.h"
+#include "viewer_autocomplete.h"
+#include "viewer_query_old.h"
+#include "viewer_render.h"
+#include "viewer_sysinfo.h"
+#include "viewer_tabletinfo.h"
 #include "wb_req.h"
 
-#include "json_tabletinfo.h"
-#include "json_sysinfo.h"
-#include "json_query.h"
-#include "json_render.h"
-#include "json_autocomplete.h"
-
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 using namespace NActors;
 using namespace NNodeWhiteboard;
 
 template<typename TRequestEventType, typename TResponseEventType>
-class TViewerWhiteboardRequest : public TWhiteboardRequest<TViewerWhiteboardRequest<TRequestEventType, TResponseEventType>, TRequestEventType, TResponseEventType> {
+class TViewerWhiteboardRequest : public TWhiteboardRequest<TRequestEventType, TResponseEventType> {
 protected:
     using TThis = TViewerWhiteboardRequest<TRequestEventType, TResponseEventType>;
-    using TBase = TWhiteboardRequest<TThis, TRequestEventType, TResponseEventType>;
+    using TBase = TWhiteboardRequest<TRequestEventType, TResponseEventType>;
     using TResponseType = typename TResponseEventType::ProtoRecordType;
     IViewer* Viewer;
     TEvViewer::TEvViewerRequest::TPtr Event;
@@ -54,7 +50,7 @@ public:
         NKikimr::NViewer::MergeWhiteboardResponses(*(response->Record.MutableSystemResponse()), perNodeStateInfo, fields);
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         auto response = MakeHolder<TEvViewer::TEvViewerResponse>();
         auto& locationResponded = (*response->Record.MutableLocationResponded());
         for (const auto& [nodeId, nodeResponse] : TBase::PerNodeStateInfo) {
@@ -75,7 +71,7 @@ IActor* CreateViewerRequestHandler(TEvViewer::TEvViewerRequest::TPtr& request) {
         case NKikimrViewer::TEvViewerRequest::kSystemRequest:
             return new TViewerWhiteboardRequest<TEvWhiteboard::TEvSystemStateRequest, TEvWhiteboard::TEvSystemStateResponse>(request);
         case NKikimrViewer::TEvViewerRequest::kQueryRequest:
-            return new TJsonQuery(request);
+            return new TJsonQueryOld(request);
         case NKikimrViewer::TEvViewerRequest::kRenderRequest:
             return new TJsonRender(request);
         case NKikimrViewer::TEvViewerRequest::kAutocompleteRequest:
@@ -89,5 +85,21 @@ IActor* CreateViewerRequestHandler(TEvViewer::TEvViewerRequest::TPtr& request) {
     return nullptr;
 }
 
+bool IsPostContent(const NMon::TEvHttpInfo::TPtr& event) {
+    if (event->Get()->Request.GetMethod() == HTTP_METHOD_POST) {
+        const THttpHeaders& headers = event->Get()->Request.GetHeaders();
+
+        auto itContentType = FindIf(headers, [](const auto& header) {
+            return AsciiEqualsIgnoreCase(header.Name(),  "Content-Type");
+        });
+
+        if (itContentType != headers.end()) {
+            TStringBuf contentTypeHeader = itContentType->Value();
+            TStringBuf contentType = contentTypeHeader.NextTok(';');
+            return contentType == "application/json";
+        }
+    }
+    return false;
 }
+
 }

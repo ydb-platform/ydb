@@ -23,6 +23,21 @@ using namespace NYql;
 using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
+namespace {
+
+bool IsStreamLookup(const TCoEquiJoinTuple& joinTuple) {
+    for (const auto& outer: joinTuple.Options()) {
+        for (const auto& inner: outer.Cast<TExprList>()) {
+            if (inner.Cast<TCoAtom>().StringValue() == "forceStreamLookup") {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+}
+
 class TDqsLogicalOptProposalTransformer : public TOptimizeTransformerBase {
 public:
     TDqsLogicalOptProposalTransformer(TTypeAnnotationContext* typeCtx, const TDqConfiguration::TPtr& config)
@@ -42,6 +57,7 @@ public:
         AddHandler(0, &TCoWideMap::Match, HNDL(DqReadWideWrapFieldSubset));
         AddHandler(0, &TCoAggregateBase::Match, HNDL(RewriteAggregate));
         AddHandler(0, &TCoTake::Match, HNDL(RewriteTakeSortToTopSort));
+        AddHandler(0, &TCoEquiJoin::Match, HNDL(RewriteStreamEquiJoinWithLookup));
         AddHandler(0, &TCoEquiJoin::Match, HNDL(OptimizeEquiJoinWithCosts));
         AddHandler(0, &TCoEquiJoin::Match, HNDL(RewriteEquiJoin));
         AddHandler(0, &TCoCalcOverWindowBase::Match, HNDL(ExpandWindowFunctions));
@@ -134,6 +150,55 @@ protected:
         return node;
     }
 
+    TDqLookupSourceWrap LookupSourceFromSource(TDqSourceWrap source, TExprContext& ctx) {
+        return Build<TDqLookupSourceWrap>(ctx, source.Pos())
+                .Input(source.Input())
+                .DataSource(source.DataSource())
+                .RowType(source.RowType())
+                .Settings(source.Settings())
+            .Done();
+    }
+
+    TDqLookupSourceWrap LookupSourceFromRead(TDqReadWrap read, TExprContext& ctx){ //temp replace with yt source
+        IDqOptimization* dqOptimization = GetDqOptCallback(read.Input());
+        YQL_ENSURE(dqOptimization);
+        auto lookupSourceWrap = dqOptimization->RewriteLookupRead(read.Input().Ptr(), ctx);
+        YQL_ENSURE(lookupSourceWrap, "Lookup read is not supported");
+        return TDqLookupSourceWrap(lookupSourceWrap);
+    }
+
+    TMaybeNode<TExprBase> RewriteStreamEquiJoinWithLookup(TExprBase node, TExprContext& ctx) {
+        Y_UNUSED(ctx);
+        const auto equiJoin = node.Cast<TCoEquiJoin>();
+        if (equiJoin.ArgCount() != 4) { // 2 parties join
+            return node;
+        }
+        const auto left = equiJoin.Arg(0).Cast<TCoEquiJoinInput>().List();
+        const auto right = equiJoin.Arg(1).Cast<TCoEquiJoinInput>().List();
+        const auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();
+        if (!IsStreamLookup(joinTuple)) {
+            return node;
+        }
+        if (!right.Maybe<TDqSourceWrap>() && !right.Maybe<TDqReadWrap>()) {
+            return node;
+        }
+
+        TDqLookupSourceWrap lookupSourceWrap =  right.Maybe<TDqSourceWrap>() 
+            ? LookupSourceFromSource(right.Cast<TDqSourceWrap>(), ctx)
+            : LookupSourceFromRead(right.Cast<TDqReadWrap>(), ctx)
+        ;
+
+        return Build<TCoEquiJoin>(ctx, node.Pos())
+                .Add(equiJoin.Arg(0))
+                .Add<TCoEquiJoinInput>()
+                        .List(lookupSourceWrap)
+                        .Scope(equiJoin.Arg(1).Cast<TCoEquiJoinInput>().Scope())
+                .Build()
+                .Add(equiJoin.Arg(2))
+                .Add(equiJoin.Arg(3))
+            .Done();
+    }
+
     TMaybeNode<TExprBase> OptimizeEquiJoinWithCosts(TExprBase node, TExprContext& ctx) {
         if (TypesCtx.CostBasedOptimizer != ECostBasedOptimizerType::Disable) {
             std::function<void(const TString&)> log = [&](auto str) {
@@ -141,7 +206,7 @@ protected:
             };
 
             std::unique_ptr<IOptimizerNew> opt;
-            TDummyProviderContext pctx;
+            TBaseProviderContext pctx;
 
             switch (TypesCtx.CostBasedOptimizer) {
             case ECostBasedOptimizerType::Native:
@@ -160,7 +225,7 @@ protected:
                 rels.push_back(rel);
             };
 
-            return DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, 1, *opt, providerCollect);
+            return DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, 2, *opt, providerCollect);
         } else {
             return node;
         }
@@ -180,12 +245,12 @@ protected:
             hasDqConnections |= !!list.Maybe<TDqConnection>();
         }
 
-        return hasDqConnections ? DqRewriteEquiJoin(node, Config->HashJoinMode.Get().GetOrElse(EHashJoinMode::Off), false, ctx) : node;
+        return hasDqConnections ? DqRewriteEquiJoin(node, Config->HashJoinMode.Get().GetOrElse(EHashJoinMode::Off), false, ctx, TypesCtx) : node;
     }
 
     TMaybeNode<TExprBase> ExpandWindowFunctions(TExprBase node, TExprContext& ctx) {
         if (node.Cast<TCoInputBase>().Input().Maybe<TDqConnection>()) {
-            return DqExpandWindowFunctions(node, ctx, true);
+            return DqExpandWindowFunctions(node, ctx, TypesCtx, true);
         }
         return node;
     }

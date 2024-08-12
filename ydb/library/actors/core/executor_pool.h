@@ -1,6 +1,7 @@
 #pragma once
 
 #include "event.h"
+#include "executor_pool_jail.h"
 #include "scheduler_queue.h"
 
 namespace NActors {
@@ -8,7 +9,9 @@ namespace NActors {
     struct TMailboxHeader;
     struct TWorkerContext;
     struct TExecutorPoolStats;
+    struct TExecutorPoolState;
     struct TExecutorThreadStats;
+    class TExecutorPoolJail;
     class ISchedulerCookie;
 
     struct TCpuConsumption {
@@ -104,6 +107,10 @@ namespace NActors {
             // TODO: make pure virtual and override everywhere
             Y_UNUSED(poolStats);
             Y_UNUSED(statsCopy);
+        }
+
+        virtual void GetExecutorPoolState(TExecutorPoolState &poolState) const {
+            Y_UNUSED(poolState);
         }
 
         virtual TString GetName() const {

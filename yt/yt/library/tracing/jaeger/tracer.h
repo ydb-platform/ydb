@@ -82,6 +82,9 @@ public:
 
     NAuth::TTvmServiceConfigPtr TvmService;
 
+    // Does not send spans to a collector, but just drops them instead. Logs batch and span count.
+    bool TestDropSpans;
+
     TJaegerTracerConfigPtr ApplyDynamic(const TJaegerTracerDynamicConfigPtr& dynamicConfig) const;
 
     bool IsEnabled() const;

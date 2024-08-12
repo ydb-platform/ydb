@@ -114,7 +114,7 @@ protected:
 
         TString usedCluster;
         TSyncMap syncList;
-        if (!IsYtIsolatedLambda(data.Ref(), syncList, usedCluster, true, false)) {
+        if (!IsYtIsolatedLambda(data.Ref(), syncList, usedCluster, false)) {
             ctx.AddError(TIssue(ctx.GetPosition(data.Pos()), TStringBuilder() << "Failed to execute node due to bad graph: " << input->Content()));
             return SyncError();
         }
@@ -210,7 +210,10 @@ protected:
             if (configure.Args().Count() == 5) {
                 value = TString{configure.Arg(4).Cast<TCoAtom>().Value()};
             }
-            if (State_->Configuration->Dispatch(clusterName, name, value, NCommon::TSettingDispatcher::EStage::RUNTIME)) {
+            if (State_->Configuration->IsRuntime(name)) {
+                if (!State_->Configuration->Dispatch(clusterName, name, value, NCommon::TSettingDispatcher::EStage::RUNTIME, NCommon::TSettingDispatcher::GetErrorCallback(input->Pos(), ctx))) {
+                    return SyncError();
+                }
                 State_->Configuration->PromoteVersion(*input);
                 YQL_CLOG(DEBUG, ProviderYt) << "Setting pragma "
                     << (NCommon::ALL_CLUSTERS == clusterName ? YtProviderName : clusterName) << '.'

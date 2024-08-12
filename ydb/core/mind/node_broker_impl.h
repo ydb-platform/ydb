@@ -46,6 +46,7 @@ public:
     struct TEvPrivate {
         enum EEv {
             EvUpdateEpoch = EventSpaceBegin(TEvents::ES_PRIVATE),
+            EvResolvedRegistrationRequest,
 
             EvEnd
         };
@@ -53,6 +54,22 @@ public:
         static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
 
         struct TEvUpdateEpoch : public TEventLocal<TEvUpdateEpoch, EvUpdateEpoch> {};
+
+        struct TEvResolvedRegistrationRequest : public TEventLocal<TEvResolvedRegistrationRequest, EvResolvedRegistrationRequest> {
+            
+            TEvResolvedRegistrationRequest(
+                    TEvNodeBroker::TEvRegistrationRequest::TPtr request,
+                    NActors::TScopeId scopeId,
+                    TSubDomainKey servicedSubDomain)
+                : Request(request)
+                , ScopeId(scopeId)
+                , ServicedSubDomain(servicedSubDomain)
+            {}
+
+            TEvNodeBroker::TEvRegistrationRequest::TPtr Request;
+            NActors::TScopeId ScopeId;
+            TSubDomainKey ServicedSubDomain;
+        };
     };
 
 private:
@@ -138,9 +155,7 @@ private:
     ITransaction *CreateTxExtendLease(TEvNodeBroker::TEvExtendLeaseRequest::TPtr &ev);
     ITransaction *CreateTxInitScheme();
     ITransaction *CreateTxLoadState();
-    ITransaction *CreateTxRegisterNode(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
-                                       const NActors::TScopeId& scopeId,
-                                       const TSubDomainKey& servicedSubDomain);
+    ITransaction *CreateTxRegisterNode(TEvPrivate::TEvResolvedRegistrationRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfig(TEvNodeBroker::TEvSetConfigRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfigSubscription(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev);
@@ -192,6 +207,7 @@ private:
             HFuncTraced(TEvNodeBroker::TEvGetConfigRequest, Handle);
             HFuncTraced(TEvNodeBroker::TEvSetConfigRequest, Handle);
             HFuncTraced(TEvPrivate::TEvUpdateEpoch, Handle);
+            HFuncTraced(TEvPrivate::TEvResolvedRegistrationRequest, Handle);
             IgnoreFunc(TEvTabletPipe::TEvServerConnected);
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
             IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
@@ -224,6 +240,8 @@ private:
 
     void ScheduleEpochUpdate(const TActorContext &ctx);
     void FillNodeInfo(const TNodeInfo &node,
+                      NKikimrNodeBroker::TNodeInfo &info) const;
+    void FillNodeName(const std::optional<ui32> &slotIndex,
                       NKikimrNodeBroker::TNodeInfo &info) const;
 
     void ComputeNextEpochDiff(TStateDiff &diff);
@@ -291,6 +309,8 @@ private:
                 const TActorContext &ctx);
     void Handle(TEvPrivate::TEvUpdateEpoch::TPtr &ev,
                 const TActorContext &ctx);
+    void Handle(TEvPrivate::TEvResolvedRegistrationRequest::TPtr &ev,
+                const TActorContext &ctx);
 
     // All registered dynamic nodes.
     THashMap<ui32, TNodeInfo> Nodes;
@@ -301,7 +321,7 @@ private:
     TDynBitMap FreeIds;
     // Maps tenant to its slot indexes pool.
     std::unordered_map<TSubDomainKey, TSlotIndexesPool, THash<TSubDomainKey>> SlotIndexesPools;
-    bool EnableSlotNameGeneration = false;
+    bool EnableStableNodeNames = false;
     // Epoch info.
     TEpochInfo Epoch;
     // Current config.
@@ -312,6 +332,7 @@ private:
     TDuration EpochDuration;
     TVector<std::pair<ui32, ui32>> BannedIds;
     ui64 ConfigSubscriptionId;
+    TString StableNodeNamePrefix;
 
     // Events collected during initialization phase.
     TMultiMap<ui64, TEvNodeBroker::TEvListNodes::TPtr> DelayedListNodesRequests;
@@ -326,6 +347,7 @@ public:
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
         , EpochDuration(TDuration::Hours(1))
         , ConfigSubscriptionId(0)
+        , StableNodeNamePrefix("slot-")
         , TxProcessor(new TTxProcessor(*this, "root", NKikimrServices::NODE_BROKER))
     {
     }

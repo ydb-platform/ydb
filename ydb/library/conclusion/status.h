@@ -20,45 +20,55 @@ private:
 
     TConclusionStatus(const char* errorMessage, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::INTERNAL_ERROR)
         : ErrorMessage(errorMessage)
-        , Status(status)
-    {
+        , Status(status) {
+        Y_ABORT_UNLESS(!!ErrorMessage);
+    }
+
+    TConclusionStatus(const std::string& errorMessage, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::INTERNAL_ERROR)
+        : ErrorMessage(TString(errorMessage.data(), errorMessage.size()))
+        , Status(status) {
         Y_ABORT_UNLESS(!!ErrorMessage);
     }
 public:
+    void Validate(const TString& processInfo = Default<TString>()) const;
 
-    const TString& GetErrorMessage() const {
+    [[nodiscard]] const TString& GetErrorMessage() const {
         return ErrorMessage ? *ErrorMessage : Default<TString>();
     }
 
-    Ydb::StatusIds::StatusCode GetStatus() const {
+    [[nodiscard]] Ydb::StatusIds::StatusCode GetStatus() const {
         return Status;
     }
 
-    static TConclusionStatus Fail(const char* errorMessage) {
+    [[nodiscard]] static TConclusionStatus Fail(const char* errorMessage) {
         return TConclusionStatus(errorMessage);
     }
 
-    static TConclusionStatus Fail(const TString& errorMessage) {
+    [[nodiscard]] static TConclusionStatus Fail(const TString& errorMessage) {
         return TConclusionStatus(errorMessage);
     }
 
-    bool IsFail() const {
+    [[nodiscard]] static TConclusionStatus Fail(const std::string& errorMessage) {
+        return TConclusionStatus(errorMessage);
+    }
+
+    [[nodiscard]] bool IsFail() const {
         return !Ok();
     }
 
-    bool Ok() const {
-        return !ErrorMessage;
-    }
-
-    bool operator!() const {
-        return !!ErrorMessage;
-    }
-
-    explicit operator bool() const {
+    [[nodiscard]] bool IsSuccess() const {
         return Ok();
     }
 
-    static TConclusionStatus Success() {
+    [[nodiscard]] bool Ok() const {
+        return !ErrorMessage;
+    }
+
+    [[nodiscard]] bool operator!() const {
+        return !!ErrorMessage;
+    }
+
+    [[nodiscard]] static TConclusionStatus Success() {
         return TConclusionStatus();
     }
 };

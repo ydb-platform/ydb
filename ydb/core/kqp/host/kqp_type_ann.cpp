@@ -24,7 +24,7 @@ using TStatus = IGraphTransformer::TStatus;
 namespace {
 
 bool RightJoinSideAllowed(const TStringBuf& joinType) {
-    return joinType != "LeftOnly";
+    return joinType != "LeftOnly" && joinType != "LeftSemi";
 }
 
 bool RightJoinSideOptional(const TStringBuf& joinType) {
@@ -502,7 +502,9 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
             return TStatus::Error;
         }
 
-        if (lookupStrategy->Content() == TKqpStreamLookupJoinStrategyName) {
+        if (lookupStrategy->Content() == TKqpStreamLookupJoinStrategyName 
+            || lookupStrategy->Content() == TKqpStreamLookupSemiJoinStrategyName) {
+
             if (!EnsureTupleType(node->Pos(), *lookupType, ctx)) {
                 return TStatus::Error;
             }
@@ -512,7 +514,12 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
             }
 
             auto tupleType = lookupType->Cast<TTupleExprType>();
-            if (!EnsureStructType(node->Pos(), *tupleType->GetItems()[0], ctx)) {
+            if (!EnsureOptionalType(node->Pos(), *tupleType->GetItems()[0], ctx)) {
+                return TStatus::Error;
+            }
+
+            auto joinKeyType = tupleType->GetItems()[0]->Cast<TOptionalExprType>()->GetItemType();
+            if (!EnsureStructType(node->Pos(), *joinKeyType, ctx)) {
                 return TStatus::Error;
             }
 
@@ -520,7 +527,7 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
                 return TStatus::Error;
             }
 
-            structType = tupleType->GetItems()[0]->Cast<TStructExprType>();
+            structType = joinKeyType->Cast<TStructExprType>();
             auto leftRowType = tupleType->GetItems()[1]->Cast<TStructExprType>();
 
             TVector<const TTypeAnnotationNode*> outputTypes;
@@ -719,7 +726,7 @@ TStatus AnnotateUpsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
 TStatus AnnotateInsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData)
 {
-    if (!EnsureArgsCount(*node, 5, ctx)) {
+    if (!EnsureMinMaxArgsCount(*node, 5, 6, ctx)) {
         return TStatus::Error;
     }
 
@@ -931,9 +938,9 @@ TStatus AnnotateOlapBinaryLogicOperator(const TExprNode::TPtr& node, TExprContex
 }
 
 bool ValidateOlapFilterConditions(const TExprNode* node, const TStructExprType* itemType, TExprContext& ctx) {
-    YQL_ENSURE(itemType);
-
-    if (TKqpOlapAnd::Match(node) || TKqpOlapOr::Match(node) || TKqpOlapXor::Match(node) || TKqpOlapNot::Match(node)) {
+    if (TKqpOlapApply::Match(node)) {
+        return true;
+    } else if (TKqpOlapAnd::Match(node) || TKqpOlapOr::Match(node) || TKqpOlapXor::Match(node) || TKqpOlapNot::Match(node)) {
         bool res = true;
         for (auto arg : node->ChildrenList()) {
             res &= ValidateOlapFilterConditions(arg.Get(), itemType, ctx);
@@ -947,7 +954,7 @@ bool ValidateOlapFilterConditions(const TExprNode* node, const TStructExprType* 
         if (!EnsureAtom(*op, ctx)) {
             return false;
         }
-        if (!op->IsAtom({"minus", "abs", "not", "size", "exists", "empty"})) {
+        if (!op->IsAtom({"minus", "abs", "not", "size", "exists", "empty", "just"})) {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()),
                 TStringBuilder() << "Unexpected OLAP unary operation: " << op->Content()
             ));
@@ -967,6 +974,20 @@ bool ValidateOlapFilterConditions(const TExprNode* node, const TStructExprType* 
         }
         return ValidateOlapFilterConditions(node->Child(TKqpOlapFilterBinaryOp::idx_Left), itemType, ctx)
             && ValidateOlapFilterConditions(node->Child(TKqpOlapFilterBinaryOp::idx_Right), itemType, ctx);
+    } else if (TKqpOlapFilterTernaryOp::Match(node)) {
+        const auto op = node->Child(TKqpOlapFilterTernaryOp::idx_Operator);
+        if (!EnsureAtom(*op, ctx)) {
+            return false;
+        }
+        if (!op->IsAtom("if")) { // TODO: +substring
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()),
+                TStringBuilder() << "Unexpected OLAP ternary operation: " << op->Content()
+            ));
+            return false;
+        }
+        return ValidateOlapFilterConditions(node->Child(TKqpOlapFilterTernaryOp::idx_First), itemType, ctx)
+            && ValidateOlapFilterConditions(node->Child(TKqpOlapFilterTernaryOp::idx_Second), itemType, ctx)
+            && ValidateOlapFilterConditions(node->Child(TKqpOlapFilterTernaryOp::idx_Third), itemType, ctx);
     } else if (TKqpOlapFilterExists::Match(node)) {
         if (!EnsureArgsCount(*node, 1, ctx)) {
             return false;
@@ -1050,6 +1071,55 @@ TStatus AnnotateOlapFilter(const TExprNode::TPtr& node, TExprContext& ctx) {
     }
 
     node->SetTypeAnn(input->GetTypeAnn());
+    return TStatus::Ok;
+}
+
+TStatus AnnotateOlapApply(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 3U, ctx)) {
+        return TStatus::Error;
+    }
+
+    const auto type = node->Child(TKqpOlapApply::idx_Type);
+    if (!EnsureType(*type, ctx)) {
+        return TStatus::Error;
+    }
+
+    const auto argsType = type->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+    if (!EnsureStructType(type->Pos(), *argsType, ctx)) {
+        return TStatus::Error;
+    }
+
+    const auto columns = node->Child(TKqpOlapApply::idx_Columns);
+    if (!EnsureTupleOfAtoms(*columns, ctx)) {
+        return TStatus::Error;
+    }
+
+    const auto structType = argsType->Cast<TStructExprType>();
+    TTypeAnnotationNode::TListType argsTypes(columns->ChildrenSize());
+    for (auto i = 0U; i < argsTypes.size(); ++i) {
+        if (const auto argType = structType->FindItemType(columns->Child(i)->Content()))
+            argsTypes[i] = argType;
+        else {
+            ctx.AddError(TIssue(ctx.GetPosition(columns->Child(i)->Pos()),
+                TStringBuilder() << "Missed column: " << columns->Child(i)->Content()
+            ));
+            return TStatus::Error;
+        }
+    }
+
+    if (!EnsureLambda(node->Tail(), ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!UpdateLambdaAllArgumentsTypes(node->TailRef(), argsTypes, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!node->Tail().GetTypeAnn()) {
+        return TStatus::Repeat;
+    }
+
+    node->SetTypeAnn(ctx.MakeType<TUnitExprType>());
     return TStatus::Ok;
 }
 
@@ -1614,7 +1684,9 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
 
         node->SetTypeAnn(ctx.MakeType<TStreamExprType>(rowType));
 
-    } else if (lookupStrategy.Value() == TKqpStreamLookupJoinStrategyName) {
+    } else if (lookupStrategy.Value() == TKqpStreamLookupJoinStrategyName 
+        || lookupStrategy.Value() == TKqpStreamLookupSemiJoinStrategyName) {
+        
         if (!EnsureTupleType(node->Pos(), *inputItemType, ctx)) {
             return TStatus::Error;
         }
@@ -1624,7 +1696,12 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
         }
 
         auto inputTupleType = inputItemType->Cast<TTupleExprType>();
-        if (!EnsureStructType(node->Pos(), *inputTupleType->GetItems()[0], ctx)) {
+        if (!EnsureOptionalType(node->Pos(), *inputTupleType->GetItems()[0], ctx)) {
+            return TStatus::Error;
+        }
+
+        auto joinKeyType = inputTupleType->GetItems()[0]->Cast<TOptionalExprType>()->GetItemType();
+        if (!EnsureStructType(node->Pos(), *joinKeyType, ctx)) {
             return TStatus::Error;
         }
 
@@ -1632,7 +1709,7 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
             return TStatus::Error;
         }
 
-        const TStructExprType* joinKeys = inputTupleType->GetItems()[0]->Cast<TStructExprType>();
+        const TStructExprType* joinKeys = joinKeyType->Cast<TStructExprType>();
         const TStructExprType* leftRowType = inputTupleType->GetItems()[1]->Cast<TStructExprType>();
 
         for (const auto& inputKey : joinKeys->GetItems()) {
@@ -1718,9 +1795,10 @@ TStatus AnnotateIndexLookupJoin(const TExprNode::TPtr& node, TExprContext& ctx) 
 
     TVector<const TItemExprType*> resultStructItems;
     for (const auto& item : leftRowType->GetItems()) {
-        resultStructItems.emplace_back(
-            ctx.MakeType<TItemExprType>(TString::Join(leftLabel.Value(), ".", item->GetName()), item->GetItemType())
-        );
+        TString itemName = leftLabel.Value().empty()
+            ? TString(item->GetName())
+            : TString::Join(leftLabel.Value(), ".", item->GetName());
+        resultStructItems.emplace_back(ctx.MakeType<TItemExprType>(itemName, item->GetItemType()));
     }
 
     if (RightJoinSideAllowed(joinType.Value())) {
@@ -1731,9 +1809,10 @@ TStatus AnnotateIndexLookupJoin(const TExprNode::TPtr& node, TExprContext& ctx) 
                 ? ctx.MakeType<TOptionalExprType>(item->GetItemType())
                 : item->GetItemType();
 
-            resultStructItems.emplace_back(
-                ctx.MakeType<TItemExprType>(TString::Join(rightLabel.Value(), ".", item->GetName()), itemType)
-            );
+            TString itemName = rightLabel.Value().empty()
+                ? TString(item->GetName())
+                : TString::Join(rightLabel.Value(), ".", item->GetName());
+            resultStructItems.emplace_back(ctx.MakeType<TItemExprType>(itemName, itemType));
         }
     }
 
@@ -1775,7 +1854,7 @@ TStatus AnnotateKqpSinkEffect(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 TStatus AnnotateTableSinkSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (!EnsureMinMaxArgsCount(*input, 2, 3, ctx)) {
+    if (!EnsureMinMaxArgsCount(*input, 4, 5, ctx)) {
         return TStatus::Error;
     }
     input->SetTypeAnn(ctx.MakeType<TVoidExprType>());
@@ -1850,6 +1929,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpOlapFilter::Match(input.Get())) {
                 return AnnotateOlapFilter(input, ctx);
+            }
+
+            if (TKqpOlapApply::Match(input.Get())) {
+                return AnnotateOlapApply(input, ctx);
             }
 
             if (TKqpOlapAgg::Match(input.Get())) {

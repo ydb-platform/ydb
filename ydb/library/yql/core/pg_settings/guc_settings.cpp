@@ -1,4 +1,14 @@
 #include "guc_settings.h"
+#include <library/cpp/json/json_reader.h>
+
+TGUCSettings::TGUCSettings(const TString &serialized) {
+    if (!serialized.Empty()) {
+        NJson::TJsonValue gucJson;
+        Y_ENSURE(NJson::ReadJsonTree(serialized, &gucJson), "Error parsing GUCSettings");
+        this->ImportFromJson(gucJson);
+    }
+}
+
 
 void TGUCSettings::Setup(const std::unordered_map<std::string, std::string>& runtimeSettings) {
     RollbackSettings_ = runtimeSettings;
@@ -71,6 +81,12 @@ void TGUCSettings::ImportFromJson(const NJson::TJsonValue& value)
             }
         }
     }
+}
+
+TString TGUCSettings::SerializeToString() const {
+    NJson::TJsonValue gucJson;
+    this->ExportToJson(gucJson);
+    return WriteJson(gucJson);
 }
 
 bool TGUCSettings::operator==(const TGUCSettings& other) const {

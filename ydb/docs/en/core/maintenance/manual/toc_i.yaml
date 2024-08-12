@@ -4,9 +4,9 @@ items:
 - name: Adding storage groups
   href: adding_storage_groups.md
 - name: Moving a State Storage
-  href: ../../administration/state-storage-move.md
+  href: ../../devops/manual/state-storage-move.md
 - name: Moving a static group
-  href: ../../administration/static-group-move.md
+  href: ../../devops/manual/static-group-move.md
 - name: Safe restart and shutdown of nodes
   href: node_restarting.md
 - name: Enabling/disabling Scrubbing
@@ -14,7 +14,7 @@ items:
 - name: Working with SelfHeal
   href: selfheal.md
 - name: Decommissioning a cluster part
-  href: ../../administration/decommissioning.md
+  href: ../../devops/manual/decommissioning.md
 - name: Moving VDisks
   href: moving_vdisks.md
 - name: Staying within the failure model

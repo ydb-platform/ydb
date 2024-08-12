@@ -2,25 +2,22 @@
 
 Implements the Distutils 'install' command."""
 
-import sys
-import os
 import contextlib
-import sysconfig
 import itertools
-
+import os
+import sys
+import sysconfig
 from distutils._log import log
+from site import USER_BASE, USER_SITE
+
+from .. import _collections
 from ..core import Command
 from ..debug import DEBUG
-from ..sysconfig import get_config_vars
-from ..file_util import write_file
-from ..util import convert_path, subst_vars, change_root
-from ..util import get_platform
 from ..errors import DistutilsOptionError, DistutilsPlatformError
+from ..file_util import write_file
+from ..sysconfig import get_config_vars
+from ..util import change_root, convert_path, get_platform, subst_vars
 from . import _framework_compat as fw
-from .. import _collections
-
-from site import USER_BASE
-from site import USER_SITE
 
 HAS_USER_SITE = True
 
@@ -196,8 +193,7 @@ class install(Command):
         (
             'install-platbase=',
             None,
-            "base installation directory for platform-specific files "
-            + "(instead of --exec-prefix or --home)",
+            "base installation directory for platform-specific files (instead of --exec-prefix or --home)",
         ),
         ('root=', None, "install everything relative to this alternate root directory"),
         # Or, explicitly set the installation scheme
@@ -214,8 +210,7 @@ class install(Command):
         (
             'install-lib=',
             None,
-            "installation directory for all module distributions "
-            + "(overrides --install-purelib and --install-platlib)",
+            "installation directory for all module distributions (overrides --install-purelib and --install-platlib)",
         ),
         ('install-headers=', None, "installation directory for C/C++ headers"),
         ('install-scripts=', None, "installation directory for Python scripts"),
@@ -245,9 +240,11 @@ class install(Command):
     boolean_options = ['compile', 'force', 'skip-build']
 
     if HAS_USER_SITE:
-        user_options.append(
-            ('user', None, "install in user site-package '%s'" % USER_SITE)
-        )
+        user_options.append((
+            'user',
+            None,
+            f"install in user site-package '{USER_SITE}'",
+        ))
         boolean_options.append('user')
 
     negative_opt = {'no-compile': 'compile'}
@@ -259,7 +256,7 @@ class install(Command):
         self.prefix = None
         self.exec_prefix = None
         self.home = None
-        self.user = 0
+        self.user = False
 
         # These select only the installation base; it's up to the user to
         # specify the installation scheme (currently, that means supplying
@@ -294,7 +291,7 @@ class install(Command):
         # 'install_path_file' is always true unless some outsider meddles
         # with it.
         self.extra_path = None
-        self.install_path_file = 1
+        self.install_path_file = True
 
         # 'force' forces installation, even if target files are not
         # out-of-date.  'skip_build' skips running the "build" command,
@@ -302,9 +299,9 @@ class install(Command):
         # a user option, it's just there so the bdist_* commands can turn
         # it off) determines whether we warn about installing to a
         # directory not in sys.path.
-        self.force = 0
-        self.skip_build = 0
-        self.warn_dir = 1
+        self.force = False
+        self.skip_build = False
+        self.warn_dir = True
 
         # These are only here as a conduit from the 'build' command to the
         # 'install_*' commands that do the real work.  ('build_base' isn't
@@ -349,8 +346,7 @@ class install(Command):
             self.install_base or self.install_platbase
         ):
             raise DistutilsOptionError(
-                "must supply either prefix/exec-prefix/home or "
-                + "install-base/install-platbase -- not both"
+                "must supply either prefix/exec-prefix/home or install-base/install-platbase -- not both"
             )
 
         if self.home and (self.prefix or self.exec_prefix):
@@ -432,9 +428,12 @@ class install(Command):
             local_vars['userbase'] = self.install_userbase
             local_vars['usersite'] = self.install_usersite
 
-        self.config_vars = _collections.DictStack(
-            [fw.vars(), compat_vars, sysconfig.get_config_vars(), local_vars]
-        )
+        self.config_vars = _collections.DictStack([
+            fw.vars(),
+            compat_vars,
+            sysconfig.get_config_vars(),
+            local_vars,
+        ])
 
         self.expand_basedirs()
 
@@ -598,7 +597,7 @@ class install(Command):
                 self.select_scheme(os.name)
             except KeyError:
                 raise DistutilsPlatformError(
-                    "I don't know how to install stuff on '%s'" % os.name
+                    f"I don't know how to install stuff on '{os.name}'"
                 )
 
     def select_scheme(self, name):
@@ -620,16 +619,14 @@ class install(Command):
 
     def expand_dirs(self):
         """Calls `os.path.expanduser` on install dirs."""
-        self._expand_attrs(
-            [
-                'install_purelib',
-                'install_platlib',
-                'install_lib',
-                'install_headers',
-                'install_scripts',
-                'install_data',
-            ]
-        )
+        self._expand_attrs([
+            'install_purelib',
+            'install_platlib',
+            'install_lib',
+            'install_headers',
+            'install_scripts',
+            'install_data',
+        ])
 
     def convert_paths(self, *names):
         """Call `convert_path` over `names`."""
@@ -683,9 +680,9 @@ class install(Command):
         if not self.user:
             return
         home = convert_path(os.path.expanduser("~"))
-        for name, path in self.config_vars.items():
+        for _name, path in self.config_vars.items():
             if str(path).startswith(home) and not os.path.isdir(path):
-                self.debug_print("os.makedirs('%s', 0o700)" % path)
+                self.debug_print(f"os.makedirs('{path}', 0o700)")
                 os.makedirs(path, 0o700)
 
     # -- Command execution methods -------------------------------------
@@ -701,7 +698,7 @@ class install(Command):
             # internally, and not to sys.path, so we don't check the platform
             # matches what we are running.
             if self.warn_dir and build_plat != get_platform():
-                raise DistutilsPlatformError("Can't install when " "cross-compiling")
+                raise DistutilsPlatformError("Can't install when cross-compiling")
 
         # Run all sub-commands (at least those that need to be run)
         for cmd_name in self.get_sub_commands():
@@ -720,7 +717,7 @@ class install(Command):
             self.execute(
                 write_file,
                 (self.record, outputs),
-                "writing list of installed files to '%s'" % self.record,
+                f"writing list of installed files to '{self.record}'",
             )
 
         sys_path = map(os.path.normpath, sys.path)
@@ -745,10 +742,10 @@ class install(Command):
         filename = os.path.join(self.install_libbase, self.path_file + ".pth")
         if self.install_path_file:
             self.execute(
-                write_file, (filename, [self.extra_dirs]), "creating %s" % filename
+                write_file, (filename, [self.extra_dirs]), f"creating {filename}"
             )
         else:
-            self.warn("path file '%s' not created" % filename)
+            self.warn(f"path file '{filename}' not created")
 
     # -- Reporting methods ---------------------------------------------
 

@@ -2,7 +2,7 @@
 #include "flat_row_celled.h"
 #include "flat_row_remap.h"
 #include "flat_bloom_hash.h"
-#include "flat_part_iter_multi.h"
+#include "flat_part_iter.h"
 #include "flat_part_laid.h"
 #include "flat_part_charge_range.h"
 #include "flat_part_charge_create.h"
@@ -16,7 +16,10 @@
 namespace NKikimr {
 namespace NTable {
 
-TTable::TTable(TEpoch epoch) : Epoch(epoch) { }
+TTable::TTable(TEpoch epoch, const TIntrusivePtr<TKeyRangeCacheNeedGCList>& gcList)
+    : Epoch(epoch)
+    , EraseCacheGCList(gcList)
+{ }
 
 TTable::~TTable() { }
 
@@ -30,12 +33,15 @@ void TTable::PrepareRollback()
     state.EraseCacheConfig = EraseCacheConfig;
     state.MutableExisted = bool(Mutable);
     state.MutableUpdated = false;
+    state.DisableEraseCache = false;
 }
 
 void TTable::RollbackChanges()
 {
     Y_ABORT_UNLESS(RollbackState, "PrepareRollback needed to rollback changes");
     auto& state = *RollbackState;
+
+    CommitOps.clear();
 
     while (!RollbackOps.empty()) {
         struct TApplyRollbackOp {
@@ -80,20 +86,12 @@ void TTable::RollbackChanges()
 
     if (Epoch != state.Epoch) {
         // We performed a snapshot, roll it back
-        if (Mutable) {
-            ErasedKeysCache.Reset();
-            Mutable = nullptr;
-        }
         Y_ABORT_UNLESS(MutableBackup, "Previous mem table missing");
         Mutable = std::move(MutableBackup);
     } else if (!state.MutableExisted) {
         // New memtable doesn't need rollback
-        if (Mutable) {
-            ErasedKeysCache.Reset();
-            Mutable = nullptr;
-        }
+        Mutable = nullptr;
     } else if (state.MutableUpdated) {
-        ErasedKeysCache.Reset();
         Y_ABORT_UNLESS(Mutable, "Mutable was updated, but it is missing");
         Mutable->RollbackChanges();
     }
@@ -103,7 +101,6 @@ void TTable::RollbackChanges()
     Annexed = state.Annexed;
     if (state.Scheme) {
         Levels.Reset();
-        ErasedKeysCache.Reset();
         Scheme = std::move(state.Scheme);
         EraseCacheEnabled = state.EraseCacheEnabled;
         EraseCacheConfig = state.EraseCacheConfig;
@@ -116,6 +113,19 @@ void TTable::CommitChanges(TArrayRef<const TMemGlob> blobs)
     Y_ABORT_UNLESS(RollbackState, "PrepareRollback needed to rollback changes");
     auto& state = *RollbackState;
 
+    for (auto& op : CommitOps) {
+        struct TApplyCommitOp {
+            TTable* Self;
+
+            void operator()(const TCommitAddDecidedTx& op) const {
+                Self->DecidedTransactions.Add(op.TxId);
+            }
+        };
+
+        std::visit(TApplyCommitOp{ this }, op);
+    }
+
+    CommitOps.clear();
     RollbackOps.clear();
 
     if (Epoch != state.Epoch) {
@@ -162,6 +172,11 @@ void TTable::SetScheme(const TScheme::TTableInfo &table)
 
     Y_ABORT_UNLESS(!Mutable && table.Columns);
 
+    if (RollbackState) {
+        // Make sure we don't populate erase cache with keys based on a schema
+        // which may end up rolling back.
+        RollbackState->DisableEraseCache = true;
+    }
     if (RollbackState && !RollbackState->Scheme) {
         RollbackState->Scheme = Scheme;
         RollbackState->EraseCacheEnabled = EraseCacheEnabled;
@@ -171,7 +186,7 @@ void TTable::SetScheme(const TScheme::TTableInfo &table)
     auto to = TRowScheme::Make(table.Columns, NUtil::TSecond());
 
     if (auto was = std::exchange(Scheme, to))
-        was->CheckCompatability(*Scheme);
+        was->CheckCompatibility(table.Name, *Scheme);
 
     /* This restriction is required for external blobs inverted index, for
         details read NPage::TFrames and NFwd blobs cache implementation. */
@@ -362,7 +377,8 @@ void TTable::ReplaceSlices(TBundleSlicesMap slices) noexcept
     }
     if (slices) {
         Levels.Reset();
-        ErasedKeysCache.Reset();
+        // Note: ReplaceSlices does not introduce any new rows, so we don't
+        // have to invalidate current erase cache.
     }
 }
 
@@ -383,9 +399,12 @@ void TTable::Replace(TArrayRef<const TPartView> partViews, const TSubset &subset
         Levels.Reset();
     }
 
+    bool removingOld = false;
+    bool addingNew = false;
     THashSet<ui64> checkNewTransactions;
 
     for (auto &memTable : subset.Frozen) {
+        removingOld = true;
         const auto found = Frozen.erase(memTable.MemTable);
 
         Y_ABORT_UNLESS(found == 1, "Got an unknown TMemTable table in TSubset");
@@ -406,6 +425,7 @@ void TTable::Replace(TArrayRef<const TPartView> partViews, const TSubset &subset
     }
 
     for (auto &part : subset.Flatten) {
+        removingOld = true;
         Y_ABORT_UNLESS(part.Slices && *part.Slices,
             "Got an empty TPart subset in TSubset");
 
@@ -454,12 +474,14 @@ void TTable::Replace(TArrayRef<const TPartView> partViews, const TSubset &subset
     }
 
     for (auto &part : subset.ColdParts) {
+        removingOld = true;
         auto it = ColdParts.find(part->Label);
         Y_ABORT_UNLESS(it != ColdParts.end(), "Got an unknown TColdPart in TSubset");
         ColdParts.erase(it);
     }
 
     for (const auto &partView : partViews) {
+        addingNew = true;
         if (Mutable && partView->Epoch >= Mutable->Epoch) {
             Y_Fail("Replace with " << NFmt::Do(*partView) << " after mutable epoch " << Mutable->Epoch);
         }
@@ -481,6 +503,7 @@ void TTable::Replace(TArrayRef<const TPartView> partViews, const TSubset &subset
             if (!ColdParts) {
                 CommittedTransactions.Remove(txId);
                 RemovedTransactions.Remove(txId);
+                DecidedTransactions.Remove(txId);
             } else {
                 CheckTransactions.insert(txId);
             }
@@ -491,7 +514,14 @@ void TTable::Replace(TArrayRef<const TPartView> partViews, const TSubset &subset
 
     ProcessCheckTransactions();
 
-    ErasedKeysCache.Reset();
+    if (!removingOld && addingNew) {
+        // Note: we invalidate erase cache when nothing old is removed,
+        // because followers always call Replace, even when leader called
+        // Merge. When something is removed we can assume it's a compaction
+        // and compactions don't add new rows to the table, keeping erase
+        // cache valid.
+        ErasedKeysCache.Reset();
+    }
 }
 
 void TTable::ReplaceTxStatus(TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>> newTxStatus, const TSubset &subset) noexcept
@@ -551,6 +581,8 @@ void TTable::Merge(TPartView partView) noexcept
         it->second.Slices = TSlices::Merge(it->second.Slices, partView.Slices);
     }
 
+    // Note: Merge is called when borrowing data, which may introduce new rows
+    // and invalidate current erase cache.
     ErasedKeysCache.Reset();
 }
 
@@ -579,8 +611,11 @@ void TTable::Merge(TIntrusiveConstPtr<TColdPart> part) noexcept
     Epoch = Max(Epoch, part->Epoch + 1);
     ColdParts.emplace(label, std::move(part));
 
-    ErasedKeysCache.Reset();
     Levels.Reset();
+
+    // Note: Merge is called when borrowing data, which may introduce new rows
+    // and invalidate current erase cache.
+    ErasedKeysCache.Reset();
 }
 
 void TTable::Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept
@@ -601,6 +636,7 @@ void TTable::Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept
         if (!TxRefs.contains(txId)) {
             CheckTransactions.insert(txId);
         }
+        DecidedTransactions.Add(txId);
         OpenTxs.erase(txId);
     }
     for (auto& item : txStatus->TxStatusPage->GetRemovedItems()) {
@@ -611,6 +647,7 @@ void TTable::Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept
         if (!TxRefs.contains(txId)) {
             CheckTransactions.insert(txId);
         }
+        DecidedTransactions.Add(txId);
         OpenTxs.erase(txId);
     }
 
@@ -627,7 +664,9 @@ void TTable::Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept
     auto res = TxStatus.emplace(txStatus->Label, txStatus);
     Y_ABORT_UNLESS(res.second, "Unexpected failure to add a new TTxStatusPart");
 
-    ErasedKeysCache.Reset();
+    // Note: Merge is called when borrowing data, but new tx status may commit
+    // or rollback some transactions, and erase cache already accounts for that
+    // eventuality, so doesn't need to be invalidated.
 }
 
 void TTable::ProcessCheckTransactions() noexcept
@@ -638,6 +677,7 @@ void TTable::ProcessCheckTransactions() noexcept
             if (it == TxRefs.end()) {
                 CommittedTransactions.Remove(txId);
                 RemovedTransactions.Remove(txId);
+                DecidedTransactions.Remove(txId);
             }
         }
         CheckTransactions.clear();
@@ -825,7 +865,7 @@ void TTable::Update(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<const TMemG
         const TCelled cells(key, *Scheme->Keys, true);
         auto res = ErasedKeysCache->FindKey(cells);
         if (res.second) {
-            ErasedKeysCache->Invalidate(res.first);
+            ErasedKeysCache->InvalidateKey(res.first, cells);
         }
     }
 
@@ -842,6 +882,8 @@ void TTable::AddTxRef(ui64 txId)
     if (addOpenTx) {
         auto res = OpenTxs.insert(txId);
         Y_ABORT_UNLESS(res.second);
+        Y_DEBUG_ABORT_UNLESS(!DecidedTransactions.Contains(txId),
+            "Decided transaction %" PRIu64 " is both open and decided", txId);
     }
     if (RollbackState) {
         RollbackOps.emplace_back(TRollbackRemoveTxRef{ txId });
@@ -855,6 +897,14 @@ void TTable::UpdateTx(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<const TMe
 {
     auto& memTable = MemTable();
     bool hadTxRef = memTable.GetTxIdStats().contains(txId);
+
+    if (ErasedKeysCache && rop != ERowOp::Erase) {
+        const TCelled cells(key, *Scheme->Keys, true);
+        auto res = ErasedKeysCache->FindKey(cells);
+        if (res.second) {
+            ErasedKeysCache->InvalidateKey(res.first, cells);
+        }
+    }
 
     // Use a special row version that marks this update as uncommitted
     TRowVersion rowVersion(Max<ui64>(), txId);
@@ -897,13 +947,15 @@ void TTable::CommitTx(ui64 txId, TRowVersion rowVersion)
         if (auto it = OpenTxs.find(txId); it != OpenTxs.end()) {
             if (RollbackState) {
                 RollbackOps.emplace_back(TRollbackAddOpenTx{ txId });
+                CommitOps.emplace_back(TCommitAddDecidedTx{ txId });
+            } else {
+                DecidedTransactions.Add(txId);
             }
             OpenTxs.erase(it);
         }
     }
 
-    // We don't know which keys have been commited, invalidate everything
-    ErasedKeysCache.Reset();
+    // Note: erase cache accounts for changes that may commit, no need to invalidate
 }
 
 void TTable::RemoveTx(ui64 txId)
@@ -922,6 +974,9 @@ void TTable::RemoveTx(ui64 txId)
         if (auto it = OpenTxs.find(txId); it != OpenTxs.end()) {
             if (RollbackState) {
                 RollbackOps.emplace_back(TRollbackAddOpenTx{ txId });
+                CommitOps.emplace_back(TCommitAddDecidedTx{ txId });
+            } else {
+                DecidedTransactions.Add(txId);
             }
             OpenTxs.erase(it);
         }
@@ -963,6 +1018,11 @@ TMemTable& TTable::MemTable()
     if (!Mutable) {
         Mutable = new TMemTable(Scheme, Epoch, Annexed);
     }
+    if (RollbackState) {
+        // MemTable() is only called when we want to apply updates
+        // Make sure we don't taint erase cache with changes that may rollback
+        RollbackState->DisableEraseCache = true;
+    }
     if (RollbackState && Epoch == RollbackState->Epoch && RollbackState->MutableExisted) {
         if (!RollbackState->MutableUpdated) {
             RollbackState->MutableUpdated = true;
@@ -972,7 +1032,7 @@ TMemTable& TTable::MemTable()
     return *Mutable;
 }
 
-TAutoPtr<TTableIt> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, ESeek seek,
+TAutoPtr<TTableIter> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, ESeek seek,
         TRowVersion snapshot,
         const ITransactionMapPtr& visible,
         const ITransactionObserverPtr& observer) const noexcept
@@ -982,44 +1042,45 @@ TAutoPtr<TTableIt> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, ES
     const TCelled key(key_, *Scheme->Keys, false);
     const ui64 limit = seek == ESeek::Exact ? 1 : Max<ui64>();
 
-    TAutoPtr<TTableIt> dbIter(new TTableIt(Scheme.Get(), tags, limit, snapshot,
+    TAutoPtr<TTableIter> dbIter(new TTableIter(Scheme.Get(), tags, limit, snapshot,
             TMergedTransactionMap::Create(visible, CommittedTransactions),
             observer));
 
     if (Mutable) {
-        dbIter->Push(TMemIt::Make(*Mutable, Mutable->Snapshot(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Forward));
+        dbIter->Push(TMemIter::Make(*Mutable, Mutable->Snapshot(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Forward));
     }
 
     if (MutableBackup) {
-        dbIter->Push(TMemIt::Make(*MutableBackup, MutableBackup->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Forward));
+        dbIter->Push(TMemIter::Make(*MutableBackup, MutableBackup->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Forward));
     }
 
     for (auto& fti : Frozen) {
         const TMemTable* memTable = fti.Get();
 
-        dbIter->Push(TMemIt::Make(*memTable, memTable->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Forward));
+        dbIter->Push(TMemIter::Make(*memTable, memTable->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Forward));
     }
 
     if (Flatten) {
         for (const auto& run : GetLevels()) {
-            auto iter = MakeHolder<TRunIt>(run, dbIter->Remap.Tags, Scheme->Keys, env);
+            auto iter = MakeHolder<TRunIter>(run, dbIter->Remap.Tags, Scheme->Keys, env);
 
             if (iter->Seek(key, seek) != EReady::Gone)
                 dbIter->Push(std::move(iter));
         }
     }
 
-    if (EraseCacheEnabled && !visible) {
+    if (EraseCacheEnabled && (!RollbackState || !RollbackState->DisableEraseCache)) {
         if (!ErasedKeysCache) {
-            ErasedKeysCache = new TKeyRangeCache(*Scheme->Keys, EraseCacheConfig);
+            ErasedKeysCache = new TKeyRangeCache(*Scheme->Keys, EraseCacheConfig, EraseCacheGCList);
         }
         dbIter->ErasedKeysCache = ErasedKeysCache;
+        dbIter->DecidedTransactions = DecidedTransactions;
     }
 
     return dbIter;
 }
 
-TAutoPtr<TTableReverseIt> TTable::IterateReverse(TRawVals key_, TTagsRef tags, IPages* env, ESeek seek,
+TAutoPtr<TTableReverseIter> TTable::IterateReverse(TRawVals key_, TTagsRef tags, IPages* env, ESeek seek,
         TRowVersion snapshot,
         const ITransactionMapPtr& visible,
         const ITransactionObserverPtr& observer) const noexcept
@@ -1029,38 +1090,39 @@ TAutoPtr<TTableReverseIt> TTable::IterateReverse(TRawVals key_, TTagsRef tags, I
     const TCelled key(key_, *Scheme->Keys, false);
     const ui64 limit = seek == ESeek::Exact ? 1 : Max<ui64>();
 
-    TAutoPtr<TTableReverseIt> dbIter(new TTableReverseIt(Scheme.Get(), tags, limit, snapshot,
+    TAutoPtr<TTableReverseIter> dbIter(new TTableReverseIter(Scheme.Get(), tags, limit, snapshot,
             TMergedTransactionMap::Create(visible, CommittedTransactions),
             observer));
 
     if (Mutable) {
-        dbIter->Push(TMemIt::Make(*Mutable, Mutable->Snapshot(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Reverse));
+        dbIter->Push(TMemIter::Make(*Mutable, Mutable->Snapshot(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Reverse));
     }
 
     if (MutableBackup) {
-        dbIter->Push(TMemIt::Make(*MutableBackup, MutableBackup->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Reverse));
+        dbIter->Push(TMemIter::Make(*MutableBackup, MutableBackup->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Reverse));
     }
 
     for (auto& fti : Frozen) {
         const TMemTable* memTable = fti.Get();
 
-        dbIter->Push(TMemIt::Make(*memTable, memTable->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Reverse));
+        dbIter->Push(TMemIter::Make(*memTable, memTable->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Reverse));
     }
 
     if (Flatten) {
         for (const auto& run : GetLevels()) {
-            auto iter = MakeHolder<TRunIt>(run, dbIter->Remap.Tags, Scheme->Keys, env);
+            auto iter = MakeHolder<TRunIter>(run, dbIter->Remap.Tags, Scheme->Keys, env);
 
             if (iter->SeekReverse(key, seek) != EReady::Gone)
                 dbIter->Push(std::move(iter));
         }
     }
 
-    if (EraseCacheEnabled && !visible) {
+    if (EraseCacheEnabled && (!RollbackState || !RollbackState->DisableEraseCache)) {
         if (!ErasedKeysCache) {
-            ErasedKeysCache = new TKeyRangeCache(*Scheme->Keys, EraseCacheConfig);
+            ErasedKeysCache = new TKeyRangeCache(*Scheme->Keys, EraseCacheConfig, EraseCacheGCList);
         }
         dbIter->ErasedKeysCache = ErasedKeysCache;
+        dbIter->DecidedTransactions = DecidedTransactions;
     }
 
     return dbIter;
@@ -1068,7 +1130,7 @@ TAutoPtr<TTableReverseIt> TTable::IterateReverse(TRawVals key_, TTagsRef tags, I
 
 EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
                       ui64 flg, TRowVersion snapshot,
-                      TDeque<TPartSimpleIt>& tempIterators,
+                      TDeque<TPartIter>& tempIterators,
                       TSelectStats& stats,
                       const ITransactionMapPtr& visible,
                       const ITransactionObserverPtr& observer) const noexcept
@@ -1097,8 +1159,8 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
     // Mutable has the newest data
     if (Mutable) {
         lastEpoch = Mutable->Epoch;
-        if (auto it = TMemIt::Make(*Mutable, Mutable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
-            if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, stats, committed, observer))) {
+        if (auto it = TMemIter::Make(*Mutable, Mutable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
+            if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, stats, committed, observer, DecidedTransactions))) {
                 // N.B. stop looking for snapshot after the first hit
                 snapshotFound = true;
                 it->Apply(row, committed, observer);
@@ -1109,8 +1171,8 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
     // Mutable data that is transitioning to frozen
     if (MutableBackup && !row.IsFinalized()) {
         lastEpoch = MutableBackup->Epoch;
-        if (auto it = TMemIt::Make(*MutableBackup, MutableBackup->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
-            if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, stats, committed, observer))) {
+        if (auto it = TMemIter::Make(*MutableBackup, MutableBackup->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
+            if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, stats, committed, observer, DecidedTransactions))) {
                 // N.B. stop looking for snapshot after the first hit
                 snapshotFound = true;
                 it->Apply(row, committed, observer);
@@ -1123,8 +1185,8 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
         const auto& memTable = *pos;
         Y_ABORT_UNLESS(lastEpoch > memTable->Epoch, "Ordering of epochs is incorrect");
         lastEpoch = memTable->Epoch;
-        if (auto it = TMemIt::Make(*memTable, memTable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
-            if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, stats, committed, observer))) {
+        if (auto it = TMemIter::Make(*memTable, memTable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
+            if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, stats, committed, observer, DecidedTransactions))) {
                 // N.B. stop looking for snapshot after the first hit
                 snapshotFound = true;
                 it->Apply(row, committed, observer);
@@ -1143,14 +1205,14 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
                     part->MightHaveKey(prefix.Get(part->Scheme->Groups[0].KeyTypes.size())))
                 {
                     ++stats.Sieved;
-                    TPartSimpleIt& it = tempIterators.emplace_back(part, tags, Scheme->Keys, env);
+                    TPartIter& it = tempIterators.emplace_back(part, tags, Scheme->Keys, env);
                     it.SetBounds(pos->Slice);
                     auto res = it.Seek(key, ESeek::Exact);
                     if (res == EReady::Data) {
                         Y_ABORT_UNLESS(lastEpoch > part->Epoch, "Ordering of epochs is incorrect");
                         lastEpoch = part->Epoch;
                         if (!snapshotFound) {
-                            res = it.SkipToRowVersion(snapshot, stats, committed, observer);
+                            res = it.SkipToRowVersion(snapshot, stats, committed, observer, DecidedTransactions);
                             if (res == EReady::Data) {
                                 // N.B. stop looking for snapshot after the first hit
                                 snapshotFound = true;
@@ -1223,7 +1285,7 @@ TSelectRowVersionResult TTable::SelectRowVersion(
     // Mutable has the newest data
     if (Mutable) {
         lastEpoch = Mutable->Epoch;
-        if (auto it = TMemIt::Make(*Mutable, Mutable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
+        if (auto it = TMemIter::Make(*Mutable, Mutable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
             if (it->IsValid()) {
                 if (auto rowVersion = it->SkipToCommitted(committed, observer)) {
                     return *rowVersion;
@@ -1235,7 +1297,7 @@ TSelectRowVersionResult TTable::SelectRowVersion(
     // Mutable data that is transitioning to frozen
     if (MutableBackup) {
         lastEpoch = MutableBackup->Epoch;
-        if (auto it = TMemIt::Make(*MutableBackup, MutableBackup->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
+        if (auto it = TMemIter::Make(*MutableBackup, MutableBackup->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
             if (it->IsValid()) {
                 if (auto rowVersion = it->SkipToCommitted(committed, observer)) {
                     return *rowVersion;
@@ -1249,7 +1311,7 @@ TSelectRowVersionResult TTable::SelectRowVersion(
         const auto& memTable = *pos;
         Y_ABORT_UNLESS(lastEpoch > memTable->Epoch, "Ordering of epochs is incorrect");
         lastEpoch = memTable->Epoch;
-        if (auto it = TMemIt::Make(*memTable, memTable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
+        if (auto it = TMemIter::Make(*memTable, memTable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
             if (it->IsValid()) {
                 if (auto rowVersion = it->SkipToCommitted(committed, observer)) {
                     return *rowVersion;
@@ -1267,7 +1329,7 @@ TSelectRowVersionResult TTable::SelectRowVersion(
             if ((readFlags & EHint::NoByKey) ||
                 part->MightHaveKey(prefix.Get(part->Scheme->Groups[0].KeyTypes.size())))
             {
-                TPartSimpleIt it(part, { }, Scheme->Keys, env);
+                TPartIter it(part, { }, Scheme->Keys, env);
                 it.SetBounds(pos->Slice);
                 auto res = it.Seek(key, ESeek::Exact);
                 if (res == EReady::Data && ready) {

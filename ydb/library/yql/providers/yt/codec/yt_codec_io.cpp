@@ -4,6 +4,7 @@
 #include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
+#include <exception>
 #ifndef MKQL_DISABLE_CODEGEN
 #include <ydb/library/yql/providers/yt/codec/codegen/yt_codec_cg.h>
 #endif
@@ -156,7 +157,7 @@ public:
         CondFill_.Signal();
     }
 
-    bool Retry(const TMaybe<ui32>& rangeIndex, const TMaybe<ui64>& rowIndex) override {
+    bool Retry(const TMaybe<ui32>& rangeIndex, const TMaybe<ui64>& rowIndex, const std::exception_ptr& error) override {
         auto guard = Guard(Mutex_);
 
         // Clean all filled blocks
@@ -168,7 +169,7 @@ public:
             BufMan_.FreeBlocks_.push(block);
         }
 
-        if (!Source_.Retry(rangeIndex, rowIndex)) {
+        if (!Source_.Retry(rangeIndex, rowIndex, error)) {
             Shutdown_ = true;
             CondRestore_.Signal();
             return false;
@@ -265,9 +266,9 @@ public:
         Block_.Avail_ = 0;
     }
 
-    bool Retry(const TMaybe<ui32>& rangeIndex, const TMaybe<ui64>& rowIndex) override {
+    bool Retry(const TMaybe<ui32>& rangeIndex, const TMaybe<ui64>& rowIndex, const std::exception_ptr& error) override {
         Block_.Avail_ = 0;
-        return Source_.Retry(rangeIndex, rowIndex);
+        return Source_.Retry(rangeIndex, rowIndex, error);
     }
 
 private:
@@ -885,12 +886,13 @@ protected:
             if (cmd == EntitySymbol) {
                 return NUdf::TUnboxedValue();
             }
-
-            auto val = ReadYsonValue(uwrappedType, SpecsCache_.GetHolderFactory(), cmd, Buf_, true);
-            return val.Release().MakeOptional();
+            auto& decoder = *SpecsCache_.GetSpecs().Inputs[TableIndex_];
+            auto val = ReadYsonValue((decoder.NativeYtTypeFlags & ENativeTypeCompatFlags::NTCF_COMPLEX) ? type : uwrappedType, decoder.NativeYtTypeFlags, SpecsCache_.GetHolderFactory(), cmd, Buf_, true);
+            return (decoder.NativeYtTypeFlags & ENativeTypeCompatFlags::NTCF_COMPLEX) ? val : val.Release().MakeOptional();
         } else {
             if (Y_LIKELY(cmd != EntitySymbol)) {
-                return ReadYsonValue(type, SpecsCache_.GetHolderFactory(), cmd, Buf_, true);
+                auto& decoder = *SpecsCache_.GetSpecs().Inputs[TableIndex_];
+                return ReadYsonValue(type, decoder.NativeYtTypeFlags, SpecsCache_.GetHolderFactory(), cmd, Buf_, true);
             }
 
             if (type->GetKind() == TType::EKind::Data && static_cast<TDataType*>(type)->GetSchemeType() == NUdf::TDataType<NUdf::TYson>::Id) {
@@ -993,6 +995,9 @@ protected:
             case NUdf::TDataType<NUdf::TTzDate>::Id:
             case NUdf::TDataType<NUdf::TTzDatetime>::Id:
             case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
+            case NUdf::TDataType<NUdf::TTzDate32>::Id:
+            case NUdf::TDataType<NUdf::TTzDatetime64>::Id:
+            case NUdf::TDataType<NUdf::TTzTimestamp64>::Id:
             case NUdf::TDataType<NUdf::TDyNumber>::Id:
             case NUdf::TDataType<NUdf::TUuid>::Id:
             case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
@@ -1359,7 +1364,7 @@ protected:
             // parse binary yson...
             YQL_ENSURE(size > 0);
             char cmd = Buf_.Read();
-            auto value = ReadYsonValue(uwrappedType, SpecsCache_.GetHolderFactory(), cmd, Buf_, true);
+            auto value = ReadYsonValue(uwrappedType, 0, SpecsCache_.GetHolderFactory(), cmd, Buf_, true);
             return isOptional ? value.Release().MakeOptional() : value;
         }
     }
@@ -1497,10 +1502,10 @@ void TMkqlReaderImpl::Finish() {
     TimerRead_.Report(JobStats_);
 }
 
-void TMkqlReaderImpl::OnError(TStringBuf msg) {
+void TMkqlReaderImpl::OnError(const std::exception_ptr& error, TStringBuf msg) {
     YQL_LOG(ERROR) << "Reader error: " << msg;
     Buf_.Reset();
-    if (!Reader_->Retry(Decoder_->RangeIndex_, Decoder_->RowIndex_)) {
+    if (!Reader_->Retry(Decoder_->RangeIndex_, Decoder_->RowIndex_, error)) {
         ythrow yexception() << "Failed to read row, table index: " << Decoder_->TableIndex_ << ", row index: " <<
             (Decoder_->RowIndex_.Defined() ? ToString(*Decoder_->RowIndex_) : "?") << "\n" << msg;
     }
@@ -1572,9 +1577,9 @@ void TMkqlReaderImpl::Next() {
         } catch (const TTimeoutException&) {
             throw;
         } catch (const yexception& e) {
-            OnError(e.AsStrBuf());
+            OnError(std::make_exception_ptr(e), e.AsStrBuf());
         } catch (...) {
-            OnError(CurrentExceptionMessage());
+            OnError(std::current_exception(), CurrentExceptionMessage());
         }
     }
 
@@ -1734,6 +1739,7 @@ public:
         : TMkqlWriterImpl::TEncoder(buf, specs)
     {
         Fields_ = GetFields(Specs_.Outputs[tableIndex].RowType);
+        NativeYtTypeFlags_ = Specs_.Outputs[tableIndex].NativeYtTypeFlags;
     }
 
     void EncodeNext(const NUdf::TUnboxedValuePod row) final {
@@ -1742,7 +1748,7 @@ public:
         for (size_t index = 0; index < Fields_.size(); ++index) {
             const TField& field = Fields_[index];
             auto value = row.GetElement(index);
-            if (field.Optional) {
+            if (field.Optional || field.Type->GetKind() == TTypeBase::EKind::Pg) {
                 if (!value) {
                     continue;
                 }
@@ -1753,8 +1759,20 @@ public:
             Buf_.WriteVarI32(field.Name.size());
             Buf_.WriteMany(field.Name.data(), field.Name.size());
             Buf_.Write(KeyValueSeparatorSymbol);
+            
+            bool isOptionalFieldTypeV3 = field.Optional && (NativeYtTypeFlags_ & ENativeTypeCompatFlags::NTCF_COMPLEX);
+            bool wrapOptionalTypeV3 = isOptionalFieldTypeV3 &&
+                (field.Type->GetKind() == TTypeBase::EKind::Optional || field.Type->GetKind() == TTypeBase::EKind::Pg);
+            if (wrapOptionalTypeV3) {
+                Buf_.Write(BeginListSymbol);
+            }
 
-            WriteYsonValueInTableFormat(Buf_, field.Type, std::move(value), true);
+            WriteYsonValueInTableFormat(Buf_, field.Type, NativeYtTypeFlags_, std::move(value), true);
+
+            if (wrapOptionalTypeV3) {
+                Buf_.Write(ListItemSeparatorSymbol);
+                Buf_.Write(EndListSymbol);
+            }
 
             Buf_.Write(KeyedItemSeparatorSymbol);
         }
@@ -1781,7 +1799,7 @@ public:
             Buf_.WriteMany(field.Name.data(), field.Name.size());
             Buf_.Write(KeyValueSeparatorSymbol);
 
-            WriteYsonValueInTableFormat(Buf_, field.Type, std::move(value), true);
+            WriteYsonValueInTableFormat(Buf_, field.Type, NativeYtTypeFlags_, std::move(value), true);
 
             Buf_.Write(KeyedItemSeparatorSymbol);
         }
@@ -1791,6 +1809,7 @@ public:
     }
 private:
     TVector<TField> Fields_;
+    ui64 NativeYtTypeFlags_;
 };
 
 class TSkiffEncoderBase: public TMkqlWriterImpl::TEncoder {
@@ -1869,7 +1888,7 @@ protected:
         } else if (!wasOptional && type->IsPg()) {
             NCommon::WriteSkiffPg(static_cast<TPgType*>(type), value, Buf_);
         } else {
-            WriteYsonContainerValue(type, value, Buf_);
+            WriteYsonContainerValue(type, 0, value, Buf_);
         }
     }
 

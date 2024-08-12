@@ -1,5 +1,20 @@
 items:
-- name: Сбор логов в кластере Kubernetes с помощью FluentBit и YDB
+- name: Сбор логов с помощью FluentBit
   href: fluent-bit.md
-- name: goose
+- name: Плагин-источник данных Grafana
+  href: grafana.md
+- name: Плагины Logstash
+  href: logstash.md
+- name: Миграции с помощью goose
   href: goose.md
+- name: Миграции с помощью Liquibase
+  href: liquibase.md
+- name: Миграции с помощью Flyway
+  href: flyway.md
+- name: Использование Hibernate
+  href: hibernate.md
+- name: Импорт из источников JDBC
+  href: import-jdbc.md
+- name: DBeaver
+  href: ide/dbeaver.md
+

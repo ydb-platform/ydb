@@ -287,6 +287,8 @@ void RegisterGreater(IBuiltinFunctionRegistry& registry) {
     RegisterAggrComparePrimitive<TGreater, TCompareArgsOpt>(registry, aggrName);
     RegisterAggrCompareDatetime<TDiffDateGreater, TCompareArgsOpt>(registry, aggrName);
     RegisterAggrCompareTzDatetime<TAggrTzDateGreater, TCompareArgsOpt>(registry, aggrName);
+    RegisterAggrCompareBigDatetime<TDiffDateGreater, TCompareArgsOpt>(registry, aggrName);
+    RegisterAggrCompareBigTzDatetime<TAggrTzDateGreater, TCompareArgsOpt>(registry, aggrName);
 
     RegisterAggrCompareStrings<TCustomGreater, TCompareArgsOpt>(registry, aggrName);
     RegisterAggrCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, TDecimalAggrGreater, TCompareArgsOpt>(registry, aggrName);

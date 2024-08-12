@@ -37,6 +37,7 @@ namespace NActors {
 
         TSharedExecutorThreadCtx *GetSharedThread(i16 poolId);
         void GetSharedStats(i16 pool, std::vector<TExecutorThreadStats>& statsCopy);
+        void GetSharedStatsForHarmonizer(i16 pool, std::vector<TExecutorThreadStats>& statsCopy);
         TCpuConsumption GetThreadCpuConsumption(i16 poolId, i16 threadIdx);
         std::vector<TCpuConsumption> GetThreadsCpuConsumption(i16 poolId);
 
@@ -56,7 +57,6 @@ namespace NActors {
         i16 PoolCount;
         i16 SharedThreadCount;
         std::unique_ptr<TSharedExecutorThreadCtx[]> Threads;
-        std::unique_ptr<TTimers[]> Timers;
 
         std::unique_ptr<NSchedulerQueue::TReader[]> ScheduleReaders;
         std::unique_ptr<NSchedulerQueue::TWriter[]> ScheduleWriters;

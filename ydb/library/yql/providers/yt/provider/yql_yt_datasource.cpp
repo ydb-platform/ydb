@@ -270,7 +270,7 @@ public:
 
     bool CanBuildResult(const TExprNode& node, TSyncMap& syncList) override {
         TString usedCluster;
-        return IsYtCompleteIsolatedLambda(node, syncList, usedCluster, true, false);
+        return IsYtCompleteIsolatedLambda(node, syncList, usedCluster, false);
     }
 
     bool GetExecWorld(const TExprNode::TPtr& node, TExprNode::TPtr& root) override {
@@ -395,7 +395,7 @@ public:
         ScanPlanDependencies(node, children);
     }
 
-    void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer) override {
+    void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer, bool withLimits) override {
         if (auto maybeRead = TMaybeNode<TYtReadTable>(&node)) {
             writer.OnKeyedItem("InputColumns");
             auto read = maybeRead.Cast();
@@ -409,6 +409,22 @@ public:
             }
             else {
                 NCommon::WriteColumns(writer, read.Input().Item(0).Paths().Item(0).Columns());
+            }
+
+            if (read.Input().Size() > 1) {
+                writer.OnKeyedItem("InputSections");
+                writer.OnBeginList();
+                ui64 ndx = 0;
+                for (auto section: read.Input()) {
+                    writer.OnListItem();
+                    writer.OnBeginList();
+                    for (ui32 i = 0; i < Min((ui32)section.Paths().Size(), withLimits && State_->PlanLimits ? State_->PlanLimits : Max<ui32>()); ++i) {
+                        writer.OnListItem();
+                        writer.OnUint64Scalar(ndx++);
+                    }
+                    writer.OnEndList();
+                }
+                writer.OnEndList();
             }
         }
     }
@@ -427,10 +443,12 @@ public:
         writer.OnStringScalar(node.Child(1)->Content());
     }
 
-    void GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs) override {
+    ui32 GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs, bool withLimit) override {
+        ui32 count = 0;
         if (auto maybeRead = TMaybeNode<TYtReadTable>(&node)) {
             auto read = maybeRead.Cast();
             for (auto section: read.Input()) {
+                ui32 i = 0;
                 for (auto path: section.Paths()) {
                     if (auto maybeTable = path.Table().Maybe<TYtTable>()) {
                         inputs.push_back(TPinInfo(read.DataSource().Raw(), nullptr, maybeTable.Cast().Raw(), MakeTableDisplayName(maybeTable.Cast(), false), false));
@@ -439,13 +457,19 @@ public:
                         auto tmpTable = GetOutTable(path.Table());
                         inputs.push_back(TPinInfo(read.DataSource().Raw(), nullptr, tmpTable.Raw(), MakeTableDisplayName(tmpTable, false), true));
                     }
+                    if (withLimit && State_->PlanLimits && ++i >= State_->PlanLimits) {
+                        break;
+                    }
                 }
+                count += section.Paths().Size();
             }
         }
         else if (auto maybeReadScheme = TMaybeNode<TYtReadTableScheme>(&node)) {
             auto readScheme = maybeReadScheme.Cast();
             inputs.push_back(TPinInfo(readScheme.DataSource().Raw(), nullptr, readScheme.Table().Raw(), MakeTableDisplayName(readScheme.Table(), false), false));
+            count = 1;
         }
+        return count;
     }
 
     void WritePinDetails(const TExprNode& node, NYson::TYsonWriter& writer) override {
@@ -648,10 +672,9 @@ private:
                 || withQB;
 
             path = Build<TYtPath>(ctx, path.Pos())
+                .InitFrom(path)
                 .Table(table)
                 .Columns(needRewrite ? Build<TCoVoid>(ctx, path.Columns().Pos()).Done() : origColumnList)
-                .Ranges(path.Ranges())
-                .Stat(path.Stat())
                 .Done();
 
             bool tableSysColumns = useSysColumns && !tableDesc.View && (view.empty() || view == "raw");
@@ -721,6 +744,7 @@ private:
 
                 newReadNode = root;
                 ctx.Step
+                    .Repeat(TExprStep::ExpandApplyForLambdas)
                     .Repeat(TExprStep::ExprEval)
                     .Repeat(TExprStep::DiscoveryIO)
                     .Repeat(TExprStep::Epochs)

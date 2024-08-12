@@ -1,0 +1,40 @@
+items:
+- name: Working on a change
+  href: suggest-change.md
+- name: Ya Make build system
+  href: build-ya.md
+- name: Releases
+  href: manage-releases.md
+- name: Core
+  items:
+  - name: LocalDB
+    items:
+    - name: Persistent uncommitted changes
+      href: localdb-uncommitted-txs.md
+  - name: DataShard
+    items:
+    - name: Locks and transaction change visibility
+      href: datashard-locks-and-change-visibility.md
+    - name: Distributed transactions
+      href: datashard-distributed-txs.md
+  - name: Testing with load actors
+    href: load-actors-overview.md
+    items:
+    - name: KqpLoad
+      href: load-actors-kqp.md
+    - name: KeyValueLoad
+      href: load-actors-key-value.md
+    - name: StorageLoad
+      href: load-actors-storage.md
+    - name: VDiskLoad
+      href: load-actors-vdisk.md
+    - name: PDiskWriteLoad
+      href: load-actors-pdisk-write.md
+    - name: PDiskReadLoad
+      href: load-actors-pdisk-read.md
+    - name: PDiskLogLoad
+      href: load-actors-pdisk-log.md
+    - name: MemoryLoad
+      href: load-actors-memory.md
+    - name: Stop
+      href: load-actors-stop.md

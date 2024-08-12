@@ -52,6 +52,7 @@ public:
     }
 
     STRICT_STFUNC(StateFuncCheck,
+        hFunc(TEvents::TEvUndelivered, Handle)
         hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
         sFunc(NActors::TEvents::TEvWakeup, CheckTableExistence);
         hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
@@ -72,16 +73,9 @@ public:
     }
 
     void CheckTableExistence() {
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        auto pathComponents = SplitPath(AppData()->TenantName);
-        request->DatabaseName = CanonizePath(pathComponents);
-        auto& entry = request->ResultSet.emplace_back();
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
-        pathComponents.insert(pathComponents.end(), PathComponents.begin(), PathComponents.end());
-        entry.Path = pathComponents;
-        entry.ShowPrivatePath = true;
-        entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(NTableCreator::BuildSchemeCacheNavigateRequest(
+            {PathComponents}
+        ).Release()), IEventHandle::FlagTrackDelivery);
     }
 
     void RunTableRequest() {
@@ -115,6 +109,14 @@ public:
             tableDesc->MutableTTLSettings()->CopyFrom(*TtlSettings);
         }
         Send(MakeTxProxyID(), std::move(request));
+    }
+
+    void Handle(TEvents::TEvUndelivered::TPtr& ev) {
+        if (ev->Get()->Reason == NActors::TEvents::TEvUndelivered::ReasonActorUnknown) {
+            Retry();
+            return;
+        }
+        Fail("Scheme cache is unavailable");
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -209,7 +211,7 @@ public:
         if (delay) {
             Schedule(*delay, new NActors::TEvents::TEvWakeup());
         } else {
-            Fail();
+            Fail("Retry limit exceeded");
         }
     }
 
@@ -272,34 +274,38 @@ public:
     }
 
     void Fail(NSchemeCache::TSchemeCacheNavigate::EStatus status) {
-        LOG_ERROR_S(*TlsActivationContext, LogService,
-            LogPrefix << "Failed to upgrade table: " << status);
-        Reply();
+        TString message = TStringBuilder() << "Failed to upgrade table: " << status;
+        LOG_ERROR_S(*TlsActivationContext, LogService, LogPrefix << message);
+        Reply(false, message);
     }
 
     void Fail(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
-        LOG_ERROR_S(*TlsActivationContext, LogService,
-            LogPrefix << "Failed " << GetOperationType() << " request: " << ev->Get()->Status() << ". Response: " << ev->Get()->Record);
-        Reply();
+        TString message = TStringBuilder() << "Failed " << GetOperationType() << " request: " << ev->Get()->Status() << ". Response: " << ev->Get()->Record;
+        LOG_ERROR_S(*TlsActivationContext, LogService, LogPrefix << message);
+        Reply(false, message);
     }
 
-    void Fail() {
-        LOG_ERROR_S(*TlsActivationContext, LogService, LogPrefix << "Retry limit exceeded");
-        Reply();
+    void Fail(const TString& message) {
+        LOG_ERROR_S(*TlsActivationContext, LogService, LogPrefix << message);
+        Reply(false, message);
     }
 
     void Success() {
-        Reply();
+        Reply(true);
     }
 
     void Success(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
         LOG_INFO_S(*TlsActivationContext, LogService,
             LogPrefix << "Successful " << GetOperationType() <<  " request: " << ev->Get()->Status());
-        Reply();
+        Reply(true);
     }
 
-    void Reply() {
-        Send(Owner, new TEvTableCreator::TEvCreateTableResponse());
+    void Reply(bool success, const TString& message) {
+        Reply(success, {NYql::TIssue(message)});
+    }
+
+    void Reply(bool success, NYql::TIssues issues = {}) {
+        Send(Owner, new TEvTableCreator::TEvCreateTableResponse(success, std::move(issues)));
         if (SchemePipeActorId) {
             NTabletPipe::CloseClient(SelfId(), SchemePipeActorId);
         }
@@ -379,6 +385,88 @@ private:
 };
 
 } // namespace
+
+namespace NTableCreator {
+
+THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(const TVector<TVector<TString>>& pathsComponents, const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken) {
+    auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+    auto databasePath = SplitPath(database);
+    request->DatabaseName = CanonizePath(databasePath);
+    if (userToken && !userToken->GetSerializedToken().empty()) {
+        request->UserToken = userToken;
+    }
+
+    for (const auto& pathComponents : pathsComponents) {
+        auto& entry = request->ResultSet.emplace_back();
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
+        entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
+        entry.ShowPrivatePath = true;
+        entry.Path = databasePath;
+        entry.Path.insert(entry.Path.end(), pathComponents.begin(), pathComponents.end());
+    }
+
+    return request;
+}
+
+THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(const TVector<TVector<TString>>& pathsComponents) {
+    return BuildSchemeCacheNavigateRequest(pathsComponents, AppData()->TenantName, nullptr);
+}
+
+NKikimrSchemeOp::TColumnDescription TMultiTableCreator::Col(const TString& columnName, const char* columnType) {
+    NKikimrSchemeOp::TColumnDescription desc;
+    desc.SetName(columnName);
+    desc.SetType(columnType);
+    return desc;
+}
+
+NKikimrSchemeOp::TColumnDescription TMultiTableCreator::Col(const TString& columnName, NScheme::TTypeId columnType) {
+    return Col(columnName, NScheme::TypeName(columnType));
+}
+
+NKikimrSchemeOp::TTTLSettings TMultiTableCreator::TtlCol(const TString& columnName, TDuration expireAfter, TDuration runInterval) {
+    NKikimrSchemeOp::TTTLSettings settings;
+    settings.MutableEnabled()->SetExpireAfterSeconds(expireAfter.Seconds());
+    settings.MutableEnabled()->SetColumnName(columnName);
+    settings.MutableEnabled()->MutableSysSettings()->SetRunInterval(runInterval.MicroSeconds());
+    return settings;
+}
+
+TMultiTableCreator::TMultiTableCreator(std::vector<NActors::IActor*> tableCreators)
+    : TableCreators(std::move(tableCreators))
+{}
+
+void TMultiTableCreator::Registered(NActors::TActorSystem* sys, const NActors::TActorId& owner) {
+    TBase::Registered(sys, owner);
+    Owner = owner;
+}
+
+void TMultiTableCreator::Bootstrap() {
+    Become(&TMultiTableCreator::StateFunc);
+
+    TablesCreating = TableCreators.size();
+    for (const auto creator : TableCreators) {
+        Register(creator);
+    }
+}
+
+void TMultiTableCreator::Handle(TEvTableCreator::TEvCreateTableResponse::TPtr& ev) {
+    if (!ev->Get()->Success) {
+        Success = false;
+        Issues.AddIssues(std::move(ev->Get()->Issues));
+    }
+
+    Y_ABORT_UNLESS(TablesCreating > 0);
+    if (--TablesCreating == 0) {
+        OnTablesCreated(Success, std::move(Issues));
+        PassAway();
+    }
+}
+
+STRICT_STFUNC(TMultiTableCreator::StateFunc,
+    hFunc(TEvTableCreator::TEvCreateTableResponse, Handle);
+);
+
+} // namespace NTableCreator
 
 NActors::IActor* CreateTableCreator(
     TVector<TString> pathComponents,

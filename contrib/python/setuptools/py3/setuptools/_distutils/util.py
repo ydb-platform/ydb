@@ -4,6 +4,7 @@ Miscellaneous utility functions -- anything that doesn't fit into
 one of the other *util.py modules.
 """
 
+import functools
 import importlib.util
 import os
 import re
@@ -11,12 +12,12 @@ import string
 import subprocess
 import sys
 import sysconfig
-import functools
+import tempfile
 
-from .errors import DistutilsPlatformError, DistutilsByteCompileError
-from ._modified import newer
-from .spawn import spawn
 from ._log import log
+from ._modified import newer
+from .errors import DistutilsByteCompileError, DistutilsPlatformError
+from .spawn import spawn
 
 
 def get_host_platform():
@@ -30,18 +31,11 @@ def get_host_platform():
     # even with older Python versions when distutils was split out.
     # Now it delegates to stdlib sysconfig, but maintains compatibility.
 
-    if sys.version_info < (3, 8):
-        if os.name == 'nt':
-            if '(arm)' in sys.version.lower():
-                return 'win-arm32'
-            if '(arm64)' in sys.version.lower():
-                return 'win-arm64'
-
     if sys.version_info < (3, 9):
         if os.name == "posix" and hasattr(os, 'uname'):
             osname, host, release, version, machine = os.uname()
             if osname[:3] == "aix":
-                from .py38compat import aix_platform
+                from .compat.py38 import aix_platform
 
                 return aix_platform(osname, version, release)
 
@@ -109,8 +103,8 @@ def get_macosx_target_ver():
         ):
             my_msg = (
                 '$' + MACOSX_VERSION_VAR + ' mismatch: '
-                'now "%s" but "%s" during configure; '
-                'must use 10.3 or later' % (env_ver, syscfg_ver)
+                f'now "{env_ver}" but "{syscfg_ver}" during configure; '
+                'must use 10.3 or later'
             )
             raise DistutilsPlatformError(my_msg)
         return env_ver
@@ -136,9 +130,9 @@ def convert_path(pathname):
     if not pathname:
         return pathname
     if pathname[0] == '/':
-        raise ValueError("path '%s' cannot be absolute" % pathname)
+        raise ValueError(f"path '{pathname}' cannot be absolute")
     if pathname[-1] == '/':
-        raise ValueError("path '%s' cannot end with '/'" % pathname)
+        raise ValueError(f"path '{pathname}' cannot end with '/'")
 
     paths = pathname.split('/')
     while '.' in paths:
@@ -165,14 +159,14 @@ def change_root(new_root, pathname):
 
     elif os.name == 'nt':
         (drive, path) = os.path.splitdrive(pathname)
-        if path[0] == '\\':
+        if path[0] == os.sep:
             path = path[1:]
         return os.path.join(new_root, path)
 
     raise DistutilsPlatformError(f"nothing known about platform '{os.name}'")
 
 
-@functools.lru_cache()
+@functools.lru_cache
 def check_environ():
     """Ensure that 'os.environ' has all the environment variables we
     guarantee that users can use in config files, command-line options,
@@ -247,7 +241,7 @@ _wordchars_re = _squote_re = _dquote_re = None
 
 def _init_regex():
     global _wordchars_re, _squote_re, _dquote_re
-    _wordchars_re = re.compile(r'[^\\\'\"%s ]*' % string.whitespace)
+    _wordchars_re = re.compile(rf'[^\\\'\"{string.whitespace} ]*')
     _squote_re = re.compile(r"'(?:[^'\\]|\\.)*'")
     _dquote_re = re.compile(r'"(?:[^"\\]|\\.)*"')
 
@@ -302,7 +296,7 @@ def split_quoted(s):
                 raise RuntimeError("this can't happen (bad char '%c')" % s[end])
 
             if m is None:
-                raise ValueError("bad string (mismatched %s quotes?)" % s[end])
+                raise ValueError(f"bad string (mismatched {s[end]} quotes?)")
 
             (beg, end) = m.span()
             s = s[:beg] + s[beg + 1 : end - 1] + s[end:]
@@ -318,7 +312,7 @@ def split_quoted(s):
 # split_quoted ()
 
 
-def execute(func, args, msg=None, verbose=0, dry_run=0):
+def execute(func, args, msg=None, verbose=False, dry_run=False):
     """Perform some action that affects the outside world (eg.  by
     writing to the filesystem).  Such actions are special because they
     are disabled by the 'dry_run' flag.  This method takes care of all
@@ -328,7 +322,7 @@ def execute(func, args, msg=None, verbose=0, dry_run=0):
     print.
     """
     if msg is None:
-        msg = "{}{!r}".format(func.__name__, args)
+        msg = f"{func.__name__}{args!r}"
         if msg[-2:] == ',)':  # correct for singleton tuple
             msg = msg[0:-2] + ')'
 
@@ -350,17 +344,17 @@ def strtobool(val):
     elif val in ('n', 'no', 'f', 'false', 'off', '0'):
         return 0
     else:
-        raise ValueError("invalid truth value {!r}".format(val))
+        raise ValueError(f"invalid truth value {val!r}")
 
 
 def byte_compile(  # noqa: C901
     py_files,
     optimize=0,
-    force=0,
+    force=False,
     prefix=None,
     base_dir=None,
-    verbose=1,
-    dry_run=0,
+    verbose=True,
+    dry_run=False,
     direct=None,
 ):
     """Byte-compile a collection of Python source files to .pyc
@@ -412,20 +406,10 @@ def byte_compile(  # noqa: C901
     # "Indirect" byte-compilation: write a temporary script and then
     # run it with the appropriate flags.
     if not direct:
-        try:
-            from tempfile import mkstemp
-
-            (script_fd, script_name) = mkstemp(".py")
-        except ImportError:
-            from tempfile import mktemp
-
-            (script_fd, script_name) = None, mktemp(".py")
+        (script_fd, script_name) = tempfile.mkstemp(".py")
         log.info("writing byte-compilation script '%s'", script_name)
         if not dry_run:
-            if script_fd is not None:
-                script = os.fdopen(script_fd, "w")
-            else:
-                script = open(script_name, "w")
+            script = os.fdopen(script_fd, "w", encoding='utf-8')
 
             with script:
                 script.write(
@@ -447,20 +431,19 @@ files = [
 
                 script.write(",\n".join(map(repr, py_files)) + "]\n")
                 script.write(
-                    """
-byte_compile(files, optimize=%r, force=%r,
-             prefix=%r, base_dir=%r,
-             verbose=%r, dry_run=0,
-             direct=1)
+                    f"""
+byte_compile(files, optimize={optimize!r}, force={force!r},
+             prefix={prefix!r}, base_dir={base_dir!r},
+             verbose={verbose!r}, dry_run=False,
+             direct=True)
 """
-                    % (optimize, force, prefix, base_dir, verbose)
                 )
 
         cmd = [sys.executable]
         cmd.extend(subprocess._optim_args_from_interpreter_flags())
         cmd.append(script_name)
         spawn(cmd, dry_run=dry_run)
-        execute(os.remove, (script_name,), "removing %s" % script_name, dry_run=dry_run)
+        execute(os.remove, (script_name,), f"removing {script_name}", dry_run=dry_run)
 
     # "Direct" byte-compilation: use the py_compile module to compile
     # right here, right now.  Note that the script generated in indirect
@@ -487,8 +470,7 @@ byte_compile(files, optimize=%r, force=%r,
             if prefix:
                 if file[: len(prefix)] != prefix:
                     raise ValueError(
-                        "invalid prefix: filename %r doesn't start with %r"
-                        % (file, prefix)
+                        f"invalid prefix: filename {file!r} doesn't start with {prefix!r}"
                     )
                 dfile = dfile[len(prefix) :]
             if base_dir:
@@ -508,6 +490,21 @@ def rfc822_escape(header):
     """Return a version of the string escaped for inclusion in an
     RFC-822 header, by ensuring there are 8 spaces space after each newline.
     """
-    lines = header.split('\n')
-    sep = '\n' + 8 * ' '
-    return sep.join(lines)
+    indent = 8 * " "
+    lines = header.splitlines(keepends=True)
+
+    # Emulate the behaviour of `str.split`
+    # (the terminal line break in `splitlines` does not result in an extra line):
+    ends_in_newline = lines and lines[-1].splitlines()[0] != lines[-1]
+    suffix = indent if ends_in_newline else ""
+
+    return indent.join(lines) + suffix
+
+
+def is_mingw():
+    """Returns True if the current platform is mingw.
+
+    Python compiled with Mingw-w64 has sys.platform == 'win32' and
+    get_platform() starts with 'mingw'.
+    """
+    return sys.platform == 'win32' and get_platform().startswith('mingw')

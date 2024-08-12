@@ -14,6 +14,7 @@ TReadBuffer::TReadBuffer(NDB::ReadBuffer& source)
     InBuffer.resize(8_KB);
     OutBuffer.resize(64_KB);
     Offset_ = InBuffer.size();
+    Size_ = InBuffer.size();
 }
 
 TReadBuffer::~TReadBuffer() {
@@ -21,13 +22,14 @@ TReadBuffer::~TReadBuffer() {
 }
 
 bool TReadBuffer::nextImpl() {
-    ::ZSTD_inBuffer zIn{InBuffer.data(), InBuffer.size(), Offset_};
+    ::ZSTD_inBuffer zIn{InBuffer.data(), Size_, Offset_};
     ::ZSTD_outBuffer zOut{OutBuffer.data(), OutBuffer.size(), 0ULL};
 
     size_t returnCode = 0ULL;
     if (!Finished_) do {
         if (zIn.pos == zIn.size) {
             zIn.size = Source_.read(InBuffer.data(), InBuffer.size());
+            Size_ = zIn.size;
 
             zIn.pos = Offset_ = 0;
             if (!zIn.size) {

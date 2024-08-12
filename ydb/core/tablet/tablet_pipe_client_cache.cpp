@@ -183,12 +183,16 @@ namespace NTabletPipe {
         }
 
     private:
-        void MoveToPool(ui64 tabletId, const TClientCacheEntry& currentClient) {
+        void MoveToPool(ui64 tabletId, TClientCacheEntry& currentClient) {
             TClientCacheEntry* insertedClient;
             if (!PoolContainer->Insert(tabletId, currentClient, insertedClient)) {
                 Y_DEBUG_ABORT_UNLESS(!insertedClient->Client);
                 *insertedClient = currentClient;
             }
+
+            // Note: client was moved to pool, make sure it's not closed by
+            // the eviction callback
+            currentClient.Client = {};
 
             Container->Erase(tabletId);
         }

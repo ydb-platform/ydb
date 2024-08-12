@@ -17,7 +17,6 @@ protected:
         const TString& serializedProgram, TReadDescription& read, const IColumnResolver& columnResolver) const;
 private:
     virtual TConclusion<std::shared_ptr<TReadMetadataBase>> DoBuildReadMetadata(const NColumnShard::TColumnShard* self, const TReadDescription& read) const = 0;
-
 public:
     virtual ~IScannerConstructor() = default;
 

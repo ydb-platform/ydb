@@ -6,9 +6,9 @@ LICENSE(BSD-3-Clause)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2.11.1)
+VERSION(2.13.1)
 
-ORIGINAL_SOURCE(https://github.com/pybind/pybind11/archive/v2.11.1.tar.gz)
+ORIGINAL_SOURCE(https://github.com/pybind/pybind11/archive/v2.13.1.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/pybind11/include

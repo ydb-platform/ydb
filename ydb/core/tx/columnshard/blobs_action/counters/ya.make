@@ -14,4 +14,6 @@ PEERDIR(
     ydb/core/tablet_flat
 )
 
+GENERATE_ENUM_SERIALIZATION(storage.h)
+
 END()

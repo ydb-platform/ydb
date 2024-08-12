@@ -73,11 +73,19 @@ err:
 	return 1;
 }
 
-static void *wait_cqe_fn(void *data)
+struct data {
+	struct io_uring *ring;
+	pthread_barrier_t barrier;
+};
+
+static void *wait_cqe_fn(void *__data)
 {
-	struct io_uring *ring = data;
+	struct data *d = __data;
+	struct io_uring *ring = d->ring;
 	struct io_uring_cqe *cqe;
 	int ret;
+
+	pthread_barrier_wait(&d->barrier);
 
 	ret = io_uring_wait_cqe(ring, &cqe);
 	if (ret) {
@@ -107,9 +115,12 @@ static int test_remote(struct io_uring *ring, struct io_uring *target)
 	void *tret;
 	struct io_uring_cqe *cqe;
 	struct io_uring_sqe *sqe;
+	struct data d;
 	int ret;
 
-	pthread_create(&thread, NULL, wait_cqe_fn, target);
+	d.ring = target;
+	pthread_barrier_init(&d.barrier, NULL, 2);
+	pthread_create(&thread, NULL, wait_cqe_fn, &d);
 
 	sqe = io_uring_get_sqe(ring);
 	if (!sqe) {
@@ -125,6 +136,8 @@ static int test_remote(struct io_uring *ring, struct io_uring *target)
 		fprintf(stderr, "sqe submit failed: %d\n", ret);
 		goto err;
 	}
+
+	pthread_barrier_wait(&d.barrier);
 
 	ret = io_uring_wait_cqe(ring, &cqe);
 	if (ret < 0) {
@@ -315,25 +328,22 @@ static int test_disabled_ring(struct io_uring *ring, int flags)
 	return 0;
 }
 
-int main(int argc, char *argv[])
+static int test(int ring_flags)
 {
 	struct io_uring ring, ring2, pring;
 	int ret, i;
 
-	if (argc > 1)
-		return T_EXIT_SKIP;
-
-	ret = io_uring_queue_init(8, &ring, 0);
+	ret = io_uring_queue_init(8, &ring, ring_flags);
 	if (ret) {
 		fprintf(stderr, "ring setup failed: %d\n", ret);
 		return T_EXIT_FAIL;
 	}
-	ret = io_uring_queue_init(8, &ring2, 0);
+	ret = io_uring_queue_init(8, &ring2, ring_flags);
 	if (ret) {
 		fprintf(stderr, "ring setup failed: %d\n", ret);
 		return T_EXIT_FAIL;
 	}
-	ret = io_uring_queue_init(8, &pring, IORING_SETUP_IOPOLL);
+	ret = io_uring_queue_init(8, &pring, ring_flags | IORING_SETUP_IOPOLL);
 	if (ret) {
 		fprintf(stderr, "ring setup failed: %d\n", ret);
 		return T_EXIT_FAIL;
@@ -418,4 +428,26 @@ int main(int argc, char *argv[])
 
 	io_uring_queue_exit(&ring2);
 	return T_EXIT_PASS;
+}
+
+int main(int argc, char *argv[])
+{
+	int ret;
+
+	if (argc > 1)
+		return T_EXIT_SKIP;
+
+	ret = test(0);
+	if (ret != T_EXIT_PASS) {
+		fprintf(stderr, "ring flags 0 failed\n");
+		return ret;
+	}
+
+	ret = test(IORING_SETUP_SINGLE_ISSUER|IORING_SETUP_DEFER_TASKRUN);
+	if (ret != T_EXIT_PASS) {
+		fprintf(stderr, "ring flags defer failed\n");
+		return ret;
+	}
+
+	return ret;
 }

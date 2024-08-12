@@ -7,10 +7,10 @@ using namespace clang::ast_matchers;
 namespace clang::tidy::arcadia {
     void TypeidNameRestrictionCheck::registerMatchers(MatchFinder* Finder) {
         Finder->addMatcher(cxxMemberCallExpr(on(expr(hasType(namedDecl(hasName("::std::type_info")))).bind("expr")),
-                                             callee(cxxMethodDecl(allOf(hasName("name"), parameterCountIs(0))))),
+                                             callee(cxxMethodDecl(hasName("name"), parameterCountIs(0)))),
                            this);
         Finder->addMatcher(cxxMemberCallExpr(on(expr(hasType(namedDecl(hasName("::std::type_index")))).bind("expr")),
-                                             callee(cxxMethodDecl(allOf(hasName("name"), parameterCountIs(0))))),
+                                             callee(cxxMethodDecl(hasName("name"), parameterCountIs(0)))),
                            this);
     }
 

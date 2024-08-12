@@ -1,7 +1,6 @@
 RECURSE(
     canondata_sync
     datastreams_helpers
-    docker_compose_helpers
     fq_runner
     idx_test
     kqprun

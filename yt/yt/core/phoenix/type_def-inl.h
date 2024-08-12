@@ -73,7 +73,9 @@ namespace NYT::NPhoenix2::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TDummyFieldRegistrar
+#define PHOENIX_REGISTRAR_NODISCARD [[nodiscard("Did you forget to call operator()?")]]
+
+class PHOENIX_REGISTRAR_NODISCARD TDummyFieldRegistrar
 {
 public:
     auto SinceVersion(auto /*version*/) &&
@@ -96,6 +98,9 @@ public:
     {
         return std::move(*this);
     }
+
+    void operator()() &&
+    { }
 };
 
 class TTypeRegistrarBase
@@ -120,7 +125,7 @@ public:
     void AfterLoad(auto&& /*handler*/)
     { }
 
-    void Finish() &&
+    void operator()() &&
     { }
 };
 
@@ -128,7 +133,7 @@ template <class TThis>
 decltype(auto) RunRegistrar(auto&& registrar)
 {
     TThis::RegisterMetadata(registrar);
-    return std::move(registrar).Finish();
+    return std::move(registrar)();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -162,7 +167,7 @@ public:
         TypeDescriptor_->BaseTypes_.push_back(&TBase::GetTypeDescriptor());
     }
 
-    const TTypeDescriptor& Finish() &&;
+    const TTypeDescriptor& operator()() &&;
 
 private:
     std::unique_ptr<TTypeDescriptor> TypeDescriptor_ = std::make_unique<TTypeDescriptor>();
@@ -212,7 +217,7 @@ const TTypeDescriptor& RegisterTypeDescriptorImpl()
 template <class TThis>
 const TTypeDescriptor& RegisterOpaqueTypeDescriptorImpl()
 {
-    return MakeTypeSchemaBuilderRegistrar<TThis, /*Template*/ false>().Finish();
+    return MakeTypeSchemaBuilderRegistrar<TThis, /*Template*/ false>()();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -239,7 +244,7 @@ private:
 };
 
 template <auto Member, class TThis, class TContext, class TFieldSerializer>
-class TFieldSaveRegistrar
+class PHOENIX_REGISTRAR_NODISCARD TFieldSaveRegistrar
 {
 public:
     TFieldSaveRegistrar(const TThis* this_, TContext& context)
@@ -251,9 +256,7 @@ public:
     TFieldSaveRegistrar(TFieldSaveRegistrar<Member, TThis, TContext, TFieldSerializer_>&& other)
         : This_(other.This_)
         , Context_(other.Context_)
-    {
-        other.Armed_ = false;
-    }
+    { }
 
     auto SinceVersion(auto /*version*/) &&
     {
@@ -276,11 +279,9 @@ public:
         return TFieldSaveRegistrar<Member, TThis, TContext, TFieldSerializer_>(std::move(*this));
     }
 
-    ~TFieldSaveRegistrar()
+    void operator()() &&
     {
-        if (Armed_) {
-            TFieldSerializer::Save(Context_, This_->*Member);
-        }
+        TFieldSerializer::Save(Context_, This_->*Member);
     }
 
 private:
@@ -289,8 +290,6 @@ private:
 
     const TThis* const This_;
     TContext& Context_;
-
-    bool Armed_ = true;
 };
 
 template <class TThis, class TContext>
@@ -347,7 +346,7 @@ private:
 };
 
 template <auto Member, class TThis, class TContext, class TFieldSerializer>
-class TFieldLoadRegistrar
+class PHOENIX_REGISTRAR_NODISCARD TFieldLoadRegistrar
 {
 public:
     TFieldLoadRegistrar(TThis* this_, TContext& context, TStringBuf name)
@@ -364,9 +363,7 @@ public:
         , MinVersion_(other.MinVersion_)
         , VersionFilter_(other.VersionFilter_)
         , MissingHandler_(other.MissingHandler_)
-    {
-        other.Armed_ = false;
-    }
+    { }
 
     using TVersion = decltype(std::declval<typename TThis::TLoadContextImpl>().GetVersion());
 
@@ -399,17 +396,15 @@ public:
         return TFieldLoadRegistrar<Member, TThis, TContext, TFieldSerializer_>(std::move(*this));
     }
 
-    ~TFieldLoadRegistrar()
+    void operator()() &&
     {
-        if (Armed_) {
-            if (auto version = Context_.GetVersion(); version >= MinVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
-                Context_.Dumper().SetFieldName(Name_);
-                TFieldSerializer::Load(Context_, This_->*Member);
-            } else if (MissingHandler_) {
-                MissingHandler_(This_, Context_);
-            } else {
-                This_->*Member = {};
-            }
+        if (auto version = Context_.GetVersion(); version >= MinVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
+            Context_.Dumper().SetFieldName(Name_);
+            TFieldSerializer::Load(Context_, This_->*Member);
+        } else if (MissingHandler_) {
+            MissingHandler_(This_, Context_);
+        } else {
+            This_->*Member = {};
         }
     }
 
@@ -424,8 +419,6 @@ private:
     TVersion MinVersion_ = static_cast<TVersion>(std::numeric_limits<int>::min());
     TVersionFilter VersionFilter_ = nullptr;
     TMissingHandler MissingHandler_ = nullptr;
-
-    bool Armed_ = true;
 };
 
 template <class TThis, class TContext>
@@ -510,7 +503,7 @@ template <class TThis, class TContext>
 using TRuntimeFieldDescriptorMap = THashMap<TFieldTag, TRuntimeFieldDescriptor<TThis, TContext>>;
 
 template <auto Member, class TThis, class TContext, class TFieldSerializer>
-class TRuntimeFieldDescriptorBuilderRegistar
+class PHOENIX_REGISTRAR_NODISCARD TRuntimeFieldDescriptorBuilderRegistar
 {
 public:
     using TRuntimeFieldDescriptor = NPhoenix2::NDetail::TRuntimeFieldDescriptor<TThis, TContext>;
@@ -522,9 +515,7 @@ public:
     template <class TFieldSerializer_>
     TRuntimeFieldDescriptorBuilderRegistar(TRuntimeFieldDescriptorBuilderRegistar<Member, TThis, TContext, TFieldSerializer_>&& other)
         : Descriptor_(other.Descriptor_)
-    {
-        other.Armed_ = false;
-    }
+    { }
 
     auto SinceVersion(auto /*version*/) &&
     {
@@ -548,13 +539,11 @@ public:
         return TRuntimeFieldDescriptorBuilderRegistar<Member, TThis, TContext, TFieldSerializer_>(std::move(*this));
     }
 
-    ~TRuntimeFieldDescriptorBuilderRegistar()
+    void operator()() &&
     {
-        if (Armed_) {
-            Descriptor_->LoadHandler = [] (TThis* this_, TContext& context) {
-                TFieldSerializer::Load(context, this_->*Member);
-            };
-        }
+        Descriptor_->LoadHandler = [] (TThis* this_, TContext& context) {
+            TFieldSerializer::Load(context, this_->*Member);
+        };
     }
 
 private:
@@ -562,8 +551,6 @@ private:
     friend class TRuntimeFieldDescriptorBuilderRegistar;
 
     TRuntimeFieldDescriptor* const Descriptor_;
-
-    bool Armed_ = true;
 };
 
 template <class TThis, class TContext>
@@ -598,10 +585,11 @@ public:
         return std::move(*this);
     }
 
+    void operator()() &&
+    { }
+
 private:
     TRuntimeFieldDescriptor* const Descriptor_;
-
-    bool Armed_ = true;
 };
 
 template <class TThis, class TContext>
@@ -629,7 +617,7 @@ public:
         return TRuntimeDeprecatedFieldDescriptorBuilderRegistar<TThis, TContext>(descriptor);
     }
 
-    auto Finish() &&
+    auto operator()() &&
     {
         return std::move(Map_);
     }
@@ -907,6 +895,8 @@ struct TSerializer
         }
     }
 };
+
+#undef PHOENIX_REGISTRAR_NODISCARD
 
 ////////////////////////////////////////////////////////////////////////////////
 

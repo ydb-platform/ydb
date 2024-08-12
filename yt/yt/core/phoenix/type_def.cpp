@@ -19,7 +19,7 @@ TTypeSchemaBuilderRegistar::TTypeSchemaBuilderRegistar(
     TypeDescriptor_->ConcreteConstructor_ = concreteConstructor;
 }
 
-const TTypeDescriptor& TTypeSchemaBuilderRegistar::Finish() &&
+const TTypeDescriptor& TTypeSchemaBuilderRegistar::operator()() &&
 {
     const auto& result = *TypeDescriptor_;
     ::NYT::NPhoenix2::ITypeRegistry::Get()->RegisterTypeDescriptor(std::move(TypeDescriptor_));

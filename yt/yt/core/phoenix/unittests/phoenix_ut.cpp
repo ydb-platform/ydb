@@ -91,8 +91,8 @@ private:
 
 void TPoint::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X_>("x");
-    registrar.template Field<2, &TThis::Y_>("y");
+    registrar.template Field<1, &TThis::X_>("x")();
+    registrar.template Field<2, &TThis::Y_>("y")();
 }
 
 PHOENIX_DEFINE_TYPE(TPoint);
@@ -112,7 +112,7 @@ struct TBaseStruct
 
 void TBaseStruct::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::A>("a");
+    registrar.template Field<1, &TThis::A>("a")();
 }
 
 PHOENIX_DEFINE_TYPE(TBaseStruct);
@@ -134,7 +134,7 @@ struct TDerivedStruct
 void TDerivedStruct::RegisterMetadata(auto&& registrar)
 {
     registrar.template BaseType<TBaseStruct>();
-    registrar.template Field<1, &TThis::B>("b");
+    registrar.template Field<1, &TThis::B>("b")();
 }
 
 PHOENIX_DEFINE_TYPE(TDerivedStruct);
@@ -157,8 +157,8 @@ struct TPair
 template <class T1, class T2>
 void TPair<T1, T2>::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::First>("first");
-    registrar.template Field<2, &TThis::Second>("second");
+    registrar.template Field<1, &TThis::First>("first")();
+    registrar.template Field<2, &TThis::Second>("second")();
 }
 
 PHOENIX_DEFINE_TEMPLATE_TYPE(TPair, (<int, int>));
@@ -247,14 +247,14 @@ struct S
 
 void S::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::A>("a");
+    registrar.template Field<1, &TThis::A>("a")();
     registrar.template Field<2, &TThis::B>("b")
-        .SinceVersion(100);
+        .SinceVersion(100)();
     registrar.template Field<3, &TThis::C>("c")
         .SinceVersion(200)
         .WhenMissing([] (TThis* this_, auto& /*context*/) {
             this_->C = 777;
-        });
+        })();
 }
 
 PHOENIX_DEFINE_TYPE(S);
@@ -310,18 +310,18 @@ struct S
 
 void S::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::A>("a");
+    registrar.template Field<1, &TThis::A>("a")();
     registrar.template Field<2, &TThis::B>("b")
         .InVersions([] (int version) {
             return version >= 150 && version <= 250;
-        });
+        })();
     registrar.template Field<3, &TThis::C>("c")
         .InVersions([] (int version) {
             return version >= 100 && version <= 200;
         })
         .WhenMissing([] (TThis* this_, auto& /*context*/) {
             this_->C = 777;
-        });
+        })();
 }
 
 PHOENIX_DEFINE_TYPE(S);
@@ -483,8 +483,8 @@ struct S
 void S::RegisterMetadata(auto&& registrar)
 {
     registrar.template Field<1, &TThis::A>("a")
-        .template Serializer<TSerializer>();
-    registrar.template Field<2, &TThis::B>("b");
+        .template Serializer<TSerializer>()();
+    registrar.template Field<2, &TThis::B>("b")();
 }
 
 PHOENIX_DEFINE_TYPE(S);
@@ -685,7 +685,7 @@ void S::RegisterMetadata(auto&& registrar)
 {
     registrar.template DeprecatedField<1>("a", [] (TThis* this_, auto& context) {
         this_->A = Load<int>(context);
-    });
+    })();
 }
 
 PHOENIX_DEFINE_TYPE(S);
@@ -810,7 +810,7 @@ struct TBase
 
 void TBase::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::A>("a");
+    registrar.template Field<1, &TThis::A>("a")();
 }
 
 PHOENIX_DEFINE_TYPE(TBase);
@@ -860,8 +860,8 @@ struct A
 
 void A::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X>("a");
-    registrar.template Field<2, &TThis::Y>("b");
+    registrar.template Field<1, &TThis::X>("a")();
+    registrar.template Field<2, &TThis::Y>("b")();
 }
 
 PHOENIX_DEFINE_TYPE(A);
@@ -876,7 +876,7 @@ struct B
 
 void B::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::V>("v");
+    registrar.template Field<1, &TThis::V>("v")();
 }
 
 PHOENIX_DEFINE_TYPE(B);
@@ -915,7 +915,7 @@ struct A
 
 void A::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X>("x");
+    registrar.template Field<1, &TThis::X>("x")();
 }
 
 PHOENIX_DEFINE_TYPE(A);
@@ -963,7 +963,7 @@ struct A
 
 void A::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X>("x");
+    registrar.template Field<1, &TThis::X>("x")();
 }
 
 PHOENIX_DEFINE_TYPE(A);
@@ -1012,8 +1012,8 @@ struct A
 
 void A::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X>("x");
-    registrar.template Field<2, &TThis::Y>("y");
+    registrar.template Field<1, &TThis::X>("x")();
+    registrar.template Field<2, &TThis::Y>("y")();
 }
 
 PHOENIX_DEFINE_TYPE(A);
@@ -1028,7 +1028,7 @@ struct B
 
 void B::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &B::V>("v");
+    registrar.template Field<1, &B::V>("v")();
 }
 
 PHOENIX_DEFINE_TYPE(B);
@@ -1078,7 +1078,7 @@ struct TDerived1
 void TDerived1::RegisterMetadata(auto&& registrar)
 {
     registrar.template BaseType<TBase>();
-    registrar.template Field<1, &TThis::V>("v");
+    registrar.template Field<1, &TThis::V>("v")();
 }
 
 PHOENIX_DEFINE_TYPE(TDerived1);
@@ -1094,7 +1094,7 @@ struct TDerived2
 void TDerived2::RegisterMetadata(auto&& registrar)
 {
     registrar.template BaseType<TBase>();
-    registrar.template Field<1, &TThis::V>("v");
+    registrar.template Field<1, &TThis::V>("v")();
 }
 
 PHOENIX_DEFINE_TYPE(TDerived2);
@@ -1134,7 +1134,7 @@ struct S
 
 void S::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X>("x");
+    registrar.template Field<1, &TThis::X>("x")();
 }
 
 PHOENIX_DEFINE_TYPE(S);
@@ -1170,8 +1170,8 @@ struct A
 
 void A::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X>("x");
-    registrar.template Field<2, &TThis::T>("t");
+    registrar.template Field<1, &TThis::X>("x")();
+    registrar.template Field<2, &TThis::T>("t")();
 }
 
 PHOENIX_DEFINE_TYPE(A);
@@ -1186,8 +1186,8 @@ struct B
 
 void B::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::Y>("y");
-    registrar.template Field<2, &TThis::Z>("z");
+    registrar.template Field<1, &TThis::Y>("y")();
+    registrar.template Field<2, &TThis::Z>("z")();
 }
 
 PHOENIX_DEFINE_TYPE(B);
@@ -1233,7 +1233,7 @@ struct TBase
 
 void TBase::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X>("x");
+    registrar.template Field<1, &TThis::X>("x")();
 }
 
 PHOENIX_DEFINE_TYPE(TBase);
@@ -1257,8 +1257,8 @@ struct TDervied
 void TDervied::RegisterMetadata(auto&& registrar)
 {
     registrar.template BaseType<TBase>();
-    registrar.template Field<1, &TThis::Y>("y");
-    registrar.template Field<2, &TThis::Z>("z");
+    registrar.template Field<1, &TThis::Y>("y")();
+    registrar.template Field<2, &TThis::Z>("z")();
 }
 
 PHOENIX_DEFINE_TYPE(TDervied);
@@ -1298,7 +1298,7 @@ struct TBase1
 
 void TBase1::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X1>("x1");
+    registrar.template Field<1, &TThis::X1>("x1")();
 }
 
 PHOENIX_DEFINE_TYPE(TBase1);
@@ -1314,7 +1314,7 @@ struct TBase2
 
 void TBase2::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X2>("x2");
+    registrar.template Field<1, &TThis::X2>("x2")();
 }
 
 PHOENIX_DEFINE_TYPE(TBase2);
@@ -1333,8 +1333,8 @@ void TDerived::RegisterMetadata(auto&& registrar)
 {
     registrar.template BaseType<TBase1>();
     registrar.template BaseType<TBase2>();
-    registrar.template Field<1, &TThis::Y>("y");
-    registrar.template Field<2, &TThis::Z>("z");
+    registrar.template Field<1, &TThis::Y>("y")();
+    registrar.template Field<2, &TThis::Z>("z")();
 }
 
 PHOENIX_DEFINE_TYPE(TDerived);
@@ -1430,7 +1430,7 @@ struct S
 
 void S::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::A>("a");
+    registrar.template Field<1, &TThis::A>("a")();
 }
 
 PHOENIX_DEFINE_TYPE(S);

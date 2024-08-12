@@ -1,15 +1,15 @@
 # {{ ydb-short-name }} cluster topology
 
-A {{ ydb-short-name }} cluster consists of [storage](./glossary.md#storage-node) and [database](./glossary.md#database-node) nodes. As the data stored in {{ ydb-short-name }} is available only via queries and API calls, both types of nodes are essential for [database availability](#database-availability). However, [distributed storage](glossary.md#distributed-storage) consisting of storage nodes has the most impact on the cluster's fault tolerance and ability to persist data reliably. During the initial cluster deployment, an appropriate distributed storage [operating mode](#cluster-config) needs to be chosen according to the expected workload and [database availability](#database-availability) requirements.
+A {{ ydb-short-name }} cluster consists of [storage](glossary.md#storage-node) and [database](glossary.md#database-node) nodes. As the data stored in {{ ydb-short-name }} is available only via queries and API calls, both types of nodes are essential for [database availability](#database-availability). However, [distributed storage](glossary.md#distributed-storage) consisting of storage nodes has the most impact on the cluster's fault tolerance and ability to persist data reliably. During the initial cluster deployment, an appropriate distributed storage [operating mode](#cluster-config) needs to be chosen according to the expected workload and [database availability](#database-availability) requirements.
 
 ## Cluster operating modes {#cluster-config}
 
-Cluster topology is based on the chosen operating mode, which needs to be determined according to the fault tolerance requirements. {{ ydb-short-name }}'s failure model is based on the concepts of [fail domain](./glossary.md#fail-domain) and [fail realm](./glossary.md#fail-realm).
+Cluster topology is based on the chosen operating mode, which needs to be determined according to the fault tolerance requirements. {{ ydb-short-name }}'s failure model is based on the concepts of [fail domain](glossary.md#fail-domain) and [fail realm](glossary.md#fail-realm).
 
 The following {{ ydb-short-name }} distributed storage operating modes are available:
 
 - `none`. There is no redundancy. Any hardware failure causes data to become unavailable or permanently lost. This mode is only recommended for development and functional testing.
-- `block-4-2`. [Erasure coding](https://en.wikipedia.org/wiki/Erasure_code) is applied with two blocks of redundancy added to the four blocks of source data. Storage nodes are placed in at least 8 failure domains (usually racks). A [storage pool](./glossary.md#storage-pool) remains available if any two domains fail, continuing to record all 6 data parts in the remaining domains. This mode is recommended for clusters deployed within a single availability zone or data center.
+- `block-4-2`. [Erasure coding](https://en.wikipedia.org/wiki/Erasure_code) is applied with two blocks of redundancy added to the four blocks of source data. Storage nodes are placed in at least 8 failure domains (usually racks). A [storage pool](glossary.md#storage-pool) remains available if any two domains fail, continuing to record all 6 data parts in the remaining domains. This mode is recommended for clusters deployed within a single availability zone or data center.
 - `mirror-3-dc`. Data is replicated to 3 availability zones using 3 failure domains (usually racks) within each zone. {{ ydb-short-name }} cluster remains available even if one availability zone completely fails; additionally, one failure domain in the remaining zones can fail at the same time. This mode is recommended for multi-datacenter clusters with high availability requirements.
 - `mirror-3-dc-3-nodes`. A simplified version of `mirror-3-dc`. This mode requires at least 3 servers with 3 disks each. Each server must be located in an independent data center to provide reasonable fault tolerance. System health in this mode is maintained if no more than one server fails. This mode is only recommended for functional testing or building prototypes.
 
@@ -32,11 +32,11 @@ The table below describes the requirements and fault tolerance levels for differ
 
 {% note info %}
 
-The storage volume multiplier specified above only applies to the fault tolerance factor. Other influencing factors (for example, [slot](./glossary.md#slot) fragmentation and granularity) must be taken into account for storage size planning.
+The storage volume multiplier specified above only applies to the fault tolerance factor. Other influencing factors (for example, [slot](glossary.md#slot) fragmentation and granularity) must be taken into account for storage size planning.
 
 {% endnote %}
 
-When creating a [storage group](glossary.md#storage-group), which is a basic allocation unit for storage management, {{ ydb-short-name }} selects [VDisks](./glossary.md#vdisk) that are located on [PDisks](./glossary.md#pdisk) from different fail domains. For `block-4-2` mode, a storage group should be distributed across at least 8 fail domains, while for `mirror-3-dc` mode, it should be distributed across 3 fail realms, with at least 3 fail domains in each realm.
+When creating a [storage group](glossary.md#storage-group), which is a basic allocation unit for storage management, {{ ydb-short-name }} selects [VDisks](glossary.md#vdisk) that are located on [PDisks](glossary.md#pdisk) from different fail domains. For `block-4-2` mode, a storage group should be distributed across at least 8 fail domains, while for `mirror-3-dc` mode, it should be distributed across 3 fail realms, with at least 3 fail domains in each realm.
 
 For information about how to set the {{ ydb-short-name }} cluster topology, see [{#T}](../deploy/configuration/config.md#domains-blob).
 
@@ -68,7 +68,7 @@ Disk group reconfiguration is limited or totally impossible when a cluster's har
 
 The load can be redistributed across all the hardware that is still running if the number of fail domains in a cluster exceeds the minimum amount required for creating storage groups by at least one. This means having 9 fail domains for `block-4-2` and 4 fail domains in each fail realm for `mirror-3-dc`, which is recommended.
 
-## Capacity and performance considerations
+## Capacity and performance considerations {#capacity}
 
 The system can work with fail domains of any size. However, if there are few domains and different numbers of disks in different domains, the number of storage groups that can be created will be limited. In this case, some hardware in fail domains that are too large may be underutilized. If all hardware is used fully, significant differences in domain sizes may make reconfiguration impossible.
 
@@ -89,15 +89,15 @@ Therefore, the optimal initial hardware configurations for production {{ ydb-sho
 
 ## Database availability {#database-availability}
 
-A [database](./glossary.md#database) within a {{ ydb-short-name }} cluster is available if both its storage and compute resources are operational:
+A [database](glossary.md#database) within a {{ ydb-short-name }} cluster is available if both its storage and compute resources are operational:
 
-- All [storage groups](./glossary.md#storage-group) allocated for the database must be operational, i.e., stay within the allowed level of failures.
-- The compute resources of the currently available [database nodes](./glossary.md#database-node) (primarily the amount of main memory) must be sufficient to start all the [tablets](glossary.md#tablet) managing objects like [tables](glossary.md#table) or [topics](glossary.md#topic) within the database and to handle user sessions.
+- All [storage groups](glossary.md#storage-group) allocated for the database must be operational, i.e., stay within the allowed level of failures.
+- The compute resources of the currently available [database nodes](glossary.md#database-node) (primarily the amount of main memory) must be sufficient to start all the [tablets](glossary.md#tablet) managing objects like [tables](glossary.md#table) or [topics](glossary.md#topic) within the database and to handle user sessions.
 
 To survive an entire data center outage at the database level, assuming a cluster configured with the `mirror-3-dc` operating mode:
 
-- The [storage nodes](./glossary.md#storage-node) need to have at least double the I/O bandwidth and disk capacity compared to what is required for normal operation. In the worst case, the load on the remaining nodes during the maximum allowed outage might triple, but that's only temporary until self-heal restores failed disks in operating data centers.
-- The [database nodes](./glossary.md#database-node) must be evenly distributed between all 3 data centers and include sufficient resources to handle the entire workload when running in just 2 of the 3 data centers. To achieve this, database nodes in each datacenter need at least 35% extra spare CPU and RAM resources when running normally without ongoing failures. If database nodes are typically utilized above this threshold, consider adding more of them or moving them to servers with more resources.
+- The [storage nodes](glossary.md#storage-node) need to have at least double the I/O bandwidth and disk capacity compared to what is required for normal operation. In the worst case, the load on the remaining nodes during the maximum allowed outage might triple, but that's only temporary until self-heal restores failed disks in operating data centers.
+- The [database nodes](glossary.md#database-node) must be evenly distributed between all 3 data centers and include sufficient resources to handle the entire workload when running in just 2 of the 3 data centers. To achieve this, database nodes in each datacenter need at least 35% extra spare CPU and RAM resources when running normally without ongoing failures. If database nodes are typically utilized above this threshold, consider adding more of them or moving them to servers with more resources.
 
 ## See also
 

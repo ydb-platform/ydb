@@ -82,6 +82,9 @@ public:
     //! Gets owned gauge with given metric suffix.
     const TGauge& GetGauge(TStringBuf name) const;
 
+    //! Gets owned time gauge with given metric suffix.
+    const TTimeGauge& GetTimeGauge(TStringBuf name) const;
+
     //! Gets owned TimeHistogram with given metric suffix using bounds as a constructor argument.
     const TEventTimer& GetTimeHistogram(TStringBuf name, std::vector<TDuration> bounds) const;
 

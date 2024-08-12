@@ -30,8 +30,8 @@ NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
     ui32 optLevel,
     IOptimizerNew& optimizer,
     const std::function<void(TVector<std::shared_ptr<TRelOptimizerNode>>&, TStringBuf, const TExprNode::TPtr, const std::shared_ptr<TOptimizerStatistics>&)>& providerCollect,
-    TCardinalityHints hints = TCardinalityHints(),
-    TJoinAlgoHints joinHints = TJoinAlgoHints());
+    TCardinalityHints hints = {},
+    TJoinAlgoHints joinHints = {});
 
 NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
     const NNodes::TExprBase& node,
@@ -41,8 +41,8 @@ NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
     IOptimizerNew& optimizer,
     const std::function<void(TVector<std::shared_ptr<TRelOptimizerNode>>&, TStringBuf, const TExprNode::TPtr, const std::shared_ptr<TOptimizerStatistics>&)>& providerCollect,
     int& equiJoinCounter,
-    TCardinalityHints hints = TCardinalityHints(),
-    TJoinAlgoHints joinHints = TJoinAlgoHints());
+    TCardinalityHints hints = {},
+    TJoinAlgoHints joinHints = {});
 
 NNodes::TExprBase DqRewriteEquiJoin(const NNodes::TExprBase& node, TExprContext& ctx);
 

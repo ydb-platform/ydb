@@ -509,15 +509,20 @@ IActor* CreateBlobStorageGroupAssimilateRequest(TBlobStorageGroupAssimilateParam
 
 IActor* CreateBlobStorageGroupEjectedProxy(ui32 groupId, TIntrusivePtr<TDsProxyNodeMon> &nodeMon);
 
-IActor* CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>&& info,
-    bool forceWaitAllDrives, bool useActorSystemTimeInBSQueue, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
-    TIntrusivePtr<TStoragePoolCounters>&& storagePoolCounters, const TControlWrapper &enablePutBatching,
-    const TControlWrapper &enableVPatch, const TControlWrapper &slowDiskThreshold,
-    const TControlWrapper &predictedDelayMultiplier);
+struct TBlobStorageProxyParameters {
+    bool UseActorSystemTimeInBSQueue = false;
 
-IActor* CreateBlobStorageGroupProxyUnconfigured(ui32 groupId, bool useActorSystemInBSQueue,
-    TIntrusivePtr<TDsProxyNodeMon> &nodeMon, const TControlWrapper &enablePutBatching,
-    const TControlWrapper &enableVPatch, const TControlWrapper &slowDiskThreshold,
-    const TControlWrapper &predictedDelayMultiplier);
+    const TControlWrapper& EnablePutBatching;
+    const TControlWrapper& EnableVPatch;
+    const TControlWrapper& SlowDiskThreshold;
+    const TControlWrapper& PredictedDelayMultiplier;
+};
+
+IActor* CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>&& info,
+    bool forceWaitAllDrives, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
+    TIntrusivePtr<TStoragePoolCounters>&& storagePoolCounters, const TBlobStorageProxyParameters& params);
+
+IActor* CreateBlobStorageGroupProxyUnconfigured(ui32 groupId, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
+    const TBlobStorageProxyParameters& params);
 
 }//NKikimr

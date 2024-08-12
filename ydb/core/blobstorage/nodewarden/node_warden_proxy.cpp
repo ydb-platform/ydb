@@ -35,9 +35,14 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                 case NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS:
                     // create proxy that will be used by blob depot agent to fetch underlying data
                     proxyActorId = as->Register(CreateBlobStorageGroupProxyConfigured(
-                        TIntrusivePtr<TBlobStorageGroupInfo>(info), false, Cfg->UseActorSystemTimeInBSQueue,
-                        DsProxyNodeMon, getCounters(info), EnablePutBatching, EnableVPatch, SlowDiskThreshold,
-                        PredictedDelayMultiplier), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
+                        TIntrusivePtr<TBlobStorageGroupInfo>(info), false, DsProxyNodeMon, getCounters(info),
+                        TBlobStorageProxyParameters{
+                            .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
+                            .EnablePutBatching = EnablePutBatching,
+                            .EnableVPatch = EnableVPatch,
+                            .SlowDiskThreshold = SlowDiskThreshold,
+                            .PredictedDelayMultiplier = PredictedDelayMultiplier,
+                        }), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
                     [[fallthrough]];
                 case NKikimrBlobStorage::TGroupDecommitStatus::DONE:
                     proxy.reset(NBlobDepot::CreateBlobDepotAgent(groupId, info, proxyActorId));
@@ -51,13 +56,23 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
         } else {
             // create proxy with configuration
             proxy.reset(CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>(info), false, 
-                Cfg->UseActorSystemTimeInBSQueue, DsProxyNodeMon, getCounters(info),
-                EnablePutBatching, EnableVPatch, SlowDiskThreshold, PredictedDelayMultiplier));
+                DsProxyNodeMon, getCounters(info), TBlobStorageProxyParameters{
+                        .EnablePutBatching = EnablePutBatching,
+                        .EnableVPatch = EnableVPatch,
+                        .SlowDiskThreshold = SlowDiskThreshold,
+                        .PredictedDelayMultiplier = PredictedDelayMultiplier,
+                    }
+                )
+            );
         }
     } else {
         // create proxy without configuration
-        proxy.reset(CreateBlobStorageGroupProxyUnconfigured(groupId, Cfg->UseActorSystemTimeInBSQueue, DsProxyNodeMon,
-                EnablePutBatching, EnableVPatch, SlowDiskThreshold, PredictedDelayMultiplier));
+        proxy.reset(CreateBlobStorageGroupProxyUnconfigured(groupId, DsProxyNodeMon, TBlobStorageProxyParameters{
+            .EnablePutBatching = EnablePutBatching,
+            .EnableVPatch = EnableVPatch,
+            .SlowDiskThreshold = SlowDiskThreshold,
+            .PredictedDelayMultiplier = PredictedDelayMultiplier,
+        }));
     }
 
     group.ProxyId = as->Register(proxy.release(), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);

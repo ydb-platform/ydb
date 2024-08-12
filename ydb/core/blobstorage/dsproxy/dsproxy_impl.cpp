@@ -5,10 +5,8 @@ namespace NKikimr {
     std::atomic<TMonotonic> TBlobStorageGroupProxy::ThrottlingTimestamp;
 
     TBlobStorageGroupProxy::TBlobStorageGroupProxy(TIntrusivePtr<TBlobStorageGroupInfo>&& info, bool forceWaitAllDrives,
-            bool useActorSystemTimeInBSQueue, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
-            TIntrusivePtr<TStoragePoolCounters>&& storagePoolCounters, const TControlWrapper &enablePutBatching,
-            const TControlWrapper &enableVPatch, const TControlWrapper &slowDiskThreshold,
-            const TControlWrapper &predictedDelayMultiplier)
+            TIntrusivePtr<TDsProxyNodeMon> &nodeMon, TIntrusivePtr<TStoragePoolCounters>&& storagePoolCounters, 
+            const TBlobStorageProxyParameters& params)
         : GroupId(info->GroupID)
         , Info(std::move(info))
         , Topology(Info->PickTopology())
@@ -16,50 +14,48 @@ namespace NKikimr {
         , StoragePoolCounters(std::move(storagePoolCounters))
         , IsEjected(false)
         , ForceWaitAllDrives(forceWaitAllDrives)
-        , UseActorSystemTimeInBSQueue(useActorSystemTimeInBSQueue)
-        , EnablePutBatching(enablePutBatching)
-        , EnableVPatch(enableVPatch)
-        , SlowDiskThreshold(slowDiskThreshold)
-        , PredictedDelayMultiplier(predictedDelayMultiplier)
+        , UseActorSystemTimeInBSQueue(params.UseActorSystemTimeInBSQueue)
+        , EnablePutBatching(params.EnablePutBatching)
+        , EnableVPatch(params.EnableVPatch)
+        , SlowDiskThreshold(params.SlowDiskThreshold)
+        , PredictedDelayMultiplier(params.PredictedDelayMultiplier)
     {}
 
-    TBlobStorageGroupProxy::TBlobStorageGroupProxy(ui32 groupId, bool isEjected, bool useActorSystemTimeInBSQueue,
-            TIntrusivePtr<TDsProxyNodeMon> &nodeMon, const TControlWrapper &enablePutBatching,
-            const TControlWrapper &enableVPatch, const TControlWrapper &slowDiskThreshold,
-            const TControlWrapper &predictedDelayMultiplier)
+    TBlobStorageGroupProxy::TBlobStorageGroupProxy(ui32 groupId, bool isEjected,TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
+            const TBlobStorageProxyParameters& params)
         : GroupId(TGroupId::FromValue(groupId))
         , NodeMon(nodeMon)
         , IsEjected(isEjected)
         , ForceWaitAllDrives(false)
-        , UseActorSystemTimeInBSQueue(useActorSystemTimeInBSQueue)
-        , EnablePutBatching(enablePutBatching)
-        , EnableVPatch(enableVPatch)
-        , SlowDiskThreshold(slowDiskThreshold)
-        , PredictedDelayMultiplier(predictedDelayMultiplier)
+        , UseActorSystemTimeInBSQueue(params.UseActorSystemTimeInBSQueue)
+        , EnablePutBatching(params.EnablePutBatching)
+        , EnableVPatch(params.EnableVPatch)
+        , SlowDiskThreshold(params.SlowDiskThreshold)
+        , PredictedDelayMultiplier(params.PredictedDelayMultiplier)
     {}
 
     IActor* CreateBlobStorageGroupEjectedProxy(ui32 groupId, TIntrusivePtr<TDsProxyNodeMon> &nodeMon) {
-        return new TBlobStorageGroupProxy(groupId, true, false, nodeMon, TControlWrapper(false, false, true),
-                TControlWrapper(false, false, true), TControlWrapper(1000, 1, 1000000),
-                TControlWrapper(1000, 1, 1000000));
+        return new TBlobStorageGroupProxy(groupId, true, nodeMon, 
+                TBlobStorageProxyParameters{
+                    .EnablePutBatching = TControlWrapper(false, false, true),
+                    .EnableVPatch = TControlWrapper(false, false, true),
+                    .SlowDiskThreshold = TControlWrapper(2000, 1, 1000000),
+                    .PredictedDelayMultiplier = TControlWrapper(1000, 1, 1000000),
+                }
+        );
     }
 
     IActor* CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>&& info, bool forceWaitAllDrives,
-            bool useActorSystemTimeInBSQueue, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
-            TIntrusivePtr<TStoragePoolCounters>&& storagePoolCounters, const TControlWrapper &enablePutBatching,
-            const TControlWrapper &enableVPatch, const TControlWrapper &slowDiskThreshold,
-            const TControlWrapper &predictedDelayMultiplier) {
+            TIntrusivePtr<TDsProxyNodeMon> &nodeMon, TIntrusivePtr<TStoragePoolCounters>&& storagePoolCounters,
+            const TBlobStorageProxyParameters& params) {
         Y_ABORT_UNLESS(info);
-        return new TBlobStorageGroupProxy(std::move(info), forceWaitAllDrives, useActorSystemTimeInBSQueue, nodeMon,
-                std::move(storagePoolCounters), enablePutBatching, enableVPatch, slowDiskThreshold, predictedDelayMultiplier);
+        return new TBlobStorageGroupProxy(std::move(info), forceWaitAllDrives, nodeMon,
+                std::move(storagePoolCounters), params);
     }
 
-    IActor* CreateBlobStorageGroupProxyUnconfigured(ui32 groupId, bool useActorSystemInBSQueue, 
-            TIntrusivePtr<TDsProxyNodeMon> &nodeMon,const TControlWrapper &enablePutBatching,
-            const TControlWrapper &enableVPatch, const TControlWrapper &slowDiskThreshold,
-            const TControlWrapper &predictedDelayMultiplier) {
-        return new TBlobStorageGroupProxy(groupId, false, useActorSystemInBSQueue, nodeMon,
-                enablePutBatching, enableVPatch, slowDiskThreshold, predictedDelayMultiplier);
+    IActor* CreateBlobStorageGroupProxyUnconfigured(ui32 groupId, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
+            const TBlobStorageProxyParameters& params) {
+        return new TBlobStorageGroupProxy(groupId, false, nodeMon, params);
     }
 
     NActors::NLog::EPriority PriorityForStatusOutbound(NKikimrProto::EReplyStatus status) {

@@ -407,7 +407,7 @@ public:
     TBlobStorageGroupGetRequest(TBlobStorageGroupGetParameters& params)
         : TBlobStorageGroupRequestActor(params)
         , GetImpl(Info, GroupQueues, params.Common.Event, std::move(params.NodeLayout),
-                LogCtx.RequestPrefix, params.AccelerationParams)
+                params.AccelerationParams, LogCtx.RequestPrefix)
         , Orbit(std::move(params.Common.Event->Orbit))
         , Deadline(params.Common.Event->Deadline)
         , StartTime(params.Common.Now)

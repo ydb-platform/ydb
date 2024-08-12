@@ -407,9 +407,17 @@ private:
         auto proxy = Counters->GetSubgroup("subsystem", "proxy");
         TIntrusivePtr<TDsProxyNodeMon> mon = MakeIntrusive<TDsProxyNodeMon>(proxy, true);
         StoragePoolCounters = MakeIntrusive<TStoragePoolCounters>(proxy, TString(), NPDisk::DEVICE_TYPE_SSD);
-        std::unique_ptr<IActor> proxyActor{CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(Info), false, false, mon,
-                TIntrusivePtr(StoragePoolCounters), DefaultEnablePutBatching, DefaultEnableVPatch,
-                DefaultSlowDiskThreshold)};
+        TControlWrapper enablePutBatching(DefaultEnablePutBatching, false, true);
+        TControlWrapper enableVPatch(DefaultEnableVPatch, false, true);
+        TControlWrapper slowDiskThreshold(DefaultSlowDiskThreshold * 1000, 1, 1000000);
+        TControlWrapper predictedDelayMultiplier(DefaultPredictedDelayMultiplier * 1000, 1, 1000000);
+        std::unique_ptr<IActor> proxyActor{CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(Info), false, mon,
+                TIntrusivePtr(StoragePoolCounters), TBlobStorageProxyParameters{
+                    .EnablePutBatching = enablePutBatching,
+                    .EnableVPatch = enableVPatch,
+                    .SlowDiskThreshold = slowDiskThreshold,
+                    .PredictedDelayMultiplier = predictedDelayMultiplier,
+                })};
         const TActorId& actorId = runtime.Register(proxyActor.release(), TActorId(), 0, std::nullopt, 1);
         runtime.RegisterService(MakeBlobStorageProxyID(GroupId), actorId);
     }

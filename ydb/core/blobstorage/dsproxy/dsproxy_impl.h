@@ -319,15 +319,11 @@ public:
     }
 
     TBlobStorageGroupProxy(TIntrusivePtr<TBlobStorageGroupInfo>&& info, bool forceWaitAllDrives,
-            bool useActorSystemTimeInBSQueue, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
-            TIntrusivePtr<TStoragePoolCounters>&& storagePoolCounters, const TControlWrapper &enablePutBatching,
-            const TControlWrapper &enableVPatch, const TControlWrapper &slowDiskThreshold,
-            const TControlWrapper &predictedDelayMultiplier);
+            TIntrusivePtr<TDsProxyNodeMon> &nodeMon, TIntrusivePtr<TStoragePoolCounters>&& storagePoolCounters,
+            const TBlobStorageProxyParameters& params);
 
-    TBlobStorageGroupProxy(ui32 groupId, bool isEjected, bool useActorSystemTimeInBSQueue,
-            TIntrusivePtr<TDsProxyNodeMon> &nodeMon, const TControlWrapper &enablePutBatching,
-            const TControlWrapper &enableVPatch, const TControlWrapper &slowDiskThreshold,
-            const TControlWrapper &predictedDelayMultiplier);
+    TBlobStorageGroupProxy(ui32 groupId, bool isEjected, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
+            const TBlobStorageProxyParameters& params);
 
     void Bootstrap();
 

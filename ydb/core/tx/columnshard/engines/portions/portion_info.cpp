@@ -596,7 +596,7 @@ TPortionInfo::TPreparedBatchData PrepareForAssembleImpl(const TPortionInfo& port
     columns.reserve(arrowResultSchema->num_fields());
     const ui32 rowsCount = portion.GetRecordsCount();
     for (auto&& i : arrowResultSchema->fields()) {
-        columns.emplace_back(rowsCount, dataSchema.GetColumnLoaderOptional(i->name()), resultSchema.GetColumnLoaderOptional(i->name()));
+        columns.emplace_back(rowsCount, dataSchema.GetColumnLoaderOptional(i->name()), resultSchema.GetColumnLoaderVerified(i->name()));
     }
     {
         int skipColumnId = -1;
@@ -716,6 +716,7 @@ std::shared_ptr<NArrow::TGeneralContainer> TPortionInfo::TPreparedBatchData::Ass
     std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> columns;
     std::vector<std::shared_ptr<arrow::Field>> fields;
     for (auto&& i : Columns) {
+        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("column", i.GetField()->ToString())("id", i.GetColumnId());
         if (sequentialColumnIds.contains(i.GetColumnId())) {
             columns.emplace_back(i.AssembleForSeqAccess());
         } else {

@@ -54,16 +54,16 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
 
 }
 
-std::vector<TPartialReadResult> TPlainReadData::DoExtractReadyResults(const int64_t maxRowsInBatch) {
-    auto result = TPartialReadResult::SplitResults(std::move(PartialResults), maxRowsInBatch);
+std::vector<std::shared_ptr<TPartialReadResult>> TPlainReadData::DoExtractReadyResults(const int64_t /*maxRowsInBatch*/) {
+    auto result = std::move(PartialResults);
+    PartialResults.clear();
+//    auto result = TPartialReadResult::SplitResults(std::move(PartialResults), maxRowsInBatch);
     ui32 count = 0;
     for (auto&& r: result) {
-        count += r.GetRecordsCount();
+        count += r->GetRecordsCount();
     }
     AFL_VERIFY(count == ReadyResultsCount);
-
     ReadyResultsCount = 0;
-    PartialResults.clear();
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoExtractReadyResults")("result", result.size())("count", count)("finished", Scanner->IsFinished());
     return result;
@@ -76,7 +76,7 @@ TConclusion<bool> TPlainReadData::DoReadNextInterval() {
 void TPlainReadData::OnIntervalResult(const std::shared_ptr<TPartialReadResult>& result) {
 //    result->GetResourcesGuardOnly()->Update(result->GetMemorySize());
     ReadyResultsCount += result->GetRecordsCount();
-    PartialResults.emplace_back(std::move(*result));
+    PartialResults.emplace_back(result);
 }
 
 }

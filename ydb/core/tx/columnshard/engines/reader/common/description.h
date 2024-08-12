@@ -13,6 +13,7 @@ private:
     TProgramContainer Program;
 public:
     // Table
+    ui64 TxId = 0;
     ui64 PathId = 0;
     TString TableName;
     bool ReadNothing = false;

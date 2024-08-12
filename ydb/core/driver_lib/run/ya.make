@@ -111,6 +111,7 @@ PEERDIR(
     ydb/core/tx/coordinator
     ydb/core/tx/conveyor/service
     ydb/core/tx/limiter/service
+    ydb/core/tx/limiter/grouped_memory/usage
     ydb/core/tx/datashard
     ydb/core/tx/long_tx_service
     ydb/core/tx/long_tx_service/public

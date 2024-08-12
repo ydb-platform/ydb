@@ -394,9 +394,6 @@ private:
         if (ev->Get()->Stats) {
             CA_LOG_T("update task runner stats");
             TaskRunnerStats = std::move(ev->Get()->Stats);
-            const auto tmp = dynamic_cast<const TDqTaskRunnerStats*>(TaskRunnerStats.Get());
-            if (tmp->SpillingReadBytes > 0 || tmp->SpillingWriteBytes > 0)
-            Cerr << "Got stats: read: " << tmp->SpillingReadBytes << " write: " << tmp->SpillingWriteBytes << "\n";
         }
         ComputeActorState = NDqProto::TEvComputeActorState();
         ComputeActorState.SetState(NDqProto::COMPUTE_STATE_EXECUTING);

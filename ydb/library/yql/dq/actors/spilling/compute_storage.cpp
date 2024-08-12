@@ -10,7 +10,7 @@ TDqComputeStorage::TDqComputeStorage(TTxId txId, TWakeUpCallback wakeUpCallback,
     TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters, TActorSystem* actorSystem) : ActorSystem_(actorSystem) {
     TStringStream spillerName;
     spillerName << "Spiller" << "_" << CreateGuidAsString();
-    ComputeStorageActor_ = CreateDqComputeStorageActor(txId, spillerName.Str(), wakeUpCallback, spillingTaskCounters, errorCallback);
+    ComputeStorageActor_ = CreateDqComputeStorageActor(txId, spillerName.Str(), wakeUpCallback, errorCallback, spillingTaskCounters);
     ComputeStorageActorId_ = ActorSystem_->Register(ComputeStorageActor_->GetActor());
 }
 

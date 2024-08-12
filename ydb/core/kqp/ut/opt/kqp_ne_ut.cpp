@@ -3870,7 +3870,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         AssertTableReads(result, "/Root/SecondaryKeys/Index/indexImplTable", 1);
     }
 
-    Y_UNIT_TEST(QueryServiceAutoChoose) {
+    Y_UNIT_TEST(MultipleBroadcastJoin) {
         TKikimrSettings kisettings;
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetIndexAutoChooseMode(NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_MAX_USED_PREFIX);

@@ -387,9 +387,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePartialAggregate(const TExprNode::TP
     }
 
     TExprNode::TPtr partialAgg = nullptr;
-    if (!NonDistinctColumns.empty()) {
-        partialAgg = GeneratePartialAggregateForNonDistinct(keyExtractor, pickleTypeNode);
-    }
+
     for (ui32 index = 0; index < DistinctFields.size(); ++index) {
         auto distinctField = DistinctFields[index];
 
@@ -406,6 +404,9 @@ TExprNode::TPtr TAggregateExpander::GeneratePartialAggregate(const TExprNode::TP
                 .Seal()
                 .Build();
         }
+    }
+    if (!NonDistinctColumns.empty()) {
+        partialAgg = GeneratePartialAggregateForNonDistinct(keyExtractor, pickleTypeNode);
     }
     // If no aggregation functions then add additional combiner
     if (AggregatedColumns->ChildrenSize() == 0 && KeyColumns->ChildrenSize() > 0 && !SessionWindowParams.Update) {

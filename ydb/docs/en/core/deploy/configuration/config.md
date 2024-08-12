@@ -552,7 +552,7 @@ memory_controller_config:
   query_execution_limit_percent: 25
 ```
 
-### Configuration
+### Configuration parameters
 
 Each configuration parameter applies within the context of a single database node.
 

@@ -1,6 +1,6 @@
 # LocalDB: persistent uncommitted changes
 
-Tablets may need to store a potentially large amount of data over a potentially long time, and then either commit or rollback all accumulated changes atomically without keeping them in-memory. To support this [LocalDB](https://github.com/ydb-platform/ydb/blob/main/ydb/core/tablet_flat/flat_database.h) allows table changes to be marked with a unique 64-bit transaction id (TxId), which are stored in the given table alongside committed data, but not visible until the given TxId is committed. The commit or rollback itself is atomic and very cheap, with committed data eventually integrated into the table as if written normally in the first place.
+Tablets may need to store a potentially large amount of data over a potentially long time, and then either commit or rollback all accumulated changes atomically without keeping them in-memory. To support this [LocalDB](../concepts/glossary.md#local-database) allows table changes to be marked with a unique 64-bit transaction id (TxId), which are stored in the given table alongside committed data, but not visible until the given TxId is committed. The commit or rollback itself is atomic and very cheap, with committed data eventually integrated into the table as if written normally in the first place.
 
 This feature is used as a building block for various other features:
 
@@ -26,7 +26,7 @@ Redo log (see [flat_redo_writer.h](https://github.com/ydb-platform/ydb/blob/main
 
 ## Storing uncommitted changes in MemTables
 
-[MemTable](../concepts/glossary.md#sst) in LocalDB is a relatively small in-memory sorted tree that maps table keys to values. MemTable value is a chain of MVCC (partial) rows, each tagged with a row version (a pair of Step and TxId which is a global timestamp). Rows are normally pre-merged across the given MemTable. For example, let's suppose there have been the following operations for some key K:
+[MemTable](../concepts/glossary.md#memtable) in LocalDB is a relatively small in-memory sorted tree that maps table keys to values. MemTable value is a chain of MVCC (partial) rows, each tagged with a row version (a pair of Step and TxId which is a global timestamp). Rows are normally pre-merged across the given MemTable. For example, let's suppose there have been the following operations for some key K:
 
 | Version | Operation |
 --- | ---

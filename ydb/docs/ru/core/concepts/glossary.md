@@ -224,7 +224,7 @@
 
 #### Акторный сервис {#actor-service}
 
-**Акторный сервис** или **actor service** — это актор, который имеет известное имя и обычно выполняется в единственном экземпляре на [узле](#node).
+**Акторный сервис** или **actor service** — это [актор](#actor), который имеет известное имя и обычно выполняется в единственном экземпляре на [узле](#node).
 
 #### ActorId {#actorid}
 
@@ -279,6 +279,20 @@
 
 **Локальная база данных таблетки**, **локальная база данных**, **tablet local database** или **local database** — это набор структур данных и связанного кода, которые управляют состоянием таблетки и хранимыми ей данными. Логически состояние локальной базы данных представлено набором таблиц, очень похожих на реляционные таблицы. Модификация состояния локальной базы данных осуществляется локальными транзакциями таблетки, создаваемыми пользовательским актором таблетки.
 
+Each local database table is stored using the [LSM-дерево](#lsm-tree) data structure.
+
+#### Log-structured merge-tree {#lsm-tree}
+
+A **[log-structured merge-tree](https://en.wikipedia.org/wiki/Log-structured_merge-tree)** or **LSM tree**, is a data structure designed to optimize write and read performance in storage systems. It is used in {{ ydb-short-name }} for storing [local database](#local-database) tables and [VDisks](#vdisk) data.
+
+#### MemTable {#memtable}
+
+All data written to a [local database](#local-database) tables is initially stored in an in-memory data structure called a **MemTable**. When the MemTable reaches a predefined size, it is flushed to disk as an immutable [SST](#sst).
+
+#### Sorted string table {#sst}
+
+A **sorted string table** or **SST** is an immutable data structure that stores rows sorted by key, facilitating efficient key lookups and range queries. Each SST is composed of a contiguous series of small data pages, typically around 7 KiB in size, which further optimizes the process of reading data from disk. An SST typically represents a part of [LSM tree](#lsm-tree).
+
 #### Пайп таблетки {#tablet-pipe}
 
 **Пайп таблетки**, **tablet pipe** или **TabletPipe** — это виртуальное соединение, которое может быть установлено с таблеткой. Оно включает поиск [лидера таблетки](#tablet-leader) по [TabletID](#tabletid). Это рекомендуемый способ работы с таблеткой. Термин **открыть пайп к таблетке** описывает процесс разрешения (поиска) таблетки в кластере и установления с ней виртуального канала связи.
@@ -290,6 +304,14 @@
 #### Bootstrapper {#bootstrapper}
 
 **Bootstrapper** — это основной механизм запуска таблеток, используемый для системных таблеток (например, для [Hive](#hive), [DS controller](#ds-controller), корневого [SchemeShard](#scheme-shard)). [Hive](#hive) инициализирует остальные таблетки.
+
+### Shared cache {#shared-cache}
+
+A **shared cache** is an [actor](#actor) that stores data pages recently accessed and read from [distributed storage](#distributed-storage). Caching these pages reduces disk I/O operations and accelerates data retrieval, enhancing overall system performance.
+
+### Memory controller {#memory-controller}
+
+A **memory controller** is an [actor](#actor) that manages {{ ydb-short-name }} [memory limits](../deploy/configuration/config.md#memory-controller).
 
 ### Типы таблеток {#tablet-types}
 
@@ -360,7 +382,7 @@
 
 #### Компакшн {#compaction}
 
-**Компакшн**, **комактизация** или **compaction** — это внутренний фоновый процесс перестройки данных [дерева LSM](https://en.wikipedia.org/wiki/Log-structured_merge-tree). Данные в [VDisk](#vdisk) и [локальных базах данных](#local-database) организованы в виде LSM-деревьев. Поэтому различают **компакшн VDisk** и **таблеточный компакшн**. Процесс компакшна обычно довольно ресурсоёмкий, поэтому принимаются меры по минимизации накладных расходов, связанных с ним, например, путём ограничения числа одновременно исполняемых компакшнов.
+**Компакшн**, **комактизация** или **compaction** — это внутренний фоновый процесс перестройки данных [LSM-дерева](#lsm-tree). Данные в [VDisk](#vdisk) и [локальных базах данных](#local-database) организованы в виде LSM-деревьев. Поэтому различают **компакшн VDisk** и **таблеточный компакшн**. Процесс компакшна обычно довольно ресурсоёмкий, поэтому принимаются меры по минимизации накладных расходов, связанных с ним, например, путём ограничения числа одновременно исполняемых компакшнов.
 
 #### gRPC-прокси {#grpc-proxy}
 
@@ -412,7 +434,7 @@ PDisk содержит планировщик, который обеспечив
 
 #### Skeleton {#skeleton}
 
-**Skeleton** — это актор, который предоставляет интерфейс к [VDisk](#vdisk).
+**Skeleton** — это [актор](#actor), который предоставляет интерфейс к [VDisk](#vdisk).
 
 #### SkeletonFront {#skeletonfront}
 

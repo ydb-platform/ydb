@@ -5,8 +5,15 @@ select
     DateTime::MakeTimestamp64(DateTime::Split(ts64)) as ts64
 from Input;
 
-select
-    DateTime::MakeTzDate32(DateTime::Split(cast(tzd32 as TzDate32))) as tzd32,
-    DateTime::MakeTzDatetime64(DateTime::Split(cast(tzdt64 as TzDatetime64))) as tzdt64,
-    DateTime::MakeTzTimestamp64(DateTime::Split(cast(tzts64 as TzTimestamp64))) as tzts64
-from InputTz;
+$tzDates = select rn, tz
+    , cast(d32 || ',' || tz as TzDate32) as tzd32
+    , cast(dt64 || ',' || tz as TzDatetime64) as tzdt64
+    , cast(ts64 || ',' || tz as TzTimestamp64) as tzts64
+from InputTz cross join Tz;
+
+select rn, tz
+, DateTime::MakeTzDate32(DateTime::Split(tzd32)) as tzd32
+, DateTime::MakeTzDatetime64(DateTime::Split(tzdt64)) as tzdt64
+, DateTime::MakeTzTimestamp64(DateTime::Split(tzts64)) as tzts64
+from $tzDates
+order by rn, tz

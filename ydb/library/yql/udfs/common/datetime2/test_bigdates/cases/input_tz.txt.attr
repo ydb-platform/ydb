@@ -4,21 +4,28 @@
             "StructType";
             [
                 [
-                    "tzd32";
+                    "rn";
+                    [
+                        "DataType";
+                        "Int32"
+                    ]
+                ];
+                [
+                    "d32";
                     [
                         "DataType";
                         "String"
                     ]
                 ];
                 [
-                    "tzdt64";
+                    "dt64";
                     [
                         "DataType";
                         "String"
                     ]
                 ];
                 [
-                    "tzts64";
+                    "ts64";
                     [
                         "DataType";
                         "String"

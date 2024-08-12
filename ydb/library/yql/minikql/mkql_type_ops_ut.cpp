@@ -300,6 +300,30 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(1, weekOfYearIso8601);
     }
 
+    Y_UNIT_TEST(MakeSplitDate32) {
+            i32 year;
+            ui32 month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
+            ui16 tzId = 1;
+
+            i32 value = -719163;
+
+            SplitDate32(value, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
+            UNIT_ASSERT_VALUES_EQUAL(-1, year);
+            UNIT_ASSERT_VALUES_EQUAL(12, month);
+            UNIT_ASSERT_VALUES_EQUAL(31, day);
+
+            i32 date32;
+            UNIT_ASSERT(MakeDate32(year, month, day, date32));
+            UNIT_ASSERT_VALUES_EQUAL(value, date32);
+            UNIT_ASSERT(!MakeDate32(0, month, day, date32));
+
+            SplitTzDate32(value, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
+            UNIT_ASSERT_VALUES_EQUAL(-1, year);
+            UNIT_ASSERT_VALUES_EQUAL(12, month);
+            UNIT_ASSERT_VALUES_EQUAL(31, day);
+            UNIT_ASSERT_VALUES_EQUAL(-719163, value);
+    }
+
     Y_UNIT_TEST(SplitDate32CornerCases) {
             i32 year;
             ui32 month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;

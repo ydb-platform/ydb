@@ -444,9 +444,6 @@ void ToLocalTime64(i64 utcSeconds, ui16 tzId, i32& year, ui32& month, ui32& day,
     hour = converted.hour();
     min = converted.minute();
     sec = converted.second();
-Cerr << "ToLocalTime64(" << utcSeconds << ") " 
-    << year << "-" << month << "-" << day << "T" << hour << ":" << min << ":" << sec
-    << Endl;
 }
 
 /*
@@ -952,7 +949,10 @@ public:
         if (tzId) {
             ui32 hour, min, sec;
             ToLocalTime64(86400ll * date, tzId, year, month, day, hour, min, sec);
-            if (!MakeDate32((year > 0) ? year : year - 1, month, day, date)) {
+            if (year <= 0) {
+                year--;
+            }
+            if (!MakeDate32(year, month, day, date)) {
                 return false;
             }
         }
@@ -1049,6 +1049,7 @@ public:
     }
 
     bool MakeDate32(i32 year, ui32 month, ui32 day, i32& value) const {
+        // TODO remove (year==0) condition to treat 0 and -1 years equally?
         if (Y_UNLIKELY(year == 0 || year < NUdf::MIN_YEAR32 || year >= NUdf::MAX_YEAR32)) {
             return false;
         }
@@ -1080,9 +1081,12 @@ public:
             return MakeDate32(year, month, day, value);
         }
         const auto& tz = Singleton<TTimezones>()->GetZone(tzId);
+        if (year < 0) {
+            year++;
+        }
         cctz::civil_second cs(year, month, day, 0, 0, 0);
         auto unixSeconds = cctz::TimePointToUnixSeconds(tz.lookup(cs).pre);
-        value = ((unixSeconds >= 0) ? unixSeconds : unixSeconds - 86400ll)/ 86400ll;
+        value = unixSeconds / 86400ll;
         return NUdf::MIN_DATE32 <= value && value <= NUdf::MAX_DATE32;
     }
 
@@ -1104,6 +1108,9 @@ public:
             return MakeDatetime64(year, month, day, hour, min, sec, value);
         }
         const auto& tz = Singleton<TTimezones>()->GetZone(tzId);
+        if (year < 0) {
+            year++;
+        }
         cctz::civil_second cs(year, month, day, hour, min, sec);
         value = cctz::TimePointToUnixSeconds(tz.lookup(cs).pre);
         return NUdf::MIN_DATETIME64 <= value && value <= NUdf::MAX_DATETIME64;

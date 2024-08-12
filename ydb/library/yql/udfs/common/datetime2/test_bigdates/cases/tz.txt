@@ -1,0 +1,12 @@
+{
+    "tz"="GMT";
+};
+{
+    "tz"="UTC";
+};
+{
+    "tz"="Europe/Moscow";
+};
+{
+    "tz"="Atlantic/Azores";
+};

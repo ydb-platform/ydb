@@ -44,7 +44,13 @@ class TDqChannelStorageActor : public IDqChannelStorageActor,
 
     struct TWritingBlobInfo {
         ui64 Size;
-        NThreading::TPromise<void> Saved;
+        NThreading::TPromise<void> SavePromise;
+        TInstant OpBegin;
+    };
+
+    struct TLoadingBlobInfo {
+        NThreading::TPromise<TBuffer> BlobPromise;
+        TInstant OpBegin;
     };
 public:
 
@@ -108,8 +114,11 @@ private:
     void HandleWork(TEvDqChannelSpilling::TEvGet::TPtr& ev) {
         auto& msg = *ev->Get();
         LOG_T("[TEvGet] blobId: " << msg.BlobId_);
+
+        auto opBegin = TInstant::Now();
  
-        LoadingBlobs_.emplace(msg.BlobId_, std::move(msg.Promise_));
+        auto loadingBlobInfo = TLoadingBlobInfo{std::move(msg.Promise_), opBegin};
+        LoadingBlobs_.emplace(msg.BlobId_, std::move(loadingBlobInfo));
 
         SendInternal(SpillingActorId_, new TEvDqSpilling::TEvRead(msg.BlobId_));
     }
@@ -118,8 +127,10 @@ private:
         auto& msg = *ev->Get();
         LOG_T("[TEvPut] blobId: " << msg.BlobId_);
 
-        auto writingBlobInfo = TWritingBlobInfo{msg.Blob_.size(), std::move(msg.Promise_)};
-        WritingBlobs_.emplace(msg.BlobId_, writingBlobInfo);
+        auto opBegin = TInstant::Now();
+
+        auto writingBlobInfo = TWritingBlobInfo{msg.Blob_.size(), std::move(msg.Promise_), opBegin};
+        WritingBlobs_.emplace(msg.BlobId_, std::move(writingBlobInfo));
 
         SendInternal(SpillingActorId_, new TEvDqSpilling::TEvWrite(msg.BlobId_, std::move(msg.Blob_)));
     }
@@ -135,11 +146,14 @@ private:
         }
 
         auto& blobInfo = it->second;
+
         if (SpillingTaskCounters_) {
-            SpillingTaskCounters_->ChannelWriteBytes.Add(blobInfo.Size);
+            SpillingTaskCounters_->ChannelWriteBytes += blobInfo.Size;
+            auto opDuration = TInstant::Now() - blobInfo.OpBegin;
+            SpillingTaskCounters_->ChannelWriteTime += opDuration.MilliSeconds();
         }
         // Complete the future
-        blobInfo.Saved.SetValue();
+        blobInfo.SavePromise.SetValue();
         WritingBlobs_.erase(it);
 
         WakeUp_();
@@ -149,17 +163,21 @@ private:
         auto& msg = *ev->Get();
         LOG_T("[TEvReadResult] blobId: " << msg.BlobId << ", size: " << msg.Blob.size());
 
-        if (SpillingTaskCounters_) {
-            SpillingTaskCounters_->ChannelReadBytes.Add(msg.Blob.size());
-        }
-
         const auto it = LoadingBlobs_.find(msg.BlobId);
         if (it == LoadingBlobs_.end()) {
             FailWithError(TStringBuilder() << "[TEvReadResult] Got unexpected TEvReadResult, blobId: " << msg.BlobId);
             return;
         }
 
-        it->second.SetValue(std::move(msg.Blob));
+        auto& blobInfo = it->second;
+
+        if (SpillingTaskCounters_) {
+            // SpillingTaskCounters_->ChannelReadBytes.Add(msg.Blob.size());
+            auto opDuration = TInstant::Now() - blobInfo.OpBegin;
+            SpillingTaskCounters_->ChannelReadTime += opDuration.MilliSeconds();
+        }
+
+        blobInfo.BlobPromise.SetValue(std::move(msg.Blob));
         LoadingBlobs_.erase(it);
 
         WakeUp_();
@@ -187,7 +205,7 @@ private:
     std::unordered_map<ui64, TWritingBlobInfo> WritingBlobs_;
     
     // BlobId -> promise with requested blob
-    std::unordered_map<ui64, NThreading::TPromise<TBuffer>> LoadingBlobs_;
+    std::unordered_map<ui64, TLoadingBlobInfo> LoadingBlobs_;
 
     TActorSystem* ActorSystem_;
 };

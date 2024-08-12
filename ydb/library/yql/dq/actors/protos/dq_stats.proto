@@ -188,10 +188,13 @@ message TDqTaskStats {
     uint64 EgressBytes = 18;
     uint64 EgressRows = 19;
 
-    uint64 SpillingComputeReadBytes = 23;
-    uint64 SpillingComputeWriteBytes = 24;
-    uint64 SpillingChannelReadBytes = 25;
-    uint64 SpillingChannelWriteBytes = 26;
+    uint64 SpillingComputeWriteBytes = 23;
+    uint64 SpillingChannelWriteBytes = 24;
+
+    uint64 SpillingComputeReadTimeMs = 25;
+    uint64 SpillingComputeWriteTimeMs = 26;
+    uint64 SpillingChannelReadTimeMs = 27;
+    uint64 SpillingChannelWriteTimeMs = 28;
 
     // full stats
     repeated TDqAsyncInputBufferStats Sources = 150;

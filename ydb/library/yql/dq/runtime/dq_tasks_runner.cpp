@@ -719,6 +719,15 @@ public:
         auto runStatus = FetchAndDispatch();
 
         if (Y_UNLIKELY(CollectFull())) {
+            if (SpillingTaskCounters) {
+                Stats->SpillingComputeWriteBytes = SpillingTaskCounters->ComputeWriteBytes;
+                Stats->SpillingChannelWriteBytes = SpillingTaskCounters->ChannelWriteBytes;
+                Stats->SpillingComputeReadTime = TDuration::MilliSeconds(SpillingTaskCounters->ComputeReadTime.load());
+                Stats->SpillingComputeWriteTime = TDuration::MilliSeconds(SpillingTaskCounters->ComputeWriteTime.load());
+                Stats->SpillingChannelReadTime = TDuration::MilliSeconds(SpillingTaskCounters->ChannelReadTime.load());
+                Stats->SpillingChannelWriteTime = TDuration::MilliSeconds(SpillingTaskCounters->ChannelWriteTime.load());
+            }
+
             Stats->ComputeCpuTimeByRun->Collect(RunComputeTime.MilliSeconds());
 
             if (AllocatedHolder->ProgramParsed.StatsRegistry) {
@@ -837,13 +846,6 @@ public:
     }
 
     const TDqTaskRunnerStats* GetStats() const override {
-        // [TODO] move this into more appropriate place
-        if (Stats && SpillingTaskCounters) {
-            Stats->SpillingComputeReadBytes = SpillingTaskCounters->ComputeReadBytes.Val();
-            Stats->SpillingComputeWriteBytes = SpillingTaskCounters->ComputeWriteBytes.Val();
-            Stats->SpillingChannelReadBytes = SpillingTaskCounters->ChannelReadBytes.Val();
-            Stats->SpillingChannelWriteBytes = SpillingTaskCounters->ChannelWriteBytes.Val();
-        }
         return Stats.get();
     }
 

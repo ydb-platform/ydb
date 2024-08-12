@@ -49,10 +49,13 @@ struct TTaskRunnerStatsBase {
     TDuration WaitInputTime;
     TDuration WaitOutputTime;
 
-    ui64 SpillingComputeReadBytes;
     ui64 SpillingComputeWriteBytes;
-    ui64 SpillingChannelReadBytes;
     ui64 SpillingChannelWriteBytes;
+
+    TDuration SpillingComputeReadTime;
+    TDuration SpillingComputeWriteTime;
+    TDuration SpillingChannelReadTime;
+    TDuration SpillingChannelWriteTime;
 
     // profile stats
     NMonitoring::IHistogramCollectorPtr ComputeCpuTimeByRun; // in millis

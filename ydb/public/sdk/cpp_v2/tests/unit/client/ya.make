@@ -1,0 +1,10 @@
+RECURSE(
+    coordination
+    discovery_mutator
+    #driver
+    #endpoints
+    #params
+    #result
+    #scripting
+    #value
+)

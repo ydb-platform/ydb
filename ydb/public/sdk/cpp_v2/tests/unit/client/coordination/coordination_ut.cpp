@@ -1,5 +1,7 @@
 #include <ydb-cpp-sdk/client/coordination/coordination.h>
 
+#include <ydb-cpp-sdk/type_switcher.h>
+
 #include <ydb/public/api/grpc/ydb_coordination_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 
@@ -100,7 +102,7 @@ namespace {
     template<class TService>
     std::unique_ptr<grpc::Server> StartGrpcServer(const std::string& address, TService& service) {
         grpc::ServerBuilder builder;
-        builder.AddListeningPort(address, grpc::InsecureServerCredentials());
+        builder.AddListeningPort(TStringType{address}, grpc::InsecureServerCredentials());
         builder.RegisterService(&service);
         return builder.BuildAndStart();
     }

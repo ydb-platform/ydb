@@ -293,17 +293,17 @@ public:
                 for (const auto& item: buildInfo.Shards) {
                     const TIndexBuildInfo::TShardStatus& shardStatus = item.second;
                     switch (shardStatus.Status) {
-                    case NKikimrTxDataShard::TEvBuildIndexProgressResponse::INVALID:
-                    case NKikimrTxDataShard::TEvBuildIndexProgressResponse::ACCEPTED:
-                    case NKikimrTxDataShard::TEvBuildIndexProgressResponse::INPROGRESS:
-                    case NKikimrTxDataShard::TEvBuildIndexProgressResponse::ABORTED:
+                    case NKikimrIndexBuilder::EBuildStatus::INVALID:
+                    case NKikimrIndexBuilder::EBuildStatus::ACCEPTED:
+                    case NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS:
+                    case NKikimrIndexBuilder::EBuildStatus::ABORTED:
                         buildInfo.ToUploadShards.push_back(item.first);
                         break;
-                    case NKikimrTxDataShard::TEvBuildIndexProgressResponse::DONE:
+                    case NKikimrIndexBuilder::EBuildStatus::DONE:
                         ++buildInfo.DoneShardsSize;
                         break;
-                    case NKikimrTxDataShard::TEvBuildIndexProgressResponse::BUILD_ERROR:
-                    case NKikimrTxDataShard::TEvBuildIndexProgressResponse::BAD_REQUEST:
+                    case NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR:
+                    case NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST:
                         Y_ABORT("Unreachable");
                     }
                 }
@@ -765,15 +765,15 @@ public:
             Self->PersistBuildIndexUploadProgress(db, buildInfo, shardIdx);
 
             switch (shardStatus.Status) {
-            case  NKikimrTxDataShard::TEvBuildIndexProgressResponse::INVALID:
+            case  NKikimrIndexBuilder::EBuildStatus::INVALID:
                 Y_ABORT("Unreachable");
 
-            case  NKikimrTxDataShard::TEvBuildIndexProgressResponse::ACCEPTED:
-            case  NKikimrTxDataShard::TEvBuildIndexProgressResponse::INPROGRESS:
+            case  NKikimrIndexBuilder::EBuildStatus::ACCEPTED:
+            case  NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS:
                 // no oop, wait resolution. Progress key are persisted
                 break;
 
-            case  NKikimrTxDataShard::TEvBuildIndexProgressResponse::DONE:
+            case  NKikimrIndexBuilder::EBuildStatus::DONE:
                 if (buildInfo.InProgressShards.erase(shardIdx)) {
                     ++buildInfo.DoneShardsSize;
 
@@ -783,7 +783,7 @@ public:
                 }
                 break;
 
-            case  NKikimrTxDataShard::TEvBuildIndexProgressResponse::ABORTED:
+            case  NKikimrIndexBuilder::EBuildStatus::ABORTED:
                 // datashard gracefully rebooted, reschedule shard
                 if (buildInfo.InProgressShards.erase(shardIdx)) {
                     buildInfo.ToUploadShards.push_front(shardIdx);
@@ -794,7 +794,7 @@ public:
                 }
                 break;
 
-            case  NKikimrTxDataShard::TEvBuildIndexProgressResponse::BUILD_ERROR:
+            case  NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR:
                 buildInfo.Issue += TStringBuilder()
                     << "One of the shards report BUILD_ERROR at Filling stage, process has to be canceled"
                     << ", shardId: " << shardId
@@ -804,7 +804,7 @@ public:
 
                 Progress(buildId);
                 break;
-            case  NKikimrTxDataShard::TEvBuildIndexProgressResponse::BAD_REQUEST:
+            case  NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST:
                 buildInfo.Issue += TStringBuilder()
                     << "One of the shards report BAD_REQUEST at Filling stage, process has to be canceled"
                     << ", shardId: " << shardId

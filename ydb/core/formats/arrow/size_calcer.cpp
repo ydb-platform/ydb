@@ -1,10 +1,15 @@
+#include "arrow_helpers.h"
 #include "size_calcer.h"
 #include "switch_type.h"
-#include "arrow_helpers.h"
+
 #include "dictionary/conversion.h"
+#include "serializer/native.h"
+#include "serializer/stream.h"
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
-#include <util/system/yassert.h>
 #include <util/string/builder.h>
+#include <util/system/yassert.h>
 
 namespace NKikimr::NArrow {
 
@@ -251,21 +256,41 @@ NKikimr::NArrow::TSerializedBatch TSerializedBatch::Build(std::shared_ptr<arrow:
 }
 
 TConclusionStatus TSerializedBatch::BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplitttingContext& context, std::optional<TSerializedBatch>& sbL, std::optional<TSerializedBatch>& sbR) {
-    TSerializedBatch sb = TSerializedBatch::Build(batch, context);
+    arrow::ipc::IpcWriteOptions Options = arrow::ipc::IpcWriteOptions::Defaults();
+    Options.use_threads = false;
+    arrow::ipc::IpcPayload payload;
+    TStatusValidator::Validate(arrow::ipc::GetRecordBatchPayload(*batch, Options, &payload));
+    int32_t metadata_length = 0;
+    arrow::io::MockOutputStream mock;
+    TStatusValidator::Validate(arrow::ipc::WriteIpcPayload(payload, Options, &mock, &metadata_length));
     const ui32 length = batch->num_rows();
-    if (sb.GetSize() <= context.GetSizeLimit()) {
-        sbL = std::move(sb);
+    if ((ui64)mock.GetExtentBytesWritten() <= context.GetSizeLimit()) {
+        std::optional<TString> specialKeys;
+        if (context.GetFieldsForSpecialKeys().size()) {
+            specialKeys = TFirstLastSpecialKeys(batch, context.GetFieldsForSpecialKeys()).SerializeToString();
+        }
+        TString str;
+        str.resize(mock.GetExtentBytesWritten());
+        NSerialization::TFixedStringOutputStream out(&str);
+        TStatusValidator::Validate(arrow::ipc::WriteIpcPayload(payload, Options, &out, &metadata_length));
+        Y_ABORT_UNLESS(out.GetPosition() == str.size());
+        Y_DEBUG_ABORT_UNLESS(NSerialization::TNativeSerializer(Options).Deserialize(str, batch->schema()).ok());
+        AFL_DEBUG(NKikimrServices::ARROW_HELPER)("event", "serialize")("size", str.size())("columns", batch->schema()->num_fields());
+        sbL = std::move(
+            TSerializedBatch(NArrow::SerializeSchema(*batch->schema()), std::move(str), length, NArrow::GetBatchDataSize(batch), specialKeys));
         return TConclusionStatus::Success();
     } else if (length == 1) {
-        return TConclusionStatus::Fail(TStringBuilder() << "original batch too big: " << sb.GetSize() << " and contains 1 row (cannot be splitted)");
+        return TConclusionStatus::Fail(
+            TStringBuilder() << "original batch too big: " << mock.GetExtentBytesWritten() << " and contains 1 row (cannot be splitted)");
     } else {
         const ui32 delta = length / 2;
         TSerializedBatch localSbL = TSerializedBatch::Build(batch->Slice(0, delta), context);
         TSerializedBatch localSbR = TSerializedBatch::Build(batch->Slice(delta, length - delta), context);
         if (localSbL.GetSize() > context.GetSizeLimit() || localSbR.GetSize() > context.GetSizeLimit()) {
-            return TConclusionStatus::Fail(TStringBuilder() << "original batch too big: " << sb.GetSize() << " and after 2 parts split we have: "
-                << localSbL.GetSize() << "(" << localSbL.GetRowsCount() << ")" << " / "
-                << localSbR.GetSize() << "(" << localSbR.GetRowsCount() << ")" << " part sizes. Its unexpected for limit " << context.GetSizeLimit());
+            return TConclusionStatus::Fail(
+                TStringBuilder() << "original batch too big: " << mock.GetExtentBytesWritten() << " and after 2 parts split we have: "
+                                 << localSbL.GetSize() << "(" << localSbL.GetRowsCount() << ")" << " / " << localSbR.GetSize() << "("
+                                 << localSbR.GetRowsCount() << ")" << " part sizes. Its unexpected for limit " << context.GetSizeLimit());
         }
         sbL = std::move(localSbL);
         sbR = std::move(localSbR);

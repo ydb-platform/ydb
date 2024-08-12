@@ -14,7 +14,6 @@ ydb/core/kqp/ut/pg KqpPg.CreateIndex
 ydb/core/kqp/ut/query KqpLimits.QueryReplySize
 ydb/core/kqp/ut/query KqpQuery.QueryTimeout
 ydb/core/kqp/ut/scan KqpRequestContext.TraceIdInErrorMessage
-ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/scheme KqpOlap.OlapRead_GenericQuerys
 ydb/core/kqp/ut/scheme KqpOlap.OlapRead_StreamGenericQuery
 ydb/core/kqp/ut/scheme KqpOlap.OlapRead_UsesGenericQueryOnJoinWithDataShardTable

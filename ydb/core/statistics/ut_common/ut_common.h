@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/statistics/events.h>
+
 #include <ydb/core/testlib/test_client.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -86,6 +88,8 @@ struct TAnalyzedTable {
     TAnalyzedTable(const TPathId& pathId, const std::vector<ui32>& columnTags);
     void ToProto(NKikimrStat::TTable& tableProto) const;
 };
+
+std::unique_ptr<TEvStatistics::TEvAnalyze> MakeAnalyzeRequest(const TString cookie, const std::vector<TAnalyzedTable>& tables);
 
 void Analyze(TTestActorRuntime& runtime, const std::vector<TAnalyzedTable>& table, ui64 saTabletId);
 void AnalyzeTable(TTestActorRuntime& runtime, const TAnalyzedTable& table, ui64 shardTabletId);

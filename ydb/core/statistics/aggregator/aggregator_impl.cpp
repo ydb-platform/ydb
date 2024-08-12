@@ -678,7 +678,7 @@ void TStatisticsAggregator::PersistStartKey(NIceDb::TNiceDb& db) {
 
 void TStatisticsAggregator::PersistForceTraversal(NIceDb::TNiceDb& db) {
     PersistSysParam(db, Schema::SysParam_ForceTraversalOperationId, ToString(ForceTraversalOperationId));
-    PersistSysParam(db, Schema::SysParam_ForceTraversalCookie, ToString(ForceTraversalCookie));
+    PersistSysParam(db, Schema::SysParam_ForceTraversalCookie, ForceTraversalCookie);
     PersistSysParam(db, Schema::SysParam_ForceTraversalColumnTags, ToString(ForceTraversalColumnTags));
     PersistSysParam(db, Schema::SysParam_ForceTraversalTypes, ToString(ForceTraversalTypes));
 }
@@ -693,7 +693,7 @@ void TStatisticsAggregator::PersistGlobalTraversalRound(NIceDb::TNiceDb& db) {
 
 void TStatisticsAggregator::ResetTraversalState(NIceDb::TNiceDb& db) {
     ForceTraversalOperationId = 0;
-    ForceTraversalCookie = 0;
+    ForceTraversalCookie.clear();
     TraversalTableId.PathId = TPathId();
     ForceTraversalColumnTags.clear();
     ForceTraversalTypes.clear();

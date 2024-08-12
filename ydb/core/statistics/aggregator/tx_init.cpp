@@ -60,7 +60,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                         break;
                     }  
                     case Schema::SysParam_ForceTraversalCookie: {
-                        Self->ForceTraversalCookie = FromString<ui64>(value);
+                        Self->ForceTraversalCookie = value;
                         SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal cookie: " << value);
                         break;
                     }
@@ -217,7 +217,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 ui64 operationId = rowset.GetValue<Schema::ForceTraversals::OperationId>();
                 ui64 ownerId = rowset.GetValue<Schema::ForceTraversals::OwnerId>();
                 ui64 localPathId = rowset.GetValue<Schema::ForceTraversals::LocalPathId>();
-                ui64 cookie = rowset.GetValue<Schema::ForceTraversals::Cookie>();
+                TString cookie = rowset.GetValue<Schema::ForceTraversals::Cookie>();
                 TString columnTags = rowset.GetValue<Schema::ForceTraversals::ColumnTags>();
                 TString types = rowset.GetValue<Schema::ForceTraversals::Types>();
 

@@ -66,6 +66,29 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
 
         Analyze(runtime, {tableInfos[0].PathId, tableInfos[1].PathId}, tableInfos[0].SaTabletId);
     }
+
+    Y_UNIT_TEST(AnalyzeSameCookie) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        auto tableInfo = CreateDatabaseTables(env, 1, 1)[0];
+
+        auto sender = runtime.AllocateEdgeActor();
+        const TString cookie = "cookie";
+
+        auto analyzeRequest1 = MakeAnalyzeRequest(cookie, {tableInfo.PathId});
+        runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest1.release());
+
+        auto analyzeRequest2 = MakeAnalyzeRequest(cookie, {tableInfo.PathId});
+        runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest2.release());
+
+        auto response1 = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
+        UNIT_ASSERT(response1);
+        UNIT_ASSERT_VALUES_EQUAL(response1->Get()->Record.GetCookie(), cookie);
+
+        auto response2 = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender, TDuration::Seconds(5));
+        UNIT_ASSERT(!response2);
+    }
+
 }
 
 } // NStat

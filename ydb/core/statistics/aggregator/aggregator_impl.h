@@ -307,7 +307,7 @@ private:
 private: // stored in local db
     
     ui64 ForceTraversalOperationId = 0;    
-    ui64 ForceTraversalCookie = 0;
+    TString ForceTraversalCookie = 0;
     TString ForceTraversalColumnTags;
     TString ForceTraversalTypes;
     TTableId TraversalTableId; 
@@ -328,7 +328,7 @@ private: // stored in local db
 
     struct TForceTraversal {
         ui64 OperationId = 0;
-        ui64 Cookie = 0;
+        TString Cookie;
         TPathId PathId;
         TString ColumnTags;
         TString Types;

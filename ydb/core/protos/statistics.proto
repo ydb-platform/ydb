@@ -81,14 +81,14 @@ message TTable {
 
 // KQP -> SA
 message TEvAnalyze {
-    optional uint64 Cookie = 1; // request cookie to match response item
+    optional bytes Cookie = 1; // unique request cookie to match response item
     repeated TTable Tables = 2; // list of analyzed tables and columns
     repeated EColumnStatisticType Types = 3; // list of statistics types requested. Empty means asking for all available.
 }
 
 // SA -> KQP
 message TEvAnalyzeResponse {
-    optional uint64 Cookie = 1;
+    optional bytes Cookie = 1;
 }
 
 // KQP -> SA

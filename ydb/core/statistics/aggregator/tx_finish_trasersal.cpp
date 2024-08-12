@@ -6,7 +6,7 @@ namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
     ui64 OperationId;
-    ui64 Cookie;
+    TString Cookie;
     TPathId PathId;
     TActorId ReplyToActorId;
 

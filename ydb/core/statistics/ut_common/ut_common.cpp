@@ -1,6 +1,5 @@
 #include "ut_common.h"
 
-#include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
 
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -340,15 +339,20 @@ void TAnalyzedTable::ToProto(NKikimrStat::TTable& tableProto) const {
     tableProto.MutableColumnTags()->Add(ColumnTags.begin(), ColumnTags.end());
 }
 
-
-void Analyze(TTestActorRuntime& runtime, const std::vector<TAnalyzedTable>& tables, ui64 saTabletId) {
-    const ui64 cookie = 555;
+std::unique_ptr<TEvStatistics::TEvAnalyze> MakeAnalyzeRequest(const TString cookie, const std::vector<TAnalyzedTable>& tables) {
     auto ev = std::make_unique<TEvStatistics::TEvAnalyze>();
     NKikimrStat::TEvAnalyze& record = ev->Record;
     record.SetCookie(cookie);
     record.AddTypes(NKikimrStat::EColumnStatisticType::TYPE_COUNT_MIN_SKETCH);
     for (const TAnalyzedTable& table : tables)
         table.ToProto(*record.AddTables());
+    return ev;
+}
+
+
+void Analyze(TTestActorRuntime& runtime, const std::vector<TAnalyzedTable>& tables, ui64 saTabletId) {
+    const TString cookie = "cookie";
+    auto ev = MakeAnalyzeRequest(cookie, tables);
 
     auto sender = runtime.AllocateEdgeActor();
     runtime.SendToPipe(saTabletId, sender, ev.release());

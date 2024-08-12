@@ -1320,7 +1320,7 @@ protected:
 
             // Current assumptions:
             // 1. All stage's inputs, except 1st one, must be a `Broadcast` or `UnionAll`
-            // 2. 1st `Broadcast` is handled as `UnionAll`
+            // 2. Stages where 1st input is `Broadcast` are not partitioned.
             if (inputIndex > 0) {
                 switch (input.GetTypeCase()) {
                     case NKqpProto::TKqpPhyConnection::kBroadcast:

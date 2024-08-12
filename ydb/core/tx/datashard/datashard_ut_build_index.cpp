@@ -6,16 +6,15 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
+#include <ydb/core/protos/index_builder.pb.h>
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 template <>
-inline void Out<NKikimrTxDataShard::TEvBuildIndexProgressResponse::EStatus>
-    (IOutputStream& o, NKikimrTxDataShard::TEvBuildIndexProgressResponse::EStatus status)
-{
-    o << NKikimrTxDataShard::TEvBuildIndexProgressResponse::EStatus_Name(status);
+inline void Out<NKikimrIndexBuilder::EBuildStatus>(IOutputStream& o, NKikimrIndexBuilder::EBuildStatus status) {
+    o << NKikimrIndexBuilder::EBuildStatus_Name(status);
 }
 
 namespace NKikimr {
@@ -30,7 +29,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
     static void DoBuildIndex(Tests::TServer::TPtr server, TActorId sender,
                              const TString& tableFrom, const TString& tableTo,
                              const TRowVersion& snapshot,
-                             const NKikimrTxDataShard::TEvBuildIndexProgressResponse::EStatus& expected) {
+                             const NKikimrIndexBuilder::EBuildStatus& expected) {
         auto &runtime = *server->GetRuntime();
         TVector<ui64> datashards = GetTableShards(server, sender, tableFrom);
         TTableId tableId = ResolveTableId(server, sender, tableFrom);
@@ -57,14 +56,14 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
                 TAutoPtr<IEventHandle> handle;
                 auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvBuildIndexProgressResponse>(handle);
 
-                if (expected == NKikimrTxDataShard::TEvBuildIndexProgressResponse::DONE
-                    && reply->Record.GetStatus() == NKikimrTxDataShard::TEvBuildIndexProgressResponse::ACCEPTED) {
+                if (expected == NKikimrIndexBuilder::EBuildStatus::DONE
+                    && reply->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::ACCEPTED) {
                     Cerr << "skip ACCEPTED" << Endl;
                     continue;
                 }
 
-                if (expected != NKikimrTxDataShard::TEvBuildIndexProgressResponse::INPROGRESS
-                    && reply->Record.GetStatus() == NKikimrTxDataShard::TEvBuildIndexProgressResponse::INPROGRESS) {
+                if (expected != NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS
+                    && reply->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS) {
                     Cerr << "skip INPROGRESS" << Endl;
                     continue;
                 }
@@ -121,7 +120,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
 
         auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1" });
 
-        DoBuildIndex(server, sender, "/Root/table-1", "/Root/table-2", snapshot, NKikimrTxDataShard::TEvBuildIndexProgressResponse::DONE);
+        DoBuildIndex(server, sender, "/Root/table-1", "/Root/table-2", snapshot, NKikimrIndexBuilder::EBuildStatus::DONE);
 
         // Writes to shadow data should not be visible yet
         auto data = ReadShardedTable(server, "/Root/table-2");
@@ -176,7 +175,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
 
         auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1" });
 
-        DoBuildIndex(server, sender, "/Root/table-1", "/Root/table-2", snapshot, NKikimrTxDataShard::TEvBuildIndexProgressResponse::DONE);
+        DoBuildIndex(server, sender, "/Root/table-1", "/Root/table-2", snapshot, NKikimrIndexBuilder::EBuildStatus::DONE);
 
         // Writes to shadow data should not be visible yet
         auto data = ReadShardedTable(server, "/Root/table-2");

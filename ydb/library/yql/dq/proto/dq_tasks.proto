@@ -184,7 +184,8 @@ message TDqInputTransformLookupSettings {
     repeated string RightJoinKeyNames = 6; //Join column names in the right hand, in the same order as previous
     bytes NarrowInputRowType = 7; //Serialized struct type
     bytes NarrowOutputRowType = 8; //Serialized struct type
-    //TODO add lookup cache parameters
+    uint64 CacheLimit = 9;
+    uint64 CacheTtlSeconds = 10;
 }
 
 message TDqTask {

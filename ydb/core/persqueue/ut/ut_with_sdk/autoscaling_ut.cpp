@@ -330,10 +330,10 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             }
         }
 
-        writeSession1->Close(TDuration::Seconds(1));
-        writeSession2->Close(TDuration::Seconds(1));
-        writeSession3->Close(TDuration::Seconds(1));
-        writeSession4->Close(TDuration::Seconds(1));
+        writeSession1->Close(TDuration::Seconds(5));
+        writeSession2->Close(TDuration::Seconds(5));
+        writeSession3->Close(TDuration::Seconds(5));
+        writeSession4->Close(TDuration::Seconds(5));
 
         readSession->Close();
     }
@@ -457,7 +457,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
-        auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .AutoPartitioningSupport = false });
+        auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .AutoCommit = false, .AutoPartitioningSupport = false });
 
         auto writeSession = CreateWriteSession(client, "producer-1", 0);
 
@@ -600,7 +600,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         TTopicClient client = setup.MakeClient();
 
         auto readSession1 = CreateTestReadSession({ .Name="Session-1", .Setup=setup, .Sdk = SdkVersion::Topic, .AutoCommit = false, .AutoPartitioningSupport = true });
-        auto readSession2 = CreateTestReadSession({ .Name="Session-2", .Setup=setup, .Sdk = SdkVersion::Topic, .AutoCommit = false, .AutoPartitioningSupport = true });
+        auto readSession2 = CreateTestReadSession({ .Name="Session-2", .Setup=setup, .Sdk = SdkVersion::Topic, .AutoCommit = false, .Partitions = {0}, .AutoPartitioningSupport = true });
 
         auto writeSession = CreateWriteSession(client, "producer-1", 0);
         UNIT_ASSERT(writeSession->Write(Msg("message_1", 2)));

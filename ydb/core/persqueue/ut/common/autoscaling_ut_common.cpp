@@ -331,7 +331,7 @@ std::shared_ptr<TTestReadSession<SdkVersion::PQv1>::TSdkReadSession> TTestReadSe
         readSettings.AppendTopics(topic);
     }
     for (auto partitionId : settings.Partitions) {
-        readSettings.Topics_[0].PartitionGroupIds_.push_back(partitionId);
+        readSettings.Topics_[0].PartitionGroupIds_.push_back(partitionId + 1);
     }
 
     struct MsgWrapper : public IMessage {

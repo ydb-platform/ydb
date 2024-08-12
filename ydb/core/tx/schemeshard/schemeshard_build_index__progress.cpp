@@ -964,7 +964,9 @@ public:
         const auto buildId = *buildIdPtr;
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(buildId);
         Y_ABORT_UNLESS(buildInfoPtr);
-        auto& buildInfo = **buildInfoPtr;
+        // We need this because we use buildInfo after EraseBuildInfo
+        auto buildInfoPin = *buildInfoPtr;
+        auto& buildInfo = *buildInfoPin;
 
         LOG_I("TTxReply : TEvModifySchemeTransactionResult"
               << ", BuildIndexId: " << buildId

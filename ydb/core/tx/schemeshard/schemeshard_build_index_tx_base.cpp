@@ -322,14 +322,14 @@ void TSchemeShard::TIndexBuilder::TTxBase::SendNotificationsIfFinished(TIndexBui
 }
 
 void TSchemeShard::TIndexBuilder::TTxBase::EraseBuildInfo(const TIndexBuildInfo& indexBuildInfo) {
-    Self->IndexBuilds.erase(indexBuildInfo.Id);
-    Self->IndexBuildsByUid.erase(indexBuildInfo.Uid);
-
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.LockTxId);
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.InitiateTxId);
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.ApplyTxId);
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.UnlockTxId);
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.AlterMainTableTxId);
+
+    Self->IndexBuildsByUid.erase(indexBuildInfo.Uid);
+    Self->IndexBuilds.erase(indexBuildInfo.Id);
 }
 
 Ydb::StatusIds::StatusCode TSchemeShard::TIndexBuilder::TTxBase::TranslateStatusCode(NKikimrScheme::EStatus status) {

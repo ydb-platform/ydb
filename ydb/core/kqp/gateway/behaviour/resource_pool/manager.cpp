@@ -118,10 +118,10 @@ void FillResourcePoolDescription(NKikimrSchemeOp::TResourcePoolDescription& reso
 
     TPoolSettings resourcePoolSettings;
     auto& properties = *resourcePoolDescription.MutableProperties()->MutableProperties();
-    for (const auto& [property, setting] : GetPropertiesMap(resourcePoolSettings, true)) {
+    for (const auto& [property, setting] : resourcePoolSettings.GetPropertiesMap(true)) {
         if (std::optional<TString> value = featuresExtractor.Extract(property)) {
             try {
-                std::visit(TSettingsParser{*value}, setting);
+                std::visit(TPoolSettings::TParser{*value}, setting);
             } catch (...) {
                 throw yexception() << "Failed to parse property " << property << ": " << CurrentExceptionMessage();
             }
@@ -129,7 +129,7 @@ void FillResourcePoolDescription(NKikimrSchemeOp::TResourcePoolDescription& reso
             continue;
         }
 
-        TString value = std::visit(TSettingsExtractor(), setting);
+        const TString value = std::visit(TPoolSettings::TExtractor(), setting);
         properties.insert({property, value});
     }
 

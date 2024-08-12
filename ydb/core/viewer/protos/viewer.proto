@@ -381,7 +381,8 @@ message TTenant {
     uint64 StorageGroups = 40;
     uint64 StorageAllocatedLimit = 41;
     Ydb.Cms.DatabaseQuotas DatabaseQuotas = 42;
-    repeated TStorageUsage StorageUsage = 43;
+    repeated TStorageUsage TablesStorage = 44;
+    repeated TStorageUsage DatabaseStorage = 45;
 }
 
 message TTenants {
@@ -391,6 +392,7 @@ message TTenants {
 message TTenantInfo {
     repeated TTenant TenantInfo = 1;
     repeated string Errors = 2;
+    uint32 Version = 3;
 }
 
 message TStoragePDisk {

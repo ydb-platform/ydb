@@ -33,7 +33,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
 
     if (buildInfo.IsBuildIndex()) {
         buildInfo.SerializeToProto(ss, modifyScheme.MutableInitiateIndexBuild());
-    } else if (buildInfo.IsBuildColumn()) {
+    } else if (buildInfo.IsBuildColumns()) {
         buildInfo.SerializeToProto(ss, modifyScheme.MutableInitiateColumnBuild());
     } else {
         Y_ABORT("Unknown operation kind while building LockPropose");
@@ -58,7 +58,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> InitiatePropose(
         modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
 
         buildInfo.SerializeToProto(ss, modifyScheme.MutableInitiateIndexBuild());
-    } else if (buildInfo.IsBuildColumn()) {
+    } else if (buildInfo.IsBuildColumns()) {
         modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateColumnBuild);
         modifyScheme.SetInternal(true);
         modifyScheme.SetWorkingDir(TPath::Init(buildInfo.DomainPathId, ss).PathString());
@@ -79,7 +79,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
     propose->Record.SetFailOnExist(true);
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
-    if (buildInfo.IsBuildColumn()) {
+    if (buildInfo.IsBuildColumns()) {
         modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
         modifyScheme.SetInternal(true);
         modifyScheme.SetWorkingDir(TPath::Init(buildInfo.TablePathId, ss).Parent().PathString());
@@ -343,7 +343,7 @@ public:
                 ev->Record.SetOwnerId(buildInfo.TablePathId.OwnerId);
                 ev->Record.SetPathId(buildInfo.TablePathId.LocalPathId);
 
-                if (buildInfo.IsBuildColumn()) {
+                if (buildInfo.IsBuildColumns()) {
                     ev->Record.SetTargetName(TPath::Init(buildInfo.TablePathId, Self).PathString());
                 } else if (buildInfo.IsBuildIndex()) {
                     ev->Record.SetTargetName(buildInfo.ImplTablePath);
@@ -358,7 +358,7 @@ public:
                     for (const auto& x: columns) {
                         *ev->Record.AddDataColumns() = x;
                     }
-                } else if (buildInfo.IsBuildColumn()) {
+                } else if (buildInfo.IsBuildColumns()) {
                     buildInfo.SerializeToProto(Self, ev->Record.MutableColumnBuildSettings());
                 }
 

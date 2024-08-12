@@ -159,7 +159,7 @@ public:
         if (settings.has_column_build_operation()) {
             // put some validation here for the build
             // operation
-            buildInfo->BuildKind = TIndexBuildInfo::EBuildKind::BuildColumn;
+            buildInfo->BuildKind = TIndexBuildInfo::EBuildKind::BuildColumns;
             buildInfo->BuildColumns.reserve(settings.column_build_operation().column_size());
             for(int i = 0; i < settings.column_build_operation().column_size(); i++) {
                 const auto& colInfo = settings.column_build_operation().column(i);

@@ -2140,7 +2140,7 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
 }
 
 void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {
-    Y_ABORT_UNLESS(IsBuildColumn());
+    Y_ABORT_UNLESS(IsBuildColumns());
     result->SetTable(TPath::Init(TablePathId, ss).PathString());
     for(const auto& column : BuildColumns) {
         column.SerializeToProto(result->add_column());

@@ -2906,7 +2906,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     enum class EBuildKind : ui32 {
         BuildKindUnspecified = 0,
         BuildIndex = 10,
-        BuildColumn = 20
+        BuildColumns = 20,
     };
 
     TActorId CreateSender;
@@ -3199,8 +3199,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         return BuildKind == EBuildKind::BuildIndex;
     }
 
-    bool IsBuildColumn() const {
-        return BuildKind == EBuildKind::BuildColumn;
+    bool IsBuildColumns() const {
+        return BuildKind == EBuildKind::BuildColumns;
     }
 
     bool IsDone() const {

@@ -152,7 +152,8 @@ Pear,15,33,2024-05-06'''
     
     @yq_v2
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_inference_null_column(self, kikimr, s3, client, unique_prefix):
+    def test_inference_null_column(self, kikimr, s3, client):
+        unique_prefix = str(uuid.uuid4())
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
@@ -207,7 +208,8 @@ Pear,15,'''
 
     @yq_v2
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_inference_optional_types(self, kikimr, s3, client, unique_prefix):
+    def test_inference_optional_types(self, kikimr, s3, client):
+        unique_prefix = str(uuid.uuid4())
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
@@ -266,7 +268,8 @@ Apple,2,22,
 
     @yq_v2
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_inference_multiple_files(self, kikimr, s3, client, unique_prefix):
+    def test_inference_multiple_files(self, kikimr, s3, client):
+        unique_prefix = str(uuid.uuid4())
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
@@ -324,7 +327,8 @@ Apple,2,22,
 
     @yq_v2
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_inference_file_error(self, kikimr, s3, client, unique_prefix):
+    def test_inference_file_error(self, kikimr, s3, client):
+        unique_prefix = str(uuid.uuid4())
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )

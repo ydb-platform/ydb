@@ -107,6 +107,7 @@ namespace NKikimr {
                             .TraceId = std::move(ev->TraceId),
                             .Event = ev->Get(),
                             .ExecutionRelay = ev->Get()->ExecutionRelay,
+                            .LogAccEnabled = ev->Get()->IsVerboseNoDataEnabled || ev->Get()->CollectDebugInfo,
                             .LatencyQueueKind = kind,
                         },
                         .NodeLayout = TNodeLayoutInfoPtr(NodeLayoutInfo)
@@ -292,9 +293,10 @@ namespace NKikimr {
         EnsureMonitoring(true);
         Mon->EventDiscover->Inc();
         EnableWilsonTracing(ev, Mon->DiscoverSamplePPM);
-        auto&& callback = Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
+        TErasureType::EErasureSpecies erasure = Info->Type.GetErasure();
+        auto&& callback = erasure == TBlobStorageGroupType::ErasureMirror3dc
             ? CreateBlobStorageGroupMirror3dcDiscoverRequest
-            : Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3of4
+            : erasure == TBlobStorageGroupType::ErasureMirror3of4
             ? CreateBlobStorageGroupMirror3of4DiscoverRequest
             : CreateBlobStorageGroupDiscoverRequest;
         PushRequest(callback(
@@ -310,7 +312,9 @@ namespace NKikimr {
                     .RestartCounter = ev->Get()->RestartCounter,
                     .TraceId = std::move(ev->TraceId),
                     .Event = ev->Get(),
-                    .ExecutionRelay = ev->Get()->ExecutionRelay
+                    .ExecutionRelay = ev->Get()->ExecutionRelay,
+                    .LogAccEnabled = (erasure != TBlobStorageGroupType::ErasureMirror3dc) &&
+                            (erasure != TBlobStorageGroupType::ErasureMirror3of4)
                 }
             }),
             ev->Get()->Deadline

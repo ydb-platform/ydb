@@ -531,6 +531,7 @@ struct Schema : NIceDb::Schema {
         struct Activity: Column<10, NScheme::NTypeIds::Bool> {};
         struct TierName: Column<11, NScheme::NTypeIds::Utf8> {};
         struct Stats: Column<12, NScheme::NTypeIds::Utf8> {};
+        struct Optimized: Column<13, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<PathId, TabletId, PortionId>;
         using TColumns = TableColumns<
@@ -545,7 +546,8 @@ struct Schema : NIceDb::Schema {
             PortionId,
             Activity,
             TierName,
-            Stats
+            Stats,
+            Optimized
         >;
     };
 

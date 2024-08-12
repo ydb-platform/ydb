@@ -1,5 +1,9 @@
 UNITTEST_FOR(ydb/library/yql/minikql/comp_nodes/packed_tuple)
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:32)
+ENDIF()
+
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)
@@ -9,7 +13,6 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-REQUIREMENTS(ram:32)
 
 SRCS(
     packed_tuple_ut.cpp

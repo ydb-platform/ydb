@@ -27,9 +27,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
 
     TPath path = TPath::Init(buildInfo.TablePathId, ss);
     modifyScheme.SetWorkingDir(path.Parent().PathString());
-
-    auto& lockConfig = *modifyScheme.MutableLockConfig();
-    lockConfig.SetName(path.LeafName());
+modifyScheme.MutableLockConfig()->SetName(path.LeafName());
 
     if (buildInfo.IsBuildIndex()) {
         buildInfo.SerializeToProto(ss, modifyScheme.MutableInitiateIndexBuild());
@@ -49,22 +47,16 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> InitiatePropose(
     propose->Record.SetFailOnExist(true);
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
-    if (buildInfo.IsBuildIndex()) {
-        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexBuild);
-        modifyScheme.SetInternal(true);
-
+            modifyScheme.SetInternal(true);
         modifyScheme.SetWorkingDir(TPath::Init(buildInfo.DomainPathId, ss).PathString());
-
         modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
 
+if (buildInfo.IsBuildIndex()) {
+        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexBuild);
         buildInfo.SerializeToProto(ss, modifyScheme.MutableInitiateIndexBuild());
     } else if (buildInfo.IsBuildColumns()) {
         modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateColumnBuild);
-        modifyScheme.SetInternal(true);
-        modifyScheme.SetWorkingDir(TPath::Init(buildInfo.DomainPathId, ss).PathString());
-        modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
-
-        buildInfo.SerializeToProto(ss, modifyScheme.MutableInitiateColumnBuild());
+                buildInfo.SerializeToProto(ss, modifyScheme.MutableInitiateColumnBuild());
     } else {
         Y_ABORT("Unknown operation kind while building InitiatePropose");
     }
@@ -75,15 +67,19 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> InitiatePropose(
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
+Y_ABORT_UNLESS(buildInfo.IsBuildColumns(), "Unknown operation kind while building AlterMainTablePropose");
+
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.AlterMainTableTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
-    if (buildInfo.IsBuildColumns()) {
-        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+            modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
         modifyScheme.SetInternal(true);
-        modifyScheme.SetWorkingDir(TPath::Init(buildInfo.TablePathId, ss).Parent().PathString());
-        modifyScheme.MutableAlterTable()->SetName(TPath::Init(buildInfo.TablePathId, ss).LeafName());
+        
+    auto path = TPath::Init(buildInfo.TablePathId, ss);
+    modifyScheme.SetWorkingDir(path.Parent().PathString());
+        modifyScheme.MutableAlterTable()->SetName(path.LeafName());
+
         for(auto& colInfo : buildInfo.BuildColumns) {
             auto col = modifyScheme.MutableAlterTable()->AddColumns();
             NScheme::TTypeInfo typeInfo;
@@ -108,11 +104,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
                 col->SetNotNull(colInfo.NotNull);
             }
 
-        }
-
-    } else {
-        Y_ABORT("Unknown operation kind while building AlterMainTablePropose");
-    }
+            }
 
     return propose;
 }

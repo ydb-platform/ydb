@@ -1,7 +1,7 @@
 services:
   fq-connector-go:
     container_name: fq-tests-my-fq-connector-go
-    image: ghcr.io/ydb-platform/fq-connector-go:v0.5.0@sha256:6d3cec43478bef88dda195cd38c10e4df719c8ce6d13c9bd288c7ec40410e9d8
+    image: ghcr.io/ydb-platform/fq-connector-go:v0.5.2@sha256:c007dc10b89aa0342bea93d843cca7097e66b2e45310010d9321259aeee453cc
     ports:
     - 2130
     volumes:
@@ -9,8 +9,8 @@ services:
   oracle:
     container_name: fq-tests-my-oracle
     environment:
-      TEST_USER_NAME: C##ADMIN  # used in list oracle tables. "C##*" - common user.
       ORACLE_PWD: password
+      TEST_USER_NAME: C##ADMIN # used in list oracle tables. "C##*" - common user.
     image: container-registry.oracle.com/database/free:latest@sha256:83edd0756fda0e5faecc0fdf047814f0177d4224d7bf037e4900123ee3e08718
     ports:
     - 1521

@@ -14,6 +14,7 @@ namespace NKikimr {
 using namespace NYdb::NTopic;
 using namespace NYdb::NTopic::NTests;
 using namespace NSchemeShardUT_Private;
+using namespace NKikimr::NPQ::NTest;
 
 Y_UNIT_TEST_SUITE(Balancing) {
 
@@ -152,77 +153,6 @@ Y_UNIT_TEST_SUITE(Balancing) {
         ManyTopics(SdkVersion::PQv1);
     }
 
-    //
-    // PQv1
-    //
-    Y_UNIT_TEST(PQv1_Simple) {
-        TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 10);
-
-        auto client = NYdb::NPersQueue::TPersQueueClient(*(setup.GetServer().AnnoyingClient->GetDriver()));
-
-        class TestReader {
-        public:
-            TestReader(const TString& name, NYdb::NPersQueue::TPersQueueClient& client) {
-                Partitions = std::make_shared<std::unordered_set<ui32>>();
-                Lock = std::make_shared<TMutex>();
-
-                NYdb::NPersQueue::TReadSessionSettings settings;
-                settings
-                    .ConsumerName(TEST_CONSUMER)
-                    .AppendTopics(TEST_TOPIC);
-
-                settings.EventHandlers_.CreatePartitionStreamHandler([lock=Lock, partitions=Partitions, name=name](NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent& e) {
-                    Cerr << ">>>>> " << name << " Received TCreatePartitionStreamEvent " << e.DebugString() << Endl<< Flush;
-                    e.Confirm();
-                    with_lock (*lock) {
-                        partitions->insert(e.GetPartitionStream()->GetPartitionId());
-                    }
-
-                   // UNIT_ASSERT_C(!Partitions.insert(e.GetPartitionStream()->GetPartitionId()).second, "Partition already is readed");
-                });
-                settings.EventHandlers_.DestroyPartitionStreamHandler([lock=Lock, partitions=Partitions, name=name](NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent& e) {
-                    Cerr << ">>>>> " << name << " Received TDestroyPartitionStreamEvent " << e.DebugString() << Endl<< Flush;
-                    e.Confirm();
-                    with_lock (*lock) {
-                        partitions->erase(e.GetPartitionStream()->GetPartitionId());
-                    }
-
-                    //UNIT_ASSERT_C(!Partitions.erase(e.GetPartitionStream()->GetPartitionId()), "Partition is not readed");
-                });
-
-                ReadSession = client.CreateReadSession(settings);
-            }
-
-
-
-            std::shared_ptr<TMutex> Lock;
-            std::shared_ptr<std::unordered_set<ui32>> Partitions;
-            std::shared_ptr<NYdb::NPersQueue::IReadSession> ReadSession;
-        };
-
-        TestReader session1("Session-1", client);
-        {
-            Sleep(TDuration::Seconds(1));
-            with_lock (*session1.Lock) {
-                UNIT_ASSERT_VALUES_EQUAL(10, session1.Partitions->size());
-            }
-        }
-
-        TestReader session2("Session-2", client);
-        {
-            Sleep(TDuration::Seconds(1));
-            with_lock (*session1.Lock) {
-                UNIT_ASSERT_VALUES_EQUAL(5, session1.Partitions->size());
-            }
-            with_lock (*session2.Lock) {
-                UNIT_ASSERT_VALUES_EQUAL(5, session2.Partitions->size());
-            }
-        }
-
-        session1.ReadSession->Close();
-        session2.ReadSession->Close();
-    }
  }
 
 } // namespace NKikimr

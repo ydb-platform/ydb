@@ -20,7 +20,7 @@ static inline IOutputStream& operator<<(IOutputStream& o, const std::unordered_m
     return o;
 }
 
-namespace NKikimr {
+namespace NKikimr::NPQ::NTest {
 
 using namespace NYdb::NTopic;
 using namespace NYdb::NTopic::NTests;
@@ -65,6 +65,15 @@ struct MsgInfo {
 
     std::shared_ptr<IMessage> Msg;
     bool Commited;
+/*
+    MsgInfo(ui64 partitionId, ui64 seqNo, ui64 offset, const TString& data, std::shared_ptr<IMessage>& msg, bool commited)
+        : PartitionId(partitionId)
+        , SeqNo(seqNo)
+        , Offset(offset)
+        , Data(data)
+        , Msg(msg)
+        , Commited(commited) {
+    }*/
 };
 
 struct EvEndMsg {

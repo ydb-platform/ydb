@@ -15,6 +15,7 @@ namespace NKikimr {
 using namespace NYdb::NTopic;
 using namespace NYdb::NTopic::NTests;
 using namespace NSchemeShardUT_Private;
+using namespace NKikimr::NPQ::NTest;
 
 Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 

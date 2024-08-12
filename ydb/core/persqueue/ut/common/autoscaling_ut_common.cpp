@@ -1,6 +1,6 @@
 #include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
 
-namespace NKikimr {
+namespace NKikimr::NPQ::NTest {
 
 using namespace NYdb::NTopic;
 using namespace NYdb::NTopic::NTests;

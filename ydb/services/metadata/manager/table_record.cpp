@@ -49,9 +49,11 @@ ui32 TTableRecord::CountIntersectColumns(const std::vector<TString>& columnIds) 
     return result;
 }
 
-bool TTableRecord::TakeValuesFrom(const TTableRecord& item) {
+bool TTableRecord::TakeValuesFrom(const TTableRecord& item, const NModifications::NColumnMerger::TMergerFactory& mergerFactory) {
     for (auto&& i : item.Values) {
-        Values[i.first] = i.second;
+        if (!mergerFactory(i.first)(Values[i.first], i.second)) {
+            return false;
+        }
     }
     return true;
 }

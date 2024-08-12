@@ -1,4 +1,5 @@
 #pragma once
+#include "common.h"
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
@@ -21,7 +22,7 @@ public:
     bool HasColumns(const std::vector<TString>& columnIds) const;
     ui32 CountIntersectColumns(const std::vector<TString>& columnIds) const;
     bool SameColumns(const TTableRecord& item) const;
-    bool TakeValuesFrom(const TTableRecord& item);
+    bool TakeValuesFrom(const TTableRecord& item, const NModifications::NColumnMerger::TMergerFactory& mergerFactory);
     const Ydb::Value* GetValuePtr(const TString& columnId) const;
 };
 

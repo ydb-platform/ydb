@@ -9,7 +9,10 @@ namespace NKikimr::NMetadata::NModifications {
 class TBaseObject {
 public:
     static Ydb::Table::CreateTableRequest AddHistoryTableScheme(const Ydb::Table::CreateTableRequest& baseScheme, const TString& tableName);
+    static NColumnMerger::TMerger MergerFactory(const TString& columnName);
 
+private:
+    static bool DefaultColumnMerger(Ydb::Value& self, const Ydb::Value& other);
 };
 
 template <class TDerived>

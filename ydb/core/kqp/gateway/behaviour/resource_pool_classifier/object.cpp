@@ -1,7 +1,7 @@
 #include "object.h"
 #include "behaviour.h"
 
-#include <ydb/core/resource_pools/resource_pool_settings.h>
+#include <library/cpp/json/json_reader.h>
 
 
 namespace NKikimr::NKqp {
@@ -15,8 +15,7 @@ TResourcePoolClassifierConfig::TDecoder::TDecoder(const Ydb::ResultSet& rawData)
     : DatabaseIdx(GetFieldIndex(rawData, Database))
     , NameIdx(GetFieldIndex(rawData, Name))
     , RankIdx(GetFieldIndex(rawData, Rank))
-    , ResourcePoolIdx(GetFieldIndex(rawData, ResourcePool))
-    , MembernameIdx(GetFieldIndex(rawData, Membername))
+    , ConfigJsonIdx(GetFieldIndex(rawData, ConfigJson))
 {}
 
 //// TResourcePoolClassifierConfig
@@ -31,12 +30,15 @@ bool TResourcePoolClassifierConfig::DeserializeFromRecord(const TDecoder& decode
     if (!decoder.Read(decoder.GetRankIdx(), Rank, rawData)) {
         Rank = -1;
     }
-    if (!decoder.Read(decoder.GetResourcePoolIdx(), ResourcePool, rawData)) {
-        ResourcePool = DEFAULT_POOL_ID;
+
+    TString configJsonString;
+    if (!decoder.Read(decoder.GetConfigJsonIdx(), configJsonString, rawData)) {
+        return false;
     }
-    if (!decoder.Read(decoder.GetMembernameIdx(), Membername, rawData)) {
-        Membername = "";
+    if (!NJson::ReadJsonTree(configJsonString, &ConfigJson)) {
+        return false;
     }
+
     return true;
 }
 
@@ -45,9 +47,33 @@ NMetadata::NInternal::TTableRecord TResourcePoolClassifierConfig::SerializeToRec
     result.SetColumn(TDecoder::Database, NMetadata::NInternal::TYDBValue::Utf8(Database));
     result.SetColumn(TDecoder::Name, NMetadata::NInternal::TYDBValue::Utf8(Name));
     result.SetColumn(TDecoder::Rank, NMetadata::NInternal::TYDBValue::Int64(Rank));
-    result.SetColumn(TDecoder::ResourcePool, NMetadata::NInternal::TYDBValue::Utf8(ResourcePool));
-    result.SetColumn(TDecoder::Membername, NMetadata::NInternal::TYDBValue::Utf8(Membername));
+
+    NJsonWriter::TBuf writer;
+    writer.WriteJsonValue(&ConfigJson);
+    result.SetColumn(TDecoder::ConfigJson, NMetadata::NInternal::TYDBValue::Utf8(writer.Str()));
+
     return result;
+}
+
+TClassifierSettings TResourcePoolClassifierConfig::GetClassifierSettings() const {
+    TClassifierSettings resourcePoolClassifierSettings;
+
+    resourcePoolClassifierSettings.Rank = Rank;
+
+    const auto& properties = resourcePoolClassifierSettings.GetPropertiesMap();
+    for (const auto& [propery, value] : ConfigJson.GetMap()) {
+        const auto it = properties.find(propery);
+        if (it == properties.end()) {
+            continue;
+        }
+        try {
+            std::visit(TClassifierSettings::TParser{value.GetString()}, it->second);
+        } catch (...) {
+            continue;
+        }
+    }
+
+    return resourcePoolClassifierSettings;
 }
 
 NJson::TJsonValue TResourcePoolClassifierConfig::GetDebugJson() const {
@@ -55,14 +81,12 @@ NJson::TJsonValue TResourcePoolClassifierConfig::GetDebugJson() const {
     result.InsertValue(TDecoder::Database, Database);
     result.InsertValue(TDecoder::Name, Name);
     result.InsertValue(TDecoder::Rank, Rank);
-    result.InsertValue(TDecoder::ResourcePool, ResourcePool);
-    result.InsertValue(TDecoder::Membername, Membername);
+    result.InsertValue(TDecoder::ConfigJson, ConfigJson);
     return result;
 }
 
 bool TResourcePoolClassifierConfig::operator==(const TResourcePoolClassifierConfig& other) const {
-    return std::tie(Database, Name, Rank, ResourcePool, Membername)
-        == std::tie(other.Database, other.Name, other.Rank, other.ResourcePool, other.Membername);
+    return std::tie(Database, Name, Rank, ConfigJson) != std::tie(other.Database, other.Name, other.Rank, other.ConfigJson);
 }
 
 NMetadata::IClassBehaviour::TPtr TResourcePoolClassifierConfig::GetBehaviour() {
@@ -71,6 +95,35 @@ NMetadata::IClassBehaviour::TPtr TResourcePoolClassifierConfig::GetBehaviour() {
 
 TString TResourcePoolClassifierConfig::GetTypeId() {
     return "RESOURCE_POOL_CLASSIFIER";
+}
+
+NMetadata::NModifications::NColumnMerger::TMerger TResourcePoolClassifierConfig::MergerFactory(const TString& columnName) {
+    if (columnName == TDecoder::ConfigJson) {
+        return &JsonConfigsMerger;
+    }
+    return TBase::MergerFactory(columnName);
+}
+
+bool TResourcePoolClassifierConfig::JsonConfigsMerger(Ydb::Value& self, const Ydb::Value& other) {
+    NJson::TJsonValue selfConfigJson;
+    if (!NJson::ReadJsonTree(self.text_value(), &selfConfigJson)) {
+        return false;
+    }
+
+    NJson::TJsonValue otherConfigJson;
+    if (!NJson::ReadJsonTree(other.text_value(), &otherConfigJson)) {
+        return false;
+    }
+
+    for (const auto& [key, value] : otherConfigJson.GetMap()) {
+        selfConfigJson.InsertValue(key, value);
+    }
+
+    NJsonWriter::TBuf writer;
+    writer.WriteJsonValue(&selfConfigJson);
+    *self.mutable_text_value() = writer.Str();
+
+    return true;
 }
 
 }  // namespace NKikimr::NKqp

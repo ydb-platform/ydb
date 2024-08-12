@@ -44,6 +44,7 @@ NMetadata::NModifications::TOperationParsingResult TResourcePoolClassifierManage
     auto& featuresExtractor = settings.GetFeaturesExtractor();
     featuresExtractor.ValidateResetFeatures();
 
+    NJson::TJsonValue configJson = NJson::JSON_MAP;
     TClassifierSettings resourcePoolClassifierSettings;
     for (const auto& [property, setting] : resourcePoolClassifierSettings.GetPropertiesMap()) {
         if (std::optional<TString> value = featuresExtractor.Extract(property)) {
@@ -57,12 +58,16 @@ NMetadata::NModifications::TOperationParsingResult TResourcePoolClassifierManage
         }
 
         const TString value = std::visit(TClassifierSettings::TExtractor(), setting);
-        if (property == "rank") {
+        if (property == TResourcePoolClassifierConfig::TDecoder::Rank) {
             result.SetColumn(property, NMetadata::NInternal::TYDBValue::Int64(FromString<i64>(value)));
         } else {
-            result.SetColumn(property, NMetadata::NInternal::TYDBValue::Utf8(value));
+            configJson.InsertValue(property, value);
         }
     }
+
+    NJsonWriter::TBuf writer;
+    writer.WriteJsonValue(&configJson);
+    result.SetColumn(TResourcePoolClassifierConfig::TDecoder::ConfigJson, NMetadata::NInternal::TYDBValue::Utf8(writer.Str()));
 
     if (!featuresExtractor.IsFinished()) {
         ythrow yexception() << "Unknown property: " << featuresExtractor.GetRemainedParamsString();

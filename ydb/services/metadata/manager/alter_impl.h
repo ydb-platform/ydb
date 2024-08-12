@@ -236,7 +236,7 @@ public:
             if (!trPatch) {
                 TBase::ExternalController->OnAlteringProblem("cannot found patch for object");
                 return false;
-            } else if (!trObject.TakeValuesFrom(*trPatch)) {
+            } else if (!trObject.TakeValuesFrom(*trPatch, &TObject::MergerFactory)) {
                 TBase::ExternalController->OnAlteringProblem("cannot patch object");
                 return false;
             } else if (!TObject::TDecoder::DeserializeFromRecord(objectPatched, trObject)) {

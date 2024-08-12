@@ -27,8 +27,7 @@ void TResourcePoolClassifierInitializer::DoPrepare(NMetadata::NInitializer::IIni
         AddColumn(request, TResourcePoolClassifierConfig::TDecoder::Database, Ydb::Type::UTF8, true);
         AddColumn(request, TResourcePoolClassifierConfig::TDecoder::Name, Ydb::Type::UTF8, true);
         AddColumn(request, TResourcePoolClassifierConfig::TDecoder::Rank, Ydb::Type::INT64);
-        AddColumn(request, TResourcePoolClassifierConfig::TDecoder::ResourcePool, Ydb::Type::UTF8);
-        AddColumn(request, TResourcePoolClassifierConfig::TDecoder::Membername, Ydb::Type::UTF8);
+        AddColumn(request, TResourcePoolClassifierConfig::TDecoder::ConfigJson, Ydb::Type::JSON_DOCUMENT);
         result.emplace_back(std::make_shared<NMetadata::NInitializer::TGenericTableModifier<NMetadata::NRequest::TDialogCreateTable>>(request, "create"));
 
         auto historyRequest = TResourcePoolClassifierConfig::AddHistoryTableScheme(request);

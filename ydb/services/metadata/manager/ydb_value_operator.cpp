@@ -16,7 +16,7 @@ bool TYDBValue::IsSameType(const Ydb::Value& v, const Ydb::Type& type) {
         return v.has_uint64_value();
     } else if (type.type_id() == Ydb::Type::STRING) {
         return v.has_bytes_value();
-    } else if (type.type_id() == Ydb::Type::UTF8) {
+    } else if (type.type_id() == Ydb::Type::UTF8 || type.type_id() == Ydb::Type::JSON_DOCUMENT) {
         return v.has_text_value();
     }
     Y_ABORT_UNLESS(false);
@@ -67,6 +67,8 @@ TString TYDBValue::TypeToString(const Ydb::Type& type) {
         return "String";
     } else if (type.type_id() == Ydb::Type::UTF8) {
         return "Utf8";
+    } else if (type.type_id() == Ydb::Type::JSON_DOCUMENT) {
+        return "JsonDocument";
     } else {
         Y_ABORT_UNLESS(false);
     }

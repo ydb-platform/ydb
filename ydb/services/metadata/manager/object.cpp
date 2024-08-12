@@ -24,4 +24,14 @@ Ydb::Table::CreateTableRequest TBaseObject::AddHistoryTableScheme(const Ydb::Tab
     return result;
 }
 
+NColumnMerger::TMerger TBaseObject::MergerFactory(const TString& columnName) {
+    Y_UNUSED(columnName);
+    return &DefaultColumnMerger;
+}
+
+bool TBaseObject::DefaultColumnMerger(Ydb::Value& self, const Ydb::Value& other) {
+    self = other;
+    return true;
+}
+
 }

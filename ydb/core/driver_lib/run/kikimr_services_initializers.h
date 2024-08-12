@@ -404,6 +404,12 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
+class TGroupedMemoryLimiterInitializer: public IKikimrServicesInitializer {
+public:
+    TGroupedMemoryLimiterInitializer(const TKikimrRunConfig& runConfig);
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
 class TCompConveyorInitializer: public IKikimrServicesInitializer {
 public:
     TCompConveyorInitializer(const TKikimrRunConfig& runConfig);

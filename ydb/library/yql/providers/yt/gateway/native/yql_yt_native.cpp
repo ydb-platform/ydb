@@ -2538,6 +2538,9 @@ private:
                 if (attrs.AsMap().contains("optimize_for") && attrs["optimize_for"].AsString() != "scan") {
                     metaInfo->Attrs["optimize_for"] = attrs["optimize_for"].AsString();
                 }
+                if (attrs.AsMap().contains("schema_mode") && attrs["schema_mode"].AsString() == "weak") {
+                    metaInfo->Attrs["schema_mode"] = attrs["schema_mode"].AsString();
+                }
                 if (attrs.AsMap().contains(SecurityTagsName)) {
                     TVector<TString> securityTags;
                     for (const auto& tag : attrs[SecurityTagsName].AsList()) {

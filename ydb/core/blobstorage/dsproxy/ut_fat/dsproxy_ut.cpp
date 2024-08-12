@@ -3404,9 +3404,24 @@ class TTestBlobStorageProxyBatchedPutRequestDoesNotContainAHugeBlob : public TTe
                 batched[1] = GetPut(blobIds[1], Data2);
 
                 TMaybe<TGroupStat::EKind> kind = PutHandleClassToGroupStatKind(HandleClass);
-                IActor *reqActor = CreateBlobStorageGroupPutRequest(BsInfo, GroupQueues,
-                        Mon, batched, false, PerDiskStatsPtr, kind,TInstant::Now(),
-                        StoragePoolCounters, HandleClass, Tactic, false);
+                IActor *reqActor = CreateBlobStorageGroupPutRequest(
+                        TBlobStorageGroupMultiPutParameters{
+                            .Common = {
+                                .GroupInfo = BsInfo,
+                                .GroupQueues = GroupQueues,
+                                .Mon = Mon,
+                                .Now = TInstant::Now(),
+                                .StoragePoolCounters = StoragePoolCounters,
+                                .RestartCounter = TBlobStorageGroupMultiPutParameters::CalculateRestartCounter(batched),
+                                .LatencyQueueKind = kind,
+                            },
+                            .Events = batched,
+                            .TimeStatsEnabled = false,
+                            .Stats = PerDiskStatsPtr,
+                            .HandleClass = HandleClass,
+                            .Tactic = Tactic,
+                            .EnableRequestMod3x3ForMinLatency = false,
+                        });
 
                 ctx.Register(reqActor);
                 break;

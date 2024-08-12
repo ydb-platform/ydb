@@ -500,7 +500,7 @@ The target memory utilization specifies a threshold for {{ ydb-short-name }} pro
 
 Flexible cache sizes are calculated according to their limit thresholds to keep process consumption around this value.
 
-For example, in a database that consumes a little memory on query execution, caches consume memory around this threshold, and other memory stays free. If query execution consumes more memory, caches start to reduce their limits to their minimum threshold.
+For example, in a database that consumes a little memory on query execution, caches consume memory around this threshold, and other memory stays free. If query execution consumes more memory, caches start to reduce their sizes to their minimum threshold.
 
 ### Per-component memory limits
 

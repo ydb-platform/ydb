@@ -454,76 +454,77 @@ actor_system_config:
 `progress_threshold` | В акторной системе есть возможность запросить отправку сообщения в будущем по расписанию. Возможна ситуация, когда в определенный момент времени системе не удастся отправить все запланированные сообщения. В этом случае система начинает рассылать сообщения в «виртуальном времени», обрабатывая в каждом цикле отправку сообщений за период, не превышающий `progress_threshold` в микросекундах, и продвигая виртуальное время на `progress_threshold`, пока оно не догонит реальное.
 `resolution` | При составлении расписания отправки сообщений используются дискретные временные слоты. Длительность слота задается параметром `resolution` в микросекундах.
 
-## Memory controller {#memory-controller}
+## Контроллер памяти {#memory-controller}
 
-There are many components inside {{ ydb-short-name }} [database nodes](../../concepts/glossary.md#database-node) that utilize memory. Most of them need a fixed amount, but some are flexible and can use varying amounts of memory, typically to improve performance. If such components allocate more memory than is physically available, the operating system is likely to [terminate](https://en.wikipedia.org/wiki/Out_of_memory#Recovery) the entire {{ ydb-short-name }} process, which is undesirable. The memory controller's goal is to allow {{ ydb-short-name }} to avoid out-of-memory situations while still efficiently using the available memory.
+Внутри [узлов](../../concepts/glossary.md#database-node) {{ ydb-short-name }} работают множество различных компонент использующих память. Большинству из них требуется фиксированное количество памяти, но некоторые из них гибкие и могут использовать варьируемое количество памяти, обычно для улучшения производительности. Если такие компоненты выделяют больше памяти, чем физически доступно, операционная система, вероятно, [завершит](https://en.wikipedia.org/wiki/Out_of_memory#Recovery) весь процесс {{ ydb-short-name }}, что нежелательно. Цель контроллера памяти — позволить {{ ydb-short-name }} избегать ситуаций с нехваткой памяти, при этом эффективно используя имеющуюся память.
 
-Examples of components managed by the memory controller:
+Примеры компонентов, управляемых контроллером памяти:
 
-- [Shared cache](../../concepts/glossary.md#shared-cache): stores recently accessed data pages read from [distributed storage](../../concepts/glossary.md#distributed-storage) to reduce disk I/O and accelerate data retrieval.
-- [MemTable](../../concepts/glossary.md#memtable): holds data that has not yet been flushed to [SST](../../concepts/glossary.md#sst).
-- [KQP](../../concepts/glossary.md#kqp): stores intermediate query results.
-- Allocator caches: keep memory blocks that have been released but not yet returned to the operating system.
+- [Общий кеш](../../concepts/glossary.md#shared-cache): хранит недавно доступные страницы данных, считанные из [распределенного хранилища](../../concepts/glossary.md#distributed-storage), чтобы уменьшить количество операций ввода-вывода с диска и ускорить получение данных.
+- [MemTable](../../concepts/glossary.md#memtable): содержит данные, которые еще не были записаны в [SST](../../concepts/glossary.md#sst).
+- [KQP](../../concepts/glossary.md#kqp): хранит промежуточные результаты запросов.
+- Кеши аллокатора: хранят блоки памяти, которые были освобождены, но еще не возвращены операционной системе.
 
-Memory limits can be configured to control overall memory usage, ensuring the database operates efficiently within the available resources.
+Лимиты памяти могут быть настроены для контроля общего использования памяти, обеспечивая эффективную работу базы данных в рамках доступных ресурсов.
 
-### Hard memory limit {#hard-memory-limit}
+### Жёсткий лимит памяти {#hard-memory-limit}
 
-The hard memory limit specifies the total amount of memory available to {{ ydb-short-name }} process.
+Жёсткий лимит памяти определяет общее количество памяти, доступное для процесса {{ ydb-short-name }}.
 
-By default, the hard memory limit for {{ ydb-short-name }} process is set to its [cgroups](https://en.wikipedia.org/wiki/Cgroups) memory limit.
+По умолчанию жёсткий лимит памяти для процесса {{ ydb-short-name }} установлен в соответствии с лимитом памяти [cgroups](https://en.wikipedia.org/wiki/Cgroups).
 
-In environments without a cgroups memory limit, the default hard memory limit equals to the host's total available memory. This configuration allows the database to utilize all available resources but may lead to resource competition with other processes on the same host. Although the memory controller attempts to account for this external consumption, such a setup is not recommended.
+В средах без лимита памяти cgroups, значение жёсткого лимита памяти по умолчанию равно общему объему доступной памяти хоста. Эта конфигурация позволяет базе данных использовать все доступные ресурсы, но может привести к конкуренции за ресурсы с другими процессами на том же хосте. Хотя контроллер памяти и пытается учесть это внешнее потребление, такое использование не рекомендуется.
 
-Additionally, the hard memory limit can be specified in the configuration. Note that the database process may still exceed this limit. Therefore, it is highly recommended to use cgroups memory limits in production environments to enforce strict memory control.
+Дополнительно, жёсткий лимит памяти может быть указан в конфигурации. Обратите внимание, что процесс базы данных всё равно может превысить этот лимит. Поэтому настоятельно рекомендуется использовать лимиты памяти cgroups в продакшен окружениях для строгого контроля памяти.
 
-Most of other memory limits can be configured either in absolute bytes or as a percentage relative to the hard memory limit. Using percentages is advantageous for managing clusters with nodes of varying capacities. If both absolute byte and percentage limits are specified, the memory controller uses a combination of both (maximum for lower limits and minimum for upper limits).
+Большинство других лимитов памяти можно настроить либо в абсолютных байтах, либо в процентах относительно жёсткого лимита памяти. Использование процентов удобно для управления кластерами с узлами разной ёмкости. Если указаны как абсолютные лимиты в байтах, так и процентные лимиты, контроллер памяти использует комбинацию обоих (максимум для нижних лимитов и минимум для верхних лимитов).
 
-Example of the `memory_controller_config` section with a specified hard memory limit:
+Пример секции `memory_controller_config` с указанным жёстким лимитом памяти:
+
 
 ```yaml
 memory_controller_config:
   hard_limit_bytes: 16106127360
 ```
 
-### Soft memory limit {#soft-memory-limit}
+### Мягкий лимит памяти {#soft-memory-limit}
 
-The soft memory limit specifies a dangerous threshold that should not be exceeded by {{ ydb-short-name }} process under normal circumstances.
+Мягкий лимит памяти определяет опасный порог, который не должен превышаться процессом {{ ydb-short-name }} при нормальных обстоятельствах.
 
-If the soft limit is exceeded, {{ ydb-short-name }} gradually reduces the shared cache size to zero. Therefore, more database nodes should be added to the cluster as soon as possible, or per-component memory limits should be reduced.
+Если мягкий лимит превышен, {{ ydb-short-name }} постепенно уменьшает размер общего кеша до нуля. В таком случае, следует как можно скорее добавить больше узлов базы данных в кластер или снизить лимиты памяти для отдельных компонентов.
 
-### Target memory utilization {#target-memory-utilization}
+### Целевое использование памяти {#target-memory-utilization}
 
-The target memory utilization specifies a threshold for {{ ydb-short-name }} process memory usage that is considered optimal.
+Целевое использование памяти определяет порог использования памяти процессом {{ ydb-short-name }}, который считается идеальным.
 
-Flexible cache sizes are calculated according to their limit thresholds to keep process consumption around this value.
+Гибкие размеры кешей рассчитываются в соответствии с их пределами, чтобы поддерживать потребление процесса вблизи этого значения.
 
-For example, in a database that consumes a little memory on query execution, caches consume memory around this threshold, and other memory stays free. If query execution consumes more memory, caches start to reduce their limits to their minimum threshold.
+Например, в базе данных, которая расходует немного памяти на выполнение запросов, кеши используют память вблизи этого порога, а остальная память остаётся свободной. Если выполнение запросов начинает потреблять больше памяти, кеши начинают сокращать свои размеры до минимального порога.
 
-### Per-component memory limits
+### Лимиты памяти для отдельных компонентов
 
-There are two different types of components inside {{ ydb-short-name }}.
+Внутри {{ ydb-short-name }} существует два разных типа компонентов.
 
-The first type components, or cache components, acts like caches, for example storing the last recently used data. Each of cache components has minimum and maximum memory limit thresholds, allowing them to change their capacity dynamically based on current {{ ydb-short-name }} process consumption.
+Первый тип компонентов, или кеш-компоненты, функционируют как кеши, например, храня последние использованные данные. Каждый кеш-компонент имеет минимальный и максимальный пороговые значения лимита памяти, что позволяет ему динамически изменять свою емкость в зависимости от текущего потребления памяти процессом {{ ydb-short-name }}.
 
-The second type components, or activity components, allocate memory for specific activities, such as query execution or the [compaction](../../concepts/glossary.md#compaction) process. Each of activity components has a fixed memory limit. There is also an additional total memory limit for these activities, from which they attempt to consume the needed memory.
+Второй тип компонентов, или активные компоненты, выделяет память для конкретных задач, таких как выполнение запросов или процесс компактизации. Каждый активный компонент имеет фиксированный лимит памяти. Также существует дополнительный общий лимит памяти для этих задач, из которого они пытаются получить необходимую память.
 
-Many other auxiliary components and processes operate alongside the {{ ydb-short-name }} process, consuming memory. Currently, these components do not have any memory limits.
+Многие другие вспомогательные компоненты и процессы работают параллельно с процессом {{ ydb-short-name }}, потребляя память. В настоящее время эти компоненты не имеют каких-либо лимитов памяти.
 
-#### Cache components memory limits
+#### Лимиты памяти для кеш-компонентов
 
-Cache components are:
+К кеш-компонентам относятся:
 
-- Shared cache
+- Общий кеш
 - MemTable
 
-Each of cache components' limits is dynamically recalculated every second so that each component consumes memory proportionally to its limit thresholds, and the total consumed memory stays around the target memory utilization.
+Лимиты каждого кеш-компонента динамически пересчитываются каждую секунду, чтобы каждый компонент потреблял память пропорционально своим предельным значениям, а общее потребление памяти оставалось около целевого использования памяти.
 
-Cache components' minimum memory limit threshold isn't reserved, meaning that the memory remains available until it is actually used. However, once this memory is filled, the components typically retain the data, operating within their current memory limit. Consequently, the sum of cache components minimum memory limits is expected to be less than the target memory utilization.
+Минимальный порог лимита памяти кеш-компонентов не резервируется, что означает, что память остается доступной до тех пор, пока она не будет фактически использована. Однако, как только эта память заполнена, компоненты обычно сохраняют данные, действуя в рамках своего текущего лимита памяти. Таким образом, ожидается, что сумма минимальных лимитов памяти кеш-компонентов будет меньше целевого использования памяти.
 
-If needed, both the minimum and maximum thresholds should be overridden; otherwise, a missing threshold will have a default value.
+При необходимости следует переопределить как минимальные, так и максимальные пороговые значения; в противном случае, если пороговое значение отсутствует, оно будет иметь значение по умолчанию.
 
-Example of the `memory_controller_config` section with specified shared cache limits:
+Пример секции `memory_controller_config` с указанными лимитами общего кеша:
 
 ```yaml
 memory_controller_config:
@@ -531,50 +532,51 @@ memory_controller_config:
   shared_cache_max_percent: 30
 ```
 
-#### Activity components memory limits
+#### Лимиты памяти для активных компонентов
 
-Activity components are:
+К активным компонентам относятся:
 
 - KQP
 
-The memory limit for each of the activity components specifies the maximum amount of memory it can attempt to use. However, to prevent {{ ydb-short-name }} process from exceeding the soft memory limit, the total consumption of activity components is further limited by an additional limit, named as the activities memory limit. If the total memory usage of the activity components exceeds this limit, any additional memory requests will be denied.
+Лимит памяти для каждого из активных компонентов указывает максимальное количество памяти, которое он может попытаться использовать. Однако, чтобы предотвратить превышение процессом {{ ydb-short-name }} мягкого лимита памяти, общее потребление активных компонентов ограничивается дополнительным лимитом, называемым лимитом памяти для активностей. Если общее использование памяти активными компонентами превышает этот лимит, любые дополнительные запросы на память будут отклонены.
 
-As a result, while the combined individual limits of the activity components might collectively exceed the activities memory limit, each component's individual limit should be less than this overall cap. Additionally, the sum of the minimum memory limits for the cache components plus the activities memory limit needs to be less than the soft memory limit.
+Таким образом, хотя суммарные индивидуальные лимиты активных компонентов могут в совокупности превышать лимит памяти для активностей, индивидуальный лимит каждого компонента должен быть меньше этого общего предела. Кроме того, сумма минимальных лимитов памяти для кеш-компонентов плюс лимит памяти для активностей должна быть меньше мягкого лимита памяти.
 
-There are some other activity components, currently they do not have any individual memory limits.
+Существуют и другие активные компоненты, которые в настоящее время не имеют каких-либо индивидуальных лимитов памяти.
 
-Example of the `memory_controller_config` section with a specified KQP limit:
+Пример секции `memory_controller_config` с указанным лимитом для KQP:
+
 
 ```yaml
 memory_controller_config:
   query_execution_limit_percent: 25
 ```
 
-### Configuration parameters
+### Параметры конфигурации
 
-Each configuration parameter applies within the context of a single database node.
+Каждый параметр конфигурации применяется в контексте одного узла базы данных.
 
-As mentioned above, it is expected that the sum of the minimum memory limits for the cache components plus the activities memory limit should be less than the soft memory limit.
+Как упоминалось ранее, ожидается, что сумма минимальных лимитов памяти для кеш-компонентов плюс лимит памяти для активностей должен быть меньше мягкого лимита памяти.
 
-This restriction can be written in a simplified form:
+Это ограничение можно записать в упрощенной форме:
 
 $shared\_cache\_min\_percent + mem\_table\_min\_percent + activities\_limit\_percent < soft\_limit\_percent$
 
-Or in a detailed form:
+Или в детализированной форме:
 
 $Max(shared\_cache\_min\_percent * hard\_limit\_bytes / 100, shared\_cache\_min\_bytes) + Max(mem\_table\_min\_percent * hard\_limit\_bytes / 100, mem\_table\_min\_bytes) + Min(activities\_limit\_percent * hard\_limit\_bytes / 100, activities\_limit\_bytes) < Min(soft\_limit\_percent * hard\_limit\_bytes / 100, soft\_limit\_bytes)$
 
-Parameters | Default | Description
+Параметры | Значение по умолчанию | Описание
 --- | --- | ---
-`hard_limit_bytes` | CGroup&nbsp;memory&nbsp;limit&nbsp;/<br/>Host memory | Hard memory usage limit.
-`soft_limit_percent`&nbsp;/<br/>`soft_limit_bytes` | 75% | Soft memory usage limit.
-`target_utilization_percent`&nbsp;/<br/>`target_utilization_bytes` | 50% | Target memory utilization.
-`activities_limit_percent`&nbsp;/<br/>`activities_limit_bytes` | 30% | Activities memory limit.
-`shared_cache_min_percent`&nbsp;/<br/>`shared_cache_min_bytes` | 20% | Minimum threshold for the shared cache memory limit.
-`shared_cache_max_percent`&nbsp;/<br/>`shared_cache_max_bytes` | 50% | Maximum threshold for the shared cache memory limit.
-`mem_table_min_percent`&nbsp;/<br/>`mem_table_min_bytes` | 1% | Minimum threshold for the MemTable memory limit.
-`mem_table_max_percent`&nbsp;/<br/>`mem_table_max_bytes` | 3% | Maximum threshold for the MemTable memory limit.
-`query_execution_limit_percent`&nbsp;/<br/>`query_execution_limit_bytes` | 20% | KQP memory limit.
+`hard_limit_bytes` | CGroup&nbsp;memory&nbsp;limit&nbsp;/<br/>Оперативная память хоста | Жесткий лимит использования памяти.
+`soft_limit_percent`&nbsp;/<br/>`soft_limit_bytes` | 75% | Мягкий лимит использования памяти.
+`target_utilization_percent`&nbsp;/<br/>`target_utilization_bytes` | 50% | Целевое использование памяти.
+`activities_limit_percent`&nbsp;/<br/>`activities_limit_bytes` | 30% | Лимит памяти для активностей.
+`shared_cache_min_percent`&nbsp;/<br/>`shared_cache_min_bytes` | 20% | Минимальный порог для лимита памяти общего кеша.
+`shared_cache_max_percent`&nbsp;/<br/>`shared_cache_max_bytes` | 50% | Максимальный порог для лимита памяти общего кеша.
+`mem_table_min_percent`&nbsp;/<br/>`mem_table_min_bytes` | 1% | Минимальный порог для лимита памяти MemTable.
+`mem_table_max_percent`&nbsp;/<br/>`mem_table_max_bytes` | 3% | Максимальный порог для лимита памяти MemTable.
+`query_execution_limit_percent`&nbsp;/<br/>`query_execution_limit_bytes` | 20% | Лимит памяти для KQP.
 
 ## blob_storage_config — статическая группа кластера {#blob-storage-config}
 

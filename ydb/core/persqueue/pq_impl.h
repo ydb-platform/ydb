@@ -499,7 +499,6 @@ private:
     void Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvTransactionCompleted::TPtr& ev, const TActorContext& ctx);
 
-//    void BeginDeleteTx(const TDistributedTransaction& tx);
     void BeginDeletePartitions(TTxWriteInfo& writeInfo);
 
     bool CheckTxWriteOperation(const NKikimrPQ::TPartitionOperation& operation,

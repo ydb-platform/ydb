@@ -4347,12 +4347,6 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         if (tx.HaveAllRecipientsReceive() && WriteIdIsDisabled(tx.WriteId)) {
             DeleteTx(tx);
             // implicitly switch to the state DELETING
-//            if (tx.WriteId.Defined()) {
-//                BeginDeleteTx(tx);
-//            } else {
-//                DeleteTx(tx);
-//                // implicitly switch to the state DELETING
-//            }
         }
 
         break;
@@ -4825,14 +4819,11 @@ void TPersQueue::Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorCon
         UnsubscribeWriteId(writeId, ctx);
         if (writeInfo.TxId.Defined()) {
             if (auto tx = GetTransaction(ctx, *writeInfo.TxId); tx) {
-//                DeleteTx(*tx);
                 if (tx->State == NKikimrPQ::TTransaction::WAIT_RS_ACKS) {
                     CheckTxState(ctx, *tx);
                 }
             }
         }
-//        PQ_LOG_D("delete WriteId " << writeId);
-//        TxWrites.erase(writeId);
     }
     TxWritesChanged = true;
 
@@ -4858,26 +4849,6 @@ void TPersQueue::Handle(TEvPQ::TEvTransactionCompleted::TPtr& ev, const TActorCo
 
     BeginDeletePartitions(writeInfo);
 }
-
-//void TPersQueue::BeginDeleteTx(const TDistributedTransaction& tx)
-//{
-//    Y_ABORT_UNLESS(tx.WriteId.Defined());
-//    const TWriteId& writeId = *tx.WriteId;
-//    PQ_LOG_D("begin delete write info for WriteId " << writeId);
-//    if (!TxWrites.contains(writeId)) {
-//        // the transaction has already been completed
-//        PQ_LOG_D("unknown WriteId " << writeId);
-//        return;
-//    }
-//
-//    TTxWriteInfo& writeInfo = TxWrites.at(writeId);
-//    if (writeInfo.LongTxSubscriptionStatus == NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED) {
-//        PQ_LOG_D("wait for WriteId subscription status");
-//        return;
-//    }
-//
-//    BeginDeletePartitions(writeInfo);
-//}
 
 void TPersQueue::BeginDeletePartitions(TTxWriteInfo& writeInfo)
 {

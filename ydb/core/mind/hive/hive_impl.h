@@ -903,13 +903,13 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
         bool allowed = true;
         const auto& denyList = CutHistoryDenyList;
         if (!denyList.empty()) {
-            auto found = std::find(denyList.begin(), denyList.end(), type);
-            allowed &= (found != denyList.end());
+            bool found = std::find(denyList.begin(), denyList.end(), type) != denyList.end();
+            allowed &= !found;
         }
         const auto& allowList = CutHistoryAllowList;
         if (!allowList.empty()) {
-            auto found = std::find(allowList.begin(), allowList.end(), type);
-            allowed &= (found == allowList.end());
+            bool found = std::find(allowList.begin(), allowList.end(), type) != allowList.end();
+            allowed &= found;
         }
         return allowed;
     }

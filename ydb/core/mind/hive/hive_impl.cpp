@@ -628,11 +628,8 @@ void THive::BuildLocalConfig() {
 }
 
 void THive::BuildCurrentConfig() {
-    BLOG_D("THive::BuildCurrentConfig ClusterConfig = " << ClusterConfig.ShortDebugString());
     CurrentConfig = ClusterConfig;
-    BLOG_D("THive::BuildCurrentConfig DatabaseConfig = " << DatabaseConfig.ShortDebugString());
     CurrentConfig.MergeFrom(DatabaseConfig);
-    BLOG_D("THive::BuildCurrentConfig CurrentConfig = " << CurrentConfig.ShortDebugString());
     TabletLimit.clear();
     for (const auto& tabletLimit : CurrentConfig.GetDefaultTabletLimit()) {
         TabletLimit.insert_or_assign(tabletLimit.GetType(), tabletLimit);
@@ -2235,7 +2232,9 @@ void THive::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev)
     const NKikimrConsole::TConfigNotificationRequest& record = ev->Get()->Record;
     ClusterConfig = record.GetConfig().GetHiveConfig();
     BLOG_D("Received TEvConsole::TEvConfigNotificationRequest with update of cluster config: " << ClusterConfig.ShortDebugString());
+    BLOG_D("Database config: " << DatabaseConfig.ShortDebugString());
     BuildCurrentConfig();
+    BLOG_D("Merged config: " << CurrentConfig);
     Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
 }
 

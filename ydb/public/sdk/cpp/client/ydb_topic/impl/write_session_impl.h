@@ -5,6 +5,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
 
 #include <util/generic/buffer.h>
+#include <util/thread/lfqueue.h>
 
 
 namespace NYdb::NTopic {
@@ -385,7 +386,8 @@ private:
     ui64 GetNextIdImpl(const TMaybe<ui64>& seqNo);
     ui64 GetSeqNoImpl(ui64 id);
     ui64 GetIdImpl(ui64 seqNo);
-    void SendImpl();
+    void FormGrpcMessagesImpl();
+    void SendGrpcMessages();
     void AbortImpl();
     void CloseImpl(EStatus statusCode, NYql::TIssues&& issues);
     void CloseImpl(EStatus statusCode, const TString& message);
@@ -445,6 +447,9 @@ private:
     //! Messages that are sent but yet not acknowledged
     std::queue<TOriginalMessage> SentOriginalMessages;
     std::queue<TBlock> SentPackedMessage;
+
+    TLockFreeQueue<TClientMessage> GrpcMessagesToSend;
+    TAdaptiveLock ProcessorLock;
 
     const size_t MaxBlockSize = std::numeric_limits<size_t>::max();
     const size_t MaxBlockMessageCount = 1; //!< Max message count that can be packed into a single block. In block version 0 is equal to 1 for compatibility

@@ -12,7 +12,10 @@ namespace NActors {
 
 namespace NYql::NDq {
 
-IDqChannelStorage::TPtr CreateDqChannelStorage(TTxId txId, ui64 channelId, IDqChannelStorage::TWakeUpCallback wakeUpCb,
-    TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters, NActors::TActorSystem* actorSystem);
+IDqChannelStorage::TPtr CreateDqChannelStorage(TTxId txId, ui64 channelId,
+    TWakeUpCallback wakeUpCallback,
+    TErrorCallback errorCallback,
+    TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters,
+    NActors::TActorSystem* actorSystem);
 
 } // namespace NYql::NDq

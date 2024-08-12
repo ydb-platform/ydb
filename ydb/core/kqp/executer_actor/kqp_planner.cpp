@@ -223,6 +223,10 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     }
 
     request.SetSchedulerGroup(UserRequestContext->PoolId);
+    request.SetDatabase(Database);
+    if (UserRequestContext->PoolConfig.has_value()) {
+        request.SetMemoryPoolPercent(UserRequestContext->PoolConfig->QueryMemoryLimitPercentPerNode);
+    }
 
     return result;
 }
@@ -350,8 +354,14 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
     NYql::NDqProto::TDqTask* taskDesc = ArenaSerializeTaskToProto(TasksGraph, task, true);
     NYql::NDq::TComputeRuntimeSettings settings;
     if (!TxInfo) {
+        double memoryPoolPercent = 100;
+        if (UserRequestContext->PoolConfig.has_value()) {
+            memoryPoolPercent = UserRequestContext->PoolConfig->QueryMemoryLimitPercentPerNode;
+        }
+
         TxInfo = MakeIntrusive<NRm::TTxState>(
-            TxId, TInstant::Now(), ResourceManager_->GetCounters());
+            TxId, TInstant::Now(), ResourceManager_->GetCounters(),
+            UserRequestContext->PoolId, memoryPoolPercent, Database);
     }
 
     auto startResult = CaFactory_->CreateKqpComputeActor({
@@ -370,7 +380,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .StatsMode = GetDqStatsMode(StatsMode),
         .Deadline = Deadline,
         .ShareMailbox = (computeTasksSize <= 1),
-        .RlPath = Nothing()
+        .RlPath = Nothing(),
     });
 
     if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&startResult)) {

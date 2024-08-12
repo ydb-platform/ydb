@@ -187,6 +187,9 @@
 #include <ydb/core/tx/limiter/usage/config.h>
 #include <ydb/core/tx/limiter/usage/service.h>
 
+#include <ydb/core/tx/limiter/grouped_memory/usage/config.h>
+#include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
+
 #include <ydb/core/backup/controller/tablet.h>
 
 #include <ydb/services/ext_index/common/config.h>
@@ -240,6 +243,25 @@
 #include <util/generic/size_literals.h>
 
 #include <util/system/hostname.h>
+
+#include <aws/core/Aws.h>
+
+namespace {
+
+struct TAwsApiGuard {
+    TAwsApiGuard() {
+        Aws::InitAPI(Options);
+    }
+
+    ~TAwsApiGuard() {
+        Aws::ShutdownAPI(Options);
+    }
+
+private:
+    Aws::SDKOptions Options;
+};
+
+}
 
 namespace NKikimr {
 
@@ -2197,6 +2219,26 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
     }
 }
 
+TGroupedMemoryLimiterInitializer::TGroupedMemoryLimiterInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig) {
+}
+
+void TGroupedMemoryLimiterInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    NOlap::NGroupedMemoryManager::TConfig serviceConfig;
+    Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetGroupedMemoryLimiterConfig()));
+
+    if (serviceConfig.IsEnabled()) {
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup = tabletGroup->GetSubgroup("type", "TX_GROUPED_MEMORY_LIMITER");
+
+        auto service = NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(serviceConfig, countersGroup);
+
+        setup->LocalServices.push_back(std::make_pair(
+            NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::MakeServiceId(NodeId),
+            TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
+    }
+}
+
 TCompDiskLimiterInitializer::TCompDiskLimiterInitializer(const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig) {
 }
@@ -2808,6 +2850,17 @@ void TGraphServiceInitializer::InitializeServices(NActors::TActorSystemSetup* se
     setup->LocalServices.emplace_back(
         NGraph::MakeGraphServiceId(),
         TActorSetupCmd(NGraph::CreateGraphService(appData->TenantName), TMailboxType::HTSwap, appData->UserPoolId));
+}
+
+TAwsApiInitializer::TAwsApiInitializer(IGlobalObjectStorage& globalObjects)
+    : GlobalObjects(globalObjects)
+{
+}
+
+void TAwsApiInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    Y_UNUSED(setup);
+    Y_UNUSED(appData);
+    GlobalObjects.AddGlobalObject(std::make_shared<TAwsApiGuard>());
 }
 
 } // namespace NKikimrServicesInitializers

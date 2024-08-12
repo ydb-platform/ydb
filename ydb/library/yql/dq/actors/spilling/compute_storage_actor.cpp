@@ -47,11 +47,12 @@ class TDqComputeStorageActor : public NActors::TActorBootstrapped<TDqComputeStor
     // void promise that completes when block is removed
     using TDeletingBlobInfo = NThreading::TPromise<void>;
 public:
-    TDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback, 
+    TDqComputeStorageActor(TTxId txId, const TString& spillerName, TWakeUpCallback wakeupCallback, TErrorCallback errorCallback,
         TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters)
         : TxId_(txId),
         SpillerName_(spillerName),
         WakeupCallback_(wakeupCallback),
+        ErrorCallback_(errorCallback),
         SpillingTaskCounters_(spillingTaskCounters)
     {
     }
@@ -72,18 +73,16 @@ public:
 protected:
 
     void FailWithError(const TString& error) {
+        if (!ErrorCallback_) Y_ABORT("Error: %s", error.c_str());
+
         LOG_E("Error: " << error);
+        ErrorCallback_(error);
         SendInternal(SpillingActorId_, new TEvents::TEvPoison);
         PassAway();
-
-        // Currently there is no better way to handle the error.
-        // Since the message was not sent from the actor system, there is no one to send the error message to.
-        Y_ABORT("Error: %s", error.c_str());
     }
 
     void SendInternal(const TActorId& recipient, IEventBase* ev, TEventFlags flags = IEventHandle::FlagTrackDelivery) {
-        bool isSent = Send(recipient, ev, flags);
-        Y_ABORT_UNLESS(isSent, "Event was not sent");
+        if (!Send(recipient, ev, flags)) FailWithError("Event was not sent");
     }
 
 private:
@@ -268,8 +267,8 @@ protected:
     TString SpillerName_;
 
     bool IsInitialized_ = false;
-
-    std::function<void()> WakeupCallback_;
+    TWakeUpCallback WakeupCallback_;
+    TErrorCallback ErrorCallback_;
     TIntrusivePtr<TSpillingTaskCounters> SpillingTaskCounters_;
 
     TSet<TKey> StoredBlobs_;
@@ -277,9 +276,9 @@ protected:
 
 } // anonymous namespace
 
-IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, 
-    std::function<void()> wakeupCallback, TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters) {
-    return new TDqComputeStorageActor(txId, spillerName, wakeupCallback, spillingTaskCounters);
+IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, TWakeUpCallback wakeupCallback, 
+    TErrorCallback errorCallback, TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters) {
+    return new TDqComputeStorageActor(txId, spillerName, wakeupCallback, errorCallback, spillingTaskCounters);
 }
 
 } // namespace NYql::NDq 

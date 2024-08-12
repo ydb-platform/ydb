@@ -54,11 +54,12 @@ class TDqChannelStorageActor : public IDqChannelStorageActor,
     };
 public:
 
-    TDqChannelStorageActor(TTxId txId, ui64 channelId, IDqChannelStorage::TWakeUpCallback&& wakeUp,
+    TDqChannelStorageActor(TTxId txId, ui64 channelId, TWakeUpCallback&& wakeUpCallback, TErrorCallback&& errorCallback,
         TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters, TActorSystem* actorSystem)
         : TxId_(txId)
         , ChannelId_(channelId)
-        , WakeUp_(std::move(wakeUp))
+        , WakeUpCallback_(std::move(wakeUpCallback))
+        , ErrorCallback_(std::move(errorCallback))
         , SpillingTaskCounters_(spillingTaskCounters)
         , ActorSystem_(actorSystem)
     {}
@@ -78,13 +79,12 @@ public:
 
 protected:
     void FailWithError(const TString& error) {
+        if (!ErrorCallback_) Y_ABORT("Error: %s", error.c_str());
+
         LOG_E("Error: " << error);
+        ErrorCallback_(error);
         SendInternal(SpillingActorId_, new TEvents::TEvPoison);
         PassAway();
-
-        // Currently there is no better way to handle the error.
-        // Since the message was not sent from the actor system, there is no one to send the error message to.
-        Y_ABORT("Error: %s", error.c_str());
     }
 
     void SendInternal(const TActorId& recipient, IEventBase* ev, TEventFlags flags = IEventHandle::FlagTrackDelivery) {
@@ -156,7 +156,7 @@ private:
         blobInfo.SavePromise.SetValue();
         WritingBlobs_.erase(it);
 
-        WakeUp_();
+        WakeUpCallback_();
     }
 
     void HandleWork(TEvDqSpilling::TEvReadResult::TPtr& ev) {
@@ -180,7 +180,7 @@ private:
         blobInfo.BlobPromise.SetValue(std::move(msg.Blob));
         LoadingBlobs_.erase(it);
 
-        WakeUp_();
+        WakeUpCallback_();
     }
 
     void HandleWork(TEvDqSpilling::TEvError::TPtr& ev) {
@@ -197,7 +197,9 @@ private:
 private:
     const TTxId TxId_;
     const ui64 ChannelId_;
-    IDqChannelStorage::TWakeUpCallback WakeUp_;
+
+    TWakeUpCallback WakeUpCallback_;
+    TErrorCallback ErrorCallback_;
     TIntrusivePtr<TSpillingTaskCounters> SpillingTaskCounters_;
     TActorId SpillingActorId_;
 
@@ -212,9 +214,13 @@ private:
 
 } // anonymous namespace
 
-IDqChannelStorageActor* CreateDqChannelStorageActor(TTxId txId, ui64 channelId, IDqChannelStorage::TWakeUpCallback&& wakeUp, 
-    TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters, NActors::TActorSystem* actorSystem) {
-    return new TDqChannelStorageActor(txId, channelId, std::move(wakeUp), spillingTaskCounters, actorSystem);
+IDqChannelStorageActor* CreateDqChannelStorageActor(TTxId txId, ui64 channelId,
+    TWakeUpCallback&& wakeUpCallback,
+    TErrorCallback&& errorCallback,
+    TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters,
+    NActors::TActorSystem* actorSystem)
+{
+    return new TDqChannelStorageActor(txId, channelId, std::move(wakeUpCallback), std::move(errorCallback), spillingTaskCounters, actorSystem);
 }
 
 } // namespace NYql::NDq

@@ -97,7 +97,7 @@ public:
         }
 
         TSyncMap syncList;
-        if (!IsYtCompleteIsolatedLambda(count.Count().Ref(), syncList, cluster, true, false)) {
+        if (!IsYtCompleteIsolatedLambda(count.Count().Ref(), syncList, cluster, false)) {
             return read;
         }
 

@@ -205,7 +205,9 @@ private:
         }
 
         TIntrusivePtr<NRm::TTxState> txInfo = MakeIntrusive<NRm::TTxState>(
-            txId, TInstant::Now(), ResourceManager_->GetCounters());
+            txId, TInstant::Now(), ResourceManager_->GetCounters(),
+            msg.GetSchedulerGroup(), msg.GetMemoryPoolPercent(),
+            msg.GetDatabase());
 
         const ui32 tasksCount = msg.GetTasks().size();
         for (auto& dqTask: *msg.MutableTasks()) {
@@ -246,7 +248,7 @@ private:
                 .RlPath = rlPath,
                 .ComputesByStages = &computesByStage,
                 .State = State_,
-                .SchedulingOptions = std::move(schedulingOptions)
+                .SchedulingOptions = std::move(schedulingOptions),
             });
 
             if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&result)) {

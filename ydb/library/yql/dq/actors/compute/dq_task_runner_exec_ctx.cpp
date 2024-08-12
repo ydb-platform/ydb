@@ -6,9 +6,10 @@
 namespace NYql {
 namespace NDq {
 
-TDqTaskRunnerExecutionContext::TDqTaskRunnerExecutionContext(TTxId txId, IDqChannelStorage::TWakeUpCallback&& wakeUp)
+TDqTaskRunnerExecutionContext::TDqTaskRunnerExecutionContext(TTxId txId, TWakeUpCallback&& wakeUpCallback, TErrorCallback&& errorCallback)
     : TxId_(txId)
-    , WakeUp_(std::move(wakeUp))
+    , WakeUpCallback_(std::move(wakeUpCallback))
+    , ErrorCallback_(std::move(errorCallback))
     , SpillingTaskCounters_(MakeIntrusive<TSpillingTaskCounters>())
 {
 }
@@ -19,14 +20,18 @@ IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64
 
 IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64 channelId, bool withSpilling,  NActors::TActorSystem* actorSystem) const {
     if (withSpilling) {
-        return CreateDqChannelStorage(TxId_, channelId, WakeUp_, SpillingTaskCounters_, actorSystem);
+        return CreateDqChannelStorage(TxId_, channelId, WakeUpCallback_, ErrorCallback_, SpillingTaskCounters_, actorSystem);
     } else {
         return nullptr;
     }
 }
 
-std::function<void()> TDqTaskRunnerExecutionContext::GetWakeupCallback() const {
-    return WakeUp_;
+TWakeUpCallback TDqTaskRunnerExecutionContext::GetWakeupCallback() const {
+    return WakeUpCallback_;
+}
+
+TErrorCallback TDqTaskRunnerExecutionContext::GetErrorCallback() const {
+    return ErrorCallback_;
 }
 
 TIntrusivePtr<TSpillingTaskCounters> TDqTaskRunnerExecutionContext::GetSpillingTaskCounters() const {

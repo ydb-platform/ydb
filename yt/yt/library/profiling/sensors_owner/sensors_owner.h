@@ -62,6 +62,8 @@ public:
     //! Result of WithPrefix(prefix) is always the same with fixed *this and prefix.
     const TSensorsOwner& WithPrefix(const TString& prefix) const;
 
+    const TSensorsOwner& WithGlobal() const;
+
     const TProfiler& GetProfiler() const;
 
     /*!

@@ -125,6 +125,20 @@ const TSensorsOwner& TSensorsOwner::WithPrefix(const TString& prefix) const
     return Get<TChild>(prefix).SensorsOwner;
 }
 
+const TSensorsOwner& TSensorsOwner::WithGlobal() const
+{
+    struct TChild
+    {
+        TSensorsOwner SensorsOwner;
+
+        TChild(const TProfiler& profiler)
+            : SensorsOwner(profiler.WithGlobal())
+        { }
+    };
+
+    return Get<TChild>().SensorsOwner;
+}
+
 const TCounter& TSensorsOwner::GetCounter(TStringBuf name) const
 {
     return Get<TCounterWrapper>(name).Sensor;

@@ -187,6 +187,77 @@ private:
     TIndexBuildId BuildId;
 
     TDeque<std::tuple<TTabletId, ui64, THolder<IEventBase>>> ToTabletSend;
+
+    template <typename Record>
+    TTabletId CommonFillRecord(Record& record, TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
+        TTabletId shardId = Self->ShardInfos.at(shardIdx).TabletID;
+        record.SetTabletId(ui64(shardId));
+        record.SetSnapshotTxId(ui64(buildInfo.SnapshotTxId));
+        record.SetSnapshotStep(ui64(buildInfo.SnapshotStep));
+
+        auto& shardStatus = buildInfo.Shards.at(shardIdx);
+        if (shardStatus.LastKeyAck) {
+            TSerializedTableRange range = TSerializedTableRange(shardStatus.LastKeyAck, "", false, false);
+            range.Serialize(*record.MutableKeyRange());
+        } else {
+            shardStatus.Range.Serialize(*record.MutableKeyRange());
+        }
+
+        record.SetSeqNoGeneration(Self->Generation());
+        record.SetSeqNoRound(++shardStatus.SeqNoRound);
+        return shardId;
+    }
+
+    void SendBuildIndexRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
+        auto ev = MakeHolder<TEvDataShard::TEvBuildIndexCreateRequest>();
+        ev->Record.SetBuildIndexId(ui64(BuildId));
+
+        ev->Record.SetOwnerId(buildInfo.TablePathId.OwnerId);
+        ev->Record.SetPathId(buildInfo.TablePathId.LocalPathId);
+
+        if (buildInfo.IsBuildIndex()) {
+            if (buildInfo.TargetName.empty()) {
+                TPath implTable = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName).Dive(NTableIndex::ImplTable);
+                buildInfo.TargetName = implTable.PathString();
+
+                const auto& implTableInfo = Self->Tables.at(implTable.Base()->PathId);
+                auto implTableColumns = NTableIndex::ExtractInfo(implTableInfo);
+                buildInfo.FillIndexColumns.clear();
+                buildInfo.FillIndexColumns.reserve(implTableColumns.Keys.size());
+                for (const auto& x: implTableColumns.Keys) {
+                    buildInfo.FillIndexColumns.emplace_back(x);
+                    implTableColumns.Columns.erase(x);
+                }
+                buildInfo.FillDataColumns.clear();
+                buildInfo.FillDataColumns.reserve(implTableColumns.Columns.size());
+                for (const auto& x: implTableColumns.Columns) {
+                    buildInfo.FillDataColumns.emplace_back(x);
+                }
+            }
+            *ev->Record.MutableIndexColumns() = {
+                buildInfo.FillIndexColumns.begin(),
+                buildInfo.FillIndexColumns.end()
+            };
+            *ev->Record.MutableDataColumns() = {
+                buildInfo.FillDataColumns.begin(),
+                buildInfo.FillDataColumns.end()
+            };
+        } else if (buildInfo.IsBuildColumns()) {
+            buildInfo.SerializeToProto(Self, ev->Record.MutableColumnBuildSettings());
+        }
+
+        ev->Record.SetTargetName(buildInfo.TargetName);
+
+        ev->Record.SetMaxBatchRows(buildInfo.Limits.MaxBatchRows);
+        ev->Record.SetMaxBatchBytes(buildInfo.Limits.MaxBatchBytes);
+        ev->Record.SetMaxRetries(buildInfo.Limits.MaxRetries);
+
+        auto shardId = CommonFillRecord(ev->Record, shardIdx, buildInfo);
+
+        LOG_D("TTxBuildProgress: TEvBuildIndexCreateRequest: " << ev->Record.ShortDebugString());
+
+        ToTabletSend.emplace_back(shardId, ui64(BuildId), std::move(ev));
+    }
     
 public:
     explicit TTxProgress(TSelf* self, TIndexBuildId id)
@@ -312,23 +383,6 @@ public:
                 Y_ABORT_UNLESS(buildInfo.SnapshotStep);
             }
 
-            if (buildInfo.TargetName.empty() && buildInfo.IsBuildIndex()) {
-                TPath implTable = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName).Dive(NTableIndex::ImplTable);
-                buildInfo.TargetName = implTable.PathString();
-
-                const auto& implTableInfo = Self->Tables.at(implTable.Base()->PathId);
-                auto implTableColumns = NTableIndex::ExtractInfo(implTableInfo);
-                buildInfo.FillIndexColumns.reserve(implTableColumns.Keys.size());
-                for (const auto& x: implTableColumns.Keys) {
-                    buildInfo.FillIndexColumns.emplace_back(x);
-                    implTableColumns.Columns.erase(x);
-                }
-                buildInfo.FillDataColumns.reserve(implTableColumns.Columns.size());
-                for (const auto& x: implTableColumns.Columns) {
-                    buildInfo.FillDataColumns.emplace_back(x);
-                }
-            }
-
             while (!buildInfo.ToUploadShards.empty()
                    && buildInfo.InProgressShards.size() < buildInfo.Limits.MaxShards)
             {
@@ -336,50 +390,7 @@ public:
                 buildInfo.ToUploadShards.pop_front();
                 buildInfo.InProgressShards.insert(shardIdx);
 
-                auto ev = MakeHolder<TEvDataShard::TEvBuildIndexCreateRequest>();
-                ev->Record.SetBuildIndexId(ui64(BuildId));
-
-                TTabletId shardId = Self->ShardInfos.at(shardIdx).TabletID;
-                ev->Record.SetTabletId(ui64(shardId));
-
-                ev->Record.SetOwnerId(buildInfo.TablePathId.OwnerId);
-                ev->Record.SetPathId(buildInfo.TablePathId.LocalPathId);
-
-                if (buildInfo.IsBuildIndex()) {
-                    *ev->Record.MutableIndexColumns() = {
-                        buildInfo.FillIndexColumns.begin(),
-                        buildInfo.FillIndexColumns.end()
-                    };
-                    *ev->Record.MutableDataColumns() = {
-                        buildInfo.FillDataColumns.begin(),
-                        buildInfo.FillDataColumns.end()
-                    };
-                } else if (buildInfo.IsBuildColumns()) {
-                    buildInfo.SerializeToProto(Self, ev->Record.MutableColumnBuildSettings());
-                }
-                ev->Record.SetTargetName(buildInfo.TargetName);
-
-                TIndexBuildInfo::TShardStatus& shardStatus = buildInfo.Shards.at(shardIdx);
-                if (shardStatus.LastKeyAck) {
-                    TSerializedTableRange range = TSerializedTableRange(shardStatus.LastKeyAck, "", false, false);
-                    range.Serialize(*ev->Record.MutableKeyRange());
-                } else {
-                    shardStatus.Range.Serialize(*ev->Record.MutableKeyRange());
-                }
-
-                ev->Record.SetMaxBatchRows(buildInfo.Limits.MaxBatchRows);
-                ev->Record.SetMaxBatchBytes(buildInfo.Limits.MaxBatchBytes);
-                ev->Record.SetMaxRetries(buildInfo.Limits.MaxRetries);
-
-                ev->Record.SetSnapshotTxId(ui64(buildInfo.SnapshotTxId));
-                ev->Record.SetSnapshotStep(ui64(buildInfo.SnapshotStep));
-
-                ev->Record.SetSeqNoGeneration(Self->Generation());
-                ev->Record.SetSeqNoRound(++shardStatus.SeqNoRound);
-
-                LOG_D("TTxBuildProgress: TEvBuildIndexCreateRequest: " << ev->Record.ShortDebugString());
-
-                ToTabletSend.emplace_back(shardId, ui64(BuildId), std::move(ev));
+                SendBuildIndexRequest(shardIdx, buildInfo);
             }
 
             if (buildInfo.InProgressShards.empty() && buildInfo.ToUploadShards.empty()

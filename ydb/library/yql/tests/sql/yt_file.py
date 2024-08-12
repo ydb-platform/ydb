@@ -55,8 +55,9 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
         (res, tables_res) = run_file_no_cache('yt', suite, case, cfg, config, yql_http_file_server, extra_args=['--lineage'])
         return [yatest.common.canonical_file(res.results_file)]
 
+    extra_final_args = []
     if is_with_final_result_issues(config):
-        extra_final_args = ['--with-final-issues']
+        extra_final_args += ['--with-final-issues']
     (res, tables_res) = run_file('yt', suite, case, cfg, config, yql_http_file_server, extra_args=extra_final_args)
 
     to_canonize = []

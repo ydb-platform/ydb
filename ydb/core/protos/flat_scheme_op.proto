@@ -412,10 +412,10 @@ message TTableDescription {
     repeated TCdcStreamDescription CdcStreams = 38;
     repeated TSequenceDescription Sequences = 39;
 
-    //oneof IncomingStreamConfig {
-        optional TTableReplicationConfig ReplicationConfig = 40;
-        optional TTableIncrementalBackupConfig IncrementalBackupConfig = 42;
-    //}
+    oneof IncomingStreamConfig {
+        TTableReplicationConfig ReplicationConfig = 40;
+        TTableIncrementalBackupConfig IncrementalBackupConfig = 42;
+    }
 
     optional bool Temporary = 41;
 }

@@ -644,6 +644,10 @@ public:
             newTable->SetAsyncReplica();
         }
 
+        if (tableInfo->IsRestoreTable()) {
+            newTable->SetRestoreTable();
+        }
+
         context.SS->Tables[newTable->PathId] = tableInfo;
         context.SS->TabletCounters->Simple()[COUNTER_TABLE_COUNT].Add(1);
         context.SS->IncrementPathDbRefCount(newTable->PathId, "new path created");

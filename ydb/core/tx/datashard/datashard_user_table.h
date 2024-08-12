@@ -352,6 +352,36 @@ struct TUserTable : public TThrRefBase {
         }
     };
 
+    struct TIncrementalBackupConfig {
+        NKikimrSchemeOp::TTableIncrementalBackupConfig::ERestoreMode Mode;
+        NKikimrSchemeOp::TTableIncrementalBackupConfig::EConsistency Consistency;
+
+        TIncrementalBackupConfig()
+            : Mode(NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_NONE)
+            , Consistency(NKikimrSchemeOp::TTableIncrementalBackupConfig::CONSISTENCY_UNKNOWN)
+        {
+        }
+
+        TIncrementalBackupConfig(const NKikimrSchemeOp::TTableIncrementalBackupConfig& config)
+            : Mode(config.GetMode())
+            , Consistency(config.GetConsistency())
+        {
+        }
+
+        bool HasWeakConsistency() const {
+            return Consistency == NKikimrSchemeOp::TTableIncrementalBackupConfig::CONSISTENCY_WEAK;
+        }
+
+        bool HasStrongConsistency() const {
+            return Consistency == NKikimrSchemeOp::TTableIncrementalBackupConfig::CONSISTENCY_STRONG;
+        }
+
+        void Serialize(NKikimrSchemeOp::TTableIncrementalBackupConfig& proto) const {
+            proto.SetMode(Mode);
+            proto.SetConsistency(Consistency);
+        }
+    };
+
     struct TStats {
         NTable::TStats DataStats;
         ui64 IndexSize = 0;
@@ -404,6 +434,7 @@ struct TUserTable : public TThrRefBase {
     TVector<ui32> KeyColumnIds;
     TSerializedTableRange Range;
     TReplicationConfig ReplicationConfig;
+    TIncrementalBackupConfig IncrementalBackupConfig;
     bool IsBackup = false;
 
     TMap<TPathId, TTableIndex> Indexes;
@@ -492,6 +523,7 @@ struct TUserTable : public TThrRefBase {
     bool NeedSchemaSnapshots() const;
 
     bool IsReplicated() const;
+    bool IsIncrementalRestore() const;
 
 private:
     void DoApplyCreate(NTabletFlatExecutor::TTransactionContext& txc, const TString& tableName, bool shadow,

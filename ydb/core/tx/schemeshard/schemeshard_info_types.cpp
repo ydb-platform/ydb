@@ -590,14 +590,32 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
             break;
-        case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_RESTORE_INCREMENTAL_BACKUP:
-            break;
         default:
             errStr = "Unknown replication mode";
             return nullptr;
         }
 
         alterData->TableDescriptionFull->MutableReplicationConfig()->CopyFrom(cfg);
+    }
+
+    if (op.HasIncrementalBackupConfig()) {
+        const auto& cfg = op.GetIncrementalBackupConfig();
+
+        switch (cfg.GetMode()) {
+        case NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_NONE:
+            if (cfg.HasConsistency() && cfg.GetConsistency() != NKikimrSchemeOp::TTableIncrementalBackupConfig::CONSISTENCY_UNKNOWN) {
+                errStr = "Cannot set incremental backup consistency";
+                return nullptr;
+            }
+            break;
+        case NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_INCREMENTAL_BACKUP:
+            break;
+        default:
+            errStr = "Unknown incrementalBackup mode";
+            return nullptr;
+        }
+
+        alterData->TableDescriptionFull->MutableIncrementalBackupConfig()->CopyFrom(cfg);
     }
 
     alterData->IsBackup = op.GetIsBackup();
@@ -1548,6 +1566,10 @@ void TTableInfo::FinishAlter() {
     // Apply replication config
     if (AlterData->TableDescriptionFull.Defined() && AlterData->TableDescriptionFull->HasReplicationConfig()) {
         MutableReplicationConfig().Swap(AlterData->TableDescriptionFull->MutableReplicationConfig());
+    }
+
+    if (AlterData->TableDescriptionFull.Defined() && AlterData->TableDescriptionFull->HasIncrementalBackupConfig()) {
+        MutableIncrementalBackupConfig().Swap(AlterData->TableDescriptionFull->MutableIncrementalBackupConfig());
     }
 
     // Force FillDescription to regenerate TableDescription

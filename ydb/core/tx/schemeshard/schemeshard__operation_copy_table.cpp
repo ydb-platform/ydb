@@ -516,6 +516,9 @@ public:
         // replication config is not copied
         schema.ClearReplicationConfig();
 
+        // replication config is not copied
+        schema.ClearIncrementalBackupConfig();
+
         NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
         if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, srcTableInfo->PartitionConfig(), schema.GetPartitionConfig(), AppData(), errStr)
             || !TPartitionConfigMerger::VerifyCreateParams(compilationPartitionConfig, AppData(), IsShadowDataAllowed(), errStr)) {

@@ -129,6 +129,7 @@ struct Schema : NIceDb::Schema {
         struct ReplicationConfig : Column<10, NScheme::NTypeIds::String> {};
         struct IsTemporary : Column<11, NScheme::NTypeIds::Bool> {};
         struct OwnerActorId : Column<12, NScheme::NTypeIds::String> {}; // deprecated
+        struct IncrementalBackupConfig : Column<13, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<TabId>;
         using TColumns = TableColumns<
@@ -143,7 +144,8 @@ struct Schema : NIceDb::Schema {
             IsBackup,
             ReplicationConfig,
             IsTemporary,
-            OwnerActorId
+            OwnerActorId,
+            IncrementalBackupConfig
         >;
     };
 
@@ -162,6 +164,7 @@ struct Schema : NIceDb::Schema {
         struct ReplicationConfig :   Column<11, NScheme::NTypeIds::String> {};
         struct IsTemporary :         Column<12, NScheme::NTypeIds::Bool> {};
         struct OwnerActorId :        Column<13, NScheme::NTypeIds::String> {}; // deprecated
+        struct IncrementalBackupConfig :   Column<14, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -177,7 +180,8 @@ struct Schema : NIceDb::Schema {
             IsBackup,
             ReplicationConfig,
             IsTemporary,
-            OwnerActorId
+            OwnerActorId,
+            IncrementalBackupConfig
         >;
     };
 

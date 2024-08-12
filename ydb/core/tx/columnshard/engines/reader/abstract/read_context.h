@@ -109,7 +109,7 @@ protected:
     virtual TString DoDebugString(const bool verbose) const = 0;
     virtual void DoAbort() = 0;
     virtual bool DoIsFinished() const = 0;
-    virtual std::vector<TPartialReadResult> DoExtractReadyResults(const int64_t maxRowsInBatch) = 0;
+    virtual std::vector<std::shared_ptr<TPartialReadResult>> DoExtractReadyResults(const int64_t maxRowsInBatch) = 0;
     virtual TConclusion<bool> DoReadNextInterval() = 0;
 public:
     IDataReader(const std::shared_ptr<TReadContext>& context);
@@ -153,7 +153,7 @@ public:
         return *result;
     }
 
-    std::vector<TPartialReadResult> ExtractReadyResults(const int64_t maxRowsInBatch) {
+    std::vector<std::shared_ptr<TPartialReadResult>> ExtractReadyResults(const int64_t maxRowsInBatch) {
         return DoExtractReadyResults(maxRowsInBatch);
     }
 

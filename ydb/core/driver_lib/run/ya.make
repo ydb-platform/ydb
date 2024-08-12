@@ -99,7 +99,7 @@ PEERDIR(
     ydb/core/security
     ydb/core/security/ldap_auth_provider
     ydb/core/statistics/aggregator
-    ydb/core/statistics/service    
+    ydb/core/statistics/service
     ydb/core/sys_view/processor
     ydb/core/sys_view/service
     ydb/core/tablet
@@ -111,6 +111,7 @@ PEERDIR(
     ydb/core/tx/coordinator
     ydb/core/tx/conveyor/service
     ydb/core/tx/limiter/service
+    ydb/core/tx/limiter/grouped_memory/usage
     ydb/core/tx/datashard
     ydb/core/tx/long_tx_service
     ydb/core/tx/long_tx_service/public

@@ -468,13 +468,11 @@ public:
             Tmp_.reserve(Max<ui64>(len, Tmp_.capacity() * 2));
         }
         len = AlignUp<ui32>(len, 8);
-        Tmp_.resize(len);
+        Tmp_.assign(len, 0);
         if constexpr (IsCString) {
             memcpy(Tmp_.data() + sizeof(void*), res, originalLen);
-            Tmp_[len - 1] = 0;
         } else if constexpr (Fixed) {
             memcpy(Tmp_.data() +  sizeof(void*), res, originalLen);
-            memset(Tmp_.data() + originalLen + sizeof(void*), 0, len - originalLen);
         } else {
             memcpy(Tmp_.data() + VARHDRSZ + sizeof(void*), res, originalLen);
             UpdateCleanVarSize((text*)(Tmp_.data() + sizeof(void*)), originalLen);
@@ -637,13 +635,11 @@ public:
             Tmp_.reserve(Max<ui64>(len, Tmp_.capacity() * 2));
         }
         len = AlignUp<ui32>(len, 8);
-        Tmp_.resize(len);
+        Tmp_.assign(len, 0);
         if constexpr (IsCString) {
             memcpy(Tmp_.data() + sizeof(void*), res, originalLen);
-            Tmp_[len - 1] = 0;
         } else if constexpr (Fixed) {
             memcpy(Tmp_.data() +  sizeof(void*), res, originalLen);
-            memset(Tmp_.data() + originalLen + sizeof(void*), 0, len - originalLen);
         } else {
             memcpy(Tmp_.data() + VARHDRSZ + sizeof(void*), res, originalLen);
             UpdateCleanVarSize((text*)(Tmp_.data() + sizeof(void*)), originalLen);

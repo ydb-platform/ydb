@@ -65,7 +65,7 @@ NMetadata::NModifications::TOperationParsingResult TTiersManager::DoBuildPatchFr
 
 void TTiersManager::DoPrepareObjectsBeforeModification(std::vector<TTierConfig>&& patchedObjects,
     NMetadata::NModifications::IAlterPreparationController<TTierConfig>::TPtr controller,
-    const TInternalModificationContext& context) const
+    const TInternalModificationContext& context, const NMetadata::NModifications::TAlterOperationContext& /*alterContext*/) const
 {
     TActivationContext::Register(new TTierPreparationActor(std::move(patchedObjects), controller, context));
 }

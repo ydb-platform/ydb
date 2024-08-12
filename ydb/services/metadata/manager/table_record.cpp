@@ -49,19 +49,16 @@ ui32 TTableRecord::CountIntersectColumns(const std::vector<TString>& columnIds) 
     return result;
 }
 
-bool TTableRecord::TakeValuesFrom(const TTableRecord& item) {
-    for (auto&& i : item.Values) {
-        Values[i.first] = i.second;
-    }
-    return true;
-}
-
 const Ydb::Value* TTableRecord::GetValuePtr(const TString& columnId) const {
     auto it = Values.find(columnId);
     if (it == Values.end()) {
         return nullptr;
     }
     return &it->second;
+}
+
+Ydb::Value* TTableRecord::GetMutableValuePtr(const TString& columnId) {
+    return &Values[columnId];
 }
 
 TTableRecord& TTableRecord::SetColumn(const TString& columnId, const Ydb::Value& v) {

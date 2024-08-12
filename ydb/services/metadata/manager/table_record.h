@@ -21,8 +21,8 @@ public:
     bool HasColumns(const std::vector<TString>& columnIds) const;
     ui32 CountIntersectColumns(const std::vector<TString>& columnIds) const;
     bool SameColumns(const TTableRecord& item) const;
-    bool TakeValuesFrom(const TTableRecord& item);
     const Ydb::Value* GetValuePtr(const TString& columnId) const;
+    Ydb::Value* GetMutableValuePtr(const TString& columnId);
 };
 
 class TTableRecords {

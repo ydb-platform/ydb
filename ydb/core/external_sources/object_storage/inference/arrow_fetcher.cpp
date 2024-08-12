@@ -153,7 +153,7 @@ private:
 
     TMaybe<TString> DecompressFile(const TString& data, const TRequest& request, const NActors::TActorContext& ctx) {
         try {
-            auto dataBuffer = NDB::ReadBufferFromString(data);
+            NDB::ReadBufferFromString dataBuffer(data);
             auto decompressorBuffer = NYql::MakeDecompressor(dataBuffer, *DecompressionFormat_);
             if (!decompressorBuffer) {
                 auto error = MakeError(

@@ -2,6 +2,7 @@ LIBRARY()
 
 ADDINCL(
     ydb/library/yql/udfs/common/clickhouse/client/base
+    ydb/library/yql/udfs/common/clickhouse/client/base/pcg-random
     ydb/library/yql/udfs/common/clickhouse/client/src
 )
 
@@ -16,7 +17,6 @@ PEERDIR(
     ydb/core/external_sources/object_storage
 
     ydb/library/yql/providers/s3/compressors
-    ydb/library/yql/udfs/common/clickhouse/client
 )
 
 END()

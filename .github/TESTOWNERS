@@ -41,11 +41,11 @@
 /ydb/tests/functional/ydb_cli @asmyasnikov
 /ydb/public/lib/ydb_cli @asmyasnikov
 
-#YDB Query Optimizer Team @pavelvelikhov 
+#YDB Query Optimizer Team @pavelvelikhov TEAM:???
 /ydb/tests/functional/canonical @pavelvelikhov 
 
 
-#YDB Engineering Team @maximyurchuk
+#YDB Engineering Team @maximyurchuk 
    # - пока не понятно
 
 #Группа разработки распределенного хранилища @the-ancient-1 TEAM:???
@@ -60,7 +60,7 @@
 /ydb/tests/functional/cms @ydb-platform/core
 
 
-#Группа разработки систем поставки данных / LogBroker @alexnick88
+#Группа разработки систем поставки данных / LogBroker @alexnick88 TEAM:???
 /ydb/tests/functional/sqs
 
 #YDB Analytics TEAM:???

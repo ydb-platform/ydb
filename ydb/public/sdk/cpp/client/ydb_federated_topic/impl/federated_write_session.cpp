@@ -140,9 +140,13 @@ std::shared_ptr<NTopic::IWriteSession> TFederatedWriteSessionImpl::OpenSubsessio
                 }
             }
         })
-        .AcksHandler([selfCtx = SelfContext](NTopic::TWriteSessionEvent::TAcksEvent& ev) {
+        .AcksHandler([selfCtx = SelfContext, generation = SubsessionGeneration](NTopic::TWriteSessionEvent::TAcksEvent& ev) {
             if (auto self = selfCtx->LockShared()) {
                 with_lock(self->Lock) {
+                    if (generation != self->SubsessionGeneration) {
+                        return;
+                    }
+
                     Y_ABORT_UNLESS(ev.Acks.size() <= self->OriginalMessagesToGetAck.size());
 
                     for (size_t i = 0; i < ev.Acks.size(); ++i) {

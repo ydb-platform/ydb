@@ -564,6 +564,7 @@ public:
 
     void ReplyAndPassAway() override {
         BLOG_TRACE("ReplyAndPassAway() started");
+        Result.SetVersion(2);
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         auto *domain = domains->GetDomain();
         THashMap<TString, NKikimrViewer::EFlag> OverallByDomainId;
@@ -752,10 +753,10 @@ public:
 
                     for (const auto& [type, size] : tablesStorageByType) {
                         auto it = storageQuotasByType.find(type);
-                        if (it != storageQuotasByType.end() && it->second.SoftQuota) {
-                            auto& tablesStorage = *tenant.AddTablesStorage();
-                            tablesStorage.SetType(type);
-                            tablesStorage.SetSize(size);
+                        auto& tablesStorage = *tenant.AddTablesStorage();
+                        tablesStorage.SetType(type);
+                        tablesStorage.SetSize(size);
+                        if (it != storageQuotasByType.end()) {
                             tablesStorage.SetLimit(it->second.SoftQuota);
                             tablesStorage.SetSoftQuota(it->second.SoftQuota);
                             tablesStorage.SetHardQuota(it->second.HardQuota);

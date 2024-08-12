@@ -392,6 +392,7 @@ message TTenants {
 message TTenantInfo {
     repeated TTenant TenantInfo = 1;
     repeated string Errors = 2;
+    uint32 Version = 3;
 }
 
 message TStoragePDisk {

@@ -885,15 +885,15 @@ struct TSerializer
                     YT_VERIFY(streamTag == runtimeTag);
                 }
             } else {
-                const auto& descriptor = [&] () -> const TTypeDescriptor& {
-                    if constexpr(TPolymorphicTraits<T>::Polymorphic) {
-                        auto tag = LoadSuspended<TTypeTag>(context);
-                        return ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTagOrThrow(tag);
-                    } else {
-                        return T::GetTypeDescriptor();
-                    }
-                }();
-                rawPtr = descriptor.template ConstructOrThrow<T>();
+                if constexpr(TPolymorphicTraits<T>::Polymorphic) {
+                    auto tag = LoadSuspended<TTypeTag>(context);
+                    const auto& descriptor = ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTagOrThrow(tag);
+                    rawPtr = descriptor.template ConstructOrThrow<T>();
+                } else {
+                    using TFactory = typename TFactoryTraits<T>::TFactory;
+                    static_assert(TFactory::ConcreteConstructor);
+                    rawPtr = static_cast<T*>(TFactory::ConcreteConstructor());
+                }
                 context.RegisterConstructedObject(rawPtr);
             }
 

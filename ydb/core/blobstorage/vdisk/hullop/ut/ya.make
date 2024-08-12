@@ -2,21 +2,20 @@ UNITTEST_FOR(ydb/core/blobstorage/vdisk/hullop)
 
 FORK_SUBTESTS()
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:16)
+ENDIF()
+
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     TIMEOUT(2400)
     SIZE(LARGE)
     TAG(ya:fat)
     REQUIREMENTS(
-        cpu:4
         ram:32
     )
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
-    REQUIREMENTS(
-        cpu:4
-        ram:16
-    )
 ENDIF()
 
 PEERDIR(

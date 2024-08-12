@@ -6,6 +6,12 @@
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
+enum class EStageFeaturesIndexes {
+    Filter = 0,
+    Fetching = 1,
+    Merge = 2
+};
+
 class TIndexesSet {
 private:
     YDB_READONLY_DEF(std::vector<ui32>, IndexIds);

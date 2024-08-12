@@ -1556,6 +1556,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TCompDiskLimiterInitializer(runConfig));
     }
 
+    if (serviceMask.EnableGroupedMemoryLimiter) {
+        sil->AddServiceInitializer(new TGroupedMemoryLimiterInitializer(runConfig));
+    }
+
     if (serviceMask.EnableScanConveyor) {
         sil->AddServiceInitializer(new TScanConveyorInitializer(runConfig));
     }

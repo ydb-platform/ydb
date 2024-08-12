@@ -56,6 +56,61 @@ void TTypeAnnotationContext::Reset() {
     ExpectedConstraints.clear();
     ExpectedColumnOrders.clear();
     StatisticsMap.clear();
+    NoBlockRewriteCallableStats.clear();
+    NoBlockRewriteTypeStats.clear();
+}
+
+void TTypeAnnotationContext::IncNoBlockCallable(TStringBuf callableName) {
+    ++NoBlockRewriteCallableStats[callableName];
+}
+
+void TTypeAnnotationContext::IncNoBlockType(const TTypeAnnotationNode& type) {
+    if (type.GetKind() == ETypeAnnotationKind::Data) {
+        IncNoBlockType(type.Cast<TDataExprType>()->GetSlot());
+    } else {
+        IncNoBlockType(type.GetKind());
+    }
+}
+
+void TTypeAnnotationContext::IncNoBlockType(ETypeAnnotationKind kind) {
+    ++NoBlockRewriteTypeStats[ToString(kind)];
+}
+
+void TTypeAnnotationContext::IncNoBlockType(NUdf::EDataSlot slot) {
+    ++NoBlockRewriteTypeStats[ToString(slot)];
+}
+
+namespace {
+
+template<typename T>
+TVector<T> GetMaxByCount(const THashMap<T, size_t>& stats, size_t maxCount) {
+    TVector<T> result;
+    result.reserve(stats.size());
+    for (auto& [key, _] : stats) {
+        result.push_back(key);
+    }
+    size_t n = std::min(maxCount, stats.size());
+    std::partial_sort(result.begin(), result.begin() + n, result.end(),
+        [&stats](const T& l, const T& r) {
+            const auto& cntLeft = stats.find(l)->second;
+            const auto& cntRight = stats.find(r)->second;
+            if (cntLeft != cntRight) {
+                return cntLeft < cntRight;
+            }
+            return l < r;
+        });
+    result.resize(n);
+    return result;
+}
+
+}
+
+TVector<TString> TTypeAnnotationContext::GetTopNoBlocksCallables(size_t maxCount) const {
+    return GetMaxByCount(NoBlockRewriteCallableStats, maxCount);
+}
+
+TVector<TString> TTypeAnnotationContext::GetTopNoBlocksTypes(size_t maxCount) const {
+    return GetMaxByCount(NoBlockRewriteTypeStats, maxCount);
 }
 
 TString TColumnOrder::Find(const TString& name) const {

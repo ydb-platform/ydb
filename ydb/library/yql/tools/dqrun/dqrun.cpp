@@ -132,6 +132,7 @@ struct TRunOptions {
     IOutputStream* ErrStream = &Cerr;
     IOutputStream* TracePlan = &Cerr;
     bool UseMetaFromGraph = false;
+    bool WithFinalIssues = false;
 };
 
 class TStoreMappingFunctor: public NLastGetopt::IOptHandler {
@@ -409,6 +410,9 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
         auto config = TOptPipelineConfigurator(program, options.PrintPlan, options.TracePlan);
         status = program->RunWithConfig(options.User, config);
     }
+    if (options.WithFinalIssues) {
+        program->FinalizeIssues();
+    }
     program->PrintErrorsTo(*options.ErrStream);
     if (status == TProgram::TStatus::Error) {
         if (options.TraceOpt) {
@@ -677,6 +681,7 @@ int RunMain(int argc, const char* argv[])
         .StoreResult(&tokenAccessorEndpoint);
     opts.AddLongOption("yson-attrs", "Provide operation yson attribues").StoreResult(&ysonAttrs);
     opts.AddLongOption("pg-ext", "pg extensions config file").StoreResult(&pgExtConfig);
+    opts.AddLongOption("with-final-issues").NoArgument();
     opts.AddHelpOption('h');
 
     opts.SetFreeArgsNum(0);
@@ -1088,6 +1093,10 @@ int RunMain(int argc, const char* argv[])
 
     if (ysonAttrs) {
         program->SetOperationAttrsYson(ysonAttrs);
+    }
+
+    if (res.Has("with-final-issues")) {
+        runOptions.WithFinalIssues = true;
     }
 
     int result = RunProgram(std::move(program), runOptions, clusters, sqlFlags);

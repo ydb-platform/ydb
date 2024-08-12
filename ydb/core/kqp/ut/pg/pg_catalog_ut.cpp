@@ -416,7 +416,8 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
         {
             auto result = db.ExecuteQuery(R"(
                 CREATE TABLE table1 (
-                    id int4 primary key
+                    id int4 primary key,
+                    value int4
                 );
                 CREATE TABLE table2 (
                     id varchar primary key
@@ -484,6 +485,16 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
             UNIT_ASSERT_C(!result.GetResultSets().empty(), "no result sets");
             CompareYson(R"([
                 ["table1"];["table2"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+        { //https://github.com/ydb-platform/ydb/issues/7286
+            auto result = db.ExecuteQuery(R"(
+                select tablename from pg_catalog.pg_tables where tablename='pg_proc'
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "no result sets");
+            CompareYson(R"([
+                ["pg_proc"]
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }

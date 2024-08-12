@@ -9,10 +9,9 @@ TEST_SRCS(
     test_kv_workload.py
 )
 
-REQUIREMENTS(
-    cpu:4
-    ram:32
-)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:32)
+ENDIF()
 
 TIMEOUT(600)
 SIZE(MEDIUM)

@@ -30,6 +30,7 @@
 
 #include <util/stream/file.h>
 #include <util/stream/null.h>
+#include <util/string/join.h>
 #include <util/string/split.h>
 #include <util/generic/guid.h>
 #include <util/system/rusage.h>
@@ -1627,6 +1628,48 @@ TProgram::TFutureStatus TProgram::ContinueAsync() {
 NThreading::TFuture<void> TProgram::Abort()
 {
     return CloseLastSession();
+}
+
+TIssues TProgram::Issues() const {
+    TIssues result;
+    if (ExprCtx_) {
+        result.AddIssues(ExprCtx_->IssueManager.GetIssues());
+    }
+    result.AddIssues(FinalIssues_);
+    return result;
+}
+
+TIssues TProgram::CompletedIssues() const {
+    TIssues result;
+    if (ExprCtx_) {
+        result.AddIssues(ExprCtx_->IssueManager.GetCompletedIssues());
+    }
+    result.AddIssues(FinalIssues_);
+    return result;
+}
+
+TIssue MakeNoBlocksInfoIssue(const TVector<TString>& names, bool isTypes) {
+    TIssue result;
+    TString msg = TStringBuilder() << "Most frequent " << (isTypes ? "types " : "callables ")
+                                   << "which do not support block mode: " << JoinRange(", ", names.begin(), names.end());
+    result.SetMessage(msg);
+    result.SetCode(isTypes ? TIssuesIds::CORE_TOP_UNSUPPORTED_BLOCK_TYPES : TIssuesIds::CORE_TOP_UNSUPPORTED_BLOCK_CALLABLES, TSeverityIds::S_INFO);
+    return result;
+}
+
+void TProgram::FinalizeIssues() {
+    FinalIssues_.Clear();
+    if (TypeCtx_) {
+        static const size_t topCount = 10;
+        auto noBlockTypes = TypeCtx_->GetTopNoBlocksTypes(topCount);
+        if (!noBlockTypes.empty()) {
+            FinalIssues_.AddIssue(MakeNoBlocksInfoIssue(noBlockTypes, true));
+        }
+        auto noBlockCallables = TypeCtx_->GetTopNoBlocksCallables(topCount);
+        if (!noBlockCallables.empty()) {
+            FinalIssues_.AddIssue(MakeNoBlocksInfoIssue(noBlockCallables, false));
+        }
+    }
 }
 
 NThreading::TFuture<void> TProgram::CleanupLastSession() {

@@ -206,31 +206,6 @@ runs:
             exit 1
             ;;
         esac
-        
-        case $GITHUB_EVENT_NAME in
-          workflow_dispatch)
-            TESTMO_RUN_NAME="${{ github.run_id }} manual"
-            TESTMO_EXTRA_TAG="manual"
-            ;;
-          pull_request | pull_request_target)
-            TESTMO_RUN_NAME="${{ github.run_id }} PR #${TESTMO_PR_NUMBER}"
-            TESTMO_EXTRA_TAG="pr"
-            TESTMO_BRANCH_TAG=""
-            ;;
-          schedule)
-            TESTMO_RUN_NAME="${{ github.run_id }} schedule"
-            TESTMO_EXTRA_TAG="schedule"
-            ;;
-          push)
-            TESTMO_RUN_NAME="${{ github.run_id }} POST"
-            TESTMO_EXTRA_TAG="post-commit"
-            ;;
-          *)
-            TESTMO_RUN_NAME="${{ github.run_id }}"
-            TESTMO_EXTRA_TAG=""
-            ;;
-        esac
-        echo "TESTMO_RUN_NAME=$TESTMO_RUN_NAME" >> $GITHUB_ENV 
 
         echo "::debug::get version"
         ./ya --version
@@ -246,8 +221,34 @@ runs:
 
         for RETRY in $(seq 1 $TEST_RETRY_COUNT)
         do
+          case $GITHUB_EVENT_NAME in
+            workflow_dispatch)
+              TESTMO_RUN_NAME="${{ github.run_id }} manual"
+              TESTMO_EXTRA_TAG="manual"
+              ;;
+            pull_request | pull_request_target)
+              TESTMO_RUN_NAME="${{ github.run_id }} PR #${TESTMO_PR_NUMBER}"
+              TESTMO_EXTRA_TAG="pr"
+              TESTMO_BRANCH_TAG=""
+              ;;
+            schedule)
+              TESTMO_RUN_NAME="${{ github.run_id }} schedule"
+              TESTMO_EXTRA_TAG="schedule"
+              ;;
+            push)
+              TESTMO_RUN_NAME="${{ github.run_id }} POST"
+              TESTMO_EXTRA_TAG="post-commit"
+              ;;
+            *)
+              TESTMO_RUN_NAME="${{ github.run_id }}"
+              TESTMO_EXTRA_TAG=""
+              ;;
+          esac
+
+          echo "TESTMO_RUN_NAME=$TESTMO_RUN_NAME" >> $GITHUB_ENV 
           if [ $RETRY != 1 ]; then
             IS_RETRY=1
+            TESTMO_RUN_NAME="$TESTMO_RUN_NAME A$RETRY"
           else
             IS_RETRY=0
           fi
@@ -274,7 +275,7 @@ runs:
           CURRENT_MESSAGE="**{platform_name}-${BUILD_PRESET}** is running..." 
           if [ $IS_RETRY = 0 ]; then
             CURRENT_MESSAGE="Check $CURRENT_MESSAGE"
-            RERUN_FAILED_TESTS=""
+            RERUN_FAILED_OPT=""
           else
             CURRENT_MESSAGE="Failed tests rerun (try $RETRY) $CURRENT_MESSAGE"
             RERUN_FAILED_OPT="-X"
@@ -360,7 +361,7 @@ runs:
             # finish testme session
 
             # split large junit_report
-            export TESTMO_JUNIT_REPORT_PARTS=$TMP_DIR/junit-split
+            export TESTMO_JUNIT_REPORT_PARTS=$TMP_DIR/try_$RETRY/junit-split
             mkdir -p $TESTMO_JUNIT_REPORT_PARTS
             .github/scripts/tests/split-junit.py -o "$TESTMO_JUNIT_REPORT_PARTS" "$CURRENT_JUNIT_XML_PATH"
             # archive unitest reports (transformed)

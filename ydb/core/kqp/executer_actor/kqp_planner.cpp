@@ -223,7 +223,10 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     }
 
     request.SetSchedulerGroup(UserRequestContext->PoolId);
-    request.SetMemoryPoolPercent(UserRequestContext->PoolConfig->QueryMemoryLimitPercentPerNode);
+    request.SetDatabase(Database);
+    if (UserRequestContext->PoolConfig.has_value()) {
+        request.SetMemoryPoolPercent(UserRequestContext->PoolConfig->QueryMemoryLimitPercentPerNode);
+    }
 
     return result;
 }
@@ -351,9 +354,14 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
     NYql::NDqProto::TDqTask* taskDesc = ArenaSerializeTaskToProto(TasksGraph, task, true);
     NYql::NDq::TComputeRuntimeSettings settings;
     if (!TxInfo) {
+        double memoryPoolPercent = 100;
+        if (UserRequestContext->PoolConfig.has_value()) {
+            memoryPoolPercent = UserRequestContext->PoolConfig->QueryMemoryLimitPercentPerNode;
+        }
+
         TxInfo = MakeIntrusive<NRm::TTxState>(
             TxId, TInstant::Now(), ResourceManager_->GetCounters(),
-            UserRequestContext->PoolId, UserRequestContext->PoolConfig->QueryMemoryLimitPercentPerNode);
+            UserRequestContext->PoolId, memoryPoolPercent, Database);
     }
 
     auto startResult = CaFactory_->CreateKqpComputeActor({

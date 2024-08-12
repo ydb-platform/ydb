@@ -36,7 +36,7 @@ NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructo
     if (!initResult) {
         return initResult;
     }
-    return dynamic_pointer_cast<TReadMetadataBase>(readMetadata);
+    return static_pointer_cast<TReadMetadataBase>(readMetadata);
 }
 
 }

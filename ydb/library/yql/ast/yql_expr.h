@@ -2525,6 +2525,7 @@ struct TExprContext : private TNonCopyable {
     ui64 StringsAllocationLimit = 100000000;
     ui64 RepeatTransformLimit = 1000000;
     ui64 RepeatTransformCounter = 0;
+    ui64 TypeAnnNodeRepeatLimit = 1000;
 
     TGcNodeConfig GcConfig;
 

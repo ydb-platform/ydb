@@ -103,6 +103,7 @@ std::partial_ordering ColumnsCompare(const std::vector<std::shared_ptr<arrow::Ar
 bool ScalarLess(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y);
 bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y);
 std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::RecordBatch> original);
+std::shared_ptr<arrow::Table> ReallocateBatch(const std::shared_ptr<arrow::Table>& original);
 
 bool HasNulls(const std::shared_ptr<arrow::Array>& column);
 

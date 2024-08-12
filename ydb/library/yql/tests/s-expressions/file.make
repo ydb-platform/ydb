@@ -8,7 +8,6 @@ IF (SANITIZER_TYPE)
     TIMEOUT(1800)
     SIZE(LARGE)
     TAG(ya:fat sb:ttl=2)
-    REQUIREMENTS(cpu:4 ram:13)
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
@@ -46,6 +45,8 @@ IF (SANITIZER_TYPE == "memory")
 ENDIF()
 
 NO_CHECK_IMPORTS()
+
+REQUIREMENTS(cpu:4 ram:13)
 
 END()
 

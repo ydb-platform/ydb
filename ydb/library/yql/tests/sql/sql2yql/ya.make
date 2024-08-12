@@ -9,7 +9,6 @@ IF (SANITIZER_TYPE)
     TIMEOUT(1800)
     SIZE(LARGE)
     TAG(ya:fat sb:ttl=2)
-    REQUIREMENTS(ram:12)
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
@@ -37,6 +36,8 @@ ENDIF()
 
 
 NO_CHECK_IMPORTS()
+
+REQUIREMENTS(ram:12)
 
 END()
 

@@ -1351,8 +1351,11 @@ void TWriteSessionImpl::SendImpl() {
         TClientMessage clientMessage;
         auto* writeRequest = clientMessage.mutable_write_request();
         ui32 prevCodec = 0;
+
+        ui64 currentSize = 0;
+
         // Send blocks while we can without messages reordering.
-        while (IsReadyToSendNextImpl() && clientMessage.ByteSizeLong() < GetMaxGrpcMessageSize()) {
+        while (IsReadyToSendNextImpl() && currentSize < GetMaxGrpcMessageSize()) {
             const auto& block = PackedMessagesToSend.top();
             Y_ABORT_UNLESS(block.Valid);
             if (writeRequest->messages_size() > 0 && prevCodec != block.CodecID) {
@@ -1400,6 +1403,8 @@ void TWriteSessionImpl::SendImpl() {
             moveBlock.Move(block);
             SentPackedMessage.emplace(std::move(moveBlock));
             PackedMessagesToSend.pop();
+
+            currentSize += writeRequest->ByteSizeLong();
         }
         UpdateTokenIfNeededImpl();
         LOG_LAZY(DbDriverState->Log,

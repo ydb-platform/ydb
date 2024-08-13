@@ -466,7 +466,7 @@ bool TPartitionFamily::PossibleForBalance(TSession* session) {
 
 void TPartitionFamily::ClassifyPartitions() {
     auto [activePartitionCount, inactivePartitionCount] = ClassifyPartitions(Partitions);
-    ChangePartitionCounters(activePartitionCount, inactivePartitionCount);
+    ChangePartitionCounters(activePartitionCount - ActivePartitionCount, inactivePartitionCount - InactivePartitionCount);
 }
 
 template<typename TPartitions>

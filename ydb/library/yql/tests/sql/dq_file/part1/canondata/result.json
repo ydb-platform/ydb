@@ -2862,23 +2862,23 @@
     ],
     "test.test[stream_lookup_join-lookup_join-default.txt-Analyze]": [
         {
-            "checksum": "056671563043c4e105ef36ae637a6809",
-            "size": 6485,
-            "uri": "https://{canondata_backend}/1931696/8efbe84ad728243c3e1c1cdb30d3b3f31d345567/resource.tar.gz#test.test_stream_lookup_join-lookup_join-default.txt-Analyze_/plan.txt"
+            "checksum": "e77b4f2fcc974f91b5ac44b39809c374",
+            "size": 4356,
+            "uri": "https://{canondata_backend}/1597364/a4a11f25f9a25c3aeb4b614333c373013ce0dbe0/resource.tar.gz#test.test_stream_lookup_join-lookup_join-default.txt-Analyze_/plan.txt"
         }
     ],
     "test.test[stream_lookup_join-lookup_join-default.txt-Debug]": [
         {
-            "checksum": "11754ff2f2a7ede159feb44614727bf6",
-            "size": 3359,
-            "uri": "https://{canondata_backend}/1931696/8efbe84ad728243c3e1c1cdb30d3b3f31d345567/resource.tar.gz#test.test_stream_lookup_join-lookup_join-default.txt-Debug_/opt.yql_patched"
+            "checksum": "8051343667373980bb5e7dc16dea7601",
+            "size": 2724,
+            "uri": "https://{canondata_backend}/1597364/a4a11f25f9a25c3aeb4b614333c373013ce0dbe0/resource.tar.gz#test.test_stream_lookup_join-lookup_join-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[stream_lookup_join-lookup_join-default.txt-Plan]": [
         {
-            "checksum": "056671563043c4e105ef36ae637a6809",
-            "size": 6485,
-            "uri": "https://{canondata_backend}/1931696/8efbe84ad728243c3e1c1cdb30d3b3f31d345567/resource.tar.gz#test.test_stream_lookup_join-lookup_join-default.txt-Plan_/plan.txt"
+            "checksum": "e77b4f2fcc974f91b5ac44b39809c374",
+            "size": 4356,
+            "uri": "https://{canondata_backend}/1597364/a4a11f25f9a25c3aeb4b614333c373013ce0dbe0/resource.tar.gz#test.test_stream_lookup_join-lookup_join-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[stream_lookup_join-lookup_join-default.txt-Results]": [

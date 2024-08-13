@@ -2831,23 +2831,23 @@
     ],
     "test.test[stream_lookup_join-lookup_join_narrow-default.txt-Analyze]": [
         {
-            "checksum": "056671563043c4e105ef36ae637a6809",
-            "size": 6485,
-            "uri": "https://{canondata_backend}/1031349/f562047a0458cc3f13d0bd9bc809240f0048d755/resource.tar.gz#test.test_stream_lookup_join-lookup_join_narrow-default.txt-Analyze_/plan.txt"
+            "checksum": "e77b4f2fcc974f91b5ac44b39809c374",
+            "size": 4356,
+            "uri": "https://{canondata_backend}/1942525/493b103fe236994f6bd102fa072d08bd1a2e5f4a/resource.tar.gz#test.test_stream_lookup_join-lookup_join_narrow-default.txt-Analyze_/plan.txt"
         }
     ],
     "test.test[stream_lookup_join-lookup_join_narrow-default.txt-Debug]": [
         {
-            "checksum": "4a5bd8d8e1c8cbc2bfca80640fc0a4cf",
-            "size": 3360,
-            "uri": "https://{canondata_backend}/1031349/f562047a0458cc3f13d0bd9bc809240f0048d755/resource.tar.gz#test.test_stream_lookup_join-lookup_join_narrow-default.txt-Debug_/opt.yql_patched"
+            "checksum": "924305e7d47b0c92d4907bbbea2782d6",
+            "size": 2725,
+            "uri": "https://{canondata_backend}/1942525/493b103fe236994f6bd102fa072d08bd1a2e5f4a/resource.tar.gz#test.test_stream_lookup_join-lookup_join_narrow-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[stream_lookup_join-lookup_join_narrow-default.txt-Plan]": [
         {
-            "checksum": "056671563043c4e105ef36ae637a6809",
-            "size": 6485,
-            "uri": "https://{canondata_backend}/1031349/f562047a0458cc3f13d0bd9bc809240f0048d755/resource.tar.gz#test.test_stream_lookup_join-lookup_join_narrow-default.txt-Plan_/plan.txt"
+            "checksum": "e77b4f2fcc974f91b5ac44b39809c374",
+            "size": 4356,
+            "uri": "https://{canondata_backend}/1942525/493b103fe236994f6bd102fa072d08bd1a2e5f4a/resource.tar.gz#test.test_stream_lookup_join-lookup_join_narrow-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[stream_lookup_join-lookup_join_narrow-default.txt-Results]": [

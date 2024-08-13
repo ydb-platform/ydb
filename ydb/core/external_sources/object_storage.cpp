@@ -13,6 +13,7 @@
 #include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/s3/credentials/credentials.h>
 #include <ydb/library/yql/providers/s3/object_listers/yql_s3_list.h>
+#include <ydb/library/yql/providers/s3/object_listers/yql_s3_path.h>
 #include <ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h>
 #include <ydb/library/yql/providers/s3/proto/credentials.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -307,15 +308,20 @@ struct TObjectStorageExternalSource : public IExternalSource {
             structuredTokenBuilder.SetNoAuth();
         }
 
+        auto effectiveFilePattern = NYql::NS3::NormalizePath(meta->TableLocation);
+        if (meta->TableLocation.EndsWith('/')) {
+            effectiveFilePattern += '*';
+        } 
+
         const NYql::TS3Credentials credentials(CredentialsFactory, structuredTokenBuilder.ToJson());
         auto httpGateway = NYql::IHTTPGateway::Make();
         auto httpRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.RetriedCurlCodes = NYql::FqRetriedCurlCodes()});
         auto s3Lister = NYql::NS3Lister::MakeS3Lister(httpGateway, httpRetryPolicy, NYql::NS3Lister::TListingRequest{
             .Url = meta->DataSourceLocation,
             .Credentials = credentials,
-            .Pattern = meta->TableLocation,
+            .Pattern = effectiveFilePattern,
         }, Nothing(), false);
-        auto afterListing = s3Lister->Next().Apply([path = meta->TableLocation](const NThreading::TFuture<NYql::NS3Lister::TListResult>& listResFut) {
+        auto afterListing = s3Lister->Next().Apply([path = effectiveFilePattern](const NThreading::TFuture<NYql::NS3Lister::TListResult>& listResFut) {
             auto& listRes = listResFut.GetValue();
             if (std::holds_alternative<NYql::NS3Lister::TListError>(listRes)) {
                 auto& error = std::get<NYql::NS3Lister::TListError>(listRes);
@@ -349,13 +355,17 @@ struct TObjectStorageExternalSource : public IExternalSource {
         return afterListing.Apply([arrowInferencinatorId, meta, actorSystem = ActorSystem](const NThreading::TFuture<TString>& pathFut) {
             auto promise = NThreading::NewPromise<TMetadataResult>();
             auto schemaToMetadata = [meta](NThreading::TPromise<TMetadataResult> metaPromise, NObjectStorage::TEvInferredFileSchema&& response) {
+                if (!response.Status.IsSuccess()) {
+                    metaPromise.SetValue(NYql::NCommon::ResultFromError<TMetadataResult>(response.Status.GetIssues()));
+                    return;
+                }
+                TMetadataResult result;
                 meta->Changed = true;
                 meta->Schema.clear_column();
                 for (const auto& column : response.Fields) {
                     auto& destColumn = *meta->Schema.add_column();
                     destColumn = column;
                 }
-                TMetadataResult result;
                 result.SetSuccess();
                 result.Metadata = meta;
                 metaPromise.SetValue(std::move(result));

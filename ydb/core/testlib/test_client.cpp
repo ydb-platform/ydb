@@ -301,7 +301,8 @@ namespace Tests {
         }
 
         auto actorSystemConfig = Settings->AppConfig->GetActorSystemConfig();
-        if (actorSystemConfig.HasUseAutoConfig() && actorSystemConfig.GetUseAutoConfig()) {
+        const bool useAutoConfig = actorSystemConfig.HasUseAutoConfig() && actorSystemConfig.GetUseAutoConfig();
+        if (useAutoConfig) {
             NAutoConfigInitializer::ApplyAutoConfig(&actorSystemConfig);
         }
 
@@ -310,10 +311,15 @@ namespace Tests {
             NActorSystemConfigHelpers::AddExecutorPool(cpuManager, actorSystemConfig.GetExecutor(poolId), actorSystemConfig, poolId, nullptr);
         }
 
+        const NAutoConfigInitializer::TASPools pools = NAutoConfigInitializer::GetASPools(actorSystemConfig, useAutoConfig);
+
         Runtime->SetupActorSystemConfig(TTestActorRuntime::TActorSystemSetupConfig{
             .CpuManagerConfig = cpuManager,
             .SchedulerConfig = NActorSystemConfigHelpers::CreateSchedulerConfig(actorSystemConfig.GetScheduler()),
             .MonitorStuckActors = actorSystemConfig.GetMonitorStuckActors()
+        }, TTestActorRuntime::TActorSystemPools{
+            pools.SystemPoolId, pools.UserPoolId, pools.IOPoolId, pools.BatchPoolId,
+            NAutoConfigInitializer::GetServicePools(actorSystemConfig, useAutoConfig)
         });
     }
 

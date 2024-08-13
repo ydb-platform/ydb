@@ -16,11 +16,13 @@ class TKqpColumnsGetterTransformer : public TSyncTransformerBase {
 public:
     TKqpColumnsGetterTransformer(
         const TKikimrConfiguration::TPtr& config,
+        TTypeAnnotationContext& typesCtx,
         TKikimrTablesData& tables,
         TString cluster,
         TActorSystem* actorSystem
     )
         : Config(config)
+        , TypesCtx(typesCtx)
         , Tables(tables)
         , Cluster(cluster)
         , ActorSystem(actorSystem)
@@ -49,6 +51,7 @@ private:
     THashMap<TString, THashSet<TString>> ColumnsByTableName;
 
     const TKikimrConfiguration::TPtr& Config;
+    TTypeAnnotationContext& TypesCtx;
     TKikimrTablesData& Tables;
     TString Cluster;
     TActorSystem* ActorSystem;
@@ -56,6 +59,7 @@ private:
 
 TAutoPtr<IGraphTransformer> CreateKqpColumnsGetterTransformer(
     const TKikimrConfiguration::TPtr& config,
+    TTypeAnnotationContext& typesCtx,
     TKikimrTablesData& tables,
     TString cluster,
     TActorSystem* actorSystem

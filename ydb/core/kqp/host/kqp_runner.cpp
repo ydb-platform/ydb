@@ -300,7 +300,7 @@ private:
             .AddPostTypeAnnotation(/* forSubgraph */ true)
             .AddCommonOptimization()
             .Add(CreateKqpConstantFoldingTransformer(OptimizeCtx, *typesCtx, Config), "ConstantFolding")
-            .Add(CreateKqpColumnsGetterTransformer(Config, SessionCtx->Tables(), Cluster, ActorSystem), "ColumnGetter")
+            .Add(CreateKqpColumnsGetterTransformer(Config, *typesCtx, SessionCtx->Tables(), Cluster, ActorSystem), "ColumnGetter")
             .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
             .Add(CreateKqpLogOptTransformer(OptimizeCtx, *typesCtx, Config), "LogicalOptimize")
             .Add(CreateLogicalDataProposalsInspector(*typesCtx), "ProvidersLogicalOptimize")

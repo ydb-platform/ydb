@@ -107,6 +107,9 @@ void InferStatisticsForKqpTable(const TExprNode::TPtr& input, TTypeAnnotationCon
 
     auto keyColumns = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(tableData.Metadata->KeyColumnNames));
     auto stats = std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, nRows, nAttrs, byteSize, 0.0, keyColumns);
+    if (typeCtx->ColumnStatisticsByTableName.contains(path.StringValue())) {
+        stats->ColumnStatistics = typeCtx->ColumnStatisticsByTableName[path.StringValue()];
+    }
     if (kqpCtx.Config->OverrideStatistics.Get()) {
         stats = OverrideStatistics(*stats, path.Value(), kqpCtx.GetOverrideStatistics());
     }

@@ -280,6 +280,7 @@ struct TUdfCachedInfo {
 };
 
 struct TTypeAnnotationContext: public TThrRefBase {
+    THashMap<TString, TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>> ColumnStatisticsByTableName;
     THashMap<const TExprNode*, std::shared_ptr<TOptimizerStatistics>> StatisticsMap;
     TIntrusivePtr<ITimeProvider> TimeProvider;
     TIntrusivePtr<IRandomProvider> RandomProvider;

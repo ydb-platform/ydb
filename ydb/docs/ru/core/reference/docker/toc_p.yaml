@@ -1,6 +1,4 @@
 items:
-  - name: Обзор
-    href: index.md
   - name: Установка Docker
     href: install.md
   - name: Работа с Docker

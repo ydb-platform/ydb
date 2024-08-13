@@ -30,6 +30,11 @@ public:
                 EEquality
             };
 
+            TColumnStatisticsUsedMember(NNodes::TCoMember member, ui32 predicateType)
+                : Member(std::move(member))
+                , PredicateType(predicateType)
+            {}
+
             NNodes::TCoMember Member;
             ui32 PredicateType;
         };

@@ -492,7 +492,7 @@ memory_controller_config:
 
 The soft memory limit specifies a dangerous threshold that should not be exceeded by {{ ydb-short-name }} process under normal circumstances.
 
-If the soft limit is exceeded, {{ ydb-short-name }} gradually reduces the shared cache size to zero. Therefore, more database nodes should be added to the cluster as soon as possible, or per-component memory limits should be reduced.
+If the soft limit is exceeded, {{ ydb-short-name }} gradually reduces the [shared cache](../../concepts/glossary.md#shared-cache) size to zero. Therefore, more database nodes should be added to the cluster as soon as possible, or per-component memory limits should be reduced.
 
 ### Target memory utilization {#target-memory-utilization}
 
@@ -504,26 +504,26 @@ For example, in a database that consumes a little memory on query execution, cac
 
 ### Per-component memory limits
 
-There are two different types of components inside {{ ydb-short-name }}.
+There are two different types of components within {{ ydb-short-name }}.
 
-The first type components, or cache components, acts like caches, for example storing the last recently used data. Each of cache components has minimum and maximum memory limit thresholds, allowing them to change their capacity dynamically based on current {{ ydb-short-name }} process consumption.
+The first type, known as cache components, functions as caches, for example, by storing the most recently used data. Each cache component has minimum and maximum memory limit thresholds, allowing them to adjust their capacity dynamically based on the current {{ ydb-short-name }} process consumption.
 
-The second type components, or activity components, allocate memory for specific activities, such as query execution or the [compaction](../../concepts/glossary.md#compaction) process. Each of activity components has a fixed memory limit. There is also an additional total memory limit for these activities, from which they attempt to consume the needed memory.
+The second type, known as activity components, allocates memory for specific activities, such as query execution or the [compaction](../../concepts/glossary.md#compaction) process. Each activity component has a fixed memory limit. Additionally, there is a total memory limit for these activities from which they attempt to draw the required memory.
 
 Many other auxiliary components and processes operate alongside the {{ ydb-short-name }} process, consuming memory. Currently, these components do not have any memory limits.
 
 #### Cache components memory limits
 
-Cache components are:
+The cache components include:
 
 - Shared cache
 - MemTable
 
-Each of cache components' limits is dynamically recalculated every second so that each component consumes memory proportionally to its limit thresholds, and the total consumed memory stays around the target memory utilization.
+Each cache component's limits are dynamically recalculated every second to ensure that each component consumes memory proportionally to its limit thresholds while the total consumed memory stays close to the target memory utilization.
 
-Cache components' minimum memory limit threshold isn't reserved, meaning that the memory remains available until it is actually used. However, once this memory is filled, the components typically retain the data, operating within their current memory limit. Consequently, the sum of cache components minimum memory limits is expected to be less than the target memory utilization.
+The minimum memory limit threshold for cache components isn't reserved, meaning the memory remains available until it is actually used. However, once this memory is filled, the components typically retain the data, operating within their current memory limit. Consequently, the sum of the minimum memory limits for cache components is expected to be less than the target memory utilization.
 
-If needed, both the minimum and maximum thresholds should be overridden; otherwise, a missing threshold will have a default value.
+If needed, both the minimum and maximum thresholds should be overridden; otherwise, any missing threshold will have a default value.
 
 Example of the `memory_controller_config` section with specified shared cache limits:
 
@@ -535,15 +535,15 @@ memory_controller_config:
 
 #### Activity components memory limits
 
-Activity components are:
+The activity components include:
 
 - KQP
 
-The memory limit for each of the activity components specifies the maximum amount of memory it can attempt to use. However, to prevent {{ ydb-short-name }} process from exceeding the soft memory limit, the total consumption of activity components is further limited by an additional limit, named as the activities memory limit. If the total memory usage of the activity components exceeds this limit, any additional memory requests will be denied.
+The memory limit for each activity component specifies the maximum amount of memory it can attempt to use. However, to prevent the {{ ydb-short-name }} process from exceeding the soft memory limit, the total consumption of activity components is further constrained by an additional limit known as the activities memory limit. If the total memory usage of the activity components exceeds this limit, any additional memory requests will be denied.
 
-As a result, while the combined individual limits of the activity components might collectively exceed the activities memory limit, each component's individual limit should be less than this overall cap. Additionally, the sum of the minimum memory limits for the cache components plus the activities memory limit needs to be less than the soft memory limit.
+As a result, while the combined individual limits of the activity components might collectively exceed the activities memory limit, each component's individual limit should be less than this overall cap. Additionally, the sum of the minimum memory limits for the cache components, plus the activities memory limit, must be less than the soft memory limit.
 
-There are some other activity components, currently they do not have any individual memory limits.
+There are some other activity components that currently do not have individual memory limits.
 
 Example of the `memory_controller_config` section with a specified KQP limit:
 
@@ -556,9 +556,9 @@ memory_controller_config:
 
 Each configuration parameter applies within the context of a single database node.
 
-As mentioned above, it is expected that the sum of the minimum memory limits for the cache components plus the activities memory limit should be less than the soft memory limit.
+As mentioned above, the sum of the minimum memory limits for the cache components plus the activities memory limit should be less than the soft memory limit.
 
-This restriction can be written in a simplified form:
+This restriction can be expressed in a simplified form:
 
 $shared\_cache\_min\_percent + mem\_table\_min\_percent + activities\_limit\_percent < soft\_limit\_percent$
 
@@ -566,17 +566,17 @@ Or in a detailed form:
 
 $Max(shared\_cache\_min\_percent * hard\_limit\_bytes / 100, shared\_cache\_min\_bytes) + Max(mem\_table\_min\_percent * hard\_limit\_bytes / 100, mem\_table\_min\_bytes) + Min(activities\_limit\_percent * hard\_limit\_bytes / 100, activities\_limit\_bytes) < Min(soft\_limit\_percent * hard\_limit\_bytes / 100, soft\_limit\_bytes)$
 
-Parameters | Default | Description
---- | --- | ---
-`hard_limit_bytes` | CGroup&nbsp;memory&nbsp;limit&nbsp;/<br/>Host memory | Hard memory usage limit.
-`soft_limit_percent`&nbsp;/<br/>`soft_limit_bytes` | 75% | Soft memory usage limit.
-`target_utilization_percent`&nbsp;/<br/>`target_utilization_bytes` | 50% | Target memory utilization.
-`activities_limit_percent`&nbsp;/<br/>`activities_limit_bytes` | 30% | Activities memory limit.
-`shared_cache_min_percent`&nbsp;/<br/>`shared_cache_min_bytes` | 20% | Minimum threshold for the shared cache memory limit.
-`shared_cache_max_percent`&nbsp;/<br/>`shared_cache_max_bytes` | 50% | Maximum threshold for the shared cache memory limit.
-`mem_table_min_percent`&nbsp;/<br/>`mem_table_min_bytes` | 1% | Minimum threshold for the MemTable memory limit.
-`mem_table_max_percent`&nbsp;/<br/>`mem_table_max_bytes` | 3% | Maximum threshold for the MemTable memory limit.
-`query_execution_limit_percent`&nbsp;/<br/>`query_execution_limit_bytes` | 20% | KQP memory limit.
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `hard_limit_bytes` | CGroup&nbsp;memory&nbsp;limit&nbsp;/<br/>Host memory | Hard memory usage limit. |
+| `soft_limit_percent`&nbsp;/<br/>`soft_limit_bytes` | 75% | Soft memory usage limit. |
+| `target_utilization_percent`&nbsp;/<br/>`target_utilization_bytes` | 50% | Target memory utilization. |
+| `activities_limit_percent`&nbsp;/<br/>`activities_limit_bytes` | 30% | Activities memory limit. |
+| `shared_cache_min_percent`&nbsp;/<br/>`shared_cache_min_bytes` | 20% | Minimum threshold for the shared cache memory limit. |
+| `shared_cache_max_percent`&nbsp;/<br/>`shared_cache_max_bytes` | 50% | Maximum threshold for the shared cache memory limit. |
+| `mem_table_min_percent`&nbsp;/<br/>`mem_table_min_bytes` | 1% | Minimum threshold for the MemTable memory limit. |
+| `mem_table_max_percent`&nbsp;/<br/>`mem_table_max_bytes` | 3% | Maximum threshold for the MemTable memory limit. |
+| `query_execution_limit_percent`&nbsp;/<br/>`query_execution_limit_bytes` | 20% | KQP memory limit. |
 
 ## blob_storage_config: Static cluster group {#blob-storage-config}
 

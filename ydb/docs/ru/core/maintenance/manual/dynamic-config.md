@@ -125,13 +125,13 @@ vim dynconfig.yaml
 
 Список динамически обновляемых настроек:
 
-* `immediate_controls_config`
-* `log_config`
-* `memory_controller_config`
-* `monitoring_config`
-* `table_service_config`
-* `tracing_config.external_throttling`
-* `tracing_config.sampling`
+* `immediate_controls_config`;
+* `log_config`;
+* `memory_controller_config`;
+* `monitoring_config`;
+* `table_service_config`;
+* `tracing_config.external_throttling`;
+* `tracing_config.sampling`.
 
 В будущем список может быть расширен.
 

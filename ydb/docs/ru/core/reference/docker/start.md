@@ -12,7 +12,7 @@ mkdir ydb_certs
 
 ## Запуск Docker
 
-Для запуска {{ ydb-short-name }} в Docker необходимо выполнить следующую команду:
+Пример команды запуска {{ ydb-short-name }} в Docker с подробными комментариями:
 
 ```bash
 docker run \

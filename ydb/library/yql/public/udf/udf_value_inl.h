@@ -390,6 +390,18 @@ inline IBoxedValuePtr TUnboxedValuePod::AsBoxed() const
     return IBoxedValuePtr(Raw.Boxed.Value);
 }
 
+inline TStringValue::TData* TUnboxedValuePod::AsRawStringValue() const
+{
+    UDF_VERIFY(IsString(), "Value is not a string");
+    return Raw.String.Value;
+}
+
+inline IBoxedValue* TUnboxedValuePod::AsRawBoxed() const
+{
+    UDF_VERIFY(IsBoxed(), "Value is not boxed");
+    return Raw.Boxed.Value;
+}
+
 inline bool TUnboxedValuePod::UniqueBoxed() const
 {
     UDF_VERIFY(IsBoxed(), "Value is not boxed");

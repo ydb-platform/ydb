@@ -515,6 +515,14 @@ public:
         const TYtSectionList& sectionList = wrap.Input().Cast<TYtReadTable>().Input();
         for (size_t i = 0; i < sectionList.Size(); ++i) {
             auto section = sectionList.Item(i);
+            auto paths = section.Paths();
+            for (const auto& path : section.Paths()) {
+                auto meta = TYtTableBaseInfo::GetMeta(path.Table());
+                if (meta->Attrs.contains("schema_mode") && meta->Attrs["schema_mode"] == "weak") {
+                    BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), "can't use block reader on tables with weak schema");
+                    return false;
+                }
+            }
             if (!NYql::GetSettingAsColumnList(section.Settings().Ref(), EYtSettingType::SysColumns).empty()) {
                 BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), "system column");
                 return false;

@@ -1,6 +1,10 @@
 # Добавление, удаление и переименование вторичного индекса
 
+{% if oss == "true" and backend_name == "YDB" %}
+
 {% include [OLAP_not_allow_note](../../../../_includes/not_allow_for_olap_note.md) %}
+
+{% endif %}
 
 ### Добавление индекса
 
@@ -80,7 +84,7 @@ ALTER TABLE `series` DROP INDEX `title_index`;
 
 `RENAME INDEX` — переименовывает индекс с указанным именем. Если индекс с новым именем существует, будет возвращена ошибка.
 
-{% if backend_name == YDB %}
+{% if backend_name == "YDB" %}
 
 Возможность атомарной замены индекса под нагрузкой поддерживается командой [{{ ydb-cli }} table index rename](../../../../reference/ydb-cli/commands/secondary_index.md#rename) {{ ydb-short-name }} CLI и специализированными методами {{ ydb-short-name }} SDK.
 

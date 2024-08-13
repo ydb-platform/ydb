@@ -684,8 +684,6 @@ private:
         // forming the right and left child nodes
         size_t k = 0;
         for (const auto& node : nodes) {
-            ++k;
-
             if (node.GetNodeId() == currentNodeId) {
                 AggregationStatistics.LocalTablets.Ids.reserve(node.GetTabletIds().size());
 
@@ -703,6 +701,7 @@ private:
             }
 
             AggregationStatistics.Nodes[k % Settings.FanOutFactor].Tablets.push_back(std::move(nodeTablets));
+            ++k;
         }
 
         for (auto& node : AggregationStatistics.Nodes) {

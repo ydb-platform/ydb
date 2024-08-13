@@ -1,7 +1,8 @@
 #include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb-cpp-sdk/client/types/exceptions/exceptions.h>
+#include <ydb-cpp-sdk/type_switcher.h>
 
 #include <ydb/public/api/protos/ydb_value.pb.h>
-#include <ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -50,7 +51,7 @@ Y_UNIT_TEST_SUITE(CppGrpcClientResultSetTest) {
             "  }\n"
             "}\n";
         Ydb::ResultSet rsProto;
-        google::protobuf::TextFormat::ParseFromString(resultSetString, &rsProto);
+        google::protobuf::TextFormat::ParseFromString(TStringType{resultSetString}, &rsProto);
 
         NYdb::TResultSet rs(std::move(rsProto));
         NYdb::TResultSetParser rsParser(rs);
@@ -112,7 +113,7 @@ Y_UNIT_TEST_SUITE(CppGrpcClientResultSetTest) {
             "  }\n"
             "}\n";
         Ydb::ResultSet rsProto;
-        google::protobuf::TextFormat::ParseFromString(resultSetString, &rsProto);
+        google::protobuf::TextFormat::ParseFromString(TStringType{resultSetString}, &rsProto);
 
         NYdb::TResultSet rs(std::move(rsProto));
         NYdb::TResultSetParser rsParser(rs);
@@ -173,7 +174,7 @@ Y_UNIT_TEST_SUITE(CppGrpcClientResultSetTest) {
             "  }\n"
             "}\n";
         Ydb::ResultSet rsProto;
-        google::protobuf::TextFormat::ParseFromString(resultSetString, &rsProto);
+        google::protobuf::TextFormat::ParseFromString(TStringType{resultSetString}, &rsProto);
 
         NYdb::TResultSet rs(std::move(rsProto));
         NYdb::TResultSetParser rsParser(rs);
@@ -224,7 +225,7 @@ Y_UNIT_TEST_SUITE(CppGrpcClientResultSetTest) {
             "  }\n"
             "}\n";
         Ydb::ResultSet rsProto;
-        google::protobuf::TextFormat::ParseFromString(resultSetString, &rsProto);
+        google::protobuf::TextFormat::ParseFromString(TStringType{resultSetString}, &rsProto);
 
         NYdb::TResultSet rs(std::move(rsProto));
         NYdb::TResultSetParser rsParser(rs);

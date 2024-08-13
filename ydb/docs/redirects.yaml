@@ -205,6 +205,12 @@ common:
     to: /contributor/manage-releases.md
   - from: /development/suggest-change.md
     to: /contributor/suggest-change.md
+  - from: /concepts/clusters/index.md
+    to: /concepts/topology.md
+  - from: /concepts/clusters/common_scheme_ydb.md
+    to: /contributor/general-schema.md
+  - from: /concepts/clusters/distributed_storage.md
+    to: /contributor/distributed-storage.md
 
 # Redirects for ydb-dstool
   - from: /administration/ydb-dstool-device-list.md

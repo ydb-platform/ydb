@@ -481,7 +481,7 @@ For a configuration located in 3 availability zones, specify 3 rings. For a conf
 
 ## BlobStorage production configurations
 
-To ensure the required fault tolerance of {{ ydb-short-name }}, configure the [cluster disk subsystem](../../concepts/cluster/distributed_storage.md) properly: select the appropriate [fault tolerance mode](#fault-tolerance) and [hardware configuration](#requirements) for your cluster.
+To ensure the required fault tolerance of {{ ydb-short-name }}, configure the [cluster disk subsystem](../../concepts/topology.md) properly: select the appropriate [fault tolerance mode](#fault-tolerance) and [hardware configuration](#requirements) for your cluster.
 
 ### Fault tolerance modes {#fault-tolerance}
 

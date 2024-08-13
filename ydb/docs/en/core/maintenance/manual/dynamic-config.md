@@ -103,7 +103,7 @@ All commands for working with configuration are described in the [{#T}](../../re
 1. The configuration file is uploaded by the user using a [grpc call](https://github.com/ydb-platform/ydb/blob/5251c9ace0a7617c25d50f1aa4d0f13e3d56f985/ydb/public/api/grpc/draft/ydb_dynamic_config_v1.proto#L22) or [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md) to the cluster.
 2. The file is checked for validity, basic constraints, version correctness, cluster name correctness, and the correctness of the configurations obtained after DSL transformation are verified.
 3. The configuration version in the file is incremented by one.
-4. The file is reliably stored in the cluster using the Console [tablet](../../concepts/cluster/common_scheme_ydb.md#tablets).
+4. The file is reliably stored in the cluster using the Console [tablet](../../concepts/glossary.md#tablet).
 5. File updates are distributed across the cluster nodes.
 
 #### Configuration update from the cluster node's perspective

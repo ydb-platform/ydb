@@ -1,26 +1,33 @@
 items:
-- { name: Glossary,                  href: glossary.md }
-- { name: Connecting to a database,       href: connect.md }
+- name: Glossary
+  href: glossary.md
+- name: Connecting to a database
+  href: connect.md
 - name: Authentication
   href: auth.md
 - name: Data model and schema
   href: datamodel/index.md
-  include: { path: datamodel/toc_p.yaml, mode: link }
-- { name: Transactions,                             href: transactions.md }
-- { name: Secondary indexes,                      href: secondary_indexes.md }
-- { name: Change Data Capture (CDC),              href: cdc.md, when: feature_changefeed }
-- { name: Time to Live (TTL),                     href: ttl.md }
-- { name: Scan queries,                           href: scan_query.md }
-- { name: Database limits,                href: limits-ydb.md }
-- { name: Multi-Version Concurrency Control (MVCC), href: mvcc.md }
-- name: YDB cluster
-  href: cluster/index.md
-  items:
-  - name: Topology
-    href: topology.md
-  - name: General YDB schema
-    href: cluster/common_scheme_ydb.md
-  - name: Disk subsystem of a cluster
-    href: cluster/distributed_storage.md
+  include:
+    path: datamodel/toc_p.yaml
+    mode: link
+- name: Transactions
+  href: transactions.md
+- name: Secondary indexes
+  href: secondary_indexes.md
+- name: Change Data Capture (CDC)
+  href: cdc.md
+  when: feature_changefeed
+- name: Time to Live (TTL)
+  href: ttl.md
+- name: Scan queries
+  href: scan_query.md
+- name: Database limits
+  href: limits-ydb.md
+- name: Multi-Version Concurrency Control (MVCC)
+  href: mvcc.md
+- name: Cluster topology
+  href: topology.md
 - name: Federated query
-  include: { path: federated_query/toc_p.yaml, mode: link }
+  include:
+    path: federated_query/toc_p.yaml
+    mode: link

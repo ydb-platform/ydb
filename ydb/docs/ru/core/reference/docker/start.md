@@ -16,22 +16,21 @@ mkdir ydb_certs
 
 ```bash
 docker run \
--d \
---rm \
---name ydb-local \
--h localhost \
--p 2135:2135 \
--p 2136:2136 \
--p 8765:8765 \
--p 5432:5432 \
--v $(pwd)/ydb_certs:/ydb_certs \
--v $(pwd)/ydb_data:/ydb_data \
--e GRPC_TLS_PORT=2135 \
--e GRPC_PORT=2136 \
--e MON_PORT=8765 \
--e YDB_USE_IN_MEMORY_PDISKS=1 \
-ydbplatform/local-ydb:latest
-```
+    -d \ # запуск в фоне
+    --rm \ # автоматическое удаление после установки
+    --name ydb-local \ # имя контейнера
+    -h localhost \ # хостейм
+    -p 2135:2135 \ # открытие внешнего доступа к grpcs порту
+    -p 2136:2136 \ # открытие внешнего доступа к grpc порту
+    -p 8765:8765 \ # открытие внешнего доступа к http порту
+    -p 5432:5432 \ # открытие внешнего доступа к порту, обеспечивающему PostgreSQL-совместимость
+    -v $(pwd)/ydb_certs:/ydb_certs \ # директория для TLS сертификатов
+    -v $(pwd)/ydb_data:/ydb_data \ # рабочая директория
+    -e GRPC_TLS_PORT=2135 \ # grpcs порт
+    -e GRPC_PORT=2136 \ # grpc порт
+    -e MON_PORT=8765 \ # http порт
+    -e YDB_USE_IN_MEMORY_PDISKS=1 \ # хранение данных только в оперативной памяти
+    ydbplatform/local-ydb:latest # имя и тег образа
     
 Подробнее про переменные окружения, используемые при запуске Docker контейнера с {{ ydb-short-name }} можно узнать [тут](environment.md)
 

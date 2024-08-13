@@ -249,7 +249,7 @@ std::shared_ptr<TTestReadSession<SdkVersion::Topic>::TSdkReadSession> TTestReadS
                                         message.GetSeqNo(),
                                         message.GetOffset(),
                                         message.GetData(),
-                                        std::make_shared<MsgWrapper>(message),
+                                        std::shared_ptr<IMessage>(new MsgWrapper(message)),
                                         impl->AutoCommit);
 
             if (impl->AutoCommit) {
@@ -364,7 +364,7 @@ std::shared_ptr<TTestReadSession<SdkVersion::PQv1>::TSdkReadSession> TTestReadSe
                                         message.GetSeqNo(),
                                         message.GetOffset(),
                                         message.GetData(),
-                                        std::make_shared<MsgWrapper>(message),
+                                        std::shared_ptr<IMessage>(new MsgWrapper(message)),
                                         impl->AutoCommit);
 
             if (impl->AutoCommit) {

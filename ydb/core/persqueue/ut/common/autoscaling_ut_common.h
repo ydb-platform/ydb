@@ -65,15 +65,6 @@ struct MsgInfo {
 
     std::shared_ptr<IMessage> Msg;
     bool Commited;
-/*
-    MsgInfo(ui64 partitionId, ui64 seqNo, ui64 offset, const TString& data, std::shared_ptr<IMessage>& msg, bool commited)
-        : PartitionId(partitionId)
-        , SeqNo(seqNo)
-        , Offset(offset)
-        , Data(data)
-        , Msg(msg)
-        , Commited(commited) {
-    }*/
 };
 
 struct EvEndMsg {

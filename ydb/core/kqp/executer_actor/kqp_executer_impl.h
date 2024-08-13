@@ -1269,13 +1269,9 @@ protected:
             const auto& input = stage.GetInputs(inputIndex);
 
             // Current assumptions:
-            // 1. `Broadcast` can not be the 1st stage input unless it's a single input
-            // 2. All stage's inputs, except 1st one, must be a `Broadcast` or `UnionAll`
-            if (inputIndex == 0) {
-                if (stage.InputsSize() > 1) {
-                    YQL_ENSURE(input.GetTypeCase() != NKqpProto::TKqpPhyConnection::kBroadcast);
-                }
-            } else {
+            // 1. All stage's inputs, except 1st one, must be a `Broadcast` or `UnionAll`
+            // 2. Stages where 1st input is `Broadcast` are not partitioned.
+            if (inputIndex > 0) {
                 switch (input.GetTypeCase()) {
                     case NKqpProto::TKqpPhyConnection::kBroadcast:
                     case NKqpProto::TKqpPhyConnection::kHashShuffle:

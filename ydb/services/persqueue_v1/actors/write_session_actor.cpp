@@ -936,7 +936,7 @@ void TWriteSessionActor<UseMigrationProtocol>::ProcessWriteResponse(
         if (res.GetAlreadyWritten()) {
             Y_ABORT_UNLESS(UseDeduplication);
             ack->mutable_skipped()->set_reason(Topic::StreamWriteMessage::WriteResponse::WriteAck::Skipped::REASON_ALREADY_WRITTEN);
-        } else if (res.GetWrittenInTx()) {
+        } else if (res.HasWrittenInTx() && res.GetWrittenInTx()) {
             ack->mutable_written_in_tx();
         } else {
             ack->mutable_written()->set_offset(res.GetOffset());

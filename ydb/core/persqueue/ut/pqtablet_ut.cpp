@@ -417,33 +417,36 @@ void TPQTabletFixture::WaitReadSet(NHelpers::TPQTabletMock& tablet, const TReadS
         UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
     }
 
+    auto readSet = std::move(*tablet.ReadSet);
+    tablet.ReadSet = Nothing();
+
     if (matcher.Step.Defined()) {
-        UNIT_ASSERT(tablet.ReadSet->HasStep());
-        UNIT_ASSERT_VALUES_EQUAL(*matcher.Step, tablet.ReadSet->GetStep());
+        UNIT_ASSERT(readSet.HasStep());
+        UNIT_ASSERT_VALUES_EQUAL(*matcher.Step, readSet.GetStep());
     }
     if (matcher.TxId.Defined()) {
-        UNIT_ASSERT(tablet.ReadSet->HasTxId());
-        UNIT_ASSERT_VALUES_EQUAL(*matcher.TxId, tablet.ReadSet->GetTxId());
+        UNIT_ASSERT(readSet.HasTxId());
+        UNIT_ASSERT_VALUES_EQUAL(*matcher.TxId, readSet.GetTxId());
     }
     if (matcher.Source.Defined()) {
-        UNIT_ASSERT(tablet.ReadSet->HasTabletSource());
-        UNIT_ASSERT_VALUES_EQUAL(*matcher.Source, tablet.ReadSet->GetTabletSource());
+        UNIT_ASSERT(readSet.HasTabletSource());
+        UNIT_ASSERT_VALUES_EQUAL(*matcher.Source, readSet.GetTabletSource());
     }
     if (matcher.Target.Defined()) {
-        UNIT_ASSERT(tablet.ReadSet->HasTabletDest());
-        UNIT_ASSERT_VALUES_EQUAL(*matcher.Target, tablet.ReadSet->GetTabletDest());
+        UNIT_ASSERT(readSet.HasTabletDest());
+        UNIT_ASSERT_VALUES_EQUAL(*matcher.Target, readSet.GetTabletDest());
     }
     if (matcher.Decision.Defined()) {
-        UNIT_ASSERT(tablet.ReadSet->HasReadSet());
+        UNIT_ASSERT(readSet.HasReadSet());
 
         NKikimrTx::TReadSetData data;
-        Y_ABORT_UNLESS(data.ParseFromString(tablet.ReadSet->GetReadSet()));
+        Y_ABORT_UNLESS(data.ParseFromString(readSet.GetReadSet()));
 
         UNIT_ASSERT_EQUAL(*matcher.Decision, data.GetDecision());
     }
     if (matcher.Producer.Defined()) {
-        UNIT_ASSERT(tablet.ReadSet->HasTabletProducer());
-        UNIT_ASSERT_VALUES_EQUAL(*matcher.Producer, tablet.ReadSet->GetTabletProducer());
+        UNIT_ASSERT(readSet.HasTabletProducer());
+        UNIT_ASSERT_VALUES_EQUAL(*matcher.Producer, readSet.GetTabletProducer());
     }
 }
 

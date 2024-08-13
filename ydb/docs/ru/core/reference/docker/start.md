@@ -34,9 +34,7 @@ docker run \
     
 Подробнее про переменные окружения, используемые при запуске Docker контейнера с {{ ydb-short-name }} можно узнать в разделе [{#T}](environment.md)
 
-## Веб-интерефейс
-
-Веб-интерфейс  {{ ydb-short-name }} доступен на [http://localhost:8765⁠](http://localhost:8765⁠).
+При указанных в примере выше параметрах и запуске Docker локально, [Embedded UI](../embedded-ui/index.md)  {{ ydb-short-name }} будет доступен по адресу [http://localhost:8765⁠](http://localhost:8765⁠).
 
 ## Остановка Docker
 

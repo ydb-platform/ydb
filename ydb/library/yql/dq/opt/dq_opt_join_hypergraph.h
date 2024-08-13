@@ -67,18 +67,12 @@ public:
                 auto leftKey = left.AttributeName;
                 auto rightKey = right.AttributeName;
 
-                for (size_t i = leftKey.size() - 1; i > 0; --i) {
-                    if (leftKey[i] == '.') {
-                        leftKey = leftKey.substr(i + 1);
-                        break;
-                    }
+                if (auto idx = leftKey.find_last_of('.') != TString::npos) {
+                    leftKey =  leftKey.substr(idx+1);
                 }
 
-                for (size_t i = rightKey.size() - 1; i > 0; --i) {
-                    if (rightKey[i] == '.') {
-                        rightKey = rightKey.substr(i + 1);
-                        break;
-                    }
+                if (auto idx = rightKey.find_last_of('.') != TString::npos) {
+                    rightKey =  rightKey.substr(idx+1);
                 }
 
                 LeftJoinKeys.emplace_back(leftKey);

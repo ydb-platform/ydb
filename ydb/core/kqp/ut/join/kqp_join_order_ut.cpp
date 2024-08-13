@@ -253,9 +253,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         ExecuteJoinOrderTestDataQueryWithStats("queries/four_way_join_with_preds_and_equiv.sql", "stats/basic.json", StreamLookupJoin);
     }
 
-    //Y_UNIT_TEST_TWIN(FourWayJoinWithPredsAndEquivAndLeft, StreamLookupJoin) {
-    //    ExecuteJoinOrderTestDataQueryWithStats("queries/four_way_join_with_preds_and_equiv_and_left.sql", "stats/basic.json", StreamLookupJoin);
-    //}
+    Y_UNIT_TEST_TWIN(FourWayJoinWithPredsAndEquivAndLeft, StreamLookupJoin) {
+        ExecuteJoinOrderTestDataQueryWithStats("queries/four_way_join_with_preds_and_equiv_and_left.sql", "stats/basic.json", StreamLookupJoin);
+    }
 
     Y_UNIT_TEST_TWIN(TestJoinHint, StreamLookupJoin) {
         CheckJoinCardinality("queries/test_join_hint.sql", "stats/basic.json", "InnerJoin (Grace)", 10e6, StreamLookupJoin);

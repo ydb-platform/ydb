@@ -24,10 +24,8 @@ namespace {
 
 
     TString RemoveAliases(TString attributeName) {
-        for (size_t i = attributeName.size() - 1; i>0; i--) {
-            if (attributeName[i]=='.') {
-                return attributeName.substr(i+1);
-            }
+        if (auto idx = attributeName.find_last_of('.') != TString::npos) {
+            return attributeName.substr(idx+1);
         }
         return attributeName;
     }

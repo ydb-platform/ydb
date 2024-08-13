@@ -98,9 +98,13 @@ private:
     TVector<std::unique_ptr<TExtension>> Extensions;
 };
 
+extern "C" ui64 TouchReadTableApi();
+
 TExtensionsRegistry::TExtensionsRegistry()
     : Impl_(std::make_unique<TImpl>())
-{}
+{
+    Y_UNUSED(TouchReadTableApi());
+}
 
 TExtensionsRegistry& TExtensionsRegistry::Instance() {
     return *Singleton<TExtensionsRegistry>();

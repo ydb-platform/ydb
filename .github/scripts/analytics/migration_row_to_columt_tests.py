@@ -32,7 +32,6 @@ def create_tables(pool,  table_path):
                 build_type Utf8 NOT NULL,
                 commit Utf8 NOT NULL,
                 duration Double,
-                full_name Utf8 NOT NULL,
                 job_id Uint64,
                 job_name Utf8,
                 log Utf8,
@@ -47,9 +46,9 @@ def create_tables(pool,  table_path):
                 suite_folder Utf8 NOT NULL,
                 test_id Utf8 NOT NULL,
                 test_name Utf8 NOT NULL,
-                PRIMARY KEY (`test_name`, `suite_folder`, `full_name`,build_type, status, run_timestamp)
+                PRIMARY KEY (`test_name`, `suite_folder`,build_type, status, run_timestamp)
             )
-                PARTITION BY HASH(`full_name`, build_type )
+                PARTITION BY HASH(`test_name`, `suite_folder`, branch, build_type )
                 WITH (STORE = COLUMN)
             """)
 
@@ -64,7 +63,6 @@ def bulk_upsert(table_client, table_path, rows):
         .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("commit", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("duration", ydb.OptionalType(ydb.PrimitiveType.Double))
-        .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("job_id", ydb.OptionalType(ydb.PrimitiveType.Uint64))
         .add_column("job_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("log", ydb.OptionalType(ydb.PrimitiveType.Utf8))
@@ -98,8 +96,7 @@ def main():
         print(
             "Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping"
         )
-        os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]="/home/kirrysin/fork_2/.github/scripts/my-robot-key.json"
-        #return 1
+        return 1
     else:
         # Do not set up 'real' variable from gh workflows because it interfere with ydb tests
         # So, set up it locally
@@ -122,7 +119,7 @@ def main():
         
        #table_path = f'test_results/analytics/flaky_tests_history_{history_for_n_day}_days'
        # default_start_date = datetime.date(2024, 7, 1)
-        table_path = 'test_results/test_runs_results_column'
+        table_path = 'test_results/test_runs_column'
         
         with ydb.SessionPool(driver) as pool:
             create_tables(pool, table_path)
@@ -151,7 +148,7 @@ def main():
 
         else:
             last_date = ddefault_start_date.strftime("%Y-%m-%dT%H:%M:%SZ")
-        
+        print(f'last run_datetime in table : {last_date}')
         # geting timestamp list from runs
         last_date_query = f"""select distinct run_timestamp from `test_results/test_runs_results`
         where run_timestamp >=Timestamp('{last_date}')"""
@@ -167,7 +164,7 @@ def main():
                 break
         end_time = time.time()
         print(f"transaction 'geting timestamp list from runs' duration: {end_time - start_time}")
-
+        print(f'count of timestamps : {len(timestamps)}')
         for ts in timestamps:
             # getting history for dates >= last_date
             query_get_runs = f"""
@@ -198,7 +195,6 @@ def main():
                     'build_type': row['build_type'], 
                     'commit': row['commit'],
                     'duration': row['duration'],
-                    'full_name': f"{row['suite_folder']}/{row['test_name']}",
                     'job_id': row['job_id'],
                     'job_name': row['job_name'], 
                     'log': row['log'],

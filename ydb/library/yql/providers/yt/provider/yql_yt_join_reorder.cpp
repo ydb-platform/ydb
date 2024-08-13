@@ -235,7 +235,6 @@ private:
         auto stat = std::make_shared<TOptimizerStatistics>();
         stat->ColumnStatistics = TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>(
             new TOptimizerStatistics::TColumnStatMap());
-
         auto providerStats = std::make_unique<TYtProviderStatistic>();
 
         if (Y_UNLIKELY(!section.Settings().Empty()) && Y_UNLIKELY(section.Settings().Item(0).Name() == "Test")) {

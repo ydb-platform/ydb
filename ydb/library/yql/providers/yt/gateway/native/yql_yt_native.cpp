@@ -2515,7 +2515,6 @@ private:
                 result.Data[idx.first].Stat = statInfo;
 
                 statInfo->ColumnarStats = std::move(statsMap[idx.first]);
-
                 auto type = GetTypeFromAttributes(attrs, false);
                 ui16 viewSyntaxVersion = 1;
                 if (type == "document") {

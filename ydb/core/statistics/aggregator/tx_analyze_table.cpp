@@ -27,7 +27,7 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
 
         NIceDb::TNiceDb db(txc.DB);
 
-        const TString cookie = Record.GetCookie();
+        const TString operationId = Record.GetOperationId();
         const TString types = JoinVectorIntoString(TVector<ui32>(Record.GetTypes().begin(), Record.GetTypes().end()), ",");
         
         for (const auto& table : Record.GetTables()) {
@@ -36,9 +36,9 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
 
             // check existing force traversal with the same cookie and path
             auto forceTraversal = std::find_if(Self->ForceTraversals.begin(), Self->ForceTraversals.end(), 
-                [&pathId, &cookie](const TForceTraversal& elem) { 
+                [&pathId, &operationId](const TForceTraversal& elem) { 
                     return elem.PathId == pathId 
-                        && elem.Cookie == cookie;});
+                        && elem.OperationId == operationId;});
 
             // update existing force traversal
             if (forceTraversal != Self->ForceTraversals.end()) {
@@ -51,8 +51,7 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
 
             // create new force trasersal
             TForceTraversal operation {
-                .OperationId = Self->NextForceTraversalOperationId,
-                .Cookie = cookie,
+                .OperationId = operationId,
                 .PathId = pathId,
                 .ColumnTags = columnTags,
                 .Types = types,
@@ -71,8 +70,6 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
 */
         }
 
-        Self->PersistNextForceTraversalOperationId(db);
-
         return true;
     }
 
@@ -82,8 +79,6 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
 };
 
 void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyze::TPtr& ev) {
-    ++NextForceTraversalOperationId;
-
     Execute(new TTxAnalyzeTable(this, ev->Get()->Record, ev->Sender), TActivationContext::AsActorContext());
 }
 

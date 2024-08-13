@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/util/ulid.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
@@ -14,6 +15,18 @@ enum {
 };
 
 using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+
+TString MakeOperationId() {
+    TULIDGenerator ulidGen;
+    return ulidGen.Next(TActivationContext::Now()).ToBinary();
+}
+
+TAnalyzeActor::TAnalyzeActor(TString tablePath, TVector<TString> columns, NThreading::TPromise<NYql::IKikimrGateway::TGenericResult> promise)
+    : TablePath(tablePath)
+    , Columns(columns) 
+    , Promise(promise)
+    , OperationId(MakeOperationId())
+{}
 
 void TAnalyzeActor::Bootstrap() {
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;
@@ -34,7 +47,7 @@ void TAnalyzeActor::SendAnalyzeStatus() {
 
     auto getStatus = std::make_unique<NStat::TEvStatistics::TEvAnalyzeStatus>();
     auto& record = getStatus->Record;
-    PathIdFromPathId(PathId, record.MutablePathId());
+    record.SetOperationId(OperationId);
 
     Send(
         MakePipePerNodeCacheID(false),
@@ -43,9 +56,19 @@ void TAnalyzeActor::SendAnalyzeStatus() {
 }
 
 void TAnalyzeActor::Handle(NStat::TEvStatistics::TEvAnalyzeResponse::TPtr& ev, const TActorContext& ctx) {
-    Y_UNUSED(ev);
     Y_UNUSED(ctx);
 
+    const auto& record = ev->Get()->Record;
+    const TString operationId = record.GetOperationId();
+
+    if (operationId != OperationId) {
+        ALOG_CRIT(NKikimrServices::KQP_GATEWAY, 
+            "TAnalyzeActor, TEvAnalyzeResponse has operationId=" << operationId 
+            << " , but expected " << OperationId);
+    }
+
+
+    // TODO Don't send EvAnalyzeStatus, EvAnalyzeResponse is already here
     SendAnalyzeStatus();
 }
 
@@ -172,6 +195,7 @@ void TAnalyzeActor::SendStatisticsAggregatorAnalyze(const NSchemeCache::TSchemeC
 
     auto analyzeRequest = std::make_unique<NStat::TEvStatistics::TEvAnalyze>();
     auto& record = analyzeRequest->Record;
+    record.SetOperationId(OperationId);
     auto table = record.AddTables();
     
     PathIdFromPathId(PathId, table->MutablePathId());
@@ -199,6 +223,7 @@ void TAnalyzeActor::SendStatisticsAggregatorAnalyze(const NSchemeCache::TSchemeC
         *table->MutableColumnTags()->Add() = tagByColumnName[columnName];
     }
 
+    // TODO This request should be retried if StatisticsAggregator fails
     Send(
         MakePipePerNodeCacheID(false),
         new TEvPipeCache::TEvForward(analyzeRequest.release(), entry.DomainInfo->Params.GetStatisticsAggregator(), true),

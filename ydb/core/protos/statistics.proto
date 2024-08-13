@@ -81,24 +81,24 @@ message TTable {
 
 // KQP -> SA
 message TEvAnalyze {
-    optional bytes Cookie = 1; // unique request cookie to match response item
+    optional bytes OperationId = 1; // unique identifier to match response item
     repeated TTable Tables = 2; // list of analyzed tables and columns
     repeated EColumnStatisticType Types = 3; // list of statistics types requested. Empty means asking for all available.
 }
 
 // SA -> KQP
 message TEvAnalyzeResponse {
-    optional bytes Cookie = 1;
+    optional bytes OperationId = 1;
 }
 
 // KQP -> SA
 message TEvAnalyzeStatus {
-    optional NKikimrProto.TPathID PathId = 1;
+    optional bytes OperationId = 1; // unique identifier to match response item
 }
 
 // SA -> KQP
 message TEvAnalyzeStatusResponse {
-    optional NKikimrProto.TPathID PathId = 1;
+    optional bytes OperationId = 1;
 
     enum EStatus {
         STATUS_UNSPECIFIED = 0;

@@ -87,7 +87,7 @@ struct TAggregatorSchema : NIceDb::Schema {
     static constexpr ui64 SysParam_ForceTraversalColumnTags = 7;
     static constexpr ui64 SysParam_ForceTraversalTypes = 8;
     static constexpr ui64 SysParam_TraversalStartTime = 9;
-    static constexpr ui64 SysParam_NextForceTraversalOperationId = 10;
+    // deprecated 10
     static constexpr ui64 SysParam_TraversalIsColumnTable = 11;
     static constexpr ui64 SysParam_GlobalTraversalRound = 12;
 };

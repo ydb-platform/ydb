@@ -433,17 +433,18 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvStatTableCreationResponse::
 }
 
 void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeStatus::TPtr& ev) {
-    auto& inRecord = ev->Get()->Record;
-    auto pathId = PathIdFromPathId(inRecord.GetPathId());
+    const auto& inRecord = ev->Get()->Record;
+    const TString operationId = inRecord.GetOperationId();
 
     auto response = std::make_unique<TEvStatistics::TEvAnalyzeStatusResponse>();
     auto& outRecord = response->Record;
+    outRecord.SetOperationId(operationId);
 
-    if (TraversalTableId.PathId == pathId) {
+    if (ForceTraversalOperationId == operationId) {
         outRecord.SetStatus(NKikimrStat::TEvAnalyzeStatusResponse::STATUS_IN_PROGRESS);
     } else {
         if (std::any_of(ForceTraversals.begin(), ForceTraversals.end(), 
-            [&pathId](const TForceTraversal& elem) { return elem.PathId == pathId;})) {
+            [&operationId](const TForceTraversal& elem) { return elem.OperationId == operationId;})) {
             outRecord.SetStatus(NKikimrStat::TEvAnalyzeStatusResponse::STATUS_ENQUEUED);
         } else {
             outRecord.SetStatus(NKikimrStat::TEvAnalyzeStatusResponse::STATUS_NO_OPERATION);
@@ -586,7 +587,6 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
         pathId = operation.PathId;
 
         ForceTraversalOperationId = operation.OperationId;
-        ForceTraversalCookie = operation.Cookie;
         ForceTraversalColumnTags = operation.ColumnTags;
         ForceTraversalTypes = operation.Types;
         ForceTraversalReplyToActorId = operation.ReplyToActorId;
@@ -678,13 +678,9 @@ void TStatisticsAggregator::PersistStartKey(NIceDb::TNiceDb& db) {
 
 void TStatisticsAggregator::PersistForceTraversal(NIceDb::TNiceDb& db) {
     PersistSysParam(db, Schema::SysParam_ForceTraversalOperationId, ToString(ForceTraversalOperationId));
-    PersistSysParam(db, Schema::SysParam_ForceTraversalCookie, ForceTraversalCookie);
+    PersistSysParam(db, Schema::SysParam_ForceTraversalCookie, ForceTraversalOperationId);
     PersistSysParam(db, Schema::SysParam_ForceTraversalColumnTags, ToString(ForceTraversalColumnTags));
     PersistSysParam(db, Schema::SysParam_ForceTraversalTypes, ToString(ForceTraversalTypes));
-}
-
-void TStatisticsAggregator::PersistNextForceTraversalOperationId(NIceDb::TNiceDb& db) {
-    PersistSysParam(db, Schema::SysParam_NextForceTraversalOperationId, ToString(NextForceTraversalOperationId));
 }
 
 void TStatisticsAggregator::PersistGlobalTraversalRound(NIceDb::TNiceDb& db) {
@@ -692,8 +688,7 @@ void TStatisticsAggregator::PersistGlobalTraversalRound(NIceDb::TNiceDb& db) {
 }
 
 void TStatisticsAggregator::ResetTraversalState(NIceDb::TNiceDb& db) {
-    ForceTraversalOperationId = 0;
-    ForceTraversalCookie.clear();
+    ForceTraversalOperationId.clear();
     TraversalTableId.PathId = TPathId();
     ForceTraversalColumnTags.clear();
     ForceTraversalTypes.clear();

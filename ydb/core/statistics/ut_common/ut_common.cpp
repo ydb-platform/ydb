@@ -339,29 +339,27 @@ void TAnalyzedTable::ToProto(NKikimrStat::TTable& tableProto) const {
     tableProto.MutableColumnTags()->Add(ColumnTags.begin(), ColumnTags.end());
 }
 
-std::unique_ptr<TEvStatistics::TEvAnalyze> MakeAnalyzeRequest(const TString cookie, const std::vector<TAnalyzedTable>& tables) {
+std::unique_ptr<TEvStatistics::TEvAnalyze> MakeAnalyzeRequest(const std::vector<TAnalyzedTable>& tables, const TString operationId) {
     auto ev = std::make_unique<TEvStatistics::TEvAnalyze>();
     NKikimrStat::TEvAnalyze& record = ev->Record;
-    record.SetCookie(cookie);
+    record.SetOperationId(operationId);
     record.AddTypes(NKikimrStat::EColumnStatisticType::TYPE_COUNT_MIN_SKETCH);
     for (const TAnalyzedTable& table : tables)
         table.ToProto(*record.AddTables());
     return ev;
 }
 
-
-void Analyze(TTestActorRuntime& runtime, const std::vector<TAnalyzedTable>& tables, ui64 saTabletId) {
-    const TString cookie = "cookie";
-    auto ev = MakeAnalyzeRequest(cookie, tables);
+void Analyze(TTestActorRuntime& runtime, ui64 saTabletId, const std::vector<TAnalyzedTable>& tables, const TString operationId) {
+    auto ev = MakeAnalyzeRequest(tables, operationId);
 
     auto sender = runtime.AllocateEdgeActor();
     runtime.SendToPipe(saTabletId, sender, ev.release());
     auto evResponse = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
 
-    UNIT_ASSERT_VALUES_EQUAL(evResponse->Get()->Record.GetCookie(), cookie);
+    UNIT_ASSERT_VALUES_EQUAL(evResponse->Get()->Record.GetOperationId(), operationId);
 }
 
-void AnalyzeTable(TTestActorRuntime& runtime, const TAnalyzedTable& table, ui64 shardTabletId) {
+void AnalyzeTable(TTestActorRuntime& runtime, ui64 shardTabletId, const TAnalyzedTable& table) {
     auto ev = std::make_unique<TEvStatistics::TEvAnalyzeTable>();
     auto& record = ev->Record;
     table.ToProto(*record.MutableTable());
@@ -370,6 +368,18 @@ void AnalyzeTable(TTestActorRuntime& runtime, const TAnalyzedTable& table, ui64 
     auto sender = runtime.AllocateEdgeActor();
     runtime.SendToPipe(shardTabletId, sender, ev.release());
     runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeTableResponse>(sender);
+}
+
+void AnalyzeStatus(TTestActorRuntime& runtime, ui64 saTabletId, const TString operationId, const NKikimrStat::TEvAnalyzeStatusResponse::EStatus expectedStatus) {
+    auto analyzeStatusRequest = std::make_unique<TEvStatistics::TEvAnalyzeStatus>();
+    analyzeStatusRequest->Record.SetOperationId(operationId);
+    auto sender = runtime.AllocateEdgeActor();
+    runtime.SendToPipe(saTabletId, sender, analyzeStatusRequest.release());
+
+    auto analyzeStatusResponse = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeStatusResponse>(sender);
+    UNIT_ASSERT(analyzeStatusResponse);
+    UNIT_ASSERT_VALUES_EQUAL(analyzeStatusResponse->Get()->Record.GetOperationId(), operationId);
+    UNIT_ASSERT_VALUES_EQUAL(analyzeStatusResponse->Get()->Record.GetStatus(), expectedStatus);
 }
 
 

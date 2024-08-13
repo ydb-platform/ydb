@@ -5,15 +5,13 @@
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
-    ui64 OperationId;
-    TString Cookie;
+    TString OperationId;
     TPathId PathId;
     TActorId ReplyToActorId;
 
     TTxFinishTraversal(TSelf* self)
         : TTxBase(self)
         , OperationId(self->ForceTraversalOperationId)
-        , Cookie(self->ForceTraversalCookie)
         , PathId(self->TraversalTableId.PathId)
         , ReplyToActorId(self->ForceTraversalReplyToActorId)
     {}
@@ -43,12 +41,12 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
         
         if (operationsRemain) {
             SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Complete. Don't send TEvAnalyzeResponse. " <<
-                "There are pending operations, Cookie " << Cookie << " , ActorId=" << ReplyToActorId);
+                "There are pending operations, OperationId " << OperationId << " , ActorId=" << ReplyToActorId);
         } else {
             SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Complete. " <<
-                "Send TEvAnalyzeResponse, Cookie=" << Cookie << ", ActorId=" << ReplyToActorId);
+                "Send TEvAnalyzeResponse, OperationId=" << OperationId << ", ActorId=" << ReplyToActorId);
             auto response = std::make_unique<TEvStatistics::TEvAnalyzeResponse>();
-            response->Record.SetCookie(Cookie);
+            response->Record.SetOperationId(OperationId);
             ctx.Send(ReplyToActorId, response.release());
         }
     }

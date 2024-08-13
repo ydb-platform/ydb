@@ -89,10 +89,12 @@ struct TAnalyzedTable {
     void ToProto(NKikimrStat::TTable& tableProto) const;
 };
 
-std::unique_ptr<TEvStatistics::TEvAnalyze> MakeAnalyzeRequest(const TString cookie, const std::vector<TAnalyzedTable>& tables);
+std::unique_ptr<TEvStatistics::TEvAnalyze> MakeAnalyzeRequest(const std::vector<TAnalyzedTable>& tables, const TString operationId = "operationId");
 
-void Analyze(TTestActorRuntime& runtime, const std::vector<TAnalyzedTable>& table, ui64 saTabletId);
-void AnalyzeTable(TTestActorRuntime& runtime, const TAnalyzedTable& table, ui64 shardTabletId);
+void Analyze(TTestActorRuntime& runtime, ui64 saTabletId, const std::vector<TAnalyzedTable>& table, const TString operationId = "operationId");
+void AnalyzeTable(TTestActorRuntime& runtime, ui64 shardTabletId, const TAnalyzedTable& table);
+void AnalyzeStatus(TTestActorRuntime& runtime, ui64 saTabletId, const TString operationId, const NKikimrStat::TEvAnalyzeStatusResponse::EStatus expectedStatus);
+
 
 } // namespace NStat
 } // namespace NKikimr

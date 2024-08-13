@@ -1,19 +1,26 @@
-#include <util/system/compiler.h>
-#include <ydb/library/yql/parser/pg_catalog/catalog.h>
+#include "pg_compat.h"
 
 extern "C" {
 #include "postgres.h"
 #include "fmgr.h"
 #include "utils/array.h"
+#include "utils/elog.h"
 #include "pgstat.h"
 #include "catalog/pg_namespace_d.h"
 }
 
 #undef Max
+constexpr auto PG_ERROR = ERROR;
+#undef ERROR
 
 #include "utils.h"
 
+#include <util/system/compiler.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
+
 #include <util/system/dynlib.h>
+
+#define ERROR PG_ERROR
 
 namespace NYql {
 

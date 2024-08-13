@@ -113,7 +113,12 @@ private:
     }
 
     static void ReplaceYqlTokenTemplate(TString& sql) {
-        SubstGlobal(sql, TStringBuilder() << "${" << NKqpRun::YQL_TOKEN_VARIABLE << "}", GetEnv(NKqpRun::YQL_TOKEN_VARIABLE));
+        const TString variableName = TStringBuilder() << "${" << NKqpRun::YQL_TOKEN_VARIABLE << "}";
+        if (const TString& yqlToken = GetEnv(NKqpRun::YQL_TOKEN_VARIABLE)) {
+            SubstGlobal(sql, variableName, yqlToken);
+        } else if (sql.Contains(variableName)) {
+            ythrow yexception() << "Failed to replace ${YQL_TOKEN} template, please specify YQL_TOKEN environment variable\n";
+        }
     }
 };
 

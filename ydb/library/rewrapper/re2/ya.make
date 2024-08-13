@@ -6,7 +6,7 @@ PEERDIR(
 )
 
 SRCS(
-    GLOBAL re2.cpp
+    re2.cpp
 )
 
 END()

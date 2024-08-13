@@ -6,7 +6,7 @@ PEERDIR(
 )
 
 SRCS(
-    GLOBAL hyperscan.cpp
+    hyperscan.cpp
 )
 
 END()

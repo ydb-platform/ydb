@@ -1092,7 +1092,8 @@ message TTransaction {
         CALCULATED = 6;
         WAIT_RS = 7;      // persist
         EXECUTING = 8;
-        EXECUTED = 9;
+        EXECUTED = 9;     // persist
+        WAIT_RS_ACKS = 11;
         DELETING = 10;
     };
 

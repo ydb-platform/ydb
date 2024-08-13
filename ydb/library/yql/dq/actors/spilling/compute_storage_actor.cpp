@@ -204,7 +204,6 @@ private:
         auto& blobInfo = it->second;
 
         if (SpillingTaskCounters_) {
-            // SpillingTaskCounters_->ComputeReadBytes.fetch_add(msg.Blob.Size());
             auto opDuration = TInstant::Now() - blobInfo.OpBegin;
             SpillingTaskCounters_->ComputeReadTime += opDuration.MilliSeconds();
         }

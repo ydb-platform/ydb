@@ -340,7 +340,9 @@ namespace Tests {
 
         auto system(Runtime->GetAnyNodeActorSystem());
 
-        Cerr << "TServer::EnableGrpc on GrpcPort " << options.Port << ", node " << system->NodeId << Endl;
+        if (Settings->Verbose) {
+            Cerr << "TServer::EnableGrpc on GrpcPort " << options.Port << ", node " << system->NodeId << Endl;
+        }
 
         const size_t proxyCount = Max(ui32{1}, Settings->AppConfig->GetGRpcConfig().GetGRpcProxyCount());
         TVector<TActorId> grpcRequestProxies;

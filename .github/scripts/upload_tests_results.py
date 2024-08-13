@@ -60,7 +60,6 @@ def bulk_upsert(table_client, table_path, rows):
         .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("commit", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("duration", ydb.OptionalType(ydb.PrimitiveType.Double))
-        .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("job_id", ydb.OptionalType(ydb.PrimitiveType.Uint64))
         .add_column("job_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("log", ydb.OptionalType(ydb.PrimitiveType.Utf8))

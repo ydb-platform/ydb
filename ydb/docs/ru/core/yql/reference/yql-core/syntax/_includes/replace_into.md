@@ -1,6 +1,6 @@
 # REPLACE INTO
 
-{% if oss == "true" and backend_name == "YDB" %}
+{% if oss == true and backend_name == "YDB" %}
 
 {% note warning %}
 

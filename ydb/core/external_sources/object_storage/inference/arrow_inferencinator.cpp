@@ -14,10 +14,24 @@ namespace NKikimr::NExternalSource::NObjectStorage::NInference {
 
 namespace {
 
-bool ArrowToYdbType(Ydb::Type& resType, const arrow::DataType& type) {
+bool ShouldBeOptional(const arrow::DataType& type) {
     switch (type.id()) {
     case arrow::Type::NA:
-        resType.set_null_type(google::protobuf::NullValue::NULL_VALUE);
+    case arrow::Type::STRING:
+    case arrow::Type::BINARY:
+    case arrow::Type::LARGE_BINARY:
+    case arrow::Type::FIXED_SIZE_BINARY:
+        return false;
+    default:
+        return true;
+    }
+}
+
+bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type) {
+    auto& resType = ShouldBeOptional(type) ? *maybeOptionalType.mutable_optional_type()->mutable_item() : maybeOptionalType;
+    switch (type.id()) {
+    case arrow::Type::NA:
+        resType.set_type_id(Ydb::Type::UTF8);
         return true;
     case arrow::Type::BOOL:
         resType.set_type_id(Ydb::Type::BOOL);
@@ -139,6 +153,14 @@ bool ArrowToYdbType(Ydb::Type& resType, const arrow::DataType& type) {
     }
     return false;
 }
+
+TEvInferredFileSchema* MakeErrorSchema(TString path, NFq::TIssuesIds::EIssueCode code, TString message) {
+    NYql::TIssues issues;
+    issues.AddIssue(std::move(message));
+    issues.back().SetCode(code, NYql::TSeverityIds::S_ERROR);
+    return new TEvInferredFileSchema{std::move(path), std::move(issues)};
+}
+
 }
 
 struct FormatConfig {
@@ -167,14 +189,14 @@ std::variant<ArrowFields, TString> InferCsvTypes(std::shared_ptr<arrow::io::Rand
     .Value(&reader);
 
     if (!readerStatus.ok()) {
-        return TString{TStringBuilder{} << "couldn't make table from data: " << readerStatus.ToString()};
+        return TString{TStringBuilder{} << "couldn't parse csv/tsv file, check format and compression params: " << readerStatus.ToString()};
     }
 
     std::shared_ptr<arrow::Table> table;
     auto tableRes = reader->Read().Value(&table);
 
     if (!tableRes.ok()) {
-        return TStringBuilder{} << "couldn't read table from data: " << readerStatus.ToString();
+        return TStringBuilder{} << "couldn't parse csv/tsv file, check format and compression params: " << readerStatus.ToString();
     }
 
     return table->fields();
@@ -245,7 +267,7 @@ public:
         auto& file = *ev->Get();
         auto mbArrowFields = InferType(Format_, file.File, *Config_);
         if (std::holds_alternative<TString>(mbArrowFields)) {
-            ctx.Send(RequesterId_, MakeError(file.Path, NFq::TIssuesIds::INTERNAL_ERROR, std::get<TString>(mbArrowFields)));
+            ctx.Send(RequesterId_, MakeErrorSchema(file.Path, NFq::TIssuesIds::INTERNAL_ERROR, std::get<TString>(mbArrowFields)));
             return;
         }
 
@@ -255,7 +277,7 @@ public:
             ydbFields.emplace_back();
             auto& ydbField = ydbFields.back();
             if (!ArrowToYdbType(*ydbField.mutable_type(), *field->type())) {
-                ctx.Send(RequesterId_, MakeError(file.Path, NFq::TIssuesIds::UNSUPPORTED, TStringBuilder{} << "couldn't convert arrow type to ydb: " << field->ToString()));
+                ctx.Send(RequesterId_, MakeErrorSchema(file.Path, NFq::TIssuesIds::UNSUPPORTED, TStringBuilder{} << "couldn't convert arrow type to ydb: " << field->ToString()));
                 return;
             }
             ydbField.mutable_name()->assign(field->name());
@@ -265,7 +287,7 @@ public:
 
     void HandleFileError(TEvFileError::TPtr& ev, const NActors::TActorContext& ctx) {
         Cout << "TArrowInferencinator::HandleFileError" << Endl;
-        ctx.Send(RequesterId_, ev->Release());
+        ctx.Send(RequesterId_, new TEvInferredFileSchema(ev->Get()->Path, std::move(ev->Get()->Issues)));
     }
 
 private:

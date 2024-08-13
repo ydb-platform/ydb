@@ -179,9 +179,6 @@ namespace NKikimr::NHttpProxy {
 
         TEvYmqCloudAuthResponse(TError& error)
             : IsSuccess(false)
-            , CloudId("")
-            , FolderId("")
-            , Sid("")
             , Error(error)
             {}
     };

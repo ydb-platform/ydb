@@ -217,8 +217,8 @@ public:
 
     std::shared_ptr<TJoinOptimizerNode> JoinSearch(
         const std::shared_ptr<TJoinOptimizerNode>& joinTree, 
-        TCardinalityHints hints = TCardinalityHints(),
-        TJoinAlgoHints joinHints = TJoinAlgoHints()
+        TCardinalityHints hints = {},
+        TJoinAlgoHints joinHints = {}
     ) override {
 
         auto relsCount = joinTree->Labels().size();
@@ -242,8 +242,8 @@ private:
     template <typename TNodeSet>
     std::shared_ptr<TJoinOptimizerNode> JoinSearchImpl(
         const std::shared_ptr<TJoinOptimizerNode>& joinTree, 
-        TCardinalityHints hints = TCardinalityHints(),
-        TJoinAlgoHints joinHints = TJoinAlgoHints()) {
+        TCardinalityHints hints = {},
+        TJoinAlgoHints joinHints = {}) {
 
         TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree);
         TDPHypSolver<TNodeSet> solver(hypergraph, this->Pctx, hints, joinHints);
@@ -290,8 +290,6 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     TCardinalityHints hints,
     TJoinAlgoHints joinHints
 ) {
-    Y_UNUSED(hints);
-
     if (optLevel <= 1) {
         return node;
     }

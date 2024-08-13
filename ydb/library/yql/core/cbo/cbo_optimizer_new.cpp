@@ -287,10 +287,10 @@ const TBaseProviderContext& TBaseProviderContext::Instance() {
 }
 
 TCardinalityHints::TCardinalityHints(const TString& json) {
-    auto jsonValue = new NJson::TJsonValue();
-    NJson::ReadJsonTree(json, jsonValue, true);
+    auto jsonValue = NJson::TJsonValue();
+    NJson::ReadJsonTree(json, &jsonValue, true);
 
-    for (auto s : jsonValue->GetArraySafe()) {
+    for (auto s : jsonValue.GetArraySafe()) {
         auto h = s.GetMapSafe();
 
         TCardinalityHints::TCardinalityHint hint;
@@ -308,10 +308,10 @@ TCardinalityHints::TCardinalityHints(const TString& json) {
 }
 
 TJoinAlgoHints::TJoinAlgoHints(const TString& json) {
-    auto jsonValue = new NJson::TJsonValue();
-    NJson::ReadJsonTree(json, jsonValue, true);
+    auto jsonValue = NJson::TJsonValue();
+    NJson::ReadJsonTree(json, &jsonValue, true);
 
-    for (auto s : jsonValue->GetArraySafe()) {
+    for (auto s : jsonValue.GetArraySafe()) {
         auto h = s.GetMapSafe();
 
         TJoinAlgoHints::TJoinAlgoHint hint;

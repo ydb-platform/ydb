@@ -2008,7 +2008,8 @@ TPersQueueL2CacheInitializer::TPersQueueL2CacheInitializer(const TKikimrRunConfi
 {}
 
 void TPersQueueL2CacheInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    static const ui64 DEFAULT_PQ_L2_MAX_SIZE_MB = 8 * 1024;
+    static const ui64 DEFAULT_PQ_L2_MAX_SIZE_MB =
+        NKikimrNodeLimits::TNodeLimitsConfig_TPersQueueNodeConfig::default_instance().GetSharedCacheSizeMb();
     static const TDuration DEFAULT_PQ_L2_KEEP_TIMEOUT = TDuration::Seconds(10);
 
     NPQ::TCacheL2Parameters params;

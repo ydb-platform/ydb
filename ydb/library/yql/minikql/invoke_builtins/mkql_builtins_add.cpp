@@ -26,6 +26,18 @@ struct TAdd : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TAdd<TLeft,
 #endif
 };
 
+struct TDecimalBlockAdd {
+    static constexpr TKernel::ENullMode NullMode = TKernel::ENullMode::Default;
+
+    static NYql::NDecimal::TInt128 Do(NYql::NDecimal::TInt128 left, NYql::NDecimal::TInt128 right) {
+        return NYql::NDecimal::TInt128(NYql::NDecimal::TDecimal(left) + NYql::NDecimal::TDecimal(right));
+    }
+
+    static void DoPtr(const NYql::NDecimal::TInt128* left, const NYql::NDecimal::TInt128* right, NYql::NDecimal::TInt128* res) {
+        *res = Do(*left, *right);
+    }
+};
+
 template<typename TType>
 using TAggrAdd = TAdd<TType, TType, TType>;
 
@@ -373,6 +385,13 @@ void RegisterAdd(TKernelFamilyMap& kernelFamilyMap) {
     RegisterIntervalAddInterval<false, true>(*family);
     RegisterIntervalAddInterval<true, false>(*family);
     RegisterIntervalAddInterval<true, true>(*family);
+
+    using TFuncInstance = TDecimalBlockAdd;
+    using TExecs = TBinaryKernelExecs<NYql::NDecimal::TInt128, false, 
+                    NYql::NDecimal::TInt128, false, 
+                    NYql::NDecimal::TInt128, EPropagateTz::None, 
+                    TFuncInstance, TFuncInstance::NullMode>;
+    AddBinaryKernelImpl(*family, NUdf::EDataSlot::Decimal, NUdf::EDataSlot::Decimal, NUdf::EDataSlot::Decimal, &TExecs::Exec, TFuncInstance::NullMode);
 
     kernelFamilyMap["Add"] = std::move(family);
 }

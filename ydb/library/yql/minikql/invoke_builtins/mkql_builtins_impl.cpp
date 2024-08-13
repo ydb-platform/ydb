@@ -70,6 +70,7 @@ arrow::compute::InputType GetPrimitiveInputArrowType(NUdf::EDataSlot slot) {
     case NUdf::EDataSlot::Timestamp64: return GetPrimitiveInputArrowType<i64>();
     case NUdf::EDataSlot::TzTimestamp64: return GetPrimitiveInputArrowType<i64>(true);
     case NUdf::EDataSlot::Interval64: return GetPrimitiveInputArrowType<i64>();
+    case NUdf::EDataSlot::Decimal: return GetPrimitiveInputArrowType<NYql::NDecimal::TInt128>();
     default:
         ythrow yexception() << "Unexpected data slot: " << slot;
     }
@@ -104,6 +105,7 @@ arrow::compute::OutputType GetPrimitiveOutputArrowType(NUdf::EDataSlot slot) {
     case NUdf::EDataSlot::Timestamp64: return GetPrimitiveOutputArrowType<i64>();
     case NUdf::EDataSlot::TzTimestamp64: return GetPrimitiveOutputArrowType<i64>(true);
     case NUdf::EDataSlot::Interval64: return GetPrimitiveOutputArrowType<i64>();
+    case NUdf::EDataSlot::Decimal: return GetPrimitiveOutputArrowType<NYql::NDecimal::TInt128>();
     default:
         ythrow yexception() << "Unexpected data slot: " << slot;
     }

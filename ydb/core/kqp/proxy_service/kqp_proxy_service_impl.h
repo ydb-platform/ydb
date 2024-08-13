@@ -424,9 +424,9 @@ class TResourcePoolsCache {
         const TString Membername;
         const TString PoolId;
 
-        TClassifierInfo(const TResourcePoolClassifierConfig& classifier)
-            : Membername(classifier.GetMembername())
-            , PoolId(classifier.GetResourcePool())
+        TClassifierInfo(const NResourcePool::TClassifierSettings& classifierSettings)
+            : Membername(classifierSettings.Membername)
+            , PoolId(classifierSettings.ResourcePool)
         {}
     };
 
@@ -582,9 +582,11 @@ private:
             if (classifier.GetRank() < 0) {
                 continue;
             }
-            databaseInfo.RankToClassifierInfo.insert({classifier.GetRank(), TClassifierInfo(classifier)});
-            if (!PoolsCache.contains(classifier.GetResourcePool())) {
-                actorContext.Send(MakeKqpWorkloadServiceId(actorContext.SelfID.NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(database, classifier.GetResourcePool()));
+
+            const auto& classifierSettings = classifier.GetClassifierSettings();
+            databaseInfo.RankToClassifierInfo.insert({classifier.GetRank(), TClassifierInfo(classifierSettings)});
+            if (!PoolsCache.contains(classifierSettings.ResourcePool)) {
+                actorContext.Send(MakeKqpWorkloadServiceId(actorContext.SelfID.NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(database, classifierSettings.ResourcePool));
             }
         }
     }

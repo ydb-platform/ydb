@@ -674,6 +674,17 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
 
         WaitForFail(ydb, settings, poolId);
     }
+
+    Y_UNIT_TEST(TestExplicitPoolId) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        auto settings = TQueryRunnerSettings().PoolId("");
+        const TString& poolId = "my_pool";
+        CreateSampleResourcePoolClassifier(ydb, settings, poolId);
+
+        WaitForFail(ydb, settings, poolId);
+        TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID)));
+    }
 }
 
 }  // namespace NKikimr::NKqp

@@ -268,6 +268,47 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
+    Y_UNIT_TEST(ExecuteQueryWithResourcePoolClassifier) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableResourcePools(true);
+
+        auto kikimr = TKikimrRunner(TKikimrSettings()
+            .SetAppConfig(config)
+            .SetEnableResourcePools(true));
+        auto db = kikimr.GetQueryClient();
+
+        const TString userSID = TStringBuilder() << "test@" << BUILTIN_ACL_DOMAIN;
+        const TString schemeSql = TStringBuilder() << R"(
+            CREATE RESOURCE POOL MyPool WITH (
+                CONCURRENT_QUERY_LIMIT=0
+            );
+            CREATE RESOURCE POOL CLASSIFIER MyPoolClassifier WITH (
+                RESOURCE_POOL="MyPool",
+                MEMBERNAME=")" << userSID << R"("
+            );
+            GRANT ALL ON `/Root` TO `)" << userSID << R"(`;
+        )";
+        auto schemeResult = db.ExecuteQuery(schemeSql, TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(schemeResult.GetStatus(), EStatus::SUCCESS, schemeResult.GetIssues().ToString());
+
+        auto testUserClient = kikimr.GetQueryClient(TClientSettings().AuthToken(userSID));
+        const TDuration timeout = TDuration::Seconds(5);
+        const TInstant start = TInstant::Now();
+        while (TInstant::Now() - start <= timeout) {
+            const TString query = "SELECT 42;";
+            auto result = testUserClient.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            if (!result.IsSuccess()) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pool MyPool was disabled due to zero concurrent query limit");
+                return;
+            }
+
+            Cerr << "Wait resource pool classifier " << TInstant::Now() - start << ": status = " << result.GetStatus() << ", issues = " << result.GetIssues().ToOneLineString() << "\n";
+            Sleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_C(false, "Waiting resource pool classifier timeout. Spent time " << TInstant::Now() - start << " exceeds limit " << timeout);
+    }
+
     std::pair<ui32, ui32> CalcRowsAndBatches(TExecuteQueryIterator& it) {
         ui32 totalRows = 0;
         ui32 totalBatches = 0;

@@ -77,10 +77,11 @@ def _run(
     ):
         raise ValueError("Only give --create")
 
+    versionpath = os.path.join(path, "_version.py")
     if newversion:
         from pkg_resources import parse_version
 
-        existing = _existing_version(path)
+        existing = _existing_version(versionpath)
         st_version = parse_version(newversion)._version  # type: ignore[attr-defined]
 
         release = list(st_version.release)
@@ -109,7 +110,7 @@ def _run(
         existing = v
 
     elif rc and not patch:
-        existing = _existing_version(path)
+        existing = _existing_version(versionpath)
 
         if existing.release_candidate:
             v = Version(
@@ -123,7 +124,7 @@ def _run(
             v = Version(package, _date.year - _YEAR_START, _date.month, 0, 1)
 
     elif patch:
-        existing = _existing_version(path)
+        existing = _existing_version(versionpath)
         v = Version(
             package,
             existing.major,
@@ -133,7 +134,7 @@ def _run(
         )
 
     elif post:
-        existing = _existing_version(path)
+        existing = _existing_version(versionpath)
 
         if existing.post is None:
             _post = 0
@@ -143,7 +144,7 @@ def _run(
         v = Version(package, existing.major, existing.minor, existing.micro, post=_post)
 
     elif dev:
-        existing = _existing_version(path)
+        existing = _existing_version(versionpath)
 
         if existing.dev is None:
             _dev = 0
@@ -160,7 +161,7 @@ def _run(
         )
 
     else:
-        existing = _existing_version(path)
+        existing = _existing_version(versionpath)
 
         if existing.release_candidate:
             v = Version(package, existing.major, existing.minor, existing.micro)
@@ -212,7 +213,6 @@ def _run(
                 with open(filepath, "wb") as f:
                     f.write(content)
 
-    versionpath = os.path.join(path, "_version.py")
     _print("Updating %s" % (versionpath,))
     with open(versionpath, "wb") as f:
         f.write(

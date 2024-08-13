@@ -368,20 +368,19 @@ def _findPath(path, package):  # type: (str, str) -> str
         return current_dir
     else:
         raise ValueError(
-            "Can't find the directory of package {}: I looked in {} and {}".format(
+            "Can't find the directory of project {}: I looked in {} and {}".format(
                 package, src_dir, current_dir
             )
         )
 
 
-def _existing_version(path):  # type: (str) -> Version
+def _existing_version(version_path):  # type: (str) -> Version
     """
-    Load the current version from {path}/_version.py.
+    Load the current version from a ``_version.py`` file.
     """
     version_info = {}  # type: Dict[str, Version]
 
-    versionpath = os.path.join(path, "_version.py")
-    with open(versionpath, "r") as f:
+    with open(version_path, "r") as f:
         exec(f.read(), version_info)
 
     return version_info["__version__"]
@@ -392,18 +391,34 @@ def _get_setuptools_version(dist):  # type: (_Distribution) -> None
     Setuptools integration: load the version from the working directory
 
     This function is registered as a setuptools.finalize_distribution_options
-    entry point [1]. It is a no-op unless there is a pyproject.toml containing
-    an empty [tool.incremental] section.
-
-    @param dist: An empty C{setuptools.Distribution} instance to mutate.
+    entry point [1]. Consequently, it is called in all sorts of weird
+    contexts. In setuptools, silent failure is the law.
 
     [1]: https://setuptools.pypa.io/en/latest/userguide/extension.html#customizing-distribution-options
+
+    @param dist:
+        A (possibly) empty C{setuptools.Distribution} instance to mutate.
+        There may be some metadata here if a `setup.py` called `setup()`,
+        but this hook is always called before setuptools loads anything
+        from ``pyproject.toml``.
     """
-    config = _load_pyproject_toml("./pyproject.toml")
-    if not config or not config.has_tool_incremental:
+    try:
+        # When operating in a packaging context (i.e. building an sdist or
+        # wheel) pyproject.toml will always be found in the current working
+        # directory.
+        config = _load_pyproject_toml("./pyproject.toml")
+    except Exception:
         return
 
-    dist.metadata.version = _existing_version(config.path).public()
+    if not config.opt_in:
+        return
+
+    try:
+        version = _existing_version(config.version_path)
+    except FileNotFoundError:
+        return
+
+    dist.metadata.version = version.public()
 
 
 def _get_distutils_version(dist, keyword, value):  # type: (_Distribution, object, object) -> None
@@ -424,8 +439,8 @@ def _get_distutils_version(dist, keyword, value):  # type: (_Distribution, objec
 
     for item in sp_command.find_all_modules():
         if item[1] == "_version":
-            package_path = os.path.dirname(item[2])
-            dist.metadata.version = _existing_version(package_path).public()
+            version_path = os.path.join(os.path.dirname(item[2]), "_version.py")
+            dist.metadata.version = _existing_version(version_path).public()
             return
 
     raise Exception("No _version.py found.")  # pragma: no cover
@@ -451,7 +466,7 @@ class _IncrementalConfig:
     Configuration loaded from a ``pyproject.toml`` file.
     """
 
-    has_tool_incremental: bool
+    opt_in: bool
     """
     Does the pyproject.toml file contain a [tool.incremental]
     section? This indicates that the package has explicitly
@@ -459,13 +474,18 @@ class _IncrementalConfig:
     """
 
     package: str
-    """The package name, capitalized as in the package metadata."""
+    """The project name, capitalized as in the project metadata."""
 
     path: str
     """Path to the package root"""
 
+    @property
+    def version_path(self):  # type: () -> str
+        """Path of the ``_version.py`` file. May not exist."""
+        return os.path.join(self.path, "_version.py")
 
-def _load_pyproject_toml(toml_path):  # type: (str) -> Optional[_IncrementalConfig]
+
+def _load_pyproject_toml(toml_path):  # type: (str) -> _IncrementalConfig
     """
     Load Incremental configuration from a ``pyproject.toml``
 
@@ -473,30 +493,29 @@ def _load_pyproject_toml(toml_path):  # type: (str) -> Optional[_IncrementalConf
     from the [project] section. Otherwise we require only a C{name} key
     specifying the project name. Other keys are forbidden to allow future
     extension and catch typos.
+
+    @param toml_path:
+        Path to the ``pyproject.toml`` to load.
     """
-    try:
-        with open(toml_path, "rb") as f:
-            data = _load_toml(f)
-    except FileNotFoundError:
-        return None
+    with open(toml_path, "rb") as f:
+        data = _load_toml(f)
 
     tool_incremental = _extract_tool_incremental(data)
 
+    # Extract the project name
     package = None
     if tool_incremental is not None and "name" in tool_incremental:
         package = tool_incremental["name"]
     if package is None:
+        # Try to fall back to [project]
         try:
             package = data["project"]["name"]
         except KeyError:
             pass
     if package is None:
-        # We can't proceed without a project name, but that's only an error
-        # if [tool.incremental] is present.
-        if tool_incremental is None:
-            return None
+        # We can't proceed without a project name.
         raise ValueError("""\
-Couldn't extract the package name from pyproject.toml. Specify it like:
+Incremental failed to extract the project name from pyproject.toml. Specify it like:
 
     [project]
     name = "Foo"
@@ -509,11 +528,11 @@ Or:
 """)
     if not isinstance(package, str):
         raise TypeError(
-            "Package name must be a string, but found {}".format(type(package))
+            "The project name must be a string, but found {}".format(type(package))
         )
 
     return _IncrementalConfig(
-        has_tool_incremental=tool_incremental is not None,
+        opt_in=tool_incremental is not None,
         package=package,
         path=_findPath(os.path.dirname(toml_path), package),
     )

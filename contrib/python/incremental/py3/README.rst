@@ -24,7 +24,7 @@ Add Incremental to your ``pyproject.toml``:
     [build-system]
     requires = [
         "setuptools",
-        "incremental>=24.7.0",  # ← Add incremental as a build dependency
+        "incremental>=24.7.2",  # ← Add incremental as a build dependency
     ]
     build-backend = "setuptools.build_meta"
 
@@ -32,7 +32,7 @@ Add Incremental to your ``pyproject.toml``:
     name = "<projectname>"
     dynamic = ["version"]     # ← Mark the version dynamic
     dependencies = [
-        "incremental>=24.7.0",  # ← Depend on incremental at runtime
+        "incremental>=24.7.2",  # ← Depend on incremental at runtime
     ]
     # ...
 
@@ -55,7 +55,7 @@ activate Incremental's Hatchling plugin by altering your ``pyproject.toml``:
     [build-system]
     requires = [
         "hatchling",
-        "incremental>=24.7.0",  # ← Add incremental as a build dependency
+        "incremental>=24.7.2",  # ← Add incremental as a build dependency
     ]
     build-backend = "hatchling.build"
 
@@ -63,7 +63,7 @@ activate Incremental's Hatchling plugin by altering your ``pyproject.toml``:
     name = "<projectname>"
     dynamic = ["version"]     # ← Mark the version dynamic
     dependencies = [
-        "incremental>=24.7.0",  # ← Depend on incremental at runtime
+        "incremental>=24.7.2",  # ← Depend on incremental at runtime
     ]
     # ...
 

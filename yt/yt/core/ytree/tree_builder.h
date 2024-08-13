@@ -37,7 +37,9 @@ struct ITreeBuilder
  */
 std::unique_ptr<ITreeBuilder> CreateBuilderFromFactory(
     INodeFactory* factory,
-    int treeSizeLimit = std::numeric_limits<int>::max());
+    int treeSizeLimit);
+
+std::unique_ptr<ITreeBuilder> CreateBuilderFromFactory(INodeFactory* factory);
 
 ////////////////////////////////////////////////////////////////////////////////
 

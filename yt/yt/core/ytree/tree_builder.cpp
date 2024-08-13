@@ -186,6 +186,12 @@ std::unique_ptr<ITreeBuilder> CreateBuilderFromFactory(
     return std::unique_ptr<ITreeBuilder>(new TTreeBuilder(std::move(factory), treeSizeLimit));
 }
 
+std::unique_ptr<ITreeBuilder> CreateBuilderFromFactory(
+    INodeFactory* factory)
+{
+    return CreateBuilderFromFactory(factory, std::numeric_limits<int>::max());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NYTree

@@ -31,6 +31,7 @@ docker run \
     -e MON_PORT=8765 \ # http порт
     -e YDB_USE_IN_MEMORY_PDISKS=1 \ # хранение данных только в оперативной памяти
     ydbplatform/local-ydb:latest # имя и тег образа
+```
     
 Подробнее про переменные окружения, используемые при запуске Docker контейнера с {{ ydb-short-name }} можно узнать в разделе [{#T}](environment.md)
 

@@ -636,7 +636,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
 
         auto settings = TQueryRunnerSettings().PoolId("");
         const TString& poolId = "my_pool";
-        const TString& classifierId = CreateSampleResourcePoolClassifier(ydb, settings, poolId);
+        CreateSampleResourcePoolClassifier(ydb, settings, poolId);
 
         WaitForFail(ydb, settings, poolId);
 

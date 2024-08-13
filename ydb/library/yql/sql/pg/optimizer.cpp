@@ -690,8 +690,13 @@ public:
         , Log(log)
     { }
 
-    std::shared_ptr<TJoinOptimizerNode> JoinSearch(const std::shared_ptr<TJoinOptimizerNode>& joinTree) override
+    std::shared_ptr<TJoinOptimizerNode> JoinSearch(
+        const std::shared_ptr<TJoinOptimizerNode>& joinTree, 
+        TCardinalityHints hints ={},
+        TJoinAlgoHints joinHints = {}) override
     {
+        Y_UNUSED(hints);
+        Y_UNUSED(joinHints);
         return TPgOptimizerImpl(joinTree, Ctx, Log).Do();
     }
 

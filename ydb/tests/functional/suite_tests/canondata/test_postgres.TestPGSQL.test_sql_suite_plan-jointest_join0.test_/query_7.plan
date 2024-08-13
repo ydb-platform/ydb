@@ -48,7 +48,7 @@
                                                 "Name": "Aggregate"
                                             },
                                             {
-                                                "Condition": "hundred,ten = t2.hundred,t3.ten",
+                                                "Condition": "t1.hundred,t1.ten = t2.hundred,t3.ten",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 15
@@ -80,7 +80,7 @@
                                                                         "Node Type": "InnerJoin (MapJoin)-Filter",
                                                                         "Operators": [
                                                                             {
-                                                                                "Condition": "thousand = unique2",
+                                                                                "Condition": "t2.thousand = t3.unique2",
                                                                                 "Inputs": [
                                                                                     {
                                                                                         "InternalOperatorId": 1

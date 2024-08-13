@@ -1,4 +1,5 @@
-PRAGMA ydb.OptOverrideStatistics = '{"/Root/R":{"n_rows":100500, "key_columns":["id"], "columns":[{"name":"id", "n_unique_vals":50}]}}';
+PRAGMA ydb.OptCardinalityHints = '[{"labels":["R","S"], "op":"#", "value":1.0}]';
+
 SELECT *
 FROM `/Root/R` as R
     INNER JOIN
@@ -12,4 +13,4 @@ FROM `/Root/R` as R
     ON T.id = U.id
     INNER JOIN
         `/Root/V` as V
-    ON U.id = V.id;
+    ON U.id = V.id

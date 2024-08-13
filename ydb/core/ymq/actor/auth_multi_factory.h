@@ -64,12 +64,12 @@ public:
         , EnableQueueLeader_(data.EnableQueueLeader)
         , PoolId_(data.ExecutorPoolID)
         , Signature_(std::move(data.AWSSignature))
-        , Action_(data.Action)
-        , IamToken_(data.IAMToken)
-        , InfraToken_(infraToken)
-        , FolderId_(data.FolderID)
-        , CloudId_(data.CloudID)
-        , ResourceId_(data.ResourceID)
+        , Action_(std::move(data.Action))
+        , IamToken_(std::move(data.IAMToken))
+        , InfraToken_(std::move(infraToken))
+        , FolderId_(std::move(data.FolderID))
+        , CloudId_(std::move(data.CloudID))
+        , ResourceId_(std::move(data.ResourceID))
         , Counters_(*data.Counters)
         , UserSidCallback_(std::move(data.UserSidCallback))
     {
@@ -170,8 +170,8 @@ protected:
 class THttpProxyAuthRequestProxy : public TBaseCloudAuthRequestProxy {
 public:
     THttpProxyAuthRequestProxy(TAuthActorData&& data, TString infraToken, TActorId requester)
-        : TBaseCloudAuthRequestProxy(std::move(data), infraToken)
-        , Requester_(requester)
+        : TBaseCloudAuthRequestProxy(std::move(data), std::move(infraToken))
+        , Requester_(std::move(requester))
     {
         Y_ABORT_UNLESS(RequestId_);
     }

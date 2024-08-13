@@ -10,7 +10,7 @@ mkdir ydb_data
 mkdir ydb_certs
 ```
 
-## Запуск Docker
+## Запуск контейнера с {{ ydb-short-name }} в Docker
 
 Пример команды запуска {{ ydb-short-name }} в Docker с подробными комментариями:
 

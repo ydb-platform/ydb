@@ -17,10 +17,6 @@ namespace NKikimr {
     struct TAppData;
 }
 
-namespace NKikimrConfig {
-    class TActorSystemConfig;
-}
-
 namespace NKikimrProto {
     class TKeyConfig;
 }
@@ -60,7 +56,7 @@ namespace NActors {
         struct TActorSystemSetupConfig {
             TCpuManagerConfig CpuManagerConfig;
             TSchedulerConfig SchedulerConfig;
-            bool MonitorStuckActors;
+            bool MonitorStuckActors = false;
         };
 
         struct TActorSystemPools {

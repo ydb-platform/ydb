@@ -54,10 +54,8 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
 
     ui32 GetsAccelerated = 0;
     bool IsGetAccelerateScheduled = false;
-    TInstant FirstGetAccelerationTimestamp = TInstant::Zero();
     ui32 PutsAccelerated = 0;
     bool IsPutAccelerateScheduled = false;
-    TInstant FirstPutAccelerationTimestamp = TInstant::Zero();
 
     TAccelerationParams AccelerationParams;
 
@@ -76,8 +74,6 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
     void AccelerateGet() {
         if (GetsAccelerated == 2) {
             return;
-        } else if (GetsAccelerated == 0) {
-            FirstGetAccelerationTimestamp = TActivationContext::Now();
         }
         GetsAccelerated++;
 
@@ -93,8 +89,6 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
     void AcceleratePut() {
         if (PutsAccelerated == 2) {
             return;
-        } else if (PutsAccelerated == 0) {
-            FirstPutAccelerationTimestamp = TActivationContext::Now();
         }
         PutsAccelerated++;
 

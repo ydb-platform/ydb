@@ -725,7 +725,7 @@ public:
                     f.GetValue(); // rethrow error if any
                     execCtx->StoreQueryCache();
                     execCtx->SetNodeExecProgress("Fetching attributes of output tables");
-                    return MakeRunResult(execCtx->OutTables_, execCtx->GetEntry());
+                    return MakeRunResult(execCtx->Options_.Config(), execCtx->OutTables_, execCtx->GetEntry());
                 } catch (...) {
                     return ResultFromCurrentException<TRunResult>(pos);
                 }
@@ -1093,7 +1093,7 @@ public:
                 try {
                     YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
                     if (f.GetValue()) {
-                        return MakeRunResult(execCtx->OutTables_, execCtx->GetEntry());
+                        return MakeRunResult(execCtx->Options_.Config(), execCtx->OutTables_, execCtx->GetEntry());
                     } else {
                         TRunResult res;
                         res.SetSuccess();
@@ -2450,14 +2450,20 @@ private:
                     attributes[idx.first] = res.GetValue();
                 }));
             }
-            auto statsFuture = RequestColumnarStatistics(batchGet, paths);
+            NThreading::TFuture<TVector<TYtTableColumnarStats>> columnarFuture;
+            if (execCtx->Options_.Config()->FetchColumnarStatsFromNodes.Get().GetOrElse(
+                 DEFAULT_FETCH_COLUMNAR_STATS_FROM_NODES)) {
+                columnarFuture = RequestColumnarStatistics(batchGet, paths);
+            }
 
             batchGet->ExecuteBatch();
             WaitExceptionOrAll(batchRes).GetValue();
-            auto idx = idxs.begin();
-            for (auto& stats : statsFuture.GetValue()) {
-                statsMap[idx->first] = std::move(stats);
-                ++idx;
+            if (columnarFuture.Initialized()) {
+                auto idx = idxs.begin();
+                for (auto& stats : columnarFuture.GetValue()) {
+                    statsMap[idx->first] = std::move(stats);
+                    ++idx;
+                }
             }
         }
         {
@@ -2613,7 +2619,6 @@ private:
                 throw yexception() << "Error loading '" << tables[idx.first].Table() << "' table metadata: " << CurrentExceptionMessage();
             }
         }
-
         if (batchRes) {
             batchGet->ExecuteBatch();
             WaitExceptionOrAll(batchRes).GetValue();
@@ -4542,7 +4547,6 @@ private:
             for (size_t i: xrange(execCtx->Options_.Paths().size())) {
                 auto& req = execCtx->Options_.Paths()[i];
                 NYT::TRichYPath ytPath = req.Path();
-
                 auto tablePath = NYql::TransformPath(tmpFolder, ytPath.Path_, req.IsTemp(), execCtx->Session_->UserName_);
                 if (req.IsTemp() && !req.IsAnonymous()) {
                     ytPath.Path_ = NYT::AddPathPrefix(tablePath, NYT::TConfig::Get()->Prefix);
@@ -4657,7 +4661,6 @@ private:
                 YQL_ENSURE(!onlyCached);
                 auto fetchMode = execCtx->Options_.Config()->JoinColumnarStatisticsFetcherMode.Get().GetOrElse(NYT::EColumnarStatisticsFetcherMode::Fallback);
                 auto columnStats = tx->GetTableColumnarStatistics(ytPaths, NYT::TGetTableColumnarStatisticsOptions().FetcherMode(fetchMode));
-
                 YQL_ENSURE(pathMap.size() == columnStats.size());
                 for (size_t i: xrange(columnStats.size())) {
                     auto& columnStat = columnStats[i];
@@ -4678,7 +4681,10 @@ private:
         }
     }
 
-    static TRunResult MakeRunResult(const TVector<TOutputInfo>& outTables, const TTransactionCache::TEntry::TPtr& entry) {
+    static TRunResult MakeRunResult(
+        std::shared_ptr<const TYtSettings> config,
+        const TVector<TOutputInfo>& outTables,
+        const TTransactionCache::TEntry::TPtr& entry) {
         TRunResult res;
         res.SetSuccess();
 
@@ -4688,7 +4694,6 @@ private:
 
         auto batchGet = entry->Tx->CreateBatchRequest();
         TVector<TFuture<TYtTableStatInfo::TPtr>> batchRes(Reserve(outTables.size()));
-
         for (auto& out: outTables) {
             batchRes.push_back(
                 batchGet->Get(out.Path + "/@", TGetOptions()
@@ -4738,17 +4743,23 @@ private:
             paths.push_back(out.Path[0] == '/' ? out.Path : "//" + out.Path);
         }
 
-        auto columnarFuture = RequestColumnarStatistics(batchGet, paths);
+        NThreading::TFuture<TVector<TYtTableColumnarStats>> columnarFuture;
+        if (config->FetchColumnarStatsFromNodes.Get().GetOrElse(
+             DEFAULT_FETCH_COLUMNAR_STATS_FROM_NODES)) {
+            columnarFuture = RequestColumnarStatistics(batchGet, paths);
+        }
         batchGet->ExecuteBatch();
 
         for (size_t i: xrange(outTables.size())) {
             res.OutTableStats.emplace_back(outTables[i].Name, batchRes[i].GetValue());
         }
 
-        int index = 0;
-        for (auto& stats : columnarFuture.GetValue()) {
-            res.OutTableStats[index].second->ColumnarStats = std::move(stats);
-            ++index;
+        if (columnarFuture.Initialized()) {
+            int index = 0;
+            for (auto& stats : columnarFuture.GetValue()) {
+                res.OutTableStats[index].second->ColumnarStats = std::move(stats);
+                ++index;
+            }
         }
         return res;
     }

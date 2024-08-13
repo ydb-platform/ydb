@@ -145,9 +145,9 @@ private:
             TExprNode::TListType children = outTable.Raw()->ChildrenList();
             if (auto& name = children[TYtOutTable::idx_Name]; name->IsAtom("") && !res.OutTableStats[i].first.empty())
                 name = ctx.NewAtom(name->Pos(), res.OutTableStats[i].first);
-            if (const auto stat = res.OutTableStats[i].second) {
+            if (const auto stat = res.OutTableStats[i].second)
                 children[TYtOutTable::idx_Stat] = stat->ToExprNode(ctx, outTable.Pos()).Ptr();
-            }
+
             newOutTables.push_back(ctx.ChangeChildren(outTable.Ref(), std::move(children)));
         }
         output = ctx.ChangeChild(*input, TYtOutputOpBase::idx_Output, ctx.NewList(outSection.Pos(), std::move(newOutTables)));

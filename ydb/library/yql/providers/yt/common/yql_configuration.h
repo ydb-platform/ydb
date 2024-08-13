@@ -89,4 +89,6 @@ constexpr ui16 DEFAULT_MAX_COLUMN_GROUPS = 64;
 
 constexpr bool DEFAULT_DISABLE_FUSE_OPERATIONS = false;
 
+constexpr bool DEFAULT_FETCH_COLUMNAR_STATS_FROM_NODES = false;
+
 } // NYql

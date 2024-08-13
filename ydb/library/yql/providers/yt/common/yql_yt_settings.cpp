@@ -500,6 +500,7 @@ TYtConfiguration::TYtConfiguration()
         });
     REGISTER_SETTING(*this, MinColumnGroupSize).Lower(2);
     REGISTER_SETTING(*this, MaxColumnGroups);
+    REGISTER_SETTING(*this, FetchColumnarStatsFromNodes);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

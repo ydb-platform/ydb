@@ -3,6 +3,6 @@ items:
 - { name: INDEX,  href: secondary_index.md, when: feature_secondary_index }
 - { name: COLUMN, href: columns.md                                        }
 - { name: SET,    href: set.md,             when: backend_name == "YDB"   }
-- { name: CDC,    href: changefeed.md,      when: feature_changefeed      }
+- { name: CHANGEFEED,    href: changefeed.md,      when: feature_changefeed      }
 - { name: RENAME, href: rename.md,          when: feature_map_tables      }
 - { name: FAMILY, href: family.md                                         }

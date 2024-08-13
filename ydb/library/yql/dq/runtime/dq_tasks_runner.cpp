@@ -270,8 +270,7 @@ public:
     }
 
     void SetSpillerFactory(std::shared_ptr<ISpillerFactory> spillerFactory) override {
-        spillerFactory->SetTaskCounters(SpillingTaskCounters);
-        AllocatedHolder->ProgramParsed.CompGraph->GetContext().SpillerFactory = std::move(spillerFactory);
+        SpillerFactory = spillerFactory;
     }
 
     bool UseSeparatePatternAlloc(const TDqTaskSettings& taskSettings) const {
@@ -513,7 +512,10 @@ public:
         TBindTerminator term(AllocatedHolder->ProgramParsed.CompGraph->GetTerminator());
 
         auto& typeEnv = TypeEnv();
+
         SpillingTaskCounters = execCtx.GetSpillingTaskCounters();
+        SpillerFactory->SetTaskCounters(SpillingTaskCounters);
+        AllocatedHolder->ProgramParsed.CompGraph->GetContext().SpillerFactory = std::move(SpillerFactory);
 
         for (ui32 i = 0; i < task.InputsSize(); ++i) {
             auto& inputDesc = task.GetInputs(i);
@@ -940,6 +942,7 @@ private:
     }
 
 private:
+    std::shared_ptr<ISpillerFactory> SpillerFactory;
     TIntrusivePtr<TSpillingTaskCounters> SpillingTaskCounters;
 
     ui64 TaskId = 0;

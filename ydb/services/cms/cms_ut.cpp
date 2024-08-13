@@ -16,7 +16,7 @@
 #include <ydb/public/api/grpc/ydb_cms_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb-cpp-sdk/library/grpc/client/grpc_client_low.h>
 
 #include <google/protobuf/any.h>
 

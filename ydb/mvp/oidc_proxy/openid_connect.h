@@ -5,7 +5,7 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/http/http.h>
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb-cpp-sdk/library/grpc/client/grpc_client_low.h>
 #include <ydb/mvp/core/core_ydb.h>
 #include "context.h"
 

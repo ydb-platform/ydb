@@ -7,7 +7,7 @@
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/db_driver_state/state.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/plain_status/status.h>
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb-cpp-sdk/library/grpc/client/grpc_client_low.h>
 
 #include <util/thread/pool.h>
 

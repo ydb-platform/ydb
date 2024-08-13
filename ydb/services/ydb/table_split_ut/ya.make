@@ -19,7 +19,7 @@ SRCS(
 PEERDIR(
     contrib/libs/apache/arrow
     library/cpp/getopt
-    ydb/library/grpc/client
+    ydb/public/sdk/cpp_v2/src/library/grpc/client
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/kqp/ut/common

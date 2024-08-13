@@ -16,7 +16,7 @@ PEERDIR(
     ydb/core/persqueue/ut/common
     ydb/core/testlib/default
     ydb/core/tx/schemeshard/ut_helpers
-    ydb/library/grpc/client
+    ydb/public/sdk/cpp_v2/src/library/grpc/client
     ydb/public/sdk/cpp/client/ydb_topic
     ydb/services/datastreams
 

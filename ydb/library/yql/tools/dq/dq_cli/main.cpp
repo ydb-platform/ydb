@@ -5,7 +5,7 @@
 #include <ydb/library/yql/utils/yql_panic.h>
 
 #include <library/cpp/getopt/last_getopt.h>
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb-cpp-sdk/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/threading/future/future.h>
 #include <library/cpp/protobuf/util/pb_io.h>
 

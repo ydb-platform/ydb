@@ -10,7 +10,7 @@
 #include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
 #include <ydb/core/viewer/json/json.h>
 #include <ydb/library/actors/http/http.h>
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb-cpp-sdk/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_value.h>
 #include <util/generic/strbuf.h>

@@ -1642,11 +1642,11 @@ Y_UNIT_TEST_SUITE(TestHttpProxy) {
         sendMessageReq["MessageGroupId"] = "MessageGroupId-0";
 
         res = SendHttpRequest("/Root", "AmazonSQS.SendMessage", std::move(sendMessageReq), FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
         UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
         UNIT_ASSERT(!GetByPath<TString>(json, "SequenceNumber").empty());
         UNIT_ASSERT(!GetByPath<TString>(json, "Md5OfMessageBody").empty());
         UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
     }
 
     Y_UNIT_TEST_F(TestReceiveMessage, THttpProxyTestMock) {

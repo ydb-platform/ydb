@@ -182,6 +182,6 @@ protected:
     void ChangeCounters(std::function<void()> func) override;
 private:
     TActorId Requester_;
-    TMaybe<NHttpProxy::TEvYmqCloudAuthResponse::TError> Error_ = Nothing();
+    TMaybe<NHttpProxy::TEvYmqCloudAuthResponse::TError> Error_;
 };
 }

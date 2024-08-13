@@ -190,9 +190,11 @@ void TBaseCloudAuthRequestProxy::ScheduleFolderServiceRequestRetry() {
 
 void TBaseCloudAuthRequestProxy::HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev) {
     ChangeCounters([this, &ev](){
-        Counters_.IncCounter(NCloudAuth::EActionType::Authenticate,
-                                NCloudAuth::ECredentialType::Signature,
-                                ev->Get()->Status.GRpcStatusCode);
+        Counters_.IncCounter(
+            NCloudAuth::EActionType::Authenticate,
+            NCloudAuth::ECredentialType::Signature,
+            ev->Get()->Status.GRpcStatusCode
+        );
         auto now = TActivationContext::Now();
         Counters_.AuthenticateDuration->Collect((now - AuthenticateRequestStartTimestamp_).MilliSeconds());
     });

@@ -150,11 +150,7 @@ struct TTableBucket {
     std::vector<ui32, TMKQLAllocator<ui32>> InterfaceOffsets; // Vector to store sizes of columns to work through IHash, IEquate interfaces
     std::vector<JoinTuplesIds, TMKQLAllocator<JoinTuplesIds>>  JoinIds;     // Results of join operations stored as index of tuples in buckets 
                                                                             // of two tables with the same number
-
-    std::vector<ui32, TMKQLAllocator<ui32>> RightIds; // Sorted Ids of right table joined tuples to process full join and exclusion join
-
-    std::set<ui32> AllLeftMatchedIds;  // All row ids of left join table which have matching rows in right table. To process streaming join mode.
-    std::set<ui32> AllRightMatchedIds; // All row ids of right join table which matching rows in left table. To process streaming join mode. 
+    std::vector<ui32, TMKQLAllocator<ui32>> LeftIds; // Left-side ids missing in other table
 
     std::vector<ui64, TMKQLAllocator<ui64>> JoinSlots;  // Hashtable
     ui64 NSlots = 0;  // Hashtable

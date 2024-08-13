@@ -43,7 +43,7 @@ public:
             Data.emplace_back(std::move(member), TColumnStatisticsUsedMember::EEquality);
         }
 
-        TVector<TColumnStatisticsUsedMember> Data;
+        TVector<TColumnStatisticsUsedMember> Data{};
     };
 public:
     TPredicateSelectivityComputer(const std::shared_ptr<TOptimizerStatistics>& stats, bool collectColumnsStatUsedMembers = false)
@@ -65,7 +65,7 @@ private:
 
 private:
     const std::shared_ptr<TOptimizerStatistics>& Stats;
-    TColumnStatisticsUsedMembers ColumnStatsUsedMembers;
+    TColumnStatisticsUsedMembers ColumnStatsUsedMembers{};
     bool CollectColumnsStatUsedMembers = false;
 };
 

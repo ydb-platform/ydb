@@ -228,7 +228,7 @@ Change Data Capture (CDC) обеспечивает захват изменени
 
 ## Создание и удаление потока изменений {#ddl}
 
-Поток изменений может быть добавлен к существующей таблице или удален директивами [ADD CHANGEFEED и DROP CHANGEFEED](../yql/reference/syntax/alter_table.md#changefeed) операции YQL `ALTER TABLE`. При удалении таблицы добавленный к ней поток изменений также будет удален.
+Поток изменений может быть добавлен к существующей таблице или удален директивами [ADD CHANGEFEED и DROP CHANGEFEED](../yql/reference/syntax/alter_table/cdc.md) операции YQL `ALTER TABLE`. При удалении таблицы добавленный к ней поток изменений также будет удален.
 
 ## Назначение и применение CDC {#best_practices}
 

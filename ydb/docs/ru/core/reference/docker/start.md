@@ -1,4 +1,4 @@
-# Работа с {{ ydb-short-name }} в Docker
+# Запуск {{ ydb-short-name }} в Docker
 
 ## Перед началом работы
 

@@ -245,12 +245,15 @@ std::shared_ptr<TTestReadSession<SdkVersion::Topic>::TSdkReadSession> TTestReadS
                     << ", seqNo=" << message.GetSeqNo()
                     << ", offset=" << message.GetOffset()
                     << Endl << Flush;
-            impl->ReceivedMessages.emplace_back(message.GetPartitionSession()->GetPartitionId(),
+
+            auto msg = MsgInfo(message.GetPartitionSession()->GetPartitionId(),
                                         message.GetSeqNo(),
                                         message.GetOffset(),
                                         message.GetData(),
-                                        std::shared_ptr<IMessage>(new MsgWrapper(message)),
-                                        impl->AutoCommit);
+                                        impl->AutoCommit)
+                                    .WithMsg(new MsgWrapper(message));
+
+            impl->ReceivedMessages.push_back(msg);
 
             if (impl->AutoCommit) {
                 message.Commit();
@@ -360,12 +363,15 @@ std::shared_ptr<TTestReadSession<SdkVersion::PQv1>::TSdkReadSession> TTestReadSe
                     << ", seqNo=" << message.GetSeqNo()
                     << ", offset=" << message.GetOffset()
                     << Endl << Flush;
-            impl->ReceivedMessages.emplace_back(message.GetPartitionStream()->GetPartitionId(),
+
+            auto msg = MsgInfo(message.GetPartitionStream()->GetPartitionId(),
                                         message.GetSeqNo(),
                                         message.GetOffset(),
                                         message.GetData(),
-                                        std::shared_ptr<IMessage>(new MsgWrapper(message)),
-                                        impl->AutoCommit);
+                                        impl->AutoCommit)
+                                    .WithMsg(new MsgWrapper(message));
+
+            impl->ReceivedMessages.push_back(msg);
 
             if (impl->AutoCommit) {
                 message.Commit();

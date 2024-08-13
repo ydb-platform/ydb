@@ -78,7 +78,7 @@
                                                 "TopSortBy": "row.x1"
                                             },
                                             {
-                                                "Condition": "x_1.x1 = x1",
+                                                "Condition": "x_1.x1 = xx.x1",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 22
@@ -101,7 +101,7 @@
                                                         "Node Type": "LeftJoin (MapJoin)",
                                                         "Operators": [
                                                             {
-                                                                "Condition": "x1 = y1",
+                                                                "Condition": "x_1.x1 = y.y1",
                                                                 "Inputs": [
                                                                     {
                                                                         "ExternalPlanNodeId": 20

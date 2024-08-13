@@ -54,7 +54,7 @@
                                                 "Predicate": "item.b.q1 > 0"
                                             },
                                             {
-                                                "Condition": "q2 = _equijoin_column_0",
+                                                "Condition": "a.q2 = b._equijoin_column_0",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 8

@@ -57,7 +57,7 @@
                                                 "TopSortBy": "row.fault"
                                             },
                                             {
-                                                "Condition": "q2 = unique2",
+                                                "Condition": "int8_tbl.q2 = tenk1.unique2",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 8

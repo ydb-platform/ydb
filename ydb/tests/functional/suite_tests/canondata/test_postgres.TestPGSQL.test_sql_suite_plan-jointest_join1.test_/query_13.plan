@@ -59,7 +59,7 @@
                                                 "Predicate": "item.J2_TBL.k == 1"
                                             },
                                             {
-                                                "Condition": "i = i",
+                                                "Condition": "J1_TBL.i = J2_TBL.i",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 15

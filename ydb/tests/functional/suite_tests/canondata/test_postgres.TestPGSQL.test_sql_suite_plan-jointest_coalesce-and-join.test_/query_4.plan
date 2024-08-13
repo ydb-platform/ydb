@@ -42,7 +42,7 @@
                                                 "TopSortBy": "argument.yy.pkyy"
                                             },
                                             {
-                                                "Condition": "_equijoin_column_0 = pkxx",
+                                                "Condition": "yy._equijoin_column_0 = xx.pkxx",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 15

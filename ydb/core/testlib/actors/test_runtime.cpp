@@ -11,6 +11,7 @@
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/executor_pool_io.h>
+#include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
 
 #include <ydb/core/protos/datashard_config.pb.h>
@@ -47,6 +48,10 @@ namespace NActors {
 
     void TTestActorRuntime::SetupStatsCollectors() {
         NeedStatsCollectors = true;
+    }
+
+    void TTestActorRuntime::SetupActorSystemConfig(const TActorSystemSetupConfig& config) {
+        ActorSystemSetupConfig = config;
     }
 
     TTestActorRuntime::TTestActorRuntime(THeSingleSystemEnv d)
@@ -219,6 +224,18 @@ namespace NActors {
     }
 
     void TTestActorRuntime::InitActorSystemSetup(TActorSystemSetup& setup, TNodeDataBase* node) {
+        if (ActorSystemSetupConfig) {
+            setup.Executors.Reset();
+            setup.ExecutorsCount = 0;
+
+            setup.CpuManager = ActorSystemSetupConfig->CpuManagerConfig;
+            setup.MonitorStuckActors = ActorSystemSetupConfig->MonitorStuckActors;
+
+            auto schedulerConfig = ActorSystemSetupConfig->SchedulerConfig;
+            schedulerConfig.MonCounters = NKikimr::GetServiceCounters(node->DynamicCounters, "utils");
+            setup.Scheduler.Reset(CreateSchedulerThread(schedulerConfig));
+        }
+
         if (NeedMonitoring && NeedStatsCollectors) {
             NActors::IActor* statsCollector = NKikimr::CreateStatsCollector(1, setup, node->DynamicCounters);
             setup.LocalServices.push_back({

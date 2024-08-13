@@ -1710,6 +1710,12 @@ namespace NActors {
             setup->Executors[0].Reset(new TExecutorPoolStub(this, nodeIndex, node, 0));
         }
 
+        if (harmonizer) {
+            for (ui32 i = 0; i < setup->ExecutorsCount; ++i) {
+                harmonizer->AddPool(setup->Executors[i].Get());
+            }
+        }
+
         InitActorSystemSetup(*setup, node);
 
         return setup;
@@ -1717,13 +1723,6 @@ namespace NActors {
 
     THolder<TActorSystem> TTestActorRuntimeBase::MakeActorSystem(ui32 nodeIndex, TNodeDataBase* node) {
         auto setup = MakeActorSystemSetup(nodeIndex, node);
-
-        node->ExecutorPools.resize(setup->ExecutorsCount);
-        for (ui32 i = 0; i < setup->ExecutorsCount; ++i) {
-            IExecutorPool* executor = setup->Executors[i].Get();
-            node->ExecutorPools[i] = executor;
-            node->Harmonizer->AddPool(executor);
-        }
 
         const auto& interconnectCounters = GetCountersForComponent(node->DynamicCounters, "interconnect");
 
@@ -1786,7 +1785,10 @@ namespace NActors {
             setup->LocalServices.push_back(std::move(loggerActorPair));
         }
 
-        return THolder<TActorSystem>(new TActorSystem(setup, node->GetAppData(), node->LogSettings));
+        auto actorSystem = THolder<TActorSystem>(new TActorSystem(setup, node->GetAppData(), node->LogSettings));
+        node->ExecutorPools = actorSystem->GetBasicExecutorPools();
+
+        return actorSystem;
     }
 
     TActorSystem* TTestActorRuntimeBase::SingleSys() const {

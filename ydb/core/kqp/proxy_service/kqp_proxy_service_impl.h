@@ -7,7 +7,6 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/gateway/behaviour/resource_pool_classifier/fetcher.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
-#include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/protos/kqp.pb.h>
 
 #include <ydb/library/actors/core/actorid.h>
@@ -454,11 +453,7 @@ public:
         }
 
         const auto databaseInfo = GetDatabaseInfo(database); 
-        if (databaseInfo && databaseInfo->Serverless) {
-            return false;
-        }
-
-        return true;
+        return !databaseInfo || !databaseInfo->Serverless;
     }
 
     TString GetPoolId(const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TActorContext actorContext) {
@@ -579,10 +574,6 @@ private:
         databaseInfo.UserToResourcePool.clear();
         databaseInfo.RankToClassifierInfo.clear();
         for (const auto& [_, classifier] : databaseInfo.ResourcePoolsClassifiers) {
-            if (classifier.GetRank() < 0) {
-                continue;
-            }
-
             const auto& classifierSettings = classifier.GetClassifierSettings();
             databaseInfo.RankToClassifierInfo.insert({classifier.GetRank(), TClassifierInfo(classifierSettings)});
             if (!PoolsCache.contains(classifierSettings.ResourcePool)) {

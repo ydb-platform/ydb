@@ -928,14 +928,16 @@ void TWriteSessionActor<UseMigrationProtocol>::ProcessWriteResponse(
     };
 
     auto addAck = [this](const TPersQueuePartitionResponse::TCmdWriteResult& res,
-                     Topic::StreamWriteMessage::WriteResponse* writeResponse,
-                     Topic::StreamWriteMessage::WriteResponse::WriteStatistics* stat) {
+                         Topic::StreamWriteMessage::WriteResponse* writeResponse,
+                         Topic::StreamWriteMessage::WriteResponse::WriteStatistics* stat) {
         auto ack = writeResponse->add_acks();
         // TODO (ildar-khisam@): validate res before filling ack fields
         ack->set_seq_no(res.GetSeqNo());
         if (res.GetAlreadyWritten()) {
             Y_ABORT_UNLESS(UseDeduplication);
             ack->mutable_skipped()->set_reason(Topic::StreamWriteMessage::WriteResponse::WriteAck::Skipped::REASON_ALREADY_WRITTEN);
+        } else if (res.GetWrittenInTx()) {
+            ack->mutable_written_in_tx();
         } else {
             ack->mutable_written()->set_offset(res.GetOffset());
         }

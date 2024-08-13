@@ -172,7 +172,6 @@ private:
         auto& blobInfo = it->second;
 
         if (SpillingTaskCounters_) {
-            // SpillingTaskCounters_->ChannelReadBytes.Add(msg.Blob.size());
             auto opDuration = TInstant::Now() - blobInfo.OpBegin;
             SpillingTaskCounters_->ChannelReadTime += opDuration.MilliSeconds();
         }

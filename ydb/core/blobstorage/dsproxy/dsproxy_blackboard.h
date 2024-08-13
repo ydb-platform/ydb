@@ -97,7 +97,8 @@ struct TBlobState {
     ui64 GetPredictedDelayNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues,
             ui32 diskIdxInSubring, NKikimrBlobStorage::EVDiskQueueId queueId) const;
     void GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues,
-            NKikimrBlobStorage::EVDiskQueueId queueId, ui32 nWorst, TDiskDelayPredictions *outNWorst) const;
+            NKikimrBlobStorage::EVDiskQueueId queueId, TDiskDelayPredictions *outNWorst,
+            double multipler = 1) const;
     TString ToString() const;
     bool HasWrittenQuorum(const TBlobStorageGroupInfo& info, const TBlobStorageGroupInfo::TGroupVDisks& expired) const;
             
@@ -158,7 +159,8 @@ class IStrategy {
 public:
     virtual ~IStrategy() = default;
     virtual EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
-            TBlackboard &blackboard, TGroupDiskRequests &groupDiskRequests) = 0;
+            TBlackboard &blackboard, TGroupDiskRequests &groupDiskRequests,
+            const TAccelerationParams& accelerationParams) = 0;
 };
 
 struct TBlackboard {
@@ -201,14 +203,16 @@ struct TBlackboard {
     void AddNotYetResponse(const TLogoBlobID &id, ui32 orderNumber);
 
     EStrategyOutcome RunStrategies(TLogContext& logCtx, const TStackVec<IStrategy*, 1>& strategies,
-        TBatchedVec<TFinishedBlob> *finished = nullptr, const TBlobStorageGroupInfo::TGroupVDisks *expired = nullptr);
-    EStrategyOutcome RunStrategy(TLogContext &logCtx, const IStrategy& s, TBatchedVec<TFinishedBlob> *finished = nullptr,
+            const TAccelerationParams& accelerationParams, TBatchedVec<TFinishedBlob> *finished = nullptr,
             const TBlobStorageGroupInfo::TGroupVDisks *expired = nullptr);
+    EStrategyOutcome RunStrategy(TLogContext &logCtx, const IStrategy& s, const TAccelerationParams& accelerationParams,
+            TBatchedVec<TFinishedBlob> *finished = nullptr, const TBlobStorageGroupInfo::TGroupVDisks *expired = nullptr);
     TBlobState& GetState(const TLogoBlobID &id);
     ssize_t AddPartMap(const TLogoBlobID &id, ui32 diskOrderNumber, ui32 requestIndex);
     void ReportPartMapStatus(const TLogoBlobID &id, ssize_t partMapIndex, ui32 responseIndex, NKikimrProto::EReplyStatus status);
     void GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues,
-            NKikimrBlobStorage::EVDiskQueueId queueId, ui32 nWorst, TDiskDelayPredictions *outNWorst) const;
+            NKikimrBlobStorage::EVDiskQueueId queueId, TDiskDelayPredictions *outNWorst,
+            double multiplier = 1) const;
     TString ToString() const;
 
     void ChangeAll() {

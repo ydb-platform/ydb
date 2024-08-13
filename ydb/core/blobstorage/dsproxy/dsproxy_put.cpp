@@ -47,6 +47,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
 
     ui64 RequestsSent = 0;
     ui64 ResponsesReceived = 0;
+    ui32 RequestsPendingBeforeAcceleration = 0;
     ui64 MaxSaneRequests = 0;
     ui64 ResponsesSent = 0;
 
@@ -67,6 +68,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
 
     TDiskResponsivenessTracker::TPerDiskStatsPtr Stats;
 
+    TAccelerationParams AccelerationParams;
     ui32 AccelerateRequestsSent = 0;
     bool IsAccelerateScheduled = false;
 
@@ -123,6 +125,9 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
         for (auto& ev : events) {
             std::visit([&](auto& ev) { SendToQueue(std::move(ev), 0, TimeStatsEnabled); }, ev);
             ++RequestsSent;
+            if (AccelerateRequestsSent == 0) {
+                RequestsPendingBeforeAcceleration++;
+            }
         }
 
         return false;
@@ -223,6 +228,10 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
 
         ProcessReplyFromQueue(ev);
         ResponsesReceived++;
+        if (!AccelerateRequestsSent) {
+            Y_DEBUG_ABORT_UNLESS(RequestsPendingBeforeAcceleration > 0);
+            RequestsPendingBeforeAcceleration--;
+        }
 
         const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
         ev->Get()->Record.MutableTimestamps()->SetReceivedByDSProxyUs(GetCycleCountFast() / cyclesPerUs);
@@ -282,6 +291,10 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
     void Handle(TEvBlobStorage::TEvVMultiPutResult::TPtr &ev) {
         ProcessReplyFromQueue(ev);
         ResponsesReceived++;
+        if (!AccelerateRequestsSent) {
+            Y_DEBUG_ABORT_UNLESS(RequestsPendingBeforeAcceleration > 0);
+            RequestsPendingBeforeAcceleration--;
+        }
 
         const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
         ev->Get()->Record.MutableTimestamps()->SetReceivedByDSProxyUs(GetCycleCountFast() / cyclesPerUs);
@@ -371,12 +384,17 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
     void TryToScheduleNextAcceleration() {
         if (!IsAccelerateScheduled && AccelerateRequestsSent < 2) {
             if (WaitingVDiskCount > 0 && WaitingVDiskCount <= 2 && RequestsSent > 1) {
-                ui64 timeToAccelerateUs = Max<ui64>(1, PutImpl.GetTimeToAccelerateNs(LogCtx, 2 - AccelerateRequestsSent) / 1000);
-                TDuration timeSinceStart = TActivationContext::Monotonic() - StartTime;
-                if (timeSinceStart.MicroSeconds() < timeToAccelerateUs) {
+                ui64 timeToAccelerateUs = Max<ui64>(1, PutImpl.GetTimeToAccelerateNs(LogCtx) / 1000);
+                if (RequestsPendingBeforeAcceleration == 1 && AccelerateRequestsSent == 1) {
+                    // if there is only one request pending, but first accelerate is unsuccessful, make a pause
+                    timeToAccelerateUs *= 2;
+                }
+                TDuration timeToAccelerate = TDuration::MicroSeconds(timeToAccelerateUs);
+                TMonotonic now = TActivationContext::Monotonic();
+                TMonotonic nextAcceleration = StartTime + timeToAccelerate;
+                if (nextAcceleration > now) {
                     ui64 causeIdx = RootCauseTrack.RegisterAccelerate();
-                    Schedule(TDuration::MicroSeconds(timeToAccelerateUs - timeSinceStart.MicroSeconds()),
-                            new TEvAccelerate(causeIdx));
+                    Schedule(nextAcceleration - now, new TEvAccelerate(causeIdx));
                     IsAccelerateScheduled = true;
                 } else {
                     Accelerate();
@@ -503,13 +521,14 @@ public:
         : TBlobStorageGroupRequestActor(params)
         , PutImpl(Info, GroupQueues, params.Common.Event, Mon,
                 params.EnableRequestMod3x3ForMinLatency, params.Common.Source,
-                params.Common.Cookie, Span.GetTraceId())
+                params.Common.Cookie, Span.GetTraceId(), params.AccelerationParams)
         , WaitingVDiskResponseCount(Info->GetTotalVDisksNum())
         , HandleClass(params.Common.Event->HandleClass)
         , ReportedBytes(0)
         , TimeStatsEnabled(params.TimeStatsEnabled)
         , Tactic(params.Common.Event->Tactic)
         , Stats(std::move(params.Stats))
+        , AccelerationParams(params.AccelerationParams)
         , IsMultiPutMode(false)
         , IncarnationRecords(Info->GetTotalVDisksNum())
         , ExpiredVDiskSet(&Info->GetTopology())
@@ -527,7 +546,7 @@ public:
     TBlobStorageGroupPutRequest(TBlobStorageGroupMultiPutParameters& params)
         : TBlobStorageGroupRequestActor(params)
         , PutImpl(Info, GroupQueues, params.Events, Mon, params.HandleClass, params.Tactic,
-                params.EnableRequestMod3x3ForMinLatency)
+                params.EnableRequestMod3x3ForMinLatency, params.AccelerationParams)
         , WaitingVDiskResponseCount(Info->GetTotalVDisksNum())
         , IsManyPuts(true)
         , HandleClass(params.HandleClass)
@@ -535,6 +554,7 @@ public:
         , TimeStatsEnabled(params.TimeStatsEnabled)
         , Tactic(params.Tactic)
         , Stats(std::move(params.Stats))
+        , AccelerationParams(params.AccelerationParams)
         , IsMultiPutMode(true)
         , IncarnationRecords(Info->GetTotalVDisksNum())
         , ExpiredVDiskSet(&Info->GetTopology())

@@ -1077,6 +1077,7 @@ namespace NKikimr::NHttpProxy {
         if (context.ApiVersion == "AmazonSQS") {
             if (!context.ServiceConfig.GetHttpConfig().GetYmqEnabled()) {
                 context.ResponseData.IsYmq = true;
+                context.ResponseData.YmqHttpCode = 400;
                 SetApiVersionDisabledErrorText(context);
             }
             Name2Processor = &Name2YmqProcessor;

@@ -164,7 +164,7 @@ static void CheckYajlCode(int yajlCode)
         default:
             errorMessage = Format("Yajl writer failed with code %v", yajlCode);
     }
-    THROW_ERROR_EXCEPTION(errorMessage);
+    THROW_ERROR_EXCEPTION(std::move(errorMessage), NYT::TError::DisableFormat);
 }
 
 TJsonWriter::TJsonWriter(IOutputStream* output, bool isPretty)

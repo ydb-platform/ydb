@@ -58,14 +58,14 @@ std::optional<std::vector<TBatch>> GetPortionsToDelete(NTabletFlatExecutor::TTra
             rowset.GetValue<Schema::IndexPortions::PathId>(),
             rowset.GetValue<Schema::IndexPortions::PortionId>()
         );
-        if (!usedPortions->contains(addr)) {
+//        if (!usedPortions->contains(addr)) {
             ACFL_WARN("normalizer", "TCleanEmptyPortionsNormalizer")("message", TStringBuilder() << addr.DebugString() << " marked for deletion");
             portionsToDelete.emplace_back(std::move(addr));
             if (portionsToDelete.size() == MaxBatchSize) {
                 result.emplace_back(std::move(portionsToDelete));
                 portionsToDelete = TBatch{};
             }
-        }
+//        }
         if (!rowset.Next()) {
             return std::nullopt;
         }

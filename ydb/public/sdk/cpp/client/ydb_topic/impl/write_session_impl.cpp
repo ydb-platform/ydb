@@ -981,9 +981,8 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
             writeStat->PartitionQuotedTime = durationConv(stat.partition_quota_wait_time());
             writeStat->TopicQuotedTime = durationConv(stat.topic_quota_wait_time());
 
-            for (size_t messageIndex = 0, endIndex = batchWriteResponse.acks_size(); messageIndex != endIndex; ++messageIndex) {
+            for (const auto& ack : batchWriteResponse.acks()) {
                 // TODO: Fill writer statistics
-                auto ack = batchWriteResponse.acks(messageIndex);
                 ui64 sequenceNumber = ack.seq_no();
 
                 Y_ABORT_UNLESS(ack.has_written() || ack.has_skipped());

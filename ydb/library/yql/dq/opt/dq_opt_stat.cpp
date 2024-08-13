@@ -37,6 +37,10 @@ namespace {
             return *stats->Labels;
         }
 
+        if (!joinColumns.Size()) {
+            return TVector<TString>();
+        }
+        
         auto fullColumnName = joinColumns.Item(0).StringValue();
         for (size_t i = 0; i < fullColumnName.size(); i++) {
             if (fullColumnName[i]=='.') {

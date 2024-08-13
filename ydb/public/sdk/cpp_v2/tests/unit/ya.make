@@ -1,4 +1,4 @@
 RECURSE(
     client
-    #library
+    library
 )

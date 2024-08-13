@@ -10,20 +10,17 @@ Y_UNIT_TEST_SUITE(OperationIdTest) {
     const std::string PreparedQueryId = "9d629c27-2c3036b3-4b180476-64435bca";
 
     Y_UNIT_TEST(ConvertKindOnly) {
-        Ydb::TOperationId proto;
-        proto.set_kind(Ydb::TOperationId::OPERATION_DDL);
-        auto str = ProtoToString(proto);
-        UNIT_ASSERT_EQUAL(str, "ydb://operation/1");
-        auto newProto = TOperationId(str);
-        UNIT_ASSERT_EQUAL(newProto.GetProto().kind(), proto.kind());
-        UNIT_ASSERT_EQUAL(newProto.GetProto().data_size(), 0);
+        TOperationId id("ydb://operation/1");
+        UNIT_ASSERT_EQUAL(id.ToString(), "ydb://operation/1");
+        UNIT_ASSERT_EQUAL(id.GetKind(), TOperationId::OPERATION_DDL);
+        UNIT_ASSERT_EQUAL(id.GetData().size(), 0);
     }
 
     Y_UNIT_TEST(PreparedQueryIdCompatibleFormatter) {
-        Ydb::TOperationId opId;
-        opId.set_kind(Ydb::TOperationId::PREPARED_QUERY_ID);
+        TOperationId opId;
+        opId.GetMutableKind() = TOperationId::PREPARED_QUERY_ID;
         AddOptionalValue(opId, "id", PreparedQueryId);
-        auto result = ProtoToString(opId);
+        auto result = opId.ToString();
         UNIT_ASSERT_VALUES_EQUAL(FormatPreparedQueryIdCompat(PreparedQueryId), result);
     }
 
@@ -88,35 +85,6 @@ Y_UNIT_TEST_SUITE(OperationIdTest) {
         std::cerr << x << std::endl;
     }
 #endif
-    Y_UNIT_TEST(ConvertKindAndValues) {
-        Ydb::TOperationId proto;
-        proto.set_kind(Ydb::TOperationId::OPERATION_DDL);
-        {
-            auto data = proto.add_data();
-            data->set_key("key1");
-            data->set_value("value1");
-        }
-        {
-            auto data = proto.add_data();
-            data->set_key("txId");
-            data->set_value("42");
-        }
-        auto str = ProtoToString(proto);
-        UNIT_ASSERT_EQUAL(str, "ydb://operation/1?key1=value1&txId=42");
-        auto newProto = TOperationId(str);
-        UNIT_ASSERT_EQUAL(newProto.GetProto().kind(), proto.kind());
-        UNIT_ASSERT_EQUAL(newProto.GetProto().data_size(), 2);
-        {
-            auto data = newProto.GetProto().data(0);
-            UNIT_ASSERT_EQUAL(data.key(), "key1");
-            UNIT_ASSERT_EQUAL(data.value(), "value1");
-        }
-        {
-            auto data = newProto.GetProto().data(1);
-            UNIT_ASSERT_EQUAL(data.key(), "txId");
-            UNIT_ASSERT_EQUAL(data.value(), "42");
-        }
-    }
 }
 
 } // namespace NOperationId

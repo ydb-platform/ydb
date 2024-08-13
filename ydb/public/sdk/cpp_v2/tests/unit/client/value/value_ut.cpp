@@ -1,4 +1,5 @@
 #include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb-cpp-sdk/type_switcher.h>
 
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb-cpp-sdk/client/types/exceptions/exceptions.h>
@@ -781,7 +782,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
             "  null_flag_value: NULL_VALUE\n"
             "}\n";
 
-        std::string protoValueStr;
+        TStringType protoValueStr;
         google::protobuf::TextFormat::PrintToString(value.GetProto(), &protoValueStr);
         UNIT_ASSERT_NO_DIFF(protoValueStr, expectedProtoValueStr);
     }
@@ -843,7 +844,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
             "  }\n"
             "}\n";
 
-        std::string protoValueStr;
+        TStringType protoValueStr;
         google::protobuf::TextFormat::PrintToString(value.GetProto(), &protoValueStr);
         UNIT_ASSERT_NO_DIFF(protoValueStr, expectedProtoValueStr);
     }

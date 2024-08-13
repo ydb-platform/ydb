@@ -1,10 +1,11 @@
 RECURSE(
     coordination
     discovery_mutator
-    #driver
-    #endpoints
-    #params
-    #result
-    #scripting
-    #value
+    driver
+    endpoints
+    oauth2_token_exchange
+    params
+    result
+    scripting
+    value
 )

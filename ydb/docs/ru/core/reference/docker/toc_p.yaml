@@ -5,5 +5,5 @@ items:
     href: start.md
   - name: Переменные окружения
     href: environment.md
-  - name: Очистка
+  - name: Остановка и очистка
     href: cleanup.md 

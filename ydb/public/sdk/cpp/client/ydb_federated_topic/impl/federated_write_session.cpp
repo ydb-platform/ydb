@@ -175,6 +175,14 @@ std::shared_ptr<NTopic::IWriteSession> TFederatedWriteSessionImpl::OpenSubsessio
             }
         });
 
+    {
+        // Unacknowledged messages should be resent.
+        for (auto& msg : OriginalMessagesToPassDown) {
+            OriginalMessagesToGetAck.emplace_back(std::move(msg));
+        }
+        OriginalMessagesToPassDown = std::move(OriginalMessagesToGetAck);
+    }
+
     NTopic::TWriteSessionSettings wsSettings = Settings;
     wsSettings
         // .MaxMemoryUsage(Settings.MaxMemoryUsage_)  // to fix if split not by half on creation

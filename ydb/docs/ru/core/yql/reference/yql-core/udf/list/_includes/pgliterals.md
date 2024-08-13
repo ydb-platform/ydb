@@ -50,7 +50,7 @@ SELECT
 
 ``` sql
 SELECT
-    PgArray(1p,null,2p), -- {1,NULL,2}, тип _int4
+    PgArray(1p, NULL ,2p) -- {1,NULL,2}, тип _int4
 ;
 ```
 

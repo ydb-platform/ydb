@@ -349,19 +349,23 @@ struct TObjectStorageExternalSource : public IExternalSource {
         meta->Attributes.erase("withinfer");
 
         auto fileFormat = NObjectStorage::NInference::ConvertFileFormat(*format);
-        auto arrowFetcherId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowFetchingActor(s3FetcherId, fileFormat));
+        auto arrowFetcherId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowFetchingActor(s3FetcherId, fileFormat, meta->Attributes));
         auto arrowInferencinatorId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowInferencinator(arrowFetcherId, fileFormat, meta->Attributes));
 
         return afterListing.Apply([arrowInferencinatorId, meta, actorSystem = ActorSystem](const NThreading::TFuture<TString>& pathFut) {
             auto promise = NThreading::NewPromise<TMetadataResult>();
             auto schemaToMetadata = [meta](NThreading::TPromise<TMetadataResult> metaPromise, NObjectStorage::TEvInferredFileSchema&& response) {
+                if (!response.Status.IsSuccess()) {
+                    metaPromise.SetValue(NYql::NCommon::ResultFromError<TMetadataResult>(response.Status.GetIssues()));
+                    return;
+                }
+                TMetadataResult result;
                 meta->Changed = true;
                 meta->Schema.clear_column();
                 for (const auto& column : response.Fields) {
                     auto& destColumn = *meta->Schema.add_column();
                     destColumn = column;
                 }
-                TMetadataResult result;
                 result.SetSuccess();
                 result.Metadata = meta;
                 metaPromise.SetValue(std::move(result));

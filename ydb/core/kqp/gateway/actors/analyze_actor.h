@@ -20,11 +20,7 @@ struct TEvAnalyzePrivate {
 
 class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> { 
 public:
-    TAnalyzeActor(TString tablePath, TVector<TString> columns, NThreading::TPromise<NYql::IKikimrGateway::TGenericResult> promise)
-        : TablePath(tablePath)
-        , Columns(columns) 
-        , Promise(promise)
-    {}
+    TAnalyzeActor(TString tablePath, TVector<TString> columns, NThreading::TPromise<NYql::IKikimrGateway::TGenericResult> promise);
 
     void Bootstrap();
 
@@ -61,6 +57,7 @@ private:
     // For Statistics Aggregator
     std::optional<ui64> StatisticsAggregatorId;
     TPathId PathId;
+    TString OperationId;
 };
 
 } // end of NKikimr::NKqp

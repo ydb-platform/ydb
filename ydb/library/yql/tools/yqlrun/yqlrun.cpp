@@ -138,6 +138,13 @@ public:
         out << baseSS.Data();
     }
 
+    void FinalizeIssues() {
+        BaseProg->FinalizeIssues();
+        for (auto& info : Infos) {
+            info.Prog->FinalizeIssues();
+        }
+    }
+
     void PrintErrorsTo(IOutputStream& out) const {
         TStringStream baseSS;
         BaseProg->PrintErrorsTo(baseSS);
@@ -474,6 +481,7 @@ int Main(int argc, const char *argv[])
     opts.AddLongOption("test-format", "compare formatted query's AST with the original query's AST (only syntaxVersion=1 is supported)").NoArgument();
     opts.AddLongOption("show-kernels", "show all Arrow kernel families").NoArgument();
     opts.AddLongOption("pg-ext", "pg extensions config file").StoreResult(&pgExtConfig);
+    opts.AddLongOption("with-final-issues", "Include some final messages (like statistic) in issues").NoArgument();
 
     opts.SetFreeArgsMax(0);
     TOptsParseResult res(&opts, argc, argv);
@@ -842,6 +850,9 @@ int Main(int argc, const char *argv[])
         status = program->Lineage(username, traceOut, exprOut, withTypes);
     }
 
+    if (res.Has("with-final-issues")) {
+        program->FinalizeIssues();
+    }
     program->PrintErrorsTo(*errStream);
     if (status == TProgram::TStatus::Error) {
         return 1;

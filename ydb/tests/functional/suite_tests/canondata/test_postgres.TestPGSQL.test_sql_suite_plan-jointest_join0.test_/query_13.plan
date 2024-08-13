@@ -41,7 +41,7 @@
                                                 "Name": "Limit"
                                             },
                                             {
-                                                "Condition": "join_key = foo2.f1",
+                                                "Condition": "foo1.join_key = foo3.foo2.f1",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 14
@@ -61,7 +61,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
+                                                        "Node Type": "Stage",
                                                         "PlanNodeId": 11,
                                                         "Plans": [
                                                             {
@@ -73,7 +73,7 @@
                                                                         "Node Type": "LeftJoin (MapJoin)",
                                                                         "Operators": [
                                                                             {
-                                                                                "Condition": "f1 = unique2",
+                                                                                "Condition": "foo2.f1 = ss2.unique2",
                                                                                 "Inputs": [
                                                                                     {
                                                                                         "ExternalPlanNodeId": 8
@@ -93,7 +93,7 @@
                                                                                 "PlanNodeType": "Connection",
                                                                                 "Plans": [
                                                                                     {
-                                                                                        "Node Type": "Collect",
+                                                                                        "Node Type": "Stage",
                                                                                         "PlanNodeId": 4,
                                                                                         "Plans": [
                                                                                             {
@@ -102,7 +102,7 @@
                                                                                                 "PlanNodeType": "Connection",
                                                                                                 "Plans": [
                                                                                                     {
-                                                                                                        "Node Type": "Collect",
+                                                                                                        "Node Type": "Stage",
                                                                                                         "PlanNodeId": 2,
                                                                                                         "Plans": [
                                                                                                             {
@@ -142,7 +142,7 @@
                                                                                 "PlanNodeType": "Connection",
                                                                                 "Plans": [
                                                                                     {
-                                                                                        "Node Type": "Collect",
+                                                                                        "Node Type": "Stage",
                                                                                         "PlanNodeId": 7,
                                                                                         "Plans": [
                                                                                             {
@@ -185,14 +185,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "ConstantExpr",
-                                                        "Operators": [
-                                                            {
-                                                                "Inputs": [],
-                                                                "Iterator": "[{join_key: 0},{join_key: 1}]",
-                                                                "Name": "Iterator"
-                                                            }
-                                                        ],
+                                                        "Node Type": "Stage",
                                                         "PlanNodeId": 13
                                                     }
                                                 ]

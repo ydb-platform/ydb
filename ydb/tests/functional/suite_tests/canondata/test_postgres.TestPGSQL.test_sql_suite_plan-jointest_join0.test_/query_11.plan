@@ -56,7 +56,7 @@
                                                 "Name": "Limit"
                                             },
                                             {
-                                                "Condition": "f1 = unique2",
+                                                "Condition": "a.f1 = b.unique2",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 8
@@ -76,7 +76,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
+                                                        "Node Type": "Stage",
                                                         "PlanNodeId": 4,
                                                         "Plans": [
                                                             {
@@ -85,7 +85,7 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "Collect",
+                                                                        "Node Type": "Stage",
                                                                         "PlanNodeId": 2,
                                                                         "Plans": [
                                                                             {
@@ -125,7 +125,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
+                                                        "Node Type": "Stage",
                                                         "PlanNodeId": 7,
                                                         "Plans": [
                                                             {

@@ -148,7 +148,7 @@ public:
         , Config(sessionCtx->ConfigPtr())
         , TransformCtx(transformCtx)
         , OptimizeCtx(MakeIntrusive<TKqpOptimizeContext>(cluster, Config, sessionCtx->QueryPtr(),
-            sessionCtx->TablesPtr()))
+            sessionCtx->TablesPtr(), sessionCtx->GetUserRequestContext()))
         , BuildQueryCtx(MakeIntrusive<TKqpBuildQueryContext>())
         , Pctx(TKqpProviderContext(*OptimizeCtx, Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->DefaultCostBasedOptimizationLevel)))
         , ActorSystem(actorSystem)

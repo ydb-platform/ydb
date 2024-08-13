@@ -62,6 +62,7 @@ struct TOptimizerStatistics {
     TIntrusivePtr<TKeyColumns> KeyColumns;
     TIntrusivePtr<TColumnStatMap> ColumnStatistics;
     std::unique_ptr<const IProviderStatistics> Specific;
+    std::shared_ptr<TVector<TString>> Labels = {};
 
     TOptimizerStatistics(TOptimizerStatistics&&) = default;
     TOptimizerStatistics() {}
@@ -80,6 +81,8 @@ struct TOptimizerStatistics {
     bool Empty() const;
 
     friend std::ostream& operator<<(std::ostream& os, const TOptimizerStatistics& s);
+
+    TString ToString() const;
 };
 
 std::shared_ptr<TOptimizerStatistics> OverrideStatistics(const TOptimizerStatistics& s, const TStringBuf& tablePath, const std::shared_ptr<NJson::TJsonValue>& stats);

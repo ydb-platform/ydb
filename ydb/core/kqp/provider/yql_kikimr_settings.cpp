@@ -81,7 +81,9 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptEnablePredicateExtract);
     REGISTER_SETTING(*this, OptEnableOlapPushdown);
     REGISTER_SETTING(*this, OptEnableOlapProvideComputeSharding);
-    REGISTER_SETTING(*this, OverrideStatistics);
+    REGISTER_SETTING(*this, OptOverrideStatistics);
+    REGISTER_SETTING(*this, OptCardinalityHints);
+    REGISTER_SETTING(*this, OptJoinAlgoHints);
     REGISTER_SETTING(*this, OverridePlanner);
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
 

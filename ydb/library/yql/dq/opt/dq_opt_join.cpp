@@ -202,6 +202,9 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
                 : FullColumnName(rightScopeAtom.Value(), rightColumnAtom.Value()))
             .Done();
 
+        auto leftColumnName = Build<TCoAtom>(ctx, left->Input.Pos()).Value(FullColumnName(leftScopeAtom.Value(), leftColumnAtom.Value())).Done();
+        auto rightColumnName = Build<TCoAtom>(ctx, right->Input.Pos()).Value(FullColumnName(rightScopeAtom.Value(), rightColumnAtom.Value())).Done();
+
         joinKeysBuilder.Add<TDqJoinKeyTuple>()
             .LeftLabel(leftScopeAtom)
             .LeftColumn(leftColumnAtom)
@@ -212,8 +215,8 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
         leftJoinKeys.emplace_back(leftKey);
         rightJoinKeys.emplace_back(rightKey);
 
-        leftJoinKeyNames.emplace_back(leftColumnAtom);
-        rightJoinKeyNames.emplace_back(rightColumnAtom);
+        leftJoinKeyNames.emplace_back(leftColumnName);
+        rightJoinKeyNames.emplace_back(rightColumnName);
     }
 
     if (EHashJoinMode::Off == mode || EHashJoinMode::Map == mode || !(leftAny || rightAny)) {

@@ -335,6 +335,8 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui32 FolderSubDirsLimit = 1000;
     bool UseBlocks = false;
     EBlockEngineMode BlockEngineMode = EBlockEngineMode::Disable;
+    THashMap<TString, size_t> NoBlockRewriteCallableStats;
+    THashMap<TString, size_t> NoBlockRewriteTypeStats;
     TMaybe<bool> PgEmitAggApply;
     IArrowResolver::TPtr ArrowResolver;
     TFileStoragePtr FileStorage;
@@ -442,6 +444,14 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool IsBlockEngineEnabled() const {
         return BlockEngineMode != EBlockEngineMode::Disable || UseBlocks;
     }
+
+    void IncNoBlockCallable(TStringBuf callableName);
+    void IncNoBlockType(const TTypeAnnotationNode& type);
+    void IncNoBlockType(ETypeAnnotationKind kind);
+    void IncNoBlockType(NUdf::EDataSlot slot);
+
+    TVector<TString> GetTopNoBlocksCallables(size_t maxCount) const;
+    TVector<TString> GetTopNoBlocksTypes(size_t maxCount) const;
 };
 
 template <> inline

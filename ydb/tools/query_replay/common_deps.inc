@@ -10,7 +10,7 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/library/actors/core
     ydb/library/actors/interconnect
     library/cpp/getopt
-    ydb/library/grpc/client
+    ydb/public/sdk/cpp_v2/src/library/grpc/client
     ydb/library/grpc/server
     library/cpp/regex/pcre
     ydb/core/actorlib_impl

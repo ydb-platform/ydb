@@ -7,7 +7,7 @@
 #include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
-#include <ydb/library/grpc/client/grpc_common.h>
+#include <ydb-cpp-sdk/library/grpc/client/grpc_common.h>
 
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 

@@ -58,7 +58,7 @@ PEERDIR(
     ydb/library/actors/core
     library/cpp/containers/intrusive_rb_tree
     library/cpp/digest/md5
-    ydb/library/grpc/client
+    ydb/public/sdk/cpp_v2/src/library/grpc/client
     ydb/library/ycloud/impl
     library/cpp/logger
     library/cpp/lwtrace/mon

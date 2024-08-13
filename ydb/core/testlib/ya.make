@@ -25,7 +25,7 @@ PEERDIR(
     ydb/apps/version
     ydb/library/actors/core
     ydb/library/actors/interconnect
-    ydb/library/grpc/client
+    ydb/public/sdk/cpp_v2/src/library/grpc/client
     ydb/library/grpc/server
     ydb/library/grpc/server/actors
     library/cpp/regex/pcre

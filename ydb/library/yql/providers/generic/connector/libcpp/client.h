@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb-cpp-sdk/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/threading/future/core/future.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/connector.grpc.pb.h>

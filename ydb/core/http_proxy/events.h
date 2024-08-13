@@ -6,7 +6,7 @@
 
 #include <ydb/core/base/events.h>
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb-cpp-sdk/library/grpc/client/grpc_client_low.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 

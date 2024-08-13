@@ -14,7 +14,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/grpc/client
+    ydb/public/sdk/cpp_v2/src/library/grpc/client
     library/cpp/monlib/dynamic_counters
     library/cpp/monlib/metrics
     library/cpp/string_utils/url

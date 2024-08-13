@@ -2,8 +2,8 @@
 #include <util/generic/size_literals.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb/library/grpc/client/grpc_common.h>
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb-cpp-sdk/library/grpc/client/grpc_common.h>
+#include <ydb-cpp-sdk/library/grpc/client/grpc_client_low.h>
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>

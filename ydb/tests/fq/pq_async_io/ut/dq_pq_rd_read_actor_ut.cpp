@@ -22,9 +22,11 @@ struct TFixture : public TPqIoTestFixture {
         UNIT_ASSERT(eventHolder.Get() != nullptr);
     }
 
-    void ExpectStartSession() {
+    void ExpectStartSession(ui64 expectedOffset) {
         auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvStartSession>(RemoteRowDispatcher, TDuration::Seconds(5));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
+        Cerr << "eventHolder->Get()->Record.GetOffset() " << eventHolder->Get()->Record.GetOffset() << " expectedOffset " << expectedOffset<< Endl;
+        UNIT_ASSERT(eventHolder->Get()->Record.GetOffset() == expectedOffset);
     }
 
     void ExpectGetNextBatch() {
@@ -125,9 +127,19 @@ struct TFixture : public TPqIoTestFixture {
         ExpectCoordinatorRequest();
 
         MockCoordinatorResult();
-        ExpectStartSession();
+        ExpectStartSession(0);
         MockAck();
     }
+
+    void ProcessSomeJsons(ui64 offset, const std::vector<TString>& jsons) {
+        MockNewDataArrived();
+        ExpectGetNextBatch();
+
+        MockMessageBatch(offset, jsons);
+
+        auto result = SourceReadDataUntil<TString>(UVParser, 2);
+        AssertDataWithWatermarks(result, jsons, {});
+    } 
 
     const TString Json1 = "{\"dt\":100,\"value\":\"value1\"}";
     const TString Json2 = "{\"dt\":200,\"value\":\"value2\"}";
@@ -139,14 +151,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTest) {
     Y_UNIT_TEST_F(TestReadFromTopic2, TFixture) {
         StartSession();
 
-        MockNewDataArrived();
-        ExpectGetNextBatch();
-
-        const std::vector<TString> data = {Json1, Json2};
-        MockMessageBatch(0, data);
-
-        auto result = SourceReadDataUntil<TString>(UVParser, 2);
-        AssertDataWithWatermarks(result, data, {});
+        ProcessSomeJsons(0, {Json1, Json2});
     }
 
     Y_UNIT_TEST_F(SessionError, TFixture) {
@@ -156,13 +161,11 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTest) {
         auto future = CaSetup->AsyncInputPromises.FatalError.GetFuture();
         MockSessionError();
 
-      //  UNIT_ASSERT(future.HasValue());
-
         bool failured = false;
         while (Now() < deadline) {
             SourceRead<TString>(UVParser);
             if (future.HasValue()) {
-              //  UNIT_ASSERT_STRING_CONTAINS(future.GetValue().ToOneLineString(), "Read session to topic \"NonExistentTopic\" was closed");
+                UNIT_ASSERT_STRING_CONTAINS(future.GetValue().ToOneLineString(), "damage your life");
                 failured = true;
                 break;
             }
@@ -185,6 +188,63 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTest) {
         auto result = SourceReadDataUntil<TString>(UVParser, 1, 1);
         std::vector<TString> expected{data1};
         AssertDataWithWatermarks(result, expected, {});
+
+        UNIT_ASSERT_EQUAL(SourceRead<TString>(UVParser, 0).size(), 0);
+    }
+
+    Y_UNIT_TEST(TestSaveLoadPqRdRead) {
+        TSourceState state;
+ 
+        {
+            TFixture f;
+            f.StartSession();
+            f.ProcessSomeJsons(0, {f.Json1, f.Json2});  // offsets: 0, 1
+
+            f.SaveSourceState(CreateCheckpoint(), state);
+            Cerr << "State saved" << Endl;
+        }
+        {
+            TFixture f;
+            f.InitRdSource(BuildPqTopicSourceSettings("topicName"));
+            f.SourceRead<TString>(UVParser);
+            f.LoadSource(state);
+            f.SourceRead<TString>(UVParser);
+            f.ExpectCoordinatorChangesSubscribe();
+    
+            f.MockCoordinatorChanged();
+            f.ExpectCoordinatorRequest();
+
+            f.MockCoordinatorResult();
+            f.ExpectStartSession(2);
+            f.MockAck();
+
+            f.ProcessSomeJsons(2, {f.Json3});  // offsets: 2
+
+            f.SaveSourceState(CreateCheckpoint(), state);
+        }
+        {
+            TFixture f;
+            f.InitRdSource(BuildPqTopicSourceSettings("topicName"));
+            f.SourceRead<TString>(UVParser);
+            f.LoadSource(state);
+            f.SourceRead<TString>(UVParser);
+            f.ExpectCoordinatorChangesSubscribe();
+    
+            f.MockCoordinatorChanged();
+            f.ExpectCoordinatorRequest();
+
+            f.MockCoordinatorResult();
+            f.ExpectStartSession(3);
+            f.MockAck();
+
+            f.ProcessSomeJsons(3, {f.Json4});  // offsets: 3
+        }
+    }
+
+    Y_UNIT_TEST_F(DisconnectFromRowDispatcher, TFixture) {
+        StartSession();
+        ProcessSomeJsons(0, {Json1, Json2});
+
     }
 }
 } // NYql::NDq

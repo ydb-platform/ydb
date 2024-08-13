@@ -102,7 +102,7 @@ public:
     public:
         TUnboxedValueVector Data;
         i64 UsedSpace = 0;
-        ui64 LastOffset = 0;
+        ui64 NextOffset = 0;
         ui64 PartitionId;
     };
 
@@ -151,7 +151,7 @@ private:
         }
 
         ESessionStatus Status = ESessionStatus::NoSession;
-        ui64 LastOffset = 0;
+        ui64 NextOffset = 0;
         bool IsWaitingRowDispatcherResponse = false;
         //TVector<TString> Data;
         NYql::NDq::TRetryEventsQueue EventsQueue;
@@ -264,7 +264,10 @@ TDqPqRdReadActor::TDqPqRdReadActor(
 }
 
 void TDqPqRdReadActor::ProcessState() {
-    if (!CoordinatorActorId && !CoordinatorChangesSubscribed) {
+    if (!CoordinatorActorId) {  
+        if (CoordinatorChangesSubscribed) {
+            return;
+        }
         SRC_LOG_D("Send TEvCoordinatorChangesSubscribe");
         CoordinatorChangesSubscribed = true;
         Send(LocalRowDispatcherActorId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
@@ -321,7 +324,7 @@ void TDqPqRdReadActor::SaveState(const NDqProto::TCheckpoint& checkpoint, TSourc
         partitionState->SetTopicIndex(0); // Now we are supporting only one topic per source.
         partitionState->SetCluster(cluster);
         partitionState->SetPartition(partition);
-        partitionState->SetOffset(offset + 1);
+        partitionState->SetOffset(offset);
         SRC_LOG_D("TDqPqRdReadActor::SaveState offset " << offset);
     }
 
@@ -421,7 +424,8 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
         SRC_LOG_T("freeSpace " << freeSpace);
 
         TPartitionKey partitionKey{TString{}, readyBatch.PartitionId};
-        PartitionToOffset[partitionKey] = readyBatch.LastOffset;
+        PartitionToOffset[partitionKey] = readyBatch.NextOffset;
+        SRC_LOG_T("NextOffset " << readyBatch.NextOffset);
         ReadyBuffer.pop();
     } while (freeSpace > 0 && !ReadyBuffer.empty());
 
@@ -617,8 +621,7 @@ void TDqPqRdReadActor::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::
     for (auto& [partitionId, sessionInfo] : Sessions) {
         sessionInfo.EventsQueue.HandleNodeDisconnected(ev->Get()->NodeId);
     }
-    Stop("TEvNodeDisconnected"); // TODO
-
+    Stop(TString{"Node disconnected, nodeId "} + ev->Get()->NodeId);
 }
 
 void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) {
@@ -652,7 +655,9 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev) 
         auto [item, size] = CreateItem(message.GetJson());
         activeBatch.Data.emplace_back(std::move(item));
         activeBatch.UsedSpace += size;
-        sessionInfo.LastOffset = message.GetOffset();
+        activeBatch.NextOffset = message.GetOffset() + 1;
+        sessionInfo.NextOffset = message.GetOffset() + 1;
+        SRC_LOG_T("TEvMessageBatch NextOffset " << sessionInfo.NextOffset);
     }
 
     Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));

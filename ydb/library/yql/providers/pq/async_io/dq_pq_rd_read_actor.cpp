@@ -92,8 +92,22 @@ public:
     using TPartitionKey = std::pair<TString, ui64>; // Cluster, partition id.
     using TDebugOffsets = TMaybe<std::pair<ui64, ui64>>;
 
+    struct TReadyBatch {
+    public:
+        TReadyBatch(ui64 partitionId, ui32 /*dataCapacity*/) 
+            : PartitionId(partitionId) {
+          //  Data.reserve(dataCapacity);
+        }
+
+    public:
+        TUnboxedValueVector Data;
+        i64 UsedSpace = 0;
+        ui64 LastOffset = 0;
+        ui64 PartitionId;
+    };
+
 private:
- //   NKikimr::NMiniKQL::TScopedAlloc Alloc;
+    NKikimr::NMiniKQL::TScopedAlloc Alloc;
     const ui64 InputIndex;
     TDqAsyncStats IngressStats;
     const TTxId TxId;
@@ -116,6 +130,8 @@ private:
     TMaybe<NActors::TActorId> CoordinatorActorId;
     NActors::TActorId LocalRowDispatcherActorId;
    // TMap<ui64, NActors::TActorId> RowDispatcherByPartitionId;
+    std::queue<TReadyBatch> ReadyBuffer;
+
 
 
     struct SessionInfo {
@@ -137,7 +153,7 @@ private:
         ESessionStatus Status = ESessionStatus::NoSession;
         ui64 LastOffset = 0;
         bool IsWaitingRowDispatcherResponse = false;
-        TVector<TString> Data;
+        //TVector<TString> Data;
         NYql::NDq::TRetryEventsQueue EventsQueue;
         bool NewDataArrived = false;
         TActorId RowDispatcherActorId;
@@ -223,6 +239,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         const TString& token,
         bool addBearerToToken)
         : TActor<TDqPqRdReadActor>(&TDqPqRdReadActor::StateFunc)
+        , Alloc(__LOCATION__)
         , InputIndex(inputIndex)
         , TxId(txId)
         , HolderFactory(holderFactory)
@@ -269,7 +286,9 @@ void TDqPqRdReadActor::ProcessState() {
                 readOffset = offsetIt->second;
             }
 
-            SRC_LOG_D("readOffset " << readOffset << " partitionId " << partitionId );
+            SRC_LOG_D("Send TEvStartSession to " << sessionInfo.RowDispatcherActorId 
+                    << ", offset " << readOffset 
+                    << ", partitionId " << partitionId);
 
             auto event = new NFq::TEvRowDispatcher::TEvStartSession(
                 SourceParams,
@@ -382,36 +401,53 @@ void TDqPqRdReadActor::PassAway() { // Is called from Compute Actor
     TActor<TDqPqRdReadActor>::PassAway();
 }
 
-i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) {
-    SRC_LOG_D("SessionId: " << " GetAsyncInputData freeSpace = " << freeSpace);
-    ProcessState();
+i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& /*watermark*/, bool&, i64 freeSpace) {
+    SRC_LOG_D("GetAsyncInputData freeSpace = " << freeSpace);
 
-    i64 usedSpace = 0;
-    if (MaybeReturnReadyBatch(buffer, watermark, usedSpace)) {
-        return usedSpace;
+    ProcessState();
+    if (ReadyBuffer.empty()) {
+        //    SubscribeOnNextEvent();
+        return 0;
     }
-    return 0;
+    i64 usedSpace = 0;
+    buffer.clear();
+    do {
+        auto& readyBatch = ReadyBuffer.front();
+        SRC_LOG_T("Return " << readyBatch.Data.size() << " items");
+        std::move(readyBatch.Data.begin(), readyBatch.Data.end(), std::back_inserter(buffer));
+        usedSpace += readyBatch.UsedSpace;
+        freeSpace -= readyBatch.UsedSpace;
+        SRC_LOG_T("usedSpace " << usedSpace);
+        SRC_LOG_T("freeSpace " << freeSpace);
+
+        TPartitionKey partitionKey{TString{}, readyBatch.PartitionId};
+        PartitionToOffset[partitionKey] = readyBatch.LastOffset;
+        ReadyBuffer.pop();
+    } while (freeSpace > 0 && !ReadyBuffer.empty());
+
+    return usedSpace;
 }
 
-bool TDqPqRdReadActor::MaybeReturnReadyBatch(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& /*watermark*/, i64& /*usedSpace*/) {
+bool TDqPqRdReadActor::MaybeReturnReadyBatch(NKikimr::NMiniKQL::TUnboxedValueBatch& /*buffer*/, TMaybe<TInstant>& /*watermark*/, i64& /*usedSpace*/) {
 
-    buffer.clear();
-    for (auto& [partitionId, sessionInfo] : Sessions) {
-        if (sessionInfo.Data.empty())
-            continue;
-        for (const auto& blob : sessionInfo.Data) {
-            auto [value, size] = CreateItem(blob);
-            buffer.push_back(value);
-            //std::move(sessionInfo.Data.begin(), sessionInfo.Data.end(), std::back_inserter(buffer));
-        }
-        sessionInfo.Data.clear();
-        TPartitionKey partitionKey{TString{}, partitionId};
-        PartitionToOffset[partitionKey] = sessionInfo.LastOffset;
-        return true;
+    // buffer.clear();
+    // for (auto& [partitionId, sessionInfo] : Sessions) {
+    //     if (sessionInfo.Data.empty())
+    //         continue;
+    //     SRC_LOG_T("Return " << sessionInfo.Data.size() << " items");
+    //     for (const auto& blob : sessionInfo.Data) {
+    //         auto [value, size] = CreateItem(blob);
+    //         buffer.push_back(value);
+    //         //std::move(sessionInfo.Data.begin(), sessionInfo.Data.end(), std::back_inserter(buffer));
+    //     }
+    //     sessionInfo.Data.clear();
+    //     TPartitionKey partitionKey{TString{}, partitionId};
+    //     PartitionToOffset[partitionKey] = sessionInfo.LastOffset;
+    //     return true;
 
-      //  usedSpace = readyBatch.UsedSpace;
+    //   //  usedSpace = readyBatch.UsedSpace;
       
-    }
+    // }
     return false;
 
 //     if (ReadyBuffer.empty()) {
@@ -593,7 +629,8 @@ void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) {
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev) {
-    SRC_LOG_T("TEvMessageBatch, ev: " << ev->Sender);
+    //NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
+    SRC_LOG_T("TEvMessageBatch  ev: " << ev->Sender);
     ui64 partitionId = ev->Get()->Record.GetPartitionId();
     YQL_ENSURE(Sessions.count(partitionId), "Unknown partition id");
     auto it = Sessions.find(partitionId);
@@ -601,38 +638,31 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev) 
         Stop("Wrong session data");
         return;
     }
+
     auto& sessionInfo = it->second;
     if (!sessionInfo.EventsQueue.OnEventReceived(ev)) {
         SRC_LOG_W("Wrong seq num, ignore message");
         return;
     }
+    ReadyBuffer.emplace(partitionId, ev->Get()->Record.MessagesSize());
+    TReadyBatch& activeBatch = ReadyBuffer.back();
+
     for (const auto& message : ev->Get()->Record.GetMessages()) {
         SRC_LOG_T("Json: " << message.GetJson());    
-        sessionInfo.Data.emplace_back(message.GetJson());
+        auto [item, size] = CreateItem(message.GetJson());
+        activeBatch.Data.emplace_back(std::move(item));
+        activeBatch.UsedSpace += size;
         sessionInfo.LastOffset = message.GetOffset();
     }
 
     Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
 }
+
 std::pair<NUdf::TUnboxedValuePod, i64> TDqPqRdReadActor::CreateItem(const TString& data) {
     i64 usedSpace = 0;
     NUdf::TUnboxedValuePod item;
-    if (MetadataFields.empty()) {
-        item = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.Data(), data.Size()));
-        usedSpace += data.Size();
-    } else {
-  /*      NUdf::TUnboxedValue* itemPtr;
-        item = HolderFactory.CreateDirectArrayHolder(MetadataFields.size() + 1, itemPtr);
-        *(itemPtr++) = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.Data(), data.Size()));
-        usedSpace += data.Size();
-
-        for (const auto& [name, extractor] : MetadataFields) {
-            auto [ub, size] = extractor(data);
-            *(itemPtr++) = std::move(ub);
-            usedSpace += size;
-        }*/
-    }
-
+    item = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.Data(), data.Size()));
+    usedSpace += data.Size();
     return std::make_pair(item, usedSpace);
 }
 

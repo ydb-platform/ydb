@@ -42,7 +42,7 @@
                                                 "TopSortBy": "argument.s2.name"
                                             },
                                             {
-                                                "Condition": "name = name",
+                                                "Condition": "s2.name = s3.name",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 15

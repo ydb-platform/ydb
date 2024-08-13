@@ -42,7 +42,7 @@
                                                 "TopSortBy": ""
                                             },
                                             {
-                                                "Condition": "x = _equijoin_column_0",
+                                                "Condition": "ss1.x = ss2._equijoin_column_0",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 7
@@ -74,7 +74,7 @@
                                                                         "Node Type": "LeftJoin (MapJoin)",
                                                                         "Operators": [
                                                                             {
-                                                                                "Condition": "q2 = id",
+                                                                                "Condition": "int8_tbl.q2 = innertab.id",
                                                                                 "Inputs": [
                                                                                     {
                                                                                         "ExternalPlanNodeId": 1

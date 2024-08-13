@@ -42,7 +42,7 @@
                                                 "TopSortBy": ""
                                             },
                                             {
-                                                "Condition": "j = k",
+                                                "Condition": "t1.j = t2.k",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 2

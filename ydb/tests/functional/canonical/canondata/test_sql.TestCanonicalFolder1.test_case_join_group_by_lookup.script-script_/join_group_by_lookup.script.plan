@@ -48,7 +48,7 @@
                                                         "TopSortBy": ""
                                                     },
                                                     {
-                                                        "Condition": "Group = Group",
+                                                        "Condition": "a.Group = t.Group",
                                                         "Inputs": [
                                                             {
                                                                 "ExternalPlanNodeId": 17

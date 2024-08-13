@@ -43,7 +43,7 @@
                                                 "TopSortBy": ""
                                             },
                                             {
-                                                "Condition": "i = i",
+                                                "Condition": "t2.i = t1.i",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 3

@@ -22,15 +22,6 @@
 #include <ydb/library/yql/public/udf/udf_static_registry.h>
 
 
-void ReplaceTemplate(const TString& variableName, const TString& variableValue, TString& query) {
-    TString variableTemplate = TStringBuilder() << "${" << variableName << "}";
-    for (size_t position = query.find(variableTemplate); position != TString::npos; position = query.find(variableTemplate, position)) {
-        query.replace(position, variableTemplate.size(), variableValue);
-        position += variableValue.size();
-    }
-}
-
-
 struct TExecutionOptions {
     enum class EExecutionCase {
         GenericScript,
@@ -100,7 +91,7 @@ struct TExecutionOptions {
         TString sql = ScriptQueries[index];
         if (UseTemplates) {
             ReplaceYqlTokenTemplate(sql);
-            ReplaceTemplate("QUERY_ID", ToString(queryId), sql);
+            SubstGlobal(sql, "${QUERY_ID}", ToString(queryId));
         }
 
         return {
@@ -122,7 +113,7 @@ private:
     }
 
     static void ReplaceYqlTokenTemplate(TString& sql) {
-        ReplaceTemplate(NKqpRun::YQL_TOKEN_VARIABLE, GetEnv(NKqpRun::YQL_TOKEN_VARIABLE), sql);
+        SubstGlobal(sql, TStringBuilder() << "${" << NKqpRun::YQL_TOKEN_VARIABLE << "}", GetEnv(NKqpRun::YQL_TOKEN_VARIABLE));
     }
 };
 

@@ -221,7 +221,7 @@ private:
         }
 
         Issues.AddIssues(std::move(issues));
-        Send(ReplyActorId, new TEvPrivate::TEvFetchPoolResponse(status, PoolConfig, PathIdFromPathId(PathId), std::move(Issues)));
+        Send(ReplyActorId, new TEvPrivate::TEvFetchPoolResponse(status, Database, PoolId, PoolConfig, PathIdFromPathId(PathId), std::move(Issues)));
         PassAway();
     }
 

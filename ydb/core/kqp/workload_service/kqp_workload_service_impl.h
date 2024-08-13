@@ -2,6 +2,7 @@
 
 #include <queue>
 
+#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/workload_service/actors/actors.h>
 #include <ydb/core/kqp/workload_service/common/cpu_quota_manager.h>
 #include <ydb/core/kqp/workload_service/common/events.h>
@@ -18,10 +19,21 @@ struct TDatabaseState {
     bool& EnabledResourcePoolsOnServerless;
 
     std::vector<TEvPlaceRequestIntoPool::TPtr> PendingRequersts = {};
+    std::unordered_map<TString, std::unordered_set<TActorId>> PendingSubscriptions = {};
     bool HasDefaultPool = false;
     bool Serverless = false;
 
     TInstant LastUpdateTime = TInstant::Zero();
+
+    void DoSubscribeRequest(TEvSubscribeOnPoolChanges::TPtr ev) {
+        const TString& poolId = ev->Get()->PoolId;
+        auto& subscribers = PendingSubscriptions[poolId];
+        if (subscribers.empty()) {
+            ActorContext.Register(CreatePoolFetcherActor(ActorContext.SelfID, ev->Get()->Database, poolId, nullptr));
+        }
+
+        subscribers.emplace(ev->Sender);
+    }
 
     void DoPlaceRequest(TEvPlaceRequestIntoPool::TPtr ev) {
         TString database = ev->Get()->Database;
@@ -34,10 +46,32 @@ struct TDatabaseState {
         }
     }
 
+    void UpdatePoolInfo(const TEvPrivate::TEvFetchPoolResponse::TPtr& ev, NActors::TActorId poolHandler) {
+        const TString& poolId = ev->Get()->PoolId;
+        auto& subscribers = PendingSubscriptions[poolId];
+        if (subscribers.empty()) {
+            return;
+        }
+
+        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS && poolHandler) {
+            ActorContext.Send(poolHandler, new TEvPrivate::TEvUpdatePoolSubscription(ev->Get()->PathId, subscribers));
+        } else {
+            const TString& database = ev->Get()->Database;
+            for (const auto& subscriber : subscribers) {
+                ActorContext.Send(subscriber, new TEvUpdatePoolInfo(database, poolId, std::nullopt, std::nullopt));
+            }
+        }
+        subscribers.clear();
+    }
+
     void UpdateDatabaseInfo(const TEvPrivate::TEvFetchDatabaseResponse::TPtr& ev) {
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             ReplyContinueError(ev->Get()->Status, GroupIssues(ev->Get()->Issues, "Failed to fetch database info"));
             return;
+        }
+
+        if (Serverless != ev->Get()->Serverless) {
+            ActorContext.Send(MakeKqpProxyID(ActorContext.SelfID.NodeId()), new TEvUpdateDatabaseInfo(ev->Get()->Database, ev->Get()->Serverless));
         }
 
         LastUpdateTime = TInstant::Now();

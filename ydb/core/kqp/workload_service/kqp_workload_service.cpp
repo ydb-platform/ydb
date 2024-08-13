@@ -140,6 +140,18 @@ public:
         }
     }
 
+    void Handle(TEvSubscribeOnPoolChanges::TPtr& ev) {
+        const TString& database = ev->Get()->Database;
+        const TString& poolId = ev->Get()->PoolId;
+        if (!EnabledResourcePools) {
+            Send(ev->Sender, new TEvUpdatePoolInfo(database, poolId, std::nullopt, std::nullopt));
+            return;
+        }
+
+        LOG_D("Recieved subscription request, Database: " << database << ", PoolId: " << poolId);
+        GetOrCreateDatabaseState(database)->DoSubscribeRequest(std::move(ev));
+    }
+
     void Handle(TEvPlaceRequestIntoPool::TPtr& ev) {
         const TActorId& workerActorId = ev->Sender;
         if (!EnabledResourcePools) {
@@ -188,11 +200,13 @@ public:
         hFunc(TEvInterconnect::TEvNodesInfo, Handle);
         hFunc(TEvents::TEvUndelivered, Handle);
 
+        hFunc(TEvSubscribeOnPoolChanges, Handle);
         hFunc(TEvPlaceRequestIntoPool, Handle);
         hFunc(TEvCleanupRequest, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
 
         hFunc(TEvPrivate::TEvFetchDatabaseResponse, Handle);
+        hFunc(TEvPrivate::TEvFetchPoolResponse, Handle);
         hFunc(TEvPrivate::TEvResolvePoolResponse, Handle);
         hFunc(TEvPrivate::TEvPlaceRequestIntoPoolResponse, Handle);
         hFunc(TEvPrivate::TEvNodesInfoRequest, Handle);
@@ -211,6 +225,21 @@ private:
         GetOrCreateDatabaseState(ev->Get()->Database)->UpdateDatabaseInfo(ev);
     }
 
+    void Handle(TEvPrivate::TEvFetchPoolResponse::TPtr& ev) {
+        const TString& database = ev->Get()->Database;
+        const TString& poolId = ev->Get()->PoolId;
+
+        TActorId poolHandler;
+        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
+            LOG_D("Successfully fetched pool " << poolId << ", Database: " << database);
+            poolHandler = GetOrCreatePoolState(database, poolId, ev->Get()->PoolConfig)->PoolHandler;
+        } else {
+            LOG_W("Failed to fetch pool " << poolId << ", Database: " << database << ", status: " << ev->Get()->Status << ", issues: " << ev->Get()->Issues.ToOneLineString());
+        }
+
+        GetOrCreateDatabaseState(database)->UpdatePoolInfo(ev, poolHandler);
+    }
+
     void Handle(TEvPrivate::TEvResolvePoolResponse::TPtr& ev) {
         const auto& event = ev->Get()->Event;
         const TString& database = event->Get()->Database;
@@ -226,18 +255,7 @@ private:
 
         LOG_D("Successfully fetched pool " << poolId << ", Database: " << database << ", SessionId: " << event->Get()->SessionId);
 
-        auto poolState = GetPoolState(database, poolId);
-        if (!poolState) {
-            TString poolKey = GetPoolKey(database, poolId);
-            LOG_I("Creating new handler for pool " << poolKey);
-
-            auto poolHandler = Register(CreatePoolHandlerActor(database, poolId, ev->Get()->PoolConfig, Counters.Counters));
-            poolState = &PoolIdToState.insert({poolKey, TPoolState{.PoolHandler = poolHandler, .ActorContext = ActorContext()}}).first->second;
-
-            Counters.ActivePools->Inc();
-            ScheduleIdleCheck();
-        }
-
+        auto poolState = GetOrCreatePoolState(database, poolId, ev->Get()->PoolConfig);
         poolState->PendingRequests.emplace(std::move(ev));
         poolState->StartPlaceRequest();
     }
@@ -498,6 +516,23 @@ private:
             return &databaseIt->second;
         }
         return &DatabaseToState.insert({database, TDatabaseState{.ActorContext = ActorContext(), .EnabledResourcePoolsOnServerless = EnabledResourcePoolsOnServerless}}).first->second;
+    }
+
+    TPoolState* GetOrCreatePoolState(const TString& database, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig) {
+        const auto& poolKey = GetPoolKey(database, poolId);
+        if (auto poolState = GetPoolState(poolKey)) {
+            return poolState;
+        }
+
+        LOG_I("Creating new handler for pool " << poolKey);
+
+        const auto poolHandler = Register(CreatePoolHandlerActor(database, poolId, poolConfig, Counters.Counters));
+        const auto poolState = &PoolIdToState.insert({poolKey, TPoolState{.PoolHandler = poolHandler, .ActorContext = ActorContext()}}).first->second;
+
+        Counters.ActivePools->Inc();
+        ScheduleIdleCheck();
+
+        return poolState;
     }
 
     TPoolState* GetPoolState(const TString& database, const TString& poolId) {

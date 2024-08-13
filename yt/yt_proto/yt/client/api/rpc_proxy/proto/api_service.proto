@@ -504,6 +504,7 @@ message TReqLookupRows
 message TRspLookupRows
 {
     required TRowsetDescriptor rowset_descriptor = 200;
+    repeated int32 unavailable_key_indexes = 201;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -544,6 +545,7 @@ message TReqVersionedLookupRows
 message TRspVersionedLookupRows
 {
     required TRowsetDescriptor rowset_descriptor = 200;
+    repeated int32 unavailable_key_indexes = 201;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -579,8 +581,8 @@ message TRspMultiLookup
     message TSubresponse
     {
         required TRowsetDescriptor rowset_descriptor = 1;
-
         required int32 attachment_count = 2;
+        repeated int32 unavailable_key_indexes = 3;
     }
 
     repeated TSubresponse subresponses = 1;

@@ -878,6 +878,7 @@ TFuture<TVersionedLookupRowsResult> TClientBase::VersionedLookupRows(
             MergeRefsToRef<TRpcProxyClientBufferTag>(rsp->Attachments()));
         return TVersionedLookupRowsResult{
             .Rowset = std::move(rowset),
+            .UnavailableKeyIndexes = FromProto<std::vector<int>>(rsp->unavailable_key_indexes()),
         };
     }));
 }
@@ -952,6 +953,7 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookupRows(
                 MergeRefsToRef<TRpcProxyClientBufferTag>(std::move(subresponseAttachments)));
             result.push_back({
                 .Rowset = std::move(rowset),
+                .UnavailableKeyIndexes = FromProto<std::vector<int>>(subresponse.unavailable_key_indexes()),
             });
 
             beginAttachmentIndex = endAttachmentIndex;

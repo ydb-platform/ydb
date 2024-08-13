@@ -2385,7 +2385,7 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQ
     }
 
     TString queryStats = "";
-    if (optCtx && optCtx->UserRequestContext) {
+    if (optCtx && optCtx->UserRequestContext && optCtx->UserRequestContext->PoolId) {
         NJsonWriter::TBuf writer;
         writer.BeginObject();
         writer.WriteKey("ResourcePoolId").WriteString(optCtx->UserRequestContext->PoolId);
@@ -2774,8 +2774,10 @@ TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats, const 
 
     writer.WriteKey("ProcessCpuTimeUs").WriteLongLong(queryStats.GetWorkerCpuTimeUs());
     writer.WriteKey("TotalDurationUs").WriteLongLong(queryStats.GetDurationUs());
-    writer.WriteKey("QueuedTimeUs").WriteLongLong(queryStats.GetQueuedTimeUs());
-    writer.WriteKey("ResourcePoolId").WriteString(poolId);
+    if (poolId) {
+        writer.WriteKey("QueuedTimeUs").WriteLongLong(queryStats.GetQueuedTimeUs());
+        writer.WriteKey("ResourcePoolId").WriteString(poolId);
+    }
     writer.EndObject();
 
     return SerializeTxPlans(txPlans, TIntrusivePtr<NOpt::TKqpOptimizeContext>(), "", writer.Str());

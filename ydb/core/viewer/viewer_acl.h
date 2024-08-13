@@ -166,6 +166,9 @@ public:
                     auto& pbAce = *pbCommon.AddACL();
                     FillACE(ace, pbAce);
                 }
+                if (acl.GetInterruptInheritance()) {
+                    pbCommon.SetInterruptInheritance(true);
+                }
             }
             if (entry.Self->Info.HasEffectiveACL()) {
                 NACLib::TACL acl(entry.Self->Info.GetEffectiveACL());
@@ -245,6 +248,8 @@ public:
                                                             type: array
                                                             items:
                                                                 type: string
+                                            InterruptInheritance:
+                                                type: boolean
                                             EffectiveACL:
                                                 type: array
                                                 items:

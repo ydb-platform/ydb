@@ -37,7 +37,10 @@
 
 ``` sql
 SELECT
-    1234p, 0x123pb, "тест"pt, 123e-1000pn; -- pgint4, pgint8, pgtext, pgnumeric
+    1234p,             -- pgint4
+    0x123pb,         -- pgint8
+    "тест"pt,         -- pgtext
+    123e-1000pn; -- pgnumeric
 ;
 ```
 

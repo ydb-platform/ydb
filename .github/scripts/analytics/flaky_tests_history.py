@@ -81,7 +81,8 @@ def main():
         print(
             "Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping"
         )
-        return 1
+        os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]="/home/kirrysin/fork_2/.github/scripts/my-robot-key.json"
+        #return 1
     else:
         # Do not set up 'real' variable from gh workflows because it interfere with ydb tests
         # So, set up it locally
@@ -151,7 +152,7 @@ def main():
                         DISTINCT suite_folder || '/' || test_name as full_name,
                         suite_folder,
                         test_name
-                    from  `test_results/test_runs_results`
+                    from  `test_results/test_runs_column`
                     where
                         status in ('failure','mute')
                         and job_name in ('Nightly-run', 'Postcommit_relwithdebinfo')
@@ -161,7 +162,7 @@ def main():
                 cross join (
                     select 
                         DISTINCT DateTime::MakeDate(run_timestamp) as date_base
-                    from  `test_results/test_runs_results`
+                    from  `test_results/test_runs_column`
                     where
                         status in ('failure','mute')
                         and job_name in ('Nightly-run', 'Postcommit_relwithdebinfo')
@@ -176,7 +177,7 @@ def main():
                         run_timestamp,
                         status
                         --ROW_NUMBER() OVER (PARTITION BY test_name ORDER BY run_timestamp DESC) AS rn
-                    from  `test_results/test_runs_results`
+                    from  `test_results/test_runs_column`
                     where
                         run_timestamp >= Date('{last_date}') -{history_for_n_day}*Interval("P1D") and
                         job_name in ('Nightly-run', 'Postcommit_relwithdebinfo')

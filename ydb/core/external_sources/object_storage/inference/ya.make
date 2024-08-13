@@ -17,6 +17,7 @@ PEERDIR(
     ydb/core/external_sources/object_storage
 
     ydb/library/yql/providers/s3/compressors
+    ydb/library/yql/providers/common/arrow
 )
 
 END()

@@ -1,6 +1,7 @@
 #include "s3_fetcher.h"
 
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/yql/providers/common/arrow/interface/arrow_reader.h>
 
 namespace NKikimr::NExternalSource::NObjectStorage {
 
@@ -23,12 +24,17 @@ public:
 
     STRICT_STFUNC(WorkingState,
         HFunc(TEvRequestS3Range, HandleRequest);
+        HFunc(TEvRequestS3Schema, HandleRequest);
 
         HFunc(TEvS3DownloadResponse, HandleDownloadReponse);
     )
 
     void HandleRequest(TEvRequestS3Range::TPtr& ev, const NActors::TActorContext& ctx) {
         StartDownload(std::shared_ptr<TEvRequestS3Range>(ev->Release().Release()), ctx.ActorSystem());
+    }
+
+    void HandleRequest(TEvRequestS3Schema::TPtr& ev, const NActors::TActorContext& ctx) {
+        StartDownload(std::shared_ptr<TEvRequestS3Schema>(ev->Release().Release()), ctx.ActorSystem());
     }
 
     void HandleDownloadReponse(TEvS3DownloadResponse::TPtr& ev, const NActors::TActorContext& ctx) {
@@ -74,6 +80,32 @@ public:
             [actorSystem, selfId = SelfId(), request = std::move(request)](NYql::IHTTPGateway::TResult&& result) mutable {
                 actorSystem->Send(selfId, new TEvS3DownloadResponse(std::move(request), std::move(result)));
             }, {}, RetryPolicy_);
+    }
+
+    void StartDownload(std::shared_ptr<TEvRequestS3Schema>&& request, NActors::TActorSystem* actorSystem) {
+        const auto& authInfo = Credentials_.GetAuthInfo();
+        auto headers = NYql::IHTTPGateway::MakeYcHeaders(
+            request->RequestId.AsGuidString(),
+            authInfo.GetToken(),
+            {},
+            authInfo.GetAwsUserPwd(),
+            authInfo.GetAwsSigV4()
+        );
+
+        NYql::TArrowFileDesc desc(
+            Url_ + request->Path,
+            Gateway_,
+            std::move(headers),
+            RetryPolicy_,
+            request->Size,
+            "parquet"
+        );
+
+        auto schemaReader = NYql::MakeArrowReader(NYql::TArrowReaderSettings());
+        auto futureSchema = schemaReader->GetSchema(desc);
+        futureSchema.Apply([actorSystem, request](NThreading::TFuture<NYql::IArrowReader::TSchemaResponse> response) {
+            actorSystem->Send(request->Sender, new TEvArrowSchema(response.GetValue().Schema, request->Path));
+        });
     }
 
 private:

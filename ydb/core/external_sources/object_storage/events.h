@@ -20,6 +20,7 @@ enum EEventTypes : ui32 {
     EvFileError,
 
     EvRequestS3Range,
+    EvRequestS3Schema,
     EvS3DownloadResponse,
     EvS3RangeResponse,
     EvS3RangeError,
@@ -29,6 +30,7 @@ enum EEventTypes : ui32 {
     EvInferredFileSchema,
 
     EvArrowFile,
+    EvArrowSchema,
 
     EvEnd,
 };
@@ -63,6 +65,22 @@ struct TEvRequestS3Range : public NActors::TEventLocal<TEvRequestS3Range, EvRequ
 
     ui64 Start = 0;
     ui64 End = 0;
+
+    TGUID RequestId;
+    NActors::TActorId Sender;
+};
+
+struct TEvRequestS3Schema : public NActors::TEventLocal<TEvRequestS3Schema, EvRequestS3Schema> {
+    TEvRequestS3Schema(TString path, ui64 size, const TGUID& requestId, NActors::TActorId sender)
+        : Path{std::move(path)}
+        , Size{size}
+        , RequestId{requestId}
+        , Sender{sender}
+    {}
+
+    TString Path;
+
+    ui64 Size;
 
     TGUID RequestId;
     NActors::TActorId Sender;
@@ -118,12 +136,24 @@ struct TEvArrowFile : public NActors::TEventLocal<TEvArrowFile, EvArrowFile> {
     TString Path;
 };
 
+struct TEvArrowSchema : public NActors::TEventLocal<TEvArrowSchema, EvArrowSchema> {
+    TEvArrowSchema(std::shared_ptr<arrow::Schema> schema, TString path)
+        : Schema{std::move(schema)}
+        , Path{std::move(path)}
+    {}
+
+    std::shared_ptr<arrow::Schema> Schema;
+    TString Path;
+};
+
 struct TEvInferFileSchema : public NActors::TEventLocal<TEvInferFileSchema, EvInferFileSchema> {
-    explicit TEvInferFileSchema(TString&& path)
+    explicit TEvInferFileSchema(TString&& path, ui64 size)
         : Path{std::move(path)}
+        , Size{size}
     {}
 
     TString Path;
+    ui64 Size = 0;
 };
 
 struct TEvInferredFileSchema : public NActors::TEventLocal<TEvInferredFileSchema, EvInferredFileSchema> {

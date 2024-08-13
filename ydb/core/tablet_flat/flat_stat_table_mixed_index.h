@@ -22,6 +22,7 @@ inline bool BuildStatsMixedIndex(const TSubset& subset, TStats& stats, ui64 rowC
     bool started = true;
     for (const auto& part : subset.Flatten) {
         stats.IndexSize.Add(part->IndexesRawSize, part->Label.Channel());
+        stats.ByKeyFilterSize.Add(part->ByKey ? part->ByKey->Raw.size() : 0, part->Label.Channel());
         TAutoPtr<TStatsScreenedPartIterator> iter = new TStatsScreenedPartIterator(part, env, subset.Scheme->Keys, part->Small, part->Large, 
             rowCountResolution / resolutionDivider, dataSizeResolution / resolutionDivider);
         auto ready = iter->Start();

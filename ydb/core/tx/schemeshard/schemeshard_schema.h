@@ -378,6 +378,8 @@ struct Schema : NIceDb::Schema {
         // Represented by NKikimrTableStats::TStoragePoolsStats.
         struct StoragePoolsStats : Column<33, NScheme::NTypeIds::String> { using Type = TString; };
 
+        struct ByKeyFilterSize : Column<34, NScheme::NTypeIds::Uint64> {};
+
         using TKey = TableKey<TableOwnerId, TableLocalId, PartitionId>;
         using TColumns = TableColumns<
             TableOwnerId,
@@ -412,7 +414,8 @@ struct Schema : NIceDb::Schema {
             SearchHeight,
             FullCompactionTs,
             MemDataSize,
-            StoragePoolsStats
+            StoragePoolsStats,
+            ByKeyFilterSize
         >;
     };
 

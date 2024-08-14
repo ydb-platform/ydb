@@ -241,13 +241,16 @@ def main():
                 'test_name': row['test_name'],
             })
         print(f'upserting runs: {len(prepared_for_update_rows)} rows')
-
-        with ydb.SessionPool(driver) as pool:
-            create_tables(pool, test_table_name)
-            bulk_upsert(driver.table_client, full_path,
+        if prepared_for_update_rows:
+            with ydb.SessionPool(driver) as pool:
+                create_tables(pool, test_table_name)
+                bulk_upsert(driver.table_client, full_path,
                         prepared_for_update_rows)
+                print('tests updated')
+        else:
+            print('nothing to upsert')
 
-        print('tests updated')
+       
 
 
 if __name__ == "__main__":

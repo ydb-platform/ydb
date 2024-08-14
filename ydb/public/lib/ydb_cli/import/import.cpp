@@ -285,6 +285,7 @@ TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TStri
         }, NTable::TRetryOperationSettings{RetrySettings}.MaxRetries(10));
 
     if (!resultStatus.IsSuccess()) {
+        /// TODO: Remove this after server fix: https://github.com/ydb-platform/ydb/issues/7791
         if (resultStatus.GetStatus() == EStatus::SCHEME_ERROR) {
             auto describePathResult = NDump::DescribePath(*SchemeClient, dbPath);
             if (describePathResult.GetStatus() != EStatus::SUCCESS) {

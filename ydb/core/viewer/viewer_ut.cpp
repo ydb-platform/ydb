@@ -1147,7 +1147,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             "syntax": "yql_v1",
             "stats": "profile"
         })json";
-        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/query?timeout=600000&base64=false&schema=modern", requestBody, &responseStream, headers);
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/json/query?timeout=600000&base64=false&schema=modern", requestBody, &responseStream, headers);
         const TString response = responseStream.ReadAll();
         UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
         {
@@ -1212,7 +1212,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             "syntax": "yql_v1",
             "stats": "profile"
         })json";
-        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/query?timeout=600000&base64=false&schema=modern", requestBody, &responseStream, headers);
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/json/query?timeout=600000&base64=false&schema=modern", requestBody, &responseStream, headers);
         const TString response = responseStream.ReadAll();
         UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
 

@@ -16,7 +16,7 @@ PEERDIR(
     library/cpp/testing/unittest
     library/cpp/threading/chunk_queue
     ydb/core/testlib/default
-    ydb/library/persqueue/topic_parser_public
+    ydb/public/sdk/cpp_v2/src/library/persqueue/topic_parser_public
     ydb/public/sdk/cpp/client/ydb_driver
     ydb/public/sdk/cpp/client/ydb_topic
     ydb/public/sdk/cpp/client/ydb_persqueue_public

@@ -3,7 +3,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 
-#include <ydb/library/persqueue/obfuscate/obfuscate.h>
+#include <ydb/public/sdk/cpp_v2/src/library/persqueue/obfuscate/obfuscate.h>
 
 #include <util/random/random.h>
 #include <util/string/cast.h>

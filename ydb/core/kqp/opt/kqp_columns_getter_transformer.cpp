@@ -191,7 +191,8 @@ bool TKqpColumnsGetterTransformer::AfterLambdas(const TExprNode::TPtr& input) {
         TCoFilterBase::Match(input.Get()) ||
         TCoFlatMapBase::Match(input.Get()) && IsPredicateFlatMap(TExprBase(input).Cast<TCoFlatMapBase>().Lambda().Body().Ref())
     ) {
-        auto computer = NDq::TPredicateSelectivityComputer(nullptr, true);
+        std::shared_ptr<TOptimizerStatistics> dummyStats = nullptr;
+        auto computer = NDq::TPredicateSelectivityComputer(dummyStats, true);
     
         if (TCoFilterBase::Match(input.Get())) {
             computer.Compute(TExprBase(input).Cast<TCoFilterBase>().Lambda().Body());

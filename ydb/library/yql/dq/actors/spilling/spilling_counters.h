@@ -20,17 +20,13 @@ struct TSpillingCounters : public TThrRefBase {
 };
 
 struct TSpillingTaskCounters : public TThrRefBase {
-    // Maybe change to std::atomic<ui64>
-    // std::atomic<ui64> ComputeReadBytes;
-    std::atomic<ui64> ComputeWriteBytes;
-    // std::atomic<ui64> ChannelReadBytes;
-    std::atomic<ui64> ChannelWriteBytes;
+    std::atomic<ui64> ComputeWriteBytes = 0;
+    std::atomic<ui64> ChannelWriteBytes = 0;
 
-    // TDuration is not atomic coutable
-    std::atomic<ui64> ComputeReadTime;
-    std::atomic<ui64> ComputeWriteTime;
-    std::atomic<ui64> ChannelReadTime;
-    std::atomic<ui64> ChannelWriteTime;
+    std::atomic<ui64> ComputeReadTime = 0;
+    std::atomic<ui64> ComputeWriteTime = 0;
+    std::atomic<ui64> ChannelReadTime = 0;
+    std::atomic<ui64> ChannelWriteTime = 0;
 };
 
 } // namespace NYql::NDq

@@ -737,6 +737,8 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
                     } else if (f->IsRelesing()) {
                         ++f->Session->ReleasingFamilyCount;
                     }
+                    f->Session->ActivePartitionCount += f->ActivePartitionCount;
+                    f->Session->InactivePartitionCount += f->InactivePartitionCount;
                 }
 
                 newFamilies.push_back(f);

@@ -203,7 +203,7 @@ void TBalancer::RenderApp(TStringStream& str) const {
                             TABLED() { str << session->SessionName; }
                             TABLED() { str << (session->Partitions.empty() ? "" : JoinRange(", ", session->Partitions.begin(), session->Partitions.end())); }
                             TABLED() { str << session->Families.size() << " / " << session->ActiveFamilyCount << " / " << session->ReleasingFamilyCount; }
-                            TABLED() { str << (session->ActivePartitionCount + session->InactivePartitionCount) << "/ " << session->ActivePartitionCount
+                            TABLED() { str << (session->ActivePartitionCount + session->InactivePartitionCount) << " / " << session->ActivePartitionCount
                                            << " / " << session->InactivePartitionCount << " / " << session->ReleasingPartitionCount; }
                             TABLED() { str << session->ClientNode; }
                             TABLED() { str << session->ProxyNodeId; }

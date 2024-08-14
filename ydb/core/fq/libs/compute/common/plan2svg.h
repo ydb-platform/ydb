@@ -169,7 +169,8 @@ struct TPlanViewConfig {
 class TPlan {
 
 public:
-    TPlan(const TString& nodeType, TPlanViewConfig& config) : NodeType(nodeType), Config(config) {
+    TPlan(const TString& nodeType, TPlanViewConfig& config, std::map<std::string, std::shared_ptr<TStage>>& cteStages)
+        : NodeType(nodeType), Config(config), CteStages(cteStages) {
         CpuTime = std::make_shared<TSummaryMetric>();
         MaxMemoryUsage = std::make_shared<TSummaryMetric>();
         OutputBytes = std::make_shared<TSummaryMetric>();
@@ -185,6 +186,7 @@ public:
     void LoadSource(std::shared_ptr<TSource> source, const NJson::TJsonValue& node);
     void MarkStageIndent(ui32 indentX, ui32& offsetY, std::shared_ptr<TStage> stage);
     void MarkLayout();
+    void ResolveCteRefs();
     void PrintTimeline(TStringBuilder& background, TStringBuilder& canvas, const TString& title, TAggregation& firstMessage, TAggregation& lastMessage, ui32 x, ui32 y, ui32 w, ui32 h, const TString& color);
     void PrintWaitTime(TStringBuilder& canvas, std::shared_ptr<TSingleMetric> metric, ui32 x, ui32 y, ui32 w, ui32 h, const TString& fillColor);
     void PrintDeriv(TStringBuilder& canvas, std::shared_ptr<TSingleMetric> metric, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor = "");
@@ -206,8 +208,8 @@ public:
     ui32 OffsetY = 0;
     ui32 Tasks = 0;
     std::vector<std::pair<std::string, std::shared_ptr<TConnection>>> CteRefs;
-    std::map<std::string, std::shared_ptr<TStage>> CteStages;
     TPlanViewConfig& Config;
+    std::map<std::string, std::shared_ptr<TStage>>& CteStages;
 };
 
 class TPlanVisualizer {
@@ -216,7 +218,7 @@ public:
 
     void LoadPlans(const TString& plans);
     void LoadPlan(const TString& planNodeType, const NJson::TJsonValue& root);
-    void SetTimeOffsets();
+    void PostProcessPlans();
     TString PrintSvg();
     TString PrintSvgSafe();
 
@@ -224,4 +226,5 @@ public:
     ui64 MaxTime = 1000;
     ui64 BaseTime = 0;
     TPlanViewConfig Config;
+    std::map<std::string, std::shared_ptr<TStage>> CteStages;
 };

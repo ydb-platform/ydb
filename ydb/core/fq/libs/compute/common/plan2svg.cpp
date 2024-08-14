@@ -181,29 +181,33 @@ void TPlan::Load(const NJson::TJsonValue& node) {
             }
         }
     }
-    // fix forward CTE declarations
+}
+
+void TPlan::ResolveCteRefs() {
     for (auto& cteRef : CteRefs) {
         auto it = CteStages.find(cteRef.first);
-        if (it != CteStages.end()) {
-            cteRef.second->FromStage = it->second;
-            if (cteRef.second->StatsNode) {
-                if (auto* inputNode = cteRef.second->StatsNode->GetValueByPath("Input")) {
-                    for (const auto& subNode : inputNode->GetArray()) {
-                        if (auto* nameNode = subNode.GetValueByPath("Name")) {
-                            if (ToString(it->second->PlanNodeId) == nameNode->GetStringSafe()) {
-                                if (auto* pushNode = subNode.GetValueByPath("Push")) {
-                                    if (auto* bytesNode = pushNode->GetValueByPath("Bytes")) {
-                                        cteRef.second->InputBytes = std::make_shared<TSingleMetric>(InputBytes,
-                                            *bytesNode,
-                                            pushNode->GetValueByPath("FirstMessageMs"),
-                                            pushNode->GetValueByPath("LastMessageMs"),
-                                            pushNode->GetValueByPath("WaitTimeUs.History")
-                                        );
-                                        MaxTime = std::max(MaxTime, cteRef.second->InputBytes->MaxTime);
-                                    }
-                                    if (auto* rowsNode = pushNode->GetValueByPath("Rows")) {
-                                        cteRef.second->InputRows = std::make_shared<TSingleMetric>(InputRows, *rowsNode);
-                                    }
+        if (it == CteStages.end()) {
+            ythrow yexception() << "Can not find CTE Ref " << cteRef.first;
+        }
+
+        cteRef.second->FromStage = it->second;
+        if (cteRef.second->StatsNode) {
+            if (auto* inputNode = cteRef.second->StatsNode->GetValueByPath("Input")) {
+                for (const auto& subNode : inputNode->GetArray()) {
+                    if (auto* nameNode = subNode.GetValueByPath("Name")) {
+                        if (ToString(it->second->PlanNodeId) == nameNode->GetStringSafe()) {
+                            if (auto* pushNode = subNode.GetValueByPath("Push")) {
+                                if (auto* bytesNode = pushNode->GetValueByPath("Bytes")) {
+                                    cteRef.second->InputBytes = std::make_shared<TSingleMetric>(InputBytes,
+                                        *bytesNode,
+                                        pushNode->GetValueByPath("FirstMessageMs"),
+                                        pushNode->GetValueByPath("LastMessageMs"),
+                                        pushNode->GetValueByPath("WaitTimeUs.History")
+                                    );
+                                    MaxTime = std::max(MaxTime, cteRef.second->InputBytes->MaxTime);
+                                }
+                                if (auto* rowsNode = pushNode->GetValueByPath("Rows")) {
+                                    cteRef.second->InputRows = std::make_shared<TSingleMetric>(InputRows, *rowsNode);
                                 }
                             }
                         }
@@ -531,6 +535,7 @@ void TPlan::MarkStageIndent(ui32 indent, ui32& offsetY, std::shared_ptr<TStage> 
             c->CteOffsetY = offsetY;
             offsetY += INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2;
             stage->IndentY = std::max(stage->IndentY, offsetY);
+            stage->Height = std::max(stage->Height, stage->IndentY - stage->OffsetY);
             offsetY += GAP_Y;
         } else {
             MarkStageIndent(indent, offsetY, c->FromStage);
@@ -1286,21 +1291,29 @@ void TPlanVisualizer::LoadPlans(const TString& plans) {
             }
         }
     }
-    SetTimeOffsets();
+    PostProcessPlans();
 }
 
 void TPlanVisualizer::LoadPlan(const TString& nodeType, const NJson::TJsonValue& node) {
-    Plans.emplace_back(nodeType, Config);
+    Plans.emplace_back(nodeType, Config, CteStages);
     Plans.back().Load(node);
-    Plans.back().MarkLayout();
-    if (BaseTime == 0) {
-        BaseTime = Plans.back().BaseTime;
-    } else {
-        BaseTime = std::min(BaseTime, Plans.back().BaseTime);
-    }
 }
 
-void TPlanVisualizer::SetTimeOffsets() {
+void TPlanVisualizer::PostProcessPlans() {
+    // Fix CTE Refs
+    for (auto& p : Plans) {
+        p.ResolveCteRefs();
+    }
+    // Fix Layouts
+    for (auto& p : Plans) {
+        p.MarkLayout();
+        if (BaseTime == 0) {
+            BaseTime = p.BaseTime;
+        } else {
+            BaseTime = std::min(BaseTime, p.BaseTime);
+        }
+    }
+    // Fix time Offsets
     for (auto& p : Plans) {
         p.TimeOffset = p.BaseTime - BaseTime;
         MaxTime = std::max(MaxTime, p.TimeOffset + p.MaxTime);

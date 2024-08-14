@@ -645,6 +645,10 @@ Y_UNIT_TEST_SUITE(PgExtensions) {
     }
 
     Y_UNIT_TEST(ProcsAndType) {
+        if (NPg::AreAllFunctionsAllowed()) {
+            return;
+        }
+
         NPg::ClearExtensions();
         NPg::TExtensionDesc desc;
         TTempFileHandle h;
@@ -740,6 +744,10 @@ Y_UNIT_TEST_SUITE(PgExtensions) {
     }
 
     Y_UNIT_TEST(Casts) {
+        if (NPg::AreAllFunctionsAllowed()) {
+            return;
+        }
+
         NPg::ClearExtensions();
         NPg::TExtensionDesc desc;
         TTempFileHandle h;

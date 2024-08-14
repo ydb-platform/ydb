@@ -303,17 +303,14 @@ Y_UNIT_TEST_LLVM(TestReplicateScalar) {
 Y_UNIT_TEST_LLVM(TestBlockFunc) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
-    auto& env = pb.GetTypeEnvironment();
-    auto decimalType = TDataDecimalType::Create(35, 2, env);
 
-    //const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
-    const auto ui64Type = decimalType;
+    const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
     const auto tupleType = pb.NewTupleType({ui64Type, ui64Type});
     const auto ui64BlockType = pb.NewBlockType(ui64Type, TBlockType::EShape::Many);
 
-    const auto data1 = pb.NewTuple(tupleType, {pb.NewDecimalLiteral(1, 35, 2), pb.NewDecimalLiteral(10, 35, 2)});
-    const auto data2 = pb.NewTuple(tupleType, {pb.NewDecimalLiteral(2, 35, 2), pb.NewDecimalLiteral(20, 35, 2)});
-    const auto data3 = pb.NewTuple(tupleType, {pb.NewDecimalLiteral(3, 35, 2), pb.NewDecimalLiteral(30, 35, 2)});
+    const auto data1 = pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(1), pb.NewDataLiteral<ui64>(10)});
+    const auto data2 = pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(2), pb.NewDataLiteral<ui64>(20)});
+    const auto data3 = pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(3), pb.NewDataLiteral<ui64>(30)});
 
     const auto list = pb.NewList(tupleType, {data1, data2, data3});
     const auto flow = pb.ToFlow(list);

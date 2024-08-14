@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceTables) {
             CanonizePath({ydb->GetSettings().DomainName_, ".metadata/workload_manager"})
         ).GetValue(FUTURE_WAIT_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetStatus(), NYdb::EStatus::SUCCESS, listResult.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren().size(), 3);
     }
 
     Y_UNIT_TEST(TestTablesIsNotCreatingForUnlimitedPool) {

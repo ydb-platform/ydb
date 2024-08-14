@@ -5,6 +5,9 @@
     "tz"="UTC";
 };
 {
+    "tz"="Europe/London";
+};
+{
     "tz"="Europe/Moscow";
 };
 {

@@ -948,7 +948,8 @@ public:
     {
         if (tzId) {
             ui32 hour, min, sec;
-            ToLocalTime64(86400ll * date, tzId, year, month, day, hour, min, sec);
+            i64 utcSeconds = (date > 0) ? ((date + 1) * 86400ll - 1) : (date * 86400ll);
+            ToLocalTime64(utcSeconds, tzId, year, month, day, hour, min, sec);
             if (year <= 0) {
                 year--;
             }

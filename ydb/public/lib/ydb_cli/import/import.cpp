@@ -88,7 +88,7 @@ void InitCsvParser(TCsvParser& parser,
     if (settings.Header_ || settings.HeaderRow_) {
         TString headerRow;
         if (settings.Header_) {
-            headerRow = defaultHeader;
+            headerRow = std::move(defaultHeader);
         }
         if (settings.HeaderRow_) {
             headerRow = settings.HeaderRow_;

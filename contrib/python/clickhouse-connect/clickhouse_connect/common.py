@@ -35,10 +35,12 @@ def build_client_name(client_name: str):
     product_name = product_name.strip() + ' ' if product_name else ''
     client_name = client_name.strip() + ' ' if client_name else ''
     py_version = sys.version.split(' ', maxsplit=1)[0]
+    os_user = ''
     if get_setting('send_os_user'):
-        os_user = f'; os_user:{getpass.getuser()}'
-    else:
-        os_user = ''
+        try:
+            os_user = f'; os_user:{getpass.getuser()}'
+        except Exception:  # pylint: disable=broad-except
+            pass
     return (f'{client_name}{product_name}clickhouse-connect/{version()}' +
             f' (lv:py/{py_version}; mode:sync; os:{sys.platform}{os_user})')
 

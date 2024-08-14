@@ -145,9 +145,9 @@ message TEvStatisticsResponse {
     enum EStatus {
         STATUS_UNSPECIFIED = 0;
         STATUS_SUCCESS = 1;
-        STATUS_ABORTED = 2;
-        STATUS_ERROR = 3;
-        STATUS_PROCESSING = 4;
+        STATUS_PROCESSING = 2;
+        STATUS_ABORTED = 3;
+        STATUS_ERROR = 4;
     }
     optional EStatus Status = 2;
     optional fixed64 ShardTabletId = 3;

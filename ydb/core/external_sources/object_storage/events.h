@@ -20,7 +20,6 @@ enum EEventTypes : ui32 {
     EvFileError,
 
     EvRequestS3Range,
-    EvRequestS3Schema,
     EvS3DownloadResponse,
     EvS3RangeResponse,
     EvS3RangeError,
@@ -65,22 +64,6 @@ struct TEvRequestS3Range : public NActors::TEventLocal<TEvRequestS3Range, EvRequ
 
     ui64 Start = 0;
     ui64 End = 0;
-
-    TGUID RequestId;
-    NActors::TActorId Sender;
-};
-
-struct TEvRequestS3Schema : public NActors::TEventLocal<TEvRequestS3Schema, EvRequestS3Schema> {
-    TEvRequestS3Schema(TString path, ui64 size, const TGUID& requestId, NActors::TActorId sender)
-        : Path{std::move(path)}
-        , Size{size}
-        , RequestId{requestId}
-        , Sender{sender}
-    {}
-
-    TString Path;
-
-    ui64 Size;
 
     TGUID RequestId;
     NActors::TActorId Sender;

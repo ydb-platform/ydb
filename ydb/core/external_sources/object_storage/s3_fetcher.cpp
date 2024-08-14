@@ -24,7 +24,7 @@ public:
 
     STRICT_STFUNC(WorkingState,
         HFunc(TEvRequestS3Range, HandleRequest);
-        HFunc(TEvRequestS3Schema, HandleRequest);
+        HFunc(TEvInferFileSchema, HandleRequest);
 
         HFunc(TEvS3DownloadResponse, HandleDownloadReponse);
     )
@@ -33,8 +33,8 @@ public:
         StartDownload(std::shared_ptr<TEvRequestS3Range>(ev->Release().Release()), ctx.ActorSystem());
     }
 
-    void HandleRequest(TEvRequestS3Schema::TPtr& ev, const NActors::TActorContext& ctx) {
-        StartDownload(std::shared_ptr<TEvRequestS3Schema>(ev->Release().Release()), ctx.ActorSystem());
+    void HandleRequest(TEvInferFileSchema::TPtr& ev, const NActors::TActorContext& ctx) {
+        StartDownload(std::shared_ptr<TEvInferFileSchema>(ev->Release().Release()), ctx.ActorSystem(), ev->Sender);
     }
 
     void HandleDownloadReponse(TEvS3DownloadResponse::TPtr& ev, const NActors::TActorContext& ctx) {
@@ -66,14 +66,7 @@ public:
 
     void StartDownload(std::shared_ptr<TEvRequestS3Range>&& request, NActors::TActorSystem* actorSystem) {
         auto length = request->End - request->Start;
-        const auto& authInfo = Credentials_.GetAuthInfo();
-        auto headers = NYql::IHTTPGateway::MakeYcHeaders(
-            request->RequestId.AsGuidString(),
-            authInfo.GetToken(),
-            {},
-            authInfo.GetAwsUserPwd(),
-            authInfo.GetAwsSigV4()
-        );
+        auto headers = MakeHeaders(request->RequestId.AsGuidString());
 
         Gateway_->Download(
             Url_ + request->Path, std::move(headers), request->Start, length,
@@ -82,20 +75,11 @@ public:
             }, {}, RetryPolicy_);
     }
 
-    void StartDownload(std::shared_ptr<TEvRequestS3Schema>&& request, NActors::TActorSystem* actorSystem) {
-        const auto& authInfo = Credentials_.GetAuthInfo();
-        auto headers = NYql::IHTTPGateway::MakeYcHeaders(
-            request->RequestId.AsGuidString(),
-            authInfo.GetToken(),
-            {},
-            authInfo.GetAwsUserPwd(),
-            authInfo.GetAwsSigV4()
-        );
-
+    void StartDownload(std::shared_ptr<TEvInferFileSchema>&& request, NActors::TActorSystem* actorSystem, NActors::TActorId sender) {
         NYql::TArrowFileDesc desc(
             Url_ + request->Path,
             Gateway_,
-            std::move(headers),
+            MakeHeaders(CreateGuidAsString()),
             RetryPolicy_,
             request->Size,
             "parquet"
@@ -103,12 +87,39 @@ public:
 
         auto schemaReader = NYql::MakeArrowReader(NYql::TArrowReaderSettings());
         auto futureSchema = schemaReader->GetSchema(desc);
-        futureSchema.Apply([actorSystem, request](NThreading::TFuture<NYql::IArrowReader::TSchemaResponse> response) {
-            actorSystem->Send(request->Sender, new TEvArrowSchema(response.GetValue().Schema, request->Path));
+        futureSchema.Apply([actorSystem, sender, request](NThreading::TFuture<NYql::IArrowReader::TSchemaResponse> response) {
+            if (response.HasException()) {
+                try {
+                    response.TryRethrow();
+                } catch (const yexception& exception) {
+                    auto error = MakeError(
+                        request->Path,
+                        NFq::TIssuesIds::INTERNAL_ERROR,
+                        TStringBuilder() << "couldn't read file schema, check format params: " << exception.what()
+                    );
+                    actorSystem->Send(sender, error);
+                    return;
+                }
+            }
+
+            actorSystem->Send(sender, new TEvArrowSchema(response.GetValue().Schema, request->Path));
         });
     }
 
 private:
+    NYql::IHTTPGateway::THeaders MakeHeaders(const TString& guid) const {
+        const auto& authInfo = Credentials_.GetAuthInfo();
+        auto headers = NYql::IHTTPGateway::MakeYcHeaders(
+            guid,
+            authInfo.GetToken(),
+            {},
+            authInfo.GetAwsUserPwd(),
+            authInfo.GetAwsSigV4()
+        );
+
+        return std::move(headers);
+    }
+
     TString Url_;
     NYql::IHTTPGateway::TPtr Gateway_;
     NYql::IHTTPGateway::TRetryPolicy::TPtr RetryPolicy_;

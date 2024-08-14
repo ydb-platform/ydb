@@ -275,10 +275,7 @@ public:
                 return;
             }
             case EFileFormat::Parquet: {
-                auto s3SchemaRequest = new TEvRequestS3Schema(event.Path, event.Size, {}, SelfId());
-                CreateGuid(&s3SchemaRequest->RequestId);
-
-                ctx.Send(S3FetcherId_, s3SchemaRequest);
+                ctx.Send(S3FetcherId_, ev->Release());
                 return;
             }
             default: {
@@ -298,13 +295,11 @@ public:
             ctx.Send(RequesterId_, MakeErrorSchema(file.Path, NFq::TIssuesIds::INTERNAL_ERROR, std::get<TString>(mbArrowFields)));
             return;
         }
-
         ConvertArrowSchema(std::get<ArrowFields>(mbArrowFields), file.Path, ctx);
     }
 
     void HandleFileSchema(TEvArrowSchema::TPtr& ev, const NActors::TActorContext& ctx) {
         auto& schema = *ev->Get();
-
         ConvertArrowSchema(schema.Schema->fields(), schema.Path, ctx);
     }
 

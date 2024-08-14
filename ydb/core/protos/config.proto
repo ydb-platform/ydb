@@ -700,6 +700,10 @@ message THttpProxyConfig {
     optional string AccessServiceEndpoint = 9;
 
     optional string JwtFile = 10;
+
+    optional bool YandexCloudMode = 11 [default = false];
+    optional bool DataStreamsEnabled = 12 [default = true];
+    optional bool YmqEnabled = 13 [default = false];
 }
 
 message TS3ProxyResolverConfig {

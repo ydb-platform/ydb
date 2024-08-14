@@ -262,6 +262,14 @@ const arrow::compute::ScalarKernel& TPlainKernel::GetArrowKernel() const {
     return *ArrowKernel;
 }
 
+std::shared_ptr<arrow::compute::ScalarKernel> TPlainKernel::MakeArrowKernel() const {
+    return {};
+}
+
+bool TPlainKernel::IsPolymorphic() const {
+    return false;
+}
+
 void AddUnaryKernelImpl(TKernelFamilyBase& owner, NUdf::EDataSlot arg1, NUdf::EDataSlot res,
     TStatelessArrayKernelExec exec, TKernel::ENullMode nullMode) {
     auto type1 = NUdf::GetDataTypeInfo(arg1).TypeId;

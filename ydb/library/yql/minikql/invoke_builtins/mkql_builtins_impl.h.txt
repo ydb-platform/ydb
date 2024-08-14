@@ -1236,6 +1236,8 @@ public:
         TKernel::ENullMode nullMode);
 
     const arrow::compute::ScalarKernel& GetArrowKernel() const final;
+    std::shared_ptr<arrow::compute::ScalarKernel> MakeArrowKernel() const final;
+    bool IsPolymorphic() const final;
 
 private:
     const std::unique_ptr<arrow::compute::ScalarKernel> ArrowKernel;

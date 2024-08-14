@@ -89,6 +89,8 @@ public:
     }
 
     virtual const arrow::compute::ScalarKernel& GetArrowKernel() const = 0;
+    virtual std::shared_ptr<arrow::compute::ScalarKernel> MakeArrowKernel() const = 0;
+    virtual bool IsPolymorphic() const = 0;
 
     virtual ~TKernel() = default;
 };

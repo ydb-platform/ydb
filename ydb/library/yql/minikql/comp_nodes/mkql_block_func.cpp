@@ -76,7 +76,7 @@ IComputationNode* WrapBlockFunc(TCallable& callable, const TComputationNodeFacto
 
     const TKernel& kernel = ResolveKernel(*ctx.FunctionRegistry.GetBuiltins(), funcName, argsTypes, callableType->GetReturnType());
     if (kernel.IsPolymorphic()) {
-        auto arrowKernel = kernel.GetMakeKernel();
+        auto arrowKernel = kernel.MakeArrowKernel();
         return new TBlockFuncNode(ctx.Mutables, funcName, std::move(argsNodes), argsTypes, *arrowKernel, arrowKernel, kernel.Family.FunctionOptions);
     } else {
         return new TBlockFuncNode(ctx.Mutables, funcName, std::move(argsNodes), argsTypes, kernel.GetArrowKernel(), {}, kernel.Family.FunctionOptions);

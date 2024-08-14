@@ -20,8 +20,8 @@ class Database:
             case EDataSourceKind.MYSQL:
                 self.name = name[:63]
             case EDataSourceKind.ORACLE:
-                # Oracle does not is not case sensitive for identifiers until quoted,
-                # so we'd better make it upper case for test convinience
+                # Oracle is not sensitive for identifiers until they are inclosed in quota marks,
+                # therefore, we'd better use uppercase for ease of testing
                 self.name = name[:127].upper()  # TODO: is it needed? max length of Oracle table name is 128 bytes/chars
             case EDataSourceKind.YDB:
                 self.name = name

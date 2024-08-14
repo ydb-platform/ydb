@@ -664,6 +664,29 @@ arrow::Status ExecBinaryOptImpl(arrow::compute::KernelContext* kernelCtx,
     }
 }
 
+arrow::Status ExecDecimalScalarArrayOptImpl(const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TUntypedBinaryArrayOptFuncPtr func) {
+    MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
+    const auto& arg1 = batch.values[0];
+    const auto& arg2 = batch.values[1];
+    auto& resArr = *res->array();
+    if (arg1.scalar()->is_valid) {
+        const auto val1Ptr = GetStringScalarValue(*arg1.scalar());
+        const auto& arr2 = *arg2.array();
+        auto length = arr2.length;
+        const auto val2Ptr = arr2.buffers[1]->data();
+        const auto nullCount2 = arr2.GetNullCount();
+        const auto valid2 = (nullCount2 == 0) ? nullptr : arr2.GetValues<uint8_t>(0);
+        auto resPtr = resArr.buffers[1]->mutable_data();
+        auto resValid = res->array()->GetMutableValues<uint8_t>(0);
+        func(val1Ptr.data(), nullptr, val2Ptr, valid2, resPtr, resValid, length, 0, arr2.offset);
+    } else {
+        GetBitmap(resArr, 0).SetBitsTo(false);
+    }
+
+    return arrow::Status::OK();
+}
+
 arrow::Status ExecDecimalScalarScalarOptImpl(arrow::compute::KernelContext* kernelCtx,
     const arrow::compute::ExecBatch& batch, arrow::Datum* res,
     TPrimitiveDataTypeGetter typeGetter, TUntypedBinaryScalarOptFuncPtr func) {
@@ -702,7 +725,7 @@ arrow::Status ExecDecimalBinaryOptImpl(arrow::compute::KernelContext* kernelCtx,
         if (arg2.is_scalar()) {
             return ExecDecimalScalarScalarOptImpl(kernelCtx, batch, res, typeGetter, scalarScalarFunc);
         } else {
-            return ExecScalarArrayOptImpl(kernelCtx, batch, res, scalarArrayFunc, outputSizeOf, typeGetter, false, false, EPropagateTz::None);
+            return ExecDecimalScalarArrayOptImpl(batch, res, scalarArrayFunc);
         }
     } else {
         if (arg2.is_scalar()) {

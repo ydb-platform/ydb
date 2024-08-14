@@ -1012,6 +1012,15 @@ arrow::Status ExecBinaryOptImpl(arrow::compute::KernelContext* kernelCtx,
     TUntypedBinaryArrayOptFuncPtr arrayScalarFunc,
     TUntypedBinaryArrayOptFuncPtr arrayArrayFunc);
 
+arrow::Status ExecDecimalBinaryOptImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TPrimitiveDataTypeGetter typeGetter,
+    size_t outputSizeOf,
+    TUntypedBinaryScalarOptFuncPtr scalarScalarFunc,
+    TUntypedBinaryArrayOptFuncPtr scalarArrayFunc,
+    TUntypedBinaryArrayOptFuncPtr arrayScalarFunc,
+    TUntypedBinaryArrayOptFuncPtr arrayArrayFunc);
+
 template<typename TInput1, bool Tz1, typename TInput2, bool Tz2, typename TOutput, EPropagateTz PropagateTz,
          typename TFuncInstance, TKernel::ENullMode NullMode>
 struct TBinaryKernelExecs;
@@ -1735,10 +1744,9 @@ struct TDecimalKernelExecs
         TTypedBinaryArrayOptFuncPtr scalarArrayFunc = &ScalarArrayCoreOpt<precision>;
         TTypedBinaryArrayOptFuncPtr arrayScalarFunc = &ArrayScalarCoreOpt<precision>;
         TTypedBinaryArrayOptFuncPtr arrayArrayFunc = &ArrayArrayCoreOpt<precision>;
-        return ExecBinaryOptImpl(kernelCtx, batch, res,
+        return ExecDecimalBinaryOptImpl(kernelCtx, batch, res,
             &GetPrimitiveDataType<TOutput>,
-            &MakeDefaultScalarDatum<TOutput>,
-            false, false, EPropagateTz::None, sizeof(TOutput),
+            sizeof(TOutput),
             (TUntypedBinaryScalarOptFuncPtr)scalarScalarFunc,
             (TUntypedBinaryArrayOptFuncPtr)scalarArrayFunc,
             (TUntypedBinaryArrayOptFuncPtr)arrayScalarFunc,

@@ -664,5 +664,54 @@ arrow::Status ExecBinaryOptImpl(arrow::compute::KernelContext* kernelCtx,
     }
 }
 
+arrow::Status ExecDecimalScalarScalarOptImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TPrimitiveDataTypeGetter typeGetter, TUntypedBinaryScalarOptFuncPtr func) {
+    MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
+    const auto& arg1 = batch.values[0];
+    const auto& arg2 = batch.values[1];
+    if (!arg1.scalar()->is_valid || !arg2.scalar()->is_valid) {
+        *res = arrow::MakeNullScalar(typeGetter());
+    } else {
+        const auto val1Ptr = GetStringScalarValue(*arg1.scalar());
+        const auto val2Ptr = GetStringScalarValue(*arg2.scalar());
+        std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(16, kernelCtx->memory_pool())));
+        auto resDatum = arrow::Datum(std::make_shared<TPrimitiveDataType<NYql::NDecimal::TInt128>::TScalarResult>(buffer));
+        if (!func(val1Ptr.data(), val2Ptr.data(), buffer->mutable_data())) {
+            *res = arrow::MakeNullScalar(typeGetter());
+        } else {
+            *res = resDatum.scalar();
+        }
+    }
+
+    return arrow::Status::OK();
+}
+
+arrow::Status ExecDecimalBinaryOptImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TPrimitiveDataTypeGetter typeGetter,
+    size_t outputSizeOf,
+    TUntypedBinaryScalarOptFuncPtr scalarScalarFunc,
+    TUntypedBinaryArrayOptFuncPtr scalarArrayFunc,
+    TUntypedBinaryArrayOptFuncPtr arrayScalarFunc,
+    TUntypedBinaryArrayOptFuncPtr arrayArrayFunc) {
+    MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
+    const auto& arg1 = batch.values[0];
+    const auto& arg2 = batch.values[1];
+    if (arg1.is_scalar()) {
+        if (arg2.is_scalar()) {
+            return ExecDecimalScalarScalarOptImpl(kernelCtx, batch, res, typeGetter, scalarScalarFunc);
+        } else {
+            return ExecScalarArrayOptImpl(kernelCtx, batch, res, scalarArrayFunc, outputSizeOf, typeGetter, false, false, EPropagateTz::None);
+        }
+    } else {
+        if (arg2.is_scalar()) {
+            return ExecArrayScalarOptImpl(kernelCtx, batch, res, arrayScalarFunc, outputSizeOf, typeGetter, false, false, EPropagateTz::None);
+        } else {
+            return ExecArrayArrayOptImpl(kernelCtx, batch, res, arrayArrayFunc, outputSizeOf, typeGetter, false, false, EPropagateTz::None);
+        }
+    }
+}
+
 } // namespace NMiniKQL
 } // namespace NKikimr

@@ -13,6 +13,8 @@
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 
+#include <library/cpp/yt/system/exit.h>
+
 #include <util/datetime/base.h>
 #include <util/stream/file.h>
 #include <util/stream/output.h>
@@ -49,7 +51,7 @@ void CollectAndDumpMemoryProfile(const TString& memoryProfilePath)
 void MemoryProfileTimeoutHandler(int /*signal*/)
 {
     WriteToStderr("*** Process hung during dumping heap profile ***\n");
-    ::_exit(1);
+    AbortProcess(ToUnderlying(EProcessExitCode::GenericError));
 }
 
 void SetupMemoryProfileTimeout(int timeout)
@@ -125,16 +127,16 @@ private:
             CollectAndDumpMemoryProfile(heapDumpPath);
 
             Cerr << "TTCMallocLimitHandler: Heap profile written" << Endl;
-            ::_exit(0);
+            AbortProcess(ToUnderlying(EProcessExitCode::OK));
         }
 
         if (childPid < 0) {
             Cerr << "TTCMallocLimitHandler: Fork failed: " << LastSystemErrorText() << Endl;
-            ::_exit(1);
+            AbortProcess(ToUnderlying(EProcessExitCode::GenericError));
         }
 
         ExecWaitForChild(childPid);
-        ::_exit(0);
+        AbortProcess(ToUnderlying(EProcessExitCode::OK));
     }
 
     TString GetHeapDumpPath() const

@@ -1204,7 +1204,7 @@ protected:
     void LogLongMessages()
     {
         for (int i = 0; i < N; ++i) {
-            YT_LOG_INFO("%v", MakeRange(Chunks_.data(), Chunks_.data() + i));
+            YT_LOG_INFO("%v", TRange(Chunks_.data(), Chunks_.data() + i));
         }
     }
 
@@ -1215,7 +1215,7 @@ protected:
         auto lines = ReadPlainTextEvents(fileName);
         EXPECT_EQ(N, std::ssize(lines));
         for (int i = 0; i < N; ++i) {
-            auto expected = Format("%v", MakeRange(Chunks_.data(), Chunks_.data() + i));
+            auto expected = Format("%v", TRange(Chunks_.data(), Chunks_.data() + i));
             auto actual = lines[i];
             EXPECT_NE(TString::npos, actual.find(expected));
         }

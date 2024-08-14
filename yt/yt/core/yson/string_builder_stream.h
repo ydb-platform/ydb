@@ -12,10 +12,10 @@ class TStringBuilderStream final
     : public IOutputStream
 {
 public:
-    TStringBuilderStream(TStringBuilderBase* builder) noexcept;
+    explicit TStringBuilderStream(TStringBuilderBase* builder) noexcept;
 
 private:
-    TStringBuilderBase* Builder_;
+    TStringBuilderBase* const Builder_;
 
     void DoWrite(const void* data, size_t size) final;
 };

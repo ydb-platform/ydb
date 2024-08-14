@@ -341,7 +341,7 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
     }
 
     auto [activePartitionCount, inactivePartitionCount] = ClassifyPartitions(newPartitions);
-    ChangePartitionCounters(activePartitionCount, activePartitionCount);
+    ChangePartitionCounters(activePartitionCount, inactivePartitionCount);
 
     if (IsActive()) {
         if (!Session->AllPartitionsReadable(newPartitions)) {
@@ -734,6 +734,8 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
                     f->Session->Families.try_emplace(f->Id, f);
                     if (f->IsActive()) {
                         ++f->Session->ActiveFamilyCount;
+                    } else if (f->IsRelesing()) {
+                        ++f->Session->ReleasingFamilyCount;
                     }
                 }
 

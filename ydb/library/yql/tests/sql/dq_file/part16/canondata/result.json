@@ -2367,6 +2367,28 @@
         }
     ],
     "test.test[pragma-config_exec--Results]": [],
+    "test.test[produce-process_lambda_opt_args-default.txt-Analyze]": [
+        {
+            "checksum": "db71f16db01fe45fcaff58e8f061b470",
+            "size": 6828,
+            "uri": "https://{canondata_backend}/1942100/d22a096de8f9cd6961c70a84e39de8dcd39ce45e/resource.tar.gz#test.test_produce-process_lambda_opt_args-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[produce-process_lambda_opt_args-default.txt-Debug]": [
+        {
+            "checksum": "901165ba1200caf03bc5f29c9348ad8d",
+            "size": 2061,
+            "uri": "https://{canondata_backend}/1942100/d22a096de8f9cd6961c70a84e39de8dcd39ce45e/resource.tar.gz#test.test_produce-process_lambda_opt_args-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[produce-process_lambda_opt_args-default.txt-Plan]": [
+        {
+            "checksum": "db71f16db01fe45fcaff58e8f061b470",
+            "size": 6828,
+            "uri": "https://{canondata_backend}/1942100/d22a096de8f9cd6961c70a84e39de8dcd39ce45e/resource.tar.gz#test.test_produce-process_lambda_opt_args-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[produce-process_lambda_opt_args-default.txt-Results]": [],
     "test.test[produce-process_with_udf_validate-default.txt-Analyze]": [
         {
             "checksum": "be0f13fdf2aa4cfcc736815caa5d992e",

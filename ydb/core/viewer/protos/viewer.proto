@@ -719,3 +719,17 @@ message TPDiskInfo {
     TPDiskInfoWhiteboard Whiteboard = 1;
     TPDiskInfoBSC BSC = 2;
 }
+
+message TFeatureFlagsConfig {
+    message TFeatureFlag {
+        string Name = 1;
+        bool Enabled = 2;
+    }
+
+    message TTenant {
+        string Name = 1;
+        repeated TFeatureFlag FeatureFlags = 2;
+    }
+
+    repeated TTenant Tenants = 1;
+}

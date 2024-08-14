@@ -193,6 +193,14 @@ void TViewerPipeClient::RequestConsoleListTenants() {
     SendRequestToPipe(pipeClient, request.Release());
 }
 
+void TViewerPipeClient::RequestConsoleNodeConfigByTenant(TString tenant, ui64 cookie) {
+    TActorId pipeClient = ConnectTabletPipe(GetConsoleId());
+    auto request = MakeHolder<NConsole::TEvConsole::TEvGetNodeConfigRequest>();
+    request->Record.MutableNode()->SetTenant(tenant);
+    request->Record.AddItemKinds(static_cast<ui32>(NKikimrConsole::TConfigItem::FeatureFlagsItem));
+    SendRequestToPipe(pipeClient, request.Release(), cookie);
+}
+
 TViewerPipeClient::TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse> TViewerPipeClient::MakeRequestConsoleListTenants() {
     TActorId pipeClient = ConnectTabletPipe(GetConsoleId());
     THolder<NConsole::TEvConsole::TEvListTenantsRequest> request = MakeHolder<NConsole::TEvConsole::TEvListTenantsRequest>();

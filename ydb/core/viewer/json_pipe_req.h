@@ -189,6 +189,7 @@ protected:
     TRequestResponse<TEvHive::TEvResponseHiveDomainStats> MakeRequestHiveDomainStats(TTabletId hiveId);
     TRequestResponse<TEvHive::TEvResponseHiveStorageStats> MakeRequestHiveStorageStats(TTabletId hiveId);
     void RequestConsoleListTenants();
+    void RequestConsoleNodeConfigByTenant(TString tenant, ui64 cookie = 0);
     TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse> MakeRequestConsoleListTenants();
     void RequestConsoleGetTenantStatus(const TString& path);
     TRequestResponse<NConsole::TEvConsole::TEvGetTenantStatusResponse> MakeRequestConsoleGetTenantStatus(const TString& path);

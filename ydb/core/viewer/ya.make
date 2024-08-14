@@ -62,6 +62,7 @@ SRCS(
     viewer_describe_consumer.h
     viewer_describe.h
     viewer_describe_topic.h
+    viewer_feature_flags.h
     viewer_graph.h
     viewer_healthcheck.h
     viewer_helper.h

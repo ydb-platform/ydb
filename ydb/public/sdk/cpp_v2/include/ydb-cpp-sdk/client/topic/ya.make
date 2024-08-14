@@ -25,7 +25,7 @@ PEERDIR(
     ydb/public/api/protos
 
     ydb/public/sdk/cpp_v2/src/library/yql/public/issue/protos
-    ydb/public/sdk/cpp_v2/src/library/retry
+    
 
     library/cpp/streams/zstd
 )

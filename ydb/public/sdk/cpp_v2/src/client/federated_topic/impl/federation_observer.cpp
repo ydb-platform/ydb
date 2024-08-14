@@ -151,8 +151,10 @@ void TFederatedDbObserverImpl::OnFederationDiscovery(TStatus&& status, Ydb::Fede
                 if (!FederationDiscoveryRetryState) {
                     FederationDiscoveryRetryState = FederationDiscoveryRetryPolicy->CreateRetryState();
                 }
-                std::optional<TDuration> retryDelay = FederationDiscoveryRetryState->GetNextRetryDelay(status.GetStatus());
-                if (retryDelay.has_value()) {
+
+                auto retryDelay = FederationDiscoveryRetryState->GetNextRetryDelay(status.GetStatus());
+
+                if (retryDelay) {
                     ScheduleFederationDiscoveryImpl(*retryDelay);
                     return;
                 }

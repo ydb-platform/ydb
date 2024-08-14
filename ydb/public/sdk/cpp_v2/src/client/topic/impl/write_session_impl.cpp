@@ -184,13 +184,12 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStat
         PreferredPartitionLocation = {};
     }
 
-    std::optional<TDuration> nextDelay = TDuration::Zero();
     if (!RetryState) {
         RetryState = Settings.RetryPolicy_->CreateRetryState();
     }
-    nextDelay = RetryState->GetNextRetryDelay(status.Status);
+    auto nextDelay = RetryState->GetNextRetryDelay(status.Status);
 
-    if (nextDelay.has_value()) {
+    if (nextDelay) {
         result.StartDelay = *nextDelay;
         result.DoRestart = true;
         LOG_LAZY(DbDriverState->Log, TLOG_WARNING, LogPrefix() << "Write session will restart in " << result.StartDelay);

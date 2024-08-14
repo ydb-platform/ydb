@@ -9,7 +9,7 @@
     ```
 1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий определённую базу данных Microsoft SQL Server. Параметр `LOCATION` содержит сетевой адрес экземпляра Microsoft SQL Server, к которому осуществляется подключение. В `DATABASE_NAME` указывается имя базы данных (например, `master`). Для аутентификации во внешнюю базу используются значения параметров `LOGIN` и `PASSWORD_SECRET_NAME`. Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`.
     ```sql
-    CREATE EXTERNAL DATA SOURCE mysql_datasource WITH (
+    CREATE EXTERNAL DATA SOURCE ms_sql_server_datasource WITH (
         SOURCE_TYPE="MsSQLServer",
         LOCATION="<host>:<port>",
         DATABASE_NAME="<database>",

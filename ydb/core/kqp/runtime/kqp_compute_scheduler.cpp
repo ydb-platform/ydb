@@ -134,6 +134,8 @@ public:
     static constexpr double BatchCalcDecay = 0;
     TDuration BatchTime = AvgBatch;
 
+    TDuration OverflowToleranceTimeout = TDuration::Seconds(1);
+
     static constexpr TDuration ActivationPenalty = TDuration::MicroSeconds(10);
 
     size_t Wakeups = 0;
@@ -212,6 +214,7 @@ struct TComputeScheduler::TImpl {
 
     TIntrusivePtr<TKqpCounters> Counters;
     TDuration SmoothPeriod = TDuration::MilliSeconds(100);
+    TDuration ForgetInteval = TDuration::Seconds(2);
 
     TDuration MaxDelay = TDuration::Seconds(10);
 
@@ -361,10 +364,13 @@ void TComputeScheduler::AdvanceTime(TMonotonic now) {
             }
             double delta = 0;
 
-            v.Next()->TrackedBefore = Impl->Records[i]->TrackedMicroSeconds.load();
+            auto tracked = Impl->Records[i]->TrackedMicroSeconds.load();
             v.Next()->MaxLimitDeviation = Impl->SmoothPeriod.MicroSeconds() * v.Next()->Weight;
             v.Next()->LastNowRecalc = now;
-            v.Next()->TrackedBefore = Min<ssize_t>(group.get()->Limit(now) - group.get()->MaxLimitDeviation, v.Next()->TrackedBefore);
+            v.Next()->TrackedBefore = 
+                Max<ssize_t>(
+                    tracked - FromDuration(Impl->ForgetInteval) * group.get()->Weight, 
+                    Min<ssize_t>(group.get()->Limit(now) - group.get()->MaxLimitDeviation, tracked));
 
             if (!group.get()->Disabled && group.get()->EntitiesWeight > MinEntitiesWeight) {
                 delta = FromDuration(now - group.get()->LastNowRecalc) * group.get()->Weight / group.get()->EntitiesWeight;
@@ -423,6 +429,10 @@ void TComputeScheduler::ReportCounters(TIntrusivePtr<TKqpCounters> counters) {
 
 void TComputeScheduler::SetMaxDeviation(TDuration period) {
     Impl->SmoothPeriod = period;
+}
+
+void TComputeScheduler::SetForgetInterval(TDuration period) {
+    Impl->ForgetInteval = period;
 }
 
 bool TComputeScheduler::Disabled(TString group) {

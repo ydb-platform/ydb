@@ -145,7 +145,6 @@ private:
 
     void PersistSysParam(NIceDb::TNiceDb& db, ui64 id, const TString& value);
     void PersistTraversal(NIceDb::TNiceDb& db);
-    void PersistForceTraversal(NIceDb::TNiceDb& db);
     void PersistStartKey(NIceDb::TNiceDb& db);
     void PersistGlobalTraversalRound(NIceDb::TNiceDb& db);
 
@@ -240,8 +239,6 @@ private:
     std::queue<TEvStatistics::TEvRequestStats::TPtr> PendingRequests;
     bool ProcessUrgentInFlight = false;
 
-    TActorId ForceTraversalReplyToActorId = {};
-
     bool IsSchemeshardSeen = false;
     bool IsStatisticsTableCreated = false;
     bool PendingSaveStatistics = false;
@@ -306,8 +303,7 @@ private:
 private: // stored in local db
     
     TString ForceTraversalOperationId;
-    TString ForceTraversalColumnTags;
-    TString ForceTraversalTypes;
+
     TTableId TraversalTableId; 
     bool TraversalIsColumnTable = false;
     TSerializedCellVec TraversalStartKey;
@@ -323,14 +319,32 @@ private: // stored in local db
         TTraversalsByTime;
     TTraversalsByTime ScheduleTraversalsByTime;
 
-    struct TForceTraversal {
-        TString OperationId;
+    struct TForceTraversalTable {
         TPathId PathId;
         TString ColumnTags;
+
+        enum class EStatus : ui8 {
+            None,
+            RequestSent,
+            ResponseReceived,
+        };
+        EStatus Status = EStatus::None;
+    };
+    struct TForceTraversalOperation {
+        TString OperationId;
+        std::list<TForceTraversalTable> Tables;
         TString Types;
         TActorId ReplyToActorId;
     };
-    std::list<TForceTraversal> ForceTraversals;
+    std::list<TForceTraversalOperation> ForceTraversals;
+
+private:
+    TForceTraversalOperation* CurrentForceTraversalOperation();
+    TForceTraversalOperation* ForceTraversalOperation(const TString& operationId);
+    void DeleteForceTraversalOperation(const TString& operationId);
+
+    TForceTraversalTable* ForceTraversalTable(const TString& operationId, const TPathId& pathId);
+    TForceTraversalTable* CurrentForceTraversalTable();
 };
 
 } // NKikimr::NStat

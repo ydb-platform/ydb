@@ -28,47 +28,63 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
         NIceDb::TNiceDb db(txc.DB);
 
         const TString operationId = Record.GetOperationId();
+
+        // check existing force traversal with the same OperationId
+        const auto existingOperation = Self->ForceTraversalOperation(operationId);  
+
+        // update existing force traversal
+        if (existingOperation) {
+            if (existingOperation->Tables.size() == Record.TablesSize()) {
+                SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeTable::Execute. Update existing force traversal. OperationId " << operationId << " , ReplyToActorId " << ReplyToActorId);
+                existingOperation->ReplyToActorId = ReplyToActorId;
+                return true;
+            } else {
+                SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeTable::Execute. Delete broken force traversal. OperationId " << operationId << " , ReplyToActorId " << ReplyToActorId);
+                Self->DeleteForceTraversalOperation(operationId);
+            }
+        }
+
+        SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeTable::Execute. Create new force traversal operation, OperationId=" << operationId);
         const TString types = JoinVectorIntoString(TVector<ui32>(Record.GetTypes().begin(), Record.GetTypes().end()), ",");
-        
+
+        // create new force trasersal
+        TForceTraversalOperation operation {
+            .OperationId = operationId,
+            .Tables = {},
+            .Types = types,
+            .ReplyToActorId = ReplyToActorId
+        };
+
         for (const auto& table : Record.GetTables()) {
             const TPathId pathId = PathIdFromPathId(table.GetPathId());
             const TString columnTags = JoinVectorIntoString(TVector<ui32>{table.GetColumnTags().begin(),table.GetColumnTags().end()},",");
+            const TForceTraversalTable::EStatus status = TForceTraversalTable::EStatus::None;
 
-            // check existing force traversal with the same cookie and path
-            auto forceTraversal = std::find_if(Self->ForceTraversals.begin(), Self->ForceTraversals.end(), 
-                [&pathId, &operationId](const TForceTraversal& elem) { 
-                    return elem.PathId == pathId 
-                        && elem.OperationId == operationId;});
+            SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeTable::Execute. Create new force traversal operation, OperationId=" << operationId << " , PathId " << pathId);
 
-            // update existing force traversal
-            if (forceTraversal != Self->ForceTraversals.end()) {
-                SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeTable::Execute. Update existing force traversal. PathId " << pathId << " , ReplyToActorId " << ReplyToActorId);
-                forceTraversal->ReplyToActorId = ReplyToActorId;
-                return true;
-            }
-
-            SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeTable::Execute. Create new force traversal operation for pathId " << pathId);
-
-            // create new force trasersal
-            TForceTraversal operation {
-                .OperationId = operationId,
+            // create new force traversal
+            TForceTraversalTable operationTable {
                 .PathId = pathId,
                 .ColumnTags = columnTags,
-                .Types = types,
-                .ReplyToActorId = ReplyToActorId
+                .Status = status
             };
-            Self->ForceTraversals.emplace_back(operation);
-/*
-            db.Table<Schema::ForceTraversals>().Key(Self->NextForceTraversalOperationId, pathId.OwnerId, pathId.LocalPathId).Update(
-                NIceDb::TUpdate<Schema::ForceTraversals::OperationId>(Self->NextForceTraversalOperationId),
-                NIceDb::TUpdate<Schema::ForceTraversals::OwnerId>(pathId.OwnerId),
-                NIceDb::TUpdate<Schema::ForceTraversals::LocalPathId>(pathId.LocalPathId),
-                NIceDb::TUpdate<Schema::ForceTraversals::Cookie>(cookie),
-                NIceDb::TUpdate<Schema::ForceTraversals::ColumnTags>(columnTags),
-                NIceDb::TUpdate<Schema::ForceTraversals::Types>(types)
+            operation.Tables.emplace_back(operationTable);
+
+            db.Table<Schema::ForceTraversalTables>().Key(operationId, pathId.OwnerId, pathId.LocalPathId).Update(
+                NIceDb::TUpdate<Schema::ForceTraversalTables::OperationId>(operationId),
+                NIceDb::TUpdate<Schema::ForceTraversalTables::OwnerId>(pathId.OwnerId),
+                NIceDb::TUpdate<Schema::ForceTraversalTables::LocalPathId>(pathId.LocalPathId),
+                NIceDb::TUpdate<Schema::ForceTraversalTables::ColumnTags>(columnTags),
+                NIceDb::TUpdate<Schema::ForceTraversalTables::Status>((ui64)status)
             );
-*/
         }
+
+        Self->ForceTraversals.emplace_back(operation);        
+
+        db.Table<Schema::ForceTraversalOperations>().Key(operationId).Update(
+            NIceDb::TUpdate<Schema::ForceTraversalOperations::OperationId>(operationId),
+            NIceDb::TUpdate<Schema::ForceTraversalOperations::Types>(types)
+        );
 
         return true;
     }

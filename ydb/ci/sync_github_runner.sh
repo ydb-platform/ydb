@@ -7,9 +7,9 @@ fi
 set -xeuo pipefail
 
 BUCKET_LATEST_PATH=$BUCKET_PATH/latest
-RELEASES_JSON=https://api.github.com/repos/actions/runner/releases
+RELEASES_JSON=https://api.github.com/repos/actions/runner/releases/latest
 
-latest_release=$(gh api $RELEASES_JSON |  jq -r 'limit(1; .[].assets[] | select(.name | test("-linux-x64-\\d+\\.\\d+\\.\\d+.tar.gz")).browser_download_url)')
+latest_release=$(gh api $RELEASES_JSON |  jq -r 'limit(1; .assets[] | select(.name | test("-linux-x64-\\d+\\.\\d+\\.\\d+.tar.gz")).browser_download_url)')
 latest_fn=$(basename $latest_release)
 
 s3cmd info $BUCKET_PATH/$latest_fn && ret=$? || ret=$?

@@ -9,7 +9,6 @@ from ydb.library.yql.providers.generic.connector.tests.utils.settings import Set
 from ydb.library.yql.providers.generic.connector.tests.utils.generate import generate_table_data
 import ydb.library.yql.providers.generic.connector.tests.utils.types.clickhouse as clickhouse
 import ydb.library.yql.providers.generic.connector.tests.utils.types.mysql as mysql
-import ydb.library.yql.providers.generic.connector.tests.utils.types.oracle as oracle
 import ydb.library.yql.providers.generic.connector.tests.utils.types.postgresql as postgresql
 import ydb.library.yql.providers.generic.connector.tests.utils.types.ydb as Ydb
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
@@ -33,7 +32,6 @@ class TestCase(BaseTestCase):
     select_where: Optional[SelectWhere]
     data_out_: Optional[Sequence]
     check_output_schema: bool = False
-    service_name: str = None
 
     @property
     def data_out(self) -> Sequence:
@@ -44,9 +42,6 @@ class TestCase(BaseTestCase):
         gs = super().generic_settings
         for cluster in gs.clickhouse_clusters:
             cluster.protocol = self.protocol
-        for cluster in gs.oracle_clusters:
-            if self.service_name is not None:
-                cluster.service_name = self.service_name
         return gs
 
 
@@ -76,14 +71,14 @@ class Factory:
                     name='COL1',
                     ydb_type=Type.INT32,
                     data_source_type=DataSourceType(
-                        ch=clickhouse.Int32(), ora=oracle.Number(), pg=postgresql.Int4(), ydb=Ydb.Int32(), my=mysql.Integer()
+                        ch=clickhouse.Int32(), pg=postgresql.Int4(), ydb=Ydb.Int32(), my=mysql.Integer()
                     ),
                 ),
                 Column(
                     name='col2',
                     ydb_type=Type.INT32,
                     data_source_type=DataSourceType(
-                        ch=clickhouse.Int32(), ora=oracle.Number(), pg=postgresql.Int4(), ydb=Ydb.Int32(), my=mysql.Integer()
+                        ch=clickhouse.Int32(), pg=postgresql.Int4(), ydb=Ydb.Int32(), my=mysql.Integer()
                     ),
                 ),
             )
@@ -103,7 +98,6 @@ class Factory:
                     EDataSourceKind.POSTGRESQL,
                     EDataSourceKind.YDB,
                     EDataSourceKind.MYSQL,
-                    EDataSourceKind.ORACLE,
                 ),
             ),
             # SELECT COL1 FROM table
@@ -118,7 +112,6 @@ class Factory:
                     # NOTE: YQ-2264: doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
                     EDataSourceKind.YDB,
                     EDataSourceKind.MYSQL,
-                    EDataSourceKind.ORACLE,
                 ),
             ),
             # SELECT col1 FROM table
@@ -128,7 +121,7 @@ class Factory:
                     [1],
                     [10],
                 ],
-                (EDataSourceKind.POSTGRESQL, EDataSourceKind.ORACLE,),  # works because of implicit cast to lowercase (COL1 -> col1)
+                (EDataSourceKind.POSTGRESQL,),  # works because of implicit cast to lowercase (COL1 -> col1)
             ),
             # SELECT col2 FROM table
             (
@@ -142,7 +135,6 @@ class Factory:
                     EDataSourceKind.POSTGRESQL,
                     EDataSourceKind.YDB,
                     EDataSourceKind.MYSQL,
-                    EDataSourceKind.ORACLE,
                 ),
             ),
             # SELECT col2, COL1 FROM table
@@ -157,7 +149,6 @@ class Factory:
                     # NOTE: YQ-2264: doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
                     EDataSourceKind.YDB,
                     EDataSourceKind.MYSQL,
-                    EDataSourceKind.ORACLE,
                 ),
             ),
             # SELECT col2, col1 FROM table
@@ -167,7 +158,7 @@ class Factory:
                     [2, 1],
                     [20, 10],
                 ],
-                (EDataSourceKind.POSTGRESQL, EDataSourceKind.ORACLE,),  # works because of implicit cast to lowercase (COL1 -> col1)
+                (EDataSourceKind.POSTGRESQL,),  # works because of implicit cast to lowercase (COL1 -> col1)
             ),
             # Simple math computation:
             # SELECT COL1 + col2 AS col3 FROM table
@@ -182,7 +173,6 @@ class Factory:
                     # NOTE: YQ-2264: doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
                     EDataSourceKind.YDB,
                     EDataSourceKind.MYSQL,
-                    EDataSourceKind.ORACLE,
                 ),
             ),
             # Select the same column multiple times with different aliases
@@ -204,7 +194,6 @@ class Factory:
                     EDataSourceKind.POSTGRESQL,
                     EDataSourceKind.YDB,
                     EDataSourceKind.MYSQL,
-                    EDataSourceKind.ORACLE,
                 ),
             ),
         )
@@ -226,7 +215,6 @@ class Factory:
                     data_out_=data_out,
                     name_=test_case_name,
                     pragmas=dict(),
-                    service_name=self.ss.oracle.service_name if self.ss.oracle is not None else None,
                 )
 
                 test_cases.append(test_case)
@@ -303,7 +291,6 @@ class Factory:
             EDataSourceKind.POSTGRESQL: [EProtocol.NATIVE],
             EDataSourceKind.YDB: [EProtocol.NATIVE],
             EDataSourceKind.MYSQL: [EProtocol.NATIVE],
-            EDataSourceKind.ORACLE: [EProtocol.NATIVE],
         }
 
         base_test_cases = None

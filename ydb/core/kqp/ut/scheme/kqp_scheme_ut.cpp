@@ -6796,7 +6796,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         // DROP RESOURCE POOL CLASSIFIER
         checkQuery("DROP RESOURCE POOL CLASSIFIER MyResourcePoolClassifier;",
-            EStatus::SUCCESS);
+            EStatus::GENERIC_ERROR,
+            "Classifier to drop not found");
     }
 
     Y_UNIT_TEST(ResourcePoolClassifiersValidation) {
@@ -7021,6 +7022,27 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(AlterNonExistingResourcePoolClassifier) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableResourcePools(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings()
+            .SetAppConfig(config)
+            .SetEnableResourcePools(true));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto query = R"(
+            ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier
+                SET (MEMBERNAME = "test@user", RANK = 100),
+                RESET (RESOURCE_POOL);
+            )";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Classifier with name MyResourcePoolClassifier not found in database /Root");
+    }
+
     Y_UNIT_TEST(DropResourcePoolClassifier) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableResourcePools(true);
@@ -7048,6 +7070,23 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":[]}");
         }
+    }
+
+    Y_UNIT_TEST(DropNonExistingResourcePoolClassifier) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableResourcePools(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings()
+            .SetAppConfig(config)
+            .SetEnableResourcePools(true));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto query = "DROP RESOURCE POOL CLASSIFIER MyResourcePoolClassifier;";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Classifier to drop not found");
     }
 }
 

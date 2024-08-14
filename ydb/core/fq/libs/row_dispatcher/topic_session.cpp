@@ -204,7 +204,7 @@ void TTopicSession::Bootstrap() {
     Become(&TTopicSession::StateFunc);
     LogPrefix = LogPrefix + " " + SelfId().ToString() + " ";
     LOG_ROW_DISPATCHER_DEBUG("Bootstrap " << ", PartitionId " << PartitionId);
-    LOG_ROW_DISPATCHER_DEBUG("Timeout " << Config.GetTimeoutBeforeStartSessionSec() << " sec " << PartitionId);
+    LOG_ROW_DISPATCHER_DEBUG("Timeout " << Config.GetTimeoutBeforeStartSessionSec() << " sec");
     
 }
 

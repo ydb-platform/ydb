@@ -1,0 +1,23 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.Ymq.V1;
+
+import "ydb/public/api/protos/draft/ymq.proto";
+
+
+option java_package = "com.yandex.ydb.ymq.v1";
+
+
+service YmqService {
+    rpc GetQueueUrl(GetQueueUrlRequest) returns (GetQueueUrlResponse);
+    rpc CreateQueue(CreateQueueRequest) returns (CreateQueueResponse);
+    rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+    rpc ReceiveMessage(ReceiveMessageRequest) returns (ReceiveMessageResponse);
+    rpc GetQueueAttributes(GetQueueAttributesRequest) returns (GetQueueAttributesResponse);
+    rpc ListQueues(ListQueuesRequest) returns (ListQueuesResponse);
+    rpc DeleteMessage(DeleteMessageRequest) returns (DeleteMessageResponse);
+    rpc PurgeQueue(PurgeQueueRequest) returns (PurgeQueueResponse);
+    rpc DeleteQueue(DeleteQueueRequest) returns (DeleteQueueResponse);
+    rpc ChangeMessageVisibility(ChangeMessageVisibilityRequest) returns (ChangeMessageVisibilityResponse);
+}

@@ -1,6 +1,6 @@
 
 #!/bin/bash
-
+# NOT USED ANYWHERE, YOU CAN DELETE THIS IF YOU KNOW WHAT ARE YOU DOING
 # Параметры подключения к YDB
 ENDPOINT="grpcs://lb.etnvsjbk7kh1jc6bbfi8.ydb.mdb.yandexcloud.net:2135"
 DATABASE="/ru-central1/b1ggceeul2pkher8vhb6/etnvsjbk7kh1jc6bbfi8"

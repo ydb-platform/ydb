@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+# NOT USED ANYWHERE, YOU CAN DELETE THIS IF YOU KNOW WHAT ARE YOU DOING
 import argparse
 import configparser
 import datetime
@@ -83,13 +83,7 @@ def bulk_upsert(table_client, table_path, rows):
 
 
 def main():
-   # parser = argparse.ArgumentParser()
-   # parser.add_argument('--days-window', default=5, type=int, help='how many days back we collecting history')
 
-   # args, unknown = parser.parse_known_args()
-   # history_for_n_day = args.days_window
-    
-  #  print(f'Getting hostory in window {history_for_n_day} days')
     
 
     if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
@@ -117,8 +111,6 @@ def main():
         tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
         table_client = ydb.TableClient(driver, tc_settings)
         
-       #table_path = f'test_results/analytics/flaky_tests_history_{history_for_n_day}_days'
-       # default_start_date = datetime.date(2024, 7, 1)
         table_path = 'test_results/test_runs_column'
         
         with ydb.SessionPool(driver) as pool:

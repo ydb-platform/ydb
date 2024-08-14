@@ -1,4 +1,4 @@
-
+# NOT USED ANYWHERE, YOU CAN DELETE THIS IF YOU KNOW WHAT ARE YOU DOING
 import os
 import csv
 import urllib.parse

@@ -75,7 +75,7 @@
                                                                 "Name": "Aggregate"
                                                             },
                                                             {
-                                                                "Condition": "q2 = q1",
+                                                                "Condition": "t1.q2 = t2.q1",
                                                                 "Inputs": [
                                                                     {
                                                                         "ExternalPlanNodeId": 8
@@ -132,7 +132,7 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "Collect",
+                                                                        "Node Type": "Stage",
                                                                         "PlanNodeId": 4,
                                                                         "Plans": [
                                                                             {

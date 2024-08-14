@@ -42,7 +42,7 @@
                                                 "TopSortBy": "argument.qr.qq"
                                             },
                                             {
-                                                "Condition": "qq = unique2",
+                                                "Condition": "qr.qq = c.unique2",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 2
@@ -71,7 +71,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
+                                                        "Node Type": "Stage",
                                                         "PlanNodeId": 4,
                                                         "Plans": [
                                                             {
@@ -80,7 +80,7 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "Collect",
+                                                                        "Node Type": "Stage",
                                                                         "PlanNodeId": 2,
                                                                         "Plans": [
                                                                             {
@@ -146,7 +146,7 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "Collect",
+                                                                        "Node Type": "Stage",
                                                                         "PlanNodeId": 14,
                                                                         "Plans": [
                                                                             {
@@ -199,7 +199,7 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "Collect",
+                                                                        "Node Type": "Stage",
                                                                         "PlanNodeId": 9,
                                                                         "Plans": [
                                                                             {

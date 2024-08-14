@@ -48,7 +48,7 @@
                                                         "TopSortBy": ""
                                                     },
                                                     {
-                                                        "Condition": "Group = Group",
+                                                        "Condition": "a.Group = t.Group",
                                                         "Inputs": [
                                                             {
                                                                 "ExternalPlanNodeId": 17
@@ -73,8 +73,8 @@
                                                                 "Operators": [
                                                                     {
                                                                         "Inputs": [],
-                                                                        "Iterator": "precompute_0_0",
-                                                                        "Name": "Iterator"
+                                                                        "Name": "ToFlow",
+                                                                        "ToFlow": "precompute_0_0"
                                                                     }
                                                                 ],
                                                                 "PlanNodeId": 16
@@ -87,7 +87,7 @@
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "Collect",
+                                                                "Node Type": "Stage",
                                                                 "PlanNodeId": 14,
                                                                 "Plans": [
                                                                     {

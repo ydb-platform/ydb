@@ -129,7 +129,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
             wBuffer.RemoveData(aggr, StoragesManager->GetInsertOperator());
         } else {
             const TMonotonic now = TMonotonic::Now();
-            Counters.GetCSCounters().OnWritePutBlobsSuccess(now - writeMeta.GetWriteStartInstant());
+            Counters.OnWritePutBlobsSuccess(now - writeMeta.GetWriteStartInstant(), aggr->GetRows());
             Counters.GetCSCounters().OnWriteMiddle1PutBlobsSuccess(now - writeMeta.GetWriteMiddle1StartInstant());
             Counters.GetCSCounters().OnWriteMiddle2PutBlobsSuccess(now - writeMeta.GetWriteMiddle2StartInstant());
             Counters.GetCSCounters().OnWriteMiddle3PutBlobsSuccess(now - writeMeta.GetWriteMiddle3StartInstant());

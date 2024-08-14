@@ -166,6 +166,12 @@ void TPartition::ProcessReserveRequests(const TActorContext& ctx) {
         const ui64& cookie = ReserveRequests.front()->Cookie;
         const bool& lastRequest = ReserveRequests.front()->LastRequest;
 
+        if (!IsActive()) {
+            ReplyOk(ctx, cookie);
+            ReserveRequests.pop_front();
+            continue;
+        }
+
         auto it = Owners.find(owner);
         if (ClosedInternalPartition) {
             ReplyError(ctx, cookie, NPersQueue::NErrorCode::BAD_REQUEST, "ReserveRequest to closed supportive partition");

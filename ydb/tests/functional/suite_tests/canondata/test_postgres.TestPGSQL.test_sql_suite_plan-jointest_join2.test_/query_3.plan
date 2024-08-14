@@ -42,7 +42,7 @@
                                                 "TopSortBy": "argument.s2.name"
                                             },
                                             {
-                                                "Condition": "name = name",
+                                                "Condition": "s2.name = s3.name",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 15
@@ -67,8 +67,8 @@
                                                         "Operators": [
                                                             {
                                                                 "Inputs": [],
-                                                                "Iterator": "precompute_0_0",
-                                                                "Name": "Iterator"
+                                                                "Name": "ToFlow",
+                                                                "ToFlow": "precompute_0_0"
                                                             }
                                                         ],
                                                         "PlanNodeId": 14
@@ -81,7 +81,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
+                                                        "Node Type": "Stage",
                                                         "PlanNodeId": 12,
                                                         "Plans": [
                                                             {

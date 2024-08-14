@@ -5,6 +5,10 @@ PY3TEST()
         test_sql_format.py
     )
 
+IF (SANITIZER_TYPE OR NOT OPENSOURCE)
+    REQUIREMENTS(ram:12)
+ENDIF()
+
 IF (SANITIZER_TYPE)
     TIMEOUT(1800)
     SIZE(LARGE)
@@ -36,8 +40,6 @@ ENDIF()
 
 
 NO_CHECK_IMPORTS()
-
-REQUIREMENTS(ram:12)
 
 END()
 

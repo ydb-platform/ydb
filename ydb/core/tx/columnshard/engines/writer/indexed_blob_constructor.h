@@ -89,6 +89,7 @@ private:
     NEvWrite::TWriteMeta WriteMeta;
     YDB_READONLY(ui64, SchemaVersion, 0);
     YDB_READONLY(ui64, Size, 0);
+    YDB_READONLY(ui64, Rows, 0);
     YDB_ACCESSOR_DEF(std::vector<TWideSerializedBatch>, SplittedBlobs);
     YDB_READONLY_DEF(TVector<TWriteId>, WriteIds);
     YDB_READONLY_DEF(std::shared_ptr<NOlap::IBlobsWritingAction>, BlobsAction);
@@ -116,6 +117,9 @@ public:
     {
         for (auto&& s : splittedBlobs) {
             SplittedBlobs.emplace_back(std::move(s), *this);
+        }
+        for (const auto& batch : SplittedBlobs) {
+            Rows += batch->GetRowsCount();
         }
     }
 

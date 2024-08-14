@@ -905,7 +905,7 @@ namespace NActors {
         TGuard<TMutex> guard(Mutex);
         TNodeDataBase* node = Nodes[FirstNodeId + nodeIndex].Get();
         if (UseRealThreads) {
-            Y_ABORT_UNLESS(poolId < node->ExecutorPools.size());
+            Y_ABORT_UNLESS(node->ExecutorPools.contains(poolId));
             return node->ExecutorPools[poolId]->Register(actor, mailboxType, revolvingCounter, parentId);
         }
 
@@ -973,7 +973,7 @@ namespace NActors {
         TGuard<TMutex> guard(Mutex);
         TNodeDataBase* node = Nodes[FirstNodeId + nodeIndex].Get();
         if (UseRealThreads) {
-            Y_ABORT_UNLESS(poolId < node->ExecutorPools.size());
+            Y_ABORT_UNLESS(node->ExecutorPools.contains(poolId));
             return node->ExecutorPools[poolId]->Register(actor, mailbox, hint, parentId);
         }
 
@@ -1718,7 +1718,7 @@ namespace NActors {
     THolder<TActorSystem> TTestActorRuntimeBase::MakeActorSystem(ui32 nodeIndex, TNodeDataBase* node) {
         auto setup = MakeActorSystemSetup(nodeIndex, node);
 
-        node->ExecutorPools.resize(setup->ExecutorsCount);
+        node->ExecutorPools.reserve(setup->ExecutorsCount);
         for (ui32 i = 0; i < setup->ExecutorsCount; ++i) {
             IExecutorPool* executor = setup->Executors[i].Get();
             node->ExecutorPools[i] = executor;
@@ -1786,7 +1786,18 @@ namespace NActors {
             setup->LocalServices.push_back(std::move(loggerActorPair));
         }
 
-        return THolder<TActorSystem>(new TActorSystem(setup, node->GetAppData(), node->LogSettings));
+        auto actorSystem = THolder<TActorSystem>(new TActorSystem(setup, node->GetAppData(), node->LogSettings));
+
+        if (node->ExecutorPools.empty()) {
+            // Initialize pools from actor system (except IO pool)
+            const auto& pools = actorSystem->GetBasicExecutorPools();
+            node->ExecutorPools.reserve(pools.size());
+            for (IExecutorPool* pool : pools) {
+                node->ExecutorPools[pool->PoolId] = pool;
+            }
+        }
+
+        return actorSystem;
     }
 
     TActorSystem* TTestActorRuntimeBase::SingleSys() const {

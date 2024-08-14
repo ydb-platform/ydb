@@ -2074,12 +2074,6 @@ TExprNode::TPtr SimpleFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, TO
         }
     }
 
-    if (lambdaBody.IsCallable("ForwardList")) {
-        const bool keepList = node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List && lambdaBody.Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow;
-        YQL_CLOG(DEBUG, Core) << (keepList ? "Pull" : "Drop") << " out " << lambdaBody.Content() << " from " << node->Content() << " lambda root.";
-        return ctx.WrapByCallableIf(keepList, lambdaBody.Content(), ctx.ChangeChild(*node, 1U, ctx.DeepCopyLambda(node->Tail(), lambdaBody.HeadPtr())));
-    }
-
     if (CanRewriteToEmptyContainer(*node)) {
         const auto& inputToCheck = SkipCallables(node->Head(), SkippableCallables);
         if (IsEmptyContainer(inputToCheck) || IsEmpty(inputToCheck, *optCtx.Types)) {

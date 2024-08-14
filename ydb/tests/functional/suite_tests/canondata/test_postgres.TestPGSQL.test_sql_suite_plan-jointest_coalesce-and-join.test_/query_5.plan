@@ -42,7 +42,7 @@
                                                 "TopSortBy": "argument.xx.pkxx"
                                             },
                                             {
-                                                "Condition": "pkxx = _equijoin_column_0",
+                                                "Condition": "xx.pkxx = Q._equijoin_column_0",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 8
@@ -62,7 +62,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
+                                                        "Node Type": "Stage",
                                                         "PlanNodeId": 4,
                                                         "Plans": [
                                                             {
@@ -111,7 +111,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
+                                                        "Node Type": "Stage",
                                                         "PlanNodeId": 7,
                                                         "Plans": [
                                                             {

@@ -283,15 +283,8 @@ private:
             return;
         }
 
-        NResourcePool::TPoolSettings poolConfig;
-        poolConfig.ConcurrentQueryLimit = Settings_.ConcurrentQueryLimit_;
-        poolConfig.QueueSize = Settings_.QueueSize_;
-        poolConfig.QueryCancelAfter = Settings_.QueryCancelAfter_;
-        poolConfig.QueryMemoryLimitPercentPerNode = Settings_.QueryMemoryLimitPercentPerNode_;
-        poolConfig.DatabaseLoadCpuThreshold = Settings_.DatabaseLoadCpuThreshold_;
-
         TActorId edgeActor = GetRuntime()->AllocateEdgeActor();
-        GetRuntime()->Register(CreatePoolCreatorActor(edgeActor, Settings_.DomainName_, Settings_.PoolId_, poolConfig, nullptr, {}));
+        GetRuntime()->Register(CreatePoolCreatorActor(edgeActor, Settings_.DomainName_, Settings_.PoolId_, Settings_.GetDefaultPoolSettings(), nullptr, {}));
         auto response = GetRuntime()->GrabEdgeEvent<TEvPrivate::TEvCreatePoolResponse>(edgeActor, FUTURE_WAIT_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Status, Ydb::StatusIds::SUCCESS, response->Get()->Issues.ToOneLineString());
     }
@@ -480,6 +473,8 @@ private:
     }
 
     std::unique_ptr<TEvKqp::TEvQueryRequest> GetQueryRequest(const TString& query, const TQueryRunnerSettings& settings) const {
+        UNIT_ASSERT_C(settings.PoolId_, "Query pool id is not specified");
+
         auto event = std::make_unique<TEvKqp::TEvQueryRequest>();
         event->Record.SetUserToken(NACLib::TUserToken("", settings.UserSID_, {}).SerializeAsString());
 
@@ -488,7 +483,7 @@ private:
         request->SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
         request->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         request->SetDatabase(Settings_.DomainName_);
-        request->SetPoolId(settings.PoolId_);
+        request->SetPoolId(*settings.PoolId_);
 
         return event;
     }
@@ -575,6 +570,16 @@ bool TQueryRunnerResultAsync::HasValue() const {
 }
 
 //// TYdbSetupSettings
+
+NResourcePool::TPoolSettings TYdbSetupSettings::GetDefaultPoolSettings() const {
+    NResourcePool::TPoolSettings poolConfig;
+    poolConfig.ConcurrentQueryLimit = ConcurrentQueryLimit_;
+    poolConfig.QueueSize = QueueSize_;
+    poolConfig.QueryCancelAfter = QueryCancelAfter_;
+    poolConfig.QueryMemoryLimitPercentPerNode = QueryMemoryLimitPercentPerNode_;
+    poolConfig.DatabaseLoadCpuThreshold = DatabaseLoadCpuThreshold_;
+    return poolConfig;
+}
 
 TIntrusivePtr<IYdbSetup> TYdbSetupSettings::Create() const {
     return MakeIntrusive<TWorkloadServiceYdbSetup>(*this);

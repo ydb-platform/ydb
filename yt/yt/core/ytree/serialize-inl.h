@@ -154,6 +154,9 @@ void DeserializeSet(T& value, INodePtr node)
     auto listNode = node->AsList();
     auto size = listNode->GetChildCount();
     value.clear();
+    if constexpr (requires {value.reserve(size);}) {
+        value.reserve(size);
+    }
     for (int i = 0; i < size; ++i) {
         typename T::value_type item;
         Deserialize(item, listNode->GetChildOrThrow(i));
@@ -166,6 +169,9 @@ void DeserializeMap(T& value, INodePtr node)
 {
     auto mapNode = node->AsMap();
     value.clear();
+    if constexpr (requires {value.reserve(mapNode->GetChildCount());}) {
+        value.reserve(mapNode->GetChildCount());
+    }
     for (const auto& [serializedKey, serializedItem] : mapNode->GetChildren()) {
         typename T::key_type key;
         TMapKeyHelper<typename T::key_type>::Deserialize(key, serializedKey);

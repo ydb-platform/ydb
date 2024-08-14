@@ -42,7 +42,7 @@
                                                 "TopSortBy": "argument.qr.y"
                                             },
                                             {
-                                                "Condition": "_equijoin_column_0 = x",
+                                                "Condition": "qr._equijoin_column_0 = pv.x",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 29
@@ -67,8 +67,8 @@
                                                         "Operators": [
                                                             {
                                                                 "Inputs": [],
-                                                                "Iterator": "precompute_2_0",
-                                                                "Name": "Iterator"
+                                                                "Name": "ToFlow",
+                                                                "ToFlow": "precompute_2_0"
                                                             }
                                                         ],
                                                         "PlanNodeId": 28
@@ -81,7 +81,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
+                                                        "Node Type": "Stage",
                                                         "PlanNodeId": 26,
                                                         "Plans": [
                                                             {
@@ -182,7 +182,7 @@
                                         "Node Type": "LeftJoin (MapJoin)",
                                         "Operators": [
                                             {
-                                                "Condition": "x = x",
+                                                "Condition": "a.x = qt.x",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 15
@@ -207,8 +207,8 @@
                                                         "Operators": [
                                                             {
                                                                 "Inputs": [],
-                                                                "Iterator": "precompute_0_0",
-                                                                "Name": "Iterator"
+                                                                "Name": "ToFlow",
+                                                                "ToFlow": "precompute_0_0"
                                                             }
                                                         ],
                                                         "PlanNodeId": 14
@@ -221,7 +221,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
+                                                        "Node Type": "Stage",
                                                         "PlanNodeId": 12,
                                                         "Plans": [
                                                             {

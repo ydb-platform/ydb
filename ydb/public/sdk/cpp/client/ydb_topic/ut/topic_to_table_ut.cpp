@@ -1846,6 +1846,40 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_26, TFixture)
     UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
 }
 
+Y_UNIT_TEST_F(WriteToTopic_Demo_27, TFixture)
+{
+    CreateTopic("topic_A", TEST_CONSUMER);
+    CreateTopic("topic_B", TEST_CONSUMER);
+    CreateTopic("topic_C", TEST_CONSUMER);
+
+    for (size_t i = 0; i < 2; ++i) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", nullptr, 0);
+        WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #2", nullptr, 0);
+
+        NTable::TSession tableSession = CreateTableSession();
+        NTable::TTransaction tx = BeginTx(tableSession);
+
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2), &tx, 0);
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+        WriteToTopic("topic_C", TEST_MESSAGE_GROUP_ID, messages[0], &tx, 0);
+        WaitForAcks("topic_C", TEST_MESSAGE_GROUP_ID);
+
+        messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2), &tx, 0);
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+        WriteToTopic("topic_C", TEST_MESSAGE_GROUP_ID, messages[0], &tx, 0);
+        WaitForAcks("topic_C", TEST_MESSAGE_GROUP_ID);
+
+        CommitTx(tx, EStatus::SUCCESS);
+
+        messages = ReadFromTopic("topic_C", TEST_CONSUMER, TDuration::Seconds(2), nullptr, 0);
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+
+        DumpPQTabletKeys("topic_A");
+        DumpPQTabletKeys("topic_B");
+        DumpPQTabletKeys("topic_C");
+    }
+}
+
 }
 
 }

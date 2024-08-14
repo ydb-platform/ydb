@@ -596,6 +596,11 @@ message TLimiterConfig {
     optional uint64 PeriodMilliSeconds = 3 [default = 1000];
 }
 
+message TGroupedMemoryLimiterConfig {
+    optional bool Enabled = 1 [default = true];
+    optional uint64 MemoryLimit = 2;
+}
+
 message TExternalIndexConfig {
     optional bool Enabled = 1 [default = true];
     optional TInternalRequestConfig RequestConfig = 2;
@@ -701,6 +706,10 @@ message THttpProxyConfig {
     optional string AccessServiceEndpoint = 9;
 
     optional string JwtFile = 10;
+
+    optional bool YandexCloudMode = 11 [default = false];
+    optional bool DataStreamsEnabled = 12 [default = true];
+    optional bool YmqEnabled = 13 [default = false];
 }
 
 message TS3ProxyResolverConfig {
@@ -1305,6 +1314,19 @@ message TImmediateControlsConfig {
             DefaultValue: 256 }];
     }
 
+    message TDSProxyControls {
+        optional uint64 SlowDiskThreshold = 1 [(ControlOptions) = {
+            Description: "The minimum ratio of slowest and second slowest disks, required to accelerate, actual value is divided by 1000",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 2000 }];
+        optional uint64 PredictedDelayMultiplier = 2 [(ControlOptions) = {
+            Description: "Predicted time of VDisk's response is multiplied by this value divided by 1000",
+            MinValue: 0,
+            MaxValue: 1000000,
+            DefaultValue: 1000 }];
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
@@ -1313,6 +1335,7 @@ message TImmediateControlsConfig {
     reserved 6;
     optional TVDiskControls VDiskControls = 7;
     optional TTabletControls TabletControls = 8;
+    optional TDSProxyControls DSProxyControls = 9;
 };
 
 message TMeteringConfig {
@@ -1439,7 +1462,7 @@ message THiveConfig {
     optional double MinPeriodBetweenReassign = 33 [default = 300.0]; // seconds
     optional double TabletRestartWatchPeriod = 34 [default = 3600.0]; // seconds
     optional double NodeRestartWatchPeriod = 35 [default = 3600.0]; // seconds
-    optional uint64 NodeDeletePeriod = 36 [default = 14400]; // seconds
+    optional uint64 NodeDeletePeriod = 36 [default = 3600]; // seconds
     repeated THiveTabletLimit DefaultTabletLimit = 37;
     repeated THiveTabletPreference DefaultTabletPreference = 38;
     optional uint64 SystemTabletCategoryId = 39 [default = 1];
@@ -1525,7 +1548,6 @@ message TColumnShardConfig {
     repeated TRepairInfo Repairs = 15;
 
     optional uint32 MaxInFlightIntervalsOnRequest = 16;
-    optional uint32 MaxInFlightMemoryOnRequest = 17;
     optional uint32 MaxReadStaleness_ms = 18 [default = 300000];
 }
 
@@ -1906,6 +1928,7 @@ message TAppConfig {
     optional TLimiterConfig CompDiskLimiterConfig = 79;
     optional TMetadataCacheConfig MetadataCacheConfig = 80;
     optional TMemoryControllerConfig MemoryControllerConfig = 81;
+	optional TGroupedMemoryLimiterConfig GroupedMemoryLimiterConfig = 82;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

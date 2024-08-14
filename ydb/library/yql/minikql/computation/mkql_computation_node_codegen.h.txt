@@ -11,7 +11,6 @@ using NYql::GetMethodPtrIndex;
 using NYql::GetMethodIndex;
 
 using TUnboxedImmutableCodegeneratorNode = TUnboxedImmutableComputationNode;
-using TUnboxedImmutableRunCodegeneratorNode = TUnboxedImmutableComputationNode;
 using TExternalCodegeneratorNode = TExternalComputationNode;
 using TWideFlowProxyCodegeneratorNode = TWideFlowProxyComputationNode;
 
@@ -678,12 +677,6 @@ private:
     Value* CreateGetValue(const TCodegenContext& ctx, BasicBlock*&) const final;
 };
 
-class TUnboxedImmutableRunCodegeneratorNode: public TUnboxedImmutableComputationNode, public ICodegeneratorRunNode
-{
-public:
-    TUnboxedImmutableRunCodegeneratorNode(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& value);
-};
-
 class TExternalCodegeneratorNode: public TExternalComputationNode, public ICodegeneratorExternalNode
 {
 public:
@@ -1254,12 +1247,12 @@ private:
 
 class DIScopeAnnotator final {
 public:
-    explicit DIScopeAnnotator(DISubprogramAnnotator& subprogramAnnotator, const TSrcLocation& location = TSrcLocation::current());
+    explicit DIScopeAnnotator(DISubprogramAnnotator* subprogramAnnotator, const TSrcLocation& location = TSrcLocation::current());
 
     Instruction* operator()(Instruction* inst, const TSrcLocation& location = TSrcLocation::current()) const;
 
 private:
-    DISubprogramAnnotator& SubprogramAnnotator;
+    DISubprogramAnnotator* SubprogramAnnotator;
     DIScope* Scope;
 };
 

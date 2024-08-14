@@ -50,7 +50,7 @@ struct TAggregatorSchema : NIceDb::Schema {
         struct OperationId    : Column<1, NScheme::NTypeIds::Uint64> {};
         struct OwnerId        : Column<2, NScheme::NTypeIds::Uint64> {};
         struct LocalPathId    : Column<3, NScheme::NTypeIds::Uint64> {};
-        struct Cookie         : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct Cookie         : Column<4, NScheme::NTypeIds::String> {};
         struct ColumnTags     : Column<5, NScheme::NTypeIds::String> {};
         struct Types          : Column<6, NScheme::NTypeIds::String> {};
 
@@ -87,7 +87,7 @@ struct TAggregatorSchema : NIceDb::Schema {
     static constexpr ui64 SysParam_ForceTraversalColumnTags = 7;
     static constexpr ui64 SysParam_ForceTraversalTypes = 8;
     static constexpr ui64 SysParam_TraversalStartTime = 9;
-    static constexpr ui64 SysParam_NextForceTraversalOperationId = 10;
+    // deprecated 10
     static constexpr ui64 SysParam_TraversalIsColumnTable = 11;
     static constexpr ui64 SysParam_GlobalTraversalRound = 12;
 };

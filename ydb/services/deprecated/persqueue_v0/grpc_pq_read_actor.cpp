@@ -1164,37 +1164,35 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvReleasePartition::TPtr& ev, cons
         return;
     }
 
-    for (ui32 c = 0; c < record.GetCount(); ++c) {
-        Y_ABORT_UNLESS(!Partitions.empty());
+    Y_ABORT_UNLESS(!Partitions.empty());
 
-        TActorId actorId = TActorId{};
-        auto jt = Partitions.begin();
-        ui32 i = 0;
-        for (auto it = Partitions.begin(); it != Partitions.end(); ++it) {
-            if (it->first.first == clientName && !it->second.Releasing && (group == 0 || it->first.second + 1 == group)) {
-                ++i;
-                if (rand() % i == 0) { //will lead to 1/n probability for each of n partitions
-                    actorId = it->second.Actor;
-                    jt = it;
-                }
+    TActorId actorId = TActorId{};
+    auto jt = Partitions.begin();
+    ui32 i = 0;
+    for (auto it = Partitions.begin(); it != Partitions.end(); ++it) {
+        if (it->first.first == clientName && !it->second.Releasing && (group == 0 || it->first.second + 1 == group)) {
+            ++i;
+            if (rand() % i == 0) { //will lead to 1/n probability for each of n partitions
+                actorId = it->second.Actor;
+                jt = it;
             }
         }
-        Y_ABORT_UNLESS(actorId);
+    }
+    Y_ABORT_UNLESS(actorId);
 
-        {
-            auto it = TopicCounters.find(name);
-            Y_ABORT_UNLESS(it != TopicCounters.end());
-            it->second.PartitionsToBeReleased.Inc();
-        }
+    {
+        auto it = TopicCounters.find(name);
+        Y_ABORT_UNLESS(it != TopicCounters.end());
+        it->second.PartitionsToBeReleased.Inc();
+    }
 
-        LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " releasing " << jt->first.first << ":" << jt->first.second);
-        jt->second.Releasing = true;
+    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " releasing " << jt->first.first << ":" << jt->first.second);
+    jt->second.Releasing = true;
 
-        ctx.Send(actorId, new TEvPQProxy::TEvReleasePartition());
-        if (ClientsideLocksAllowed && jt->second.LockSent && !jt->second.Reading) { //locked and no active reads
-            if (!ProcessReleasePartition(jt, BalanceRightNow, false, ctx)) { // returns false if actor died
-                return;
-            }
+    ctx.Send(actorId, new TEvPQProxy::TEvReleasePartition());
+    if (ClientsideLocksAllowed && jt->second.LockSent && !jt->second.Reading) { //locked and no active reads
+        if (!ProcessReleasePartition(jt, BalanceRightNow, false, ctx)) { // returns false if actor died
+            return;
         }
     }
     AnswerForCommitsIfCan(ctx); // in case of killing partition

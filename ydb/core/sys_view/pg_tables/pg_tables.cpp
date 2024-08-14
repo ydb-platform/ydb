@@ -19,6 +19,7 @@ namespace NSysView {
 using namespace NActors;
 
 TStringBuf TPgTablesScanBase::GetColumnName(NTable::TTag tag) const {
+    Y_ENSURE(tag > 0 && tag <= SchemaColumns_.size());
     return SchemaColumns_.at(tag - 1)._ColumnName;
 }
 

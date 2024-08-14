@@ -50,8 +50,11 @@ public:
     }
 
     TWhiteboardRequest() = default;
+    TWhiteboardRequest(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+        : TBase(viewer, ev)
+    {}
 
-    THolder<TRequestEventType> BuildRequest() {
+    virtual THolder<TRequestEventType> BuildRequest() {
         THolder<TRequestEventType> request = MakeHolder<TRequestEventType>();
         constexpr bool hasFormat = requires(const TRequestEventType* r) {r->Record.GetFormat();};
         if constexpr (hasFormat) {

@@ -3,6 +3,7 @@
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.h>
 #include <ydb/library/yql/providers/dq/counters/task_counters.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/dq/api/protos/dqs.pb.h>
 #include <ydb/library/yql/providers/dq/api/protos/task_command_executor.pb.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
@@ -18,6 +19,9 @@
 #include <ydb/library/yql/dq/runtime/dq_output_channel.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/yql_panic.h>
+
+#include <ydb/library/yql/parser/pg_wrapper/interface/context.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
 
 #include <util/system/thread.h>
 #include <util/system/fs.h>
@@ -677,6 +681,15 @@ public:
         TString workingDirectory = taskParams[NTaskRunnerProxy::WorkingDirectoryParamName];
         Y_ABORT_UNLESS(workingDirectory);
         NFs::SetCurrentWorkingDirectory(workingDirectory);
+
+        QueryStat.Measure<void>("LoadPgExtensions", [&]()
+        {
+            if (TFsPath(NCommon::PgCatalogFileName).Exists()) {
+                TFileInput file(TString{NCommon::PgCatalogFileName});
+                NPg::ImportExtensions(file.ReadAll(), false,
+                    NKikimr::NMiniKQL::CreateExtensionLoader().get());
+            }
+        });
 
         THashMap<TString, TString> modulesMapping;
 

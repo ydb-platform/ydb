@@ -396,7 +396,8 @@ enum EServiceKikimr {
     // Distributed storage debugging
     BS_REQUEST_COST = 2500;
 
-    YQ_ROW_DISPATCHER = 2700;
+    GROUPED_MEMORY_LIMITER = 2700;
+    YQ_ROW_DISPATCHER = 2800;
 };
 
 message TActivity {

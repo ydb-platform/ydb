@@ -130,7 +130,6 @@ public:
 
     // BSC
     bool FallbackToWhiteboard = false;
-    bool FillDisksFromWhiteboard = false;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetGroupsResponse>> GetGroupsResponse;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetStoragePoolsResponse>> GetStoragePoolsResponse;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse>> GetVSlotsResponse;
@@ -657,7 +656,6 @@ public:
             FieldsRequired |= FieldsBsVSlots;
             FieldsRequired |= FieldsBsPDisks;
         }
-        FillDisksFromWhiteboard = FromStringWithDefault<bool>(params.Get("fill_disks_from_whiteboard"), FillDisksFromWhiteboard);
         TString fieldsRequired = params.Get("fields_required");
         if (!fieldsRequired.empty()) {
             if (fieldsRequired == "all") {
@@ -1066,19 +1064,6 @@ public:
         }
     }
 
-    static TPathId GetPathId(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        if (ev->Get()->Request->ResultSet.size() == 1) {
-            if (ev->Get()->Request->ResultSet.begin()->Self) {
-                const auto& info = ev->Get()->Request->ResultSet.begin()->Self->Info;
-                return TPathId(info.GetSchemeshardId(), info.GetPathId());
-            }
-            if (ev->Get()->Request->ResultSet.begin()->TableId) {
-                return ev->Get()->Request->ResultSet.begin()->TableId.PathId;
-            }
-        }
-        return {};
-    }
-
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         bool firstNavigate = (ev->Cookie == 0);
         TPathId pathId = GetPathId(ev);
@@ -1167,6 +1152,13 @@ public:
         //vDisk.Kind = info.GetKind();
         vDisk.Status = info.GetStatusV2();
         NKikimrBlobStorage::EVDiskStatus_Parse(info.GetStatusV2(), &vDisk.VDiskStatus);
+    }
+
+    bool AreBSControllerRequestsDone() const {
+        return (!GetGroupsResponse || GetGroupsResponse->IsDone()) &&
+               (!GetStoragePoolsResponse || GetStoragePoolsResponse->IsDone()) &&
+               (!GetVSlotsResponse || GetVSlotsResponse->IsDone()) &&
+               (!GetPDisksResponse || GetPDisksResponse->IsDone());
     }
 
     void ProcessBSControllerResponses() {
@@ -1306,7 +1298,7 @@ public:
                 }
             }
         }
-        if (NoMoreRequests(requestsDone) && FieldsNeeded(FieldsWbDisks)) {
+        if (AreBSControllerRequestsDone() && FieldsNeeded(FieldsWbDisks)) {
             for (TGroup& group : Groups) {
                 for (TNodeId nodeId : group.VDiskNodeIds) {
                     SendWhiteboardDisksRequest(nodeId);
@@ -1748,9 +1740,11 @@ public:
     void HandleTimeout(TEvents::TEvWakeup::TPtr& ev) {
         switch (ev->Get()->Tag) {
             case TimeoutBSC:
-                OnBscError("timeout");
-                Problems.emplace_back("bsc-timeout");
-                RequestDone(FailPipeConnect(GetBSControllerId()));
+                if (!AreBSControllerRequestsDone()) {
+                    OnBscError("timeout");
+                    Problems.emplace_back("bsc-timeout");
+                    RequestDone(FailPipeConnect(GetBSControllerId()));
+                }
                 break;
             case TimeoutFinal:
                 // bread crumbs
@@ -1761,6 +1755,12 @@ public:
                 if (VDiskStateRequestsInFlight > 0 || PDiskStateRequestsInFlight > 0) {
                     Problems.emplace_back("wb-incomplete-disks");
                     ProcessWhiteboardDisks();
+                }
+                if (HiveStorageStatsInFlight > 0) {
+                    Problems.emplace_back("hive-incomplete");
+                }
+                if (!AreBSControllerRequestsDone()) {
+                    Problems.emplace_back("bsc-incomplete");
                 }
                 ReplyAndPassAway();
                 break;
@@ -2017,6 +2017,31 @@ public:
                           * `MediaType`
                           * `MissingDisks`
                           * `State`
+                    required: false
+                    type: string
+                  - name: fields_required
+                    in: query
+                    description: >
+                        list of fields required in response (the more - the heavier could be request):
+                          * `GroupId` (always required)
+                          * `PoolName`
+                          * `Kind`
+                          * `MediaType`
+                          * `Erasure`
+                          * `MissingDisks`
+                          * `State`
+                          * `Usage`
+                          * `Used`
+                          * `Limit`
+                          * `Usage`
+                          * `Available`
+                          * `DiskSpaceUsage`
+                          * `Encryption`
+                          * `AllocationUnits`
+                          * `Read`
+                          * `Write`
+                          * `PDisk`
+                          * `VDisk`
                     required: false
                     type: string
                   - name: offset

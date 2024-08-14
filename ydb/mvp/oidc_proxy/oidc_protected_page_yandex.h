@@ -42,37 +42,9 @@ public:
         Die(ctx);
     }
 
-    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
-        NHttp::THttpOutgoingResponsePtr httpResponse;
-        if (event->Get()->Response != nullptr) {
-            NHttp::THttpIncomingResponsePtr response = event->Get()->Response;
-            if (response->Status == "400" && RequestedPageScheme.empty()) {
-                NHttp::THttpOutgoingRequestPtr request = response->GetRequest();
-                if (!request->Secure) {
-                    LOG_DEBUG_S(ctx, EService::MVP, "Try to send request to HTTPS port");
-                    NHttp::THeadersBuilder headers {request->Headers};
-                    ForwardUserRequest(headers.Get(AUTH_HEADER_NAME), ctx, true);
-                    return;
-                }
-            }
-            NHttp::THeadersBuilder headers = GetResponseHeaders(response);
-            TStringBuf contentType = headers.Get("Content-Type").NextTok(';');
-            if (contentType == "text/html") {
-                TString newBody = FixReferenceInHtml(response->Body, response->GetRequest()->Host);
-                httpResponse = Request->CreateResponse( response->Status, response->Message, headers, newBody);
-            } else {
-                httpResponse = Request->CreateResponse( response->Status, response->Message, headers, response->Body);
-            }
-        } else {
-            httpResponse = Request->CreateResponseNotFound(NOT_FOUND_HTML_PAGE, "text/html");
-        }
-        ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
-        Die(ctx);
-    }
-
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
+            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, HandleProxy);
             HFunc(TEvPrivate::TEvCheckSessionResponse, Handle);
             HFunc(TEvPrivate::TEvErrorResponse, Handle);
         }

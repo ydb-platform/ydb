@@ -124,6 +124,7 @@ bool TTxScan::Execute(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/
     LOG_S_DEBUG("TTxScan prepare txId: " << txId << " scanId: " << scanId << " at tablet " << Self->TabletID());
 
     TReadDescription read(snapshot, record.GetReverse());
+    read.TxId = txId;
     read.PathId = record.GetLocalPathId();
     read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);
     read.TableName = record.GetTablePath();

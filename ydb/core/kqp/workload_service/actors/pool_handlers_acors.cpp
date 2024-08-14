@@ -138,6 +138,7 @@ public:
         sFunc(TEvents::TEvPoison, HandlePoison);
         sFunc(TEvPrivate::TEvStopPoolHandler, HandleStop);
         hFunc(TEvPrivate::TEvResolvePoolResponse, Handle);
+        hFunc(TEvPrivate::TEvUpdatePoolSubscription, Handle);
 
         // Pool handler events
         hFunc(TEvPrivate::TEvCancelRequest, Handle);
@@ -157,7 +158,7 @@ public:
             this->Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchRemove(0));
         }
 
-        SendPoolInfoUpdate(std::nullopt, std::nullopt);
+        SendPoolInfoUpdate(std::nullopt, std::nullopt, Subscribers);
 
         Counters.OnCleanup();
 
@@ -180,6 +181,8 @@ private:
     }
 
     void Handle(TEvPrivate::TEvResolvePoolResponse::TPtr& ev) {
+        this->Send(MakeKqpWorkloadServiceId(this->SelfId().NodeId()), new TEvPrivate::TEvPlaceRequestIntoPoolResponse(Database, PoolId));
+
         auto event = std::move(ev->Get()->Event);
         const TActorId& workerActorId = event->Sender;
         if (!InFlightLimit) {
@@ -204,8 +207,6 @@ private:
         UpdatePoolConfig(ev->Get()->PoolConfig);
         UpdateSchemeboardSubscription(ev->Get()->PathId);
         OnScheduleRequest(request);
-
-        this->Send(MakeKqpWorkloadServiceId(this->SelfId().NodeId()), new TEvPrivate::TEvPlaceRequestIntoPoolResponse(Database, PoolId));
     }
 
     void Handle(TEvCleanupRequest::TPtr& ev) {
@@ -241,6 +242,14 @@ private:
         OnCleanupRequest(request);
     }
 
+    void Handle(TEvPrivate::TEvUpdatePoolSubscription::TPtr& ev) {
+        const auto& newSubscribers = ev->Get()->Subscribers;
+        if (!UpdateSchemeboardSubscription(ev->Get()->PathId)) {
+            SendPoolInfoUpdate(PoolConfig, SecurityObject, newSubscribers);
+        }
+        Subscribers.insert(newSubscribers.begin(), newSubscribers.end());
+    }
+
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev) {
         if (ev->Get()->Key != WatchKey) {
             // Skip old paths watch notifications
@@ -265,12 +274,11 @@ private:
         UpdatePoolConfig(poolConfig);
 
         const auto& pathDescription = result->GetPathDescription().GetSelf();
-        NACLib::TSecurityObject object(pathDescription.GetOwner(), false);
-        if (object.MutableACL()->ParseFromString(pathDescription.GetEffectiveACL())) {
-            SendPoolInfoUpdate(poolConfig, object);
-        } else {
-            SendPoolInfoUpdate(poolConfig, std::nullopt);
+        SecurityObject = NACLib::TSecurityObject(pathDescription.GetOwner(), false);
+        if (!SecurityObject->MutableACL()->ParseFromString(pathDescription.GetEffectiveACL())) {
+            SecurityObject = std::nullopt;
         }
+        SendPoolInfoUpdate(poolConfig, SecurityObject, Subscribers);
     }
 
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev) {
@@ -280,7 +288,7 @@ private:
         }
 
         LOG_D("Got delete notification");
-        SendPoolInfoUpdate(std::nullopt, std::nullopt);
+        SendPoolInfoUpdate(std::nullopt, std::nullopt, Subscribers);
     }
 
 public:
@@ -346,8 +354,10 @@ public:
         RemoveRequest(request);
     }
 
-    void SendPoolInfoUpdate(const std::optional<NResourcePool::TPoolSettings>& config, const std::optional<NACLib::TSecurityObject>& securityObject) const {
-        this->Send(MakeKqpProxyID(this->SelfId().NodeId()), new TEvUpdatePoolInfo(Database, PoolId, config, securityObject));
+    void SendPoolInfoUpdate(const std::optional<NResourcePool::TPoolSettings>& config, const std::optional<NACLib::TSecurityObject>& securityObject, const std::unordered_set<TActorId>& subscribers) const {
+        for (const auto& subscriber : subscribers) {
+            this->Send(subscriber, new TEvUpdatePoolInfo(Database, PoolId, config, securityObject));
+        }
     }
 
 protected:
@@ -437,9 +447,9 @@ private:
         LOG_I("Cancel request for worker " << request->WorkerActorId << ", session id: " << request->SessionId << ", local in flight: " << LocalInFlight);
     }
 
-    void UpdateSchemeboardSubscription(TPathId pathId) {
+    bool UpdateSchemeboardSubscription(TPathId pathId) {
         if (WatchPathId && *WatchPathId == pathId) {
-            return;
+            return false;
         }
 
         if (WatchPathId) {
@@ -452,6 +462,7 @@ private:
         LOG_D("Subscribed on schemeboard notifications for path: " << pathId.ToString());
         WatchPathId = std::make_unique<TPathId>(pathId);
         this->Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchPathId(*WatchPathId, WatchKey));
+        return true;
     }
 
     void UpdatePoolConfig(const NResourcePool::TPoolSettings& poolConfig) {
@@ -493,10 +504,12 @@ protected:
 
 private:
     NResourcePool::TPoolSettings PoolConfig;
+    std::optional<NACLib::TSecurityObject> SecurityObject;
 
     // Scheme board settings
     std::unique_ptr<TPathId> WatchPathId;
     ui64 WatchKey = 0;
+    std::unordered_set<TActorId> Subscribers;
 
     // Pool state
     ui64 LocalInFlight = 0;

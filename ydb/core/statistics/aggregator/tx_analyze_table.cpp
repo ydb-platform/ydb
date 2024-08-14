@@ -19,7 +19,7 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_ANALYZE_TABLE; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeTable::Execute");
+        SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeTable::Execute. ReplyToActorId " << ReplyToActorId << " , Record " << Record);
 
         if (!Self->EnableColumnStatistics) {
             return true;
@@ -27,27 +27,31 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
 
         NIceDb::TNiceDb db(txc.DB);
 
-        const ui64 cookie = Record.GetCookie();
+        const TString operationId = Record.GetOperationId();
         const TString types = JoinVectorIntoString(TVector<ui32>(Record.GetTypes().begin(), Record.GetTypes().end()), ",");
         
         for (const auto& table : Record.GetTables()) {
             const TPathId pathId = PathIdFromPathId(table.GetPathId());
             const TString columnTags = JoinVectorIntoString(TVector<ui32>{table.GetColumnTags().begin(),table.GetColumnTags().end()},",");
 
-            // drop request with the same cookie and path from this sender
-            if (std::any_of(Self->ForceTraversals.begin(), Self->ForceTraversals.end(), 
-                [this, &pathId, &cookie](const TForceTraversal& elem) { 
+            // check existing force traversal with the same cookie and path
+            auto forceTraversal = std::find_if(Self->ForceTraversals.begin(), Self->ForceTraversals.end(), 
+                [&pathId, &operationId](const TForceTraversal& elem) { 
                     return elem.PathId == pathId 
-                        && elem.Cookie == cookie
-                        && elem.ReplyToActorId == ReplyToActorId
-                    ;})) {
+                        && elem.OperationId == operationId;});
+
+            // update existing force traversal
+            if (forceTraversal != Self->ForceTraversals.end()) {
+                SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeTable::Execute. Update existing force traversal. PathId " << pathId << " , ReplyToActorId " << ReplyToActorId);
+                forceTraversal->ReplyToActorId = ReplyToActorId;
                 return true;
             }
 
+            SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeTable::Execute. Create new force traversal operation for pathId " << pathId);
+
             // create new force trasersal
             TForceTraversal operation {
-                .OperationId = Self->NextForceTraversalOperationId,
-                .Cookie = cookie,
+                .OperationId = operationId,
                 .PathId = pathId,
                 .ColumnTags = columnTags,
                 .Types = types,
@@ -66,8 +70,6 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
 */
         }
 
-        Self->PersistNextForceTraversalOperationId(db);
-
         return true;
     }
 
@@ -77,8 +79,6 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
 };
 
 void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyze::TPtr& ev) {
-    ++NextForceTraversalOperationId;
-
     Execute(new TTxAnalyzeTable(this, ev->Get()->Record, ev->Sender), TActivationContext::AsActorContext());
 }
 

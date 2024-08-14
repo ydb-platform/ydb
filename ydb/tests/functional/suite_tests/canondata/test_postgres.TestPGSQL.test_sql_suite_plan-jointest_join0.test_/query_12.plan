@@ -41,7 +41,7 @@
                                                 "Name": "Limit"
                                             },
                                             {
-                                                "Condition": "_equijoin_column_0 = unique2",
+                                                "Condition": "b._equijoin_column_0 = c.unique2",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 15
@@ -61,7 +61,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
+                                                        "Node Type": "Stage",
                                                         "PlanNodeId": 4,
                                                         "Plans": [
                                                             {
@@ -116,7 +116,7 @@
                                                         "Node Type": "LeftJoin (MapJoin)",
                                                         "Operators": [
                                                             {
-                                                                "Condition": "unique1 = thousand",
+                                                                "Condition": "a.unique1 = b.thousand",
                                                                 "Inputs": [
                                                                     {
                                                                         "ExternalPlanNodeId": 13
@@ -186,7 +186,7 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "Collect",
+                                                                        "Node Type": "Stage",
                                                                         "PlanNodeId": 9,
                                                                         "Plans": [
                                                                             {

@@ -285,6 +285,8 @@ void TPartitionFamily::AfterRelease() {
     Partitions.clear();
     Partitions.insert(Partitions.end(), RootPartitions.begin(), RootPartitions.end());
 
+    LockedPartitions.clear();
+
     ClassifyPartitions();
     UpdatePartitionMapping(Partitions);
     // After reducing the number of partitions in the family, the list of reading sessions that can read this family may expand.
@@ -464,7 +466,7 @@ bool TPartitionFamily::PossibleForBalance(TSession* session) {
 
 void TPartitionFamily::ClassifyPartitions() {
     auto [activePartitionCount, inactivePartitionCount] = ClassifyPartitions(Partitions);
-    ChangePartitionCounters(activePartitionCount, inactivePartitionCount);
+    ChangePartitionCounters(activePartitionCount - ActivePartitionCount, inactivePartitionCount - InactivePartitionCount);
 }
 
 template<typename TPartitions>
@@ -1791,10 +1793,9 @@ void TBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& ev, const TAc
             pi->SetPartition(partitionId);
 
             auto* family = consumer->FindFamily(partitionId);
-            if (family && family->LockedPartitions.contains(partitionId)) {
+            if (family && family->Session && family->LockedPartitions.contains(partitionId)) {
                 auto* session = family->Session;
 
-                Y_ABORT_UNLESS(session != nullptr);
                 pi->SetClientNode(session->ClientNode);
                 pi->SetProxyNodeId(session->ProxyNodeId);
                 pi->SetSession(session->SessionName);

@@ -1010,10 +1010,6 @@ Value* TUnboxedImmutableCodegeneratorNode::CreateGetValue(const TCodegenContext&
     return ConstantInt::get(Type::getInt128Ty(ctx.Codegen.GetContext()), APInt(128, 2, reinterpret_cast<const uint64_t*>(&UnboxedValue)));
 }
 
-TUnboxedImmutableRunCodegeneratorNode::TUnboxedImmutableRunCodegeneratorNode(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& value)
-    : TUnboxedImmutableComputationNode(memInfo, std::move(value))
-{}
-
 TExternalCodegeneratorNode::TExternalCodegeneratorNode(TComputationMutables& mutables, EValueRepresentation kind)
     : TExternalComputationNode(mutables, kind)
 {}
@@ -2622,7 +2618,7 @@ DISubprogramAnnotator::DISubprogramAnnotator(TCodegenContext& ctx, Function* sub
 DISubprogramAnnotator::~DISubprogramAnnotator() {
     Ctx.Annotator = nullptr;
     { // necessary stub annotation of "CallInst"s
-        DIScopeAnnotator stubAnnotate(*this);
+        DIScopeAnnotator stubAnnotate(this);
         for (BasicBlock& block : *Func) {
             for (Instruction& inst : block) {
                 if (CallInst* callInst = dyn_cast_or_null<CallInst>(&inst)) {
@@ -2655,13 +2651,17 @@ DISubprogram* DISubprogramAnnotator::MakeDISubprogram(const StringRef& name, con
     );
 }
 
-DIScopeAnnotator::DIScopeAnnotator(DISubprogramAnnotator& subprogramAnnotator, const TSrcLocation& location)
-    : SubprogramAnnotator(subprogramAnnotator)
-    , Scope(SubprogramAnnotator.DebugBuilder->createLexicalBlock(SubprogramAnnotator.Subprogram, SubprogramAnnotator.MakeDIFile(location), location.line(), location.column()))
-{}
+DIScopeAnnotator::DIScopeAnnotator(DISubprogramAnnotator* subprogramAnnotator, const TSrcLocation& location)
+    : SubprogramAnnotator(nullptr)
+    , Scope(nullptr)
+{
+    Y_ENSURE(subprogramAnnotator != nullptr);
+    SubprogramAnnotator = subprogramAnnotator;
+    Scope = SubprogramAnnotator->DebugBuilder->createLexicalBlock(SubprogramAnnotator->Subprogram, SubprogramAnnotator->MakeDIFile(location), location.line(), location.column());
+}
 
 Instruction* DIScopeAnnotator::operator()(Instruction* inst, const TSrcLocation& location) const {
-    inst->setDebugLoc(DILocation::get(SubprogramAnnotator.Ctx.Codegen.GetContext(), location.line(), location.column(), Scope));
+    inst->setDebugLoc(DILocation::get(SubprogramAnnotator->Ctx.Codegen.GetContext(), location.line(), location.column(), Scope));
     return inst;
 }
 

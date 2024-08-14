@@ -62,7 +62,7 @@
                                                 "Predicate": "Not Exist(item.b.unique2) And item.a.ten == 2 Or item.b.hundred == 3"
                                             },
                                             {
-                                                "Condition": "unique2 = tenthous",
+                                                "Condition": "a.unique2 = b.tenthous",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 8
@@ -82,7 +82,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
+                                                        "Node Type": "Stage",
                                                         "PlanNodeId": 4,
                                                         "Plans": [
                                                             {
@@ -91,7 +91,7 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "Collect",
+                                                                        "Node Type": "Stage",
                                                                         "PlanNodeId": 2,
                                                                         "Plans": [
                                                                             {
@@ -133,7 +133,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
+                                                        "Node Type": "Stage",
                                                         "PlanNodeId": 7,
                                                         "Plans": [
                                                             {

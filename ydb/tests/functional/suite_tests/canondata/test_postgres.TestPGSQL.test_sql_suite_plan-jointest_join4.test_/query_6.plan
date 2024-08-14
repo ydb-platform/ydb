@@ -41,7 +41,7 @@
                                                 "Name": "Limit"
                                             },
                                             {
-                                                "Condition": "zt3.f3 = f1",
+                                                "Condition": "zt3.f3 = zt1.f1",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 27
@@ -61,7 +61,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
+                                                        "Node Type": "Stage",
                                                         "PlanNodeId": 24,
                                                         "Plans": [
                                                             {
@@ -122,8 +122,8 @@
                                                         "Operators": [
                                                             {
                                                                 "Inputs": [],
-                                                                "Iterator": "precompute_2_0",
-                                                                "Name": "Iterator"
+                                                                "Name": "ToFlow",
+                                                                "ToFlow": "precompute_2_0"
                                                             }
                                                         ],
                                                         "PlanNodeId": 26
@@ -178,7 +178,7 @@
                                         "Node Type": "LeftJoin (MapJoin)",
                                         "Operators": [
                                             {
-                                                "Condition": "f2 = f3",
+                                                "Condition": "zt2.f2 = zt3.f3",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 13
@@ -198,7 +198,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
+                                                        "Node Type": "Stage",
                                                         "PlanNodeId": 10,
                                                         "Plans": [
                                                             {
@@ -259,8 +259,8 @@
                                                         "Operators": [
                                                             {
                                                                 "Inputs": [],
-                                                                "Iterator": "precompute_0_0",
-                                                                "Name": "Iterator"
+                                                                "Name": "ToFlow",
+                                                                "ToFlow": "precompute_0_0"
                                                             }
                                                         ],
                                                         "PlanNodeId": 12

@@ -7,18 +7,18 @@
 
 namespace NKikimr::NOlap {
 
-::NTls::TValue<NMiniKQL::IBuiltinFunctionRegistry::TPtr> Registry;
+::NTls::TValue<TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry>> Registry;
 
 bool TKernelsRegistry::Parse(const TString& serialized) {
     Y_ABORT_UNLESS(!!serialized);
     if (!Registry.Get()) {
-        Registry = NMiniKQL::CreateBuiltinRegistry();
+        auto registry = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry())->Clone();
+        NMiniKQL::FillStaticModules(*registry.Get());
+        Registry = std::move(registry);
     }
-    auto copy = Registry.Get();
-    auto functionRegistry = NMiniKQL::CreateFunctionRegistry(std::move(copy))->Clone();
-    NMiniKQL::FillStaticModules(*functionRegistry);
+
     auto nodeFactory = NMiniKQL::GetBuiltinFactory();
-    auto kernels =  NYql::LoadKernels(serialized, *functionRegistry, nodeFactory);
+    auto kernels =  NYql::LoadKernels(serialized, *Registry.Get(), nodeFactory);
     Kernels.swap(kernels);
     for (const auto& kernel : Kernels) {
         arrow::compute::Arity arity(kernel->signature->in_types().size(), kernel->signature->is_varargs());

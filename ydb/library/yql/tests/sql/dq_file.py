@@ -6,7 +6,7 @@ import re
 import yatest.common
 from yql_utils import get_supported_providers, yql_binary_path, is_xfail, is_skip_forceblocks, get_param, \
     normalize_source_code_path, dump_table_yson, get_gateway_cfg_suffix, do_custom_query_check, normalize_result, \
-    stable_result_file, stable_table_file
+    stable_result_file, stable_table_file, is_with_final_result_issues
 
 from utils import get_config, DATA_PATH
 from file_common import run_file, run_file_no_cache
@@ -32,10 +32,16 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     if force_blocks and is_skip_forceblocks(config):
         pytest.skip('skip force blocks requested')
 
+    extra_args=["--emulate-yt"]
     if what == 'Analyze':
-        (res, tables_res) = run_file_no_cache('dq', suite, case, cfg, config, yql_http_file_server, DQRUN_PATH, extra_args=["--emulate-yt", "--analyze-query", "--optimize"])
+        extra_args += ["--analyze-query", "--optimize"]
+    if is_with_final_result_issues(config):
+        extra_args += ["--with-final-issues"]
+
+    if what == 'Analyze':
+        (res, tables_res) = run_file_no_cache('dq', suite, case, cfg, config, yql_http_file_server, DQRUN_PATH, extra_args=extra_args)
     else:
-        (res, tables_res) = run_file('dq', suite, case, cfg, config, yql_http_file_server, DQRUN_PATH, extra_args=["--emulate-yt"])
+        (res, tables_res) = run_file('dq', suite, case, cfg, config, yql_http_file_server, DQRUN_PATH, extra_args=extra_args)
 
     to_canonize = []
 

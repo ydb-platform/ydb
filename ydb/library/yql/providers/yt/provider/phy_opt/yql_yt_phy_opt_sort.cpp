@@ -73,7 +73,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Sort(TExprBase node, TE
     auto keySelectorLambda = sort.KeySelectorLambda();
     auto cluster = TString{GetClusterName(sort.Input())};
     TSyncMap syncList;
-    if (!IsYtCompleteIsolatedLambda(keySelectorLambda.Ref(), syncList, cluster, true, false)) {
+    if (!IsYtCompleteIsolatedLambda(keySelectorLambda.Ref(), syncList, cluster, false)) {
         return node;
     }
 

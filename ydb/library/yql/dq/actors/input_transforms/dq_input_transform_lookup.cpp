@@ -168,9 +168,8 @@ private: //IDqComputeActorAsyncInput
             const auto maxKeysInRequest = LookupSource.first->GetMaxSupportedKeysInRequest();
             IDqAsyncLookupSource::TUnboxedValueMap keysForLookup{maxKeysInRequest, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual()};
             while (
-                ((InputFlowFetchStatus = FetchWideInputValue(inputRowItems)) == NUdf::EFetchStatus::Ok) && 
-                (keysForLookup.size() < maxKeysInRequest)
-            ) {
+                (keysForLookup.size() < maxKeysInRequest) &&
+                ((InputFlowFetchStatus = FetchWideInputValue(inputRowItems)) == NUdf::EFetchStatus::Ok)) {
                 NUdf::TUnboxedValue* keyItems;
                 NUdf::TUnboxedValue key = HolderFactory.CreateDirectArrayHolder(InputJoinColumns.size(), keyItems);
                 for (size_t i = 0; i != InputJoinColumns.size(); ++i) {

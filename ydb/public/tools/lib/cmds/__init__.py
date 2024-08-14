@@ -314,9 +314,12 @@ def enable_pqcd(arguments):
 def merge_two_yaml_configs(main_yaml_config, additioanal_yaml_config):
     return merge(main_yaml_config, additioanal_yaml_config)
 
-def get_additional_yaml_config(path):
-    with open(os.path.join("/ydb_data", path)) as fh:
-        additional_yaml_config = yaml.load(fh, Loader=yaml.FullLoader)
+def get_additional_yaml_config(arguments, path):
+    if arguments.ydb_working_dir:
+        with open(os.path.join(arguments.ydb_working_dir, path)) as fh:
+            additional_yaml_config = yaml.load(fh, Loader=yaml.FullLoader)
+    else:
+        raise Exception("No working directory")
 
     return additional_yaml_config
 
@@ -386,7 +389,7 @@ def deploy(arguments):
     )
 
     if os.getenv("YDB_CONFIG_PATCH") is not None:      
-        additional_yaml_config = get_additional_yaml_config(os.getenv("YDB_CONFIG_PATCH"))
+        additional_yaml_config = get_additional_yaml_config(arguments, os.getenv("YDB_CONFIG_PATCH"))
         configuration.yaml_config = merge_two_yaml_configs(configuration.yaml_config, additional_yaml_config)
     
     cluster = kikimr_cluster_factory(configuration)

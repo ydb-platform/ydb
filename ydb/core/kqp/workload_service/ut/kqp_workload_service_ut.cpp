@@ -480,7 +480,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
         );
 
         IYdbSetup::WaitFor(FUTURE_WAIT_TIMEOUT, "pool drop", [ydb, poolId](TString& errorString) {
-            auto kind = ydb->Navigate(TStringBuilder() << ".resource_pools/" << poolId)->ResultSet.at(0).Kind;
+            auto kind = ydb->Navigate(TStringBuilder() << ".metadata/workload_manager/pools/" << poolId)->ResultSet.at(0).Kind;
 
             errorString = TStringBuilder() << "kind = " << kind;
             return kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindUnknown;
@@ -500,7 +500,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
             CREATE RESOURCE POOL )" << poolId << R"( WITH (
                 CONCURRENT_QUERY_LIMIT=1
             );
-            GRANT DESCRIBE SCHEMA ON `/Root/.resource_pools/)" << poolId << "` TO `" << userSID << "`;"
+            GRANT DESCRIBE SCHEMA ON `/Root/.metadata/workload_manager/pools/)" << poolId << "` TO `" << userSID << "`;"
         );
         ydb->WaitPoolAccess(userSID, NACLib::EAccessRights::DescribeSchema, poolId);
 
@@ -510,7 +510,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), TStringBuilder() << "You don't have access permissions for resource pool " << poolId);
 
         ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
-            GRANT SELECT ROW ON `/Root/.resource_pools/)" << poolId << "` TO `" << userSID << "`;"
+            GRANT SELECT ROW ON `/Root/.metadata/workload_manager/pools/)" << poolId << "` TO `" << userSID << "`;"
         );
         ydb->WaitPoolAccess(userSID, NACLib::EAccessRights::SelectRow, poolId);
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings));
@@ -524,7 +524,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
         const TString& userSID = "user@test";
         ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
             GRANT DESCRIBE SCHEMA ON `/Root` TO `)" << userSID << R"(`;
-            GRANT DESCRIBE SCHEMA, SELECT ROW ON `/Root/.resource_pools/)" << ydb->GetSettings().PoolId_ << "` TO `" << userSID << "`;"
+            GRANT DESCRIBE SCHEMA, SELECT ROW ON `/Root/.metadata/workload_manager/pools/)" << ydb->GetSettings().PoolId_ << "` TO `" << userSID << "`;"
         );
         ydb->WaitPoolAccess(userSID, NACLib::EAccessRights::DescribeSchema | NACLib::EAccessRights::SelectRow);
 

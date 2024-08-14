@@ -74,10 +74,6 @@ await queryClient.Exec(@"
 
 ```c#
 await queryClient.Exec(@"
-    DECLARE $id AS Uint64;
-    DECLARE $title AS Utf8;
-    DECLARE $release_date AS Date;
-
     UPSERT INTO series (series_id, title, release_date) VALUES
         ($id, $title, $release_date);
     ",
@@ -90,16 +86,12 @@ await queryClient.Exec(@"
 );
 ```
 
-{% include [pragmatablepathprefix.md](auxilary/pragmatablepathprefix.md) %}
-
 {% include [steps/04_query_processing.md](steps/04_query_processing.md) %}
 
 Для чтения YQL-запросов используется методы `queryClient.ReadRow` или `queryClient.ReadAllRows`. SDK позволяет в явном виде контролировать выполнение транзакций и настраивать необходимый режим выполнения транзакций с помощью класса `TxMode`. Во фрагменте кода, приведенном ниже, используется транзакция с режимом `NoTx` и автоматическим коммитом после выполнения запроса. Значения параметров запроса передаются в виде словаря имя-значение в аргументе `parameters`.
 
 ```c#
 var row = await queryClient.ReadRow(@"
-        DECLARE $id AS Uint64;
-
         SELECT
             series_id,
             title,
@@ -132,7 +124,7 @@ foreach (var row in resultSet.Rows)
 
 ```c#
 await queryClient.Stream(
-    $"SELECT title FROM seasons ORDER BY series_id, season_id LIMIT {sizeSeasons} OFFSET 9",
+    $"SELECT title FROM seasons ORDER BY series_id, season_id;",
     async stream =>
     {
         await foreach (var part in stream)

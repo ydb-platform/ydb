@@ -73,11 +73,7 @@ await queryClient.Exec(@"
 Code snippet for data insert/update:
 
 ```c#
-await _queryClient.Exec(@"
-    DECLARE $id AS Uint64;
-    DECLARE $title AS Utf8;
-    DECLARE $release_date AS Date;
-
+await queryClient.Exec(@"
     UPSERT INTO series (series_id, title, release_date) VALUES
         ($id, $title, $release_date);
     ",
@@ -90,16 +86,12 @@ await _queryClient.Exec(@"
 );
 ```
 
-{% include [pragmatablepathprefix.md](auxilary/pragmatablepathprefix.md) %}
-
 {% include [steps/04_query_processing.md](steps/04_query_processing.md) %}
 
 To execute YQL queries, use the `queryClient.ReadRow` или `queryClient.ReadAllRows` method. The SDK lets you explicitly control the execution of transactions and configure the transaction execution mode using the `TxMode` enum. In the code snippet below, a transaction with the `NoTx` mode and an automatic commit after executing the request is used. The values of the request parameters are passed in the form of a dictionary name-value in the `parameters` argument.
 
 ```c#
-var row = await _queryClient.ReadRow(@"
-        DECLARE $id AS Uint64;
-
+var row = await queryClient.ReadRow(@"
         SELECT
             series_id,
             title,
@@ -132,7 +124,7 @@ foreach (var row in resultSet.Rows)
 
 ```c#
 await queryClient.Stream(
-    $"SELECT title FROM seasons ORDER BY series_id, season_id LIMIT {sizeSeasons} OFFSET 9",
+    $"SELECT title FROM seasons ORDER BY series_id, season_id;",
     async stream =>
     {
         await foreach (var part in stream)

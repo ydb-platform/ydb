@@ -1753,20 +1753,19 @@ struct TDecimalKernelExecs
             (TUntypedBinaryArrayOptFuncPtr)arrayArrayFunc);
     }
 
-    template<ui8 maxPrecision>
-    static arrow::Status ExecSwitch(ui8 precision, arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-        if (precision == maxPrecision) {
-            return ExecImpl<maxPrecision>(kernelCtx, batch, res);
-        } else if constexpr(maxPrecision > 1) {
-            return ExecSwitch<maxPrecision-1>(precision, kernelCtx, batch, res);
-        } else {
-            MKQL_ENSURE(false, TStringBuilder() << "Wrong precision: " << (int)precision);
-        }
+    using ExecFunc = arrow::Status(*)(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) ;
+
+    template <size_t... Is>
+    static constexpr auto GenerateTable(std::index_sequence<Is...>) {
+        return std::array<ExecFunc, sizeof...(Is)>{ExecImpl<Is+1>...};
     }
 
     static arrow::Status Exec(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         ui8 precision = static_cast<TDecimalKernel::TKernelState*>(kernelCtx->state())->Precision;
-        return ExecSwitch<35>(precision, kernelCtx, batch, res);
+        MKQL_ENSURE(precision >= 1&& precision <= 35, TStringBuilder() << "Wrong precision: " << (int)precision);
+
+        static constexpr auto jumpTable = GenerateTable(std::make_index_sequence<35>{});
+        return jumpTable[precision-1](kernelCtx, batch, res);
     }
 };
 

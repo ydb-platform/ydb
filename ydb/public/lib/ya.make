@@ -4,7 +4,6 @@ RECURSE(
     experimental
     fq
     idx_test
-    json_value
     operation_id
     protobuf
     scheme_types

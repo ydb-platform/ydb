@@ -3,7 +3,7 @@
 #include <util/string/vector.h>
 #include <library/cpp/json/json_prettifier.h>
 
-#include <ydb/public/lib/json_value/ydb_json_value.h>
+#include <ydb-cpp-sdk/library/json_value/ydb_json_value.h>
 #include <ydb/library/arrow_parquet/result_set_parquet_printer.h>
 
 #include <iomanip>

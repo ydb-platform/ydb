@@ -12,7 +12,7 @@ ENDIF()
 FORK_SUBTESTS()
 
 PEERDIR(
-    ydb/public/lib/json_value
+    ydb/public/sdk/cpp_v2/src/library/json_value
     ydb/public/lib/yson_value
     ydb/public/sdk/cpp/client/ydb_params
 )

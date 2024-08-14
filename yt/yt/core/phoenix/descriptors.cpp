@@ -102,21 +102,6 @@ std::vector<TTypeTag> TTypeDescriptor::GetBaseTypeTags() const
     return result;
 }
 
-void* TTypeDescriptor::TryConstruct() const
-{
-    return Constructor_ ? Constructor_() : nullptr;
-}
-
-void* TTypeDescriptor::ConstructOrThrow() const
-{
-    auto* instance = TryConstruct();
-    if (!instance) {
-        THROW_ERROR_EXCEPTION("Cannot instantiate object of type %v",
-            Name_);
-    }
-    return instance;
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 const TUniverseSchemaPtr& TUniverseDescriptor::GetSchema() const

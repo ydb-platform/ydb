@@ -5,15 +5,14 @@ PROGRAM(bison)
 LICENSE(
     Bison-exception-2.2 AND
     GPL-3.0-only AND
-    GPL-3.0-or-later AND
-    GPL-3.0-or-later WITH Bison-exception-2.2
+    GPL-3.0-or-later
 )
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(3.5.4)
+VERSION(3.7.6)
 
-ORIGINAL_SOURCE(mirror://gnu/bison/bison-3.5.4.tar.gz)
+ORIGINAL_SOURCE(mirror://gnu/bison/bison-3.7.6.tar.gz)
 
 PEERDIR(
     contrib/tools/bison/lib
@@ -30,7 +29,7 @@ NO_RUNTIME()
 
 CFLAGS(
     -DEXEEXT=\"\"
-    -DINSTALLDIR=\"/var/empty/bison-3.5.4/bin\"
+    -DINSTALLDIR=\"/var/empty/bison-3.7.6/bin\"
 )
 
 SRCS(
@@ -41,22 +40,27 @@ SRCS(
     src/closure.c
     src/complain.c
     src/conflicts.c
+    src/counterexample.c
+    src/derivation.c
     src/derives.c
     src/files.c
     src/fixits.c
     src/getargs.c
+    src/glyphs.c
     src/gram.c
     src/graphviz.c
     src/ielr.c
     src/lalr.c
     src/location.c
     src/lr0.c
+    src/lssi.c
     src/main.c
     src/muscle-tab.c
     src/named-ref.c
     src/nullable.c
     src/output.c
     src/parse-gram.c
+    src/parse-simulation.c
     src/print-graph.c
     src/print-xml.c
     src/print.c
@@ -66,7 +70,9 @@ SRCS(
     src/scan-code-c.c
     src/scan-gram-c.c
     src/scan-skel-c.c
+    src/state-item.c
     src/state.c
+    src/strversion.c
     src/symlist.c
     src/symtab.c
     src/tables.c

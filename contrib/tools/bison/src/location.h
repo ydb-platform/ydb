@@ -1,6 +1,6 @@
 /* Locations for Bison
 
-   Copyright (C) 2002, 2004-2015, 2018-2020 Free Software Foundation,
+   Copyright (C) 2002, 2004-2015, 2018-2021 Free Software Foundation,
    Inc.
 
    This file is part of Bison, the GNU Compiler Compiler.
@@ -16,7 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #ifndef LOCATION_H_
 # define LOCATION_H_
@@ -124,12 +124,12 @@ void caret_init (void);
    left-over by the usage of location_caret.  */
 void caret_free (void);
 
-/* Quote the line containing LOC onto OUT.  Highlight the part of LOC
-   with the color STYLE.  */
+/* If -fcaret is enabled, quote the line containing LOC onto OUT.
+   Highlight the part of LOC with the color STYLE.  */
 void location_caret (location loc, const char* style, FILE *out);
 
-/* Display a suggestion of replacement for LOC with S.  To call after
-   location_caret.  */
+/* If -fcaret is enabled, display a suggestion of replacement for LOC
+   with S.  To call after location_caret.  */
 void location_caret_suggestion (location loc, const char *s, FILE *out);
 
 /* Return -1, 0, 1, depending whether a is before, equal, or

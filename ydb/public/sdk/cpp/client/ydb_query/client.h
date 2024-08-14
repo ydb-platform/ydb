@@ -58,9 +58,11 @@ class TSession;
 class TQueryClient {
     friend class TSession;
     friend class NRetry::Async::TRetryContext<TQueryClient, TAsyncExecuteQueryResult>;
+    friend class NRetry::Async::TRetryContext<TQueryClient, TAsyncStatus>;
 
 public:
-    using TQueryFunc = std::function<TAsyncExecuteQueryResult(TSession session)>;
+    using TQueryResultFunc = std::function<TAsyncExecuteQueryResult(TSession session)>;
+    using TQueryStatusFunc = std::function<TAsyncStatus(TSession session)>;
     using TQueryWithoutSessionFunc = std::function<TAsyncExecuteQueryResult(TQueryClient& client)>;
     using TSettings = TClientSettings;
     using TSession = TSession;
@@ -82,7 +84,9 @@ public:
     TAsyncExecuteQueryIterator StreamExecuteQuery(const TString& query, const TTxControl& txControl,
         const TParams& params, const TExecuteQuerySettings& settings = TExecuteQuerySettings());
 
-    TAsyncExecuteQueryResult RetryQuery(TQueryFunc&& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
+    TAsyncExecuteQueryResult RetryQuery(TQueryResultFunc&& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
+
+    TAsyncStatus RetryQuery(TQueryStatusFunc&& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
 
     TAsyncExecuteQueryResult RetryQuery(const TString& query, const TTxControl& txControl,
         TDuration timeout, bool isIndempotent);

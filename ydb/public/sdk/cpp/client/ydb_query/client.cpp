@@ -18,7 +18,8 @@
 
 namespace NYdb::NQuery {
 
-using TRetryContextAsync = NRetry::Async::TRetryContext<TQueryClient, TAsyncExecuteQueryResult>;
+using TRetryContextResultAsync = NRetry::Async::TRetryContext<TQueryClient, TAsyncExecuteQueryResult>;
+using TRetryContextStatusAsync = NRetry::Async::TRetryContext<TQueryClient, TAsyncStatus>;
 
 NYdb::NRetry::TRetryOperationSettings GetRetrySettings(TDuration timeout, bool isIndempotent) {
     return NYdb::NRetry::TRetryOperationSettings()
@@ -574,9 +575,14 @@ i64 TQueryClient::GetCurrentPoolSize() const {
     return Impl_->GetCurrentPoolSize();
 }
 
-TAsyncExecuteQueryResult TQueryClient::RetryQuery(TQueryFunc&& queryFunc, TRetryOperationSettings settings)
+TAsyncExecuteQueryResult TQueryClient::RetryQuery(TQueryResultFunc&& queryFunc, TRetryOperationSettings settings)
 {
-    TRetryContextAsync::TPtr ctx(new NRetry::Async::TRetryWithSession(*this, std::move(queryFunc), settings));
+    TRetryContextResultAsync::TPtr ctx(new NRetry::Async::TRetryWithSession(*this, std::move(queryFunc), settings));
+    return ctx->Execute();
+}
+
+TAsyncStatus TQueryClient::RetryQuery(TQueryStatusFunc&& queryFunc, TRetryOperationSettings settings) {
+    TRetryContextStatusAsync::TPtr ctx(new NRetry::Async::TRetryWithSession(*this, std::move(queryFunc), settings));
     return ctx->Execute();
 }
 
@@ -587,7 +593,7 @@ TAsyncExecuteQueryResult TQueryClient::RetryQuery(const TString& query, const TT
     auto queryFunc = [&query, &txControl](TSession session, TDuration duration) -> TAsyncExecuteQueryResult {
         return session.ExecuteQuery(query, txControl, TExecuteQuerySettings().ClientTimeout(duration));
     };
-    TRetryContextAsync::TPtr ctx(new NRetry::Async::TRetryWithSession(*this, std::move(queryFunc), settings));
+    TRetryContextResultAsync::TPtr ctx(new NRetry::Async::TRetryWithSession(*this, std::move(queryFunc), settings));
     return ctx->Execute();
 }
 

@@ -1236,7 +1236,7 @@ public:
         TKernel::ENullMode nullMode);
 
     const arrow::compute::ScalarKernel& GetArrowKernel() const final;
-    std::shared_ptr<arrow::compute::ScalarKernel> MakeArrowKernel() const final;
+    std::shared_ptr<arrow::compute::ScalarKernel> MakeArrowKernel(const TVector<TType*>& argTypes, TType* resultType) const final;
     bool IsPolymorphic() const final;
 
 private:
@@ -1586,6 +1586,29 @@ void AddDateComparisonKernels(TKernelFamilyBase& owner) {
     AddBinaryPredicateKernelPoly<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval64>, TPred>(owner);
     AddBinaryPredicateKernelPoly<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval>, TPred>(owner);
     AddBinaryPredicateKernelPoly<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval64>, TPred>(owner);
+}
+
+class TDecimalKernel : public TKernel {
+public:
+    struct TKernelState : arrow::compute::KernelState {
+        ui8 Precision;
+    };
+
+    TDecimalKernel(const TKernelFamily& family, const std::vector<NUdf::TDataTypeId>& argTypes,
+        NUdf::TDataTypeId returnType, TStatelessArrayKernelExec exec,
+        TKernel::ENullMode nullMode);
+
+    const arrow::compute::ScalarKernel& GetArrowKernel() const final;
+    std::shared_ptr<arrow::compute::ScalarKernel> MakeArrowKernel(const TVector<TType*>& argTypes, TType* resultType) const final;
+    bool IsPolymorphic() const final;
+
+private:
+    TStatelessArrayKernelExec Exec;
+};
+
+template<template<ui8> class TFunc>
+void AddBinaryDecimalKernels(TKernelFamilyBase& owner) {
+    Y_UNUSED(owner);
 }
 
 }

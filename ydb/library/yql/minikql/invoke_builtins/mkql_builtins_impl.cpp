@@ -262,12 +262,57 @@ const arrow::compute::ScalarKernel& TPlainKernel::GetArrowKernel() const {
     return *ArrowKernel;
 }
 
-std::shared_ptr<arrow::compute::ScalarKernel> TPlainKernel::MakeArrowKernel() const {
+std::shared_ptr<arrow::compute::ScalarKernel> TPlainKernel::MakeArrowKernel(const TVector<TType*>&, TType*) const {
     return {};
 }
 
 bool TPlainKernel::IsPolymorphic() const {
     return false;
+}
+
+TDecimalKernel::TDecimalKernel(const TKernelFamily& family, const std::vector<NUdf::TDataTypeId>& argTypes, 
+    NUdf::TDataTypeId returnType, TStatelessArrayKernelExec exec,
+    TKernel::ENullMode nullMode)
+    : TKernel(family, argTypes, returnType, nullMode)
+    , Exec(exec)
+{
+}
+
+const arrow::compute::ScalarKernel& TDecimalKernel::GetArrowKernel() const {
+    MKQL_ENSURE(false, "Unimplemented");
+}
+
+std::shared_ptr<arrow::compute::ScalarKernel> TDecimalKernel::MakeArrowKernel(const TVector<TType*>& argTypes, TType* resultType) const {
+    MKQL_ENSURE(ArgTypes.size() == 2, "Require 2 arguments");
+    MKQL_ENSURE(argTypes.size() == 2, "Require 2 arguments");
+    
+    auto decimalType1 = static_cast<TDataDecimalType*>(argTypes[0]);
+    auto decimalType2 = static_cast<TDataDecimalType*>(argTypes[1]);
+    auto decimalResultType = static_cast<TDataDecimalType*>(resultType);
+
+    MKQL_ENSURE(decimalType1->GetParams() == decimalType2->GetParams(), "Same precision/scale required");
+    MKQL_ENSURE(decimalType1->GetParams() == decimalResultType->GetParams(), "Same precision/scale required");
+
+    auto type1 = ArgTypes[0];
+    auto type2 = ArgTypes[1];
+
+    ui8 precision = decimalType1->GetParams().first;
+
+    auto k = std::make_shared<arrow::compute::ScalarKernel>(std::vector<arrow::compute::InputType>{
+        GetPrimitiveInputArrowType(NYql::NUdf::GetDataSlot(type1)), GetPrimitiveInputArrowType(NYql::NUdf::GetDataSlot(type2))
+    }, GetPrimitiveOutputArrowType(NYql::NUdf::GetDataSlot(ReturnType)), Exec);
+    k->null_handling = arrow::compute::NullHandling::INTERSECTION;
+    k->init = [precision](arrow::compute::KernelContext*, const arrow::compute::KernelInitArgs&) {
+        auto state = std::make_unique<TDecimalKernel::TKernelState>();
+        state->Precision = precision;
+        return arrow::Result(std::move(state));
+    };
+
+    return k;
+}
+
+bool TDecimalKernel::IsPolymorphic() const {
+    return true;
 }
 
 void AddUnaryKernelImpl(TKernelFamilyBase& owner, NUdf::EDataSlot arg1, NUdf::EDataSlot res,

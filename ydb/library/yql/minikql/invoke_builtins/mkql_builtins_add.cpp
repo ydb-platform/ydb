@@ -393,6 +393,8 @@ void RegisterAdd(TKernelFamilyMap& kernelFamilyMap) {
                     TFuncInstance, TFuncInstance::NullMode>;
     AddBinaryKernelImpl(*family, NUdf::EDataSlot::Decimal, NUdf::EDataSlot::Decimal, NUdf::EDataSlot::Decimal, &TExecs::Exec, TFuncInstance::NullMode);
 
+    AddBinaryDecimalKernels<TDecimalAdd>(*family);
+
     kernelFamilyMap["Add"] = std::move(family);
 }
 

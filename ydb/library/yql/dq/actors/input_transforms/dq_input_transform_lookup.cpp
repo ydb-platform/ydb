@@ -385,10 +385,8 @@ THashMap<TStringBuf, size_t> GetNameToIndex(const ::google::protobuf::RepeatedPt
 
 THashMap<TStringBuf, size_t> GetNameToIndex(const NMiniKQL::TStructType* type) {
     THashMap<TStringBuf, size_t> result;
-    for (ui32 i = 0; i != type->GetMembersCount()//names.size()
-                         ; ++i) {
-        auto name = type->GetMemberName(i);
-        result[name] = i;
+    for (ui32 i = 0; i != type->GetMembersCount(); ++i) {
+        result[type->GetMemberName(i)] = i;
     }
     return result;
 }
@@ -431,12 +429,12 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
 
     const auto rightRowType = DeserializeStructType(settings.GetRightSource().GetSerializedRowType(), args.TypeEnv);
 
-    auto leftJoinColumns = GetNameToIndex(narrowInputRowType);
+    auto inputColumns = GetNameToIndex(narrowInputRowType);
     auto rightJoinColumns = GetNameToIndex(settings.GetRightJoinKeyNames());
 
     auto leftJoinColumnIndexes = GetJoinColumnIndexes(
             settings.GetLeftJoinKeyNames(),
-            leftJoinColumns);
+            inputColumns);
     auto rightJoinColumnIndexes  = GetJoinColumnIndexes(rightRowType, rightJoinColumns);
     Y_ABORT_UNLESS(rightJoinColumnIndexes.size() == rightJoinColumns.size());
     Y_ABORT_UNLESS(leftJoinColumnIndexes.size() == rightJoinColumnIndexes.size());

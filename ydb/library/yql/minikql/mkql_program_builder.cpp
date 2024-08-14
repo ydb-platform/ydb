@@ -237,40 +237,31 @@ bool ReduceOptionalElements(const TType* type, const TArrayRef<const ui32>& test
     return multiOptional;
 }
 
-std::vector<TType*> ValidateBlockStreamType(const TType* streamType) {
-    const auto wideComponents = GetWideComponents(AS_TYPE(TStreamType, streamType));
+static std::vector<TType*> ValidateBlockItems(const TArrayRef<TType* const>& wideComponents) {
     MKQL_ENSURE(wideComponents.size() > 0, "Expected at least one column");
-    std::vector<TType*> streamItems;
-    streamItems.reserve(wideComponents.size());
+    std::vector<TType*> items;
+    items.reserve(wideComponents.size());
     bool isScalar;
-    for (size_t i = 0; i < wideComponents.size(); ++i) {
-        auto blockType = AS_TYPE(TBlockType, wideComponents[i]);
+    for (const auto& wideComponent : wideComponents) {
+        auto blockType = AS_TYPE(TBlockType, wideComponent);
         isScalar = blockType->GetShape() == TBlockType::EShape::Scalar;
         auto withoutBlock = blockType->GetItemType();
-        streamItems.push_back(withoutBlock);
+        items.push_back(withoutBlock);
     }
 
     MKQL_ENSURE(isScalar, "Last column should be scalar");
-    MKQL_ENSURE(AS_TYPE(TDataType, streamItems.back())->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected Uint64");
-    return streamItems;
+    MKQL_ENSURE(AS_TYPE(TDataType, items.back())->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected Uint64");
+    return items;
+}
+
+std::vector<TType*> ValidateBlockStreamType(const TType* streamType) {
+    const auto wideComponents = GetWideComponents(AS_TYPE(TStreamType, streamType));
+    return ValidateBlockItems(wideComponents);
 }
 
 std::vector<TType*> ValidateBlockFlowType(const TType* flowType) {
     const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flowType));
-    MKQL_ENSURE(wideComponents.size() > 0, "Expected at least one column");
-    std::vector<TType*> flowItems;
-    flowItems.reserve(wideComponents.size());
-    bool isScalar;
-    for (size_t i = 0; i < wideComponents.size(); ++i) {
-        auto blockType = AS_TYPE(TBlockType, wideComponents[i]);
-        isScalar = blockType->GetShape() == TBlockType::EShape::Scalar;
-        auto withoutBlock = blockType->GetItemType();
-        flowItems.push_back(withoutBlock);
-    }
-
-    MKQL_ENSURE(isScalar, "Last column should be scalar");
-    MKQL_ENSURE(AS_TYPE(TDataType, flowItems.back())->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected Uint64");
-    return flowItems;
+    return ValidateBlockItems(wideComponents);
 }
 
 } // namespace

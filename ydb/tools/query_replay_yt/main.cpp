@@ -277,6 +277,7 @@ int main(int argc, const char** argv) {
     }
 
     spec.MapperSpec(userJobSpec);
+    spec.CoreTablePath(config.CoreTablePath);
 
     client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.YqlLogLevel));
 

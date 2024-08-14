@@ -7,7 +7,6 @@ import time
 import ydb
 
 
-
 dir = os.path.dirname(__file__)
 config = configparser.ConfigParser()
 config_file_path = f"{dir}/../../config/ydb_qa_db.ini"
@@ -15,6 +14,7 @@ config.read(config_file_path)
 
 DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
 DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
+
 
 def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type):
     if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
@@ -29,7 +29,6 @@ def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type):
             "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
         ]
 
-    
     results = {}
     with ydb.Driver(
         endpoint=DATABASE_ENDPOINT,
@@ -74,14 +73,14 @@ def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type):
             query = ydb.ScanQuery(history_query, {})
             it = driver.table_client.scan_query(query)
             query_result = []
-            
+
             while True:
                 try:
                     result = next(it)
                     query_result = query_result + result.result_set.rows
                 except StopIteration:
                     break
-            
+
             for row in query_result:
                 if not row["full_name"].decode("utf-8") in results:
                     results[row["full_name"].decode("utf-8")] = {}
@@ -93,7 +92,8 @@ def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type):
                     "status_description": row["status_description"],
                 }
         end_time = time.time()
-        print(f'durations of getting history for {len(test_names_array)} tests :{end_time-start_time} sec')
+        print(
+            f'durations of getting history for {len(test_names_array)} tests :{end_time-start_time} sec')
         return results
 
 

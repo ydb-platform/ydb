@@ -159,7 +159,7 @@ public:
         }
 
         for (ui32 i = 0, e = labeledCounters->GetCounters().Size(); i < e; ++i) {
-            if(!strlen(labeledCounters->GetCounterName(i))) 
+            if(!strlen(labeledCounters->GetCounterName(i)))
                 continue;
             const ui64& value = labeledCounters->GetCounters()[i].Get();
             const ui64& id = labeledCounters->GetIds()[i].Get();
@@ -1464,7 +1464,8 @@ TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletLabeledCo
                     continue;
                 }
                 if (groupNames[j] == "Client") {
-                    group = group->GetSubgroup("ConsumerPath", NPersQueue::ConvertOldConsumerName(groups[j], ctx));
+                    group = group->GetSubgroup("ConsumerPath",
+                                         NPersQueue::ConvertOldConsumerName(groups[j], AppData(ctx)->PQConfig));
                     continue;
                 }
             }
@@ -2058,7 +2059,7 @@ public:
             if (groups.size() == 1) { //topic case
                 ff = groups[0];
             } else if (groups.size() == 3) { //client important topic
-                res = NPersQueue::ConvertOldConsumerName(groups[0], ctx) + "|" + groups[1] + "|";
+                res = NPersQueue::ConvertOldConsumerName(groups[0], AppData(ctx)->PQConfig) + "|" + groups[1] + "|";
                 ff = groups[2];
             } else {
                 continue;

@@ -507,6 +507,7 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
         TSetup setup;
         setup.Run(cases);
     }
+
     Y_UNIT_TEST(AlterTopic) {
         TCases cases = {
              {"alter topic topic1 alter consumer c1 set (important = false)",
@@ -523,10 +524,25 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
         TSetup setup;
         setup.Run(cases);
     }
+
     Y_UNIT_TEST(DropTopic) {
         TCases cases = {
             {"drop topic topic1",
              "DROP TOPIC topic1;\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(TopicExistsStatement) {
+        TCases cases = {
+            {"drop topic if exists topic1",
+             "DROP TOPIC IF EXISTS topic1;\n"},
+            {"create topic if not exists topic1 with (partition_count_limit = 5)",
+             "CREATE TOPIC IF NOT EXISTS topic1 WITH (\n\tpartition_count_limit = 5\n);\n"},
+             {"alter topic if exists topic1 alter consumer c1 set (important = false)",
+             "ALTER TOPIC IF EXISTS topic1\n\tALTER CONSUMER c1 SET (important = FALSE);\n"},
         };
 
         TSetup setup;

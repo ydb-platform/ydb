@@ -449,6 +449,9 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme CreateResourcePool = 38;
         NKikimrSchemeOp.TModifyScheme AlterResourcePool = 39;
         NKikimrSchemeOp.TModifyScheme DropResourcePool = 40;
+        NKikimrSchemeOp.TModifyScheme CreateTopic = 42;
+        NKikimrSchemeOp.TModifyScheme AlterTopic = 43;
+        NKikimrSchemeOp.TModifyScheme DropTopic = 44;
     }
 }
 

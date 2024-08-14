@@ -354,7 +354,7 @@ public:
         auto token = NACLib::TUserToken(userSID, {});
 
         WaitFor(FUTURE_WAIT_TIMEOUT, "pool acl", [this, token, access, poolId](TString& errorString) {
-            auto response = Navigate(TStringBuilder() << ".resource_pools/" << (poolId ? poolId : Settings_.PoolId_));
+            auto response = Navigate(TStringBuilder() << ".metadata/workload_manager/pools/" << (poolId ? poolId : Settings_.PoolId_));
             if (!response) {
                 errorString = "empty response";
                 return false;

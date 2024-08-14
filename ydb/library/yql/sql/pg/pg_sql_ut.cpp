@@ -756,7 +756,7 @@ Y_UNIT_TEST_SUITE(PgExtensions) {
 
             CREATE OR REPLACE FUNCTION bar(foo)
                 RETURNS bar
-                AS '$libdir/MyExt','bar_to_foo'
+                AS '$libdir/MyExt','foo_to_bar'
                 LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
 
             CREATE CAST (foo AS bar) WITH FUNCTION bar(foo);

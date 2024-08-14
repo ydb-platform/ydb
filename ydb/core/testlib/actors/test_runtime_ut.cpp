@@ -794,7 +794,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         runtime.EnableScheduleForActor(source);
 
         TBlockEvents<TEvTrigger> block(runtime, [&](TEvTrigger::TPtr& ev){ return ev->GetRecipientRewrite() == target; });
-        runtime.WaitFor("blocked 2 events", [&]{ return block.size() >= 3; });
+        runtime.WaitFor("blocked 3 events", [&]{ return block.size() >= 3; });
         UNIT_ASSERT_VALUES_EQUAL(block.size(), 3u);
         UNIT_ASSERT_VALUES_EQUAL(values.size(), 0u);
 

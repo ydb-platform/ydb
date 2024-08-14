@@ -36,7 +36,7 @@ std::shared_ptr<arrow::Array> TColumnPortion::AppendBlob(const TString& data, co
 ui32 TColumnPortion::AppendSlice(const std::shared_ptr<arrow::Array>& a, const ui32 startIndex, const ui32 length) {
     Y_ABORT_UNLESS(a);
     Y_ABORT_UNLESS(length);
-    Y_ABORT_UNLESS(CurrentPortionRecords < Context.GetPortionRowsCountLimit());
+    Y_ABORT_UNLESS(CurrentPortionRecords < ChunkContext.GetPortionRowsCountLimit());
     Y_ABORT_UNLESS(startIndex + length <= a->length());
     AFL_VERIFY(Type->id() == a->type_id())("own", Type->ToString())("a", a->type()->ToString());
     ui32 i = startIndex;
@@ -46,7 +46,7 @@ ui32 TColumnPortion::AppendSlice(const std::shared_ptr<arrow::Array>& a, const u
         AFL_VERIFY(NArrow::Append(*Builder, *a, i, &recordSize))("a", a->ToString())("a_type", a->type()->ToString())("builder_type", Builder->type()->ToString());
         CurrentChunkRawSize += recordSize;
         PredictedPackedBytes += packedRecordSize ? packedRecordSize : (recordSize / 2);
-        if (++CurrentPortionRecords == Context.GetPortionRowsCountLimit()) {
+        if (++CurrentPortionRecords == ChunkContext.GetPortionRowsCountLimit()) {
             FlushBuffer();
             ++i;
             break;

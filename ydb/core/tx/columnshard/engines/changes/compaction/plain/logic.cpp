@@ -8,9 +8,9 @@ void TPlainMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::
     }
 }
 
-std::vector<NKikimr::NOlap::NCompaction::TColumnPortionResult> TPlainMerger::DoExecute(
-    const NCompaction::TColumnMergeContext& context, const arrow::UInt16Array& pIdxArray, const arrow::UInt32Array& pRecordIdxArray) {
-    NCompaction::TMergedColumn mColumn(context);
+std::vector<NKikimr::NOlap::NCompaction::TColumnPortionResult> TPlainMerger::DoExecute(const TChunkMergeContext& chunkContext,
+    const arrow::UInt16Array& pIdxArray, const arrow::UInt32Array& pRecordIdxArray) {
+    NCompaction::TMergedColumn mColumn(Context, chunkContext);
 
     std::optional<ui16> predPortionIdx;
     for (ui32 idx = 0; idx < pIdxArray.length(); ++idx) {

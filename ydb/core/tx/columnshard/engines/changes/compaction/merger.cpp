@@ -30,6 +30,8 @@ std::vector<NKikimr::NOlap::TWritePortionInfoWithBlobsResult> TMerger::Execute(c
 
         ui32 idx = 0;
         for (auto&& batch : Batches) {
+            AFL_VERIFY(batch->GetColumnsCount() == resultFiltered->GetColumnsCount())("data", batch->GetColumnsCount())(
+                                                       "schema", resultFiltered->GetColumnsCount());
             {
                 NArrow::NConstruction::IArrayBuilder::TPtr column =
                     std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntConstFiller<arrow::UInt16Type>>>(
@@ -54,8 +56,18 @@ std::vector<NKikimr::NOlap::TWritePortionInfoWithBlobsResult> TMerger::Execute(c
         NActors::TLogContextGuard logGuard(
             NActors::TLogContextBuilder::Build()("field_name", resultFiltered->GetIndexInfo().GetColumnName(columnId)));
         auto columnInfo = stats->GetColumnInfo(columnId);
-        auto resultField = resultFiltered->GetIndexInfo().GetColumnFieldVerified(columnId);
-        std::shared_ptr<IColumnMerger> merger = std::make_shared<TPlainMerger>();
+
+        TColumnMergeContext commonContext(
+            columnId, resultFiltered, NSplitter::TSplitSettings().GetExpectedUnpackColumnChunkRawSize(), columnInfo);
+        
+        if (OptimizationWritingPackMode) {
+            commonContext.MutableSaver().AddSerializerWithBorder(
+                100, std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::UNCOMPRESSED));
+            commonContext.MutableSaver().AddSerializerWithBorder(
+                Max<ui32>(), std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::LZ4_FRAME));
+        }
+        
+        std::shared_ptr<IColumnMerger> merger = std::make_shared<TPlainMerger>(commonContext);
         //        resultFiltered->BuildColumnMergerVerified(columnId);
 
         {
@@ -72,21 +84,9 @@ std::vector<NKikimr::NOlap::TWritePortionInfoWithBlobsResult> TMerger::Execute(c
         for (auto&& batchResult : batchResults) {
             const ui32 portionRecordsCountLimit =
                 batchResult->num_rows() / (batchResult->num_rows() / NSplitter::TSplitSettings().GetExpectedRecordsCountOnPage() + 1) + 1;
-
             NArrow::NSerialization::TSerializerContainer externalSaver;
-            if (OptimizationWritingPackMode) {
-                if (batchResult->num_rows() < 100) {
-                    externalSaver = NArrow::NSerialization::TSerializerContainer(
-                        std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::UNCOMPRESSED));
-                } else {
-                    externalSaver = NArrow::NSerialization::TSerializerContainer(
-                        std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::LZ4_FRAME));
-                }
-            }
 
-            NCompaction::TColumnMergeContext context(columnId, resultFiltered, portionRecordsCountLimit,
-                NSplitter::TSplitSettings().GetExpectedUnpackColumnChunkRawSize(), columnInfo, externalSaver);
-
+            TChunkMergeContext context(portionRecordsCountLimit);
             chunkGroups[batchIdx][columnId] = merger->Execute(context, batchResult);
             ++batchIdx;
         }

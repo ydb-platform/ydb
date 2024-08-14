@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceTables) {
         ).GetValue(FUTURE_WAIT_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetStatus(), NYdb::EStatus::SUCCESS, listResult.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren().size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren()[0].Name, ".resource_pools");
+        UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren()[0].Name, ".metadata");
         UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren()[1].Name, ".sys");
     }
 

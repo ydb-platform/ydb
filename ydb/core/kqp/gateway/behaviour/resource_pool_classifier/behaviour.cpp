@@ -16,7 +16,7 @@ NMetadata::NModifications::IOperationsManager::TPtr TResourcePoolClassifierBehav
 }
 
 TString TResourcePoolClassifierBehaviour::GetInternalStorageTablePath() const {
-    return "resource_pools/resource_pools_classifiers";
+    return "workload_manager/classifiers";
 }
 
 TString TResourcePoolClassifierBehaviour::GetTypeId() const {

@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceActors) {
 
         const TString& userSID = "user@test";
         TSampleQueries::CheckSuccess(ydb->ExecuteQuery(TStringBuilder() << R"(
-            GRANT DESCRIBE SCHEMA ON `/Root/.resource_pools/)" << ydb->GetSettings().PoolId_ << "` TO `" << userSID << "`;"
+            GRANT DESCRIBE SCHEMA ON `/Root/.metadata/workload_manager/pools/)" << ydb->GetSettings().PoolId_ << "` TO `" << userSID << "`;"
         ));
         ydb->WaitPoolAccess(userSID, NACLib::EAccessRights::DescribeSchema);
 
@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceActors) {
         UNIT_ASSERT_STRING_CONTAINS(failedResponse->Get()->Issues.ToString(), TStringBuilder() << "You don't have access permissions for resource pool " << ydb->GetSettings().PoolId_);
 
         TSampleQueries::CheckSuccess(ydb->ExecuteQuery(TStringBuilder() << R"(
-            GRANT SELECT ROW ON `/Root/.resource_pools/)" << ydb->GetSettings().PoolId_ << "` TO `" << userSID << "`;"
+            GRANT SELECT ROW ON `/Root/.metadata/workload_manager/pools/)" << ydb->GetSettings().PoolId_ << "` TO `" << userSID << "`;"
         ));
         ydb->WaitPoolAccess(userSID, NACLib::EAccessRights::SelectRow);
 
@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceActors) {
     Y_UNIT_TEST(TestCreateDefaultPool) {
         auto ydb = TYdbSetupSettings().Create();
 
-        const TString path = TStringBuilder() << ".resource_pools/" << NResourcePool::DEFAULT_POOL_ID;
+        const TString path = TStringBuilder() << ".metadata/workload_manager/pools/" << NResourcePool::DEFAULT_POOL_ID;
         auto response = ydb->Navigate(path, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
         UNIT_ASSERT_VALUES_EQUAL(response->ErrorCount, 1);
         UNIT_ASSERT_VALUES_EQUAL(response->ResultSet.at(0).Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindUnknown);
@@ -224,7 +224,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceSubscriptions) {
 
         const TString& userSID = "test@user";
         ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
-            GRANT ALL ON `/Root/.resource_pools/)" << ydb->GetSettings().PoolId_ << R"(` TO `)" << userSID << R"(`;
+            GRANT ALL ON `/Root/.metadata/workload_manager/pools/)" << ydb->GetSettings().PoolId_ << R"(` TO `)" << userSID << R"(`;
         )");
 
         const auto& response = ydb->GetRuntime()->GrabEdgeEvent<TEvUpdatePoolInfo>(subscriber, FUTURE_WAIT_TIMEOUT);

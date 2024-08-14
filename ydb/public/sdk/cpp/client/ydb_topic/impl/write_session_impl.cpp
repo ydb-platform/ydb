@@ -985,12 +985,19 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
                 // TODO: Fill writer statistics
                 ui64 sequenceNumber = ack.seq_no();
 
-                Y_ABORT_UNLESS(ack.has_written() || ack.has_skipped());
-                auto msgWriteStatus = ack.has_written()
-                                ? TWriteSessionEvent::TWriteAck::EES_WRITTEN
-                                : (ack.skipped().reason() == Ydb::Topic::StreamWriteMessage_WriteResponse_WriteAck_Skipped_Reason::StreamWriteMessage_WriteResponse_WriteAck_Skipped_Reason_REASON_ALREADY_WRITTEN
-                                    ? TWriteSessionEvent::TWriteAck::EES_ALREADY_WRITTEN
-                                    : TWriteSessionEvent::TWriteAck::EES_DISCARDED);
+                Y_ABORT_UNLESS(ack.has_written() || ack.has_skipped() || ack.has_written_in_tx());
+
+                TWriteSessionEvent::TWriteAck::EEventState msgWriteStatus;
+                if (ack.has_written_in_tx()) {
+                    msgWriteStatus = TWriteSessionEvent::TWriteAck::EES_WRITTEN_IN_TX;
+                } else if (ack.has_written()) {
+                    msgWriteStatus = TWriteSessionEvent::TWriteAck::EES_WRITTEN;
+                } else {
+                    msgWriteStatus =
+                        (ack.skipped().reason() == Ydb::Topic::StreamWriteMessage_WriteResponse_WriteAck_Skipped_Reason::StreamWriteMessage_WriteResponse_WriteAck_Skipped_Reason_REASON_ALREADY_WRITTEN)
+                        ? TWriteSessionEvent::TWriteAck::EES_ALREADY_WRITTEN
+                        : TWriteSessionEvent::TWriteAck::EES_DISCARDED;
+                }
 
                 ui64 offset = ack.has_written() ? ack.written().offset() : 0;
 

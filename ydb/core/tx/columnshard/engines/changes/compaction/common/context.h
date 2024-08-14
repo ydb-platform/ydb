@@ -12,10 +12,9 @@ class TColumnMergeContext {
 private:
     YDB_READONLY(ui32, ColumnId, 0);
     ISnapshotSchema::TPtr SchemaInfo;
-    YDB_READONLY_DEF(TColumnSaver, Saver);
+    YDB_ACCESSOR_DEF(TColumnSaver, Saver);
     YDB_READONLY_DEF(std::shared_ptr<TColumnLoader>, Loader);
     YDB_READONLY_DEF(std::shared_ptr<arrow::Field>, ResultField);
-    YDB_READONLY(ui32, PortionRowsCountLimit, 10000);
     YDB_READONLY(ui64, ChunkPackedBytesLimit, 7 * 1024 * 1024);
     YDB_READONLY(ui64, ExpectedBlobPackedBytes, 4 * 1024 * 1024);
     YDB_READONLY(ui64, ChunkRawBytesLimit, 50 * 1024 * 1024);
@@ -42,25 +41,30 @@ public:
         return IndexInfo;
     }
 
-    TColumnMergeContext(const ui32 columnId, const ISnapshotSchema::TPtr& schema, const ui32 portionRowsCountLimit,
-        const ui32 chunkRawBytesLimit, const std::optional<TColumnSerializationStat>& columnStat,
-        const NArrow::NSerialization::TSerializerContainer& overrideSerializer)
+    TColumnMergeContext(const ui32 columnId, const ISnapshotSchema::TPtr& schema,
+        const ui32 chunkRawBytesLimit, const std::optional<TColumnSerializationStat>& columnStat)
         : ColumnId(columnId)
         , SchemaInfo(schema)
         , Saver(schema->GetColumnSaver(columnId))
         , Loader(schema->GetColumnLoaderOptional(columnId))
         , ResultField(schema->GetIndexInfo().GetColumnFieldVerified(columnId))
-        , PortionRowsCountLimit(portionRowsCountLimit)
         , ChunkRawBytesLimit(chunkRawBytesLimit)
         , UseWholeChunksOptimization(!schema->GetIndexInfo().GetReplaceKey()->GetFieldByName(ResultField->name()))
         , ColumnStat(columnStat)
         , IndexInfo(schema->GetIndexInfo()) {
-        Y_ABORT_UNLESS(PortionRowsCountLimit);
         Y_ABORT_UNLESS(ChunkRawBytesLimit);
-        if (!!overrideSerializer) {
-            Saver.ResetSerializer(overrideSerializer);
-        }
     }
 };
 
-}
+class TChunkMergeContext {
+private:
+    YDB_READONLY(ui32, PortionRowsCountLimit, 10000);
+
+public:
+    TChunkMergeContext(const ui32 portionRowsCountLimit)
+        : PortionRowsCountLimit(portionRowsCountLimit) {
+        Y_ABORT_UNLESS(PortionRowsCountLimit);
+    }
+};
+
+}   // namespace NKikimr::NOlap::NCompaction

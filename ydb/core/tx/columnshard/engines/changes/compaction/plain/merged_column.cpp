@@ -44,7 +44,7 @@ void TMergedColumn::NewPortion() {
     if (Portions.size()) {
         Portions.back().FlushBuffer();
     }
-    Portions.emplace_back(TColumnPortion(Context));
+    Portions.emplace_back(TColumnPortion(Context, ChunkContext));
 }
 
 }

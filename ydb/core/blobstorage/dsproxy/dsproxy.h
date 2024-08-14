@@ -371,6 +371,7 @@ struct TBlobStorageGroupPutParameters {
     TDiskResponsivenessTracker::TPerDiskStatsPtr Stats;
     bool EnableRequestMod3x3ForMinLatency;
     TAccelerationParams AccelerationParams;
+    TDuration LongRequestThreshold;
 };
 IActor* CreateBlobStorageGroupPutRequest(TBlobStorageGroupPutParameters params);
 
@@ -389,6 +390,7 @@ struct TBlobStorageGroupMultiPutParameters {
     TEvBlobStorage::TEvPut::ETactic Tactic;
     bool EnableRequestMod3x3ForMinLatency;
     TAccelerationParams AccelerationParams;
+    TDuration LongRequestThreshold;
 
     static ui32 CalculateRestartCounter(TBatchedVec<TEvBlobStorage::TEvPut::TPtr>& events) {
         ui32 maxRestarts = 0;
@@ -409,6 +411,7 @@ struct TBlobStorageGroupGetParameters {
     };
     TNodeLayoutInfoPtr NodeLayout;
     TAccelerationParams AccelerationParams;
+    TDuration LongRequestThreshold;
 };
 IActor* CreateBlobStorageGroupGetRequest(TBlobStorageGroupGetParameters params);
 
@@ -511,6 +514,9 @@ IActor* CreateBlobStorageGroupEjectedProxy(ui32 groupId, TIntrusivePtr<TDsProxyN
 
 struct TBlobStorageProxyParameters {
     bool UseActorSystemTimeInBSQueue = false;
+    TDuration RequestReportingThrottlerDelay = TDuration::Seconds(1);
+    TParameterByHandleClass<TDuration> LongRequestThreshold =
+            TParameterByHandleClass<TDuration>(TDuration::Seconds(60));
 
     const TControlWrapper& EnablePutBatching;
     const TControlWrapper& EnableVPatch;

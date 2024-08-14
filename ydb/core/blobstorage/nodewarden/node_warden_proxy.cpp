@@ -38,6 +38,8 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                         TIntrusivePtr<TBlobStorageGroupInfo>(info), false, DsProxyNodeMon, getCounters(info),
                         TBlobStorageProxyParameters{
                             .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
+                            .RequestReportingThrottlerDelay = Cfg->RequestReportingThrottlerDelay,
+                            .LongRequestThreshold = Cfg->LongRequestThreshold,
                             .EnablePutBatching = EnablePutBatching,
                             .EnableVPatch = EnableVPatch,
                             .SlowDiskThreshold = SlowDiskThreshold,
@@ -57,6 +59,9 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
             // create proxy with configuration
             proxy.reset(CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>(info), false, 
                 DsProxyNodeMon, getCounters(info), TBlobStorageProxyParameters{
+                        .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
+                        .RequestReportingThrottlerDelay = Cfg->RequestReportingThrottlerDelay,
+                        .LongRequestThreshold = Cfg->LongRequestThreshold,
                         .EnablePutBatching = EnablePutBatching,
                         .EnableVPatch = EnableVPatch,
                         .SlowDiskThreshold = SlowDiskThreshold,
@@ -68,6 +73,9 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
     } else {
         // create proxy without configuration
         proxy.reset(CreateBlobStorageGroupProxyUnconfigured(groupId, DsProxyNodeMon, TBlobStorageProxyParameters{
+            .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
+            .RequestReportingThrottlerDelay = Cfg->RequestReportingThrottlerDelay,
+            .LongRequestThreshold = Cfg->LongRequestThreshold,
             .EnablePutBatching = EnablePutBatching,
             .EnableVPatch = EnableVPatch,
             .SlowDiskThreshold = SlowDiskThreshold,

@@ -5,8 +5,8 @@
 
 namespace NKikimr {
 
-bool AllowToReportPut(NKikimrBlobStorage::EPutHandleClass& handleClass);
-bool AllowToReportGet(NKikimrBlobStorage::EGetHandleClass& handleClass);
+bool AllowToReport(NKikimrBlobStorage::EPutHandleClass handleClass);
+bool AllowToReport(NKikimrBlobStorage::EGetHandleClass handleClass);
 
 IActor* CreateRequestReportingThrottler(TDuration updatePermissionsDelay);
 

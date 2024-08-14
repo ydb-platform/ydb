@@ -112,6 +112,7 @@ namespace NKikimr {
                         },
                         .NodeLayout = TNodeLayoutInfoPtr(NodeLayoutInfo),
                         .AccelerationParams = GetAccelerationParams(),
+                        .LongRequestThreshold = LongRequestThreshold.Get(ev->Get()->GetHandleClass),
                     }),
                     ev->Get()->Deadline
                 );
@@ -225,6 +226,7 @@ namespace NKikimr {
                     .Stats = PerDiskStats,
                     .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
                     .AccelerationParams = GetAccelerationParams(),
+                    .LongRequestThreshold = LongRequestThreshold.Get(ev->Get()->HandleClass),
                 }),
                 ev->Get()->Deadline
             );
@@ -499,6 +501,7 @@ namespace NKikimr {
                             .Stats = PerDiskStats,
                             .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
                             .AccelerationParams = GetAccelerationParams(),
+                            .LongRequestThreshold = LongRequestThreshold.Get(ev->Get()->HandleClass),
                         }),
                         ev->Get()->Deadline
                     );

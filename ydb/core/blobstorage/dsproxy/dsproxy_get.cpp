@@ -1,6 +1,7 @@
 #include "dsproxy.h"
 #include "dsproxy_mon.h"
 #include "root_cause.h"
+#include <ydb/core/blobstorage/dsproxy/dsproxy_request_reporting.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
@@ -58,6 +59,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
     bool IsPutAccelerateScheduled = false;
 
     TAccelerationParams AccelerationParams;
+    TDuration LongRequestThreshold;
 
     void Handle(TEvAccelerateGet::TPtr &ev) {
         IsGetAccelerateScheduled = false;
@@ -380,6 +382,15 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
                 evResult->GroupId, channel, NKikimrBlobStorage::EGetHandleClass_Name(GetImpl.GetHandleClass()),
                 success);
         A_LOG_LOG_S(true, success ? NLog::PRI_INFO : NLog::PRI_NOTICE, "BPG68", "Result# " << evResult->Print(false));
+
+        if (TActivationContext::Now() - StartTime >= LongRequestThreshold) {
+            if (AllowToReport(GetImpl.GetHandleClass())) {
+                TStringStream str;
+                LogCtx.LogAcc.Output(str);
+                R_LOG_WARN_S("BPG71", "Request was being processed for more than " << LongRequestThreshold
+                        << ", accumulated log# " << str.Str());
+            }
+        }
         return SendResponseAndDie(std::unique_ptr<TEvBlobStorage::TEvGetResult>(evResult.Release()));
     }
 
@@ -409,6 +420,7 @@ public:
         , GroupSize(Info->Type.BlobSubgroupSize())
         , ReportedBytes(0)
         , AccelerationParams(params.AccelerationParams)
+        , LongRequestThreshold(params.LongRequestThreshold)
     {
         ReportBytes(sizeof(*this));
         MaxSaneRequests = params.Common.Event->QuerySize * Info->Type.TotalPartCount() *

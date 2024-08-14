@@ -17,7 +17,7 @@ TString ExecYdb(const TList<TString>& args, bool checkExitCode = true)
     //
     // ydb -e grpc://${YDB_ENDPOINT} -d /${YDB_DATABASE} workload topic ${args}
     //
-    return RunYdb({"--user", "root", "--no-password", "workload", "topic"}, args, checkExitCode);
+    return RunYdb({"workload", "topic"}, args, checkExitCode);
 }
 
 struct TTopicConfigurationMatcher {
@@ -93,8 +93,6 @@ void EnsureStatisticsColumns(const TList<TString>& args,
                              const TVector<TString>& columns1,
                              const TVector<TString>& columns2)
 {
-    RunYdb({"-v", "yql", "-s", R"(ALTER USER root PASSWORD "")"}, TList<TString>());
-
     ExecYdb({"init"});
     auto output = ExecYdb(args, false);
 

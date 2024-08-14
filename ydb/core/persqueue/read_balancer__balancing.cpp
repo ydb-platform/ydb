@@ -411,7 +411,10 @@ void TPartitionFamily::Merge(TPartitionFamily* other) {
     other->RootPartitions.clear();
 
     WantedPartitions.insert(other->WantedPartitions.begin(), other->WantedPartitions.end());
-    WantedPartitions.clear();
+    other->WantedPartitions.clear();
+
+    LockedPartitions.insert(other->LockedPartitions.begin(), other->LockedPartitions.end());
+    other->LockedPartitions.clear();
 
     ChangePartitionCounters(other->ActivePartitionCount, other->InactivePartitionCount);
     other->ChangePartitionCounters(-other->ActivePartitionCount, -other->InactivePartitionCount);
@@ -1466,49 +1469,14 @@ TConsumer* TBalancer::GetConsumer(const TString& consumerName) {
     return it->second.get();
 }
 
-const TStatistics TBalancer::GetStatistics() const {
-    TStatistics result;
-
-    result.Consumers.reserve(Consumers.size());
-    for (auto& [_, consumer] : Consumers) {
-        result.Consumers.push_back(TStatistics::TConsumerStatistics());
-        auto& c = result.Consumers.back();
-
-        c.ConsumerName = consumer->ConsumerName;
-        c.Partitions.reserve(GetPartitionsInfo().size());
-        for (auto [partitionId, partitionInfo] : GetPartitionsInfo()) {
-            c.Partitions.push_back(TStatistics::TConsumerStatistics::TPartitionStatistics());
-            auto& p = c.Partitions.back();
-            p.PartitionId = partitionId;
-            p.TabletId = partitionInfo.TabletId;
-
-            auto* family = consumer->FindFamily(partitionId);
-            if (family && family->Session && family->LockedPartitions.contains(partitionId)) {
-                p.Session = family->Session->SessionName;
-                p.State = 1;
-            }
-        }
-    }
-
-    size_t readablePartitionCount = 0;
-
-    result.Sessions.reserve(Sessions.size());
-    for (auto& [_, session] : Sessions) {
-        result.Sessions.push_back(TStatistics::TSessionStatistics());
-        auto& s = result.Sessions.back();
-        s.Session = session->SessionName;
-        s.ActivePartitionCount = session->ActivePartitionCount;
-        s.InactivePartitionCount = session->InactivePartitionCount;
-        s.SuspendedPartitionCount = session->ReleasingPartitionCount;
-        s.TotalPartitionCount = s.ActivePartitionCount + s.InactivePartitionCount;
-
-        readablePartitionCount += s.TotalPartitionCount;
-    }
-
-    result.FreePartitions = GetPartitionsInfo().size() - readablePartitionCount;
-
-    return result;
+const std::unordered_map<TString, std::unique_ptr<TConsumer>>& TBalancer::GetConsumers() const {
+    return Consumers;
 }
+
+const std::unordered_map<TActorId, std::unique_ptr<TSession>>& TBalancer::GetSessions() const {
+    return Sessions;
+}
+
 
 void TBalancer::UpdateConfig(std::vector<ui32> addedPartitions, std::vector<ui32> deletedPartitions, const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,

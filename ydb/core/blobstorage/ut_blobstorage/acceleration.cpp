@@ -557,7 +557,7 @@ Y_UNIT_TEST_SUITE(Acceleration) {
         Test##param##method(TBlobStorageGroupType::Erasure##erasure, slowDisks);    \
     }
 
-//    TEST_ACCELERATE_PARAMS(Threshold, Put, Mirror3dc, 1);
+    TEST_ACCELERATE_PARAMS(Threshold, Put, Mirror3dc, 1);
     TEST_ACCELERATE_PARAMS(Threshold, Put, 4Plus2Block, 1);
 
 //    TEST_ACCELERATE_PARAMS(Threshold, Put, Mirror3dc, 2);

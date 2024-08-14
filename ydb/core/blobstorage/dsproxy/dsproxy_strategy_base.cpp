@@ -390,8 +390,8 @@ void TStrategyBase::Prepare3dcPartPlacement(const TBlobState &state,
 
 ui32 TStrategyBase::MakeSlowSubgroupDiskMask(TBlobState &state, const TBlobStorageGroupInfo &info, TBlackboard &blackboard,
         bool isPut, const TAccelerationParams& accelerationParams) {
-    if (info.GetTotalVDisksNum() == 1) {
-        // when there is only one disk, we consider it not slow
+    if (info.GetTotalVDisksNum() < 3) {
+        // when there is less than 3 disks, we consider them not slow
         return 0;
     }
     // Find the slowest disk
@@ -403,21 +403,26 @@ ui32 TStrategyBase::MakeSlowSubgroupDiskMask(TBlobState &state, const TBlobStora
                             HandleClassToQueueId(blackboard.GetHandleClass)),
                     &worstDisks, accelerationParams.PredictedDelayMultiplier);
 
-            // Check if the slowest disk exceptionally slow, or just not very fast
+            // Check if two slowest disks are exceptionally slow, or just not very fast
             ui32 slowDiskSubgroupMask = 0;
-            if (worstDisks[1].PredictedNs > 0 && worstDisks[0].PredictedNs > worstDisks[1].PredictedNs *
-                    accelerationParams.SlowDiskThreshold) {
-                slowDiskSubgroupMask = 1 << worstDisks[0].DiskIdx;
+    
+            ui64 slowThreshold = worstDisks[2].PredictedNs * accelerationParams.SlowDiskThreshold;
+            if (slowThreshold == 0) {
+                // invalid or non-initialized predicted ns, consider all disks not slow
+                return 0;
             }
 
-            // Mark single slow disk
-            for (size_t diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {
-                state.Disks[diskIdx].IsSlow = false;
-            }
-            if (slowDiskSubgroupMask > 0) {
-                state.Disks[worstDisks[0].DiskIdx].IsSlow = true;
+            for (ui32 idx = 0; idx < 1; ++idx) {
+                if (worstDisks[idx].PredictedNs > slowThreshold) {
+                    slowDiskSubgroupMask |= 1 << worstDisks[idx].DiskIdx;
+                }
             }
 
+            // Mark slow disks
+            for (size_t idx = 0; idx < state.Disks.size(); ++idx) {
+                state.Disks[idx].IsSlow = slowDiskSubgroupMask & (1 << worstDisks[idx].DiskIdx);
+            }
+            Cerr << "Bin(slowDiskSubgroupMask) " << Bin(slowDiskSubgroupMask) << Endl;
             return slowDiskSubgroupMask;
         }
         case TBlackboard::AccelerationModeSkipMarked: {

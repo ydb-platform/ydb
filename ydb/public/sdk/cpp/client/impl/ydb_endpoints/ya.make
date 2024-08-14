@@ -5,6 +5,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/public/sdk/cpp/client/impl/ydb_stats
     library/cpp/monlib/metrics
     ydb/public/api/grpc
 )

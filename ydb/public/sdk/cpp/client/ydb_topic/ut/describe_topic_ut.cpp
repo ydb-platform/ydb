@@ -1,7 +1,7 @@
 #include "ut_utils/topic_sdk_test_setup.h"
 
 #include <format>
-#include <ydb/library/persqueue/topic_parser_public/topic_parser.h>
+#include <ydb/public/sdk/cpp_v2/src/library/persqueue/topic_parser_public/topic_parser.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>

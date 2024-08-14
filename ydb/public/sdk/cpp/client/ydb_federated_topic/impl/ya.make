@@ -18,7 +18,7 @@ PEERDIR(
     library/cpp/monlib/dynamic_counters
     library/cpp/monlib/metrics
     library/cpp/string_utils/url
-    ydb/library/persqueue/obfuscate
+    ydb/public/sdk/cpp_v2/src/library/persqueue/obfuscate
     ydb/public/api/grpc/draft
     ydb/public/api/grpc
     ydb/public/sdk/cpp/client/impl/ydb_internal/make_request

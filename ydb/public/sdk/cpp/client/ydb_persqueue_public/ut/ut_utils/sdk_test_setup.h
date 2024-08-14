@@ -1,6 +1,6 @@
 #pragma once
 #include "test_server.h"
-#include <ydb/library/persqueue/topic_parser_public/topic_parser.h>
+#include <ydb/public/sdk/cpp_v2/src/library/persqueue/topic_parser_public/topic_parser.h>
 #include <library/cpp/logger/log.h>
 #include <util/system/tempfile.h>
 

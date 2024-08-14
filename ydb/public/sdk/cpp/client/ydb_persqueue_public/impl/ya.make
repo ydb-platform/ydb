@@ -22,7 +22,7 @@ PEERDIR(
     library/cpp/string_utils/url
     library/cpp/containers/disjoint_interval_tree
     ydb/public/sdk/cpp_v2/src/library/grpc/client
-    ydb/library/persqueue/obfuscate
+    ydb/public/sdk/cpp_v2/src/library/persqueue/obfuscate
     ydb/public/api/grpc/draft
     ydb/public/sdk/cpp/client/impl/ydb_internal/make_request
     ydb/public/sdk/cpp/client/ydb_common_client/impl

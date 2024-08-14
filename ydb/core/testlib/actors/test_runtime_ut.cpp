@@ -622,6 +622,101 @@ Y_UNIT_TEST_SUITE(TActorTest) {
             UNIT_ASSERT_VALUES_EQUAL(event->Get()->Index, 12u);
         }
     }
+
+    Y_UNIT_TEST(TestWaitFuture) {
+        enum EEv {
+            EvTrigger = EventSpaceBegin(TEvents::ES_PRIVATE)
+        };
+
+        struct TEvTrigger : public TEventLocal<TEvTrigger, EvTrigger> {
+            TEvTrigger() = default;
+        };
+
+        class TTriggerActor : public TActorBootstrapped<TTriggerActor> {
+        public:
+            TTriggerActor(NThreading::TPromise<void> promise)
+                : Promise(std::move(promise))
+            {}
+
+            void Bootstrap() {
+                Schedule(TDuration::Seconds(1), new TEvTrigger);
+                Become(&TThis::StateWork);
+            }
+
+        private:
+            STFUNC(StateWork) {
+                switch (ev->GetTypeRewrite()) {
+                    hFunc(TEvTrigger, Handle);
+                }
+            }
+
+            void Handle(TEvTrigger::TPtr&) {
+                Promise.SetValue();
+                PassAway();
+            }
+
+        private:
+            NThreading::TPromise<void> Promise;
+        };
+
+        TTestActorRuntime runtime;
+        runtime.Initialize(MakeEgg());
+
+        NThreading::TPromise<void> promise = NThreading::NewPromise<void>();
+        NThreading::TFuture<void> future = promise.GetFuture();
+
+        auto actor = runtime.Register(new TTriggerActor(std::move(promise)));
+        runtime.EnableScheduleForActor(actor);
+
+        runtime.WaitFuture(std::move(future));
+    }
+
+    Y_UNIT_TEST(TestWaitFor) {
+        enum EEv {
+            EvTrigger = EventSpaceBegin(TEvents::ES_PRIVATE)
+        };
+
+        struct TEvTrigger : public TEventLocal<TEvTrigger, EvTrigger> {
+            TEvTrigger() = default;
+        };
+
+        class TTriggerActor : public TActorBootstrapped<TTriggerActor> {
+        public:
+            TTriggerActor(int* ptr)
+                : Ptr(ptr)
+            {}
+
+            void Bootstrap() {
+                Schedule(TDuration::Seconds(1), new TEvTrigger);
+                Become(&TThis::StateWork);
+            }
+
+        private:
+            STFUNC(StateWork) {
+                switch (ev->GetTypeRewrite()) {
+                    hFunc(TEvTrigger, Handle);
+                }
+            }
+
+            void Handle(TEvTrigger::TPtr&) {
+                *Ptr = 42;
+                PassAway();
+            }
+
+        private:
+            int* Ptr;
+        };
+
+        TTestActorRuntime runtime;
+        runtime.Initialize(MakeEgg());
+
+        int value = 0;
+        auto actor = runtime.Register(new TTriggerActor(&value));
+        runtime.EnableScheduleForActor(actor);
+
+        runtime.WaitFor("value = 42", [&]{ return value == 42; });
+        UNIT_ASSERT_VALUES_EQUAL(value, 42);
+    }
 };
 
 }

@@ -53,6 +53,20 @@ namespace NActors {
             std::vector<TIntrusivePtr<NKikimr::TControlBoard>> Icb;
         };
 
+        struct TActorSystemSetupConfig {
+            TCpuManagerConfig CpuManagerConfig;
+            TSchedulerConfig SchedulerConfig;
+            bool MonitorStuckActors = false;
+        };
+
+        struct TActorSystemPools {
+            ui32 SystemPoolId = 0;
+            ui32 UserPoolId = 1;
+            ui32 IOPoolId = 2;
+            ui32 BatchPoolId = 3;
+            TMap<TString, ui32> ServicePools = {};
+        };
+
         TTestActorRuntime(THeSingleSystemEnv d);
         TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool UseRealThreads);
         TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount);
@@ -63,6 +77,7 @@ namespace NActors {
         void AddAppDataInit(std::function<void(ui32, NKikimr::TAppData&)> callback);
         virtual void Initialize(TEgg);
         void SetupStatsCollectors();
+        void SetupActorSystemConfig(const TActorSystemSetupConfig& config, const TActorSystemPools& pools);
 
         ui16 GetMonPort(ui32 nodeIndex = 0) const;
 
@@ -125,5 +140,7 @@ namespace NActors {
         TActorId SleepEdgeActor;
         TVector<std::function<void(ui32, NKikimr::TAppData&)>> AppDataInit_;
         bool NeedStatsCollectors = false;
+        std::optional<TActorSystemSetupConfig> ActorSystemSetupConfig;
+        TActorSystemPools ActorSystemPools;
     };
 } // namespace NActors

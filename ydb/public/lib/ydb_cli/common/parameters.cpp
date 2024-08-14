@@ -1,6 +1,6 @@
 #include "parameters.h"
 
-#include <ydb/public/lib/json_value/ydb_json_value.h>
+#include <ydb-cpp-sdk/library/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <library/cpp/json/json_reader.h>

@@ -47,7 +47,7 @@ PEERDIR(
     ydb/library/yql/minikql/jsonpath
     ydb/library/testlib/service_mocks/ldap_mock
     ydb/public/lib/experimental
-    ydb/public/lib/json_value
+    ydb/public/sdk/cpp_v2/src/library/json_value
     ydb/public/lib/yson_value
     ydb/public/lib/ut_helpers
     ydb/public/lib/ydb_cli/commands

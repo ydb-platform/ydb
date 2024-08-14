@@ -13,7 +13,7 @@ FORK_SUBTESTS()
 
 PEERDIR(
     library/cpp/testing/gmock_in_unittest
-    ydb/public/lib/json_value
+    ydb/public/sdk/cpp_v2/src/library/json_value
     ydb/public/lib/yson_value
     ydb/public/sdk/cpp/client/ydb_driver
     ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils

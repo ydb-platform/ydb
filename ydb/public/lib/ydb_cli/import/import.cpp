@@ -8,7 +8,7 @@
 
 #include <ydb/public/api/protos/ydb_formats.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
-#include <ydb/public/lib/json_value/ydb_json_value.h>
+#include <ydb-cpp-sdk/library/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/csv_parser.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>

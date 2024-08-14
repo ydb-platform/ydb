@@ -7,7 +7,7 @@
 #include <ydb/core/blob_depot/mon_main.h>
 #include <ydb/core/fq/libs/compute/common/utils.h>
 
-#include <ydb/public/lib/json_value/ydb_json_value.h>
+#include <ydb-cpp-sdk/library/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/plan2svg.h>
 

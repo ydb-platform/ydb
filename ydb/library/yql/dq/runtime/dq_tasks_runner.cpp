@@ -514,7 +514,9 @@ public:
         auto& typeEnv = TypeEnv();
 
         SpillingTaskCounters = execCtx.GetSpillingTaskCounters();
-        SpillerFactory->SetTaskCounters(SpillingTaskCounters);
+        if (SpillerFactory) {
+            SpillerFactory->SetTaskCounters(SpillingTaskCounters);
+        }
         AllocatedHolder->ProgramParsed.CompGraph->GetContext().SpillerFactory = std::move(SpillerFactory);
 
         for (ui32 i = 0; i < task.InputsSize(); ++i) {

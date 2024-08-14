@@ -237,31 +237,34 @@ bool ReduceOptionalElements(const TType* type, const TArrayRef<const ui32>& test
     return multiOptional;
 }
 
-static std::vector<TType*> ValidateBlockItems(const TArrayRef<TType* const>& wideComponents) {
+static std::vector<TType*> ValidateBlockItems(const TArrayRef<TType* const>& wideComponents, bool unwrap) {
     MKQL_ENSURE(wideComponents.size() > 0, "Expected at least one column");
     std::vector<TType*> items;
     items.reserve(wideComponents.size());
+    // XXX: Declare these variables outside the loop body to use for the last
+    // item (i.e. block length column) in the assertions below.
     bool isScalar;
+    TType* itemType;
     for (const auto& wideComponent : wideComponents) {
         auto blockType = AS_TYPE(TBlockType, wideComponent);
         isScalar = blockType->GetShape() == TBlockType::EShape::Scalar;
-        auto withoutBlock = blockType->GetItemType();
-        items.push_back(withoutBlock);
+        itemType = blockType->GetItemType();
+        items.push_back(unwrap ? itemType : blockType);
     }
 
     MKQL_ENSURE(isScalar, "Last column should be scalar");
-    MKQL_ENSURE(AS_TYPE(TDataType, items.back())->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected Uint64");
+    MKQL_ENSURE(AS_TYPE(TDataType, itemType)->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected Uint64");
     return items;
 }
 
-std::vector<TType*> ValidateBlockStreamType(const TType* streamType) {
+std::vector<TType*> ValidateBlockStreamType(const TType* streamType, bool unwrap = true) {
     const auto wideComponents = GetWideComponents(AS_TYPE(TStreamType, streamType));
-    return ValidateBlockItems(wideComponents);
+    return ValidateBlockItems(wideComponents, unwrap);
 }
 
-std::vector<TType*> ValidateBlockFlowType(const TType* flowType) {
+std::vector<TType*> ValidateBlockFlowType(const TType* flowType, bool unwrap = true) {
     const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flowType));
-    return ValidateBlockItems(wideComponents);
+    return ValidateBlockItems(wideComponents, unwrap);
 }
 
 } // namespace

@@ -479,7 +479,7 @@ TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage, TString* time
         }
     }
     if (timeline) {
-        planViz.SetTimeOffsets();
+        planViz.PostProcessPlans();
         *timeline = planViz.PrintSvgSafe();
         // remove json "timeline" field after migration
         writer.OnKeyedItem("timeline");

@@ -1,4 +1,4 @@
-#include "basic_example.h"
+#include "basic_example_qs.h"
 
 #include <library/cpp/getopt/last_getopt.h>
 
@@ -42,7 +42,7 @@ int main(int argc, char** argv) {
         .SetEndpoint(endpoint)
         .SetDatabase(database)
         .SetAuthToken(GetEnv("YDB_TOKEN"));
-
+        
     if (!certPath.empty()) {
         TString cert = TFileInput(certPath).ReadAll();
         driverConfig.UseSecureConnection(cert);

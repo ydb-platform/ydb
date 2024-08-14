@@ -237,14 +237,14 @@ void TReadInitAndAuthActor::HandleClientSchemeCacheResponse(
             case NSchemeCache::TSchemeCacheNavigate::EStatus::Unknown:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotTable:
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotPath:
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
                 errorCode = PersQueue::ErrorCode::ERROR;
                 break;
             case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotTable:
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotPath:
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
                 errorCode = PersQueue::ErrorCode::UNKNOWN_TOPIC;
                 break;
             case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:

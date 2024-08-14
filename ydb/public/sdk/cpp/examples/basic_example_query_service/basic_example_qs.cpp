@@ -334,6 +334,8 @@ static TAsyncExecuteQueryResult MultiStepTransaction(TSession session, const TSt
 // Show usage of explicit Begin/Commit transaction control calls.
 // In most cases it's better to use transaction control settings in ExecuteDataQuery calls instead
 // to avoid additional hops to YDB cluster and allow more efficient execution of queries.
+// WARNING: Do not use without RetryQuery!!!
+// Now, RetryQuery does not support explicit transactions
 static TStatus ExplicitTclTransaction(TQueryClient client, const TString& path, const TInstant& airDate) { 
     auto session = client.GetSession().GetValueSync().GetSession();
     auto beginResult = session.BeginTransaction(TTxSettings::SerializableRW());
@@ -374,6 +376,8 @@ static TStatus ExplicitTclTransaction(TQueryClient client, const TString& path, 
     return tx.Commit().GetValueSync();
 }
 
+// WARNING: Do not use without RetryQuery!!!
+// Now, RetryQuery does not support StreamExecuteQuery
 static TStatus StreamQuerySelectTransaction(TQueryClient client, const TString& path) {
     auto query = Sprintf(R"(
         --!syntax_v1

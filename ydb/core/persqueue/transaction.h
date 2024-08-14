@@ -46,8 +46,8 @@ struct TDistributedTransaction {
     EState State = NKikimrPQ::TTransaction::UNKNOWN;
     ui64 MinStep = Max<ui64>();
     ui64 MaxStep = Max<ui64>();
-    THashSet<ui64> Senders;        // список отправителей TEvReadSet
-    THashSet<ui64> Receivers;      // список получателей TEvReadSet
+    THashMap<ui64, NKikimrPQ::TTransaction::TPredicateReceived> PredicatesReceived;
+    THashMap<ui64, bool> PredicateRecipients;
     TVector<NKikimrPQ::TPartitionOperation> Operations;
     TMaybe<TWriteId> WriteId;
 
@@ -75,7 +75,6 @@ struct TDistributedTransaction {
     bool HaveAllRecipientsReceive() const;
 
     void AddCmdWrite(NKikimrClient::TKeyValueRequest& request, EState state);
-    void AddCmdDelete(NKikimrClient::TKeyValueRequest& request);
 
     static void SetDecision(NKikimrTx::TReadSetData::EDecision& var, NKikimrTx::TReadSetData::EDecision value);
 
@@ -92,6 +91,8 @@ struct TDistributedTransaction {
 
     template<class E>
     void OnPartitionResult(const E& event, EDecision decision);
+
+    TString LogPrefix() const;
 
     struct TSerializedMessage {
         ui32 Type;
@@ -111,6 +112,7 @@ struct TDistributedTransaction {
     const TVector<TSerializedMessage>& GetBindedMsgs(ui64 tabletId);
 
     bool HasWriteOperations = false;
+    size_t PredicateAcksCount = 0;
 };
 
 }

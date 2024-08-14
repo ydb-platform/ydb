@@ -18,7 +18,6 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/yql_panic.h>
-//#include <ydb/core/fq/libs/row_dispatcher/leader_detector.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 
@@ -100,14 +99,13 @@ public:
         }
 
     public:
-        TUnboxedValueVector Data;
+        TVector<TString> Data;
         i64 UsedSpace = 0;
         ui64 NextOffset = 0;
         ui64 PartitionId;
     };
 
 private:
-    NKikimr::NMiniKQL::TScopedAlloc Alloc;
     const ui64 InputIndex;
     TDqAsyncStats IngressStats;
     const TTxId TxId;
@@ -121,7 +119,6 @@ private:
     TInstant StartingMessageTimestamp;
     const NActors::TActorId ComputeActorId;
     std::queue<std::pair<ui64, NYdb::NTopic::TDeferredCommit>> DeferredCommits;
-    NYdb::NTopic::TDeferredCommit CurrentDeferredCommit;
     std::vector<std::tuple<TString, TPqMetaExtractor::TPqMetaExtractorLambda>> MetadataFields;
     TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
     TMaybe<TInstant> NextIdlenesCheckAt;
@@ -131,8 +128,6 @@ private:
     NActors::TActorId LocalRowDispatcherActorId;
    // TMap<ui64, NActors::TActorId> RowDispatcherByPartitionId;
     std::queue<TReadyBatch> ReadyBuffer;
-
-
 
     struct SessionInfo {
         enum class ESessionStatus {
@@ -239,7 +234,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         const TString& token,
         bool addBearerToToken)
         : TActor<TDqPqRdReadActor>(&TDqPqRdReadActor::StateFunc)
-        , Alloc(__LOCATION__)
+       // , Alloc(__LOCATION__)
         , InputIndex(inputIndex)
         , TxId(txId)
         , HolderFactory(holderFactory)
@@ -274,6 +269,7 @@ void TDqPqRdReadActor::ProcessState() {
         return;
     }
     if (Sessions.empty()) {
+        // todo:
         SRC_LOG_D("Send TEvCoordinatorRequest");
         Send(*CoordinatorActorId, new NFq::TEvRowDispatcher::TEvCoordinatorRequest(SourceParams, GetPartitionsToRead()));
         return;
@@ -307,9 +303,8 @@ void TDqPqRdReadActor::ProcessState() {
     }
 }
 
-void TDqPqRdReadActor::SaveState(const NDqProto::TCheckpoint& checkpoint, TSourceState& state) {
-
-    SRC_LOG_D("TDqPqRdReadActor::SaveState");
+void TDqPqRdReadActor::SaveState(const NDqProto::TCheckpoint& /*checkpoint*/, TSourceState& state) {
+    SRC_LOG_D("SaveState");
     NPq::NProto::TDqPqTopicSourceState stateProto;
 
     NPq::NProto::TDqPqTopicSourceState::TTopicDescription* topic = stateProto.AddTopics();
@@ -335,12 +330,10 @@ void TDqPqRdReadActor::SaveState(const NDqProto::TCheckpoint& checkpoint, TSourc
     YQL_ENSURE(stateProto.SerializeToString(&stateBlob));
 
     state.Data.emplace_back(stateBlob, StateVersion);
-
-    DeferredCommits.emplace(checkpoint.GetId(), std::move(CurrentDeferredCommit));
-    CurrentDeferredCommit = NYdb::NTopic::TDeferredCommit();
 }
 
 void TDqPqRdReadActor::LoadState(const TSourceState& state) {
+    SRC_LOG_D("LoadState");
     TInstant minStartingMessageTs = state.DataSize() ? TInstant::Max() : StartingMessageTimestamp;
     ui64 ingressBytes = 0;
     for (const auto& data : state.Data) {
@@ -352,9 +345,12 @@ void TDqPqRdReadActor::LoadState(const TSourceState& state) {
             for (const NPq::NProto::TDqPqTopicSourceState::TPartitionReadState& partitionProto : stateProto.GetPartitions()) {
                 ui64& offset = PartitionToOffset[TPartitionKey{partitionProto.GetCluster(), partitionProto.GetPartition()}];
                 if (offset) {
+                    SRC_LOG_D("offset1: " << offset);
+                    SRC_LOG_D("partitionProto.GetOffset(): " << partitionProto.GetOffset());
                     offset = Min(offset, partitionProto.GetOffset());
                 } else {
                     offset = partitionProto.GetOffset();
+                    SRC_LOG_D("offset2: " << offset);
                 }
             }
             minStartingMessageTs = Min(minStartingMessageTs, TInstant::MilliSeconds(stateProto.GetStartingMessageTimestampMs()));
@@ -371,13 +367,7 @@ void TDqPqRdReadActor::LoadState(const TSourceState& state) {
     IngressStats.Chunks++;
 }
 
-void TDqPqRdReadActor::CommitState(const NDqProto::TCheckpoint& checkpoint) {
-    const auto checkpointId = checkpoint.GetId();
-    while (!DeferredCommits.empty() && DeferredCommits.front().first <= checkpointId) {
-        auto& deferredCommit = DeferredCommits.front().second;
-        deferredCommit.Commit();
-        DeferredCommits.pop();
-    }
+void TDqPqRdReadActor::CommitState(const NDqProto::TCheckpoint& /*checkpoint*/) {
 }
 
 ui64 TDqPqRdReadActor::GetInputIndex() const {
@@ -408,7 +398,7 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
     SRC_LOG_D("GetAsyncInputData freeSpace = " << freeSpace);
 
     ProcessState();
-    if (ReadyBuffer.empty()) {
+    if (ReadyBuffer.empty() || !freeSpace) {
         //    SubscribeOnNextEvent();
         return 0;
     }
@@ -417,7 +407,11 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
     do {
         auto& readyBatch = ReadyBuffer.front();
         SRC_LOG_T("Return " << readyBatch.Data.size() << " items");
-        std::move(readyBatch.Data.begin(), readyBatch.Data.end(), std::back_inserter(buffer));
+
+        for (const auto& message : readyBatch.Data) {
+            auto [item, size] = CreateItem(message);
+            buffer.push_back(std::move(item));
+        }
         usedSpace += readyBatch.UsedSpace;
         freeSpace -= readyBatch.UsedSpace;
         SRC_LOG_T("usedSpace " << usedSpace);
@@ -632,8 +626,7 @@ void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) {
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev) {
-    //NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
-    SRC_LOG_T("TEvMessageBatch  ev: " << ev->Sender);
+    SRC_LOG_T("TEvMessageBatch from " << ev->Sender);
     ui64 partitionId = ev->Get()->Record.GetPartitionId();
     YQL_ENSURE(Sessions.count(partitionId), "Unknown partition id");
     auto it = Sessions.find(partitionId);
@@ -652,9 +645,8 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev) 
 
     for (const auto& message : ev->Get()->Record.GetMessages()) {
         SRC_LOG_T("Json: " << message.GetJson());    
-        auto [item, size] = CreateItem(message.GetJson());
-        activeBatch.Data.emplace_back(std::move(item));
-        activeBatch.UsedSpace += size;
+        activeBatch.Data.emplace_back(message.GetJson());
+        activeBatch.UsedSpace += message.GetJson().size();
         activeBatch.NextOffset = message.GetOffset() + 1;
         sessionInfo.NextOffset = message.GetOffset() + 1;
         SRC_LOG_T("TEvMessageBatch NextOffset " << sessionInfo.NextOffset);

@@ -244,6 +244,7 @@ federated_query_config:
       endpoint: ""
   row_dispatcher:
     enabled: false
+    timeout_before_start_session_sec: 1
     coordinator:
       enabled: true
       node_path: "row_dispatcher"

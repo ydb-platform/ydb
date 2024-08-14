@@ -7,7 +7,6 @@
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
-#include <ydb/core/fq/libs/row_dispatcher/leader_election.h>
 #include <ydb/library/actors/core/interconnect.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -51,23 +50,28 @@ struct TEvAcquireSemaphoreResult : NActors::TEventLocal<TEvAcquireSemaphoreResul
 
 class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
 
+    using TPartitionKey = std::tuple<TString, TString, TString, ui64>;     // Endpoint / Database / TopicName / PartitionId 
+
     NConfig::TRowDispatcherCoordinatorConfig Config;
-    const NKikimr::TYdbCredentialsProviderFactory& CredentialsProviderFactory;
+  //  const NKikimr::TYdbCredentialsProviderFactory& CredentialsProviderFactory;
     TYqSharedResources::TPtr YqSharedResources;
-    TMaybe<TActorId> LeaderActorId;
+   // TMaybe<TActorId> LeaderActorId;
+    TActorId LocalRowDispatcherId;
     const TString LogPrefix;
     const TString Tenant;
-
-    struct NodeInfo {
-        bool Connected = false;
-        TActorId ActorId;
-    };
-    std::map<ui32, NodeInfo> RowDispatchersByNode; 
     bool IsLeader = false;
+
+    struct RowDispatcherInfo {
+        bool Connected = false;
+   //     TActorId ActorId;
+    };
+    TMap<NActors::TActorId, RowDispatcherInfo> RowDispatchers;
+    //TVector<NActors::TActorId> RowDispatchers;
+    THashMap<TPartitionKey, TActorId> PartitionLocations;
 
 public:
     TActorCoordinator(
-        NActors::TActorId rowDispatcherId,
+        NActors::TActorId localRowDispatcherId,
         const NConfig::TRowDispatcherCoordinatorConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const TYqSharedResources::TPtr& yqSharedResources,
@@ -95,63 +99,98 @@ public:
     })
 
 private:
-    void DebugPrint();
+
+    void AddRowDispatcher(NActors::TActorId actorId);
+    void PrintInternalState();
+    NActors::TActorId GetAndUpdateLocation(TPartitionKey key);
 };
 
 TActorCoordinator::TActorCoordinator(
-    NActors::TActorId /*rowDispatcherId*/,
+    NActors::TActorId localRowDispatcherId,
     const NConfig::TRowDispatcherCoordinatorConfig& config,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
+    const NKikimr::TYdbCredentialsProviderFactory&, // credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
     const TString& tenant)
     : Config(config)
-    , CredentialsProviderFactory(credentialsProviderFactory)
+   // , CredentialsProviderFactory(credentialsProviderFactory)
     , YqSharedResources(yqSharedResources)
+    , LocalRowDispatcherId(localRowDispatcherId)
     , LogPrefix("Coordinator: ")
     , Tenant(tenant) {
+    AddRowDispatcher(localRowDispatcherId);
 }
 
 void TActorCoordinator::Bootstrap() {
     Become(&TActorCoordinator::StateFunc);
+    Send(LocalRowDispatcherId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
     LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped coordinator, id " << SelfId());
-    Register(NewLeaderElection(SelfId(), Config, CredentialsProviderFactory, YqSharedResources, Tenant).release());
+}
+
+void TActorCoordinator::AddRowDispatcher(NActors::TActorId actorId) {
+    if (RowDispatchers.contains(actorId)) {
+        return;
+    }
+    auto& info = RowDispatchers[actorId];
+    info.Connected = true;
 }
 
 void TActorCoordinator::Handle(NActors::TEvents::TEvPing::TPtr& ev) {
-    LOG_ROW_DISPATCHER_DEBUG("StartSession received, " << ev->Sender);
+    LOG_ROW_DISPATCHER_TRACE("TEvPing received, " << ev->Sender);
 
-    ui32 nodeId = ev->Sender.NodeId();
-    auto& nodeInfo = RowDispatchersByNode[nodeId];
-    nodeInfo.Connected = true;
-    nodeInfo.ActorId = ev->Sender;
+    AddRowDispatcher(ev->Sender);
 
-    DebugPrint();
+    PrintInternalState();
+    LOG_ROW_DISPATCHER_TRACE("Send TEvPong to " << ev->Sender);
+
     Send(ev->Sender, new NActors::TEvents::TEvPong(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
 }
 
-void TActorCoordinator::DebugPrint() {
-    LOG_ROW_DISPATCHER_DEBUG("RowDispatchers: ");
+void TActorCoordinator::PrintInternalState() {
+    TStringStream str;
+    str << "RowDispatcher:\n";
 
-    for (const auto& [nodeId, nodeInfo] : RowDispatchersByNode) {
-            LOG_ROW_DISPATCHER_DEBUG("   node " << nodeId << ", connected " << nodeInfo.Connected);
+    for (const auto& [actorId, info] : RowDispatchers) {
+        str << "   actorId " << actorId << ", connected " << info.Connected << "\n";
     }
+
+    str << "\nLocations:\n";
+    for (auto& [key, actorId] : PartitionLocations) {
+        str << "  endpoint: " << std::get<0>(key) << ", db: " << std::get<1>(key) << ", topic " << std::get<2>(key) << ", partId " << std::get<3>(key)  <<  ",  row dispatcher actor id: " << actorId << "\n";
+    }
+    LOG_ROW_DISPATCHER_DEBUG(str.Str());
 }
 
 void TActorCoordinator::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
     LOG_ROW_DISPATCHER_DEBUG("EvNodeConnected " << ev->Get()->NodeId);
+
+    for (auto& [actorId, info] : RowDispatchers) {
+        if (ev->Get()->NodeId != actorId.NodeId()) {
+            continue;
+        }
+        info.Connected = true;
+    }
 }
 
 void TActorCoordinator::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvNodeDisconnected " << ev->Get()->NodeId);
-    auto& nodeInfo = RowDispatchersByNode[ev->Get()->NodeId];
-    nodeInfo.Connected = false;
+   
+    for (auto& [actorId, info] : RowDispatchers) {
+        if (ev->Get()->NodeId != actorId.NodeId()) {
+            continue;
+        }
+        info.Connected = false;
+    }
 }
 
 void TActorCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvUndelivered, ev: " << ev->Get()->ToString());
-    LOG_ROW_DISPATCHER_DEBUG("TEvUndelivered, Reason: " << ev->Get()->Reason);
-    auto& nodeInfo = RowDispatchersByNode[ev->Sender.NodeId()];
-    nodeInfo.Connected = false;
+
+    for (auto& [actorId, info] : RowDispatchers) {
+        if (ev->Sender != actorId) {
+            continue;
+        }
+        info.Connected = false;
+    }
 }
 
 void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
@@ -162,31 +201,66 @@ void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPt
     LOG_ROW_DISPATCHER_DEBUG("IsLeader " << IsLeader);
 }
 
+NActors::TActorId TActorCoordinator::GetAndUpdateLocation(TPartitionKey key) {
+    static ui64 counter = 0;
+
+    Y_ENSURE(!PartitionLocations.contains(key));
+    auto rand = counter++ % RowDispatchers.size();
+
+    auto it = std::begin(RowDispatchers);
+    std::advance(it, rand);
+
+    while(true) {
+        auto& info = it->second;
+        if (!info.Connected) {
+            it++;
+            if (it == RowDispatchers.end()) {
+                it = RowDispatchers.begin();
+            }
+            continue;
+        }
+        PartitionLocations[key] = it->first;
+        return it->first;
+    }
+}
+
 void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvCoordinatorRequest: ");
-    LOG_ROW_DISPATCHER_DEBUG("  TopicPath " << ev->Get()->Record.GetSource().GetTopicPath());
+    const auto source =  ev->Get()->Record.GetSource();
+    LOG_ROW_DISPATCHER_DEBUG("  TopicPath " << source.GetTopicPath());
     
     for (auto& partitionId : ev->Get()->Record.GetPartitionId()) {
         LOG_ROW_DISPATCHER_DEBUG("  partitionId " << partitionId);
     }
-    DebugPrint();
+    Y_ENSURE(!RowDispatchers.empty());
 
-    if (RowDispatchersByNode.empty()) {
-        LOG_ROW_DISPATCHER_DEBUG("empty  RowDispatchersByNode"); // TODO
-        return;
+    TMap<NActors::TActorId, TSet<ui64>> tmpResult;
+
+    for (auto& partitionId : ev->Get()->Record.GetPartitionId()) {
+        TPartitionKey key{source.GetEndpoint(), source.GetDatabase(), source.GetTopicPath(), partitionId};
+        auto locationIt = PartitionLocations.find(key);
+        NActors::TActorId rowDispatcherId;
+        if (locationIt != PartitionLocations.end()) {
+            rowDispatcherId = locationIt->second;
+        } else {
+            rowDispatcherId = GetAndUpdateLocation(key);
+        }
+        tmpResult[rowDispatcherId].insert(partitionId);
     }
 
-    const auto& nodeInfo = RowDispatchersByNode.begin()->second;
-    LOG_ROW_DISPATCHER_DEBUG("Send  TEvCoordinatorResult " << nodeInfo.ActorId);
     auto response = std::make_unique<TEvRowDispatcher::TEvCoordinatorResult>();
-    auto* partitions = response->Record.AddPartitions();
-    for (auto& partitionId : ev->Get()->Record.GetPartitionId()) {
-        partitions->AddPartitionId(partitionId);
+    for (auto [actorId, partitions] : tmpResult) {
+        auto* partitionsProto = response->Record.AddPartitions();
+        ActorIdToProto(actorId, partitionsProto->MutableActorId());
+        LOG_ROW_DISPATCHER_DEBUG("  rowDispatcherActorId " << actorId);
+        for (auto partitionId : partitions) {
+            partitionsProto->AddPartitionId(partitionId);
+        }
     }
     
-    ActorIdToProto(nodeInfo.ActorId, partitions->MutableActorId());
-
+    LOG_ROW_DISPATCHER_DEBUG("Send  TEvCoordinatorResult to " << ev->Sender);
     Send(ev->Sender, response.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+    PrintInternalState();
 }
 
 

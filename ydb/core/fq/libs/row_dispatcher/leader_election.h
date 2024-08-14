@@ -13,6 +13,7 @@ namespace NFq {
 
 std::unique_ptr<NActors::IActor> NewLeaderElection(
     NActors::TActorId rowDispatcherId,
+    NActors::TActorId coordinatorId,
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,

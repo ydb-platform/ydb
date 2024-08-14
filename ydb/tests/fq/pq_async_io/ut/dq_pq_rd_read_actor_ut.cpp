@@ -11,7 +11,6 @@ namespace NYql::NDq {
 
 struct TFixture : public TPqIoTestFixture {
 
-
     void ExpectCoordinatorChangesSubscribe() {
         auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe>(LocalRowDispatcherId, TDuration::Seconds(5));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
@@ -137,7 +136,7 @@ struct TFixture : public TPqIoTestFixture {
 
         MockMessageBatch(offset, jsons);
 
-        auto result = SourceReadDataUntil<TString>(UVParser, 2);
+        auto result = SourceReadDataUntil<TString>(UVParser, jsons.size());
         AssertDataWithWatermarks(result, jsons, {});
     } 
 
@@ -183,7 +182,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTest) {
         MockMessageBatch(0, data1);
 
         const std::vector<TString> data2 = {Json3, Json4};
-        MockMessageBatch(0, data2);
+        MockMessageBatch(2, data2);
 
         auto result = SourceReadDataUntil<TString>(UVParser, 1, 1);
         std::vector<TString> expected{data1};
@@ -219,8 +218,9 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTest) {
             f.MockAck();
 
             f.ProcessSomeJsons(2, {f.Json3});  // offsets: 2
-
+            state.Data.clear();
             f.SaveSourceState(CreateCheckpoint(), state);
+            Cerr << "State saved" << Endl;
         }
         {
             TFixture f;

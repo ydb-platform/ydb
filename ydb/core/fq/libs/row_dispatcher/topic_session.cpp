@@ -69,10 +69,8 @@ class TTopicSession : public TActorBootstrapped<TTopicSession> {
 private:
     NActors::TActorId RowDispatcherActorId;
     ui32 PartitionId;
-    //TMaybe<ui64> ReadOffset;
     NYdb::TDriver Driver;
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
-
     std::unique_ptr<NYdb::NTopic::TTopicClient> TopicClient;
     std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
     const i64 BufferSize;
@@ -80,7 +78,6 @@ private:
     NYql::NDq::TDqAsyncStats IngressStats;
     TQueue<TReadyBatch> ReadyBuffer;
     ui32 BatchCapacity;
-    //bool IsStopped = false;
     ui64 LastMessageOffset = 0;
 
     struct ClientsInfo {
@@ -207,6 +204,8 @@ void TTopicSession::Bootstrap() {
     Become(&TTopicSession::StateFunc);
     LogPrefix = LogPrefix + " " + SelfId().ToString() + " ";
     LOG_ROW_DISPATCHER_DEBUG("Bootstrap " << ", PartitionId " << PartitionId);
+    LOG_ROW_DISPATCHER_DEBUG("Timeout " << Config.GetTimeoutBeforeStartSessionSec() << " sec " << PartitionId);
+    
 }
 
 void TTopicSession::PassAway() {

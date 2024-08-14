@@ -20,6 +20,7 @@
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/topic_session.h>
 #include <ydb/core/fq/libs/row_dispatcher/consumer.h>
+#include <ydb/core/fq/libs/row_dispatcher/leader_election.h>
 #include <ydb/core/fq/libs/row_dispatcher/protos/events.pb.h>
 
 
@@ -187,7 +188,8 @@ void TRowDispatcher::Bootstrap() {
     if (Config.GetCoordinator().GetEnabled()) {
         const auto& config = Config.GetCoordinator();
         Register(NewLeaderDetector(SelfId(), config, CredentialsProviderFactory, YqSharedResources->UserSpaceYdbDriver, Tenant).release());
-        Register(NewCoordinator(SelfId(), config, CredentialsProviderFactory, YqSharedResources, Tenant).release());
+        auto coordinatorId = Register(NewCoordinator(SelfId(), config, CredentialsProviderFactory, YqSharedResources, Tenant).release());
+        Register(NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, YqSharedResources, Tenant).release());
     }
 }
 

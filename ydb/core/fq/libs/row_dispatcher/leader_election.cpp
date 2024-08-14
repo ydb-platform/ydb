@@ -66,6 +66,7 @@ class TLeaderElection: public TActorBootstrapped<TLeaderElection> {
     TString CoordinationNodePath;
     TMaybe<NYdb::NCoordination::TSession> Session;
     TActorId ParentId;
+    TActorId CoordinatorId;
     const TString LogPrefix;
     const TString Tenant;
 
@@ -77,6 +78,7 @@ class TLeaderElection: public TActorBootstrapped<TLeaderElection> {
 public:
     TLeaderElection(
         NActors::TActorId parentId,
+        NActors::TActorId coordinatorId,
         const NConfig::TRowDispatcherCoordinatorConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const TYqSharedResources::TPtr& yqSharedResources,
@@ -110,6 +112,7 @@ private:
 
 TLeaderElection::TLeaderElection(
     NActors::TActorId parentId,
+    NActors::TActorId coordinatorId,
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
@@ -120,6 +123,7 @@ TLeaderElection::TLeaderElection(
     , YdbConnection(NewYdbConnection(config.GetStorage(), credentialsProviderFactory, yqSharedResources->UserSpaceYdbDriver))
     , CoordinationNodePath(JoinPath(YdbConnection->TablePathPrefix, tenant))
     , ParentId(parentId)
+    , CoordinatorId(coordinatorId)
     , LogPrefix("TLeaderElection: ")
     , Tenant(tenant) {
 }
@@ -178,7 +182,7 @@ void TLeaderElection::CreateSemaphore() {
 void TLeaderElection::AcquireSemaphore() {
 
     NActorsProto::TActorId protoId;
-    ActorIdToProto(ParentId, &protoId);
+    ActorIdToProto(CoordinatorId, &protoId);
     TString strActorId;
     if (!protoId.SerializeToString(&strActorId)) {
         Y_ABORT("SerializeToString");
@@ -245,12 +249,13 @@ void TLeaderElection::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr&
 
 std::unique_ptr<NActors::IActor> NewLeaderElection(
     NActors::TActorId rowDispatcherId,
+    NActors::TActorId coordinatorId,
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
     const TString& tenant)
 {
-    return std::unique_ptr<NActors::IActor>(new TLeaderElection(rowDispatcherId, config, credentialsProviderFactory, yqSharedResources, tenant));
+    return std::unique_ptr<NActors::IActor>(new TLeaderElection(rowDispatcherId, coordinatorId, config, credentialsProviderFactory, yqSharedResources, tenant));
 }
 
 } // namespace NFq

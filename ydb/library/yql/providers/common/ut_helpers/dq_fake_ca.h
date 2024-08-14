@@ -137,7 +137,7 @@ private:
     )
 
     void Handle(TEvPrivate::TEvExecute::TPtr& ev) {
-        //TGuard<NKikimr::NMiniKQL::TScopedAlloc> guard(Alloc);
+        TGuard<NKikimr::NMiniKQL::TScopedAlloc> guard(Alloc);
         try {
             ev->Get()->Callback(*this);
         } catch (...) {
@@ -190,7 +190,7 @@ struct TFakeCASetup {
         std::vector<std::variant<T, TInstant>> result;
         NThreading::TFuture<bool> nextDataFuture;
         Execute([&result, &parser, freeSpace, &nextDataFutureOut, this](TFakeActor& actor) {
-            //NKikimr::NMiniKQL::TScopedAlloc guard(__LOCATION__);
+            NKikimr::NMiniKQL::TScopedAlloc guard(__LOCATION__);
             TMaybe<TInstant> watermark;
             NKikimr::NMiniKQL::TUnboxedValueBatch buffer;
             bool finished = false;

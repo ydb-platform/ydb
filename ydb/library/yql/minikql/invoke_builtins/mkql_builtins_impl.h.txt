@@ -1641,7 +1641,7 @@ struct TDecimalKernelExecs
             return false;
         }
 
-        *resPtr = resPod.template Get<typename TPrimitiveDataType<TOutput>::TLayout>();
+        *resPtr = resPod.GetInt128();
         return true;
     }
 
@@ -1663,7 +1663,7 @@ struct TDecimalKernelExecs
             if (!valid2 || arrow::BitUtil::GetBit(valid2, i + offset2)) {
                 auto resPod = TFuncInstance<precision>::Execute(NUdf::TUnboxedValuePod(*val1Ptr), NUdf::TUnboxedValuePod(*val2Ptr));
                 if (resPod) {
-                    *resPtr = resPod.template Get<typename TPrimitiveDataType<TOutput>::TLayout>();
+                    *resPtr = resPod.GetInt128();
                     arrow::BitUtil::SetBit(resValid, i);
                     continue;
                 }
@@ -1691,7 +1691,7 @@ struct TDecimalKernelExecs
             if (!valid1 || arrow::BitUtil::GetBit(valid1, i + offset1)) {
                 auto resPod = TFuncInstance<precision>::Execute(NUdf::TUnboxedValuePod(*val1Ptr), NUdf::TUnboxedValuePod(*val2Ptr));
                 if (resPod) {
-                    *resPtr = resPod.template Get<typename TPrimitiveDataType<TOutput>::TLayout>();
+                    *resPtr = resPod.GetInt128();
                     arrow::BitUtil::SetBit(resValid, i);
                     continue;
                 }
@@ -1719,7 +1719,7 @@ struct TDecimalKernelExecs
                 (!valid2 || arrow::BitUtil::GetBit(valid2, i + offset2))) {
                 auto resPod = TFuncInstance<precision>::Execute(NUdf::TUnboxedValuePod(*val1Ptr), NUdf::TUnboxedValuePod(*val2Ptr));
                 if (resPod) {
-                    *resPtr = resPod.template Get<typename TPrimitiveDataType<TOutput>::TLayout>();
+                    *resPtr = resPod.GetInt128();
                     arrow::BitUtil::SetBit(resValid, i);
                     continue;
                 }
@@ -1752,7 +1752,7 @@ struct TDecimalKernelExecs
         } else if constexpr(maxPrecision > 1) {
             return ExecSwitch<maxPrecision-1>(precision, kernelCtx, batch, res);
         } else {
-            MKQL_ENSURE(false, "Wrong precision");
+            MKQL_ENSURE(false, TStringBuilder() << "Wrong precision: " << (int)precision);
         }
     }
 
@@ -1765,7 +1765,14 @@ struct TDecimalKernelExecs
 
 template<template<ui8> class TFunc>
 void AddBinaryDecimalKernels(TKernelFamilyBase& owner) {
-    Y_UNUSED(owner);
+    auto type1 = NUdf::GetDataTypeInfo(NUdf::EDataSlot::Decimal).TypeId;
+    auto type2 = type1;
+    auto returnType = type1;
+    std::vector<NUdf::TDataTypeId> argTypes({ type1, type2 });
+
+    using Execs = TDecimalKernelExecs<TFunc>;
+    auto kernel = std::make_unique<TDecimalKernel>(owner, argTypes, returnType, &Execs::Exec, TKernel::ENullMode::Default);
+    owner.Adopt(argTypes, returnType, std::move(kernel));
 }
 
 }

@@ -1,4 +1,5 @@
 #include "mkql_builtins_impl.h"  // Y_IGNORE
+#include <ydb/library/yql/minikql/mkql_node_builder.h> // UnpackOptionalData
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -283,24 +284,32 @@ const arrow::compute::ScalarKernel& TDecimalKernel::GetArrowKernel() const {
 }
 
 std::shared_ptr<arrow::compute::ScalarKernel> TDecimalKernel::MakeArrowKernel(const TVector<TType*>& argTypes, TType* resultType) const {
-    MKQL_ENSURE(ArgTypes.size() == 2, "Require 2 arguments");
     MKQL_ENSURE(argTypes.size() == 2, "Require 2 arguments");
+    MKQL_ENSURE(argTypes[0]->GetKind() == TType::EKind::Block, "Require block");
+    MKQL_ENSURE(argTypes[1]->GetKind() == TType::EKind::Block, "Require block");
+    MKQL_ENSURE(resultType->GetKind() == TType::EKind::Block, "Require block");
+
+    bool isOptional = false;
+    auto dataType1 = UnpackOptionalData(static_cast<TBlockType*>(argTypes[0])->GetItemType(), isOptional);
+    auto dataType2 = UnpackOptionalData(static_cast<TBlockType*>(argTypes[1])->GetItemType(), isOptional);
+    auto dataResultType = UnpackOptionalData(static_cast<TBlockType*>(resultType)->GetItemType(), isOptional);
+
+    MKQL_ENSURE(*dataType1->GetDataSlot() == NUdf::EDataSlot::Decimal, "Require decimal");
+    MKQL_ENSURE(*dataType2->GetDataSlot() == NUdf::EDataSlot::Decimal, "Require decimal");
+    MKQL_ENSURE(*dataResultType->GetDataSlot() == NUdf::EDataSlot::Decimal, "Require decimal");
     
-    auto decimalType1 = static_cast<TDataDecimalType*>(argTypes[0]);
-    auto decimalType2 = static_cast<TDataDecimalType*>(argTypes[1]);
-    auto decimalResultType = static_cast<TDataDecimalType*>(resultType);
+    auto decimalType1 = static_cast<TDataDecimalType*>(dataType1);
+    auto decimalType2 = static_cast<TDataDecimalType*>(dataType2);
+    auto decimalResultType = static_cast<TDataDecimalType*>(dataResultType);
 
-    MKQL_ENSURE(decimalType1->GetParams() == decimalType2->GetParams(), "Same precision/scale required");
-    MKQL_ENSURE(decimalType1->GetParams() == decimalResultType->GetParams(), "Same precision/scale required");
-
-    auto type1 = ArgTypes[0];
-    auto type2 = ArgTypes[1];
+    MKQL_ENSURE(decimalType1->GetParams() == decimalType2->GetParams(), "Require same precision/scale");
+    MKQL_ENSURE(decimalType1->GetParams() == decimalResultType->GetParams(), "Require same precision/scale");
 
     ui8 precision = decimalType1->GetParams().first;
 
     auto k = std::make_shared<arrow::compute::ScalarKernel>(std::vector<arrow::compute::InputType>{
-        GetPrimitiveInputArrowType(NYql::NUdf::GetDataSlot(type1)), GetPrimitiveInputArrowType(NYql::NUdf::GetDataSlot(type2))
-    }, GetPrimitiveOutputArrowType(NYql::NUdf::GetDataSlot(ReturnType)), Exec);
+        GetPrimitiveInputArrowType(NUdf::EDataSlot::Decimal), GetPrimitiveInputArrowType(NUdf::EDataSlot::Decimal)
+    }, GetPrimitiveOutputArrowType(NUdf::EDataSlot::Decimal), Exec);
     k->null_handling = arrow::compute::NullHandling::INTERSECTION;
     k->init = [precision](arrow::compute::KernelContext*, const arrow::compute::KernelInitArgs&) {
         auto state = std::make_unique<TDecimalKernel::TKernelState>();

@@ -46,7 +46,7 @@ this.retryCtx = SessionRetryContext.create(queryClient).build();
 
 {% include [create_table.md](../_includes/steps/02_create_table.md) %}
 
-To create tables, use the `TxMode.NONE` transaction mode which allows to execute DDL queries:
+To create tables, use the `TxMode.NONE` transaction mode, which allows the execution of DDL queries:
 
 ```java
 private void createTables() {
@@ -86,7 +86,7 @@ private void createTables() {
 
 {% include [../steps/03_write_queries.md](../_includes/steps/03_write_queries.md) %}
 
-To execute YQL queries, use the `QuerySession.createQuery()` method. It creates a new `QueryStream` object, which allows to execute a query and subscribe for receiving response data from the server. Because the write requests don't expect any results, the `QueryStream.execute()` method is used without parameters; it just executes the request and waits for the stream to complete.
+To execute YQL queries, use the `QuerySession.createQuery()` method. It creates a new `QueryStream` object, which allows to execute a query and subscribe for receiving response data from the server. Because write requests don't expect any results, the `QueryStream.execute()` method is used without parameters; it just executes the request and waits for the stream to complete.
 Code snippet demonstrating this logic:
 
 ```java
@@ -102,7 +102,7 @@ private void upsertSimple() {
 
 {% include [steps/04_query_processing.md](../_includes/steps/04_query_processing.md) %}
 
-Direct usage of the `QueryStream` class to obtain results may not always be convenient - it involves receiving data from the server asynchronously in the callback of the `QueryStream.execute()` method. If the number of expected rows in a result is not too large, it is more useful to use the `QueryReader` helper from SDK, which first reads all response parts from the stream and gives they all to the user in an ordered form.
+Direct usage of the `QueryStream` class to obtain results may not always be convenient, as it involves receiving data from the server asynchronously in the callback of the `QueryStream.execute()` method. If the number of expected rows in a result is not too large, it is more practical to use the `QueryReader` helper from the SDK, which first reads all response parts from the stream and provides them all to the user in an ordered form.
 
 ```java
 private void selectSimple() {
@@ -138,7 +138,7 @@ As a result of the query, an object of the `QueryReader` class is generated. It 
 
 {% include [param_queries.md](../_includes/steps/06_param_queries.md) %}
 
-Фрагмент кода, приведенный ниже, демонстрирует использование параметризованных запросов и класс `Params` для формирования параметров и передачи их методу `QuerySession.createQuery`.
+The code snippet below demonstrates how to use parameterized queries and the `Params` class to construct parameters and pass them to the `QuerySession.createQuery` method.
 
 ```java
 private void selectWithParams(long seriesID, long seasonID) {
@@ -175,7 +175,7 @@ private void selectWithParams(long seriesID, long seasonID) {
 
 {% include [async_requests.md](../_includes/steps/11_async_requests.md) %}
 
-If the expected count of the response rows is large, asynchronous reading is a more preferable way to process them. In this case the `SessionRetryContext` is still used for the retries, because the response parts processing can be interrupted in any moment and after that the entire process of executing has to restart.
+If the expected row count in the response is large, asynchronous reading is the preferred way to process them. In this case, the `SessionRetryContext` is still used for retries because processing response parts can be interrupted at any moment, requiring the entire execution process to restart.
 
 ```java
 private void asyncSelectRead(long seriesID, long seasonID) {
@@ -238,7 +238,7 @@ The first step is to prepare and execute the first query:
             + "SELECT MIN(first_aired) AS from_date FROM seasons "
             + "WHERE series_id = $seriesId AND season_id = $seasonId;";
 
-    // Execute first query to start a new transaction
+    // Execute the first query to start a new transaction
     QueryReader res1 = QueryReader.readFrom(transaction.createQuery(query1, Params.of(
             "$seriesId", PrimitiveValue.newUint64(seriesID),
             "$seasonId", PrimitiveValue.newUint64(seasonID)
@@ -275,7 +275,7 @@ The next step is to create the next query that uses the results of code executio
             + "SELECT season_id, episode_id, title, air_date FROM episodes "
             + "WHERE series_id = $seriesId AND air_date >= $fromDate AND air_date <= $toDate;";
 
-    // Execute second query with commit at end.
+    // Execute the second query and commit
     QueryReader res2 = QueryReader.readFrom(transaction.createQueryWithCommit(query2, Params.of(
         "$seriesId", PrimitiveValue.newUint64(seriesID),
         "$fromDate", PrimitiveValue.newDate(fromDate),

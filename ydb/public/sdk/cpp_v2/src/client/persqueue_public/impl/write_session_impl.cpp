@@ -98,11 +98,10 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStat
             << ". Description: " << IssuesSingleLineString(status.Issues)
     );
     SessionEstablished = false;
-    std::optional<TDuration> nextDelay = TDuration::Zero();
     if (!RetryState) {
         RetryState = Settings.RetryPolicy_->CreateRetryState();
     }
-    nextDelay = RetryState->GetNextRetryDelay(status.Status);
+    auto nextDelay = RetryState->GetNextRetryDelay(status.Status);
 
     if (nextDelay) {
         result.StartDelay = *nextDelay;

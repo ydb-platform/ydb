@@ -16,7 +16,7 @@ PEERDIR(
     library/cpp/uri
     ydb/public/sdk/cpp_v2/src/client/types
     ydb/public/sdk/cpp_v2/src/client/types/credentials
-    ydb/public/sdk/cpp_v2/src/library/retry
+    
 )
 
 END()

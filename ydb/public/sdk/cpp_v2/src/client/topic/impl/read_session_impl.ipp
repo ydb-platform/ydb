@@ -302,7 +302,8 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::Reconnect(const TPlain
             RetryState = Settings.RetryPolicy_->CreateRetryState();
         }
         if (!status.Ok()) {
-            std::optional<TDuration> nextDelay = RetryState->GetNextRetryDelay(status.Status);
+            auto nextDelay = RetryState->GetNextRetryDelay(status.Status);
+
             if (!nextDelay) {
                 return false;
             }

@@ -230,7 +230,7 @@ void TReadSession::OnClusterDiscovery(const TStatus& status, const Ydb::PersQueu
             if (!ClusterDiscoveryRetryState) {
                 ClusterDiscoveryRetryState = Settings.RetryPolicy_->CreateRetryState();
             }
-            std::optional<TDuration> retryDelay = ClusterDiscoveryRetryState->GetNextRetryDelay(status.GetStatus());
+            auto retryDelay = ClusterDiscoveryRetryState->GetNextRetryDelay(status.GetStatus());
             if (retryDelay) {
                 LOG_LAZY(Log,
                     TLOG_INFO,

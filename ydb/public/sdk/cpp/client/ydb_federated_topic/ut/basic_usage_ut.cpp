@@ -1060,8 +1060,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
     }
 
     Y_UNIT_TEST(WriteSessionSwitchDatabases) {
-        // Test that the federated write session doesn't deadlock when reconnecting to another database,
-        // if the updated state of the federation is different from the previous one.
+        // When a write session receives a federation state different from the previous one,
+        // it should successfully reconnect to another database.
 
         auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(
             TEST_CASE_NAME, false, ::NPersQueue::TTestServer::LOGGED_SERVICES, NActors::NLog::PRI_DEBUG, 2);
@@ -1096,9 +1096,10 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                 ++(ev.IsSuccess() ? successfulSessionClosedEvents : otherSessionClosedEvents);
             });
 
+        // Use sync executor to check that there are no deadlocks in the event handlers.
         writeSettings.EventHandlers_.HandlersExecutor(NTopic::CreateSyncExecutor());
 
-        auto WriteSession = topicClient.CreateWriteSession(writeSettings);
+        auto writer = topicClient.CreateWriteSession(writeSettings);
 
         TMaybe<NTopic::TContinuationToken> token;
 
@@ -1106,10 +1107,10 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         fdsRequest.Result.SetValue(fdsMock.ComposeOkResultAvailableDatabases());
 
         {
-            WriteSession->Write(GetToken(WriteSession), NTopic::TWriteMessage("hello 1"));
-            token = GetToken(WriteSession);
+            writer->Write(GetToken(writer), NTopic::TWriteMessage("hello 1"));
+            token = GetToken(writer);
 
-            auto e = WriteSession->GetEvent(true);
+            auto e = writer->GetEvent(true);
             auto* acksEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TAcksEvent>(&*e);
             UNIT_ASSERT(acksEvent);
         }
@@ -1126,11 +1127,11 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         {
             UNIT_ASSERT(token.Defined());
-            WriteSession->Write(std::move(*token), NTopic::TWriteMessage("hello 2"));
+            writer->Write(std::move(*token), NTopic::TWriteMessage("hello 2"));
 
-            token = GetToken(WriteSession);
+            token = GetToken(writer);
 
-            auto e = WriteSession->GetEvent(true);
+            auto e = writer->GetEvent(true);
             auto* acksEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TAcksEvent>(&*e);
             UNIT_ASSERT(acksEvent);
         }
@@ -1143,21 +1144,173 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         {
             UNIT_ASSERT(token.Defined());
-            WriteSession->Write(std::move(*token), NTopic::TWriteMessage("hello 3"));
+            writer->Write(std::move(*token), NTopic::TWriteMessage("hello 3"));
 
-            token = GetToken(WriteSession);
+            token = GetToken(writer);
 
-            auto e = WriteSession->GetEvent(true);
+            auto e = writer->GetEvent(true);
             auto* acksEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TAcksEvent>(&*e);
             UNIT_ASSERT(acksEvent);
         }
 
         setup->ShutdownGRpc();
 
-        WriteSession->Close(TDuration::Seconds(5));
+        writer->Close(TDuration::Seconds(5));
 
         UNIT_ASSERT_VALUES_EQUAL(otherSessionClosedEvents, 1);
         UNIT_ASSERT_VALUES_EQUAL(successfulSessionClosedEvents, 0);
+    }
+
+    Y_UNIT_TEST(WriteSessionSwitchDatabasesNoLostMessages) {
+        // 1. The test involves a federated write session interacting with two databases (db1 and db2).
+        // 2. Initially, db1 is READ_ONLY, so the session connects to db2.
+        // 3. The test process:
+        //     a. Write one message to db2 and wait for acknowledgment.
+        //     b. Kill the PQ tablet, causing an UNAVAILABLE error.
+        //     c. Wait for the session to request a retry state (with a 1000-second retry interval).
+        //        We set delay to 1000 seconds, so the session doesn't send messages to db2 right away.
+        //     d. Write more messages to the session (these are buffered).
+        //     e. Switch db1 to AVAILABLE state.
+        //     f. The federated write session should connect to db1.
+        //     g. All buffered messages should be sent to db1 and acknowledged.
+
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(
+            TEST_CASE_NAME, false, ::NPersQueue::TTestServer::LOGGED_SERVICES, NActors::NLog::PRI_DEBUG, 2);
+
+        setup->Start(true);
+
+        TFederationDiscoveryServiceMock fdsMock;
+        fdsMock.Port = setup->GetGrpcPort();
+        ui16 newServicePort = setup->GetPortManager()->GetPort(4285);
+        auto grpcServer = setup->StartGrpcService(newServicePort, &fdsMock);
+
+        auto driverConfig = NYdb::TDriverConfig()
+            .SetEndpoint(TStringBuilder() << "localhost:" << newServicePort)
+            .SetDatabase("/Root")
+            .SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        auto driver = NYdb::TDriver(driverConfig);
+        auto topicClient = NYdb::NFederatedTopic::TFederatedTopicClient(driver);
+
+        TVector<TString> sentMessages;
+
+        {
+            // Write messages.
+            size_t totalMessages = 1000;
+            size_t gotAcks = 0;
+
+            std::shared_ptr<NTopic::IWriteSession> writer;
+            auto gotFirstAck = NThreading::NewPromise();
+            auto gotAllAcks = NThreading::NewPromise();
+            auto pqTabletsKilled = NThreading::NewPromise();
+            auto wroteAllMessages = NThreading::NewPromise();
+            TMutex readyToAcceptMutex;
+            TMutex acksMutex;
+
+            auto writeSettings = NTopic::TFederatedWriteSessionSettings()
+                .PreferredDatabase("dc1")
+                .AllowFallback(true)
+                .DirectWriteToPartition(false)
+                .Path(setup->GetTestTopic())
+                .MessageGroupId("src_id");
+
+            // After we kill the PQ tablets, the subsession should fall asleep.
+            // In the meantime, we make the db1 database available, the federated write session should switch to it,
+            // and write all unacknowledged messages to db1.
+            auto retryPolicy = std::make_shared<NPersQueue::NTests::TYdbPqTestRetryPolicy>(TDuration::Seconds(1000));
+            writeSettings.RetryPolicy(retryPolicy);
+            writeSettings.EventHandlers_
+
+                // We need 2 threads, because at one point ReadyToAcceptHandler has to wait,
+                // until AcksHandler sets gotFirstAck promise value.
+                .HandlersExecutor(NTopic::CreateThreadPoolExecutor(2))
+
+                .ReadyToAcceptHandler([&](NTopic::TWriteSessionEvent::TReadyToAcceptEvent& ev) {
+                    auto guard = Guard(readyToAcceptMutex);
+                    if (sentMessages.size() >= totalMessages) {
+                        return;
+                    }
+                    TString message = TStringBuilder() << sentMessages.size() << "-" << TString(100, 'x');
+                    sentMessages.push_back(message);
+                    if (sentMessages.size() > 1) {
+                        // We have written one message to db2, now wait until we get UNAVAILABLE.
+                        // Then write a bunch of other messages, that will stay in subsession buffer
+                        // and federated session OriginalMessagesToGetAck queue.
+                        pqTabletsKilled.GetFuture().Wait();
+                    }
+                    writer->Write(std::move(ev.ContinuationToken), message);
+                    if (sentMessages.size() == totalMessages) {
+                        wroteAllMessages.SetValue();
+                    }
+                })
+                .AcksHandler([&](NTopic::TWriteSessionEvent::TAcksEvent& ev) {
+                    auto guard = Guard(acksMutex);
+                    if (!gotFirstAck.HasValue()) {
+                        gotFirstAck.SetValue();
+                    }
+                    gotAcks += ev.Acks.size();
+                    if (gotAcks >= totalMessages) {
+                        gotAllAcks.SetValue();
+                    }
+                });
+
+            writer = topicClient.CreateWriteSession(writeSettings);
+
+            fdsMock.Databases.emplace_back(TFederationDiscoveryServiceMock::TFederationDatabase{
+                .Name = "db1",
+                .Id = "account-db1",
+                .Location = "db1",
+                .Status = Ydb::FederationDiscovery::DatabaseInfo_Status_READ_ONLY,
+            });
+            fdsMock.Databases.emplace_back(TFederationDiscoveryServiceMock::TFederationDatabase{
+                .Name = "db2",
+                .Id = "account-db2",
+                .Location = "db2",
+            });
+            fdsMock.NextResponse(fdsMock.ComposeOkResultFromVector());
+
+            gotFirstAck.GetFuture().Wait();
+            auto retried = NThreading::NewPromise();
+            retryPolicy->WaitForRetries(1, retried);
+            setup->GetServer().KillTopicPqTablets(setup->GetTestTopicPath());
+            retried.GetFuture().Wait();
+            pqTabletsKilled.SetValue();
+
+            wroteAllMessages.GetFuture().Wait();
+
+            fdsMock.Databases[0].EnableWrite();
+            auto fdsResult = fdsMock.ComposeOkResultFromVector();
+            fdsMock.NextResponse(fdsResult);
+
+            gotAllAcks.GetFuture().Wait();
+            writer->Close();
+        }
+
+        {
+            // Read the messages back.
+
+            size_t totalReceived = 0;
+            auto gotAllMessages = NThreading::NewPromise();
+
+            auto readSettings = NYdb::NFederatedTopic::TFederatedReadSessionSettings();
+            readSettings
+                .ConsumerName("shared/user")
+                .AppendTopics(setup->GetTestTopic());
+
+            readSettings.FederatedEventHandlers_.SimpleDataHandlers([&](TReadSessionEvent::TDataReceivedEvent& ev) mutable {
+                auto& messages = ev.GetMessages();
+                for (auto& message : messages) {
+                    UNIT_ASSERT_VALUES_EQUAL(message.GetData(), sentMessages[totalReceived]);
+                    ++totalReceived;
+                }
+                if (totalReceived >= sentMessages.size()) {
+                    gotAllMessages.SetValue();
+                }
+            });
+
+            auto reader = topicClient.CreateReadSession(readSettings);
+            gotAllMessages.GetFuture().Wait();
+            reader->Close();
+        }
     }
 
     Y_UNIT_TEST(WriteSessionWriteInHandlers) {

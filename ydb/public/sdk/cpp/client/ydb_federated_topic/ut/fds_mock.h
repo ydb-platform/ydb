@@ -57,6 +57,10 @@ public:
         } while (true);
     }
 
+    void NextResponse(TGrpcResult response) {
+        WaitNextPendingRequest().Result.SetValue(response);
+    }
+
     virtual grpc::Status ListFederationDatabases(grpc::ServerContext*,
                               const TRequest* request,
                               TResponse* response) override {
@@ -169,10 +173,57 @@ public:
         return {okResponse, grpc::Status::OK};
     }
 
+    TGrpcResult ComposeOkResultFromVector() {
+        Ydb::FederationDiscovery::ListFederationDatabasesResponse okResponse;
+
+        auto op = okResponse.mutable_operation();
+        op->set_status(Ydb::StatusIds::SUCCESS);
+        okResponse.mutable_operation()->set_ready(true);
+        okResponse.mutable_operation()->set_id("12345");
+
+        Ydb::FederationDiscovery::ListFederationDatabasesResult mockResult;
+        mockResult.set_control_plane_endpoint("cp.logbroker-federation:2135");
+        mockResult.set_self_location("fancy_datacenter");
+
+        for (auto& database : Databases) {
+            auto db = mockResult.add_federation_databases();
+            db->set_name(database.Name);
+            db->set_path(database.Path);
+            db->set_id(database.Id);
+            db->set_endpoint(database.Host + ":" + ToString(Port));
+            db->set_location(database.Location);
+            db->set_status(database.Status);
+            db->set_weight(database.Weight);
+        }
+
+        op->mutable_result()->PackFrom(mockResult);
+
+        return {okResponse, grpc::Status::OK};
+    }
+
 public:
     ui16 Port;
     std::deque<TManualRequest> PendingRequests;
     TAdaptiveLock Lock;
+
+public:
+    struct TFederationDatabase {
+        TString Name;
+        TString Path = "/Root";
+        TString Id;
+        TString Host = "localhost";
+        TString Location;
+        ::Ydb::FederationDiscovery::DatabaseInfo::Status Status = ::Ydb::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_AVAILABLE;
+        i64 Weight = 1000;
+
+        void EnableWrite() {
+            Status = ::Ydb::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_AVAILABLE;
+        }
+        void DisableWrite() {
+            Status = ::Ydb::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_READ_ONLY;
+        }
+    };
+    TVector<TFederationDatabase> Databases;
 };
 
 }  // namespace NYdb::NFederatedTopic::NTests

@@ -231,26 +231,7 @@ void TReadInitAndAuthActor::HandleClientSchemeCacheResponse(
     auto path = "/" + JoinPath(entry.Path); // ToDo [migration] - through converter ?
     if (navigate->ErrorCount > 0) {
         const NSchemeCache::TSchemeCacheNavigate::EStatus status = navigate->ResultSet.front().Status;
-
-        PersQueue::ErrorCode::ErrorCode errorCode;
-        switch(status) {
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::Unknown:
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotTable:
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotPath:
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
-                errorCode = PersQueue::ErrorCode::ERROR;
-                break;
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
-                errorCode = PersQueue::ErrorCode::UNKNOWN_TOPIC;
-                break;
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
-                errorCode = PersQueue::ErrorCode::ACCESS_DENIED;
-                break;
-        }
+        PersQueue::ErrorCode::ErrorCode errorCode = ConvertNavigateStatus(status);
 
         CloseSession(TStringBuilder() << "Failed to read ACL for '" << path << "' Scheme cache error : " << status,  errorCode, ctx);
         return;

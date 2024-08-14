@@ -67,6 +67,7 @@ public:
 
 private:
     std::shared_ptr<NTable::TTableClient> TableClient;
+    std::shared_ptr<NScheme::TSchemeClient> SchemeClient;
 
     NTable::TBulkUpsertSettings UpsertSettings;
     NTable::TRetryOperationSettings RetrySettings;

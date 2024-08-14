@@ -260,6 +260,7 @@ private:
 
 TImportFileClient::TImportFileClient(const TDriver& driver, const TClientCommand::TConfig& rootConfig)
     : TableClient(std::make_shared<NTable::TTableClient>(driver))
+    , SchemeClient(std::make_shared<NScheme::TSchemeClient>(driver))
 {
     RetrySettings
         .MaxRetries(TImportFileSettings::MaxRetries)
@@ -275,7 +276,7 @@ TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TStri
     }
 
     auto resultStatus = TableClient->RetryOperationSync(
-        [this, dbPath](NTable::TSession session) -> TStatus {
+        [this, dbPath](NTable::TSession session) {
             auto result = session.DescribeTable(dbPath).ExtractValueSync();
             if (result.IsSuccess()) {
                 DbTableInfo = std::make_unique<const NTable::TTableDescription>(result.GetTableDescription());
@@ -284,6 +285,13 @@ TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TStri
         }, NTable::TRetryOperationSettings{RetrySettings}.MaxRetries(10));
 
     if (!resultStatus.IsSuccess()) {
+        if (resultStatus.GetStatus() == EStatus::SCHEME_ERROR) {
+            auto describePathResult = NDump::DescribePath(*SchemeClient, dbPath);
+            if (describePathResult.GetStatus() != EStatus::SUCCESS) {
+                return MakeStatus(EStatus::SCHEME_ERROR,
+                    TStringBuilder() << describePathResult.GetIssues().ToString() << dbPath);
+            }
+        }
         return resultStatus;
     }
 

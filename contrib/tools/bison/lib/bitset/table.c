@@ -206,7 +206,7 @@ tbitset_elt_alloc (void)
 # define OBSTACK_CHUNK_FREE free
 #endif
 
-#if ! defined __GNUC__ || __GNUC__ < 2
+#if !(defined __GNUC__ || defined __clang__)
 # define __alignof__(type) 0
 #endif
 
@@ -1184,7 +1184,7 @@ struct bitset_vtable tbitset_vtable = {
 
 /* Return size of initial structure.  */
 size_t
-tbitset_bytes (bitset_bindex n_bits ATTRIBUTE_UNUSED)
+tbitset_bytes (bitset_bindex n_bits MAYBE_UNUSED)
 {
   return sizeof (struct tbitset_struct);
 }

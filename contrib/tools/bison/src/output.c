@@ -1,6 +1,6 @@
 /* Output the generated parsing program for Bison.
 
-   Copyright (C) 1984, 1986, 1989, 1992, 2000-2015, 2018-2020 Free
+   Copyright (C) 1984, 1986, 1989, 1992, 2000-2015, 2018-2021 Free
    Software Foundation, Inc.
 
    This file is part of Bison, the GNU Compiler Compiler.
@@ -16,13 +16,14 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #include <config.h>
 #include "system.h"
 
 #include <filename.h> /* IS_PATH_WITH_DIR */
 #include <get-errno.h>
+#include <mbswidth.h>
 #include <path-join.h>
 #include <quotearg.h>
 #include <spawn-pipe.h>
@@ -41,6 +42,7 @@
 #include "scan-skel.h"
 #include "symtab.h"
 #include "tables.h"
+#include "strversion.h"
 
 static struct obstack format_obstack;
 
@@ -50,6 +52,10 @@ static struct obstack format_obstack;
 | result of formatting the FIRST and then TABLE_DATA[BEGIN..END[ (of |
 | TYPE), and to the muscle NAME_max, the max value of the            |
 | TABLE_DATA.                                                        |
+|                                                                    |
+| For the typical case of outputting a complete table from 0, pass   |
+| TABLE[0] as FIRST, and 1 as BEGIN.  For instance                   |
+| muscle_insert_base_table ("pact", base, base[0], 1, nstates);      |
 `-------------------------------------------------------------------*/
 
 
@@ -103,10 +109,8 @@ GENERATE_MUSCLE_INSERT_TABLE (muscle_insert_state_number_table, state_number)
 `----------------------------------------------------------------*/
 
 static void
-quoted_output (FILE *out, char const *cp)
+output_escaped (FILE *out, const char *cp)
 {
-  fprintf (out, "[[");
-
   for (; *cp; cp++)
     switch (*cp)
       {
@@ -116,7 +120,13 @@ quoted_output (FILE *out, char const *cp)
       case ']': fputs ("@}",  out); break;
       default:  fputc (*cp,   out); break;
       }
+}
 
+static void
+output_quoted (FILE *out, char const *cp)
+{
+  fprintf (out, "[[");
+  output_escaped (out, cp);
   fprintf (out, "]]");
 }
 
@@ -128,9 +138,76 @@ quoted_output (FILE *out, char const *cp)
 static void
 string_output (FILE *out, char const *string)
 {
-  quoted_output (out, quotearg_style (c_quoting_style, string));
+  output_quoted (out, quotearg_style (c_quoting_style, string));
 }
 
+
+/* Store in BUFFER a copy of SRC where trigraphs are escaped, return
+   the size of the result (including the final NUL).  If called with
+   BUFFERSIZE = 0, returns the needed size for BUFFER.  */
+static ptrdiff_t
+escape_trigraphs (char *buffer, ptrdiff_t buffersize, const char *src)
+{
+#define STORE(c)                                \
+  do                                            \
+    {                                           \
+      if (res < buffersize)                     \
+        buffer[res] = (c);                      \
+      ++res;                                    \
+    }                                           \
+  while (0)
+  ptrdiff_t res = 0;
+  for (ptrdiff_t i = 0, len = strlen (src); i < len; ++i)
+    {
+      if (i + 2 < len
+          && src[i] == '?' && src[i+1] == '?')
+        {
+          switch (src[i+2])
+            {
+            case '!': case '\'':
+            case '(': case ')': case '-': case '/':
+            case '<': case '=': case '>':
+              i += 1;
+              STORE ('?');
+              STORE ('"');
+              STORE ('"');
+              STORE ('?');
+              continue;
+            }
+        }
+      STORE (src[i]);
+    }
+  STORE ('\0');
+#undef STORE
+  return res;
+}
+
+/* Same as xstrdup, except that trigraphs are escaped.  */
+static char *
+xescape_trigraphs (const char *src)
+{
+  ptrdiff_t bufsize = escape_trigraphs (NULL, 0, src);
+  char *buf = xcharalloc (bufsize);
+  escape_trigraphs (buf, bufsize, src);
+  return buf;
+}
+
+/* The tag to show in the generated parsers.  Use "end of file" rather
+   than "$end".  But keep "$end" in the reports, it's shorter and more
+   consistent.  Support i18n if the user already uses it.  */
+static const char *
+symbol_tag (const symbol *sym)
+{
+  const bool eof_is_user_defined
+    = !eoftoken->alias || STRNEQ (eoftoken->alias->tag, "$end");
+
+  if (!eof_is_user_defined && sym->content == eoftoken->content)
+    return "\"end of file\"";
+  else if (sym->content == undeftoken->content)
+    return "\"invalid token\"";
+  else
+    return sym->tag;
+}
 
 /* Generate the b4_<MUSCLE_NAME> (e.g., b4_tname) table with the
    symbol names (aka tags). */
@@ -138,36 +215,57 @@ string_output (FILE *out, char const *string)
 static void
 prepare_symbol_names (char const *muscle_name)
 {
+  // Whether to add a pair of quotes around the name.
+  const bool quote = STREQ (muscle_name, "tname");
+  bool has_translations = false;
+
   /* We assume that the table will be output starting at column 2. */
-  int j = 2;
+  int col = 2;
   struct quoting_options *qo = clone_quoting_options (0);
   set_quoting_style (qo, c_quoting_style);
   set_quoting_flags (qo, QA_SPLIT_TRIGRAPHS);
   for (int i = 0; i < nsyms; i++)
     {
-      char *cp = quotearg_alloc (symbols[i]->tag, -1, qo);
+      const char *tag = symbol_tag (symbols[i]);
+      bool translatable = !quote && symbols[i]->translatable;
+      if (translatable)
+        has_translations = true;
+
+      char *cp
+        = tag[0] == '"' && !quote
+        ? xescape_trigraphs (tag)
+        : quotearg_alloc (tag, -1, qo);
       /* Width of the next token, including the two quotes, the
          comma and the space.  */
-      int width = strlen (cp) + 2;
+      int width
+        = mbswidth (cp, 0) + 2
+        + (translatable ? strlen ("N_()") : 0);
 
-      if (j + width > 75)
+      if (col + width > 75)
         {
           obstack_sgrow (&format_obstack, "\n ");
-          j = 1;
+          col = 1;
         }
 
       if (i)
         obstack_1grow (&format_obstack, ' ');
+      if (translatable)
+        obstack_sgrow (&format_obstack, "]b4_symbol_translate""([");
       obstack_escape (&format_obstack, cp);
+      if (translatable)
+        obstack_sgrow (&format_obstack, "])[");
       free (cp);
       obstack_1grow (&format_obstack, ',');
-      j += width;
+      col += width;
     }
   free (qo);
   obstack_sgrow (&format_obstack, " ]b4_null[");
 
   /* Finish table and store. */
   muscle_insert (muscle_name, obstack_finish0 (&format_obstack));
+
+  /* Announce whether translation support is needed.  */
+  MUSCLE_INSERT_BOOL ("has_translations_flag", has_translations);
 }
 
 
@@ -180,24 +278,44 @@ static void
 prepare_symbols (void)
 {
   MUSCLE_INSERT_INT ("tokens_number", ntokens);
-  MUSCLE_INSERT_INT ("nterms_number", nvars);
+  MUSCLE_INSERT_INT ("nterms_number", nnterms);
   MUSCLE_INSERT_INT ("symbols_number", nsyms);
-  MUSCLE_INSERT_INT ("undef_token_number", undeftoken->content->number);
-  MUSCLE_INSERT_INT ("user_token_number_max", max_user_token_number);
+  MUSCLE_INSERT_INT ("code_max", max_code);
 
   muscle_insert_symbol_number_table ("translate",
                                      token_translations,
                                      token_translations[0],
-                                     1, max_user_token_number + 1);
+                                     1, max_code + 1);
 
   /* tname -- token names.  */
   prepare_symbol_names ("tname");
+  prepare_symbol_names ("symbol_names");
+
+  /* translatable -- whether a token is translatable. */
+  {
+    bool translatable = false;
+    for (int i = 0; i < ntokens; ++i)
+      if (symbols[i]->translatable)
+        {
+          translatable = true;
+          break;
+        }
+    if (translatable)
+      {
+        int *values = xnmalloc (nsyms, sizeof *values);
+        for (int i = 0; i < ntokens; ++i)
+          values[i] = symbols[i]->translatable;
+        muscle_insert_int_table ("translatable", values,
+                                 values[0], 1, ntokens);
+        free (values);
+      }
+  }
 
   /* Output YYTOKNUM. */
   {
     int *values = xnmalloc (ntokens, sizeof *values);
     for (int i = 0; i < ntokens; ++i)
-      values[i] = symbols[i]->content->user_token_number;
+      values[i] = symbols[i]->content->code;
     muscle_insert_int_table ("toknum", values,
                              values[0], 1, ntokens);
     free (values);
@@ -363,6 +481,21 @@ symbol_numbers_output (FILE *out)
 `-------------------------------------------*/
 
 static void
+rule_output (const rule *r, FILE *out)
+{
+  output_escaped (out, r->lhs->symbol->tag);
+  fputc (':', out);
+  if (0 <= *r->rhs)
+    for (item_number *rhsp = r->rhs; 0 <= *rhsp; ++rhsp)
+      {
+        fputc (' ', out);
+        output_escaped (out, symbols[*rhsp]->tag);
+      }
+  else
+    fputs (" %empty", out);
+}
+
+static void
 user_actions_output (FILE *out)
 {
   fputs ("m4_define([b4_actions], \n[", out);
@@ -380,9 +513,11 @@ user_actions_output (FILE *out)
             string_output (out, rules[r].action_loc.start.file);
             fprintf (out, ")dnl\n");
           }
-        fprintf (out, "[%*s%s]])\n\n",
+        fprintf (out, "[%*s%s]],\n[[",
                  rules[r].action_loc.start.column - 1, "",
                  rules[r].action);
+        rule_output (&rules[r], out);
+        fprintf (out, "]])\n\n");
       }
   fputs ("])\n\n", out);
 }
@@ -398,14 +533,8 @@ merger_output (FILE *out)
   int n;
   merger_list* p;
   for (n = 1, p = merge_functions; p != NULL; n += 1, p = p->next)
-    {
-      if (p->type[0] == '\0')
-        fprintf (out, "  case %d: *yy0 = %s (*yy0, *yy1); break;\n",
-                 n, p->name);
-      else
-        fprintf (out, "  case %d: yy0->%s = %s (*yy0, *yy1); break;\n",
-                 n, p->type, p->name);
-    }
+    fprintf (out, "]b4_call_merger""([%d], [%s], [%d])[\n",
+             n, p->name, p->sym->content->number);
   fputs ("]])\n\n", out);
 }
 
@@ -420,7 +549,7 @@ prepare_symbol_definitions (void)
   /* Map "orig NUM" to new numbers.  See data/README.  */
   for (symbol_number i = ntokens; i < nsyms + nuseless_nonterminals; ++i)
     {
-      obstack_printf (&format_obstack, "symbol(orig %d, number)", i);
+      obstack_printf (&format_obstack, "symbol""(orig %d, number)", i);
       const char *key = obstack_finish0 (&format_obstack);
       MUSCLE_INSERT_INT (key, nterm_map ? nterm_map[i - ntokens] : i);
     }
@@ -431,12 +560,12 @@ prepare_symbol_definitions (void)
       const char *key;
 
 #define SET_KEY(Entry)                                          \
-      obstack_printf (&format_obstack, "symbol(%d, %s)",        \
+      obstack_printf (&format_obstack, "symbol""(%d, %s)",        \
                       i, Entry);                                \
       key = obstack_finish0 (&format_obstack);
 
 #define SET_KEY2(Entry, Suffix)                                 \
-      obstack_printf (&format_obstack, "symbol(%d, %s_%s)",     \
+      obstack_printf (&format_obstack, "symbol""(%d, %s_%s)",     \
                       i, Entry, Suffix);                        \
       key = obstack_finish0 (&format_obstack);
 
@@ -451,14 +580,13 @@ prepare_symbol_definitions (void)
 
       /* Its tag.  Typically for documentation purpose.  */
       SET_KEY ("tag");
-      MUSCLE_INSERT_STRING (key, sym->tag);
+      MUSCLE_INSERT_STRING (key, symbol_tag (sym));
 
-      SET_KEY ("user_number");
-      MUSCLE_INSERT_INT (key, sym->content->user_token_number);
+      SET_KEY ("code");
+      MUSCLE_INSERT_INT (key, sym->content->code);
 
       SET_KEY ("is_token");
-      MUSCLE_INSERT_INT (key,
-                         i < ntokens && sym != errtoken && sym != undeftoken);
+      MUSCLE_INSERT_INT (key, i < ntokens);
 
       SET_KEY ("number");
       MUSCLE_INSERT_INT (key, sym->content->number);
@@ -504,9 +632,7 @@ prepare_symbol_definitions (void)
 static void
 prepare_actions (void)
 {
-  /* Figure out the actions for the specified state, indexed by
-     lookahead token type.  */
-
+  /* Figure out the actions for the specified state.  */
   muscle_insert_rule_number_table ("defact", yydefact,
                                    yydefact[0], 1, nstates);
 
@@ -573,11 +699,12 @@ static void
 output_skeleton (void)
 {
   /* Compute the names of the package data dir and skeleton files.  */
-  char const *m4 = (m4 = getenv ("M4")) ? m4 : M4;
+  char const *m4 = m4path ();
   char const *datadir = pkgdatadir ();
   char *skeldir = xpath_join (datadir, "skeletons");
   char *m4sugar = xpath_join (datadir, "m4sugar/m4sugar.m4");
   char *m4bison = xpath_join (skeldir, "bison.m4");
+  char *traceon = xpath_join (skeldir, "traceon.m4");
   char *skel = (IS_PATH_WITH_DIR (skeleton)
                 ? xstrdup (skeleton)
                 : xpath_join (skeldir, skeleton));
@@ -589,21 +716,10 @@ output_skeleton (void)
 
   /* Create an m4 subprocess connected to us via two pipes.  */
 
-  if (trace_flag & trace_tools)
-    fprintf (stderr, "running: %s %s - %s %s\n",
-             m4, m4sugar, m4bison, skel);
-
-  /* Some future version of GNU M4 (most likely 1.6) may treat the -dV in a
-     position-dependent manner.  Keep it as the first argument so that all
-     files are traced.
-
-     See the thread starting at
-     <http://lists.gnu.org/archive/html/bug-bison/2008-07/msg00000.html>
-     for details.  */
   int filter_fd[2];
   pid_t pid;
   {
-    char const *argv[10];
+    char const *argv[11];
     int i = 0;
     argv[i++] = m4;
 
@@ -614,21 +730,35 @@ output_skeleton (void)
        extensions even when POSIXLY_CORRECT is set.
 
        See the thread starting at
-       <http://lists.gnu.org/archive/html/bug-bison/2008-07/msg00000.html>
+       <https://lists.gnu.org/r/bug-bison/2008-07/msg00000.html>
        for details.  */
     if (*M4_GNU_OPTION)
       argv[i++] = M4_GNU_OPTION;
 
     argv[i++] = "-I";
     argv[i++] = datadir;
-    if (trace_flag & trace_m4)
+    /* Some future version of GNU M4 (most likely 1.6) may treat the
+       -dV in a position-dependent manner.  See the thread starting at
+       <https://lists.gnu.org/r/bug-bison/2008-07/msg00000.html>
+       for details.  */
+    if (trace_flag & trace_m4_early)
       argv[i++] = "-dV";
     argv[i++] = m4sugar;
     argv[i++] = "-";
     argv[i++] = m4bison;
+    if (trace_flag & trace_m4)
+      argv[i++] = traceon;
     argv[i++] = skel;
     argv[i++] = NULL;
     aver (i <= ARRAY_CARDINALITY (argv));
+
+    if (trace_flag & trace_tools)
+      {
+        fputs ("running:", stderr);
+        for (int j = 0; argv[j]; ++j)
+          fprintf (stderr, " %s", argv[j]);
+        fputc ('\n', stderr);
+      }
 
     /* The ugly cast is because gnulib gets the const-ness wrong.  */
     pid = create_pipe_bidi ("m4", m4, (char **)(void*)argv, false, true,
@@ -638,6 +768,7 @@ output_skeleton (void)
   free (skeldir);
   free (m4sugar);
   free (m4bison);
+  free (traceon);
   free (skel);
 
   if (trace_flag & trace_muscles)
@@ -671,6 +802,9 @@ prepare (void)
   char const *cp = getenv ("BISON_USE_PUSH_FOR_PULL");
   bool use_push_for_pull_flag = cp && *cp && strtol (cp, 0, 10);
 
+  /* Versions.  */
+  MUSCLE_INSERT_STRING ("version_string", VERSION);
+  MUSCLE_INSERT_INT ("version", strversion_to_int (VERSION));
   MUSCLE_INSERT_INT ("required_version", required_version);
 
   /* Flags. */
@@ -691,8 +825,10 @@ prepare (void)
 
 #define DEFINE(Name) MUSCLE_INSERT_STRING (#Name, Name ? Name : "")
   DEFINE (dir_prefix);
+  DEFINE (mapped_dir_prefix);
   DEFINE (parser_file_name);
   DEFINE (spec_header_file);
+  DEFINE (spec_mapped_header_file);
   DEFINE (spec_file_prefix);
   DEFINE (spec_graph_file);
   DEFINE (spec_name_prefix);

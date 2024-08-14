@@ -6,6 +6,10 @@ LICENSE(GPL-3.0-or-later)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
+PEERDIR(
+    contrib/libs/libiconv
+)
+
 ADDINCL(
     contrib/tools/bison
     contrib/tools/bison/lib
@@ -60,7 +64,11 @@ SRCS(
     gethrxtime.c
     getprogname.c
     gl_array_list.c
+    gl_linked_list.c
     gl_list.c
+    gl_oset.c
+    gl_rbtree_oset.c
+    gl_rbtreehash_list.c
     gl_xlist.c
     glthread/lock.c
     glthread/threadlib.c
@@ -83,13 +91,18 @@ SRCS(
     printf-parse.c
     progname.c
     quotearg.c
+    readline.c
     setlocale_null.c
     sig-handler.c
     spawn-pipe.c
     stripslash.c
     timespec.c
     timevar.c
+    unicodeio.c
     unistd.c
+    unistr/u8-mbtoucr.c
+    unistr/u8-uctomb-aux.c
+    unistr/u8-uctomb.c
     uniwidth/width.c
     vasnprintf.c
     vasprintf.c
@@ -137,6 +150,7 @@ ELSEIF (OS_WINDOWS)
         sigaction.c
         sigprocmask.c
         stpcpy.c
+        stpncpy.c
         strndup.c
         strverscmp.c
         waitpid.c

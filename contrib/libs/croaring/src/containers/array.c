@@ -145,11 +145,8 @@ int array_container_shrink_to_fit(array_container_t *src) {
 
 /* Free memory. */
 void array_container_free(array_container_t *arr) {
-    if (arr->array !=
-        NULL) {  // Jon Strabala reports that some tools complain otherwise
-        roaring_free(arr->array);
-        arr->array = NULL;  // pedantic
-    }
+    if (arr == NULL) return;
+    roaring_free(arr->array);
     roaring_free(arr);
 }
 
@@ -177,10 +174,7 @@ void array_container_grow(array_container_t *container, int32_t min,
             (uint16_t *)roaring_realloc(array, new_capacity * sizeof(uint16_t));
         if (container->array == NULL) roaring_free(array);
     } else {
-        // Jon Strabala reports that some tools complain otherwise
-        if (array != NULL) {
-            roaring_free(array);
-        }
+        roaring_free(array);
         container->array =
             (uint16_t *)roaring_malloc(new_capacity * sizeof(uint16_t));
     }

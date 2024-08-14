@@ -1,6 +1,6 @@
 /* Declaration for error-reporting function for Bison.
 
-   Copyright (C) 2000-2002, 2004-2006, 2009-2015, 2018-2020 Free
+   Copyright (C) 2000-2002, 2004-2006, 2009-2015, 2018-2021 Free
    Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
@@ -14,7 +14,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 /* Based on error.c and error.h,
    written by David MacKenzie <djm@gnu.ai.mit.edu>.  */
@@ -23,6 +23,7 @@
 #include "system.h"
 
 #include <argmatch.h>
+#include <c-ctype.h>
 #include <progname.h>
 #include <stdarg.h>
 #include <sys/stat.h>
@@ -33,6 +34,13 @@
 #include "fixits.h"
 #include "getargs.h"
 #include "quote.h"
+
+// The URL of the manual page about diagnostics.  Use the per-node
+// manual, to avoid downloading repeatedly the whole manual over the
+// Internet.
+static const char *diagnostics_url
+  = "https://www.gnu.org/software/bison/manual/html_node/Diagnostics.html";
+
 
 err_status complaint_status = status_none;
 
@@ -95,6 +103,20 @@ end_use_class (const char *s, FILE *out)
     }
 }
 
+static void
+begin_hyperlink (FILE *out, const char *ref)
+{
+  if (out == stderr)
+    styled_ostream_set_hyperlink (errstream, ref, NULL);
+}
+
+static void
+end_hyperlink (FILE *out)
+{
+  if (out == stderr)
+    styled_ostream_set_hyperlink (errstream, NULL, NULL);
+}
+
 void
 flush (FILE *out)
 {
@@ -102,6 +124,23 @@ flush (FILE *out)
     ostream_flush (errstream, FLUSH_THIS_STREAM);
   fflush (out);
 }
+
+bool
+is_styled (FILE *out)
+{
+  if (out != stderr)
+    return false;
+  if (color_debug)
+    return true;
+#if HAVE_LIBTEXTSTYLE
+  return (color_mode == color_yes
+          || color_mode == color_html
+          || (color_mode == color_tty && isatty (STDERR_FILENO)));
+#else
+  return false;
+#endif
+}
+
 
 /*------------------------.
 | --warnings's handling.  |
@@ -113,6 +152,7 @@ static const argmatch_warning_doc argmatch_warning_docs[] =
 {
   { "conflicts-sr",     N_("S/R conflicts (enabled by default)") },
   { "conflicts-rr",     N_("R/R conflicts (enabled by default)") },
+  { "counterexamples",  N_("generate conflict counterexamples") },
   { "dangling-alias",   N_("string aliases not attached to a symbol") },
   { "deprecated",       N_("obsolete constructs") },
   { "empty-rule",       N_("empty rules without %empty") },
@@ -120,7 +160,7 @@ static const argmatch_warning_doc argmatch_warning_docs[] =
   { "precedence",       N_("useless precedence and associativity") },
   { "yacc",             N_("incompatibilities with POSIX Yacc") },
   { "other",            N_("all other warnings (enabled by default)") },
-  { "all",              N_("all the warnings except 'dangling-alias' and 'yacc'") },
+  { "all",              N_("all the warnings except 'counterexamples', 'dangling-alias' and 'yacc'") },
   { "no-CATEGORY",      N_("turn off warnings in CATEGORY") },
   { "none",             N_("turn off all the warnings") },
   { "error[=CATEGORY]", N_("treat warnings as errors") },
@@ -129,18 +169,19 @@ static const argmatch_warning_doc argmatch_warning_docs[] =
 
 static const argmatch_warning_arg argmatch_warning_args[] =
 {
-  { "all",            Wall },
-  { "conflicts-rr",   Wconflicts_rr },
-  { "conflicts-sr",   Wconflicts_sr },
-  { "dangling-alias", Wdangling_alias },
-  { "deprecated",     Wdeprecated },
-  { "empty-rule",     Wempty_rule },
-  { "everything",     Weverything },
-  { "midrule-values", Wmidrule_values },
-  { "none",           Wnone },
-  { "other",          Wother },
-  { "precedence",     Wprecedence },
-  { "yacc",           Wyacc },
+  { "all",             Wall },
+  { "conflicts-rr",    Wconflicts_rr },
+  { "conflicts-sr",    Wconflicts_sr },
+  { "counterexamples", Wcounterexamples }, { "cex", Wcounterexamples }, // Show cex second.
+  { "dangling-alias",  Wdangling_alias },
+  { "deprecated",      Wdeprecated },
+  { "empty-rule",      Wempty_rule },
+  { "everything",      Weverything },
+  { "midrule-values",  Wmidrule_values },
+  { "none",            Wnone },
+  { "other",           Wother },
+  { "precedence",      Wprecedence },
+  { "yacc",            Wyacc },
   { NULL, Wnone }
 };
 
@@ -263,6 +304,20 @@ severity_prefix (severity s)
 }
 
 
+static void
+severity_print (severity s, FILE *out)
+{
+  if (s != severity_disabled)
+    {
+      const char* style = severity_style (s);
+      begin_use_class (style, out);
+      fprintf (out, "%s:", severity_prefix (s));
+      end_use_class (style, out);
+      fputc (' ', out);
+    }
+}
+
+
 /*-----------.
 | complain.  |
 `-----------*/
@@ -271,9 +326,7 @@ void
 complain_init_color (void)
 {
 #if HAVE_LIBTEXTSTYLE
-  if (color_mode == color_yes
-      || color_mode == color_html
-      || (color_mode == color_tty && isatty (STDERR_FILENO)))
+  if (is_styled (stderr))
     {
       style_file_prepare ("BISON_STYLE", "BISON_STYLEDIR", pkgdatadir (),
                           "bison-default.css");
@@ -395,9 +448,20 @@ warnings_print_categories (warnings warn_flags, FILE *out)
         const char* style = severity_style (s);
         fputs (" [", out);
         begin_use_class (style, out);
-        fprintf (out, "-W%s%s",
-                 s == severity_error ? "error=" : "",
-                 argmatch_warning_argument (&w));
+        // E.g., "counterexamples".
+        const char *warning = argmatch_warning_argument (&w);
+        char ref[200];
+        snprintf (ref, sizeof ref,
+                  "%s#W%s", diagnostics_url, warning);
+        begin_hyperlink (out, ref);
+        ostream_printf (errstream,
+                        "-W%s%s",
+                        s == severity_error ? "error=" : "",
+                        warning);
+        end_hyperlink (out);
+        // Because we mix stdio with ostream I/O, we need to flush
+        // here for sake of color == debug.
+        flush (out);
         end_use_class (style, out);
         fputc (']', out);
         /* Display only the first match, the second is "-Wall".  */
@@ -409,7 +473,6 @@ warnings_print_categories (warnings warn_flags, FILE *out)
  *
  * \param loc     the location, defaulting to the current file,
  *                or the program name.
- * \param indent  optional indentation for the error message.
  * \param flags   the category for this message.
  * \param sever   to decide the prefix to put before the message
  *                (e.g., "warning").
@@ -421,33 +484,21 @@ warnings_print_categories (warnings warn_flags, FILE *out)
  */
 static
 void
-error_message (const location *loc, int *indent, warnings flags,
+error_message (const location *loc, warnings flags,
                severity sever, const char *message, va_list args)
 {
-  int pos = 0;
+  const char* style = flags & note ? "note" : severity_style (sever);
 
   if (loc)
-    pos += location_print (*loc, stderr);
+    location_print (*loc, stderr);
   else
-    pos += fprintf (stderr, "%s", grammar_file ? grammar_file : program_name);
-  pos += fprintf (stderr, ": ");
-
-  if (indent)
-    {
-      if (*indent)
-        sever = severity_disabled;
-      if (!*indent)
-        *indent = pos;
-      else if (*indent > pos)
-        fprintf (stderr, "%*s", *indent - pos, "");
-    }
-
-  const char* style = severity_style (sever);
+    fprintf (stderr, "%s", grammar_file ? grammar_file : program_name);
+  fprintf (stderr, ": ");
 
   if (sever != severity_disabled)
     {
       begin_use_class (style, stderr);
-      fprintf (stderr, "%s:", severity_prefix (sever));
+      fprintf (stderr, "%s:", flags & note ? _("note") : severity_prefix (sever));
       end_use_class (style, stderr);
       fputc (' ', stderr);
     }
@@ -458,34 +509,32 @@ error_message (const location *loc, int *indent, warnings flags,
   if (! (flags & silent) && sever != severity_disabled)
     warnings_print_categories (flags, stderr);
 
-  {
-    size_t l = strlen (message);
-    if (l < 2 || message[l - 2] != ':' || message[l - 1] != ' ')
-      {
-        putc ('\n', stderr);
-        flush (stderr);
-        if (loc && feature_flag & feature_caret && !(flags & no_caret))
-          location_caret (*loc, style, stderr);
-      }
-  }
+  size_t l = strlen (message);
+  if (l < 2 || message[l - 2] != ':' || message[l - 1] != ' ')
+    {
+      putc ('\n', stderr);
+      flush (stderr);
+      if (loc && !(flags & no_caret))
+        location_caret (*loc, style, stderr);
+    }
   flush (stderr);
 }
 
 /** Raise a complaint (fatal error, error or just warning).  */
 
 static void
-complains (const location *loc, int *indent, warnings flags,
+complains (const location *loc, warnings flags,
            const char *message, va_list args)
 {
-  severity s = warning_severity (flags);
   if ((flags & complaint) && complaint_status < status_complaint)
     complaint_status = status_complaint;
 
+  severity s = warning_severity (flags);
   if (severity_warning <= s)
     {
       if (severity_error <= s && ! complaint_status)
         complaint_status = status_warning_as_error;
-      error_message (loc, indent, flags, s, message, args);
+      error_message (loc, flags, s, message, args);
     }
 
   if (flags & fatal)
@@ -497,41 +546,39 @@ complain (location const *loc, warnings flags, const char *message, ...)
 {
   va_list args;
   va_start (args, message);
-  complains (loc, NULL, flags, message, args);
+  complains (loc, flags, message, args);
   va_end (args);
 }
 
 void
-complain_indent (location const *loc, warnings flags, int *indent,
-                 const char *message, ...)
+subcomplain (location const *loc, warnings flags, const char *message, ...)
 {
   va_list args;
   va_start (args, message);
-  complains (loc, indent, flags, message, args);
+  complains (loc, flags | note | silent, message, args);
   va_end (args);
 }
 
 void
-complain_args (location const *loc, warnings w, int *indent,
+complain_args (location const *loc, warnings w,
                int argc, char *argv[])
 {
   switch (argc)
   {
   case 1:
-    complain_indent (loc, w, indent, "%s", _(argv[0]));
+    complain (loc, w, "%s", _(argv[0]));
     break;
   case 2:
-    complain_indent (loc, w, indent, _(argv[0]), argv[1]);
+    complain (loc, w, _(argv[0]), argv[1]);
     break;
   case 3:
-    complain_indent (loc, w, indent, _(argv[0]), argv[1], argv[2]);
+    complain (loc, w, _(argv[0]), argv[1], argv[2]);
     break;
   case 4:
-    complain_indent (loc, w, indent, _(argv[0]), argv[1], argv[2], argv[3]);
+    complain (loc, w, _(argv[0]), argv[1], argv[2], argv[3]);
     break;
   case 5:
-    complain_indent (loc, w, indent, _(argv[0]), argv[1], argv[2], argv[3],
-                     argv[4]);
+    complain (loc, w, _(argv[0]), argv[1], argv[2], argv[3], argv[4]);
     break;
   default:
     complain (loc, fatal, "too many arguments for complains");
@@ -555,8 +602,7 @@ deprecated_directive (location const *loc, char const *old, char const *upd)
       complain (loc, Wdeprecated,
                 _("deprecated directive: %s, use %s"),
                 quote (old), quote_n (1, upd));
-      if (feature_flag & feature_caret)
-        location_caret_suggestion (*loc, upd, stderr);
+      location_caret_suggestion (*loc, upd, stderr);
       /* Register updates only if -Wdeprecated is enabled.  */
       fixits_register (loc, upd);
     }
@@ -566,13 +612,11 @@ void
 duplicate_directive (char const *directive,
                      location first, location second)
 {
-  int i = 0;
   if (feature_flag & feature_caret)
-    complain_indent (&second, Wother, &i, _("duplicate directive"));
+    complain (&second, Wother, _("duplicate directive"));
   else
-    complain_indent (&second, Wother, &i, _("duplicate directive: %s"), quote (directive));
-  i += SUB_INDENT;
-  complain_indent (&first, Wother, &i, _("previous declaration"));
+    complain (&second, Wother, _("duplicate directive: %s"), quote (directive));
+  subcomplain (&first, Wother, _("previous declaration"));
   fixits_register (&second, "");
 }
 
@@ -580,11 +624,57 @@ void
 duplicate_rule_directive (char const *directive,
                           location first, location second)
 {
-  int i = 0;
-  complain_indent (&second, complaint, &i,
-                   _("only one %s allowed per rule"), directive);
-  i += SUB_INDENT;
-  complain_indent (&first, complaint, &i,
-                   _("previous declaration"));
+  complain (&second, complaint, _("only one %s allowed per rule"), directive);
+  subcomplain (&first, complaint, _("previous declaration"));
   fixits_register (&second, "");
+}
+
+void
+syntax_error (location loc,
+              int argc, const char* argv[])
+{
+  if (complaint_status < status_complaint)
+    complaint_status = status_complaint;
+  assert (argc <= 5);
+  const char *format = NULL;
+  switch (argc)
+    {
+#define CASE(N, S)                          \
+      case N:                               \
+        format = S;                         \
+        break
+    default: /* Avoid compiler warnings. */
+      CASE (0, _("syntax error"));
+      CASE (1, _("unexpected %0$s"));
+      CASE (2, _("expected %1$s before %0$s"));
+      CASE (3, _("expected %1$s or %2$s before %0$s"));
+      CASE (4, _("expected %1$s or %2$s or %3$s before %0$s"));
+      CASE (5, _("expected %1$s or %2$s or %3$s or %4$s before %0$s"));
+#undef CASE
+    }
+  location_print (loc, stderr);
+  fputs (": ", stderr);
+  severity_print (severity_error, stderr);
+
+  while (*format)
+    if (format[0] == '%'
+        && c_isdigit (format[1])
+        && format[2] == '$'
+        && format[3] == 's'
+        && (format[1] - '0') < argc)
+      {
+        int i = format[1] - '0';
+        const char *style = i == 0 ? "unexpected" : "expected";
+        begin_use_class (style, stderr);
+        fputs (argv[i], stderr);
+        end_use_class (style, stderr);
+        format += 4;
+      }
+    else
+      {
+        fputc (*format, stderr);
+        ++format;
+      }
+  fputc ('\n', stderr);
+  location_caret (loc, "error", stderr);
 }

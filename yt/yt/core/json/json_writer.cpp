@@ -1,5 +1,5 @@
 #include "json_writer.h"
-#include "config.h"
+
 #include "helpers.h"
 
 #include <yt/yt/core/misc/utf8_decoder.h>
@@ -7,7 +7,6 @@
 #include <contrib/libs/yajl/api/yajl_gen.h>
 
 #include <cmath>
-#include <iostream>
 
 namespace NYT::NJson {
 
@@ -54,8 +53,8 @@ private:
     TStringBuf GetBuffer() const;
 
 private:
-    yajl_gen Handle;
-    IOutputStream* Output;
+    yajl_gen Handle_;
+    IOutputStream* Output_;
     ui64 WrittenToOutputByteCount_ = 0;
 };
 
@@ -117,20 +116,20 @@ private:
     bool IsWriteAllowed();
 
 private:
-    IJsonWriter* const JsonWriter;
+    IJsonWriter* const JsonWriter_;
     std::unique_ptr<IJsonWriter> JsonWriterHolder_;
 
-    const EYsonType Type;
-    const TJsonFormatConfigPtr Config;
+    const EYsonType Type_;
+    const TJsonFormatConfigPtr Config_;
     ENanInfinityMode NanInfinityMode_;
 
-    TUtf8Transcoder Utf8Transcoder;
+    TUtf8Transcoder Utf8Transcoder_;
 
-    std::vector<bool> HasUnfoldedStructureStack;
-    int InAttributesBalance = 0;
-    bool HasAttributes = false;
-    int Depth = 0;
-    bool CheckLimit = true;
+    std::vector<bool> HasUnfoldedStructureStack_;
+    int InAttributesBalance_ = 0;
+    bool HasAttributes_ = false;
+    int Depth_ = 0;
+    bool CheckLimit_ = true;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -165,58 +164,58 @@ static void CheckYajlCode(int yajlCode)
         default:
             errorMessage = Format("Yajl writer failed with code %v", yajlCode);
     }
-    THROW_ERROR_EXCEPTION(errorMessage);
+    THROW_ERROR_EXCEPTION(std::move(errorMessage), NYT::TError::DisableFormat);
 }
 
 TJsonWriter::TJsonWriter(IOutputStream* output, bool isPretty)
-    : Output(output)
+    : Output_(output)
 {
-    Handle = yajl_gen_alloc(nullptr);
-    yajl_gen_config(Handle, yajl_gen_beautify, isPretty ? 1 : 0);
-    yajl_gen_config(Handle, yajl_gen_skip_final_newline, 0);
+    Handle_ = yajl_gen_alloc(nullptr);
+    yajl_gen_config(Handle_, yajl_gen_beautify, isPretty ? 1 : 0);
+    yajl_gen_config(Handle_, yajl_gen_skip_final_newline, 0);
 
-    yajl_gen_config(Handle, yajl_gen_support_infinity, 1);
+    yajl_gen_config(Handle_, yajl_gen_support_infinity, 1);
 
-    yajl_gen_config(Handle, yajl_gen_disable_yandex_double_format, 1);
-    yajl_gen_config(Handle, yajl_gen_validate_utf8, 1);
+    yajl_gen_config(Handle_, yajl_gen_disable_yandex_double_format, 1);
+    yajl_gen_config(Handle_, yajl_gen_validate_utf8, 1);
 }
 
 TJsonWriter::~TJsonWriter()
 {
-    yajl_gen_free(Handle);
+    yajl_gen_free(Handle_);
 }
 
 void TJsonWriter::GenerateString(TStringBuf value)
 {
-    CheckYajlCode(yajl_gen_string(Handle, (const unsigned char*) value.data(), value.size()));
+    CheckYajlCode(yajl_gen_string(Handle_, (const unsigned char*) value.data(), value.size()));
 }
 
 TStringBuf TJsonWriter::GetBuffer() const
 {
     size_t len = 0;
     const unsigned char* buf = nullptr;
-    CheckYajlCode(yajl_gen_get_buf(Handle, &buf, &len));
+    CheckYajlCode(yajl_gen_get_buf(Handle_, &buf, &len));
     return TStringBuf(static_cast<const char*>(static_cast<const void*>(buf)), len);
 }
 
 void TJsonWriter::Flush()
 {
     auto buf = GetBuffer();
-    Output->Write(buf);
+    Output_->Write(buf);
     WrittenToOutputByteCount_ += buf.Size();
-    yajl_gen_clear(Handle);
+    yajl_gen_clear(Handle_);
 }
 
 void TJsonWriter::StartNextValue()
 {
     Flush();
-    yajl_gen_reset(Handle, nullptr);
-    Output->Write('\n');
+    yajl_gen_reset(Handle_, nullptr);
+    Output_->Write('\n');
 }
 
 void TJsonWriter::OnBeginMap()
 {
-    CheckYajlCode(yajl_gen_map_open(Handle));
+    CheckYajlCode(yajl_gen_map_open(Handle_));
 }
 
 void TJsonWriter::OnKeyedItem(TStringBuf name)
@@ -226,12 +225,12 @@ void TJsonWriter::OnKeyedItem(TStringBuf name)
 
 void TJsonWriter::OnEndMap()
 {
-    CheckYajlCode(yajl_gen_map_close(Handle));
+    CheckYajlCode(yajl_gen_map_close(Handle_));
 }
 
 void TJsonWriter::OnBeginList()
 {
-    CheckYajlCode(yajl_gen_array_open(Handle));
+    CheckYajlCode(yajl_gen_array_open(Handle_));
 }
 
 void TJsonWriter::OnListItem()
@@ -239,7 +238,7 @@ void TJsonWriter::OnListItem()
 
 void TJsonWriter::OnEndList()
 {
-    CheckYajlCode(yajl_gen_array_close(Handle));
+    CheckYajlCode(yajl_gen_array_close(Handle_));
 }
 
 void TJsonWriter::OnStringScalar(TStringBuf value)
@@ -249,27 +248,27 @@ void TJsonWriter::OnStringScalar(TStringBuf value)
 
 void TJsonWriter::OnEntity()
 {
-    CheckYajlCode(yajl_gen_null(Handle));
+    CheckYajlCode(yajl_gen_null(Handle_));
 }
 
 void TJsonWriter::OnDoubleScalar(double value)
 {
-    CheckYajlCode(yajl_gen_double(Handle, value));
+    CheckYajlCode(yajl_gen_double(Handle_, value));
 }
 
 void TJsonWriter::OnInt64Scalar(i64 value)
 {
-    CheckYajlCode(yajl_gen_integer(Handle, value));
+    CheckYajlCode(yajl_gen_integer(Handle_, value));
 }
 
 void TJsonWriter::OnUint64Scalar(ui64 value)
 {
-    CheckYajlCode(yajl_gen_uinteger(Handle, value));
+    CheckYajlCode(yajl_gen_uinteger(Handle_, value));
 }
 
 void TJsonWriter::OnBooleanScalar(bool value)
 {
-    CheckYajlCode(yajl_gen_bool(Handle, value ? 1 : 0));
+    CheckYajlCode(yajl_gen_bool(Handle_, value ? 1 : 0));
 }
 
 void TJsonWriter::OnBeginAttributes()
@@ -298,19 +297,19 @@ TJsonConsumer::TJsonConsumer(
     IJsonWriter* jsonWriter,
     EYsonType type,
     TJsonFormatConfigPtr config)
-    : JsonWriter(jsonWriter)
-    , Type(type)
-    , Config(std::move(config))
-    , Utf8Transcoder(Config->EncodeUtf8)
+    : JsonWriter_(jsonWriter)
+    , Type_(type)
+    , Config_(std::move(config))
+    , Utf8Transcoder_(Config_->EncodeUtf8)
 {
-    if (Type == EYsonType::MapFragment) {
+    if (Type_ == EYsonType::MapFragment) {
         THROW_ERROR_EXCEPTION("Map fragments are not supported by JSON");
     }
 
     NanInfinityMode_ = ENanInfinityMode::NotSupported;
-    if (Config->SupportInfinity) {
+    if (Config_->SupportInfinity) {
         NanInfinityMode_ = ENanInfinityMode::WriteInfinitiesUnquoted;
-    } else if (Config->StringifyNanAndInfinity) {
+    } else if (Config_->StringifyNanAndInfinity) {
         NanInfinityMode_ = ENanInfinityMode::WriteAllQuouted;
     }
 }
@@ -326,49 +325,49 @@ TJsonConsumer::TJsonConsumer(
 
 void TJsonConsumer::EnterNode()
 {
-    if (Config->AttributesMode == EJsonAttributesMode::Never) {
-        HasAttributes = false;
-    } else if (Config->AttributesMode == EJsonAttributesMode::OnDemand) {
+    if (Config_->AttributesMode == EJsonAttributesMode::Never) {
+        HasAttributes_ = false;
+    } else if (Config_->AttributesMode == EJsonAttributesMode::OnDemand) {
         // Do nothing
-    } else if (Config->AttributesMode == EJsonAttributesMode::Always) {
-        if (!HasAttributes) {
-            JsonWriter->OnBeginMap();
-            JsonWriter->OnKeyedItem(TStringBuf("$attributes"));
-            JsonWriter->OnBeginMap();
-            JsonWriter->OnEndMap();
-            HasAttributes = true;
+    } else if (Config_->AttributesMode == EJsonAttributesMode::Always) {
+        if (!HasAttributes_) {
+            JsonWriter_->OnBeginMap();
+            JsonWriter_->OnKeyedItem(TStringBuf("$attributes"));
+            JsonWriter_->OnBeginMap();
+            JsonWriter_->OnEndMap();
+            HasAttributes_ = true;
         }
     }
-    HasUnfoldedStructureStack.push_back(HasAttributes);
+    HasUnfoldedStructureStack_.push_back(HasAttributes_);
 
-    if (HasAttributes) {
-        JsonWriter->OnKeyedItem(TStringBuf("$value"));
-        HasAttributes = false;
+    if (HasAttributes_) {
+        JsonWriter_->OnKeyedItem(TStringBuf("$value"));
+        HasAttributes_ = false;
     }
 
-    Depth += 1;
+    Depth_ += 1;
 }
 
 void TJsonConsumer::LeaveNode()
 {
-    YT_VERIFY(!HasUnfoldedStructureStack.empty());
-    if (HasUnfoldedStructureStack.back()) {
+    YT_VERIFY(!HasUnfoldedStructureStack_.empty());
+    if (HasUnfoldedStructureStack_.back()) {
         // Close map of the {$attributes, $value}
-        JsonWriter->OnEndMap();
+        JsonWriter_->OnEndMap();
     }
-    HasUnfoldedStructureStack.pop_back();
+    HasUnfoldedStructureStack_.pop_back();
 
-    Depth -= 1;
+    Depth_ -= 1;
 
-    if (Depth == 0 && Type == EYsonType::ListFragment && InAttributesBalance == 0) {
-        JsonWriter->StartNextValue();
+    if (Depth_ == 0 && Type_ == EYsonType::ListFragment && InAttributesBalance_ == 0) {
+        JsonWriter_->StartNextValue();
     }
 }
 
 bool TJsonConsumer::IsWriteAllowed()
 {
-    if (Config->AttributesMode == EJsonAttributesMode::Never) {
-        return InAttributesBalance == 0;
+    if (Config_->AttributesMode == EJsonAttributesMode::Never) {
+        return InAttributesBalance_ == 0;
     }
     return true;
 }
@@ -377,9 +376,9 @@ void TJsonConsumer::OnStringScalar(TStringBuf value)
 {
     TStringBuf writeValue = value;
     bool incomplete = false;
-    if (Config->AttributesMode != EJsonAttributesMode::Never) {
-        if (CheckLimit && Config->StringLengthLimit && std::ssize(value) > *Config->StringLengthLimit) {
-            writeValue = value.substr(0, *Config->StringLengthLimit);
+    if (Config_->AttributesMode != EJsonAttributesMode::Never) {
+        if (CheckLimit_ && Config_->StringLengthLimit && std::ssize(value) > *Config_->StringLengthLimit) {
+            writeValue = value.substr(0, *Config_->StringLengthLimit);
             incomplete = true;
         }
     }
@@ -390,19 +389,19 @@ void TJsonConsumer::OnStringScalar(TStringBuf value)
 void TJsonConsumer::OnInt64Scalar(i64 value)
 {
     if (IsWriteAllowed()) {
-        if (Config->AnnotateWithTypes && Config->AttributesMode != EJsonAttributesMode::Never) {
-            if (!HasAttributes) {
-                JsonWriter->OnBeginMap();
-                HasAttributes = true;
+        if (Config_->AnnotateWithTypes && Config_->AttributesMode != EJsonAttributesMode::Never) {
+            if (!HasAttributes_) {
+                JsonWriter_->OnBeginMap();
+                HasAttributes_ = true;
             }
-            JsonWriter->OnKeyedItem(TStringBuf("$type"));
-            JsonWriter->OnStringScalar(TStringBuf("int64"));
+            JsonWriter_->OnKeyedItem(TStringBuf("$type"));
+            JsonWriter_->OnStringScalar(TStringBuf("int64"));
         }
         EnterNode();
-        if (Config->Stringify) {
+        if (Config_->Stringify) {
             WriteStringScalar(::ToString(value));
         } else {
-            JsonWriter->OnInt64Scalar(value);
+            JsonWriter_->OnInt64Scalar(value);
         }
         LeaveNode();
     }
@@ -411,19 +410,19 @@ void TJsonConsumer::OnInt64Scalar(i64 value)
 void TJsonConsumer::OnUint64Scalar(ui64 value)
 {
     if (IsWriteAllowed()) {
-        if (Config->AnnotateWithTypes && Config->AttributesMode != EJsonAttributesMode::Never) {
-            if (!HasAttributes) {
-                JsonWriter->OnBeginMap();
-                HasAttributes = true;
+        if (Config_->AnnotateWithTypes && Config_->AttributesMode != EJsonAttributesMode::Never) {
+            if (!HasAttributes_) {
+                JsonWriter_->OnBeginMap();
+                HasAttributes_ = true;
             }
-            JsonWriter->OnKeyedItem(TStringBuf("$type"));
-            JsonWriter->OnStringScalar(TStringBuf("uint64"));
+            JsonWriter_->OnKeyedItem(TStringBuf("$type"));
+            JsonWriter_->OnStringScalar(TStringBuf("uint64"));
         }
         EnterNode();
-        if (Config->Stringify) {
+        if (Config_->Stringify) {
             WriteStringScalar(::ToString(value));
         } else {
-            JsonWriter->OnUint64Scalar(value);
+            JsonWriter_->OnUint64Scalar(value);
         }
         LeaveNode();
 
@@ -433,16 +432,16 @@ void TJsonConsumer::OnUint64Scalar(ui64 value)
 void TJsonConsumer::OnDoubleScalar(double value)
 {
     if (IsWriteAllowed()) {
-        if (Config->AnnotateWithTypes && Config->AttributesMode != EJsonAttributesMode::Never) {
-            if (!HasAttributes) {
-                JsonWriter->OnBeginMap();
-                HasAttributes = true;
+        if (Config_->AnnotateWithTypes && Config_->AttributesMode != EJsonAttributesMode::Never) {
+            if (!HasAttributes_) {
+                JsonWriter_->OnBeginMap();
+                HasAttributes_ = true;
             }
-            JsonWriter->OnKeyedItem(TStringBuf("$type"));
-            JsonWriter->OnStringScalar(TStringBuf("double"));
+            JsonWriter_->OnKeyedItem(TStringBuf("$type"));
+            JsonWriter_->OnStringScalar(TStringBuf("double"));
         }
         EnterNode();
-        if (Config->Stringify) {
+        if (Config_->Stringify) {
             char buf[256];
             auto str = TStringBuf(buf, FloatToString(value, buf, sizeof(buf)));
             WriteStringScalar(str);
@@ -450,15 +449,15 @@ void TJsonConsumer::OnDoubleScalar(double value)
             switch (NanInfinityMode_) {
                 case ENanInfinityMode::WriteAllQuouted:
                     if (std::isnan(value)) {
-                        JsonWriter->OnStringScalar(TStringBuf("nan"));
+                        JsonWriter_->OnStringScalar(TStringBuf("nan"));
                     } else if (std::isinf(value)) {
                         if (value < 0) {
-                            JsonWriter->OnStringScalar(TStringBuf("-inf"));
+                            JsonWriter_->OnStringScalar(TStringBuf("-inf"));
                         } else {
-                            JsonWriter->OnStringScalar(TStringBuf("inf"));
+                            JsonWriter_->OnStringScalar(TStringBuf("inf"));
                         }
                     } else {
-                        JsonWriter->OnDoubleScalar(value);
+                        JsonWriter_->OnDoubleScalar(value);
                     }
                     break;
                 case ENanInfinityMode::WriteInfinitiesUnquoted:
@@ -467,7 +466,7 @@ void TJsonConsumer::OnDoubleScalar(double value)
                             "Unexpected NaN encountered during JSON writing; "
                             "consider \"stringify_nan_and_infinity\" config option");
                     }
-                    JsonWriter->OnDoubleScalar(value);
+                    JsonWriter_->OnDoubleScalar(value);
                     break;
                 case ENanInfinityMode::NotSupported:
                     if (std::isnan(value) || std::isinf(value)) {
@@ -475,7 +474,7 @@ void TJsonConsumer::OnDoubleScalar(double value)
                             "Unexpected NaN or infinity encountered during JSON writing; "
                             "consider using either \"support_infinity\" or \"stringify_nan_and_infinity\" config options");
                     }
-                    JsonWriter->OnDoubleScalar(value);
+                    JsonWriter_->OnDoubleScalar(value);
                     break;
             }
         }
@@ -486,19 +485,19 @@ void TJsonConsumer::OnDoubleScalar(double value)
 void TJsonConsumer::OnBooleanScalar(bool value)
 {
     if (IsWriteAllowed()) {
-        if (Config->AnnotateWithTypes && Config->AttributesMode != EJsonAttributesMode::Never) {
-            if (!HasAttributes) {
-                JsonWriter->OnBeginMap();
-                HasAttributes = true;
+        if (Config_->AnnotateWithTypes && Config_->AttributesMode != EJsonAttributesMode::Never) {
+            if (!HasAttributes_) {
+                JsonWriter_->OnBeginMap();
+                HasAttributes_ = true;
             }
-            JsonWriter->OnKeyedItem(TStringBuf("$type"));
-            JsonWriter->OnStringScalar(TStringBuf("boolean"));
+            JsonWriter_->OnKeyedItem(TStringBuf("$type"));
+            JsonWriter_->OnStringScalar(TStringBuf("boolean"));
         }
         EnterNode();
-        if (Config->Stringify) {
+        if (Config_->Stringify) {
             WriteStringScalar(FormatBool(value));
         } else {
-            JsonWriter->OnBooleanScalar(value);
+            JsonWriter_->OnBooleanScalar(value);
         }
         LeaveNode();
     }
@@ -508,7 +507,7 @@ void TJsonConsumer::OnEntity()
 {
     if (IsWriteAllowed()) {
         EnterNode();
-        JsonWriter->OnEntity();
+        JsonWriter_->OnEntity();
         LeaveNode();
     }
 }
@@ -517,21 +516,21 @@ void TJsonConsumer::OnBeginList()
 {
     if (IsWriteAllowed()) {
         EnterNode();
-        JsonWriter->OnBeginList();
+        JsonWriter_->OnBeginList();
     }
 }
 
 void TJsonConsumer::OnListItem()
 {
     if (IsWriteAllowed()) {
-        JsonWriter->OnListItem();
+        JsonWriter_->OnListItem();
     }
 }
 
 void TJsonConsumer::OnEndList()
 {
     if (IsWriteAllowed()) {
-        JsonWriter->OnEndList();
+        JsonWriter_->OnEndList();
         LeaveNode();
     }
 }
@@ -540,7 +539,7 @@ void TJsonConsumer::OnBeginMap()
 {
     if (IsWriteAllowed()) {
         EnterNode();
-        JsonWriter->OnBeginMap();
+        JsonWriter_->OnBeginMap();
     }
 }
 
@@ -548,9 +547,9 @@ void TJsonConsumer::OnKeyedItem(TStringBuf name)
 {
     if (IsWriteAllowed()) {
         if (IsSpecialJsonKey(name)) {
-            JsonWriter->OnKeyedItem(Utf8Transcoder.Encode(TString("$") + name));
+            JsonWriter_->OnKeyedItem(Utf8Transcoder_.Encode(TString("$") + name));
         } else {
-            JsonWriter->OnKeyedItem(Utf8Transcoder.Encode(name));
+            JsonWriter_->OnKeyedItem(Utf8Transcoder_.Encode(name));
         }
     }
 }
@@ -558,38 +557,38 @@ void TJsonConsumer::OnKeyedItem(TStringBuf name)
 void TJsonConsumer::OnEndMap()
 {
     if (IsWriteAllowed()) {
-        JsonWriter->OnEndMap();
+        JsonWriter_->OnEndMap();
         LeaveNode();
     }
 }
 
 void TJsonConsumer::OnBeginAttributes()
 {
-    InAttributesBalance += 1;
-    if (Config->AttributesMode != EJsonAttributesMode::Never) {
-        JsonWriter->OnBeginMap();
-        JsonWriter->OnKeyedItem(TStringBuf("$attributes"));
-        JsonWriter->OnBeginMap();
+    InAttributesBalance_ += 1;
+    if (Config_->AttributesMode != EJsonAttributesMode::Never) {
+        JsonWriter_->OnBeginMap();
+        JsonWriter_->OnKeyedItem(TStringBuf("$attributes"));
+        JsonWriter_->OnBeginMap();
     }
 }
 
 void TJsonConsumer::OnEndAttributes()
 {
-    InAttributesBalance -= 1;
-    if (Config->AttributesMode != EJsonAttributesMode::Never) {
-        JsonWriter->OnEndMap();
-        HasAttributes = true;
+    InAttributesBalance_ -= 1;
+    if (Config_->AttributesMode != EJsonAttributesMode::Never) {
+        JsonWriter_->OnEndMap();
+        HasAttributes_ = true;
     }
 }
 
 void TJsonConsumer::Flush()
 {
-    JsonWriter->Flush();
+    JsonWriter_->Flush();
 }
 
 void TJsonConsumer::WriteStringScalar(TStringBuf value)
 {
-    JsonWriter->OnStringScalar(Utf8Transcoder.Encode(value));
+    JsonWriter_->OnStringScalar(Utf8Transcoder_.Encode(value));
 }
 
 void TJsonConsumer::WriteStringScalarWithAttributes(
@@ -598,25 +597,25 @@ void TJsonConsumer::WriteStringScalarWithAttributes(
     bool incomplete)
 {
     if (IsWriteAllowed()) {
-        if (Config->AttributesMode != EJsonAttributesMode::Never) {
+        if (Config_->AttributesMode != EJsonAttributesMode::Never) {
             if (incomplete) {
-                if (!HasAttributes) {
-                    JsonWriter->OnBeginMap();
-                    HasAttributes = true;
+                if (!HasAttributes_) {
+                    JsonWriter_->OnBeginMap();
+                    HasAttributes_ = true;
                 }
 
-                JsonWriter->OnKeyedItem(TStringBuf("$incomplete"));
-                JsonWriter->OnBooleanScalar(true);
+                JsonWriter_->OnKeyedItem(TStringBuf("$incomplete"));
+                JsonWriter_->OnBooleanScalar(true);
             }
 
-            if (Config->AnnotateWithTypes) {
-                if (!HasAttributes) {
-                    JsonWriter->OnBeginMap();
-                    HasAttributes = true;
+            if (Config_->AnnotateWithTypes) {
+                if (!HasAttributes_) {
+                    JsonWriter_->OnBeginMap();
+                    HasAttributes_ = true;
                 }
 
-                JsonWriter->OnKeyedItem(TStringBuf("$type"));
-                JsonWriter->OnStringScalar(type);
+                JsonWriter_->OnKeyedItem(TStringBuf("$type"));
+                JsonWriter_->OnStringScalar(type);
             }
         }
 
@@ -628,14 +627,14 @@ void TJsonConsumer::WriteStringScalarWithAttributes(
 
 void TJsonConsumer::SetAnnotateWithTypesParameter(bool value)
 {
-    Config->AnnotateWithTypes = value;
+    Config_->AnnotateWithTypes = value;
 }
 
 void TJsonConsumer::OnStringScalarWeightLimited(TStringBuf value, std::optional<i64> weightLimit)
 {
     TStringBuf writeValue = value;
     bool incomplete = false;
-    if (CheckLimit && weightLimit && std::ssize(value) > *weightLimit) {
+    if (CheckLimit_ && weightLimit && std::ssize(value) > *weightLimit) {
         writeValue = value.substr(0, *weightLimit);
         incomplete = true;
     }
@@ -645,7 +644,7 @@ void TJsonConsumer::OnStringScalarWeightLimited(TStringBuf value, std::optional<
 
 void TJsonConsumer::OnNodeWeightLimited(TStringBuf yson, std::optional<i64> weightLimit)
 {
-    if (CheckLimit && weightLimit && std::ssize(yson) > *weightLimit) {
+    if (CheckLimit_ && weightLimit && std::ssize(yson) > *weightLimit) {
         WriteStringScalarWithAttributes({}, TStringBuf("any"), true);
         return;
     }

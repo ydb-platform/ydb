@@ -615,7 +615,7 @@ public:
         ::google::protobuf::io::CodedInputStream chunkStream(
             reinterpret_cast<const ui8*>(Current_),
             static_cast<int>(size));
-        Y_PROTOBUF_SUPPRESS_NODISCARD message->ParsePartialFromCodedStream(&chunkStream);
+        Y_UNUSED(message->ParsePartialFromCodedStream(&chunkStream));
         Current_ += AlignUp<size_t>(size, SerializationAlignment);
     }
 

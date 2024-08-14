@@ -308,7 +308,7 @@ std::optional<std::pair<void*, void*>> GetExecutableRange(dl_phdr_info* info)
 }
 
 #if defined(_msan_enabled_)
-extern "C" void __msan_unpoison_string(const volatile void* a);
+extern "C" void __msan_unpoison_string(const volatile char* a);
 #endif
 
 class TSymbolIndex

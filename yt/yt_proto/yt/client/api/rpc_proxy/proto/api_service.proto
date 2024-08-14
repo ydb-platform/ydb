@@ -224,6 +224,8 @@ enum EMultiplexingBand
     MB_CONTROL = 1;
     MB_HEAVY = 2;
     MB_INTERACTIVE = 3;
+    MB_REAL_TIME = 4;
+    MB_JOURNAL = 5;
 }
 
 enum ETableSchemaModification
@@ -502,6 +504,7 @@ message TReqLookupRows
 message TRspLookupRows
 {
     required TRowsetDescriptor rowset_descriptor = 200;
+    repeated int32 unavailable_key_indexes = 201;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -542,6 +545,7 @@ message TReqVersionedLookupRows
 message TRspVersionedLookupRows
 {
     required TRowsetDescriptor rowset_descriptor = 200;
+    repeated int32 unavailable_key_indexes = 201;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -577,8 +581,8 @@ message TRspMultiLookup
     message TSubresponse
     {
         required TRowsetDescriptor rowset_descriptor = 1;
-
         required int32 attachment_count = 2;
+        repeated int32 unavailable_key_indexes = 3;
     }
 
     repeated TSubresponse subresponses = 1;

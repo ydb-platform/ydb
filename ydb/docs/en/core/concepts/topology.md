@@ -70,9 +70,9 @@ The load can be redistributed across all the hardware that is still running if t
 
 ## Capacity and performance considerations {#capacity}
 
-The system can work with fail domains of any size. However, if there are few domains and different numbers of disks in different domains, the number of storage groups that can be created will be limited. In this case, some hardware in fail domains that are too large may be underutilized. If all hardware is used fully, significant differences in domain sizes may make reconfiguration impossible.
+The system can function with fail domains of any size. However, if there are few domains with varying numbers of disks, the number of storage groups that can be created will be limited. In such cases, hardware in overly large fail domains may be underutilized. If all hardware is fully utilized, significant differences in domain sizes may prevent reconfiguration.
 
-For example, consider a cluster in `block-4-2` mode with 15 racks. The first of the 15 racks hosts 20 servers, while the other 14 racks host 10 servers each. To fully utilize all 20 servers from the first rack, {{ ydb-short-name }} will create groups so that 1 disk from this largest fail domain is used in each group. As a result, if the hardware in any other fail domain fails, the load cannot be redistributed to the hardware in the first rack.
+For example, consider a cluster in `block-4-2` mode with 15 racks. The first rack contains 20 servers, while the other 14 racks each contain 10 servers. To fully utilize the 20 servers from the first rack, {{ ydb-short-name }} will create groups that include 1 disk from this largest fail domain in each group. Consequently, if any other fail domain's hardware fails, the load cannot be redistributed to the hardware in the first rack.
 
 {{ ydb-short-name }} can group disk drives of different vendors, capacities, and speeds. The resulting characteristics of a group depend on the set of the worst characteristics of the hardware serving the group. Generally, the best results can be achieved by using homogeneous hardware.
 

@@ -8269,6 +8269,44 @@ TExprNode::TPtr OptimizeCoalesce(const TExprNode::TPtr& node, TExprContext& ctx)
     return node;
 }
 
+TExprNode::TPtr OptimizeSqlCompare(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (const auto& left = node->Head(); left.IsCallable("If") && left.ChildrenSize() == 3U && node->Tail().IsComplete()) {
+        if (left.Child(2U)->IsCallable("Nothing")) {
+            YQL_CLOG(DEBUG, CorePeepHole) << "Swap '" << node->Content() << "' with " << left.Content();
+            return ctx.ChangeChildren(left, {
+                left.HeadPtr(),
+                ctx.ChangeChild(*node, 0U, left.ChildPtr(1U)),
+                ctx.ChangeChildren(*left.Child(2U), {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)})
+            });
+        } else if (left.Child(1U)->IsCallable("Nothing")) {
+            YQL_CLOG(DEBUG, CorePeepHole) << "Swap '" << node->Content() << "' with " << left.Content();
+            return ctx.ChangeChildren(left, {
+                left.HeadPtr(),
+                ctx.ChangeChildren(*left.Child(1U), {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)}),
+                ctx.ChangeChild(*node, 0U, left.ChildPtr(2U))
+            });
+        }
+    } else if (const auto& right = node->Tail(); right.IsCallable("If") && right.ChildrenSize() == 3U && node->Head().IsComplete()) {
+        if (right.Child(2U)->IsCallable("Nothing")) {
+            YQL_CLOG(DEBUG, CorePeepHole) << "Swap '" << node->Content() << "' with " << right.Content();
+            return ctx.ChangeChildren(right, {
+                right.HeadPtr(),
+                ctx.ChangeChild(*node, 1U, right.ChildPtr(1U)),
+                ctx.ChangeChildren(*right.Child(2U), {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)})
+            });
+        } else if (right.Child(1U)->IsCallable("Nothing")) {
+            YQL_CLOG(DEBUG, CorePeepHole) << "Swap '" << node->Content() << "' with " << right.Content();
+            return ctx.ChangeChildren(right, {
+                right.HeadPtr(),
+                ctx.ChangeChildren(*right.Child(1U), {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)}),
+                ctx.ChangeChild(*node, 1U, right.ChildPtr(2U))
+            });
+        }
+    }
+
+    return node;
+}
+
 ui64 ToDate(ui64 now)      { return std::min<ui64>(NUdf::MAX_DATE - 1U, now / 86400000000ull); }
 ui64 ToDatetime(ui64 now)  { return std::min<ui64>(NUdf::MAX_DATETIME - 1U, now / 1000000ull); }
 ui64 ToTimestamp(ui64 now) { return std::min<ui64>(NUdf::MAX_TIMESTAMP - 1ULL, now); }
@@ -8440,6 +8478,12 @@ struct TPeepHoleRules {
         {"Sort", &OptimizeTopOrSort<true, false>},
         {"ToFlow", &OptimizeToFlow},
         {"Coalesce", &OptimizeCoalesce},
+        {"==", &OptimizeSqlCompare},
+        {"!=", &OptimizeSqlCompare},
+        {"<", &OptimizeSqlCompare},
+        {">", &OptimizeSqlCompare},
+        {"<=", &OptimizeSqlCompare},
+        {">=", &OptimizeSqlCompare},
     };
 
     const TExtPeepHoleOptimizerMap FinalStageExtRules = {};

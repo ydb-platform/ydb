@@ -198,6 +198,7 @@ message StreamWriteMessage {
             oneof message_write_status {
                 Written written = 2;
                 Skipped skipped = 3;
+                WrittenInTx written_in_tx = 4;
             }
 
             message Written {
@@ -212,6 +213,9 @@ message StreamWriteMessage {
                     REASON_UNSPECIFIED = 0;
                     REASON_ALREADY_WRITTEN = 1;
                 }
+            }
+
+            message WrittenInTx {
             }
         }
 

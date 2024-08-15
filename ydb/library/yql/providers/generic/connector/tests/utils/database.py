@@ -57,6 +57,8 @@ class Database:
                 return f'database "{self.name}" does not exist'
             case EDataSourceKind.YDB:
                 raise Exception("Fix me first in YQ-3315")
+            case EDataSourceKind.MS_SQL_SERVER:
+                return 'Unknown database'
             case EDataSourceKind.MYSQL:
                 return 'Unknown database'
             case EDataSourceKind.ORACLE:
@@ -72,6 +74,8 @@ class Database:
                 return 'table does not exist'
             case EDataSourceKind.YDB:
                 return 'issues = [{\'Path not found\'}])'
+            case EDataSourceKind.MS_SQL_SERVER:
+                return 'table does not exist'
             case EDataSourceKind.MYSQL:
                 return 'table does not exist'
             case EDataSourceKind.ORACLE:

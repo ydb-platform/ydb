@@ -74,11 +74,11 @@ CREATE TABLE primitives (
 );
 
 INSERT INTO primitives VALUES
-    (0, 1, 2, 3, 4, 5, 6.6, 7.7, 'az', 'az', 'az', 'az', 'az', 'az', 0x1234567890ABCDEF, 0x1234567890ABCDEF, 0x1234567890ABCDEF,
+    (0, 1, 2, 3, 4, 5, 6.6, 7.7, 'az', 'az', 'az', 'az', 'az', 'az', 0x61, 0x61, 0x61,
     '1988-11-20', '1988-11-20 12:55:00', '1988-11-20 12:55:28.123', '1988-11-20 12:55:28.1231231'),
     (1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 
     NULL, NULL, NULL, NULL),
-    (2, 0, 2, -3, -4, -5, -6.6, -7.7, N'буки', N'буки', N'буки', N'буки', N'буки', N'буки', 0x1234567890ABCDEF, 0x1234567890ABCDEF, 0x1234567890ABCDEF,
+    (2, 0, 2, -3, -4, -5, -6.6, -7.7, N'буки', N'буки', N'буки', N'буки', N'буки', N'буки', 0x62, 0x62, 0x62,
     '2023-03-21', '2023-03-21 11:21:00', '2023-03-21 11:21:31', '2023-03-21 11:21:31');
 
 DROP TABLE IF EXISTS constant;

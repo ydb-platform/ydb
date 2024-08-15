@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(TableWriter) {
                     .Tag = 1,
                     .Type = NScheme::TTypeInfo{NScheme::NTypeIds::Uint64},
                 });
-        schema->ValueColumns.emplace("__incrBackupImpl_deleted", TLightweightSchema::TColumn{
+        schema->ValueColumns.emplace("__ydb_incrBackupImpl_deleted", TLightweightSchema::TColumn{
                     .Tag = 123,
                     .Type = NScheme::TTypeInfo{NScheme::NTypeIds::Bool},
                 });

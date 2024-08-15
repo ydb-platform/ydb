@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/ydb_driver/driver.h>
-#include <ydb-cpp-sdk/client/ydb_types/operation/operation.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/types/operation/operation.h>
 
 namespace NYdb {
 namespace NConsoleClient {

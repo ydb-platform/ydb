@@ -1,9 +1,9 @@
 #include "ydb_common_ut.h"
 
 #include <ydb/public/lib/experimental/ydb_object_storage.h>
-#include <ydb-cpp-sdk/client/ydb_result/result.h>
-#include <ydb-cpp-sdk/client/ydb_scheme/scheme.h>
-#include <ydb-cpp-sdk/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 using namespace NYdb;
 

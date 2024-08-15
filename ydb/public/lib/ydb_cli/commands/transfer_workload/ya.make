@@ -11,7 +11,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/yql/public/issue
-    ydb/public/sdk/cpp/src/library/yql/issue/protos
+    ydb/public/sdk/cpp/src/library/yql_common/issue/protos
     ydb/public/api/grpc
     ydb/public/api/protos
     ydb/public/api/protos/annotations

@@ -1,6 +1,6 @@
 #include "db_schema.h"
 
-#include <ydb-cpp-sdk/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 #include <util/string/printf.h>
 
 namespace NFq {

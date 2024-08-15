@@ -2,7 +2,7 @@
 
 #include <ydb/public/lib/ydb_cli/common/command.h>
 
-#include <ydb-cpp-sdk/client/ydb_driver/driver.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
 
 #include <library/cpp/logger/backend.h>

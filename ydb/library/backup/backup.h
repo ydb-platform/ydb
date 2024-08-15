@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/ydb_driver/driver.h>
-#include <ydb-cpp-sdk/client/ydb_table/table.h>
-#include <ydb-cpp-sdk/client/ydb_value/value.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/value/value.h>
 
 #include <library/cpp/regex/pcre/regexp.h>
 

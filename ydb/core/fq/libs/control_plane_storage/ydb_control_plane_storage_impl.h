@@ -19,7 +19,7 @@
 #include <library/cpp/protobuf/interop/cast.h>
 
 #include <ydb/public/api/protos/draft/fq.pb.h>
-#include <ydb-cpp-sdk/client/ydb_scheme/scheme.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <ydb/library/db_pool/db_pool.h>
 #include <ydb/library/security/util.h>

@@ -3,10 +3,10 @@
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/core/fq/libs/config/protos/storage.pb.h>
 
-#include <ydb-cpp-sdk/client/ydb_coordination/coordination.h>
-#include <ydb-cpp-sdk/client/ydb_rate_limiter/rate_limiter.h>
-#include <ydb-cpp-sdk/client/ydb_table/table.h>
-#include <ydb-cpp-sdk/client/ydb_scheme/scheme.h>
+#include <ydb-cpp-sdk/client/coordination/coordination.h>
+#include <ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <util/stream/file.h>
 #include <util/string/strip.h>

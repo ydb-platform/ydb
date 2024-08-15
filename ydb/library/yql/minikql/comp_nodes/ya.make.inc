@@ -161,7 +161,7 @@ PEERDIR(
     ydb/library/yql/parser/pg_wrapper/interface
     ydb/library/yql/utils
     ydb/library/actors/core
-    ydb/public/sdk/cpp/src/library/yql/issue/protos
+    ydb/public/sdk/cpp/src/library/yql_common/issue/protos
 )
 
 IF (ARCH_X86_64)

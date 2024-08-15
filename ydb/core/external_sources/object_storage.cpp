@@ -20,7 +20,7 @@
 #include <ydb/library/yql/providers/s3/proto/credentials.pb.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
-#include <ydb-cpp-sdk/client/ydb_value/value.h>
+#include <ydb-cpp-sdk/client/value/value.h>
 
 #include <library/cpp/scheme/scheme.h>
 #include <library/cpp/json/json_reader.h>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/ydb_driver/driver.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
 
 namespace NYdb {
 namespace NTable {

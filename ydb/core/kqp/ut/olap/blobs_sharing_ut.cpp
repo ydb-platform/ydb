@@ -9,8 +9,8 @@
 #include <ydb/core/tx/columnshard/data_sharing/destination/session/destination.h>
 #include <ydb/core/tx/columnshard/data_sharing/destination/events/control.h>
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb-cpp-sdk/client/ydb_operation/operation.h>
-#include <ydb-cpp-sdk/client/ydb_ss_tasks/task.h>
+#include <ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb-cpp-sdk/client/ss_tasks/task.h>
 
 namespace NKikimr::NKqp {
 

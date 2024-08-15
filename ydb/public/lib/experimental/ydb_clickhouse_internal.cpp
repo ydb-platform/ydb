@@ -6,7 +6,7 @@
 
 #include <ydb/public/api/grpc/draft/ydb_clickhouse_internal_v1.grpc.pb.h>
 #include <ydb-cpp-sdk/library/grpc/client/grpc_client_low.h>
-#include <ydb-cpp-sdk/client/ydb_common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 
 // TODO: Bad dependency???
 #include <ydb/core/scheme/scheme_tablecell.h>

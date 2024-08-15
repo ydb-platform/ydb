@@ -5,8 +5,8 @@
 #include "pretty_table.h"
 
 #include <ydb-cpp-sdk/library/json_value/ydb_json_value.h>
-#include <ydb-cpp-sdk/client/ydb_result/result.h>
-#include <ydb-cpp-sdk/client/ydb_types/status/status.h>
+#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb-cpp-sdk/client/types/status/status.h>
 
 #include <util/generic/set.h>
 

@@ -48,7 +48,7 @@ CHECK_DEPENDENT_DIRS(
     ydb/public
     ydb/library/yql/public/decimal
     ydb/library/yql/public/issue
-    ydb/public/sdk/cpp/src/library/yql/issue/protos
+    ydb/public/sdk/cpp/src/library/yql_common/issue/protos
 )
 
 END()

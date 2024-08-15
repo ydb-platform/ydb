@@ -8,7 +8,7 @@
 #include <ydb/core/pgproxy/pg_proxy_types.h>
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb-cpp-sdk/client/ydb_result/result.h>
+#include <ydb-cpp-sdk/client/result/result.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 

@@ -6,7 +6,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actor.h>
 
-#include <ydb-cpp-sdk/client/ydb_types/s3_settings.h>
+#include <ydb-cpp-sdk/client/types/s3_settings.h>
 #include <ydb/services/metadata/secret/snapshot.h>
 #include <ydb/services/metadata/service.h>
 

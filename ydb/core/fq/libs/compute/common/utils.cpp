@@ -6,7 +6,7 @@
 #include <library/cpp/json/yson/json2yson.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
-#include <ydb-cpp-sdk/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NFq {
 

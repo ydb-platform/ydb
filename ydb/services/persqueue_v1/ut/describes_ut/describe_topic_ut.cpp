@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/core/client/server/ic_nodes_cache_service.h>
-#include <ydb-cpp-sdk/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
+#include <ydb-cpp-sdk/client/persqueue_core/ut/ut_utils/test_server.h>
 #include <ydb/services/persqueue_v1/ut/test_utils.h>
 #include <ydb/services/persqueue_v1/actors/schema_actors.h>
 #include <ydb/core/client/server/ic_nodes_cache_service.h>

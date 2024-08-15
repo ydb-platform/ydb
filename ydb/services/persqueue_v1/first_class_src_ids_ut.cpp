@@ -1,7 +1,7 @@
 #include <ydb/services/persqueue_v1/ut/test_utils.h>
-#include <ydb-cpp-sdk/client/ydb_topic/topic.h>
-#include <ydb-cpp-sdk/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
-#include <ydb-cpp-sdk/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb-cpp-sdk/client/persqueue_core/ut/ut_utils/test_server.h>
+#include <ydb-cpp-sdk/client/persqueue_core/ut/ut_utils/data_plane_helpers.h>
 #include <ydb/services/persqueue_v1/actors/helpers.h>
 
 namespace NKikimr::NPersQueueTests {

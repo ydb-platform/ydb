@@ -1,6 +1,6 @@
 #include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
 
-#include <ydb-cpp-sdk/client/ydb_topic/ut/ut_utils/topic_sdk_test_setup.h>
+#include <ydb-cpp-sdk/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>

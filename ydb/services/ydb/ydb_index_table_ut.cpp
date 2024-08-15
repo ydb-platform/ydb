@@ -1,6 +1,6 @@
-#include <ydb-cpp-sdk/client/ydb_params/params.h>
-#include <ydb-cpp-sdk/client/ydb_table/table.h>
-#include <ydb-cpp-sdk/client/ydb_types/status_codes.h>
+#include <ydb-cpp-sdk/client/params/params.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/types/status_codes.h>
 
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/client/flat_ut_client.h>

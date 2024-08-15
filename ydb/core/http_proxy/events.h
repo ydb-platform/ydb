@@ -8,7 +8,7 @@
 
 #include <ydb-cpp-sdk/library/grpc/client/grpc_client_low.h>
 
-#include <ydb-cpp-sdk/client/ydb_driver/driver.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
 
 
 

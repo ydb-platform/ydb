@@ -1,8 +1,8 @@
 #include "ydb_common_ut.h"
 
 #include <ydb-cpp-sdk/client/extensions/solomon_stats/pull_connector.h>
-#include <ydb-cpp-sdk/client/ydb_extension/extension.h>
-#include <ydb-cpp-sdk/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/extension/extension.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>

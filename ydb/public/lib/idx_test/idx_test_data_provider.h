@@ -1,6 +1,6 @@
 #pragma once
-#include <ydb-cpp-sdk/client/ydb_table/table.h>
-#include <ydb-cpp-sdk/client/ydb_result/result.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/result/result.h>
 #include <util/system/types.h>
 #include <util/generic/string.h>
 

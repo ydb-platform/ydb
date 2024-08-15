@@ -105,6 +105,7 @@ void TWriteSessionImpl::Start(const TDuration& delay) {
         }
         InitWriter();
     }
+
     with_lock (Lock) {
         ++ConnectionAttemptsDone;
         Started = true;
@@ -114,6 +115,7 @@ void TWriteSessionImpl::Start(const TDuration& delay) {
             return;
         }
     }
+
     Connect(delay);
 }
 
@@ -412,7 +414,9 @@ void TWriteSessionImpl::InitWriter() { // No Lock, very initial start - no race 
     Settings.CompressionExecutor_->Start();
     Settings.EventHandlers_.HandlersExecutor_->Start();
 
+    EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
 }
+
 // Client method
 NThreading::TFuture<ui64> TWriteSessionImpl::GetInitSeqNo() {
     if (!Settings.DeduplicationEnabled_.GetOrElse(true)) {
@@ -953,10 +957,6 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
             LastCountersUpdateTs = TInstant::Now();
             SessionStartedTs = TInstant::Now();
 
-            if (!FirstTokenSent) {
-                result.Events.emplace_back(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
-                FirstTokenSent = true;
-            }
             // Kickstart send after session reestablishment
             SendImpl();
             break;

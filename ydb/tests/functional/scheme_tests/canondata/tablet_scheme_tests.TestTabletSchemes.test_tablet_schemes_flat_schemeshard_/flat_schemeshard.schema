@@ -6833,7 +6833,7 @@
                 "ColumnId": 34,
                 "ColumnName": "ByKeyFilterSize",
                 "ColumnType": "Uint64"
-             }
+            }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {

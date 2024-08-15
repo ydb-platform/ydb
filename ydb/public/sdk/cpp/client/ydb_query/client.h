@@ -6,6 +6,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
 #include <ydb/public/sdk/cpp/client/ydb_retry/retry.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/retry/retry_sync.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/request_settings.h>
 
 #include <util/generic/maybe.h>
@@ -59,11 +60,15 @@ class TQueryClient {
     friend class TSession;
     friend class NRetry::Async::TRetryContext<TQueryClient, TAsyncExecuteQueryResult>;
     friend class NRetry::Async::TRetryContext<TQueryClient, TAsyncStatus>;
+    friend class NRetry::Sync::TRetryContext<TQueryClient, TStatus>;
 
 public:
     using TQueryResultFunc = std::function<TAsyncExecuteQueryResult(TSession session)>;
     using TQueryStatusFunc = std::function<TAsyncStatus(TSession session)>;
+    using TQuerySyncStatusFunc = std::function<TStatus(TSession session)>;
     using TQueryWithoutSessionFunc = std::function<TAsyncExecuteQueryResult(TQueryClient& client)>;
+    using TQueryWithoutSessionStatusFunc = std::function<TAsyncStatus(TQueryClient& client)>;
+    using TQueryWithoutSessionSyncStatusFunc = std::function<TStatus(TQueryClient& client)>;
     using TSettings = TClientSettings;
     using TSession = TSession;
     using TCreateSessionSettings = TCreateSessionSettings;
@@ -87,6 +92,12 @@ public:
     TAsyncExecuteQueryResult RetryQuery(TQueryResultFunc&& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
 
     TAsyncStatus RetryQuery(TQueryStatusFunc&& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
+
+    TAsyncStatus RetryQuery(TQueryWithoutSessionStatusFunc&& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
+
+    TStatus RetryQuery(const TQuerySyncStatusFunc& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
+
+    TStatus RetryQuery(const TQueryWithoutSessionSyncStatusFunc& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
 
     TAsyncExecuteQueryResult RetryQuery(const TString& query, const TTxControl& txControl,
         TDuration timeout, bool isIndempotent);

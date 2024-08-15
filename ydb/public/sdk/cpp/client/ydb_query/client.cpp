@@ -586,6 +586,21 @@ TAsyncStatus TQueryClient::RetryQuery(TQueryStatusFunc&& queryFunc, TRetryOperat
     return ctx->Execute();
 }
 
+TAsyncStatus TQueryClient::RetryQuery(TQueryWithoutSessionStatusFunc&& queryFunc, TRetryOperationSettings settings) {
+    TRetryContextStatusAsync::TPtr ctx(new NRetry::Async::TRetryWithoutSession(*this, std::move(queryFunc), settings));
+    return ctx->Execute();
+}
+
+TStatus TQueryClient::RetryQuery(const TQuerySyncStatusFunc& queryFunc, TRetryOperationSettings settings) {
+    NRetry::Sync::TRetryWithSession ctx(*this, queryFunc, settings);
+    return ctx.Execute();
+}
+
+TStatus TQueryClient::RetryQuery(const TQueryWithoutSessionSyncStatusFunc& queryFunc, TRetryOperationSettings settings) {
+    NRetry::Sync::TRetryWithoutSession ctx(*this, queryFunc, settings);
+    return ctx.Execute();
+}
+
 TAsyncExecuteQueryResult TQueryClient::RetryQuery(const TString& query, const TTxControl& txControl,
     TDuration timeout, bool isIndempotent)
 {

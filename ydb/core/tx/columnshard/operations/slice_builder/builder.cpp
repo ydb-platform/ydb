@@ -60,7 +60,7 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
             const std::vector<ui32>& columnIdsVector = ActualSchema->GetIndexInfo().GetColumnIds();
             const std::set<ui32> columnIdsSet(columnIdsVector.begin(), columnIdsVector.end());
             auto normalized =
-                ActualSchema->NormalizeBatch(*ActualSchema, std::make_shared<NArrow::TGeneralContainer>(OriginalBatch), columnIdsSet);
+                ActualSchema->NormalizeBatch(*ActualSchema, std::make_shared<NArrow::TGeneralContainer>(OriginalBatch), columnIdsSet).DetachResult();
             OriginalBatch = NArrow::ToBatch(normalized->BuildTableVerified(), true);
         }
     }

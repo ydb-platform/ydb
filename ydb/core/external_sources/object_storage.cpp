@@ -350,7 +350,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
 
         auto fileFormat = NObjectStorage::NInference::ConvertFileFormat(*format);
         auto arrowFetcherId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowFetchingActor(s3FetcherId, fileFormat, meta->Attributes));
-        auto arrowInferencinatorId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowInferencinator(arrowFetcherId, s3FetcherId, fileFormat, meta->Attributes));
+        auto arrowInferencinatorId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowInferencinator(arrowFetcherId, fileFormat, meta->Attributes));
 
         return afterListing.Apply([arrowInferencinatorId, meta, actorSystem = ActorSystem](const NThreading::TFuture<NYql::NS3Lister::TObjectListEntry>& entryFut) {
             auto promise = NThreading::NewPromise<TMetadataResult>();

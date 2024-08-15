@@ -1,7 +1,6 @@
 #include "s3_fetcher.h"
 
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/yql/providers/common/arrow/interface/arrow_reader.h>
 
 namespace NKikimr::NExternalSource::NObjectStorage {
 
@@ -24,17 +23,12 @@ public:
 
     STRICT_STFUNC(WorkingState,
         HFunc(TEvRequestS3Range, HandleRequest);
-        HFunc(TEvInferFileSchema, HandleRequest);
 
         HFunc(TEvS3DownloadResponse, HandleDownloadReponse);
     )
 
     void HandleRequest(TEvRequestS3Range::TPtr& ev, const NActors::TActorContext& ctx) {
         StartDownload(std::shared_ptr<TEvRequestS3Range>(ev->Release().Release()), ctx.ActorSystem());
-    }
-
-    void HandleRequest(TEvInferFileSchema::TPtr& ev, const NActors::TActorContext& ctx) {
-        StartDownload(std::shared_ptr<TEvInferFileSchema>(ev->Release().Release()), ctx.ActorSystem(), ev->Sender);
     }
 
     void HandleDownloadReponse(TEvS3DownloadResponse::TPtr& ev, const NActors::TActorContext& ctx) {
@@ -66,7 +60,14 @@ public:
 
     void StartDownload(std::shared_ptr<TEvRequestS3Range>&& request, NActors::TActorSystem* actorSystem) {
         auto length = request->End - request->Start;
-        auto headers = MakeHeaders(request->RequestId.AsGuidString());
+        const auto& authInfo = Credentials_.GetAuthInfo();
+        auto headers = NYql::IHTTPGateway::MakeYcHeaders(
+            request->RequestId.AsGuidString(),
+            authInfo.GetToken(),
+            {},
+            authInfo.GetAwsUserPwd(),
+            authInfo.GetAwsSigV4()
+        );
 
         Gateway_->Download(
             Url_ + request->Path, std::move(headers), request->Start, length,
@@ -75,51 +76,7 @@ public:
             }, {}, RetryPolicy_);
     }
 
-    void StartDownload(std::shared_ptr<TEvInferFileSchema>&& request, NActors::TActorSystem* actorSystem, NActors::TActorId sender) {
-        NYql::TArrowFileDesc desc(
-            Url_ + request->Path,
-            Gateway_,
-            MakeHeaders(CreateGuidAsString()),
-            RetryPolicy_,
-            request->Size,
-            "parquet"
-        );
-
-        auto schemaReader = NYql::MakeArrowReader(NYql::TArrowReaderSettings());
-        auto futureSchema = schemaReader->GetSchema(desc);
-        futureSchema.Apply([actorSystem, sender, request](NThreading::TFuture<NYql::IArrowReader::TSchemaResponse> response) {
-            if (response.HasException()) {
-                try {
-                    response.TryRethrow();
-                } catch (const yexception& exception) {
-                    auto error = MakeError(
-                        request->Path,
-                        NFq::TIssuesIds::INTERNAL_ERROR,
-                        TStringBuilder() << "couldn't read file schema, check format params: " << exception.what()
-                    );
-                    actorSystem->Send(sender, error);
-                    return;
-                }
-            }
-
-            actorSystem->Send(sender, new TEvArrowSchema(response.GetValue().Schema, request->Path));
-        });
-    }
-
 private:
-    NYql::IHTTPGateway::THeaders MakeHeaders(const TString& guid) const {
-        const auto& authInfo = Credentials_.GetAuthInfo();
-        auto headers = NYql::IHTTPGateway::MakeYcHeaders(
-            guid,
-            authInfo.GetToken(),
-            {},
-            authInfo.GetAwsUserPwd(),
-            authInfo.GetAwsSigV4()
-        );
-
-        return std::move(headers);
-    }
-
     TString Url_;
     NYql::IHTTPGateway::TPtr Gateway_;
     NYql::IHTTPGateway::TRetryPolicy::TPtr RetryPolicy_;

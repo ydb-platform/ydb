@@ -18,6 +18,14 @@
 
 namespace NKikimr::NExternalSource::NObjectStorage::NInference {
 
+namespace {
+
+bool IsMetadataSizeRequest(uint64_t from, uint64_t to) {
+    return to - from == 4;
+}
+
+}
+
 class TArrowFileFetcher : public NActors::TActorBootstrapped<TArrowFileFetcher> {
     static constexpr uint64_t PrefixSize = 10_MB;
 public:
@@ -55,7 +63,11 @@ public:
         switch (Format_) {
             case EFileFormat::CsvWithNames:
             case EFileFormat::TsvWithNames: {
-                HandleAsPrefixFile(std::move(localRequest), ctx);
+                RequestPartialFile(std::move(localRequest), ctx, 0, 10_MB);
+                break;
+            }
+            case EFileFormat::Parquet: {
+                RequestPartialFile(std::move(localRequest), ctx, request.Size - 8, request.Size - 4);
                 break;
             }
             default: {
@@ -96,6 +108,15 @@ public:
                 ctx.Send(request.Requester, new TEvArrowFile(std::move(file), request.Path));
                 break;
             }
+            case EFileFormat::Parquet: {
+                if (IsMetadataSizeRequest(request.From, request.To)) {
+                    CleanupMetadataSize(data, request, ctx);
+                    return;
+                }
+                file = CleanupParquetFile(data, request, ctx);
+                ctx.Send(request.Requester, new TEvArrowFile(std::move(file), request.Path));
+                break;
+            }
             case EFileFormat::Undefined:
             default:
                 Y_ABORT("Invalid format should be unreachable");
@@ -124,10 +145,10 @@ private:
 
     // Reading file
 
-    void HandleAsPrefixFile(TRequest&& insertedRequest, const NActors::TActorContext& ctx) {
+    void RequestPartialFile(TRequest&& insertedRequest, const NActors::TActorContext& ctx, uint64_t from, uint64_t to) {
         auto path = insertedRequest.Path;
-        insertedRequest.From = 0;
-        insertedRequest.To = 10_MB;
+        insertedRequest.From = from;
+        insertedRequest.To = to;
         auto it = InflightRequests_.try_emplace(path, std::move(insertedRequest));
         Y_ABORT_UNLESS(it.second, "couldn't insert request for path: %s", path.c_str());
 
@@ -221,6 +242,52 @@ private:
         }
 
         return std::make_shared<arrow::io::BufferReader>(std::move(whole));
+    }
+
+    void CleanupMetadataSize(const TString& data, TRequest request, const NActors::TActorContext& ctx) {
+        uint32_t metadataSize = ReadUnaligned<uint32_t>(data.data());
+
+        if (metadataSize > 10_MB) {
+            auto error = MakeError(
+                request.Path,
+                NFq::TIssuesIds::INTERNAL_ERROR,
+                TStringBuilder{} << "couldn't load parquet metadata, size is bigger than 10MB : " << metadataSize
+            );
+            SendError(ctx, error);
+            return;
+        }
+
+        InflightRequests_.erase(request.Path);
+
+        TRequest localRequest{
+            .Path = request.Path,
+            .RequestId = {},
+            .Requester = request.Requester,
+        };
+        CreateGuid(&localRequest.RequestId);
+        RequestPartialFile(std::move(localRequest), ctx, request.From - metadataSize, request.To + 4);
+    }
+
+    std::shared_ptr<arrow::io::RandomAccessFile> CleanupParquetFile(const TString& data, const TRequest& request, const NActors::TActorContext& ctx) {
+        auto arrowData = std::make_shared<arrow::Buffer>(nullptr, 0);
+        {
+            arrow::BufferBuilder builder;
+            auto buildRes = builder.Append(data.data(), data.size());
+            if (buildRes.ok()) {
+                buildRes = builder.Finish(&arrowData);
+            }
+            if (!buildRes.ok()) {
+                auto error = MakeError(
+                    request.Path,
+                    NFq::TIssuesIds::INTERNAL_ERROR,
+                    TStringBuilder{} << "couldn't consume buffer from S3Fetcher: " << buildRes.ToString()
+                );
+                SendError(ctx, error);
+                return nullptr;
+            }
+        }
+
+        return std::make_shared<arrow::io::BufferReader>(std::move(arrowData));
     }
 
     // Utility

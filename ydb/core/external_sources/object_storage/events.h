@@ -29,7 +29,6 @@ enum EEventTypes : ui32 {
     EvInferredFileSchema,
 
     EvArrowFile,
-    EvArrowSchema,
 
     EvEnd,
 };
@@ -116,16 +115,6 @@ struct TEvArrowFile : public NActors::TEventLocal<TEvArrowFile, EvArrowFile> {
     {}
 
     std::shared_ptr<arrow::io::RandomAccessFile> File;
-    TString Path;
-};
-
-struct TEvArrowSchema : public NActors::TEventLocal<TEvArrowSchema, EvArrowSchema> {
-    TEvArrowSchema(std::shared_ptr<arrow::Schema> schema, TString path)
-        : Schema{std::move(schema)}
-        , Path{std::move(path)}
-    {}
-
-    std::shared_ptr<arrow::Schema> Schema;
     TString Path;
 };
 

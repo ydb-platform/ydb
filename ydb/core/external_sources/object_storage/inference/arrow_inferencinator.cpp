@@ -3,6 +3,7 @@
 #include <arrow/table.h>
 #include <arrow/csv/options.h>
 #include <arrow/csv/reader.h>
+#include <parquet/arrow/reader.h>
 
 #include <ydb/core/external_sources/object_storage/events.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -202,12 +203,37 @@ std::variant<ArrowFields, TString> InferCsvTypes(std::shared_ptr<arrow::io::Rand
     return table->fields();
 }
 
+std::variant<ArrowFields, TString> InferParquetTypes(std::shared_ptr<arrow::io::RandomAccessFile> file) {
+    parquet::arrow::FileReaderBuilder builder;
+    builder.properties(parquet::ArrowReaderProperties(false));
+    auto openStatus = builder.Open(std::move(file));
+    if (!openStatus.ok()) {
+        return TStringBuilder{} << "couldn't parse parquet file, check format params: " << openStatus.ToString();
+    }
+
+    std::unique_ptr<parquet::arrow::FileReader> reader;
+    auto readerStatus = builder.Build(&reader);
+    if (!readerStatus.ok()) {
+        return TStringBuilder{} << "couldn't parse parquet file, check format params: " << openStatus.ToString();
+    }
+
+    std::shared_ptr<arrow::Schema> schema;
+    auto schemaRes = reader->GetSchema(&schema);
+    if (!schemaRes.ok()) {
+        return TStringBuilder{} << "couldn't parse parquet file, check format params: " << openStatus.ToString();
+    }
+
+    return schema->fields();
+}
+
 std::variant<ArrowFields, TString> InferType(EFileFormat format, std::shared_ptr<arrow::io::RandomAccessFile> file, const FormatConfig& config) {
     switch (format) {
     case EFileFormat::CsvWithNames:
         return InferCsvTypes(std::move(file), static_cast<const CsvConfig&>(config));
     case EFileFormat::TsvWithNames:
         return InferCsvTypes(std::move(file), static_cast<const TsvConfig&>(config));
+    case EFileFormat::Parquet:
+        return InferParquetTypes(std::move(file));
     case EFileFormat::Undefined:
     default:
         return std::variant<ArrowFields, TString>{std::in_place_type_t<TString>{}, TStringBuilder{} << "unexpected format: " << ConvertFileFormat(format)};
@@ -242,13 +268,11 @@ class TArrowInferencinator : public NActors::TActorBootstrapped<TArrowInferencin
 public:
     TArrowInferencinator(
         NActors::TActorId arrowFetcher,
-        NActors::TActorId s3Fetcher,
         EFileFormat format,
         const THashMap<TString, TString>& params)
         : Format_{format}
         , Config_{MakeFormatConfig(Format_, params)}
         , ArrowFetcherId_{arrowFetcher}
-        , S3FetcherId_{s3Fetcher}
     {
         Y_ABORT_UNLESS(IsArrowInferredFormat(Format_));
     }
@@ -261,31 +285,11 @@ public:
         HFunc(TEvInferFileSchema, HandleInferRequest);
         HFunc(TEvFileError, HandleFileError);
         HFunc(TEvArrowFile, HandleFileInference);
-        HFunc(TEvArrowSchema, HandleFileSchema);
     )
 
     void HandleInferRequest(TEvInferFileSchema::TPtr& ev, const NActors::TActorContext& ctx) {
         RequesterId_ = ev->Sender;
-        auto& event = *ev->Get();
-
-        switch (Format_) {
-            case EFileFormat::CsvWithNames:
-            case EFileFormat::TsvWithNames: {
-                ctx.Send(ArrowFetcherId_, ev->Release());
-                return;
-            }
-            case EFileFormat::Parquet: {
-                ctx.Send(S3FetcherId_, ev->Release());
-                return;
-            }
-            default: {
-                ctx.Send(RequesterId_, MakeError(event.Path, NFq::TIssuesIds::UNSUPPORTED, TStringBuilder{} << "unsupported format for inference: " << ConvertFileFormat(Format_)));
-                return;
-            }
-            case EFileFormat::Undefined:
-                Y_ABORT("Invalid format should be unreachable");
-        }
-        
+        ctx.Send(ArrowFetcherId_, ev->Release());
     }
 
     void HandleFileInference(TEvArrowFile::TPtr& ev, const NActors::TActorContext& ctx) {
@@ -295,12 +299,18 @@ public:
             ctx.Send(RequesterId_, MakeErrorSchema(file.Path, NFq::TIssuesIds::INTERNAL_ERROR, std::get<TString>(mbArrowFields)));
             return;
         }
-        ConvertArrowSchema(std::get<ArrowFields>(mbArrowFields), file.Path, ctx);
-    }
-
-    void HandleFileSchema(TEvArrowSchema::TPtr& ev, const NActors::TActorContext& ctx) {
-        auto& schema = *ev->Get();
-        ConvertArrowSchema(schema.Schema->fields(), schema.Path, ctx);
+        auto& arrowFields = std::get<ArrowFields>(mbArrowFields);
+        std::vector<Ydb::Column> ydbFields;
+        for (const auto& field : arrowFields) {
+            ydbFields.emplace_back();
+            auto& ydbField = ydbFields.back();
+            if (!ArrowToYdbType(*ydbField.mutable_type(), *field->type())) {
+                ctx.Send(RequesterId_, MakeErrorSchema(file.Path, NFq::TIssuesIds::UNSUPPORTED, TStringBuilder{} << "couldn't convert arrow type to ydb: " << field->ToString()));
+                return;
+            }
+            ydbField.mutable_name()->assign(field->name());
+        }
+        ctx.Send(RequesterId_, new TEvInferredFileSchema(file.Path, std::move(ydbFields)));
     }
 
     void HandleFileError(TEvFileError::TPtr& ev, const NActors::TActorContext& ctx) {
@@ -309,33 +319,17 @@ public:
     }
 
 private:
-    void ConvertArrowSchema(const ArrowFields& fields, const TString& path, const NActors::TActorContext& ctx) const {
-        std::vector<Ydb::Column> ydbFields;
-        for (const auto& field : fields) {
-            ydbFields.emplace_back();
-            auto& ydbField = ydbFields.back();
-            if (!ArrowToYdbType(*ydbField.mutable_type(), *field->type())) {
-                ctx.Send(RequesterId_, MakeErrorSchema(path, NFq::TIssuesIds::UNSUPPORTED, TStringBuilder{} << "couldn't convert arrow type to ydb: " << field->ToString()));
-                return;
-            }
-            ydbField.mutable_name()->assign(field->name());
-        }
-        ctx.Send(RequesterId_, new TEvInferredFileSchema(path, std::move(ydbFields)));
-    }
-
     EFileFormat Format_;
     std::unique_ptr<FormatConfig> Config_;
     NActors::TActorId ArrowFetcherId_;
-    NActors::TActorId S3FetcherId_;
     NActors::TActorId RequesterId_;
 };
 
 NActors::IActor* CreateArrowInferencinator(
     NActors::TActorId arrowFetcher,
-    NActors::TActorId s3Fetcher,
     EFileFormat format,
     const THashMap<TString, TString>& params) {
 
-    return new TArrowInferencinator{arrowFetcher, s3Fetcher, format, params};
+    return new TArrowInferencinator{arrowFetcher, format, params};
 }
 } // namespace NKikimr::NExternalSource::NObjectStorage::NInference

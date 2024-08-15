@@ -53,5 +53,5 @@ constexpr bool IsArrowInferredFormat(TStringBuf format) {
     return IsArrowInferredFormat(ConvertFileFormat(format));
 }
 
-NActors::IActor* CreateArrowInferencinator(NActors::TActorId arrowFetcher, NActors::TActorId s3Fetcher, EFileFormat format, const THashMap<TString, TString>& params);
+NActors::IActor* CreateArrowInferencinator(NActors::TActorId arrowFetcher, EFileFormat format, const THashMap<TString, TString>& params);
 } // namespace NKikimr::NExternalSource::NObjectStorage::NInference

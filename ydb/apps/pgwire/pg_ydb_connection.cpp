@@ -3,8 +3,8 @@
 #include "log_impl.h"
 #include <ydb/core/pgproxy/pg_proxy_events.h>
 #include <ydb/core/local_pgwire/local_pgwire_util.h>
-#include <ydb-cpp-sdk/client/ydb_driver/driver.h>
-#include <ydb-cpp-sdk/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/ydb_types/status/status.h>
+#include <ydb-cpp-sdk/client/types/status/status.h>
 #include <ydb/library/yql/public/issue/yql_issue_id.h>
 
 #include <util/generic/fwd.h>

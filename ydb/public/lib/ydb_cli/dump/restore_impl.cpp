@@ -3,7 +3,7 @@
 #include "restore_compat.h"
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
-#include <ydb-cpp-sdk/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>

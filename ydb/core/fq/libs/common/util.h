@@ -6,7 +6,7 @@
 #include <google/protobuf/repeated_field.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
-#include <ydb-cpp-sdk/client/ydb_types/status/status.h>
+#include <ydb-cpp-sdk/client/types/status/status.h>
 
 #include <library/cpp/iterator/mapped.h>
 #include <util/generic/string.h>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/ydb_scheme/scheme.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
 #include <library/cpp/colorizer/colors.h>
 
 namespace NYdb {

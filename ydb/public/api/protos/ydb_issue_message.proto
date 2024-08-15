@@ -16,7 +16,7 @@ message IssueMessage {
     string message = 2;
     Position end_position = 3;
     uint32 issue_code = 4;
-    // Severity values from ydb/public/sdk/cpp/src/library/yql/issue/protos/issue_severity.proto
+    // Severity values from ydb/public/sdk/cpp/src/library/yql_common/issue/protos/issue_severity.proto
     // FATAL = 0;
     // ERROR = 1;
     // WARNING = 2;

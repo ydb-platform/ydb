@@ -6,8 +6,8 @@
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host_impl.h>
 
-#include <ydb-cpp-sdk/client/ydb_proto/accessor.h>
-#include <ydb-cpp-sdk/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/library/yql/core/services/mounts/yql_mounts.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>

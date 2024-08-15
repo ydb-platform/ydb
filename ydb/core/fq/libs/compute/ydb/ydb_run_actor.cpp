@@ -21,9 +21,9 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb-cpp-sdk/client/ydb_operation/operation.h>
-#include <ydb-cpp-sdk/client/ydb_proto/accessor.h>
-#include <ydb-cpp-sdk/client/ydb_query/client.h>
+#include <ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb-cpp-sdk/client/query/client.h>
 
 
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] QueryId: " << Params.QueryId << " " << stream)

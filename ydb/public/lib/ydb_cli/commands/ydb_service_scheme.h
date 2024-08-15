@@ -12,7 +12,7 @@
 #include <ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb-cpp-sdk/client/table/table.h>
-#include <ydb-cpp-sdk/client/topic/topic.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
 
 namespace NYdb {
 

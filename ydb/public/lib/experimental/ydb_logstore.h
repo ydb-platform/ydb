@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/ydb_result/result.h>
-#include <ydb-cpp-sdk/client/ydb_scheme/scheme.h>
-#include <ydb-cpp-sdk/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/api/protos/draft/ydb_logstore.pb.h>
 
 namespace Ydb::LogStore {

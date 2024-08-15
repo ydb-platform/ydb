@@ -6,10 +6,10 @@
 #include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 #include <ydb/library/yql/core/issue/yql_issue.h>
 #include <ydb-cpp-sdk/library/yson_value/ydb_yson_value.h>
-#include <ydb-cpp-sdk/client/ydb_query/client.h>
+#include <ydb-cpp-sdk/client/query/client.h>
 #include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
-#include <ydb-cpp-sdk/client/ydb_scheme/scheme.h>
-#include <ydb-cpp-sdk/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/json/json_reader.h>

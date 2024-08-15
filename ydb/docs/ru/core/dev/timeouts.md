@@ -54,8 +54,8 @@
 
   ```cpp
   #include <ydb-cpp-sdk/client/ydb.h>
-  #include <ydb-cpp-sdk/client/ydb_table.h>
-  #include <ydb-cpp-sdk/client/ydb_value.h>
+  #include <ydb-cpp-sdk/client/table.h>
+  #include <ydb-cpp-sdk/client/value.h>
 
   using namespace NYdb;
   using namespace NYdb::NTable;

@@ -1,7 +1,7 @@
 #include "ydb_service_monitoring.h"
 
 #include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
-#include <ydb-cpp-sdk/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NYdb {
 namespace NConsoleClient {

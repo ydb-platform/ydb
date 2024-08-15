@@ -3,8 +3,8 @@
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 
-#include <ydb-cpp-sdk/client/ydb_query/client.h>
-#include <ydb-cpp-sdk/client/ydb_operation/operation.h>
+#include <ydb-cpp-sdk/client/query/client.h>
+#include <ydb-cpp-sdk/client/operation/operation.h>
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 

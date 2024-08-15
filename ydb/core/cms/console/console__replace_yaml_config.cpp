@@ -5,7 +5,7 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/yaml_config/yaml_config.h>
-#include <ydb/public/sdk/cpp/src/library/yql/issue/protos/issue_severity.pb.h>
+#include <ydb/public/sdk/cpp/src/library/yql_common/issue/protos/issue_severity.pb.h>
 
 namespace NKikimr::NConsole {
 

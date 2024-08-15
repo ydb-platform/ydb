@@ -1,7 +1,7 @@
 #include "result_set_parquet_printer.h"
 
-#include <ydb-cpp-sdk/client/ydb_value/value.h>
-#include <ydb-cpp-sdk/client/ydb_result/result.h>
+#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb-cpp-sdk/client/result/result.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/file.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/stdio.h>

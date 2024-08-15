@@ -11,7 +11,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/sdk/cpp/src/library/yql/issue/protos
+    ydb/public/sdk/cpp/src/library/yql_common/issue/protos
 )
 
 EXCLUDE_TAGS(GO_PROTO)

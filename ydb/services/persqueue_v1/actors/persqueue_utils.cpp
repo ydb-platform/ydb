@@ -2,7 +2,7 @@
 
 #include <ydb/core/base/path.h>
 
-#include <ydb/public/sdk/cpp/src/library/yql/issue/protos/issue_severity.pb.h>
+#include <ydb/public/sdk/cpp/src/library/yql_common/issue/protos/issue_severity.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
 namespace NKikimr::NGRpcProxy::V1 {

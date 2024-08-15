@@ -1,10 +1,10 @@
 #include "import.h"
 
-#include <ydb-cpp-sdk/client/ydb_driver/driver.h>
-#include <ydb-cpp-sdk/client/ydb_operation/operation.h>
-#include <ydb-cpp-sdk/client/ydb_proto/accessor.h>
-#include <ydb-cpp-sdk/client/ydb_scheme/scheme.h>
-#include <ydb-cpp-sdk/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/public/api/protos/ydb_formats.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>

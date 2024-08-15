@@ -3,7 +3,7 @@
 
 #include <ydb/library/yql/utils/log/context.h>
 
-#include <ydb-cpp-sdk/client/ydb_driver/driver.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
 
 #include <util/system/mutex.h>
 

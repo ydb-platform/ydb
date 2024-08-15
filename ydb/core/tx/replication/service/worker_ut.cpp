@@ -6,7 +6,7 @@
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
 #include <ydb/core/tx/replication/ut_helpers/write_topic.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
-#include <ydb-cpp-sdk/client/ydb_topic/topic.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

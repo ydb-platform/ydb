@@ -1,9 +1,9 @@
 #include <ydb/services/ydb/ydb_common_ut.h>
 
-#include <ydb-cpp-sdk/client/ydb_coordination/coordination.h>
-#include <ydb-cpp-sdk/client/ydb_rate_limiter/rate_limiter.h>
+#include <ydb-cpp-sdk/client/coordination/coordination.h>
+#include <ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
 
-#include <ydb-cpp-sdk/client/ydb_types/status/status.h>
+#include <ydb-cpp-sdk/client/types/status/status.h>
 
 #include <ydb/core/grpc_services/local_rate_limiter.h>
 

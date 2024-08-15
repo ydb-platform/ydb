@@ -3,7 +3,7 @@ syntax = "proto3";
 package NKikimrIssues;
 option java_package = "ru.yandex.kikimr.proto";
 
-import "ydb/public/sdk/cpp/src/library/yql/issue/protos/issue_severity.proto";
+import "ydb/public/sdk/cpp/src/library/yql_common/issue/protos/issue_severity.proto";
 
 message TIssuesIds {
 // reserved range [200000, 399999]

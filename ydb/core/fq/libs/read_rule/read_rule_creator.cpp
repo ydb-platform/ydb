@@ -4,7 +4,7 @@
 #include <ydb/core/fq/libs/events/events.h>
 
 #include <ydb/library/services/services.pb.h>
-#include <ydb-cpp-sdk/client/ydb_topic/topic.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
 
 #include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>

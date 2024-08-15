@@ -3,7 +3,7 @@
 #include "ydb_version.h"
 
 #include <ydb-cpp-sdk/client/iam/common/iam.h>
-#include <ydb-cpp-sdk/client/ydb_types/credentials/oauth2_token_exchange/from_file.h>
+#include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
 #include <ydb/public/lib/ydb_cli/common/ydb_updater.h>
 
 #include <filesystem>

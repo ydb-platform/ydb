@@ -5,8 +5,8 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
-#include <ydb-cpp-sdk/client/ydb_proto/accessor.h>
-#include <ydb-cpp-sdk/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/actorsystem.h>

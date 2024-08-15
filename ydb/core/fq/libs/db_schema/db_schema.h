@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/ydb_driver/driver.h>
-#include <ydb-cpp-sdk/client/ydb_params/params.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/params/params.h>
 
 #include <util/string/builder.h>
 #include <util/generic/hash_set.h>

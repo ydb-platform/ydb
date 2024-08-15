@@ -17,9 +17,9 @@
 #include "ydb_workload.h"
 
 #include <ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.h>
-#include <ydb-cpp-sdk/client/ydb_types/credentials/oauth2_token_exchange/credentials.h>
-#include <ydb-cpp-sdk/client/ydb_types/credentials/oauth2_token_exchange/from_file.h>
-#include <ydb-cpp-sdk/client/ydb_types/credentials/oauth2_token_exchange/jwt_token_source.h>
+#include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/credentials.h>
+#include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
+#include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/jwt_token_source.h>
 
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>

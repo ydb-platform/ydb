@@ -38,11 +38,11 @@
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
-#include <ydb-cpp-sdk/client/ydb_persqueue_public/persqueue.h>
-#include <ydb-cpp-sdk/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.h>
-#include <ydb-cpp-sdk/client/ydb_scheme/scheme.h>
-#include <ydb-cpp-sdk/client/ydb_proto/accessor.h>
-#include <ydb-cpp-sdk/client/ydb_topic/include/client.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
+#include <ydb-cpp-sdk/client/persqueue_core/ut/ut_utils/data_plane_helpers.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb-cpp-sdk/client/topic/include/client.h>
 #include <thread>
 
 

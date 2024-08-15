@@ -3,8 +3,8 @@
 #include "command.h"
 #include "formats.h"
 
-#include <ydb-cpp-sdk/client/ydb_result/result.h>
-#include <ydb-cpp-sdk/client/ydb_types/status/status.h>
+#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb-cpp-sdk/client/types/status/status.h>
 
 namespace NYdb {
 namespace NConsoleClient {

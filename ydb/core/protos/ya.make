@@ -167,7 +167,7 @@ PEERDIR(
     ydb/library/yql/dq/actors/protos
     ydb/library/yql/dq/proto
     ydb/library/yql/providers/common/proto
-    ydb/public/sdk/cpp/src/library/yql/issue/protos
+    ydb/public/sdk/cpp/src/library/yql_common/issue/protos
     ydb/library/yql/public/types
     ydb/library/services
     ydb/library/ydb_issue/proto

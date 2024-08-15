@@ -7,7 +7,7 @@
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/persqueue/pq_database.h>
-#include <ydb-cpp-sdk/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/services/metadata/service.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>

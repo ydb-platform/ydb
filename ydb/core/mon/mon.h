@@ -12,7 +12,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/mon.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb-cpp-sdk/client/ydb_types/status/status.h>
+#include <ydb-cpp-sdk/client/types/status/status.h>
 
 namespace NActors {
 

@@ -9,8 +9,8 @@
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
-#include <ydb-cpp-sdk/client/ydb_proto/accessor.h>
-#include <ydb-cpp-sdk/client/ydb_common_client/impl/client.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 
 namespace NYdb {
 namespace NObjectStorage {

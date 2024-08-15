@@ -7,11 +7,11 @@
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <library/cpp/string_utils/base64/base64.h>
-#include <ydb-cpp-sdk/client/ydb_driver/driver.h>
-#include <ydb-cpp-sdk/client/ydb_scheme/scheme.h>
-#include <ydb-cpp-sdk/client/ydb_table/table.h>
-#include <ydb-cpp-sdk/client/ydb_topic/topic.h>
-#include <ydb-cpp-sdk/client/ydb_types/status_codes.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb-cpp-sdk/client/types/status_codes.h>
 #include <ydb-cpp-sdk/client/resources/ydb_resources.h>
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>

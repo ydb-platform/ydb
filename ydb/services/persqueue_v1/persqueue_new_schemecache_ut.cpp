@@ -22,7 +22,7 @@
 #include <grpcpp/client_context.h>
 
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
-#include <ydb-cpp-sdk/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.h>
+#include <ydb-cpp-sdk/client/persqueue_core/ut/ut_utils/data_plane_helpers.h>
 
 namespace {
     const static TString DEFAULT_TOPIC_NAME = "rt3.dc1--topic1";

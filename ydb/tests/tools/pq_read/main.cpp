@@ -1,4 +1,4 @@
-#include <ydb-cpp-sdk/client/ydb_persqueue_public/persqueue.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/threading/future/future.h>

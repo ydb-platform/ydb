@@ -1103,9 +1103,9 @@ private:
                     << TErrorAttribute("timeout", *requestControl->GetTimeout());
             }
 
-            if (!detailedError.HasTracingAttributes()) {
+            if (!HasTracingAttributes(detailedError)) {
                 if (auto tracingAttributes = requestControl->GetTracingAttributes()) {
-                    detailedError.SetTracingAttributes(*tracingAttributes);
+                    SetTracingAttributes(&detailedError, *tracingAttributes);
                 }
             }
 

@@ -22,6 +22,9 @@ private:
 
     virtual TConclusionStatus DoOnDataChunk(const std::shared_ptr<arrow::Table>& data) override;
     virtual TConclusionStatus DoOnFinished() override;
+    virtual void DoOnError(const TString& errorMessage) override;
+    void SendErrorMessage(const TString& errorMessage);
+
 public:
     TModificationRestoreTask(const ui64 tabletId, const NActors::TActorId parentActorId,
         const NActors::TActorId bufferActorId, NEvWrite::TWriteData&& writeData, const std::shared_ptr<IMerger>& merger,

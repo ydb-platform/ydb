@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
+#include <ydb-cpp-sdk/library/yql_common/issue/yql_issue_id.h>
 
 #include <library/cpp/resource/resource.h>
 #include <google/protobuf/descriptor.h>
@@ -20,17 +20,6 @@
 #endif
 
 namespace NYql {
-
-using TIssueCode = ui32;
-using ESeverity = NYql::TSeverityIds::ESeverityId;
-const TIssueCode DEFAULT_ERROR = 0;
-const TIssueCode UNEXPECTED_ERROR = 1;
-
-inline TString SeverityToString(ESeverity severity)
-{
-    auto ret = NYql::TSeverityIds::ESeverityId_Name(severity);
-    return ret.empty() ? "Unknown" : to_title(ret.substr(2)); //remove prefix "S_"
-}
 
 template <typename T>
 inline TString IssueCodeToString(TIssueCode id) {

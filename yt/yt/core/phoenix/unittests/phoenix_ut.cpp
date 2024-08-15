@@ -208,6 +208,22 @@ PHOENIX_DEFINE_TYPE(TConcreteStruct);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TRefCountedAbstractStruct
+    : public TRefCounted
+    , public NPhoenix2::IPersistent
+{
+    virtual void Foo() = 0;
+
+    PHOENIX_DECLARE_POLYMORPHIC_TYPE(TRefCountedAbstractStruct, 0x7e16f830);
+};
+
+void TRefCountedAbstractStruct::RegisterMetadata(auto&& /*registrar*/)
+{ }
+
+PHOENIX_DEFINE_TYPE(TRefCountedAbstractStruct);
+
+////////////////////////////////////////////////////////////////////////////////
+
 TEST(TPhoenixTest, Point)
 {
     TPoint p1(123, 456);

@@ -71,14 +71,16 @@ class Factory:
                 None,
                 None,
                 None,
+                None,
             ],
             [
                 2,
                 datetime.date(2023, 3, 21),
                 datetime.datetime(2023, 3, 21, 11, 21, 0, 0),
                 datetime.datetime(2023, 3, 21, 11, 21, 31, 0),
+                datetime.datetime(2023, 3, 21, 11, 21, 31, 0),
             ],
-            [3, None, None, None],
+            [3, None, None, None, None],
         ]
 
         return TestCase(
@@ -100,7 +102,7 @@ class Factory:
                 1,
                 '1950-05-27',
                 '1950-05-27T01:02:00Z',
-                '1950-05-27T01:02:03.110Z',
+                '1950-05-27T01:02:03.11Z',
                 '1950-05-27T01:02:03.1111111Z',
             ],
             [
@@ -113,6 +115,7 @@ class Factory:
             [
                 3,
                 '2079-06-06',
+                '2079-06-06T23:59:00Z',
                 '2079-06-06T23:59:59.999Z',
                 '2079-06-06T23:59:59.9999999Z'
             ],

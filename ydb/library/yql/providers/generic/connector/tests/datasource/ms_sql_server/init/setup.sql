@@ -50,7 +50,7 @@ INSERT INTO column_selection_col3 (COL1, col2) VALUES
 
 DROP TABLE IF EXISTS primitives;
 CREATE TABLE primitives (
-    id INTEGER PRIMARY KEY,
+    col_00_id INTEGER PRIMARY KEY,
     col_01_bit BIT,
     col_02_tinyint TINYINT,
     col_03_smallint SMALLINT,
@@ -112,7 +112,7 @@ INSERT INTO pushdown VALUES
 
 DROP TABLE IF EXISTS datetimes;
 CREATE TABLE datetimes (
-    id INTEGER PRIMARY KEY,
+    col_00_id INTEGER PRIMARY KEY,
     col_01_date DATE,
     col_02_smalldatetime SMALLDATETIME,
     col_03_datetime DATETIME,

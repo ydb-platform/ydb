@@ -22,7 +22,7 @@ PEERDIR(
     ydb/public/api/grpc/draft
     ydb/public/api/protos
 
-    ydb/public/sdk/cpp_v2/src/library/yql/public/issue/protos
+    ydb/public/sdk/cpp_v2/src/library/yql_common/issue/protos
 )
 
 END()

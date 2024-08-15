@@ -11,7 +11,7 @@ PEERDIR(
     ydb/public/sdk/cpp_v2/src/client/impl/ydb_internal/plain_status
     ydb/public/sdk/cpp_v2/src/client/types
     ydb/public/sdk/cpp_v2/src/client/types/fatal_error_handlers
-    ydb/public/sdk/cpp_v2/src/library/yql/public/issue
+    ydb/public/sdk/cpp_v2/src/library/yql_common/issue
 )
 
 END()

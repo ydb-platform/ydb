@@ -7,7 +7,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/sdk/cpp_v2/src/library/yql/utils
+    ydb/public/sdk/cpp_v2/src/library/yql_common/utils
 )
 
 END()

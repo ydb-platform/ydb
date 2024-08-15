@@ -1,4 +1,4 @@
-#include <ydb-cpp-sdk/library/yql/utils/utf8.h>
+#include <ydb-cpp-sdk/library/yql_common/utils/utf8.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

@@ -1,4 +1,4 @@
-#include <ydb-cpp-sdk/library/yql/public/issue/yql_issue_id.h>
+#include <ydb-cpp-sdk/library/yql_common/issue/yql_issue_id.h>
 
 #include <ydb-cpp-sdk/library/string_utils/helpers/helpers.h>
 

@@ -14,7 +14,7 @@ PEERDIR(
     ydb/public/api/protos
     ydb/public/sdk/cpp_v2/src/client/impl/ydb_internal/value_helpers
     ydb/public/sdk/cpp_v2/src/client/types/fatal_error_handlers
-    ydb/public/sdk/cpp_v2/src/library/yql/public/decimal
+    ydb/public/sdk/cpp_v2/src/library/yql_common/decimal
     ydb/public/sdk/cpp_v2/src/library/uuid
 )
 

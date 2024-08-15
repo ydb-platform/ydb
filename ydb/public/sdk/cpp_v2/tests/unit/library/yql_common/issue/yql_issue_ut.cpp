@@ -1,10 +1,12 @@
-#include <ydb-cpp-sdk/library/yql/public/issue/yql_issue.h>
-#include <src/library/yql/public/issue/yql_issue_message.h>
+#include <ydb-cpp-sdk/library/yql_common/issue/yql_issue.h>
+#include <src/library/yql_common/issue/yql_issue_message.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <src/library/yql/public/issue/protos/issue_message.pb.h>
-#include <src/library/yql/public/issue/yql_issue_message.h>
+#include <ydb/public/sdk/cpp_v2/src/library/yql_common/issue/protos/issue_message.pb.h>
+#include <src/library/yql_common/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
+
+#include <ydb-cpp-sdk/type_switcher.h>
 
 #include <library/cpp/unicode/normalization/normalization.h>
 
@@ -194,7 +196,7 @@ Y_UNIT_TEST_SUITE(ToMessage) {
 
         Ydb::Issue::IssueMessage msg;
         IssueToMessage(issue, &msg);
-        std::string serialized;
+        NYdb::TStringType serialized;
         UNIT_ASSERT(msg.SerializeToString(&serialized));
         Ydb::Issue::IssueMessage msg2;
         UNIT_ASSERT(msg2.ParseFromString(serialized));

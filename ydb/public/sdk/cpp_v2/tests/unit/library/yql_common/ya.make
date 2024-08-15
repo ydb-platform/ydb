@@ -1,4 +1,5 @@
 RECURSE(
     decimal
     issue
+    utils
 )

@@ -21,4 +21,4 @@ src/api/protos/ydb_coordination.pb.h
 src/api/protos/ydb_status_codes.pb.h
 src/api/protos/draft/ydb_replication.pb.h
 src/library/operation_id/protos/operation_id.pb.h
-src/library/yql/public/issue/protos/issue_severity.pb.h
+src/library/yql_common/issue/protos/issue_severity.pb.h

@@ -1,6 +1,6 @@
-#include <ydb-cpp-sdk/library/yql/public/issue/yql_issue.h>
+#include <ydb-cpp-sdk/library/yql_common/issue/yql_issue.h>
 
-#include <ydb-cpp-sdk/library/yql/utils/utf8.h>
+#include <ydb-cpp-sdk/library/yql_common/utils/utf8.h>
 
 #include <library/cpp/colorizer/output.h>
 #include <ydb-cpp-sdk/library/string_utils/misc/misc.h>

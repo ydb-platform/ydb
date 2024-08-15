@@ -7,6 +7,6 @@ RECURSE(
     persqueue/topic_parser_public
     string_utils/helpers
     uuid
-    yql
+    yql_common
     yson_value
 )

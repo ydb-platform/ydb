@@ -49,6 +49,14 @@ struct TTaskRunnerStatsBase {
     TDuration WaitInputTime;
     TDuration WaitOutputTime;
 
+    ui64 SpillingComputeWriteBytes;
+    ui64 SpillingChannelWriteBytes;
+
+    TDuration SpillingComputeReadTime;
+    TDuration SpillingComputeWriteTime;
+    TDuration SpillingChannelReadTime;
+    TDuration SpillingChannelWriteTime;
+
     // profile stats
     NMonitoring::IHistogramCollectorPtr ComputeCpuTimeByRun; // in millis
 
@@ -140,6 +148,7 @@ public:
 
     virtual TWakeUpCallback GetWakeupCallback() const = 0;
     virtual TErrorCallback GetErrorCallback() const = 0;
+    virtual TIntrusivePtr<TSpillingTaskCounters> GetSpillingTaskCounters() const = 0;
     virtual TTxId GetTxId() const = 0;
 };
 
@@ -167,6 +176,10 @@ public:
     }
 
     TErrorCallback GetErrorCallback() const override {
+        return {};
+    }
+
+    TIntrusivePtr<TSpillingTaskCounters> GetSpillingTaskCounters() const override {
         return {};
     }
 

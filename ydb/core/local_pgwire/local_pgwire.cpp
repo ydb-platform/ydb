@@ -252,61 +252,6 @@ public:
             hFunc(TEvTicketParser::TEvAuthorizeTicketResult, Handle);
         }
     }
-private:
-
-    void SendLoginRequest(NPG::TEvPGEvents::TEvAuth::TPtr& ev, 
-            std::unordered_map<TString, TString>& clientParams, const NActors::TActorContext& ctx) {
-        Ydb::Auth::LoginRequest request;
-        request.set_user(clientParams["user"]);
-        if (ev->Get()->PasswordMessage) {
-            request.set_password(TString(ev->Get()->PasswordMessage->GetPassword()));
-        }
-        TActorSystem* actorSystem = TActivationContext::ActorSystem();
-        TActorId sender = ev->Sender;
-        TString database = clientParams["database"];
-        if (database == "/postgres") {
-            auto authResponse = std::make_unique<NPG::TEvPGEvents::TEvAuthResponse>();
-            authResponse->Error = Ydb::StatusIds_StatusCode_Name(Ydb::StatusIds_StatusCode::StatusIds_StatusCode_BAD_REQUEST);
-            actorSystem->Send(sender, authResponse.release());
-        }
-        TString peerName = TStringBuilder() << ev->Get()->Address;
-
-        using TRpcEv = NGRpcService::TGRpcRequestWrapperNoAuth<NGRpcService::TRpcServices::EvLogin, Ydb::Auth::LoginRequest, Ydb::Auth::LoginResponse>;
-        auto rpcFuture = NRpcService::DoLocalRpc<TRpcEv>(std::move(request), database, {}, actorSystem);
-        rpcFuture.Subscribe([actorSystem, sender, database, peerName, selfId = SelfId()](const NThreading::TFuture<Ydb::Auth::LoginResponse>& future) {
-            auto& response = future.GetValueSync();
-            if (response.operation().status() == Ydb::StatusIds::SUCCESS) {
-                auto tokenReady = std::make_unique<TEvPrivate::TEvTokenReady>();
-                response.operation().result().UnpackTo(&(tokenReady->LoginResult));
-                tokenReady->Sender = sender;
-                tokenReady->Database = database;
-                tokenReady->PeerName = peerName;
-                actorSystem->Send(selfId, tokenReady.release());
-            } else {
-                auto authResponse = std::make_unique<NPG::TEvPGEvents::TEvAuthResponse>();
-                if (response.operation().issues_size() > 0) {
-                    authResponse->Error = response.operation().issues(0).message();
-                } else {
-                    authResponse->Error = Ydb::StatusIds_StatusCode_Name(response.operation().status());
-                }
-                actorSystem->Send(sender, authResponse.release());
-            }
-        });
-    }
-
-    void SendApiKeyRequest(NPG::TEvPGEvents::TEvAuth::TPtr& ev, const std::unordered_map<TString, TString>& clientParams) {
-        TString database = clientParams["database"];
-        TString peerName = ev->Get()->Address;
-
-        auto entries = NKikimr::NGRpcProxy::V1::GetTicketParserEntries(DatabaseId, FolderId, true);
-
-        Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
-            .Database = database,
-            .Ticket = "ApiKey " + apiKey,
-            .PeerName = peerName,
-            .Entries = entries
-        }));
-    }
 };
 
 

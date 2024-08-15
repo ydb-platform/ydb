@@ -189,13 +189,14 @@ NOlap::TSnapshot TColumnShard::GetMinReadSnapshot() const {
     ui64 delayMillisec = GetMaxReadStaleness().MilliSeconds();
     ui64 passedStep = GetOutdatedStep();
     ui64 minReadStep = (passedStep > delayMillisec ? passedStep - delayMillisec : 0);
-    Counters.GetRequestsTracingCounters()->OnDefaultMinSnapshotInstant(TInstant::MilliSeconds(minReadStep));
 
     if (auto ssClean = InFlightReadsTracker.GetSnapshotToClean()) {
         if (ssClean->GetPlanStep() < minReadStep) {
+            Counters.GetRequestsTracingCounters()->OnDefaultMinSnapshotInstant(TInstant::MilliSeconds(ssClean->GetPlanStep()));
             return *ssClean;
         }
     }
+    Counters.GetRequestsTracingCounters()->OnDefaultMinSnapshotInstant(TInstant::MilliSeconds(minReadStep));
     return NOlap::TSnapshot::MaxForPlanStep(minReadStep);
 }
 

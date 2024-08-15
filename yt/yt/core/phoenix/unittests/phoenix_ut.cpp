@@ -672,7 +672,7 @@ TEST(TPhoenixTest, NativeLoadDerivedStructNoSchema)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace NDeprecatedField {
+namespace NLoadOnlyVirtualField {
 
 struct S
 {
@@ -683,41 +683,61 @@ struct S
 
 void S::RegisterMetadata(auto&& registrar)
 {
-    registrar.template DeprecatedField<1>("a", [] (TThis* this_, auto& context) {
+    registrar.template VirtualField<1>("a", [] (TThis* this_, auto& context) {
         this_->A = Load<int>(context);
     })();
 }
 
 PHOENIX_DEFINE_TYPE(S);
 
-} // namespace NDeprecatedField
+} // namespace NLoadOnlyVirtualField
 
-TEST(TPhoenixTest, DeprecatedField)
+TEST(TPhoenixTest, LoadOnlyVirtualField)
 {
-    using namespace NDeprecatedField;
+    using namespace NLoadOnlyVirtualField;
 
     auto buffer = MakeBuffer([] (auto& context) {
         Save<int>(context, 123);
     });
 
-    auto loadSchema = ConvertTo<TUniverseSchemaPtr>(TYsonString(TString(R"""(
-        {
-            types = [
-                {
-                    name = S;
-                    tag = 1652735129u;
-                    fields = [
-                        {name = a; tag = 1u};
-                    ];
-                }
-            ];
-        }
-    )""")));
-    TLoadSessionGuard guard(loadSchema);
-    EXPECT_TRUE(NDetail::UniverseLoadState->Schedule);
-
     auto s = Deserialize<S>(buffer);
     EXPECT_EQ(s.A, 123);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NSaveLoadVirtualField {
+
+struct S
+{
+    int A = 0;
+
+    bool operator==(const S&) const = default;
+
+    PHOENIX_DECLARE_TYPE(S, 0x67bdf7f9);
+};
+
+void S::RegisterMetadata(auto&& registrar)
+{
+    registrar.template VirtualField<1>("a", [] (TThis* this_, auto& context) {
+        this_->A = Load<int>(context);
+    }, [] (const TThis* this_, auto& context) {
+        NYT::Save(context, this_->A);
+    })();
+}
+
+PHOENIX_DEFINE_TYPE(S);
+
+} // namespace NSaveLoadVirtualField
+
+TEST(TPhoenixTest, SaveLoadVirtualField)
+{
+    using namespace NSaveLoadVirtualField;
+
+    S s1;
+    s1.A = 123;
+    auto s2 = Deserialize<S>(Serialize(s1));
+    EXPECT_EQ(s1, s2);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

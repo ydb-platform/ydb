@@ -4,8 +4,8 @@
 #include <src/client/impl/ydb_internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
-#include <ydb-cpp-sdk/library/yql/public/issue/yql_issue.h>
-#include <src/library/yql/public/issue/yql_issue_message.h>
+#include <ydb-cpp-sdk/library/yql_common/issue/yql_issue.h>
+//#include <src/library/yql_common/issue/yql_issue_message.h>
 
 #include <src/client/common_client/impl/client.h>
 

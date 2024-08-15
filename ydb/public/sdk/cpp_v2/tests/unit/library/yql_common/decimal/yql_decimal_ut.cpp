@@ -1,5 +1,5 @@
-#include <src/library/yql/public/decimal/yql_decimal.h>
-#include <src/library/yql/public/decimal/yql_decimal_serialize.h>
+#include <src/library/yql_common/decimal/yql_decimal.h>
+#include <src/library/yql_common/decimal/yql_decimal_serialize.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

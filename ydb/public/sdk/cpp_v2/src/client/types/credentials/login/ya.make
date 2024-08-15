@@ -11,7 +11,7 @@ PEERDIR(
     ydb/public/api/grpc
     ydb/public/sdk/cpp_v2/src/client/types/status
     ydb/public/sdk/cpp_v2/src/client/impl/ydb_internal/grpc_connections
-    ydb/public/sdk/cpp_v2/src/library/yql/public/issue
+    ydb/public/sdk/cpp_v2/src/library/yql_common/issue
 )
 
 END()

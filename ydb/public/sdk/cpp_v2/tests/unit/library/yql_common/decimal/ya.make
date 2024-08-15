@@ -8,7 +8,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/sdk/cpp_v2/src/library/yql/public/decimal
+    ydb/public/sdk/cpp_v2/src/library/yql_common/decimal
 )
 
 END()

@@ -16,7 +16,7 @@ PEERDIR(
     ydb/public/sdk/cpp_v2/src/client/impl/ydb_endpoints
     ydb/public/sdk/cpp_v2/src/client/impl/ydb_internal/session_pool
     ydb/public/sdk/cpp_v2/src/client/table/query_stats
-    ydb/public/sdk/cpp_v2/src/library/yql/public/issue/protos
+    ydb/public/sdk/cpp_v2/src/library/yql_common/issue/protos
     ydb/public/sdk/cpp_v2/src/library/string_utils/helpers
 )
 

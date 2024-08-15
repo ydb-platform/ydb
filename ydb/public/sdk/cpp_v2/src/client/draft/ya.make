@@ -11,7 +11,7 @@ SRCS(
 GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp_v2/include/ydb-cpp-sdk/client/draft/ydb_replication.h)
 
 PEERDIR(
-    ydb/public/sdk/cpp_v2/src/library/yql/public/issue
+    ydb/public/sdk/cpp_v2/src/library/yql_common/issue
     ydb/public/api/grpc/draft
     ydb/public/sdk/cpp_v2/src/client/table
     ydb/public/sdk/cpp_v2/src/client/types/operation

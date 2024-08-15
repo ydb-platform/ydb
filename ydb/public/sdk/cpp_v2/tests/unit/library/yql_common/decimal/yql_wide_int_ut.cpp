@@ -1,4 +1,4 @@
-#include <src/library/yql/public/decimal/yql_wide_int.h>
+#include <src/library/yql_common/decimal/yql_wide_int.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NYql {

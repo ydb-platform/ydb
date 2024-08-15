@@ -587,12 +587,11 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
             for (TForceTraversalTable& operationTable : operation.Tables) {
                 if (operationTable.Status == TForceTraversalTable::EStatus::None) {
                     operationTable.Status = TForceTraversalTable::EStatus::RequestSent;
-                    // TODO delete it later, after EStatus::ResponseReceived. Only update status in local db
-                    // db.Table<Schema::ForceTraversalTables>().Key(operation.OperationId, operationTable.PathId.OwnerId, operationTable.PathId.LocalPathId)
-                    //     .Update(NIceDb::TUpdate<Schema::ForceTraversalTables::Status>((ui64)operationTable.Status));
-                    db.Table<Schema::ForceTraversalTables>().Key(operation.OperationId, operationTable.PathId.OwnerId, operationTable.PathId.LocalPathId).Delete();
+                    db.Table<Schema::ForceTraversalTables>().Key(operation.OperationId, operationTable.PathId.OwnerId, operationTable.PathId.LocalPathId)
+                        .Update(NIceDb::TUpdate<Schema::ForceTraversalTables::Status>((ui64)operationTable.Status));
 
                     pathId = operationTable.PathId;
+                    break;
                 }
             }
             

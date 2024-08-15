@@ -453,7 +453,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
                 SELECT PathId, Kind, TabletId
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
-                    PathId == UInt64("3") AND Activity = true
+                    PathId == UInt64("3") AND Activity = 1
                 GROUP BY TabletId, PathId, Kind
                 ORDER BY TabletId, Kind
             )");

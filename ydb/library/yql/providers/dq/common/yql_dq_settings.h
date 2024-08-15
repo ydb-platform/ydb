@@ -29,6 +29,7 @@ struct TDqSettings {
     };
 
     enum class EEnabledSpillingNodes : ui64 {
+        None        = 0ULL      /* None */,
         GraceJoin   = 1ULL      /* "GraceJoin" */,
         All         = ~0ULL     /* "All" */,
     };
@@ -143,6 +144,7 @@ struct TDqSettings {
 
     NCommon::TConfSetting<ui64, false> _MaxAttachmentsSize;
     NCommon::TConfSetting<bool, false> DisableCheckpoints;
+    NCommon::TConfSetting<bool, false> UseGraceJoinCoreForMap;
 
     // This options will be passed to executor_actor and worker_actor
     template <typename TProtoConfig>

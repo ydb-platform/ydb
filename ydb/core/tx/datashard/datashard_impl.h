@@ -13,7 +13,6 @@
 #include "datashard_repl_offsets_client.h"
 #include "datashard_repl_offsets_server.h"
 #include "datashard_write.h"
-#include "build_index.h"
 #include "cdc_stream_heartbeat.h"
 #include "cdc_stream_scan.h"
 #include "change_exchange.h"
@@ -24,6 +23,7 @@
 #include "volatile_tx.h"
 #include "conflicts_cache.h"
 #include "reject_reason.h"
+#include "scan_common.h"
 
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
@@ -252,6 +252,7 @@ class TDataShard
 
     class TTxHandleSafeKqpScan;
     class TTxHandleSafeBuildIndexScan;
+    class TTxHandleSafeSampleKScan;
     class TTxHandleSafeStatisticsScan;
 
     class TTxMediatorStateRestored;
@@ -1322,6 +1323,8 @@ class TDataShard
     void Handle(TEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanRegistered::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TActorContext& ctx);
@@ -1966,7 +1969,7 @@ public:
         return SnapshotManager.PromoteCompleteEdge(std::forward<Args>(args)...);
     }
 
-    TBuildIndexManager& GetBuildIndexManager() { return BuildIndexManager; }
+    TScanManager& GetScanManager() { return ScanManager; }
 
     // Returns true when datashard is working in mvcc mode
     bool IsMvccEnabled() const;
@@ -2665,7 +2668,7 @@ private:
 
     TReplicationSourceOffsetsServerLink ReplicationSourceOffsetsServer;
 
-    TBuildIndexManager BuildIndexManager;
+    TScanManager ScanManager;
 
     TS3UploadsManager S3Uploads;
     TS3DownloadsManager S3Downloads;
@@ -3102,6 +3105,7 @@ protected:
             HFunc(TEvDataShard::TEvRefreshVolatileSnapshotRequest, Handle);
             HFunc(TEvDataShard::TEvDiscardVolatileSnapshotRequest, Handle);
             HFuncTraced(TEvDataShard::TEvBuildIndexCreateRequest, Handle);
+            HFunc(TEvDataShard::TEvSampleKRequest, Handle);
             HFunc(TEvDataShard::TEvCdcStreamScanRequest, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanRegistered, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanProgress, Handle);
@@ -3318,6 +3322,10 @@ protected:
     bool AllowCancelROwithReadsets() const;
 
     void ResolveTablePath(const TActorContext &ctx);
+
+public:
+    NMonitoring::TDynamicCounters::TCounterPtr CounterReadIteratorLastKeyReset;
+    void IncCounterReadIteratorLastKeyReset();
 };
 
 NKikimrTxDataShard::TError::EKind ConvertErrCode(NMiniKQL::IEngineFlat::EResult code);

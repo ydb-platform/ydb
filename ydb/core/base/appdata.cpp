@@ -18,6 +18,7 @@
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/key.pb.h>
+#include <ydb/core/protos/memory_controller_config.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/protos/netclassifier.pb.h>
@@ -61,6 +62,7 @@ struct TAppData::TImpl {
     NKikimrConfig::TGraphConfig GraphConfig;
     NKikimrSharedCache::TSharedCacheConfig SharedCacheConfig;
     NKikimrConfig::TMetadataCacheConfig MetadataCacheConfig;
+    NKikimrConfig::TMemoryControllerConfig MemoryControllerConfig;
 };
 
 TAppData::TAppData(
@@ -113,6 +115,7 @@ TAppData::TAppData(
     , GraphConfig(Impl->GraphConfig)
     , SharedCacheConfig(Impl->SharedCacheConfig)
     , MetadataCacheConfig(Impl->MetadataCacheConfig)
+    , MemoryControllerConfig(Impl->MemoryControllerConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
 {}
 

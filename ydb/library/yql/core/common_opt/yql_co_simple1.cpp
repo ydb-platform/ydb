@@ -2074,12 +2074,6 @@ TExprNode::TPtr SimpleFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, TO
         }
     }
 
-    if (lambdaBody.IsCallable("ForwardList")) {
-        const bool keepList = node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List && lambdaBody.Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow;
-        YQL_CLOG(DEBUG, Core) << (keepList ? "Pull" : "Drop") << " out " << lambdaBody.Content() << " from " << node->Content() << " lambda root.";
-        return ctx.WrapByCallableIf(keepList, lambdaBody.Content(), ctx.ChangeChild(*node, 1U, ctx.DeepCopyLambda(node->Tail(), lambdaBody.HeadPtr())));
-    }
-
     if (CanRewriteToEmptyContainer(*node)) {
         const auto& inputToCheck = SkipCallables(node->Head(), SkippableCallables);
         if (IsEmptyContainer(inputToCheck) || IsEmpty(inputToCheck, *optCtx.Types)) {
@@ -2271,6 +2265,24 @@ TExprNode::TPtr HasNullOverVariant(const TExprNode::TPtr& node, TExprContext& ct
 
 }
 
+constexpr std::initializer_list<std::string_view> FlowPriority = {
+    "AssumeSorted", "AssumeUnique", "AssumeDistinct",
+    "Map", "OrderedMap", "MapNext",
+    "Filter", "OrderedFilter",
+    "FlatMap", "OrderedFlatMap",
+    "MultiMap", "OrderedMultiMap",
+    "FoldMap", "Fold1Map", "Chain1Map",
+    "Take", "Skip",
+    "TakeWhile", "SkipWhile",
+    "TakeWhileInclusive", "SkipWhileInclusive",
+    "SkipNullMembers", "FilterNullMembers",
+    "SkipNullElements", "FilterNullElements",
+    "Condense", "Condense1",
+    "MapJoinCore", "CommonJoinCore",
+    "CombineCore", "ExtractMembers",
+    "PartitionByKey", "SqueezeToDict"
+};
+
 TExprNode::TPtr OptimizeToFlow(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (node->Head().IsCallable("Nothing")) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
@@ -2295,6 +2307,65 @@ TExprNode::TPtr OptimizeToFlow(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (node->Head().IsCallable("ToList") && node->Head().Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
         YQL_CLOG(DEBUG, Core) << "Drop " << node->Head().Content() << " under " << node->Content();
         return ctx.ChangeChildren(*node, node->Head().ChildrenList());
+    }
+
+    if (node->Head().IsCallable(FlowPriority)) {
+        YQL_CLOG(DEBUG, Core) << "Swap " << node->Content() << " with " << node->Head().Content();
+        return ctx.SwapWithHead(*node);
+    }
+
+    if (node->Head().IsCallable("FromFlow")) {
+        YQL_CLOG(DEBUG, Core) << "Drop " << node->Content() << " with " << node->Head().Content();
+        return node->Head().HeadPtr();
+    }
+
+    if (node->Head().IsCallable("ForwardList")) {
+        YQL_CLOG(DEBUG, Core) << "Drop " << node->Head().Content() << " under " << node->Content();
+        return ctx.ChangeChild(*node, 0U,  node->Head().HeadPtr());
+    }
+
+    if (node->Head().IsCallable("Chopper")) {
+        YQL_CLOG(DEBUG, Core) << "Swap " << node->Head().Content() << " with " << node->Content();
+        auto children = node->Head().ChildrenList();
+        children.front() = ctx.ChangeChildren(*node, {std::move(children.front())});
+        children.back() = ctx.Builder(children.back()->Pos())
+            .Lambda()
+                .Param("key")
+                .Param("flow")
+                .Callable("ToFlow")
+                    .Apply(0, *children.back())
+                        .With(0, "key")
+                        .With(1)
+                            .Callable("FromFlow")
+                                .Arg(0, "flow")
+                            .Seal()
+                        .Done()
+                    .Seal()
+                .Seal()
+            .Seal().Build();
+        return ctx.ChangeChildren(node->Head(), std::move(children));
+    }
+
+    if (node->Head().IsCallable("Switch")) {
+        YQL_CLOG(DEBUG, Core) << "Swap " << node->Head().Content() << " with " << node->Content();
+        auto children = node->Head().ChildrenList();
+        children.front() = ctx.ChangeChildren(*node, {std::move(children.front())});
+        for (auto i = 3U; i < children.size(); ++++i) {
+            children[i] = ctx.Builder(children[i]->Pos())
+                .Lambda()
+                    .Param("flow")
+                    .Callable("ToFlow")
+                        .Apply(0, *children[i])
+                            .With(0)
+                                .Callable("FromFlow")
+                                    .Arg(0, "flow")
+                                .Seal()
+                            .Done()
+                        .Seal()
+                    .Seal()
+                .Seal().Build();
+        }
+        return ctx.ChangeChildren(node->Head(), std::move(children));
     }
 
     return node;

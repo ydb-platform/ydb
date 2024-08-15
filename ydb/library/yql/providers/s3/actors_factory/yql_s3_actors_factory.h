@@ -53,4 +53,5 @@ namespace NYql::NDq {
 
     std::shared_ptr<IS3ActorsFactory> CreateDefaultS3ActorsFactory();
 
+    TS3ReadActorFactoryConfig CreateReadActorFactoryConfig(const ::NYql::TS3GatewayConfig& s3Config);
 }

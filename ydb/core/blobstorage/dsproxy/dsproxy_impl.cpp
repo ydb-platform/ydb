@@ -5,8 +5,8 @@ namespace NKikimr {
     std::atomic<TMonotonic> TBlobStorageGroupProxy::ThrottlingTimestamp;
 
     TBlobStorageGroupProxy::TBlobStorageGroupProxy(TIntrusivePtr<TBlobStorageGroupInfo>&& info, bool forceWaitAllDrives,
-            TIntrusivePtr<TDsProxyNodeMon> &nodeMon, TIntrusivePtr<TStoragePoolCounters>&& storagePoolCounters,
-            const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch)
+            TIntrusivePtr<TDsProxyNodeMon> &nodeMon, TIntrusivePtr<TStoragePoolCounters>&& storagePoolCounters, 
+            const TBlobStorageProxyParameters& params)
         : GroupId(info->GroupID)
         , Info(std::move(info))
         , Topology(Info->PickTopology())
@@ -14,36 +14,48 @@ namespace NKikimr {
         , StoragePoolCounters(std::move(storagePoolCounters))
         , IsEjected(false)
         , ForceWaitAllDrives(forceWaitAllDrives)
-        , EnablePutBatching(enablePutBatching)
-        , EnableVPatch(enableVPatch)
+        , UseActorSystemTimeInBSQueue(params.UseActorSystemTimeInBSQueue)
+        , EnablePutBatching(params.EnablePutBatching)
+        , EnableVPatch(params.EnableVPatch)
+        , SlowDiskThreshold(params.SlowDiskThreshold)
+        , PredictedDelayMultiplier(params.PredictedDelayMultiplier)
     {}
 
-    TBlobStorageGroupProxy::TBlobStorageGroupProxy(ui32 groupId, bool isEjected, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
-            const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch)
+    TBlobStorageGroupProxy::TBlobStorageGroupProxy(ui32 groupId, bool isEjected,TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
+            const TBlobStorageProxyParameters& params)
         : GroupId(TGroupId::FromValue(groupId))
         , NodeMon(nodeMon)
         , IsEjected(isEjected)
         , ForceWaitAllDrives(false)
-        , EnablePutBatching(enablePutBatching)
-        , EnableVPatch(enableVPatch)
+        , UseActorSystemTimeInBSQueue(params.UseActorSystemTimeInBSQueue)
+        , EnablePutBatching(params.EnablePutBatching)
+        , EnableVPatch(params.EnableVPatch)
+        , SlowDiskThreshold(params.SlowDiskThreshold)
+        , PredictedDelayMultiplier(params.PredictedDelayMultiplier)
     {}
 
     IActor* CreateBlobStorageGroupEjectedProxy(ui32 groupId, TIntrusivePtr<TDsProxyNodeMon> &nodeMon) {
-        return new TBlobStorageGroupProxy(groupId, true, nodeMon, TControlWrapper(false, false, true),
-                TControlWrapper(false, false, true));
+        return new TBlobStorageGroupProxy(groupId, true, nodeMon, 
+                TBlobStorageProxyParameters{
+                    .EnablePutBatching = TControlWrapper(false, false, true),
+                    .EnableVPatch = TControlWrapper(false, false, true),
+                    .SlowDiskThreshold = TControlWrapper(2000, 1, 1000000),
+                    .PredictedDelayMultiplier = TControlWrapper(1000, 1, 1000000),
+                }
+        );
     }
 
     IActor* CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>&& info, bool forceWaitAllDrives,
             TIntrusivePtr<TDsProxyNodeMon> &nodeMon, TIntrusivePtr<TStoragePoolCounters>&& storagePoolCounters,
-            const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch) {
+            const TBlobStorageProxyParameters& params) {
         Y_ABORT_UNLESS(info);
-        return new TBlobStorageGroupProxy(std::move(info), forceWaitAllDrives, nodeMon, std::move(storagePoolCounters),
-                enablePutBatching, enableVPatch);
+        return new TBlobStorageGroupProxy(std::move(info), forceWaitAllDrives, nodeMon,
+                std::move(storagePoolCounters), params);
     }
 
     IActor* CreateBlobStorageGroupProxyUnconfigured(ui32 groupId, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
-            const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch) {
-        return new TBlobStorageGroupProxy(groupId, false, nodeMon, enablePutBatching, enableVPatch);
+            const TBlobStorageProxyParameters& params) {
+        return new TBlobStorageGroupProxy(groupId, false, nodeMon, params);
     }
 
     NActors::NLog::EPriority PriorityForStatusOutbound(NKikimrProto::EReplyStatus status) {

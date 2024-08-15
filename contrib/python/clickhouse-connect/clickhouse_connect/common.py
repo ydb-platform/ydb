@@ -1,3 +1,4 @@
+import getpass
 import sys
 from dataclasses import dataclass
 from typing import Any, Sequence, Optional, Dict
@@ -34,7 +35,14 @@ def build_client_name(client_name: str):
     product_name = product_name.strip() + ' ' if product_name else ''
     client_name = client_name.strip() + ' ' if client_name else ''
     py_version = sys.version.split(' ', maxsplit=1)[0]
-    return f'{client_name}{product_name}clickhouse-connect/{version()} (lv:py/{py_version}; os:{sys.platform})'
+    os_user = ''
+    if get_setting('send_os_user'):
+        try:
+            os_user = f'; os_user:{getpass.getuser()}'
+        except Exception:  # pylint: disable=broad-except
+            pass
+    return (f'{client_name}{product_name}clickhouse-connect/{version()}' +
+            f' (lv:py/{py_version}; mode:sync; os:{sys.platform}{os_user})')
 
 
 def get_setting(name: str):
@@ -66,6 +74,7 @@ _init_common('invalid_setting_action', ('send', 'drop', 'error'), 'error')
 _init_common('max_connection_age', (), 10 * 60)  # Max time in seconds to keep reusing a database TCP connection
 _init_common('product_name', (), '')  # Product name used as part of client identification for ClickHouse query_log
 _init_common('readonly', (0, 1), 0)  # Implied "read_only" ClickHouse settings for versions prior to 19.17
+_init_common('send_os_user', (True, False), True)
 
 # Use the client protocol version  This is needed for DateTime timezone columns but breaks with current version of
 # chproxy

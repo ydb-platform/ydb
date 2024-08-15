@@ -163,7 +163,6 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStat
         LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session is aborting and will not restart");
         return result;
     }
-    LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "Got error. " << status.ToDebugString());
     SessionEstablished = false;
 
     // Keep DirectWriteToPartitionId value on temporary errors.
@@ -185,10 +184,11 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStat
     if (nextDelay) {
         result.StartDelay = *nextDelay;
         result.DoRestart = true;
-        LOG_LAZY(DbDriverState->Log, TLOG_WARNING, LogPrefix() << "Write session will restart in " << result.StartDelay);
+        LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Got error. " << status.ToDebugString());
+        LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Write session will restart in " << result.StartDelay);
         ResetForRetryImpl();
-
     } else {
+        LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "Got error. " << status.ToDebugString());
         LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "Write session will not restart after a fatal error");
         result.DoStop = true;
         CheckHandleResultImpl(result);
@@ -981,17 +981,23 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
             writeStat->PartitionQuotedTime = durationConv(stat.partition_quota_wait_time());
             writeStat->TopicQuotedTime = durationConv(stat.topic_quota_wait_time());
 
-            for (size_t messageIndex = 0, endIndex = batchWriteResponse.acks_size(); messageIndex != endIndex; ++messageIndex) {
+            for (const auto& ack : batchWriteResponse.acks()) {
                 // TODO: Fill writer statistics
-                auto ack = batchWriteResponse.acks(messageIndex);
                 ui64 sequenceNumber = ack.seq_no();
 
-                Y_ABORT_UNLESS(ack.has_written() || ack.has_skipped());
-                auto msgWriteStatus = ack.has_written()
-                                ? TWriteSessionEvent::TWriteAck::EES_WRITTEN
-                                : (ack.skipped().reason() == Ydb::Topic::StreamWriteMessage_WriteResponse_WriteAck_Skipped_Reason::StreamWriteMessage_WriteResponse_WriteAck_Skipped_Reason_REASON_ALREADY_WRITTEN
-                                    ? TWriteSessionEvent::TWriteAck::EES_ALREADY_WRITTEN
-                                    : TWriteSessionEvent::TWriteAck::EES_DISCARDED);
+                Y_ABORT_UNLESS(ack.has_written() || ack.has_skipped() || ack.has_written_in_tx());
+
+                TWriteSessionEvent::TWriteAck::EEventState msgWriteStatus;
+                if (ack.has_written_in_tx()) {
+                    msgWriteStatus = TWriteSessionEvent::TWriteAck::EES_WRITTEN_IN_TX;
+                } else if (ack.has_written()) {
+                    msgWriteStatus = TWriteSessionEvent::TWriteAck::EES_WRITTEN;
+                } else {
+                    msgWriteStatus =
+                        (ack.skipped().reason() == Ydb::Topic::StreamWriteMessage_WriteResponse_WriteAck_Skipped_Reason::StreamWriteMessage_WriteResponse_WriteAck_Skipped_Reason_REASON_ALREADY_WRITTEN)
+                        ? TWriteSessionEvent::TWriteAck::EES_ALREADY_WRITTEN
+                        : TWriteSessionEvent::TWriteAck::EES_DISCARDED;
+                }
 
                 ui64 offset = ack.has_written() ? ack.written().offset() : 0;
 
@@ -1351,8 +1357,11 @@ void TWriteSessionImpl::SendImpl() {
         TClientMessage clientMessage;
         auto* writeRequest = clientMessage.mutable_write_request();
         ui32 prevCodec = 0;
+
+        ui64 currentSize = 0;
+
         // Send blocks while we can without messages reordering.
-        while (IsReadyToSendNextImpl() && clientMessage.ByteSizeLong() < GetMaxGrpcMessageSize()) {
+        while (IsReadyToSendNextImpl() && currentSize < GetMaxGrpcMessageSize()) {
             const auto& block = PackedMessagesToSend.top();
             Y_ABORT_UNLESS(block.Valid);
             if (writeRequest->messages_size() > 0 && prevCodec != block.CodecID) {
@@ -1400,6 +1409,8 @@ void TWriteSessionImpl::SendImpl() {
             moveBlock.Move(block);
             SentPackedMessage.emplace(std::move(moveBlock));
             PackedMessagesToSend.pop();
+
+            currentSize += writeRequest->ByteSizeLong();
         }
         UpdateTokenIfNeededImpl();
         LOG_LAZY(DbDriverState->Log,

@@ -299,11 +299,6 @@ TExprBase KqpPushOlapAggregate(TExprBase node, TExprContext& ctx, const TKqpOpti
         return node;
     }
 
-    // temporary for keys grouping push down not useful
-    if (!aggCombine.Keys().Empty()) {
-        return node;
-    }
-
     auto read = maybeRead.Cast();
     auto aggs = Build<TKqpOlapAggOperationList>(ctx, node.Pos());
 

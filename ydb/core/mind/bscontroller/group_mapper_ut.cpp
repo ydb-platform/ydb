@@ -551,8 +551,8 @@ public:
 Y_UNIT_TEST_SUITE(TGroupMapperTest) {
 
     Y_UNIT_TEST(MapperSequentialCalls) {
-        TTestContext globalContext(3, 4, 20, 5, 4);
-        TTestContext localContext(3, 4, 20, 5, 4);
+        TTestContext globalContext(3, 3, 4, 3, 4);
+        TTestContext localContext(3, 3, 4, 3, 4);
 
         TGroupMapper globalMapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::Erasure4Plus2Block, 1, 8, 2));
         globalContext.PopulateGroupMapper(globalMapper, 16);

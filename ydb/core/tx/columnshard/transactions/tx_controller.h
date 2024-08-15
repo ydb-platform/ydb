@@ -1,11 +1,10 @@
 #pragma once
 
-#include <ydb/core/tx/columnshard/columnshard_schema.h>
-
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/counters/columnshard.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/message_seqno.h>
-
 
 namespace NKikimr::NColumnShard {
 
@@ -191,6 +190,7 @@ public:
         virtual void DoStartProposeOnComplete(TColumnShard& owner, const TActorContext& ctx) = 0;
         virtual void DoFinishProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) = 0;
         virtual void DoFinishProposeOnComplete(TColumnShard& owner, const TActorContext& ctx) = 0;
+        virtual TString DoGetOpType() const = 0;
         virtual bool DoIsAsync() const = 0;
         virtual void DoSendReply(TColumnShard& owner, const TActorContext& ctx) = 0;
         virtual bool DoCheckAllowUpdate(const TFullTxInfo& currentTxInfo) const = 0;
@@ -203,29 +203,25 @@ public:
             return TxInfo;
         }
 
+        virtual void DoOnTabletInit(TColumnShard& /*owner*/) {
+        
+        }
+
         void ResetStatusOnUpdate() {
             Status = {};
         }
 
         virtual TString DoDebugString() const = 0;
-        virtual bool DoOnStartAsync(TColumnShard& /*owner*/) {
-            return false;
-        }
 
         std::optional<bool> StartedAsync;
 
     public:
         using TPtr = std::shared_ptr<ITransactionOperator>;
         using TFactory = NObjectFactory::TParametrizedObjectFactory<ITransactionOperator, NKikimrTxColumnShard::ETransactionKind, TTxInfo>;
+        using OpType = TString;
 
         bool CheckTxInfoForReply(const TFullTxInfo& originalTxInfo) const {
             return DoCheckTxInfoForReply(originalTxInfo);
-        }
-
-        [[nodiscard]] bool OnStartAsync(TColumnShard& owner) {
-            AFL_VERIFY(!StartedAsync);
-            StartedAsync = DoOnStartAsync(owner);
-            return *StartedAsync;
         }
 
         TString DebugString() const {
@@ -263,6 +259,10 @@ public:
 
         ui64 GetTxId() const {
             return TxInfo.TxId;
+        }
+
+        OpType GetOpType() const {
+            return DoGetOpType();
         }
 
         bool IsAsync() const {
@@ -345,7 +345,11 @@ public:
         virtual void RegisterSubscriber(const TActorId&) {
             AFL_VERIFY(false)("message", "Not implemented");
         };
-        virtual void OnTabletInit(TColumnShard& /*owner*/) {}
+        void OnTabletInit(TColumnShard& owner) {
+            AFL_VERIFY(!StartedAsync);
+            StartedAsync = true;
+            DoOnTabletInit(owner);
+        }
     };
 
 private:
@@ -354,12 +358,13 @@ private:
     std::set<TPlanQueueItem> DeadlineQueue;
     std::set<TPlanQueueItem> PlanQueue;
     std::set<TPlanQueueItem> RunningQueue;
+    TTxProgressCounters Counters;
 
     THashMap<ui64, ITransactionOperator::TPtr> Operators;
 
 private:
     ui64 GetAllowedStep() const;
-    bool AbortTx(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
+    bool AbortTx(const TPlanQueueItem planQueueItem, NTabletFlatExecutor::TTransactionContext& txc);
 
     TTxInfo RegisterTx(const std::shared_ptr<TTxController::ITransactionOperator>& txOperator, const TString& txBody, NTabletFlatExecutor::TTransactionContext& txc);
     TTxInfo RegisterTxWithDeadline(const std::shared_ptr<TTxController::ITransactionOperator>& txOperator, const TString& txBody, NTabletFlatExecutor::TTransactionContext& txc);
@@ -369,7 +374,6 @@ public:
 
     ITransactionOperator::TPtr GetTxOperator(const ui64 txId) const;
     ITransactionOperator::TPtr GetVerifiedTxOperator(const ui64 txId) const;
-    void StartOperators();
 
     ui64 GetMemoryUsage() const;
     bool HaveOutdatedTxs() const;

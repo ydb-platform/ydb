@@ -114,7 +114,8 @@ class BaseCanonicalTest(object):
                 domain_name='local',
                 use_in_memory_pdisks=True,
                 disable_iterator_reads=True,
-                disable_iterator_lookups=True
+                disable_iterator_lookups=True,
+                extra_feature_flags=["enable_resource_pools"]
             )
         )
         cls.cluster.start()

@@ -188,6 +188,7 @@ enum EServiceKikimr {
     TOKEN_BUILDER = 450;
     TICKET_PARSER = 455;
     BLACKBOX_VALIDATOR = 460;
+    LDAP_AUTH_PROVIDER = 2650;
 
     GRPC_CLIENT = 461;
 
@@ -206,6 +207,7 @@ enum EServiceKikimr {
     DB_METADATA_CACHE = 501;
 
     MEMORY_PROFILER = 510;
+    MEMORY_CONTROLLER = 511;
 
     DATASHARD_BACKUP = 522;
 
@@ -393,6 +395,8 @@ enum EServiceKikimr {
 
     // Distributed storage debugging
     BS_REQUEST_COST = 2500;
+
+    GROUPED_MEMORY_LIMITER = 2700;
 };
 
 message TActivity {
@@ -1042,5 +1046,8 @@ message TActivity {
         STAT_SERVICE_HTTP_REQUEST = 640;
         BACKUP_PQ_OFFLOAD_ACTOR = 641;
         REPLICATION_CONTROLLER_TARGET_DESCRIBER = 642;
+        SAMPLE_K_SCAN_ACTOR = 643;
+        MEMORY_CONTROLLER = 644;
+        BUILD_COLUMNS_SCAN_ACTOR = 645;
     };
 };

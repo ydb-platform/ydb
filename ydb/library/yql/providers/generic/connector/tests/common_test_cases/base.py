@@ -26,6 +26,8 @@ class BaseTestCase:
                 return f'{self.name_}_{EProtocol.Name(self.protocol)}'
             case EDataSourceKind.MYSQL:
                 return self.name_
+            case EDataSourceKind.ORACLE:
+                return self.name_
             case EDataSourceKind.POSTGRESQL:
                 return self.name_
             case EDataSourceKind.YDB:
@@ -44,6 +46,8 @@ class BaseTestCase:
                 return Database(self.name, self.data_source_kind)
             case EDataSourceKind.MYSQL:
                 return Database("db", self.data_source_kind)
+            case EDataSourceKind.ORACLE:
+                return Database(self.name, self.data_source_kind)
             case EDataSourceKind.POSTGRESQL:
                 return Database(self.name, self.data_source_kind)
             case EDataSourceKind.YDB:
@@ -59,6 +63,8 @@ class BaseTestCase:
             case EDataSourceKind.CLICKHOUSE:
                 return 't' + make_random_string(8)
             case EDataSourceKind.MYSQL:
+                return self.name
+            case EDataSourceKind.ORACLE:
                 return self.name
             case EDataSourceKind.POSTGRESQL:
                 return 't' + make_random_string(8)
@@ -88,6 +94,11 @@ class BaseTestCase:
                 return GenericSettings(
                     date_time_format=EDateTimeFormat.YQL_FORMAT,
                     mysql_clusters=[GenericSettings.MySQLCluster(database=self.database.name)],
+                )
+            case EDataSourceKind.ORACLE:
+                return GenericSettings(
+                    date_time_format=EDateTimeFormat.YQL_FORMAT,
+                    oracle_clusters=[GenericSettings.OracleCluster(database=self.database.name, service_name=None)],
                 )
             case EDataSourceKind.POSTGRESQL:
                 return GenericSettings(

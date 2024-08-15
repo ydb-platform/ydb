@@ -534,6 +534,8 @@ private:
         ui64 defaultCostBasedOptimizationLevel = TableServiceConfig.GetDefaultCostBasedOptimizationLevel();
         bool enableConstantFolding = TableServiceConfig.GetEnableConstantFolding();
 
+        TString enableSpillingNodes = TableServiceConfig.GetEnableSpillingNodes();
+
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
@@ -556,6 +558,7 @@ private:
             TableServiceConfig.GetExtractPredicateRangesLimit() != rangesLimit ||
             TableServiceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit() != mkqlHeavyLimit ||
             TableServiceConfig.GetIdxLookupJoinPointsLimit() != idxLookupPointsLimit ||
+            TableServiceConfig.GetEnableSpillingNodes() != enableSpillingNodes ||
             TableServiceConfig.GetEnableQueryServiceSpilling() != enableQueryServiceSpilling ||
             TableServiceConfig.GetDefaultCostBasedOptimizationLevel() != defaultCostBasedOptimizationLevel ||
             TableServiceConfig.GetEnableConstantFolding() != enableConstantFolding ||
@@ -775,7 +778,11 @@ private:
                     : (TableServiceConfig.GetEnableAstCache() && !request.QueryAst)
                         ? ECompileActorAction::PARSE
                         : ECompileActorAction::COMPILE);
-            TKqpCompileRequest compileRequest(ev->Sender, request.Uid, request.Query ? *request.Query : *compileResult->Query,
+            auto query = request.Query ? *request.Query : *compileResult->Query;
+            if (compileResult) {
+                query.UserSid = compileResult->Query->UserSid;
+            }
+            TKqpCompileRequest compileRequest(ev->Sender, request.Uid, query,
                 compileSettings, request.UserToken, dbCounters, request.GUCSettings, request.ApplicationName,
                 ev->Cookie, std::move(ev->Get()->IntrestedInResult),
                 ev->Get()->UserRequestContext,

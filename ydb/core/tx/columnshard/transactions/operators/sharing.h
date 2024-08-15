@@ -25,6 +25,9 @@ private:
     }
     virtual void DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
     }
+    virtual TString DoGetOpType() const override {
+        return "Sharing";
+    }
     virtual bool DoIsAsync() const override {
         AFL_VERIFY(SharingTask);
         return !SharingTask->IsFinished();

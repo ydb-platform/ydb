@@ -20,6 +20,7 @@ import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/core/protos/index_builder.proto";
 import "ydb/core/tx/columnshard/engines/scheme/defaults/protos/data.proto";
 import "ydb/core/tx/columnshard/common/protos/snapshot.proto";
+import "ydb/core/formats/arrow/protos/accessor.proto";
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
@@ -347,6 +348,7 @@ message TTableReplicationConfig {
     enum EReplicationMode {
         REPLICATION_MODE_NONE = 0;
         REPLICATION_MODE_READ_ONLY = 1;
+        REPLICATION_MODE_RESTORE_INCREMENTAL_BACKUP = 2;
     }
 
     enum EConsistency {
@@ -398,6 +400,11 @@ message TTableDescription {
     optional TTableReplicationConfig ReplicationConfig = 40;
 
     optional bool Temporary = 41;
+
+    // This flag is create-only, and has to be set up
+    // on table creation to allow system column names (started with __ydb_)
+    // It won't be present on describes and won't be preserved
+    optional bool SystemColumnNamesAllowed = 42;
 }
 
 message TDictionaryEncodingSettings {
@@ -425,6 +432,7 @@ message TOlapColumnDiff {
     optional TOlapColumn.TSerializer Serializer = 5;
     optional string StorageId = 6;
     optional string DefaultValue = 7;
+    optional NKikimrArrowAccessorProto.TRequestedConstructor DataAccessorConstructor = 8;
 }
 
 message TOlapColumnDescription {
@@ -444,6 +452,7 @@ message TOlapColumnDescription {
     optional TOlapColumn.TSerializer Serializer = 10;
     optional string StorageId = 11;
     optional NKikimrColumnShardColumnDefaults.TColumnDefault DefaultValue = 12;
+    optional NKikimrArrowAccessorProto.TConstructor DataAccessorConstructor = 13;
 }
 
 message TRequestedBloomFilter {
@@ -886,6 +895,7 @@ enum ECdcStreamMode {
     ECdcStreamModeNewImage = 3;
     ECdcStreamModeOldImage = 4;
     ECdcStreamModeNewAndOldImages = 5;
+    ECdcStreamModeRestoreIncrBackup = 106;
 }
 
 enum ECdcStreamFormat {
@@ -922,10 +932,6 @@ message TCreateCdcStream {
     optional TCdcStreamDescription StreamDescription = 2;
     optional uint64 RetentionPeriodSeconds = 3 [default = 86400]; // 1d by default
     optional uint32 TopicPartitions = 4;
-    oneof IndexMode {
-        google.protobuf.Empty AllIndexes = 5; // Create topic per each index
-        string IndexName = 6;
-    }
 }
 
 message TAlterCdcStream {
@@ -965,6 +971,7 @@ message TAlterContinuousBackup {
     }
 
     message TTakeIncrementalBackup {
+        optional string DstPath = 1;
     }
 
     oneof Action {
@@ -975,6 +982,11 @@ message TAlterContinuousBackup {
 
 message TDropContinuousBackup {
     optional string TableName = 1;
+}
+
+message TRestoreIncrementalBackup {
+    optional string SrcTableName = 1;
+    optional string DstTableName = 2;
 }
 
 enum EIndexType {
@@ -1441,6 +1453,7 @@ message TSequenceDescription {
     optional sint64 Increment = 9; // increment at each call, defaults to 1
     optional bool Cycle = 10; // true when cycle on overflow is allowed
     optional TSetVal SetVal = 11; // SetVal(NextValue, NextUsed) is executed atomically when creating
+    optional string DataType = 12; // data type of the sequence: Int64/pgint8, Int32/pgint4, Int16/pgint2, defaults to Int64/pgint8
 }
 
 message TSequenceSharding {
@@ -1617,6 +1630,8 @@ enum EOperationType {
     ESchemeOpCreateResourcePool = 100;
     ESchemeOpDropResourcePool = 101;
     ESchemeOpAlterResourcePool = 102;
+
+    ESchemeOpRestoreIncrementalBackup = 103;
 }
 
 message TApplyIf {
@@ -1652,7 +1667,6 @@ message TIndexBuildControl {
 
 message TLockConfig {
     optional string Name = 1;
-    optional bool AllowIndexImplLock = 2;
 }
 
 message TLockGuard {
@@ -1799,6 +1813,8 @@ message TModifyScheme {
     optional bool AllowCreateInTempDir = 71 [default = false];
 
     optional TResourcePoolDescription CreateResourcePool = 72;
+
+    optional TRestoreIncrementalBackup RestoreIncrementalBackup = 73;
 }
 
 message TCopySequence {

@@ -1,6 +1,6 @@
 /* Bitset statistics.
 
-   Copyright (C) 2002-2006, 2009-2015, 2018-2019 Free Software Foundation, Inc.
+   Copyright (C) 2002-2006, 2009-2015, 2018-2020 Free Software Foundation, Inc.
 
    Contributed by Michael Hayes (m.hayes@elec.canterbury.ac.nz).
 
@@ -15,7 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 /* This file is a wrapper bitset implementation for the other bitset
    implementations.  It provides bitset compatibility checking and
@@ -202,7 +202,7 @@ bitset_stats_print_1 (FILE *file, const char *name,
 
 /* Print all bitset statistics to FILE.  */
 static void
-bitset_stats_print (FILE *file, bool verbose ATTRIBUTE_UNUSED)
+bitset_stats_print (FILE *file, bool verbose MAYBE_UNUSED)
 {
   if (!bitset_stats_info)
     return;
@@ -245,7 +245,7 @@ bitset_stats_read (const char *file_name)
   if (!file_name)
     file_name = BITSET_STATS_FILE;
 
-  FILE *file = fopen (file_name, "r");
+  FILE *file = fopen (file_name, "re");
   if (file)
     {
       if (fread (&bitset_stats_info_data, sizeof (bitset_stats_info_data),
@@ -273,7 +273,7 @@ bitset_stats_write (const char *file_name)
   if (!file_name)
     file_name = BITSET_STATS_FILE;
 
-  FILE *file = fopen (file_name, "w");
+  FILE *file = fopen (file_name, "we");
   if (file)
     {
       if (fwrite (&bitset_stats_info_data, sizeof (bitset_stats_info_data),
@@ -694,7 +694,7 @@ bitset_stats_init (bitset bset, bitset_bindex n_bits, enum bitset_type type)
     case BITSET_ARRAY:
       {
         size_t bytes = abitset_bytes (n_bits);
-        bset->s.bset = xcalloc (1, bytes);
+        bset->s.bset = xzalloc (bytes);
         abitset_init (bset->s.bset, n_bits);
       }
       break;
@@ -702,7 +702,7 @@ bitset_stats_init (bitset bset, bitset_bindex n_bits, enum bitset_type type)
     case BITSET_LIST:
       {
         size_t bytes = lbitset_bytes (n_bits);
-        bset->s.bset = xcalloc (1, bytes);
+        bset->s.bset = xzalloc (bytes);
         lbitset_init (bset->s.bset, n_bits);
       }
       break;
@@ -710,7 +710,7 @@ bitset_stats_init (bitset bset, bitset_bindex n_bits, enum bitset_type type)
     case BITSET_TABLE:
       {
         size_t bytes = tbitset_bytes (n_bits);
-        bset->s.bset = xcalloc (1, bytes);
+        bset->s.bset = xzalloc (bytes);
         tbitset_init (bset->s.bset, n_bits);
       }
       break;
@@ -718,7 +718,7 @@ bitset_stats_init (bitset bset, bitset_bindex n_bits, enum bitset_type type)
     case BITSET_VECTOR:
       {
         size_t bytes = vbitset_bytes (n_bits);
-        bset->s.bset = xcalloc (1, bytes);
+        bset->s.bset = xzalloc (bytes);
         vbitset_init (bset->s.bset, n_bits);
       }
       break;

@@ -781,7 +781,6 @@ optimizers/yql-6133_skip_deps
 order_by/SortByOneField
 pg/select_win_expr_order
 pg/select_table2
-pg/sublink_projection_array_corr
 key_filter/string_with_ff
 library/library_via_http
 library/package
@@ -2840,7 +2839,6 @@ pg/select_where
 pg/select_win_ntile
 pg/with_rec_all_empty
 window/win_group_peephole
-pg/sublink_projection_array
 pg/select_plusminus
 pg-tpcds/q33
 pg-tpcds/q42

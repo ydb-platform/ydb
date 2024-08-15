@@ -4,6 +4,8 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
+#include <sstream>
+
 using namespace NYql;
 
 static TString ConvertToStatisticsTypeString(EStatisticsType type) {
@@ -18,6 +20,12 @@ static TString ConvertToStatisticsTypeString(EStatisticsType type) {
             Y_ENSURE(false,"Unknown EStatisticsType");
     }
     return "";
+}
+
+TString TOptimizerStatistics::ToString() const {
+    std::stringstream ss;
+    ss << *this;
+    return ss.str();
 }
 
 std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) {
@@ -63,12 +71,10 @@ TOptimizerStatistics& TOptimizerStatistics::operator+=(const TOptimizerStatistic
     return *this;
 }
 
-std::shared_ptr<TOptimizerStatistics> NYql::OverrideStatistics(const NYql::TOptimizerStatistics& s, const TStringBuf& tablePath, const TString& statHints) {
+std::shared_ptr<TOptimizerStatistics> NYql::OverrideStatistics(const NYql::TOptimizerStatistics& s, const TStringBuf& tablePath, const std::shared_ptr<NJson::TJsonValue>& stats) {
     auto res = std::make_shared<TOptimizerStatistics>(s.Type, s.Nrows, s.Ncols, s.ByteSize, s.Cost, s.KeyColumns, s.ColumnStatistics);
 
-    NJson::TJsonValue root;
-    NJson::ReadJsonTree(statHints, &root, true);
-    auto dbStats = root.GetMapSafe();
+    auto dbStats = stats->GetMapSafe();
 
     if (!dbStats.contains(tablePath)){
         return res;

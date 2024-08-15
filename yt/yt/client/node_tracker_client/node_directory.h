@@ -67,6 +67,9 @@ public:
 
     void Persist(const TStreamPersistenceContext& context);
 
+    friend void SerializeFragment(const TNodeDescriptor& descriptor, NYson::IYsonConsumer* consumer);
+    friend void DeserializeFragment(TNodeDescriptor& descriptor, NYTree::INodePtr node);
+
 private:
     TAddressMap Addresses_;
     TString DefaultAddress_;

@@ -37,7 +37,7 @@ struct TExternalDataSource : public IExternalSource {
     }
 
     bool IsRDBMSDataSource(const TProtoStringType& sourceType) const {
-        return IsIn({"Greenplum", "PostgreSQL", "MySQL", "MsSQLServer", "Clickhouse"}, sourceType);
+        return IsIn({"Greenplum", "PostgreSQL", "MySQL", "MsSQLServer", "ClickHouse", "Oracle"}, sourceType);
     }
 
     virtual void ValidateExternalDataSource(const TString& externalDataSourceDescription) const override {
@@ -53,8 +53,13 @@ struct TExternalDataSource : public IExternalSource {
             ythrow TExternalSourceException() << "Unsupported property: " << key;
         }
 
-        if (IsRDBMSDataSource(proto.GetSourceType()) && !proto.GetProperties().GetProperties().contains("database_name")){
+        if (IsRDBMSDataSource(proto.GetSourceType()) && !proto.GetProperties().GetProperties().contains("database_name")) {
             ythrow TExternalSourceException() << proto.GetSourceType() << " source must provide database_name";
+        }
+
+        // oracle must have property service_name
+        if (proto.GetSourceType() == "Oracle" && !proto.GetProperties().GetProperties().contains("service_name")) {
+            ythrow TExternalSourceException() << proto.GetSourceType() << " source must provide service_name";
         }
 
         ValidateHostname(HostnamePatterns, proto.GetLocation());

@@ -17,6 +17,7 @@ using namespace NConcurrency;
 using namespace NTransactionClient;
 using namespace NYPath;
 using namespace NProfiling;
+using namespace NCrypto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -68,6 +69,11 @@ public:
     const TNameTablePtr& GetNameTable() const override
     {
         return Writer_->GetNameTable();
+    }
+
+    std::optional<TMD5Hash> GetDigest() const override
+    {
+        return std::nullopt;
     }
 
 private:

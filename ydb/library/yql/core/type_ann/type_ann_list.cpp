@@ -2755,8 +2755,8 @@ namespace {
 
             TTypeAnnotationNode::TListType childTypes;
             const auto structType = itemType->Cast<TStructExprType>();
-            for (const auto& col : *childColumnOrder) {
-                auto itemIdx = structType->FindItem(col);
+            for (const auto& [col, gen_col] : *childColumnOrder) {
+                auto itemIdx = structType->FindItem(gen_col);
                 YQL_ENSURE(itemIdx);
                 childTypes.push_back(structType->GetItems()[*itemIdx]->GetItemType());
             }
@@ -2781,10 +2781,10 @@ namespace {
             idx++;
         }
 
-        YQL_ENSURE(resultColumnOrder.size() == resultTypes.size());
+        YQL_ENSURE(resultColumnOrder.Size() == resultTypes.size());
         TVector<const TItemExprType*> structItems;
         for (size_t i = 0; i < resultTypes.size(); ++i) {
-            structItems.push_back(ctx.Expr.MakeType<TItemExprType>(resultColumnOrder[i], resultTypes[i]));
+            structItems.push_back(ctx.Expr.MakeType<TItemExprType>(resultColumnOrder[i].PhysicalName, resultTypes[i]));
         }
 
         resultStructType = ctx.Expr.MakeType<TStructExprType>(structItems);
@@ -4454,13 +4454,16 @@ namespace {
         auto inputColumns = GetColumnsOfStructOrSequenceOfStruct(*input->Head().GetTypeAnn());
         auto columnOrder = input->Tail().ChildrenList();
 
+        TColumnOrder order;
+
         for (auto& column : columnOrder) {
             YQL_ENSURE(column->IsAtom());
-            auto pos = FindOrReportMissingMember(column->Content(), input->Head().Pos(), *structType, ctx.Expr);
+            auto colName = TString(column->Content());
+            auto pos = FindOrReportMissingMember(colName, input->Head().Pos(), *structType, ctx.Expr);
             if (!pos) {
                 return IGraphTransformer::TStatus::Error;
             }
-            inputColumns.erase(inputColumns.find(column->Content()));
+            inputColumns.erase(inputColumns.find(order.AddColumn(colName)));
         }
 
         if (input->IsCallable("AssumeColumnOrderPartial")) {

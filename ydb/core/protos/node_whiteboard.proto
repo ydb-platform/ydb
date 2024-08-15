@@ -131,6 +131,7 @@ message TPDiskStateInfo {
     optional uint64 LogTotalSize = 21;
     optional uint32 ExpectedSlotCount = 22;
     optional uint64 EnforcedDynamicSlotSize = 23;
+    optional uint32 NumActiveSlots = 24;
 }
 
 message TEvPDiskStateRequest {
@@ -292,6 +293,7 @@ message TSystemStateInfo {
         optional uint32 Body = 4;
     }
 
+    // TODO: use memory stats
     message TNodeSharedCache {
         optional uint64 UsedBytes = 1;
         optional uint64 LimitBytes = 2;
@@ -328,7 +330,7 @@ message TSystemStateInfo {
     optional int64 MaxClockSkewWithPeerUs = 32; // a positive value means the peer is ahead in time; a negative value means it's behind
     optional uint32 MaxClockSkewPeerId = 33;
     optional uint64 DisconnectTime = 34;
-    optional TNodeSharedCache SharedCacheStats = 35;
+    optional TNodeSharedCache SharedCacheStats = 35; // TODO: use memory stats
     optional uint32 TotalSessions = 36;
     optional string NodeName = 37;
 }

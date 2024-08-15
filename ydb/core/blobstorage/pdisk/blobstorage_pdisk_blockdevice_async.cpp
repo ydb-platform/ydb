@@ -1052,7 +1052,8 @@ protected:
             if (DriveData = ::NKikimr::NPDisk::GetDriveData(Path, &details)) {
                 if (ActorSystem) {
                     LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
-                            << " Gathered DriveData, data# " << DriveData->ToString(false));
+                            << " Gathered DriveData, data# " << DriveData->ToString(false)
+                            << " Details# " << details.Str());
                 }
             } else {
                 if (ActorSystem) {

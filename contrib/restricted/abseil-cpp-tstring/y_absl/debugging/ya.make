@@ -20,9 +20,12 @@ NO_COMPILER_WARNINGS()
 SRCS(
     failure_signal_handler.cc
     internal/address_is_readable.cc
+    internal/decode_rust_punycode.cc
     internal/demangle.cc
+    internal/demangle_rust.cc
     internal/elf_mem_image.cc
     internal/examine_stack.cc
+    internal/utf8_for_code_point.cc
     internal/vdso_support.cc
     leak_check.cc
     stacktrace.cc

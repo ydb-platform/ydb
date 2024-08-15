@@ -6,6 +6,7 @@
 
 #include <yt/yt/core/misc/guid.h>
 #include <yt/yt/core/misc/mpl.h>
+#include <yt/yt/core/misc/statistic_path.h>
 
 #include <yt/yt/core/yson/writer.h>
 
@@ -161,6 +162,8 @@ void Serialize(
 template <class T, class TTag>
 void Serialize(const TStrongTypedef<T, TTag>& value, NYson::IYsonConsumer* consumer);
 
+void Serialize(const NStatisticPath::TStatisticPath& path, NYson::IYsonConsumer* consumer);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
@@ -252,19 +255,23 @@ void Deserialize(TEnumIndexedArray<E, T, Min, Max>& vector, INodePtr node);
 
 // Subtypes of google::protobuf::Message
 template <class T>
+    requires std::derived_from<T, google::protobuf::Message>
 void Deserialize(
     T& message,
-    const INodePtr& node,
-    typename std::enable_if<std::is_convertible<T*, google::protobuf::Message*>::value, void>::type* = nullptr);
-
-template <class T>
-void Deserialize(
-    T& message,
-    NYson::TYsonPullParserCursor* cursor,
-    typename std::enable_if<std::is_convertible<T*, google::protobuf::Message*>::value, void>::type* = nullptr);
+    const INodePtr& node);
 
 template <class T, class TTag>
 void Deserialize(TStrongTypedef<T, TTag>& value, INodePtr node);
+
+void Deserialize(NStatisticPath::TStatisticPath& path, INodePtr node);
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T, class... TExtraArgs>
+concept CYsonSerializable = requires (const T& value, NYson::IYsonConsumer* consumer, TExtraArgs&&... args)
+{
+    { Serialize(value, consumer, std::forward<TExtraArgs>(args)...) } -> std::same_as<void>;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 

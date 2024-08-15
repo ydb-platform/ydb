@@ -8,6 +8,18 @@ namespace NYT::NTableClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TRowBuffer::TRowBuffer(
+    TRefCountedTypeCookie tagCookie,
+    IMemoryChunkProviderPtr chunkProvider,
+    size_t startChunkSize,
+    IMemoryUsageTrackerPtr tracker)
+    : MemoryTracker_(std::move(tracker))
+    , Pool_(
+        tagCookie,
+        std::move(chunkProvider),
+        startChunkSize)
+{ }
+
 TChunkedMemoryPool* TRowBuffer::GetPool()
 {
     return &Pool_;

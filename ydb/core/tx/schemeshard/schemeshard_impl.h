@@ -187,6 +187,9 @@ public:
     TControlWrapper DisablePublicationsOfDropping;
     TControlWrapper FillAllocatePQ;
 
+    // Shared with NTabletFlatExecutor::TExecutor
+    TControlWrapper MaxCommitRedoMB;
+
     TSplitSettings SplitSettings;
 
     struct TTenantInitState {
@@ -326,6 +329,8 @@ public:
     bool EnableReplaceIfExistsForExternalEntities = false;
     bool EnableTempTables = false;
     bool EnableTableDatetime64 = false;
+    bool EnableResourcePoolsOnServerless = false;
+    bool EnableVectorIndex = false;
 
     TShardDeleter ShardDeleter;
 
@@ -370,6 +375,8 @@ public:
     NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory{NExternalSource::CreateExternalSourceFactory({})};
 
     THolder<TProposeResponse> IgniteOperation(TProposeRequest& request, TOperationContext& context);
+    void AbortOperationPropose(const TTxId txId, TOperationContext& context);
+
     THolder<TEvDataShard::TEvProposeTransaction> MakeDataShardProposal(const TPathId& pathId, const TOperationId& opId,
         const TString& body, const TActorContext& ctx) const;
 
@@ -419,7 +426,7 @@ public:
         return MakeLocalId(NextLocalPathId);
     }
 
-    TPathId AllocatePathId () {
+    TPathId AllocatePathId() {
        TPathId next = PeekNextPathId();
        ++NextLocalPathId;
        return next;
@@ -1014,7 +1021,7 @@ public:
 
     void FillAsyncIndexInfo(const TPathId& tableId, NKikimrTxDataShard::TFlatSchemeTransaction& tx);
 
-    void DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme::TTypeRegistry* typeRegistry,
+    void DescribeTable(const TTableInfo& tableInfo, const NScheme::TTypeRegistry* typeRegistry,
                        bool fillConfig, NKikimrSchemeOp::TTableDescription* entry) const;
     void DescribeTableIndex(const TPathId& pathId, const TString& name,
         bool fillConfig, bool fillBoundaries, NKikimrSchemeOp::TIndexDescription& entry

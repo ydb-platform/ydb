@@ -1072,10 +1072,8 @@ def ir_value_permitted(value, ir_type, kwargs):
         if max_value is not None and value > max_value:
             return False
 
-        if (max_value is None or min_value is None) and (
-            value - shrink_towards
-        ).bit_length() >= 128:
-            return False
+        if max_value is None or min_value is None:
+            return (value - shrink_towards).bit_length() < 128
 
         return True
     elif ir_type == "float":
@@ -1208,18 +1206,34 @@ class PrimitiveProvider(abc.ABC):
     # Non-hypothesis providers probably want to set a lifetime of test_function.
     lifetime = "test_function"
 
+    # Solver-based backends such as hypothesis-crosshair use symbolic values
+    # which record operations performed on them in order to discover new paths.
+    # If avoid_realization is set to True, hypothesis will avoid interacting with
+    # ir values (symbolics) returned by the provider in any way that would force the
+    # solver to narrow the range of possible values for that symbolic.
+    #
+    # Setting this to True disables some hypothesis features, such as
+    # DataTree-based deduplication, and some internal optimizations, such as
+    # caching kwargs. Only enable this if it is necessary for your backend.
+    avoid_realization = False
+
     def __init__(self, conjecturedata: Optional["ConjectureData"], /) -> None:
         self._cd = conjecturedata
 
-    def post_test_case_hook(self, value):
-        # hook for providers to modify values returned by draw_* after a full
-        # test case concludes. Originally exposed for crosshair to reify its
-        # symbolic values into actual values.
-        # I'm not tied to this exact function name or design.
-        return value
-
     def per_test_case_context_manager(self):
         return contextlib.nullcontext()
+
+    def realize(self, value: T) -> T:
+        """
+        Called whenever hypothesis requires a concrete (non-symbolic) value from
+        a potentially symbolic value. Hypothesis will not check that `value` is
+        symbolic before calling `realize`, so you should handle the case where
+        `value` is non-symbolic.
+
+        The returned value should be non-symbolic.
+        """
+
+        return value
 
     @abc.abstractmethod
     def draw_boolean(
@@ -1890,6 +1904,14 @@ AVAILABLE_PROVIDERS = {
 }
 
 
+# eventually we'll want to expose this publicly, but for now it lives as psuedo-internal.
+def realize(value: object) -> object:
+    from hypothesis.control import current_build_context
+
+    context = current_build_context()
+    return context.data.provider.realize(value)
+
+
 class ConjectureData:
     @classmethod
     def for_buffer(
@@ -1966,7 +1988,9 @@ class ConjectureData:
         self.max_depth = 0
         self.has_discards = False
 
-        self.provider = provider(self) if isinstance(provider, type) else provider
+        self.provider: PrimitiveProvider = (
+            provider(self) if isinstance(provider, type) else provider
+        )
         assert isinstance(self.provider, PrimitiveProvider)
 
         self.__result: "Optional[ConjectureResult]" = None
@@ -2059,11 +2083,17 @@ class ConjectureData:
             assert len(weights) == width
 
         if forced is not None and (min_value is None or max_value is None):
-            # We draw `forced=forced - shrink_towards` here internally. If that
-            # grows larger than a 128 bit signed integer, we can't represent it.
+            # We draw `forced=forced - shrink_towards` here internally, after clamping.
+            # If that grows larger than a 128 bit signed integer, we can't represent it.
             # Disallow this combination for now.
             # Note that bit_length() = 128 -> signed bit size = 129.
-            assert (forced - shrink_towards).bit_length() < 128
+            _shrink_towards = shrink_towards
+            if min_value is not None:
+                _shrink_towards = max(min_value, _shrink_towards)
+            if max_value is not None:
+                _shrink_towards = min(max_value, _shrink_towards)
+
+            assert (forced - _shrink_towards).bit_length() < 128
         if forced is not None and min_value is not None:
             assert min_value <= forced
         if forced is not None and max_value is not None:
@@ -2249,10 +2279,9 @@ class ConjectureData:
         #
         # Note that even if we lift this 64 bit restriction in the future, p
         # cannot be 0 (1) when forced is True (False).
-        if forced is True:
-            assert p > 2 ** (-64)
-        if forced is False:
-            assert p < (1 - 2 ** (-64))
+        eps = 2 ** (-64) if isinstance(self.provider, HypothesisProvider) else 0
+        assert (forced is not True) or (0 + eps) < p
+        assert (forced is not False) or p < (1 - eps)
 
         kwargs: BooleanKWargs = self._pooled_kwargs("boolean", {"p": p})
 
@@ -2280,6 +2309,10 @@ class ConjectureData:
 
     def _pooled_kwargs(self, ir_type, kwargs):
         """Memoize common dictionary objects to reduce memory pressure."""
+        # caching runs afoul of nondeterminism checks
+        if self.provider.avoid_realization:
+            return kwargs
+
         key = []
         for k, v in kwargs.items():
             if ir_type == "float" and k in ["min_value", "max_value"]:

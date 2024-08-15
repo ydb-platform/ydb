@@ -11,7 +11,7 @@ source "yandex" "this" {
   image_description = "ydb github actions runner image"
   image_pooled      = false
 
-  source_image_family = "ubuntu-2204-lts-oslogin"
+  source_image_family = "ubuntu-2204-lts"
   instance_cores      = 4
   instance_mem_gb     = 16
 
@@ -32,13 +32,14 @@ build {
     content     = <<EOF
 set -x
 apt-get update
-apt-get -y --no-install-recommends dist-upgrade
+# wait for unattended-upgrade is finished
+apt-get -o DPkg::Lock::Timeout=600 -y --no-install-recommends dist-upgrade
 apt-get -y install --no-install-recommends \
   antlr3 clang-12 clang-14 cmake docker.io git jq libaio-dev libaio1 libicu70 libidn11-dev libkrb5-3 \
   liblttng-ust1 lld-14 llvm-14 m4 make ninja-build parallel postgresql-client postgresql-client \
   python-is-python3 python3-pip s3cmd s3cmd zlib1g
 
-apt-get -y purge lxd-agent-loader snapd
+apt-get -y purge lxd-agent-loader snapd modemanager
 apt-get -y autoremove
 
 pip3 install conan==1.59 pytest==7.1.3 pytest-timeout pytest-xdist==3.3.1 setproctitle==1.3.2 \
@@ -49,6 +50,10 @@ pip3 install conan==1.59 pytest==7.1.3 pytest-timeout pytest-xdist==3.3.1 setpro
     | tar -xJ -C /usr/local/bin/ --strip-components=1 --no-same-owner ccache-$CCACHE_VERSION-linux-$OS_ARCH/ccache
 )
 
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash
+apt-get install -y nodejs
+
+npm install -g @testmo/testmo-cli
 EOF
     destination = "/tmp/install-packages.sh"
   }

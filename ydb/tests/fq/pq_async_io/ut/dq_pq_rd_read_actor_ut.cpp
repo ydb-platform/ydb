@@ -24,7 +24,6 @@ struct TFixture : public TPqIoTestFixture {
     void ExpectStartSession(ui64 expectedOffset) {
         auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvStartSession>(RemoteRowDispatcher, TDuration::Seconds(5));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
-        Cerr << "eventHolder->Get()->Record.GetOffset() " << eventHolder->Get()->Record.GetOffset() << " expectedOffset " << expectedOffset<< Endl;
         UNIT_ASSERT(eventHolder->Get()->Record.GetOffset() == expectedOffset);
     }
 
@@ -115,6 +114,13 @@ struct TFixture : public TPqIoTestFixture {
                 expectedPos++;
             }
         }
+    }
+
+    void MockDisconnected() {
+        CaSetup->Execute([&](TFakeActor& actor) {
+            auto event = new NActors::TEvInterconnect::TEvNodeDisconnected(CaSetup->Runtime->GetNodeId(0));
+            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, RemoteRowDispatcher, event));
+        });
     }
 
     void StartSession() {
@@ -244,7 +250,20 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTest) {
     Y_UNIT_TEST_F(DisconnectFromRowDispatcher, TFixture) {
         StartSession();
         ProcessSomeJsons(0, {Json1, Json2});
+        MockDisconnected();
 
+        TInstant deadline = Now() + TDuration::Seconds(5);
+        auto future = CaSetup->AsyncInputPromises.FatalError.GetFuture();
+        bool failured = false;
+        while (Now() < deadline) {
+            SourceRead<TString>(UVParser);
+            if (future.HasValue()) {
+                UNIT_ASSERT_STRING_CONTAINS(future.GetValue().ToOneLineString(), "Node disconnected");
+                failured = true;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(failured, "Failure timeout");
     }
 }
 } // NYql::NDq

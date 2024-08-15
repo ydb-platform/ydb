@@ -350,7 +350,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr &ev) {
 
 void TRowDispatcher::Handle(NActors::TEvents::TEvPing::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvPing from " << ev->Sender);
-    // TODO
+    Send(ev->Sender, new NActors::TEvents::TEvPong());
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev) {

@@ -22,6 +22,7 @@ from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
 @dataclass
 class TestCase(select_positive_common.TestCase):
     date_time_format: EDateTimeFormat = EDateTimeFormat.YQL_FORMAT
+    service_name: str = None
 
     @property
     def data_out(self) -> Sequence:
@@ -30,6 +31,9 @@ class TestCase(select_positive_common.TestCase):
     @property
     def generic_settings(self) -> GenericSettings:
         gs = super().generic_settings
+        for cluster in gs.oracle_clusters:
+            if self.service_name is not None:
+                cluster.service_name = self.service_name
         gs.date_time_format = self.date_time_format
         return gs
 

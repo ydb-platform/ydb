@@ -21,79 +21,163 @@ python3 -m pip install iso8601
 
 Фрагмент кода приложения для инициализации драйвера:
 
-```python
-def run(endpoint, database, path):
-    driver_config = ydb.DriverConfig(
-        endpoint, database, credentials=ydb.credentials_from_env_variables(),
-        root_certificates=ydb.load_ydb_root_certificate(),
-    )
-    with ydb.Driver(driver_config) as driver:
-        try:
-            driver.wait(timeout=5)
-        except TimeoutError:
-            print("Connect failed to YDB")
-            print("Last reported errors by discovery:")
-            print(driver.discovery_debug_details())
-            exit(1)
-```
+{% list tabs %}
+
+- Sync
+
+   ```python
+   def run(endpoint, database, path):
+       driver_config = ydb.DriverConfig(
+           endpoint, database, credentials=ydb.credentials_from_env_variables(),
+           root_certificates=ydb.load_ydb_root_certificate(),
+       )
+       with ydb.Driver(driver_config) as driver:
+           try:
+               driver.wait(timeout=5)
+           except TimeoutError:
+               print("Connect failed to YDB")
+               print("Last reported errors by discovery:")
+               print(driver.discovery_debug_details())
+               exit(1)
+   ```
+
+- AsyncIO
+
+   ```python
+   async def run(endpoint, database, path):
+       driver_config = ydb.DriverConfig(
+           endpoint, database, credentials=ydb.credentials_from_env_variables(),
+           root_certificates=ydb.load_ydb_root_certificate(),
+       )
+       async with ydb.aio.Driver(driver_config) as driver:
+           try:
+               await driver.wait(timeout=5)
+           except TimeoutError:
+               print("Connect failed to YDB")
+               print("Last reported errors by discovery:")
+               print(driver.discovery_debug_details())
+               exit(1)
+   ```
+
+{% endlist %}
 
 {% include [create_table.md](../_includes/steps/02_create_table.md) %}
 
 Для создания таблиц используется метод `pool.execute_with_retries()`:
 
-```python
-def create_tables(pool, path):
-    print("\nCreating table series...")
-    pool.execute_with_retries(
-        """
-            PRAGMA TablePathPrefix("{}");
-            CREATE table `series` (
-                `series_id` Uint64,
-                `title` Utf8,
-                `series_info` Utf8,
-                `release_date` Uint64,
-                PRIMARY KEY (`series_id`)
-            )
-            """.format(
-            path
-        )
-    )
+{% list tabs %}
 
-    print("\nCreating table seasons...")
-    pool.execute_with_retries(
-        """
-            PRAGMA TablePathPrefix("{}");
-            CREATE table `seasons` (
-                `series_id` Uint64,
-                `season_id` Uint64,
-                `title` Utf8,
-                `first_aired` Uint64,
-                `last_aired` Uint64,
-                PRIMARY KEY (`series_id`, `season_id`)
-            )
-            """.format(
-            path
-        )
-    )
+- Sync
 
-    print("\nCreating table episodes...")
-    pool.execute_with_retries(
-        """
-            PRAGMA TablePathPrefix("{}");
-            CREATE table `episodes` (
-                `series_id` Uint64,
-                `season_id` Uint64,
-                `episode_id` Uint64,
-                `title` Utf8,
-                `air_date` Uint64,
-                PRIMARY KEY (`series_id`, `season_id`, `episode_id`)
-            )
-            """.format(
-            path
-        )
-    )
+   ```python
+   def create_tables(pool: ydb.QuerySessionPool, path: str):
+       print("\nCreating table series...")
+       pool.execute_with_retries(
+           """
+               PRAGMA TablePathPrefix("{}");
+               CREATE table `series` (
+                   `series_id` Uint64,
+                   `title` Utf8,
+                   `series_info` Utf8,
+                   `release_date` Uint64,
+                   PRIMARY KEY (`series_id`)
+               )
+               """.format(
+               path
+           )
+       )
 
-```
+       print("\nCreating table seasons...")
+       pool.execute_with_retries(
+           """
+               PRAGMA TablePathPrefix("{}");
+               CREATE table `seasons` (
+                   `series_id` Uint64,
+                   `season_id` Uint64,
+                   `title` Utf8,
+                   `first_aired` Uint64,
+                   `last_aired` Uint64,
+                   PRIMARY KEY (`series_id`, `season_id`)
+               )
+               """.format(
+               path
+           )
+       )
+
+       print("\nCreating table episodes...")
+       pool.execute_with_retries(
+           """
+               PRAGMA TablePathPrefix("{}");
+               CREATE table `episodes` (
+                   `series_id` Uint64,
+                   `season_id` Uint64,
+                   `episode_id` Uint64,
+                   `title` Utf8,
+                   `air_date` Uint64,
+                   PRIMARY KEY (`series_id`, `season_id`, `episode_id`)
+               )
+               """.format(
+               path
+           )
+       )
+   ```
+
+- AsyncIO
+
+   ```python
+   async def create_tables(pool: ydb.aio.QuerySessionPoolAsync, path: str):
+       print("\nCreating table series...")
+       await pool.execute_with_retries(
+           """
+               PRAGMA TablePathPrefix("{}");
+               CREATE table `series` (
+                   `series_id` Uint64,
+                   `title` Utf8,
+                   `series_info` Utf8,
+                   `release_date` Uint64,
+                   PRIMARY KEY (`series_id`)
+               )
+               """.format(
+               path
+           )
+       )
+
+       print("\nCreating table seasons...")
+       await pool.execute_with_retries(
+           """
+               PRAGMA TablePathPrefix("{}");
+               CREATE table `seasons` (
+                   `series_id` Uint64,
+                   `season_id` Uint64,
+                   `title` Utf8,
+                   `first_aired` Uint64,
+                   `last_aired` Uint64,
+                   PRIMARY KEY (`series_id`, `season_id`)
+               )
+               """.format(
+               path
+           )
+       )
+
+       print("\nCreating table episodes...")
+       await pool.execute_with_retries(
+           """
+               PRAGMA TablePathPrefix("{}");
+               CREATE table `episodes` (
+                   `series_id` Uint64,
+                   `season_id` Uint64,
+                   `episode_id` Uint64,
+                   `title` Utf8,
+                   `air_date` Uint64,
+                   PRIMARY KEY (`series_id`, `season_id`, `episode_id`)
+               )
+               """.format(
+               path
+           )
+       )
+   ```
+
+{% endlist %}
 
 В параметр path передаётся абсолютный путь от корня:
 
@@ -105,86 +189,115 @@ full_path = os.path.join(database, path)
 Благодаря этому нет необходимости использовать специальные контрукции для контроля над стримом, однако нужно с осторожностью пользоваться данным методом с большими `SELECT` запросами.
 Подробнее про стримы будет сказано ниже.
 
-## Работа со стримами {#work-with-streams}
-
-Результатом выполнения `tx.execute()` является стрим. Стрим позволяет считать неограниченное количество строк и объем данных, не загружая в память весь результат. Однако, для корректного сохранения состояния транзакции на стороне `ydb`
-стрим необходимо прочитывать до конца после каждого запроса. Для удобства результат функции `tx.execute()` представлен в виде контекстного менеджера, который долистывает стрим до конца после выхода.
-
-```python
-with tx.execute(query) as _:
-    pass
-```
-
 {% include [steps/03_write_queries.md](../_includes/steps/03_write_queries.md) %}
 
 Фрагмент кода, демонстрирующий выполнение запроса на запись/изменение данных:
 
-```python
-def upsert_simple(pool, path):
-    print("\nPerforming UPSERT into episodes...")
+{% list tabs %}
 
-    def callee(session):
-        with session.transaction().execute(
-            """
-            PRAGMA TablePathPrefix("{}");
-            UPSERT INTO episodes (series_id, season_id, episode_id, title) VALUES (2, 6, 1, "TBD");
-            """.format(
-                path
-            ),
-            commit_tx=True,
-        ) as _:
-            pass
+- Sync
 
-    return pool.retry_operation_sync(callee)
-```
+   ```python
+   def upsert_simple(pool, path):
+       print("\nPerforming UPSERT into episodes...")
+       pool.execute_with_retries(
+           """
+           PRAGMA TablePathPrefix("{}");
+           UPSERT INTO episodes (series_id, season_id, episode_id, title) VALUES (2, 6, 1, "TBD");
+           """.format(
+               path
+           )
+       )
+   ```
+
+- AsyncIO
+
+   ```python
+   async def upsert_simple(pool: ydb.aio.QuerySessionPoolAsync, path: str):
+       print("\nPerforming UPSERT into episodes...")
+       await pool.execute_with_retries(
+           """
+           PRAGMA TablePathPrefix("{}");
+           UPSERT INTO episodes (series_id, season_id, episode_id, title) VALUES (2, 6, 1, "TBD");
+           """.format(
+               path
+           )
+       )
+   ```
+
+{% endlist %}
 
 {% include [pragmatablepathprefix.md](../_includes/auxilary/pragmatablepathprefix.md) %}
 
 {% include [steps/04_query_processing.md](../_includes/steps/04_query_processing.md) %}
 
-Для выполнения YQL-запросов используется метод `session.transaction().execute()`.
-SDK позволяет в явном виде контролировать выполнение транзакций и настраивать необходимый режим выполнения транзакций с помощью класса `TxControl`.
+Для выполнения YQL-запросов чаще всего достаточно использования уже знакомого метода `pool.execute_with_retries()`.
 
-В фрагменте кода, приведенном ниже, транзакция выполняется с помощью метода `transaction().execute()`. Устанавливается режим выполнения транзакции `ydb.QuerySerializableReadWrite()`. После завершения всех запросов транзакции она будет автоматически завершена с помощью явного указания флага: `commit_tx=True`. Тело запроса описано с помощью синтаксиса YQL и как параметр передается методу `execute`.
+{% list tabs %}
 
-```python
-def select_simple(pool, path):
-    print("\nCheck series table...")
+- Sync
 
-    def callee(session):
-        # new transaction in serializable read write mode
-        # if query successfully completed you will get result sets.
-        # otherwise exception will be raised
-        with session.transaction(ydb.QuerySerializableReadWrite()).execute(
-            """
-            PRAGMA TablePathPrefix("{}");
-            $format = DateTime::Format("%Y-%m-%d");
-            SELECT
-                series_id,
-                title,
-                $format(DateTime::FromSeconds(CAST(DateTime::ToSeconds(DateTime::IntervalFromDays(CAST(release_date AS Int16))) AS Uint32))) AS release_date
-            FROM series
-            WHERE series_id = 1;
-            """.format(
-                path
-            ),
-            commit_tx=True,
-        ) as result_sets:
-            first_set = next(result_sets)
-            for row in first_set.rows:
-                print(
-                    "series, id: ",
-                    row.series_id,
-                    ", title: ",
-                    row.title,
-                    ", release date: ",
-                    row.release_date,
-                )
+   ```python
+   def select_simple(pool: ydb.QuerySessionPool, path: str):
+       print("\nCheck series table...")
+       result_sets = pool.execute_with_retries(
+           """
+           PRAGMA TablePathPrefix("{}");
+           SELECT
+               series_id,
+               title,
+               release_date
+           FROM series
+           WHERE series_id = 1;
+           """.format(
+               path
+           ),
+       )
+       first_set = result_sets[0]
+       for row in first_set.rows:
+           print(
+               "series, id: ",
+               row.series_id,
+               ", title: ",
+               row.title,
+               ", release date: ",
+               row.release_date,
+           )
+       return first_set
+   ```
 
-            return first_set
+- AsyncIO
 
-    return pool.retry_operation_sync(callee)
-```
+   ```python
+   async def select_simple(pool: ydb.aio.QuerySessionPoolAsync, path: str):
+       print("\nCheck series table...")
+       result_sets = await pool.execute_with_retries(
+           """
+           PRAGMA TablePathPrefix("{}");
+           SELECT
+               series_id,
+               title,
+               release_date
+           FROM series
+           WHERE series_id = 1;
+           """.format(
+               path
+           ),
+       )
+       first_set = result_sets[0]
+       for row in first_set.rows:
+           print(
+               "series, id: ",
+               row.series_id,
+               ", title: ",
+               row.title,
+               ", release date: ",
+               row.release_date,
+           )
+       return first_set
+   ```
+
+{% endlist %}
 
 В качестве результата выполнения запроса возвращается `result_set`, итерирование по которому выводит на консоль текст:
 
@@ -195,48 +308,86 @@ series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 
 ## Параметризованные запросы {#param-queries}
 
-Для выполнения параметризованных запросов в метод `tx.execute()` необходимо передать словарь с параметрами специального вида, где ключом служит имя параметра, а значение может быть одним из следующих:
-1. Обычное значение (без указывания типов допустимо использовать только int, str, bool);
+Для выполнения параметризованных запросов в метод `pool.execute_with_retries()` (или `tx.execute()`, работа с которым будет показана в следующей секции) необходимо передать словарь с параметрами специального вида, где ключом служит имя параметра, а значение может быть одним из следующих:
+1. Обычное значение;
 2. Кортеж со значением и типом;
 3. Специальный тип ydb.TypedValue(value=value, value_type=value_type).
 
+В случае указания значения без типа, конвертация происходит по следующим правилам:
+* `int` -> `ydb.PrimitiveType.Int64`
+* `float` -> `ydb.PrimitiveType.Float`
+* `str` -> `ydb.PrimitiveType.Utf8`
+* `bool` -> `ydb.PrimitiveType.Bool`
+* `list` -> `ydb.ListType`
+* `dict` -> `ydb.DictType`
+
+Автоматическая конвертация списков и словарей возможна только в случае однородных структур, тип вложенного значения будет вычисляться рекурсивно по вышеупомянутым правилам.
+
 Фрагмент кода, демонстрирующий возможность использования параметризованных запросов:
 
-```python
-def select_with_parameters(pool, path, series_id, season_id, episode_id):
-    def callee(session):
-        query = """
-        PRAGMA TablePathPrefix("{}");
-        $format = DateTime::Format("%Y-%m-%d");
-        SELECT
-            title,
-            $format(DateTime::FromSeconds(CAST(DateTime::ToSeconds(DateTime::IntervalFromDays(CAST(air_date AS Int16))) AS Uint32))) AS air_date
-        FROM episodes
-        WHERE series_id = $seriesId AND season_id = $seasonId AND episode_id = $episodeId;
-        """.format(
-            path
-        )
+{% list tabs %}
 
-        with session.transaction(ydb.QuerySerializableReadWrite()).execute(
-            query,
-            {
-                "$seriesId": (series_id, ydb.PrimitiveType.Uint64),
-                "$seasonId": (season_id, ydb.PrimitiveType.Uint64),  # could be defined via tuple
-                "$episodeId": ydb.TypedValue(
-                    episode_id, ydb.PrimitiveType.Uint64
-                ),  # could be defined via special class
-            },
-            commit_tx=True,
-        ) as result_sets:
-            print("\n> select_prepared_transaction:")
-            first_set = next(result_sets)
-            for row in first_set.rows:
-                print("episode title:", row.title, ", air date:", row.air_date)
+- Sync
 
-            return first_set
+   ```python
+   def select_with_parameters(pool: ydb.QuerySessionPool, path: str, series_id, season_id, episode_id):
+       result_sets = pool.execute_with_retries(
+           """
+           PRAGMA TablePathPrefix("{}");
+           SELECT
+               title,
+               air_date
+           FROM episodes
+           WHERE series_id = $seriesId AND season_id = $seasonId AND episode_id = $episodeId;
+           """.format(
+               path
+           ),
+           {
+               "$seriesId": series_id,  # could be defined implicit
+               "$seasonId": (season_id, ydb.PrimitiveType.Int64),  # could be defined via tuple
+               "$episodeId": ydb.TypedValue(episode_id, ydb.PrimitiveType.Int64),  # could be defined via special class
+           },
+       )
 
-    return pool.retry_operation_sync(callee)
-```
+       print("\n> select_with_parameters:")
+       first_set = result_sets[0]
+       for row in first_set.rows:
+           print("episode title:", row.title, ", air date:", row.air_date)
+
+       return first_set
+   ```
+
+- AsyncIO
+
+   ```python
+   async def select_with_parameters(pool: ydb.aio.QuerySessionPoolAsync, path: str, series_id, season_id, episode_id):
+       result_sets = await pool.execute_with_retries(
+           """
+           PRAGMA TablePathPrefix("{}");
+           SELECT
+               title,
+               air_date
+           FROM episodes
+           WHERE series_id = $seriesId AND season_id = $seasonId AND episode_id = $episodeId;
+           """.format(
+               path
+           ),
+           {
+               "$seriesId": series_id,  # could be defined implicit
+               "$seasonId": (season_id, ydb.PrimitiveType.Int64),  # could be defined via tuple
+               "$episodeId": ydb.TypedValue(episode_id, ydb.PrimitiveType.Int64),  # could be defined via special class
+           },
+       )
+
+       print("\n> select_with_parameters:")
+       first_set = result_sets[0]
+       for row in first_set.rows:
+           print("episode title:", row.title, ", air date:", row.air_date)
+
+       return first_set
+   ```
+
+{% endlist %}
 
 Приведенный фрагмент кода при запуске выводит на консоль текст:
 
@@ -248,40 +399,115 @@ def select_with_parameters(pool, path, series_id, season_id, episode_id):
 
 {% include [transaction_control.md](../_includes/steps/10_transaction_control.md) %}
 
+Для выполнения YQL-запросов также метод `session.transaction().execute()`.
+SDK позволяет в явном виде контролировать выполнение транзакций и настраивать необходимый режим выполнения транзакций с помощью класса `TxControl`.
+
+Результатом выполнения `tx.execute()` является стрим. Стрим позволяет считать неограниченное количество строк и объем данных, не загружая в память весь результат.
+Однако, для корректного сохранения состояния транзакции на стороне `ydb` стрим необходимо прочитывать до конца после каждого запроса.
+Для удобства результат функции `tx.execute()` представлен в виде контекстного менеджера, который долистывает стрим до конца после выхода.
+
+{% list tabs %}
+
+- Sync
+
+   ```python
+   with tx.execute(query) as _:
+       pass
+   ```
+
+- AsyncIO
+
+   ```python
+   async with await tx.execute(query) as _:
+       pass
+   ```
+
+{% endlist %}
+
+В фрагменте кода, приведенном ниже, транзакция выполняется с помощью метода `transaction().execute()`. Устанавливается режим выполнения транзакции `ydb.QuerySerializableReadWrite()`.
+Тело запроса описано с помощью синтаксиса YQL и как параметр передается методу `execute`.
+
 Фрагмент кода, демонстрирующий явное использование вызовов `transaction().begin()` и `tx.commit()`:
 
-```python
-def explicit_tcl(pool, path, series_id, season_id, episode_id):
-    def callee(session):
-        query = """
-        PRAGMA TablePathPrefix("{}");
-        UPDATE episodes
-        SET air_date = CAST(CurrentUtcDate() AS Uint64)
-        WHERE series_id = $seriesId AND season_id = $seasonId AND episode_id = $episodeId;
-        """.format(
-            path
-        )
+{% list tabs %}
 
-        # Get newly created transaction id
-        tx = session.transaction(ydb.QuerySerializableReadWrite()).begin()
+- Sync
 
-        # Execute data query.
-        # Transaction control settings continues active transaction (tx)
-        with tx.execute(
-            query,
-            {
-                "$seriesId": (series_id, ydb.PrimitiveType.Uint64),
-                "$seasonId": (season_id, ydb.PrimitiveType.Uint64),
-                "$episodeId": (episode_id, ydb.PrimitiveType.Uint64),
-            },
-        ) as _:
-            pass
+   ```python
+   def explicit_transaction_control(pool: ydb.QuerySessionPool, path: str, series_id, season_id, episode_id):
+       def callee(session: ydb.QuerySessionSync):
+           query = """
+           PRAGMA TablePathPrefix("{}");
+           UPDATE episodes
+           SET air_date = CurrentUtcDate()
+           WHERE series_id = $seriesId AND season_id = $seasonId AND episode_id = $episodeId;
+           """.format(
+               path
+           )
 
-        print("\n> explicit TCL call")
+           # Get newly created transaction id
+           tx = session.transaction(ydb.QuerySerializableReadWrite()).begin()
 
-        # Commit active transaction(tx)
-        tx.commit()
+           # Execute data query.
+           # Transaction control settings continues active transaction (tx)
+           with tx.execute(
+               query,
+               {
+                   "$seriesId": (series_id, ydb.PrimitiveType.Int64),
+                   "$seasonId": (season_id, ydb.PrimitiveType.Int64),
+                   "$episodeId": (episode_id, ydb.PrimitiveType.Int64),
+               },
+           ) as _:
+               pass
 
-    return pool.retry_operation_sync(callee)
-```
+           print("\n> explicit TCL call")
 
+           # Commit active transaction(tx)
+           tx.commit()
+
+       return pool.retry_operation_sync(callee)
+   ```
+
+- AsyncIO
+
+   ```python
+   async def explicit_transaction_control(
+       pool: ydb.aio.QuerySessionPoolAsync, path: str, series_id, season_id, episode_id
+   ):
+       async def callee(session: ydb.aio.QuerySessionAsync):
+           query = """
+           PRAGMA TablePathPrefix("{}");
+           UPDATE episodes
+           SET air_date = CurrentUtcDate()
+           WHERE series_id = $seriesId AND season_id = $seasonId AND episode_id = $episodeId;
+           """.format(
+               path
+           )
+
+           # Get newly created transaction id
+           tx = await session.transaction(ydb.QuerySerializableReadWrite()).begin()
+
+           # Execute data query.
+           # Transaction control settings continues active transaction (tx)
+           async with await tx.execute(
+               query,
+               {
+                   "$seriesId": (series_id, ydb.PrimitiveType.Int64),
+                   "$seasonId": (season_id, ydb.PrimitiveType.Int64),
+                   "$episodeId": (episode_id, ydb.PrimitiveType.Int64),
+               },
+           ) as _:
+               pass
+
+           print("\n> explicit TCL call")
+
+           # Commit active transaction(tx)
+           await tx.commit()
+
+       return await pool.retry_operation_async(callee)
+   ```
+
+{% endlist %}
+
+Однако, стоит помнить, что транзакция может быть открыта неявно при первом запросе. Завершиться же она может автоматически с помощью явного указания флага: `commit_tx=True`.
+Неявное управление транзакцией является предпочтительным, так как используется меньше обращений на сервер.

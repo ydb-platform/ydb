@@ -264,7 +264,7 @@ const arrow::compute::ScalarKernel& TPlainKernel::GetArrowKernel() const {
 }
 
 std::shared_ptr<arrow::compute::ScalarKernel> TPlainKernel::MakeArrowKernel(const TVector<TType*>&, TType*) const {
-    return {};
+    ythrow yexception() << "Unsupported kernel";
 }
 
 bool TPlainKernel::IsPolymorphic() const {
@@ -280,7 +280,7 @@ TDecimalKernel::TDecimalKernel(const TKernelFamily& family, const std::vector<NU
 }
 
 const arrow::compute::ScalarKernel& TDecimalKernel::GetArrowKernel() const {
-    MKQL_ENSURE(false, "Unimplemented");
+    ythrow yexception() << "Unsupported kernel";
 }
 
 std::shared_ptr<arrow::compute::ScalarKernel> TDecimalKernel::MakeArrowKernel(const TVector<TType*>& argTypes, TType* resultType) const {

@@ -79,4 +79,6 @@ list_result.log
 bin/config.json
 
 .vs/
+
+# handy for local junk, which is not intended to appear in the repo
 junk/

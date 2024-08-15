@@ -46,6 +46,7 @@ struct TEvPrivate {
         EvExportSaveCursor,
 
         EvTaskProcessedResult,
+        EvPingSnapshotsUsage,
 
         EvEnd
     };
@@ -142,8 +143,9 @@ struct TEvPrivate {
 
     struct TEvReadFinished : public TEventLocal<TEvReadFinished, EvReadFinished> {
         explicit TEvReadFinished(ui64 requestCookie, ui64 txId = 0)
-            : RequestCookie(requestCookie), TxId(txId)
-        {}
+            : RequestCookie(requestCookie)
+            , TxId(txId) {
+        }
 
         ui64 RequestCookie;
         ui64 TxId;
@@ -157,7 +159,11 @@ struct TEvPrivate {
         bool Manual;
     };
 
-    class TEvWriteBlobsResult : public TEventLocal<TEvWriteBlobsResult, EvWriteBlobsResult> {
+    struct TEvPingSnapshotsUsage: public TEventLocal<TEvPingSnapshotsUsage, EvPingSnapshotsUsage> {
+        TEvPingSnapshotsUsage() = default;
+    };
+
+    class TEvWriteBlobsResult: public TEventLocal<TEvWriteBlobsResult, EvWriteBlobsResult> {
     private:
         NColumnShard::TBlobPutResult::TPtr PutResult;
         NOlap::TWritingBuffer WritesBuffer;

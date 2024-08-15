@@ -1,6 +1,7 @@
 #include "helper.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/protos/accessor.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/storage.h>
@@ -25,11 +26,24 @@ NKikimrSchemeOp::TOlapColumnDescription TTestColumn::CreateColumn(const ui32 id)
         col.SetStorageId(StorageId);
     }
     auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(Type, "");
+    if (AccessorClassName) {
+        col.MutableDataAccessorConstructor()->SetClassName(AccessorClassName);
+    }
     col.SetTypeId(columnType.TypeId);
     if (columnType.TypeInfo) {
         *col.MutableTypeInfo() = *columnType.TypeInfo;
     }
     return col;
+}
+
+std::set<std::string> TTestColumn::GetNullableSet(const std::vector<TTestColumn>& columns) {
+    std::set<std::string> result;
+    for (auto&& i : columns) {
+        if (!i.GetNullable()) {
+            result.emplace(i.GetName());
+        }
+    }
+    return result;
 }
 
 std::vector<std::pair<TString, NKikimr::NScheme::TTypeInfo>> TTestColumn::ConvertToPairs(const std::vector<TTestColumn>& columns) {
@@ -66,15 +80,15 @@ std::vector<NKikimr::NArrow::NTest::TTestColumn> TTestColumn::CropSchema(const s
 
 namespace NKikimr::NArrow {
 
-std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(
-    const std::vector<NTest::TTestColumn>& columns, const std::set<std::string>& notNullColumns /*= {}*/) {
+std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const std::vector<NTest::TTestColumn>& columns) {
+    std::set<std::string> notNullColumns = NTest::TTestColumn::GetNullableSet(columns);
     auto result = MakeArrowFields(NTest::TTestColumn::ConvertToPairs(columns), notNullColumns);
     UNIT_ASSERT_C(result.ok(), result.status().ToString());
     return result.ValueUnsafe();
 }
 
-std::shared_ptr<arrow::Schema> MakeArrowSchema(
-    const std::vector<NTest::TTestColumn>& columns, const std::set<std::string>& notNullColumns /*= {}*/) {
+std::shared_ptr<arrow::Schema> MakeArrowSchema(const std::vector<NTest::TTestColumn>& columns) {
+    std::set<std::string> notNullColumns = NTest::TTestColumn::GetNullableSet(columns);
     auto result = MakeArrowSchema(NTest::TTestColumn::ConvertToPairs(columns), notNullColumns);
     UNIT_ASSERT_C(result.ok(), result.status().ToString());
     return result.ValueUnsafe();

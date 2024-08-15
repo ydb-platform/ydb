@@ -2,6 +2,9 @@
 #include "yql_job_stats_writer.h"
 #include "yql_job_factory.h"
 
+#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/context.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/mkql_stats_registry.h>
@@ -241,6 +244,12 @@ void TYqlJobBase::Init() {
             << lnkTarget.GetPath().Quote() << " to " << lnk.GetPath().Quote()
             << ": " << LastSystemErrorText());
 #endif
+    }
+
+    if (TFsPath(NCommon::PgCatalogFileName).Exists()) {
+        TFileInput file(TString{NCommon::PgCatalogFileName});
+        NPg::ImportExtensions(file.ReadAll(), false,
+            NKikimr::NMiniKQL::CreateExtensionLoader().get());
     }
 
     FillStaticModules(*funcRegistry);

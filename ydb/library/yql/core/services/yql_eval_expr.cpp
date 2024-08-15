@@ -999,7 +999,10 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             fullTransformer->Rewind();
             auto prevSteps = ctx.Step;
             TEvalScope scope(types);
-            ctx.Step = TExprStep();
+            ctx.Step.Reset();
+            if (prevSteps.IsDone(TExprStep::Recapture)) {
+                ctx.Step.Done(TExprStep::Recapture);
+            }
             status = SyncTransform(*fullTransformer, clonedArg, ctx);
             ctx.Step = prevSteps;
             if (status.Level == IGraphTransformer::TStatus::Error) {

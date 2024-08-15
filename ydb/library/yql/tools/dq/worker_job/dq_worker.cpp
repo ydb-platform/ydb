@@ -171,8 +171,8 @@ namespace NYql::NDq::NWorker {
 
         TString fileCacheDir = GetEnv(NCommonJobVars::UDFS_PATH);
         TString ytCoordinatorStr = GetEnv(TString("YT_SECURE_VAULT_") + NCommonJobVars::YT_COORDINATOR);
-
         TString ytBackendStr = GetEnv(TString("YT_SECURE_VAULT_") + NCommonJobVars::YT_BACKEND);
+        NYT::NYson::TYsonString addressResolverYson = NYT::NYson::TYsonString(GetEnv(NCommonJobVars::ADDRESS_RESOLVER_CONFIG));
 
         TString operationId = GetEnv("YT_OPERATION_ID");
         TString jobId = GetEnv("YT_JOB_ID");
@@ -190,13 +190,10 @@ namespace NYql::NDq::NWorker {
         TRangeWalker<int> portWalker(startPort, startPort+100);
         auto ports = BindInRange(portWalker);
 
+        auto addressResolverConfig = NYT::NYTree::ConvertTo<NYT::NNet::TAddressResolverConfigPtr>(addressResolverYson);
+        NYT::NNet::TAddressResolver::Get()->Configure(addressResolverConfig);
+
         auto forceIPv4 = IsTrue(GetEnv(TString("YT_SECURE_VAULT_") + NCommonJobVars::YT_FORCE_IPV4, ""));
-        if (forceIPv4) {
-            auto config = NYT::New<NYT::NNet::TAddressResolverConfig>();
-            config->EnableIPv4 = true;
-            config->EnableIPv6 = false;
-            NYT::NNet::TAddressResolver::Get()->Configure(config);
-        }
 
         auto [host, ip] = NYql::NDqs::GetLocalAddress(
             coordinatorConfig.HasHostName() ? &coordinatorConfig.GetHostName() : nullptr,
@@ -236,6 +233,10 @@ namespace NYql::NDq::NWorker {
         }
         if (backendConfig.GetEnforceJobUtc()) {
             pfOptions.Env["TZ"] = "UTC0";
+        }
+        if (backendConfig.GetEnforceJobYtIsolation()) {
+            pfOptions.Env["YT_ALLOW_HTTP_REQUESTS_TO_YT_FROM_JOB"] = "0";
+            pfOptions.Env["YT_FORBID_REQUESTS_FROM_JOB"] = "1";
         }
         pfOptions.EnablePorto = backendConfig.GetEnablePorto() == "isolate";
         pfOptions.PortoLayer = backendConfig.GetPortoLayer().size() == 0 ? "" : layerDir;

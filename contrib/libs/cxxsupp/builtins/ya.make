@@ -28,8 +28,19 @@ IF (MUSL)
     # them with ADDINCL GLOBAL because we do not have an API, and we
     # can not propagate them because libcxx has to put its own
     # includes before musl includes for its include_next to work.
+    IF (ARCH_X86_64)
+        ADDINCL(
+            contrib/libs/musl/arch/x86_64
+        )
+    ENDIF()
+
+    IF (ARCH_AARCH64)
+        ADDINCL(
+            contrib/libs/musl/arch/aarch64
+        )
+    ENDIF()
+
     ADDINCL(
-        contrib/libs/musl/arch/x86_64
         contrib/libs/musl/arch/generic
         contrib/libs/musl/include
         contrib/libs/musl/extra

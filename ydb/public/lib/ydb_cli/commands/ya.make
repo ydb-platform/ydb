@@ -11,7 +11,6 @@ SRCS(
     query_workload.cpp
     ydb_admin.cpp
     ydb_benchmark.cpp
-    ydb_sdk_core_access.cpp
     ydb_dynamic_config.cpp
     ydb_profile.cpp
     ydb_root_common.cpp
@@ -48,6 +47,7 @@ PEERDIR(
     ydb/public/lib/ydb_cli/commands/topic_workload
     ydb/public/lib/ydb_cli/commands/transfer_workload
     ydb/public/lib/ydb_cli/commands/ydb_discovery
+    ydb/public/lib/ydb_cli/commands/sdk_core_access
     ydb/public/lib/ydb_cli/dump
     ydb/public/lib/ydb_cli/import
     ydb/public/lib/ydb_cli/topic

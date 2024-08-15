@@ -46,13 +46,13 @@ void FormatValue(TStringBuilderBase* builder, const TDefaultMap<T>& map, TString
 template <class T>
 struct TIsDefaultMap
 {
-    constexpr static bool Value = false;
+    static constexpr bool Value = false;
 };
 
 template <class T>
 struct TIsDefaultMap<TDefaultMap<T>>
 {
-    constexpr static bool Value = true;
+    static constexpr bool Value = true;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

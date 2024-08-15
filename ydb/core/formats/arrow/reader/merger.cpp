@@ -4,12 +4,12 @@
 
 namespace NKikimr::NArrow::NMerger {
 
-void TMergePartialStream::PutControlPoint(const TSortableBatchPosition& point) {
+void TMergePartialStream::PutControlPoint(const TSortableBatchPosition& point, const bool deepCopy) {
     AFL_VERIFY(point.IsSameSortingSchema(SortSchema))("point", point.DebugJson())("schema", SortSchema->ToString());
     Y_ABORT_UNLESS(point.IsReverseSort() == Reverse);
     Y_ABORT_UNLESS(++ControlPoints == 1);
 
-    SortHeap.Push(TBatchIterator(point.BuildRWPosition()));
+    SortHeap.Push(TBatchIterator(point.BuildRWPosition(false, deepCopy)));
 }
 
 void TMergePartialStream::RemoveControlPoint() {
@@ -65,7 +65,7 @@ bool TMergePartialStream::DrainToControlPoint(TRecordBatchBuilder& builder, cons
 }
 
 bool TMergePartialStream::DrainCurrentTo(TRecordBatchBuilder& builder, const TSortableBatchPosition& readTo, const bool includeFinish, std::optional<TCursor>* lastResultPosition) {
-    PutControlPoint(readTo);
+    PutControlPoint(readTo, false);
     return DrainToControlPoint(builder, includeFinish, lastResultPosition);
 }
 
@@ -185,13 +185,16 @@ void TMergePartialStream::DrainCurrentPosition(TRecordBatchBuilder* builder, std
     SortHeap.CleanFinished();
 }
 
-std::vector<std::shared_ptr<arrow::RecordBatch>> TMergePartialStream::DrainAllParts(const std::map<TSortableBatchPosition, bool>& positions,
+std::vector<std::shared_ptr<arrow::RecordBatch>> TMergePartialStream::DrainAllParts(const TIntervalPositions& positions,
     const std::vector<std::shared_ptr<arrow::Field>>& resultFields)
 {
     std::vector<std::shared_ptr<arrow::RecordBatch>> result;
     for (auto&& i : positions) {
         TRecordBatchBuilder indexesBuilder(resultFields);
-        DrainCurrentTo(indexesBuilder, i.first, i.second);
+        if (SortHeap.Empty() || i.GetPosition().Compare(SortHeap.Current().GetKeyColumns()) == std::partial_ordering::less) {
+            continue;
+        }
+        DrainCurrentTo(indexesBuilder, i.GetPosition(), i.IsIncludedToLeftInterval());
         result.emplace_back(indexesBuilder.Finalize());
         if (result.back()->num_rows() == 0) {
             result.pop_back();

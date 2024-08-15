@@ -19,6 +19,7 @@ NO_COMPILER_WARNINGS()
 SRCS(
     internal/cycleclock.cc
     internal/low_level_alloc.cc
+    internal/poison.cc
     internal/raw_logging.cc
     internal/scoped_set_env.cc
     internal/spinlock.cc

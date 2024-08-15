@@ -10,9 +10,12 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/s3/credentials/credentials.h>
 #include <ydb/library/yql/providers/s3/object_listers/yql_s3_list.h>
+#include <ydb/library/yql/providers/s3/object_listers/yql_s3_path.h>
 #include <ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h>
+#include <ydb/library/yql/providers/s3/proto/credentials.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 
@@ -284,12 +287,13 @@ struct TObjectStorageExternalSource : public IExternalSource {
             return NThreading::MakeFuture(std::move(meta));
         }
 
-        NYql::TS3Credentials::TAuthInfo authInfo{};
+        NYql::TStructuredTokenBuilder structuredTokenBuilder;
         if (std::holds_alternative<NAuth::TAws>(meta->Auth)) {
             auto& awsAuth = std::get<NAuth::TAws>(meta->Auth);
-            authInfo.AwsAccessKey = awsAuth.AccessKey;
-            authInfo.AwsAccessSecret = awsAuth.SecretAccessKey;
-            authInfo.AwsRegion = awsAuth.Region;
+            NYql::NS3::TAwsParams params;
+            params.SetAwsAccessKey(awsAuth.AccessKey);
+            params.SetAwsRegion(awsAuth.Region);
+            structuredTokenBuilder.SetBasicAuth(params.SerializeAsString(), awsAuth.SecretAccessKey);
         } else if (std::holds_alternative<NAuth::TServiceAccount>(meta->Auth)) {
             if (!CredentialsFactory) {
                 try {
@@ -299,18 +303,25 @@ struct TObjectStorageExternalSource : public IExternalSource {
                 }
             }
             auto& saAuth = std::get<NAuth::TServiceAccount>(meta->Auth);
-            NYql::GetAuthInfo(CredentialsFactory, "");
-            authInfo.Token = CredentialsFactory->Create(saAuth.ServiceAccountId, saAuth.ServiceAccountIdSignature)->CreateProvider()->GetAuthInfo();
+            structuredTokenBuilder.SetServiceAccountIdAuth(saAuth.ServiceAccountId, saAuth.ServiceAccountIdSignature);
+        } else {
+            structuredTokenBuilder.SetNoAuth();
         }
 
+        auto effectiveFilePattern = NYql::NS3::NormalizePath(meta->TableLocation);
+        if (meta->TableLocation.EndsWith('/')) {
+            effectiveFilePattern += '*';
+        } 
+
+        const NYql::TS3Credentials credentials(CredentialsFactory, structuredTokenBuilder.ToJson());
         auto httpGateway = NYql::IHTTPGateway::Make();
         auto httpRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.RetriedCurlCodes = NYql::FqRetriedCurlCodes()});
         auto s3Lister = NYql::NS3Lister::MakeS3Lister(httpGateway, httpRetryPolicy, NYql::NS3Lister::TListingRequest{
             .Url = meta->DataSourceLocation,
-            .AuthInfo = authInfo,
-            .Pattern = meta->TableLocation,
+            .Credentials = credentials,
+            .Pattern = effectiveFilePattern,
         }, Nothing(), false);
-        auto afterListing = s3Lister->Next().Apply([path = meta->TableLocation](const NThreading::TFuture<NYql::NS3Lister::TListResult>& listResFut) {
+        auto afterListing = s3Lister->Next().Apply([path = effectiveFilePattern](const NThreading::TFuture<NYql::NS3Lister::TListResult>& listResFut) {
             auto& listRes = listResFut.GetValue();
             if (std::holds_alternative<NYql::NS3Lister::TListError>(listRes)) {
                 auto& error = std::get<NYql::NS3Lister::TListError>(listRes);
@@ -332,25 +343,29 @@ struct TObjectStorageExternalSource : public IExternalSource {
             meta->DataSourceLocation,
             httpGateway,
             NYql::IHTTPGateway::TRetryPolicy::GetNoRetryPolicy(),
-            std::move(authInfo)
+            credentials
         ));
 
         meta->Attributes.erase("withinfer");
 
         auto fileFormat = NObjectStorage::NInference::ConvertFileFormat(*format);
-        auto arrowFetcherId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowFetchingActor(s3FetcherId, fileFormat));
+        auto arrowFetcherId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowFetchingActor(s3FetcherId, fileFormat, meta->Attributes));
         auto arrowInferencinatorId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowInferencinator(arrowFetcherId, fileFormat, meta->Attributes));
 
         return afterListing.Apply([arrowInferencinatorId, meta, actorSystem = ActorSystem](const NThreading::TFuture<TString>& pathFut) {
             auto promise = NThreading::NewPromise<TMetadataResult>();
             auto schemaToMetadata = [meta](NThreading::TPromise<TMetadataResult> metaPromise, NObjectStorage::TEvInferredFileSchema&& response) {
+                if (!response.Status.IsSuccess()) {
+                    metaPromise.SetValue(NYql::NCommon::ResultFromError<TMetadataResult>(response.Status.GetIssues()));
+                    return;
+                }
+                TMetadataResult result;
                 meta->Changed = true;
                 meta->Schema.clear_column();
                 for (const auto& column : response.Fields) {
                     auto& destColumn = *meta->Schema.add_column();
                     destColumn = column;
                 }
-                TMetadataResult result;
                 result.SetSuccess();
                 result.Metadata = meta;
                 metaPromise.SetValue(std::move(result));

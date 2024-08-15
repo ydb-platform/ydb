@@ -1016,14 +1016,14 @@ Y_UNIT_TEST_TWIN(JoinWithComplexCondition, StreamLookupJoin) {
     TVector<NKikimrKqp::TKqpSetting> settings;
 
     NKikimrKqp::TKqpSetting setting;
-    setting.SetName("OverrideStatistics");
+    setting.SetName("OptOverrideStatistics");
     setting.SetValue(stats);
     settings.push_back(setting);
 
     TKikimrSettings serverSettings = TKikimrSettings().SetAppConfig(appConfig);;
     serverSettings.SetKqpSettings(settings);
 
-    TKikimrRunner kikimr(settings);
+    TKikimrRunner kikimr(serverSettings);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1179,6 +1179,68 @@ Y_UNIT_TEST_TWIN(JoinWithComplexCondition, StreamLookupJoin) {
                 UNIT_ASSERT_VALUES_EQUAL(tableStats.reads().rows(), 1);
             }
         }
+    }
+}
+
+Y_UNIT_TEST_TWIN(LeftSemiJoinWithDuplicatesInRightTable, StreamLookupJoin) {
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
+    auto settings = TKikimrSettings().SetAppConfig(appConfig);
+    TKikimrRunner kikimr(settings);
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    {  // create tables
+        const TString query = R"(
+            CREATE TABLE `/Root/Left` (
+                Key1 Int64,
+                Key2 Int64,
+                Value String,
+                PRIMARY KEY (Key1, Key2)
+            );
+
+            CREATE TABLE `/Root/Right` (
+                Key1 Int64,
+                Key2 Int64,
+                Value String,
+                PRIMARY KEY (Key1, Key2)
+            );
+        )";
+        UNIT_ASSERT(session.ExecuteSchemeQuery(query).GetValueSync().IsSuccess());
+    }
+
+    {  // fill tables
+        const TString query = R"(
+            REPLACE INTO `/Root/Left` (Key1, Key2, Value) VALUES
+                (1, 10, "value1"),
+                (2, 20, "value2"),
+                (3, 30, "value3");
+        
+            REPLACE INTO `/Root/Right` (Key1, Key2, Value) VALUES
+                (10, 100, "value1"),
+                (10, 101, "value1"),
+                (10, 102, "value1"),
+                (20, 200, "value2"),
+                (20, 201, "value2"),
+                (30, 300, "value3");
+        )";
+        UNIT_ASSERT(session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync().IsSuccess());
+    }
+
+    {
+        const TString query = R"(
+            SELECT l.Key1, l.Key2, l.Value
+            FROM `/Root/Left` AS l
+            LEFT SEMI JOIN `/Root/Right` AS r
+                ON l.Key2 = r.Key1 ORDER BY l.Key1, l.Key2, l.Value
+        )";
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        CompareYson(R"([
+            [[1];[10];["value1"]];
+            [[2];[20];["value2"]];
+            [[3];[30];["value3"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 }
 

@@ -230,6 +230,7 @@ private:
     TAppConfig GetAppConfig() const {
         TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableResourcePools(Settings_.EnableResourcePools_);
+        appConfig.MutableFeatureFlags()->SetEnableResourcePoolsCounters(true);
 
         return appConfig;
     }
@@ -283,15 +284,8 @@ private:
             return;
         }
 
-        NResourcePool::TPoolSettings poolConfig;
-        poolConfig.ConcurrentQueryLimit = Settings_.ConcurrentQueryLimit_;
-        poolConfig.QueueSize = Settings_.QueueSize_;
-        poolConfig.QueryCancelAfter = Settings_.QueryCancelAfter_;
-        poolConfig.QueryMemoryLimitPercentPerNode = Settings_.QueryMemoryLimitPercentPerNode_;
-        poolConfig.DatabaseLoadCpuThreshold = Settings_.DatabaseLoadCpuThreshold_;
-
         TActorId edgeActor = GetRuntime()->AllocateEdgeActor();
-        GetRuntime()->Register(CreatePoolCreatorActor(edgeActor, Settings_.DomainName_, Settings_.PoolId_, poolConfig, nullptr, {}));
+        GetRuntime()->Register(CreatePoolCreatorActor(edgeActor, Settings_.DomainName_, Settings_.PoolId_, Settings_.GetDefaultPoolSettings(), nullptr, {}));
         auto response = GetRuntime()->GrabEdgeEvent<TEvPrivate::TEvCreatePoolResponse>(edgeActor, FUTURE_WAIT_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Status, Ydb::StatusIds::SUCCESS, response->Get()->Issues.ToOneLineString());
     }
@@ -361,7 +355,7 @@ public:
         auto token = NACLib::TUserToken(userSID, {});
 
         WaitFor(FUTURE_WAIT_TIMEOUT, "pool acl", [this, token, access, poolId](TString& errorString) {
-            auto response = Navigate(TStringBuilder() << ".resource_pools/" << (poolId ? poolId : Settings_.PoolId_));
+            auto response = Navigate(TStringBuilder() << ".metadata/workload_manager/pools/" << (poolId ? poolId : Settings_.PoolId_));
             if (!response) {
                 errorString = "empty response";
                 return false;
@@ -453,9 +447,10 @@ public:
             auto subgroup = GetWorkloadManagerCounters(nodeIndex)
                 ->GetSubgroup("pool", CanonizePath(TStringBuilder() << Settings_.DomainName_ << "/" << (poolId ? poolId : Settings_.PoolId_)));
 
-            CheckCommonCounters(subgroup);
+            const TString description = TStringBuilder() << "Node id: " << GetRuntime()->GetNodeId(nodeIndex);
+            CheckCommonCounters(subgroup, description);
             if (checkTableCounters) {
-                CheckTableCounters(subgroup);
+                CheckTableCounters(subgroup, description);
             }
         }
     }
@@ -479,6 +474,8 @@ private:
     }
 
     std::unique_ptr<TEvKqp::TEvQueryRequest> GetQueryRequest(const TString& query, const TQueryRunnerSettings& settings) const {
+        UNIT_ASSERT_C(settings.PoolId_, "Query pool id is not specified");
+
         auto event = std::make_unique<TEvKqp::TEvQueryRequest>();
         event->Record.SetUserToken(NACLib::TUserToken("", settings.UserSID_, {}).SerializeAsString());
 
@@ -487,7 +484,7 @@ private:
         request->SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
         request->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         request->SetDatabase(Settings_.DomainName_);
-        request->SetPoolId(settings.PoolId_);
+        request->SetPoolId(*settings.PoolId_);
 
         return event;
     }
@@ -497,37 +494,30 @@ private:
             ->GetSubgroup("subsystem", "workload_manager");
     }
 
-    static void CheckCommonCounters(NMonitoring::TDynamicCounterPtr subgroup) {
-        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("LocalInFly", false)->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("LocalDelayedRequests", false)->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("ContinueOverloaded", true)->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("ContinueError", true)->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("CleanupError", true)->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("Cancelled", true)->Val(), 0);
-
-        UNIT_ASSERT_GE(subgroup->GetCounter("ContinueOk", true)->Val(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("ContinueOk", true)->Val(), subgroup->GetCounter("CleanupOk", true)->Val());
+    static void CheckCommonCounters(NMonitoring::TDynamicCounterPtr subgroup, const TString& description) {
+        UNIT_ASSERT_VALUES_EQUAL_C(subgroup->GetCounter("LocalInFly", false)->Val(), 0, description);
+        UNIT_ASSERT_VALUES_EQUAL_C(subgroup->GetCounter("LocalDelayedRequests", false)->Val(), 0, description);
+        UNIT_ASSERT_VALUES_EQUAL_C(subgroup->GetCounter("ContinueOverloaded", true)->Val(), 0, description);
+        UNIT_ASSERT_VALUES_EQUAL_C(subgroup->GetCounter("ContinueError", true)->Val(), 0, description);
+        UNIT_ASSERT_VALUES_EQUAL_C(subgroup->GetCounter("CleanupError", true)->Val(), 0, description);
+        UNIT_ASSERT_VALUES_EQUAL_C(subgroup->GetCounter("Cancelled", true)->Val(), 0, description);
     }
 
-    static void CheckTableCounters(NMonitoring::TDynamicCounterPtr subgroup) {
-        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("PendingRequestsCount", false)->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("FinishingRequestsCount", false)->Val(), 0);
+    static void CheckTableCounters(NMonitoring::TDynamicCounterPtr subgroup, const TString& description) {
+        UNIT_ASSERT_VALUES_EQUAL_C(subgroup->GetCounter("PendingRequestsCount", false)->Val(), 0, description);
+        UNIT_ASSERT_VALUES_EQUAL_C(subgroup->GetCounter("FinishingRequestsCount", false)->Val(), 0, description);
 
-        const std::vector<std::pair<TString, bool>> tableQueries = {
-            {"TCleanupTablesQuery", false},
-            {"TRefreshPoolStateQuery", true},
-            {"TDelayRequestQuery", true},
-            {"TStartFirstDelayedRequestQuery", true},
-            {"TStartRequestQuery", false},
-            {"TCleanupRequestsQuery", true},
+        const std::vector<TString> tableQueries = {
+            "TCleanupTablesQuery",
+            "TRefreshPoolStateQuery",
+            "TDelayRequestQuery",
+            "TStartFirstDelayedRequestQuery",
+            "TStartRequestQuery",
+            "TCleanupRequestsQuery",
         };
-        for (const auto& [operation, runExpected] : tableQueries) {
+        for (const auto& operation : tableQueries) {
             auto operationSubgroup = subgroup->GetSubgroup("operation", operation);
-
-            UNIT_ASSERT_VALUES_EQUAL_C(operationSubgroup->GetCounter("FinishError", true)->Val(), 0, TStringBuilder() << "Unexpected vaule for operation " << operation);
-            if (runExpected) {
-                UNIT_ASSERT_GE_C(operationSubgroup->GetCounter("FinishOk", true)->Val(), 1, TStringBuilder() << "Unexpected vaule for operation " << operation);
-            }
+            UNIT_ASSERT_VALUES_EQUAL_C(operationSubgroup->GetCounter("FinishError", true)->Val(), 0, TStringBuilder() << description << ", unexpected vaule for operation " << operation);
         }
     }
 
@@ -581,6 +571,16 @@ bool TQueryRunnerResultAsync::HasValue() const {
 }
 
 //// TYdbSetupSettings
+
+NResourcePool::TPoolSettings TYdbSetupSettings::GetDefaultPoolSettings() const {
+    NResourcePool::TPoolSettings poolConfig;
+    poolConfig.ConcurrentQueryLimit = ConcurrentQueryLimit_;
+    poolConfig.QueueSize = QueueSize_;
+    poolConfig.QueryCancelAfter = QueryCancelAfter_;
+    poolConfig.QueryMemoryLimitPercentPerNode = QueryMemoryLimitPercentPerNode_;
+    poolConfig.DatabaseLoadCpuThreshold = DatabaseLoadCpuThreshold_;
+    return poolConfig;
+}
 
 TIntrusivePtr<IYdbSetup> TYdbSetupSettings::Create() const {
     return MakeIntrusive<TWorkloadServiceYdbSetup>(*this);

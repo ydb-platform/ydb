@@ -25,6 +25,7 @@ PEERDIR(
     ydb/services/kesus
     ydb/services/persqueue_cluster_discovery
     ydb/services/ydb
+    ydb/services/ymq
 )
 
 SRCS(

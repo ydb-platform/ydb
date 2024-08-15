@@ -140,28 +140,22 @@ public:
         return ERequestType::CollectGarbage;
     }
 
-    TBlobStorageGroupCollectGarbageRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-            const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
-            const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvCollectGarbage *ev, ui64 cookie,
-            NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
-        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
-                NKikimrServices::BS_PROXY_COLLECT, false, {}, now, storagePoolCounters, ev->RestartCounter,
-                std::move(traceId), "DSProxy.CollectGarbage", ev, std::move(ev->ExecutionRelay),
-                NKikimrServices::TActivity::BS_GROUP_COLLECT_GARBAGE)
-        , TabletId(ev->TabletId)
-        , RecordGeneration(ev->RecordGeneration)
-        , PerGenerationCounter(ev->PerGenerationCounter)
-        , Channel(ev->Channel)
-        , Deadline(ev->Deadline)
-        , Keep(ev->Keep.Release())
-        , DoNotKeep(ev->DoNotKeep.Release())
-        , CollectGeneration(ev->CollectGeneration)
-        , CollectStep(ev->CollectStep)
-        , Hard(ev->Hard)
-        , Collect(ev->Collect)
-        , Decommission(ev->Decommission)
+    TBlobStorageGroupCollectGarbageRequest(TBlobStorageGroupCollectGarbageParameters& params)
+        : TBlobStorageGroupRequestActor(params)
+        , TabletId(params.Common.Event->TabletId)
+        , RecordGeneration(params.Common.Event->RecordGeneration)
+        , PerGenerationCounter(params.Common.Event->PerGenerationCounter)
+        , Channel(params.Common.Event->Channel)
+        , Deadline(params.Common.Event->Deadline)
+        , Keep(params.Common.Event->Keep.Release())
+        , DoNotKeep(params.Common.Event->DoNotKeep.Release())
+        , CollectGeneration(params.Common.Event->CollectGeneration)
+        , CollectStep(params.Common.Event->CollectStep)
+        , Hard(params.Common.Event->Hard)
+        , Collect(params.Common.Event->Collect)
+        , Decommission(params.Common.Event->Decommission)
         , QuorumTracker(Info.Get())
-        , StartTime(now)
+        , StartTime(params.Common.Now)
     {}
 
     void Bootstrap() override {
@@ -205,12 +199,8 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupCollectGarbageRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-        const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
-        const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvCollectGarbage *ev,
-        ui64 cookie, NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
-    return new TBlobStorageGroupCollectGarbageRequest(info, state, source, mon, ev, cookie, std::move(traceId), now,
-        storagePoolCounters);
+IActor* CreateBlobStorageGroupCollectGarbageRequest(TBlobStorageGroupCollectGarbageParameters params) {
+    return new TBlobStorageGroupCollectGarbageRequest(params);
 }
 
 } // NKikimr

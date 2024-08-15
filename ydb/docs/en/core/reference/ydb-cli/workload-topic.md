@@ -29,10 +29,10 @@ Subcommand options:
 
 | Option name | Option description |
 ---|---
-| `--topic` | Topic name.<br>Default value: `workload-topic`. |
-| `--partitions`, `-p` | Number of topic partitions.<br>Default value: `128`. |
-| `--consumers`, `-c` | Number of topic consumers.<br>Default value: `1`. |
-| `--consumer-prefix` | Consumer name prefix.<br/>Default value: `workload-consumer`.<br>For example, if the number of consumers `--consumers` is `2` and the prefix `--consumer-prefix` is `workload-consumer`, then the following consumer names will be used: `workload-consumer-0`, `workload-consumer-1`. |
+| `--topic` | Topic name.<br/>Default value: `workload-topic`. |
+| `--partitions`, `-p` | Number of topic partitions.<br/>Default value: `128`. |
+| `--consumers`, `-c` | Number of topic consumers.<br/>Default value: `1`. |
+| `--consumer-prefix` | Consumer name prefix.<br/>Default value: `workload-consumer`.<br/>For example, if the number of consumers `--consumers` is `2` and the prefix `--consumer-prefix` is `workload-consumer`, then the following consumer names will be used: `workload-consumer-0`, `workload-consumer-1`. |
 
 > To create a topic with `256` partitions and `2` consumers, run this command:
 >
@@ -63,18 +63,18 @@ Subcommand options:
 
 | Option name | Option description |
 ---|---
-| `--seconds`, `-s` | Test duration in seconds.<br>Default value: `60`. |
-| `--window`, `-w` | Statistics window in seconds.<br>Default value: `1`. |
+| `--seconds`, `-s` | Test duration in seconds.<br/>Default value: `60`. |
+| `--window`, `-w` | Statistics window in seconds.<br/>Default value: `1`. |
 | `--quiet`, `-q` | Output only the final test result. |
 | `--print-timestamp` | Print the time together with the statistics of each time window. |
-| `--warmup` | Test warm-up period (in seconds).<br>Within the period, no statistics are calculated. It's needed to eliminate the effect of transition processes at startup.<br>Default value: `5`. |
-| `--percentile` | Percentile that is output in statistics.<br>Default value: `50`. |
-| `--topic` | Topic name.<br>Default value: `workload-topic`. |
-| `--threads`, `-t` | Number of producer threads.<br>Default value: `1`. |
-| `--message-size`, `-m` | Message size in bytes. Use the `K`, `M`, or `G` suffix to set the size in KB, MB, or GB, respectively.<br>Default value: `10K`. |
-| `--message-rate` | Total target write rate in messages per second. Can't be used together with the `--byte-rate` option.<br>Default value: `0` (no limit). |
-| `--byte-rate` | Total target write rate in bytes per second. Can't be used together with the `--message-rate` option. Use the `K`, `M`, or `G` suffix to set the rate in KB/s, MB/s, or GB/s, respectively.<br>Default value: `0` (no limit). |
-| `--codec` | Codec used to compress messages on the client before sending them to the server.<br>Compression increases CPU usage on the client when reading and writing messages, but usually enables you to reduce the amounts of data stored and transmitted over the network. When consumers read messages, they decompress them by the codec that was used to write the messages, with no special options needed.<br>Acceptable values: `RAW` - no compression (default), `GZIP`, `ZSTD`. |
+| `--warmup` | Test warm-up period (in seconds).<br/>Within the period, no statistics are calculated. It's needed to eliminate the effect of transition processes at startup.<br/>Default value: `5`. |
+| `--percentile` | Percentile that is output in statistics.<br/>Default value: `50`. |
+| `--topic` | Topic name.<br/>Default value: `workload-topic`. |
+| `--threads`, `-t` | Number of producer threads.<br/>Default value: `1`. |
+| `--message-size`, `-m` | Message size in bytes. Use the `K`, `M`, or `G` suffix to set the size in KB, MB, or GB, respectively.<br/>Default value: `10K`. |
+| `--message-rate` | Total target write rate in messages per second. Can't be used together with the `--byte-rate` option.<br/>Default value: `0` (no limit). |
+| `--byte-rate` | Total target write rate in bytes per second. Can't be used together with the `--message-rate` option. Use the `K`, `M`, or `G` suffix to set the rate in KB/s, MB/s, or GB/s, respectively.<br/>Default value: `0` (no limit). |
+| `--codec` | Codec used to compress messages on the client before sending them to the server.<br/>Compression increases CPU usage on the client when reading and writing messages, but usually enables you to reduce the amounts of data stored and transmitted over the network. When consumers read messages, they decompress them by the codec that was used to write the messages, with no special options needed.<br/>Acceptable values: `RAW` - no compression (default), `GZIP`, `ZSTD`. |
 
 > To write data to `100` producer threads at the target rate of `80` MB/s for `10` seconds, run this command:
 >
@@ -130,16 +130,16 @@ Subcommand options:
 
 | Option name | Option description |
 ---|---
-| `--seconds`, `-s` | Test duration in seconds.<br>Default value: `60`. |
-| `--window`, `-w` | Statistics window in seconds.<br>Default value: `1`. |
+| `--seconds`, `-s` | Test duration in seconds.<br/>Default value: `60`. |
+| `--window`, `-w` | Statistics window in seconds.<br/>Default value: `1`. |
 | `--quiet`, `-q` | Output only the final test result. |
 | `--print-timestamp` | Print the time together with the statistics of each time window. |
-| `--warmup` | Test warm-up period (in seconds).<br>Within the period, no statistics are calculated. It's needed to eliminate the effect of transition processes at startup.<br>Default value: `5`. |
-| `--percentile` | Percentile that is output in statistics.<br>Default value: `50`. |
-| `--topic` | Topic name.<br>Default value: `workload-topic`. |
-| `--consumers`, `-c` | Number of consumers.<br>Default value: `1`. |
-| `--consumer-prefix` | Consumer name prefix.<br/>Default value: `workload-consumer`.<br>For example, if the number of consumers `--consumers` is `2` and the prefix `--consumer-prefix` is `workload-consumer`, then the following consumer names will be used: `workload-consumer-0`, `workload-consumer-1`. |
-| `--threads`, `-t` | Number of consumer threads.<br>Default value: `1`. |
+| `--warmup` | Test warm-up period (in seconds).<br/>Within the period, no statistics are calculated. It's needed to eliminate the effect of transition processes at startup.<br/>Default value: `5`. |
+| `--percentile` | Percentile that is output in statistics.<br/>Default value: `50`. |
+| `--topic` | Topic name.<br/>Default value: `workload-topic`. |
+| `--consumers`, `-c` | Number of consumers.<br/>Default value: `1`. |
+| `--consumer-prefix` | Consumer name prefix.<br/>Default value: `workload-consumer`.<br/>For example, if the number of consumers `--consumers` is `2` and the prefix `--consumer-prefix` is `workload-consumer`, then the following consumer names will be used: `workload-consumer-0`, `workload-consumer-1`. |
+| `--threads`, `-t` | Number of consumer threads.<br/>Default value: `1`. |
 
 > To use `2` consumers to read data from the topic, with `100` threads per consumer, run the following command:
 >
@@ -196,21 +196,21 @@ Subcommand options:
 
 | Option name | Option description |
 ---|---
-| `--seconds`, `-s` | Test duration in seconds.<br>Default value: `60`. |
-| `--window`, `-w` | Statistics window in seconds.<br>Default value: `1`. |
+| `--seconds`, `-s` | Test duration in seconds.<br/>Default value: `60`. |
+| `--window`, `-w` | Statistics window in seconds.<br/>Default value: `1`. |
 | `--quiet`, `-q` | Output only the final test result. |
 | `--print-timestamp` | Print the time together with the statistics of each time window. |
-| `--warmup` | Test warm-up period (in seconds).<br>Within the period, no statistics are calculated. It's needed to eliminate the effect of transition processes at startup.<br>Default value: `5`. |
-| `--percentile` | Percentile that is output in statistics.<br>Default value: `50`. |
-| `--topic` | Topic name.<br>Default value: `workload-topic`. |
-| `--producer-threads`, `-p` | Number of producer threads.<br>Default value: `1`. |
-| `--message-size`, `-m` | Message size in bytes. Use the `K`, `M`, or `G` suffix to set the size in KB, MB, or GB, respectively.<br>Default value: `10K`. |
-| `--message-rate` | Total target write rate in messages per second. Can't be used together with the `--message-rate` option.<br>Default value: `0` (no limit). |
-| `--byte-rate` | Total target write rate in bytes per second. Can't be used together with the `--byte-rate` option. Use the `K`, `M`, or `G` suffix to set the rate in KB/s, MB/s, or GB/s, respectively.<br>Default value: `0` (no limit). |
-| `--codec` | Codec used to compress messages on the client before sending them to the server.<br>Compression increases CPU usage on the client when reading and writing messages, but usually enables you to reduce the amounts of data stored and transmitted over the network. When consumers read messages, they decompress them by the codec that was used to write the messages, with no special options needed.<br>Acceptable values: `RAW` - no compression (default), `GZIP`, `ZSTD`. |
-| `--consumers`, `-c` | Number of consumers.<br>Default value: `1`. |
-| `--consumer-prefix` | Consumer name prefix.<br/>Default value: `workload-consumer`.<br>For example, if the number of consumers `--consumers` is `2` and the prefix `--consumer-prefix` is `workload-consumer`, then the following consumer names will be used: `workload-consumer-0`, `workload-consumer-1`. |
-| `--threads`, `-t` | Number of consumer threads.<br>Default value: `1`. |
+| `--warmup` | Test warm-up period (in seconds).<br/>Within the period, no statistics are calculated. It's needed to eliminate the effect of transition processes at startup.<br/>Default value: `5`. |
+| `--percentile` | Percentile that is output in statistics.<br/>Default value: `50`. |
+| `--topic` | Topic name.<br/>Default value: `workload-topic`. |
+| `--producer-threads`, `-p` | Number of producer threads.<br/>Default value: `1`. |
+| `--message-size`, `-m` | Message size in bytes. Use the `K`, `M`, or `G` suffix to set the size in KB, MB, or GB, respectively.<br/>Default value: `10K`. |
+| `--message-rate` | Total target write rate in messages per second. Can't be used together with the `--message-rate` option.<br/>Default value: `0` (no limit). |
+| `--byte-rate` | Total target write rate in bytes per second. Can't be used together with the `--byte-rate` option. Use the `K`, `M`, or `G` suffix to set the rate in KB/s, MB/s, or GB/s, respectively.<br/>Default value: `0` (no limit). |
+| `--codec` | Codec used to compress messages on the client before sending them to the server.<br/>Compression increases CPU usage on the client when reading and writing messages, but usually enables you to reduce the amounts of data stored and transmitted over the network. When consumers read messages, they decompress them by the codec that was used to write the messages, with no special options needed.<br/>Acceptable values: `RAW` - no compression (default), `GZIP`, `ZSTD`. |
+| `--consumers`, `-c` | Number of consumers.<br/>Default value: `1`. |
+| `--consumer-prefix` | Consumer name prefix.<br/>Default value: `workload-consumer`.<br/>For example, if the number of consumers `--consumers` is `2` and the prefix `--consumer-prefix` is `workload-consumer`, then the following consumer names will be used: `workload-consumer-0`, `workload-consumer-1`. |
+| `--threads`, `-t` | Number of consumer threads.<br/>Default value: `1`. |
 
 > Example of a command that reads `50` threads by `2` consumers and writes data to `100` producer threads at the target rate of `80` MB/s and duration of `10` seconds:
 >
@@ -262,7 +262,7 @@ Subcommand options:
 
 | Option name | Option description |
 ---|---
-| `--topic` | Topic name.<br>Default value: `workload-topic`. |
+| `--topic` | Topic name.<br/>Default value: `workload-topic`. |
 
 > To delete the `workload-topic` test topic, run the following command:
 >

@@ -49,6 +49,20 @@ class Settings:
     mysql: MySQL
 
     @dataclass
+    class Oracle:
+        dbname: str
+        cluster_name: str
+        service_name: str
+        username: str
+        password: Optional[str]  # TODO: why optional?
+        host_external: str
+        host_internal: str
+        port_external: int
+        port_internal: int
+
+    oracle: Oracle
+
+    @dataclass
     class PostgreSQL:
         dbname: str
         cluster_name: str
@@ -112,6 +126,21 @@ class Settings:
                         username='root',
                         password='password',
                     )
+                case EDataSourceKind.ORACLE:
+                    data_sources[data_source_kind] = cls.Oracle(
+                        cluster_name='oracle_integration_test',
+                        host_external='0.0.0.0',
+                        # This hack is due to YQ-3003.
+                        # Previously we used container names instead of container ips:
+                        # host_internal=docker_compose_file['services']['mysql']['container_name'],
+                        host_internal=endpoint_determiner.get_internal_ip('oracle'),
+                        port_external=endpoint_determiner.get_external_port('oracle', 1521),
+                        port_internal=1521,
+                        dbname='db',
+                        username='C##ADMIN',  # user that is created in oracle init. Maybe change to SYSTEM
+                        password='password',
+                        service_name="FREE",
+                    )
                 case EDataSourceKind.POSTGRESQL:
                     data_sources[data_source_kind] = cls.PostgreSQL(
                         cluster_name='postgresql_integration_test',
@@ -147,6 +176,7 @@ class Settings:
                 paging_prefetch_queue_capacity=2,
             ),
             mysql=data_sources.get(EDataSourceKind.MYSQL),
+            oracle=data_sources.get(EDataSourceKind.ORACLE),
             postgresql=data_sources.get(EDataSourceKind.POSTGRESQL),
             ydb=data_sources.get(EDataSourceKind.YDB),
         )
@@ -157,6 +187,8 @@ class Settings:
                 return self.clickhouse.cluster_name
             case EDataSourceKind.MYSQL:
                 return self.mysql.cluster_name
+            case EDataSourceKind.ORACLE:
+                return self.oracle.cluster_name
             case EDataSourceKind.POSTGRESQL:
                 return self.postgresql.cluster_name
             case EDataSourceKind.YDB:
@@ -187,6 +219,16 @@ class GenericSettings:
         database: str
 
     mysql_clusters: Sequence[MySQLCluster] = field(default_factory=list)
+
+    @dataclass
+    class OracleCluster:
+        def __hash__(self) -> int:
+            return hash(self.database) + hash(self.service_name)
+
+        database: str
+        service_name: str
+
+    oracle_clusters: Sequence[OracleCluster] = field(default_factory=list)
 
     @dataclass
     class PostgreSQLCluster:

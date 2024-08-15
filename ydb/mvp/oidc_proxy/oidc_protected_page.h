@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/generic/algorithm.h>
 #include <util/generic/hash_set.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/actor.h>
@@ -22,9 +23,8 @@
 namespace NMVP {
 
 class THandlerSessionServiceCheck : public NActors::TActorBootstrapped<THandlerSessionServiceCheck> {
-private:
+protected:
     using TBase = NActors::TActorBootstrapped<THandlerSessionServiceCheck>;
-    using TSessionService = yandex::cloud::priv::oauth::v1::SessionService;
 
     const NActors::TActorId Sender;
     const NHttp::THttpIncomingRequestPtr Request;
@@ -32,10 +32,11 @@ private:
     const TOpenIdConnectSettings Settings;
     TString ProtectedPageUrl;
     TString RequestedPageScheme;
-    bool  IsAjaxRequest = false;
+    bool IsAjaxRequest = false;
 
     const static inline TStringBuf NOT_FOUND_HTML_PAGE = "<html><head><title>404 Not Found</title></head><body bgcolor=\"white\"><center><h1>404 Not Found</h1></center></body></html>";
     const static inline TStringBuf IAM_TOKEN_SCHEME = "Bearer ";
+    const static inline TStringBuf IAM_TOKEN_SCHEME_LOWER = "bearer ";
     const static inline TStringBuf AUTH_HEADER_NAME = "Authorization";
 
 public:
@@ -50,55 +51,34 @@ public:
         , ProtectedPageUrl(Request->URL.SubStr(1))
         {}
 
-    void Bootstrap(const NActors::TActorContext& ctx) {
+
+    virtual void Bootstrap(const NActors::TActorContext& ctx) {
         if (!CheckRequestedHost()) {
             ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponseNotFound(NOT_FOUND_HTML_PAGE, "text/html")));
             Die(ctx);
             return;
         }
         NHttp::THeaders headers(Request->Headers);
+        IsAjaxRequest = DetectAjaxRequest(headers);
         TStringBuf authHeader = headers.Get(AUTH_HEADER_NAME);
         if (Request->Method == "OPTIONS" || IsAuthorizedRequest(authHeader)) {
-            LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "Forward request bypass OIDC");
-            ForwardRequest(TString(authHeader), ctx);
+            ForwardUserRequest(TString(authHeader), ctx);
         } else {
-            LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "Start OIDC process");
-            StartOidcProcess(headers, ctx);
+            StartOidcProcess(ctx);
         }
-
-        Become(&THandlerSessionServiceCheck::StateWork);
     }
 
-    void Handle(TEvPrivate::TEvCheckSessionResponse::TPtr event, const NActors::TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, EService::MVP, "SessionService.Check(): OK");
-        auto response = event->Get()->Response;
-        const auto& iamToken = response.Getiam_token();
-        const TString authHeader = IAM_TOKEN_SCHEME + iamToken.Getiam_token();
-        ForwardRequest(authHeader, ctx);
-    }
-
-    void Handle(TEvPrivate::TEvErrorResponse::TPtr event, const NActors::TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "SessionService.Check(): " << event->Get()->Status);
-        NHttp::THttpOutgoingResponsePtr httpResponse;
-        if (event->Get()->Status == "400") {
-            httpResponse = GetHttpOutgoingResponsePtr(event->Get()->Details, Request, Settings, IsAjaxRequest);
-        } else {
-            httpResponse = Request->CreateResponse( event->Get()->Status, event->Get()->Message, "text/plain", event->Get()->Details);
-        }
-        ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
-        Die(ctx);
-    }
-
-    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
+    void HandleProxy(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
         NHttp::THttpOutgoingResponsePtr httpResponse;
         if (event->Get()->Response != nullptr) {
             NHttp::THttpIncomingResponsePtr response = event->Get()->Response;
-            if (response->Status == "400" && RequestedPageScheme.empty()) {
+            LOG_DEBUG_S(ctx, EService::MVP, "Incoming response for protected resource: " << response->Status);
+            if ((response->Status == "400" || response->Status.empty()) && RequestedPageScheme.empty()) {
                 NHttp::THttpOutgoingRequestPtr request = response->GetRequest();
                 if (!request->Secure) {
                     LOG_DEBUG_S(ctx, EService::MVP, "Try to send request to HTTPS port");
                     NHttp::THeadersBuilder headers {request->Headers};
-                    ForwardRequest(headers.Get(AUTH_HEADER_NAME), ctx, true);
+                    ForwardUserRequest(headers.Get(AUTH_HEADER_NAME), ctx, true);
                     return;
                 }
             }
@@ -117,15 +97,7 @@ public:
         Die(ctx);
     }
 
-    STFUNC(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
-            HFunc(TEvPrivate::TEvCheckSessionResponse, Handle);
-            HFunc(TEvPrivate::TEvErrorResponse, Handle);
-        }
-    }
-
-private:
+protected:
     bool CheckRequestedHost() {
         size_t pos = ProtectedPageUrl.find('/');
         if (pos == TString::npos) {
@@ -149,41 +121,13 @@ private:
         if (authHeader.empty()) {
             return false;
         }
-        return authHeader.StartsWith(IAM_TOKEN_SCHEME);
+        return to_lower(ToString(authHeader)).StartsWith(IAM_TOKEN_SCHEME_LOWER);
     }
 
-    void StartOidcProcess(const NHttp::THeaders& headers, const NActors::TActorContext& ctx) {
-        TStringBuf cookie = headers.Get("cookie");
-        IsAjaxRequest = DetectAjaxRequest(headers);
-        yandex::cloud::priv::oauth::v1::CheckSessionRequest request;
-        request.Setcookie_header(TString(cookie));
+    virtual void StartOidcProcess(const NActors::TActorContext& ctx) = 0;
 
-        std::unique_ptr<NYdbGrpc::TServiceConnection<TSessionService>> connection = CreateGRpcServiceConnection<TSessionService>(Settings.SessionServiceEndpoint);
-
-        NActors::TActorSystem* actorSystem = ctx.ActorSystem();
-        NActors::TActorId actorId = ctx.SelfID;
-        NYdbGrpc::TResponseCallback<yandex::cloud::priv::oauth::v1::CheckSessionResponse> responseCb =
-            [actorId, actorSystem](NYdbGrpc::TGrpcStatus&& status, yandex::cloud::priv::oauth::v1::CheckSessionResponse&& response) -> void {
-            if (status.Ok()) {
-                actorSystem->Send(actorId, new TEvPrivate::TEvCheckSessionResponse(std::move(response)));
-            } else {
-                actorSystem->Send(actorId, new TEvPrivate::TEvErrorResponse(status));
-            }
-        };
-
-        NMVP::TMvpTokenator* tokenator = MVPAppData()->Tokenator;
-        TString token = "";
-        if (tokenator) {
-            token = tokenator->GetToken(Settings.SessionServiceTokenName);
-        }
-        NYdbGrpc::TCallMeta meta;
-        SetHeader(meta, "authorization", token);
-        meta.Timeout = TDuration::Seconds(10);
-        connection->DoRequest(request, std::move(responseCb), &yandex::cloud::priv::oauth::v1::SessionService::Stub::AsyncCheck, meta);
-
-    }
-
-    void ForwardRequest(TStringBuf authHeader, const NActors::TActorContext& ctx, bool secure = false) {
+    virtual void ForwardUserRequest(TStringBuf authHeader, const NActors::TActorContext& ctx, bool secure = false) {
+        LOG_DEBUG_S(ctx, EService::MVP, "Forward user request bypass OIDC");
         NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequest(Request->Method, ProtectedPageUrl);
         ForwardRequestHeaders(httpRequest);
         if (!authHeader.empty()) {
@@ -271,30 +215,6 @@ private:
             }
         }
         return resultHeaders;
-    }
-};
-
-class TProtectedPageHandler : public NActors::TActor<TProtectedPageHandler> {
-    using TBase = NActors::TActor<TProtectedPageHandler>;
-
-    NActors::TActorId HttpProxyId;
-    const TOpenIdConnectSettings Settings;
-
-public:
-    TProtectedPageHandler(const NActors::TActorId& httpProxyId, const TOpenIdConnectSettings& settings)
-        : TBase(&TProtectedPageHandler::StateWork)
-        , HttpProxyId(httpProxyId)
-        , Settings(settings)
-    {}
-
-    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx) {
-        ctx.Register(new THandlerSessionServiceCheck(event->Sender, event->Get()->Request, HttpProxyId, Settings));
-    }
-
-    STFUNC(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
-        }
     }
 };
 

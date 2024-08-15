@@ -193,6 +193,8 @@ SRCS(
     range_ops.cpp
     read_iterator.h
     restore_unit.cpp
+    sample_k.cpp
+    scan_common.cpp
     setup_sys_locks.h
     store_and_send_out_rs_unit.cpp
     store_and_send_write_out_rs_unit.cpp    

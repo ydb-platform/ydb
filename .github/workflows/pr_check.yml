@@ -8,7 +8,6 @@ on:
       - '*-stable-*'
     paths-ignore:
       - 'ydb/docs/**'
-      - '*'
     types:
       - 'opened'
       - 'synchronize'
@@ -212,9 +211,6 @@ jobs:
       with:
         ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
         fetch-depth: 2
-    - name: Clean ya cache
-      shell: bash
-      run: ./ya gc cache
     - name: Setup ydb access
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:
@@ -228,8 +224,8 @@ jobs:
         run_tests: ${{ contains(fromJSON('["relwithdebinfo", "release-asan"]'), matrix.build_preset) }}
         test_size: "small,medium"
         test_threads: 52
+        test_retry_count: 1
         put_build_results_to_cache: true
-        run_tests_if_build_fails: false
         secs: ${{ format('{{"TESTMO_TOKEN2":"{0}","AWS_KEY_ID":"{1}","AWS_KEY_VALUE":"{2}","REMOTE_CACHE_USERNAME":"{3}","REMOTE_CACHE_PASSWORD":"{4}"}}',
           secrets.TESTMO_TOKEN2, secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD ) }}
         vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","TESTMO_URL":"{3}","TESTMO_PROJECT_ID":"{4}"}}',
@@ -245,9 +241,9 @@ jobs:
         run: |
           successbuilds=$(curl -L -X GET -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{github.repository}}/commits/${{github.event.pull_request.head.sha}}/status | \
-            jq -cr '.statuses | .[] | select(.state=="success") | select(.context | startswith("build_")) | .context' | \
+            jq -cr '.statuses | .[] | select(.state=="success") | select(.context | (startswith("build_") or startswith("test_relwithdebinfo")) ) | .context' | \
             wc -l )
-          if [[ $successbuilds == "3" ]];then
+          if [[ $successbuilds == "4" ]];then
             integrated_status="success"
           else
             integrated_status="failure"

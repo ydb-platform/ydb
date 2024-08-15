@@ -75,6 +75,13 @@ namespace NKikimr {
         }
 
     public:
+        template <typename TIter>
+        THeapIterator(TIter* iter) {
+            iter->PutToHeap(*this);
+        }
+
+        THeapIterator() = default;
+
         bool Valid() const {
             return HeapItems;
         }
@@ -143,8 +150,10 @@ namespace NKikimr {
         }
 
         template<typename TMerger, typename TCallback>
-        void Walk(TKey key, TMerger merger, TCallback&& callback) {
-            Seek(key);
+        void Walk(std::optional<TKey> key, TMerger merger, TCallback&& callback) {
+            if (key.has_value()) {
+                Seek(key.value());
+            }
             while (Valid()) {
                 const TKey key = GetCurKey();
                 PutToMergerAndAdvance(merger);

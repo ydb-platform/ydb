@@ -34,8 +34,9 @@ Generic {
 {% set CLICKHOUSE = 'CLICKHOUSE' %}
 {% set POSTGRESQL = 'POSTGRESQL' %}
 {% set MYSQL = 'MYSQL' %}
+{% set ORACLE = 'ORACLE' %}
 
-{% macro data_source(kind, cluster, host, port, username, password, protocol, database, schema) -%}
+{% macro data_source(kind, cluster, host, port, username, password, protocol, database, schema, service_name) -%}
     ClusterMapping {
         Kind: {{kind}}
         Name: "{{cluster}}"
@@ -57,6 +58,13 @@ Generic {
         DataSourceOptions: {
             key: "schema"
             value: "{{schema}}"
+        }
+        {% endif %}
+
+        {% if kind == ORACLE and service_name %}
+        DataSourceOptions: {
+            key: "service_name"
+            value: "{{service_name}}"
         }
         {% endif %}
     }
@@ -84,6 +92,7 @@ Generic {
     settings.clickhouse.password,
     CLICKHOUSE_PROTOCOL,
     cluster.database,
+    NONE,
     NONE)
 }}
 {% endfor %}
@@ -98,7 +107,23 @@ Generic {
     settings.mysql.password,
     NATIVE,
     cluster.database,
+    NONE,
     NONE)
+}}
+{% endfor %}
+
+{% for cluster in generic_settings.oracle_clusters %}
+{{ data_source(
+    ORACLE,
+    settings.oracle.cluster_name,
+    settings.oracle.host_internal,
+    settings.oracle.port_internal,
+    settings.oracle.username,
+    settings.oracle.password,
+    NATIVE,
+    cluster.database,
+    NONE,
+    cluster.service_name)
 }}
 {% endfor %}
 
@@ -112,7 +137,8 @@ Generic {
     settings.postgresql.password,
     NATIVE,
     cluster.database,
-    cluster.schema)
+    cluster.schema,
+    NONE)
 }}
 {% endfor %}
 

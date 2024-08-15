@@ -5,6 +5,8 @@
 #include "utility.h"
 #include "typetraits.h"
 
+#include <util/system/compiler.h>
+
 #include <string_view>
 
 using namespace std::string_view_literals;
@@ -97,12 +99,12 @@ public:
      */
     constexpr inline TBasicStringBuf(std::nullptr_t begin, size_t size) = delete;
 
-    constexpr inline TBasicStringBuf(const TCharType* data, size_t size) noexcept
+    constexpr inline TBasicStringBuf(const TCharType* data Y_LIFETIME_BOUND, size_t size) noexcept
         : TStringView(data, size)
     {
     }
 
-    constexpr TBasicStringBuf(const TCharType* data) noexcept
+    constexpr TBasicStringBuf(const TCharType* data Y_LIFETIME_BOUND) noexcept
         /*
          * WARN: TBase::StrLen properly handles nullptr,
          * while std::string_view (using std::char_traits) will abort in such case
@@ -111,7 +113,7 @@ public:
     {
     }
 
-    constexpr inline TBasicStringBuf(const TCharType* beg, const TCharType* end) noexcept
+    constexpr inline TBasicStringBuf(const TCharType* beg Y_LIFETIME_BOUND, const TCharType* end Y_LIFETIME_BOUND) noexcept
         : TStringView(beg, end - beg)
     {
     }
@@ -122,20 +124,26 @@ public:
     {
     }
 
+    template <typename T>
+    inline TBasicStringBuf(const TBasicString<TCharType, T>& str Y_STRING_LIFETIME_BOUND) noexcept
+        : TStringView(str.data(), str.size())
+    {
+    }
+
     template <typename T, typename A>
-    inline TBasicStringBuf(const std::basic_string<TCharType, T, A>& str) noexcept
+    inline TBasicStringBuf(const std::basic_string<TCharType, T, A>& str Y_LIFETIME_BOUND) noexcept
         : TStringView(str)
     {
     }
 
     template <typename TCharTraits>
-    constexpr TBasicStringBuf(std::basic_string_view<TCharType, TCharTraits> view) noexcept
+    constexpr TBasicStringBuf(std::basic_string_view<TCharType, TCharTraits> view Y_LIFETIME_BOUND) noexcept
         : TStringView(view)
     {
     }
 
     template <typename TCharTraits>
-    constexpr TBasicStringBuf(TBasicStringBuf<TCharType, TCharTraits> sb) noexcept
+    constexpr TBasicStringBuf(TBasicStringBuf<TCharType, TCharTraits> sb Y_LIFETIME_BOUND) noexcept
         : TStringView(sb)
     {
     }
@@ -151,13 +159,13 @@ public:
          */
     }
 
-    inline TBasicStringBuf(const TBasicStringBuf& src, size_t pos, size_t n) noexcept
+    inline TBasicStringBuf(const TBasicStringBuf src Y_LIFETIME_BOUND, size_t pos, size_t n) noexcept
         : TBasicStringBuf(src)
     {
         Skip(pos).Trunc(n);
     }
 
-    inline TBasicStringBuf(const TBasicStringBuf& src, size_t pos) noexcept
+    inline TBasicStringBuf(const TBasicStringBuf src Y_LIFETIME_BOUND, size_t pos) noexcept
         : TBasicStringBuf(src, pos, TBase::npos)
     {
     }

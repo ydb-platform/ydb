@@ -6,6 +6,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/engine/mkql_proto.h>
+#include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/core/scheme/scheme_pathid.h>
@@ -166,7 +167,8 @@ bool BuildAlterTableAddIndexRequest(const Ydb::Table::AlterTableRequest* req, NK
     return true;
 }
 
-bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme, const TTableProfiles& profiles,
+bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme, const TTableProfiles& profiles,
     const TPathId& resolvedPathId,
     Ydb::StatusIds::StatusCode& code, TString& error)
 {
@@ -187,7 +189,7 @@ bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKiki
     const auto OpType = *ops.begin();
 
     try {
-        pathPair = SplitPathIntoWorkingDirAndName(req->path());
+        pathPair = SplitPathIntoWorkingDirAndName(path);
     } catch (const std::exception&) {
         code = Ydb::StatusIds::BAD_REQUEST;
         return false;
@@ -230,7 +232,7 @@ bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKiki
     for(const auto& rename: req->rename_indexes()) {
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex);
         auto& alter = *modifyScheme->MutableMoveIndex();
-        alter.SetTablePath(req->path());
+        alter.SetTablePath(path);
         alter.SetSrcPath(rename.source_name());
         alter.SetDstPath(rename.destination_name());
         alter.SetAllowOverwrite(rename.replace_destination());
@@ -295,6 +297,11 @@ bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKiki
         for (const auto &alter : req->alter_columns()) {
             auto column = desc->AddColumns();
             column->SetName(alter.name());
+
+            if (alter.Hasnot_null()) {
+                column->SetNotNull(alter.Getnot_null());
+            }
+
             if (!alter.family().empty()) {
                 column->SetFamilyName(alter.family());
             }
@@ -370,6 +377,11 @@ bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKiki
     return true;
 }
 
+bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme,
+    const TTableProfiles& profiles, const TPathId& resolvedPathId, Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    return BuildAlterTableModifyScheme(req->path(), req, modifyScheme, profiles, resolvedPathId, code, error);
+}
 
 template <typename TColumn>
 static Ydb::Type* AddColumn(Ydb::Table::ColumnMeta* newColumn, const TColumn& column) {
@@ -1453,7 +1465,7 @@ bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
     return true;
 }
 
-void FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TTableDescription& in) {
+bool FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TTableDescription& in, Ydb::StatusIds::StatusCode& status, TString& error) {
     THashMap<TString, NKikimrSchemeOp::TSequenceDescription> sequences;
 
     for (const auto& sequenceDescription : in.GetSequences()) {
@@ -1491,6 +1503,58 @@ void FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrS
                     setVal->set_next_used(sequenceDescription.GetSetVal().GetNextUsed());
                     setVal->set_next_value(sequenceDescription.GetSetVal().GetNextValue());
                 }
+                if (sequenceDescription.HasDataType()) {
+                    auto* dataType = fromSequence->mutable_data_type();
+                    auto* typeDesc = NPg::TypeDescFromPgTypeName(sequenceDescription.GetDataType());
+                    if (typeDesc) {
+                        auto* pg = dataType->mutable_pg_type();
+                        auto typeId = NPg::PgTypeIdFromTypeDesc(typeDesc);
+                        switch (typeId) {
+                            case INT2OID:
+                            case INT4OID:
+                            case INT8OID:
+                                break;
+                            default: {
+                                TString sequenceType = NPg::PgTypeNameFromTypeDesc(typeDesc);
+                                status = Ydb::StatusIds::BAD_REQUEST;
+                                error = Sprintf(
+                                    "Invalid type name %s for sequence: %s", sequenceType.c_str(), sequenceDescription.GetName().data()
+                                );
+                                return false;
+                                break;
+                            }
+                        }
+                        pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
+                        pg->set_type_modifier(NPg::TypeModFromPgTypeName(sequenceDescription.GetDataType()));
+                        pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
+                        pg->set_typlen(0);
+                        pg->set_typmod(0);
+                    } else {
+                        NYql::NProto::TypeIds protoType;
+                        if (!NYql::NProto::TypeIds_Parse(sequenceDescription.GetDataType(), &protoType)) {
+                            status = Ydb::StatusIds::BAD_REQUEST;
+                            error = Sprintf(
+                                "Invalid type name %s for sequence: %s", sequenceDescription.GetDataType().data(), sequenceDescription.GetName().data()
+                            );
+                            return false;
+                        }
+                        switch (protoType) {
+                            case NYql::NProto::TypeIds::Int16:
+                            case NYql::NProto::TypeIds::Int32:
+                            case NYql::NProto::TypeIds::Int64: {
+                                NMiniKQL::ExportPrimitiveTypeToProto(protoType, *dataType);
+                                break;
+                            }
+                            default: {
+                                status = Ydb::StatusIds::BAD_REQUEST;
+                                error = Sprintf(
+                                    "Invalid type name %s for sequence: %s", sequenceDescription.GetDataType().data(), sequenceDescription.GetName().data()
+                                );
+                                return false;
+                            }
+                        }
+                    }
+                }
                 break;
             }
             case Ydb::Table::ColumnMeta::kFromLiteral: {
@@ -1499,6 +1563,78 @@ void FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrS
             default: break;
         }
     }
+    return true;
+}
+
+bool FillSequenceDescription(NKikimrSchemeOp::TSequenceDescription& out, const Ydb::Table::SequenceDescription& in, Ydb::StatusIds::StatusCode& status, TString& error) {
+    out.SetName(in.name());
+    if (in.has_min_value()) {
+        out.SetMinValue(in.min_value());
+    }
+    if (in.has_max_value()) {
+        out.SetMaxValue(in.max_value());
+    }
+    if (in.has_start_value()) {
+        out.SetStartValue(in.start_value());
+    }
+    if (in.has_cache()) {
+        out.SetCache(in.cache());
+    }
+    if (in.has_increment()) {
+        out.SetIncrement(in.increment());
+    }
+    if (in.has_cycle()) {
+        out.SetCycle(in.cycle());
+    }
+    if (in.has_set_val()) {
+        auto* setVal = out.MutableSetVal();
+        setVal->SetNextUsed(in.set_val().next_used());
+        setVal->SetNextValue(in.set_val().next_value());
+    }
+    if (in.has_data_type()) {
+        NScheme::TTypeInfo typeInfo;
+        TString typeMod;
+        if (!ExtractColumnTypeInfo(typeInfo, typeMod, in.data_type(), status, error)) {
+            return false;
+        }
+
+        switch (typeInfo.GetTypeId()) {
+            case NScheme::NTypeIds::Int16:
+            case NScheme::NTypeIds::Int32:
+            case NScheme::NTypeIds::Int64: {
+                out.SetDataType(NScheme::TypeName(typeInfo, typeMod));
+                break;
+            }
+            case NScheme::NTypeIds::Pg: {
+                switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc())) {
+                    case INT2OID:
+                    case INT4OID:
+                    case INT8OID: {
+                        out.SetDataType(NScheme::TypeName(typeInfo, typeMod));
+                        break;
+                    }
+                    default: {
+                        TString sequenceType = NPg::PgTypeNameFromTypeDesc(typeInfo.GetTypeDesc());
+                        status = Ydb::StatusIds::BAD_REQUEST;
+                        error = Sprintf(
+                            "Invalid type name %s for sequence: %s", sequenceType.c_str(), out.GetName().data()
+                        );
+                        return false;
+                    }
+                }
+                break;
+            }
+            default: {
+                TString sequenceType = NScheme::TypeName(typeInfo.GetTypeId());
+                status = Ydb::StatusIds::BAD_REQUEST;
+                error = Sprintf(
+                    "Invalid type name %s for sequence: %s", sequenceType.c_str(), out.GetName().data()
+                );
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 } // namespace NKikimr

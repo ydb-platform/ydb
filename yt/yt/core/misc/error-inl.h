@@ -52,28 +52,27 @@ constexpr bool TErrorCode::operator == (TErrorCode rhs) const
 
 namespace NDetail {
 
-template <size_t Length, class... TArgs>
-TString FormatErrorMessage(const char (&format)[Length], TArgs&&... args)
+template <class... TArgs>
+TString FormatErrorMessage(TStringBuf format, TArgs&&... args)
 {
     return Format(TRuntimeFormat{format}, std::forward<TArgs>(args)...);
 }
 
-template <size_t Length>
-TString FormatErrorMessage(const char (&message)[Length])
+inline TString FormatErrorMessage(TStringBuf format)
 {
-    return TString(message);
+    return TString(format);
 }
 
 } // namespace NDetail
 
-template <size_t Length, class... TArgs>
-TError::TErrorOr(const char (&messageOrFormat)[Length], TArgs&&... args)
-    : TErrorOr(NYT::EErrorCode::Generic, NYT::NDetail::FormatErrorMessage(messageOrFormat, std::forward<TArgs>(args)...))
+template <class... TArgs>
+TError::TErrorOr(TFormatString<TArgs...> format, TArgs&&... args)
+    : TErrorOr(NYT::EErrorCode::Generic, NYT::NDetail::FormatErrorMessage(format.Get(), std::forward<TArgs>(args)...), DisableFormat)
 { }
 
-template <size_t Length, class... TArgs>
-TError::TErrorOr(TErrorCode code, const char (&messageOrFormat)[Length], TArgs&&... args)
-    : TErrorOr(code, NYT::NDetail::FormatErrorMessage(messageOrFormat, std::forward<TArgs>(args)...))
+template <class... TArgs>
+TError::TErrorOr(TErrorCode code, TFormatString<TArgs...> format, TArgs&&... args)
+    : TErrorOr(code, NYT::NDetail::FormatErrorMessage(format.Get(), std::forward<TArgs>(args)...), DisableFormat)
 { }
 
 template <CInvocable<bool(const TError&)> TFilter>
@@ -102,19 +101,54 @@ std::optional<TError> TError::FindMatching(const TFilter& filter) const
     return FindMatching([&] (const TError& error) { return filter(error.GetCode()); });
 }
 
-template <class... TArgs>
-    requires std::constructible_from<TError, TArgs...>
-TError TError::Wrap(TArgs&&... args) const &
+#define IMPLEMENT_COPY_WRAP(...) \
+    return TError(__VA_ARGS__) << *this; \
+    static_assert(true)
+
+#define IMPLEMENT_MOVE_WRAP(...) \
+    return TError(__VA_ARGS__) << std::move(*this); \
+    static_assert(true)
+
+template <class U>
+    requires (!CStringLiteral<std::remove_cvref_t<U>>)
+TError TError::Wrap(U&& u) const &
 {
-    return TError(std::forward<TArgs>(args)...) << *this;
+    IMPLEMENT_COPY_WRAP(std::forward<U>(u));
 }
 
 template <class... TArgs>
-    requires std::constructible_from<TError, TArgs...>
-TError TError::Wrap(TArgs&&... args) &&
+TError TError::Wrap(TFormatString<TArgs...> format, TArgs&&... args) const &
 {
-    return TError(std::forward<TArgs>(args)...) << std::move(*this);
+    IMPLEMENT_COPY_WRAP(format, std::forward<TArgs>(args)...);
 }
+
+template <class... TArgs>
+TError TError::Wrap(TErrorCode code, TFormatString<TArgs...> format, TArgs&&... args) const &
+{
+    IMPLEMENT_COPY_WRAP(code, format, std::forward<TArgs>(args)...);
+}
+
+template <class U>
+    requires (!CStringLiteral<std::remove_cvref_t<U>>)
+TError TError::Wrap(U&& u) &&
+{
+    IMPLEMENT_MOVE_WRAP(std::forward<U>(u));
+}
+
+template <class... TArgs>
+TError TError::Wrap(TFormatString<TArgs...> format, TArgs&&... args) &&
+{
+    IMPLEMENT_MOVE_WRAP(format, std::forward<TArgs>(args)...);
+}
+
+template <class... TArgs>
+TError TError::Wrap(TErrorCode code, TFormatString<TArgs...> format, TArgs&&... args) &&
+{
+    IMPLEMENT_MOVE_WRAP(code, format, std::forward<TArgs>(args)...);
+}
+
+#undef IMPLEMENT_COPY_WRAP
+#undef IMPLEMENT_MOVE_WRAP
 
 template <CErrorNestable TValue>
 TError&& TError::operator << (TValue&& rhs) &&
@@ -128,13 +162,82 @@ TError TError::operator << (TValue&& rhs) const &
     return TError(*this) << std::forward<TValue>(rhs);
 }
 
-template <class... TArgs>
-void TError::ThrowOnError(TArgs&&... args) const
+template <CErrorNestable TValue>
+TError&& TError::operator << (const std::optional<TValue>& rhs) &&
 {
-    if (!IsOK()) {
-        THROW_ERROR std::move(*this).Wrap(std::forward<TArgs>(args)...);
+    if (rhs) {
+        return std::move(*this <<= *rhs);
+    } else {
+        return std::move(*this);
     }
 }
+
+template <CErrorNestable TValue>
+TError TError::operator << (const std::optional<TValue>& rhs) const &
+{
+    if (rhs) {
+        return TError(*this) << *rhs;
+    } else {
+        return *this;
+    }
+}
+
+#define IMPLEMENT_THROW_ON_ERROR(...) \
+    if (!IsOK()) { \
+        THROW_ERROR std::move(*this).Wrap(__VA_ARGS__); \
+    } \
+    static_assert(true)
+
+template <class U>
+    requires (!CStringLiteral<std::remove_cvref_t<U>>)
+void TError::ThrowOnError(U&& u) const &
+{
+    IMPLEMENT_THROW_ON_ERROR(std::forward<U>(u));
+}
+
+template <class... TArgs>
+void TError::ThrowOnError(TFormatString<TArgs...> format, TArgs&&... args) const &
+{
+    IMPLEMENT_THROW_ON_ERROR(format, std::forward<TArgs>(args)...);
+}
+
+template <class... TArgs>
+void TError::ThrowOnError(TErrorCode code, TFormatString<TArgs...> format, TArgs&&... args) const &
+{
+    IMPLEMENT_THROW_ON_ERROR(code, format, std::forward<TArgs>(args)...);
+}
+
+inline void TError::ThrowOnError() const &
+{
+    IMPLEMENT_THROW_ON_ERROR();
+}
+
+template <class U>
+    requires (!CStringLiteral<std::remove_cvref_t<U>>)
+void TError::ThrowOnError(U&& u) &&
+{
+    IMPLEMENT_THROW_ON_ERROR(std::forward<U>(u));
+}
+
+template <class... TArgs>
+void TError::ThrowOnError(TFormatString<TArgs...> format, TArgs&&... args) &&
+{
+    IMPLEMENT_THROW_ON_ERROR(format, std::forward<TArgs>(args)...);
+}
+
+template <class... TArgs>
+void TError::ThrowOnError(TErrorCode code, TFormatString<TArgs...> format, TArgs&&... args) &&
+{
+    IMPLEMENT_THROW_ON_ERROR(code, format, std::forward<TArgs>(args)...);
+}
+
+inline void TError::ThrowOnError() &&
+{
+    IMPLEMENT_THROW_ON_ERROR();
+}
+
+
+#undef IMPLEMENT_THROW_ON_ERROR
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -229,35 +332,106 @@ TErrorOr<T>& TErrorOr<T>::operator = (TErrorOr<T>&& other) noexcept
     return *this;
 }
 
+#define IMPLEMENT_VALUE_OR_THROW_REF(...) \
+    if (!IsOK()) { \
+        THROW_ERROR Wrap(__VA_ARGS__); \
+    } \
+    return *Value_; \
+    static_assert(true)
+
+#define IMPLEMENT_VALUE_OR_THROW_MOVE(...) \
+    if (!IsOK()) { \
+        THROW_ERROR std::move(*this).Wrap(__VA_ARGS__); \
+    } \
+    return std::move(*Value_); \
+    static_assert(true)
+
 template <class T>
-template <class... TArgs>
-T&& TErrorOr<T>::ValueOrThrow(TArgs&&... args) && Y_LIFETIME_BOUND
+template <class U>
+    requires (!CStringLiteral<std::remove_cvref_t<U>>)
+const T& TErrorOr<T>::ValueOrThrow(U&& u) const & Y_LIFETIME_BOUND
 {
-    if (!IsOK()) {
-        THROW_ERROR std::move(*this).Wrap(std::forward<TArgs>(args)...);
-    }
-    return std::move(*Value_);
+    IMPLEMENT_VALUE_OR_THROW_REF(std::forward<U>(u));
 }
 
 template <class T>
 template <class... TArgs>
-T& TErrorOr<T>::ValueOrThrow(TArgs&&... args) & Y_LIFETIME_BOUND
+const T& TErrorOr<T>::ValueOrThrow(TFormatString<TArgs...> format, TArgs&&... args) const & Y_LIFETIME_BOUND
 {
-    if (!IsOK()) {
-        THROW_ERROR Wrap(std::forward<TArgs>(args)...);
-    }
-    return *Value_;
+    IMPLEMENT_VALUE_OR_THROW_REF(format, std::forward<TArgs>(args)...);
 }
 
 template <class T>
 template <class... TArgs>
-const T& TErrorOr<T>::ValueOrThrow(TArgs&&... args) const & Y_LIFETIME_BOUND
+const T& TErrorOr<T>::ValueOrThrow(TErrorCode code, TFormatString<TArgs...> format, TArgs&&... args) const & Y_LIFETIME_BOUND
 {
-    if (!IsOK()) {
-        THROW_ERROR Wrap(std::forward<TArgs>(args)...);
-    }
-    return *Value_;
+    IMPLEMENT_VALUE_OR_THROW_REF(code, format, std::forward<TArgs>(args)...);
 }
+
+template <class T>
+const T& TErrorOr<T>::ValueOrThrow() const & Y_LIFETIME_BOUND
+{
+    IMPLEMENT_VALUE_OR_THROW_REF();
+}
+
+template <class T>
+template <class U>
+    requires (!CStringLiteral<std::remove_cvref_t<U>>)
+T& TErrorOr<T>::ValueOrThrow(U&& u) & Y_LIFETIME_BOUND
+{
+    IMPLEMENT_VALUE_OR_THROW_REF(std::forward<U>(u));
+}
+
+template <class T>
+template <class... TArgs>
+T& TErrorOr<T>::ValueOrThrow(TFormatString<TArgs...> format, TArgs&&... args) & Y_LIFETIME_BOUND
+{
+    IMPLEMENT_VALUE_OR_THROW_REF(format, std::forward<TArgs>(args)...);
+}
+
+template <class T>
+template <class... TArgs>
+T& TErrorOr<T>::ValueOrThrow(TErrorCode code, TFormatString<TArgs...> format, TArgs&&... args) & Y_LIFETIME_BOUND
+{
+    IMPLEMENT_VALUE_OR_THROW_REF(code, format, std::forward<TArgs>(args)...);
+}
+
+template <class T>
+T& TErrorOr<T>::ValueOrThrow() & Y_LIFETIME_BOUND
+{
+    IMPLEMENT_VALUE_OR_THROW_REF();
+}
+
+template <class T>
+template <class U>
+    requires (!CStringLiteral<std::remove_cvref_t<U>>)
+T&& TErrorOr<T>::ValueOrThrow(U&& u) && Y_LIFETIME_BOUND
+{
+    IMPLEMENT_VALUE_OR_THROW_MOVE(std::forward<U>(u));
+}
+
+template <class T>
+template <class... TArgs>
+T&& TErrorOr<T>::ValueOrThrow(TFormatString<TArgs...> format, TArgs&&... args) && Y_LIFETIME_BOUND
+{
+    IMPLEMENT_VALUE_OR_THROW_MOVE(format, std::forward<TArgs>(args)...);
+}
+
+template <class T>
+template <class... TArgs>
+T&& TErrorOr<T>::ValueOrThrow(TErrorCode code, TFormatString<TArgs...> format, TArgs&&... args) && Y_LIFETIME_BOUND
+{
+    IMPLEMENT_VALUE_OR_THROW_MOVE(code, format, std::forward<TArgs>(args)...);
+}
+
+template <class T>
+T&& TErrorOr<T>::ValueOrThrow() && Y_LIFETIME_BOUND
+{
+    IMPLEMENT_VALUE_OR_THROW_MOVE();
+}
+
+#undef IMPLEMENT_VALUE_OR_THROW_REF
+#undef IMPLEMENT_VALUE_OR_THROW_MOVE
 
 template <class T>
 T&& TErrorOr<T>::Value() && Y_LIFETIME_BOUND
@@ -356,17 +530,38 @@ TArg&& TErrorAdaptor::operator << (TArg&& rhs) const
     return std::forward<TArg>(rhs);
 }
 
-template <class TErrorLike, class... TArgs>
+template <class TErrorLike, class U>
     requires
         std::derived_from<std::remove_cvref_t<TErrorLike>, TError> &&
-        std::constructible_from<TError, TArgs...>
-void ThrowErrorExceptionIfFailed(TErrorLike&& error, TArgs&&... args)
+        (!CStringLiteral<std::remove_cvref_t<U>>)
+void ThrowErrorExceptionIfFailed(TErrorLike&& error, U&& u)
 {
-    if (!error.IsOK()) {
-        THROW_ERROR std::move(error).Wrap(std::forward<TArgs>(args)...);
-    }
+    std::move(error).ThrowOnError(std::forward<U>(u));
+}
+
+template <class TErrorLike, class... TArgs>
+    requires std::derived_from<std::remove_cvref_t<TErrorLike>, TError>
+void ThrowErrorExceptionIfFailed(TErrorLike&& error, TFormatString<TArgs...> format, TArgs&&... args)
+{
+    std::move(error).ThrowOnError(format, std::forward<TArgs>(args)...);
+}
+
+template <class TErrorLike, class... TArgs>
+    requires std::derived_from<std::remove_cvref_t<TErrorLike>, TError>
+void ThrowErrorExceptionIfFailed(TErrorLike&& error, TErrorCode code, TFormatString<TArgs...> format, TArgs&&... args)
+{
+    std::move(error).ThrowOnError(code, format, std::forward<TArgs>(args)...);
+}
+
+template <class TErrorLike>
+    requires std::derived_from<std::remove_cvref_t<TErrorLike>, TError>
+void ThrowErrorExceptionIfFailed(TErrorLike&& error)
+{
+    std::move(error).ThrowOnError();
 }
 
 } // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

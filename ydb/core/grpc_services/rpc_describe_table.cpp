@@ -1,11 +1,11 @@
-#include "service_table.h"
-#include <ydb/core/grpc_services/base/base.h>
-
 #include "rpc_calls.h"
 #include "rpc_scheme_base.h"
-
 #include "service_table.h"
-#include "rpc_common/rpc_common.h"
+
+#include <ydb/core/base/path.h>
+#include <ydb/core/base/table_index.h>
+#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/rpc_common/rpc_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -22,6 +22,21 @@ using TEvDescribeTableRequest = TGrpcRequestOperationCall<Ydb::Table::DescribeTa
 class TDescribeTableRPC : public TRpcSchemeRequestActor<TDescribeTableRPC, TEvDescribeTableRequest> {
     using TBase = TRpcSchemeRequestActor<TDescribeTableRPC, TEvDescribeTableRequest>;
 
+    TString OverrideName;
+
+    static bool ShowPrivatePath(const TString& path) {
+        if (AppData()->AllowPrivateTableDescribeForTest) {
+           return true;
+        }
+
+        auto pathElements = ::NKikimr::SplitPath(path);
+        if (pathElements.size() != 0 && NTableIndex::IsImplTable(pathElements.back())) {
+            return true;
+        }
+
+        return false;
+    }
+
 public:
     TDescribeTableRPC(IRequestOpCtx* msg)
         : TBase(msg) {}
@@ -29,15 +44,60 @@ public:
     void Bootstrap(const TActorContext &ctx) {
         TBase::Bootstrap(ctx);
 
-        SendProposeRequest(ctx);
+        const auto& path = GetProtoRequest()->path();
+        const auto paths = NKikimr::SplitPath(path);
+        if (paths.empty()) {
+            Request_->RaiseIssue(NYql::TIssue("Invalid path"));
+            return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
+        }
+
+        auto navigate = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        navigate->DatabaseName = CanonizePath(Request_->GetDatabaseName().GetOrElse(""));
+        auto& entry = navigate->ResultSet.emplace_back();
+        entry.Path = paths;
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
+        entry.SyncVersion = true;
+        entry.ShowPrivatePath = ShowPrivatePath(path);
+
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate));
         Become(&TDescribeTableRPC::StateWork);
     }
 
 private:
     void StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
+            HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             default: TBase::StateWork(ev);
+        }
+    }
+
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
+        auto* navigate = ev->Get()->Request.Get();
+
+        Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
+        const auto& entry = navigate->ResultSet.front();
+
+        if (navigate->ErrorCount > 0) {
+            switch (entry.Status) {
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
+                return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
+            default:
+                return Reply(Ydb::StatusIds::UNAVAILABLE, ctx);
+            }
+        }
+
+        if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindIndex) {
+            auto list = entry.ListNodeEntry;
+            if (!list || list->Children.size() != 1) {
+                return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
+            }
+
+            OverrideName = entry.Path.back();
+            SendProposeRequest(CanonizePath(ChildPath(entry.Path, list->Children.at(0).Name)), ctx);
+        } else {
+            SendProposeRequest(GetProtoRequest()->path(), ctx);
         }
     }
 
@@ -53,9 +113,10 @@ private:
             case NKikimrScheme::StatusSuccess: {
                 const auto& pathDescription = record.GetPathDescription();
                 Ydb::Scheme::Entry* selfEntry = describeTableResult.mutable_self();
-                selfEntry->set_name(pathDescription.GetSelf().GetName());
-                selfEntry->set_type(static_cast<Ydb::Scheme::Entry::Type>(pathDescription.GetSelf().GetPathType()));
                 ConvertDirectoryEntry(pathDescription.GetSelf(), selfEntry, true);
+                if (OverrideName) {
+                    selfEntry->set_name(OverrideName);
+                }
 
                 if (pathDescription.HasColumnTableDescription()) {
                     const auto& tableDescription = pathDescription.GetColumnTableDescription();
@@ -136,9 +197,8 @@ private:
         }
     }
 
-    void SendProposeRequest(const TActorContext &ctx) {
+    void SendProposeRequest(const TString& path, const TActorContext& ctx) {
         const auto req = GetProtoRequest();
-        const TString path = req->path();
 
         std::unique_ptr<TEvTxUserProxy::TEvNavigate> navigateRequest(new TEvTxUserProxy::TEvNavigate());
         SetAuthToken(navigateRequest, *Request_);
@@ -153,9 +213,7 @@ private:
             record->MutableOptions()->SetReturnPartitionStats(true);
         }
 
-        if (AppData(ctx)->AllowPrivateTableDescribeForTest || path.EndsWith("/indexImplTable")) {
-            record->MutableOptions()->SetShowPrivateTable(true);
-        }
+        record->MutableOptions()->SetShowPrivateTable(ShowPrivatePath(path));
 
         ctx.Send(MakeTxProxyID(), navigateRequest.release());
     }

@@ -1,4 +1,5 @@
 #include "utils.h"
+#include "plan2svg.h"
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
@@ -432,18 +433,22 @@ void EnumeratePlans(NYson::TYsonWriter& writer, NJson::TJsonValue& value, ui32& 
     }
 }
 
-TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage) {
+TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage, TString* timeline) {
     TStringStream out;
     NYson::TYsonWriter writer(&out);
     writer.OnBeginMap();
     NJson::TJsonReaderConfig jsonConfig;
     NJson::TJsonValue stat;
+    TPlanVisualizer planViz;
     if (NJson::ReadJsonTree(plan, &jsonConfig, &stat)) {
         if (auto* topNode = stat.GetValueByPath("Plan")) {
             if (auto* subNode = topNode->GetValueByPath("Plans")) {
                 for (auto plan : subNode->GetArray()) {
                     if (auto* typeNode = plan.GetValueByPath("Node Type")) {
                         auto nodeType = typeNode->GetStringSafe();
+                        if (timeline) {
+                            planViz.LoadPlan(nodeType, plan);
+                        }
                         TTotalStatistics totals;
                         ui32 stageViewIndex = 0;
                         writer.OnKeyedItem(nodeType);
@@ -472,6 +477,13 @@ TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage) {
                 }
             }
         }
+    }
+    if (timeline) {
+        planViz.SetTimeOffsets();
+        *timeline = planViz.PrintSvgSafe();
+        // remove json "timeline" field after migration
+        writer.OnKeyedItem("timeline");
+        writer.OnStringScalar(*timeline);
     }
     writer.OnEndMap();
     return NJson2Yson::ConvertYson2Json(out.Str());
@@ -1147,7 +1159,7 @@ struct TNoneStatProcessor : IPlanStatProcessor {
         return plan;
     }
 
-    TString GetQueryStat(const TString&, double& cpuUsage) override {
+    TString GetQueryStat(const TString&, double& cpuUsage, TString*) override {
         cpuUsage = 0.0;
         return "";
     }
@@ -1180,8 +1192,8 @@ struct TPlanStatProcessor : IPlanStatProcessor {
         return plan;
     }
 
-    TString GetQueryStat(const TString& plan, double& cpuUsage) override {
-        return GetV1StatFromV2Plan(plan, &cpuUsage);
+    TString GetQueryStat(const TString& plan, double& cpuUsage, TString* timeline) override {
+        return GetV1StatFromV2Plan(plan, &cpuUsage, timeline);
     }
 
     TPublicStat GetPublicStat(const TString& stat) override {
@@ -1212,8 +1224,8 @@ struct TProfileStatProcessor : TPlanStatProcessor {
 };
 
 struct TProdStatProcessor : TFullStatProcessor {
-    TString GetQueryStat(const TString& plan, double& cpuUsage) override {
-        return GetPrettyStatistics(GetV1StatFromV2Plan(plan, &cpuUsage));
+    TString GetQueryStat(const TString& plan, double& cpuUsage, TString* timeline) override {
+        return GetPrettyStatistics(GetV1StatFromV2Plan(plan, &cpuUsage, timeline));
     }
 };
 
@@ -1231,7 +1243,7 @@ std::unique_ptr<IPlanStatProcessor> CreateStatProcessor(const TString& statViewN
 
 PingTaskRequestBuilder::PingTaskRequestBuilder(const NConfig::TCommonConfig& commonConfig, std::unique_ptr<IPlanStatProcessor>&& processor) 
     : Compressor(commonConfig.GetQueryArtifactsCompressionMethod(), commonConfig.GetQueryArtifactsCompressionMinSize())
-    , Processor(std::move(processor))
+    , Processor(std::move(processor)), ShowQueryTimeline(commonConfig.GetShowQueryTimeline())
 {}
 
 Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(
@@ -1297,9 +1309,13 @@ Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const TString& queryP
 
     CpuUsage = 0.0;
     try {
-        auto stat = Processor->GetQueryStat(plan, CpuUsage);
+        TString timeline;
+        auto stat = Processor->GetQueryStat(plan, CpuUsage, ShowQueryTimeline ? &timeline : nullptr);
         pingTaskRequest.set_statistics(stat);
         pingTaskRequest.set_dump_raw_statistics(true);
+        if (timeline) {
+            pingTaskRequest.set_timeline(timeline);
+        }
         auto flatStat = Processor->GetFlatStat(plan);
         flatStat["CompilationTimeUs"] = compilationTimeUs;
         flatStat["ComputeTimeUs"] = computeTimeUs;

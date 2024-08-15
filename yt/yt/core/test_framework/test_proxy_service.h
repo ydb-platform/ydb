@@ -110,6 +110,8 @@ public:
 
     int GetInflightRequestCount() override;
 
+    const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override;
+
     void SubscribeTerminated(const TCallback<void(const TError&)>& callback) override;
 
     void UnsubscribeTerminated(const TCallback<void(const TError&)>& callback) override;
@@ -119,6 +121,7 @@ private:
     const TRealmIdServiceMap DefaultServices_;
     const TString Address_;
     const NYTree::IAttributeDictionaryPtr Attributes_;
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_ = GetNullMemoryUsageTracker();
 
     TSingleShotCallbackList<void(const TError&)> Terminated_;
 

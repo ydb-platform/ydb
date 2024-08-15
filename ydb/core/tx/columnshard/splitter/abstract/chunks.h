@@ -15,7 +15,6 @@ namespace NKikimr::NOlap {
 class TPortionInfo;
 class TPortionInfoConstructor;
 class TSimpleColumnInfo;
-class TColumnSaver;
 
 class IPortionDataChunk {
 private:

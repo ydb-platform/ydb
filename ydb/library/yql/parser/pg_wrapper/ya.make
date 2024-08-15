@@ -33,6 +33,7 @@ SRCS(
     comp_factory.cpp
     type_cache.cpp
     pg_aggs.cpp
+    read_table.cpp
     recovery.cpp
     superuser.cpp
     config.cpp
@@ -99,6 +100,13 @@ PEERDIR(
 )
 
 INCLUDE(cflags.inc)
+
+IF (OS_LINUX)
+    SRCS(
+        postgresql/src/port/strlcat.c
+        postgresql/src/port/strlcpy.c
+    )
+ENDIF()
 
 IF (OS_LINUX OR OS_DARWIN)
     SRCS(

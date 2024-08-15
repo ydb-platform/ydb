@@ -271,6 +271,7 @@ struct TOperation
     NYson::TYsonString Result;
 
     NYson::TYsonString SlotIndexPerPoolTree;
+    NYson::TYsonString SchedulingAttributesPerPoolTree;
     NYson::TYsonString Alerts;
     NYson::TYsonString AlertEvents;
 

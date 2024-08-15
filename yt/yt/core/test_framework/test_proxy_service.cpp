@@ -97,7 +97,7 @@ void TTestChannel::HandleRequestResult(
         response->HandleResponse(bus->GetMessage(), address);
     } else if (error.IsOK()) {
         NProto::TResponseHeader header;
-        TryParseResponseHeader(bus->GetMessage(), &header);
+        YT_VERIFY(TryParseResponseHeader(bus->GetMessage(), &header));
         auto wrappedError = TError("Test proxy service error")
             << FromProto<TError>(header.error());
         response->HandleError(std::move(wrappedError));
@@ -165,6 +165,11 @@ void TTestChannel::UnsubscribeTerminated(const TCallback<void(const TError&)>& c
 int TTestChannel::GetInflightRequestCount()
 {
     return 0;
+}
+
+const IMemoryUsageTrackerPtr& TTestChannel::GetChannelMemoryTracker()
+{
+    return MemoryUsageTracker_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

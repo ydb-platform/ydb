@@ -258,10 +258,12 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     TPtr source,
     NKikimrSchemeOp::TTableDescription& op,
     const NScheme::TTypeRegistry& typeRegistry,
-    const TSchemeLimits& limits, const TSubDomainInfo& subDomain,
+    const TSchemeLimits& limits,
+    const TSubDomainInfo& subDomain,
     bool pgTypesEnabled,
     bool datetime64TypesEnabled,
-    TString& errStr, const THashSet<TString>& localSequences)
+    TString& errStr,
+    const THashSet<TString>& localSequences)
 {
     TAlterDataPtr alterData = new TTableInfo::TAlterTableInfo();
     alterData->TableDescriptionFull = NKikimrSchemeOp::TTableDescription();
@@ -290,6 +292,8 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         }
     }
 
+    bool allowSystemColumns = op.GetSystemColumnNamesAllowed();
+
     for (auto& col : *op.MutableColumns()) {
         TString colName = col.GetName();
 
@@ -300,7 +304,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             return nullptr;
         }
 
-        if (!IsValidColumnName(colName)) {
+        if (!IsValidColumnName(colName, allowSystemColumns)) {
             errStr = Sprintf("Invalid name for column '%s'", colName.data());
             return nullptr;
         }
@@ -334,7 +338,9 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
 
-            if (!columnFamily && !col.HasDefaultFromSequence() && !col.HasEmptyDefault()) {
+            bool isDropNotNull = col.HasNotNull(); // if has, then always false
+
+            if (!isDropNotNull && !columnFamily && !col.HasDefaultFromSequence() && !col.HasEmptyDefault()) {
                 errStr = Sprintf("Nothing to alter for column '%s'", colName.data());
                 return nullptr;
             }
@@ -362,20 +368,57 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             const TTableInfo::TColumn& sourceColumn = source->Columns[colId];
 
             if (col.HasDefaultFromSequence()) {
-                if (sourceColumn.PType.GetTypeId() != NScheme::NTypeIds::Int64
-                        && NPg::PgTypeIdFromTypeDesc(sourceColumn.PType.GetTypeDesc()) != INT8OID) {
-                    TString sequenceType = sourceColumn.PType.GetTypeId() == NScheme::NTypeIds::Pg
-                        ? NPg::PgTypeNameFromTypeDesc(NPg::TypeDescFromPgTypeId(INT8OID))
-                        : NScheme::TypeName(NScheme::NTypeIds::Int64);
-                    errStr = Sprintf(
-                        "Sequence value type '%s' must be equal to the column type '%s'", sequenceType.c_str(),
-                        NScheme::TypeName(sourceColumn.PType, sourceColumn.PTypeMod).c_str());
-                    return nullptr;
+                switch (sourceColumn.PType.GetTypeId()) {
+                    case NScheme::NTypeIds::Int8:
+                    case NScheme::NTypeIds::Int16:
+                    case NScheme::NTypeIds::Int32:
+                    case NScheme::NTypeIds::Int64:
+                    case NScheme::NTypeIds::Uint8:
+                    case NScheme::NTypeIds::Uint16:
+                    case NScheme::NTypeIds::Uint32:
+                    case NScheme::NTypeIds::Uint64:
+                    case NScheme::NTypeIds::Float:
+                    case NScheme::NTypeIds::Double:
+                    case NScheme::NTypeIds::String:
+                    case NScheme::NTypeIds::Utf8:
+                        break;
+                    case NScheme::NTypeIds::Pg: {
+                        switch (NPg::PgTypeIdFromTypeDesc(sourceColumn.PType.GetTypeDesc())) {
+                            case INT2OID:
+                            case INT4OID:
+                            case INT8OID:
+                            case FLOAT4OID:
+                            case FLOAT8OID:
+                                break;
+                            default: {
+                                TString columnType = NPg::PgTypeNameFromTypeDesc(sourceColumn.PType.GetTypeDesc());
+                                TString sequenceType = NPg::PgTypeNameFromTypeDesc(NPg::TypeDescFromPgTypeId(INT8OID));
+                                errStr = Sprintf(
+                                    "Column '%s' is of type %s but default expression is of type %s", colName.c_str(), columnType.c_str(), sequenceType.c_str()
+                                );
+                                return nullptr;
+                            }
+                        }
+                        break;
+                    }
+                    default: {
+                        TString columnType = NScheme::TypeName(sourceColumn.PType.GetTypeId());
+                        TString sequenceType = NScheme::TypeName(NScheme::NTypeIds::Int64);
+                        errStr = Sprintf(
+                            "Column '%s' is of type %s but default expression is of type %s", colName.c_str(), columnType.c_str(), sequenceType.c_str()
+                        );
+                        return nullptr;
+                    }
                 }
             }
 
             TTableInfo::TColumn& column = alterData->Columns[colId];
             column = sourceColumn;
+
+            if (isDropNotNull) {
+                column.NotNull = false;
+            }
+
             if (columnFamily) {
                 column.Family = columnFamily->GetId();
             }
@@ -550,6 +593,8 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 errStr = "Cannot set replication mode";
                 return nullptr;
             }
+            break;
+        case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_RESTORE_INCREMENTAL_BACKUP:
             break;
         default:
             errStr = "Unknown replication mode";
@@ -1415,18 +1460,20 @@ void TTableInfo::FinishAlter() {
     AlterVersion = AlterData->AlterVersion;
     NextColumnId = AlterData->NextColumnId;
     for (const auto& col : AlterData->Columns) {
+        const auto& cinfo = col.second;
         TColumn * oldCol = Columns.FindPtr(col.first);
         if (oldCol) {
-            //oldCol->CreateVersion = col.second.CreateVersion;
-            oldCol->DeleteVersion = col.second.DeleteVersion;
-            oldCol->Family = col.second.Family;
-            oldCol->DefaultKind = col.second.DefaultKind;
-            oldCol->DefaultValue = col.second.DefaultValue;
+            //oldCol->CreateVersion = cinfo.CreateVersion;
+            oldCol->DeleteVersion = cinfo.DeleteVersion;
+            oldCol->Family = cinfo.Family;
+            oldCol->DefaultKind = cinfo.DefaultKind;
+            oldCol->DefaultValue = cinfo.DefaultValue;
+            oldCol->NotNull = cinfo.NotNull;
         } else {
-            Columns[col.first] = col.second;
-            if (col.second.KeyOrder != (ui32)-1) {
-                KeyColumnIds.resize(Max<ui32>(KeyColumnIds.size(), col.second.KeyOrder + 1));
-                KeyColumnIds[col.second.KeyOrder] = col.first;
+            Columns[col.first] = cinfo;
+            if (cinfo.KeyOrder != (ui32)-1) {
+                KeyColumnIds.resize(Max<ui32>(KeyColumnIds.size(), cinfo.KeyOrder + 1));
+                KeyColumnIds[cinfo.KeyOrder] = col.first;
             }
         }
     }
@@ -2090,6 +2137,10 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
     for (const auto& implTableDescription : ImplTableDescriptions) {
         *index.AddIndexImplTableDescriptions() = implTableDescription;
     }
+
+    if (IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+        *index.MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
+    }
 }
 
 void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {
@@ -2407,6 +2458,76 @@ bool TSequenceInfo::ValidateCreate(const NKikimrSchemeOp::TSequenceDescription& 
     }
 
     return true;
+}
+
+// validate type of the sequence
+std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceName, const TString& dataType, 
+        const NScheme::TTypeRegistry& typeRegistry, bool pgTypesEnabled, TString& errStr) {
+
+    i64 dataTypeMaxValue, dataTypeMinValue;
+    auto typeName = NMiniKQL::AdaptLegacyYqlType(dataType);
+    const NScheme::IType* type = typeRegistry.GetType(typeName);
+    if (type) {
+        if (!NScheme::NTypeIds::IsYqlType(type->GetTypeId())) {
+            errStr = Sprintf("Type '%s' specified for sequence '%s' is no longer supported", dataType.data(), sequenceName.c_str());
+            return std::nullopt;
+        }
+
+        switch (type->GetTypeId()) {
+            case NScheme::NTypeIds::Int16: {
+                dataTypeMaxValue = Max<i16>();
+                dataTypeMinValue = Min<i16>();
+                break;
+            }
+            case NScheme::NTypeIds::Int32: {
+                dataTypeMaxValue = Max<i32>();
+                dataTypeMinValue = Min<i32>();
+                break;
+            }
+            case NScheme::NTypeIds::Int64: {
+                dataTypeMaxValue = Max<i64>();
+                dataTypeMinValue = Min<i64>();
+                break;
+            }
+            default: {
+                errStr = Sprintf("Type '%s' specified for sequence '%s' is not supported", dataType.data(), sequenceName.c_str());
+                return std::nullopt;
+            }
+        }                    
+    } else {
+        auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
+        if (!typeDesc) {
+            errStr = Sprintf("Type '%s' specified for sequence '%s' is not supported", dataType.data(), sequenceName.c_str());
+            return std::nullopt;
+        }
+        if (!pgTypesEnabled) {
+            errStr = Sprintf("Type '%s' specified for sequence '%s', but support for pg types is disabled (EnableTablePgTypes feature flag is off)", dataType.data(), sequenceName.c_str());
+            return std::nullopt;
+        }
+        switch (NPg::PgTypeIdFromTypeDesc(typeDesc)) {
+            case INT2OID: {
+                dataTypeMaxValue = Max<i16>();
+                dataTypeMinValue = Min<i16>();
+                break;
+            }
+            case INT4OID: {
+                dataTypeMaxValue = Max<i32>();
+                dataTypeMinValue = Min<i32>();
+                break;
+            }
+            case INT8OID: {
+                dataTypeMaxValue = Max<i64>();
+                dataTypeMinValue = Min<i64>();
+                break;
+            }
+            default: {
+                errStr = Sprintf("Type '%s' specified for sequence '%s' is not supported", dataType.data(), sequenceName.c_str());
+                return std::nullopt;
+            }
+        }
+    }
+
+    return {{dataTypeMinValue, dataTypeMaxValue}};
 }
 
 } // namespace NSchemeShard

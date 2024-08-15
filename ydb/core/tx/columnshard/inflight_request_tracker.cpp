@@ -23,7 +23,6 @@ void TInFlightReadsTracker::RemoveInFlightRequest(ui64 cookie, const NOlap::TVer
             AFL_VERIFY(it != SnapshotsLive.end());
             if (it->second.DelRequest(cookie, now)) {
                 SnapshotsLive.erase(it);
-                Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetSnapshotToClean());
             }
         }
 
@@ -33,6 +32,7 @@ void TInFlightReadsTracker::RemoveInFlightRequest(ui64 cookie, const NOlap::TVer
             tracker->FreeBlob(committedBlob.GetBlobRange().GetBlobId());
         }
     }
+    Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetSnapshotToClean());
 
     RequestsMeta.erase(cookie);
 }
@@ -110,6 +110,7 @@ std::unique_ptr<NTabletFlatExecutor::ITransaction> TInFlightReadsTracker::Ping(
     for (auto&& i : snapshotsToFree) {
         SnapshotsLive.erase(i);
     }
+    Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetSnapshotToClean());
     if (snapshotsToFree.size() || snapshotsToSave.size()) {
         NYDBTest::TControllers::GetColumnShardController()->OnRequestTracingChanges(snapshotsToSave, snapshotsToFree);
         return std::make_unique<TTransactionSavePersistentSnapshots>(self, std::move(snapshotsToSave), std::move(snapshotsToFree));

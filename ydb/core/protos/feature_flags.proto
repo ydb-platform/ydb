@@ -152,4 +152,5 @@ message TFeatureFlags {
     optional bool EnableVectorIndex = 133 [default = false];
     optional bool EnableChangefeedsOnIndexTables = 134 [default = false];
     optional bool EnableResourcePoolsCounters = 135 [default = false];
+    optional bool EnableOptionalColumnsInColumnShard = 135 [default = false];
 }

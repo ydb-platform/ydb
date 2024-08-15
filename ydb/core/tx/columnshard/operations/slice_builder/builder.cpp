@@ -55,7 +55,12 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
     if (OriginalBatch->num_columns() != indexSchema->num_fields()) {
         AFL_VERIFY(OriginalBatch->num_columns() < indexSchema->num_fields())("original", OriginalBatch->num_columns())(
                                                       "index", indexSchema->num_fields());
-
+        if (HasAppData() && !AppDataVerified().FeatureFlags.GetEnableOptionalColumnsInColumnShard()) {
+            subset = NArrow::TSchemaSubset::AllFieldsAccepted();
+            auto normalized = ActualSchema->NormalizeBatch(
+                *ActualSchema, std::make_shared<NArrow::TGeneralContainer>(OriginalBatch), ActualSchema->GetColumnIds());
+            OriginalBatch = NArrow::ToBatch(normalized->BuildTableVerified(), true);
+        }
     }
     WriteData.MutableWriteMeta().SetWriteMiddle2StartInstant(TMonotonic::Now());
     auto batches = BuildSlices();

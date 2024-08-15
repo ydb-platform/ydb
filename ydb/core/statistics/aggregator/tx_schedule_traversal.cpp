@@ -20,12 +20,22 @@ struct TStatisticsAggregator::TTxScheduleTrasersal : public TTxBase {
             return true;
         }
 
-        if (Self->TraversalTableId.PathId) {
+        if (Self->TraversalPathId) {
+            SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleTrasersal::Execute. Traverse is in progress. PathId " << Self->TraversalPathId);
             return true; // traverse is in progress
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        Self->ScheduleNextTraversal(db);
+
+        switch (Self->NavigateType) {
+        case ENavigateType::Analyze:
+            Self->ScheduleNextAnalyze(db);
+            break;
+        case ENavigateType::Traversal:
+            Self->ScheduleNextTraversal(db);
+            break;
+        }
+
         return true;
     }
 

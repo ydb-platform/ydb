@@ -296,7 +296,7 @@ public:
 
         const TStats& stats = tableInfo.Stats.DataStats;
         Result->Record.MutableTableStats()->SetIndexSize(stats.IndexSize.Size);
-        Result->Record.MutableTableStats()->SetByKeyFilterSize(stats.ByKeyFilterSize.Size);
+        Result->Record.MutableTableStats()->SetByKeyFilterSize(stats.ByKeyFilterSize);
         Result->Record.MutableTableStats()->SetDataSize(stats.DataSize.Size + memSize);
         Result->Record.MutableTableStats()->SetRowCount(stats.RowCount + memRowCount);
         FillHistogram(stats.DataSizeHistogram, *Result->Record.MutableTableStats()->MutableDataSizeHistogram());

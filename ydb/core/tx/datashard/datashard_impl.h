@@ -3240,6 +3240,7 @@ protected:
 
             ev->Record.MutableTableStats()->SetDataSize(ti.Stats.DataStats.DataSize.Size + ti.Stats.MemDataSize);
             ev->Record.MutableTableStats()->SetIndexSize(ti.Stats.DataStats.IndexSize.Size);
+            ev->Record.MutableTableStats()->SetByKeyFilterSize(ti.Stats.DataStats.ByKeyFilterSize);
             ev->Record.MutableTableStats()->SetInMemSize(ti.Stats.MemDataSize);
 
             TMap<ui8, std::tuple<ui64, ui64>> channels; // Channel -> (DataSize, IndexSize)

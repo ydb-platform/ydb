@@ -102,7 +102,7 @@ struct TStats {
     ui64 RowCount = 0;
     TChanneledDataSize DataSize = { };
     TChanneledDataSize IndexSize = { };
-    TChanneledDataSize ByKeyFilterSize = { };
+    ui64 ByKeyFilterSize = 0;
     THistogram RowCountHistogram;
     THistogram DataSizeHistogram;
 
@@ -110,7 +110,7 @@ struct TStats {
         RowCount = 0;
         DataSize = { };
         IndexSize = { };
-        ByKeyFilterSize = { };
+        ByKeyFilterSize = 0;
         RowCountHistogram.clear();
         DataSizeHistogram.clear();
     }

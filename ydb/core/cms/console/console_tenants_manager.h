@@ -19,7 +19,7 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb-cpp-sdk/library/operation_id/operation_id.h>
 
-#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
+#include <ydb/public/sdk/cpp/src/library/yql/issue/protos/issue_severity.pb.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 

@@ -53,7 +53,7 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/public/api/protos
     ydb/public/lib/base
     ydb/public/lib/deprecated/kicli
-    ydb-cpp-sdk/client/ydb_table
+    ydb/public/sdk/cpp/src/client/ydb_table
     ydb/services/cms
     ydb/services/datastreams
     ydb/services/discovery

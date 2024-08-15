@@ -1,5 +1,5 @@
 #include "yq_issue.h"
-#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
+#include <ydb/public/sdk/cpp/src/library/yql/issue/protos/issue_severity.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue_id.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 

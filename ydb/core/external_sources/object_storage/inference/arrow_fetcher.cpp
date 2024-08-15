@@ -110,7 +110,7 @@ public:
             }
             case EFileFormat::Parquet: {
                 if (IsMetadataSizeRequest(request.From, request.To)) {
-                    CleanupMetadataSize(data, request, ctx);
+                    HandleMetadataSizeRequest(data, request, ctx);
                     return;
                 }
                 file = CleanupParquetFile(data, request, ctx);
@@ -244,7 +244,7 @@ private:
         return std::make_shared<arrow::io::BufferReader>(std::move(whole));
     }
 
-    void CleanupMetadataSize(const TString& data, TRequest request, const NActors::TActorContext& ctx) {
+    void HandleMetadataSizeRequest(const TString& data, TRequest request, const NActors::TActorContext& ctx) {
         uint32_t metadataSize = ReadUnaligned<uint32_t>(data.data());
 
         if (metadataSize > 10_MB) {

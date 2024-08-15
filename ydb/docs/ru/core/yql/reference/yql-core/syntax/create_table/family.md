@@ -1,6 +1,6 @@
 # Группы колонок
 
-{% include [not_allow_for_olap](../../../../../_includes/not_allow_for_olap_note.md) %}
+{% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
 
 Колонки одной таблицы можно объединять в группы, для того чтобы задать следующие параметры:
 

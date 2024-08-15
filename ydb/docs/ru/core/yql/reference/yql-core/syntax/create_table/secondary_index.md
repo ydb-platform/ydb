@@ -1,6 +1,6 @@
 # INDEX
 
-{% include [not_allow_for_olap](../../../../../_includes/not_allow_for_olap_note.md) %}
+{% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
 
 Конструкция `INDEX` используется для определения {% if concept_secondary_index %}[вторичного индекса]({{ concept_secondary_index }}){% else %}вторичного индекса{% endif %} {% if backend_name == "YDB" %}для [строковых](../../../../concepts/datamodel/table.md#row-oriented-tables) таблиц{% else %}на таблице{% endif %}:
 

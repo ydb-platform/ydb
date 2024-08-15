@@ -142,7 +142,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
     }
     AppendedPortions = merger.Execute(stats, CheckPoints, resultFiltered, GranuleMeta->GetPathId(), shardingActualVersion);
     for (auto&& p : AppendedPortions) {
-        i.GetPortionConstructor().GetMeta().UpdateRecordsMeta(NPortion::EProduced::SPLIT_COMPACTED);
+        p.GetPortionConstructor().GetMeta().UpdateRecordsMeta(NPortion::EProduced::SPLIT_COMPACTED);
     }
 }
 

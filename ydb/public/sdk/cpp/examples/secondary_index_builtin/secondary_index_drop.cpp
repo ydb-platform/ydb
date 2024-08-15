@@ -3,13 +3,13 @@
 using namespace NYdb::NTable;
 using namespace NYdb;
 
-static void DropTable(TTableClient& client, const TString& path) {
+static void DropTable(TTableClient& client, const std::string& path) {
     ThrowOnError(client.RetryOperationSync([path] (TSession session) {
         return session.DropTable(path).ExtractValueSync();
     }));
 }
 
-int Drop(NYdb::TDriver& driver, const TString& path) {
+int Drop(NYdb::TDriver& driver, const std::string& path) {
 
     TTableClient client(driver);
     DropTable(client, JoinPath(path, TABLE_SERIES));

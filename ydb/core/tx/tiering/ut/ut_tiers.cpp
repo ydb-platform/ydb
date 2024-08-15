@@ -10,7 +10,7 @@
 #include <ydb/core/wrappers/fake_storage.h>
 #include <ydb/core/tx/columnshard/hooks/testing/ro_controller.h>
 #include <ydb/library/accessor/accessor.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/ydb_table/table.h>
 #include <ydb/services/metadata/manager/alter.h>
 #include <ydb/services/metadata/manager/common.h>
 #include <ydb/services/metadata/manager/table_record.h>

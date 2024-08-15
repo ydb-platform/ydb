@@ -8,7 +8,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 
-#include <ydb/public/sdk/cpp_v2/src/library/persqueue/topic_parser_public/topic_parser.h>
+#include <ydb/public/sdk/cpp/src/library/persqueue/topic_parser_public/topic_parser.h>
 
 
 namespace NKikimr::NMsgBusProxy::NPqMetaCacheV2 {

@@ -3,7 +3,7 @@
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/codec.h>
 #include <ydb/library/yql/utils/log/log.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/ydb_proto/accessor.h>
 #include <util/system/env.h>
 
 

@@ -8,7 +8,7 @@ SRCS(
 PEERDIR(
     library/cpp/json
     ydb/public/api/grpc/draft
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/src/client/table
 )
 
 END()

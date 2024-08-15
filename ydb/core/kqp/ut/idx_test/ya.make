@@ -23,9 +23,9 @@ SRCS(
 PEERDIR(
     ydb/core/kqp/ut/common
     ydb/public/lib/idx_test
-    ydb/public/sdk/cpp_v2/src/library/yson_value
-    ydb/public/sdk/cpp/client/ydb_scheme
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/src/library/yson_value
+    ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/table
     ydb/library/yql/sql/pg_dummy
 )
 

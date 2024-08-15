@@ -20,7 +20,7 @@
 #include <ydb/library/binary_json/write.h>
 #include <ydb/library/dynumber/dynumber.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/ydb_proto/accessor.h>
 
 #include <util/string/vector.h>
 #include <util/generic/size_literals.h>

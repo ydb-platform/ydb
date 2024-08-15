@@ -6,8 +6,8 @@
 #include <library/cpp/json/json_writer.h>
 
 #include <ydb/public/lib/idx_test/idx_test.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/ydb_scheme/scheme.h>
+#include <ydb-cpp-sdk/client/ydb_table/table.h>
 
 using namespace NYdb;
 using namespace NYdb::NTable;

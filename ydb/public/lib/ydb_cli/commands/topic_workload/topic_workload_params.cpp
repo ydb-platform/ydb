@@ -5,7 +5,7 @@
 #include <library/cpp/getopt/small/last_getopt_support.h>
 #include <library/cpp/regex/pcre/regexp.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb-cpp-sdk/client/ydb_topic/topic.h>
 
 using namespace NYdb::NConsoleClient;
 

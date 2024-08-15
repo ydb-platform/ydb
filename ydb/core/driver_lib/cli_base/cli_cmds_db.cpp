@@ -6,13 +6,13 @@
 
 #include <ydb/library/aclib/aclib.h>
 
-#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
+#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 
 #include <ydb-cpp-sdk/library/grpc/client/grpc_client_low.h>
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/ydb_table/table.h>
 
 #include <util/generic/hash.h>
 #include <util/string/split.h>

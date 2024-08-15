@@ -13,7 +13,7 @@ PEERDIR(
     ydb/core/fq/libs/grpc
     ydb/core/fq/libs/shared_resources
     ydb/core/protos
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/src/client/table
 )
 
 YQL_LAST_ABI_VERSION()

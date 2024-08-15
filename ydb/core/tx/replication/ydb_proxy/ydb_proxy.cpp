@@ -1,8 +1,8 @@
 #include "ydb_proxy.h"
 
 #include <ydb/core/protos/replication.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
+#include <ydb-cpp-sdk/client/ydb_driver/driver.h>
+#include <ydb-cpp-sdk/client/ydb_types/credentials/credentials.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>

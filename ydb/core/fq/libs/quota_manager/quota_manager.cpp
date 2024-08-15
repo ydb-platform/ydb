@@ -6,7 +6,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <library/cpp/protobuf/interop/cast.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/ydb_table/table.h>
 #include <ydb/core/fq/libs/control_plane_storage/schema.h>
 #include <ydb/core/fq/libs/control_plane_storage/util.h>
 #include <ydb/core/fq/libs/shared_resources/db_exec.h>

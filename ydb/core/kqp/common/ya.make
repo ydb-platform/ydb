@@ -41,8 +41,8 @@ PEERDIR(
     ydb/library/yql/dq/common
     ydb/library/yql/dq/integration
     ydb/library/yql/parser/pg_wrapper/interface
-    ydb/public/sdk/cpp_v2/src/library/operation_id/
-    ydb/public/sdk/cpp_v2/src/library/operation_id/
+    ydb/public/sdk/cpp/src/library/operation_id/
+    ydb/public/sdk/cpp/src/library/operation_id/
     ydb/core/grpc_services/cancelation
     library/cpp/lwtrace
     #library/cpp/lwtrace/protos

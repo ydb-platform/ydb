@@ -1,6 +1,6 @@
 #include "sys.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb-cpp-sdk/client/ydb_scheme/scheme.h>
 
 namespace NYdb::NConsoleClient {
 

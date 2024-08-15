@@ -37,7 +37,7 @@ PEERDIR(
     ydb/library/yql/minikql
     ydb/library/yql/public/decimal
     ydb/public/lib/scheme_types
-    ydb/public/sdk/cpp/client/ydb_topic
+    ydb/public/sdk/cpp/src/client/topic
     ydb/library/yql/core/expr_nodes
     ydb/library/yql/core/peephole_opt
     ydb/library/yql/parser/pg_wrapper/interface

@@ -1,8 +1,8 @@
 #pragma once
 
 #include <ydb/public/lib/ydb_cli/common/sys.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb-cpp-sdk/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/ydb_scheme/scheme.h>
 
 #include <util/folder/path.h>
 #include <util/generic/deque.h>

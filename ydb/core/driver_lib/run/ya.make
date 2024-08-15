@@ -40,7 +40,7 @@ PEERDIR(
     ydb/library/actors/protos
     ydb/library/actors/util
     library/cpp/getopt/small
-    ydb/public/sdk/cpp_v2/src/library/grpc/client
+    ydb/public/sdk/cpp/src/library/grpc/client
     ydb/library/grpc/server
     ydb/library/grpc/server/actors
     library/cpp/logger

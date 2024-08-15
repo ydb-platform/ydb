@@ -1,6 +1,6 @@
 #include "pq_schema_actor.h"
 
-#include <ydb/public/sdk/cpp_v2/src/library/persqueue/obfuscate/obfuscate.h>
+#include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/persqueue/utils.h>

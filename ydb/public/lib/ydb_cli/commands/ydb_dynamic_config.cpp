@@ -1,6 +1,6 @@
 #include "ydb_dynamic_config.h"
 
-#include <ydb/public/sdk/cpp/client/draft/ydb_dynamic_config.h>
+#include <ydb-cpp-sdk/client/draft/ydb_dynamic_config.h>
 #include <ydb/library/yaml_config/public/yaml_config.h>
 
 #include <openssl/sha.h>

@@ -9,7 +9,7 @@
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/string_utils/csv/csv.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/ydb_table/table.h>
 #include <ydb-cpp-sdk/library/yson_value/ydb_yson_value.h>
 
 #include <ydb/public/api/protos/ydb_query.pb.h>

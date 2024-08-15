@@ -17,10 +17,10 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/sdk/cpp_v2/src/library/grpc/client
+    ydb/public/sdk/cpp/src/library/grpc/client
     ydb/core/testlib/default
     ydb/core/testlib
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/src/client/table
 )
 
 YQL_LAST_ABI_VERSION()

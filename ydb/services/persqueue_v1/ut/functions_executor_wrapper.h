@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
+#include <ydb-cpp-sdk/client/ydb_persqueue_public/persqueue.h>
 #include <util/system/mutex.h>
 
 #include <vector>

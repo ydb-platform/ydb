@@ -1,0 +1,22 @@
+LIBRARY()
+
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/headers.inc)
+
+SRCS(
+    credentials.cpp
+    jwt_token_source.cpp
+)
+
+PEERDIR(
+    contrib/libs/jwt-cpp
+    library/cpp/cgiparam
+    library/cpp/http/misc
+    library/cpp/http/simple
+    library/cpp/json
+    library/cpp/uri
+    ydb/public/sdk/cpp/src/client/types
+    ydb/public/sdk/cpp/src/client/types/credentials
+    
+)
+
+END()

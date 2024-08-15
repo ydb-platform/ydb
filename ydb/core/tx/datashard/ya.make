@@ -277,7 +277,7 @@ PEERDIR(
     ydb/library/yql/parser/pg_wrapper/interface
     ydb/services/lib/sharding
     ydb/library/chunks_limiter
-    ydb/public/sdk/cpp_v2/src/library/uuid
+    ydb/public/sdk/cpp/src/library/uuid
 )
 
 YQL_LAST_ABI_VERSION()

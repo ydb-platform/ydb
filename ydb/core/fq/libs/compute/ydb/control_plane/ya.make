@@ -26,7 +26,7 @@ PEERDIR(
     ydb/library/yql/utils/actors
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
-    ydb/public/sdk/cpp_v2/src/library/operation_id/
+    ydb/public/sdk/cpp/src/library/operation_id/
 )
 
 YQL_LAST_ABI_VERSION()

@@ -10,10 +10,10 @@ PEERDIR(
     ydb/public/api/protos
     ydb/public/lib/ydb_cli/common
     ydb/public/lib/ydb_cli/dump/util
-    ydb/public/sdk/cpp_v2/src/library/yson_value
-    ydb/public/sdk/cpp/client/ydb_proto
-    ydb/public/sdk/cpp/client/ydb_scheme
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/src/library/yson_value
+    ydb/public/sdk/cpp/src/client/proto
+    ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/table
 )
 
 SRCS(

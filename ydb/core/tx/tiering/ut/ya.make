@@ -23,7 +23,7 @@ PEERDIR(
     ydb/core/tx
     ydb/core/tx/columnshard
     ydb/core/tx/columnshard/hooks/testing
-    ydb/public/sdk/cpp_v2/src/library/yson_value
+    ydb/public/sdk/cpp/src/library/yson_value
 )
 
 YQL_LAST_ABI_VERSION()

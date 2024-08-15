@@ -23,7 +23,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/http
     ydb/library/yql/public/issue
-    ydb/public/sdk/cpp/client/ydb_types/status
+    ydb/public/sdk/cpp/src/client/types/status
 )
 
 END()

@@ -2,7 +2,7 @@
 #include "pretty_table.h"
 
 #include <ydb-cpp-sdk/library/operation_id/operation_id.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
+#include <ydb-cpp-sdk/client/ydb_types/status_codes.h>
 
 #include <util/string/builder.h>
 #include <util/string/cast.h>

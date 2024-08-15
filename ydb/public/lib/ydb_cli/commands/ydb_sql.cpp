@@ -8,7 +8,7 @@
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
 #include <ydb/public/lib/ydb_cli/common/waiting_bar.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/ydb_proto/accessor.h>
 #include <util/generic/queue.h>
 #include <google/protobuf/text_format.h>
 

@@ -24,7 +24,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/statistics/ut_common
-    ydb/public/sdk/cpp/client/ydb_proto
+    ydb/public/sdk/cpp/src/client/proto
     ydb/core/kqp
     ydb/core/kqp/ut/common
     ydb/library/yql/sql/pg_dummy

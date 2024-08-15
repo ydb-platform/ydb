@@ -26,7 +26,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/ydb_convert
     ydb/library/aclib
-    ydb/public/sdk/cpp_v2/src/library/persqueue/obfuscate
+    ydb/public/sdk/cpp/src/library/persqueue/obfuscate
 #    ydb/library/persqueue/tests
     ydb/library/persqueue/topic_parser
     ydb/public/api/grpc

@@ -178,6 +178,7 @@ runs:
 
         if [ true = ${{ inputs.run_tests }} ]; then
           params+=(-A)
+          params+=(--retest)
         fi
 
         params+=(

@@ -6797,7 +6797,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         // DROP RESOURCE POOL CLASSIFIER
         checkQuery("DROP RESOURCE POOL CLASSIFIER MyResourcePoolClassifier;",
             EStatus::GENERIC_ERROR,
-            "Classifier to drop not found");
+            "Classifier with name MyResourcePoolClassifier not found in database /Root");
     }
 
     Y_UNIT_TEST(ResourcePoolClassifiersValidation) {
@@ -7086,7 +7086,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto query = "DROP RESOURCE POOL CLASSIFIER MyResourcePoolClassifier;";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Classifier to drop not found");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Classifier with name MyResourcePoolClassifier not found in database /Root");
     }
 }
 

@@ -207,7 +207,10 @@ public:
 
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
         const auto& snapshot = ev->Get()->GetSnapshotAs<TResourcePoolClassifierSnapshot>();
-        for (const auto& object : PatchedObjects) {
+        for (const auto& objectRecord : AlterContext.GetRestoreObjectIds().GetTableRecords()) {
+            TResourcePoolClassifierConfig object;
+            TResourcePoolClassifierConfig::TDecoder::DeserializeFromRecord(object, objectRecord);
+
             if (!snapshot->GetClassifierConfig(CanonizePath(object.GetDatabase()), object.GetName())) {
                 FailAndPassAway(TStringBuilder() << "Classifier with name " << object.GetName() << " not found in database " << object.GetDatabase());
                 return;
@@ -252,7 +255,7 @@ private:
         }
 
         Register(new TQueryRetryActor<TRanksCheckerActor, TEvPrivate::TEvRanksCheckerResponse, TString, TString, TString, std::unordered_map<i64, TString>>(
-            SelfId(), Context.GetExternalData().GetDatabase(), AlterContext.SessionId, AlterContext.TransactionId, ranksToNames
+            SelfId(), Context.GetExternalData().GetDatabase(), AlterContext.GetSessionId(), AlterContext.GetTransactionId(), ranksToNames
         ));
     }
 
@@ -277,13 +280,8 @@ private:
     }
 
     void ValidateExistence() {
-        if (Context.GetActivityType() == NMetadata::NModifications::IOperationsManager::EActivityType::Alter && NMetadata::NProvider::TServiceOperator::IsEnabled()) {
+        if (Context.GetActivityType() != NMetadata::NModifications::IOperationsManager::EActivityType::Create && NMetadata::NProvider::TServiceOperator::IsEnabled()) {
             Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<TResourcePoolClassifierSnapshotsFetcher>()));
-            return;
-        }
-
-        if (Context.GetActivityType() == NMetadata::NModifications::IOperationsManager::EActivityType::Drop && PatchedObjects.empty()) {
-            FailAndPassAway("Classifier to drop not found");
             return;
         }
 

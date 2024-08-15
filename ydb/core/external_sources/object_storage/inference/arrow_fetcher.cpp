@@ -265,21 +265,27 @@ private:
 
     std::shared_ptr<arrow::io::RandomAccessFile> BuildParquetFileFromMetadata(const TString& data, const TRequest& request, const NActors::TActorContext& ctx) {
         auto arrowData = std::make_shared<arrow::Buffer>(nullptr, 0);
-        {
-            arrow::BufferBuilder builder;
-            auto buildRes = builder.Append(data.data(), data.size());
-            if (buildRes.ok()) {
-                buildRes = builder.Finish(&arrowData);
-            }
-            if (!buildRes.ok()) {
-                auto error = MakeError(
-                    request.Path,
-                    NFq::TIssuesIds::INTERNAL_ERROR,
-                    TStringBuilder{} << "couldn't consume buffer from S3Fetcher: " << buildRes.ToString()
-                );
-                SendError(ctx, error);
-                return nullptr;
-            }
+        arrow::BufferBuilder builder;
+        auto buildRes = builder.Append(data.data(), data.size());
+        if (!buildRes.ok()) {
+            auto error = MakeError(
+                request.Path,
+                NFq::TIssuesIds::INTERNAL_ERROR,
+                TStringBuilder{} << "couldn't read data from S3Fetcher: " << buildRes.ToString()
+            );
+            SendError(ctx, error);
+            return nullptr;
+        }
+
+        buildRes = builder.Finish(&arrowData);
+        if (!buildRes.ok()) {
+            auto error = MakeError(
+                request.Path,
+                NFq::TIssuesIds::INTERNAL_ERROR,
+                TStringBuilder{} << "couldn't copy data from S3Fetcher: " << buildRes.ToString()
+            );
+            SendError(ctx, error);
+            return nullptr;
         }
 
         return std::make_shared<arrow::io::BufferReader>(std::move(arrowData));

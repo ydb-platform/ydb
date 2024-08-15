@@ -464,6 +464,9 @@ auto CalcVectorKmeansTreePostingImplTableDescImpl(
     }
     implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn);
     FillIndexImplTableColumns(GetColumns(baseTable), implTableColumns, implTableDesc);
+
+    implTableDesc.SetSystemColumnNamesAllowed(true);
+
     return implTableDesc;
 }
 
@@ -516,6 +519,8 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
 
     implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::LevelTable_ParentIdColumn);
     implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::LevelTable_IdColumn);
+
+    implTableDesc.SetSystemColumnNamesAllowed(true);
 
     return implTableDesc;
 }

@@ -17,8 +17,8 @@ class Collection(object):
 
     def __init__(self, ss: Settings):
         self._test_cases = {
-            'select_missing_database': select_missing_database.Factory().make_test_cases(EDataSourceKind.MS_SQL_SERVER),
-            'select_missing_table': select_missing_table.Factory().make_test_cases(EDataSourceKind.MS_SQL_SERVER),
+            'select_missing_database': select_missing_database.Factory(ss).make_test_cases(EDataSourceKind.MS_SQL_SERVER),
+            'select_missing_table': select_missing_table.Factory(ss).make_test_cases(EDataSourceKind.MS_SQL_SERVER),
             'select_positive': select_positive.Factory().make_test_cases()
             + select_positive_common.Factory(ss).make_test_cases(EDataSourceKind.MS_SQL_SERVER),
             'select_datetime': select_datetime.Factory().make_test_cases(),

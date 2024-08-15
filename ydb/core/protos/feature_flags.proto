@@ -145,7 +145,7 @@ message TFeatureFlags {
     optional bool EnableExternalSourceSchemaInference = 126 [default = false];
     optional bool EnableDbMetadataCache = 127 [default = false];
     optional bool EnableTableDatetime64 = 128 [default = true];
-    optional bool EnableResourcePools = 129 [default = false];
+    optional bool EnableResourcePools = 129 [default = true];
     optional bool EnableColumnStatistics = 130 [default = false];
     optional bool EnableSingleCompositeActionGroup = 131 [default = false];
     optional bool EnableResourcePoolsOnServerless = 132 [default = false];

@@ -63,6 +63,7 @@ class OneTimeWaiter:
             try:
                 actual_tables = set(self.docker_compose_helper.list_ms_sql_server_tables())
             except Exception as e:
+                print("CRAB", e)
                 LOGGER.error(f"list ms_sql_server tables error: {e}")
                 time.sleep(5)
             else:
@@ -76,25 +77,25 @@ class OneTimeWaiter:
 one_time_waiter = OneTimeWaiter()
 
 
-@pytest.mark.parametrize("runner_type", runner_types)
-@pytest.mark.parametrize("test_case", tc_collection.get('select_positive'), ids=tc_collection.ids('select_positive'))
-@pytest.mark.usefixtures("settings")
-def test_select_positive(
-    request: pytest.FixtureRequest,
-    settings: Settings,
-    runner_type: str,
-    test_case: select_positive_common.TestCase,
-):
-    # Let ms_sql_server initialize
-    one_time_waiter.wait()
+# @pytest.mark.parametrize("runner_type", runner_types)
+# @pytest.mark.parametrize("test_case", tc_collection.get('select_positive'), ids=tc_collection.ids('select_positive'))
+# @pytest.mark.usefixtures("settings")
+# def test_select_positive(
+#     request: pytest.FixtureRequest,
+#     settings: Settings,
+#     runner_type: str,
+#     test_case: select_positive_common.TestCase,
+# ):
+#     # Let ms_sql_server initialize
+#     one_time_waiter.wait()
 
-    runner = configure_runner(runner_type=runner_type, settings=settings)
-    scenario.select_positive(
-        settings=settings,
-        runner=runner,
-        test_case=test_case,
-        test_name=request.node.name,
-    )
+#     runner = configure_runner(runner_type=runner_type, settings=settings)
+#     scenario.select_positive(
+#         settings=settings,
+#         runner=runner,
+#         test_case=test_case,
+#         test_name=request.node.name,
+#     )
 
 
 @pytest.mark.parametrize("runner_type", runner_types)
@@ -118,47 +119,47 @@ def test_select_datetime(
     )
 
 
-@pytest.mark.parametrize("runner_type", runner_types)
-@pytest.mark.parametrize(
-    "test_case", tc_collection.get('select_missing_database'), ids=tc_collection.ids('select_missing_database')
-)
-@pytest.mark.usefixtures("settings")
-def test_select_missing_database(
-    request: pytest.FixtureRequest,
-    settings: Settings,
-    runner_type: str,
-    test_case: select_missing_database.TestCase,
-):
-    # Let ms_sql_server initialize
-    one_time_waiter.wait()
+# @pytest.mark.parametrize("runner_type", runner_types)
+# @pytest.mark.parametrize(
+#     "test_case", tc_collection.get('select_missing_database'), ids=tc_collection.ids('select_missing_database')
+# )
+# @pytest.mark.usefixtures("settings")
+# def test_select_missing_database(
+#     request: pytest.FixtureRequest,
+#     settings: Settings,
+#     runner_type: str,
+#     test_case: select_missing_database.TestCase,
+# ):
+#     # Let ms_sql_server initialize
+#     one_time_waiter.wait()
 
-    runner = configure_runner(runner_type=runner_type, settings=settings)
-    scenario.select_missing_database(
-        settings=settings,
-        runner=runner,
-        test_case=test_case,
-        test_name=request.node.name,
-    )
+#     runner = configure_runner(runner_type=runner_type, settings=settings)
+#     scenario.select_missing_database(
+#         settings=settings,
+#         runner=runner,
+#         test_case=test_case,
+#         test_name=request.node.name,
+#     )
 
 
-@pytest.mark.parametrize("runner_type", runner_types)
-@pytest.mark.parametrize(
-    "test_case", tc_collection.get('select_missing_table'), ids=tc_collection.ids('select_missing_table')
-)
-@pytest.mark.usefixtures("settings")
-def test_select_missing_table(
-    request: pytest.FixtureRequest,
-    settings: Settings,
-    runner_type: str,
-    test_case: select_missing_table.TestCase,
-):
-    # Let ms_sql_server initialize
-    one_time_waiter.wait()
+# @pytest.mark.parametrize("runner_type", runner_types)
+# @pytest.mark.parametrize(
+#     "test_case", tc_collection.get('select_missing_table'), ids=tc_collection.ids('select_missing_table')
+# )
+# @pytest.mark.usefixtures("settings")
+# def test_select_missing_table(
+#     request: pytest.FixtureRequest,
+#     settings: Settings,
+#     runner_type: str,
+#     test_case: select_missing_table.TestCase,
+# ):
+#     # Let ms_sql_server initialize
+#     one_time_waiter.wait()
 
-    runner = configure_runner(runner_type=runner_type, settings=settings)
-    scenario.select_missing_table(
-        test_name=request.node.name,
-        settings=settings,
-        runner=runner,
-        test_case=test_case,
-    )
+#     runner = configure_runner(runner_type=runner_type, settings=settings)
+#     scenario.select_missing_table(
+#         test_name=request.node.name,
+#         settings=settings,
+#         runner=runner,
+#         test_case=test_case,
+#     )

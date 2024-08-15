@@ -23,14 +23,14 @@ def select_positive(
     where_statement = ""
     if test_case.select_where is not None:
         where_statement = "WHERE " + test_case.select_where.render(
-            cluster_name=settings.mysql.cluster_name,
+            cluster_name=settings.ms_sql_server.cluster_name,
             table_name=test_case.table_name,
         )
 
     yql_script = f"""
         {test_case.pragmas_sql_string}
         SELECT {test_case.select_what.yql_select_names}
-        FROM {settings.mysql.cluster_name}.{test_case.table_name}
+        FROM {settings.ms_sql_server.cluster_name}.{test_case.table_name}
         {where_statement}
     """
     result = runner.run(
@@ -56,7 +56,7 @@ def select_missing_database(
     # select table from database that does not exist
     yql_script = f"""
         SELECT *
-        FROM {settings.mysql.cluster_name}.{test_case.table_name}
+        FROM {settings.ms_sql_server.cluster_name}.{test_case.table_name}
     """
     result = runner.run(
         test_name=test_name,
@@ -79,7 +79,7 @@ def select_missing_table(
     # select non-existing table from existing database
     yql_script = f"""
         SELECT *
-        FROM {settings.mysql.cluster_name}.{test_case.table_name}
+        FROM {settings.ms_sql_server.cluster_name}.{test_case.table_name}
     """
     result = runner.run(
         test_name=test_name,

@@ -16,12 +16,16 @@ class TestCase(BaseTestCase):
         gs = super().generic_settings
 
         # Overload setting for MySQL database
-        if self.data_source_kind == EDataSourceKind.MYSQL:
+        if self.data_source_kind in EDataSourceKind.MYSQL:
             for cluster in gs.mysql_clusters:
                 cluster.database = "missing_database"
         for cluster in gs.oracle_clusters:
             if self.service_name is not None:
                 cluster.service_name = self.service_name
+
+        if self.data_source_kind in EDataSourceKind.MS_SQL_SERVER:
+            for cluster in gs.ms_sql_server_clusters:
+                cluster.database = "missing_database"
 
         return gs
 

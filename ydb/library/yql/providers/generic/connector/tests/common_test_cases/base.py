@@ -67,6 +67,8 @@ class BaseTestCase:
         match self.data_source_kind:
             case EDataSourceKind.CLICKHOUSE:
                 return 't' + make_random_string(8)
+            case EDataSourceKind.MS_SQL_SERVER:
+                return self.name
             case EDataSourceKind.MYSQL:
                 return self.name
             case EDataSourceKind.ORACLE:
@@ -94,6 +96,11 @@ class BaseTestCase:
                     clickhouse_clusters=[
                         GenericSettings.ClickHouseCluster(database=self.database.name, protocol=EProtocol.NATIVE)
                     ],
+                )
+            case EDataSourceKind.MS_SQL_SERVER:
+                return GenericSettings(
+                    date_time_format=EDateTimeFormat.YQL_FORMAT,
+                    ms_sql_server_clusters=[GenericSettings.MsSQLServerCluster(database=self.database.name)],
                 )
             case EDataSourceKind.MYSQL:
                 return GenericSettings(

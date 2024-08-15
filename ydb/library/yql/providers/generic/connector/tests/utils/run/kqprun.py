@@ -50,6 +50,7 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
 {%- endmacro -%}
 
 {% set CLICKHOUSE = 'ClickHouse' %}
+{% set MS_SQL_SERVER = 'MsSQLServer' %}
 {% set MYSQL = 'MySQL' %}
 {% set ORACLE = 'Oracle' %}
 {% set POSTGRESQL = 'PostgreSQL' %}
@@ -78,6 +79,20 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
     CLICKHOUSE_PROTOCOL,
     cluster.database,
     NONE,
+    NONE)
+}}
+{% endfor %}
+
+{% for cluster in generic_settings.ms_sql_server_clusters %}
+{{ create_data_source(
+    MS_SQL_SERVER,
+    settings.ms_sql_server.cluster_name,
+    settings.ms_sql_server.host_internal,
+    settings.ms_sql_server.port_internal,
+    settings.ms_sql_server.username,
+    settings.ms_sql_server.password,
+    NONE,
+    cluster.database,
     NONE)
 }}
 {% endfor %}

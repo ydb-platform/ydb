@@ -248,7 +248,7 @@ class GenericSettings:
 
         database: str
 
-    ms_sql_clusters: Sequence[MsSQLServerCluster] = field(default_factory=list)
+    ms_sql_server_clusters: Sequence[MsSQLServerCluster] = field(default_factory=list)
 
     @dataclass
     class MySQLCluster:

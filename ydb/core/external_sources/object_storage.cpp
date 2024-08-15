@@ -335,7 +335,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
             }
             for (const auto& entry : entries.Objects) {
                 if (entry.Size > 0) {
-                    return entry.Path;
+                    return entry;
                 }
             }
             throw yexception() << "couldn't find any files for type inference, please check that the right path is provided";
@@ -354,7 +354,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
         auto arrowFetcherId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowFetchingActor(s3FetcherId, fileFormat, meta->Attributes));
         auto arrowInferencinatorId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowInferencinator(arrowFetcherId, fileFormat, meta->Attributes));
 
-        return afterListing.Apply([arrowInferencinatorId, meta, actorSystem = ActorSystem](const NThreading::TFuture<TString>& pathFut) {
+        return afterListing.Apply([arrowInferencinatorId, meta, actorSystem = ActorSystem](const NThreading::TFuture<NYql::NS3Lister::TObjectListEntry>& entryFut) {
             auto promise = NThreading::NewPromise<TMetadataResult>();
             auto schemaToMetadata = [meta](NThreading::TPromise<TMetadataResult> metaPromise, NObjectStorage::TEvInferredFileSchema&& response) {
                 if (!response.Status.IsSuccess()) {
@@ -372,9 +372,10 @@ struct TObjectStorageExternalSource : public IExternalSource {
                 result.Metadata = meta;
                 metaPromise.SetValue(std::move(result));
             };
+            auto [path, size, _] = entryFut.GetValue();
             actorSystem->Register(new NKqp::TActorRequestHandler<NObjectStorage::TEvInferFileSchema, NObjectStorage::TEvInferredFileSchema, TMetadataResult>(
                 arrowInferencinatorId,
-                new NObjectStorage::TEvInferFileSchema(TString{pathFut.GetValue()}),
+                new NObjectStorage::TEvInferFileSchema(TString{path}, size),
                 promise,
                 std::move(schemaToMetadata)
             ));

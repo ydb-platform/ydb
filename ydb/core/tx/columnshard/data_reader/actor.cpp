@@ -35,7 +35,10 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
 }
 
 void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanError::TPtr& ev) {
-    AFL_VERIFY(false)("error", NYql::IssuesFromMessageAsString(ev->Get()->Record.GetIssues()));
+    SwitchStage(EStage::WaitData, EStage::Finished);
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "problem_on_restore_data")(
+        "reason", NYql::IssuesFromMessageAsString(ev->Get()->Record.GetIssues()));
+    RestoreTask->OnError(NYql::IssuesFromMessageAsString(ev->Get()->Record.GetIssues()));
 }
 
 void TActor::Bootstrap(const TActorContext& /*ctx*/) {

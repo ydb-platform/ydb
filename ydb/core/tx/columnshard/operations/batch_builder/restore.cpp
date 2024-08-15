@@ -25,15 +25,17 @@ std::unique_ptr<NKikimr::TEvColumnShard::TEvInternalScan> TModificationRestoreTa
 NKikimr::TConclusionStatus TModificationRestoreTask::DoOnDataChunk(const std::shared_ptr<arrow::Table>& data) {
     auto result = Merger->AddExistsDataOrdered(data);
     if (result.IsFail()) {
-        auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "restore_data_problems")
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "merge_data_problems")
             ("write_id", WriteData.GetWriteMeta().GetWriteId())("tablet_id", TabletId)("message", result.GetErrorMessage());
-        TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(*writeDataPtr) });
-        auto evResult = NColumnShard::TEvPrivate::TEvWriteBlobsResult::Error(NKikimrProto::EReplyStatus::CORRUPTED,
-            std::move(buffer), result.GetErrorMessage());
-        TActorContext::AsActorContext().Send(ParentActorId, evResult.release());
+        SendErrorMessage(result.GetErrorMessage());
     }
     return result;
+}
+
+void TModificationRestoreTask::DoOnError(const TString& errorMessage) {
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "restore_data_problems")("write_id", WriteData.GetWriteMeta().GetWriteId())(
+        "tablet_id", TabletId)("message", errorMessage);
+    SendErrorMessage(errorMessage);
 }
 
 NKikimr::TConclusionStatus TModificationRestoreTask::DoOnFinished() {
@@ -63,6 +65,14 @@ TModificationRestoreTask::TModificationRestoreTask(const ui64 tabletId, const NA
     , Snapshot(actualSnapshot)
     , IncomingData(incomingData) {
 
+}
+
+void TModificationRestoreTask::SendErrorMessage(const TString& errorMessage) {
+    auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
+    TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(*writeDataPtr) });
+    auto evResult =
+        NColumnShard::TEvPrivate::TEvWriteBlobsResult::Error(NKikimrProto::EReplyStatus::CORRUPTED, std::move(buffer), result.GetErrorMessage());
+    TActorContext::AsActorContext().Send(ParentActorId, evResult.release());
 }
 
 }

@@ -26,9 +26,36 @@ public:
 private:
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
 
-    TRingQueue<TFuture<T>> ValueQueue_;
+    TRingQueue<TFuture<T>> AsyncValueQueue_;
     TRingQueue<TPromise<T>> PromiseQueue_;
 
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+class TBoundedNonblockingQueue
+{
+public:
+    explicit TBoundedNonblockingQueue(i64 sizeLimit);
+
+    TFuture<void> Enqueue(TFuture<T> asyncValue);
+
+    // This template is required to enable perfect forwarding.
+    template <class TArg>
+    TFuture<void> Enqueue(TArg&& value);
+
+    // Dequeued futures could be set in arbitrary order.
+    TFuture<T> Dequeue();
+
+private:
+    const i64 SizeLimit_ = 0;
+
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+
+    TRingQueue<TFuture<T>> AsyncValueQueue_;
+    TRingQueue<TPromise<T>> ConsumerQueue_;
+    TRingQueue<TPromise<void>> ProducerQueue_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

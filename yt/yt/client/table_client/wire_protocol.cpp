@@ -87,7 +87,7 @@ public:
 
     size_t GetByteSize() const override
     {
-        return Stream_.GetSize();
+        return Stream_.GetSize() + (Current_ - BeginPreallocated_);
     }
 
     void WriteCommand(EWireProtocolCommand command) override
@@ -206,9 +206,21 @@ public:
         TRange<TUnversionedRow> rowset,
         const TNameTableToSchemaIdMapping* idMapping) override
     {
-        WriteRowCount(rowset);
+        WriteRowCount(rowset.Size());
         for (auto row : rowset) {
             WriteUnversionedRow(row, idMapping);
+        }
+    }
+
+    void WriteSerializedRowset(
+        size_t rowCount,
+        const std::vector<TSharedRef>& serializedRowset) override
+    {
+        WriteRowCount(rowCount);
+
+        for (const auto& item : serializedRowset) {
+            EnsureCapacity(item.Size());
+            UnsafeWriteRaw(item.Data(), item.Size());
         }
     }
 
@@ -216,7 +228,7 @@ public:
         TRange<TUnversionedRow> rowset,
         const TNameTableToSchemaIdMapping* idMapping) override
     {
-        WriteRowCount(rowset);
+        WriteRowCount(rowset.Size());
         for (auto row : rowset) {
             WriteSchemafulRow(row, idMapping);
         }
@@ -224,7 +236,7 @@ public:
 
     void WriteVersionedRowset(TRange<TVersionedRow> rowset) override
     {
-        WriteRowCount(rowset);
+        WriteRowCount(rowset.Size());
         for (auto row : rowset) {
             WriteVersionedRow(row);
         }
@@ -326,10 +338,8 @@ private:
         UnsafeWritePod(value);
     }
 
-    template <class TRow>
-    void WriteRowCount(TRange<TRow> rowset)
+    void WriteRowCount(size_t rowCount)
     {
-        size_t rowCount = rowset.Size();
         ValidateRowCount(rowCount);
         WriteUint64(rowCount);
     }
@@ -392,7 +402,7 @@ private:
                 return lhs.Id < rhs.Id;
             });
 
-        return MakeRange(PooledValues_);
+        return TRange(PooledValues_);
     }
 
     void UnsafeWriteNullBitmap(TUnversionedValueRange values)
@@ -605,7 +615,7 @@ public:
         ::google::protobuf::io::CodedInputStream chunkStream(
             reinterpret_cast<const ui8*>(Current_),
             static_cast<int>(size));
-        Y_PROTOBUF_SUPPRESS_NODISCARD message->ParsePartialFromCodedStream(&chunkStream);
+        Y_UNUSED(message->ParsePartialFromCodedStream(&chunkStream));
         Current_ += AlignUp<size_t>(size, SerializationAlignment);
     }
 

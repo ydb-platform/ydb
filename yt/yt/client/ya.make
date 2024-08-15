@@ -21,7 +21,6 @@ SRCS(
     api/query_tracker_client.cpp
     api/helpers.cpp
     api/internal_client.cpp
-    api/operations_archive_schema.cpp
     api/public.cpp
     api/rowset.cpp
     api/skynet.cpp
@@ -152,6 +151,7 @@ SRCS(
     queue_client/consumer_client.cpp
     queue_client/helpers.cpp
     queue_client/partition_reader.cpp
+    queue_client/producer_client.cpp
     queue_client/queue_rowset.cpp
 
     ypath/rich.cpp

@@ -241,7 +241,7 @@ void TResourcePoolManager::PrepareCreateResourcePool(NKqpProto::TKqpSchemeOperat
     }
 
     auto& schemeTx = *schemeOperation.MutableCreateResourcePool();
-    schemeTx.SetWorkingDir(JoinPath({context.GetExternalData().GetDatabase(), ".resource_pools/"}));
+    schemeTx.SetWorkingDir(JoinPath({context.GetExternalData().GetDatabase(), ".metadata/workload_manager/pools/"}));
     schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateResourcePool);
 
     FillResourcePoolDescription(*schemeTx.MutableCreateResourcePool(), settings);
@@ -249,7 +249,7 @@ void TResourcePoolManager::PrepareCreateResourcePool(NKqpProto::TKqpSchemeOperat
 
 void TResourcePoolManager::PrepareAlterResourcePool(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TDropObjectSettings& settings, TInternalModificationContext& context) const {
     auto& schemeTx = *schemeOperation.MutableAlterResourcePool();
-    schemeTx.SetWorkingDir(JoinPath({context.GetExternalData().GetDatabase(), ".resource_pools/"}));
+    schemeTx.SetWorkingDir(JoinPath({context.GetExternalData().GetDatabase(), ".metadata/workload_manager/pools/"}));
     schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterResourcePool);
 
     FillResourcePoolDescription(*schemeTx.MutableCreateResourcePool(), settings);
@@ -257,7 +257,7 @@ void TResourcePoolManager::PrepareAlterResourcePool(NKqpProto::TKqpSchemeOperati
 
 void TResourcePoolManager::PrepareDropResourcePool(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TDropObjectSettings& settings, TInternalModificationContext& context) const {
     auto& schemeTx = *schemeOperation.MutableDropResourcePool();
-    schemeTx.SetWorkingDir(JoinPath({context.GetExternalData().GetDatabase(), ".resource_pools/"}));
+    schemeTx.SetWorkingDir(JoinPath({context.GetExternalData().GetDatabase(), ".metadata/workload_manager/pools/"}));
     schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropResourcePool);
 
     schemeTx.MutableDrop()->SetName(settings.GetObjectId());

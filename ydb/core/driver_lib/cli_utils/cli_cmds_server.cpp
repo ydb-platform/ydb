@@ -944,7 +944,8 @@ protected:
             const TString &nodeHost,
             const TString &nodeAddress,
             const TString &nodeResolveHost,
-            const TMaybe<TString>& path) {
+            const TMaybe<TString>& path,
+            const TString& nodeRegistrationToken) {
         TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(addr);
         NYdb::TDriverConfig config;
         if (endpoint.EnableSsl.Defined()) {
@@ -957,7 +958,9 @@ protected:
                 config.UseClientCertificate(certificate.c_str(), privateKey.c_str());
             }
         }
-        config.SetAuthToken(BUILTIN_ACL_ROOT);
+        if (nodeRegistrationToken) {
+            config.SetAuthToken(nodeRegistrationToken);
+        }
         config.SetEndpoint(endpoint.Address);
         auto connection = NYdb::TDriver(config);
 
@@ -1028,13 +1031,13 @@ protected:
         return {};
     }
 
-    NYdb::NDiscovery::TNodeRegistrationResult RegisterDynamicNodeViaDiscoveryService(const TVector<TString>& addrs, const TString& domainName) {
+    NYdb::NDiscovery::TNodeRegistrationResult RegisterDynamicNodeViaDiscoveryService(const TVector<TString>& addrs, const TString& domainName, const TString& nodeRegistrationToken) {
         NYdb::NDiscovery::TNodeRegistrationResult result;
         const size_t maxNumberRecivedCallUnimplemented = 5;
         size_t currentNumberRecivedCallUnimplemented = 0;
         while (!result.IsSuccess() && currentNumberRecivedCallUnimplemented < maxNumberRecivedCallUnimplemented) {
             for (const auto& addr : addrs) {
-                result = TryToRegisterDynamicNodeViaDiscoveryService(addr, domainName, NodeHost, NodeAddress, NodeResolveHost, GetSchemePath());
+                result = TryToRegisterDynamicNodeViaDiscoveryService(addr, domainName, NodeHost, NodeAddress, NodeResolveHost, GetSchemePath(), nodeRegistrationToken);
                 if (result.IsSuccess()) {
                     Cout << "Success. Registered via discovery service as " << result.GetNodeId() << Endl;
                     Cout << "Node name: ";
@@ -1217,7 +1220,7 @@ protected:
         if (!NodeResolveHost)
             NodeResolveHost = NodeHost;
 
-        NYdb::NDiscovery::TNodeRegistrationResult result = RegisterDynamicNodeViaDiscoveryService(addrs, domainName);
+        NYdb::NDiscovery::TNodeRegistrationResult result = RegisterDynamicNodeViaDiscoveryService(addrs, domainName, AppConfig.GetAuthConfig().GetNodeRegistrationToken());
         if (result.IsSuccess()) {
             ProcessRegistrationDynamicNodeResult(result);
         } else {

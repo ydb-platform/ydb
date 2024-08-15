@@ -52,6 +52,7 @@ message TAuthConfig {
     optional bool UseBuiltinDomain = 78 [default = true];
     optional string CertificateAuthenticationDomain = 80 [default = "cert"];
     optional bool EnableLoginAuthentication = 81 [default = true];
+    optional string NodeRegistrationToken = 82 [default = "root@builtin", (Ydb.sensitive) = true];
 }
 
 message TUserRegistryConfig {

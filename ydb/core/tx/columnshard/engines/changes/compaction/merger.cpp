@@ -30,6 +30,8 @@ std::vector<NKikimr::NOlap::TWritePortionInfoWithBlobsResult> TMerger::Execute(c
 
         ui32 idx = 0;
         for (auto&& batch : Batches) {
+            AFL_VERIFY(batch->GetColumnsCount() == resultFiltered->GetColumnsCount())("data", batch->GetColumnsCount())(
+                                                       "schema", resultFiltered->GetColumnsCount());
             {
                 NArrow::NConstruction::IArrayBuilder::TPtr column =
                     std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntConstFiller<arrow::UInt16Type>>>(
@@ -54,7 +56,7 @@ std::vector<NKikimr::NOlap::TWritePortionInfoWithBlobsResult> TMerger::Execute(c
         NActors::TLogContextGuard logGuard(
             NActors::TLogContextBuilder::Build()("field_name", resultFiltered->GetIndexInfo().GetColumnName(columnId)));
         auto columnInfo = stats->GetColumnInfo(columnId);
-        auto resultField = resultFiltered->GetIndexInfo().GetColumnFieldVerified(columnId);
+//        auto resultField = resultFiltered->GetIndexInfo().GetColumnFieldVerified(columnId);
         std::shared_ptr<IColumnMerger> merger = std::make_shared<TPlainMerger>();
         //        resultFiltered->BuildColumnMergerVerified(columnId);
 

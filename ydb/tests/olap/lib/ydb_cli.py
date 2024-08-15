@@ -60,7 +60,7 @@ class YdbCliHelper:
             return stderr[begin_pos:end_pos].strip()
 
         try:
-            if not YdbCluster.wait_ydb_alive(60):
+            if not YdbCluster.wait_ydb_alive(300, path):
                 return YdbCliHelper.WorkloadRunResult(error_message='Ydb cluster is dead')
 
             json_path = yatest.common.work_path(f'q{query_num}.json')

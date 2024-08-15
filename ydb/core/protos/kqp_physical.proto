@@ -263,6 +263,7 @@ enum EStreamLookupStrategy {
     UNSPECIFIED = 0;
     LOOKUP = 1;
     JOIN = 2;
+    SEMI_JOIN = 3;
 };
 
 message TKqpPhyCnStreamLookup {
@@ -375,6 +376,7 @@ message TKqpPhyStage {
     repeated TKqpSink Sinks = 11;
     map<string, string> SecureParams = 12;
     bool AllowWithSpilling = 13;
+    uint32 TaskCount = 14;
 }
 
 message TKqpPhyResult {
@@ -383,6 +385,11 @@ message TKqpPhyResult {
     bool IsStream = 3;
     repeated string ColumnHints = 4;
     optional uint32 QueryResultIndex = 5;
+}
+
+message TKqpAnalyzeOperation {
+    string TablePath = 1;
+    repeated string Columns = 2;
 }
 
 message TKqpPhyMetadataOperation {
@@ -449,6 +456,10 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme CreateResourcePool = 38;
         NKikimrSchemeOp.TModifyScheme AlterResourcePool = 39;
         NKikimrSchemeOp.TModifyScheme DropResourcePool = 40;
+        TKqpAnalyzeOperation AnalyzeTable = 41;
+        NKikimrSchemeOp.TModifyScheme CreateTopic = 42;
+        NKikimrSchemeOp.TModifyScheme AlterTopic = 43;
+        NKikimrSchemeOp.TModifyScheme DropTopic = 44;
     }
 }
 

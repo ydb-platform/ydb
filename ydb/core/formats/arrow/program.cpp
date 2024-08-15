@@ -919,7 +919,7 @@ std::set<std::string> TProgramStep::GetColumnsInUsage(const bool originalOnly/* 
 }
 
 arrow::Result<std::shared_ptr<NArrow::TColumnFilter>> TProgramStep::BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& t) const {
-    return BuildFilter(t->BuildTable(GetColumnsInUsage(true)));
+    return BuildFilter(t->BuildTableVerified(GetColumnsInUsage(true)));
 }
 
 arrow::Result<std::shared_ptr<NArrow::TColumnFilter>> TProgramStep::BuildFilter(const std::shared_ptr<arrow::Table>& t) const {

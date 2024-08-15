@@ -123,6 +123,8 @@ struct IChannel
     DECLARE_INTERFACE_SIGNAL(void(const TError&), Terminated);
 
     virtual int GetInflightRequestCount() = 0;
+
+    virtual const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IChannel)

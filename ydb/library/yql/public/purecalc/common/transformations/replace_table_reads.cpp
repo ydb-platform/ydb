@@ -1,6 +1,7 @@
 #include "replace_table_reads.h"
 
 #include <ydb/library/yql/public/purecalc/common/names.h>
+#include <ydb/library/yql/public/purecalc/common/transformations/utils.h>
 
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
@@ -11,23 +12,26 @@ using namespace NYql::NPureCalc;
 namespace {
     class TTableReadsReplacer: public TSyncTransformerBase {
     private:
-        ui32 InputsNumber_;
+        const TVector<const TStructExprType*>& InputStructs_;
         bool UseSystemColumns_;
-        TString TablePrefix_;
+        EProcessorMode ProcessorMode_;
         TString CallableName_;
+        TString TablePrefix_;
         bool Complete_ = false;
 
     public:
         explicit TTableReadsReplacer(
-            ui32 inputsNumber,
+            const TVector<const TStructExprType*>& inputStructs,
             bool useSystemColumns,
-            TString tablePrefix,
-            TString inputNodeName
+            EProcessorMode processorMode,
+            TString inputNodeName,
+            TString tablePrefix
         )
-            : InputsNumber_(inputsNumber)
+            : InputStructs_(inputStructs)
             , UseSystemColumns_(useSystemColumns)
-            , TablePrefix_(std::move(tablePrefix))
+            , ProcessorMode_(processorMode)
             , CallableName_(std::move(inputNodeName))
+            , TablePrefix_(std::move(tablePrefix))
         {
         }
 
@@ -135,6 +139,13 @@ namespace {
                 .Seal()
                 .Build();
 
+            if (inputNode->IsCallable(PurecalcBlockInputCallableName)) {
+                const auto inputStruct = InputStructs_[inputIndex]->Cast<TStructExprType>();
+                const auto blocksLambda = NodeFromBlocks(replacePos, inputStruct, ctx);
+                bool wrapLMap = ProcessorMode_ == EProcessorMode::PullList;
+                inputNode = ApplyToIterable(replacePos, inputNode, blocksLambda, wrapLMap, ctx);
+            }
+
             if (UseSystemColumns_) {
                 auto mapLambda = ctx.Builder(replacePos)
                     .Lambda()
@@ -163,7 +174,7 @@ namespace {
                 return MakeIntrusive<TIssue>(ctx.GetPosition(node->Pos()), TStringBuilder() << "At function: " << node->Content());
             });
 
-            if (!InputsNumber_) {
+            if (InputStructs_.empty()) {
                 ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "No inputs provided by input spec"));
                 return nullptr;
             }
@@ -174,10 +185,10 @@ namespace {
 
             auto builder = ctx.Builder(replacePos);
 
-            if (InputsNumber_ > 1) {
+            if (InputStructs_.size() > 1) {
                 auto listBuilder = builder.List();
 
-                for (ui32 i = 0; i < InputsNumber_; ++i) {
+                for (ui32 i = 0; i < InputStructs_.size(); ++i) {
                     listBuilder.Callable(i, CallableName_).Atom(0, ToString(i)).Seal();
                 }
 
@@ -226,10 +237,11 @@ namespace {
 }
 
 TAutoPtr<IGraphTransformer> NYql::NPureCalc::MakeTableReadsReplacer(
-    ui32 inputsNumber,
+    const TVector<const TStructExprType*>& inputStructs,
     bool useSystemColumns,
-    TString tablePrefix,
-    TString callableName
+    EProcessorMode processorMode,
+    TString callableName,
+    TString tablePrefix
 ) {
-    return new TTableReadsReplacer(inputsNumber, useSystemColumns, std::move(tablePrefix), std::move(callableName));
+    return new TTableReadsReplacer(inputStructs, useSystemColumns, processorMode, std::move(callableName), std::move(tablePrefix));
 }

@@ -161,11 +161,13 @@ namespace {
         auto structType = itemType->Cast<TStructExprType>();
         TSet<TString> usedFields;
         TExprNode::TListType orderedFields;
+        TColumnOrder order;
         for (size_t i = 0; i < columns->ChildrenSize(); ++i) {
             auto child = columns->ChildPtr(i);
             if (child->IsAtom()) {
                 orderedFields.push_back(child);
-                if (!structType->FindItem(child->Content())) {
+                auto rightName = order.AddColumn(TString(child->Content()));
+                if (!structType->FindItem(rightName)) {
                     if (hasAutoNames) {
                         columns = {};
                         return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
@@ -175,13 +177,13 @@ namespace {
                     return IGraphTransformer::TStatus::Error;
                 }
 
-                if (!usedFields.insert(TString(child->Content())).second) {
+                if (!usedFields.insert(rightName).second) {
                     if (hasAutoNames) {
                         columns = {};
                         return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
                     }
                     ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() <<
-                        "Duplicate field in hint: " << child->Content()));
+                        "Duplicate field in hint: " << rightName));
                     return IGraphTransformer::TStatus::Error;
                 }
             } else if (child->Child(0)->Content() == "auto") {
@@ -1147,7 +1149,7 @@ namespace {
                                 YQL_CLOG(INFO, ProviderResult) << "Setting result column order: " << FormatColumnOrder(dataOrder);
                                 auto settings = RemoveSetting(res.Settings().Ref(), "columns", ctx);
                                 TExprNodeList columnsList;
-                                for (auto& col : *dataOrder) {
+                                for (auto& [col, gen_col] : *dataOrder) {
                                     columnsList.push_back(ctx.NewAtom(settings->Pos(), col));
                                 }
                                 settings = AddSetting(*settings, settings->Pos(), "columns", ctx.NewList(settings->Pos(), std::move(columnsList)), ctx);

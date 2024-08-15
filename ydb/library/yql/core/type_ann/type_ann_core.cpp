@@ -8935,10 +8935,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         TExprNode::TListType applyChildren = input->ChildrenList();
         applyChildren.pop_back(); // Remove position of list argument
 
-        if (input->Head().Type() != TExprNode::Lambda) {
-            if (!EnsureCallableType(input->Head(), ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Callable) {
             const TCallableExprType* callableType = input->Head().GetTypeAnn()->Cast<TCallableExprType>();
 
             if (applyChildren.size() < callableType->GetArgumentsSize() + 1 - callableType->GetOptionalArgumentsCount()) {
@@ -8992,11 +8989,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
         else {
             auto lambda = input->HeadPtr();
-            const auto args = lambda->Child(0);
-            if (input->ChildrenSize() - 2 != args->ChildrenSize()) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Different arguments count, lambda has "
-                    << args->ChildrenSize() << " arguments, but provided " << (input->ChildrenSize() - 2)));
-                return IGraphTransformer::TStatus::Error;
+            auto status = ConvertToLambda(lambda, ctx.Expr, input->ChildrenSize() - 2);
+            if (status == IGraphTransformer::TStatus::Error) {
+                return status;
             }
 
             output = ctx.Expr.Builder(input->Pos())
@@ -9843,11 +9838,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                         TStringBuilder() << "Failed to deduce column order for input - star / qualified star is present in projection"));
                     return IGraphTransformer::TStatus::Error;
                 }
-                childColumnOrder->push_back(ToString(item->Child(1)->Content()));
+                childColumnOrder->AddColumn(ToString(item->Child(1)->Content()));
             }
 
         }
-        YQL_ENSURE(childColumnOrder->size() == numColumns);
+        YQL_ENSURE(childColumnOrder->Size() == numColumns);
 
         output = ctx.Expr.Builder(input->Pos())
             .Callable("AssumeColumnOrder")
@@ -9863,7 +9858,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                                             .Add(0, input->Child(1)->ChildPtr(i))
                                             .Callable(1, "Member")
                                                 .Arg(0, "item")
-                                                .Atom(1, (*childColumnOrder)[i])
+                                                .Atom(1, childColumnOrder->at(i).PhysicalName)
                                             .Seal()
                                         .Seal();
                                 }
@@ -9905,14 +9900,14 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        TVector<TString> topLevelColumns;
+        TColumnOrder topLevelColumns;
         auto type = NCommon::ParseOrderAwareTypeFromYson(input->Head().Content(), topLevelColumns, ctx.Expr, ctx.Expr.GetPosition(input->Pos()));
         if (!type) {
             return IGraphTransformer::TStatus::Error;
         }
 
         TExprNodeList items;
-        for (auto& col : topLevelColumns) {
+        for (auto& [col, gen_col] : topLevelColumns) {
             items.push_back(ctx.Expr.NewAtom(input->Pos(), col));
         }
 

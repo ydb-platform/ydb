@@ -99,11 +99,13 @@ Y_UNIT_TEST_SUITE(TContinuousBackupTests) {
 
         TestAlterContinuousBackup(runtime, ++txId, "/MyRoot", R"(
             TableName: "Table"
-            TakeIncrementalBackup {}
+            TakeIncrementalBackup {
+                DstPath: "IncrBackupImpl"
+            }
         )");
         env.TestWaitNotification(runtime, txId);
 
-        auto pathInfo = DescribePrivatePath(runtime, "/MyRoot/Table/incBackupImpl");
+        auto pathInfo = DescribePrivatePath(runtime, "/MyRoot/IncrBackupImpl");
         auto ownerId = pathInfo.GetPathOwnerId();
         auto localId = pathInfo.GetPathId();
 
@@ -111,7 +113,7 @@ Y_UNIT_TEST_SUITE(TContinuousBackupTests) {
             NLs::PathExist,
             NLs::HasOffloadConfig(Sprintf(R"(
                     IncrementalBackup: {
-                        DstPath: "/MyRoot/Table/incBackupImpl"
+                        DstPath: "/MyRoot/IncrBackupImpl"
                         DstPathId: {
                             OwnerId: %)" PRIu64 R"(
                             LocalId: %)" PRIu64 R"(
@@ -120,10 +122,10 @@ Y_UNIT_TEST_SUITE(TContinuousBackupTests) {
                 )", ownerId, localId)),
         });
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/incBackupImpl"), {
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/IncrBackupImpl"), {
             NLs::PathExist,
             NLs::IsTable,
-            NLs::CheckColumns("incBackupImpl", {"key", "value", "__incrBackupImpl_deleted"}, {}, {"key"}),
+            NLs::CheckColumns("IncrBackupImpl", {"key", "value", "__incrBackupImpl_deleted"}, {}, {"key"}),
         });
     }
 } // TCdcStreamWithInitialScanTests

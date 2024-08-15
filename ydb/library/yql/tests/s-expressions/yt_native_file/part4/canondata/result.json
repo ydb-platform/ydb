@@ -1035,9 +1035,9 @@
     ],
     "test.test[EquiJoin-EquiJoinConvertMapI8U32-Debug]": [
         {
-            "checksum": "07df0647cd2720568de2acd1c2f5ac23",
-            "size": 18434,
-            "uri": "https://{canondata_backend}/1880306/3923e1a600f93542b414a543bc91520fbd3a2554/resource.tar.gz#test.test_EquiJoin-EquiJoinConvertMapI8U32-Debug_/opt.yql"
+            "checksum": "ca54ab9b5a671343d62a512410c268c1",
+            "size": 18316,
+            "uri": "https://{canondata_backend}/1600758/8ae22e8895aeca97699cbfb33bc7979a3bfb8310/resource.tar.gz#test.test_EquiJoin-EquiJoinConvertMapI8U32-Debug_/opt.yql"
         },
         {
             "checksum": "b3ad6c26babf882b76373f6084dbf37c",
@@ -1262,9 +1262,9 @@
     ],
     "test.test[EquiJoin-EquiJoinConvertMapI8U32-Plan]": [
         {
-            "checksum": "f54da3e0fe9734725763ef7f3ee0a8f0",
-            "size": 43842,
-            "uri": "https://{canondata_backend}/1931696/343d3ddbf17ce205e67f4b609bbc3d6820c76625/resource.tar.gz#test.test_EquiJoin-EquiJoinConvertMapI8U32-Plan_/plan.txt"
+            "checksum": "fd4d3cbbf361c1525902f36a16ecf03e",
+            "size": 43270,
+            "uri": "https://{canondata_backend}/1937429/9ccaeaa71c2a2536036c2fc5be4d363a086f39f9/resource.tar.gz#test.test_EquiJoin-EquiJoinConvertMapI8U32-Plan_/plan.txt"
         }
     ],
     "test.test[EquiJoin-EquiJoinConvertMapI8U32-Results]": [
@@ -2055,9 +2055,9 @@
     ],
     "test.test[EquiJoinMap-JoinMapOpt12-Debug]": [
         {
-            "checksum": "33945bdfd2af302b24b1d9df58e02660",
-            "size": 11419,
-            "uri": "https://{canondata_backend}/1936997/7e1c17c15eb7c14c851e4812e1d7a1d1e5ecb4c8/resource.tar.gz#test.test_EquiJoinMap-JoinMapOpt12-Debug_/opt.yql"
+            "checksum": "3a7e0d7ecf1c6c01b3ce1a587d747111",
+            "size": 11370,
+            "uri": "https://{canondata_backend}/1942415/69fda1cecc1db727564c082823132d3fb504cfc5/resource.tar.gz#test.test_EquiJoinMap-JoinMapOpt12-Debug_/opt.yql"
         },
         {
             "checksum": "e286e591e319776361f0538fbcb207f2",
@@ -2162,9 +2162,9 @@
     ],
     "test.test[EquiJoinMap-JoinMapOpt12-Plan]": [
         {
-            "checksum": "2abf7a421efb9d665ba0e0e3f74f7dd9",
-            "size": 32783,
-            "uri": "https://{canondata_backend}/1936997/7e1c17c15eb7c14c851e4812e1d7a1d1e5ecb4c8/resource.tar.gz#test.test_EquiJoinMap-JoinMapOpt12-Plan_/plan.txt"
+            "checksum": "2e2e956784072772e3a835a767c5f1c2",
+            "size": 32497,
+            "uri": "https://{canondata_backend}/212715/be64088d0c950974876d778f6923606e08b13081/resource.tar.gz#test.test_EquiJoinMap-JoinMapOpt12-Plan_/plan.txt"
         }
     ],
     "test.test[EquiJoinMap-JoinMapOpt12-Results]": [
@@ -3615,9 +3615,9 @@
     ],
     "test.test[Scheme-IgnoreWeakSchemaForceInfer-Debug]": [
         {
-            "checksum": "cc19159e66bb4b15cf330e1c76f1b94e",
-            "size": 1047,
-            "uri": "https://{canondata_backend}/1809005/bb560db2ac536757475d6779b427321ab1d72d73/resource.tar.gz#test.test_Scheme-IgnoreWeakSchemaForceInfer-Debug_/opt.yql"
+            "checksum": "78697c6d31cbf9c8160cc7d96917f3dc",
+            "size": 1086,
+            "uri": "https://{canondata_backend}/1937429/2682c8a03858172f9dad8df2693362bf0f706d46/resource.tar.gz#test.test_Scheme-IgnoreWeakSchemaForceInfer-Debug_/opt.yql"
         }
     ],
     "test.test[Scheme-IgnoreWeakSchemaForceInfer-Plan]": [
@@ -3629,9 +3629,9 @@
     ],
     "test.test[Scheme-IgnoreWeakSchemaForceInfer-Results]": [
         {
-            "checksum": "9dbc94fa72f7c2539bc56046802d1e65",
-            "size": 4950,
-            "uri": "https://{canondata_backend}/212715/879d99eb75d342eeb6cf2b58f2993892131bc9f3/resource.tar.gz#test.test_Scheme-IgnoreWeakSchemaForceInfer-Results_/results.txt"
+            "checksum": "82ba27b9c664d3a5bdc1c30d35012dad",
+            "size": 5018,
+            "uri": "https://{canondata_backend}/1937429/2682c8a03858172f9dad8df2693362bf0f706d46/resource.tar.gz#test.test_Scheme-IgnoreWeakSchemaForceInfer-Results_/results.txt"
         }
     ],
     "test.test[TimeOrderRecover-ahead-Debug]": [

@@ -48,6 +48,8 @@ static void CreateSampleTable(TSession session) {
 
     UNIT_ASSERT(session.ExecuteSchemeQuery(GetStatic("schema/tpcc.sql")).GetValueSync().IsSuccess());
 
+    UNIT_ASSERT(session.ExecuteSchemeQuery(GetStatic("schema/lookupbug.sql")).GetValueSync().IsSuccess());
+
 }
 
 static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false, TString stats = ""){
@@ -56,7 +58,7 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
     NKikimrKqp::TKqpSetting setting;
 
     if (stats != "") {
-        setting.SetName("OverrideStatistics");
+        setting.SetName("OptOverrideStatistics");
         setting.SetValue(stats);
         settings.push_back(setting);
     }
@@ -148,7 +150,8 @@ void ExplainJoinOrderTestDataQuery(const TString& queryPath, bool useStreamLooku
 
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-        Cout << result.GetPlan();
+        Cout << result.GetPlan() << Endl;
+        Cout << CanonizeJoinOrder(result.GetPlan()) << Endl;
     }
 }
 
@@ -176,100 +179,158 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         chain.JoinTables();
     }
 
+    void ExecuteJoinOrderTestDataQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin) {
+        auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTable(session);
+
+        /* join with parameters */
+        {
+            const TString query = GetStatic(queryPath);
+
+            auto result = session.ExplainDataQuery(query).ExtractValueSync();
+            Cout << result.GetPlan() << Endl;
+        
+            auto result2 = session.ExecuteDataQuery(query,TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL(result2.GetStatus(), EStatus::SUCCESS);
+        }
+    }
+
+    void CheckJoinCardinality(const TString& queryPath, const TString& statsPath, const TString& joinKind, double card, bool useStreamLookupJoin) {
+        auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTable(session);
+
+        /* join with parameters */
+        {
+            const TString query = GetStatic(queryPath);
+
+            auto result = session.ExplainDataQuery(query).ExtractValueSync();
+            Cout << result.GetPlan() << Endl;
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+
+            if(!useStreamLookupJoin) {
+                auto joinNode = FindPlanNodeByKv(plan.GetMapSafe().at("SimplifiedPlan"), "Node Type", joinKind);
+                UNIT_ASSERT(joinNode.IsDefined());
+                auto op = joinNode.GetMapSafe().at("Operators").GetArraySafe()[0];
+                auto eRows = op.GetMapSafe().at("E-Rows").GetStringSafe();
+                UNIT_ASSERT_EQUAL(std::stod(eRows), card);
+            }
+        }
+    }
+
     Y_UNIT_TEST_TWIN(FiveWayJoin, StreamLookupJoin) {
-        ExecuteJoinOrderTestDataQuery("queries/five_way_join.sql", StreamLookupJoin);
+        ExecuteJoinOrderTestDataQueryWithStats("queries/five_way_join.sql", "stats/basic.json", StreamLookupJoin);
     }
 
     Y_UNIT_TEST_TWIN(FiveWayJoinStatsOverride, StreamLookupJoin) {
-        ExecuteJoinOrderTestDataQuery("queries/five_way_join_stats_override.sql", StreamLookupJoin);
+        ExecuteJoinOrderTestDataQueryWithStats("queries/five_way_join_stats_override.sql", "stats/basic.json", StreamLookupJoin);
     }
 
     Y_UNIT_TEST_TWIN(FourWayJoinLeftFirst, StreamLookupJoin) {
-        ExecuteJoinOrderTestDataQuery("queries/four_way_join_left_first.sql", StreamLookupJoin);
+        ExecuteJoinOrderTestDataQueryWithStats("queries/four_way_join_left_first.sql", "stats/basic.json", StreamLookupJoin);
     }
 
      Y_UNIT_TEST_TWIN(FiveWayJoinWithPreds, StreamLookupJoin) {
-        ExplainJoinOrderTestDataQuery("queries/five_way_join_with_preds.sql", StreamLookupJoin);
+        ExecuteJoinOrderTestDataQueryWithStats("queries/five_way_join_with_preds.sql", "stats/basic.json", StreamLookupJoin);
     }
 
     Y_UNIT_TEST_TWIN(FiveWayJoinWithComplexPreds, StreamLookupJoin) {
-        ExplainJoinOrderTestDataQuery("queries/five_way_join_with_complex_preds.sql", StreamLookupJoin);
+        ExecuteJoinOrderTestDataQueryWithStats("queries/five_way_join_with_complex_preds.sql", "stats/basic.json", StreamLookupJoin);
     }
 
     Y_UNIT_TEST_TWIN(FiveWayJoinWithComplexPreds2, StreamLookupJoin) {
-        ExplainJoinOrderTestDataQuery("queries/five_way_join_with_complex_preds2.sql", StreamLookupJoin);
+        ExecuteJoinOrderTestDataQueryWithStats("queries/five_way_join_with_complex_preds2.sql", "stats/basic.json", StreamLookupJoin);
     }
 
     Y_UNIT_TEST_TWIN(FiveWayJoinWithPredsAndEquiv, StreamLookupJoin) {
-        ExplainJoinOrderTestDataQuery("queries/four_way_join_with_preds_and_equiv.sql", StreamLookupJoin);
+        ExecuteJoinOrderTestDataQueryWithStats("queries/four_way_join_with_preds_and_equiv.sql", "stats/basic.json", StreamLookupJoin);
     }
 
     Y_UNIT_TEST_TWIN(FourWayJoinWithPredsAndEquivAndLeft, StreamLookupJoin) {
-        ExplainJoinOrderTestDataQuery("queries/four_way_join_with_preds_and_equiv_and_left.sql", StreamLookupJoin);
+        ExecuteJoinOrderTestDataQueryWithStats("queries/four_way_join_with_preds_and_equiv_and_left.sql", "stats/basic.json", StreamLookupJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestJoinHint, StreamLookupJoin) {
+        CheckJoinCardinality("queries/test_join_hint.sql", "stats/basic.json", "InnerJoin (Grace)", 10e6, StreamLookupJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestJoinHint2, StreamLookupJoin) {
+        CheckJoinCardinality("queries/test_join_hint2.sql", "stats/basic.json", "InnerJoin (MapJoin)", 1, StreamLookupJoin);
     }
 
     Y_UNIT_TEST_TWIN(FiveWayJoinWithConstantFold, StreamLookupJoin) {
-        ExplainJoinOrderTestDataQuery("queries/five_way_join_with_constant_fold.sql", StreamLookupJoin);
+        ExecuteJoinOrderTestDataQueryWithStats("queries/five_way_join_with_constant_fold.sql", "stats/basic.json", StreamLookupJoin);
     }
 
     Y_UNIT_TEST_TWIN(FiveWayJoinWithConstantFoldOpt, StreamLookupJoin) {
-        ExplainJoinOrderTestDataQuery("queries/five_way_join_with_constant_fold_opt.sql", StreamLookupJoin);
+        ExecuteJoinOrderTestDataQueryWithStats("queries/five_way_join_with_constant_fold_opt.sql", "stats/basic.json", StreamLookupJoin);
     }
 
     Y_UNIT_TEST_TWIN(DatetimeConstantFold, StreamLookupJoin) {
-        ExplainJoinOrderTestDataQuery("queries/datetime_constant_fold.sql", StreamLookupJoin);
+        ExecuteJoinOrderTestDataQueryWithStats("queries/datetime_constant_fold.sql", "stats/basic.json", StreamLookupJoin);
     }
 
     Y_UNIT_TEST_TWIN(TPCH3, StreamLookupJoin) {
-        ExplainJoinOrderTestDataQuery("queries/tpch3.sql", StreamLookupJoin);
+        ExecuteJoinOrderTestDataQueryWithStats("queries/tpch3.sql", "stats/tpch1000s.json", StreamLookupJoin);
     }
 
     Y_UNIT_TEST_TWIN(TPCH5, StreamLookupJoin) {
-        ExplainJoinOrderTestDataQuery("queries/tpch5.sql", StreamLookupJoin);
+        ExecuteJoinOrderTestDataQueryWithStats("queries/tpch5.sql", "stats/tpch1000s.json", StreamLookupJoin);
     }
 
     Y_UNIT_TEST_TWIN(TPCH10, StreamLookupJoin) {
-        ExplainJoinOrderTestDataQuery("queries/tpch10.sql", StreamLookupJoin);
+        ExecuteJoinOrderTestDataQueryWithStats("queries/tpch10.sql", "stats/tpch1000s.json", StreamLookupJoin);
     }
 
     Y_UNIT_TEST_TWIN(TPCH11, StreamLookupJoin) {
-        ExplainJoinOrderTestDataQuery("queries/tpch11.sql", StreamLookupJoin);
+        ExecuteJoinOrderTestDataQueryWithStats("queries/tpch11.sql", "stats/tpch1000s.json", StreamLookupJoin);
     }
 
     Y_UNIT_TEST_TWIN(TPCH21, StreamLookupJoin) {
-        ExplainJoinOrderTestDataQuery("queries/tpch21.sql", StreamLookupJoin);
+        ExecuteJoinOrderTestDataQueryWithStats("queries/tpch21.sql", "stats/tpch1000s.json", StreamLookupJoin);
     }
 
     Y_UNIT_TEST_TWIN(TPCDS16, StreamLookupJoin) {
-        ExplainJoinOrderTestDataQuery("queries/tpcds16.sql", StreamLookupJoin);       
+        ExecuteJoinOrderTestDataQueryWithStats("queries/tpcds16.sql", "stats/tpcds1000s.json", StreamLookupJoin);       
     }
 
     Y_UNIT_TEST_TWIN(TPCDS61, StreamLookupJoin) {
-        ExplainJoinOrderTestDataQuery("queries/tpcds61.sql", StreamLookupJoin);       
+        ExecuteJoinOrderTestDataQueryWithStats("queries/tpcds61.sql", "stats/tpcds1000s.json", StreamLookupJoin);       
+    }
+
+    Y_UNIT_TEST_TWIN(TPCDS87, StreamLookupJoin) {
+        ExecuteJoinOrderTestDataQueryWithStats("queries/tpcds87.sql", "stats/tpcds1000s.json", StreamLookupJoin);
     }
 
     Y_UNIT_TEST_TWIN(TPCDS88, StreamLookupJoin) {
-        ExplainJoinOrderTestDataQuery("queries/tpcds88.sql", StreamLookupJoin); 
+        ExecuteJoinOrderTestDataQueryWithStats("queries/tpcds88.sql", "stats/tpcds1000s.json", StreamLookupJoin); 
     }
 
     Y_UNIT_TEST_TWIN(TPCDS90, StreamLookupJoin) {
-        ExplainJoinOrderTestDataQuery("queries/tpcds90.sql", StreamLookupJoin);  
+        ExecuteJoinOrderTestDataQueryWithStats("queries/tpcds90.sql", "stats/tpcds1000s.json", StreamLookupJoin);  
     }
     
     Y_UNIT_TEST_TWIN(TPCDS92, StreamLookupJoin) {
-        ExplainJoinOrderTestDataQuery("queries/tpcds92.sql", StreamLookupJoin);
+        ExecuteJoinOrderTestDataQueryWithStats("queries/tpcds92.sql", "stats/tpcds1000s.json", StreamLookupJoin);
     }
 
     Y_UNIT_TEST_TWIN(TPCDS94, StreamLookupJoin) {
-        ExplainJoinOrderTestDataQuery("queries/tpcds94.sql", StreamLookupJoin); 
+        ExecuteJoinOrderTestDataQueryWithStats("queries/tpcds94.sql", "stats/tpcds1000s.json", StreamLookupJoin); 
     }
 
     Y_UNIT_TEST_TWIN(TPCDS95, StreamLookupJoin) {
-        ExplainJoinOrderTestDataQuery("queries/tpcds95.sql", StreamLookupJoin); 
+        ExecuteJoinOrderTestDataQueryWithStats("queries/tpcds95.sql", "stats/tpcds1000s.json", StreamLookupJoin); 
     }
 
     Y_UNIT_TEST_TWIN(TPCDS96, StreamLookupJoin) {
-        ExplainJoinOrderTestDataQuery("queries/tpcds96.sql", StreamLookupJoin);     
+        ExecuteJoinOrderTestDataQueryWithStats("queries/tpcds96.sql", "stats/tpcds1000s.json", StreamLookupJoin);     
     }
 
     void JoinOrderTestWithOverridenStats(const TString& queryPath, const TString& statsPath, const TString& correctJoinOrderPath, bool useStreamLookupJoin) {
@@ -288,6 +349,8 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
             TString ref = GetStatic(correctJoinOrderPath);
+
+            Cout << result.GetPlan() << Endl;
 
             /* correct canonized join order in cout, change corresponding join_order/.json file */
             Cout << CanonizeJoinOrder(result.GetPlan()) << Endl;
@@ -311,13 +374,19 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
-    /*
+
     Y_UNIT_TEST_TWIN(OverrideStatsTPCDS64, StreamLookupJoin) {
         JoinOrderTestWithOverridenStats(
             "queries/tpcds64.sql", "stats/tpcds1000s.json", "join_order/tpcds64_1000s.json", StreamLookupJoin
         );
     }
-    */
+
+
+    Y_UNIT_TEST_TWIN(OverrideStatsTPCDS64_small, StreamLookupJoin) {
+        JoinOrderTestWithOverridenStats(
+            "queries/tpcds64_small.sql", "stats/tpcds1000s.json", "join_order/tpcds64_small_1000s.json", StreamLookupJoin
+        );
+    }
    
     Y_UNIT_TEST_TWIN(OverrideStatsTPCDS78, StreamLookupJoin) {
         JoinOrderTestWithOverridenStats(
@@ -329,6 +398,12 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         JoinOrderTestWithOverridenStats(
             "queries/tpcc.sql", "stats/tpcc.json", "join_order/tpcc.json", false);
     }
+
+    Y_UNIT_TEST(LookupBug) {
+        JoinOrderTestWithOverridenStats(
+            "queries/lookupbug.sql", "stats/lookupbug.json", "join_order/lookupbug.json", false);
+    }
+
 
 }
 }

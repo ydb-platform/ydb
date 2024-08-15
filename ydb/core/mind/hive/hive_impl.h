@@ -415,6 +415,8 @@ protected:
     TEventPriorityQueue<THive> EventQueue{*this};
     ui64 OperationsLogIndex = 0;
     std::vector<TActorId> ActorsWaitingToMoveTablets;
+    std::queue<TActorId> NodePingQueue;
+    std::unordered_set<TNodeId> NodePingsInProgress;
 
     struct TPendingCreateTablet {
         NKikimrHive::TEvCreateTablet CreateTablet;
@@ -443,6 +445,7 @@ protected:
 
     NKikimrConfig::THiveConfig ClusterConfig;
     NKikimrConfig::THiveConfig DatabaseConfig;
+    TDuration NodeBrokerEpoch;
     std::unordered_map<TTabletTypes::EType, NKikimrConfig::THiveTabletLimit> TabletLimit; // built from CurrentConfig
     std::unordered_map<TTabletTypes::EType, NKikimrHive::TDataCentersPreference> DefaultDataCentersPreference;
     std::unordered_map<TDataCenterId, std::unordered_set<TNodeId>> RegisteredDataCenterNodes;
@@ -650,6 +653,7 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     void UpdateCounterEventQueueSize(i64 eventQueueSizeDiff);
     void UpdateCounterNodesConnected(i64 nodesConnectedDiff);
     void UpdateCounterTabletsStarting(i64 tabletsStartingDiff);
+    void UpdateCounterPingQueueSize();
     void RecordTabletMove(const TTabletMoveInfo& info);
     bool DomainHasNodes(const TSubDomainKey &domainKey) const;
     void ProcessBootQueue();
@@ -678,7 +682,10 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     void UpdateRegisteredDataCenters();
     void AddRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId);
     void RemoveRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId);
+    void QueuePing(const TActorId& local);
     void SendPing(const TActorId& local, TNodeId id);
+    void RemoveFromPingInProgress(TNodeId node);
+    void ProcessNodePingQueue();
     void SendReconnect(const TActorId& local);
     static THolder<TGroupFilter> BuildGroupParametersForChannel(const TLeaderTabletInfo& tablet, ui32 channelId);
     void KickTablet(const TTabletInfo& tablet);
@@ -734,7 +741,11 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     }
 
     TDuration GetNodeDeletePeriod() const {
-        return TDuration::Seconds(CurrentConfig.GetNodeDeletePeriod());
+        if (CurrentConfig.HasNodeDeletePeriod()) {
+            return TDuration::Seconds(CurrentConfig.GetNodeDeletePeriod());
+        } else {
+            return NodeBrokerEpoch;
+        }
     }
 
     ui64 GetDrainInflight() const {
@@ -937,6 +948,14 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
 
     double GetNodeUsageRangeToKick() const {
         return CurrentConfig.GetNodeUsageRangeToKick();
+    }
+
+    bool GetLessSystemTabletsMoves() const {
+        return CurrentConfig.GetLessSystemTabletsMoves();
+    }
+
+    ui64 GetMaxPingsInFlight() const {
+        return CurrentConfig.GetMaxPingsInFlight();
     }
 
     static void ActualizeRestartStatistics(google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);

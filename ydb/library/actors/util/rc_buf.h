@@ -12,6 +12,7 @@
 #include <util/system/valgrind.h>
 #include <util/generic/array_ref.h>
 #include <util/system/sys_alloc.h>
+#include <util/system/info.h>
 
 #include "shared_data.h"
 #include "rc_buf_backend.h"
@@ -835,6 +836,13 @@ public:
 
         TInternalBackend res = TInternalBackend::Uninitialized(size, headroom, tailroom);
         return TRcBuf(res, res.data() + headroom, size);
+    }
+
+    static TRcBuf UninitializedPageAligned(size_t size) {
+        const size_t pageSize = NSystemInfo::GetPageSize();
+        TRcBuf res = Uninitialized(size + pageSize - 1);
+        const size_t misalign = (pageSize - reinterpret_cast<uintptr_t>(res.data())) & (pageSize - 1);
+        return TRcBuf(Piece, res.data() + misalign, size, res);
     }
 
     static TRcBuf Copy(TContiguousSpan data, size_t headroom = 0, size_t tailroom = 0) {

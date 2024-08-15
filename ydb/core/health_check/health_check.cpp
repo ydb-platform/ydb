@@ -56,6 +56,7 @@ struct hash<NKikimrBlobStorage::TVSlotId> {
 }
 
 #define BLOG_CRIT(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::HEALTH, stream)
+#define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HEALTH, stream)
 
 namespace NKikimr {
 
@@ -631,7 +632,7 @@ public:
     }
 
     bool NeedWhiteboardInfoForGroup(TGroupId groupId) {
-        return !HaveAllBSControllerInfo() && IsStaticGroup(groupId);
+        return UnknownStaticGroups.contains(groupId) || (!HaveAllBSControllerInfo() && IsStaticGroup(groupId));
     }
 
     void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
@@ -666,6 +667,7 @@ public:
 
                     auto groupId = vDisk.GetVDiskID().GetGroupID();
                     if (NeedWhiteboardInfoForGroup(groupId)) {
+                        BLOG_D("Requesting whiteboard for group " << groupId);
                         RequestStorageNode(vDisk.GetVDiskLocation().GetNodeID());
                     }
                 }
@@ -1296,6 +1298,7 @@ public:
         // it should not be trusted
         Ydb::Monitoring::StorageGroupStatus staticGroupStatus;
         FillGroupStatus(0, staticGroupStatus, {nullptr});
+        BLOG_D("Static group status is " << staticGroupStatus.overall());
         if (staticGroupStatus.overall() != Ydb::Monitoring::StatusFlag::GREEN) {
             UnknownStaticGroups.emplace(0);
             RequestStorageConfig();
@@ -1697,12 +1700,9 @@ public:
                                  ETags::PDiskState);
         }
         switch (status->number()) {
-            case NKikimrBlobStorage::ACTIVE: {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
-                break;
-            }
+            case NKikimrBlobStorage::ACTIVE:
             case NKikimrBlobStorage::INACTIVE: {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "PDisk is inactive", ETags::PDiskState);
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                 break;
             }
             case NKikimrBlobStorage::FAULTY:
@@ -2154,7 +2154,7 @@ public:
         context.OverallStatus = MinStatus(context.OverallStatus, Ydb::Monitoring::StatusFlag::YELLOW);
         checker.ReportStatus(context);
 
-
+        BLOG_D("Group " << groupId << " has status " << context.GetOverallStatus());
         storageGroupStatus.set_overall(context.GetOverallStatus());
     }
 

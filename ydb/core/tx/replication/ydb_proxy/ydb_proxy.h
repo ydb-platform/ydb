@@ -255,9 +255,9 @@ struct TEvYdbProxy {
 
 #pragma pop_macro("RemoveDirectory")
 
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database);
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database, const TString& token);
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database,
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl);
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& token);
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl,
     const NKikimrReplication::TStaticCredentials& credentials);
 
 }

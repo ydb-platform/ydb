@@ -132,14 +132,15 @@ bool IsMapKeyType(FieldDescriptor::Type type)
 TString ToUnderscoreCase(const TString& protobufName)
 {
     TStringBuilder builder;
-    for (auto ch : protobufName) {
-        if (isupper(ch)) {
-            if (builder.GetLength() > 0 && builder.GetBuffer()[builder.GetLength() - 1] != '_') {
+    for (size_t i = 0; i < protobufName.size(); ++i) {
+        if (isupper(protobufName[i])) {
+            size_t length = builder.GetLength();
+            if (length && builder.GetBuffer()[length - 1] != '_' && !isupper(protobufName[i - 1])) {
                 builder.AppendChar('_');
             }
-            builder.AppendChar(tolower(ch));
+            builder.AppendChar(tolower(protobufName[i]));
         } else {
-            builder.AppendChar(ch);
+            builder.AppendChar(protobufName[i]);
         }
     }
     return builder.Flush();

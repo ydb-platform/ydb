@@ -50,7 +50,8 @@ def main(args):
         m = re.match(OUT_DIR_FLAG_PATTERN, args[i])
         if m:
             out_dir_flag = m.group(1)
-            index = max(len(out_dir_flag), args[i].rfind(':') + 1)
+            index = len(out_dir_flag)
+            index = max(index, args[i].find(':', index) + 1)
             out_dir = args[i][index:]
             if out_dir_orig:
                 assert out_dir_orig == out_dir, 'Output directories do not match: [{}] and [{}]'.format(

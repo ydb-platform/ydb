@@ -166,6 +166,7 @@ message PingTaskRequest {
     bool dump_raw_statistics = 38;
     repeated Ydb.ValuePair flat_stats = 39;
     int32 current_load = 40;
+    string timeline = 41;
 }
 
 message PingTaskResult {

@@ -66,33 +66,6 @@ public:
         }
     }
 
-    ui64 ResolvePartitionId(NChangeExchange::IChangeSenderResolver* const resolver) const override {
-        const auto& partitions = resolver->GetPartitions();
-        Y_ABORT_UNLESS(partitions);
-        const auto& schema = resolver->GetSchema();
-        const auto streamFormat = resolver->GetStreamFormat();
-        Y_ABORT_UNLESS(streamFormat == NKikimrSchemeOp::ECdcStreamFormatProto);
-
-        const auto range = TTableRange(GetKey());
-        Y_ABORT_UNLESS(range.Point);
-
-        const auto it = LowerBound(
-            partitions.cbegin(), partitions.cend(), true,
-            [&](const auto& partition, bool) {
-                const int compares = CompareBorders<true, false>(
-                    partition.Range->EndKeyPrefix.GetCells(), range.From,
-                    partition.Range->IsInclusive || partition.Range->IsPoint,
-                    range.InclusiveFrom || range.Point, schema
-                );
-
-                return (compares < 0);
-            }
-        );
-
-        Y_ABORT_UNLESS(it != partitions.end());
-        return it->ShardId;
-    }
-
     TConstArrayRef<TCell> GetKey() const {
         Y_ABORT_UNLESS(ProtoBody.HasCdcDataChange());
         Y_ABORT_UNLESS(ProtoBody.GetCdcDataChange().HasKey());
@@ -158,7 +131,7 @@ private:
 
             break;
         }
-        case NKikimrChangeExchange::TDataChange::kReset:
+        case NKikimrChangeExchange::TDataChange::kReset: [[fallthrough]];
         default:
             Y_FAIL_S("Unexpected row operation: " << static_cast<int>(ProtoBody.GetCdcDataChange().GetRowOperationCase()));
         }
@@ -166,20 +139,27 @@ private:
 
     // just pass through, all conversions are on level above
     void SerializeRestore(NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& record) const {
-        Y_ABORT_UNLESS(
-            ProtoBody.GetCdcDataChange().GetRowOperationCase() == NKikimrChangeExchange::TDataChange::kUpsert,
-            "Invariant violation");
-
         record.SetSourceOffset(GetOrder());
         // TODO: fill WriteTxId
 
         record.SetKey(ProtoBody.GetCdcDataChange().GetKey().GetData());
 
-        auto& upsert = *record.MutableUpsert();
-        *upsert.MutableTags() = {
-            ProtoBody.GetCdcDataChange().GetUpsert().GetTags().begin(),
-            ProtoBody.GetCdcDataChange().GetUpsert().GetTags().end()};
-        upsert.SetData(ProtoBody.GetCdcDataChange().GetUpsert().GetData());
+        switch (ProtoBody.GetCdcDataChange().GetRowOperationCase()) {
+        case NKikimrChangeExchange::TDataChange::kUpsert: {
+            auto& upsert = *record.MutableUpsert();
+            *upsert.MutableTags() = {
+                ProtoBody.GetCdcDataChange().GetUpsert().GetTags().begin(),
+                ProtoBody.GetCdcDataChange().GetUpsert().GetTags().end()};
+            upsert.SetData(ProtoBody.GetCdcDataChange().GetUpsert().GetData());
+            break;
+        }
+        case NKikimrChangeExchange::TDataChange::kErase:
+            record.MutableErase();
+            break;
+        case NKikimrChangeExchange::TDataChange::kReset: [[fallthrough]];
+        default:
+            Y_FAIL_S("Unexpected row operation: " << static_cast<int>(ProtoBody.GetCdcDataChange().GetRowOperationCase()));
+        }
     }
 
 }; // TChangeRecord

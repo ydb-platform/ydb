@@ -727,6 +727,37 @@
             "uri": "https://{canondata_backend}/1817427/0b979af6b2bfa42e752a296b0288b726527203dd/resource.tar.gz#test.test_blocks-sub_uint64_opt2--Results_/results.txt"
         }
     ],
+    "test.test[blocks-type_and_callable_stats--Debug]": [
+        {
+            "checksum": "abf887f971c093b3c766c0d61de9bfa5",
+            "size": 3140,
+            "uri": "https://{canondata_backend}/1942278/7c66ffff1df826f3e0283b5718f3b64fef634b24/resource.tar.gz#test.test_blocks-type_and_callable_stats--Debug_/opt.yql"
+        }
+    ],
+    "test.test[blocks-type_and_callable_stats--Peephole]": [
+        {
+            "checksum": "7c4459aaef912df4e3a670d1353db50b",
+            "size": 3060,
+            "uri": "https://{canondata_backend}/1942278/7c66ffff1df826f3e0283b5718f3b64fef634b24/resource.tar.gz#test.test_blocks-type_and_callable_stats--Peephole_/opt.yql"
+        }
+    ],
+    "test.test[blocks-type_and_callable_stats--Plan]": [
+        {
+            "checksum": "990c31fd75086073adb260445a1886fa",
+            "size": 3527,
+            "uri": "https://{canondata_backend}/1936842/85945930c4a0d22d0dbc35897f90760fc842f68b/resource.tar.gz#test.test_blocks-type_and_callable_stats--Plan_/plan.txt"
+        }
+    ],
+    "test.test[blocks-type_and_callable_stats--Results]": [
+        {
+            "checksum": "d73069afcdb42caedfabf2180cc11bc2",
+            "size": 10729,
+            "uri": "https://{canondata_backend}/1942278/7c66ffff1df826f3e0283b5718f3b64fef634b24/resource.tar.gz#test.test_blocks-type_and_callable_stats--Results_/results.txt"
+        },
+        {
+            "uri": "file://test.test_blocks-type_and_callable_stats--Results_/extracted"
+        }
+    ],
     "test.test[coalesce-coalesce_symmetry-default.txt-Debug]": [
         {
             "checksum": "eaea85a7f97f5d800e13e8d9676a846e",
@@ -2604,6 +2635,13 @@
             "checksum": "c7f7259dc86a1e46ffe8c817241e7dde",
             "size": 748,
             "uri": "https://{canondata_backend}/1817427/0b979af6b2bfa42e752a296b0288b726527203dd/resource.tar.gz#test.test_pg_catalog-pg_get_userbyid-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[pg_duplicated-ambigous_order_by_wo_duplicated_in_projection--Debug]": [],
+    "test.test[pg_duplicated-ambigous_order_by_wo_duplicated_in_projection--Plan]": [],
+    "test.test[pg_duplicated-ambigous_order_by_wo_duplicated_in_projection--Results]": [
+        {
+            "uri": "file://test.test_pg_duplicated-ambigous_order_by_wo_duplicated_in_projection--Results_/extracted"
         }
     ],
     "test.test[pragma-file-default.txt-Debug]": [

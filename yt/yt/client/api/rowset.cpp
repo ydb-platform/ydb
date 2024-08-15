@@ -14,6 +14,7 @@ namespace NYT::NApi {
 
 using namespace NTabletClient;
 using namespace NTableClient;
+using namespace NCrypto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -169,6 +170,11 @@ public:
     TFuture<void> GetReadyEvent() override
     {
         return VoidFuture;
+    }
+
+    std::optional<TMD5Hash> GetDigest() const override
+    {
+        return std::nullopt;
     }
 
 private:

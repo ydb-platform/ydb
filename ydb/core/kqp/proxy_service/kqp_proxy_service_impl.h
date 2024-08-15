@@ -1,8 +1,11 @@
 #pragma once
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/common/events/workload_service.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/kqp/gateway/behaviour/resource_pool_classifier/fetcher.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/protos/kqp.pb.h>
 
@@ -413,6 +416,226 @@ private:
             }
         }
     }
+};
+
+class TResourcePoolsCache {
+    struct TClassifierInfo {
+        const TString Membername;
+        const TString PoolId;
+
+        TClassifierInfo(const NResourcePool::TClassifierSettings& classifierSettings)
+            : Membername(classifierSettings.Membername)
+            , PoolId(classifierSettings.ResourcePool)
+        {}
+    };
+
+    struct TDatabaseInfo {
+        std::unordered_map<TString, TResourcePoolClassifierConfig> ResourcePoolsClassifiers = {};
+        std::map<i64, TClassifierInfo> RankToClassifierInfo = {};
+        std::unordered_map<TString, TString> UserToResourcePool = {};
+        bool Serverless = false;
+    };
+
+    struct TPoolInfo {
+        NResourcePool::TPoolSettings Config;
+        std::optional<NACLib::TSecurityObject> SecurityObject;
+        bool Expired = false;
+    };
+
+public:
+    bool ResourcePoolsEnabled(const TString& database) const {
+        if (!EnableResourcePools) {
+            return false;
+        }
+
+        if (EnableResourcePoolsOnServerless) {
+            return true;
+        }
+
+        const auto databaseInfo = GetDatabaseInfo(database); 
+        return !databaseInfo || !databaseInfo->Serverless;
+    }
+
+    TString GetPoolId(const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TActorContext actorContext) {
+        if (!userToken || userToken->GetUserSID().empty()) {
+            return NResourcePool::DEFAULT_POOL_ID;
+        }
+
+        TDatabaseInfo& databaseInfo = *GetOrCreateDatabaseInfo(database);
+        if (const auto& poolId = GetPoolIdFromClassifiers(database, userToken->GetUserSID(), databaseInfo, userToken, actorContext)) {
+            return poolId;
+        }
+        for (const auto& userSID : userToken->GetGroupSIDs()) {
+            if (const auto& poolId = GetPoolIdFromClassifiers(database, userSID, databaseInfo, userToken, actorContext)) {
+                return poolId;
+            }
+        }
+
+        return NResourcePool::DEFAULT_POOL_ID;
+    }
+
+    std::optional<TPoolInfo> GetPoolInfo(const TString& database, const TString& poolId, TActorContext actorContext) const {
+        auto it = PoolsCache.find(GetPoolKey(database, poolId));
+        if (it == PoolsCache.end()) {
+            actorContext.Send(MakeKqpWorkloadServiceId(actorContext.SelfID.NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(database, poolId));
+            return std::nullopt;
+        }
+        return it->second;
+    }
+
+    void UpdateFeatureFlags(const NKikimrConfig::TFeatureFlags& featureFlags, TActorContext actorContext) {
+        EnableResourcePools = featureFlags.GetEnableResourcePools();
+        EnableResourcePoolsOnServerless = featureFlags.GetEnableResourcePoolsOnServerless();
+        UpdateResourcePoolClassifiersSubscription(actorContext);
+    }
+
+    void UpdateDatabaseInfo(const TString& database, bool serverless) {
+        GetOrCreateDatabaseInfo(database)->Serverless = serverless;
+    }
+
+    void UpdatePoolInfo(const TString& database, const TString& poolId, const std::optional<NResourcePool::TPoolSettings>& config, const std::optional<NACLib::TSecurityObject>& securityObject, TActorContext actorContext) {
+        bool clearClassifierCache = false;
+
+        const TString& poolKey = GetPoolKey(database, poolId);
+        if (!config) {
+            auto it = PoolsCache.find(poolKey);
+            if (it == PoolsCache.end()) {
+                return;
+            }
+            if (it->second.Expired) {
+                // Pool was dropped
+                clearClassifierCache = true;
+                PoolsCache.erase(it);
+            } else {
+                // Refresh pool subscription
+                it->second.Expired = true;
+                actorContext.Send(MakeKqpWorkloadServiceId(actorContext.SelfID.NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(database, poolId));
+            }
+        } else {
+            auto& poolInfo = PoolsCache[poolKey];
+            clearClassifierCache = poolInfo.SecurityObject != securityObject;
+            poolInfo.Config = *config;
+            poolInfo.SecurityObject = securityObject;
+            poolInfo.Expired = false;
+        }
+
+        if (clearClassifierCache) {
+            GetOrCreateDatabaseInfo(database)->UserToResourcePool.clear();
+        }
+    }
+
+    void UpdateResourcePoolClassifiersInfo(const TResourcePoolClassifierSnapshot* snapsot, TActorContext actorContext) {
+        auto resourcePoolClassifierConfigs = snapsot->GetResourcePoolClassifierConfigs();
+        for (auto& [database, databaseInfo] : DatabasesCache) {
+            auto it = resourcePoolClassifierConfigs.find(database);
+            if (it != resourcePoolClassifierConfigs.end()) {
+                UpdateDatabaseResourcePoolClassifiers(database, databaseInfo, std::move(it->second), actorContext);
+                resourcePoolClassifierConfigs.erase(it);
+            } else if (!databaseInfo.ResourcePoolsClassifiers.empty()) {
+                databaseInfo.ResourcePoolsClassifiers.clear();
+                databaseInfo.RankToClassifierInfo.clear();
+                databaseInfo.UserToResourcePool.clear();
+            }
+        }
+        for (auto& [database, configsMap] : resourcePoolClassifierConfigs) {
+            UpdateDatabaseResourcePoolClassifiers(database, *GetOrCreateDatabaseInfo(database), std::move(configsMap), actorContext);
+        }
+    }
+
+    void UnsubscribeFromResourcePoolClassifiers(TActorContext actorContext) {
+        if (SubscribedOnResourcePoolClassifiers) {
+            SubscribedOnResourcePoolClassifiers = false;
+            actorContext.Send(NMetadata::NProvider::MakeServiceId(actorContext.SelfID.NodeId()), new NMetadata::NProvider::TEvUnsubscribeExternal(std::make_shared<TResourcePoolClassifierSnapshotsFetcher>()));
+        }
+    }
+
+private:
+    void UpdateResourcePoolClassifiersSubscription(TActorContext actorContext) {
+        if (EnableResourcePools) {
+            SubscribeOnResourcePoolClassifiers(actorContext);
+        } else {
+            UnsubscribeFromResourcePoolClassifiers(actorContext);
+        }
+    }
+
+    void SubscribeOnResourcePoolClassifiers(TActorContext actorContext) {
+        if (!SubscribedOnResourcePoolClassifiers && NMetadata::NProvider::TServiceOperator::IsEnabled()) {
+            SubscribedOnResourcePoolClassifiers = true;
+            actorContext.Send(NMetadata::NProvider::MakeServiceId(actorContext.SelfID.NodeId()), new NMetadata::NProvider::TEvSubscribeExternal(std::make_shared<TResourcePoolClassifierSnapshotsFetcher>()));
+        }
+    }
+
+    void UpdateDatabaseResourcePoolClassifiers(const TString& database, TDatabaseInfo& databaseInfo, std::unordered_map<TString, TResourcePoolClassifierConfig>&& configsMap, TActorContext actorContext) {
+        if (databaseInfo.ResourcePoolsClassifiers == configsMap) {
+            return;
+        }
+
+        databaseInfo.ResourcePoolsClassifiers.swap(configsMap);
+        databaseInfo.UserToResourcePool.clear();
+        databaseInfo.RankToClassifierInfo.clear();
+        for (const auto& [_, classifier] : databaseInfo.ResourcePoolsClassifiers) {
+            const auto& classifierSettings = classifier.GetClassifierSettings();
+            databaseInfo.RankToClassifierInfo.insert({classifier.GetRank(), TClassifierInfo(classifierSettings)});
+            if (!PoolsCache.contains(classifierSettings.ResourcePool)) {
+                actorContext.Send(MakeKqpWorkloadServiceId(actorContext.SelfID.NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(database, classifierSettings.ResourcePool));
+            }
+        }
+    }
+
+    TString GetPoolIdFromClassifiers(const TString& database, const TString& userSID, TDatabaseInfo& databaseInfo, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TActorContext actorContext) const {
+        auto& usersMap = databaseInfo.UserToResourcePool;
+        if (const auto it = usersMap.find(userSID); it != usersMap.end()) {
+            return it->second;
+        }
+
+        TString poolId = "";
+        for (const auto& [_, classifier] : databaseInfo.RankToClassifierInfo) {
+            if (classifier.Membername != userSID) {
+                continue;
+            }
+
+            auto it = PoolsCache.find(GetPoolKey(database, classifier.PoolId));
+            if (it == PoolsCache.end()) {
+                actorContext.Send(MakeKqpWorkloadServiceId(actorContext.SelfID.NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(database, classifier.PoolId));
+                continue;
+            }
+
+            if (userToken && !userToken->GetSerializedToken().empty() && !it->second.SecurityObject->CheckAccess(NACLib::DescribeSchema | NACLib::SelectRow, *userToken)) {
+                continue;
+            }
+
+            poolId = classifier.PoolId;
+            break;
+        }
+
+        usersMap[userSID] = poolId;
+        return poolId;
+    }
+
+    TDatabaseInfo* GetOrCreateDatabaseInfo(const TString& database) {
+        const TString& path = CanonizePath(database);
+        if (const auto it = DatabasesCache.find(path); it != DatabasesCache.end()) {
+            return &it->second;
+        }
+        return &DatabasesCache.insert({path, TDatabaseInfo{}}).first->second;
+    }
+
+    const TDatabaseInfo* GetDatabaseInfo(const TString& database) const {
+        const auto it = DatabasesCache.find(CanonizePath(database));
+        return it != DatabasesCache.end() ? &it->second : nullptr;
+    }
+
+    static TString GetPoolKey(const TString& database, const TString& poolId) {
+        return CanonizePath(TStringBuilder() << database << "/" << poolId);
+    }
+
+private:
+    std::unordered_map<TString, TPoolInfo> PoolsCache;
+    std::unordered_map<TString, TDatabaseInfo> DatabasesCache;
+
+    bool EnableResourcePools = false;
+    bool EnableResourcePoolsOnServerless = false;
+    bool SubscribedOnResourcePoolClassifiers = false;
 };
 
 }  // namespace NKikimr::NKqp

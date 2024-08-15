@@ -7,6 +7,7 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
+#include <ydb/core/protos/memory_stats.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
 #include <ydb/library/actors/interconnect/events_local.h>
 #include <ydb/library/actors/core/interconnect.h>
@@ -60,6 +61,7 @@ struct TEvWhiteboard{
         EvVDiskStateGenerationChange,
         EvVDiskDropDonors,
         EvClockSkewUpdate,
+        EvMemoryStatsUpdate,
         EvEnd
     };
 
@@ -386,13 +388,7 @@ struct TEvWhiteboard{
         }
     };
 
-    static TEvSystemStateUpdate *CreateSharedCacheStatsUpdateRequest(ui64 memUsedBytes, ui64 memLimitBytes) {
-        TEvSystemStateUpdate *request = new TEvSystemStateUpdate();
-        auto *pb = request->Record.MutableSharedCacheStats();
-        pb->SetUsedBytes(memUsedBytes);
-        pb->SetLimitBytes(memLimitBytes);
-        return request;
-    }
+    struct TEvMemoryStatsUpdate : TEventPB<TEvMemoryStatsUpdate, NKikimrMemory::TMemoryStats, EvMemoryStatsUpdate> {};
 
     static TEvSystemStateUpdate *CreateTotalSessionsUpdateRequest(ui32 totalSessions) {
         TEvSystemStateUpdate *request = new TEvSystemStateUpdate();

@@ -183,8 +183,14 @@ public:
         return 0;
     }
 
+    const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override
+    {
+        return MemoryUsageTracker_;
+    }
+
 private:
     const IRoamingChannelProviderPtr Provider_;
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_ = GetNullMemoryUsageTracker();
 };
 
 IChannelPtr CreateRoamingChannel(IRoamingChannelProviderPtr provider)

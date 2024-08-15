@@ -1,0 +1,13 @@
+{%- for conan_import in conan_imports -%}
+{%-     set search_and_dstdir = rsplit(conan_import|trim, "->", 2) -%}
+{%-     set search = search_and_dstdir[0]|trim -%}
+{%-     set dstdir = search_and_dstdir[1]|trim -%}
+{%-     set srcdir_and_mask = rsplit(search, ",", 2) -%}
+{%-     set srcdir = srcdir_and_mask[0]|trim -%}
+{%-     set mask = srcdir_and_mask[1]|trim -%}
+{%-     if use_conan2 %}
+                {{ shift }}copy(self, pattern="{{ mask }}", src=dep.cpp_info.bindirs[0], dst=self.build_folder + "../../../../{{ dstdir }}")
+{%-     else %}
+        {{ shift }}self.copy(pattern="{{ mask }}", src="{{ srcdir }}", dst="{{ dstdir }}")
+{%-     endif -%}
+{%- endfor -%}

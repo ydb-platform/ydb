@@ -18,7 +18,9 @@ namespace NKikimr::NMsgBusProxy::NPqMetaCacheV2 {
 namespace NPersQueue {
 
 TString GetFullTopicPath(const NActors::TActorContext& ctx, const TMaybe<TString>& database, const TString& topicPath);
+TString ConvertNewConsumerName(const TString& consumer, const NKikimrPQ::TPQConfig& pqConfig);
 TString ConvertNewConsumerName(const TString& consumer, const NActors::TActorContext& ctx);
+TString ConvertOldConsumerName(const TString& consumer, const NKikimrPQ::TPQConfig& pqConfig);
 TString ConvertOldConsumerName(const TString& consumer, const NActors::TActorContext& ctx);
 TString MakeConsumerPath(const TString& consumer);
 

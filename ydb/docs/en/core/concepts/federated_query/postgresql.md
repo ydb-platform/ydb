@@ -45,7 +45,7 @@ When working with PostgreSQL clusters, there are a number of limitations:
 
 ## Supported data types
 
-In the PostgreSQL database, the optionality of column values (whether a column can contain `NULL` values) is not part of the data type system. The `NOT NULL` constraint for each column is implemented as the `attnotnull` attribute in the system catalog [pg_attribute](https://www.postgresql.org/docs/current/catalog-pg-attribute.html), i.e., at the metadata level of the table. Therefore, all basic PostgreSQL types can contain `NULL` values by default, and in the {{ ydb-full-name }} type system, they should be mapped to [optional](https://ydb.tech/docs/ru/yql/reference/types/optional) types.
+In the PostgreSQL database, the optionality of column values (whether a column can contain `NULL` values) is not part of the data type system. The `NOT NULL` constraint for each column is implemented as the `attnotnull` attribute in the system catalog [pg_attribute](https://www.postgresql.org/docs/current/catalog-pg-attribute.html), i.e., at the metadata level of the table. Therefore, all basic PostgreSQL types can contain `NULL` values by default, and in the {{ ydb-full-name }} type system, they should be mapped to [optional](,,/yql/reference/yql-core/types/optional.md) types.
 
 Below is a correspondence table between PostgreSQL and {{ ydb-short-name }} types. All other data types, except those listed, are not supported.
 

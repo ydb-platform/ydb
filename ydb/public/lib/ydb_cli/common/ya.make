@@ -40,7 +40,7 @@ PEERDIR(
     library/cpp/yaml/as
     library/cpp/string_utils/csv
     ydb/public/sdk/cpp/src/library/json_value
-    ydb/public/sdk/cpp/src/library/operation_id/
+    ydb/public/sdk/cpp/src/library/operation_id
     ydb/public/sdk/cpp/src/library/yson_value
     ydb/public/sdk/cpp/src/client/draft
     ydb/public/sdk/cpp/src/client/result

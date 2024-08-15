@@ -66,7 +66,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/persqueue_core
     ydb/public/api/protos
     ydb/public/api/grpc
-    ydb/public/sdk/cpp/src/library/operation_id/
+    ydb/public/sdk/cpp/src/library/operation_id
 )
 
 END()

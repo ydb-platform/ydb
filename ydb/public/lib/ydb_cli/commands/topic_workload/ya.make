@@ -22,8 +22,8 @@ PEERDIR(
     ydb/public/api/grpc
     ydb/public/api/protos
     ydb/public/api/protos/annotations
-    ydb/public/sdk/cpp/src/library/operation_id/
-    ydb/public/sdk/cpp/src/library/operation_id/
+    ydb/public/sdk/cpp/src/library/operation_id
+    ydb/public/sdk/cpp/src/library/operation_id
     ydb/public/sdk/cpp/src/client/draft
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/proto

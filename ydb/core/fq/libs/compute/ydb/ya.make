@@ -31,7 +31,7 @@ PEERDIR(
     ydb/library/yql/providers/dq/api/protos
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
-    ydb/public/sdk/cpp/src/library/operation_id/
+    ydb/public/sdk/cpp/src/library/operation_id
 )
 
 YQL_LAST_ABI_VERSION()

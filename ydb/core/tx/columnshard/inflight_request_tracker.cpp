@@ -1,6 +1,7 @@
-#include "inflight_request_tracker.h"
 #include "columnshard_impl.h"
 #include "columnshard_schema.h"
+#include "inflight_request_tracker.h"
+
 #include "data_sharing/common/transactions/tx_extension.h"
 #include "engines/column_engine.h"
 #include "engines/reader/plain_reader/constructor/read_metadata.h"
@@ -9,15 +10,11 @@
 namespace NKikimr::NColumnShard {
 
 void TInFlightReadsTracker::RemoveInFlightRequest(ui64 cookie, const NOlap::TVersionedIndex* /*index*/, const TInstant now) {
-    Y_ABORT_UNLESS(RequestsMeta.contains(cookie), "Unknown request cookie %" PRIu64, cookie);
-    const auto& readMetaList = RequestsMeta[cookie];
+    auto it = RequestsMeta.find(cookie);
+    AFL_VERIFY(it != RequestsMeta.end())("cookie", cookie);
+    const auto& readMetaList = it->second;
 
     for (const auto& readMetaBase : readMetaList) {
-        NOlap::NReader::NPlain::TReadMetadata::TConstPtr readMeta = std::dynamic_pointer_cast<const NOlap::NReader::NPlain::TReadMetadata>(readMetaBase);
-
-        if (!readMeta) {
-            continue;
-        }
         {
             auto it = SnapshotsLive.find(readMeta->GetRequestSnapshot());
             AFL_VERIFY(it != SnapshotsLive.end());
@@ -27,10 +24,13 @@ void TInFlightReadsTracker::RemoveInFlightRequest(ui64 cookie, const NOlap::TVer
             }
         }
 
-        auto insertStorage = StoragesManager->GetInsertOperator();
-        auto tracker = insertStorage->GetBlobsTracker();
-        for (const auto& committedBlob : readMeta->CommittedBlobs) {
-            tracker->FreeBlob(committedBlob.GetBlobRange().GetBlobId());
+        if (NOlap::NReader::NPlain::TReadMetadata::TConstPtr readMeta =
+                std::dynamic_pointer_cast<const NOlap::NReader::NPlain::TReadMetadata>(readMetaBase)) {
+            auto insertStorage = StoragesManager->GetInsertOperator();
+            auto tracker = insertStorage->GetBlobsTracker();
+            for (const auto& committedBlob : readMeta->CommittedBlobs) {
+                tracker->FreeBlob(committedBlob.GetBlobRange().GetBlobId());
+            }
         }
     }
 
@@ -85,8 +85,7 @@ public:
         NColumnShard::TColumnShard* self, std::set<NOlap::TSnapshot>&& saveSnapshots, std::set<NOlap::TSnapshot>&& removeSnapshots)
         : TBase(self)
         , SaveSnapshots(std::move(saveSnapshots))
-        , RemoveSnapshots(std::move(removeSnapshots))
-    {
+        , RemoveSnapshots(std::move(removeSnapshots)) {
         AFL_VERIFY(SaveSnapshots.size() || RemoveSnapshots.size());
     }
 };
@@ -138,4 +137,4 @@ bool TInFlightReadsTracker::LoadFromDatabase(NTable::TDatabase& tableDB) {
     return true;
 }
 
-}
+}   // namespace NKikimr::NColumnShard

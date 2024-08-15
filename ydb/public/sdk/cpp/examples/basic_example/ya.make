@@ -2,8 +2,8 @@ PROGRAM()
 
 SRCS(
     main.cpp
-    basic_example_data_qs.cpp
-    basic_example_qs.cpp
+    basic_example_data.cpp
+    basic_example.cpp
 )
 
 PEERDIR(

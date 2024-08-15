@@ -1,4 +1,4 @@
-#include "basic_example_qs.h"
+#include "basic_example.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_retry/retry.h>
 

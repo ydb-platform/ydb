@@ -1,4 +1,4 @@
-#include "basic_example_ts.h"
+#include "basic_example.h"
 
 using namespace NYdb;
 using namespace NYdb::NTable;

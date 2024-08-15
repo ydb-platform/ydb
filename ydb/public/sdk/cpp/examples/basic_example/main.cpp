@@ -1,4 +1,4 @@
-#include "basic_example_qs.h"
+#include "basic_example.h"
 
 #include <library/cpp/getopt/last_getopt.h>
 

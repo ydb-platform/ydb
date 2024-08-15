@@ -53,7 +53,8 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::Normali
             }
         }
         if (restoreColumnIds.contains(columnId)) {
-            AFL_VERIFY(!!GetExternalDefaultValueVerified(columnId) || GetIndexInfo().IsNullableVerified(columnId));
+            AFL_VERIFY(!!GetExternalDefaultValueVerified(columnId) || GetIndexInfo().IsNullableVerified(columnId))("column_name",
+                                                                          GetIndexInfo().GetColumnName(columnId, false))("id", columnId);
             result->AddField(resultField, GetColumnLoaderVerified(columnId)->BuildDefaultAccessor(batch->num_rows())).Validate();
         }
     }
@@ -114,8 +115,9 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
     Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(batch, GetIndexInfo().GetPrimaryKey()));
 
     switch (mType) {
+        case NEvWrite::EModificationType::Replace:
         case NEvWrite::EModificationType::Upsert: {
-            AFL_VERIFY(batch->num_columns() <= dstSchema->num_fields());
+                AFL_VERIFY(batch->num_columns() <= dstSchema->num_fields());
             if (batch->num_columns() < dstSchema->num_fields()) {
                 for (auto&& f : dstSchema->fields()) {
                     if (GetIndexInfo().IsNullableVerified(f->name())) {
@@ -132,7 +134,6 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
             return batch;
         }
         case NEvWrite::EModificationType::Delete:
-        case NEvWrite::EModificationType::Replace:
         case NEvWrite::EModificationType::Insert:
         case NEvWrite::EModificationType::Update:
             return batch;

@@ -5202,6 +5202,8 @@ public:
         switch (value->kind) {
         case OBJECT_TYPE:
             return ParseDefineType(value);
+        case OBJECT_OPERATOR:
+            return ParseDefineOperator(value);
         default:
             return false;
         }
@@ -5215,15 +5217,13 @@ public:
 
         auto nameNode = ListNodeNth(value->defnames, 0);
         auto name = to_lower(TString(StrVal(nameNode)));
-        if (!NPg::HasType(name)) {
-            Builder.PrepareType(ExtensionIndex, name);
-        }
+        Builder.PrepareType(ExtensionIndex, name);
 
         NPg::TTypeDesc desc = NPg::LookupType(name);
 
         for (int i = 0; i < ListLength(value->definition); ++i) {
             auto node = LIST_CAST_NTH(DefElem, value->definition, i);
-            TString defnameStr(node->defname);
+            auto defnameStr = to_lower(TString(node->defname));
             if (defnameStr == "internallength") {
                 if (NodeTag(node->arg) == T_Integer) {
                     desc.TypeLen = IntVal(node->arg);
@@ -5364,6 +5364,106 @@ public:
     }
 
     [[nodiscard]]
+    bool ParseDefineOperator(const DefineStmt* value) {
+        if (ListLength(value->defnames) != 1) {
+            return false;
+        }
+
+        auto nameNode = ListNodeNth(value->defnames, 0);
+        auto name = to_lower(TString(StrVal(nameNode)));
+        TString procedureName;
+        TString commutator;
+        TString negator;
+        ui32 leftType = 0;
+        ui32 rightType = 0;
+        for (int i = 0; i < ListLength(value->definition); ++i) {
+            auto node = LIST_CAST_NTH(DefElem, value->definition, i);
+            auto defnameStr = to_lower(TString(node->defname));
+            if (defnameStr == "leftarg") {
+                if (NodeTag(node->arg) != T_TypeName) {
+                    return false;
+                }
+
+                TString value;
+                if (!ParseTypeName(CAST_NODE_EXT(PG_TypeName, T_TypeName, node->arg), value)) {
+                    return false;
+                }
+
+                leftType = NPg::LookupType(value).TypeId;
+            } else if (defnameStr == "rightarg") {
+                if (NodeTag(node->arg) != T_TypeName) {
+                    return false;
+                }
+
+                TString value;
+                if (!ParseTypeName(CAST_NODE_EXT(PG_TypeName, T_TypeName, node->arg), value)) {
+                    return false;
+                }
+
+                rightType = NPg::LookupType(value).TypeId;
+            } else if (defnameStr == "procedure") {
+                if (NodeTag(node->arg) != T_TypeName) {
+                    return false;
+                }
+
+                TString value;
+                if (!ParseTypeName(CAST_NODE_EXT(PG_TypeName, T_TypeName, node->arg), value)) {
+                    return false;
+                }
+
+                procedureName = value;
+            } else if (defnameStr == "commutator") {
+                if (NodeTag(node->arg) != T_String) {
+                    return false;
+                }
+
+                commutator = StrVal(node->arg);
+            } else if (defnameStr == "negator") {
+                if (NodeTag(node->arg) != T_String) {
+                    return false;
+                }
+
+                negator = StrVal(node->arg);
+            }
+        }
+
+        if (!leftType) {
+            return false;
+        } 
+        
+        if (procedureName.empty()) {
+            return false;
+        }
+
+        TVector<ui32> args;
+        args.push_back(leftType);
+        if (rightType) {
+            args.push_back(rightType);
+        }
+
+        Builder.PrepareOper(ExtensionIndex, name, args);
+        auto desc = NPg::LookupOper(name, args);
+        if (!commutator.empty()) {
+            TVector<ui32> commArgs;
+            commArgs.push_back(rightType);
+            commArgs.push_back(leftType);
+            Builder.PrepareOper(ExtensionIndex, commutator, commArgs);
+            desc.ComId = NPg::LookupOper(commutator, commArgs).OperId;
+        }
+
+        if (!negator.empty()) {
+            Builder.PrepareOper(ExtensionIndex, negator, args);
+            desc.NegateId = NPg::LookupOper(negator, args).OperId;
+        }
+
+        const auto& procDesc = NPg::LookupProc(procedureName, args);
+        desc.ProcId = procDesc.ProcId;
+        desc.ResultType = procDesc.ResultType;
+        Builder.UpdateOper(desc);
+        return true;
+    }
+
+    [[nodiscard]]
     bool ParseCreateFunctionStmt(const CreateFunctionStmt* value) {
         NYql::NPg::TProcDesc desc;
         if (value->sql_body) {
@@ -5384,10 +5484,7 @@ public:
                 return false;
             }
 
-            if (!NPg::HasType(resultTypeStr)) {
-                Builder.PrepareType(ExtensionIndex, resultTypeStr);
-            }
-
+            Builder.PrepareType(ExtensionIndex, resultTypeStr);
             desc.ResultType = NPg::LookupType(resultTypeStr).TypeId;
         } else {
             desc.ResultType = NPg::LookupType("record").TypeId;
@@ -5466,10 +5563,7 @@ public:
                 return false;
             }
 
-            if (!NPg::HasType(argTypeStr)) {
-                Builder.PrepareType(ExtensionIndex, argTypeStr);
-            }
-
+            Builder.PrepareType(ExtensionIndex, argTypeStr);
             auto argTypeId = NPg::LookupType(argTypeStr).TypeId;
             if (node->mode == FUNC_PARAM_IN || node->mode == FUNC_PARAM_DEFAULT) {
                 desc.ArgTypes.push_back(argTypeId);

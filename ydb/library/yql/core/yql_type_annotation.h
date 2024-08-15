@@ -170,7 +170,7 @@ public:
     explicit TColumnOrder(const TVector<TString>& order);
     TString AddColumn(const TString& name);
 
-    bool IsDuplicated(const TString& name) const;
+    bool IsDuplicatedIgnoreCase(const TString& name) const;
 
     void Shrink(size_t remain);
 

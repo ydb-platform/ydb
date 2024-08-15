@@ -32,6 +32,13 @@ Y_UNIT_TEST_SUITE(TYqlColumnOrder) {
         UNIT_ASSERT_EQUAL(order.AddColumn("a_generated_2_generated_2"), "a_generated_2_generated_2_generated_2");
     }
 
+    Y_UNIT_TEST(ColumnOrderCaseSensetive) {
+        TColumnOrder order;
+        UNIT_ASSERT_EQUAL(order.AddColumn("a"), "a");
+        UNIT_ASSERT_EQUAL(order.AddColumn("A"), "A");
+        UNIT_ASSERT_EQUAL(order.IsDuplicatedIgnoreCase("a"), true);
+    }
+
     Y_UNIT_TEST(ColumnOrderGeneratedMatchOverVectorCtor) {
         TColumnOrder order(TVector<TString>{"a", "a", "a_generated_2", "a_generated_2_generated_2"});
         TVector<TColumnOrder::TOrderedItem> got(order.begin(), order.end());

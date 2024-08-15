@@ -150,7 +150,7 @@ TString TColumnOrder::AddColumn(const TString& name) {
     return name;
 }
 
-bool TColumnOrder::IsDuplicated(const TString& name) const {
+bool TColumnOrder::IsDuplicatedIgnoreCase(const TString& name) const {
     auto it = UseCountLcase_.find(to_lower(name));
     return it != UseCount_.end() && it->second > 1;
 }

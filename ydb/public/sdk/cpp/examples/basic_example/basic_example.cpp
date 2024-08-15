@@ -111,9 +111,9 @@ static void DropTables(TQueryClient client, const TString& path) {
     }));
 }
 
-// ///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
 
-// //! Fills sample tables with data in single parameterized data query.
+//! Fills sample tables with data in single parameterized data query.
 static TAsyncExecuteQueryResult FillTableDataTransaction(TSession session, const TString& path) {
     auto query = Sprintf(R"(
         PRAGMA TablePathPrefix("%s");
@@ -193,7 +193,7 @@ static TAsyncExecuteQueryResult SelectSimpleTransaction(TSession session, const 
     return session.ExecuteQuery(query, txControl);
 }
 
-// //! Shows basic usage of mutating operations.
+//! Shows basic usage of mutating operations.
 static TAsyncExecuteQueryResult UpsertSimpleTransaction(TSession session, const TString& path) {
     auto query = Sprintf(R"(
         --!syntax_v1
@@ -335,7 +335,7 @@ static TAsyncExecuteQueryResult MultiStepTransaction(TSession session, const TSt
 // In most cases it's better to use transaction control settings in ExecuteDataQuery calls instead
 // to avoid additional hops to YDB cluster and allow more efficient execution of queries.
 // WARNING: Do not use without RetryQuery!!!
-// Now, RetryQuery does not support explicit transactions
+// Now, RetryQuery does not support explicit transactions.
 static TStatus ExplicitTclTransaction(TQueryClient client, const TString& path, const TInstant& airDate) { 
     auto session = client.GetSession().GetValueSync().GetSession();
     auto beginResult = session.BeginTransaction(TTxSettings::SerializableRW());
@@ -377,7 +377,7 @@ static TStatus ExplicitTclTransaction(TQueryClient client, const TString& path, 
 }
 
 // WARNING: Do not use without RetryQuery!!!
-// Now, RetryQuery does not support StreamExecuteQuery
+// Now, RetryQuery does not support StreamExecuteQuery.
 static TStatus StreamQuerySelectTransaction(TQueryClient client, const TString& path) {
     auto query = Sprintf(R"(
         --!syntax_v1

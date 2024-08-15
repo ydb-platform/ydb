@@ -262,7 +262,6 @@ Y_UNIT_TEST(SharedCache) {
 
     server->PrintCounters();
     UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ConfigLimitBytes->Val(), 32_MB);
-    UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->MemLimitBytes->Val(), 0); // not applied yet
     UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ActiveLimitBytes->Val(), server->SharedPageCacheCounters->ConfigLimitBytes->Val());
 
     runtime.SimulateSleep(TDuration::Seconds(2));

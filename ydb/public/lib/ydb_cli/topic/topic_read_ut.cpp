@@ -1,6 +1,6 @@
 #include "topic_read.h"
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.h>
+#include <ydb-cpp-sdk/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.h>
 #include <ydb/services/persqueue_v1/ut/persqueue_test_fixture.h>
 
 namespace NYdb::NConsoleClient {

@@ -12,9 +12,9 @@
 
 #include <ydb/library/yql/providers/common/metrics/service_counters.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/ydb_query/client.h>
+#include <ydb-cpp-sdk/client/ydb_operation/operation.h>
+#include <ydb-cpp-sdk/client/ydb_proto/accessor.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>

@@ -3,7 +3,7 @@
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb-cpp-sdk/client/ydb_topic/topic.h>
 
 #include <util/string/cast.h>
 #include <util/string/split.h>

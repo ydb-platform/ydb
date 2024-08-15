@@ -10,10 +10,10 @@
 #include <ydb/library/actors/http/http.h>
 #include <ydb/public/lib/deprecated/client/grpc_client.h>
 #include <ydb-cpp-sdk/library/grpc/client/grpc_client_low.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/ydb_table/table.h>
 #include <ydb/public/api/grpc/ydb_scripting_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb-cpp-sdk/client/ydb_result/result.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/mvp/core/core_ydb.h>

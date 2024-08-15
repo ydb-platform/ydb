@@ -1,8 +1,8 @@
 #pragma once
 
 #include <library/cpp/json/json_value.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
+#include <ydb-cpp-sdk/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/ydb_query/client.h>
 #include <ydb/library/accessor/accessor.h>
 
 #include <vector>

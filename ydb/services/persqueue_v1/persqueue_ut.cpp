@@ -15,7 +15,7 @@
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 
 #include <ydb/library/aclib/aclib.h>
-#include <ydb/public/sdk/cpp_v2/src/library/persqueue/obfuscate/obfuscate.h>
+#include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
 #include <ydb/library/persqueue/tests/counters.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
@@ -38,11 +38,11 @@
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/include/client.h>
+#include <ydb-cpp-sdk/client/ydb_persqueue_public/persqueue.h>
+#include <ydb-cpp-sdk/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.h>
+#include <ydb-cpp-sdk/client/ydb_scheme/scheme.h>
+#include <ydb-cpp-sdk/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/ydb_topic/include/client.h>
 #include <thread>
 
 

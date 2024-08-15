@@ -2,7 +2,7 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/ydb_proto/accessor.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>

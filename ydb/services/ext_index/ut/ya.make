@@ -21,7 +21,7 @@ PEERDIR(
     ydb/core/testlib/default
     ydb/services/metadata
     ydb/services/ext_index
-    ydb/public/sdk/cpp_v2/src/library/yson_value
+    ydb/public/sdk/cpp/src/library/yson_value
 )
 
 YQL_LAST_ABI_VERSION()

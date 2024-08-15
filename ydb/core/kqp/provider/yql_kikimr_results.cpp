@@ -2,7 +2,7 @@
 
 #include <ydb/library/binary_json/read.h>
 #include <ydb/library/dynumber/dynumber.h>
-#include <ydb/public/sdk/cpp_v2/src/library/uuid/uuid.h>
+#include <ydb/public/sdk/cpp/src/library/uuid/uuid.h>
 
 #include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
 #include <ydb/library/yql/public/result_format/yql_codec_results.h>

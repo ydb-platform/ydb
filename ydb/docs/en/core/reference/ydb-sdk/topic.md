@@ -104,7 +104,7 @@ The topic path is mandatory. Other parameters are optional.
 
 - C++
 
-  For a full list of supported parameters, see the [source code](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L394).
+  For a full list of supported parameters, see the [source code](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb-cpp-sdk/client/ydb_topic/topic.h#L394).
 
   Example of creating a topic with three partitions and ZSTD codec support:
 
@@ -173,7 +173,7 @@ When you update a topic, you must specify the topic path and the parameters to b
 
 - C++
 
-  For a full list of supported parameters, see the [source code](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L458).
+  For a full list of supported parameters, see the [source code](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb-cpp-sdk/client/ydb_topic/topic.h#L458).
 
   Example of adding an [important consumer](../../concepts/topic#important-consumer) and setting two days [retention time](../../concepts/topic#retention-time) for the topic:
 
@@ -241,7 +241,7 @@ When you update a topic, you must specify the topic path and the parameters to b
 
   Use `DescribeTopic` method to get information about topic.
 
-  For a full list of description fields, see the [source code](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L163).
+  For a full list of description fields, see the [source code](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb-cpp-sdk/client/ydb_topic/topic.h#L163).
 
   Example of using topic description:
 
@@ -331,7 +331,7 @@ Only connections with matching [producer and message group](../../concepts/topic
 
   The write session object with `IWriteSession` interface is used to connect to a topic for writing.
 
-  For a full list of write session settings, see the [source code](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L1199).
+  For a full list of write session settings, see the [source code](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb-cpp-sdk/client/ydb_topic/topic.h#L1199).
 
   Example of creating a write session:
 
@@ -1007,7 +1007,7 @@ Topic can have several Consumers and for each of them server stores its own read
 
   The read session object with `IReadSession` interface is used to connect to one or more topics for reading.
 
-  For a full list of read session settings, see `TReadSessionSettings` class in the [source code](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L1344).
+  For a full list of read session settings, see `TReadSessionSettings` class in the [source code](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb-cpp-sdk/client/ydb_topic/topic.h#L1344).
 
   To establish a connection to the existing `my-topic` topic using the added `my-consumer` consumer, use the following code:
 

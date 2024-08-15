@@ -3,7 +3,7 @@
 
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/testlib/tenant_runtime.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb-cpp-sdk/client/ydb_result/result.h>
 #include <ydb-cpp-sdk/library/yson_value/ydb_yson_value.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>

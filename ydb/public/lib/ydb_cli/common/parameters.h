@@ -8,7 +8,7 @@
 #include <ydb/public/lib/ydb_cli/common/csv_parser.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/parameter_stream.h>
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
+#include <ydb-cpp-sdk/client/ydb_params/params.h>
 #include <ydb-cpp-sdk/library/json_value/ydb_json_value.h>
 
 namespace NYdb {

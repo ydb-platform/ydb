@@ -7,10 +7,10 @@
 #include <ydb/library/aclib/aclib.h>
 
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
+#include <ydb-cpp-sdk/client/ydb_driver/driver.h>
+#include <ydb-cpp-sdk/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/ydb_persqueue_core/persqueue.h>
+#include <ydb-cpp-sdk/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
 
 #include <util/system/env.h>
 

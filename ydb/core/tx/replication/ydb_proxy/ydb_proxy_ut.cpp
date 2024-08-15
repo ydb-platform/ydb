@@ -2,7 +2,7 @@
 
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/write_topic.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb-cpp-sdk/client/ydb_topic/topic.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

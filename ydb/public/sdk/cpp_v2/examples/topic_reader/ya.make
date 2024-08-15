@@ -1,5 +1,0 @@
-RECURSE(
-    eventloop
-    simple
-    transaction
-)

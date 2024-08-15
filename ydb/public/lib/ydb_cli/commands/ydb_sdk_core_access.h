@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_types/core_facility/core_facility.h>
+#include <ydb-cpp-sdk/client/ydb_types/core_facility/core_facility.h>
 #include <memory>
 
 namespace NYdb {

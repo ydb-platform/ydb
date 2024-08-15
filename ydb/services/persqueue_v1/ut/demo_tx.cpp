@@ -1,10 +1,10 @@
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
+#include <ydb-cpp-sdk/client/ydb_driver/driver.h>
+#include <ydb-cpp-sdk/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.h>
+#include <ydb-cpp-sdk/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
+#include <ydb-cpp-sdk/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/ydb_types/status_codes.h>
 
 #include <ydb/library/services/services.pb.h>
 

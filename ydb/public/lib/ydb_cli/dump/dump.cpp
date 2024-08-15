@@ -2,10 +2,10 @@
 #include "dump_impl.h"
 #include "restore_impl.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_import/import.h>
-#include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/ydb_import/import.h>
+#include <ydb-cpp-sdk/client/ydb_operation/operation.h>
+#include <ydb-cpp-sdk/client/ydb_scheme/scheme.h>
+#include <ydb-cpp-sdk/client/ydb_table/table.h>
 
 #include <util/string/printf.h>
 

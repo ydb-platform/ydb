@@ -19,8 +19,8 @@ PEERDIR(
     ydb/core/local_pgwire
     ydb/core/protos
     ydb/public/api/grpc
-    ydb/public/sdk/cpp/client/ydb_driver
-    ydb/public/sdk/cpp/client/draft
+    ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/draft
     ydb/library/yql/parser/pg_wrapper
     ydb/library/yql/public/udf/service/exception_policy
 )

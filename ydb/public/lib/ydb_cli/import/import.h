@@ -6,9 +6,9 @@
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/command.h>
 #include <ydb/public/lib/ydb_cli/common/formats.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/fluent_settings_helpers.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/ydb_types/status/status.h>
+#include <ydb-cpp-sdk/client/ydb_types/fluent_settings_helpers.h>
+#include <ydb-cpp-sdk/client/ydb_table/table.h>
 
 #include <util/generic/size_literals.h>
 

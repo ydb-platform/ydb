@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
+#include <ydb-cpp-sdk/client/ydb_params/params.h>
 
 #include <library/cpp/string_utils/csv/csv.h>
 

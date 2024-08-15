@@ -5,10 +5,10 @@
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
-#include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
+#include <ydb-cpp-sdk/client/ydb_operation/operation.h>
+#include <ydb-cpp-sdk/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/ydb_types/exceptions/exceptions.h>
+#include <ydb-cpp-sdk/client/ydb_types/operation/operation.h>
 
 #include <ydb/core/kqp/counters/kqp_counters.h>
 

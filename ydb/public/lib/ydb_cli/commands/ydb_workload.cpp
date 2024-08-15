@@ -11,7 +11,7 @@
 #include <ydb/library/workload/abstract/workload_factory.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb-cpp-sdk/client/ydb_topic/topic.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 

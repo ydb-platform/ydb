@@ -5,8 +5,8 @@
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/ydb_topic/topic.h>
+#include <ydb-cpp-sdk/client/ydb_table/table.h>
 
 Y_UNIT_TEST_SUITE(YdbWorkloadTransferTopicToTable) {
 

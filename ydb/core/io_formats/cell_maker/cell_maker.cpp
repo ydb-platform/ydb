@@ -2,7 +2,7 @@
 
 #include <ydb/library/binary_json/write.h>
 #include <ydb/library/dynumber/dynumber.h>
-#include <ydb/public/sdk/cpp_v2/src/library/uuid/uuid.h>
+#include <ydb/public/sdk/cpp/src/library/uuid/uuid.h>
 
 #include <ydb/library/yql/minikql/dom/yson.h>
 #include <ydb/library/yql/minikql/dom/json.h>

@@ -18,14 +18,14 @@ PEERDIR(
     ydb/library/yql/public/udf
     ydb/library/yql/udfs/common/string
     ydb/library/yql/utils/backtrace
-    ydb/public/sdk/cpp_v2/src/library/yson_value
+    ydb/public/sdk/cpp/src/library/yson_value
     ydb/core/tx/columnshard/test_helper
-    ydb/public/sdk/cpp/client/draft
-    ydb/public/sdk/cpp/client/ydb_query
-    ydb/public/sdk/cpp/client/ydb_proto
-    ydb/public/sdk/cpp/client/ydb_scheme
-    ydb/public/sdk/cpp/client/ydb_table
-    ydb/public/sdk/cpp/client/ydb_topic
+    ydb/public/sdk/cpp/src/client/draft
+    ydb/public/sdk/cpp/src/client/query
+    ydb/public/sdk/cpp/src/client/proto
+    ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/table
+    ydb/public/sdk/cpp/src/client/topic
 )
 
 YQL_LAST_ABI_VERSION()

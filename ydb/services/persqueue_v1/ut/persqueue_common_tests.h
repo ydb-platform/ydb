@@ -11,7 +11,7 @@
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 
 #include <ydb/library/aclib/aclib.h>
-#include <ydb/public/sdk/cpp_v2/src/library/persqueue/obfuscate/obfuscate.h>
+#include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -24,7 +24,7 @@
 
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.h>
+#include <ydb-cpp-sdk/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.h>
 
 
 namespace NKikimr::NPersQueueTests {

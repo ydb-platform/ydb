@@ -11,7 +11,7 @@
 #include <ydb/core/external_sources/object_storage/inference/infer_config.h>
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
+#include <ydb-cpp-sdk/client/ydb_types/status/status.h>
 
 namespace NKikimr::NExternalSource::NObjectStorage {
 

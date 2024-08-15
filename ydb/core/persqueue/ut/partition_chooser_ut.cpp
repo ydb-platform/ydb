@@ -3,7 +3,7 @@
 #include <ydb/core/persqueue/writer/metadata_initializers.h>
 #include <ydb/core/persqueue/writer/partition_chooser_impl.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
+#include <ydb-cpp-sdk/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
 
 #include <ydb/core/persqueue/writer/pipe_utils.h>
 

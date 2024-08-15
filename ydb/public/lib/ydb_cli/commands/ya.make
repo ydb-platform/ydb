@@ -37,7 +37,7 @@ PEERDIR(
     ydb/library/backup
     ydb/library/workload
     ydb/library/yaml_config/public
-    ydb/public/sdk/cpp_v2/src/library/operation_id/
+    ydb/public/sdk/cpp/src/library/operation_id/
     ydb/public/lib/stat_visualization
     ydb/public/lib/ydb_cli/common
     ydb/public/lib/ydb_cli/commands/command_base
@@ -49,18 +49,18 @@ PEERDIR(
     ydb/public/lib/ydb_cli/dump
     ydb/public/lib/ydb_cli/import
     ydb/public/lib/ydb_cli/topic
-    ydb/public/sdk/cpp/client/draft
-    ydb/public/sdk/cpp/client/ydb_coordination
-    ydb/public/sdk/cpp/client/ydb_export
-    ydb/public/sdk/cpp/client/ydb_import
-    ydb/public/sdk/cpp/client/ydb_monitoring
-    ydb/public/sdk/cpp/client/ydb_operation
-    ydb/public/sdk/cpp/client/ydb_persqueue_public
-    ydb/public/sdk/cpp/client/ydb_proto
-    ydb/public/sdk/cpp/client/ydb_scheme
-    ydb/public/sdk/cpp/client/ydb_table
-    ydb/public/sdk/cpp/client/ydb_topic
-    ydb/public/sdk/cpp/client/ydb_types/credentials/login
+    ydb/public/sdk/cpp/src/client/draft
+    ydb/public/sdk/cpp/src/client/coordination
+    ydb/public/sdk/cpp/src/client/export
+    ydb/public/sdk/cpp/src/client/import
+    ydb/public/sdk/cpp/src/client/monitoring
+    ydb/public/sdk/cpp/src/client/operation
+    ydb/public/sdk/cpp/src/client/persqueue_public
+    ydb/public/sdk/cpp/src/client/proto
+    ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/table
+    ydb/public/sdk/cpp/src/client/topic
+    ydb/public/sdk/cpp/src/client/types/credentials/login
 )
 
 END()

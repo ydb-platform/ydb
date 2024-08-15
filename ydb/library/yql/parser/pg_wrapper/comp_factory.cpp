@@ -79,7 +79,7 @@ constexpr auto PG_ERROR = ERROR;
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/binary_json/read.h>
-#include <ydb/public/sdk/cpp_v2/src/library/uuid/uuid.h>
+#include <ydb/public/sdk/cpp/src/library/uuid/uuid.h>
 #include <ydb/library/yql/public/udf/arrow/block_reader.h>
 #include <ydb/library/yql/public/udf/arrow/block_builder.cpp>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>

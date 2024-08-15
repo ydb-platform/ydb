@@ -1,14 +1,11 @@
 #include "vector_index.h"
 
-#include <util/system/env.h>
-#include <util/stream/file.h>
-
 using namespace NLastGetopt;
 using namespace NYdb;
 
 int main(int argc, char** argv) {
-    TString endpoint;
-    TString command;
+    std::string endpoint;
+    std::string command;
     TOptions options;
 
     TOpts opts = TOpts::Default();
@@ -33,14 +30,14 @@ int main(int argc, char** argv) {
     ECommand cmd = Parse(command);
 
     if (cmd == ECommand::None) {
-        Cerr << "Unsupported command: " << command << Endl;
+        std::cerr << "Unsupported command: " << command << std::endl;
         return 1;
     }
 
     auto config = TDriverConfig()
                       .SetEndpoint(endpoint)
                       .SetDatabase(options.Database)
-                      .SetAuthToken(GetEnv("YDB_TOKEN"));
+                      .SetAuthToken(std::getenv("YDB_TOKEN") ? std::getenv("YDB_TOKEN") : "");
 
     TDriver driver(config);
 
@@ -66,7 +63,7 @@ int main(int argc, char** argv) {
                 break;
         }
     } catch (const std::exception& e) {
-        Cerr << "Execution failed: " << e.what() << Endl;
+        std::cerr << "Execution failed: " << e.what() << std::endl;
     }
     return 1;
 }

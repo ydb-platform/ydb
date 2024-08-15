@@ -5,8 +5,8 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/sdk/cpp/client/ydb_scheme
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/table
     ydb/public/api/grpc
 )
 

@@ -31,7 +31,7 @@ PEERDIR(
     ydb/library/yql/providers/pg/provider
     ydb/library/yql/providers/result/provider
     ydb/library/yql/providers/s3/expr_nodes
-    ydb/public/sdk/cpp/client/impl/ydb_internal/common
+    ydb/public/sdk/cpp/src/client/impl/ydb_internal/common
 )
 
 YQL_LAST_ABI_VERSION()

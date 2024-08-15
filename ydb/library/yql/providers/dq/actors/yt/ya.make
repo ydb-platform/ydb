@@ -2,7 +2,7 @@ LIBRARY()
 
 PEERDIR(
     ydb/library/actors/core
-    ydb/public/sdk/cpp_v2/src/library/grpc/client
+    ydb/public/sdk/cpp/src/library/grpc/client
     yt/cpp/mapreduce/interface
     ydb/library/yql/providers/dq/config
     ydb/library/yql/core/issue

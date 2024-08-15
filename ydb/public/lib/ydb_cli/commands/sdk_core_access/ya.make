@@ -5,8 +5,8 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/sdk/cpp/client/ydb_common_client/impl
-    ydb/public/sdk/cpp/client/ydb_types
+    ydb/public/sdk/cpp/src/client/common_client/impl
+    ydb/public/sdk/cpp/src/client/types
 )
 
 END()

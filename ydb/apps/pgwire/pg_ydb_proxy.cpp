@@ -5,7 +5,7 @@
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 #include <ydb/library/actors/core/actor.h>
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
 
 namespace NPGW {
 

@@ -1,13 +1,13 @@
 #pragma once
 
 #include <ydb/mvp/security/simple/security.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
+#include <ydb-cpp-sdk/client/ydb_driver/driver.h>
+#include <ydb-cpp-sdk/client/ydb_scheme/scheme.h>
+#include <ydb-cpp-sdk/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/ydb_datastreams/datastreams.h>
+#include <ydb-cpp-sdk/client/ydb_persqueue_public/persqueue.h>
+#include <ydb-cpp-sdk/client/ydb_topic/topic.h>
+#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/core/viewer/json/json.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb-cpp-sdk/library/grpc/client/grpc_client_low.h>

@@ -15,7 +15,7 @@ PEERDIR(
     ydb/library/yql/providers/generic/proto
     ydb/library/yql/public/types
     ydb/library/yql/providers/generic/connector/libcpp
-    ydb/public/sdk/cpp/client/ydb_types/credentials
+    ydb/public/sdk/cpp/src/client/types/credentials
 )
 
 YQL_LAST_ABI_VERSION()

@@ -1,0 +1,15 @@
+LIBRARY()
+
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/headers.inc)
+
+SRCS(
+    iam.cpp
+)
+
+PEERDIR(
+    ydb/public/api/client/yc_public/iam
+    ydb/public/sdk/cpp/src/client/iam/impl
+    ydb/public/sdk/cpp/src/client/iam/common
+)
+
+END()

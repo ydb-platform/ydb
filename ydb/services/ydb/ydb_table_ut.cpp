@@ -1,15 +1,15 @@
 #include "ydb_common_ut.h"
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h>
-#include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
-#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
+#include <ydb-cpp-sdk/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/ydb_scheme/scheme.h>
+#include <ydb-cpp-sdk/client/ydb_params/params.h>
+#include <ydb-cpp-sdk/client/ydb_result/result.h>
+#include <ydb-cpp-sdk/client/ydb_types/status_codes.h>
+#include <ydb-cpp-sdk/client/ydb_types/exceptions/exceptions.h>
+#include <ydb-cpp-sdk/client/ydb_operation/operation.h>
+#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
 #include <ydb-cpp-sdk/library/yson_value/ydb_yson_value.h>
 
 #include <ydb/library/yql/public/issue/yql_issue.h>

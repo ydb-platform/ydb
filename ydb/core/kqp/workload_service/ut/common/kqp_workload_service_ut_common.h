@@ -8,8 +8,8 @@
 
 #include <ydb-cpp-sdk/library/yson_value/ydb_yson_value.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb-cpp-sdk/client/ydb_query/client.h>
+#include <ydb-cpp-sdk/client/ydb_scheme/scheme.h>
 
 
 namespace NKikimr::NKqp::NWorkload {

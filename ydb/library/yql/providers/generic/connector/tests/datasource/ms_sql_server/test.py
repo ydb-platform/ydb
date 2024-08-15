@@ -57,7 +57,7 @@ class OneTimeWaiter:
 
         start = datetime.now()
         actual_tables: Set[str] = None
-        timeout = 10
+        timeout = 60
 
         while (datetime.now() - start).total_seconds() < timeout:
             try:

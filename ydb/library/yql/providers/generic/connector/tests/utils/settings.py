@@ -40,7 +40,7 @@ class Settings:
         dbname: str
         cluster_name: str
         username: str
-        password: str  
+        password: str
         host_external: str
         host_internal: str
         port_external: int

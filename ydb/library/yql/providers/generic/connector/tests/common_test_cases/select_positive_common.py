@@ -304,7 +304,7 @@ class Factory:
 
         if data_source_kind in [
             EDataSourceKind.YDB,
-            EDataSourceKind.MYSQL, 
+            EDataSourceKind.MYSQL,
             EDataSourceKind.MS_SQL_SERVER,
         ]:
             base_test_cases = self._column_selection()

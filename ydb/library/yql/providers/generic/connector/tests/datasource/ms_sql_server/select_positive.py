@@ -346,7 +346,6 @@ class Factory:
             ),
         ]
 
-
     def make_test_cases(self) -> Sequence[TestCase]:
         return list(
             itertools.chain(

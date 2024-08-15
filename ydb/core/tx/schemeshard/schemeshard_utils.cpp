@@ -443,8 +443,6 @@ auto CalcImplTableDescImpl(
         implTableDesc.MutableReplicationConfig()->CopyFrom(indexTableDesc.GetReplicationConfig());
     }
 
-    implTableDesc.SetSystemColumnNamesAllowed(true);
-
     return implTableDesc;
 }
 

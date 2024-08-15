@@ -304,7 +304,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             return nullptr;
         }
 
-        if (!allowSystemColumns && !IsValidColumnName(colName) || allowSystemColumns && !IsValidSystemColumnName(colName)) {
+        if (!IsValidColumnName(colName, allowSystemColumns)) {
             errStr = Sprintf("Invalid name for column '%s'", colName.data());
             return nullptr;
         }

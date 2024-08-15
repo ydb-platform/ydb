@@ -39,17 +39,18 @@ inline bool IsAllowedKeyType(NScheme::TTypeInfo typeInfo) {
     }
 }
 
-inline bool IsValidSystemColumnName(const TString& name) {
+inline bool IsValidColumnName(const TString& name, bool allowSystemColumnNames = false) {
+    if (!allowSystemColumnNames && name.StartsWith(SYSTEM_COLUMN_PREFIX)) {
+        return false;
+    }
+
     for (auto c: name) {
         if (!std::isalnum(c) && c != '_' && c != '-') {
             return false;
         }
     }
-    return true;
-}
 
-inline bool IsValidColumnName(const TString& name) {
-    return IsValidSystemColumnName(name) && !name.StartsWith(SYSTEM_COLUMN_PREFIX);
+    return true;
 }
 
 inline NKikimrSchemeOp::TModifyScheme TransactionTemplate(const TString& workingDir, NKikimrSchemeOp::EOperationType type) {

@@ -43,7 +43,7 @@ When working with Microsoft SQL Server clusters, there are a number of limitatio
 
 ## Supported data types
 
-In the Microsoft SQL Server database, the optionality of column values (whether the column can contain `NULL` values or not) is not a part of the data type system. The `NOT NULL` constraint for any column of any table is stored within the `IS_NULLABLE` column the [INFORMATION_SCHEMA.COLUMNS](https://learn.microsoft.com/en-us/sql/relational-databases/system-information-schema-views/columns-transact-sql?view=sql-server-ver16) system table, i.e., at the table metadata level. Therefore, all basic Microsoft SQL Server types can contain `NULL` values by default, and in the {{ ydb-full-name }} type system, they should be mapped to [optional](../yql/reference/yql-core/types/optional.md).
+In the Microsoft SQL Server database, the optionality of column values (whether the column can contain `NULL` values or not) is not a part of the data type system. The `NOT NULL` constraint for any column of any table is stored within the `IS_NULLABLE` column the [INFORMATION_SCHEMA.COLUMNS](https://learn.microsoft.com/en-us/sql/relational-databases/system-information-schema-views/columns-transact-sql?view=sql-server-ver16) system table, i.e., at the table metadata level. Therefore, all basic Microsoft SQL Server types can contain `NULL` values by default, and in the {{ ydb-full-name }} type system, they should be mapped to [optional](../../yql/reference/types/optional.md).
 
 Below is a correspondence table between Microsoft SQL Server types and {{ ydb-short-name }} types. All other data types, except those listed, are not supported.
 

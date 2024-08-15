@@ -38,7 +38,7 @@ this.transport = GrpcTransport.forConnectionString(connectionString)
 this.queryClient = QueryClient.newClient(transport).build();
 ```
 
-Все операции с YDB рекомендуется выполнять с помощью класса-хелпера `SessionRetryContext`, который обеспечивает корректное повторное выполнение операции в случае частичной недоступности. Фрагмент кода для инициализации контекста ретраев:
+Все операции с YDB [рекомендуется](../../../recipes/ydb-sdk/retry.md) выполнять с помощью класса-хелпера `SessionRetryContext`, который обеспечивает корректное повторное выполнение операции в случае частичной недоступности. Фрагмент кода для инициализации контекста ретраев:
 
 ```java
 this.retryCtx = SessionRetryContext.create(queryClient).build();

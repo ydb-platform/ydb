@@ -38,7 +38,7 @@ this.transport = GrpcTransport.forConnectionString(connectionString)
 this.queryClient = QueryClient.newClient(transport).build();
 ```
 
-We recommend that you use the `SessionRetryContext` helper class for all your operations with the YDB: it ensures proper retries in case the database becomes partially unavailable. Sample code to initialize the retry context:
+It is also [recommended] (../../../recipes/ydb-sdk/retry.md) to use the `SessionRetryContext` helper class for execution of operations with the YDB: it ensures proper retries in case the database becomes partially unavailable. Sample code to initialize the retry context:
 
 ```java
 this.retryCtx = SessionRetryContext.create(queryClient).build();

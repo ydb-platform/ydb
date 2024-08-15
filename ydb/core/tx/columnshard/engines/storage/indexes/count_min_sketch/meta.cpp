@@ -23,9 +23,8 @@ TString TIndexMeta::DoBuildIndexImpl(std::vector<TChunkedColumnReader>&& columnR
         sketchesByColumns.emplace_back();
         auto& sketch = sketchesByColumns.back();
 
-        for (colReader.Start(); colReader.IsCorrect(); colReader.ReadNext()) {
+        for (colReader.Start(); colReader.IsCorrect(); colReader.ReadNextChunk()) {
             auto array = colReader.GetCurrentChunk();
-            int i = colReader.GetCurrentRecordIndex();
 
             NArrow::SwitchType(array->type_id(), [&](const auto& type) {
                 using TWrap = std::decay_t<decltype(type)>;
@@ -33,13 +32,17 @@ TString TIndexMeta::DoBuildIndexImpl(std::vector<TChunkedColumnReader>&& columnR
 
                 const TArray& arrTyped = static_cast<const TArray&>(*array);
                 if constexpr (arrow::has_c_type<typename TWrap::T>()) {
-                    auto cell = TCell::Make(arrTyped.Value(i));
-                    sketch.Count(cell.Data(), cell.Size());
+                    for (int64_t i = 0; i < arrTyped.length(); ++i) {
+                        auto cell = TCell::Make(arrTyped.Value(i));
+                        sketch.Count(cell.Data(), cell.Size());
+                    }
                     return true;
                 }
                 if constexpr (arrow::has_string_view<typename TWrap::T>()) {
-                    auto view = arrTyped.GetView(i);
-                    sketch.Count(view.data(), view.size());
+                    for (int64_t i = 0; i < arrTyped.length(); ++i) {
+                        auto view = arrTyped.GetView(i);
+                        sketch.Count(view.data(), view.size());
+                    }
                     return true;
                 }
                 AFL_VERIFY(false);

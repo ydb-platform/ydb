@@ -16,7 +16,7 @@ std::unique_ptr<NActors::IActor> NewLeaderDetector(
     NActors::TActorId parentId,
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    NYdb::TDriver driver,
+    const TYqSharedResources::TPtr& yqSharedResources,
     const TString& tenant);
 
 } // namespace NFq

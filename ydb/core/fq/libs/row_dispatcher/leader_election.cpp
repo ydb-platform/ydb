@@ -67,7 +67,7 @@ class TLeaderElection: public TActorBootstrapped<TLeaderElection> {
     TMaybe<NYdb::NCoordination::TSession> Session;
     TActorId ParentId;
     TActorId CoordinatorId;
-    const TString LogPrefix;
+    TString LogPrefix;
     const TString Tenant;
 
     struct NodeInfo {
@@ -124,7 +124,7 @@ TLeaderElection::TLeaderElection(
     , CoordinationNodePath(JoinPath(YdbConnection->TablePathPrefix, tenant))
     , ParentId(parentId)
     , CoordinatorId(coordinatorId)
-    , LogPrefix("TLeaderElection: ")
+    , LogPrefix("TLeaderElection ")
     , Tenant(tenant) {
 }
 
@@ -159,9 +159,8 @@ TYdbSdkRetryPolicy::TPtr MakeSchemaRetryPolicy() {
 
 void TLeaderElection::Bootstrap() {
     Become(&TLeaderElection::StateFunc);
+    LogPrefix = LogPrefix + " " + SelfId().ToString() + " ";
     LOG_ROW_DISPATCHER_DEBUG("Bootstrap " << SelfId());
-
-    Register(NewLeaderDetector(SelfId(), Config, CredentialsProviderFactory, YqSharedResources->UserSpaceYdbDriver, Tenant).release());
 
     Register(MakeCreateCoordinationNodeActor(
         SelfId(),
@@ -238,9 +237,9 @@ void TLeaderElection::Handle(TEvPrivate::TEvAcquireSemaphoreResult::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("Semaphore successfully acquired");
 }
 
-void TLeaderElection::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
+void TLeaderElection::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& /*ev*/) {
     LOG_ROW_DISPATCHER_DEBUG("TEvCoordinatorChanged ");
-    Send(ParentId, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(ev->Get()->CoordinatorActorId));
+    //Send(ParentId, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(ev->Get()->CoordinatorActorId));
 }
 
 } // namespace

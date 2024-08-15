@@ -5,6 +5,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.in
 SRCS(
     coordinator_ut.cpp
     leader_detector_ut.cpp
+    leader_election_ut.cpp
     json_parser_ut.cpp
     json_filter_ut.cpp
     topic_session_ut.cpp

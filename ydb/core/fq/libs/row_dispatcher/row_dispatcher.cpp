@@ -187,7 +187,7 @@ void TRowDispatcher::Bootstrap() {
 
     if (Config.GetCoordinator().GetEnabled()) {
         const auto& config = Config.GetCoordinator();
-        Register(NewLeaderDetector(SelfId(), config, CredentialsProviderFactory, YqSharedResources->UserSpaceYdbDriver, Tenant).release());
+        Register(NewLeaderDetector(SelfId(), config, CredentialsProviderFactory, YqSharedResources, Tenant).release());
         auto coordinatorId = Register(NewCoordinator(SelfId(), config, CredentialsProviderFactory, YqSharedResources, Tenant).release());
         Register(NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, YqSharedResources, Tenant).release());
     }

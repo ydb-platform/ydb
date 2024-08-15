@@ -205,7 +205,6 @@ void TTopicSession::Bootstrap() {
     LogPrefix = LogPrefix + " " + SelfId().ToString() + " ";
     LOG_ROW_DISPATCHER_DEBUG("Bootstrap " << ", PartitionId " << PartitionId);
     LOG_ROW_DISPATCHER_DEBUG("Timeout " << Config.GetTimeoutBeforeStartSessionSec() << " sec");
-    
 }
 
 void TTopicSession::PassAway() {

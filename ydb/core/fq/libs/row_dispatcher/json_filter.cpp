@@ -280,7 +280,6 @@ private:
         str << "SELECT " << OffsetFieldName <<  ", Unwrap(Json::SerializeJson(Yson::From(RemoveMembers(TableRow(), [\"" << OffsetFieldName;
         str << "\"])))) as data FROM $filtered";
         LOG_ROW_DISPATCHER_DEBUG("Generated sql: " << str.Str());
-        std::cerr << "sql " << str.Str() << std::endl;
         return str.Str();
     }
 

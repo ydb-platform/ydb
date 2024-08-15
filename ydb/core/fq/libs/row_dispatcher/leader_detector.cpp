@@ -75,13 +75,14 @@ class TLeaderDetector : public TActorBootstrapped<TLeaderDetector> {
     bool HasSubcription = false;
     const TString LogPrefix;
     const TString Tenant;
+    bool TimeoutScheduled = false;
 
 public:
     TLeaderDetector(
         NActors::TActorId rowDispatcherId,
         const NConfig::TRowDispatcherCoordinatorConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-        NYdb::TDriver driver,
+        const TYqSharedResources::TPtr& yqSharedResources,
         const TString& tenant);
 
     void Bootstrap();
@@ -110,16 +111,17 @@ private:
     void StartSession();
     void CreateSemaphore();
     void DescribeSemaphore();
+    void SetTimeout();
 };
 
 TLeaderDetector::TLeaderDetector(
     NActors::TActorId parentId,
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    NYdb::TDriver driver,
+    const TYqSharedResources::TPtr& yqSharedResources,
     const TString& tenant)
     : Config(config)
-    , YdbConnection(NewYdbConnection(config.GetStorage(), credentialsProviderFactory, driver))
+    , YdbConnection(NewYdbConnection(config.GetStorage(), credentialsProviderFactory, yqSharedResources->UserSpaceYdbDriver))
     , CoordinationNodePath(JoinPath(YdbConnection->TablePathPrefix, tenant))
     , ParentId(parentId)
     , LogPrefix("LeaderDetector: ")
@@ -178,7 +180,7 @@ void TLeaderDetector::DescribeSemaphore() {
 void TLeaderDetector::Handle(TEvPrivate::TEvCreateSessionResult::TPtr& ev) {
     if (!ev->Get()->Result.IsSuccess()) {
         LOG_ROW_DISPATCHER_DEBUG("StartSession fail, " << ev->Get()->Result.GetIssues());
-        Schedule(TDuration::Seconds(TimeoutDurationSec), new TEvPrivate::TEvTimeout());
+        SetTimeout();
         return;
     }
     Session =  ev->Get()->Result.GetResult();
@@ -190,7 +192,7 @@ void TLeaderDetector::Handle(TEvPrivate::TEvDescribeSemaphoreResult::TPtr& ev) {
     if (!ev->Get()->Result.IsSuccess()) {
         HasSubcription = false;
         LOG_ROW_DISPATCHER_DEBUG("Semaphore describe fail, " <<  ev->Get()->Result.GetIssues());
-        Schedule(TDuration::Seconds(TimeoutDurationSec), new TEvPrivate::TEvTimeout());
+        SetTimeout();
         return;
     }
     LOG_ROW_DISPATCHER_DEBUG("Semaphore successfully described:");
@@ -219,8 +221,9 @@ void TLeaderDetector::Handle(TEvPrivate::TEvDescribeSemaphoreResult::TPtr& ev) {
     }
 
     NActors::TActorId id = ActorIdFromProto(protoId);
-
+    LOG_ROW_DISPATCHER_DEBUG("Coordinator id " << id);
     if (!LeaderActorId || (*LeaderActorId != id)) {
+        LOG_ROW_DISPATCHER_INFO("Send TEvCoordinatorChanged to " << ParentId);
         TActivationContext::ActorSystem()->Send(ParentId, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(id));
     }
     LeaderActorId = id;
@@ -235,10 +238,20 @@ void TLeaderDetector::Handle(TEvPrivate::TEvOnChangedResult::TPtr& ev) {
 void TLeaderDetector::Handle(TEvPrivate::TEvSessionStopped::TPtr&) {
     LOG_ROW_DISPATCHER_DEBUG("TEvSessionStopped");
     Session.Clear();
+
+    SetTimeout();
+}
+
+void TLeaderDetector::SetTimeout() {
+    if (TimeoutScheduled) {
+        return;
+    }
+    TimeoutScheduled = true;
     Schedule(TDuration::Seconds(TimeoutDurationSec), new TEvPrivate::TEvTimeout());
 }
 
 void TLeaderDetector::Handle(TEvPrivate::TEvTimeout::TPtr&) {
+    TimeoutScheduled = false;
     LOG_ROW_DISPATCHER_DEBUG("TEvTimeout");
     ProcessState(); 
 }
@@ -251,10 +264,10 @@ std::unique_ptr<NActors::IActor> NewLeaderDetector(
     NActors::TActorId parentId,
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    NYdb::TDriver driver,
+    const TYqSharedResources::TPtr& yqSharedResources,
     const TString& tenant)
 {
-    return std::unique_ptr<NActors::IActor>(new TLeaderDetector(parentId, config, credentialsProviderFactory, driver, tenant));
+    return std::unique_ptr<NActors::IActor>(new TLeaderDetector(parentId, config, credentialsProviderFactory, yqSharedResources, tenant));
 }
 
 } // namespace NFq

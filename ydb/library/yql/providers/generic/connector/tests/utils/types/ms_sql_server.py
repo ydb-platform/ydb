@@ -13,16 +13,16 @@ class PrimitiveType(Type):
 class Bit(PrimitiveType):
     pass
 
-class Tinyint(PrimitiveType):
+class TinyInt(PrimitiveType):
     pass
 
-class Smallint(PrimitiveType):
+class SmallInt(PrimitiveType):
     pass
 
 class Int(PrimitiveType):
     pass
 
-class Bigint(PrimitiveType):
+class BigInt(PrimitiveType):
     pass
 
 class Real(PrimitiveType):
@@ -34,7 +34,7 @@ class Float(PrimitiveType):
 class Binary(PrimitiveType):
     pass
 
-class Varbinary(PrimitiveType):
+class VarBinary(PrimitiveType):
     pass
 
 class Image(PrimitiveType):
@@ -43,7 +43,7 @@ class Image(PrimitiveType):
 class Char(PrimitiveType):
     pass
 
-class Varchar(PrimitiveType):
+class VarChar(PrimitiveType):
     pass
 
 class Text(PrimitiveType):
@@ -52,7 +52,7 @@ class Text(PrimitiveType):
 class NChar(PrimitiveType):
     pass
 
-class NVarchar(PrimitiveType):
+class NVarChar(PrimitiveType):
     pass
 
 class NText(PrimitiveType):
@@ -61,7 +61,7 @@ class NText(PrimitiveType):
 class Date(PrimitiveType):
     pass
 
-class Smalldatetime(PrimitiveType):
+class SmallDatetime(PrimitiveType):
     pass
 
 class Datetime(PrimitiveType):

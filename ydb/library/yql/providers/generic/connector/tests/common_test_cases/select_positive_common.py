@@ -291,11 +291,16 @@ class Factory:
             EDataSourceKind.POSTGRESQL: [EProtocol.NATIVE],
             EDataSourceKind.YDB: [EProtocol.NATIVE],
             EDataSourceKind.MYSQL: [EProtocol.NATIVE],
+            EDataSourceKind.MS_SQL_SERVER: [EProtocol.NATIVE],
         }
 
         base_test_cases = None
 
-        if data_source_kind in [EDataSourceKind.YDB, EDataSourceKind.MYSQL]:
+        if data_source_kind in [
+            EDataSourceKind.YDB,
+            EDataSourceKind.MYSQL, 
+            EDataSourceKind.MS_SQL_SERVER,
+        ]:
             base_test_cases = self._column_selection()
         elif data_source_kind in [EDataSourceKind.CLICKHOUSE, EDataSourceKind.POSTGRESQL]:
             base_test_cases = list(

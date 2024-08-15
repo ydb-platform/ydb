@@ -39,27 +39,27 @@ class Factory:
             Column(
                 name='col_00_id',
                 ydb_type=Type.INT32,
-                data_source_type=DataSourceType(my=ms_sql_server.Int()),
+                data_source_type=DataSourceType(ms=ms_sql_server.Int()),
             ),
             Column(
                 name='col_01_date',
                 ydb_type=Type.DATE,
-                data_source_type=DataSourceType(my=ms_sql_server.Date()),
+                data_source_type=DataSourceType(ms=ms_sql_server.Date()),
             ),
             Column(
                 name='col_02_smalldatetime',
                 ydb_type=Type.DATETIME,
-                data_source_type=DataSourceType(my=ms_sql_server.Smalldatetime()),
+                data_source_type=DataSourceType(ms=ms_sql_server.SmallDatetime()),
             ),
             Column(
                 name='col_03_datetime',
                 ydb_type=Type.TIMESTAMP,
-                data_source_type=DataSourceType(my=ms_sql_server.Datetime()),
+                data_source_type=DataSourceType(ms=ms_sql_server.Datetime()),
             ),
             Column(
                 name='col_04_datetime2',
                 ydb_type=Type.TIMESTAMP,
-                data_source_type=DataSourceType(my=ms_sql_server.Datetime2()),
+                data_source_type=DataSourceType(ms=ms_sql_server.Datetime2()),
             ),
         ),
     )

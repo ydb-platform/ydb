@@ -137,4 +137,20 @@ bool TInFlightReadsTracker::LoadFromDatabase(NTable::TDatabase& tableDB) {
     return true;
 }
 
+NKikimr::TConclusion<ui64> TInFlightReadsTracker::AddInFlightRequest(
+    NOlap::NReader::TReadMetadataBase::TConstPtr readMeta, const NOlap::TVersionedIndex* index) {
+    const ui64 cookie = NextCookie++;
+    auto it = SnapshotsLive.find(readMeta->GetRequestSnapshot());
+    if (it == SnapshotsLive.end()) {
+        it = SnapshotsLive.emplace(readMeta->GetRequestSnapshot(), TSnapshotLiveInfo::BuildFromRequest(readMeta->GetRequestSnapshot())).first;
+        Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetSnapshotToClean());
+    }
+    it->second.AddRequest(cookie);
+    auto status = AddToInFlightRequest(cookie, readMeta, index);
+    if (!status) {
+        return status;
+    }
+    return cookie;
+}
+
 }   // namespace NKikimr::NColumnShard

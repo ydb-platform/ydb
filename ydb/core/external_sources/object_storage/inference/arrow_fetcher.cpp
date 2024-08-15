@@ -19,14 +19,6 @@
 
 namespace NKikimr::NExternalSource::NObjectStorage::NInference {
 
-namespace {
-
-bool IsMetadataSizeRequest(uint64_t from, uint64_t to) {
-    return to - from == 4;
-}
-
-}
-
 class TArrowFileFetcher : public NActors::TActorBootstrapped<TArrowFileFetcher> {
     static constexpr uint64_t PrefixSize = 10_MB;
 public:
@@ -56,10 +48,10 @@ public:
         const auto& request = *ev->Get();
         TRequest localRequest{
             .Path = request.Path,
-            .RequestId = {},
+            .RequestId = TGUID::Create(),
             .Requester = ev->Sender,
+            .MetadataRequest = false,
         };
-        CreateGuid(&localRequest.RequestId);
 
         switch (Format_) {
             case EFileFormat::CsvWithNames:
@@ -68,6 +60,7 @@ public:
                 break;
             }
             case EFileFormat::Parquet: {
+                localRequest.MetadataRequest = true;
                 RequestPartialFile(std::move(localRequest), ctx, request.Size - 8, request.Size - 4);
                 break;
             }
@@ -110,11 +103,11 @@ public:
                 break;
             }
             case EFileFormat::Parquet: {
-                if (IsMetadataSizeRequest(request.From, request.To)) {
+                if (request.MetadataRequest) {
                     HandleMetadataSizeRequest(data, request, ctx);
                     return;
                 }
-                file = CleanupParquetFile(data, request, ctx);
+                file = BuildParquetFileFromMetadata(data, request, ctx);
                 ctx.Send(request.Requester, new TEvArrowFile(std::move(file), request.Path));
                 break;
             }
@@ -142,6 +135,7 @@ private:
         uint64_t From = 0;
         uint64_t To = 0;
         NActors::TActorId Requester;
+        bool MetadataRequest;
     };
 
     // Reading file
@@ -262,14 +256,14 @@ private:
 
         TRequest localRequest{
             .Path = request.Path,
-            .RequestId = {},
+            .RequestId = TGUID::Create(),
             .Requester = request.Requester,
+            .MetadataRequest = false,
         };
-        CreateGuid(&localRequest.RequestId);
         RequestPartialFile(std::move(localRequest), ctx, request.From - metadataSize, request.To + 4);
     }
 
-    std::shared_ptr<arrow::io::RandomAccessFile> CleanupParquetFile(const TString& data, const TRequest& request, const NActors::TActorContext& ctx) {
+    std::shared_ptr<arrow::io::RandomAccessFile> BuildParquetFileFromMetadata(const TString& data, const TRequest& request, const NActors::TActorContext& ctx) {
         auto arrowData = std::make_shared<arrow::Buffer>(nullptr, 0);
         {
             arrow::BufferBuilder builder;

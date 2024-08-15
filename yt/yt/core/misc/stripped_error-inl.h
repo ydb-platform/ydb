@@ -1,7 +1,7 @@
-#ifndef ERROR_INL_H_
-#error "Direct inclusion of this file is not allowed, include error.h"
+#ifndef STRIPPED_ERROR_INL_H_
+#error "Direct inclusion of this file is not allowed, include stripped_error.h"
 // For the sake of sane code completion.
-#include "error.h"
+#include "stripped_error.h"
 #endif
 
 #include <library/cpp/yt/string/format.h>
@@ -484,14 +484,6 @@ constexpr T TErrorOr<T>::ValueOrDefault(T&& defaultValue) &&
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class T>
-void FormatValue(TStringBuilderBase* builder, const TErrorOr<T>& error, TStringBuf spec)
-{
-    FormatValue(builder, static_cast<const TError&>(error), spec);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 template <class TException>
     requires std::derived_from<std::remove_cvref_t<TException>, TErrorException>
 TException&& operator <<= (TException&& ex, const TError& error)
@@ -561,6 +553,14 @@ void ThrowErrorExceptionIfFailed(TErrorLike&& error)
 }
 
 } // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+void FormatValue(TStringBuilderBase* builder, const TErrorOr<T>& error, TStringBuf spec)
+{
+    FormatValue(builder, static_cast<const TError&>(error), spec);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

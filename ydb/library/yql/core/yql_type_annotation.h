@@ -213,6 +213,7 @@ public:
 private:
     THashMap<TString, TString> GeneratedToOriginal_;
     THashMap<TString, uint64_t> UseCount_;
+    THashMap<TString, uint64_t> UseCountLcase_;
     // (name, generated_name)
     TVector<TOrderedItem> Order_;
 };

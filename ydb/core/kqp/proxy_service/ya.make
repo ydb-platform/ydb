@@ -36,7 +36,7 @@ PEERDIR(
     ydb/library/yql/public/issue
     ydb/library/yql/dq/actors/spilling
     ydb/public/api/protos
-    ydb/public/sdk/cpp/src/library/operation_id/
+    ydb/public/sdk/cpp/src/library/operation_id
     ydb/public/lib/scheme_types
     ydb/public/sdk/cpp/src/client/params
 )

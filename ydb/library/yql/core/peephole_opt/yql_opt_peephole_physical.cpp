@@ -8270,7 +8270,7 @@ TExprNode::TPtr OptimizeCoalesce(const TExprNode::TPtr& node, TExprContext& ctx)
 }
 
 TExprNode::TPtr OptimizeSqlCompare(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (const auto& left = node->Head(); left.IsCallable("If") && left.ChildrenSize() == 3U && node->Tail().IsComplete()) {
+    if (const auto& left = node->Head(); left.IsCallable("If") && left.ChildrenSize() == 3U) {
         if (left.Child(2U)->IsCallable("Nothing")) {
             YQL_CLOG(DEBUG, CorePeepHole) << "Swap '" << node->Content() << "' with " << left.Content();
             return ctx.ChangeChildren(left, {
@@ -8286,7 +8286,7 @@ TExprNode::TPtr OptimizeSqlCompare(const TExprNode::TPtr& node, TExprContext& ct
                 ctx.ChangeChild(*node, 0U, left.ChildPtr(2U))
             });
         }
-    } else if (const auto& right = node->Tail(); right.IsCallable("If") && right.ChildrenSize() == 3U && node->Head().IsComplete()) {
+    } else if (const auto& right = node->Tail(); right.IsCallable("If") && right.ChildrenSize() == 3U) {
         if (right.Child(2U)->IsCallable("Nothing")) {
             YQL_CLOG(DEBUG, CorePeepHole) << "Swap '" << node->Content() << "' with " << right.Content();
             return ctx.ChangeChildren(right, {

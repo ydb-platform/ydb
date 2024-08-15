@@ -305,7 +305,7 @@ class Factory:
                 )
             )
         elif data_source_kind == EDataSourceKind.ORACLE:
-            raise 'Common test cases are not supported for ORACLE bacause of column lack of Int32 column type'
+            raise 'Common test cases are not supported by Oracle due to the lack of Int32 columns'
         else:
             raise f'Unexpected data source kind: {data_source_kind}'
 

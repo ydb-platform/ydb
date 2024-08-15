@@ -4,6 +4,7 @@
 #include "yql_errors.h"
 
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
+#include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
@@ -188,7 +189,7 @@ struct TAstNode {
     inline ~TAstNode() {}
 
     void Destroy() {
-        TString().swap(Position.File);
+        std::string{}.swap(Position.File);
     }
 
 private:

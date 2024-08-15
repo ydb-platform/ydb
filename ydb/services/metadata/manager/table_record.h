@@ -45,6 +45,7 @@ private:
 
 public:
     TTableRecords SelectColumns(const std::vector<TString>& columnIds) const;
+    std::vector<TTableRecord> GetTableRecords() const;
 
     Ydb::Table::ExecuteDataQueryRequest BuildInsertQuery(const TString& tablePath) const;
     Ydb::Table::ExecuteDataQueryRequest BuildUpsertQuery(const TString& tablePath) const;

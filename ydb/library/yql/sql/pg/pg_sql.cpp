@@ -5190,6 +5190,8 @@ public:
             return ParseCreateStmt(CAST_NODE(CreateStmt, node));
         case T_InsertStmt:
             return ParseInsertStmt(CAST_NODE(InsertStmt, node));
+        case T_CreateCastStmt:
+            return ParseCreateCastStmt(CAST_NODE(CreateCastStmt, node));
         default:
             return false;
         }
@@ -5553,6 +5555,68 @@ public:
         }
 
         Builder.InsertValues(NPg::TTableInfoKey{"pg_catalog", tableName}, colNames, data);
+        return true;
+    }
+
+    [[nodiscard]]
+    bool ParseCreateCastStmt(const CreateCastStmt* value) {
+        TString sourceType;
+        if (!ParseTypeName(value->sourcetype, sourceType)) {
+            return false;
+        }
+
+        TString targetType;
+        if (!ParseTypeName(value->targettype, targetType)) {
+            return false;
+        }
+
+        NPg::TCastDesc desc;
+        desc.ExtensionIndex = ExtensionIndex;
+        desc.SourceId = NPg::LookupType(sourceType).TypeId;
+        desc.TargetId = NPg::LookupType(targetType).TypeId;
+        if (value->func) {
+            if (ListLength(value->func->objname) != 1) {
+                return false;
+            }
+
+            TString funcName = StrVal(ListNodeNth(value->func->objname, 0));
+            TVector<ui32> argTypes;
+            for (int i = 0; i < ListLength(value->func->objargs); ++i) {
+                auto node = ListNodeNth(value->func->objargs, i);
+                if (NodeTag(node) != T_TypeName) {
+                    return false;
+                }
+
+                TString value;
+                if (!ParseTypeName(CAST_NODE_EXT(PG_TypeName, T_TypeName, node), value)) {
+                    return false;
+                }
+
+                argTypes.push_back(NPg::LookupType(value).TypeId);
+            }
+
+            desc.FunctionId = NPg::LookupProc(funcName, argTypes).ProcId;
+        } else if (value->inout) {
+            desc.Method = NPg::ECastMethod::InOut;
+        } else {
+            desc.Method = NPg::ECastMethod::Binary;
+        }
+
+        switch (value->context) {
+        case COERCION_IMPLICIT:
+            desc.CoercionCode = NPg::ECoercionCode::Implicit;
+            break;
+        case COERCION_ASSIGNMENT:
+            desc.CoercionCode = NPg::ECoercionCode::Assignment;
+            break;
+        case COERCION_EXPLICIT:
+            desc.CoercionCode = NPg::ECoercionCode::Explicit;
+            break;
+        default:
+            return false;
+        }
+
+        Builder.CreateCast(desc);
         return true;
     }
 

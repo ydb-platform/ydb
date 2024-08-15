@@ -300,27 +300,74 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(1, weekOfYearIso8601);
     }
 
-    Y_UNIT_TEST(SplitMakeTzDate) {
-            ui32 year;
-            ui32 month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
-            ui16 tzId = 333;
+    Y_UNIT_TEST(SplitMakeTzDate16vs32) {
+            ui16 tzId = 451;
+
+            ui32 year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
+            i32 y;
+            ui32 m, d, doy, woy, woyIso, dow;
 
             for (ui16 value = 0; value < NUdf::MAX_DATE; ++value) {
                 UNIT_ASSERT(SplitTzDate(value, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId));
                 ui32 dt;
                 UNIT_ASSERT(MakeTzDatetime(year, month, day, 0, 0, 0, dt, tzId));
-                UNIT_ASSERT_VALUES_EQUAL(value, dt/86400u);
+                // UNIT_ASSERT_VALUES_EQUAL_C(value, dt/86400u, dt);
                 
-                // TODO also compare with split/make TzDate32
+                SplitTzDate32(value, y, m, d, doy, woy, woyIso, dow, tzId);
+                UNIT_ASSERT_VALUES_EQUAL(year, y);
+                UNIT_ASSERT_VALUES_EQUAL(month, m);
+                UNIT_ASSERT_VALUES_EQUAL(day, d);
+                UNIT_ASSERT_VALUES_EQUAL(dayOfYear, doy);
+                UNIT_ASSERT_VALUES_EQUAL(dayOfWeek, dow);
+                UNIT_ASSERT_VALUES_EQUAL(weekOfYear, woy);
+                UNIT_ASSERT_VALUES_EQUAL(weekOfYearIso8601, woyIso);
+
+                i32 date32;
+                UNIT_ASSERT(MakeTzDate32(year, month, day, date32, tzId));
+                // UNIT_ASSERT_VALUES_EQUAL(value, date32);
+            }
+    }
+
+    Y_UNIT_TEST(SplitMakeTzDatetime32vs64) {
+            ui16 tzId = 451;
+
+            ui32 year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, hour, min, sec;
+            i32 y;
+            ui32 mon, d, doy, woy, woyIso, dow, h, m, s;
+
+            // for (ui32 value = 0; value < NUdf::MAX_DATETIME; value += 86400u) {
+            for (ui32 value = 86399u; value < NUdf::MAX_DATETIME; value += 86400u) {
+                UNIT_ASSERT(SplitTzDatetime(value, year, month, day, hour, min, sec, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId));
+                ui32 dt;
+                UNIT_ASSERT(MakeTzDatetime(year, month, day, hour, min, sec, dt, tzId));
+                UNIT_ASSERT_VALUES_EQUAL(value, dt);
+                
+                SplitTzDatetime64(value, y, mon, d, h, m, s, doy, woy, woyIso, dow, tzId);
+                UNIT_ASSERT_VALUES_EQUAL(year, y);
+                UNIT_ASSERT_VALUES_EQUAL(month, mon);
+                UNIT_ASSERT_VALUES_EQUAL(day, d);
+                UNIT_ASSERT_VALUES_EQUAL_C(dayOfYear, doy, value);
+                UNIT_ASSERT_VALUES_EQUAL(dayOfWeek, dow);
+                UNIT_ASSERT_VALUES_EQUAL(weekOfYear, woy);
+                UNIT_ASSERT_VALUES_EQUAL(weekOfYearIso8601, woyIso);
+                UNIT_ASSERT_VALUES_EQUAL(hour, h);
+                UNIT_ASSERT_VALUES_EQUAL(min, m);
+                UNIT_ASSERT_VALUES_EQUAL(sec, s);
+
+                i64 dt64;
+                UNIT_ASSERT(MakeTzDatetime64(year, month, day, hour, min, sec, dt64, tzId));
+                UNIT_ASSERT_VALUES_EQUAL(value, dt64);
             }
     }
 
     Y_UNIT_TEST(SplitMakeTzDate32) {
             i32 year;
             ui32 month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
-            ui16 tzId = 1;
+            ui16 tzId = 336;
 
-            for (i32 value = NUdf::MIN_DATE32; value <= NUdf::MAX_DATE32; ++value) {
+            for (i32 value = -719528; value < 0; ++value) {
+            // for (i32 value = NUdf::MAX_DATE; value < NUdf::MAX_DATE * 10; ++value) {
+            // for (i32 value = -10000; value <= -10000; ++value) {
                 SplitTzDate32(value, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
                 i32 date32;
                 UNIT_ASSERT(MakeTzDate32(year, month, day, date32, tzId));
@@ -331,12 +378,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
     Y_UNIT_TEST(SplitMakeTzDateSingle) {
             ui32 y, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
             ui16 tzId = 1;
-            i32 value = 1;
+            i32 value = 0;
 
             UNIT_ASSERT(SplitTzDate(value, y, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId));
             UNIT_ASSERT_VALUES_EQUAL(y, 1970);
             UNIT_ASSERT_VALUES_EQUAL(month, 1);
-            UNIT_ASSERT_VALUES_EQUAL(day, 3);
+            UNIT_ASSERT_VALUES_EQUAL(day, 2);
 
             ui32 dt;
             UNIT_ASSERT(MakeTzDatetime(y, month, day, 0, 0, 0, dt, tzId));

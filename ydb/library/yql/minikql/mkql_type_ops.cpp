@@ -948,7 +948,7 @@ public:
     {
         if (tzId) {
             ui32 hour, min, sec;
-            i64 utcSeconds = (date > 0) ? ((date + 1) * 86400ll - 1) : (date * 86400ll);
+            i64 utcSeconds = (date >= 0) ? ((date + 1) * 86400ll - 1) : (date * 86400ll);
             ToLocalTime64(utcSeconds, tzId, year, month, day, hour, min, sec);
             if (year <= 0) {
                 year--;
@@ -975,10 +975,13 @@ public:
         if (tzId) {
             ToLocalTime64(value, tzId, year, month, day, hour, min, sec);
             i32 date;
-            MakeDate32((year > 0) ? year : year - 1, month, day, date);
+            if (year <= 0) {
+                year--;
+            }
+            MakeDate32(year, month, day, date);
+            SplitDate32(date, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
         } else {
             SplitDatetime64(value, year, month, day, hour, min, sec, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
-            return;
         }
     }
 
@@ -1002,7 +1005,6 @@ public:
             MakeDate32((year > 0) ? year : year - 1, month, day, date);
         } else {
             SplitTimestamp64(value, year, month, day, hour, min, sec, usec, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
-            return;
         }
     }
 

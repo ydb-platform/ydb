@@ -1072,7 +1072,8 @@ public:
                                                                                  ActorSystem,
                                                                                  FederatedQuerySetup->S3GatewayConfig.GetGeneratorPathsLimit(),
                                                                                  FederatedQuerySetup ? FederatedQuerySetup->CredentialsFactory : nullptr,
-                                                                                 Config->FeatureFlags.GetEnableExternalSourceSchemaInference());
+                                                                                 Config->FeatureFlags.GetEnableExternalSourceSchemaInference(),
+                                                                                 FederatedQuerySetup->S3GatewayConfig.GetAllowLocalFiles());
         }
     }
 

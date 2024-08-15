@@ -22,6 +22,7 @@ struct TDatabaseState {
     std::unordered_map<TString, std::unordered_set<TActorId>> PendingSubscriptions = {};
     bool HasDefaultPool = false;
     bool Serverless = false;
+    bool DatabaseUnsupported = false;
 
     TInstant LastUpdateTime = TInstant::Zero();
 
@@ -41,8 +42,10 @@ struct TDatabaseState {
 
         if (!EnabledResourcePoolsOnServerless && (TInstant::Now() - LastUpdateTime) > IDLE_DURATION) {
             ActorContext.Register(CreateDatabaseFetcherActor(ActorContext.SelfID, database));
-        } else {
+        } else if (!DatabaseUnsupported) {
             StartPendingRequests();
+        } else {
+            ReplyContinueError(Ydb::StatusIds::UNSUPPORTED, {NYql::TIssue(TStringBuilder() << "Unsupported database: " << database)});
         }
     }
 
@@ -65,6 +68,7 @@ struct TDatabaseState {
     }
 
     void UpdateDatabaseInfo(const TEvPrivate::TEvFetchDatabaseResponse::TPtr& ev) {
+        DatabaseUnsupported = ev->Get()->Status == Ydb::StatusIds::UNSUPPORTED;
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             ReplyContinueError(ev->Get()->Status, GroupIssues(ev->Get()->Issues, "Failed to fetch database info"));
             return;

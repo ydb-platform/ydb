@@ -16,7 +16,7 @@ void TInFlightReadsTracker::RemoveInFlightRequest(ui64 cookie, const NOlap::TVer
 
     for (const auto& readMetaBase : readMetaList) {
         {
-            auto it = SnapshotsLive.find(readMeta->GetRequestSnapshot());
+            auto it = SnapshotsLive.find(readMetaBase->GetRequestSnapshot());
             AFL_VERIFY(it != SnapshotsLive.end());
             if (it->second.DelRequest(cookie, now)) {
                 SnapshotsLive.erase(it);

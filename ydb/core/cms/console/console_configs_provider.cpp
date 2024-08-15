@@ -100,7 +100,7 @@ public:
         Die(ctx);
     }
 
-    void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx)
+    void Handle(TEvents::TEvPoisonPill::TPtr &/*ev*/, const TActorContext &ctx)
     {
         LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
                     "TTabletConfigSender(" << Subscription->Id << ") die to poison pill");

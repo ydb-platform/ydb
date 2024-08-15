@@ -169,13 +169,13 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "CTE Name": "precompute_0_0",
+                                                                        "CTE Name": "precompute_0_1",
                                                                         "Node Type": "ConstantExpr",
                                                                         "Operators": [
                                                                             {
                                                                                 "Inputs": [],
                                                                                 "Name": "ToFlow",
-                                                                                "ToFlow": "precompute_0_0"
+                                                                                "ToFlow": "precompute_0_1"
                                                                             }
                                                                         ],
                                                                         "PlanNodeId": 19
@@ -192,13 +192,13 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "CTE Name": "precompute_0_1",
+                                                        "CTE Name": "precompute_0_0",
                                                         "Node Type": "ConstantExpr",
                                                         "Operators": [
                                                             {
                                                                 "Inputs": [],
                                                                 "Name": "ToFlow",
-                                                                "ToFlow": "precompute_0_1"
+                                                                "ToFlow": "precompute_0_0"
                                                             }
                                                         ],
                                                         "PlanNodeId": 13
@@ -223,11 +223,11 @@
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
-                        "CTE Name": "precompute_0_0",
+                        "CTE Name": "precompute_0_1",
                         "Node Type": "Aggregate",
                         "Operators": [
                             {
-                                "Input": "precompute_0_0",
+                                "Input": "precompute_0_1",
                                 "Inputs": [],
                                 "Name": "PartitionByKey"
                             }
@@ -334,7 +334,10 @@
                 ],
                 "Subplan Name": "CTE precompute_0_0"
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

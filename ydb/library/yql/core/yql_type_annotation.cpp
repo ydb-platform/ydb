@@ -124,6 +124,7 @@ TString TColumnOrder::Find(const TString& name) const {
 TColumnOrder& TColumnOrder::operator=(const TColumnOrder& rhs) {
     GeneratedToOriginal_ = rhs.GeneratedToOriginal_;
     Order_ = rhs.Order_;
+    UseCountLcase_ = rhs.UseCountLcase_;
     UseCount_ = rhs.UseCount_;
     return *this;
 }
@@ -152,7 +153,7 @@ TString TColumnOrder::AddColumn(const TString& name) {
 
 bool TColumnOrder::IsDuplicatedIgnoreCase(const TString& name) const {
     auto it = UseCountLcase_.find(to_lower(name));
-    return it != UseCount_.end() && it->second > 1;
+    return it != UseCountLcase_.end() && it->second > 1;
 }
 
 void TColumnOrder::Shrink(size_t remain) {
@@ -179,6 +180,7 @@ void TColumnOrder::Clear() {
     Order_.clear();
     GeneratedToOriginal_.clear();
     UseCount_.clear();
+    UseCountLcase_.clear();
 }
 
 void TColumnOrder::EraseIf(const std::function<bool(const TString&)>& fn) {

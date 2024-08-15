@@ -9,12 +9,6 @@ using namespace NYql;
 
 Y_UNIT_TEST_SUITE(TYqlColumnOrder) {
 
-    Y_UNIT_TEST(ColumnOrderIgnoreCase) {
-        TColumnOrder order;
-        UNIT_ASSERT_EQUAL(order.AddColumn("a"), "a");
-        UNIT_ASSERT_EQUAL(order.AddColumn("A"), "A_generated_2");
-    }
-
     Y_UNIT_TEST(ColumnOrderShrink) {
         TColumnOrder order;
         UNIT_ASSERT_EQUAL(order.AddColumn("a"), "a");

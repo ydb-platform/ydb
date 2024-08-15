@@ -84,6 +84,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
 
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
 
         {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
@@ -94,28 +95,31 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 20000, 2000000, 7000);
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 30000, 1000000, 11000);
         }
+        while (csController->GetInsertFinishedCounter().Val() == 0) {
+            Cout << "Wait indexation..." << Endl;
+            Sleep(TDuration::Seconds(2));
+        }
+        AFL_VERIFY(Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
 
         {
             TString query = R"(
                 --!syntax_v1
-                PRAGMA Kikimr.OptUseFinalizeByKey;
                 SELECT
-                    level, COUNT(level)
+                    COUNT(level)
                 FROM `/Root/olapStore/olapTable`
-                GROUP BY level
-                ORDER BY level
             )";
+            auto opStartTime = Now();
             auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             TString result = StreamResultToYson(it);
+            Cerr << "!!!\nPushdown query execution time: " << (Now() - opStartTime).MilliSeconds() << "\n!!!\n";
             Cout << result << Endl;
-            CompareYson(result, R"([[[0];4600u];[[1];4600u];[[2];4600u];[[3];4600u];[[4];4600u]])");
+            CompareYson(result, R"([[23000u;]])");
 
             // Check plan
 #if SSA_RUNTIME_VERSION >= 2U
-            CheckPlanForAggregatePushdown(query, tableClient, { "WideCombiner" }, "Aggregate-TableFullScan");
-//            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "TableFullScan");
+            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "TableFullScan");
 #else
             CheckPlanForAggregatePushdown(query, tableClient, { "CombineCore" }, "");
 #endif
@@ -125,7 +129,6 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     Y_UNIT_TEST(AggregationCountGroupByPushdown) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetBlockChannelsMode(NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -144,7 +147,6 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
         {
             TString query = R"(
                 --!syntax_v1
-                pragma UseBlocks;
                 PRAGMA Kikimr.OptUseFinalizeByKey;
                 SELECT
                     level, COUNT(level)

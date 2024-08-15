@@ -36,6 +36,19 @@ class Settings:
     clickhouse: ClickHouse
 
     @dataclass
+    class MsSQLServer:
+        dbname: str
+        cluster_name: str
+        username: str
+        password: str  
+        host_external: str
+        host_internal: str
+        port_external: int
+        port_internal: int
+
+    ms_sql_server: MsSQLServer
+
+    @dataclass
     class MySQL:
         dbname: str
         cluster_name: str
@@ -112,6 +125,20 @@ class Settings:
                         password='password',
                         protocol='native',
                     )
+                case EDataSourceKind.MS_SQL_SERVER:
+                    data_sources[data_source_kind] = cls.MsSQLServer(
+                        cluster_name='ms_sql_server_integration_test',
+                        host_external='0.0.0.0',
+                        # This hack is due to YQ-3003.
+                        # Previously we used container names instead of container ips:
+                        # host_internal=docker_compose_file['services']['mysql']['container_name'],
+                        host_internal=endpoint_determiner.get_internal_ip('ms_sql_server'),
+                        port_external=endpoint_determiner.get_external_port('ms_sql_server', 1433),
+                        port_internal=1433,
+                        dbname='master',
+                        username='sa',
+                        password='Qwerty12345!',
+                    )
                 case EDataSourceKind.MYSQL:
                     data_sources[data_source_kind] = cls.MySQL(
                         cluster_name='mysql_integration_test',
@@ -175,6 +202,7 @@ class Settings:
                 paging_bytes_per_page=4 * 1024 * 1024,
                 paging_prefetch_queue_capacity=2,
             ),
+            ms_sql_server=data_sources.get(EDataSourceKind.MS_SQL_SERVER),
             mysql=data_sources.get(EDataSourceKind.MYSQL),
             oracle=data_sources.get(EDataSourceKind.ORACLE),
             postgresql=data_sources.get(EDataSourceKind.POSTGRESQL),
@@ -189,6 +217,8 @@ class Settings:
                 return self.mysql.cluster_name
             case EDataSourceKind.ORACLE:
                 return self.oracle.cluster_name
+            case EDataSourceKind.MS_SQL_SERVER:
+                return self.ms_sql_server.cluster_name
             case EDataSourceKind.POSTGRESQL:
                 return self.postgresql.cluster_name
             case EDataSourceKind.YDB:
@@ -210,6 +240,15 @@ class GenericSettings:
         protocol: EProtocol
 
     clickhouse_clusters: Sequence[ClickHouseCluster] = field(default_factory=list)
+
+    @dataclass
+    class MsSQLServerCluster:
+        def __hash__(self) -> int:
+            return hash(self.database)
+
+        database: str
+
+    ms_sql_clusters: Sequence[MsSQLServerCluster] = field(default_factory=list)
 
     @dataclass
     class MySQLCluster:

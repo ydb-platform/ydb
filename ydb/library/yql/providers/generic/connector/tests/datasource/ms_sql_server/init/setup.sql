@@ -1,3 +1,4 @@
+DROP TABLE IF EXISTS column_selection_A_b_C_d_E;
 CREATE TABLE column_selection_A_b_C_d_E (COL1 INTEGER, col2 INTEGER);
 INSERT INTO column_selection_A_b_C_d_E (COL1, col2) VALUES
     (1, 2),
@@ -10,11 +11,13 @@ INSERT INTO column_selection_A_b_C_d_E (COL1, col2) VALUES
 --     (1, 2),
 --     (10, 20);
 
+DROP TABLE IF EXISTS column_selection_col1;
 CREATE TABLE column_selection_col1 (COL1 INTEGER, col2 INTEGER);
 INSERT INTO column_selection_col1 (COL1, col2) VALUES
     (1, 2),
     (10, 20);
 
+DROP TABLE IF EXISTS column_selection_asterisk;
 CREATE TABLE column_selection_asterisk (COL1 INTEGER, col2 INTEGER);
 INSERT INTO column_selection_asterisk (COL1, col2) VALUES
     (1, 2),
@@ -27,21 +30,25 @@ INSERT INTO column_selection_asterisk (COL1, col2) VALUES
 --     (1, 2),
 --     (10, 20);
 
+DROP TABLE IF EXISTS column_selection_col2_col1;
 CREATE TABLE column_selection_col2_col1 (COL1 INTEGER, col2 INTEGER);
 INSERT INTO column_selection_col2_col1 (COL1, col2) VALUES
     (1, 2),
     (10, 20);
 
+DROP TABLE IF EXISTS column_selection_col2;
 CREATE TABLE column_selection_col2 (COL1 INTEGER, col2 INTEGER);
 INSERT INTO column_selection_col2 (COL1, col2) VALUES
     (1, 2),
     (10, 20);
 
+DROP TABLE IF EXISTS column_selection_col3;
 CREATE TABLE column_selection_col3 (COL1 INTEGER, col2 INTEGER);
 INSERT INTO column_selection_col3 (COL1, col2) VALUES
     (1, 2),
     (10, 20);
 
+DROP TABLE IF EXISTS primitives;
 CREATE TABLE primitives (
     id INTEGER PRIMARY KEY,
     col_01_bit BIT,
@@ -74,6 +81,7 @@ INSERT INTO primitives VALUES
     (2, 0, 2, -3, -4, -5, -6.6, -7.7, N'буки', N'буки', N'буки', N'буки', N'буки', N'буки', 0x1234567890ABCDEF, 0x1234567890ABCDEF, 0x1234567890ABCDEF,
     '2023-03-21', '2023-03-21 11:21:00', '2023-03-21 11:21:31', '2023-03-21 11:21:31');
 
+DROP TABLE IF EXISTS constant;
 CREATE TABLE constant (
     col_00_id INTEGER NOT NULL,
     PRIMARY KEY (col_00_id)
@@ -81,7 +89,7 @@ CREATE TABLE constant (
 
 INSERT INTO constant VALUES (0), (1), (2);
 
-
+DROP TABLE IF EXISTS count_rows;
 CREATE TABLE count_rows (
     col_00_id INTEGER NOT NULL,
     PRIMARY KEY (col_00_id)
@@ -89,7 +97,7 @@ CREATE TABLE count_rows (
 
 INSERT INTO count_rows VALUES (0), (1), (2);
 
-
+DROP TABLE IF EXISTS pushdown;
 CREATE TABLE pushdown (
     col_00_id INT NOT NULL,
     col_01_integer INT,
@@ -113,7 +121,8 @@ CREATE TABLE datetimes (
 
 INSERT INTO datetimes VALUES 
     (1, '1950-05-27', '1950-05-27 01:02:00', '1950-05-27 01:02:03.110', '1950-05-27 01:02:03.1111111'),
-    (2, '1988-11-20', '1988-11-20 12:55:00', '1988-11-20 12:55:28.123', '1988-11-20 12:55:28.1231231'),
-    (3, '2023-03-21', '2023-03-21 11:21:00', '2023-03-21 11:21:31', '2023-03-21 11:21:31');
+    (2, '2023-03-21', '2023-03-21 11:21:00', '2023-03-21 11:21:31', '2023-03-21 11:21:31'),
+    (3, '2079-06-06', '2079-06-06 23:59:00', '2079-06-06 23:59:59.999', '9999-12-31 23:59:59.9999999');
+
 
 SELECT * FROM datetimes;

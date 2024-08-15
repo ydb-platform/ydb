@@ -34,10 +34,8 @@ class OneTimeWaiter:
 
     __expected_tables: Set[str] = {
         'column_selection_A_b_C_d_E',
-        'column_selection_COL1',
         'column_selection_col1',
         'column_selection_asterisk',
-        'column_selection_col2_COL1',
         'column_selection_col2_col1',
         'column_selection_col2',
         'column_selection_col3',
@@ -45,7 +43,6 @@ class OneTimeWaiter:
         'constant',
         'count_rows',
         'pushdown',
-        'json',
         'datetimes',
     }
 

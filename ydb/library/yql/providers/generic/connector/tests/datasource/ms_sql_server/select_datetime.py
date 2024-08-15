@@ -39,7 +39,7 @@ class Factory:
             Column(
                 name='col_00_id',
                 ydb_type=Type.INT32,
-                data_source_type=DataSourceType(my=ms_sql_server.Integer()),
+                data_source_type=DataSourceType(my=ms_sql_server.Int()),
             ),
             Column(
                 name='col_01_date',
@@ -47,14 +47,19 @@ class Factory:
                 data_source_type=DataSourceType(my=ms_sql_server.Date()),
             ),
             Column(
-                name='col_02_datetime',
+                name='col_02_smalldatetime',
+                ydb_type=Type.DATETIME,
+                data_source_type=DataSourceType(my=ms_sql_server.Smalldatetime()),
+            ),
+            Column(
+                name='col_03_datetime',
                 ydb_type=Type.TIMESTAMP,
                 data_source_type=DataSourceType(my=ms_sql_server.Datetime()),
             ),
             Column(
-                name='col_03_timestamp',
+                name='col_04_datetime2',
                 ydb_type=Type.TIMESTAMP,
-                data_source_type=DataSourceType(my=ms_sql_server.Timestamp()),
+                data_source_type=DataSourceType(my=ms_sql_server.Datetime2()),
             ),
         ),
     )
@@ -69,18 +74,11 @@ class Factory:
             ],
             [
                 2,
-                datetime.date(1988, 11, 20),
-                datetime.datetime(1988, 11, 20, 12, 55, 28, 123000),
-                datetime.datetime(1988, 11, 20, 12, 55, 28, 123000),
+                datetime.date(2023, 3, 21),
+                datetime.datetime(2023, 3, 21, 11, 21, 0, 0),
+                datetime.datetime(2023, 3, 21, 11, 21, 31, 0),
             ],
-            # [3, '2038-01-19', '2038-01-19T03:14:07.000000Z', '2038-01-19T03:14:07.000009Z'],
-            [
-                3,
-                datetime.date(2038, 1, 18),
-                datetime.datetime(2038, 1, 19, 3, 14, 7, 0),
-                datetime.datetime(2038, 1, 19, 3, 14, 7, 0),
-            ],
-            [4, None, None, None],
+            [3, None, None, None],
         ]
 
         return TestCase(
@@ -101,17 +99,23 @@ class Factory:
             [
                 1,
                 '1950-05-27',
-                '1950-05-27T01:02:03.111111Z',
-                None,
+                '1950-05-27T01:02:00Z',
+                '1950-05-27T01:02:03.110Z',
+                '1950-05-27T01:02:03.1111111Z',
             ],
             [
                 2,
-                '1988-11-20',
-                '1988-11-20T12:23:45.67891Z',
-                '1988-11-20T12:23:45.67891Z',
+                '2023-03-21',
+                '2023-03-21T11:21:00Z',
+                '2023-03-21T11:21:31Z',
+                '2023-03-21T11:21:31Z',
             ],
-            [3, '2038-01-19', '2038-01-19T03:14:07.000000Z', '2038-01-19T03:14:07.000009Z'],
-            [4, '9999-12-31', '9999-12-31T23:59:59.999999Z', None],
+            [
+                3,
+                '2079-06-06',
+                '2079-06-06T23:59:59.999Z',
+                '2079-06-06T23:59:59.9999999Z'
+            ],
         ]
 
         return TestCase(

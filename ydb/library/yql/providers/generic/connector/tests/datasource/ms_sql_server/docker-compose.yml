@@ -10,7 +10,7 @@ services:
     build: ./init
     container_name: fq-tests-mssql-ms_sql_server
     environment:
-      ACCEPT_EULA: true
+      ACCEPT_EULA: Y
       DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: "false"
       LANG: ru_RU.UTF-8
       SA_PASSWORD: Qwerty12345!

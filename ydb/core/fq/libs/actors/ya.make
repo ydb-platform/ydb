@@ -81,7 +81,7 @@ PEERDIR(
     ydb/library/yql/providers/s3/actors_factory
     ydb/library/yql/providers/s3/provider
     ydb/library/yql/public/issue
-    ydb/library/yql/public/issue/protos
+    ydb/public/sdk/cpp/src/library/yql/issue/protos
     ydb/library/yql/sql/settings
     ydb/library/yql/utils
     ydb/library/yql/utils/actor_log

@@ -42,7 +42,7 @@
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/protos/issue_message.pb.h>
+#include <ydb/public/sdk/cpp/src/library/yql/issue/protos/issue_message.pb.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 
 #include <ydb/library/mkql_proto/mkql_proto.h>

@@ -487,6 +487,7 @@ struct TShardedTableOptions {
     TABLE_OPTION(std::optional<EReplicationConsistency>, ReplicationConsistency, std::nullopt);
     TABLE_OPTION(TAttributes, Attributes, {});
     TABLE_OPTION(bool, Sequences, false);
+    TABLE_OPTION(bool, AllowSystemColumnNames, false);
 
 #undef TABLE_OPTION
 #undef TABLE_OPTION_IMPL

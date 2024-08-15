@@ -37,7 +37,7 @@ PEERDIR(
     ydb/library/backup
     ydb/library/workload
     ydb/library/yaml_config/public
-    ydb/public/lib/operation_id
+    ydb/public/sdk/cpp_v2/src/library/operation_id/
     ydb/public/lib/stat_visualization
     ydb/public/lib/ydb_cli/common
     ydb/public/lib/ydb_cli/commands/command_base

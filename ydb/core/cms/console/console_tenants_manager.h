@@ -17,7 +17,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/aclib/aclib.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
+#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>

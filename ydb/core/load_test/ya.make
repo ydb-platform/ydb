@@ -20,7 +20,7 @@ PEERDIR(
     ydb/library/workload/kv
     ydb/library/workload/stock
     ydb/public/lib/base
-    ydb/public/lib/operation_id
+    ydb/public/sdk/cpp_v2/src/library/operation_id/
     ydb/public/sdk/cpp/client/ydb_proto
     ydb/services/kesus
     ydb/services/metadata

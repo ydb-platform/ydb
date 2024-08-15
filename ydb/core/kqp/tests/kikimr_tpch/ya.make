@@ -24,7 +24,7 @@ PEERDIR(
     ydb/core/protos
     ydb/public/sdk/cpp_v2/src/library/grpc/client
     ydb/library/yql/public/udf/service/stub
-    ydb/public/lib/yson_value
+    ydb/public/sdk/cpp_v2/src/library/yson_value
 )
 
 SIZE(MEDIUM)

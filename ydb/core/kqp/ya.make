@@ -43,7 +43,7 @@ PEERDIR(
     ydb/library/yql/utils/log
     ydb/public/api/protos
     ydb/public/lib/base
-    ydb/public/lib/operation_id
+    ydb/public/sdk/cpp_v2/src/library/operation_id/
 )
 
 YQL_LAST_ABI_VERSION()

@@ -10,7 +10,7 @@
 #include <ydb/library/yql/providers/dq/config/config.pb.h>
 #include <ydb/library/yql/utils/log/log.h>
 
-#include <ydb/public/lib/yson_value/ydb_yson_value.h>
+#include <ydb-cpp-sdk/library/yson_value/ydb_yson_value.h>
 
 #include <ydb-cpp-sdk/library/grpc/client/grpc_client_low.h>
 

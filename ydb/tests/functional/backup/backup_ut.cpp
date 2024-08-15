@@ -9,7 +9,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
-#include <ydb/public/lib/yson_value/ydb_yson_value.h>
+#include <ydb-cpp-sdk/library/yson_value/ydb_yson_value.h>
 #include <library/cpp/yson/writer.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>

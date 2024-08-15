@@ -12,7 +12,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
+#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 
 namespace NYdb {

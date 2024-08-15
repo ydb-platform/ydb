@@ -5,7 +5,7 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 #include <ydb/library/yql/core/issue/yql_issue.h>
-#include <ydb/public/lib/yson_value/ydb_yson_value.h>
+#include <ydb-cpp-sdk/library/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>

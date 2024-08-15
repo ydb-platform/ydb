@@ -3,7 +3,7 @@
 #include <ydb/core/protos/import.pb.h>
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
+#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #include <util/string/cast.h>
 

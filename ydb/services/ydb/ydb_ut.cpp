@@ -36,7 +36,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 
-#include <ydb/public/lib/yson_value/ydb_yson_value.h>
+#include <ydb-cpp-sdk/library/yson_value/ydb_yson_value.h>
 #include <ydb-cpp-sdk/library/json_value/ydb_json_value.h>
 
 #include "ydb_common_ut.h"

@@ -26,7 +26,7 @@ PEERDIR(
     ydb/core/pgproxy
     ydb/core/ydb_convert
     ydb/public/api/grpc
-    ydb/public/lib/operation_id/protos
+    ydb/public/sdk/cpp_v2/src/library/operation_id/
     ydb/services/persqueue_v1/actors
 )
 

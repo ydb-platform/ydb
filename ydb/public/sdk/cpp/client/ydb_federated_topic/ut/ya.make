@@ -15,7 +15,7 @@ PEERDIR(
     library/cpp/testing/gmock_in_unittest
     ydb/core/testlib/default
     ydb/public/sdk/cpp_v2/src/library/json_value
-    ydb/public/lib/yson_value
+    ydb/public/sdk/cpp_v2/src/library/yson_value
     ydb/public/sdk/cpp/client/ydb_driver
     ydb/public/sdk/cpp/client/ydb_persqueue_public
     ydb/public/sdk/cpp/client/ydb_persqueue_public/include

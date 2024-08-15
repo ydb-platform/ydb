@@ -673,8 +673,7 @@ void TStatisticsAggregator::FinishTraversal(NIceDb::TNiceDb& db) {
         bool tablesRemained = std::any_of(forceTraversalOperation->Tables.begin(), forceTraversalOperation->Tables.end(), 
         [](const TForceTraversalTable& elem) { return elem.Status == TForceTraversalTable::EStatus::None;});
         if (!tablesRemained) {
-            DeleteForceTraversalOperation(ForceTraversalOperationId);
-            db.Table<Schema::ForceTraversalOperations>().Key(ForceTraversalOperationId).Delete();
+            DeleteForceTraversalOperation(ForceTraversalOperationId, db);
         }
     }
     
@@ -700,7 +699,14 @@ TStatisticsAggregator::TForceTraversalOperation* TStatisticsAggregator::ForceTra
     }
 }
 
-void TStatisticsAggregator::DeleteForceTraversalOperation(const TString& operationId) {
+void TStatisticsAggregator::DeleteForceTraversalOperation(const TString& operationId, NIceDb::TNiceDb& db) {
+    db.Table<Schema::ForceTraversalOperations>().Key(ForceTraversalOperationId).Delete();
+    
+    auto operation = ForceTraversalOperation(operationId);
+    for(const TForceTraversalTable& table : operation->Tables) {
+        db.Table<Schema::ForceTraversalTables>().Key(operationId, table.PathId.OwnerId, table.PathId.LocalPathId).Delete();
+    }
+
     ForceTraversals.remove_if([operationId](const TForceTraversalOperation& elem) { return elem.OperationId == operationId;});
 }
 

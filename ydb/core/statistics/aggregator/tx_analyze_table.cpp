@@ -40,7 +40,7 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
                 return true;
             } else {
                 SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeTable::Execute. Delete broken force traversal. OperationId " << operationId << " , ReplyToActorId " << ReplyToActorId);
-                Self->DeleteForceTraversalOperation(operationId);
+                Self->DeleteForceTraversalOperation(operationId, db);
             }
         }
 

@@ -341,7 +341,7 @@ private: // stored in local db
 private:
     TForceTraversalOperation* CurrentForceTraversalOperation();
     TForceTraversalOperation* ForceTraversalOperation(const TString& operationId);
-    void DeleteForceTraversalOperation(const TString& operationId);
+    void DeleteForceTraversalOperation(const TString& operationId, NIceDb::TNiceDb& db);
 
     TForceTraversalTable* ForceTraversalTable(const TString& operationId, const TPathId& pathId);
     TForceTraversalTable* CurrentForceTraversalTable();

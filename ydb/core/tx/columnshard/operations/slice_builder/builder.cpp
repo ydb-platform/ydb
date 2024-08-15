@@ -58,7 +58,7 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
         if (HasAppData() && !AppDataVerified().FeatureFlags.GetEnableOptionalColumnsInColumnShard()) {
             subset = NArrow::TSchemaSubset::AllFieldsAccepted();
             auto normalized = ActualSchema->NormalizeBatch(
-                *ActualSchema, std::make_shared<NArrow::TGeneralContainer>(OriginalBatch), ActualSchema->GetColumnIds());
+                *ActualSchema, std::make_shared<NArrow::TGeneralContainer>(OriginalBatch), ActualSchema->GetIndexInfo().GetColumnIds());
             OriginalBatch = NArrow::ToBatch(normalized->BuildTableVerified(), true);
         }
     }

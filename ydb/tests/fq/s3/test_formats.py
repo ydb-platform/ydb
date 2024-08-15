@@ -11,7 +11,7 @@ import ydb.public.api.protos.ydb_value_pb2 as ydb
 import ydb.public.api.protos.draft.fq_pb2 as fq
 
 import ydb.tests.fq.s3.s3_helpers as s3_helpers
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_all, YQ_STATS_FULL
+from ydb.tests.tools.fq_runner.kikimr_utils import yq_all, yq_v2, YQ_STATS_FULL
 
 
 class TestS3Formats:
@@ -38,6 +38,26 @@ class TestS3Formats:
         assert result_set.rows[2].items[0].bytes_value == b"Pear"
         assert result_set.rows[2].items[1].int32_value == 15
         assert result_set.rows[2].items[2].int32_value == 33
+    
+    def validate_result_inference(self, result_set):
+        logging.debug(str(result_set))
+        assert len(result_set.columns) == 3
+        assert result_set.columns[0].name == "Fruit"
+        assert result_set.columns[0].type.type_id == ydb.Type.UTF8
+        assert result_set.columns[1].name == "Price"
+        assert result_set.columns[1].type.optional_type.item.type_id == ydb.Type.INT64
+        assert result_set.columns[2].name == "Weight"
+        assert result_set.columns[2].type.optional_type.item.type_id == ydb.Type.INT64
+        assert len(result_set.rows) == 3
+        assert result_set.rows[0].items[0].text_value == "Banana"
+        assert result_set.rows[0].items[1].int64_value == 3
+        assert result_set.rows[0].items[2].int64_value == 100
+        assert result_set.rows[1].items[0].text_value == "Apple"
+        assert result_set.rows[1].items[1].int64_value == 2
+        assert result_set.rows[1].items[2].int64_value == 22
+        assert result_set.rows[2].items[0].text_value == "Pear"
+        assert result_set.rows[2].items[1].int64_value == 15
+        assert result_set.rows[2].items[2].int64_value == 33
 
     def validate_pg_result(self, result_set):
         logging.debug(str(result_set))
@@ -103,6 +123,33 @@ class TestS3Formats:
             assert stat["ResultSet"]["IngressBytes"]["sum"] > 0
             if type_format != "json_list":
                 assert stat["ResultSet"]["IngressRows"]["sum"] == 3
+
+    @yq_v2
+    @pytest.mark.parametrize(
+        "filename, type_format",
+        [
+            ("test.csv", "csv_with_names"),
+            ("test.tsv", "tsv_with_names"),
+            ("test.parquet", "parquet"),
+        ],
+    )
+    def test_format_inference(self, kikimr, s3, client, filename, type_format, unique_prefix):
+        self.create_bucket_and_upload_file(filename, s3, kikimr)
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            SELECT *
+            FROM `{storage_connection_name}`.`{filename}`
+            WITH (format=`{type_format}`, with_infer='true');
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        self.validate_result_inference(result_set)
 
     @yq_all
     def test_btc(self, kikimr, s3, client, unique_prefix):

@@ -1106,9 +1106,8 @@ struct TBinaryKernelExecs<TInput1, Tz1, TInput2, Tz2, TOutput, PropagateTz, TFun
     }
 };
 
-template<typename TInput1, bool Tz1, typename TInput2, bool Tz2, typename TOutput, EPropagateTz PropagateTz,
-        typename TFuncInstance>
-struct TBinaryKernelExecs<TInput1, Tz1, TInput2, Tz2, TOutput, PropagateTz, TFuncInstance, TKernel::ENullMode::AlwaysNull>
+template<typename TInput1, typename TInput2, typename TOutput, typename TFuncInstance>
+struct TBinaryKernelOptExecsImpl
 {
     using TTypedBinaryScalarOptFuncPtr = bool(*)(
         const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
@@ -1137,7 +1136,11 @@ struct TBinaryKernelExecs<TInput1, Tz1, TInput2, Tz2, TOutput, PropagateTz, TFun
             return false;
         }
 
-        *resPtr = resPod.template Get<typename TPrimitiveDataType<TOutput>::TLayout>();
+        if constexpr(std::is_same_v<TOutput, NYql::NDecimal::TInt128>) {
+            *resPtr = resPod.GetInt128();
+        } else {
+            *resPtr = resPod.template Get<typename TPrimitiveDataType<TOutput>::TLayout>();
+        }
         return true;
     }
 
@@ -1158,7 +1161,11 @@ struct TBinaryKernelExecs<TInput1, Tz1, TInput2, Tz2, TOutput, PropagateTz, TFun
             if (!valid2 || arrow::BitUtil::GetBit(valid2, i + offset2)) {
                 auto resPod = TFuncInstance::Execute(NUdf::TUnboxedValuePod(*val1Ptr), NUdf::TUnboxedValuePod(*val2Ptr));
                 if (resPod) {
-                    *resPtr = resPod.template Get<typename TPrimitiveDataType<TOutput>::TLayout>();
+                    if constexpr(std::is_same_v<TOutput, NYql::NDecimal::TInt128>) {
+                        *resPtr = resPod.GetInt128();
+                    } else {
+                        *resPtr = resPod.template Get<typename TPrimitiveDataType<TOutput>::TLayout>();
+                    }
                     arrow::BitUtil::SetBit(resValid, i);
                     continue;
                 }
@@ -1185,7 +1192,11 @@ struct TBinaryKernelExecs<TInput1, Tz1, TInput2, Tz2, TOutput, PropagateTz, TFun
             if (!valid1 || arrow::BitUtil::GetBit(valid1, i + offset1)) {
                 auto resPod = TFuncInstance::Execute(NUdf::TUnboxedValuePod(*val1Ptr), NUdf::TUnboxedValuePod(*val2Ptr));
                 if (resPod) {
-                    *resPtr = resPod.template Get<typename TPrimitiveDataType<TOutput>::TLayout>();
+                    if constexpr(std::is_same_v<TOutput, NYql::NDecimal::TInt128>) {
+                        *resPtr = resPod.GetInt128();
+                    } else {
+                        *resPtr = resPod.template Get<typename TPrimitiveDataType<TOutput>::TLayout>();
+                    }
                     arrow::BitUtil::SetBit(resValid, i);
                     continue;
                 }
@@ -1212,7 +1223,11 @@ struct TBinaryKernelExecs<TInput1, Tz1, TInput2, Tz2, TOutput, PropagateTz, TFun
                 (!valid2 || arrow::BitUtil::GetBit(valid2, i + offset2))) {
                 auto resPod = TFuncInstance::Execute(NUdf::TUnboxedValuePod(*val1Ptr), NUdf::TUnboxedValuePod(*val2Ptr));
                 if (resPod) {
-                    *resPtr = resPod.template Get<typename TPrimitiveDataType<TOutput>::TLayout>();
+                    if constexpr(std::is_same_v<TOutput, NYql::NDecimal::TInt128>) {
+                        *resPtr = resPod.GetInt128();
+                    } else {
+                        *resPtr = resPod.template Get<typename TPrimitiveDataType<TOutput>::TLayout>();
+                    }
                     arrow::BitUtil::SetBit(resValid, i);
                     continue;
                 }
@@ -1221,12 +1236,17 @@ struct TBinaryKernelExecs<TInput1, Tz1, TInput2, Tz2, TOutput, PropagateTz, TFun
             arrow::BitUtil::ClearBit(resValid, i);
         }
     }
-
+};
+ 
+template<typename TInput1, bool Tz1, typename TInput2, bool Tz2, typename TOutput, EPropagateTz PropagateTz,
+        typename TFuncInstance>
+struct TBinaryKernelExecs<TInput1, Tz1, TInput2, Tz2, TOutput, PropagateTz, TFuncInstance, TKernel::ENullMode::AlwaysNull>
+{
     static arrow::Status Exec(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-        TTypedBinaryScalarOptFuncPtr scalarScalarFunc = &ScalarScalarCoreOpt;
-        TTypedBinaryArrayOptFuncPtr scalarArrayFunc = &ScalarArrayCoreOpt;
-        TTypedBinaryArrayOptFuncPtr arrayScalarFunc = &ArrayScalarCoreOpt;
-        TTypedBinaryArrayOptFuncPtr arrayArrayFunc = &ArrayArrayCoreOpt;
+        auto scalarScalarFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ScalarScalarCoreOpt;
+        auto scalarArrayFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ScalarArrayCoreOpt;
+        auto arrayScalarFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ArrayScalarCoreOpt;
+        auto arrayArrayFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ArrayArrayCoreOpt;
         return ExecBinaryOptImpl(kernelCtx, batch, res,
             &GetPrimitiveDataType<TOutput>,
             &MakeDefaultScalarDatum<TOutput>,
@@ -1622,128 +1642,13 @@ struct TDecimalKernelExecs
     using TInput2 = NYql::NDecimal::TInt128;
     using TOutput = NYql::NDecimal::TInt128;
 
-    using TTypedBinaryScalarOptFuncPtr = bool(*)(
-        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
-        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
-        typename TPrimitiveDataType<TOutput>::TLayout* resPtr
-    );
-
-    using TTypedBinaryArrayOptFuncPtr = void(*)(
-        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
-        const ui8* valid1,
-        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
-        const ui8* valid2,
-        typename TPrimitiveDataType<TOutput>::TLayout* resPtr,
-        ui8* resValid,
-        int64_t length,
-        int64_t offset1,
-        int64_t offset2
-    );
-
-    template<ui8 precision>
-    static bool ScalarScalarCoreOpt(
-        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
-        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
-        typename TPrimitiveDataType<TOutput>::TLayout* resPtr) {
-        auto resPod = TFuncInstance<precision>::Execute(NUdf::TUnboxedValuePod(*val1Ptr), NUdf::TUnboxedValuePod(*val2Ptr));
-        if (!resPod) {
-            return false;
-        }
-
-        *resPtr = resPod.GetInt128();
-        return true;
-    }
-
-    template<ui8 precision>
-    static void ScalarArrayCoreOpt(
-        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
-        const ui8* valid1,
-        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
-        const ui8* valid2,
-        typename TPrimitiveDataType<TOutput>::TLayout* resPtr,
-        ui8* resValid,
-        int64_t length,
-        int64_t offset1,
-        int64_t offset2) {
-        val2Ptr += offset2;
-        Y_UNUSED(valid1);
-        Y_UNUSED(offset1);
-        for (int64_t i = 0; i < length; ++i, ++val2Ptr, ++resPtr) {
-            if (!valid2 || arrow::BitUtil::GetBit(valid2, i + offset2)) {
-                auto resPod = TFuncInstance<precision>::Execute(NUdf::TUnboxedValuePod(*val1Ptr), NUdf::TUnboxedValuePod(*val2Ptr));
-                if (resPod) {
-                    *resPtr = resPod.GetInt128();
-                    arrow::BitUtil::SetBit(resValid, i);
-                    continue;
-                }
-            }
-
-            arrow::BitUtil::ClearBit(resValid, i);
-        }
-    }
-
-    template<ui8 precision>
-    static void ArrayScalarCoreOpt(
-        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
-        const ui8* valid1,
-        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
-        const ui8* valid2,
-        typename TPrimitiveDataType<TOutput>::TLayout* resPtr,
-        ui8* resValid,
-        int64_t length,
-        int64_t offset1,
-        int64_t offset2) {
-        val1Ptr += offset1;
-        Y_UNUSED(valid2);
-        Y_UNUSED(offset2);
-        for (int64_t i = 0; i < length; ++i, ++val1Ptr, ++resPtr) {
-            if (!valid1 || arrow::BitUtil::GetBit(valid1, i + offset1)) {
-                auto resPod = TFuncInstance<precision>::Execute(NUdf::TUnboxedValuePod(*val1Ptr), NUdf::TUnboxedValuePod(*val2Ptr));
-                if (resPod) {
-                    *resPtr = resPod.GetInt128();
-                    arrow::BitUtil::SetBit(resValid, i);
-                    continue;
-                }
-            }
-
-            arrow::BitUtil::ClearBit(resValid, i);
-        }
-    }
-
-    template<ui8 precision>
-    static void ArrayArrayCoreOpt(
-        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
-        const ui8* valid1,
-        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
-        const ui8* valid2,
-        typename TPrimitiveDataType<TOutput>::TLayout* resPtr,
-        ui8* resValid,
-        int64_t length,
-        int64_t offset1,
-        int64_t offset2) {
-        val1Ptr += offset1;
-        val2Ptr += offset2;
-        for (int64_t i = 0; i < length; ++i, ++val1Ptr, ++val2Ptr, ++resPtr) {
-            if ((!valid1 || arrow::BitUtil::GetBit(valid1, i + offset1)) && 
-                (!valid2 || arrow::BitUtil::GetBit(valid2, i + offset2))) {
-                auto resPod = TFuncInstance<precision>::Execute(NUdf::TUnboxedValuePod(*val1Ptr), NUdf::TUnboxedValuePod(*val2Ptr));
-                if (resPod) {
-                    *resPtr = resPod.GetInt128();
-                    arrow::BitUtil::SetBit(resValid, i);
-                    continue;
-                }
-            }
-
-            arrow::BitUtil::ClearBit(resValid, i);
-        }
-    }
-
     template<ui8 precision>
     static arrow::Status ExecImpl(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-        TTypedBinaryScalarOptFuncPtr scalarScalarFunc = &ScalarScalarCoreOpt<precision>;
-        TTypedBinaryArrayOptFuncPtr scalarArrayFunc = &ScalarArrayCoreOpt<precision>;
-        TTypedBinaryArrayOptFuncPtr arrayScalarFunc = &ArrayScalarCoreOpt<precision>;
-        TTypedBinaryArrayOptFuncPtr arrayArrayFunc = &ArrayArrayCoreOpt<precision>;
+        auto scalarScalarFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance<precision>>::ScalarScalarCoreOpt;
+        auto scalarArrayFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance<precision>>::ScalarArrayCoreOpt;
+        auto arrayScalarFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance<precision>>::ArrayScalarCoreOpt;
+        auto arrayArrayFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance<precision>>::ArrayArrayCoreOpt;
+
         return ExecDecimalBinaryOptImpl(kernelCtx, batch, res,
             &GetPrimitiveDataType<TOutput>,
             sizeof(TOutput),

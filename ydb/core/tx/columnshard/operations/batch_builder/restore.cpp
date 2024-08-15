@@ -70,8 +70,7 @@ TModificationRestoreTask::TModificationRestoreTask(const ui64 tabletId, const NA
 void TModificationRestoreTask::SendErrorMessage(const TString& errorMessage) {
     auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
     TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(*writeDataPtr) });
-    auto evResult =
-        NColumnShard::TEvPrivate::TEvWriteBlobsResult::Error(NKikimrProto::EReplyStatus::CORRUPTED, std::move(buffer), result.GetErrorMessage());
+    auto evResult = NColumnShard::TEvPrivate::TEvWriteBlobsResult::Error(NKikimrProto::EReplyStatus::CORRUPTED, std::move(buffer), errorMessage);
     TActorContext::AsActorContext().Send(ParentActorId, evResult.release());
 }
 

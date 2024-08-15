@@ -74,6 +74,7 @@ public:
 
         EnabledResourcePools = AppData()->FeatureFlags.GetEnableResourcePools();
         EnabledResourcePoolsOnServerless = AppData()->FeatureFlags.GetEnableResourcePoolsOnServerless();
+        EnableResourcePoolsCounters = AppData()->FeatureFlags.GetEnableResourcePoolsCounters();
         if (EnabledResourcePools) {
             InitializeWorkloadService();
         }
@@ -101,6 +102,7 @@ public:
 
         EnabledResourcePools = event.GetConfig().GetFeatureFlags().GetEnableResourcePools();
         EnabledResourcePoolsOnServerless = event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsOnServerless();
+        EnableResourcePoolsCounters = event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsCounters();
         if (EnabledResourcePools) {
             LOG_I("Resource pools was enanbled");
             InitializeWorkloadService();
@@ -526,7 +528,7 @@ private:
 
         LOG_I("Creating new handler for pool " << poolKey);
 
-        const auto poolHandler = Register(CreatePoolHandlerActor(database, poolId, poolConfig, Counters.Counters));
+        const auto poolHandler = Register(CreatePoolHandlerActor(database, poolId, poolConfig, EnableResourcePoolsCounters ? Counters.Counters : MakeIntrusive<NMonitoring::TDynamicCounters>()));
         const auto poolState = &PoolIdToState.insert({poolKey, TPoolState{.PoolHandler = poolHandler, .ActorContext = ActorContext()}}).first->second;
 
         Counters.ActivePools->Inc();
@@ -560,6 +562,7 @@ private:
 
     bool EnabledResourcePools = false;
     bool EnabledResourcePoolsOnServerless = false;
+    bool EnableResourcePoolsCounters = false;
     bool ServiceInitialized = false;
     bool IdleChecksStarted = false;
     ETablesCreationStatus TablesCreationStatus = ETablesCreationStatus::Cleanup;

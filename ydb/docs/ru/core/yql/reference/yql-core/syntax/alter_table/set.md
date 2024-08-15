@@ -10,17 +10,7 @@ ALTER TABLE table_name SET (key = value);
 
 ```key``` — имя параметра, ```value``` — его новое значение.
 
-Список дополнительных параметров, которые можно изменить для таблиц:
-
-* `AUTO_PARTITIONING_BY_SIZE` — автоматическое партиционирование таблицы:
-    ```sql
-    ALTER TABLE series SET (AUTO_PARTITIONING_BY_SIZE = DISABLED);
-    ```
-* `AUTO_PARTITIONING_PARTITION_SIZE_MB` — размер партиции таблицы:    
-    ```sql
-    ALTER TABLE series SET (AUTO_PARTITIONING_PARTITION_SIZE_MB = 512);
-    ```
-* `TTL` — время жизни записи в таблицы:
+Пример изменения параметра `TTL`, отвечающего за время жизни записей в таблицы:
     ```sql
     ALTER TABLE series SET (TTL = Interval("PT0S") ON expire_at);
     ```
@@ -40,5 +30,3 @@ ALTER TABLE table_name RESET (key);
 ```sql
 ALTER TABLE series RESET (TTL);
 ```
-
-Сброс параметров `AUTO_PARTITIONING_BY_SIZE` и `AUTO_PARTITIONING_PARTITION_SIZE_MB` не поддерживается для колоночных таблиц.

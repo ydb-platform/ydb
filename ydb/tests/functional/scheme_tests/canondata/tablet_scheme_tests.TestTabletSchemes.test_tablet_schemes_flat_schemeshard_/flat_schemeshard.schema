@@ -6828,7 +6828,12 @@
                 "ColumnId": 33,
                 "ColumnName": "StoragePoolsStats",
                 "ColumnType": "String"
-            }
+            },
+            {
+                "ColumnId": 34,
+                "ColumnName": "ByKeyFilterSize",
+                "ColumnType": "Uint64"
+             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
@@ -6866,7 +6871,8 @@
                     30,
                     31,
                     32,
-                    33
+                    33,
+                    34
                 ],
                 "RoomID": 0,
                 "Codec": 0,

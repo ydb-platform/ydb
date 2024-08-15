@@ -14,7 +14,7 @@ jobs:
         with:
           sparse-checkout: |
             .github
-            ydb/ci/sync_github_runner.sh
+            ydb/ci/
       - name: Set up S3cmd cli tool
         uses: s3-actions/s3cmd@v1.6.1
       - name: Prepare s3cmd

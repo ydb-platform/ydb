@@ -58,7 +58,7 @@ class Database:
             case EDataSourceKind.YDB:
                 raise Exception("Fix me first in YQ-3315")
             case EDataSourceKind.MS_SQL_SERVER:
-                return 'Unknown database'
+                return 'Cannot open database'
             case EDataSourceKind.MYSQL:
                 return 'Unknown database'
             case EDataSourceKind.ORACLE:

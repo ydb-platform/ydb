@@ -230,6 +230,7 @@ private:
     TAppConfig GetAppConfig() const {
         TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableResourcePools(Settings_.EnableResourcePools_);
+        appConfig.MutableFeatureFlags()->SetEnableResourcePoolsCounters(true);
 
         return appConfig;
     }

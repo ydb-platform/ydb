@@ -205,12 +205,16 @@ public:
     }
 
     void Finalize() {
+        YQL_ENSURE(!AlreadyReplied);
+
         if (LocksBroken) {
             TString message = "Transaction locks invalidated.";
 
             return ReplyErrorAndDie(Ydb::StatusIds::ABORTED,
                 YqlIssue({}, TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message));
         }
+
+        AlreadyReplied = true;
 
         auto& response = *ResponseEv->Record.MutableResponse();
 
@@ -278,8 +282,6 @@ public:
         ExecuterSpan.EndOk();
 
         Request.Transactions.crop(0);
-        LOG_D("Sending response to: " << Target << ", results: " << ResponseEv->ResultsSize());
-        Send(Target, ResponseEv.release());
         PassAway();
     }
 
@@ -319,6 +321,8 @@ private:
             return "WaitSnapshotState";
         } else if (func == &TThis::WaitResolveState) {
             return "WaitResolveState";
+        } else if (func == &TThis::WaitShutdownState) {
+            return "WaitShutdownState";
         } else {
             return TBase::CurrentStateFuncName();
         }
@@ -2596,6 +2600,45 @@ private:
     }
 
     void PassAway() override {
+        if (Planner) {
+            if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
+                DoShutdown();
+            } else {
+                this->Become(&TThis::WaitShutdownState);
+            }
+        } else {
+            DoShutdown();
+        }
+    }
+
+    STATEFN(WaitShutdownState) {
+        switch(ev->GetTypeRewrite()) {
+            // TODO: properly handle node disconnect
+            // TODO: implement wait timeout mechanism
+            hFunc(TEvDqCompute::TEvState, HandleShutdown);
+            default:
+                ; // ignore all other events
+        }
+    }
+
+    void HandleShutdown(TEvDqCompute::TEvState::TPtr& ev) {
+        if (ev->Get()->Record.GetState() == NDqProto::COMPUTE_STATE_FINISHED) {
+            YQL_ENSURE(Planner);
+
+            TActorId actor = ev->Sender;
+            ui64 taskId = ev->Get()->Record.GetTaskId();
+
+            Planner->CompletedCA(taskId, actor);
+
+            if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
+                DoShutdown();
+            }
+        } else {
+            // TODO: handle another states.
+        }
+    }
+
+    void DoShutdown() {
         auto totalTime = TInstant::Now() - StartTime;
         Counters->Counters->DataTxTotalTimeHistogram->Collect(totalTime.MilliSeconds());
 

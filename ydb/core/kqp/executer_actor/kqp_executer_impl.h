@@ -667,7 +667,7 @@ protected:
         if (statusCode == Ydb::StatusIds::INTERNAL_ERROR) {
             InternalError(issues);
         } else if (statusCode == Ydb::StatusIds::TIMEOUT) {
-            AbortExecutionAndDie(ev->Sender, NYql::NDqProto::StatusIds::TIMEOUT, "Request timeout exceeded");
+            TimeoutError(ev->Sender);
         } else {
             RuntimeError(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), issues);
         }
@@ -1624,14 +1624,14 @@ protected:
 protected:
     void TerminateComputeActors(Ydb::StatusIds::StatusCode code, const NYql::TIssues& issues) {
         for (const auto& task : this->TasksGraph.GetTasks()) {
-            if (task.ComputeActorId) {
+            if (task.ComputeActorId && !task.Meta.Completed) {
                 LOG_I("aborting compute actor execution, message: " << issues.ToOneLineString()
                     << ", compute actor: " << task.ComputeActorId << ", task: " << task.Id);
 
                 auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDq::YdbStatusToDqStatus(code), issues);
                 this->Send(task.ComputeActorId, ev.Release());
             } else {
-                LOG_I("task: " << task.Id << ", does not have Compute ActorId yet");
+                LOG_I("task: " << task.Id << ", does not have the CA id yet or is already complete");
             }
         }
     }
@@ -1649,7 +1649,6 @@ protected:
 
     void InternalError(const NYql::TIssues& issues) {
         LOG_E(issues.ToOneLineString());
-        TerminateComputeActors(Ydb::StatusIds::INTERNAL_ERROR, issues);
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, "Internal error while executing transaction.");
         for (const NYql::TIssue& i : issues) {
             issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
@@ -1663,7 +1662,6 @@ protected:
 
     void ReplyUnavailable(const TString& message) {
         LOG_E("UNAVAILABLE: " << message);
-        TerminateComputeActors(Ydb::StatusIds::UNAVAILABLE, message);
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE);
         issue.AddSubIssue(new NYql::TIssue(message));
         ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, issue);
@@ -1671,7 +1669,6 @@ protected:
 
     void RuntimeError(Ydb::StatusIds::StatusCode code, const NYql::TIssues& issues) {
         LOG_E(Ydb::StatusIds_StatusCode_Name(code) << ": " << issues.ToOneLineString());
-        TerminateComputeActors(code, issues);
         ReplyErrorAndDie(code, issues);
     }
 
@@ -1687,10 +1684,17 @@ protected:
         ReplyErrorAndDie(status, &issues);
     }
 
-    void AbortExecutionAndDie(TActorId abortSender, NYql::NDqProto::StatusIds::StatusCode status, const TString& message) {
+    void TimeoutError(TActorId abortSender) {
         if (AlreadyReplied) {
             return;
         }
+
+        const auto status = NYql::NDqProto::StatusIds::TIMEOUT;
+        const TString message = "Request timeout exceeded";
+
+        TerminateComputeActors(Ydb::StatusIds::TIMEOUT, message);
+
+        AlreadyReplied = true;
 
         LOG_E("Abort execution: " << NYql::NDqProto::StatusIds_StatusCode_Name(status) << "," << message);
         if (ExecuterSpan) {
@@ -1701,16 +1705,13 @@ protected:
 
         // TEvAbortExecution can come from either ComputeActor or SessionActor (== Target).
         if (abortSender != Target) {
-            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(status, "Request timeout exceeded");
+            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(status, message);
             this->Send(Target, abortEv.Release());
         }
 
-        AlreadyReplied = true;
         LOG_E("Sending timeout response to: " << Target);
-        this->Send(Target, ResponseEv.release());
 
         Request.Transactions.crop(0);
-        TerminateComputeActors(Ydb::StatusIds::TIMEOUT, message);
         this->PassAway();
     }
 
@@ -1749,14 +1750,7 @@ protected:
             return;
         }
 
-        if (Planner) {
-            for (auto computeActor : Planner->GetPendingComputeActors()) {
-                LOG_D("terminate compute actor " << computeActor.first);
-
-                auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDq::YdbStatusToDqStatus(status), "Terminate execution");
-                this->Send(computeActor.first, ev.Release());
-            }
-        }
+        TerminateComputeActors(status, "Terminate execution");
 
         AlreadyReplied = true;
         auto& response = *ResponseEv->Record.MutableResponse();
@@ -1782,7 +1776,6 @@ protected:
         ExecuterStateSpan.EndError(response.DebugString());
 
         Request.Transactions.crop(0);
-        this->Send(Target, ResponseEv.release());
         this->PassAway();
     }
 
@@ -1852,6 +1845,9 @@ protected:
 
 protected:
     void PassAway() override {
+        YQL_ENSURE(ResponseEv);
+        this->Send(Target, ResponseEv.release());
+
         for (auto channelPair: ResultChannelProxies) {
             LOG_D("terminate result channel " << channelPair.first << " proxy at " << channelPair.second->SelfId());
 
@@ -1872,12 +1868,11 @@ protected:
 
         if (KqpTableResolverId) {
             this->Send(KqpTableResolverId, new TEvents::TEvPoison);
-            this->Send(this->SelfId(), new TEvents::TEvPoison);
-            LOG_T("Terminate, become ZombieState");
-            this->Become(&TKqpExecuterBase::ZombieState);
-        } else {
-            IActor::PassAway();
         }
+
+        this->Send(this->SelfId(), new TEvents::TEvPoison);
+        LOG_T("Terminate, become ZombieState");
+        this->Become(&TKqpExecuterBase::ZombieState);
     }
 
     STATEFN(ZombieState) {

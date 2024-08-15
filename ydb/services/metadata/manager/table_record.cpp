@@ -288,4 +288,16 @@ TTableRecords TTableRecords::SelectColumns(const std::vector<TString>& columnIds
     return result;
 }
 
+std::vector<TTableRecord> TTableRecords::GetTableRecords() const {
+    std::vector<TTableRecord> result;
+    result.reserve(Records.size());
+    for (const Ydb::Value& record : Records) {
+        result.emplace_back();
+        for (size_t i = 0; i < std::min(Columns.size(), static_cast<size_t>(record.items_size())); ++i) {
+            result.back().SetColumn(Columns[i].name(), record.items(i));
+        }
+    }
+    return result;
+}
+
 }

@@ -1667,7 +1667,7 @@ struct TDecimalKernelExecs
 
     static arrow::Status Exec(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         ui8 precision = static_cast<TDecimalKernel::TKernelState*>(kernelCtx->state())->Precision;
-        MKQL_ENSURE(precision >= 1&& precision <= 35, TStringBuilder() << "Wrong precision: " << (int)precision);
+        Y_DEBUG_ABORT_UNLESS(precision >= 1&& precision <= 35);
 
         static constexpr auto jumpTable = GenerateTable(std::make_index_sequence<35>{});
         return jumpTable[precision-1](kernelCtx, batch, res);

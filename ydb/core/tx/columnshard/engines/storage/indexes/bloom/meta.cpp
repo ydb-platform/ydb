@@ -10,7 +10,9 @@
 
 namespace NKikimr::NOlap::NIndexes {
 
-TString TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader) const {
+TString TBloomIndexMeta::DoBuildIndexImpl(std::vector<TChunkedColumnReader>&& columnReaders) const {
+    TChunkedBatchReader reader(std::move(columnReaders));
+
     std::set<ui64> hashes;
     {
         NArrow::NHash::NXX64::TStreamStringHashCalcer hashCalcer(0);

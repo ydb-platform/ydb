@@ -10,7 +10,9 @@
 
 namespace NKikimr::NOlap::NIndexes::NMax {
 
-TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader) const {
+TString TIndexMeta::DoBuildIndexImpl(std::vector<TChunkedColumnReader>&& columnReaders) const {
+    TChunkedBatchReader reader(std::move(columnReaders));
+
     std::shared_ptr<arrow::Scalar> result;
     AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
     {

@@ -11,16 +11,20 @@
 
 namespace NKikimr::NOlap::NIndexes::NCountMinSketch {
 
-TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader) const {
-    std::vector<TStackAllocatedCountMinSketch<256, 8>> sketchesByColumns(ColumnIds.size());
+using TCountMinSketch = TStackAllocatedCountMinSketch<256, 8>;
 
-    AFL_VERIFY(std::distance(reader.begin(), reader.end()) == static_cast<long>(sketchesByColumns.size()));
+TString TIndexMeta::DoBuildIndexImpl(std::vector<TChunkedColumnReader>&& columnReaders) const {
+    AFL_VERIFY(columnReaders.size() == ColumnIds.size());
 
-    for (reader.Start(); reader.IsCorrect(); reader.ReadNext()) {
-        size_t sketchIndex = 0;
-        for (auto&& colReader : reader) {
+    std::vector<TCountMinSketch> sketchesByColumns;
+    sketchesByColumns.reserve(ColumnIds.size());
+
+    for (auto&& colReader : columnReaders) {
+        sketchesByColumns.emplace_back();
+        auto& sketch = sketchesByColumns.back();
+
+        for (colReader.Start(); colReader.IsCorrect(); colReader.ReadNext()) {
             auto array = colReader.GetCurrentChunk();
-            auto& sketch = sketchesByColumns[sketchIndex];
             int i = colReader.GetCurrentRecordIndex();
 
             NArrow::SwitchType(array->type_id(), [&](const auto& type) {
@@ -41,15 +45,14 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader) const {
                 AFL_VERIFY(false);
                 return false;
             });
-            ++sketchIndex;
         }
     }
 
-    TString result(reinterpret_cast<const char*>(sketchesByColumns.data()), sketchesByColumns.size() * TStackAllocatedCountMinSketch<256, 8>::GetSize());
+    TString result(reinterpret_cast<const char*>(sketchesByColumns.data()), sketchesByColumns.size() * TCountMinSketch::GetSize());
     return result;
 }
 
-void TIndexMeta::DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const {
+void TIndexMeta::DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& /*schema*/) const {
     for (auto&& branch : info->GetBranches()) {
         branch->MutableIndexes().emplace_back(std::make_shared<TCountMinSketchChecker>(GetIndexId()));
     }

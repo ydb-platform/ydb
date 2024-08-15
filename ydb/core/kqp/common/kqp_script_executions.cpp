@@ -1,6 +1,6 @@
 #include "kqp_script_executions.h"
 
-#include <ydb/public/lib/operation_id/protos/operation_id.pb.h>
+#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 namespace NKikimr::NKqp {
 

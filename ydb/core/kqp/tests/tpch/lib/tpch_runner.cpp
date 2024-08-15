@@ -1,7 +1,7 @@
 #include "tpch_runner.h"
 #include "tpch_tables.h"
 
-#include <ydb/public/lib/yson_value/ydb_yson_value.h>
+#include <ydb-cpp-sdk/library/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 
 #include <library/cpp/resource/resource.h>

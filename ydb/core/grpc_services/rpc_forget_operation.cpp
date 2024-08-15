@@ -9,7 +9,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
+#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 

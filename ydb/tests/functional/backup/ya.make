@@ -12,7 +12,7 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_table
     ydb/public/sdk/cpp/client/ydb_operation
     ydb/public/sdk/cpp/client/draft
-    ydb/public/lib/yson_value
+    ydb/public/sdk/cpp_v2/src/library/yson_value
 )
 
 SRCS(

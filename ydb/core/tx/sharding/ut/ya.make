@@ -20,7 +20,7 @@ PEERDIR(
     library/cpp/svnversion
     ydb/core/testlib/default
     ydb/core/tx/sharding
-    ydb/public/lib/yson_value
+    ydb/public/sdk/cpp_v2/src/library/yson_value
 )
 
 YQL_LAST_ABI_VERSION()

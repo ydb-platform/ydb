@@ -7,7 +7,7 @@ PEERDIR(
     library/cpp/threading/future
     ydb/library/yql/utils
     ydb/public/api/protos
-    ydb/public/lib/yson_value
+    ydb/public/sdk/cpp_v2/src/library/yson_value
     ydb/library/yql/providers/dq/api/grpc
     ydb/library/yql/providers/dq/common
 )

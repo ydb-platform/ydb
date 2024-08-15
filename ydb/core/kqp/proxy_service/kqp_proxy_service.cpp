@@ -24,7 +24,7 @@
 #include <ydb/library/yql/dq/actors/spilling/spilling_file.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
+#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>

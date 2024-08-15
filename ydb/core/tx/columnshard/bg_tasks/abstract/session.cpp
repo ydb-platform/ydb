@@ -1,7 +1,7 @@
 #include "session.h"
 #include "adapter.h"
 #include <ydb/public/api/protos/ydb_operation.pb.h>
-#include <ydb/public/lib/operation_id/protos/operation_id.pb.h>
+#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 namespace NKikimr::NOlap::NBackground {
 

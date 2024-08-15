@@ -10,7 +10,7 @@ PEERDIR(
     ydb/public/api/protos
     ydb/public/lib/ydb_cli/common
     ydb/public/lib/ydb_cli/dump/util
-    ydb/public/lib/yson_value
+    ydb/public/sdk/cpp_v2/src/library/yson_value
     ydb/public/sdk/cpp/client/ydb_proto
     ydb/public/sdk/cpp/client/ydb_scheme
     ydb/public/sdk/cpp/client/ydb_table

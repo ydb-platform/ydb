@@ -30,7 +30,7 @@ PEERDIR(
     ydb/library/yql/minikql/jsonpath
     ydb/public/lib/experimental
     ydb/public/sdk/cpp_v2/src/library/json_value
-    ydb/public/lib/yson_value
+    ydb/public/sdk/cpp_v2/src/library/yson_value
     ydb/public/sdk/cpp/client/draft
     ydb/public/sdk/cpp/client/ydb_coordination
     ydb/public/sdk/cpp/client/ydb_export

@@ -16,7 +16,7 @@ PEERDIR(
     ydb/core/mind
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
-    ydb/public/lib/operation_id
+    ydb/public/sdk/cpp_v2/src/library/operation_id/
     ydb/public/sdk/cpp/client/resources
     ydb/public/sdk/cpp/client/ydb_datastreams
     ydb/services/lib/actors

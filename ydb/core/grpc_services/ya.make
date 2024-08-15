@@ -141,7 +141,7 @@ PEERDIR(
     ydb/public/api/grpc/draft
     ydb/public/api/protos
     ydb/public/lib/fq
-    ydb/public/lib/operation_id
+    ydb/public/sdk/cpp_v2/src/library/operation_id/
     ydb/public/sdk/cpp/client/resources
     ydb/services/ext_index/common
 )

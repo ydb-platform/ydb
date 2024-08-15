@@ -31,7 +31,7 @@ SELECT * FROM ms_sql_server_datasource.<table_name>
 
 where:
 - `ms_sql_server_datasource` - the external data source identifier;
-- `<table_name> - the table name within the external data source.
+- `<table_name>` - the table name within the external data source.
 
 ## Limitations
 

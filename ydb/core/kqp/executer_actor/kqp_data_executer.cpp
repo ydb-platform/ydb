@@ -2605,6 +2605,7 @@ private:
                 DoShutdown();
             } else {
                 this->Become(&TThis::WaitShutdownState);
+                TActivationContext::Schedule(TDuration::Seconds(10), new IEventHandle(SelfId(), SelfId(), new TEvents::TEvPoison));
             }
         } else {
             DoShutdown();
@@ -2613,9 +2614,9 @@ private:
 
     STATEFN(WaitShutdownState) {
         switch(ev->GetTypeRewrite()) {
-            // TODO: properly handle node disconnect
-            // TODO: implement wait timeout mechanism
             hFunc(TEvDqCompute::TEvState, HandleShutdown);
+            hFunc(TEvInterconnect::TEvNodeDisconnected, HandleShutdown);
+            hFunc(TEvents::TEvPoison, HandleShutdown);
             default:
                 ; // ignore all other events
         }
@@ -2635,6 +2636,34 @@ private:
             }
         } else {
             // TODO: handle another states.
+        }
+    }
+
+    void HandleShutdown(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
+        const auto nodeId = ev->Get()->NodeId;
+        LOG_N("Node has disconnected while shutdown: " << nodeId);
+
+        YQL_ENSURE(Planner);
+
+        for (const auto& task : TasksGraph.GetTasks()) {
+            if (task.Meta.NodeId == nodeId && !task.Meta.Completed) {
+                if (task.ComputeActorId) {
+                    Planner->CompletedCA(task.Id, task.ComputeActorId);
+                } else {
+                    Planner->TaskNotStarted(task.Id);
+                }
+            }
+        }
+
+        if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
+            DoShutdown();
+        }
+    }
+
+    void HandleShutdown(TEvents::TEvPoison::TPtr& ev) {
+        // Self-poison means timeout - don't wait anymore.
+        if (ev->Sender == SelfId()) {
+            DoShutdown();
         }
     }
 

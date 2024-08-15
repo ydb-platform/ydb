@@ -133,4 +133,23 @@ Y_UNIT_TEST(Write_Statistics_UseTx)
                             {"#", "msg/s", "MB/s", "percentile,ms", "percentile,msg", "percentile,ms", "percentile,ms", "percentile,ms"});
 }
 
+Y_UNIT_TEST(WriteInTx)
+{
+    ExecYdb({"init", "-p", "3"});
+
+    auto output = ExecYdb({"run", "write", "-t", "6", "--byte-rate", "102400", "-m", "10240", "--use-tx", "--commit-messages", "10", "--warmup", "2", "-s", "10"});
+    ui64 commitTimeValue = GetCommitTimeValue(output);
+
+    output = RunYdb({}, {"topic", "read", "workload-topic", "-c", "workload-consumer-0", "--commit", "0", "--format", "newline-delimited", "--limit", "200"});
+    TVector<TString> lines;
+    Split(output, "\n", lines);
+
+    ExecYdb({"clean"});
+
+    UNIT_ASSERT_GT(commitTimeValue, 0);
+
+    UNIT_ASSERT_GT(lines.size(), 95);
+    UNIT_ASSERT_LT(lines.size(), 105);
+}
+
 }

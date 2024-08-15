@@ -235,7 +235,7 @@ std::vector<const std::type_info*> GetTypeInfos()
 }
 
 template <class T>
-    requires std::derived_from<T, TRefCounted>
+    requires std::derived_from<T, TRefCounted> && (!std::is_abstract_v<TRefCountedWrapperMock<T>>)
 std::vector<const std::type_info*> GetTypeInfos()
 {
     return {&typeid (T), &typeid (TRefCountedWrapper<T>)};

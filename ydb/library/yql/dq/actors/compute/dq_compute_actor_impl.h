@@ -515,6 +515,18 @@ protected:
             RuntimeSettings.TerminateHandler(success, issues);
         }
 
+        // Send final state to executer to inform about termination.
+        {
+            auto ev = MakeHolder<TEvDqCompute::TEvState>();
+            auto& record = ev->Record;
+
+            record.SetState(NDqProto::COMPUTE_STATE_FINISHED);
+            record.SetStatusCode(NDqProto::StatusIds::ABORTED);
+            record.SetTaskId(Task.GetId());
+
+            this->Send(ExecuterId, ev.Release());
+        }
+
         this->PassAway();
         Terminated = true;
     }

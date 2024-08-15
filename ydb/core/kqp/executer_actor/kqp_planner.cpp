@@ -554,7 +554,8 @@ void TKqpPlanner::CompletedCA(ui64 taskId, TActorId computeActor) {
     YQL_ENSURE(it != PendingComputeActors.end());
     LastStats.emplace_back(std::move(it->second));
     PendingComputeActors.erase(it);
-    return;
+
+    LOG_I("Compute actor has finished execution: " << computeActor.ToString());
 }
 
 void TKqpPlanner::TaskNotStarted(ui64 taskId) {

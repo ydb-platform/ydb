@@ -36,9 +36,12 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
         auto& outRecord = Request->Record;
 
         PathIdFromPathId(Self->TraversalTableId.PathId, outRecord.MutablePathId());
-        
-        TVector<ui32> columnTags = Scan<ui32>(SplitString(Self->ForceTraversalColumnTags, ","));
-        outRecord.MutableColumnTags()->Add(columnTags.begin(), columnTags.end());
+
+        const auto forceTraversalTable = Self->CurrentForceTraversalTable();
+        if (forceTraversalTable) {
+            TVector<ui32> columnTags = Scan<ui32>(SplitString(forceTraversalTable->ColumnTags, ","));
+            outRecord.MutableColumnTags()->Add(columnTags.begin(), columnTags.end());
+        }
 
         auto distribution = Self->TabletsForReqDistribution;
         for (auto& inNode : Record.GetNodes()) {

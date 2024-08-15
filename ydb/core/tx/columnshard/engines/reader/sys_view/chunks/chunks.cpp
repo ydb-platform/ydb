@@ -71,7 +71,7 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
             }
             NArrow::Append<arrow::UInt64Type>(*builders[10], r->BlobRange.Offset);
             NArrow::Append<arrow::UInt64Type>(*builders[11], r->BlobRange.Size);
-            NArrow::Append<arrow::BooleanType>(*builders[12], activity);
+            NArrow::Append<arrow::UInt8Type>(*builders[12], activity);
 
             NArrow::Append<arrow::StringType>(*builders[13], arrow::util::string_view(lastTierName.data(), lastTierName.size()));
             NArrow::Append<arrow::StringType>(*builders[14], ConstantEntityIsColumnView);

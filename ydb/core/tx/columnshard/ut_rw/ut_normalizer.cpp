@@ -267,10 +267,8 @@ Y_UNIT_TEST_SUITE(Normalizers) {
     void TestNormalizerImpl(const TNormalizerChecker& checker = TNormalizerChecker()) {
         using namespace NArrow;
         auto csControllerGuard = NYDBTest::TControllers::RegisterCSControllerGuard<TPrepareLocalDBController<TLocalDBModifier>>();
-
-        TTestBasicRuntime runtime;
-        TTester::Setup(runtime);
-
+        TColumnShardTestSetup testSetup;
+        
         const ui64 ownerId = 0;
         const ui64 tableId = 1;
         const ui64 schemaVersion = 1;
@@ -280,7 +278,7 @@ Y_UNIT_TEST_SUITE(Normalizers) {
                                                                     NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8) )
                                                                 };
         const std::vector<ui32> columnsIds = { 1, 2, 3};
-        PrepareTablet(runtime, tableId, schema, 2);
+        testSetup.CreateTable(tableId, {schema, {schema[0], schema[1]}});
         const ui64 txId = 111;
 
         NConstruction::IArrayBuilder::TPtr key1Column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key1");
@@ -296,30 +294,29 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         ui64 payloadIndex = NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
         evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, {ownerId, tableId, schemaVersion}, columnsIds, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
 
-        TActorId sender = runtime.AllocateEdgeActor();
-        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evWrite.release());
+        testSetup.ForwardToTablet(evWrite.release());
         {
             TAutoPtr<NActors::IEventHandle> handle;
-            auto event = runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
+            auto event = testSetup.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
             UNIT_ASSERT(event);
             UNIT_ASSERT_VALUES_EQUAL((ui64)event->Record.GetStatus(), (ui64)NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
 
-            PlanWriteTx(runtime, sender, NOlap::TSnapshot(11, txId));
+            testSetup.PlanWriteTx(NOlap::TSnapshot(11, txId));
         }
 
         {
-            auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(11, txId), schema);
+            auto readResult = testSetup.ReadAllAsBatch(tableId, NOlap::TSnapshot(11, txId), schema);
             UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 20048);
             while (!csControllerGuard->GetInsertFinishedCounter().Val()) {
                 Cerr << csControllerGuard->GetInsertStartedCounter().Val() << Endl;
-                Wakeup(runtime, sender, TTestTxConfig::TxTablet0);
-                runtime.SimulateSleep(TDuration::Seconds(1));
+                testSetup.Wakeup();
+                testSetup.GetRuntime().SimulateSleep(TDuration::Seconds(1));
             }
         }
-        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        testSetup.RebootTablet();
 
         {
-            auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(11, txId), schema);
+            auto readResult = testSetup.ReadAllAsBatch(tableId, NOlap::TSnapshot(11, txId), schema);
             UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), checker.RecordsCountAfterReboot(20048));
         }
     }

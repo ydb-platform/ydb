@@ -86,20 +86,6 @@ std::shared_ptr<arrow::RecordBatch> UpdateColumn(std::shared_ptr<arrow::RecordBa
     return arrow::RecordBatch::Make(schema, batch->num_rows(), columns);
 }
 
-bool TriggerTTL(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap, const std::vector<ui64>& pathIds,
-                ui64 tsSeconds, const TString& ttlColumnName) {
-    TString txBody = TTestSchema::TtlTxBody(pathIds, ttlColumnName, tsSeconds);
-    auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
-        NKikimrTxColumnShard::TX_KIND_TTL, sender, snap.GetTxId(), txBody);
-
-    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
-    auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
-    const auto& res = ev->Get()->Record;
-    UNIT_ASSERT_EQUAL(res.GetTxId(), snap.GetTxId());
-    UNIT_ASSERT_EQUAL(res.GetTxKind(), NKikimrTxColumnShard::TX_KIND_TTL);
-    return (res.GetStatus() == NKikimrTxColumnShard::SUCCESS);
-}
-
 bool CheckSame(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 expectedSize,
                const std::string& columnName, i64 seconds) {
     UNIT_ASSERT(batch);
@@ -175,6 +161,8 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
     csControllerGuard->SetTasksActualizationLag(TDuration::Zero());
+    TColumnShardTestSetup testSetup;
+
     std::vector<ui64> ts = {1600000000, 1620000000};
 
     ui32 ttlIncSeconds = 1;
@@ -187,18 +175,6 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
         }
     }
 
-    TTestBasicRuntime runtime;
-    TTester::Setup(runtime);
-    runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_TRACE);
-
-    TActorId sender = runtime.AllocateEdgeActor();
-    CreateTestBootstrapper(runtime,
-                           CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard),
-                           &CreateColumnShard);
-
-    TDispatchOptions options;
-    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
-    runtime.DispatchEvents(options);
 
     //
 
@@ -219,11 +195,18 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
         UNIT_ASSERT(!spec.TtlColumn.empty());
         spec.EvictAfter = TDuration::Seconds(ttlSec);
     }
-    SetupSchema(runtime, sender,
-                              TTestSchema::CreateInitShardTxBody(tableId, ydbSchema, testYdbPk, spec, "/Root/olapStore"),
-                              NOlap::TSnapshot(++planStep, ++txId));
+    UNIT_ASSERT_EQUAL(
+        testSetup.ProposeTxWaitProposeResult(
+            NKikimrTxColumnShard::TX_KIND_SCHEMA, 
+            TTestSchema::CreateInitShardTxBody(tableId, ydbSchema, testYdbPk, spec, "/Root/olapStore"),
+            ++txId
+        ),
+        NKikimrTxColumnShard::PREPARED
+    );
+    testSetup.PlanTxWaitTxResult(txId, ++planStep, NKikimrTxColumnShard::TX_KIND_SCHEMA);
+
     if (spec.HasTiers()) {
-        csControllerGuard->SetTiersSnapshot(runtime, sender, TTestSchema::BuildSnapshot(spec));
+        csControllerGuard->SetTiersSnapshot(testSetup.GetRuntime(), testSetup.GetSender(), TTestSchema::BuildSnapshot(spec));
     }
     //
 
@@ -231,35 +214,35 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     UNIT_ASSERT_EQUAL(blobs.size(), 2);
     for (auto& data : blobs) {
         std::vector<ui64> writeIds;
-        UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, data, ydbSchema, true, &writeIds));
-        ProposeCommit(runtime, sender, ++txId, writeIds);
-        PlanCommit(runtime, sender, ++planStep, txId);
+        UNIT_ASSERT(testSetup.WriteData(++writeId, tableId, data, ydbSchema, true, &writeIds));
+        testSetup.ProposeCommit(++txId, writeIds);
+        testSetup.PlanCommit(++planStep, {txId});
     }
 
     // TODO: write into path 2 (no ttl)
 
     if (reboots) {
-        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        testSetup.RebootTablet();
     }
 
     if (internal) {
-        TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {}, 0, spec.TtlColumn);
+        testSetup.TriggerTTL(NOlap::TSnapshot(++planStep, ++txId), {}, 0, spec.TtlColumn);
     } else {
-        TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {tableId}, ts[0] + ttlIncSeconds, spec.TtlColumn);
+        testSetup.TriggerTTL(NOlap::TSnapshot(++planStep, ++txId), {tableId}, ts[0] + ttlIncSeconds, spec.TtlColumn);
     }
     while (csControllerGuard->GetTTLFinishedCounter().Val() != csControllerGuard->GetTTLStartedCounter().Val()) {
-        runtime.SimulateSleep(TDuration::Seconds(1)); // wait all finished before (ttl especially)
+        testSetup.GetRuntime().SimulateSleep(TDuration::Seconds(1)); // wait all finished before (ttl especially)
     }
 
     TAutoPtr<IEventHandle> handle;
 
     if (reboots) {
-        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        testSetup.RebootTablet();
     }
 
     {
         --planStep;
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
+        auto reader = testSetup.GetReader(tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
         reader.SetReplyColumns({spec.TtlColumn});
         auto rb = reader.ReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -273,25 +256,29 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     } else {
         spec.EvictAfter = TDuration::Seconds(ttlSec);
     }
-    SetupSchema(runtime, sender,
-                         TTestSchema::AlterTableTxBody(tableId, 2, spec),
-                         NOlap::TSnapshot(++planStep, ++txId));
+    testSetup.ProposeTxPlanTxWaitTxResult(
+        NKikimrTxColumnShard::TX_KIND_SCHEMA,
+        TTestSchema::AlterTableTxBody(tableId, 2, spec),
+        ++txId,
+        ++planStep
+    );
+
     if (spec.HasTiers()) {
-        csControllerGuard->SetTiersSnapshot(runtime, sender, TTestSchema::BuildSnapshot(spec));
+        csControllerGuard->SetTiersSnapshot(testSetup.GetRuntime(), testSetup.GetSender(), TTestSchema::BuildSnapshot(spec));
     }
 
     if (internal) {
-        TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {}, 0, spec.TtlColumn);
+        testSetup.TriggerTTL(NOlap::TSnapshot(++planStep, ++txId), {}, 0, spec.TtlColumn);
     } else {
-        TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {tableId}, ts[1] + ttlIncSeconds, spec.TtlColumn);
+        testSetup.TriggerTTL(NOlap::TSnapshot(++planStep, ++txId), {tableId}, ts[1] + ttlIncSeconds, spec.TtlColumn);
     }
     while (csControllerGuard->GetTTLFinishedCounter().Val() != csControllerGuard->GetTTLStartedCounter().Val()) {
-        runtime.SimulateSleep(TDuration::Seconds(1)); // wait all finished before (ttl especially)
+        testSetup.SimulateSleep(TDuration::Seconds(1)); // wait all finished before (ttl especially)
     }
 
     {
         --planStep;
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
+        auto reader = testSetup.GetReader(tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
         reader.SetReplyColumns({spec.TtlColumn, NOlap::TIndexInfo::SPEC_COL_PLAN_STEP});
         auto rb = reader.ReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -299,33 +286,37 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     }
 
     // Disable TTL
-    auto ok = ProposeSchemaTx(runtime, sender,
-                         TTestSchema::AlterTableTxBody(tableId, 3, TTestSchema::TTableSpecials()),
-                         NOlap::TSnapshot(++planStep, ++txId));
-    UNIT_ASSERT(ok);
+    UNIT_ASSERT_EQUAL(
+        testSetup.ProposeTxWaitProposeResult(
+            NKikimrTxColumnShard::TX_KIND_SCHEMA,
+            TTestSchema::AlterTableTxBody(tableId, 3, TTestSchema::TTableSpecials()),
+            ++txId
+        ),
+        NKikimrTxColumnShard::PREPARED
+    );
     if (spec.HasTiers()) {
-        csControllerGuard->SetTiersSnapshot(runtime, sender, TTestSchema::BuildSnapshot(TTestSchema::TTableSpecials()));
+        csControllerGuard->SetTiersSnapshot(testSetup.GetRuntime(), testSetup.GetSender(), TTestSchema::BuildSnapshot(TTestSchema::TTableSpecials()));
     }
-    PlanSchemaTx(runtime, sender, NOlap::TSnapshot(planStep, txId));
+    testSetup.PlanTxWaitTxResult(txId, planStep, NKikimrTxColumnShard::TX_KIND_SCHEMA);
 
 
     std::vector<ui64> writeIds;
-    UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, blobs[0], ydbSchema, true, &writeIds));
-    ProposeCommit(runtime, sender, ++txId, writeIds);
-    PlanCommit(runtime, sender, ++planStep, txId);
+    UNIT_ASSERT(testSetup.WriteData(++writeId, tableId, blobs[0], ydbSchema, true, &writeIds));
+    testSetup.ProposeCommit(++txId, writeIds);
+    testSetup.PlanCommit(++planStep, {txId});
 
     if (internal) {
-        TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {}, 0, spec.TtlColumn);
+        testSetup.TriggerTTL(NOlap::TSnapshot(++planStep, ++txId), {}, 0, spec.TtlColumn);
     } else {
-        TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {tableId}, ts[0] - ttlIncSeconds, spec.TtlColumn);
+        testSetup.TriggerTTL(NOlap::TSnapshot(++planStep, ++txId), {tableId}, ts[0] - ttlIncSeconds, spec.TtlColumn);
     }
     while (csControllerGuard->GetTTLFinishedCounter().Val() != csControllerGuard->GetTTLStartedCounter().Val()) {
-        runtime.SimulateSleep(TDuration::Seconds(1)); // wait all finished before (ttl especially)
+        testSetup.SimulateSleep(TDuration::Seconds(1)); // wait all finished before (ttl especially)
     }
 
     {
         --planStep;
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
+        auto reader = testSetup.GetReader(tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
         reader.SetReplyColumns({spec.TtlColumn});
         auto rb = reader.ReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -527,31 +518,19 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
     csControllerGuard->DisableBackground(NYDBTest::ICSController::EBackground::TTL);
     csControllerGuard->SetTasksActualizationLag(TDuration::Zero());
-    TTestBasicRuntime runtime;
-    TTester::Setup(runtime);
-
-    runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
-    runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
-
-    TActorId sender = runtime.AllocateEdgeActor();
-    CreateTestBootstrapper(runtime,
-                           CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard),
-                           &CreateColumnShard);
-
-    TDispatchOptions options;
-    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
-    runtime.DispatchEvents(options);
+    TColumnShardTestSetup testSetup;
+    
 
     // Disable blob cache. It hides evict-delete, evict-read races.
     {
         TAtomic unused;
-        runtime.GetAppData().Icb->SetValue("BlobCache.MaxCacheDataSize", 0, unused);
+        testSetup.GetRuntime().GetAppData().Icb->SetValue("BlobCache.MaxCacheDataSize", 0, unused);
     }
 
     // Disable GC batching so that deleted blobs get collected without a delay
     {
         TAtomic unused;
-        runtime.GetAppData().Icb->SetValue("ColumnShardControls.BlobCountToTriggerGC", 1, unused);
+        testSetup.GetRuntime().GetAppData().Icb->SetValue("ColumnShardControls.BlobCountToTriggerGC", 1, unused);
     }
 
     //
@@ -563,26 +542,29 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
 //    const TDuration exportTimeout = TDuration::Seconds(40);
 
     UNIT_ASSERT(specs.size() > 0);
-    SetupSchema(runtime, sender,
-            TTestSchema::CreateInitShardTxBody(tableId, testYdbSchema, testYdbPk, specs[0], "/Root/olapStore"),
-            NOlap::TSnapshot(++planStep, ++txId));
+    testSetup.ProposeTxPlanTxWaitTxResult(
+        NKikimrTxColumnShard::TX_KIND_SCHEMA,
+        TTestSchema::CreateInitShardTxBody(tableId, testYdbSchema, testYdbPk, specs[0], "/Root/olapStore"),
+        ++txId,
+        ++planStep
+    );
     if (specs[0].Tiers.size()) {
-        csControllerGuard->SetTiersSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[0]));
+        csControllerGuard->SetTiersSnapshot(testSetup.GetRuntime(), testSetup.GetSender(), TTestSchema::BuildSnapshot(specs[0]));
     }
 
     for (auto& data : blobs) {
         std::vector<ui64> writeIds;
-        UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, data, testYdbSchema, true, &writeIds));
-        ProposeCommit(runtime, sender, ++txId, writeIds);
-        PlanCommit(runtime, sender, ++planStep, txId);
+        UNIT_ASSERT(testSetup.WriteData(++writeId, tableId, data, testYdbSchema, true, &writeIds));
+        testSetup.ProposeCommit(++txId, writeIds);
+        testSetup.PlanCommit(++planStep, {txId});
     }
 
     if (reboots) {
-        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        testSetup.RebootTablet();
     }
     csControllerGuard->EnableBackground(NYDBTest::ICSController::EBackground::TTL);
 
-    runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+    testSetup.GetRuntime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 
     TAutoPtr<IEventHandle> handle;
 
@@ -590,7 +572,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
     specRowsBytes.reserve(specs.size());
 
     TCountersContainer counter;
-    runtime.SetEventFilter(TEventsCounter(counter, runtime));
+    testSetup.GetRuntime().SetEventFilter(TEventsCounter(counter, testSetup.GetRuntime()));
     for (ui32 i = 0; i < specs.size(); ++i) {
         NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", i);
         bool hasColdEviction = false;
@@ -615,12 +597,15 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         }
         if (i) {
             const ui32 version = 2 * i + 1;
-            SetupSchema(runtime, sender,
+            testSetup.ProposeTxPlanTxWaitTxResult(
+                NKikimrTxColumnShard::TX_KIND_SCHEMA,
                 TTestSchema::AlterTableTxBody(tableId, version, specs[i]),
-                NOlap::TSnapshot(++planStep, ++txId));
+                ++txId,
+                ++planStep
+            );
         }
         if (specs[i].HasTiers() || reboots) {
-            csControllerGuard->SetTiersSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[i]));
+            csControllerGuard->SetTiersSnapshot(testSetup.GetRuntime(), testSetup.GetSender(), TTestSchema::BuildSnapshot(specs[i]));
         }
 
         if (eventLoss) {
@@ -628,7 +613,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
                 counter.CaptureEvictResponse = 1;
             } else {
                 // Check there would be no troubles with delayed responses
-                counter.ResendCapturedResponses(runtime);
+                counter.ResendCapturedResponses(testSetup.GetRuntime());
             }
         }
 
@@ -636,46 +621,46 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         {
             std::unique_ptr<TShardReader> reader;
             if (!misconfig) {
-                reader = std::make_unique<TShardReader>(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep - 1, Max<ui64>()));
+                reader = std::make_unique<TShardReader>(testSetup.GetRuntime(), TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep - 1, Max<ui64>()));
                 reader->SetReplyColumns({specs[i].TtlColumn});
                 counter.CaptureReadEvents = specs[i].WaitEmptyAfter ? 0 : 1; // TODO: we need affected by tiering blob here
-                counter.WaitReadsCaptured(runtime);
+                counter.WaitReadsCaptured(testSetup.GetRuntime());
                 reader->InitializeScanner();
                 reader->Ack();
             }
 
             // Eviction
-            TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {}, 0, specs[i].TtlColumn);
+            testSetup.TriggerTTL(NOlap::TSnapshot(++planStep, ++txId), {}, 0, specs[i].TtlColumn);
 
             Cerr << "-- " << (hasColdEviction ? "COLD" : "HOT")
                 << " TIERING(" << i << ") num tiers: " << specs[i].Tiers.size() << Endl;
 
             // Read crossed with eviction (finish)
             if (!misconfig) {
-                counter.ResendCapturedReads(runtime);
+                counter.ResendCapturedReads(testSetup.GetRuntime());
                 reader->ContinueReadAll();
                 UNIT_ASSERT(reader->IsCorrectlyFinished());
             }
         }
         while (csControllerGuard->GetTTLFinishedCounter().Val() != csControllerGuard->GetTTLStartedCounter().Val()) {
-            runtime.SimulateSleep(TDuration::Seconds(1)); // wait all finished before (ttl especially)
+            testSetup.SimulateSleep(TDuration::Seconds(1)); // wait all finished before (ttl especially)
         }
 
         if (tIdxCorrect) {
             specs[i].Tiers[*tIdxCorrect].S3.SetEndpoint(originalEndpoint);
-            csControllerGuard->SetTiersSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[i]));
+            csControllerGuard->SetTiersSnapshot(testSetup.GetRuntime(), testSetup.GetSender(), TTestSchema::BuildSnapshot(specs[i]));
         }
 
 
         if (reboots) {
             Cerr << "INTERMEDIATE REBOOT(" << i << ")" << Endl;
-            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+            testSetup.RebootTablet();
         }
 
         // Read data after eviction
         TString columnToRead = specs[i].TtlColumn;
 
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep - 1, Max<ui64>()));
+        auto reader = testSetup.GetReader(tableId, NOlap::TSnapshot(planStep - 1, Max<ui64>()));
         reader.SetReplyColumns({columnToRead});
         auto rb = reader.ReadAll();
         if (expectedReadResult == EExpectedResult::ERROR) {
@@ -690,10 +675,10 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
 
         if (reboots) {
             Cerr << "REBOOT(" << i << ")" << Endl;
-            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+            testSetup.RebootTablet();
         } else if (misconfig) {
             while (NOlap::NBlobOperations::NRead::TActor::WaitingBlobsCount.Val()) {
-                runtime.SimulateSleep(TDuration::Seconds(1));
+                testSetup.SimulateSleep(TDuration::Seconds(1));
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("waiting", NOlap::NBlobOperations::NRead::TActor::WaitingBlobsCount.Val());
             }
         }
@@ -937,19 +922,8 @@ void TestExport(bool reboot, TExportTestOpts&& opts = TExportTestOpts{}) {
 }
 
 void TestDrop(bool reboots) {
-    TTestBasicRuntime runtime;
-    TTester::Setup(runtime);
     auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
-
-    TActorId sender = runtime.AllocateEdgeActor();
-    CreateTestBootstrapper(runtime,
-                           CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard),
-                           &CreateColumnShard);
-
-    TDispatchOptions options;
-    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
-    runtime.DispatchEvents(options);
-
+    TColumnShardTestSetup testSetup;
     //
 
     ui64 writeId = 0;
@@ -957,8 +931,12 @@ void TestDrop(bool reboots) {
     ui64 planStep = 1000000000; // greater then delays
     ui64 txId = 100;
 
-    SetupSchema(runtime, sender, TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk),
-                              NOlap::TSnapshot(++planStep, ++txId));
+    testSetup.ProposeTxPlanTxWaitTxResult(
+        NKikimrTxColumnShard::TX_KIND_SCHEMA,
+        TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk),
+        ++txId,
+        ++planStep
+    );
     //
 
     TString data1 = MakeTestBlob({0, PORTION_ROWS}, testYdbSchema);
@@ -970,31 +948,35 @@ void TestDrop(bool reboots) {
 
     // Write into index
     std::vector<ui64> writeIds;
-    UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, data1, testYdbSchema, true, &writeIds));
-    ProposeCommit(runtime, sender, ++txId, writeIds);
-    PlanCommit(runtime, sender, ++planStep, txId);
+    UNIT_ASSERT(testSetup.WriteData(++writeId, tableId, data1, testYdbSchema, true, &writeIds));
+    testSetup.ProposeCommit(++txId, writeIds);
+    testSetup.PlanCommit(++planStep, {txId});
 
     // Write into InsertTable
     writeIds.clear();
-    UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, data2, testYdbSchema, true, &writeIds));
-    ProposeCommit(runtime, sender, ++txId, writeIds);
-    PlanCommit(runtime, sender, ++planStep, txId);
+    UNIT_ASSERT(testSetup.WriteData(++writeId, tableId, data2, testYdbSchema, true, &writeIds));
+    testSetup.ProposeCommit(++txId, writeIds);
+    testSetup.PlanCommit(++planStep, {txId});
 
     if (reboots) {
-        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        testSetup.RebootTablet();
     }
 
     // Drop table
-    SetupSchema(runtime, sender, TTestSchema::DropTableTxBody(tableId, 2), NOlap::TSnapshot(++planStep, ++txId));
-
+    testSetup.ProposeTxPlanTxWaitTxResult(
+        NKikimrTxColumnShard::TX_KIND_SCHEMA,
+        TTestSchema::DropTableTxBody(tableId, 2),
+        ++txId,
+        ++planStep
+    );
     if (reboots) {
-        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        testSetup.RebootTablet();
     }
 
     TAutoPtr<IEventHandle> handle;
     {
         --planStep;
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
+        auto reader = testSetup.GetReader(tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
         reader.SetReplyColumns({TTestSchema::DefaultTtlColumn});
         auto rb = reader.ReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -1003,18 +985,8 @@ void TestDrop(bool reboots) {
 }
 
 void TestDropWriteRace() {
-    TTestBasicRuntime runtime;
-    TTester::Setup(runtime);
     auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
-
-    TActorId sender = runtime.AllocateEdgeActor();
-    CreateTestBootstrapper(runtime,
-                           CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard),
-                           &CreateColumnShard);
-
-    TDispatchOptions options;
-    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
-    runtime.DispatchEvents(options);
+    TColumnShardTestSetup testSetup;
 
     //
 
@@ -1025,40 +997,36 @@ void TestDropWriteRace() {
     NLongTxService::TLongTxId longTxId;
     UNIT_ASSERT(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=1"));
 
-    SetupSchema(runtime, sender, TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk),
-                              NOlap::TSnapshot(++planStep, ++txId));
+    testSetup.ProposeTxPlanTxWaitTxResult(
+        NKikimrTxColumnShard::TX_KIND_SCHEMA,
+        TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk),
+        ++txId,
+        ++planStep
+    );
     TString data = MakeTestBlob({0, 100}, testYdbSchema);
     UNIT_ASSERT(data.size() < NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
 
     // Write into InsertTable
-    auto writeIdOpt = WriteData(runtime, sender, longTxId, tableId, 1, data, testYdbSchema);
+    auto writeIdOpt = testSetup.WriteData(longTxId, tableId, 1, data, testYdbSchema);
     UNIT_ASSERT(writeIdOpt);
-    ProposeCommit(runtime, sender, ++txId, {*writeIdOpt});
+    testSetup.ProposeCommit(++txId, {*writeIdOpt});
     auto commitTxId = txId;
 
     // Drop table
-    auto ok = ProposeSchemaTx(runtime, sender, TTestSchema::DropTableTxBody(tableId, 2), NOlap::TSnapshot(++planStep, ++txId));
-    if (ok) {
-        PlanSchemaTx(runtime, sender, NOlap::TSnapshot(planStep, txId));
-    }
+    testSetup.ProposeTxPlanTxWaitTxResult(
+        NKikimrTxColumnShard::TX_KIND_SCHEMA,
+        TTestSchema::DropTableTxBody(tableId, 2),
+        ++txId,
+        ++planStep
+    );
 
     // Plan commit
-    PlanCommit(runtime, sender, ++planStep, commitTxId);
+    testSetup.PlanCommit(++planStep, {commitTxId});
 }
 
 void TestCompaction(std::optional<ui32> numWrites = {}) {
-    TTestBasicRuntime runtime;
-    TTester::Setup(runtime);
     auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
-
-    TActorId sender = runtime.AllocateEdgeActor();
-    CreateTestBootstrapper(runtime,
-                        CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard),
-                        &CreateColumnShard);
-
-    TDispatchOptions options;
-    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
-    runtime.DispatchEvents(options);
+    TColumnShardTestSetup testSetup;
 
     // Create table
     ui64 writeId = 0;
@@ -1066,8 +1034,12 @@ void TestCompaction(std::optional<ui32> numWrites = {}) {
     ui64 planStep = 100;
     ui64 txId = 100;
 
-    SetupSchema(runtime, sender, TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk),
-                              NOlap::TSnapshot(++planStep, ++txId));
+    testSetup.ProposeTxPlanTxWaitTxResult(
+        NKikimrTxColumnShard::TX_KIND_SCHEMA,
+        TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk),
+        ++txId,
+        ++planStep
+    );
     // Set tiering
 
     ui64 ts = 1620000000;
@@ -1083,9 +1055,13 @@ void TestCompaction(std::optional<ui32> numWrites = {}) {
     spec.Tiers.back().EvictAfter = allow;
     spec.Tiers.back().S3 = TTestSchema::TStorageTier::FakeS3();
 
-    SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, 1, spec),
-                            NOlap::TSnapshot(++planStep, ++txId));
-    ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(spec));
+    testSetup.ProposeTxPlanTxWaitTxResult(
+        NKikimrTxColumnShard::TX_KIND_SCHEMA,
+        TTestSchema::AlterTableTxBody(tableId, 1, spec),
+        ++txId,
+        ++planStep
+    );
+    ProvideTieringSnapshot(testSetup.GetRuntime(), testSetup.GetSender(), TTestSchema::BuildSnapshot(spec));
 
     // Writes
 
@@ -1102,13 +1078,13 @@ void TestCompaction(std::optional<ui32> numWrites = {}) {
     ++txId;
     for (ui32 i = 0; i < *numWrites; ++i, ++writeId, ++planStep, ++txId) {
         std::vector<ui64> writeIds;
-        UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, testYdbSchema, true, &writeIds));
+        UNIT_ASSERT(testSetup.WriteData(writeId, tableId, triggerData, testYdbSchema, true, &writeIds));
 
-        ProposeCommit(runtime, sender, txId, writeIds);
-        PlanCommit(runtime, sender, planStep, txId);
+        testSetup.ProposeCommit(txId, writeIds);
+        testSetup.PlanCommit(planStep, {txId});
 
         if (i % 2 == 0) {
-            TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {}, 0, spec.TtlColumn);
+            testSetup.TriggerTTL(NOlap::TSnapshot(++planStep, ++txId), {}, 0, spec.TtlColumn);
         }
     }
 }
@@ -1142,18 +1118,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
             NTypeIds::Interval64
         };
 
-        TTestBasicRuntime runtime;
-        TTester::Setup(runtime);
         auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
-
-        using namespace NTxUT;
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
-
-        TDispatchOptions options;
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
-        runtime.DispatchEvents(options);
-
-        TActorId sender = runtime.AllocateEdgeActor();
+        TColumnShardTestSetup testSetup;
 
         auto schema = TTestSchema::YdbSchema(NArrow::NTest::TTestColumn("k0", TTypeInfo(NTypeIds::Timestamp)));
         auto pk = NArrow::NTest::TTestColumn::CropSchema(schema, 4);
@@ -1166,7 +1132,12 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
             schema[0].SetType(TTypeInfo(ydbType));
             pk[0].SetType(TTypeInfo(ydbType));
             auto txBody = TTestSchema::CreateTableTxBody(tableId++, schema, pk, {}, ++generation);
-            SetupSchema(runtime, sender, txBody, NOlap::TSnapshot(planStep++, txId++));
+            testSetup.ProposeTxPlanTxWaitTxResult(
+                NKikimrTxColumnShard::TX_KIND_SCHEMA,
+                txBody,
+                ++txId,
+                ++planStep
+            );
         }
 
         // TODO: support float types
@@ -1179,7 +1150,14 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
             schema[0].SetType(TTypeInfo(ydbType));
             pk[0].SetType(TTypeInfo(ydbType));
             auto txBody = TTestSchema::CreateTableTxBody(tableId++, schema, pk, {}, ++generation);
-            SetupSchema(runtime, sender, txBody, NOlap::TSnapshot(planStep++, txId++), false);
+            UNIT_ASSERT_UNEQUAL(
+                testSetup.ProposeTxWaitProposeResult(
+                    NKikimrTxColumnShard::TX_KIND_SCHEMA,
+                    txBody,
+                    ++txId
+                ),
+                NKikimrTxColumnShard::PREPARED
+            );
         }
 
         std::vector<TTypeId> strTypes = {
@@ -1191,7 +1169,12 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
             schema[0].SetType(TTypeInfo(ydbType));
             pk[0].SetType(TTypeInfo(ydbType));
             auto txBody = TTestSchema::CreateTableTxBody(tableId++, schema, pk, {}, ++generation);
-            SetupSchema(runtime, sender, txBody, NOlap::TSnapshot(planStep++, txId++));
+            testSetup.ProposeTxPlanTxWaitTxResult(
+                NKikimrTxColumnShard::TX_KIND_SCHEMA,
+                txBody,
+                ++txId,
+                ++planStep
+            );
         }
 
         std::vector<TTypeId> xsonTypes = {
@@ -1204,7 +1187,14 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
             schema[0].SetType(TTypeInfo(ydbType));
             pk[0].SetType(TTypeInfo(ydbType));
             auto txBody = TTestSchema::CreateTableTxBody(tableId++, schema, pk, {}, ++generation);
-            SetupSchema(runtime, sender, txBody, NOlap::TSnapshot(planStep++, txId++), false);
+            UNIT_ASSERT_UNEQUAL(
+                testSetup.ProposeTxWaitProposeResult(
+                    NKikimrTxColumnShard::TX_KIND_SCHEMA,
+                    txBody,
+                    ++txId
+                ),
+                NKikimrTxColumnShard::PREPARED
+            );
         }
     }
 

@@ -80,5 +80,5 @@ bin/config.json
 
 .vs/
 
-# handy for local junk, which is not indendent to appear in github repo
+# handy for local junk, which is not intended to appear in the repo
 junk/

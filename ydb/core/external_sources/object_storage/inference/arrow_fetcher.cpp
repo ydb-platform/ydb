@@ -6,6 +6,7 @@
 #include <arrow/csv/chunker.h>
 #include <arrow/csv/options.h>
 #include <arrow/io/memory.h>
+#include <arrow/util/endian.h>
 
 #include <util/generic/guid.h>
 #include <util/generic/size_literals.h>
@@ -245,7 +246,7 @@ private:
     }
 
     void HandleMetadataSizeRequest(const TString& data, TRequest request, const NActors::TActorContext& ctx) {
-        uint32_t metadataSize = ReadUnaligned<uint32_t>(data.data());
+        uint32_t metadataSize = arrow::BitUtil::FromLittleEndian<uint32_t>(ReadUnaligned<uint32_t>(data.data()));
 
         if (metadataSize > 10_MB) {
             auto error = MakeError(

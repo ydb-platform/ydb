@@ -465,6 +465,7 @@ message TRequestedMaxIndex {
 }
 
 message TRequestedCountMinSketch {
+    // sketch built on the combined data from the set of columns
     repeated string ColumnNames = 1;
 }
 

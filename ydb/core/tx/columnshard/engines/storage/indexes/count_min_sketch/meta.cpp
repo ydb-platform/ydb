@@ -17,13 +17,9 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader) const {
     std::vector<TChunkedColumnReader>& columnReaders = reader.GetColumnReaders();
     AFL_VERIFY(columnReaders.size() == ColumnIds.size());
 
-    std::vector<TCountMinSketch> sketchesByColumns;
-    sketchesByColumns.reserve(ColumnIds.size());
+    TCountMinSketch sketch;
 
     for (auto&& colReader : columnReaders) {
-        sketchesByColumns.emplace_back();
-        auto& sketch = sketchesByColumns.back();
-
         for (colReader.Start(); colReader.IsCorrect(); colReader.ReadNextChunk()) {
             auto array = colReader.GetCurrentChunk();
 
@@ -46,13 +42,13 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader) const {
                     }
                     return true;
                 }
-                AFL_VERIFY(false);
+                AFL_VERIFY(false)("message", "Unsupported arrow type for building an index");
                 return false;
             });
         }
     }
 
-    TString result(reinterpret_cast<const char*>(sketchesByColumns.data()), sketchesByColumns.size() * TCountMinSketch::GetSize());
+    TString result(sketch.AsStringBuf());
     return result;
 }
 

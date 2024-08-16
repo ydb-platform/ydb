@@ -724,12 +724,14 @@ message TFeatureFlagsConfig {
     message TFeatureFlag {
         string Name = 1;
         bool Enabled = 2;
+        bool IsDefault = 3;
     }
 
-    message TTenant {
+    message TDatabase {
         string Name = 1;
         repeated TFeatureFlag FeatureFlags = 2;
     }
 
-    repeated TTenant Tenants = 1;
+    uint32 Version = 1;
+    repeated TDatabase Databases = 2;
 }

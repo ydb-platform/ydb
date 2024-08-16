@@ -1,4 +1,6 @@
 #pragma once
+#include "json_pipe_req.h"
+#include "viewer.h"
 
 namespace NKikimr::NViewer {
 
@@ -7,27 +9,26 @@ using namespace NActors;
 class TJsonFeatureFlags : public TViewerPipeClient {
     using TThis = TJsonFeatureFlags;
     using TBase = TViewerPipeClient;
-    IViewer* Viewer;
-    NMon::TEvHttpInfo::TPtr Event;
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
 
-    TString Database;
-    NKikimrViewer::TFeatureFlagsConfig Result;
-    THashMap<ui64, TString> TenantsByCookie;
+    TString FilterDatabase;
+    THashSet<TString> FilterFeatures;
+    THashMap<ui64, TString> DatabaseByCookie;
     ui64 Cookie = 0;
     TString DomainPath;
-    THashMap<TString, THashMap<TString, bool>> FeatureFlagsByTenant;
+
+    TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse> TenantsResponse;
+    THashMap<TString, TRequestResponse<NConsole::TEvConsole::TEvGetNodeConfigResponse>> NodeConfigResponses;
 
 public:
     TJsonFeatureFlags(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)
-        : Viewer(viewer)
-        , Event(ev)
+        : TViewerPipeClient(viewer, ev)
     {}
 
-    void MakeNodeConfigRequest(const TString& tenant) {
-        RequestConsoleNodeConfigByTenant(tenant, Cookie);
-        TenantsByCookie[Cookie++] = tenant;
+    void MakeNodeConfigRequest(const TString& database) {
+        NodeConfigResponses[database] = MakeRequestConsoleNodeConfigByTenant(database, Cookie);
+        DatabaseByCookie[Cookie++] = database;
     }
 
     void Bootstrap() override {
@@ -35,18 +36,19 @@ public:
 
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
-        Database = params.Get("database");
+        FilterDatabase = params.Get("database");
+        StringSplitter(params.Get("features")).Split(',').SkipEmpty().Collect(&FilterFeatures);
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
 
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         auto* domain = domains->GetDomain();
         DomainPath = "/" + domain->Name;
 
-        MakeNodeConfigRequest(DomainPath);
-        if (!Database) {
-            RequestConsoleListTenants();
+        if (!FilterDatabase) {
+            MakeNodeConfigRequest(DomainPath);
+            TenantsResponse = MakeRequestConsoleListTenants();
         } else {
-            MakeNodeConfigRequest(Database);
+            MakeNodeConfigRequest(FilterDatabase);
         }
 
         Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
@@ -56,87 +58,73 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(NConsole::TEvConsole::TEvListTenantsResponse, Handle);
             hFunc(NConsole::TEvConsole::TEvGetNodeConfigResponse, Handle);
+            hFunc(TEvTabletPipe::TEvClientConnected, TBase::Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
 
     void Handle(NConsole::TEvConsole::TEvListTenantsResponse::TPtr& ev) {
-        auto rec = ev->Release()->Record;
-
-        Ydb::Cms::ListDatabasesResult listTenantsResult;
-        rec.GetResponse().operation().result().UnpackTo(&listTenantsResult);
-        for (const TString& path : listTenantsResult.paths()) {
+        TenantsResponse.Set(std::move(ev));
+        Ydb::Cms::ListDatabasesResult listDatabasesResult;
+        TenantsResponse->Record.GetResponse().operation().result().UnpackTo(&listDatabasesResult);
+        for (const TString& path : listDatabasesResult.paths()) {
             MakeNodeConfigRequest(path);
         }
-
         RequestDone();
     }
 
     void Handle(NConsole::TEvConsole::TEvGetNodeConfigResponse::TPtr& ev) {
-        TString tenant = TenantsByCookie[ev.Get()->Cookie];
-        NKikimrConsole::TGetNodeConfigResponse rec = ev->Release()->Record;
-        FeatureFlagsByTenant[tenant] = ParseFeatureFlags(rec.GetConfig().GetFeatureFlags());
-
+        TString database = DatabaseByCookie[ev.Get()->Cookie];
+        NodeConfigResponses[database].Set(std::move(ev));
         RequestDone();
     }
 
-    THashMap<TString, bool> ParseFeatureFlags(const NKikimrConfig::TFeatureFlags& featureFlags) {
-        THashMap<TString, bool> features;
+    THashMap<TString, NKikimrViewer::TFeatureFlagsConfig::TFeatureFlag> ParseFeatureFlags(const NKikimrConfig::TFeatureFlags& featureFlags) {
+        THashMap<TString, NKikimrViewer::TFeatureFlagsConfig::TFeatureFlag> features;
         const google::protobuf::Reflection* reflection = featureFlags.GetReflection();
         const google::protobuf::Descriptor* descriptor = featureFlags.GetDescriptor();
 
         for (int i = 0; i < descriptor->field_count(); ++i) {
             const google::protobuf::FieldDescriptor* field = descriptor->field(i);
-            if (reflection->HasField(featureFlags, field) && field->cpp_type() == google::protobuf::FieldDescriptor::CPPTYPE_BOOL) {
-                bool isEnabled = reflection->GetBool(featureFlags, field);
-                features[field->name()] = isEnabled;
+            if (field->cpp_type() == google::protobuf::FieldDescriptor::CPPTYPE_BOOL) {
+                auto& feat = features[field->name()];
+                feat.SetName(field->name());
+                feat.SetEnabled(reflection->GetBool(featureFlags, field));
+                feat.SetIsDefault(field->default_value_bool());
             }
         }
         return features;
     }
 
     void ReplyAndPassAway() override {
-        auto domainFeaturesIt = FeatureFlagsByTenant.find(DomainPath);
-        if (domainFeaturesIt == FeatureFlagsByTenant.end()) {
-            Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPINTERNALERROR(Event->Get(), "text/plain", "No domain info from Console"), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-            PassAway();
-            return;
+        THashMap<TString, THashMap<TString, NKikimrViewer::TFeatureFlagsConfig::TFeatureFlag>> FeatureFlagsByDatabase;
+        for (const auto& [database, response] : NodeConfigResponses) {
+            NKikimrConsole::TGetNodeConfigResponse rec = response->Record;
+            FeatureFlagsByDatabase[database] = ParseFeatureFlags(rec.GetConfig().GetFeatureFlags());
         }
 
-        // remove features that are the same as in the domain
-        for (auto& [tenant, features] : FeatureFlagsByTenant) {
-            if (tenant != DomainPath) {
-                for (const auto& [name, enabled] : domainFeaturesIt->second) {
-                    auto featureIt = features.find(name);
-                    if (featureIt != features.end() && featureIt->second == enabled) {
-                        features.erase(name);
-                    }
-                }
-            }
+        auto domainFeaturesIt = FeatureFlagsByDatabase.find(DomainPath);
+        if (domainFeaturesIt == FeatureFlagsByDatabase.end()) {
+            return TBase::ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "No domain info from Console"));
         }
 
         // prepare response
-        for (const auto& [tenant, features] : FeatureFlagsByTenant) {
-            if (!Database || Database == tenant) {
-                auto tenantProto = Result.AddTenants();
-                tenantProto->SetName(tenant);
-                for (const auto& [name, enabled] : features) {
-                    auto flag = tenantProto->AddFeatureFlags();
-                    flag->SetName(name);
-                    flag->SetEnabled(enabled);
+        NKikimrViewer::TFeatureFlagsConfig Result;
+        Result.SetVersion(1);
+        for (const auto& [database, features] : FeatureFlagsByDatabase) {
+            auto databaseProto = Result.AddDatabases();
+            databaseProto->SetName(database);
+            for (const auto& [name, featProto] : features) {
+                if (FilterFeatures.empty() || FilterFeatures.find(name) != FilterFeatures.end()) {
+                    auto flag = databaseProto->AddFeatureFlags();
+                    flag->CopyFrom(featProto);
                 }
             }
         }
 
         TStringStream json;
         TProtoToJson::ProtoToJson(json, Result, JsonSettings);
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), json.Str()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        PassAway();
-    }
-
-    void HandleTimeout() {
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        PassAway();
+        TBase::ReplyAndPassAway(GetHTTPOKJSON(json.Str()));
     }
 
     static YAML::Node GetSwagger() {
@@ -149,6 +137,11 @@ public:
         yaml.AddParameter({
             .Name = "database",
             .Description = "database name",
+            .Type = "string",
+        });
+        yaml.AddParameter({
+            .Name = "features",
+            .Description = "comma separated list of features",
             .Type = "string",
         });
         yaml.AddParameter({

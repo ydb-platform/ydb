@@ -1706,9 +1706,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
         ui16 monPort = tp.GetPort(8765);
         auto settings = TServerSettings(port);
 
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
-
         settings.InitKikimrRunConfig()
                 .SetNodeCount(1)
                 .SetUseRealThreads(true)
@@ -1723,13 +1720,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
+        headers["X-Want-Trace"] = "1";
         const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoGet("/viewer/feature_flags?timeout=600000&base64=false", &responseStream, headers);
         const TString response = responseStream.ReadAll();
         UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
         NJson::TJsonReaderConfig jsonCfg;
         NJson::TJsonValue json;
         NJson::ReadJsonTree(response, &jsonCfg, &json, /* throwOnError = */ true);
-        auto resultSets = json["Tenants"].GetArray();
+        auto resultSets = json["Databases"].GetArray();
         UNIT_ASSERT_EQUAL_C(1, resultSets.size(), response);
     }
 }

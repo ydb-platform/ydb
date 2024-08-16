@@ -450,7 +450,7 @@ public:
                 range.Save(&out);
 
                 paths.clear();
-                ReadPathsList(srcDesc, {}, serialized, paths);
+                ReadPathsList({}, serialized, paths);
 
                 const NDq::TS3ReadActorFactoryConfig& readActorConfig = State_->Configuration->S3ReadActorFactoryConfig;
                 ui64 fileSizeLimit = readActorConfig.FileSizeLimit;

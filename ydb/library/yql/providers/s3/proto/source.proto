@@ -11,7 +11,7 @@ message TPath {
 message TSource {
     string Url = 1;
     string Token = 2;
-    repeated TPath DeprecatedPath = 3; // deprecated
+    reserved 3;
     optional string RowType = 4;
     optional string Format = 5;
     map<string, string> Settings = 6;

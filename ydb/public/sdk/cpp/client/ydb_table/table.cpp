@@ -469,6 +469,16 @@ public:
         Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, dataColumns));
     }
 
+    void AddSecondaryIndex(
+        const TString& indexName,
+        EIndexType type,
+        const TVector<TString>& indexColumns,
+        const TVector<TString>& dataColumns,
+        const TGlobalIndexSettings& globalIndexSettings
+    ) {
+        Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, dataColumns, { globalIndexSettings }));
+    }
+
     void AddVectorIndex(const TString& indexName, EIndexType type, const TVector<TString>& indexColumns, const TVectorIndexSettings& vectorIndexSettings) {
         Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, {}, {}, vectorIndexSettings));
     }
@@ -747,6 +757,16 @@ void TTableDescription::AddSecondaryIndex(const TString& indexName, EIndexType t
 
 void TTableDescription::AddSecondaryIndex(const TString& indexName, EIndexType type, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns) {
     Impl_->AddSecondaryIndex(indexName, type, indexColumns, dataColumns);
+}
+
+void TTableDescription::AddSecondaryIndex(
+    const TString& indexName,
+    EIndexType type,
+    const TVector<TString>& indexColumns,
+    const TVector<TString>& dataColumns,
+    const TGlobalIndexSettings& globalIndexSettings
+) {
+    Impl_->AddSecondaryIndex(indexName, type, indexColumns, dataColumns, globalIndexSettings);
 }
 
 void TTableDescription::AddSyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns) {
@@ -1170,6 +1190,17 @@ TTableBuilder& TTableBuilder::SetPrimaryKeyColumns(const TVector<TString>& prima
 
 TTableBuilder& TTableBuilder::SetPrimaryKeyColumn(const TString& primaryKeyColumn) {
     TableDescription_.SetPrimaryKeyColumns(TVector<TString>{primaryKeyColumn});
+    return *this;
+}
+
+TTableBuilder& TTableBuilder::AddSecondaryIndex(
+    const TString& indexName,
+    EIndexType type,
+    const TVector<TString>& indexColumns,
+    const TVector<TString>& dataColumns,
+    const TGlobalIndexSettings& globalIndexSettings
+) {
+    TableDescription_.AddSecondaryIndex(indexName, type, indexColumns, dataColumns, globalIndexSettings);
     return *this;
 }
 
@@ -2364,7 +2395,7 @@ TVectorIndexSettings TVectorIndexSettings::FromProto(const TProto& proto) {
         default:
             return EVectorType::Unknown;
         }
-    }; 
+    };
 
 
     auto metricFromProto = [&](const auto& proto) -> TVectorIndexSettings::TMetric {
@@ -2376,7 +2407,7 @@ TVectorIndexSettings TVectorIndexSettings::FromProto(const TProto& proto) {
         default:
             return {};
         }
-    };   
+    };
 
     return {
         .Metric = metricFromProto(proto),
@@ -2424,8 +2455,8 @@ void TVectorIndexSettings::SerializeTo(Ydb::Table::VectorIndexSettings& settings
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED;
         }
     };
-    
-    
+
+
     if (const auto* distance = std::get_if<EDistance>(&Metric)) {
         settings.set_distance(convertDistance(*distance));
     } else if (const auto* similarity = std::get_if<ESimilarity>(&Metric)) {

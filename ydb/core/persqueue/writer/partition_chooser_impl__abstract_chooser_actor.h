@@ -178,9 +178,10 @@ protected:
         auto& record = ev->Get()->Record.GetRef();
         DEBUG("HandleUpdate PartitionPersisted=" << PartitionPersisted << " Status=" << record.GetYdbStatus());
 
+        TableHelper.CloseKqpSession(ctx);
+
         if (record.GetYdbStatus() == Ydb::StatusIds::ABORTED) {
             if (!PartitionPersisted) {
-                TableHelper.CloseKqpSession(ctx);
                 StartKqpSession(ctx);
             }
             return;
@@ -195,8 +196,6 @@ protected:
 
         if (!PartitionPersisted) {
             PartitionPersisted = true;
-            // Use tx only for query after select. Updating AccessTime without transaction.
-            TableHelper.CloseKqpSession(ctx);
 
             ReplyResult(ctx);
         }

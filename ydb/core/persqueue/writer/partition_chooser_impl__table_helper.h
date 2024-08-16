@@ -254,7 +254,7 @@ private:
     const TString TopicHashName;
 
     NPQ::NSourceIdEncoding::TEncodedSourceId EncodedSourceId;
-   
+
     NPQ::ESourceIdTableGeneration TableGeneration;
     TString SelectQuery;
     TString UpdateQuery;

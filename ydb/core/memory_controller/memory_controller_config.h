@@ -12,7 +12,7 @@ ui64 GetPercent(float percent, ui64 value) {
     return static_cast<ui64>(static_cast<double>(value) * (percent / 100.0));
 }
 
-#define GET_X_LIMIT(name) \
+#define GET_LIMIT(name) \
     inline ui64 Get##name##Bytes(const NKikimrConfig::TMemoryControllerConfig& config, ui64 hardLimitBytes) { \
         if (config.Has##name##Percent() && config.Has##name##Bytes()) { \
             return Min(GetPercent(config.Get##name##Percent(), hardLimitBytes), config.Get##name##Bytes()); \
@@ -65,9 +65,9 @@ inline ui64 GetHardLimitBytes(const NKikimrConfig::TMemoryControllerConfig& conf
     return 512_MB; // fallback
 }
 
-GET_X_LIMIT(SoftLimit)
-GET_X_LIMIT(TargetUtilization)
-GET_X_LIMIT(ActivitiesLimit)
+GET_LIMIT(SoftLimit)
+GET_LIMIT(TargetUtilization)
+GET_LIMIT(ActivitiesLimit)
 
 GET_MIN_LIMIT(MemTable)
 GET_MAX_LIMIT(MemTable)
@@ -75,6 +75,6 @@ GET_MAX_LIMIT(MemTable)
 GET_MIN_LIMIT(SharedCache)
 GET_MAX_LIMIT(SharedCache)
 
-GET_X_LIMIT(QueryExecutionLimit)
+GET_LIMIT(QueryExecutionLimit)
 
 }

@@ -112,8 +112,11 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                 .RetryPolicy(IRetryPolicy::GetNoRetryPolicy());
             auto writeSession = client.CreateWriteSession(writeSettings);
 
-            auto event = writeSession->GetEvent(true);
-            UNIT_ASSERT(event.Defined() && std::holds_alternative<TSessionClosedEvent>(event.GetRef()));
+            auto event1 = writeSession->GetEvent(true);
+            UNIT_ASSERT(event1.Defined() && std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event1.GetRef()));
+
+            auto event2 = writeSession->GetEvent(true);
+            UNIT_ASSERT(event2.Defined() && std::holds_alternative<TSessionClosedEvent>(event2.GetRef()));
         }
 
         {
@@ -129,8 +132,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                 .RetryPolicy(IRetryPolicy::GetNoRetryPolicy());
             auto writeSession = client.CreateWriteSession(writeSettings);
 
-            auto event = writeSession->GetEvent(true);
-            UNIT_ASSERT(event.Defined() && !std::holds_alternative<TSessionClosedEvent>(event.GetRef()));
+            auto event1 = writeSession->GetEvent(true);
+            UNIT_ASSERT(event1.Defined() && std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event1.GetRef()));
         }
     }
 

@@ -63,7 +63,7 @@ private:
     TActorSystem* ActorSystem;
 };
 
-TAutoPtr<IGraphTransformer> CreateKqpColumnsGetterTransformer(
+TAutoPtr<IGraphTransformer> CreateKqpColumnStatisticsRequester(
     const TKikimrConfiguration::TPtr& config,
     TTypeAnnotationContext& typesCtx,
     TKikimrTablesData& tables,

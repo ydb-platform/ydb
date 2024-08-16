@@ -240,7 +240,7 @@ bool TKqpColumnStatisticsRequester::AfterLambdasUnmatched(const TExprNode::TPtr&
     return true;
 }
 
-TAutoPtr<IGraphTransformer> CreateKqpColumnsGetterTransformer(
+TAutoPtr<IGraphTransformer> CreateKqpColumnStatisticsRequester(
     const TKikimrConfiguration::TPtr& config,
     TTypeAnnotationContext& typesCtx,
     TKikimrTablesData& tables,

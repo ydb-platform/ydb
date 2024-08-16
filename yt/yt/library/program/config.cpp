@@ -8,7 +8,7 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void THeapSizeLimit::Register(TRegistrar registrar)
+void THeapSizeLimitConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("container_memory_ratio", &TThis::ContainerMemoryRatio)
         .Optional();

@@ -1106,7 +1106,7 @@ public:
     }
 
     void Bootstrap() {
-        MemLimitBytes = Config->LimitBytes.value_or(512_MB); // soon will be updated by MemoryController
+        MemLimitBytes = Config->LimitBytes.value_or(128_MB); // soon will be updated by MemoryController
         ActualizeCacheSizeLimit();
         
         Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::SharedCache));

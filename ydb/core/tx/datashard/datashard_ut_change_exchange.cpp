@@ -3081,10 +3081,17 @@ Y_UNIT_TEST_SUITE(Cdc) {
     }
 
     Y_UNIT_TEST(EnqueueRequestProcessSend) {
+        // Disable workload manager because it's also used events from ES_PRIVATE
+        // which squash with event NChangeExchange::TEvChangeExchangePrivate::EvReady in test
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableResourcePools(false);
+
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
             .SetUseRealThreads(false)
             .SetDomainName("Root")
+            .SetEnableResourcePools(false)
+            .SetAppConfig(config)
         );
 
         auto& runtime = *server->GetRuntime();

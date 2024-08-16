@@ -24,19 +24,19 @@ struct TRedirectUrlParameters {
     TStringBuf State;
     TStringBuf Scheme;
     TStringBuf Host;
-    NMVP::EAuthProfile AuthProfile;
-    TStringBuf AuthEndpoint;
+    NMvp::EAccessServiceType AccessServiceType;
+    TStringBuf AuthUrlPath;
 };
 
 bool TryAppendAuthEndpointFromDetailsYandexProfile(const TRedirectUrlParameters& parameters, TStringBuilder& locationHeaderValue) {
-    if (parameters.AuthProfile != NMVP::EAuthProfile::Yandex) {
+    if (parameters.AccessServiceType != NMvp::yandex_v2) {
         return false;
     }
     const auto& eventDetails = parameters.SessionServerCheckDetails;
-    size_t posAuthUrl = eventDetails.find(parameters.AuthEndpoint);
+    size_t posAuthUrl = eventDetails.find(parameters.AuthUrlPath);
     if (posAuthUrl != TStringBuf::npos) {
         size_t pos = eventDetails.rfind("https://", posAuthUrl);
-        locationHeaderValue << eventDetails.substr(pos, posAuthUrl - pos) << parameters.AuthEndpoint;
+        locationHeaderValue << eventDetails.substr(pos, posAuthUrl - pos) << parameters.AuthUrlPath;
         return true;
     }
     return false;
@@ -124,8 +124,8 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(TStringBuf eventDetai
                                                     .State = state,
                                                     .Scheme = (request->Endpoint->Secure ? "https://" : "http://"),
                                                     .Host = request->Host,
-                                                    .AuthProfile = settings.AuthProfile,
-                                                    .AuthEndpoint = settings.AuthEndpoint});
+                                                    .AccessServiceType = settings.AccessServiceType,
+                                                    .AuthUrlPath = settings.AuthUrlPath});
     const size_t cookieMaxAgeSec = 420;
     TStringBuilder setCookieBuilder;
     setCookieBuilder << CreateNameYdbOidcCookie(settings.ClientSecret, state) << "=" << GenerateCookie(state, GetRequestedUrl(request, isAjaxRequest), settings.ClientSecret, isAjaxRequest)
@@ -172,6 +172,6 @@ const TString& GetAuthCallbackUrl() {
 TString CreateSecureCookie(const TString& key, const TString& value) {
     TStringBuilder cookieBuilder;
     cookieBuilder << CreateNameSessionCookie(key) << "=" << Base64Encode(value)
-            << "; Path=/; Secure; HttpOnly; SameSite=Lax";
+            << "; Path=/; Secure; HttpOnly; SameSite=None; Partitioned";
     return cookieBuilder;
 }

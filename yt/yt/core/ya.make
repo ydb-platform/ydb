@@ -152,6 +152,7 @@ SRCS(
     misc/shutdown.cpp
     misc/signal_registry.cpp
     misc/slab_allocator.cpp
+    misc/statistic_path.cpp
     misc/statistics.cpp
     misc/string_helpers.cpp
     misc/cache_config.cpp

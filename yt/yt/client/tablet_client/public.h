@@ -92,6 +92,7 @@ YT_DEFINE_ERROR_ENUM(
     ((TableSchemaIncompatible)                (1738))
     ((BundleIsBanned)                         (1739))
     ((TabletServantIsNotActive)               (1740))
+    ((UniqueIndexConflict)                    (1741))
 );
 
 DEFINE_ENUM(EInMemoryMode,
@@ -222,11 +223,13 @@ DEFINE_ENUM(ETabletServiceFeatures,
 DEFINE_ENUM(ESecondaryIndexKind,
     ((FullSync)                 (0))
     ((Unfolding)                (1))
+    ((Unique)                   (2))
 );
 
 DEFINE_ENUM(ERowMergerType,
     ((Legacy)               (0))
     ((Watermark)            (1))
+    ((New)                  (2))
 );
 
 extern const TString CustomRuntimeDataWatermarkKey;

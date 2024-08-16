@@ -29,24 +29,32 @@ std::set<ui32> ISnapshotSchema::GetPkColumnsIds() const {
 
 TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::NormalizeBatch(
     const ISnapshotSchema& dataSchema, const std::shared_ptr<NArrow::TGeneralContainer>& batch, const std::set<ui32>& restoreColumnIds) const {
+    AFL_VERIFY(dataSchema.GetSnapshot() <= GetSnapshot());
     if (dataSchema.GetSnapshot() == GetSnapshot()) {
-        return batch;
+        if (batch->GetColumnsCount() == GetColumnsCount()) {
+            return batch;
+        }
     }
-    AFL_VERIFY(dataSchema.GetSnapshot() < GetSnapshot());
     const std::shared_ptr<arrow::Schema>& resultArrowSchema = GetSchema();
 
-    std::shared_ptr<NArrow::TGeneralContainer> result = std::make_shared<NArrow::TGeneralContainer>();
+    std::shared_ptr<NArrow::TGeneralContainer> result = std::make_shared<NArrow::TGeneralContainer>(batch->GetRecordsCount());
     for (size_t i = 0; i < resultArrowSchema->fields().size(); ++i) {
         auto& resultField = resultArrowSchema->fields()[i];
         auto columnId = GetIndexInfo().GetColumnId(resultField->name());
         auto oldField = dataSchema.GetFieldByColumnIdOptional(columnId);
         if (oldField) {
-            auto conclusion = result->AddField(resultField, batch->GetAccessorByNameVerified(oldField->name()));
-            if (conclusion.IsFail()) {
-                return conclusion;
+            auto fAccessor = batch->GetAccessorByNameOptional(oldField->name());
+            if (fAccessor) {
+                auto conclusion = result->AddField(resultField, fAccessor);
+                if (conclusion.IsFail()) {
+                    return conclusion;
+                }
+                continue;
             }
-        } else if (restoreColumnIds.contains(columnId)) {
-            AFL_VERIFY(!!GetExternalDefaultValueVerified(columnId) || GetIndexInfo().IsNullableVerified(columnId));
+        }
+        if (restoreColumnIds.contains(columnId)) {
+            AFL_VERIFY(!!GetExternalDefaultValueVerified(columnId) || GetIndexInfo().IsNullableVerified(columnId))("column_name",
+                                                                          GetIndexInfo().GetColumnName(columnId, false))("id", columnId);
             result->AddField(resultField, GetColumnLoaderVerified(columnId)->BuildDefaultAccessor(batch->num_rows())).Validate();
         }
     }
@@ -107,6 +115,7 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
     Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(batch, GetIndexInfo().GetPrimaryKey()));
 
     switch (mType) {
+        case NEvWrite::EModificationType::Replace:
         case NEvWrite::EModificationType::Upsert: {
             AFL_VERIFY(batch->num_columns() <= dstSchema->num_fields());
             if (batch->num_columns() < dstSchema->num_fields()) {
@@ -125,7 +134,6 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
             return batch;
         }
         case NEvWrite::EModificationType::Delete:
-        case NEvWrite::EModificationType::Replace:
         case NEvWrite::EModificationType::Insert:
         case NEvWrite::EModificationType::Update:
             return batch;

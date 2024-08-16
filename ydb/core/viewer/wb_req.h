@@ -1,25 +1,13 @@
 #pragma once
-
-#pragma once
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/interconnect.h>
-#include <ydb/library/actors/core/mon.h>
-
-#include <ydb/library/services/services.pb.h>
-#include <ydb/core/node_whiteboard/node_whiteboard.h>
-#include <ydb/core/viewer/json/json.h>
-#include <ydb/core/base/nameservice.h>
-#include <ydb/library/actors/interconnect/interconnect.h>
-#include <library/cpp/time_provider/time_provider.h>
-#include "viewer.h"
 #include "json_pipe_req.h"
-#include "wb_merge.h"
-#include "wb_group.h"
-#include "wb_filter.h"
 #include "log.h"
+#include "viewer.h"
+#include "wb_filter.h"
+#include "wb_group.h"
+#include "wb_merge.h"
+#include <ydb/library/actors/interconnect/interconnect.h>
 
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 using namespace NActors;
 using namespace NNodeWhiteboard;
@@ -62,8 +50,11 @@ public:
     }
 
     TWhiteboardRequest() = default;
+    TWhiteboardRequest(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+        : TBase(viewer, ev)
+    {}
 
-    THolder<TRequestEventType> BuildRequest() {
+    virtual THolder<TRequestEventType> BuildRequest() {
         THolder<TRequestEventType> request = MakeHolder<TRequestEventType>();
         constexpr bool hasFormat = requires(const TRequestEventType* r) {r->Record.GetFormat();};
         if constexpr (hasFormat) {
@@ -296,5 +287,4 @@ public:
     }
 };
 
-}
 }

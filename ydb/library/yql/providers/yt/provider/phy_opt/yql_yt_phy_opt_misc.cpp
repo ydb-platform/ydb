@@ -244,7 +244,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Mux(TExprBase node, TEx
                 return node;
             }
             TSyncMap syncList;
-            if (!IsYtCompleteIsolatedLambda(child.Ref(), syncList, resultCluster, true, false)) {
+            if (!IsYtCompleteIsolatedLambda(child.Ref(), syncList, resultCluster, false)) {
                 return node;
             }
 
@@ -319,7 +319,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::TakeOrSkip(TExprBase no
 
     auto cluster = TString{GetClusterName(input)};
     TSyncMap syncList;
-    if (!IsYtCompleteIsolatedLambda(countBase.Count().Ref(), syncList, cluster, true, false)) {
+    if (!IsYtCompleteIsolatedLambda(countBase.Count().Ref(), syncList, cluster, false)) {
         return node;
     }
 
@@ -558,7 +558,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Extend(TExprBase node, 
                 return node;
             }
             TSyncMap syncList;
-            if (!IsYtCompleteIsolatedLambda(child.Ref(), syncList, resultCluster, true, false)) {
+            if (!IsYtCompleteIsolatedLambda(child.Ref(), syncList, resultCluster, false)) {
                 return node;
             }
 

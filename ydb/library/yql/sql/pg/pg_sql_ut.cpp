@@ -2,6 +2,10 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <ydb/library/yql/parser/pg_wrapper/interface/parser.h>
+
+#include <util/system/tempfile.h>
+
 using namespace NSQLTranslation;
 
 Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
@@ -628,5 +632,165 @@ from pg_catalog.pg_type)",
             settings);
         UNIT_ASSERT(res.IsOk());
         UNIT_ASSERT(res.Root);
+    }
+}
+
+Y_UNIT_TEST_SUITE(PgExtensions) {
+    using namespace NYql;
+
+    Y_UNIT_TEST(Empty) {
+        NPg::ClearExtensions();
+        UNIT_ASSERT_VALUES_EQUAL(NPg::ExportExtensions(), "");
+        NPg::ImportExtensions("", true, nullptr);
+    }
+
+    Y_UNIT_TEST(ProcsAndType) {
+        if (NPg::AreAllFunctionsAllowed()) {
+            return;
+        }
+
+        NPg::ClearExtensions();
+        NPg::TExtensionDesc desc;
+        TTempFileHandle h;
+        TStringBuf sql = R"(
+            CREATE OR REPLACE FUNCTION mytype_in(cstring)
+                RETURNS mytype
+                AS '$libdir/MyExt','mytype_in_func'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE OR REPLACE FUNCTION mytype_out(mytype)
+                RETURNS cstring
+                AS '$libdir/MyExt','mytype_out_func'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE TYPE mytype (
+                alignment = double,
+                internallength = 65,
+                input = mytype_in,
+                output = mytype_out
+            );
+        )";
+
+        h.Write(sql.Data(), sql.Size());
+        desc.Name = "MyExt";
+        desc.InstallName = "$libdir/MyExt";
+        desc.SqlPaths.push_back(h.Name());
+        NPg::RegisterExtensions({desc}, true, *NSQLTranslationPG::CreateExtensionSqlParser(), nullptr);
+        auto validate = [&]() {
+            const auto& type = NPg::LookupType("mytype");
+            UNIT_ASSERT_VALUES_EQUAL(type.Category, 'U');
+            UNIT_ASSERT_VALUES_EQUAL(type.TypeLen, 65);
+            UNIT_ASSERT_VALUES_EQUAL(type.TypeAlign, 'd');
+            const auto& arrType = NPg::LookupType("_mytype");
+            UNIT_ASSERT_VALUES_EQUAL(arrType.ElementTypeId, type.TypeId);
+            const auto& inProc = NPg::LookupProc("mytype_in", { NPg::LookupType("cstring").TypeId });
+            UNIT_ASSERT_VALUES_EQUAL(inProc.ArgTypes.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(inProc.Src, "mytype_in_func");
+            UNIT_ASSERT(inProc.IsStrict);
+            const auto& outProc = NPg::LookupProc("mytype_out", { NPg::LookupType("mytype").TypeId });
+            UNIT_ASSERT_VALUES_EQUAL(outProc.ArgTypes.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(outProc.Src, "mytype_out_func");
+            UNIT_ASSERT(outProc.IsStrict);
+            UNIT_ASSERT_VALUES_EQUAL(type.InFuncId, inProc.ProcId);
+            UNIT_ASSERT_VALUES_EQUAL(type.OutFuncId, outProc.ProcId);
+        };
+
+        validate();
+        auto exported = NPg::ExportExtensions();
+        NPg::ClearExtensions();
+        NPg::ImportExtensions(exported, true, nullptr);
+        validate();
+    }
+
+    Y_UNIT_TEST(InsertValues) {
+        NPg::ClearExtensions();
+        NPg::TExtensionDesc desc;
+        TTempFileHandle h;
+        TStringBuf sql = R"(
+            CREATE TABLE mytable(
+                foo int4,
+                bar text,
+                baz double
+            );
+
+            INSERT INTO mytable(bar, foo, baz)
+            VALUES ('a', 1, null),('b', null, -3.4);
+        )";
+
+        h.Write(sql.Data(), sql.Size());
+        desc.Name = "MyExt";
+        desc.InstallName = "$libdir/MyExt";
+        desc.SqlPaths.push_back(h.Name());
+        NPg::RegisterExtensions({desc}, true, *NSQLTranslationPG::CreateExtensionSqlParser(), nullptr);
+        auto validate = [&]() {
+            const auto& table = NPg::LookupStaticTable({"pg_catalog","mytable"});
+            UNIT_ASSERT(table.Kind == NPg::ERelKind::Relation);
+            size_t remap[2];
+            size_t rowStep;
+            const auto& data = *NPg::ReadTable({"pg_catalog", "mytable"}, {"foo", "bar"}, remap, rowStep);
+            UNIT_ASSERT_VALUES_EQUAL(rowStep, 3);
+            UNIT_ASSERT_VALUES_EQUAL(data.size(), 2 * rowStep);
+            UNIT_ASSERT_VALUES_EQUAL(data[rowStep * 0 + remap[0]], "1");
+            UNIT_ASSERT_VALUES_EQUAL(data[rowStep * 0 + remap[1]], "a");
+            UNIT_ASSERT(!data[rowStep * 1 + remap[0]].Defined());
+            UNIT_ASSERT_VALUES_EQUAL(data[rowStep * 1 + remap[1]], "b");
+        };
+
+        validate();
+        auto exported = NPg::ExportExtensions();
+        NPg::ClearExtensions();
+        NPg::ImportExtensions(exported, true, nullptr);
+        validate();
+    }
+
+    Y_UNIT_TEST(Casts) {
+        if (NPg::AreAllFunctionsAllowed()) {
+            return;
+        }
+
+        NPg::ClearExtensions();
+        NPg::TExtensionDesc desc;
+        TTempFileHandle h;
+        TStringBuf sql = R"(
+            CREATE TYPE foo (
+                alignment = double,
+                internallength = variable
+            );
+
+            CREATE TYPE bar (
+                alignment = double,
+                internallength = variable
+            );
+
+            CREATE OR REPLACE FUNCTION bar(foo)
+                RETURNS bar
+                AS '$libdir/MyExt','foo_to_bar'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE CAST (foo AS bar) WITH FUNCTION bar(foo);
+        )";
+
+        h.Write(sql.Data(), sql.Size());
+        desc.Name = "MyExt";
+        desc.InstallName = "$libdir/MyExt";
+        desc.SqlPaths.push_back(h.Name());
+        NPg::RegisterExtensions({desc}, true, *NSQLTranslationPG::CreateExtensionSqlParser(), nullptr);
+        auto validate = [&]() {
+            auto sourceId = NPg::LookupType("foo").TypeId;
+            auto targetId = NPg::LookupType("bar").TypeId;
+            UNIT_ASSERT(NPg::HasCast(sourceId, targetId));
+            const auto& cast = NPg::LookupCast(sourceId, targetId);
+            UNIT_ASSERT_VALUES_EQUAL(cast.SourceId, sourceId);
+            UNIT_ASSERT_VALUES_EQUAL(cast.TargetId, targetId);
+            UNIT_ASSERT_VALUES_EQUAL((ui32)cast.Method, (ui32)NPg::ECastMethod::Function);
+            UNIT_ASSERT_VALUES_EQUAL(cast.CoercionCode, NPg::ECoercionCode::Explicit);
+            UNIT_ASSERT_VALUES_EQUAL(cast.FunctionId, NPg::LookupProc("bar",{sourceId}).ProcId);
+        };
+
+        validate();
+        auto exported = NPg::ExportExtensions();
+        NPg::ClearExtensions();
+        NPg::ImportExtensions(exported, true, nullptr);
+        validate();
     }
 }

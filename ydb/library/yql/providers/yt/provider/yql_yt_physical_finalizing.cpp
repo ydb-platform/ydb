@@ -332,7 +332,7 @@ public:
                         auto kind = FromString<EYtSettingType>(setting.Name().Value());
                         if (EYtSettingType::Take == kind || EYtSettingType::Skip == kind) {
                             TSyncMap syncList;
-                            if (!IsYtCompleteIsolatedLambda(setting.Value().Ref(), syncList, usedCluster, true, false) || !syncList.empty()) {
+                            if (!IsYtCompleteIsolatedLambda(setting.Value().Ref(), syncList, usedCluster, false) || !syncList.empty()) {
                                 hasTake = false;
                                 break;
                             }

@@ -62,7 +62,7 @@ int TChannelWrapper::GetInflightRequestCount()
     return UnderlyingChannel_->GetInflightRequestCount();
 }
 
-IMemoryUsageTrackerPtr TChannelWrapper::GetChannelMemoryTracker()
+const IMemoryUsageTrackerPtr& TChannelWrapper::GetChannelMemoryTracker()
 {
     return UnderlyingChannel_->GetChannelMemoryTracker();
 }

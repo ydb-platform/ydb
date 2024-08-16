@@ -95,7 +95,7 @@ public:
             statusDetail = "Unknown error";
         }
 
-        return TError(StatusCodeToErrorCode(static_cast<grpc_status_code>(statusCode)), statusDetail)
+        return TError(StatusCodeToErrorCode(static_cast<grpc_status_code>(statusCode)), std::move(statusDetail), TError::DisableFormat)
             << TErrorAttribute("status_code", statusCode);
     }
 
@@ -216,15 +216,16 @@ public:
         YT_UNIMPLEMENTED();
     }
 
-    IMemoryUsageTrackerPtr GetChannelMemoryTracker() override
+    const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override
     {
-        return GetNullMemoryUsageTracker();
+        return MemoryUsageTracker_;
     }
 
 private:
     const TChannelConfigPtr Config_;
     const TString EndpointAddress_;
     const IAttributeDictionaryPtr EndpointAttributes_;
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_ = GetNullMemoryUsageTracker();
 
     TSingleShotCallbackList<void(const TError&)> Terminated_;
 
@@ -592,7 +593,7 @@ private:
                 if (serializedError) {
                     error = DeserializeError(serializedError);
                 } else {
-                    error = TError(StatusCodeToErrorCode(ResponseStatusCode_), ResponseStatusDetails_.AsString())
+                    error = TError(StatusCodeToErrorCode(ResponseStatusCode_), ResponseStatusDetails_.AsString(), TError::DisableFormat)
                         << TErrorAttribute("status_code", ResponseStatusCode_);
                 }
                 NotifyError(TStringBuf("Request failed"), error);

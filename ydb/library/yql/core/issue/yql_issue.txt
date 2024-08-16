@@ -663,3 +663,11 @@ ids {
   code: YT_SECURE_DATA_IN_COMMON_TMP
   severity: S_WARNING
 }
+ids {
+  code: CORE_TOP_UNSUPPORTED_BLOCK_TYPES
+  severity: S_INFO
+}
+ids {
+  code: CORE_TOP_UNSUPPORTED_BLOCK_CALLABLES
+  severity: S_INFO
+}

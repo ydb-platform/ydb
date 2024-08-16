@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: cachetools
-Version: 5.3.3
+Version: 5.4.0
 Summary: Extensible memoizing collections and decorators
 Home-page: https://github.com/tkem/cachetools/
 Author: Thomas Kemmer

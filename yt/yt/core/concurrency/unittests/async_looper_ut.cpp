@@ -7,12 +7,12 @@
 
 #include <library/cpp/yt/threading/event_count.h>
 
+#include <thread>
+
 namespace NYT::NConcurrency {
 namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
-
-const TString LooperName = "TestLooper";
 
 // TODO(arkady-e1ppa): Add ManualInvoker which only runs callbacks when
 // manually requested. Add test when Stop/Restart occurs during the
@@ -22,13 +22,13 @@ TEST(TAsyncLooperTest, JustWorks)
 {
     auto queue = New<TActionQueue>();
 
-    TCallback asyncStart = BIND([invoker = queue->GetInvoker()] (bool) {
+    auto asyncStart = BIND([invoker = queue->GetInvoker()] (bool) {
         VERIFY_INVOKER_AFFINITY(invoker);
         return BIND([] {}).AsyncVia(invoker).Run();
     });
 
     auto progress = std::make_shared<std::atomic<int>>(0);
-    TCallback syncFinish = BIND([progress, invoker = queue->GetInvoker()] (bool) {
+    auto syncFinish = BIND([progress, invoker = queue->GetInvoker()] (bool) {
         VERIFY_INVOKER_AFFINITY(invoker);
         progress->fetch_add(1);
     });
@@ -38,33 +38,37 @@ TEST(TAsyncLooperTest, JustWorks)
     auto looper = New<TAsyncLooper>(
         queue->GetInvoker(),
         asyncStart,
-        syncFinish,
-        LooperName);
+        syncFinish);
 
     Sleep(TDuration::Seconds(1));
     EXPECT_EQ(currentProgress, progress->load());
 
     looper->Start();
 
-    while (currentProgress == progress->load());
+    while (currentProgress == progress->load()) {
+        Sleep(TDuration::MilliSeconds(1));
+    }
 
     currentProgress = progress->load();
 
-    while (currentProgress == progress->load());
+    while (currentProgress == progress->load()) {
+        Sleep(TDuration::MilliSeconds(1));
+    }
 
     looper->Stop();
+    queue->Shutdown();
 }
 
 TEST(TAsyncLooperTest, Restart)
 {
     auto queue = New<TActionQueue>();
 
-    TCallback asyncStart = BIND([invoker = queue->GetInvoker()] (bool) {
+    auto asyncStart = BIND([invoker = queue->GetInvoker()] (bool) {
         return BIND([] {}).AsyncVia(invoker).Run();
     });
 
     auto cleanStarts = std::make_shared<std::atomic<int>>(0);
-    TCallback syncFinish = BIND([cleanStarts] (bool cleanStart) {
+    auto syncFinish = BIND([cleanStarts] (bool cleanStart) {
         if (cleanStart) {
             cleanStarts->fetch_add(1);
         }
@@ -73,12 +77,13 @@ TEST(TAsyncLooperTest, Restart)
     auto looper = New<TAsyncLooper>(
         queue->GetInvoker(),
         asyncStart,
-        syncFinish,
-        LooperName);
+        syncFinish);
 
     looper->Start();
 
-    while (cleanStarts->load() == 0);
+    while (cleanStarts->load() == 0) {
+        Sleep(TDuration::MilliSeconds(1));
+    }
 
     EXPECT_EQ(cleanStarts->load(), 1);
 
@@ -90,11 +95,14 @@ TEST(TAsyncLooperTest, Restart)
 
     looper->Start();
 
-    while (cleanStarts->load() == 1);
+    while (cleanStarts->load() == 1) {
+        Sleep(TDuration::MilliSeconds(1));
+    }
 
     EXPECT_EQ(cleanStarts->load(), 2);
 
     looper->Stop();
+    queue->Shutdown();
 }
 
 TEST(TAsyncLooperTest, CancelAsyncStep)
@@ -104,7 +112,7 @@ TEST(TAsyncLooperTest, CancelAsyncStep)
     NThreading::TEvent started;
     auto promise = NewPromise<void>();
 
-    TCallback asyncStart = BIND([invoker = queue->GetInvoker(), promise, &started] (bool) {
+    auto asyncStart = BIND([invoker = queue->GetInvoker(), promise, &started] (bool) {
         return BIND([promise, &started] {
             started.NotifyAll();
             WaitFor(promise.ToFuture())
@@ -112,14 +120,13 @@ TEST(TAsyncLooperTest, CancelAsyncStep)
         }).AsyncVia(invoker).Run();
     });
 
-    TCallback syncFinish = BIND([] (bool) {
+    auto syncFinish = BIND([] (bool) {
     });
 
     auto looper = New<TAsyncLooper>(
         queue->GetInvoker(),
         asyncStart,
-        syncFinish,
-        LooperName);
+        syncFinish);
 
     looper->Start();
 
@@ -128,6 +135,8 @@ TEST(TAsyncLooperTest, CancelAsyncStep)
     looper->Stop();
 
     EXPECT_TRUE(promise.IsCanceled());
+
+    queue->Shutdown();
 }
 
 TEST(TAsyncLooperTest, CancelSyncStep)
@@ -137,12 +146,12 @@ TEST(TAsyncLooperTest, CancelSyncStep)
     NThreading::TEvent started;
     auto promise = NewPromise<void>();
 
-    TCallback asyncStart = BIND([invoker = queue->GetInvoker()] (bool) {
+    auto asyncStart = BIND([invoker = queue->GetInvoker()] (bool) {
         return BIND([] {
         }).AsyncVia(invoker).Run();
     });
 
-    TCallback syncFinish = BIND([promise, &started] (bool) {
+    auto syncFinish = BIND([promise, &started] (bool) {
         started.NotifyAll();
         WaitFor(promise.ToFuture())
             .ThrowOnError();
@@ -151,8 +160,7 @@ TEST(TAsyncLooperTest, CancelSyncStep)
     auto looper = New<TAsyncLooper>(
         queue->GetInvoker(),
         asyncStart,
-        syncFinish,
-        LooperName);
+        syncFinish);
 
     looper->Start();
 
@@ -161,6 +169,8 @@ TEST(TAsyncLooperTest, CancelSyncStep)
     looper->Stop();
 
     EXPECT_TRUE(promise.IsCanceled());
+
+    queue->Shutdown();
 }
 
 TEST(TAsyncLooperTest, StopDuringAsyncStep)
@@ -172,7 +182,7 @@ TEST(TAsyncLooperTest, StopDuringAsyncStep)
     NThreading::TEvent releaseAsync;
     NThreading::TEvent started;
 
-    TCallback asyncStart = BIND([invoker = queue->GetInvoker(), &releaseAsync, &started] (bool) {
+    auto asyncStart = BIND([invoker = queue->GetInvoker(), &releaseAsync, &started] (bool) {
         return BIND([&releaseAsync, &started] {
             started.NotifyAll();
             releaseAsync.Wait();
@@ -180,15 +190,14 @@ TEST(TAsyncLooperTest, StopDuringAsyncStep)
     });
 
     auto mustBeFalse = std::make_shared<std::atomic<bool>>(false);
-    TCallback syncFinish = BIND([mustBeFalse] (bool) {
+    auto syncFinish = BIND([mustBeFalse] (bool) {
         mustBeFalse->store(true);
     });
 
     auto looper = New<TAsyncLooper>(
         queue->GetInvoker(),
         asyncStart,
-        syncFinish,
-        LooperName);
+        syncFinish);
 
     looper->Start();
 
@@ -215,7 +224,7 @@ TEST(TAsyncLooperTest, StopDuringAsyncStepWaitFor)
     auto releaseAsync = NewPromise<void>();
     NThreading::TEvent started;
 
-    TCallback asyncStart = BIND([invoker = queue->GetInvoker(), &started, releaseAsync] (bool) {
+    auto asyncStart = BIND([invoker = queue->GetInvoker(), &started, releaseAsync] (bool) {
         return BIND([releaseAsync, &started] {
             started.NotifyAll();
             WaitFor(releaseAsync.ToFuture())
@@ -224,15 +233,14 @@ TEST(TAsyncLooperTest, StopDuringAsyncStepWaitFor)
     });
 
     auto mustBeFalse = std::make_shared<std::atomic<bool>>(false);
-    TCallback syncFinish = BIND([mustBeFalse] (bool) {
+    auto syncFinish = BIND([mustBeFalse] (bool) {
         mustBeFalse->store(true);
     });
 
     auto looper = New<TAsyncLooper>(
         queue->GetInvoker(),
         asyncStart,
-        syncFinish,
-        LooperName);
+        syncFinish);
 
     looper->Start();
 
@@ -260,38 +268,42 @@ TEST(TAsyncLooperTest, RestartDuringAsyncStep)
     // ignore cancelation in this test.
     NThreading::TEvent releaseAsync;
 
-    auto asyncRunsCount = std::make_shared<std::atomic<int>>(0);
+    auto asyncRunCount = std::make_shared<std::atomic<int>>(0);
 
-    TCallback asyncStart = BIND([invoker = queue->GetInvoker(), &releaseAsync, asyncRunsCount] (bool) {
-        return BIND([&releaseAsync, asyncRunsCount] {
-            asyncRunsCount->fetch_add(1);
+    auto asyncStart = BIND([invoker = queue->GetInvoker(), &releaseAsync, asyncRunCount] (bool) {
+        return BIND([&releaseAsync, asyncRunCount] {
+            asyncRunCount->fetch_add(1);
             releaseAsync.Wait();
         }).AsyncVia(invoker).Run();
     });
 
-    TCallback syncFinish = BIND([] (bool) {
+    auto syncFinish = BIND([] (bool) {
     });
 
     auto looper = New<TAsyncLooper>(
         queue->GetInvoker(),
         asyncStart,
-        syncFinish,
-        LooperName);
+        syncFinish);
 
     looper->Start();
 
-    while (asyncRunsCount->load() == 0);
+    while (asyncRunCount->load() == 0) {
+        Sleep(TDuration::MilliSeconds(1));
+    }
 
-    EXPECT_EQ(asyncRunsCount->load(), 1);
+    EXPECT_EQ(asyncRunCount->load(), 1);
 
     looper->Stop();
     looper->Start();
 
     releaseAsync.NotifyAll();
 
-    while (asyncRunsCount->load() == 1);
+    while (asyncRunCount->load() == 1) {
+        Sleep(TDuration::MilliSeconds(1));
+    }
 
     looper->Stop();
+    queue->Shutdown();
 }
 
 TEST(TAsyncLooperTest, RestartDuringAsyncStepWaitFor)
@@ -300,39 +312,43 @@ TEST(TAsyncLooperTest, RestartDuringAsyncStepWaitFor)
 
     auto releaseAsync = NewPromise<void>();
 
-    auto asyncRunsCount = std::make_shared<std::atomic<int>>(0);
+    auto asyncRunCount = std::make_shared<std::atomic<int>>(0);
 
-    TCallback asyncStart = BIND([invoker = queue->GetInvoker(), releaseAsync, asyncRunsCount] (bool) {
-        return BIND([releaseAsync, asyncRunsCount] {
-            asyncRunsCount->fetch_add(1);
+    auto asyncStart = BIND([invoker = queue->GetInvoker(), releaseAsync, asyncRunCount] (bool) {
+        return BIND([releaseAsync, asyncRunCount] {
+            asyncRunCount->fetch_add(1);
             WaitFor(releaseAsync.ToFuture())
                 .ThrowOnError();
         }).AsyncVia(invoker).Run();
     });
 
-    TCallback syncFinish = BIND([] (bool) {
+    auto syncFinish = BIND([] (bool) {
     });
 
     auto looper = New<TAsyncLooper>(
         queue->GetInvoker(),
         asyncStart,
-        syncFinish,
-        LooperName);
+        syncFinish);
 
     looper->Start();
 
-    while (asyncRunsCount->load() == 0);
+    while (asyncRunCount->load() == 0) {
+        Sleep(TDuration::MilliSeconds(1));
+    }
 
-    EXPECT_EQ(asyncRunsCount->load(), 1);
+    EXPECT_EQ(asyncRunCount->load(), 1);
 
     looper->Stop();
     looper->Start();
 
     releaseAsync.Set();
 
-    while (asyncRunsCount->load() == 1);
+    while (asyncRunCount->load() == 1) {
+        Sleep(TDuration::MilliSeconds(1));
+    }
 
     looper->Stop();
+    queue->Shutdown();
 }
 
 TEST(TAsyncLooperTest, StopDuringAsyncStepPreparation)
@@ -345,7 +361,7 @@ TEST(TAsyncLooperTest, StopDuringAsyncStepPreparation)
     NThreading::TEvent started;
 
     auto mustBeFalse = std::make_shared<std::atomic<bool>>(false);
-    TCallback asyncStart = BIND([invoker = queue->GetInvoker(), &releaseAsync, &started, mustBeFalse] (bool) {
+    auto asyncStart = BIND([invoker = queue->GetInvoker(), &releaseAsync, &started, mustBeFalse] (bool) {
         started.NotifyAll();
         releaseAsync.Wait();
 
@@ -358,14 +374,13 @@ TEST(TAsyncLooperTest, StopDuringAsyncStepPreparation)
         }).AsyncVia(invoker).Run();
     });
 
-    TCallback syncFinish = BIND([] (bool) {
+    auto syncFinish = BIND([] (bool) {
     });
 
     auto looper = New<TAsyncLooper>(
         queue->GetInvoker(),
         asyncStart,
-        syncFinish,
-        LooperName);
+        syncFinish);
 
     queue->GetInvoker()->Invoke(BIND([looper] {
         looper->Start();
@@ -396,24 +411,23 @@ TEST(TAsyncLooperTest, RestartDuringAsyncStepPreparation1)
     NThreading::TEvent releaseAsync;
     NThreading::TEvent started;
 
-    auto asyncRunsCount = std::make_shared<std::atomic<int>>(0);
+    auto asyncRunCount = std::make_shared<std::atomic<int>>(0);
 
-    TCallback asyncStart = BIND([invoker = queue->GetInvoker(), &releaseAsync, &started, asyncRunsCount] (bool) {
+    auto asyncStart = BIND([invoker = queue->GetInvoker(), &releaseAsync, &started, asyncRunCount] (bool) {
         started.NotifyAll();
         releaseAsync.Wait();
-        return BIND([asyncRunsCount] {
-            asyncRunsCount->fetch_add(1);
+        return BIND([asyncRunCount] {
+            asyncRunCount->fetch_add(1);
         }).AsyncVia(invoker).Run();
     });
 
-    TCallback syncFinish = BIND([] (bool) {
+    auto syncFinish = BIND([] (bool) {
     });
 
     auto looper = New<TAsyncLooper>(
         queue->GetInvoker(),
         asyncStart,
-        syncFinish,
-        LooperName);
+        syncFinish);
 
     looper->Start();
 
@@ -424,9 +438,12 @@ TEST(TAsyncLooperTest, RestartDuringAsyncStepPreparation1)
 
     releaseAsync.NotifyAll();
 
-    while (asyncRunsCount->load() == 0);
+    while (asyncRunCount->load() == 0) {
+        Sleep(TDuration::MilliSeconds(1));
+    }
 
     looper->Stop();
+    queue->Shutdown();
 }
 
 TEST(TAsyncLooperTest, RestartDuringAsyncStepPreparation2)
@@ -441,7 +458,7 @@ TEST(TAsyncLooperTest, RestartDuringAsyncStepPreparation2)
     auto asyncCleanStarts = std::make_shared<std::atomic<int>>(0);
     auto syncCleanStarts = std::make_shared<std::atomic<int>>(0);
 
-    TCallback asyncStart = BIND([invoker = queue->GetInvoker(), &releaseAsync, &secondIterationStarted, asyncCleanStarts, syncCleanStarts] (bool cleanStart) {
+    auto asyncStart = BIND([invoker = queue->GetInvoker(), &releaseAsync, &secondIterationStarted, asyncCleanStarts, syncCleanStarts] (bool cleanStart) {
         if (cleanStart) {
             asyncCleanStarts->fetch_add(1);
         }
@@ -456,7 +473,7 @@ TEST(TAsyncLooperTest, RestartDuringAsyncStepPreparation2)
         }).AsyncVia(invoker).Run();
     });
 
-    TCallback syncFinish = BIND([syncCleanStarts] (bool cleanStart) {
+    auto syncFinish = BIND([syncCleanStarts] (bool cleanStart) {
         if (cleanStart) {
             syncCleanStarts->fetch_add(1);
         }
@@ -465,8 +482,7 @@ TEST(TAsyncLooperTest, RestartDuringAsyncStepPreparation2)
     auto looper = New<TAsyncLooper>(
         queue->GetInvoker(),
         asyncStart,
-        syncFinish,
-        LooperName);
+        syncFinish);
 
     looper->Start();
 
@@ -480,12 +496,15 @@ TEST(TAsyncLooperTest, RestartDuringAsyncStepPreparation2)
 
     releaseAsync.NotifyAll();
 
-    while (syncCleanStarts->load() == 1);
+    while (syncCleanStarts->load() == 1) {
+        Sleep(TDuration::MilliSeconds(1));
+    }
 
     EXPECT_EQ(asyncCleanStarts->load(), 2);
     EXPECT_EQ(syncCleanStarts->load(), 2);
 
     looper->Stop();
+    queue->Shutdown();
 }
 
 TEST(TAsyncLooperTest, StopDuringSyncStep)
@@ -497,14 +516,14 @@ TEST(TAsyncLooperTest, StopDuringSyncStep)
     NThreading::TEvent releaseAsync;
     NThreading::TEvent started;
 
-    auto asyncRunsCount = std::make_shared<std::atomic<int>>(0);
-    TCallback asyncStart = BIND([invoker = queue->GetInvoker(), asyncRunsCount] (bool) {
-        return BIND([asyncRunsCount] {
-            asyncRunsCount->fetch_add(1);
+    auto asyncRunCount = std::make_shared<std::atomic<int>>(0);
+    auto asyncStart = BIND([invoker = queue->GetInvoker(), asyncRunCount] (bool) {
+        return BIND([asyncRunCount] {
+            asyncRunCount->fetch_add(1);
         }).AsyncVia(invoker).Run();
     });
 
-    TCallback syncFinish = BIND([&releaseAsync, &started] (bool) {
+    auto syncFinish = BIND([&releaseAsync, &started] (bool) {
         started.NotifyAll();
         releaseAsync.Wait();
     });
@@ -512,8 +531,7 @@ TEST(TAsyncLooperTest, StopDuringSyncStep)
     auto looper = New<TAsyncLooper>(
         queue->GetInvoker(),
         asyncStart,
-        syncFinish,
-        LooperName);
+        syncFinish);
 
     looper->Start();
 
@@ -530,7 +548,7 @@ TEST(TAsyncLooperTest, StopDuringSyncStep)
     // Ensure queue is empty
     queue->Shutdown(/*graceful*/ true);
 
-    EXPECT_EQ(asyncRunsCount->load(), 1);
+    EXPECT_EQ(asyncRunCount->load(), 1);
 }
 
 TEST(TAsyncLooperTest, StopDuringSyncStepWaitFor)
@@ -542,14 +560,14 @@ TEST(TAsyncLooperTest, StopDuringSyncStepWaitFor)
     auto releaseAsync = NewPromise<void>();
     NThreading::TEvent started;
 
-    auto asyncRunsCount = std::make_shared<std::atomic<int>>(0);
-    TCallback asyncStart = BIND([invoker = queue->GetInvoker(), asyncRunsCount] (bool) {
-        return BIND([asyncRunsCount] {
-            asyncRunsCount->fetch_add(1);
+    auto asyncRunCount = std::make_shared<std::atomic<int>>(0);
+    auto asyncStart = BIND([invoker = queue->GetInvoker(), asyncRunCount] (bool) {
+        return BIND([asyncRunCount] {
+            asyncRunCount->fetch_add(1);
         }).AsyncVia(invoker).Run();
     });
 
-    TCallback syncFinish = BIND([releaseAsync, &started] (bool) {
+    auto syncFinish = BIND([releaseAsync, &started] (bool) {
         started.NotifyAll();
         WaitFor(releaseAsync.ToFuture())
             .ThrowOnError();
@@ -558,8 +576,7 @@ TEST(TAsyncLooperTest, StopDuringSyncStepWaitFor)
     auto looper = New<TAsyncLooper>(
         queue->GetInvoker(),
         asyncStart,
-        syncFinish,
-        LooperName);
+        syncFinish);
 
     looper->Start();
 
@@ -576,7 +593,7 @@ TEST(TAsyncLooperTest, StopDuringSyncStepWaitFor)
     // Ensure queue is empty
     queue->Shutdown(/*graceful*/ true);
 
-    EXPECT_EQ(asyncRunsCount->load(), 1);
+    EXPECT_EQ(asyncRunCount->load(), 1);
 }
 
 TEST(TAsyncLooperTest, RestartDuringSyncStep)
@@ -587,38 +604,42 @@ TEST(TAsyncLooperTest, RestartDuringSyncStep)
     // ignore cancelation in this test.
     NThreading::TEvent releaseAsync;
 
-    auto syncRunsCount = std::make_shared<std::atomic<int>>(0);
+    auto syncRunCount = std::make_shared<std::atomic<int>>(0);
 
-    TCallback asyncStart = BIND([invoker = queue->GetInvoker()] (bool) {
+    auto asyncStart = BIND([invoker = queue->GetInvoker()] (bool) {
         return BIND([] {
         }).AsyncVia(invoker).Run();
     });
 
-    TCallback syncFinish = BIND([&releaseAsync, syncRunsCount] (bool) {
-        syncRunsCount->fetch_add(1);
+    auto syncFinish = BIND([&releaseAsync, syncRunCount] (bool) {
+        syncRunCount->fetch_add(1);
         releaseAsync.Wait();
     });
 
     auto looper = New<TAsyncLooper>(
         queue->GetInvoker(),
         asyncStart,
-        syncFinish,
-        LooperName);
+        syncFinish);
 
     looper->Start();
 
-    while (syncRunsCount->load() == 0);
+    while (syncRunCount->load() == 0) {
+        Sleep(TDuration::MilliSeconds(1));
+    }
 
-    EXPECT_EQ(syncRunsCount->load(), 1);
+    EXPECT_EQ(syncRunCount->load(), 1);
 
     looper->Stop();
     looper->Start();
 
     releaseAsync.NotifyAll();
 
-    while (syncRunsCount->load() == 1);
+    while (syncRunCount->load() == 1) {
+        Sleep(TDuration::MilliSeconds(1));
+    }
 
     looper->Stop();
+    queue->Shutdown();
 }
 
 TEST(TAsyncLooperTest, RestartDuringSyncStepWaitFor)
@@ -627,15 +648,15 @@ TEST(TAsyncLooperTest, RestartDuringSyncStepWaitFor)
 
     auto releaseAsync = NewPromise<void>();
 
-    auto syncRunsCount = std::make_shared<std::atomic<int>>(0);
+    auto syncRunCount = std::make_shared<std::atomic<int>>(0);
 
-    TCallback asyncStart = BIND([invoker = queue->GetInvoker()] (bool) {
+    auto asyncStart = BIND([invoker = queue->GetInvoker()] (bool) {
         return BIND([] {
         }).AsyncVia(invoker).Run();
     });
 
-    TCallback syncFinish = BIND([releaseAsync, syncRunsCount] (bool) {
-        syncRunsCount->fetch_add(1);
+    auto syncFinish = BIND([releaseAsync, syncRunCount] (bool) {
+        syncRunCount->fetch_add(1);
         WaitFor(releaseAsync.ToFuture())
             .ThrowOnError();
     });
@@ -643,23 +664,27 @@ TEST(TAsyncLooperTest, RestartDuringSyncStepWaitFor)
     auto looper = New<TAsyncLooper>(
         queue->GetInvoker(),
         asyncStart,
-        syncFinish,
-        LooperName);
+        syncFinish);
 
     looper->Start();
 
-    while (syncRunsCount->load() == 0);
+    while (syncRunCount->load() == 0) {
+        Sleep(TDuration::MilliSeconds(1));
+    }
 
-    EXPECT_EQ(syncRunsCount->load(), 1);
+    EXPECT_EQ(syncRunCount->load(), 1);
 
     looper->Stop();
     looper->Start();
 
     releaseAsync.Set();
 
-    while (syncRunsCount->load() == 1);
+    while (syncRunCount->load() == 1) {
+        Sleep(TDuration::MilliSeconds(1));
+    }
 
     looper->Stop();
+    queue->Shutdown();
 }
 
 TEST(TAsyncLooperTest, NullFuture)
@@ -669,7 +694,7 @@ TEST(TAsyncLooperTest, NullFuture)
     auto switcher = std::make_shared<std::atomic<bool>>(false);
     NThreading::TEvent loopBroken;
 
-    TCallback asyncStart = BIND([invoker = queue->GetInvoker(), switcher, &loopBroken] (bool) {
+    auto asyncStart = BIND([invoker = queue->GetInvoker(), switcher, &loopBroken] (bool) {
         if (!switcher->load()) {
             loopBroken.NotifyAll();
             return TFuture<void>();
@@ -678,30 +703,32 @@ TEST(TAsyncLooperTest, NullFuture)
         return BIND([] {}).AsyncVia(invoker).Run();
     });
 
-    auto syncRunsCount = std::make_shared<std::atomic<int>>(0);
-    TCallback syncFinish = BIND([syncRunsCount] (bool) {
-        syncRunsCount->fetch_add(1);
+    auto syncRunCount = std::make_shared<std::atomic<int>>(0);
+    auto syncFinish = BIND([syncRunCount] (bool) {
+        syncRunCount->fetch_add(1);
     });
 
     auto looper = New<TAsyncLooper>(
         queue->GetInvoker(),
         asyncStart,
-        syncFinish,
-        LooperName);
+        syncFinish);
 
     looper->Start();
 
     loopBroken.Wait();
 
-    EXPECT_EQ(syncRunsCount->load(), 0);
+    EXPECT_EQ(syncRunCount->load(), 0);
 
     switcher->store(true);
     looper->Stop();
     looper->Start();
 
-    while (syncRunsCount->load() == 0);
+    while (syncRunCount->load() == 0) {
+        Sleep(TDuration::MilliSeconds(1));
+    }
 
     looper->Stop();
+    queue->Shutdown();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

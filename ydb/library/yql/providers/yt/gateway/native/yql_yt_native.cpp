@@ -233,17 +233,22 @@ public:
     TFuture<void> CloseSession(TCloseSessionOptions&& options) final {
         YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
 
+        TSession::TPtr session;
         with_lock(Mutex_) {
             auto it = Sessions_.find(options.SessionId());
             if (it != Sessions_.end()) {
-                auto session = it->second;
+                session = it->second;
                 Sessions_.erase(it);
-                try {
-                    session->Close();
-                } catch (...) {
-                    YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
-                    return MakeErrorFuture<void>(std::current_exception());
-                }
+            }
+        }
+
+        // Do final destruction outside of mutex, because it may do some transaction aborts on YT clusters
+        if (session) {
+            try {
+                session->Close();
+            } catch (...) {
+                YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+                return MakeErrorFuture<void>(std::current_exception());
             }
         }
 
@@ -2537,6 +2542,9 @@ private:
                 }
                 if (attrs.AsMap().contains("optimize_for") && attrs["optimize_for"].AsString() != "scan") {
                     metaInfo->Attrs["optimize_for"] = attrs["optimize_for"].AsString();
+                }
+                if (attrs.AsMap().contains("schema_mode") && attrs["schema_mode"].AsString() == "weak") {
+                    metaInfo->Attrs["schema_mode"] = attrs["schema_mode"].AsString();
                 }
                 if (attrs.AsMap().contains(SecurityTagsName)) {
                     TVector<TString> securityTags;

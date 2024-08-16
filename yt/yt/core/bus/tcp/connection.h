@@ -288,7 +288,7 @@ private:
     void Close();
     void CloseSslSession(ESslState newSslState);
 
-    void Abort(const TError& error);
+    void Abort(const TError& error, NLogging::ELogLevel logLevel = NLogging::ELogLevel::Debug);
     bool AbortIfNetworkingDisabled();
     void AbortSslSession();
 

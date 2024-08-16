@@ -1,4 +1,5 @@
 #include "json_pipe_req.h"
+#include <library/cpp/json/json_writer.h>
 
 namespace NKikimr::NViewer {
 
@@ -86,6 +87,26 @@ void TViewerPipeClient::SendDelayedRequests() {
     }
 }
 
+TPathId TViewerPipeClient::GetPathId(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+    if (ev->Get()->Request->ResultSet.size() == 1) {
+        if (ev->Get()->Request->ResultSet.begin()->Self) {
+            const auto& info = ev->Get()->Request->ResultSet.begin()->Self->Info;
+            return TPathId(info.GetSchemeshardId(), info.GetPathId());
+        }
+        if (ev->Get()->Request->ResultSet.begin()->TableId) {
+            return ev->Get()->Request->ResultSet.begin()->TableId.PathId;
+        }
+    }
+    return {};
+}
+
+TString TViewerPipeClient::GetPath(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+    if (ev->Get()->Request->ResultSet.size() == 1) {
+        return CanonizePath(ev->Get()->Request->ResultSet.begin()->Path);
+    }
+    return {};
+}
+
 void TViewerPipeClient::RequestHiveDomainStats(NNodeWhiteboard::TTabletId hiveId) {
     TActorId pipeClient = ConnectTabletPipe(hiveId);
     THolder<TEvHive::TEvRequestHiveDomainStats> request = MakeHolder<TEvHive::TEvRequestHiveDomainStats>();
@@ -112,6 +133,19 @@ void TViewerPipeClient::RequestHiveStorageStats(NNodeWhiteboard::TTabletId hiveI
     SendRequestToPipe(pipeClient, request.Release(), hiveId);
 }
 
+TViewerPipeClient::TRequestResponse<TEvHive::TEvResponseHiveDomainStats> TViewerPipeClient::MakeRequestHiveDomainStats(NNodeWhiteboard::TTabletId hiveId) {
+    TActorId pipeClient = ConnectTabletPipe(hiveId);
+    THolder<TEvHive::TEvRequestHiveDomainStats> request = MakeHolder<TEvHive::TEvRequestHiveDomainStats>();
+    request->Record.SetReturnFollowers(Followers);
+    request->Record.SetReturnMetrics(Metrics);
+    auto response = MakeRequestToPipe<TEvHive::TEvResponseHiveDomainStats>(pipeClient, request.Release(), hiveId);
+    if (response.Span) {
+        auto hive_id = "#" + ::ToString(hiveId);
+        response.Span.Attribute("hive_id", hive_id);
+    }
+    return response;
+}
+
 TViewerPipeClient::TRequestResponse<TEvHive::TEvResponseHiveStorageStats> TViewerPipeClient::MakeRequestHiveStorageStats(NNodeWhiteboard::TTabletId hiveId) {
     TActorId pipeClient = ConnectTabletPipe(hiveId);
     THolder<TEvHive::TEvRequestHiveStorageStats> request = MakeHolder<TEvHive::TEvRequestHiveStorageStats>();
@@ -119,6 +153,36 @@ TViewerPipeClient::TRequestResponse<TEvHive::TEvResponseHiveStorageStats> TViewe
     if (response.Span) {
         auto hive_id = "#" + ::ToString(hiveId);
         response.Span.Attribute("hive_id", hive_id);
+    }
+    return response;
+}
+
+TViewerPipeClient::TRequestResponse<TEvViewer::TEvViewerResponse> TViewerPipeClient::MakeRequestViewer(TNodeId nodeId, TEvViewer::TEvViewerRequest* request, ui32 flags) {
+    auto requestType = request->Record.GetRequestCase();
+    auto response = MakeRequest<TEvViewer::TEvViewerResponse>(MakeViewerID(nodeId), request, flags, nodeId);
+    if (response.Span) {
+        TString requestTypeString;
+        switch (requestType) {
+            case NKikimrViewer::TEvViewerRequest::kTabletRequest:
+                requestTypeString = "TabletRequest";
+                break;
+            case NKikimrViewer::TEvViewerRequest::kSystemRequest:
+                requestTypeString = "SystemRequest";
+                break;
+            case NKikimrViewer::TEvViewerRequest::kQueryRequest:
+                requestTypeString = "QueryRequest";
+                break;
+            case NKikimrViewer::TEvViewerRequest::kRenderRequest:
+                requestTypeString = "RenderRequest";
+                break;
+            case NKikimrViewer::TEvViewerRequest::kAutocompleteRequest:
+                requestTypeString = "AutocompleteRequest";
+                break;
+            default:
+                requestTypeString = ::ToString(static_cast<int>(requestType));
+                break;
+        }
+        response.Span.Attribute("request_type", requestTypeString);
     }
     return response;
 }
@@ -140,6 +204,17 @@ void TViewerPipeClient::RequestConsoleGetTenantStatus(const TString& path) {
     THolder<NConsole::TEvConsole::TEvGetTenantStatusRequest> request = MakeHolder<NConsole::TEvConsole::TEvGetTenantStatusRequest>();
     request->Record.MutableRequest()->set_path(path);
     SendRequestToPipe(pipeClient, request.Release());
+}
+
+TViewerPipeClient::TRequestResponse<NConsole::TEvConsole::TEvGetTenantStatusResponse> TViewerPipeClient::MakeRequestConsoleGetTenantStatus(const TString& path) {
+    TActorId pipeClient = ConnectTabletPipe(GetConsoleId());
+    THolder<NConsole::TEvConsole::TEvGetTenantStatusRequest> request = MakeHolder<NConsole::TEvConsole::TEvGetTenantStatusRequest>();
+    request->Record.MutableRequest()->set_path(path);
+    auto response = MakeRequestToPipe<NConsole::TEvConsole::TEvGetTenantStatusResponse>(pipeClient, request.Release());
+    if (response.Span) {
+        response.Span.Attribute("path", path);
+    }
+    return response;
 }
 
 void TViewerPipeClient::RequestBSControllerConfig() {
@@ -299,7 +374,7 @@ TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResu
     request->ResultSet.emplace_back(entry);
     auto response = MakeRequest<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0 /*flags*/, cookie);
     if (response.Span) {
-        response.Span.Attribute("cookie", "#" + ::ToString(cookie));
+        response.Span.Attribute("path", path);
     }
     return response;
 }
@@ -314,7 +389,7 @@ TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResu
     request->ResultSet.emplace_back(entry);
     auto response = MakeRequest<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0 /*flags*/, cookie);
     if (response.Span) {
-        response.Span.Attribute("response", "#" + ::ToString(cookie));
+        response.Span.Attribute("path_id", pathId.ToString());
     }
     return response;
 }
@@ -358,6 +433,7 @@ void TViewerPipeClient::InitConfig(const TCgiParameters& params) {
     Followers = FromStringWithDefault(params.Get("followers"), Followers);
     Metrics = FromStringWithDefault(params.Get("metrics"), Metrics);
     WithRetry = FromStringWithDefault(params.Get("with_retry"), WithRetry);
+    MaxRequestsInFlight = FromStringWithDefault(params.Get("max_requests_in_flight"), MaxRequestsInFlight);
 }
 
 void TViewerPipeClient::InitConfig(const TRequestSettings& settings) {
@@ -410,6 +486,10 @@ TString TViewerPipeClient::GetHTTPOKJSON(TString response, TInstant lastModified
     return Viewer->GetHTTPOKJSON(GetRequest(), std::move(response), lastModified);
 }
 
+TString TViewerPipeClient::GetHTTPOKJSON(const NJson::TJsonValue& response, TInstant lastModified) {
+    return GetHTTPOKJSON(NJson::WriteJson(response, false), lastModified);
+}
+
 TString TViewerPipeClient::GetHTTPGATEWAYTIMEOUT(TString contentType, TString response) {
     return Viewer->GetHTTPGATEWAYTIMEOUT(GetRequest(), std::move(contentType), std::move(response));
 }
@@ -420,6 +500,10 @@ TString TViewerPipeClient::GetHTTPBADREQUEST(TString contentType, TString respon
 
 TString TViewerPipeClient::GetHTTPINTERNALERROR(TString contentType, TString response) {
     return Viewer->GetHTTPINTERNALERROR(GetRequest(), std::move(contentType), std::move(response));
+}
+
+TString TViewerPipeClient::GetHTTPFORBIDDEN(TString contentType, TString response) {
+    return Viewer->GetHTTPFORBIDDEN(GetRequest(), std::move(contentType), std::move(response));
 }
 
 TString TViewerPipeClient::MakeForward(const std::vector<ui32>& nodes) {
@@ -441,6 +525,10 @@ void TViewerPipeClient::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         ui32 requests = FailPipeConnect(ev->Get()->TabletId);
         RequestDone(requests);
     }
+}
+
+void TViewerPipeClient::HandleTimeout() {
+    ReplyAndPassAway(GetHTTPGATEWAYTIMEOUT());
 }
 
 void TViewerPipeClient::PassAway() {

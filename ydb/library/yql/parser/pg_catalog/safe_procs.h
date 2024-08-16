@@ -4,6 +4,7 @@
 "pg_total_relation_size",
 "row_to_json",
 "version",
+"pow",
 
 "set_config",//pgadmin
 "pg_is_in_recovery",//pgadmin
@@ -20,3 +21,9 @@
 
 // postgis
 "postgis_lib_version",
+
+//dbeaver
+"pg_get_expr",
+"pg_get_partkeydef",
+"pg_tablespace_location",
+"current_schemas",

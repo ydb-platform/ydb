@@ -55,8 +55,8 @@ auto GetStepAndTxId(const E& event)
     return GetStepAndTxId(event.Step, event.TxId);
 }
 
-bool TPartition::LastOffsetHasBeenCommited(const TUserInfo& userInfo) const {
-    return !IsActive() && static_cast<ui64>(std::max<i64>(userInfo.Offset, 0)) == EndOffset;
+bool TPartition::LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const {
+    return !IsActive() && (static_cast<ui64>(std::max<i64>(userInfo.Offset, 0)) == EndOffset || StartOffset == EndOffset);
 }
 
 struct TMirrorerInfo {
@@ -245,7 +245,7 @@ void TPartition::EmplaceResponse(TMessage&& message, const TActorContext& ctx) {
     );
 }
 
-ui64 TPartition::MeteringDataSize() const {
+ui64 TPartition::UserDataSize() const {
     if (DataKeysBody.size() <= 1) {
         // tiny optimization - we do not meter very small queues up to 16MB
         return 0;
@@ -260,25 +260,39 @@ ui64 TPartition::MeteringDataSize() const {
     return size >= lastBlobSize ? size - lastBlobSize : 0;
 }
 
+ui64 TPartition::MeteringDataSize(TInstant now) const {
+    if (IsActive() || NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS == Config.GetMeteringMode()) {
+        return UserDataSize();
+    } else {
+        // We only add the amount of data that is blocked by an important consumer.
+        ui64 size = 0;
+        auto expirationTimestamp = now - TDuration::Seconds(Config.GetPartitionConfig().GetLifetimeSeconds()) - WAKE_TIMEOUT;
+        for (size_t i = 1; i < DataKeysBody.size() && DataKeysBody[i].Timestamp < expirationTimestamp; ++i) {
+            size += DataKeysBody[i].Size;
+        }
+        return size;
+    }
+}
+
 ui64 TPartition::ReserveSize() const {
-    return TopicPartitionReserveSize(Config);
+    return IsActive() ? TopicPartitionReserveSize(Config) : 0;
 }
 
 ui64 TPartition::StorageSize(const TActorContext&) const {
-    return std::max<ui64>(MeteringDataSize(), ReserveSize());
+    return std::max<ui64>(UserDataSize(), ReserveSize());
 }
 
 ui64 TPartition::UsedReserveSize(const TActorContext&) const {
-    return std::min<ui64>(MeteringDataSize(), ReserveSize());
+    return std::min<ui64>(UserDataSize(), ReserveSize());
 }
 
 ui64 TPartition::GetUsedStorage(const TInstant& now) {
     const auto duration = now - LastUsedStorageMeterTimestamp;
     LastUsedStorageMeterTimestamp = now;
 
-    auto dataSize = MeteringDataSize();
+    auto dataSize = MeteringDataSize(now);
     auto reservedSize = ReserveSize();
-    ui64 size = dataSize > reservedSize ? dataSize - reservedSize : 0;
+    auto size = dataSize > reservedSize ? dataSize - reservedSize : 0;
     return size * duration.MilliSeconds() / 1000 / 1_MB; // mb*seconds
 }
 
@@ -493,8 +507,8 @@ void TPartition::DestroyActor(const TActorContext& ctx)
         UsersInfoStorage->Clear(ctx);
     }
 
+    Send(ReadQuotaTrackerActor, new TEvents::TEvPoisonPill());
     if (!IsSupportive()) {
-        Send(ReadQuotaTrackerActor, new TEvents::TEvPoisonPill());
         Send(WriteQuotaTrackerActor, new TEvents::TEvPoisonPill());
     }
 
@@ -749,7 +763,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
 
         result.SetReadBytesQuota(maxQuota);
 
-        result.SetPartitionSize(MeteringDataSize());
+        result.SetPartitionSize(UserDataSize());
         result.SetUsedReserveSize(UsedReserveSize(ctx));
 
         result.SetLastWriteTimestampMs(WriteTimestamp.MilliSeconds());
@@ -2883,6 +2897,10 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
 
         userInfo.Offset = offset;
 
+        if (LastOffsetHasBeenCommited(userInfo)) {
+            SendReadingFinished(user);
+        }
+
         auto counter = setSession ? COUNTER_PQ_CREATE_SESSION_OK : (dropSession ? COUNTER_PQ_DELETE_SESSION_OK : COUNTER_PQ_SET_CLIENT_OFFSET_OK);
         TabletCounters.Cumulative()[counter].Increment(1);
     }
@@ -2920,6 +2938,10 @@ void TPartition::ScheduleReplyPropose(const NKikimrPQ::TEvProposeTransaction& ev
                                       NKikimrPQ::TError::EKind kind,
                                       const TString& reason)
 {
+    PQ_LOG_D("schedule TEvPersQueue::TEvProposeTransactionResult(" <<
+             NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(statusCode) <<
+             ")" <<
+             ", reason=" << reason);
     Replies.emplace_back(ActorIdFromProto(event.GetSourceActor()),
                          MakeReplyPropose(event,
                                           statusCode,
@@ -3335,6 +3357,8 @@ void TPartition::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const T
 
 void TPartition::HandleOnInit(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext&)
 {
+    PQ_LOG_D("HandleOnInit TEvPQ::TEvDeletePartition");
+
     Y_ABORT_UNLESS(IsSupportive());
 
     PendingEvents.emplace_back(ev->ReleaseBase().Release());
@@ -3342,6 +3366,8 @@ void TPartition::HandleOnInit(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorC
 
 void TPartition::Handle(TEvPQ::TEvDeletePartition::TPtr&, const TActorContext& ctx)
 {
+    PQ_LOG_D("Handle TEvPQ::TEvDeletePartition");
+
     Y_ABORT_UNLESS(IsSupportive());
     Y_ABORT_UNLESS(DeletePartitionState == DELETION_NOT_INITED);
 

@@ -1530,7 +1530,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TNetClassifierInitializer(runConfig));
     }
 
-    sil->AddServiceInitializer(new TMemProfMonitorInitializer(runConfig));
+    sil->AddServiceInitializer(new TMemProfMonitorInitializer(runConfig, ProcessMemoryInfoProvider));
 
 #if defined(ENABLE_MEMORY_TRACKING)
     if (serviceMask.EnableMemoryTracker) {
@@ -1554,6 +1554,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     if (serviceMask.EnableCompDiskLimiter) {
         sil->AddServiceInitializer(new TCompDiskLimiterInitializer(runConfig));
+    }
+
+    if (serviceMask.EnableGroupedMemoryLimiter) {
+        sil->AddServiceInitializer(new TGroupedMemoryLimiterInitializer(runConfig));
     }
 
     if (serviceMask.EnableScanConveyor) {
@@ -1652,6 +1656,8 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     if (serviceMask.EnableGraphService) {
         sil->AddServiceInitializer(new TGraphServiceInitializer(runConfig));
     }
+
+    sil->AddServiceInitializer(new TAwsApiInitializer(*this));
 
     return sil;
 }

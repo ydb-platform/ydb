@@ -3,6 +3,8 @@
 #include <ydb/core/protos/hive.pb.h>
 #include <ydb/core/statistics/service/service.h>
 
+#include <util/string/vector.h>
+
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
@@ -33,15 +35,20 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
         Request = std::make_unique<TEvStatistics::TEvAggregateStatistics>();
         auto& outRecord = Request->Record;
 
-        PathIdFromPathId(Self->ScanTableId.PathId, outRecord.MutablePathId());
+        PathIdFromPathId(Self->TraversalTableId.PathId, outRecord.MutablePathId());
 
-        bool hasTablets = false;
+        const auto forceTraversalTable = Self->CurrentForceTraversalTable();
+        if (forceTraversalTable) {
+            TVector<ui32> columnTags = Scan<ui32>(SplitString(forceTraversalTable->ColumnTags, ","));
+            outRecord.MutableColumnTags()->Add(columnTags.begin(), columnTags.end());
+        }
+
+        auto distribution = Self->TabletsForReqDistribution;
         for (auto& inNode : Record.GetNodes()) {
             if (inNode.GetNodeId() == 0) {
                 // these tablets are probably in Hive boot queue
                 if (Self->HiveRequestRound < Self->MaxHiveRequestRoundCount) {
                     Action = EAction::ScheduleReqDistribution;
-                    return true;
                 }
                 continue;
             }
@@ -50,19 +57,17 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
             outNode.MutableTabletIds()->Reserve(inNode.TabletIdsSize());
             for (auto tabletId : inNode.GetTabletIds()) {
                 outNode.AddTabletIds(tabletId);
-                Self->TabletsForReqDistribution.erase(tabletId);
+                distribution.erase(tabletId);
             }
-            hasTablets = true;
         }
 
-        if (!Self->TabletsForReqDistribution.empty() && Self->ResolveRound < Self->MaxResolveRoundCount) {
-            // these tablets do not exist in Hive anymore
-            Action = EAction::ScheduleResolve;
+        if (Action == EAction::ScheduleReqDistribution) {
             return true;
         }
 
-        if (!hasTablets) {
-            Self->FinishScan(db);
+        if (!distribution.empty() && Self->ResolveRound < Self->MaxResolveRoundCount) {
+            // these tablets do not exist in Hive anymore
+            Action = EAction::ScheduleResolve;
             return true;
         }
 

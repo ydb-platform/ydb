@@ -1,6 +1,6 @@
 /* Print information on generated parser, for bison,
 
-   Copyright (C) 1984, 1986, 1989, 2000-2005, 2007, 2009-2015, 2018-2019
+   Copyright (C) 1984, 1986, 1989, 2000-2005, 2007, 2009-2015, 2018-2021
    Free Software Foundation, Inc.
 
    This file is part of Bison, the GNU Compiler Compiler.
@@ -16,22 +16,27 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #include <config.h>
+
+#include "print.h"
+
 #include "system.h"
 
 #include <bitset.h>
+#include <mbswidth.h>
 
-#include "LR0.h"
 #include "closure.h"
+#include "complain.h"
 #include "conflicts.h"
+#include "counterexample.h"
 #include "files.h"
 #include "getargs.h"
 #include "gram.h"
 #include "lalr.h"
+#include "lr0.h"
 #include "muscle-tab.h"
-#include "print.h"
 #include "reader.h"
 #include "reduce.h"
 #include "state.h"
@@ -49,7 +54,7 @@ static bitset no_reduce_set;
 static void
 max_length (size_t *width, const char *str)
 {
-  size_t len = strlen (str);
+  size_t len = mbswidth (str, 0);
   if (len > *width)
     *width = len;
 }
@@ -59,12 +64,10 @@ max_length (size_t *width, const char *str)
 `--------------------------------*/
 
 static void
-print_core (FILE *out, state *s)
+print_core (FILE *out, const state *s)
 {
-  item_number *sitems = s->items;
+  const item_index *sitems = s->items;
   size_t snritems = s->nitems;
-  sym_content *previous_lhs = NULL;
-
   /* Output all the items of a state, not only its kernel.  */
   if (report_flag & report_itemsets)
     {
@@ -78,33 +81,18 @@ print_core (FILE *out, state *s)
 
   fputc ('\n', out);
 
+  rule const *previous_rule = NULL;
   for (size_t i = 0; i < snritems; i++)
     {
       item_number *sp1 = ritem + sitems[i];
-
-      item_number *sp = sp1;
-      while (*sp >= 0)
-        sp++;
-
-      rule_number r = item_number_as_rule_number (*sp);
-
-      rule_lhs_print (&rules[r], previous_lhs, out);
-      previous_lhs = rules[r].lhs;
-
-      for (sp = rules[r].rhs; sp < sp1; sp++)
-        fprintf (out, " %s", symbols[*sp]->tag);
-      fputs (" .", out);
-      if (0 <= *rules[r].rhs)
-        for (/* Nothing */; 0 <= *sp; ++sp)
-          fprintf (out, " %s", symbols[*sp]->tag);
-      else
-        fprintf (out, " %%empty");
+      rule const *r = item_rule (sp1);
+      item_print (sp1, previous_rule, out);
+      previous_rule = r;
 
       /* Display the lookahead tokens?  */
-      if (report_flag & report_lookahead_tokens
+      if (report_flag & report_lookaheads
           && item_number_is_rule_number (*sp1))
-        state_rule_lookahead_tokens_print (s, &rules[r], out);
-
+        state_rule_lookaheads_print (s, r, out);
       fputc ('\n', out);
     }
 }
@@ -116,7 +104,7 @@ print_core (FILE *out, state *s)
 `------------------------------------------------------------*/
 
 static void
-print_transitions (state *s, FILE *out, bool display_transitions_p)
+print_transitions (const state *s, FILE *out, bool display_transitions_p)
 {
   transitions *trans = s->transitions;
   size_t width = 0;
@@ -144,10 +132,10 @@ print_transitions (state *s, FILE *out, bool display_transitions_p)
       {
         symbol *sym = symbols[TRANSITION_SYMBOL (trans, i)];
         const char *tag = sym->tag;
-        state *s1 = trans->states[i];
+        const state *s1 = trans->states[i];
 
         fprintf (out, "    %s", tag);
-        for (int j = width - strlen (tag); j > 0; --j)
+        for (int j = width - mbswidth (tag, 0); j > 0; --j)
           fputc (' ', out);
         if (display_transitions_p)
           fprintf (out, _("shift, and go to state %d\n"), s1->number);
@@ -162,7 +150,7 @@ print_transitions (state *s, FILE *out, bool display_transitions_p)
 `--------------------------------------------------------*/
 
 static void
-print_errs (FILE *out, state *s)
+print_errs (FILE *out, const state *s)
 {
   errs *errp = s->errs;
   size_t width = 0;
@@ -185,26 +173,26 @@ print_errs (FILE *out, state *s)
       {
         const char *tag = errp->symbols[i]->tag;
         fprintf (out, "    %s", tag);
-        for (int j = width - strlen (tag); j > 0; --j)
+        for (int j = width - mbswidth (tag, 0); j > 0; --j)
           fputc (' ', out);
         fputs (_("error (nonassociative)\n"), out);
       }
 }
 
 
-/*-------------------------------------------------------------------------.
-| Report a reduction of RULE on LOOKAHEAD_TOKEN (which can be 'default').  |
-| If not ENABLED, the rule is masked by a shift or a reduce (S/R and       |
-| R/R conflicts).                                                          |
-`-------------------------------------------------------------------------*/
+/*-------------------------------------------------------------------.
+| Report a reduction of RULE on LOOKAHEAD (which can be 'default').  |
+| If not ENABLED, the rule is masked by a shift or a reduce (S/R and |
+| R/R conflicts).                                                    |
+`-------------------------------------------------------------------*/
 
 static void
 print_reduction (FILE *out, size_t width,
-                 const char *lookahead_token,
+                 const char *lookahead,
                  rule *r, bool enabled)
 {
-  fprintf (out, "    %s", lookahead_token);
-  for (int j = width - strlen (lookahead_token); j > 0; --j)
+  fprintf (out, "    %s", lookahead);
+  for (int j = width - mbswidth (lookahead, 0); j > 0; --j)
     fputc (' ', out);
   if (!enabled)
     fputc ('[', out);
@@ -224,7 +212,7 @@ print_reduction (FILE *out, size_t width,
 `-------------------------------------------*/
 
 static void
-print_reductions (FILE *out, state *s)
+print_reductions (FILE *out, const state *s)
 {
   reductions *reds = s->reductions;
   if (reds->num == 0)
@@ -249,15 +237,15 @@ print_reductions (FILE *out, state *s)
   /* Compute the width of the lookahead token column.  */
   size_t width = 0;
   if (default_reduction)
-    width = strlen (_("$default"));
+    width = mbswidth (_("$default"), 0);
 
-  if (reds->lookahead_tokens)
+  if (reds->lookaheads)
     for (int i = 0; i < ntokens; i++)
       {
         bool count = bitset_test (no_reduce_set, i);
 
         for (int j = 0; j < reds->num; ++j)
-          if (bitset_test (reds->lookahead_tokens[j], i))
+          if (bitset_test (reds->lookaheads[j], i))
             {
               if (! count)
                 {
@@ -280,7 +268,7 @@ print_reductions (FILE *out, state *s)
   bool default_reduction_only = true;
 
   /* Report lookahead tokens (or $default) and reductions.  */
-  if (reds->lookahead_tokens)
+  if (reds->lookaheads)
     for (int i = 0; i < ntokens; i++)
       {
         bool defaulted = false;
@@ -289,7 +277,7 @@ print_reductions (FILE *out, state *s)
           default_reduction_only = false;
 
         for (int j = 0; j < reds->num; ++j)
-          if (bitset_test (reds->lookahead_tokens[j], i))
+          if (bitset_test (reds->lookaheads[j], i))
             {
               if (! count)
                 {
@@ -336,11 +324,11 @@ print_reductions (FILE *out, state *s)
 
 /*--------------------------------------------------------------.
 | Report on OUT all the actions (shifts, gotos, reductions, and |
-| explicit erros from %nonassoc) of S.                          |
+| explicit errors from %nonassoc) of S.                         |
 `--------------------------------------------------------------*/
 
 static void
-print_actions (FILE *out, state *s)
+print_actions (FILE *out, const state *s)
 {
   /* Print shifts.  */
   print_transitions (s, out, true);
@@ -356,7 +344,7 @@ print_actions (FILE *out, state *s)
 `----------------------------------*/
 
 static void
-print_state (FILE *out, state *s)
+print_state (FILE *out, const state *s)
 {
   fputs ("\n\n", out);
   fprintf (out, _("State %d"), s->number);
@@ -368,55 +356,42 @@ print_state (FILE *out, state *s)
       fputc ('\n', out);
       fputs (s->solved_conflicts, out);
     }
+  if (has_conflicts (s)
+      && (report_flag & report_cex
+          || warning_is_enabled (Wcounterexamples)))
+    {
+      fputc ('\n', out);
+      counterexample_report_state (s, out, "    ");
+    }
 }
 
 /*-----------------------------------------.
 | Print information on the whole grammar.  |
 `-----------------------------------------*/
 
-#define END_TEST(End)                           \
-  do {                                          \
-    if (column + strlen (buffer) > (End))       \
-      {                                         \
-        fprintf (out, "%s\n   ", buffer);       \
-        column = 3;                             \
-        buffer[0] = 0;                          \
-      }                                         \
-  } while (0)
-
-
 static void
 print_terminal_symbols (FILE *out)
 {
   /* TERMINAL (type #) : rule #s terminal is on RHS */
   fprintf (out, "%s\n\n", _("Terminals, with rules where they appear"));
-  for (symbol_number i = 0; i < max_user_token_number + 1; i++)
+  for (int i = 0; i < max_code + 1; ++i)
     if (token_translations[i] != undeftoken->content->number)
       {
-        const char *tag = symbols[token_translations[i]]->tag;
-        int column = strlen (tag);
-        char buffer[90];
-
-        buffer[0] = 0;
-        fputs (tag, out);
-        END_TEST (65);
-        if (symbols[token_translations[i]]->content->type_name)
-          {
-            column += fprintf (out, " <%s>",
-                               symbols[token_translations[i]]->content->type_name);
-            END_TEST (65);
-          }
-        sprintf (buffer, " (%d)", i);
+        const symbol *sym = symbols[token_translations[i]];
+        const char *tag = sym->tag;
+        fprintf (out, "%4s%s", "", tag);
+        if (sym->content->type_name)
+          fprintf (out, " <%s>", sym->content->type_name);
+        fprintf (out, " (%d)", i);
 
         for (rule_number r = 0; r < nrules; r++)
           for (item_number *rhsp = rules[r].rhs; *rhsp >= 0; rhsp++)
             if (item_number_as_symbol_number (*rhsp) == token_translations[i])
               {
-                END_TEST (65);
-                sprintf (buffer + strlen (buffer), " %d", r);
+                fprintf (out, " %d", r);
                 break;
               }
-        fprintf (out, "%s\n", buffer);
+        fputc ('\n', out);
       }
   fputs ("\n\n", out);
 }
@@ -428,65 +403,48 @@ print_nonterminal_symbols (FILE *out)
   fprintf (out, "%s\n\n", _("Nonterminals, with rules where they appear"));
   for (symbol_number i = ntokens; i < nsyms; i++)
     {
-      const char *tag = symbols[i]->tag;
-      int column = strlen (tag);
-      int left_count = 0, right_count = 0;
+      const symbol *sym = symbols[i];
+      const char *tag = sym->tag;
+      bool on_left = false;
+      bool on_right = false;
 
       for (rule_number r = 0; r < nrules; r++)
         {
-          if (rules[r].lhs->number == i)
-            left_count++;
-          for (item_number *rhsp = rules[r].rhs; *rhsp >= 0; rhsp++)
-            if (item_number_as_symbol_number (*rhsp) == i)
-              {
-                right_count++;
-                break;
-              }
+          on_left |= rules[r].lhs->number == i;
+          for (item_number *rhsp = rules[r].rhs; !on_right && 0 <= *rhsp; ++rhsp)
+            on_right |= item_number_as_symbol_number (*rhsp) == i;
+          if (on_left && on_right)
+            break;
         }
 
-      fputs (tag, out);
-      if (symbols[i]->content->type_name)
+      int column = 4 + mbswidth (tag, 0);
+      fprintf (out, "%4s%s", "", tag);
+      if (sym->content->type_name)
         column += fprintf (out, " <%s>",
-                           symbols[i]->content->type_name);
-      char buffer[90];
-      buffer[0] = 0;
-      sprintf (buffer, " (%d)", i);
-      END_TEST (0);
+                           sym->content->type_name);
+      fprintf (out, " (%d)\n", i);
 
-      if (left_count > 0)
+      if (on_left)
         {
-          END_TEST (65);
-          sprintf (buffer + strlen (buffer), _(" on left:"));
-
+          fprintf (out, "%8s%s", "", _("on left:"));
           for (rule_number r = 0; r < nrules; r++)
-            {
-              if (rules[r].lhs->number == i)
+            if (rules[r].lhs->number == i)
+              fprintf (out, " %d", r);
+          fputc ('\n', out);
+        }
+
+      if (on_right)
+        {
+          fprintf (out, "%8s%s", "", _("on right:"));
+          for (rule_number r = 0; r < nrules; r++)
+            for (item_number *rhsp = rules[r].rhs; 0 <= *rhsp; ++rhsp)
+              if (item_number_as_symbol_number (*rhsp) == i)
                 {
-                  END_TEST (65);
-                  sprintf (buffer + strlen (buffer), " %d", r);
+                  fprintf (out, " %d", r);
+                  break;
                 }
-            }
+          fputc ('\n', out);
         }
-
-      if (right_count > 0)
-        {
-          if (left_count > 0)
-            sprintf (buffer + strlen (buffer), ",");
-          END_TEST (65);
-          sprintf (buffer + strlen (buffer), _(" on right:"));
-          for (rule_number r = 0; r < nrules; r++)
-            {
-              item_number *rhsp;
-              for (rhsp = rules[r].rhs; *rhsp >= 0; rhsp++)
-                if (item_number_as_symbol_number (*rhsp) == i)
-                  {
-                    END_TEST (65);
-                    sprintf (buffer + strlen (buffer), " %d", r);
-                    break;
-                  }
-            }
-        }
-      fprintf (out, "%s\n", buffer);
     }
 }
 
@@ -500,24 +458,18 @@ print_results (void)
   reduce_output (out);
   grammar_rules_partial_print (out,
                                _("Rules useless in parser due to conflicts"),
-                                 rule_useless_in_parser_p);
+                               rule_useless_in_parser_p);
   conflicts_output (out);
 
   grammar_rules_print (out);
   print_terminal_symbols (out);
   print_nonterminal_symbols (out);
 
-  /* If the whole state item sets, not only the kernels, are wanted,
-     'closure' will be run, which needs memory allocation/deallocation.   */
-  if (report_flag & report_itemsets)
-    new_closure (nritems);
   /* Storage for print_reductions.  */
   no_reduce_set = bitset_create (ntokens, BITSET_FIXED);
   for (state_number i = 0; i < nstates; i++)
     print_state (out, states[i]);
   bitset_free (no_reduce_set);
-  if (report_flag & report_itemsets)
-    free_closure ();
 
   xfclose (out);
 }

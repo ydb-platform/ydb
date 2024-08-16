@@ -75,6 +75,7 @@
 #include "y_absl/base/internal/per_thread_tls.h"
 #include "y_absl/base/macros.h"
 #include "y_absl/base/nullability.h"
+#include "y_absl/base/optimization.h"
 #include "y_absl/base/port.h"
 #include "y_absl/container/inlined_vector.h"
 #include "y_absl/crc/internal/crc_cord_state.h"
@@ -95,6 +96,7 @@
 #include "y_absl/strings/internal/resize_uninitialized.h"
 #include "y_absl/strings/internal/string_constant.h"
 #include "y_absl/strings/string_view.h"
+#include "y_absl/types/compare.h"
 #include "y_absl/types/optional.h"
 
 namespace y_absl {
@@ -104,6 +106,7 @@ class CordTestPeer;
 template <typename Releaser>
 Cord MakeCordFromExternal(y_absl::string_view, Releaser&&);
 void CopyCordToString(const Cord& src, y_absl::Nonnull<TString*> dst);
+void AppendCordToString(const Cord& src, y_absl::Nonnull<TString*> dst);
 
 // Cord memory accounting modes
 enum class CordMemoryAccounting {
@@ -419,6 +422,18 @@ class Cord {
   // object, prefer to simply use the conversion operator to `TString`.
   friend void CopyCordToString(const Cord& src,
                                y_absl::Nonnull<TString*> dst);
+
+  // AppendCordToString()
+  //
+  // Appends the contents of a `src` Cord to a `*dst` string.
+  //
+  // This function optimizes the case of appending to a non-empty destination
+  // string. If `*dst` already has capacity to store the contents of the cord,
+  // this function does not invalidate pointers previously returned by
+  // `dst->data()`. If `*dst` is a new object, prefer to simply use the
+  // conversion operator to `TString`.
+  friend void AppendCordToString(const Cord& src,
+                                 y_absl::Nonnull<TString*> dst);
 
   class CharIterator;
 
@@ -757,7 +772,7 @@ class Cord {
 
   // Cord::Find()
   //
-  // Returns an iterator to the first occurrance of the substring `needle`.
+  // Returns an iterator to the first occurrence of the substring `needle`.
   //
   // If the substring `needle` does not occur, `Cord::char_end()` is returned.
   CharIterator Find(y_absl::string_view needle) const;
@@ -834,6 +849,38 @@ class Cord {
   friend class CordTestPeer;
   friend bool operator==(const Cord& lhs, const Cord& rhs);
   friend bool operator==(const Cord& lhs, y_absl::string_view rhs);
+
+#ifdef __cpp_impl_three_way_comparison
+
+  // Cords support comparison with other Cords and string_views via operator<
+  // and others; here we provide a wrapper for the C++20 three-way comparison
+  // <=> operator.
+
+  static inline std::strong_ordering ConvertCompareResultToStrongOrdering(
+      int c) {
+    if (c == 0) {
+      return std::strong_ordering::equal;
+    } else if (c < 0) {
+      return std::strong_ordering::less;
+    } else {
+      return std::strong_ordering::greater;
+    }
+  }
+
+  friend inline std::strong_ordering operator<=>(const Cord& x, const Cord& y) {
+    return ConvertCompareResultToStrongOrdering(x.Compare(y));
+  }
+
+  friend inline std::strong_ordering operator<=>(const Cord& lhs,
+                                                 y_absl::string_view rhs) {
+    return ConvertCompareResultToStrongOrdering(lhs.Compare(rhs));
+  }
+
+  friend inline std::strong_ordering operator<=>(y_absl::string_view lhs,
+                                                 const Cord& rhs) {
+    return ConvertCompareResultToStrongOrdering(-rhs.Compare(lhs));
+  }
+#endif
 
   friend y_absl::Nullable<const CordzInfo*> GetCordzInfoForTesting(
       const Cord& cord);
@@ -1065,6 +1112,8 @@ class Cord {
       const;
 
   CharIterator FindImpl(CharIterator it, y_absl::string_view needle) const;
+
+  void CopyToArrayImpl(y_absl::Nonnull<char*> dst) const;
 };
 
 Y_ABSL_NAMESPACE_END
@@ -1103,8 +1152,8 @@ y_absl::Nonnull<CordRep*> NewExternalRep(y_absl::string_view data,
 // Overload for function reference types that dispatches using a function
 // pointer because there are no `alignof()` or `sizeof()` a function reference.
 // NOLINTNEXTLINE - suppress clang-tidy raw pointer return.
-inline y_absl::Nonnull<CordRep*> NewExternalRep(y_absl::string_view data,
-                               void (&releaser)(y_absl::string_view)) {
+inline y_absl::Nonnull<CordRep*> NewExternalRep(
+    y_absl::string_view data, void (&releaser)(y_absl::string_view)) {
   return NewExternalRep(data, &releaser);
 }
 
@@ -1120,7 +1169,7 @@ Cord MakeCordFromExternal(y_absl::string_view data, Releaser&& releaser) {
   } else {
     using ReleaserType = y_absl::decay_t<Releaser>;
     cord_internal::InvokeReleaser(
-        cord_internal::Rank0{}, ReleaserType(std::forward<Releaser>(releaser)),
+        cord_internal::Rank1{}, ReleaserType(std::forward<Releaser>(releaser)),
         data);
   }
   return cord;
@@ -1170,7 +1219,8 @@ inline void Cord::InlineRep::Swap(y_absl::Nonnull<Cord::InlineRep*> rhs) {
   if (rhs == this) {
     return;
   }
-  std::swap(data_, rhs->data_);
+  using std::swap;
+  swap(data_, rhs->data_);
 }
 
 inline y_absl::Nullable<const char*> Cord::InlineRep::data() const {
@@ -1352,7 +1402,8 @@ inline size_t Cord::EstimatedMemoryUsage(
   return result;
 }
 
-inline y_absl::optional<y_absl::string_view> Cord::TryFlat() const {
+inline y_absl::optional<y_absl::string_view> Cord::TryFlat() const
+    Y_ABSL_ATTRIBUTE_LIFETIME_BOUND {
   y_absl::cord_internal::CordRep* rep = contents_.tree();
   if (rep == nullptr) {
     return y_absl::string_view(contents_.data(), contents_.size());
@@ -1364,7 +1415,7 @@ inline y_absl::optional<y_absl::string_view> Cord::TryFlat() const {
   return y_absl::nullopt;
 }
 
-inline y_absl::string_view Cord::Flatten() {
+inline y_absl::string_view Cord::Flatten() Y_ABSL_ATTRIBUTE_LIFETIME_BOUND {
   y_absl::cord_internal::CordRep* rep = contents_.tree();
   if (rep == nullptr) {
     return y_absl::string_view(contents_.data(), contents_.size());
@@ -1387,6 +1438,7 @@ inline void Cord::Prepend(y_absl::string_view src) {
 
 inline void Cord::Append(CordBuffer buffer) {
   if (Y_ABSL_PREDICT_FALSE(buffer.length() == 0)) return;
+  contents_.MaybeRemoveEmptyCrcNode();
   y_absl::string_view short_value;
   if (CordRep* rep = buffer.ConsumeValue(short_value)) {
     contents_.AppendTree(rep, CordzUpdateTracker::kAppendCordBuffer);
@@ -1397,6 +1449,7 @@ inline void Cord::Append(CordBuffer buffer) {
 
 inline void Cord::Prepend(CordBuffer buffer) {
   if (Y_ABSL_PREDICT_FALSE(buffer.length() == 0)) return;
+  contents_.MaybeRemoveEmptyCrcNode();
   y_absl::string_view short_value;
   if (CordRep* rep = buffer.ConsumeValue(short_value)) {
     contents_.PrependTree(rep, CordzUpdateTracker::kPrependCordBuffer);
@@ -1443,6 +1496,14 @@ inline bool Cord::StartsWith(y_absl::string_view rhs) const {
   size_t rhs_size = rhs.size();
   if (size() < rhs_size) return false;
   return EqualsImpl(rhs, rhs_size);
+}
+
+inline void Cord::CopyToArrayImpl(y_absl::Nonnull<char*> dst) const {
+  if (!contents_.is_tree()) {
+    if (!empty()) contents_.CopyToArray(dst);
+  } else {
+    CopyToArraySlowPath(dst);
+  }
 }
 
 inline void Cord::ChunkIterator::InitTree(

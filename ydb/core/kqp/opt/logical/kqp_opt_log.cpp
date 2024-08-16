@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_rules.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
+#include <ydb/library/yql/core/yql_opt_match_recognize.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/opt/dq_opt_join.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
@@ -60,6 +61,7 @@ public:
         AddHandler(0, &TCoNarrowFlatMap::Match, HNDL(DqReadWideWrapFieldSubset));
         AddHandler(0, &TCoNarrowMultiMap::Match, HNDL(DqReadWideWrapFieldSubset));
         AddHandler(0, &TCoWideMap::Match, HNDL(DqReadWideWrapFieldSubset));
+        AddHandler(0, &TCoMatchRecognize::Match, HNDL(MatchRecognize));
 
         AddHandler(1, &TCoTop::Match, HNDL(RewriteTopSortOverIndexRead));
         AddHandler(1, &TCoTopSort::Match, HNDL(RewriteTopSortOverIndexRead));
@@ -151,7 +153,9 @@ protected:
             *opt, [](auto& rels, auto label, auto node, auto stat) {
                 rels.emplace_back(std::make_shared<TKqpRelOptimizerNode>(TString(label), stat, node));
             },
-            KqpCtx.EquiJoinsCount);
+            KqpCtx.EquiJoinsCount,
+            KqpCtx.GetCardinalityHints(),
+            KqpCtx.GetJoinAlgoHints());
         DumpAppliedRule("OptimizeEquiJoinWithCosts", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -284,6 +288,14 @@ protected:
         auto output = NDq::DqReadWideWrapFieldSubset(node, ctx, getParents, TypesCtx);
         if (output) {
             DumpAppliedRule("DqReadWideWrapFieldSubset", node.Ptr(), output.Cast().Ptr(), ctx);
+        }
+        return output;
+    }
+
+    TMaybeNode<TExprBase> MatchRecognize(TExprBase node, TExprContext& ctx) {
+        auto output = ExpandMatchRecognize(node.Ptr(), ctx, TypesCtx);
+        if (output) {
+            DumpAppliedRule("MatchRecognize", node.Ptr(), output, ctx);
         }
         return output;
     }

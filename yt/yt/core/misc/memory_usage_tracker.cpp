@@ -233,14 +233,9 @@ TError TMemoryUsageTrackerGuard::SetSizeImpl(i64 size, auto acquirer)
     return {};
 }
 
-void TMemoryUsageTrackerGuard::IncreaseSize(i64 sizeDelta)
+void TMemoryUsageTrackerGuard::IncrementSize(i64 sizeDelta)
 {
     SetSize(Size_ + sizeDelta);
-}
-
-void TMemoryUsageTrackerGuard::DecreaseSize(i64 sizeDelta)
-{
-    SetSize(Size_ - sizeDelta);
 }
 
 TMemoryUsageTrackerGuard TMemoryUsageTrackerGuard::TransferMemory(i64 size)
@@ -369,7 +364,7 @@ TErrorOr<TSharedRef> TryTrackMemory(
     if (!tracker || !reference) {
         return reference;
     }
-    return tracker->TryTrack(reference, keepExistingTracking);
+    return tracker->TryTrack(std::move(reference), keepExistingTracking);
 }
 
 TSharedRef TrackMemory(
@@ -380,7 +375,7 @@ TSharedRef TrackMemory(
     if (!tracker || !reference) {
         return reference;
     }
-    return tracker->Track(reference, keepExistingTracking);
+    return tracker->Track(std::move(reference), keepExistingTracking);
 }
 
 TSharedRefArray TrackMemory(

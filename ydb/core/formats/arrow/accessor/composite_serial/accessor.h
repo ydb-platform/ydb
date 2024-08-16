@@ -9,15 +9,6 @@ private:
     using TBase = NArrow::NAccessor::IChunkedArray;
 
 public:
-    class TChunkCacheInfo {
-    private:
-        YDB_ACCESSOR_DEF(std::shared_ptr<NArrow::NAccessor::IChunkedArray>, Chunk);
-        YDB_ACCESSOR(ui32, Index, 0);
-        YDB_ACCESSOR(ui32, StartPosition, 0);
-
-    public:
-    };
-
     class TChunk {
     private:
         YDB_READONLY(ui32, RecordsCount, 0);
@@ -47,7 +38,6 @@ public:
 private:
     std::shared_ptr<TColumnLoader> Loader;
     std::vector<TChunk> Chunks;
-    std::shared_ptr<TChunkCacheInfo> CurrentChunkCache = std::make_shared<TChunkCacheInfo>();
 
 protected:
     virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(
@@ -60,7 +50,7 @@ protected:
         return {};
     }
 
-    virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const override {
+    virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 /*index*/) const override {
         AFL_VERIFY(false)("problem", "cannot use method");
         return nullptr;
     }

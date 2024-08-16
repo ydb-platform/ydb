@@ -124,7 +124,7 @@ struct IChannel
 
     virtual int GetInflightRequestCount() = 0;
 
-    virtual IMemoryUsageTrackerPtr GetChannelMemoryTracker() = 0;
+    virtual const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IChannel)

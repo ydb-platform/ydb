@@ -258,7 +258,8 @@ namespace NKikimr {
                             VCtx->Top->GetOrderNumber(VCtx->ShortSelfVDisk));
                 CreateQueuesForVDisks(VPatchCtx->AsyncBlobQueues, SelfId(), GInfo, VCtx, GInfo->GetVDisks(), patchGroup,
                         patchQueueClientId, NKikimrBlobStorage::EVDiskQueueId::PutAsyncBlob,
-                        "PeerVPatch",  TInterconnectChannels::IC_BLOBSTORAGE_ASYNC_DATA);
+                        "PeerVPatch",  TInterconnectChannels::IC_BLOBSTORAGE_ASYNC_DATA,
+                        Config->UseActorSystemTimeInBSQueue);
             }
         }
 
@@ -1809,7 +1810,7 @@ namespace NKikimr {
         }
 
         void StartDefrag(const TActorContext &ctx) {
-            auto defragCtx = std::make_shared<TDefragCtx>(VCtx, HugeBlobCtx, PDiskCtx, ctx.SelfID,
+            auto defragCtx = std::make_shared<TDefragCtx>(VCtx, Config, HugeBlobCtx, PDiskCtx, ctx.SelfID,
                 Db->HugeKeeperID, true);
             DefragId = ctx.Register(CreateDefragActor(defragCtx, GInfo));
             ActiveActors.Insert(DefragId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever

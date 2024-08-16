@@ -546,7 +546,8 @@ public:
                         TS3Credentials(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster)),
                         pathPattern,
                         pathPatternVariant,
-                        NS3Lister::ES3PatternType::Wildcard
+                        NS3Lister::ES3PatternType::Wildcard,
+                        State_->Configuration->AllowLocalFiles
                     ),
                     NActors::TMailboxType::HTSwap,
                     State_->ExecutorPoolId

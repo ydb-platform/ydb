@@ -155,6 +155,7 @@ namespace NKikimr::NStorage {
         TControlWrapper EnableSyncLogChunkCompressionSSD;
         TControlWrapper MaxSyncLogChunksInFlightHDD;
         TControlWrapper MaxSyncLogChunksInFlightSSD;
+        TControlWrapper DefaultHugeGarbagePerMille;
 
         TReplQuoter::TPtr ReplNodeRequestQuoter;
         TReplQuoter::TPtr ReplNodeResponseQuoter;
@@ -162,6 +163,9 @@ namespace NKikimr::NStorage {
         TCostMetricsParametersByMedia CostMetricsParametersByMedia;
 
         class TPDiskMetadataInteractionActor;
+
+        TControlWrapper SlowDiskThreshold;
+        TControlWrapper PredictedDelayMultiplier;
 
     public:
         struct TGroupRecord;
@@ -180,11 +184,14 @@ namespace NKikimr::NStorage {
             , EnableSyncLogChunkCompressionSSD(0, 0, 1)
             , MaxSyncLogChunksInFlightHDD(10, 1, 1024)
             , MaxSyncLogChunksInFlightSSD(10, 1, 1024)
+            , DefaultHugeGarbagePerMille(300, 1, 1000)
             , CostMetricsParametersByMedia({
                 TCostMetricsParameters{200},
                 TCostMetricsParameters{50},
                 TCostMetricsParameters{32},
             })
+            , SlowDiskThreshold(2000, 1, 1000000)
+            , PredictedDelayMultiplier(1000, 1, 1000)
         {
             Y_ABORT_UNLESS(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
             AvailDomainId = 1;

@@ -358,8 +358,9 @@ public:
 };
 
 class TMemProfMonitorInitializer : public IKikimrServicesInitializer {
+    TIntrusiveConstPtr<NMemory::IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
 public:
-    TMemProfMonitorInitializer(const TKikimrRunConfig& runConfig);
+    TMemProfMonitorInitializer(const TKikimrRunConfig& runConfig, TIntrusiveConstPtr<NMemory::IProcessMemoryInfoProvider> processMemoryInfoProvider);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
@@ -400,6 +401,12 @@ private:
 class TCompDiskLimiterInitializer: public IKikimrServicesInitializer {
 public:
     TCompDiskLimiterInitializer(const TKikimrRunConfig& runConfig);
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
+class TGroupedMemoryLimiterInitializer: public IKikimrServicesInitializer {
+public:
+    TGroupedMemoryLimiterInitializer(const TKikimrRunConfig& runConfig);
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
@@ -614,6 +621,15 @@ public:
 class TGraphServiceInitializer : public IKikimrServicesInitializer {
 public:
     TGraphServiceInitializer(const TKikimrRunConfig& runConfig);
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
+class TAwsApiInitializer : public IServiceInitializer {
+    IGlobalObjectStorage& GlobalObjects;
+
+public:
+    TAwsApiInitializer(IGlobalObjectStorage& globalObjects);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };

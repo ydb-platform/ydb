@@ -11,6 +11,113 @@ using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpReturning) {
 
+Y_UNIT_TEST(ReturningTwice) {
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
+    appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(true);
+    auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+    TKikimrRunner kikimr(serverSettings);
+
+    auto client = kikimr.GetTableClient();
+    auto session = client.CreateSession().GetValueSync().GetSession();
+
+    const auto queryCreate = Q_(R"(
+        CREATE TABLE IF NOT EXISTS tasks (
+            hashed_key          Uint32,
+            queue_name          String,
+            task_id             String,
+            worker_id           Int32,
+            running             Bool,
+            eta                 Timestamp,
+            lock_timeout        Timestamp,
+            num_fails           Int32,
+            num_reschedules     Int32,
+            body                String,
+            first_fail          Timestamp,
+            idempotency_run_id  String,
+            PRIMARY KEY (hashed_key, queue_name, task_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS tasks_eta_002 (
+            eta                 Timestamp,
+            hashed_key          Uint32,
+            queue_name          String,
+            task_id             String,
+            PRIMARY KEY (eta, hashed_key, queue_name, task_id)
+        ) WITH (
+            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1,
+            AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1
+        );
+
+        CREATE TABLE IF NOT EXISTS tasks_processing_002 (
+            expiration_ts       Timestamp,
+            hashed_key          Uint32,
+            queue_name          String,
+            task_id             String,
+            PRIMARY KEY (expiration_ts, hashed_key, queue_name, task_id)
+        ) WITH (
+            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1,
+            AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1
+        );
+        )");
+
+    auto resultCreate = session.ExecuteSchemeQuery(queryCreate).GetValueSync();
+    UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
+
+    {
+        const auto query = Q_(R"(
+            --!syntax_v1
+            DECLARE $eta AS Timestamp;
+            DECLARE $expiration_ts AS Timestamp;
+            DECLARE $limit AS Int32;
+
+            $to_move = (
+                SELECT $expiration_ts AS expiration_ts, eta, hashed_key, queue_name, task_id
+                FROM tasks_eta_002
+                WHERE eta <= $eta
+                ORDER BY eta, hashed_key, queue_name, task_id
+                LIMIT $limit
+            );
+
+            UPSERT INTO tasks_processing_002 (expiration_ts, hashed_key, queue_name, task_id)
+            SELECT expiration_ts, hashed_key, queue_name, task_id FROM $to_move
+            RETURNING expiration_ts, hashed_key, queue_name, task_id;
+
+            UPSERT INTO tasks (hashed_key, queue_name, task_id, running, lock_timeout)
+            SELECT hashed_key, queue_name, task_id, True as running, $expiration_ts AS lock_timeout FROM $to_move;
+
+            DELETE FROM tasks_eta_002 ON
+            SELECT eta, hashed_key, queue_name, task_id FROM $to_move;
+        )");
+
+        auto params = TParamsBuilder()
+            .AddParam("$eta").Timestamp(TInstant::Zero()).Build()
+            .AddParam("$expiration_ts").Timestamp(TInstant::Zero()).Build()
+            .AddParam("$limit").Int32(1).Build()
+            .Build();
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params, execSettings).GetValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+
+        size_t eta_table_access = 0;
+        auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+        for (auto phase : stats.query_phases()) {
+            for (auto table : phase.table_access()) {
+                if (table.name() == "/Root/tasks_eta_002") {
+                    eta_table_access++;
+                }
+            }
+        }
+        Cerr << "access count " << eta_table_access << Endl;
+        UNIT_ASSERT_EQUAL(eta_table_access, 1);
+        //Cerr << stats.Utf8DebugString() << Endl;
+    }
+}
+
 Y_UNIT_TEST(ReturningSerial) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableSequences(true);

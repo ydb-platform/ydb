@@ -1,6 +1,5 @@
 #include "ut_common.h"
 
-#include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
 
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -41,7 +40,7 @@ NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSettings(const TString 
     return subdomain;
 }
 
-TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools) {
+TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools, bool useRealThreads) {
     auto mbusPort = PortManager.GetPort();
     auto grpcPort = PortManager.GetPort();
 
@@ -49,7 +48,7 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools) {
     Settings->SetDomainName("Root");
     Settings->SetNodeCount(staticNodes);
     Settings->SetDynamicNodeCount(dynamicNodes);
-    Settings->SetUseRealThreads(false);
+    Settings->SetUseRealThreads(useRealThreads);
 
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableStatistics(true);
@@ -263,12 +262,12 @@ void DropTable(TTestEnv& env, const TString& databaseName, const TString& tableN
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, TPathId pathId) {
+std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, TPathId pathId, ui64 columnTag) {
     auto statServiceId = NStat::MakeStatServiceID(runtime.GetNodeId(1));
 
     NStat::TRequest req;
     req.PathId = pathId;
-    req.ColumnTag = 1;
+    req.ColumnTag = columnTag;
 
     auto evGet = std::make_unique<TEvStatistics::TEvGetStatistics>();
     evGet->StatType = NStat::EStatType::COUNT_MIN_SKETCH;
@@ -323,26 +322,61 @@ void ValidateCountMinAbsense(TTestActorRuntime& runtime, TPathId pathId) {
     UNIT_ASSERT(!rsp.Success);
 }
 
-void Analyze(TTestActorRuntime& runtime, const std::vector<TPathId>& pathIds, ui64 saTabletId) {
+TAnalyzedTable::TAnalyzedTable(const TPathId& pathId)
+    : PathId(pathId)
+{}
+
+TAnalyzedTable::TAnalyzedTable(const TPathId& pathId, const std::vector<ui32>& columnTags)
+    : PathId(pathId)
+    , ColumnTags(columnTags)
+{}
+
+void TAnalyzedTable::ToProto(NKikimrStat::TTable& tableProto) const {
+    PathIdFromPathId(PathId, tableProto.MutablePathId());
+    tableProto.MutableColumnTags()->Add(ColumnTags.begin(), ColumnTags.end());
+}
+
+std::unique_ptr<TEvStatistics::TEvAnalyze> MakeAnalyzeRequest(const std::vector<TAnalyzedTable>& tables, const TString operationId) {
     auto ev = std::make_unique<TEvStatistics::TEvAnalyze>();
-    auto& record = ev->Record;
-    for (const TPathId& pathId : pathIds)
-        PathIdFromPathId(pathId, record.AddTables()->MutablePathId());
+    NKikimrStat::TEvAnalyze& record = ev->Record;
+    record.SetOperationId(operationId);
+    record.AddTypes(NKikimrStat::EColumnStatisticType::TYPE_COUNT_MIN_SKETCH);
+    for (const TAnalyzedTable& table : tables)
+        table.ToProto(*record.AddTables());
+    return ev;
+}
+
+void Analyze(TTestActorRuntime& runtime, ui64 saTabletId, const std::vector<TAnalyzedTable>& tables, const TString operationId) {
+    auto ev = MakeAnalyzeRequest(tables, operationId);
 
     auto sender = runtime.AllocateEdgeActor();
     runtime.SendToPipe(saTabletId, sender, ev.release());
-    runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
+    auto evResponse = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
+
+    UNIT_ASSERT_VALUES_EQUAL(evResponse->Get()->Record.GetOperationId(), operationId);
 }
 
-void AnalyzeTable(TTestActorRuntime& runtime, const TPathId& pathId, ui64 shardTabletId) {
+void AnalyzeTable(TTestActorRuntime& runtime, ui64 shardTabletId, const TAnalyzedTable& table) {
     auto ev = std::make_unique<TEvStatistics::TEvAnalyzeTable>();
     auto& record = ev->Record;
-    PathIdFromPathId(pathId, record.MutableTable()->MutablePathId());
+    table.ToProto(*record.MutableTable());
     record.AddTypes(NKikimrStat::EColumnStatisticType::TYPE_COUNT_MIN_SKETCH);
 
     auto sender = runtime.AllocateEdgeActor();
     runtime.SendToPipe(shardTabletId, sender, ev.release());
     runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeTableResponse>(sender);
+}
+
+void AnalyzeStatus(TTestActorRuntime& runtime, ui64 saTabletId, const TString operationId, const NKikimrStat::TEvAnalyzeStatusResponse::EStatus expectedStatus) {
+    auto analyzeStatusRequest = std::make_unique<TEvStatistics::TEvAnalyzeStatus>();
+    analyzeStatusRequest->Record.SetOperationId(operationId);
+    auto sender = runtime.AllocateEdgeActor();
+    runtime.SendToPipe(saTabletId, sender, analyzeStatusRequest.release());
+
+    auto analyzeStatusResponse = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeStatusResponse>(sender);
+    UNIT_ASSERT(analyzeStatusResponse);
+    UNIT_ASSERT_VALUES_EQUAL(analyzeStatusResponse->Get()->Record.GetOperationId(), operationId);
+    UNIT_ASSERT_VALUES_EQUAL(analyzeStatusResponse->Get()->Record.GetStatus(), expectedStatus);
 }
 
 

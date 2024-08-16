@@ -50,7 +50,7 @@ public:
 
     NActors::TActorId RegisterInferencinator(TStringBuf formatStr) {
         auto format = NInference::ConvertFileFormat(formatStr);
-        auto arrowFetcher = ActorSystem.Register(NInference::CreateArrowFetchingActor(S3ActorId, format), 1);
+        auto arrowFetcher = ActorSystem.Register(NInference::CreateArrowFetchingActor(S3ActorId, format, {}), 1);
         return ActorSystem.Register(NInference::CreateArrowInferencinator(arrowFetcher, format, {}), 1);
     }
 
@@ -85,7 +85,7 @@ TEST_F(ArrowInferenceTest, csv_simple) {
 
     auto inferencinatorId = RegisterInferencinator("csv_with_names");
     ActorSystem.WrapInActorContext(EdgeActorId, [this, inferencinatorId] {
-        NActors::TActivationContext::AsActorContext().Send(inferencinatorId, new TEvInferFileSchema(TString{Path}));
+        NActors::TActivationContext::AsActorContext().Send(inferencinatorId, new TEvInferFileSchema(TString{Path}, 0));
     });
 
     std::unique_ptr<NActors::IEventHandle> event = ActorSystem.WaitForEdgeActorEvent({EdgeActorId});
@@ -93,16 +93,16 @@ TEST_F(ArrowInferenceTest, csv_simple) {
     ASSERT_NE(response, nullptr);
 
     auto& fields = response->Fields;
-    ASSERT_TRUE(fields[0].type().has_type_id());
-    ASSERT_EQ(response->Fields[0].type().type_id(), Ydb::Type::INT64);
-    ASSERT_EQ(response->Fields[0].name(), "A");
+    ASSERT_TRUE(fields[0].type().optional_type().item().has_type_id());
+    ASSERT_EQ(fields[0].type().optional_type().item().type_id(), Ydb::Type::INT64);
+    ASSERT_EQ(fields[0].name(), "A");
 
     ASSERT_TRUE(fields[1].type().has_type_id());
     ASSERT_EQ(fields[1].type().type_id(), Ydb::Type::UTF8);
     ASSERT_EQ(fields[1].name(), "B");
 
-    ASSERT_TRUE(fields[2].type().has_type_id());
-    ASSERT_EQ(fields[2].type().type_id(), Ydb::Type::DOUBLE);
+    ASSERT_TRUE(fields[2].type().optional_type().item().has_type_id());
+    ASSERT_EQ(fields[2].type().optional_type().item().type_id(), Ydb::Type::DOUBLE);
     ASSERT_EQ(fields[2].name(), "C");
 }
 
@@ -121,7 +121,7 @@ TEST_F(ArrowInferenceTest, tsv_simple) {
 
     auto inferencinatorId = RegisterInferencinator("tsv_with_names");
     ActorSystem.WrapInActorContext(EdgeActorId, [this, inferencinatorId] {
-        NActors::TActivationContext::AsActorContext().Send(inferencinatorId, new TEvInferFileSchema(TString{Path}));
+        NActors::TActivationContext::AsActorContext().Send(inferencinatorId, new TEvInferFileSchema(TString{Path}, 0));
     });
 
     std::unique_ptr<NActors::IEventHandle> event = ActorSystem.WaitForEdgeActorEvent({EdgeActorId});
@@ -129,16 +129,16 @@ TEST_F(ArrowInferenceTest, tsv_simple) {
     ASSERT_NE(response, nullptr);
 
     auto& fields = response->Fields;
-    ASSERT_TRUE(fields[0].type().has_type_id());
-    ASSERT_EQ(response->Fields[0].type().type_id(), Ydb::Type::INT64);
-    ASSERT_EQ(response->Fields[0].name(), "A");
+    ASSERT_TRUE(fields[0].type().optional_type().item().has_type_id());
+    ASSERT_EQ(fields[0].type().optional_type().item().type_id(), Ydb::Type::INT64);
+    ASSERT_EQ(fields[0].name(), "A");
 
     ASSERT_TRUE(fields[1].type().has_type_id());
     ASSERT_EQ(fields[1].type().type_id(), Ydb::Type::UTF8);
     ASSERT_EQ(fields[1].name(), "B");
 
-    ASSERT_TRUE(fields[2].type().has_type_id());
-    ASSERT_EQ(fields[2].type().type_id(), Ydb::Type::DOUBLE);
+    ASSERT_TRUE(fields[2].type().optional_type().item().has_type_id());
+    ASSERT_EQ(fields[2].type().optional_type().item().type_id(), Ydb::Type::DOUBLE);
     ASSERT_EQ(fields[2].name(), "C");
 }
 

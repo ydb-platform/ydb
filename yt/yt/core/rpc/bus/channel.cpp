@@ -150,7 +150,7 @@ public:
         return requestCount;
     }
 
-    IMemoryUsageTrackerPtr GetChannelMemoryTracker() override
+    const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override
     {
         return MemoryUsageTracker_;
     }
@@ -377,10 +377,11 @@ private:
             }
 
             if (auto readyFuture = GetBusReadyFuture()) {
-                YT_LOG_DEBUG("Waiting for bus to become ready (RequestId: %v, Method: %v.%v)",
+                YT_LOG_DEBUG("Waiting for bus to become ready (RequestId: %v, Method: %v.%v, Endpoint: %v)",
                     requestControl->GetRequestId(),
                     requestControl->GetService(),
-                    requestControl->GetMethod());
+                    requestControl->GetMethod(),
+                    Bus_->GetEndpointDescription());
 
                 readyFuture.Subscribe(BIND(
                     [
@@ -557,9 +558,9 @@ private:
                 requestControl,
                 responseHandler,
                 TStringBuf("Request timed out"),
-                TError(NYT::EErrorCode::Timeout, aborted
+                TError(NYT::EErrorCode::Timeout, TRuntimeFormat(aborted
                     ? "Request timed out or timer was aborted"
-                    : "Request timed out"));
+                    : "Request timed out")));
         }
 
         void HandleAcknowledgementTimeout(const TClientRequestControlPtr& requestControl, bool aborted)

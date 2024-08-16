@@ -144,6 +144,7 @@ struct TDqSettings {
 
     NCommon::TConfSetting<ui64, false> _MaxAttachmentsSize;
     NCommon::TConfSetting<bool, false> DisableCheckpoints;
+    NCommon::TConfSetting<bool, false> UseGraceJoinCoreForMap;
 
     // This options will be passed to executor_actor and worker_actor
     template <typename TProtoConfig>

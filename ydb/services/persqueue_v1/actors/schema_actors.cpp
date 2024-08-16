@@ -222,31 +222,32 @@ void TAddReadRuleActor::Bootstrap(const NActors::TActorContext& ctx) {
 }
 
 void TAddReadRuleActor::ModifyPersqueueConfig(
-    const TActorContext& ctx,
+    TAppData* appData,
     NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
     const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
     const NKikimrSchemeOp::TDirEntry& selfInfo
 ) {
     Y_UNUSED(pqGroupDescription);
 
-    auto* pqConfig = groupConfig.MutablePQTabletConfig();
+    auto* tabletConfig = groupConfig.MutablePQTabletConfig();
+    const auto& pqConfig = appData->PQConfig;
     auto rule = GetProtoRequest()->read_rule();
 
     if (rule.version() == 0) {
         rule.set_version(selfInfo.GetVersion().GetPQVersion());
     }
-    auto serviceTypes = GetSupportedClientServiceTypes(ctx);
+    auto serviceTypes = GetSupportedClientServiceTypes(pqConfig);
 
     TString error;
-    auto messageAndCode = AddReadRuleToConfig(pqConfig, rule, serviceTypes, ctx);
+    auto messageAndCode = AddReadRuleToConfig(tabletConfig, rule, serviceTypes, pqConfig);
     auto status = messageAndCode.PQCode == Ydb::PersQueue::ErrorCode::OK ?
-                                CheckConfig(*pqConfig, serviceTypes, messageAndCode.Message, ctx, Ydb::StatusIds::ALREADY_EXISTS)
+                                CheckConfig(*tabletConfig, serviceTypes, messageAndCode.Message, pqConfig, Ydb::StatusIds::ALREADY_EXISTS)
                                 : Ydb::StatusIds::BAD_REQUEST;
     if (status != Ydb::StatusIds::SUCCESS) {
         return ReplyWithError(status,
                               status == Ydb::StatusIds::ALREADY_EXISTS ? Ydb::PersQueue::ErrorCode::OK
                                                                        : Ydb::PersQueue::ErrorCode::BAD_REQUEST,
-                              messageAndCode.Message, ctx);
+                              messageAndCode.Message);
     }
 }
 
@@ -263,7 +264,7 @@ void TRemoveReadRuleActor::Bootstrap(const NActors::TActorContext& ctx) {
 }
 
 void TRemoveReadRuleActor::ModifyPersqueueConfig(
-    const TActorContext& ctx,
+    TAppData* appData,
     NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
     const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
     const NKikimrSchemeOp::TDirEntry& selfInfo
@@ -274,10 +275,10 @@ void TRemoveReadRuleActor::ModifyPersqueueConfig(
         groupConfig.MutablePQTabletConfig(),
         pqGroupDescription.GetPQTabletConfig(),
         GetProtoRequest()->consumer_name(),
-        ctx
+        appData->PQConfig
     );
     if (!error.Empty()) {
-        return ReplyWithError(Ydb::StatusIds::NOT_FOUND, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx);
+        return ReplyWithError(Ydb::StatusIds::NOT_FOUND, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error);
     }
 }
 
@@ -373,7 +374,7 @@ void TCreateTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction
     {
         TString error;
 
-        auto status = FillProposeRequestImpl(name, *GetProtoRequest(), modifyScheme, ctx, error,
+        auto status = FillProposeRequestImpl(name, *GetProtoRequest(), modifyScheme, AppData(ctx), error,
                                              workingDir, proposal.Record.GetDatabaseName(), LocalCluster).YdbCode;
 
         if (!error.empty()) {
@@ -426,7 +427,7 @@ void TAlterTopicActor::Bootstrap(const NActors::TActorContext& ctx) {
 }
 
 void TAlterTopicActor::ModifyPersqueueConfig(
-    const TActorContext& ctx,
+    TAppData* appData,
     NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
     const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
     const NKikimrSchemeOp::TDirEntry& selfInfo
@@ -436,7 +437,7 @@ void TAlterTopicActor::ModifyPersqueueConfig(
     TString error;
     Y_UNUSED(selfInfo);
 
-    auto status = FillProposeRequestImpl(*GetProtoRequest(), groupConfig, ctx, error, GetCdcStreamName().Defined());
+    auto status = FillProposeRequestImpl(*GetProtoRequest(), groupConfig, appData, error, GetCdcStreamName().Defined());
     if (!error.empty()) {
         Request_->RaiseIssue(FillIssue(error, Ydb::PersQueue::ErrorCode::BAD_REQUEST));
         return RespondWithCode(status);
@@ -1070,10 +1071,26 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
 
     if (response.PQGroupInfo) {
         const auto& pqDescr = response.PQGroupInfo->Description;
-        for(ui32 i = 0; i < pqDescr.GetTotalGroupCount(); ++i) {
-            auto part = Result.add_partitions();
-            part->set_partition_id(i);
-            part->set_active(true);
+        for (auto& sourcePart: pqDescr.GetPartitions()) {
+            auto destPart = Result.add_partitions();
+            destPart->set_partition_id(sourcePart.GetPartitionId());
+            destPart->set_active(sourcePart.GetStatus() == ::NKikimrPQ::ETopicPartitionStatus::Active);
+            if (sourcePart.HasKeyRange()) {
+                if (sourcePart.GetKeyRange().HasFromBound()) {
+                    destPart->mutable_key_range()->set_from_bound(sourcePart.GetKeyRange().GetFromBound());
+                }
+                if (sourcePart.GetKeyRange().HasToBound()) {
+                    destPart->mutable_key_range()->set_to_bound(sourcePart.GetKeyRange().GetToBound());
+                }
+            }
+
+            for (size_t i = 0; i < sourcePart.ChildPartitionIdsSize(); ++i) {
+                destPart->add_child_partition_ids(static_cast<int64_t>(sourcePart.GetChildPartitionIds(i)));
+            }
+
+            for (size_t i = 0; i < sourcePart.ParentPartitionIdsSize(); ++i) {
+                destPart->add_parent_partition_ids(static_cast<int64_t>(sourcePart.GetParentPartitionIds(i)));
+            }
         }
 
         const auto &config = pqDescr.GetPQTabletConfig();
@@ -1404,7 +1421,6 @@ void TDescribePartitionActor::ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TE
     for (auto partData : record.GetPartResult()) {
         if ((ui32)partData.GetPartition() != Settings.Partitions[0])
             continue;
-
         Y_ABORT_UNLESS((ui32)(partData.GetPartition()) == Settings.Partitions[0]);
         partResult->set_partition_id(partData.GetPartition());
         partResult->set_active(true);
@@ -1547,6 +1563,62 @@ void TPartitionsLocationActor::Finalize() {
 void TPartitionsLocationActor::RaiseError(const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const Ydb::StatusIds::StatusCode status, const TActorContext&) {
     this->AddIssue(FillIssue(error, errorCode));
     this->RespondWithCode(status);
+}
+
+TAlterTopicActorInternal::TAlterTopicActorInternal(
+        TAlterTopicActorInternal::TRequest&& request,
+        NThreading::TPromise<TAlterTopicResponse>&& promise,
+        bool missingOk
+)
+    : TActorBase(std::move(request), TActorId{})
+    , Promise(std::move(promise))
+    , MissingOk(missingOk)
+{}
+
+void TAlterTopicActorInternal::Bootstrap(const NActors::TActorContext&) {
+    SendDescribeProposeRequest();
+    Become(&TAlterTopicActorInternal::StateWork);
+}
+
+void TAlterTopicActorInternal::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+    if (!TActorBase::HandleCacheNavigateResponseBase(ev)) {
+        this->Die(ActorContext());
+        return;
+    }
+    TUpdateSchemeBase::HandleCacheNavigateResponse(ev);
+    auto& schemeTx = Response->Response.ModifyScheme;
+    FillModifyScheme(schemeTx, ActorContext(), GetRequest().WorkingDir, GetRequest().Name);
+}
+
+void TAlterTopicActorInternal::ModifyPersqueueConfig(
+    TAppData* appData,
+    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
+    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
+    const NKikimrSchemeOp::TDirEntry& selfInfo
+) {
+    Y_UNUSED(pqGroupDescription);
+    Y_UNUSED(selfInfo);
+    TString error;
+    Y_UNUSED(selfInfo);
+
+    auto status = FillProposeRequestImpl(GetRequest().Request, groupConfig, appData, error, false);
+    if (!error.empty()) {
+        Response->Response.Issues.AddIssue(error);
+    }
+    RespondWithCode(status);
+}
+
+bool TAlterTopicActorInternal::RespondOverride(Ydb::StatusIds::StatusCode status, bool notFound) {
+    if (MissingOk && notFound) {
+        Response->Response.Status = Ydb::StatusIds::SUCCESS;
+        Response->Response.ModifyScheme.Clear();
+
+    } else {
+        Response->Response.Status = status;
+        Response->Response.Issues.AddIssues(std::move(Response->Issues));
+    }
+    Promise.SetValue(std::move(Response->Response));
+    return true;
 }
 
 } // namespace NKikimr::NGRpcProxy::V1

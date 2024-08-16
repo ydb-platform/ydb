@@ -61,8 +61,10 @@ public:
 
     std::vector<TTypeTag> GetBaseTypeTags() const;
 
-    void* TryConstruct() const;
-    void* ConstructOrThrow() const;
+    template <class T>
+    T* TryConstruct() const;
+    template <class T>
+    T* ConstructOrThrow() const;
 
 private:
     friend class NDetail::TTypeRegistry;
@@ -74,7 +76,8 @@ private:
     std::vector<std::unique_ptr<TFieldDescriptor>> Fields_;
     std::vector<const TTypeDescriptor*> BaseTypes_;
     bool Template_ = false;
-    TConstructor Constructor_ = nullptr;
+    TPolymorphicConstructor PolymorphicConstructor_ = nullptr;
+    TConcreteConstructor ConcreteConstructor_ = nullptr;
 
     mutable std::once_flag SchemaOnceFlag_;
     mutable TTypeSchemaPtr Schema_;
@@ -112,3 +115,6 @@ private:
 
 } // namespace NYT::NPhoenix2
 
+#define DESCRIPTORS_INL_H_
+#include "descriptors-inl.h"
+#undef DESCRIPTORS_INL_H_

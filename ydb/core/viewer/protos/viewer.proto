@@ -93,6 +93,7 @@ message TMetaCommonInfo {
     repeated uint32 Nodes = 15;
     repeated uint32 Disks = 16;
     repeated TACE ACL = 17;
+    bool InterruptInheritance = 40;
 
     TBackupInfo Backup = 18;
     TResources Resources = 19;
@@ -381,7 +382,8 @@ message TTenant {
     uint64 StorageGroups = 40;
     uint64 StorageAllocatedLimit = 41;
     Ydb.Cms.DatabaseQuotas DatabaseQuotas = 42;
-    repeated TStorageUsage StorageUsage = 43;
+    repeated TStorageUsage TablesStorage = 44;
+    repeated TStorageUsage DatabaseStorage = 45;
 }
 
 message TTenants {
@@ -391,6 +393,7 @@ message TTenants {
 message TTenantInfo {
     repeated TTenant TenantInfo = 1;
     repeated string Errors = 2;
+    uint32 Version = 3;
 }
 
 message TStoragePDisk {
@@ -437,10 +440,16 @@ message TStorageGroupInfo {
     uint64 Used = 13;
     uint64 Limit = 14;
     uint64 Available = 15;
-    double Usage = 16;
+    float Usage = 16;
     uint64 Read = 17;
     uint64 Write = 18;
+    float DiskSpaceUsage = 19;
     repeated TStorageVDisk VDisks = 20;
+}
+
+message TStorageGroupGroup {
+    string GroupName = 1;
+    uint64 GroupCount = 2;
 }
 
 message TStoragePoolInfo {
@@ -467,15 +476,18 @@ message TStorageInfo {
 }
 
 message TStorageGroupsInfo {
-    uint64 Version = 1;
-    optional uint64 TotalGroups = 2;
-    optional uint64 FoundGroups = 3;
-    optional uint64 FieldsAvailable = 4;
-    optional uint64 FieldsRequired = 5;
+    uint32 Version = 1;
+    optional uint32 TotalGroups = 2;
+    optional uint32 FoundGroups = 3;
+    optional uint32 FieldsAvailable = 4;
+    optional uint32 FieldsRequired = 5;
     optional bool NeedFilter = 6;
-    optional bool NeedSort = 7;
-    optional bool NeedLimit = 8;
-    repeated TStorageGroupInfo StorageGroups = 10;
+    optional bool NeedGroup = 7;
+    optional bool NeedSort = 8;
+    optional bool NeedLimit = 9;
+    repeated string Problems = 10;
+    repeated TStorageGroupInfo StorageGroups = 11;
+    repeated TStorageGroupGroup StorageGroupGroups = 12;
 }
 
 message TStorageUsageStats {
@@ -638,18 +650,17 @@ message TEvDescribeSchemeInfo {
         Cache = 2;
     }
 
-    optional string Status = 1;
-    optional string Reason = 2;
-    optional string Path = 3;
-    optional NKikimrSchemeOp.TPathDescription PathDescription = 4;
-    optional fixed64 DEPRECATED_PathOwner = 5;  // replaced by PathOwnerId
-    optional fixed64 PathId = 6;
-
-    optional string LastExistedPrefixPath = 7;
-    optional fixed64 LastExistedPrefixPathId = 8;
-    optional NKikimrSchemeOp.TPathDescription LastExistedPrefixDescription = 9;
-    optional fixed64 PathOwnerId = 10;
-    optional ESource Source = 11;
+    string Status = 1;
+    string Reason = 2;
+    string Path = 3;
+    NKikimrSchemeOp.TPathDescription PathDescription = 4;
+    fixed64 DEPRECATED_PathOwner = 5;  // replaced by PathOwnerId
+    fixed64 PathId = 6;
+    string LastExistedPrefixPath = 7;
+    fixed64 LastExistedPrefixPathId = 8;
+    NKikimrSchemeOp.TPathDescription LastExistedPrefixDescription = 9;
+    fixed64 PathOwnerId = 10;
+    ESource Source = 11;
 }
 
 enum EAutocompleteType {

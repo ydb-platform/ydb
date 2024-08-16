@@ -1,6 +1,6 @@
 /* IELR's inadequacy list.
 
-   Copyright (C) 2009-2015, 2018-2019 Free Software Foundation, Inc.
+   Copyright (C) 2009-2015, 2018-2021 Free Software Foundation, Inc.
 
    This file is part of Bison, the GNU Compiler Compiler.
 
@@ -15,7 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #ifndef INADEQUACY_LIST_H_
 # define INADEQUACY_LIST_H_
@@ -27,11 +27,8 @@
 
 /**
  * A unique ID assigned to every \c InadequacyList node.
- *
- * This must remain unsigned so that the overflow check in
- * \c InadequacyList__new_conflict works properly.
  */
-typedef unsigned long long InadequacyListNodeCount;
+typedef long long InadequacyListNodeCount;
 
 /**
  * For a conflict, each rule in the grammar can have at most one contributing

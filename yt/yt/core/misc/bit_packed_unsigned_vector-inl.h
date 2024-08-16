@@ -154,7 +154,7 @@ inline size_t TBitPackedUnsignedVectorReader<T, Scan>::GetByteSize() const
 template <class T, bool Scan>
 TRange<T> TBitPackedUnsignedVectorReader<T, Scan>::GetData() const
 {
-    return MakeRange(Values_, Values_ + Size_);
+    return TRange(Values_, Values_ + Size_);
 }
 
 template <class T, bool Scan>

@@ -10,6 +10,7 @@ PY_SRCS(
     npm_lockfile.py
     npm_package_manager.py
     npm_utils.py
+    npm_workspace.py
 )
 
 PEERDIR(

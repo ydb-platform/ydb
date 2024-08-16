@@ -373,13 +373,15 @@ public:
             return ReplyErrorAndPassAway(result);
         }
         bool found = false;
-        for (const TString& sid : ActorMonPage->AllowedSIDs) {
-            if (result.UserToken->IsExist(sid)) {
-                found = true;
-                break;
+        if (result.UserToken) {
+            for (const TString& sid : ActorMonPage->AllowedSIDs) {
+                if (result.UserToken->IsExist(sid)) {
+                    found = true;
+                    break;
+                }
             }
         }
-        if (found || ActorMonPage->AllowedSIDs.empty()) {
+        if (found || ActorMonPage->AllowedSIDs.empty() || !result.UserToken) {
             SendRequest(&result);
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");

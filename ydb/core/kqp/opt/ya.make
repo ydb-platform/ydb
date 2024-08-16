@@ -12,7 +12,7 @@ SRCS(
     kqp_query_blocks_transformer.cpp
     kqp_query_plan.cpp
     kqp_statistics_transformer.cpp
-    kqp_columns_getter_transformer.cpp
+    kqp_column_statistics_requester.cpp
     kqp_constant_folding_transformer.cpp
 )
 

@@ -14,7 +14,7 @@ namespace NKikimr::NKqp {
 using namespace NThreading;
 using namespace NYql;
 
-void TKqpColumnsGetterTransformer::PropagateTableToLambdaArgument(const TExprNode::TPtr& input) {
+void TKqpColumnStatisticsRequester::PropagateTableToLambdaArgument(const TExprNode::TPtr& input) {
     if (input->ChildrenSize() < 2) {
         return;
     }
@@ -35,15 +35,15 @@ void TKqpColumnsGetterTransformer::PropagateTableToLambdaArgument(const TExprNod
 
         if (callableInput->IsList()){
             for (size_t j = 0; j < callableInput->ChildrenSize(); ++j){
-                TableByExprNode[lambda.Args().Arg(j).Ptr()] = TableByExprNode[callableInput->Child(j)];  
+                KqpTableByExprNode[lambda.Args().Arg(j).Ptr()] = KqpTableByExprNode[callableInput->Child(j)];  
             }
         } else {
-            TableByExprNode[lambda.Args().Arg(0).Ptr()] = TableByExprNode[callableInput.Get()];
+            KqpTableByExprNode[lambda.Args().Arg(0).Ptr()] = KqpTableByExprNode[callableInput.Get()];
         }
     }
 }
 
-IGraphTransformer::TStatus TKqpColumnsGetterTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     Y_UNUSED(ctx);
     
     output = input;
@@ -159,13 +159,13 @@ IGraphTransformer::TStatus TKqpColumnsGetterTransformer::DoTransform(TExprNode::
     return IGraphTransformer::TStatus::Ok;
 }
 
-bool TKqpColumnsGetterTransformer::BeforeLambdas(const TExprNode::TPtr& input) {
+bool TKqpColumnStatisticsRequester::BeforeLambdas(const TExprNode::TPtr& input) {
     bool matched = true;
     
     if (TKqpTable::Match(input.Get())) {
-        TableByExprNode[input.Get()] = input.Get();
+        KqpTableByExprNode[input.Get()] = input.Get();
     } else if (auto maybeStreamLookup = TExprBase(input).Maybe<TKqpCnStreamLookup>()) {
-        TableByExprNode[input.Get()] = maybeStreamLookup.Cast().Table().Ptr();
+        KqpTableByExprNode[input.Get()] = maybeStreamLookup.Cast().Table().Ptr();
     } else {
         matched = false;
     }
@@ -173,10 +173,10 @@ bool TKqpColumnsGetterTransformer::BeforeLambdas(const TExprNode::TPtr& input) {
     return matched;
 }
 
-bool TKqpColumnsGetterTransformer::BeforeLambdasUnmatched(const TExprNode::TPtr& input) {
+bool TKqpColumnStatisticsRequester::BeforeLambdasUnmatched(const TExprNode::TPtr& input) {
     for (const auto& node: input->Children()) {
-        if (TableByExprNode.contains(node)) {
-            TableByExprNode[input.Get()] = TableByExprNode[node];
+        if (KqpTableByExprNode.contains(node)) {
+            KqpTableByExprNode[input.Get()] = KqpTableByExprNode[node];
             return true;
         }
     }
@@ -184,7 +184,7 @@ bool TKqpColumnsGetterTransformer::BeforeLambdasUnmatched(const TExprNode::TPtr&
     return true;
 }
 
-bool TKqpColumnsGetterTransformer::AfterLambdas(const TExprNode::TPtr& input) {
+bool TKqpColumnStatisticsRequester::AfterLambdas(const TExprNode::TPtr& input) {
     bool matched = true;
 
     if (
@@ -205,11 +205,11 @@ bool TKqpColumnsGetterTransformer::AfterLambdas(const TExprNode::TPtr& input) {
         auto columnStatsUsedMembers = computer.GetColumnStatsUsedMembers();
         for (const auto& item: columnStatsUsedMembers.Data) {
             auto exprNode = TExprBase(item.Member).Ptr();
-            if (!TableByExprNode.contains(exprNode) || TableByExprNode[exprNode] == nullptr) {
+            if (!KqpTableByExprNode.contains(exprNode) || KqpTableByExprNode[exprNode] == nullptr) {
                 continue;
             }
 
-            auto table = TExprBase(TableByExprNode[exprNode]).Cast<TKqpTable>().Path().StringValue();
+            auto table = TExprBase(KqpTableByExprNode[exprNode]).Cast<TKqpTable>().Path().StringValue();
             auto column = item.Member.Name().StringValue();
             size_t pointPos = column.find('.'); // table.column
             if (pointPos != TString::npos) {
@@ -225,14 +225,14 @@ bool TKqpColumnsGetterTransformer::AfterLambdas(const TExprNode::TPtr& input) {
     return matched;
 }
 
-bool TKqpColumnsGetterTransformer::AfterLambdasUnmatched(const TExprNode::TPtr& input) {
-    if (TableByExprNode.contains(input.Get())) {
+bool TKqpColumnStatisticsRequester::AfterLambdasUnmatched(const TExprNode::TPtr& input) {
+    if (KqpTableByExprNode.contains(input.Get())) {
         return true;
     }
 
     for (const auto& node: input->Children()) {
-        if (TableByExprNode.contains(node)) {
-            TableByExprNode[input.Get()] = TableByExprNode[node];
+        if (KqpTableByExprNode.contains(node)) {
+            KqpTableByExprNode[input.Get()] = KqpTableByExprNode[node];
             return true;
         }
     }
@@ -247,7 +247,7 @@ TAutoPtr<IGraphTransformer> CreateKqpColumnsGetterTransformer(
     TString cluster,
     TActorSystem* actorSystem
 ) {
-    return THolder<IGraphTransformer>(new TKqpColumnsGetterTransformer(config, typesCtx, tables, cluster, actorSystem));
+    return THolder<IGraphTransformer>(new TKqpColumnStatisticsRequester(config, typesCtx, tables, cluster, actorSystem));
 }
 
 } // end of NKikimr::NKqp

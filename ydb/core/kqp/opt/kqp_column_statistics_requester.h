@@ -12,9 +12,15 @@ namespace NKikimr::NKqp {
 using namespace NYql;
 using namespace NYql::NNodes;
 
-class TKqpColumnsGetterTransformer : public TSyncTransformerBase {
+/* 
+ * This tranformer collects column's and table's names from an AST. It propogates 
+ * KqpTable node from the leaves to the root of the tree and searches members in filters.
+ * Then it requests column statistics for these attributes from the column statistics service
+ * and stores it into a TTypeAnnotationContext. 
+ */
+class TKqpColumnStatisticsRequester : public TSyncTransformerBase {
 public:
-    TKqpColumnsGetterTransformer(
+    TKqpColumnStatisticsRequester(
         const TKikimrConfiguration::TPtr& config,
         TTypeAnnotationContext& typesCtx,
         TKikimrTablesData& tables,
@@ -33,7 +39,7 @@ public:
 
     void Rewind() override {}
 
-    ~TKqpColumnsGetterTransformer() override  = default;
+    ~TKqpColumnStatisticsRequester() override  = default;
 
 private:
     bool BeforeLambdas(const TExprNode::TPtr& input);
@@ -47,7 +53,7 @@ private:
     bool AfterLambdasUnmatched(const TExprNode::TPtr& input);
     
 private:
-    THashMap<TExprNode::TPtr, TExprNode::TPtr> TableByExprNode;
+    THashMap<TExprNode::TPtr, TExprNode::TPtr> KqpTableByExprNode;
     THashMap<TString, THashSet<TString>> ColumnsByTableName;
 
     const TKikimrConfiguration::TPtr& Config;

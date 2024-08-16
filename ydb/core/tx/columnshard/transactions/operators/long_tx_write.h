@@ -6,7 +6,7 @@
 
 namespace NKikimr::NColumnShard {
 
-    class TLongTxTransactionOperator: public IProposeTxOperator {
+    class TLongTxTransactionOperator: public IProposeTxOperator, public TMonitoringObjectsCounter<TLongTxTransactionOperator> {
         using TBase = IProposeTxOperator;
         using TProposeResult = TTxController::TProposeResult;
         static inline auto Registrator = TFactory::TRegistrator<TLongTxTransactionOperator>(NKikimrTxColumnShard::TX_KIND_COMMIT);

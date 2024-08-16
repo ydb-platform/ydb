@@ -412,21 +412,17 @@ ui32 TStrategyBase::MakeSlowSubgroupDiskMask(TBlobState &state, const TBlobStora
                 return 0;
             }
 
-            for (ui32 idx = 0; idx < 2; ++idx) {
-                if (worstDisks[idx].PredictedNs > slowThreshold) {
-                    slowDiskSubgroupMask |= 1 << worstDisks[idx].DiskIdx;
-                }
-            }
-
-            // Mark slow disks
             for (size_t idx = 0; idx < state.Disks.size(); ++idx) {
                 state.Disks[idx].IsSlow = false;
             }
 
-            for (size_t idx = 0; idx < 2; ++idx) {
-                bool isSlow = slowDiskSubgroupMask & (1 << idx);
-                state.Disks[worstDisks[idx].DiskIdx].IsSlow = isSlow;
+            for (ui32 idx = 0; idx < 2; ++idx) {
+                if (worstDisks[idx].PredictedNs > slowThreshold) {
+                    slowDiskSubgroupMask |= 1 << worstDisks[idx].DiskIdx;
+                    state.Disks[worstDisks[idx].DiskIdx].IsSlow = true;
+                }
             }
+
             return slowDiskSubgroupMask;
         }
         case TBlackboard::AccelerationModeSkipMarked: {

@@ -50,7 +50,7 @@ Indexes have type-specific parameters that can be tuned. Global indexes, whether
 
 {% note info %}
 
-Currently, specifying secondary index partitioning settings during index creation is not supported in either the [`ALTER TABLE ADD INDEX`](#add-index) or the [`CREATE TABLE INDEX`](../create_table/econdary_index.md) statements.
+Currently, specifying secondary index partitioning settings during index creation is not supported in either the [`ALTER TABLE ADD INDEX`](#add-index) or the [`CREATE TABLE INDEX`](../create_table/secondary_index.md) statements.
 
 {% endnote %}
 

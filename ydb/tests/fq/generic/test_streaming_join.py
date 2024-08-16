@@ -38,7 +38,8 @@ TESTCASES = [
             ('ydb30', '{"data":"ydb30","lookup":3}'),
             ('ydb40', '{"data":"ydb40","lookup":null}'),
             ('ydb50', '{"data":"ydb50","lookup":null}'),
-        ],
+        ]
+        * 10,
     ),
     # 1
     (
@@ -67,7 +68,8 @@ TESTCASES = [
             ('3', '{"data":"3","id":3,"lookup":"ydb30"}'),
             ('4', '{"data":"4","id":4,"lookup":null}'),
             ('5', '{"data":"5","id":5,"lookup":null}'),
-        ],
+        ]
+        * 3,
     ),
     # 2
     (
@@ -102,7 +104,8 @@ TESTCASES = [
             ('{"id":5,"user":3}', '{"id":5,"user_id":3,"lookup":"ydb30"}'),
             ('{"id":6,"user":1}', '{"id":6,"user_id":1,"lookup":"ydb10"}'),
             ('{"id":7,"user":2}', '{"id":7,"user_id":2,"lookup":"ydb20"}'),
-        ],
+        ]
+        * 20,
     ),
     # 3
     (
@@ -162,7 +165,70 @@ TESTCASES = [
                 '{"id":7,"ts":"20240701T113349","ev_type":"foo7","user":2}',
                 '{"id":7,"ts":"11:33:49","user_id":2,"lookup":"ydb20"}',
             ),
-        ],
+        ]
+        * 10,
+    ),
+    # 4
+    (
+        R'''
+            $input = SELECT * FROM myyds.`{input_topic}`
+                    WITH (
+                        FORMAT=json_each_row,
+                        SCHEMA (
+                            id Int32,
+                            ts String,
+                            ev_type String,
+                            user Int32,
+                        )
+                    )            ;
+
+            $formatTime = DateTime::Format("%H:%M:%S");
+
+            $enriched = select e.id as id,
+                            $formatTime(DateTime::ParseIso8601(e.ts)) as ts,
+                            e.user as user_id,
+                            u.name as name,
+                            u.age as age
+                from
+                    $input as e
+                left join {streamlookup} ydb_conn_{table_name}.`users` as u
+                on(e.user = u.id)
+            ;
+
+            insert into myyds.`{output_topic}`
+            select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
+            ''',
+        [
+            (
+                '{"id":1,"ts":"20240701T113344","ev_type":"foo1","user":2}',
+                '{"id":1,"ts":"11:33:44","user_id":2,"name":"Petr","age":25}',
+            ),
+            (
+                '{"id":2,"ts":"20240701T112233","ev_type":"foo2","user":1}',
+                '{"id":2,"ts":"11:22:33","user_id":1,"name":"Anya","age":15}',
+            ),
+            (
+                '{"id":3,"ts":"20240701T113355","ev_type":"foo3","user":100}',
+                '{"id":3,"ts":"11:33:55","user_id":100,"name":null,"age":null}',
+            ),
+            (
+                '{"id":4,"ts":"20240701T113356","ev_type":"foo4","user":3}',
+                '{"id":4,"ts":"11:33:56","user_id":3,"name":"Masha","age":17}',
+            ),
+            (
+                '{"id":5,"ts":"20240701T113357","ev_type":"foo5","user":3}',
+                '{"id":5,"ts":"11:33:57","user_id":3,"name":"Masha","age":17}',
+            ),
+            (
+                '{"id":6,"ts":"20240701T112238","ev_type":"foo6","user":1}',
+                '{"id":6,"ts":"11:22:38","user_id":1,"name":"Anya","age":15}',
+            ),
+            (
+                '{"id":7,"ts":"20240701T113349","ev_type":"foo7","user":2}',
+                '{"id":7,"ts":"11:33:49","user_id":2,"name":"Petr","age":25}',
+            ),
+        ]
+        * 1000,
     ),
 ]
 
@@ -222,7 +288,7 @@ class TestStreamingJoin(TestYdsBase):
     @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": "tests-fq-generic-ydb:2136"}], indirect=True)
     @pytest.mark.parametrize("fq_client", [{"folder_id": "my_folder_slj"}], indirect=True)
     @pytest.mark.parametrize("streamlookup", [False, True])
-    @pytest.mark.parametrize("testcase", [0, 1, 2, 3])
+    @pytest.mark.parametrize("testcase", [*range(len(TESTCASES))])
     def test_streamlookup(
         self, kikimr, testcase, streamlookup, fq_client: FederatedQueryClient, settings: Settings, yq_version
     ):
@@ -251,10 +317,16 @@ class TestStreamingJoin(TestYdsBase):
         fq_client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
         kikimr.compute_plane.wait_zero_checkpoint(query_id)
 
-        self.write_stream(map(lambda x: x[0], messages))
+        offset = 0
+        while offset < len(messages):
+            chunk = messages[offset : offset + 500]
+            self.write_stream(map(lambda x: x[0], chunk))
+            offset += 500
 
         read_data = self.read_stream(len(messages))
-        print(streamlookup, testcase, *zip(messages, read_data), file=sys.stderr)
+        print(streamlookup, testcase, file=sys.stderr)
+        print(sql, file=sys.stderr)
+        print(*zip(messages, read_data), file=sys.stderr, sep="\n")
         for r, exp in zip(read_data, messages):
             r = json.loads(r)
             exp = json.loads(exp[1])

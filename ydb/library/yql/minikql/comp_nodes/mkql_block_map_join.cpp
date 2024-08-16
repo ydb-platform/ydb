@@ -21,10 +21,10 @@ size_t CalcMaxBlockLength(const TVector<TType*>& items) {
         }));
 }
 
-
-class TBlockWideMapJoinWrapper : public TStatefulWideFlowComputationNode<TBlockWideMapJoinWrapper>
+template <bool RightRequired>
+class TBlockWideMapJoinWrapper : public TStatefulWideFlowComputationNode<TBlockWideMapJoinWrapper<RightRequired>>
 {
-using TBaseComputation = TStatefulWideFlowComputationNode<TBlockWideMapJoinWrapper>;
+using TBaseComputation = TStatefulWideFlowComputationNode<TBlockWideMapJoinWrapper<RightRequired>>;
 public:
     TBlockWideMapJoinWrapper(TComputationMutables& mutables,
         const TVector<TType*>&& resultJoinItems, const TVector<TType*>&& leftFlowItems,
@@ -47,7 +47,7 @@ public:
         do {
             while (s.IsNotFull() && s.NextRow()) {
                 const auto key = MakeKeysTuple(ctx, s, LeftKeyColumns_);
-                if (key && dict.Contains(key) == true) {
+                if (key && dict.Contains(key) == RightRequired) {
                     s.CopyRow();
                 }
             }
@@ -317,7 +317,7 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
     const auto rawKind = AS_VALUE(TDataLiteral, joinKindNode)->AsValue().Get<ui32>();
     const auto joinKind = GetJoinKind(rawKind);
     // TODO: Handle other join types.
-    Y_ENSURE(joinKind == EJoinKind::LeftSemi);
+    Y_ENSURE(joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly);
 
     const auto tupleLiteral = AS_VALUE(TTupleLiteral, callable.GetInput(3));
     TVector<ui32> leftKeyColumns;
@@ -332,9 +332,18 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
     const auto flow = LocateNode(ctx.NodeLocator, callable, 0);
     const auto dict = LocateNode(ctx.NodeLocator, callable, 1);
 
-    return new TBlockWideMapJoinWrapper(ctx.Mutables, std::move(joinItems),
-        std::move(leftFlowItems), std::move(leftKeyColumns),
-        static_cast<IComputationWideFlowNode*>(flow), dict);
+    switch (joinKind) {
+    case EJoinKind::LeftSemi:
+        return new TBlockWideMapJoinWrapper<true>(ctx.Mutables, std::move(joinItems),
+            std::move(leftFlowItems), std::move(leftKeyColumns),
+            static_cast<IComputationWideFlowNode*>(flow), dict);
+    case EJoinKind::LeftOnly:
+        return new TBlockWideMapJoinWrapper<false>(ctx.Mutables, std::move(joinItems),
+            std::move(leftFlowItems), std::move(leftKeyColumns),
+            static_cast<IComputationWideFlowNode*>(flow), dict);
+    default:
+        Y_ABORT();
+    }
 }
 
 } // namespace NMiniKQL

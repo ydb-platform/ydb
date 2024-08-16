@@ -5857,7 +5857,8 @@ TRuntimeNode TProgramBuilder::ScalarApply(const TArrayRef<const TRuntimeNode>& a
 TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode dict,
     EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns
 ) {
-    MKQL_ENSURE(joinKind == EJoinKind::LeftSemi, "Unsupported join kind");
+    MKQL_ENSURE(joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly,
+                "Unsupported join kind");
     MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
 
     TRuntimeNode::TList leftKeyColumnsNodes;

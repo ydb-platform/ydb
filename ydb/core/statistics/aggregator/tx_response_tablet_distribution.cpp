@@ -84,8 +84,6 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
 
         Action = EAction::SendAggregate;
         return ExecuteStartForceTraversal(txc);
-
-        return true;
     }
 
     void Complete(const TActorContext& ctx) override {

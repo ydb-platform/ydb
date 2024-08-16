@@ -501,7 +501,7 @@ public:
                     } else {
                         sb << "Possible arguments are: prefix, pattern, suffix, view." << Endl;
                     }
-                    sb << "Pass [] to arguments you want to skip.";
+                    sb << "Pass empty string in arguments if you want to skip.";
 
                     ctx.Error(Pos) << sb;
                     return nullptr;

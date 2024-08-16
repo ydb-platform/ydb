@@ -63,13 +63,16 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
                 // these tablets are probably in Hive boot queue
                 if (Self->HiveRequestRound < Self->MaxHiveRequestRoundCount) {
                     Action = EAction::ScheduleReqDistribution;
-                    return true;
                 }
                 continue;
             }
             for (auto tabletId : inNode.GetTabletIds()) {
                 distribution.erase(tabletId);
             }
+        }
+
+        if (Action == EAction::ScheduleReqDistribution) {
+            return true;
         }
 
         if (!distribution.empty() && Self->ResolveRound < Self->MaxResolveRoundCount) {
@@ -79,12 +82,8 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
             return true;
         }
 
-
-        //if (Self->ForceTraversalOperationId) 
-        {
-            Action = EAction::SendAggregate;
-            return ExecuteStartForceTraversal(txc);
-        }
+        Action = EAction::SendAggregate;
+        return ExecuteStartForceTraversal(txc);
 
         return true;
     }

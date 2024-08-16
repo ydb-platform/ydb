@@ -70,7 +70,7 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
             case NKikimrStat::TEvAggregateStatisticsResponse::TYPE_UNAVAILABLE_NODE:
                 Self->TabletsForReqDistribution.insert(tablet.GetTabletId());
                 Action = EAction::SendReqDistribution;
-                return true;
+                break;
 
             case NKikimrStat::TEvAggregateStatisticsResponse::TYPE_NON_LOCAL_TABLET:
                 auto nodeId = tablet.GetNodeId();
@@ -78,11 +78,16 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
                     // we cannot reach this tablet
                     Self->TabletsForReqDistribution.insert(tablet.GetTabletId());
                     Action = EAction::SendReqDistribution;
-                    return true;
-                } 
-                nonLocalTablets[nodeId].push_back(tablet.GetTabletId());
+
+                } else if (Action != EAction::SendReqDistribution) {
+                    nonLocalTablets[nodeId].push_back(tablet.GetTabletId());
+                }
                 break;
             }
+        }
+
+        if (Action == EAction::SendReqDistribution) {
+            return true;
         }
 
         Request = std::make_unique<TEvStatistics::TEvAggregateStatistics>();

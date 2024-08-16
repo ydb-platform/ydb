@@ -921,7 +921,6 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
             str << "ProcessUrgentInFlight: " << ProcessUrgentInFlight << Endl << Endl;
 
             str << "TraversalPathId: " << TraversalPathId << Endl;
-            str << "TraversalPathId: " << TraversalPathId << Endl;
             str << "Columns: " << Columns.size() << Endl;
             str << "DatashardRanges: " << DatashardRanges.size() << Endl;
             str << "CountMinSketches: " << CountMinSketches.size() << Endl << Endl;

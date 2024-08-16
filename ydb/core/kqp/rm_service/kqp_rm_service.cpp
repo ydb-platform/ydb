@@ -107,6 +107,15 @@ struct TTxState {
     ui32 TxExecutionUnits = 0;
     TInstant CreatedAt;
 
+    TString ToString() const {
+        return TStringBuilder() << "TxResourcesInfo{ "
+            << "Memory initially granted resources: " << TxExternalDataQueryMemory
+            << ", extra allocations " << TxScanQueryMemory
+            << ", execution units: " << TxExecutionUnits
+            << ", started at: " << CreatedAt
+            << " }";
+    }
+
     TTaskState& Allocated(ui64 taskId, TInstant now, const TKqpResourcesRequest& resources, bool memoryAsExternal = false) {
         ui64 externalMemory = resources.ExternalMemory;
         ui64 resourceBrokerMemory = 0;
@@ -563,6 +572,19 @@ public:
 
         ActorSystem->Send(SelfId, new TEvPrivate::TEvSchedulePublishResources);
     }
+
+    TString GetTxResourcesUsageDebugInfo(ui64 txId) override {
+        auto& txBucket = TxBucket(txId);
+        with_lock(txBucket.Lock) {
+            auto it = txBucket.Txs.find(txId);
+            if (it == txBucket.Txs.end()) {
+                return "<empty info>";
+            }
+
+            return it->second.ToString();
+        }
+    }
+
 
     void UpdatePatternCache(ui64 maxSizeBytes, ui64 maxCompiledSizeBytes, ui64 patternAccessTimesBeforeTryToCompile) {
         if (maxSizeBytes == 0) {

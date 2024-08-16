@@ -1,7 +1,7 @@
 ## Column order in YQL {#orderedcolumns}
 
 The standard SQL is sensitive to the order of columns in projections (that is, in `SELECT`). While the order of columns must be preserved in the query results or when writing data to a new table, some SQL constructs use this order.
-This applies, for example, to [UNION ALL](#unionall) and positional [ORDER BY](#orderby) (ORDER BY ordinal).
+This applies, for example, to [UNION ALL](../../select/union.md#union_all) and positional [ORDER BY](../../select/order_by.md) (ORDER BY ordinal).
 
 The column order is ignored in YQL by default:
 
@@ -13,8 +13,8 @@ If you enable `PRAGMA OrderedColumns;`, the order of columns is preserved in the
 * `SELECT`: an explicit column enumeration dictates the result order.
 * `SELECT` with an asterisk (`SELECT * FROM ...`) inherits the order from its input.
 {% if feature_join %}* The order of columns after [JOIN](../../join.md): First output the left-hand columns, then the right-hand ones. If the column order in any of the sides in the `JOIN` output is undefined, the column order in the result is also undefined.{% endif %}
-* The order in `UNION ALL` depends on the [UNION ALL](#unionall) execution mode.
-* The column order for [AS_TABLE](#as_table) is undefined.
+* The order in `UNION ALL` depends on the [UNION ALL](../../select/union.md#union_all) execution mode.
+* The column order for [AS_TABLE](../../select/from_as_table.md) is undefined.
 
 {% note warning %}
 

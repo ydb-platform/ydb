@@ -278,6 +278,10 @@ struct TArgs_pg_rotate_logfile_v2_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 0> IsFixedArg = {};
 };
+struct TArgs_pg_settings_get_flags_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
 struct TArgs_pg_terminate_backend_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};

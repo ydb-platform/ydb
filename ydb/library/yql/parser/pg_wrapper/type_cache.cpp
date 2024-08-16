@@ -519,9 +519,9 @@ TupleDescInitEntry(TupleDesc desc,
     /*
      * sanity checks
      */
-    AssertArg(PointerIsValid(desc));
-    AssertArg(attributeNumber >= 1);
-    AssertArg(attributeNumber <= desc->natts);
+    //AssertArg(PointerIsValid(desc));
+    //AssertArg(attributeNumber >= 1);
+    //AssertArg(attributeNumber <= desc->natts);
 
     /*
      * initialize the attribute fields

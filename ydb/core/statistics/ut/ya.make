@@ -15,6 +15,7 @@ YQL_LAST_ABI_VERSION()
 
 PEERDIR(
     library/cpp/testing/unittest
+    ydb/core/protos
     ydb/core/testlib/default
 )
 
@@ -24,6 +25,7 @@ SRCS(
     ut_aggregator.cpp
     ut_statistics.cpp
     ut_save_load_stats.cpp
+    ut_statistics_service.cpp
 )
 
 END()

@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/events.h>
 
+#include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/providers/s3/proto/file_queue.pb.h>
 
@@ -48,6 +49,10 @@ struct TEvS3Provider {
         EvCachePutRequest,
         EvCacheNotification,
         EvCacheSourceFinish,
+        // Decompressor events
+        EvDecompressDataRequest,
+        EvDecompressDataResult,
+        EvDecompressDataFinish,
         EvEnd
     };
     static_assert(EvEnd < EventSpaceEnd(NKikimr::TKikimrEvents::ES_S3_PROVIDER), "expect EvEnd < EventSpaceEnd(TEvents::ES_S3_PROVIDER)");
@@ -194,6 +199,21 @@ struct TEvS3Provider {
     };
 
     struct TEvContinue : public NActors::TEventLocal<TEvContinue, EvContinue> {
+    };
+
+    struct TEvDecompressDataRequest : public NActors::TEventLocal<TEvDecompressDataRequest, EvDecompressDataRequest> {
+        TEvDecompressDataRequest(TString&& data) : Data(std::move(data)) {}
+        TString Data;
+    };
+
+    struct TEvDecompressDataResult : public NActors::TEventLocal<TEvDecompressDataResult, EvDecompressDataResult> {
+        TEvDecompressDataResult(TString&& data) : Data(std::move(data)) {}
+        TEvDecompressDataResult(std::exception_ptr exception) : Exception(exception) {}
+        TString Data;
+        std::exception_ptr Exception;
+    };
+
+    struct TEvDecompressDataFinish : public NActors::TEventLocal<TEvDecompressDataFinish, EvDecompressDataFinish> {
     };
 
     struct TReadRange {

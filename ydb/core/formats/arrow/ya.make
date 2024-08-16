@@ -12,6 +12,8 @@ PEERDIR(
     ydb/core/formats/arrow/dictionary
     ydb/core/formats/arrow/transformer
     ydb/core/formats/arrow/reader
+    ydb/core/formats/arrow/modifier
+    ydb/core/formats/arrow/scalar
     ydb/core/formats/arrow/hash
     ydb/library/actors/core
     ydb/library/arrow_kernels

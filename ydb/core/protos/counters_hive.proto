@@ -29,6 +29,7 @@ enum ESimpleCounters {
     COUNTER_IMBALANCED_OBJECTS = 19 [(CounterOpts) = {Name: "ImbalancedObjects"}];
     COUNTER_WORST_OBJECT_VARIANCE = 20 [(CounterOpts) = {Name: "WorstObjectVariance"}];
     COUNTER_STORAGE_SCATTER = 21 [(CounterOpts) = {Name: "StorageScatter"}];
+    COUNTER_TABLETS_STARTING = 22 [(CounterOpts) = {Name: "TabletsStarting"}];
 }
 
 enum ECumulativeCounters {
@@ -74,6 +75,21 @@ enum EPercentileCounters {
         Ranges: { Value: 90    Name: "90%"       },
         Ranges: { Value: 95    Name: "95%"       },
         Ranges: { Value: 100   Name: "100%"      },
+    }];
+
+    COUNTER_TABLETS_START_TIME = 2 [(CounterOpts) = {
+        Name: "TabletsStartTimeMs",
+        Ranges: { Value: 1                       }
+        Ranges: { Value: 5                       }
+        Ranges: { Value: 10                      }
+        Ranges: { Value: 50                      }
+        Ranges: { Value: 100                     }
+        Ranges: { Value: 500                     }
+        Ranges: { Value: 1000                    }
+        Ranges: { Value: 5000                    }
+        Ranges: { Value: 10000                   }
+        Ranges: { Value: 30000                   }
+        Ranges: { Value: 60000                   }
     }];
 }
 

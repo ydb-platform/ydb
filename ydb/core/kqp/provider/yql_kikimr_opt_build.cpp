@@ -445,7 +445,9 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
                     .Update(node)
                     .Columns(write.ReturningColumns())
                     .Build()
-                .Settings().Build()
+                .Settings()
+                    .Add().Name().Value("columns").Build().Value(write.ReturningColumns()).Build()
+                .Build()
                 .Done());
         }
 
@@ -491,7 +493,9 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
                     .Update(node)
                     .Columns(update.ReturningColumns())
                     .Build()
-                .Settings().Build()
+                .Settings()
+                    .Add().Name().Value("columns").Build().Value(update.ReturningColumns()).Build()
+                .Build()
                 .Done());
         }
 
@@ -524,7 +528,9 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
                     .Update(node)
                     .Columns(del.ReturningColumns())
                     .Build()
-                .Settings().Build()
+                .Settings()
+                    .Add().Name().Value("columns").Build().Value(del.ReturningColumns()).Build()
+                .Build()
                 .Done());
         }
 

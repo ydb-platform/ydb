@@ -1,6 +1,7 @@
 #pragma once
 #include "loader.h"
 
+#include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 
@@ -106,10 +107,10 @@ public:
     virtual std::shared_ptr<TColumnLoader> GetColumnLoaderOptional(const ui32 columnId) const = 0;
     std::shared_ptr<TColumnLoader> GetColumnLoaderVerified(const ui32 columnId) const;
 
-    static std::shared_ptr<arrow::RecordBatch> NormalizeDeletionColumn(const std::shared_ptr<arrow::RecordBatch>& batch);
+    static void NormalizeDeletionColumn(NArrow::TGeneralContainer& batch);
 
-    static std::shared_ptr<arrow::RecordBatch> AddSnapshotColumns(const std::shared_ptr<arrow::RecordBatch>& batch, const TSnapshot& snapshot);
-    static std::shared_ptr<arrow::RecordBatch> AddDeleteFlagsColumn(const std::shared_ptr<arrow::RecordBatch>& batch, const bool isDelete);
+    static void AddSnapshotColumns(NArrow::TGeneralContainer& batch, const TSnapshot& snapshot);
+    static void AddDeleteFlagsColumn(NArrow::TGeneralContainer& batch, const bool isDelete);
 
     static ui64 GetSpecialColumnsRecordSize() {
         return sizeof(ui64) + sizeof(ui64) + sizeof(bool);

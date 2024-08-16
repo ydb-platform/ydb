@@ -268,6 +268,14 @@ def fix_line(line, all_lines, pos):
         ret+="\n";
         thread_funcs.append(found_v+"_init");
 
+    if "DCLIST_STATIC_INIT" in ret:
+        # rewrite without {{}} inits
+        pos=ret.find("=");
+        ret=ret[:pos] + ";";
+        ret+="void "+found_v+"_init(void) { dlist_init(&" + found_v + ".dlist); " + found_v + ".count = 0; }";
+        ret+="\n";
+        thread_funcs.append(found_v+"_init");
+
     if "CurrentTransactionState" in ret or "mainrdata_last" in ret:
         # rewrite with address of TLS var
         pos=ret.find("=");
@@ -327,6 +335,11 @@ def make_sources_list(build_dir):
             for line in fsrc:
                 #print(line.strip())
                 name = line.strip()
+                if name.endswith(".funcs.c"): continue
+                if name.endswith(".switch.c"): continue
+                basename = os.path.basename(name)
+                if basename.startswith("regc_") and basename.endswith(".c"): continue
+                if basename == "rege_dfa.c": continue
                 if name.endswith(".c") and need_copy(name) and name not in exclude_from_source_list:
                     fdst.write("    " + name + "\n")
             fdst.write(")\n")
@@ -381,7 +394,8 @@ static __thread int pg_thread_init_flag;
 
 void pg_thread_init(void) {
     if (pg_thread_init_flag) return;
-    pg_thread_init_flag=1;""", file=f)
+    pg_thread_init_flag=1;
+    my_wait_event_info_init();""", file=f)
 
         for a in sorted(thread_funcs):
             print("    " + a + "();", file=f)

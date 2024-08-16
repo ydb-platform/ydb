@@ -598,8 +598,9 @@ void TSchemeShard::ClearDescribePathCaches(const TPathElement::TPtr node, bool f
     } else if (node->PathType == NKikimrSchemeOp::EPathType::EPathTypeTable) {
         Y_ABORT_UNLESS(Tables.contains(node->PathId));
         TTableInfo::TPtr tabletInfo = Tables.at(node->PathId);
-        tabletInfo->PreSerializedPathDescription.clear();
-        tabletInfo->PreSerializedPathDescriptionWithoutRangeKey.clear();
+        tabletInfo->PreserializedTablePartitions.clear();
+        tabletInfo->PreserializedTablePartitionsNoKeys.clear();
+        tabletInfo->PreserializedTableSplitBoundaries.clear();
     }
 }
 
@@ -4461,6 +4462,8 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     appData->Icb->RegisterSharedControl(AllowConditionalEraseOperations, "SchemeShard_AllowConditionalEraseOperations");
     appData->Icb->RegisterSharedControl(DisablePublicationsOfDropping, "SchemeShard_DisablePublicationsOfDropping");
     appData->Icb->RegisterSharedControl(FillAllocatePQ, "SchemeShard_FillAllocatePQ");
+
+    appData->Icb->RegisterSharedControl(MaxCommitRedoMB, "TabletControls.MaxCommitRedoMB");
 
     AllowDataColumnForIndexTable = appData->FeatureFlags.GetEnableDataColumnForIndexTable();
     appData->Icb->RegisterSharedControl(AllowDataColumnForIndexTable, "SchemeShard_AllowDataColumnForIndexTable");

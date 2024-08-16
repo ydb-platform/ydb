@@ -138,8 +138,14 @@ void FillResourcePoolDescription(NKikimrSchemeOp::TResourcePoolDescription& reso
     }
 
     if (settings.GetObjectId() == NResourcePool::DEFAULT_POOL_ID) {
-        if (properties.contains("concurrent_query_limit")) {
-            ythrow yexception() << "Can not change property concurrent_query_limit for default pool";
+        std::vector<TString> forbiddenProperties = {
+            "concurrent_query_limit",
+            "database_load_cpu_threshold"
+        };
+        for (const TString& property : forbiddenProperties) {
+            if (properties.contains(property)) {
+                ythrow yexception() << "Can not change property " << property << " for default pool";
+            }
         }
     }
 }

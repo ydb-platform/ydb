@@ -2,7 +2,7 @@
  * brin_pageops.c
  *		Page-handling routines for BRIN indexes
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -730,6 +730,10 @@ brin_getinsertbuffer(Relation irel, Buffer oldbuf, Size itemsz,
 			 * There's not enough free space in any existing index page,
 			 * according to the FSM: extend the relation to obtain a shiny new
 			 * page.
+			 *
+			 * XXX: It's likely possible to use RBM_ZERO_AND_LOCK here,
+			 * which'd avoid the need to hold the extension lock during buffer
+			 * reclaim.
 			 */
 			if (!RELATION_IS_LOCAL(irel))
 			{

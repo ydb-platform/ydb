@@ -7,11 +7,10 @@ yag make -DBUILD_POSTGRES_ONLY || exit $?
 echo -n "Checking static variables: "
 
 data=$(objdump libyql-parser-pg_wrapper.a -t | grep -E "\.data\.|\.bss\." | \
-grep -v -E "\.data\.rel\.ro\." | \
-grep -v -E "progname|pg_popcount32|pg_popcount64|pg_comp_crc32c|_ZN4NYqlL10GlobalInitE|BlockSig|StartupBlockSig|UnBlockSig" | \
-grep -v -E "local_my_wait_event_info|my_wait_event_info|maxSems|nextSemKey|numSems|sharedSemas|AnonymousShmem|AnonymousShmemSize" | \
-grep -v -E "UsedShmemSegAddr|UsedShmemSegID|_ZN4NYql11TVPtrHolder8InstanceE" | \
-grep -v -E "on_proc_exit_index|on_shmem_exit_index|before_shmem_exit_index")
+	grep -v -E "\.data\.rel\.ro\." | \
+        grep -v -E "pg_comp_crc32c|pg_popcount32|pg_popcount64" | \
+        grep -v -E "BlockSig|StartupBlockSig|UnBlockSig"
+)
 
 if [ ${#data} -eq 0 ]; then
     echo "OK";

@@ -5,7 +5,7 @@ services:
         echo \"$$(dig fq-tests-ydb-ydb +short) fq-tests-ydb-ydb\" >> /etc/hosts; cat /etc/hosts;
         /opt/ydb/bin/fq-connector-go server -c /opt/ydb/cfg/fq-connector-go.yaml"
     container_name: fq-tests-ydb-fq-connector-go
-    image: ghcr.io/ydb-platform/fq-connector-go:v0.4.9@sha256:3a1fe086be50c0edbae2c2b284aee5ce76bd056d7f46cb460919ec37a6f8ab5c
+    image: ghcr.io/ydb-platform/fq-connector-go:v0.4.17@sha256:3763344ab70f9a6b8c1546f15c0b31465590e8ac6636be15ca2d29c4f4cd9b19
     ports:
     - 2130
     volumes:

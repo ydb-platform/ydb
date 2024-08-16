@@ -509,15 +509,12 @@ private:
 
         bool enableKqpScanQuerySourceRead = TableServiceConfig.GetEnableKqpScanQuerySourceRead();
 
-        bool predicateExtract20 = TableServiceConfig.GetPredicateExtract20();
-
         bool defaultSyntaxVersion = TableServiceConfig.GetSqlVersion();
 
         auto indexAutoChooser = TableServiceConfig.GetIndexAutoChooseMode();
 
         ui64 rangesLimit = TableServiceConfig.GetExtractPredicateRangesLimit();
         ui64 idxLookupPointsLimit = TableServiceConfig.GetIdxLookupJoinPointsLimit();
-        bool oldLookupJoinBehaviour = TableServiceConfig.GetOldLookupJoinBehaviour();
 
         bool enableSequences = TableServiceConfig.GetEnableSequences();
         bool enableColumnsWithDefault = TableServiceConfig.GetEnableColumnsWithDefault();
@@ -526,9 +523,16 @@ private:
         bool enableCreateTableAs = TableServiceConfig.GetEnableCreateTableAs();
         auto blockChannelsMode = TableServiceConfig.GetBlockChannelsMode();
 
+        bool enableAstCache = TableServiceConfig.GetEnableAstCache();
+        bool enableImplicitQueryParameterTypes = TableServiceConfig.GetEnableImplicitQueryParameterTypes();
+        bool enablePgConstsToParams = TableServiceConfig.GetEnablePgConstsToParams();
+        bool enablePerStatementQueryExecution = TableServiceConfig.GetEnablePerStatementQueryExecution();
+
         auto mkqlHeavyLimit = TableServiceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit();
 
         bool enableQueryServiceSpilling = TableServiceConfig.GetEnableQueryServiceSpilling();
+        ui64 defaultCostBasedOptimizationLevel = TableServiceConfig.GetDefaultCostBasedOptimizationLevel();
+        bool enableConstantFolding = TableServiceConfig.GetEnableConstantFolding();
 
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
@@ -542,7 +546,6 @@ private:
             TableServiceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin() != enableKqpScanQueryStreamIdxLookupJoin ||
             TableServiceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin() != enableKqpDataQueryStreamIdxLookupJoin ||
             TableServiceConfig.GetEnableKqpScanQuerySourceRead() != enableKqpScanQuerySourceRead ||
-            TableServiceConfig.GetPredicateExtract20() != predicateExtract20 ||
             TableServiceConfig.GetIndexAutoChooseMode() != indexAutoChooser ||
             TableServiceConfig.GetEnableSequences() != enableSequences ||
             TableServiceConfig.GetEnableColumnsWithDefault() != enableColumnsWithDefault ||
@@ -550,11 +553,16 @@ private:
             TableServiceConfig.GetEnableOltpSink() != enableOltpSink ||
             TableServiceConfig.GetEnableCreateTableAs() != enableCreateTableAs ||
             TableServiceConfig.GetBlockChannelsMode() != blockChannelsMode ||
-            TableServiceConfig.GetOldLookupJoinBehaviour() != oldLookupJoinBehaviour ||
             TableServiceConfig.GetExtractPredicateRangesLimit() != rangesLimit ||
             TableServiceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit() != mkqlHeavyLimit ||
             TableServiceConfig.GetIdxLookupJoinPointsLimit() != idxLookupPointsLimit ||
-            TableServiceConfig.GetEnableQueryServiceSpilling() != enableQueryServiceSpilling) {
+            TableServiceConfig.GetEnableQueryServiceSpilling() != enableQueryServiceSpilling ||
+            TableServiceConfig.GetDefaultCostBasedOptimizationLevel() != defaultCostBasedOptimizationLevel ||
+            TableServiceConfig.GetEnableConstantFolding() != enableConstantFolding ||
+            TableServiceConfig.GetEnableAstCache() != enableAstCache ||
+            TableServiceConfig.GetEnableImplicitQueryParameterTypes() != enableImplicitQueryParameterTypes ||
+            TableServiceConfig.GetEnablePgConstsToParams() != enablePgConstsToParams ||
+            TableServiceConfig.GetEnablePerStatementQueryExecution() != enablePerStatementQueryExecution) {
 
             QueryCache.Clear();
 

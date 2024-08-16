@@ -166,6 +166,13 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
             for (const auto &input : stage.GetInputs()) {
                 hasStreamLookup |= input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup;
             }
+
+            for (const auto &tableOp : stage.GetTableOps()) {
+                if (tableOp.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
+                    // always need snapshot for OLAP reads
+                    return true;
+                }
+            }
         }
     }
 

@@ -1072,9 +1072,13 @@ void TColumnShard::Handle(TAutoPtr<TEventHandle<NOlap::NBackground::TEvExecuteGe
 void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs::TPtr& ev, const TActorContext& ctx) {
     if (SharingSessionsManager->IsSharingInProgress()) {
         ctx.Send(NActors::ActorIdFromProto(ev->Get()->Record.GetSourceActorId()),
-            new NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobsFinished((NOlap::TTabletId)TabletID(),
-                NKikimrColumnShardBlobOperationsProto::TEvDeleteSharedBlobsFinished::DestinationCurrenlyLocked));
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "sharing_in_progress");
+            new NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobsFinished(
+                (NOlap::TTabletId)TabletID(), NKikimrColumnShardBlobOperationsProto::TEvDeleteSharedBlobsFinished::DestinationCurrenlyLocked));
+        for (auto&& i : ev->Get()->Record.GetBlobIds()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS)("event", "sharing_in_progress")("blob_id", i)(
+                "from_tablet", ev->Get()->Record.GetSourceTabletId());
+        }
+
         return;
     }
 

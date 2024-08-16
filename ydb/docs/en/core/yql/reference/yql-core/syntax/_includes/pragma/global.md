@@ -6,7 +6,7 @@
 | --- | --- |
 | Flag | false |
 
-Automatically run [COMMIT](../../select.md#commit) after every statement.
+Automatically run [COMMIT](../../commit.md) after every statement.
 
 ### TablePathPrefix {#table-path-prefix}
 
@@ -75,7 +75,7 @@ When set to "auto", it enables a new compute engine. Computing is made, whenever
 
 When you use `SELECT foo.* FROM ... AS foo`, remove the `foo.` prefix from the names of the result columns.
 
-It can be also used with a [JOIN](../../join.md), but in this case it may fail in the case of a name conflict (that can be resolved by using [WITHOUT](../../select.md#without) and renaming columns). For JOIN in SimpleColumns mode, an implicit Coalesce is made for key columns: the query `SELECT * FROM T1 AS a JOIN T2 AS b USING(key)` in the SimpleColumns mode works same as `SELECT a.key ?? b.key AS key, ... FROM T1 AS a JOIN T2 AS b USING(key)`.
+It can be also used with a [JOIN](../../join.md), but in this case it may fail in the case of a name conflict (that can be resolved by using [WITHOUT](../../select/without.md) and renaming columns). For JOIN in SimpleColumns mode, an implicit Coalesce is made for key columns: the query `SELECT * FROM T1 AS a JOIN T2 AS b USING(key)` in the SimpleColumns mode works same as `SELECT a.key ?? b.key AS key, ... FROM T1 AS a JOIN T2 AS b USING(key)`.
 
 ### CoalesceJoinKeysOnQualifiedAll
 
@@ -158,11 +158,11 @@ You can explicitly select the old behavior by using the `DisableAnsiOrderByLimit
 
 `OrderedColumns`/`DisableOrderedColumns`
 
-Output the [column order](../../select.md#orderedcolumns) in SELECT/JOIN/UNION ALL and preserve it when writing the results. The order of columns is undefined by default.
+Output the [column order](../../select/order_by.md) in SELECT/JOIN/UNION ALL and preserve it when writing the results. The order of columns is undefined by default.
 
 ### PositionalUnionAll {#positionalunionall}
 
-Enable the standard column-by-column execution for [UNION ALL](../../select.md#unionall). This automatically enables
+Enable the standard column-by-column execution for [UNION ALL](../../select/union.md#unionall). This automatically enables
 [ordered columns](#orderedcolumns).
 
 ### RegexUseRe2

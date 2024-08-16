@@ -68,6 +68,7 @@ TExecFunc arrow_pg_log_backend_memory_contexts() { return MakeIndirectExec<true,
 TExecFunc arrow_pg_reload_conf() { return MakeIndirectExec<true, true>(&pg_reload_conf); }
 TExecFunc arrow_pg_rotate_logfile() { return MakeIndirectExec<true, true>(&pg_rotate_logfile); }
 TExecFunc arrow_pg_rotate_logfile_v2() { return MakeIndirectExec<true, true>(&pg_rotate_logfile_v2); }
+TExecFunc arrow_pg_settings_get_flags() { return MakeIndirectExec<true, false>(&pg_settings_get_flags); }
 TExecFunc arrow_pg_terminate_backend() { return MakeIndirectExec<true, true>(&pg_terminate_backend); }
 TExecFunc arrow_set_config_by_name() { return MakeIndirectExec<false, false>(&set_config_by_name); }
 TExecFunc arrow_show_config_by_name() { return MakeIndirectExec<true, false>(&show_config_by_name); }

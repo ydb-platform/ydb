@@ -3,7 +3,7 @@
  * pg_publication_d.h
  *    Macro definitions for pg_publication
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -19,6 +19,8 @@
 #define PG_PUBLICATION_D_H
 
 #define PublicationRelationId 6104
+#define PublicationObjectIndexId 6110
+#define PublicationNameIndexId 6111
 
 #define Anum_pg_publication_oid 1
 #define Anum_pg_publication_pubname 2

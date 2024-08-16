@@ -13,6 +13,7 @@
 #include <library/cpp/yson/writer.h>
 
 #include <util/datetime/cputimer.h>
+#include <util/stream/file.h>
 #include <util/stream/format.h>
 #include <util/stream/null.h>
 
@@ -33,6 +34,7 @@ int Main(int argc, const char *argv[])
     TString udfsDir;
     TString LLVMSettings;
     TString blockEngineSettings;
+    TString exprFile;
     opts.AddHelpOption();
     opts.AddLongOption("ndebug", "should be at first argument, do not show debug info in error output").NoArgument();
     opts.AddLongOption('b', "blocks-engine", "Block engine settings").StoreResult(&blockEngineSettings).DefaultValue("disable");
@@ -45,6 +47,8 @@ int Main(int argc, const char *argv[])
     opts.AddLongOption("pt", "use PG syntax for test query").NoArgument();
     opts.AddLongOption("udfs-dir", "directory with UDFs").StoreResult(&udfsDir).DefaultValue("");
     opts.AddLongOption("llvm-settings", "LLVM settings").StoreResult(&LLVMSettings).DefaultValue("");
+    opts.AddLongOption("print-expr", "print rebuild AST before execution").NoArgument();
+    opts.AddLongOption("expr-file", "print AST to that file instead of stdout").StoreResult(&exprFile);
     opts.SetFreeArgsMax(0);
     TOptsParseResult res(&opts, argc, argv);
 
@@ -52,6 +56,17 @@ int Main(int argc, const char *argv[])
     factoryOptions.SetUDFsDir(udfsDir);
     factoryOptions.SetLLVMSettings(LLVMSettings);
     factoryOptions.SetBlockEngineSettings(blockEngineSettings);
+
+    IOutputStream* exprOut = nullptr;
+    THolder<TFixedBufferFileOutput> exprFileHolder;
+    if (res.Has("print-expr")) {
+        exprOut = &Cout;
+    } else if (!exprFile.empty()) {
+        exprFileHolder.Reset(new TFixedBufferFileOutput(exprFile));
+        exprOut = exprFileHolder.Get();
+    }
+    factoryOptions.SetExprOutputStream(exprOut);
+
     auto factory = MakeProgramFactory(factoryOptions);
 
     NYT::TNode members{NYT::TNode::CreateList()};

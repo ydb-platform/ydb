@@ -47,8 +47,8 @@ message TTableServiceConfig {
 
     message TSpillingServiceConfig {
         message TLocalFileConfig {
-            optional bool Enable = 1 [default = false];
-            optional string Root = 2 [default = "/tmp/kikimr_spilling/"];
+            optional bool Enable = 1 [default = true];
+            optional string Root = 2 [default = ""];
             optional uint64 MaxTotalSize = 3 [default = 21474836480];  // 20 GiB
             optional uint64 MaxFileSize = 4 [default = 5368709120];    // 5 GiB
             optional uint64 MaxFilePartSize = 5 [default = 104857600]; // 100 MB
@@ -249,7 +249,7 @@ message TTableServiceConfig {
 
     optional EBindingsMode BindingsMode = 40 [default = BM_ENABLED];
     optional TIteratorReadsRetrySettings IteratorReadsRetrySettings = 41;
-    optional bool PredicateExtract20 = 44 [default = true];
+    reserved 44; // optional bool PredicateExtract20 = 44 [default = true];
     optional TIteratorReadQuotaSettings IteratorReadQuotaSettings = 45;
 
     enum EChannelTransportVersion {
@@ -280,7 +280,7 @@ message TTableServiceConfig {
     optional bool EnableCreateTableAs = 57 [default = true];
 
     optional uint64 IdxLookupJoinPointsLimit = 58 [default = 3];
-    optional bool OldLookupJoinBehaviour = 59 [default = false];
+    reserved 59; //optional bool OldLookupJoinBehaviour = 59 [default = false];
 
     optional bool EnableOltpSink = 60 [default = false];
 
@@ -294,4 +294,10 @@ message TTableServiceConfig {
     optional uint64 QueryReplayCacheUploadTTLSec = 62 [default = 36000];
 
     optional bool EnableQueryServiceSpilling = 63 [ default = true ];
+
+    optional uint32 DefaultCostBasedOptimizationLevel = 64 [default = 3];
+
+    optional bool EnableConstantFolding = 65 [ default = true ];
+    
+    optional bool EnableImplicitQueryParameterTypes = 66 [ default = true ];
 };

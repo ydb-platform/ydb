@@ -4,7 +4,7 @@
  *	 Implementation of generic xlog records.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/backend/access/transam/generic_xlog.c
@@ -58,18 +58,21 @@ typedef struct
 	char		delta[MAX_DELTA_SIZE];	/* delta between page images */
 } PageData;
 
-/* State of generic xlog record construction */
+/*
+ * State of generic xlog record construction.  Must be allocated at an I/O
+ * aligned address.
+ */
 struct GenericXLogState
 {
+	/* Page images (properly aligned, must be first) */
+	PGIOAlignedBlock images[MAX_GENERIC_XLOG_PAGES];
 	/* Info about each page, see above */
 	PageData	pages[MAX_GENERIC_XLOG_PAGES];
 	bool		isLogged;
-	/* Page images (properly aligned) */
-	PGAlignedBlock images[MAX_GENERIC_XLOG_PAGES];
 };
 
 static void writeFragment(PageData *pageData, OffsetNumber offset,
-						  OffsetNumber len, const char *data);
+						  OffsetNumber length, const char *data);
 static void computeRegionDelta(PageData *pageData,
 							   const char *curpage, const char *targetpage,
 							   int targetStart, int targetEnd,
@@ -269,7 +272,9 @@ GenericXLogStart(Relation relation)
 	GenericXLogState *state;
 	int			i;
 
-	state = (GenericXLogState *) palloc(sizeof(GenericXLogState));
+	state = (GenericXLogState *) palloc_aligned(sizeof(GenericXLogState),
+												PG_IO_ALIGN_SIZE,
+												0);
 	state->isLogged = RelationNeedsWAL(relation);
 
 	for (i = 0; i < MAX_GENERIC_XLOG_PAGES; i++)
@@ -478,10 +483,10 @@ generic_redo(XLogReaderState *record)
 	uint8		block_id;
 
 	/* Protect limited size of buffers[] array */
-	Assert(record->max_block_id < MAX_GENERIC_XLOG_PAGES);
+	Assert(XLogRecMaxBlockId(record) < MAX_GENERIC_XLOG_PAGES);
 
 	/* Iterate over blocks */
-	for (block_id = 0; block_id <= record->max_block_id; block_id++)
+	for (block_id = 0; block_id <= XLogRecMaxBlockId(record); block_id++)
 	{
 		XLogRedoAction action;
 
@@ -521,7 +526,7 @@ generic_redo(XLogReaderState *record)
 	}
 
 	/* Changes are done: unlock and release all buffers */
-	for (block_id = 0; block_id <= record->max_block_id; block_id++)
+	for (block_id = 0; block_id <= XLogRecMaxBlockId(record); block_id++)
 	{
 		if (BufferIsValid(buffers[block_id]))
 			UnlockReleaseBuffer(buffers[block_id]);

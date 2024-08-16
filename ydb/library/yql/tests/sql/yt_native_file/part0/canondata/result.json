@@ -1956,9 +1956,9 @@
     ],
     "test.test[pg-aggregate_ctx-default.txt-Debug]": [
         {
-            "checksum": "0d6c001e583471af7f91c2f109939bd2",
-            "size": 1150,
-            "uri": "https://{canondata_backend}/1881367/b37e651c7197c955cae725cabde95ec407979d17/resource.tar.gz#test.test_pg-aggregate_ctx-default.txt-Debug_/opt.yql"
+            "checksum": "d4c6e76440caf9496811717400260fe3",
+            "size": 1336,
+            "uri": "https://{canondata_backend}/1600758/f5fc91ec8f2ea81e9f0a70d6becbbfc127a25b9d/resource.tar.gz#test.test_pg-aggregate_ctx-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-aggregate_ctx-default.txt-Plan]": [
@@ -1977,9 +1977,9 @@
     ],
     "test.test[pg-aggregate_distinct-default.txt-Debug]": [
         {
-            "checksum": "1c835c7ade9b27bda4cd87fa08784756",
-            "size": 2472,
-            "uri": "https://{canondata_backend}/1881367/b37e651c7197c955cae725cabde95ec407979d17/resource.tar.gz#test.test_pg-aggregate_distinct-default.txt-Debug_/opt.yql"
+            "checksum": "def0d170b183585cd0cbdf8e68b2903e",
+            "size": 2657,
+            "uri": "https://{canondata_backend}/1600758/f5fc91ec8f2ea81e9f0a70d6becbbfc127a25b9d/resource.tar.gz#test.test_pg-aggregate_distinct-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-aggregate_distinct-default.txt-Plan]": [
@@ -2474,9 +2474,9 @@
     ],
     "test.test[pg_catalog-pg_database-default.txt-Results]": [
         {
-            "checksum": "ffb82ff2a66fffc2cebce35e729be6d3",
-            "size": 4022,
-            "uri": "https://{canondata_backend}/1946324/67e5945dc28520630af9ac756d628fe05ed75ccf/resource.tar.gz#test.test_pg_catalog-pg_database-default.txt-Results_/results.txt"
+            "checksum": "2fab1ece347b77674e8266730c8f8cab",
+            "size": 4160,
+            "uri": "https://{canondata_backend}/1773845/2598e59cb6089a030055722ac0c7d3bc8b4362ad/resource.tar.gz#test.test_pg_catalog-pg_database-default.txt-Results_/results.txt"
         }
     ],
     "test.test[pg_catalog-pg_stat_gssapi-default.txt-Debug]": [

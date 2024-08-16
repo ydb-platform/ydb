@@ -238,25 +238,37 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             result.push_back(CreateNewTableIndex(NextPartId(nextId, result), scheme));
         }
 
-        {
+        auto createIndexImplTable = [&] (const NKikimrSchemeOp::TTableDescription&& implTableDesc) {
             auto scheme = TransactionTemplate(
                 tx.GetWorkingDir() + "/" + baseTableDescription.GetName() + "/" + indexDescription.GetName(),
                 NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
             scheme.SetFailOnExist(tx.GetFailOnExist());
             scheme.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
 
-            const auto& implTableColumns = indexes.at(indexDescription.GetName());
+            *scheme.MutableCreateTable() = implTableDesc;
 
-            auto& indexImplTableDescription = *scheme.MutableCreateTable();
+            return CreateNewTable(NextPartId(nextId, result), scheme);    
+        };
 
+        const auto& implTableColumns = indexes.at(indexDescription.GetName());
+        if (indexDescription.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+            NKikimrSchemeOp::TTableDescription userLevelDesc, userPostingDesc;
+            if (indexDescription.IndexImplTableDescriptionsSize() == 2) {
+                // This description provided by user to override partition policy
+                userLevelDesc = indexDescription.GetIndexImplTableDescriptions(0);
+                userPostingDesc = indexDescription.GetIndexImplTableDescriptions(1);
+            }
+                
+            result.push_back(createIndexImplTable(CalcVectorKmeansTreeLevelImplTableDesc(baseTableDescription.GetPartitionConfig(), userLevelDesc)));
+            result.push_back(createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), implTableColumns, userPostingDesc)));
+        } else {
             NKikimrSchemeOp::TTableDescription userIndexDesc;
             if (indexDescription.IndexImplTableDescriptionsSize()) {
                 // This description provided by user to override partition policy
                 userIndexDesc = indexDescription.GetIndexImplTableDescriptions(0);
             }
-            indexImplTableDescription = CalcImplTableDesc(baseTableDescription, implTableColumns, userIndexDesc);
 
-            result.push_back(CreateNewTable(NextPartId(nextId, result), scheme));
+            result.push_back(createIndexImplTable(CalcImplTableDesc(baseTableDescription, implTableColumns, userIndexDesc)));
         }
     }
 

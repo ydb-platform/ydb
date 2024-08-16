@@ -395,11 +395,15 @@ TMaybeNode<TExprBase> BuildKqpStreamIndexLookupJoin(
         }
     }
 
+    auto strategy = join.JoinType().Value() == "LeftSemi"
+        ? TKqpStreamLookupSemiJoinStrategyName
+        : TKqpStreamLookupJoinStrategyName;
+
     TExprBase lookupJoin = Build<TKqlStreamLookupTable>(ctx, join.Pos())
         .Table(rightLookup.MainTable)
         .LookupKeys(leftInput)
         .Columns(lookupColumns.Cast())
-        .LookupStrategy().Build(TKqpStreamLookupJoinStrategyName)
+        .LookupStrategy().Build(strategy)
         .Done();
 
     // Stream lookup join output: stream<tuple<left_row_struct, optional<right_row_struct>>>
@@ -569,10 +573,6 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         return {};
     }
 
-    if ((!kqpCtx.Config->PredicateExtract20 || kqpCtx.Config->OldLookupJoinBehaviour) && prefixLookup->Filter.IsValid()) {
-        return {};
-    }
-
     TMap<std::string_view, TString> rightJoinKeyToLeft;
     TVector<TCoAtom> rightKeyColumns;
     rightKeyColumns.reserve(join.JoinKeys().Size());
@@ -632,9 +632,6 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
                             .Build()
                         .Done());
                 deduplicateLeftColumns.insert(*leftColumn);
-                if ((!kqpCtx.Config->PredicateExtract20 || kqpCtx.Config->OldLookupJoinBehaviour)) {
-                    return {};
-                }
             }
 
             member = Build<TCoNth>(ctx, prefixRowArg.Pos())

@@ -1,0 +1,1854 @@
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/common/heaptuple.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/common/heaptuple.c
+index 1f748c8be5..38c9301642 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/common/heaptuple.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/common/heaptuple.c
+@@ -429,14 +429,15 @@ heap_fill_tuple(TupleDesc tupleDesc,
+ 	for (i = 0; i < numberOfAttributes; i++)
+ 	{
+ 		Form_pg_attribute attr = TupleDescAttr(tupleDesc, i);
+-
++		bool isNullAttribute = isnull ? isnull[i] : true;
++		Datum v = (isNullAttribute || !values) ? PointerGetDatum(NULL) : values[i];
+ 		fill_val(attr,
+ 				 bitP ? &bitP : NULL,
+ 				 &bitmask,
+ 				 &data,
+ 				 infomask,
+-				 values ? values[i] : PointerGetDatum(NULL),
+-				 isnull ? isnull[i] : true);
++				 v,
++				 isNullAttribute);
+ 	}
+ 
+ 	Assert((data - start) == data_size);
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/common/tupdesc.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/common/tupdesc.c
+index 9f41b1e854..2777ceaeab 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/common/tupdesc.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/common/tupdesc.c
+@@ -580,7 +580,7 @@ hashTupleDesc(TupleDesc desc)
+  * TupleDescInitEntryCollation.
+  */
+ void
+-TupleDescInitEntry(TupleDesc desc,
++TupleDescInitEntry_original(TupleDesc desc,
+ 				   AttrNumber attributeNumber,
+ 				   const char *attributeName,
+ 				   Oid oidtypeid,
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/transam/timeline.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/transam/timeline.c
+index be21968293..77b72f0fad 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/transam/timeline.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/transam/timeline.c
+@@ -405,6 +405,7 @@ writeTimeLineHistory(TimeLineID newTLI, TimeLineID parentTLI,
+ 			 LSN_FORMAT_ARGS(switchpoint),
+ 			 reason);
+ 
++	buffer[BLCKSZ - 1] = 0;
+ 	nbytes = strlen(buffer);
+ 	errno = 0;
+ 	pgstat_report_wait_start(WAIT_EVENT_TIMELINE_HISTORY_WRITE);
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/transam/xlog.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/transam/xlog.c
+index 1da6203ea9..f414f90aed 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/transam/xlog.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/transam/xlog.c
+@@ -5779,7 +5779,7 @@ PerformRecoveryXLogAction(void)
+  * shared memory.
+  */
+ bool
+-RecoveryInProgress(void)
++RecoveryInProgress_original(void)
+ {
+ 	/*
+ 	 * We check shared state each time only until we leave recovery mode. We
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/transam/xloginsert.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/transam/xloginsert.c
+index 575139dea1..4a7e272c6c 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/transam/xloginsert.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/transam/xloginsert.c
+@@ -24,7 +24,7 @@
+ #endif
+ 
+ #ifdef USE_ZSTD
+-#include <zstd.h>
++#error #include <zstd.h>
+ #endif
+ 
+ #include "access/xact.h"
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/transam/xlogreader.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/transam/xlogreader.c
+index e7ad3317e4..b8e07a7a75 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/transam/xlogreader.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/transam/xlogreader.c
+@@ -22,7 +22,7 @@
+ #include <lz4.h>
+ #endif
+ #ifdef USE_ZSTD
+-#include <zstd.h>
++#error #include <zstd.h>
+ #endif
+ 
+ #include "access/transam.h"
+@@ -38,7 +38,7 @@
+ #include "pgstat.h"
+ #include "utils/memutils.h"
+ #else
+-#include "common/logging.h"
++#error #include "common/logging.h"
+ #endif
+ 
+ static void report_invalid_record(XLogReaderState *state, const char *fmt,...)
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/backup/basebackup_zstd.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/backup/basebackup_zstd.c
+index 84256e3fa2..511c2e5b67 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/backup/basebackup_zstd.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/backup/basebackup_zstd.c
+@@ -13,7 +13,7 @@
+ #include "postgres.h"
+ 
+ #ifdef USE_ZSTD
+-#include <zstd.h>
++#error #include <zstd.h>
+ #endif
+ 
+ #include "backup/basebackup_sink.h"
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/catalog/namespace.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/catalog/namespace.c
+index e0157e5571..3fa2bb86e8 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/catalog/namespace.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/catalog/namespace.c
+@@ -3757,7 +3757,7 @@ get_conversion_oid(List *name, bool missing_ok)
+  * FindDefaultConversionProc - find default encoding conversion proc
+  */
+ Oid
+-FindDefaultConversionProc(int32 for_encoding, int32 to_encoding)
++FindDefaultConversionProc_original(int32 for_encoding, int32 to_encoding)
+ {
+ 	Oid			proc;
+ 	ListCell   *l;
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/libpq/auth.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/libpq/auth.c
+index 44953ec062..f3e2873154 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/libpq/auth.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/libpq/auth.c
+@@ -88,10 +88,10 @@ static int	auth_peer(hbaPort *port);
+  */
+ #ifdef USE_PAM
+ #ifdef HAVE_PAM_PAM_APPL_H
+-#include <pam/pam_appl.h>
++#error #include <pam/pam_appl.h>
+ #endif
+ #ifdef HAVE_SECURITY_PAM_APPL_H
+-#include <security/pam_appl.h>
++#error #include <security/pam_appl.h>
+ #endif
+ 
+ #define PGSQL_PAM_SERVICE "postgresql"	/* Service name passed to PAM */
+@@ -118,7 +118,7 @@ static bool pam_no_password;	/* For detecting no-password-given */
+  *----------------------------------------------------------------
+  */
+ #ifdef USE_BSD_AUTH
+-#include <bsd_auth.h>
++#error #include <bsd_auth.h>
+ 
+ static int	CheckBSDAuth(Port *port, char *user);
+ #endif							/* USE_BSD_AUTH */
+@@ -132,7 +132,7 @@ static int	CheckBSDAuth(Port *port, char *user);
+ #ifndef WIN32
+ /* We use a deprecated function to keep the codepath the same as win32. */
+ #define LDAP_DEPRECATED 1
+-#include <ldap.h>
++#error #include <ldap.h>
+ #else
+ #include <winldap.h>
+ 
+@@ -177,7 +177,7 @@ __thread bool		pg_krb_caseins_users;
+  *----------------------------------------------------------------
+  */
+ #ifdef ENABLE_GSS
+-#include "libpq/be-gssapi-common.h"
++#error #include "libpq/be-gssapi-common.h"
+ 
+ static int	pg_GSS_checkauth(Port *port);
+ static int	pg_GSS_recvauth(Port *port);
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/libpq/hba.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/libpq/hba.c
+index 5e0fe24de4..f045e294eb 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/libpq/hba.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/libpq/hba.c
+@@ -49,7 +49,7 @@
+ #ifdef WIN32
+ #include <winldap.h>
+ #else
+-#include <ldap.h>
++#error #include <ldap.h>
+ #endif
+ #endif
+ 
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/libpq/pqformat.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/libpq/pqformat.c
+index 9c24df3360..3c7ff64b2f 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/libpq/pqformat.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/libpq/pqformat.c
+@@ -78,6 +78,8 @@
+ #include "mb/pg_wchar.h"
+ #include "port/pg_bswap.h"
+ 
++extern void yql_canonize_float4(float4*);
++extern void yql_canonize_float8(float8*);
+ 
+ /* --------------------------------
+  *		pq_beginmessage		- initialize for sending a message
+@@ -260,6 +262,7 @@ pq_sendfloat4(StringInfo buf, float4 f)
+ 	}			swap;
+ 
+ 	swap.f = f;
++	yql_canonize_float4(&swap.f);
+ 	pq_sendint32(buf, swap.i);
+ }
+ 
+@@ -284,6 +287,7 @@ pq_sendfloat8(StringInfo buf, float8 f)
+ 	}			swap;
+ 
+ 	swap.f = f;
++	yql_canonize_float8(&swap.f);
+ 	pq_sendint64(buf, swap.i);
+ }
+ 
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/nodes/nodeFuncs.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/nodes/nodeFuncs.c
+index 675041f9c9..010ec41eea 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/nodes/nodeFuncs.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/nodes/nodeFuncs.c
+@@ -1910,7 +1910,7 @@ check_functions_in_node(Node *node, check_function_callback checker,
+ 
+ bool
+ expression_tree_walker(Node *node,
+-					   bool (*walker) (),
++					   bool (*walker) (void*, void*),
+ 					   void *context)
+ {
+ 	ListCell   *temp;
+@@ -2393,7 +2393,7 @@ expression_tree_walker(Node *node,
+  */
+ bool
+ query_tree_walker(Query *query,
+-				  bool (*walker) (),
++				  bool (*walker) (void*, void*),
+ 				  void *context,
+ 				  int flags)
+ {
+@@ -2517,7 +2517,7 @@ range_table_walker(List *rtable,
+  */
+ bool
+ range_table_entry_walker(RangeTblEntry *rte,
+-						 bool (*walker) (),
++						 bool (*walker) (void*, void*),
+ 						 void *context,
+ 						 int flags)
+ {
+@@ -2640,7 +2640,7 @@ range_table_entry_walker(RangeTblEntry *rte,
+ 
+ Node *
+ expression_tree_mutator(Node *node,
+-						Node *(*mutator) (),
++						Node *(*mutator) (void*, void*),
+ 						void *context)
+ {
+ 	/*
+@@ -3372,7 +3372,7 @@ expression_tree_mutator(Node *node,
+  */
+ Query *
+ query_tree_mutator(Query *query,
+-				   Node *(*mutator) (),
++				   Node *(*mutator) (void*, void*),
+ 				   void *context,
+ 				   int flags)
+ {
+@@ -3463,7 +3463,7 @@ query_tree_mutator(Query *query,
+  */
+ List *
+ range_table_mutator(List *rtable,
+-					Node *(*mutator) (),
++					Node *(*mutator) (void*, void*),
+ 					void *context,
+ 					int flags)
+ {
+@@ -3532,7 +3532,7 @@ range_table_mutator(List *rtable,
+  */
+ bool
+ query_or_expression_tree_walker(Node *node,
+-								bool (*walker) (),
++								bool (*walker) (void*, void*),
+ 								void *context,
+ 								int flags)
+ {
+@@ -3555,7 +3555,7 @@ query_or_expression_tree_walker(Node *node,
+  */
+ Node *
+ query_or_expression_tree_mutator(Node *node,
+-								 Node *(*mutator) (),
++								 Node *(*mutator) (void*, void*),
+ 								 void *context,
+ 								 int flags)
+ {
+@@ -3586,7 +3586,7 @@ query_or_expression_tree_mutator(Node *node,
+  */
+ bool
+ raw_expression_tree_walker(Node *node,
+-						   bool (*walker) (),
++						   bool (*walker) (void*, void*),
+ 						   void *context)
+ {
+ 	ListCell   *temp;
+@@ -4090,7 +4090,7 @@ raw_expression_tree_walker(Node *node,
+  */
+ bool
+ planstate_tree_walker(PlanState *planstate,
+-					  bool (*walker) (),
++					  bool (*walker) (void*, void*),
+ 					  void *context)
+ {
+ 	Plan	   *plan = planstate->plan;
+@@ -4171,7 +4171,7 @@ planstate_tree_walker(PlanState *planstate,
+  */
+ static bool
+ planstate_walk_subplans(List *plans,
+-						bool (*walker) (),
++						bool (*walker) (void*, void*),
+ 						void *context)
+ {
+ 	ListCell   *lc;
+@@ -4193,7 +4193,7 @@ planstate_walk_subplans(List *plans,
+  */
+ static bool
+ planstate_walk_members(PlanState **planstates, int nplans,
+-					   bool (*walker) (), void *context)
++					   bool (*walker) (void*, void*), void *context)
+ {
+ 	int			j;
+ 
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/nodes/outfuncs.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/nodes/outfuncs.c
+index 3f8e58626c..0a75e62a45 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/nodes/outfuncs.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/nodes/outfuncs.c
+@@ -3485,6 +3485,20 @@ _outBoolean(StringInfo str, const Boolean *node)
+ 	appendStringInfoString(str, node->boolval ? "true" : "false");
+ }
+ 
++static void
++_outInsertStmt(StringInfo str, const InsertStmt *node)
++{
++    WRITE_NODE_TYPE("INSERTSTMT");
++
++    WRITE_NODE_FIELD(relation);
++    WRITE_NODE_FIELD(cols);
++    WRITE_NODE_FIELD(selectStmt);
++    WRITE_NODE_FIELD(onConflictClause);
++    WRITE_NODE_FIELD(returningList);
++    WRITE_NODE_FIELD(withClause);
++    WRITE_ENUM_FIELD(override, OverridingKind);
++}
++
+ static void
+ _outString(StringInfo str, const String *node)
+ {
+@@ -3880,6 +3894,30 @@ _outPartitionRangeDatum(StringInfo str, const PartitionRangeDatum *node)
+ 	WRITE_LOCATION_FIELD(location);
+ }
+ 
++static void
++_outOnConflictClause(StringInfo str, const OnConflictClause *node)
++{
++	WRITE_NODE_TYPE("ONCONFLICTCLAUSE");
++
++	WRITE_ENUM_FIELD(action, OnConflictAction);
++	WRITE_NODE_FIELD(infer);
++	WRITE_NODE_FIELD(targetList);
++	WRITE_NODE_FIELD(whereClause);
++	WRITE_LOCATION_FIELD(location);
++}
++
++
++static void
++_outInferClause(StringInfo str, const InferClause *node)
++{
++	WRITE_NODE_TYPE("INFERCLAUSE");
++
++	WRITE_NODE_FIELD(indexElems);
++	WRITE_NODE_FIELD(whereClause);
++	WRITE_STRING_FIELD(conname);
++	WRITE_LOCATION_FIELD(location);
++}
++
+ /*
+  * outNode -
+  *	  converts a Node into ascii string and append it to 'str'
+@@ -4510,6 +4548,9 @@ outNode(StringInfo str, const void *obj)
+ 			case T_RawStmt:
+ 				_outRawStmt(str, obj);
+ 				break;
++            case T_InsertStmt:
++			    _outInsertStmt(str, obj);
++			    break;
+ 			case T_A_Const:
+ 				_outA_Const(str, obj);
+ 				break;
+@@ -4588,6 +4629,12 @@ outNode(StringInfo str, const void *obj)
+ 			case T_PartitionRangeDatum:
+ 				_outPartitionRangeDatum(str, obj);
+ 				break;
++		        case T_OnConflictClause:
++			        _outOnConflictClause(str, obj);
++			        break;
++		        case T_InferClause:
++			        _outInferClause(str, obj);
++			        break;
+ 
+ 			default:
+ 
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/optimizer/util/plancat.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/optimizer/util/plancat.c
+index c2642028aa..f7582bf9ed 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/optimizer/util/plancat.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/optimizer/util/plancat.c
+@@ -2003,7 +2003,7 @@ function_selectivity(PlannerInfo *root,
+  * In some usages root might be NULL, too.
+  */
+ void
+-add_function_cost(PlannerInfo *root, Oid funcid, Node *node,
++add_function_cost_original(PlannerInfo *root, Oid funcid, Node *node,
+ 				  QualCost *cost)
+ {
+ 	HeapTuple	proctup;
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/parser/parser.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/parser/parser.c
+index 50227cc098..7220c7a3c4 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/parser/parser.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/parser/parser.c
+@@ -282,9 +282,7 @@ base_yylex(YYSTYPE *lvalp, YYLTYPE *llocp, core_yyscan_t yyscanner)
+ 			if (cur_token == UIDENT)
+ 			{
+ 				/* It's an identifier, so truncate as appropriate */
+-				truncate_identifier(lvalp->core_yystype.str,
+-									strlen(lvalp->core_yystype.str),
+-									true);
++
+ 				cur_token = IDENT;
+ 			}
+ 			else if (cur_token == USCONST)
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/parser/scan.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/parser/scan.c
+index f305a12a4a..81daaadfc2 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/parser/scan.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/parser/scan.c
+@@ -6595,8 +6595,6 @@ YY_RULE_SETUP
+ 					if (yyextra->literallen == 0)
+ 						yyerror("zero-length delimited identifier");
+ 					ident = litbufdup(yyscanner);
+-					if (yyextra->literallen >= NAMEDATALEN)
+-						truncate_identifier(ident, yyextra->literallen, true);
+ 					yylval->str = ident;
+ 					return IDENT;
+ 				}
+@@ -6643,7 +6641,7 @@ YY_RULE_SETUP
+ 					/* throw back all but the initial u/U */
+ 					yyless(1);
+ 					/* and treat it as {identifier} */
+-					ident = downcase_truncate_identifier(yytext, yyleng, true);
++					ident = copy_identifier(yytext, yyleng);
+ 					yylval->str = ident;
+ 					return IDENT;
+ 				}
+@@ -6941,7 +6939,7 @@ YY_RULE_SETUP
+ 					 * No.  Convert the identifier to lower case, and truncate
+ 					 * if necessary.
+ 					 */
+-					ident = downcase_truncate_identifier(yytext, yyleng, true);
++					ident = copy_identifier(yytext, yyleng);
+ 					yylval->str = ident;
+ 					return IDENT;
+ 				}
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/parser/scansup.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/parser/scansup.c
+index 602108a40f..2c251743e9 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/parser/scansup.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/parser/scansup.c
+@@ -79,6 +79,17 @@ downcase_identifier(const char *ident, int len, bool warn, bool truncate)
+ 	return result;
+ }
+ 
++char *
++copy_identifier(const char *ident, int len)
++{
++    char	   *result;
++
++    result = palloc(len + 1);
++    memcpy(result, ident, len);
++    result[len] = '\0';
++
++    return result;
++}
+ 
+ /*
+  * truncate_identifier() --- truncate an identifier to NAMEDATALEN-1 bytes.
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/postmaster/postmaster.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/postmaster/postmaster.c
+index bd6a533da5..69642045ee 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/postmaster/postmaster.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/postmaster/postmaster.c
+@@ -82,11 +82,11 @@
+ #endif
+ 
+ #ifdef USE_BONJOUR
+-#include <dns_sd.h>
++#error #include <dns_sd.h>
+ #endif
+ 
+ #ifdef USE_SYSTEMD
+-#include <systemd/sd-daemon.h>
++#error #include <systemd/sd-daemon.h>
+ #endif
+ 
+ #ifdef HAVE_PTHREAD_IS_THREADED_NP
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/regex/regc_lex.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/regex/regc_lex.c
+index 38c09b1123..7673dab76f 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/regex/regc_lex.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/regex/regc_lex.c
+@@ -201,8 +201,6 @@ next(struct vars *v)
+ {
+ 	chr			c;
+ 
+-next_restart:					/* loop here after eating a comment */
+-
+ 	/* errors yield an infinite sequence of failures */
+ 	if (ISERR())
+ 		return 0;				/* the error has set nexttype to EOS */
+@@ -495,7 +493,8 @@ next_restart:					/* loop here after eating a comment */
+ 						if (!ATEOS())
+ 							v->now++;
+ 						assert(v->nexttype == v->lasttype);
+-						goto next_restart;
++						return next(v);
++						break;
+ 					case CHR('='):	/* positive lookahead */
+ 						NOTE(REG_ULOOKAROUND);
+ 						RETV(LACON, LATYPE_AHEAD_POS);
+@@ -529,7 +528,10 @@ next_restart:					/* loop here after eating a comment */
+ 				}
+ 				assert(NOTREACHED);
+ 			}
+-			RETV('(', 1);
++			if (v->cflags & REG_NOSUB)
++				RETV('(', 0);	/* all parens non-capturing */
++			else
++				RETV('(', 1);
+ 			break;
+ 		case CHR(')'):
+ 			if (LASTTYPE('('))
+@@ -613,11 +615,7 @@ lexescape(struct vars *v)
+ 
+ 	assert(!ATEOS());
+ 	c = *v->now++;
+-
+-	/* if it's not alphanumeric ASCII, treat it as a plain character */
+-	if (!('a' <= c && c <= 'z') &&
+-		!('A' <= c && c <= 'Z') &&
+-		!('0' <= c && c <= '9'))
++	if (!iscalnum(c))
+ 		RETV(PLAIN, c);
+ 
+ 	NOTE(REG_UNONPOSIX);
+@@ -759,11 +757,8 @@ lexescape(struct vars *v)
+ 			RETV(PLAIN, c);
+ 			break;
+ 		default:
+-			/*
+-			 * Throw an error for unrecognized ASCII alpha escape sequences,
+-			 * which reserves them for future use if needed.
+-			 */
+-			FAILW(REG_EESCAPE);
++			assert(iscalpha(c));
++			FAILW(REG_EESCAPE); /* unknown alphabetic escape */
+ 			break;
+ 	}
+ 	assert(NOTREACHED);
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/regex/regc_nfa.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/regex/regc_nfa.c
+index 60fb0bec5d..0e93c74287 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/regex/regc_nfa.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/regex/regc_nfa.c
+@@ -777,10 +777,6 @@ sortouts_cmp(const void *a, const void *b)
+  * However, if we have a whole lot of arcs to deal with, retail duplicate
+  * checks become too slow.  In that case we proceed by sorting and merging
+  * the arc lists, and then we can indeed just update the arcs in-place.
+- *
+- * On the other hand, it's also true that this is frequently called with
+- * a brand-new newState that has no existing in-arcs.  In that case,
+- * de-duplication is unnecessary, so we can just blindly move all the arcs.
+  */
+ static void
+ moveins(struct nfa *nfa,
+@@ -789,18 +785,7 @@ moveins(struct nfa *nfa,
+ {
+ 	assert(oldState != newState);
+ 
+-	if (newState->nins == 0)
+-	{
+-		/* No need for de-duplication */
+-		struct arc *a;
+-
+-		while ((a = oldState->ins) != NULL)
+-		{
+-			createarc(nfa, a->type, a->co, a->from, newState);
+-			freearc(nfa, a);
+-		}
+-	}
+-	else if (!BULK_ARC_OP_USE_SORT(oldState->nins, newState->nins))
++	if (!BULK_ARC_OP_USE_SORT(oldState->nins, newState->nins))
+ 	{
+ 		/* With not too many arcs, just do them one at a time */
+ 		struct arc *a;
+@@ -884,11 +869,6 @@ moveins(struct nfa *nfa,
+ 
+ /*
+  * copyins - copy in arcs of a state to another state
+- *
+- * The comments for moveins() apply here as well.  However, in current
+- * usage, this is *only* called with brand-new target states, so that
+- * only the "no need for de-duplication" code path is ever reached.
+- * We keep the rest #ifdef'd out in case it's needed in the future.
+  */
+ static void
+ copyins(struct nfa *nfa,
+@@ -896,18 +876,8 @@ copyins(struct nfa *nfa,
+ 		struct state *newState)
+ {
+ 	assert(oldState != newState);
+-	assert(newState->nins == 0);	/* see comment above */
+-
+-	if (newState->nins == 0)
+-	{
+-		/* No need for de-duplication */
+-		struct arc *a;
+ 
+-		for (a = oldState->ins; a != NULL; a = a->inchain)
+-			createarc(nfa, a->type, a->co, a->from, newState);
+-	}
+-#ifdef NOT_USED					/* see comment above */
+-	else if (!BULK_ARC_OP_USE_SORT(oldState->nins, newState->nins))
++	if (!BULK_ARC_OP_USE_SORT(oldState->nins, newState->nins))
+ 	{
+ 		/* With not too many arcs, just do them one at a time */
+ 		struct arc *a;
+@@ -974,7 +944,6 @@ copyins(struct nfa *nfa,
+ 			createarc(nfa, a->type, a->co, a->from, newState);
+ 		}
+ 	}
+-#endif							/* NOT_USED */
+ }
+ 
+ /*
+@@ -1089,18 +1058,7 @@ moveouts(struct nfa *nfa,
+ {
+ 	assert(oldState != newState);
+ 
+-	if (newState->nouts == 0)
+-	{
+-		/* No need for de-duplication */
+-		struct arc *a;
+-
+-		while ((a = oldState->outs) != NULL)
+-		{
+-			createarc(nfa, a->type, a->co, newState, a->to);
+-			freearc(nfa, a);
+-		}
+-	}
+-	else if (!BULK_ARC_OP_USE_SORT(oldState->nouts, newState->nouts))
++	if (!BULK_ARC_OP_USE_SORT(oldState->nouts, newState->nouts))
+ 	{
+ 		/* With not too many arcs, just do them one at a time */
+ 		struct arc *a;
+@@ -1184,8 +1142,6 @@ moveouts(struct nfa *nfa,
+ 
+ /*
+  * copyouts - copy out arcs of a state to another state
+- *
+- * See comments for copyins()
+  */
+ static void
+ copyouts(struct nfa *nfa,
+@@ -1193,18 +1149,8 @@ copyouts(struct nfa *nfa,
+ 		 struct state *newState)
+ {
+ 	assert(oldState != newState);
+-	assert(newState->nouts == 0);	/* see comment above */
+-
+-	if (newState->nouts == 0)
+-	{
+-		/* No need for de-duplication */
+-		struct arc *a;
+ 
+-		for (a = oldState->outs; a != NULL; a = a->outchain)
+-			createarc(nfa, a->type, a->co, newState, a->to);
+-	}
+-#ifdef NOT_USED					/* see comment above */
+-	else if (!BULK_ARC_OP_USE_SORT(oldState->nouts, newState->nouts))
++	if (!BULK_ARC_OP_USE_SORT(oldState->nouts, newState->nouts))
+ 	{
+ 		/* With not too many arcs, just do them one at a time */
+ 		struct arc *a;
+@@ -1271,7 +1217,6 @@ copyouts(struct nfa *nfa,
+ 			createarc(nfa, a->type, a->co, newState, a->to);
+ 		}
+ 	}
+-#endif							/* NOT_USED */
+ }
+ 
+ /*
+@@ -2030,7 +1975,6 @@ combine(struct nfa *nfa,
+ 			else if (a->co == RAINBOW)
+ 			{
+ 				/* con is incompatible if it's for a pseudocolor */
+-				/* (this is hypothetical; we make no such constraints today) */
+ 				if (nfa->cm->cd[con->co].flags & PSEUDO)
+ 					return INCOMPATIBLE;
+ 				/* otherwise, constraint constrains arc to be only its color */
+@@ -2057,7 +2001,6 @@ combine(struct nfa *nfa,
+ 			else if (a->co == RAINBOW)
+ 			{
+ 				/* con is incompatible if it's for a pseudocolor */
+-				/* (this is hypothetical; we make no such constraints today) */
+ 				if (nfa->cm->cd[con->co].flags & PSEUDO)
+ 					return INCOMPATIBLE;
+ 				/* otherwise, constraint constrains arc to be only its color */
+@@ -3619,7 +3562,6 @@ carc_cmp(const void *a, const void *b)
+ 		return -1;
+ 	if (aa->to > bb->to)
+ 		return +1;
+-	/* This is unreached, since there should be no duplicate arcs now: */
+ 	return 0;
+ }
+ 
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/regex/regc_pg_locale.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/regex/regc_pg_locale.c
+index 35516c1636..6a9261caed 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/regex/regc_pg_locale.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/regex/regc_pg_locale.c
+@@ -6,7 +6,7 @@
+  *
+  * This file is #included by regcomp.c; it's not meant to compile standalone.
+  *
+- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
++ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+  * Portions Copyright (c) 1994, Regents of the University of California
+  *
+  * IDENTIFICATION
+@@ -231,18 +231,6 @@ static const unsigned char pg_char_properties[128] = {
+ void
+ pg_set_regex_collation(Oid collation)
+ {
+-	if (!OidIsValid(collation))
+-	{
+-		/*
+-		 * This typically means that the parser could not resolve a conflict
+-		 * of implicit collations, so report it that way.
+-		 */
+-		ereport(ERROR,
+-				(errcode(ERRCODE_INDETERMINATE_COLLATION),
+-				 errmsg("could not determine which collation to use for regular expression"),
+-				 errhint("Use the COLLATE clause to set the collation explicitly.")));
+-	}
+-
+ 	if (lc_ctype_is_c(collation))
+ 	{
+ 		/* C/POSIX collations use this path regardless of database encoding */
+@@ -252,12 +240,28 @@ pg_set_regex_collation(Oid collation)
+ 	}
+ 	else
+ 	{
+-		/*
+-		 * NB: pg_newlocale_from_collation will fail if not HAVE_LOCALE_T; the
+-		 * case of pg_regex_locale != 0 but not HAVE_LOCALE_T does not have to
+-		 * be considered below.
+-		 */
+-		pg_regex_locale = pg_newlocale_from_collation(collation);
++		if (collation == DEFAULT_COLLATION_OID)
++			pg_regex_locale = 0;
++		else if (OidIsValid(collation))
++		{
++			/*
++			 * NB: pg_newlocale_from_collation will fail if not HAVE_LOCALE_T;
++			 * the case of pg_regex_locale != 0 but not HAVE_LOCALE_T does not
++			 * have to be considered below.
++			 */
++			pg_regex_locale = pg_newlocale_from_collation(collation);
++		}
++		else
++		{
++			/*
++			 * This typically means that the parser could not resolve a
++			 * conflict of implicit collations, so report it that way.
++			 */
++			ereport(ERROR,
++					(errcode(ERRCODE_INDETERMINATE_COLLATION),
++					 errmsg("could not determine which collation to use for regular expression"),
++					 errhint("Use the COLLATE clause to set the collation explicitly.")));
++		}
+ 
+ 		if (pg_regex_locale && !pg_regex_locale->deterministic)
+ 			ereport(ERROR,
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/storage/ipc/standby.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/storage/ipc/standby.c
+index a143e9d006..1a7dc65d2c 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/storage/ipc/standby.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/storage/ipc/standby.c
+@@ -653,6 +653,7 @@ ResolveRecoveryConflictWithLock(LOCKTAG locktag, bool logging_conflict)
+ 		timeouts[cnt].id = STANDBY_DEADLOCK_TIMEOUT;
+ 		timeouts[cnt].type = TMPARAM_AFTER;
+ 		timeouts[cnt].delay_ms = DeadlockTimeout;
++		timeouts[cnt].fin_time = 0;
+ 		cnt++;
+ 
+ 		enable_timeouts(timeouts, cnt);
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/storage/lmgr/proc.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/storage/lmgr/proc.c
+index 274f0221fb..d8adfd917e 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/storage/lmgr/proc.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/storage/lmgr/proc.c
+@@ -1254,9 +1254,11 @@ ProcSleep(LOCALLOCK *locallock, LockMethod lockMethodTable)
+ 			timeouts[0].id = DEADLOCK_TIMEOUT;
+ 			timeouts[0].type = TMPARAM_AFTER;
+ 			timeouts[0].delay_ms = DeadlockTimeout;
++			timeouts[0].fin_time = 0;
+ 			timeouts[1].id = LOCK_TIMEOUT;
+ 			timeouts[1].type = TMPARAM_AFTER;
+ 			timeouts[1].delay_ms = LockTimeout;
++			timeouts[1].fin_time = 0;
+ 			enable_timeouts(timeouts, 2);
+ 		}
+ 		else
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/tcop/postgres.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/tcop/postgres.c
+index 0ce4188c0b..c91072f20a 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/tcop/postgres.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/tcop/postgres.c
+@@ -3420,11 +3420,11 @@ ProcessInterrupts(void)
+ 
+ #if defined(__hpux) && !defined(__GNUC__) && !defined(__INTEL_COMPILER)
+ /* Assume it's HP-UX native compiler */
+-#include <ia64/sys/inline.h>
++#error #include <ia64/sys/inline.h>
+ #define ia64_get_bsp() ((char *) (_Asm_mov_from_ar(_AREG_BSP, _NO_FENCE)))
+ #elif defined(__INTEL_COMPILER)
+ /* icc */
+-#include <asm/ia64regs.h>
++#error #include <asm/ia64regs.h>
+ #define ia64_get_bsp() ((char *) __getReg(_IA64_REG_AR_BSP))
+ #else
+ /* gcc */
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/adt/arrayfuncs.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/adt/arrayfuncs.c
+index 4930bd684f..d69ffceb6e 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/adt/arrayfuncs.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/adt/arrayfuncs.c
+@@ -1473,7 +1473,6 @@ ReadArrayBinary(StringInfo buf,
+ 	{
+ 		int			itemlen;
+ 		StringInfoData elem_buf;
+-		char		csave;
+ 
+ 		/* Get and check the item length */
+ 		itemlen = pq_getmsgint(buf, 4);
+@@ -1504,9 +1503,6 @@ ReadArrayBinary(StringInfo buf,
+ 
+ 		buf->cursor += itemlen;
+ 
+-		csave = buf->data[buf->cursor];
+-		buf->data[buf->cursor] = '\0';
+-
+ 		/* Now call the element's receiveproc */
+ 		values[i] = ReceiveFunctionCall(receiveproc, &elem_buf,
+ 										typioparam, typmod);
+@@ -1518,8 +1514,6 @@ ReadArrayBinary(StringInfo buf,
+ 					(errcode(ERRCODE_INVALID_BINARY_REPRESENTATION),
+ 					 errmsg("improper binary format in array element %d",
+ 							i + 1)));
+-
+-		buf->data[buf->cursor] = csave;
+ 	}
+ 
+ 	/*
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/adt/misc.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/adt/misc.c
+index 6d8fa920cd..5a5c4ffabe 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/adt/misc.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/adt/misc.c
+@@ -769,7 +769,7 @@ parse_ident(PG_FUNCTION_ARGS)
+ 			 * being too long. It's easy enough for the user to get the
+ 			 * truncated names by casting our output to name[].
+ 			 */
+-			downname = downcase_identifier(curname, len, false, false);
++			downname = copy_identifier(curname, len);
+ 			part = cstring_to_text_with_len(downname, len);
+ 			astate = accumArrayResult(astate, PointerGetDatum(part), false,
+ 									  TEXTOID, CurrentMemoryContext);
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/adt/pg_locale.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/adt/pg_locale.c
+index df7b0fc526..946b5dfefa 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/adt/pg_locale.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/adt/pg_locale.c
+@@ -105,6 +105,8 @@ __thread bool		database_ctype_is_c = false;
+ /* indicates whether locale information cache is valid */
+ static __thread bool CurrentLocaleConvValid = false;
+ static __thread bool CurrentLCTimeValid = false;
++static __thread struct lconv CurrentLocaleConv;
++static __thread bool CurrentLocaleConvAllocated = false;
+ 
+ /* Cache for collation-related knowledge */
+ 
+@@ -399,6 +401,14 @@ free_struct_lconv(struct lconv *s)
+ 		free(s->negative_sign);
+ }
+ 
++void free_current_locale_conv()
++{
++	if (CurrentLocaleConvAllocated)
++	{
++		free_struct_lconv(&CurrentLocaleConv);
++		CurrentLocaleConvAllocated = false;
++	}
++}
+ /*
+  * Check that all fields of a struct lconv (or at least, the ones we care
+  * about) are non-NULL.  The field list must match free_struct_lconv().
+@@ -467,8 +477,6 @@ db_encoding_convert(int encoding, char **str)
+ struct lconv *
+ PGLC_localeconv(void)
+ {
+-	static __thread struct lconv CurrentLocaleConv;
+-	static __thread bool CurrentLocaleConvAllocated = false;
+ 	struct lconv *extlconv;
+ 	struct lconv worklconv;
+ 	char	   *save_lc_monetary;
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/adt/regexp.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/adt/regexp.c
+index 54bf769da2..f4efd89442 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/adt/regexp.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/adt/regexp.c
+@@ -109,6 +109,15 @@ typedef struct cached_re_str
+ static __thread int	num_res = 0;		/* # of cached re's */
+ static __thread cached_re_str re_array[MAX_CACHED_RES];	/* cached re's */
+ 
++void RE_cleanup_cache(void) {
++    int i;
++    for (i = 0; i < num_res; ++i) {
++        pg_regfree(&re_array[i].cre_re);
++        free(re_array[i].cre_pat);
++    }
++
++    num_res = 0;
++}
+ 
+ /* Local functions */
+ static regexp_matches_ctx *setup_regexp_matches(text *orig_str, text *pattern,
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/adt/xml.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/adt/xml.c
+index 804b7dde72..0cf67fa938 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/adt/xml.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/adt/xml.c
+@@ -1586,7 +1586,7 @@ xml_parse(text *data, XmlOptionType xmloption_arg, bool preserve_whitespace,
+ 			doc = xmlCtxtReadDoc(ctxt, utf8string,
+ 								 NULL,
+ 								 "UTF-8",
+-								 XML_PARSE_NOENT | XML_PARSE_DTDATTR
++								 XML_PARSE_DTDATTR // XML_PARSE_NOENT removed to make coverity happy
+ 								 | (preserve_whitespace ? 0 : XML_PARSE_NOBLANKS));
+ 			if (doc == NULL || xmlerrcxt->err_occurred)
+ 			{
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/cache/catcache.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/cache/catcache.c
+index ddf6e91793..63b5edf029 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/cache/catcache.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/cache/catcache.c
+@@ -1828,6 +1828,7 @@ SearchCatCacheList(CatCache *cache,
+ void
+ ReleaseCatCacheList(CatCList *list)
+ {
++    return;
+ 	/* Safety checks to ensure we were handed a cache entry */
+ 	Assert(list->cl_magic == CL_MAGIC);
+ 	Assert(list->refcount > 0);
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/cache/inval.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/cache/inval.c
+index 0e03fb2b5d..ec569662c9 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/cache/inval.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/cache/inval.c
+@@ -743,7 +743,7 @@ InvalidateSystemCachesExtended(bool debug_discard)
+  *		This should be called as the first step in processing a transaction.
+  */
+ void
+-AcceptInvalidationMessages(void)
++AcceptInvalidationMessages_original(void)
+ {
+ 	ReceiveSharedInvalidMessages(LocalExecuteInvalidationMessage,
+ 								 InvalidateSystemCaches);
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/cache/lsyscache.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/cache/lsyscache.c
+index 7e728507b1..459d27d872 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/cache/lsyscache.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/cache/lsyscache.c
+@@ -161,8 +161,8 @@ get_op_opfamily_properties(Oid opno, Oid opfamily, bool ordering_op,
+  * Returns InvalidOid if there is no pg_amop entry for the given keys.
+  */
+ Oid
+-get_opfamily_member(Oid opfamily, Oid lefttype, Oid righttype,
+-					int16 strategy)
++get_opfamily_member_original(Oid opfamily, Oid lefttype, Oid righttype,
++                             int16 strategy)
+ {
+ 	HeapTuple	tp;
+ 	Form_pg_amop amop_tup;
+@@ -791,7 +791,7 @@ comparison_ops_are_compatible(Oid opno1, Oid opno2)
+  * Returns InvalidOid if there is no pg_amproc entry for the given keys.
+  */
+ Oid
+-get_opfamily_proc(Oid opfamily, Oid lefttype, Oid righttype, int16 procnum)
++get_opfamily_proc_original(Oid opfamily, Oid lefttype, Oid righttype, int16 procnum)
+ {
+ 	HeapTuple	tp;
+ 	Form_pg_amproc amproc_tup;
+@@ -1263,7 +1263,7 @@ get_opclass_opfamily_and_input_type(Oid opclass, Oid *opfamily, Oid *opcintype)
+  *		operator given the operator oid.
+  */
+ RegProcedure
+-get_opcode(Oid opno)
++get_opcode_original(Oid opno)
+ {
+ 	HeapTuple	tp;
+ 
+@@ -1364,7 +1364,7 @@ op_input_types(Oid opno, Oid *lefttype, Oid *righttype)
+  * is needed to check this --- by convention, pass the left input's data type.
+  */
+ bool
+-op_mergejoinable(Oid opno, Oid inputtype)
++op_mergejoinable_original(Oid opno, Oid inputtype)
+ {
+ 	bool		result = false;
+ 	HeapTuple	tp;
+@@ -1415,7 +1415,7 @@ op_mergejoinable(Oid opno, Oid inputtype)
+  * to check this --- by convention, pass the left input's data type.
+  */
+ bool
+-op_hashjoinable(Oid opno, Oid inputtype)
++op_hashjoinable_original(Oid opno, Oid inputtype)
+ {
+ 	bool		result = false;
+ 	HeapTuple	tp;
+@@ -1559,7 +1559,7 @@ get_oprrest(Oid opno)
+  *		Returns procedure id for computing selectivity of a join.
+  */
+ RegProcedure
+-get_oprjoin(Oid opno)
++get_oprjoin_original(Oid opno)
+ {
+ 	HeapTuple	tp;
+ 
+@@ -1758,7 +1758,7 @@ func_strict(Oid funcid)
+  *		Given procedure id, return the function's provolatile flag.
+  */
+ char
+-func_volatile(Oid funcid)
++func_volatile_original(Oid funcid)
+ {
+ 	HeapTuple	tp;
+ 	char		result;
+@@ -2279,7 +2279,7 @@ getTypeIOParam(HeapTuple typeTuple)
+  *					returned is controlled by IOFuncSelector
+  */
+ void
+-get_type_io_data(Oid typid,
++get_type_io_data_original(Oid typid,
+ 				 IOFuncSelector which_func,
+ 				 int16 *typlen,
+ 				 bool *typbyval,
+@@ -2767,15 +2767,17 @@ get_array_type(Oid typid)
+ Oid
+ get_promoted_array_type(Oid typid)
+ {
+-	Oid			array_type = get_array_type(typid);
++    Oid			array_type = get_array_type(typid);
+ 
+-	if (OidIsValid(array_type))
+-		return array_type;
+-	if (OidIsValid(get_element_type(typid)))
+-		return typid;
+-	return InvalidOid;
++    if (OidIsValid(array_type))
++        return array_type;
++    if (OidIsValid(get_element_type(typid)))
++        return typid;
++    return InvalidOid;
+ }
+ 
++extern Oid get_base_element_type(Oid typid);
++
+ /*
+  * get_base_element_type
+  *		Given the type OID, get the typelem, looking "through" any domain
+@@ -2786,7 +2788,7 @@ get_promoted_array_type(Oid typid)
+  * about the typmod of the array.
+  */
+ Oid
+-get_base_element_type(Oid typid)
++get_base_element_type_original(Oid typid)
+ {
+ 	/*
+ 	 * We loop to find the bottom base type in a stack of domains.
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/cache/syscache.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/cache/syscache.c
+index 51a3a091c3..c164210bc3 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/cache/syscache.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/cache/syscache.c
+@@ -1157,7 +1157,7 @@ InitCatalogCachePhase2(void)
+  *	CAUTION: The tuple that is returned must NOT be freed by the caller!
+  */
+ HeapTuple
+-SearchSysCache(int cacheId,
++SearchSysCache_original(int cacheId,
+ 			   Datum key1,
+ 			   Datum key2,
+ 			   Datum key3,
+@@ -1170,7 +1170,7 @@ SearchSysCache(int cacheId,
+ }
+ 
+ HeapTuple
+-SearchSysCache1(int cacheId,
++SearchSysCache1_original(int cacheId,
+ 				Datum key1)
+ {
+ 	Assert(cacheId >= 0 && cacheId < SysCacheSize &&
+@@ -1181,7 +1181,7 @@ SearchSysCache1(int cacheId,
+ }
+ 
+ HeapTuple
+-SearchSysCache2(int cacheId,
++SearchSysCache2_original(int cacheId,
+ 				Datum key1, Datum key2)
+ {
+ 	Assert(cacheId >= 0 && cacheId < SysCacheSize &&
+@@ -1192,7 +1192,7 @@ SearchSysCache2(int cacheId,
+ }
+ 
+ HeapTuple
+-SearchSysCache3(int cacheId,
++SearchSysCache3_original(int cacheId,
+ 				Datum key1, Datum key2, Datum key3)
+ {
+ 	Assert(cacheId >= 0 && cacheId < SysCacheSize &&
+@@ -1203,7 +1203,7 @@ SearchSysCache3(int cacheId,
+ }
+ 
+ HeapTuple
+-SearchSysCache4(int cacheId,
++SearchSysCache4_original(int cacheId,
+ 				Datum key1, Datum key2, Datum key3, Datum key4)
+ {
+ 	Assert(cacheId >= 0 && cacheId < SysCacheSize &&
+@@ -1218,7 +1218,7 @@ SearchSysCache4(int cacheId,
+  *		Release previously grabbed reference count on a tuple
+  */
+ void
+-ReleaseSysCache(HeapTuple tuple)
++ReleaseSysCache_original(HeapTuple tuple)
+ {
+ 	ReleaseCatCache(tuple);
+ }
+@@ -1279,7 +1279,7 @@ SearchSysCacheExists(int cacheId,
+  * No lock is retained on the syscache entry.
+  */
+ Oid
+-GetSysCacheOid(int cacheId,
++GetSysCacheOid_original(int cacheId,
+ 			   AttrNumber oidcol,
+ 			   Datum key1,
+ 			   Datum key2,
+@@ -1431,7 +1431,7 @@ SearchSysCacheCopyAttNum(Oid relid, int16 attnum)
+  * a different cache for the same catalog the tuple was fetched from.
+  */
+ Datum
+-SysCacheGetAttr(int cacheId, HeapTuple tup,
++SysCacheGetAttr_original(int cacheId, HeapTuple tup,
+ 				AttrNumber attributeNumber,
+ 				bool *isNull)
+ {
+@@ -1483,7 +1483,7 @@ GetSysCacheHashValue(int cacheId,
+  * List-search interface
+  */
+ struct catclist *
+-SearchSysCacheList(int cacheId, int nkeys,
++SearchSysCacheList_original(int cacheId, int nkeys,
+ 				   Datum key1, Datum key2, Datum key3)
+ {
+ 	if (cacheId < 0 || cacheId >= SysCacheSize ||
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/cache/typcache.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/cache/typcache.c
+index 9cee18ae9c..0ad6641ac6 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/cache/typcache.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/cache/typcache.c
+@@ -291,18 +291,34 @@ static __thread int32 NextRecordTypmod = 0;	/* number of entries used */
+  */
+ static __thread uint64 tupledesc_id_counter = INVALID_TUPLEDESC_IDENTIFIER;
+ 
++void LoadRecordCacheState(RecordCacheState* state) {
++    RecordCacheHash = state->RecordCacheHash;
++    RecordCacheArray = (RecordCacheArrayEntry*)state->RecordCacheArray;
++    RecordCacheArrayLen = state->RecordCacheArrayLen;
++    NextRecordTypmod = state->NextRecordTypmod;
++    tupledesc_id_counter = state->tupledesc_id_counter;
++}
++
++extern void SaveRecordCacheState(RecordCacheState* state) {
++    state->RecordCacheHash = RecordCacheHash;
++    state->RecordCacheArray = RecordCacheArray;
++    state->RecordCacheArrayLen = RecordCacheArrayLen;
++    state->NextRecordTypmod = NextRecordTypmod;
++    state->tupledesc_id_counter = tupledesc_id_counter;
++}
++
+ static void load_typcache_tupdesc(TypeCacheEntry *typentry);
+ static void load_rangetype_info(TypeCacheEntry *typentry);
+ static void load_multirangetype_info(TypeCacheEntry *typentry);
+ static void load_domaintype_info(TypeCacheEntry *typentry);
+-static int	dcs_cmp(const void *a, const void *b);
++static int  dcs_cmp(const void *a, const void *b);
+ static void decr_dcc_refcount(DomainConstraintCache *dcc);
+ static void dccref_deletion_callback(void *arg);
+ static List *prep_domain_constraints(List *constraints, MemoryContext execctx);
+-static bool array_element_has_equality(TypeCacheEntry *typentry);
+-static bool array_element_has_compare(TypeCacheEntry *typentry);
+-static bool array_element_has_hashing(TypeCacheEntry *typentry);
+-static bool array_element_has_extended_hashing(TypeCacheEntry *typentry);
++bool array_element_has_equality(TypeCacheEntry *typentry);
++bool array_element_has_compare(TypeCacheEntry *typentry);
++bool array_element_has_hashing(TypeCacheEntry *typentry);
++bool array_element_has_extended_hashing(TypeCacheEntry *typentry);
+ static void cache_array_element_properties(TypeCacheEntry *typentry);
+ static bool record_fields_have_equality(TypeCacheEntry *typentry);
+ static bool record_fields_have_compare(TypeCacheEntry *typentry);
+@@ -341,7 +357,7 @@ static dsa_pointer share_tupledesc(dsa_area *area, TupleDesc tupdesc,
+  * are InvalidOid or not.
+  */
+ TypeCacheEntry *
+-lookup_type_cache(Oid type_id, int flags)
++lookup_type_cache_original(Oid type_id, int flags)
+ {
+ 	TypeCacheEntry *typentry;
+ 	bool		found;
+@@ -1420,7 +1436,7 @@ DomainHasConstraints(Oid type_id)
+  * component datatype(s).
+  */
+ 
+-static bool
++bool
+ array_element_has_equality(TypeCacheEntry *typentry)
+ {
+ 	if (!(typentry->flags & TCFLAGS_CHECKED_ELEM_PROPERTIES))
+@@ -1428,7 +1444,7 @@ array_element_has_equality(TypeCacheEntry *typentry)
+ 	return (typentry->flags & TCFLAGS_HAVE_ELEM_EQUALITY) != 0;
+ }
+ 
+-static bool
++bool
+ array_element_has_compare(TypeCacheEntry *typentry)
+ {
+ 	if (!(typentry->flags & TCFLAGS_CHECKED_ELEM_PROPERTIES))
+@@ -1436,7 +1452,7 @@ array_element_has_compare(TypeCacheEntry *typentry)
+ 	return (typentry->flags & TCFLAGS_HAVE_ELEM_COMPARE) != 0;
+ }
+ 
+-static bool
++bool
+ array_element_has_hashing(TypeCacheEntry *typentry)
+ {
+ 	if (!(typentry->flags & TCFLAGS_CHECKED_ELEM_PROPERTIES))
+@@ -1444,7 +1460,7 @@ array_element_has_hashing(TypeCacheEntry *typentry)
+ 	return (typentry->flags & TCFLAGS_HAVE_ELEM_HASHING) != 0;
+ }
+ 
+-static bool
++bool
+ array_element_has_extended_hashing(TypeCacheEntry *typentry)
+ {
+ 	if (!(typentry->flags & TCFLAGS_CHECKED_ELEM_PROPERTIES))
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/error/elog.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/error/elog.c
+index e3ac62a736..6887e0014e 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/error/elog.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/error/elog.c
+@@ -93,6 +93,7 @@
+ __thread ErrorContextCallback *error_context_stack = NULL;
+ 
+ __thread sigjmp_buf *PG_exception_stack = NULL;
++__thread bool yql_error_report_active = false;
+ 
+ extern __thread bool redirection_done;
+ 
+@@ -366,7 +367,7 @@ errstart(int elevel, const char *domain)
+ 		 */
+ 		if (elevel == ERROR)
+ 		{
+-			if (PG_exception_stack == NULL ||
++			if ((PG_exception_stack == NULL && !yql_error_report_active) ||
+ 				ExitOnAnyError ||
+ 				proc_exit_inprogress)
+ 				elevel = FATAL;
+@@ -1800,7 +1801,12 @@ pg_re_throw(void)
+ 	/* If possible, throw the error to the next outer setjmp handler */
+ 	if (PG_exception_stack != NULL)
+ 		siglongjmp(*PG_exception_stack, 1);
+-	else
++	else if (yql_error_report_active) {
++		ErrorData  *edata = &errordata[errordata_stack_depth];
++		send_message_to_server_log(edata);
++		FlushErrorState();
++		yql_raise_error();
++	}
+ 	{
+ 		/*
+ 		 * If we get here, elog(ERROR) was thrown inside a PG_TRY block, which
+@@ -2923,6 +2929,11 @@ send_message_to_server_log(ErrorData *edata)
+ 		appendStringInfoChar(&buf, '\n');
+ 	}
+ 
++	if (yql_error_report_active) {
++		yql_prepare_error(buf.data);
++		return;
++	}
++
+ #ifdef HAVE_SYSLOG
+ 	/* Write to syslog, if enabled */
+ 	if (Log_destination & LOG_DESTINATION_SYSLOG)
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/init/miscinit.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/init/miscinit.c
+index 101fcf2d3a..cdcf343ece 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/init/miscinit.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/init/miscinit.c
+@@ -65,7 +65,7 @@ __thread BackendType MyBackendType;
+ /* List of lock files to be removed at proc exit */
+ static __thread List *lock_files = NIL;
+ 
+-static __thread Latch LocalLatchData;
++__thread Latch LocalLatchData;
+ 
+ /* ----------------------------------------------------------------
+  *		ignoring system indexes support stuff
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/misc/guc.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/misc/guc.c
+index 6f7a2fff97..36f110bcbf 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/misc/guc.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/misc/guc.c
+@@ -3476,7 +3476,7 @@ set_config_option_ext(const char *name, const char *value,
+ 		return -1;
+ 	}
+ 
+-	record = find_option(name, true, false, elevel);
++	record = find_option(name, true, true, elevel);
+ 	if (record == NULL)
+ 		return 0;
+ 
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/misc/superuser.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/misc/superuser.c
+index 2b721547f0..147c85eabe 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/misc/superuser.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/misc/superuser.c
+@@ -53,7 +53,7 @@ superuser(void)
+  * The specified role has Postgres superuser privileges
+  */
+ bool
+-superuser_arg(Oid roleid)
++superuser_arg_original(Oid roleid)
+ {
+ 	bool		result;
+ 	HeapTuple	rtup;
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/mmgr/aset.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/mmgr/aset.c
+index 2aaa1d5943..69644e3098 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/mmgr/aset.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/mmgr/aset.c
+@@ -423,6 +423,8 @@ AllocSetContextCreateInternal(MemoryContext parent,
+ 	else
+ 		freeListIndex = -1;
+ 
++        freeListIndex = -1;
++
+ 	/*
+ 	 * If a suitable freelist entry exists, just recycle that context.
+ 	 */
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/mmgr/dsa.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/mmgr/dsa.c
+index c3c69bd389..f6391f8823 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/mmgr/dsa.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/mmgr/dsa.c
+@@ -840,6 +840,13 @@ dsa_free(dsa_area *area, dsa_pointer dp)
+ 	superblock = dsa_get_address(area, span->start);
+ 	object = dsa_get_address(area, dp);
+ 	size_class = span->size_class;
++	if (size_class >= lengthof(dsa_size_classes))
++	{
++		ereport(ERROR,
++				(errcode(ERRCODE_DATA_CORRUPTED),
++				errmsg("invalid span size"),
++				errdetail("Invalid span->size_class value %zu, but dsa_size_classes size is %zu.", size_class, lengthof(dsa_size_classes))));
++	}
+ 	size = dsa_size_classes[size_class];
+ 
+ 	/*
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/sort/tuplesort.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/sort/tuplesort.c
+index c1e0e70ba3..b1986f0615 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/sort/tuplesort.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/sort/tuplesort.c
+@@ -3911,8 +3911,10 @@ comparetup_heap(const SortTuple *a, const SortTuple *b, Tuplesortstate *state)
+ 	/* Compare additional sort keys */
+ 	ltup.t_len = ((MinimalTuple) a->tuple)->t_len + MINIMAL_TUPLE_OFFSET;
+ 	ltup.t_data = (HeapTupleHeader) ((char *) a->tuple - MINIMAL_TUPLE_OFFSET);
++	ltup.t_tableOid = 0;
+ 	rtup.t_len = ((MinimalTuple) b->tuple)->t_len + MINIMAL_TUPLE_OFFSET;
+ 	rtup.t_data = (HeapTupleHeader) ((char *) b->tuple - MINIMAL_TUPLE_OFFSET);
++	rtup.t_tableOid = 0;
+ 	tupDesc = state->tupDesc;
+ 
+ 	if (sortKey->abbrev_converter)
+@@ -3967,6 +3969,7 @@ copytup_heap(Tuplesortstate *state, SortTuple *stup, void *tup)
+ 	/* set up first-column key value */
+ 	htup.t_len = tuple->t_len + MINIMAL_TUPLE_OFFSET;
+ 	htup.t_data = (HeapTupleHeader) ((char *) tuple - MINIMAL_TUPLE_OFFSET);
++	htup.t_tableOid = 0;
+ 	original = heap_getattr(&htup,
+ 							state->sortKeys[0].ssup_attno,
+ 							state->tupDesc,
+@@ -4070,6 +4073,7 @@ readtup_heap(Tuplesortstate *state, SortTuple *stup,
+ 	/* set up first-column key value */
+ 	htup.t_len = tuple->t_len + MINIMAL_TUPLE_OFFSET;
+ 	htup.t_data = (HeapTupleHeader) ((char *) tuple - MINIMAL_TUPLE_OFFSET);
++	htup.t_tableOid = 0;
+ 	stup->datum1 = heap_getattr(&htup,
+ 								state->sortKeys[0].ssup_attno,
+ 								state->tupDesc,
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/common/compression.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/common/compression.c
+index df5b627834..516a2076ab 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/common/compression.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/common/compression.c
+@@ -28,7 +28,7 @@
+ #endif
+ 
+ #ifdef USE_ZSTD
+-#include <zstd.h>
++#error #include <zstd.h>
+ #endif
+ #ifdef HAVE_LIBZ
+ #include <zlib.h>
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/common/config_info.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/common/config_info.c
+index aa643b63fe..43a4440ee1 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/common/config_info.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/common/config_info.c
+@@ -117,7 +117,10 @@ get_configdata(const char *my_exec_path, size_t *configdata_len)
+ 	i++;
+ 
+ 	configdata[i].name = pstrdup("PGXS");
++	strlcpy(path, "/var/empty/tmp/out/lib", sizeof(path));
++/* commented out to be able to point to nix $out path
+ 	get_pkglib_path(my_exec_path, path);
++*/
+ 	strlcat(path, "/pgxs/src/makefiles/pgxs.mk", sizeof(path));
+ 	cleanup_path(path);
+ 	configdata[i].setting = pstrdup(path);
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/common/controldata_utils.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/common/controldata_utils.c
+index 2331319df2..b9b3e21b1e 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/common/controldata_utils.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/common/controldata_utils.c
+@@ -30,7 +30,7 @@
+ #include "common/controldata_utils.h"
+ #include "common/file_perm.h"
+ #ifdef FRONTEND
+-#include "common/logging.h"
++#error #include "common/logging.h"
+ #endif
+ #include "port/pg_crc32c.h"
+ 
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/common/exec.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/common/exec.c
+index 9da588daf9..268882deff 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/common/exec.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/common/exec.c
+@@ -29,7 +29,7 @@
+ #if defined(HAVE_SYS_PERSONALITY_H)
+ #include <sys/personality.h>
+ #elif defined(HAVE_SYS_PROCCTL_H)
+-#include <sys/procctl.h>
++#error #include <sys/procctl.h>
+ #endif
+ #endif
+ 
+@@ -242,6 +242,9 @@ find_my_exec(const char *argv0, char *retpath)
+ static int
+ resolve_symlinks(char *path)
+ {
++	// On NixOS we *want* stuff relative to symlinks.
++	return 0;
++
+ #ifdef HAVE_READLINK
+ 	struct stat buf;
+ 	char		orig_wd[MAXPGPATH],
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/common/file_utils.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/common/file_utils.c
+index 966b987d64..ff09fd8245 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/common/file_utils.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/common/file_utils.c
+@@ -26,7 +26,7 @@
+ 
+ #include "common/file_utils.h"
+ #ifdef FRONTEND
+-#include "common/logging.h"
++#error #include "common/logging.h"
+ #endif
+ 
+ #ifdef FRONTEND
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/common/pgfnames.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/common/pgfnames.c
+index d4be4f18c1..e40fb16a04 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/common/pgfnames.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/common/pgfnames.c
+@@ -23,7 +23,7 @@
+ #ifndef FRONTEND
+ #define pg_log_warning(...) elog(WARNING, __VA_ARGS__)
+ #else
+-#include "common/logging.h"
++#error #include "common/logging.h"
+ #endif
+ 
+ /*
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/common/rmtree.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/common/rmtree.c
+index 221d0e20a7..26d3a47562 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/common/rmtree.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/common/rmtree.c
+@@ -23,7 +23,7 @@
+ #ifndef FRONTEND
+ #define pg_log_warning(...) elog(WARNING, __VA_ARGS__)
+ #else
+-#include "common/logging.h"
++#error #include "common/logging.h"
+ #endif
+ 
+ 
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/c.h a/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/c.h
+index ffcdb0520e..13e5e24f8c 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/c.h
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/c.h
+@@ -156,7 +156,7 @@
+ #endif
+ 
+ /* GCC and XLC support format attributes */
+-#if defined(__GNUC__) || defined(__IBMC__)
++#if (defined(__GNUC__) && !defined(__clang__)) || defined(__IBMC__)
+ #define pg_attribute_format_arg(a) __attribute__((format_arg(a)))
+ #define pg_attribute_printf(f,a) __attribute__((format(PG_PRINTF_ATTRIBUTE, f, a)))
+ #else
+@@ -1358,9 +1358,7 @@ extern unsigned long long strtoull(const char *str, char **endptr, int base);
+  * in the core backend and need to be accessible by loadable modules.
+  * No special marking is required on most ports.
+  */
+-#ifndef PGDLLIMPORT
+ #define PGDLLIMPORT
+-#endif
+ 
+ /*
+  * Use "extern PGDLLEXPORT ..." to declare functions that are defined in
+@@ -1369,9 +1367,7 @@ extern unsigned long long strtoull(const char *str, char **endptr, int base);
+  * such symbols, but sometimes manual marking is required.)
+  * No special marking is required on most ports.
+  */
+-#ifndef PGDLLEXPORT
+ #define PGDLLEXPORT
+-#endif
+ 
+ /*
+  * The following is used as the arg list for signal handlers.  Any ports
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_language.dat a/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_language.dat
+index 1663c9645f..a584679927 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_language.dat
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_language.dat
+@@ -3,7 +3,7 @@
+ # pg_language.dat
+ #    Initial contents of the pg_language system catalog.
+ #
+-# Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
++# Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ # Portions Copyright (c) 1994, Regents of the University of California
+ #
+ # src/include/catalog/pg_language.dat
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/parser/scansup.h a/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/parser/scansup.h
+index ff65224bf6..b68bf20454 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/parser/scansup.h
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/parser/scansup.h
+@@ -20,6 +20,8 @@ extern char *downcase_truncate_identifier(const char *ident, int len,
+ extern char *downcase_identifier(const char *ident, int len,
+ 								 bool warn, bool truncate);
+ 
++extern char * copy_identifier(const char *ident, int len);
++
+ extern void truncate_identifier(char *ident, int len, bool warn);
+ 
+ extern bool scanner_isspace(char ch);
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/pg_config-linux.h a/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/pg_config-linux.h
+index 69268d0a55..7ed4b3b354 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/pg_config-linux.h
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/pg_config-linux.h
+@@ -399,7 +399,7 @@
+ #define HAVE_OPENSSL_INIT_SSL 1
+ 
+ /* Define to 1 if you have the <ossp/uuid.h> header file. */
+-#define HAVE_OSSP_UUID_H 1
++/* #undef HAVE_OSSP_UUID_H */
+ 
+ /* Define to 1 if you have the <pam/pam_appl.h> header file. */
+ /* #undef HAVE_PAM_PAM_APPL_H */
+@@ -639,7 +639,7 @@
+ #define HAVE_SYS_SHM_H 1
+ 
+ /* Define to 1 if you have the <sys/signalfd.h> header file. */
+-#define HAVE_SYS_SIGNALFD_H 1
++/* #undef HAVE_SYS_SIGNALFD_H */
+ 
+ /* Define to 1 if you have the <sys/sockio.h> header file. */
+ /* #undef HAVE_SYS_SOCKIO_H */
+@@ -696,7 +696,7 @@
+ /* #undef HAVE_UUID_E2FS */
+ 
+ /* Define to 1 if you have the <uuid.h> header file. */
+-/* #undef HAVE_UUID_H */
++#define HAVE_UUID_H 1
+ 
+ /* Define to 1 if you have OSSP UUID support. */
+ #define HAVE_UUID_OSSP 1
+@@ -747,7 +747,7 @@
+ #define HAVE__BUILTIN_CTZ 1
+ 
+ /* Define to 1 if your compiler understands __builtin_frame_address. */
+-#define HAVE__BUILTIN_FRAME_ADDRESS 1
++/* #undef HAVE__BUILTIN_FRAME_ADDRESS */ /* problems with sanitizers */
+ 
+ /* Define to 1 if your compiler understands __builtin_$op_overflow. */
+ #define HAVE__BUILTIN_OP_OVERFLOW 1
+@@ -768,7 +768,7 @@
+ /* #undef HAVE__CPUID */
+ 
+ /* Define to 1 if you have __get_cpuid. */
+-#define HAVE__GET_CPUID 1
++// #define HAVE__GET_CPUID 1
+ 
+ /* Define to 1 if your compiler understands _Static_assert. */
+ #define HAVE__STATIC_ASSERT 1
+@@ -833,7 +833,7 @@
+ #define PG_MINORVERSION_NUM 7
+ 
+ /* Define to best printf format archetype, usually gnu_printf if available. */
+-#define PG_PRINTF_ATTRIBUTE printf
++#define PG_PRINTF_ATTRIBUTE gnu_printf
+ 
+ /* Define to 1 to use <stdbool.h> to define type bool. */
+ #define PG_USE_STDBOOL 1
+@@ -939,7 +939,7 @@
+ /* #undef USE_SSE42_CRC32C */
+ 
+ /* Define to 1 to use Intel SSE 4.2 CRC instructions with a runtime check. */
+-#define USE_SSE42_CRC32C_WITH_RUNTIME_CHECK 1
++// #define USE_SSE42_CRC32C_WITH_RUNTIME_CHECK 1
+ 
+ /* Define to build with systemd support. (--with-systemd) */
+ /* #undef USE_SYSTEMD */
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/pg_config_manual.h a/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/pg_config_manual.h
+index 8d2e3e3a57..15a397537e 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/pg_config_manual.h
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/pg_config_manual.h
+@@ -224,7 +224,7 @@
+  * support them yet.
+  */
+ #ifndef WIN32
+-#define DEFAULT_PGSOCKET_DIR  "/tmp"
++#define DEFAULT_PGSOCKET_DIR  "/run/postgresql"
+ #else
+ #define DEFAULT_PGSOCKET_DIR ""
+ #endif
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port.h a/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port.h
+index 9f357612b3..f6cbd937e3 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port.h
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port.h
+@@ -343,7 +343,9 @@ extern int	gettimeofday(struct timeval *tp, struct timezone *tzp);
+  *	Win32 requires a special close for sockets and pipes, while on Unix
+  *	close() does them all.
+  */
++#ifndef closesocket
+ #define closesocket close
++#endif
+ #endif							/* WIN32 */
+ 
+ /*
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/atomics.h a/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/atomics.h
+index 9550e04aaa..e32a1c400a 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/atomics.h
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/atomics.h
+@@ -69,11 +69,11 @@
+ #elif defined(__i386__) || defined(__i386) || defined(__x86_64__)
+ #include "port/atomics/arch-x86.h"
+ #elif defined(__ia64__) || defined(__ia64)
+-#include "port/atomics/arch-ia64.h"
++#error #include "port/atomics/arch-ia64.h"
+ #elif defined(__ppc__) || defined(__powerpc__) || defined(__ppc64__) || defined(__powerpc64__)
+-#include "port/atomics/arch-ppc.h"
++#error #include "port/atomics/arch-ppc.h"
+ #elif defined(__hppa) || defined(__hppa__)
+-#include "port/atomics/arch-hppa.h"
++#error #include "port/atomics/arch-hppa.h"
+ #endif
+ 
+ /*
+@@ -96,9 +96,9 @@
+ #elif defined(_MSC_VER)
+ #include "port/atomics/generic-msvc.h"
+ #elif defined(__hpux) && defined(__ia64) && !defined(__GNUC__)
+-#include "port/atomics/generic-acc.h"
++#error #include "port/atomics/generic-acc.h"
+ #elif defined(__SUNPRO_C) && !defined(__GNUC__)
+-#include "port/atomics/generic-sunpro.h"
++#error #include "port/atomics/generic-sunpro.h"
+ #else
+ /*
+  * Unsupported compiler, we'll likely use slower fallbacks... At least
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/atomics/generic-msvc.h a/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/atomics/generic-msvc.h
+index 6294162b4c..d51f7bffce 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/atomics/generic-msvc.h
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/atomics/generic-msvc.h
+@@ -52,7 +52,7 @@ pg_atomic_compare_exchange_u32_impl(volatile pg_atomic_uint32 *ptr,
+ {
+ 	bool	ret;
+ 	uint32	current;
+-	current = InterlockedCompareExchange(&ptr->value, newval, *expected);
++	current = InterlockedCompareExchange((volatile long*)&ptr->value, newval, *expected);
+ 	ret = current == *expected;
+ 	*expected = current;
+ 	return ret;
+@@ -62,7 +62,7 @@ pg_atomic_compare_exchange_u32_impl(volatile pg_atomic_uint32 *ptr,
+ static inline uint32
+ pg_atomic_fetch_add_u32_impl(volatile pg_atomic_uint32 *ptr, int32 add_)
+ {
+-	return InterlockedExchangeAdd(&ptr->value, add_);
++	return InterlockedExchangeAdd((volatile long*)&ptr->value, add_);
+ }
+ 
+ /*
+@@ -80,7 +80,7 @@ pg_atomic_compare_exchange_u64_impl(volatile pg_atomic_uint64 *ptr,
+ {
+ 	bool	ret;
+ 	uint64	current;
+-	current = _InterlockedCompareExchange64(&ptr->value, newval, *expected);
++	current = _InterlockedCompareExchange64((volatile long long*)&ptr->value, newval, *expected);
+ 	ret = current == *expected;
+ 	*expected = current;
+ 	return ret;
+@@ -94,7 +94,7 @@ pg_atomic_compare_exchange_u64_impl(volatile pg_atomic_uint64 *ptr,
+ static inline uint64
+ pg_atomic_fetch_add_u64_impl(volatile pg_atomic_uint64 *ptr, int64 add_)
+ {
+-	return _InterlockedExchangeAdd64(&ptr->value, add_);
++	return _InterlockedExchangeAdd64((volatile long long*)&ptr->value, add_);
+ }
+ #endif /* _WIN64 */
+ 
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/win32_port.h a/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/win32_port.h
+index d1e89f364a..4a29edf6e7 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/win32_port.h
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/win32_port.h
+@@ -415,9 +415,7 @@ extern int	_pgstat64(const char *name, struct stat *buf);
+ #define iswalpha_l _iswalpha_l
+ #define isalnum_l _isalnum_l
+ #define iswalnum_l _iswalnum_l
+-#define isupper_l _isupper_l
+ #define iswupper_l _iswupper_l
+-#define islower_l _islower_l
+ #define iswlower_l _iswlower_l
+ #define isgraph_l _isgraph_l
+ #define iswgraph_l _iswgraph_l
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/storage/pmsignal.h a/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/storage/pmsignal.h
+index 4214ba4496..ca72c18822 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/storage/pmsignal.h
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/storage/pmsignal.h
+@@ -21,7 +21,7 @@
+ #endif
+ 
+ #ifdef HAVE_SYS_PROCCTL_H
+-#include "sys/procctl.h"
++#error #include "sys/procctl.h"
+ #endif
+ 
+ /*
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/storage/s_lock.h a/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/storage/s_lock.h
+index 041f74ed7d..62e7ed79a2 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/storage/s_lock.h
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/storage/s_lock.h
+@@ -694,7 +694,7 @@ do \
+ #if defined(__m32r__) && defined(HAVE_SYS_TAS_H)	/* Renesas' M32R */
+ #define HAS_TEST_AND_SET
+ 
+-#include <sys/tas.h>
++#error #include <sys/tas.h>
+ 
+ typedef int slock_t;
+ 
+@@ -900,7 +900,7 @@ tas(volatile slock_t *lock)
+ 
+ typedef unsigned int slock_t;
+ 
+-#include <ia64/sys/inline.h>
++#error #include <ia64/sys/inline.h>
+ #define TAS(lock) _Asm_xchg(_SZ_W, lock, 1, _LDHINT_NONE)
+ /* On IA64, it's a win to use a non-locking test before the xchg proper */
+ #define TAS_SPIN(lock)	(*(lock) ? 1 : TAS(lock))
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/utils/elog.h a/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/utils/elog.h
+index 299cddda69..330916b0b5 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/utils/elog.h
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/utils/elog.h
+@@ -356,6 +356,7 @@ extern __thread PGDLLIMPORT ErrorContextCallback *error_context_stack;
+ #endif
+ 
+ extern __thread PGDLLIMPORT sigjmp_buf *PG_exception_stack;
++extern __thread PGDLLIMPORT bool yql_error_report_active;
+ 
+ 
+ /* Stuff that error handlers might want to use */
+@@ -400,6 +401,9 @@ typedef struct ErrorData
+ 	struct MemoryContextData *assoc_context;
+ } ErrorData;
+ 
++extern void yql_prepare_error(const char* msg);
++extern void yql_raise_error();
++
+ extern void EmitErrorReport(void);
+ extern ErrorData *CopyErrorData(void);
+ extern void FreeErrorData(ErrorData *edata);
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/utils/pg_locale.h a/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/utils/pg_locale.h
+index 8e755a5e35..e9078ab5b3 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/utils/pg_locale.h
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/utils/pg_locale.h
+@@ -74,6 +74,12 @@ extern bool lc_ctype_is_c(Oid collation);
+  */
+ extern struct lconv *PGLC_localeconv(void);
+ 
++/*
++ * Free thread_local lconv struct
++ */
++extern void free_current_locale_conv();
++
++
+ extern void cache_locale_time(void);
+ 
+ 
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/utils/typcache.h a/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/utils/typcache.h
+index 431ad7f1b3..97b8e80f11 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/utils/typcache.h
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/utils/typcache.h
+@@ -206,4 +206,17 @@ extern void SharedRecordTypmodRegistryInit(SharedRecordTypmodRegistry *,
+ 
+ extern void SharedRecordTypmodRegistryAttach(SharedRecordTypmodRegistry *);
+ 
++struct HTAB;
++
++typedef struct RecordCacheState {
++    struct HTAB *RecordCacheHash;
++    void* RecordCacheArray;
++    int32 RecordCacheArrayLen;
++    int32 NextRecordTypmod;
++    uint64 tupledesc_id_counter;
++} RecordCacheState;
++
++extern void LoadRecordCacheState(RecordCacheState* state);
++extern void SaveRecordCacheState(RecordCacheState* state);
++
+ #endif							/* TYPCACHE_H */
+diff --git b/ydb/library/yql/parser/pg_wrapper/postgresql/src/timezone/pgtz.c a/ydb/library/yql/parser/pg_wrapper/postgresql/src/timezone/pgtz.c
+index 17a2647a78..e07caf2ae8 100644
+--- b/ydb/library/yql/parser/pg_wrapper/postgresql/src/timezone/pgtz.c
++++ a/ydb/library/yql/parser/pg_wrapper/postgresql/src/timezone/pgtz.c
+@@ -197,6 +197,11 @@ typedef struct
+ 
+ static __thread HTAB *timezone_cache = NULL;
+ 
++void destroy_timezone_hashtable() 
++{
++        hash_destroy(timezone_cache);
++        timezone_cache = NULL;
++}
+ 
+ static bool
+ init_timezone_hashtable(void)

@@ -876,6 +876,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 return TResolve::KindSyncIndexTable;
             case NKikimrSchemeOp::EPathSubTypeAsyncIndexImplTable:
                 return TResolve::KindAsyncIndexTable;
+            case NKikimrSchemeOp::EPathSubTypeVectorKmeansTreeIndexImplTable:
+                return TResolve::KindVectorIndexTable;
             default:
                 return TResolve::KindRegularTable;
             }
@@ -887,6 +889,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 switch (subType) {
                 case NKikimrSchemeOp::EPathSubTypeSyncIndexImplTable:
                 case NKikimrSchemeOp::EPathSubTypeAsyncIndexImplTable:
+                case NKikimrSchemeOp::EPathSubTypeVectorKmeansTreeIndexImplTable:
                     return true;
                 default:
                     return false;

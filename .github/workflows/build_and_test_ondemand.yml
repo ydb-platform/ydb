@@ -1,4 +1,4 @@
-name: Build-and-Test-On-demand
+name: Build-and-Test-On-demand  # actually tests are not executed
 
 on:
   workflow_call:
@@ -6,9 +6,6 @@ on:
       sanitizer:
         required: false
         type: string
-      test_label_regexp:
-        required: false
-        type: string
       image:
         type: string
         required: false
@@ -16,20 +13,11 @@ on:
       extra_compile_flags:
         required: false
         type: string
-      run_unit_tests:
-        type: boolean
-        default: true
-      run_functional_tests:
-        type: boolean
-        default: true
   workflow_dispatch:
     inputs:
       sanitizer:
         required: false
         type: string
-      test_label_regexp:
-        required: false
-        type: string
       image:
         type: string
         required: false
@@ -37,12 +25,6 @@ on:
       extra_compile_flags:
         required: false
         type: string
-      run_unit_tests:
-        type: boolean
-        default: true
-      run_functional_tests:
-        type: boolean
-        default: true
 
 jobs:
 
@@ -109,20 +91,6 @@ jobs:
         sanitizer: ${{ inputs.sanitizer }}
         ccache_remote_path: ${{ vars.REMOTE_CACHE_URL && format('http://{0}{1}', secrets.REMOTE_CACHE_AUTH, vars.REMOTE_CACHE_URL) || ''}}
         extra_compile_flags: ${{ inputs.extra_compile_flags }}
-    - name: Run tests
-      uses: ./.github/actions/test
-      with:
-        log_suffix: ${{ inputs.sanitizer != '' && format('{0}-{1}', 'x86_64', inputs.sanitizer) || 'x86_64' }}
-        test_label_regexp: ${{ inputs.test_label_regexp }}
-        aws_key_id: ${{secrets.AWS_KEY_ID}}
-        aws_key_value: ${{secrets.AWS_KEY_VALUE}}
-        aws_bucket: ${{vars.AWS_BUCKET}}
-        aws_endpoint: ${{vars.AWS_ENDPOINT}}
-        testman_token: ${{secrets.TESTMO_TOKEN2}}
-        testman_url: ${{vars.TESTMO_URL}}
-        testman_project_id: ${{vars.TESTMO_PROJECT_ID}}
-        run_unit_tests: ${{inputs.run_unit_tests}}
-        run_functional_tests: ${{inputs.run_functional_tests}}
   release-runner:
     name: Release self-hosted YC runner if provided on-demand
     needs:

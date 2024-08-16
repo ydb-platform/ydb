@@ -27,34 +27,33 @@ std::set<ui32> ISnapshotSchema::GetPkColumnsIds() const {
 
 }
 
-TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::NormalizeBatch(const ISnapshotSchema& dataSchema, const std::shared_ptr<arrow::RecordBatch> batch) const {
+TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::NormalizeBatch(
+    const ISnapshotSchema& dataSchema, const std::shared_ptr<NArrow::TGeneralContainer>& batch) const {
     if (dataSchema.GetSnapshot() == GetSnapshot()) {
         return batch;
     }
-    Y_ABORT_UNLESS(dataSchema.GetSnapshot() < GetSnapshot());
+    AFL_VERIFY(dataSchema.GetSnapshot() < GetSnapshot());
     const std::shared_ptr<arrow::Schema>& resultArrowSchema = GetSchema();
-    std::vector<std::shared_ptr<arrow::Array>> newColumns;
-    newColumns.reserve(resultArrowSchema->num_fields());
 
+    std::shared_ptr<NArrow::TGeneralContainer> result = std::make_shared<NArrow::TGeneralContainer>();
     for (size_t i = 0; i < resultArrowSchema->fields().size(); ++i) {
         auto& resultField = resultArrowSchema->fields()[i];
         auto columnId = GetIndexInfo().GetColumnId(resultField->name());
-        auto oldColumnIndex = dataSchema.GetFieldIndex(columnId);
-        if (oldColumnIndex >= 0) { // ColumnExists
-            auto oldColumnInfo = dataSchema.GetFieldByIndex(oldColumnIndex);
-            Y_ABORT_UNLESS(oldColumnInfo);
-            auto columnData = batch->GetColumnByName(oldColumnInfo->name());
-            Y_ABORT_UNLESS(columnData);
-            newColumns.push_back(columnData);
-        } else { // AddNullColumn
+        auto oldField = dataSchema.GetFieldByColumnIdOptional(columnId);
+        if (oldField) {
+            auto conclusion = result->AddField(resultField, batch->GetAccessorByNameVerified(oldField->name()));
+            if (conclusion.IsFail()) {
+                return conclusion;
+            }
+        } else {
             auto conclusion = BuildDefaultBatch({ resultField }, batch->num_rows());
             if (conclusion.IsFail()) {
                 return conclusion;
             }
-            newColumns.push_back((*conclusion)->column(0));
+            result->AddField(resultField, (*conclusion)->column(0)).Validate();
         }
     }
-    return arrow::RecordBatch::Make(resultArrowSchema, batch->num_rows(), newColumns);
+    return result;
 }
 
 TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModification(

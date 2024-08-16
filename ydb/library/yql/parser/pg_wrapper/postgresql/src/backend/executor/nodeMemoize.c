@@ -3,7 +3,7 @@
  * nodeMemoize.c
  *	  Routines to handle caching of results from parameterized nodes
  *
- * Portions Copyright (c) 2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2021-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -115,8 +115,8 @@ typedef struct MemoizeKey
 typedef struct MemoizeEntry
 {
 	MemoizeKey *key;			/* Hash key for hash table lookups */
-	MemoizeTuple *tuplehead;	/* Pointer to the first tuple or NULL if
-								 * no tuples are cached for this entry */
+	MemoizeTuple *tuplehead;	/* Pointer to the first tuple or NULL if no
+								 * tuples are cached for this entry */
 	uint32		hash;			/* Hash value (cached) */
 	char		status;			/* Hash status */
 	bool		complete;		/* Did we read the outer plan to completion? */
@@ -133,8 +133,8 @@ typedef struct MemoizeEntry
 static uint32 MemoizeHash_hash(struct memoize_hash *tb,
 							   const MemoizeKey *key);
 static bool MemoizeHash_equal(struct memoize_hash *tb,
-							  const MemoizeKey *params1,
-							  const MemoizeKey *params2);
+							  const MemoizeKey *key1,
+							  const MemoizeKey *key2);
 
 #define SH_PREFIX memoize
 #define SH_ELEMENT_TYPE MemoizeEntry
@@ -170,8 +170,8 @@ MemoizeHash_hash(struct memoize_hash *tb, const MemoizeKey *key)
 	{
 		for (int i = 0; i < numkeys; i++)
 		{
-			/* rotate hashkey left 1 bit at each step */
-			hashkey = (hashkey << 1) | ((hashkey & 0x80000000) ? 1 : 0);
+			/* combine successive hashkeys by rotating */
+			hashkey = pg_rotate_left32(hashkey, 1);
 
 			if (!pslot->tts_isnull[i])	/* treat nulls as having hash key 0 */
 			{
@@ -193,8 +193,8 @@ MemoizeHash_hash(struct memoize_hash *tb, const MemoizeKey *key)
 
 		for (int i = 0; i < numkeys; i++)
 		{
-			/* rotate hashkey left 1 bit at each step */
-			hashkey = (hashkey << 1) | ((hashkey & 0x80000000) ? 1 : 0);
+			/* combine successive hashkeys by rotating */
+			hashkey = pg_rotate_left32(hashkey, 1);
 
 			if (!pslot->tts_isnull[i])	/* treat nulls as having hash key 0 */
 			{
@@ -219,7 +219,7 @@ MemoizeHash_hash(struct memoize_hash *tb, const MemoizeKey *key)
  */
 static bool
 MemoizeHash_equal(struct memoize_hash *tb, const MemoizeKey *key1,
-			  const MemoizeKey *key2)
+				  const MemoizeKey *key2)
 {
 	MemoizeState *mstate = (MemoizeState *) tb->private_data;
 	ExprContext *econtext = mstate->ss.ps.ps_ExprContext;
@@ -399,7 +399,7 @@ static void
 cache_purge_all(MemoizeState *mstate)
 {
 	uint64		evictions = mstate->hashtable->members;
-	PlanState *pstate = (PlanState *) mstate;
+	PlanState  *pstate = (PlanState *) mstate;
 
 	/*
 	 * Likely the most efficient way to remove all items is to just reset the
@@ -502,7 +502,7 @@ cache_reduce_memory(MemoizeState *mstate, MemoizeKey *specialkey)
 			break;
 	}
 
-	mstate->stats.cache_evictions += evictions;	/* Update Stats */
+	mstate->stats.cache_evictions += evictions; /* Update Stats */
 
 	return specialkey_intact;
 }
@@ -992,8 +992,8 @@ ExecInitMemoize(Memoize *node, EState *estate, int eflags)
 												 &TTSOpsVirtual);
 
 	mstate->param_exprs = (ExprState **) palloc(nkeys * sizeof(ExprState *));
-	mstate->collations = node->collations; /* Just point directly to the plan
-											* data */
+	mstate->collations = node->collations;	/* Just point directly to the plan
+											 * data */
 	mstate->hashfunctions = (FmgrInfo *) palloc(nkeys * sizeof(FmgrInfo));
 
 	eqfuncoids = palloc(nkeys * sizeof(Oid));
@@ -1168,7 +1168,7 @@ double
 ExecEstimateCacheEntryOverheadBytes(double ntuples)
 {
 	return sizeof(MemoizeEntry) + sizeof(MemoizeKey) + sizeof(MemoizeTuple) *
-			ntuples;
+		ntuples;
 }
 
 /* ----------------------------------------------------------------

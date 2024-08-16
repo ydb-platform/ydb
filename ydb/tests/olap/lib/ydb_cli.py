@@ -47,8 +47,20 @@ class YdbCliHelper:
     @staticmethod
     def workload_run(type: WorkloadType, path: str, query_num: int, iterations: int = 5,
                      timeout: float = 100.) -> YdbCliHelper.WorkloadRunResult:
+        def _try_extract_error_message(stderr: str) -> str:
+            begin_str = f'{query_num}:'
+            end_str = 'Query text:'
+            begin_pos = stderr.find(begin_str)
+            if begin_pos < 0:
+                return ''
+            begin_pos += len(begin_str)
+            end_pos = stderr.find(end_str, begin_pos)
+            if end_pos < 0:
+                return stderr[begin_pos:].strip()
+            return stderr[begin_pos:end_pos].strip()
+
         try:
-            if not YdbCluster.wait_ydb_alive(60):
+            if not YdbCluster.wait_ydb_alive(300, path):
                 return YdbCliHelper.WorkloadRunResult(error_message='Ydb cluster is dead')
 
             json_path = yatest.common.work_path(f'q{query_num}.json')
@@ -63,22 +75,28 @@ class YdbCliHelper:
                 '--executer', 'generic',
                 '--include', str(query_num),
                 '--iterations', str(iterations),
-                '--query-settings', "PRAGMA ydb.HashJoinMode='grace';" + get_external_param('query-prefix', ''),
                 '--plan', plan_path,
                 '--verbose'
             ]
+            query_preffix = get_external_param('query-prefix', '')
+            if query_preffix:
+                cmd += ['--query-settings', query_preffix]
             err = None
             try:
                 exec: yatest.common.process._Execution = yatest.common.process.execute(cmd, wait=False, check_exit_code=False)
                 exec.wait(check_exit_code=False, timeout=timeout)
                 if exec.returncode != 0:
-                    err = f'Invalid return code: {exec.returncode} instesd 0.'
+                    err = _try_extract_error_message(exec.stderr.decode('utf-8'))
+                    if not err:
+                        err = f'Invalid return code: {exec.returncode} instesd 0.'
             except (yatest.common.process.TimeoutError, yatest.common.process.ExecutionTimeoutError):
                 err = f'Timeout {timeout}s expeared.'
             stats = {}
             if (os.path.exists(json_path)):
                 with open(json_path, 'r') as r:
-                    for signal in json.load(r):
+                    json_data = r.read()
+                if json_data:
+                    for signal in json.loads(json_data):
                         q = signal['labels']['query']
                         if q not in stats:
                             stats[q] = {}

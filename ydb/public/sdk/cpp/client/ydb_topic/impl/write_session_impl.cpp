@@ -293,7 +293,15 @@ void TWriteSessionImpl::OnDescribePartition(const TStatus& status, const Ydb::To
 
     if (!status.IsSuccess()) {
         with_lock (Lock) {
-            handleResult = OnErrorImpl({status.GetStatus(), MakeIssueWithSubIssues("Failed to get partition location", status.GetIssues())});
+            if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED) {
+                Settings.DirectWriteToPartition_ = false;
+                handleResult = OnErrorImpl({
+                    EStatus::UNAVAILABLE,
+                    MakeIssueWithSubIssues("The server does not support direct write, fallback to in-direct write", status.GetIssues())
+                });
+            } else {
+                handleResult = OnErrorImpl({status.GetStatus(), MakeIssueWithSubIssues("Failed to get partition location", status.GetIssues())});
+            }
         }
         ProcessHandleResult(handleResult);
         return;

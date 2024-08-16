@@ -688,6 +688,13 @@ namespace NSQLTranslationV1 {
     };
 
     struct TColumnSchema {
+        enum class ETypeOfChange {
+            Nothing,
+            DropNotNullConstraint,
+            SetNotNullConstraint, // todo flown4qqqq
+            SetFamily
+        };
+
         TPosition Pos;
         TString Name;
         TNodePtr Type;
@@ -695,9 +702,10 @@ namespace NSQLTranslationV1 {
         TVector<TIdentifier> Families;
         bool Serial;
         TNodePtr DefaultExpr;
+        const ETypeOfChange TypeOfChange;
 
         TColumnSchema(TPosition pos, const TString& name, const TNodePtr& type, bool nullable,
-            TVector<TIdentifier> families, bool serial, TNodePtr defaultExpr);
+            TVector<TIdentifier> families, bool serial, TNodePtr defaultExpr, ETypeOfChange typeOfChange = ETypeOfChange::Nothing);
     };
 
     struct TColumns: public TSimpleRefCount<TColumns> {

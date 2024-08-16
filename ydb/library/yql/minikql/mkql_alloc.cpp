@@ -20,7 +20,7 @@ void TAllocState::TListEntry::Link(TAllocState::TListEntry* root) noexcept {
 
 void TAllocState::TListEntry::Unlink() noexcept {
     std::tie(Right->Left, Left->Right) = std::make_pair(Left, Right);
-    Left = Right = nullptr;
+    Clear();
 }
 
 TAllocState::TAllocState(const TSourceLocation& location, const NKikimr::TAlignedPagePoolCounters &counters, bool supportsSizedAllocators)
@@ -31,14 +31,27 @@ TAllocState::TAllocState(const TSourceLocation& location, const NKikimr::TAligne
     GetRoot()->InitLinks();
     OffloadedBlocksRoot.InitLinks();
     GlobalPAllocList.InitLinks();
+    ArrowBlocksRoot.InitLinks();
 }
 
 void TAllocState::CleanupPAllocList(TListEntry* root) {
     for (auto curr = root->Right; curr != root; ) {
         auto next = curr->Right;
         auto size = ((TMkqlPAllocHeader*)curr)->Size;
-	auto fullSize = size + sizeof(TMkqlPAllocHeader);
+        auto fullSize = size + sizeof(TMkqlPAllocHeader);
         MKQLFreeWithSize(curr, fullSize, EMemorySubPool::Default); // may free items from OffloadedBlocksRoot
+        curr = next;
+    }
+
+    root->InitLinks();
+}
+
+void TAllocState::CleanupArrowList(TListEntry* root) {
+    for (auto curr = root->Right; curr != root; ) {
+        auto next = curr->Right;
+        auto size = ((TMkqlArrowHeader*)curr)->Size;
+        auto fullSize = size + sizeof(TMkqlArrowHeader);
+        ReleaseAlignedPage(curr, fullSize);
         curr = next;
     }
 
@@ -71,6 +84,8 @@ void TAllocState::KillAllBoxed() {
 
         OffloadedBlocksRoot.InitLinks();
     }
+
+    CleanupArrowList(&ArrowBlocksRoot);
 
 #ifndef NDEBUG
     ActiveMemInfo.clear();
@@ -230,18 +245,55 @@ void TPagedArena::Clear() noexcept {
 }
 
 void* MKQLArrowAllocate(ui64 size) {
-    return GetAlignedPage(size);
+    TAllocState* state = TlsAllocState;
+    Y_ENSURE(state);
+    auto fullSize = size + sizeof(TMkqlArrowHeader);
+    if (state->EnableArrowTracking) {
+        state->OffloadAlloc(fullSize);
+    }
+    
+    auto ptr = GetAlignedPage(fullSize);
+    auto header = (TMkqlArrowHeader*)ptr;
+    if (state->EnableArrowTracking) {
+        header->Entry.Link(&state->ArrowBlocksRoot);
+    } else {
+        header->Entry.Clear();
+    }
+
+    header->Size = size;
+    return header + 1;
 }
 
 void* MKQLArrowReallocate(const void* mem, ui64 prevSize, ui64 size) {
-    auto res = GetAlignedPage(size);
+    auto res = MKQLArrowAllocate(size);
     memcpy(res, mem, Min(prevSize, size));
-    ReleaseAlignedPage(const_cast<void*>(mem), prevSize);
+    MKQLArrowFree(mem, prevSize);
     return res;
 }
 
 void MKQLArrowFree(const void* mem, ui64 size) {
-    ReleaseAlignedPage(const_cast<void*>(mem), size);
+    auto fullSize = size + sizeof(TMkqlArrowHeader);
+    auto header = ((TMkqlArrowHeader*)mem) - 1;
+    if (!header->Entry.IsUnlinked()) {
+        TAllocState* state = TlsAllocState;
+        Y_ENSURE(state);
+        state->OffloadFree(fullSize);
+        header->Entry.Unlink();
+    }
+
+    Y_ENSURE(size == header->Size);
+    ReleaseAlignedPage(header, fullSize);
+}
+
+void MKQLArrowUntrack(const void* mem) {
+    TAllocState* state = TlsAllocState;
+    Y_ENSURE(state);
+    auto header = ((TMkqlArrowHeader*)mem) - 1;
+    if (!header->Entry.IsUnlinked()) {
+        header->Entry.Unlink();
+        auto fullSize = header->Size + sizeof(TMkqlArrowHeader);
+        state->OffloadFree(fullSize);
+    }
 }
 
 } // NMiniKQL

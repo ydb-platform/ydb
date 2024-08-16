@@ -459,7 +459,7 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_C(!result.GetResultSets().empty(), "no result sets");
             CompareYson(
-                Sprintf("[[\"%u\"]]", experimentalPg ? 208 : 205), 
+                Sprintf("[[\"%u\"]]", experimentalPg ? 214 : 211), 
                 FormatResultSetYson(result.GetResultSet(0)));
         }
     }

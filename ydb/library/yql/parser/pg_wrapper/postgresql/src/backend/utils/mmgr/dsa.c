@@ -39,7 +39,7 @@
  * empty and be returned to the free page manager, and whole segments can
  * become empty and be returned to the operating system.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -51,6 +51,7 @@
 #include "postgres.h"
 
 #include "port/atomics.h"
+#include "port/pg_bitutils.h"
 #include "storage/dsm.h"
 #include "storage/ipc.h"
 #include "storage/lwlock.h"
@@ -137,7 +138,18 @@ typedef size_t dsa_segment_index;
  * free pages?	There is no point in looking in segments in lower bins; they
  * definitely can't service a request for n free pages.
  */
-#define contiguous_pages_to_segment_bin(n) Min(fls(n), DSA_NUM_SEGMENT_BINS - 1)
+static inline size_t
+contiguous_pages_to_segment_bin(size_t n)
+{
+	size_t		bin;
+
+	if (n == 0)
+		bin = 0;
+	else
+		bin = pg_leftmost_one_pos_size_t(n) + 1;
+
+	return Min(bin, DSA_NUM_SEGMENT_BINS - 1);
+}
 
 /* Macros for access to locks. */
 #define DSA_AREA_LOCK(area) (&area->control->lock)
@@ -494,7 +506,7 @@ dsa_create_in_place(void *place, size_t size,
 dsa_handle
 dsa_get_handle(dsa_area *area)
 {
-	Assert(area->control->handle != DSM_HANDLE_INVALID);
+	Assert(area->control->handle != DSA_HANDLE_INVALID);
 	return area->control->handle;
 }
 
@@ -543,7 +555,7 @@ dsa_attach_in_place(void *place, dsm_segment *segment)
 {
 	dsa_area   *area;
 
-	area = attach_internal(place, NULL, DSM_HANDLE_INVALID);
+	area = attach_internal(place, NULL, DSA_HANDLE_INVALID);
 
 	/*
 	 * Clean up when the control segment detaches, if a containing DSM segment
@@ -1373,7 +1385,7 @@ init_span(dsa_area *area,
 	if (DsaPointerIsValid(pool->spans[1]))
 	{
 		dsa_area_span *head = (dsa_area_span *)
-		dsa_get_address(area, pool->spans[1]);
+			dsa_get_address(area, pool->spans[1]);
 
 		head->prevspan = span_pointer;
 	}
@@ -2203,7 +2215,7 @@ make_new_segment(dsa_area *area, size_t requested_pages)
 	if (segment_map->header->next != DSA_SEGMENT_INDEX_NONE)
 	{
 		dsa_segment_map *next =
-		get_segment_by_index(area, segment_map->header->next);
+			get_segment_by_index(area, segment_map->header->next);
 
 		Assert(next->header->bin == segment_map->header->bin);
 		next->header->prev = new_index;

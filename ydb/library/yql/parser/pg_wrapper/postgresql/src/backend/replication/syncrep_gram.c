@@ -80,7 +80,7 @@
  *
  * syncrep_gram.y				- Parser for synchronous_standby_names
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -91,6 +91,7 @@
  */
 #include "postgres.h"
 
+#include "nodes/pg_list.h"
 #include "replication/syncrep.h"
 
 /* Result of parsing is returned in one of these two variables */
@@ -103,16 +104,13 @@ static SyncRepConfigData *create_syncrep_config(const char *num_sync,
 /*
  * Bison doesn't allocate anything that needs to live across parser calls,
  * so we can easily have it use palloc instead of malloc.  This prevents
- * memory leaks if we error out during parsing.  Note this only works with
- * bison >= 2.0.  However, in bison 1.875 the default is to use alloca()
- * if possible, so there's not really much problem anyhow, at least if
- * you're building with gcc.
+ * memory leaks if we error out during parsing.
  */
 #define YYMALLOC palloc
 #define YYFREE   pfree
 
 
-#line 116 "syncrep_gram.c"
+#line 114 "syncrep_gram.c"
 
 # ifndef YY_CAST
 #  ifdef __cplusplus
@@ -135,57 +133,7 @@ static SyncRepConfigData *create_syncrep_config(const char *num_sync,
 #  endif
 # endif
 
-
-/* Debug traces.  */
-#ifndef YYDEBUG
-# define YYDEBUG 0
-#endif
-#if YYDEBUG
-extern int syncrep_yydebug;
-#endif
-
-/* Token kinds.  */
-#ifndef YYTOKENTYPE
-# define YYTOKENTYPE
-  enum yytokentype
-  {
-    YYEMPTY = -2,
-    YYEOF = 0,                     /* "end of file"  */
-    YYerror = 256,                 /* error  */
-    YYUNDEF = 257,                 /* "invalid token"  */
-    NAME = 258,                    /* NAME  */
-    NUM = 259,                     /* NUM  */
-    JUNK = 260,                    /* JUNK  */
-    ANY = 261,                     /* ANY  */
-    FIRST = 262                    /* FIRST  */
-  };
-  typedef enum yytokentype yytoken_kind_t;
-#endif
-
-/* Value type.  */
-#if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
-union YYSTYPE
-{
-#line 43 "syncrep_gram.y"
-
-	char	   *str;
-	List	   *list;
-	SyncRepConfigData *config;
-
-#line 176 "syncrep_gram.c"
-
-};
-typedef union YYSTYPE YYSTYPE;
-# define YYSTYPE_IS_TRIVIAL 1
-# define YYSTYPE_IS_DECLARED 1
-#endif
-
-
-extern __thread YYSTYPE syncrep_yylval;
-
-int syncrep_yyparse (void);
-
-
+#include "syncrep_gram.h"
 /* Symbol kind.  */
 enum yysymbol_kind_t
 {
@@ -586,8 +534,8 @@ static const yytype_int8 yytranslate[] =
   /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_int8 yyrline[] =
 {
-       0,    59,    59,    63,    64,    65,    66,    70,    71,    75,
-      76
+       0,    57,    57,    61,    62,    63,    64,    68,    69,    73,
+      74
 };
 #endif
 
@@ -1171,61 +1119,61 @@ yyreduce:
   switch (yyn)
     {
   case 2: /* result: standby_config  */
-#line 59 "syncrep_gram.y"
+#line 57 "syncrep_gram.y"
                                                         { syncrep_parse_result = (yyvsp[0].config); }
-#line 1177 "syncrep_gram.c"
+#line 1125 "syncrep_gram.c"
     break;
 
   case 3: /* standby_config: standby_list  */
-#line 63 "syncrep_gram.y"
+#line 61 "syncrep_gram.y"
                                                         { (yyval.config) = create_syncrep_config("1", (yyvsp[0].list), SYNC_REP_PRIORITY); }
-#line 1183 "syncrep_gram.c"
+#line 1131 "syncrep_gram.c"
     break;
 
   case 4: /* standby_config: NUM '(' standby_list ')'  */
-#line 64 "syncrep_gram.y"
+#line 62 "syncrep_gram.y"
                                                         { (yyval.config) = create_syncrep_config((yyvsp[-3].str), (yyvsp[-1].list), SYNC_REP_PRIORITY); }
-#line 1189 "syncrep_gram.c"
+#line 1137 "syncrep_gram.c"
     break;
 
   case 5: /* standby_config: ANY NUM '(' standby_list ')'  */
-#line 65 "syncrep_gram.y"
+#line 63 "syncrep_gram.y"
                                                         { (yyval.config) = create_syncrep_config((yyvsp[-3].str), (yyvsp[-1].list), SYNC_REP_QUORUM); }
-#line 1195 "syncrep_gram.c"
+#line 1143 "syncrep_gram.c"
     break;
 
   case 6: /* standby_config: FIRST NUM '(' standby_list ')'  */
-#line 66 "syncrep_gram.y"
+#line 64 "syncrep_gram.y"
                                                                 { (yyval.config) = create_syncrep_config((yyvsp[-3].str), (yyvsp[-1].list), SYNC_REP_PRIORITY); }
-#line 1201 "syncrep_gram.c"
+#line 1149 "syncrep_gram.c"
     break;
 
   case 7: /* standby_list: standby_name  */
-#line 70 "syncrep_gram.y"
+#line 68 "syncrep_gram.y"
                                                                         { (yyval.list) = list_make1((yyvsp[0].str)); }
-#line 1207 "syncrep_gram.c"
+#line 1155 "syncrep_gram.c"
     break;
 
   case 8: /* standby_list: standby_list ',' standby_name  */
-#line 71 "syncrep_gram.y"
+#line 69 "syncrep_gram.y"
                                                         { (yyval.list) = lappend((yyvsp[-2].list), (yyvsp[0].str)); }
-#line 1213 "syncrep_gram.c"
+#line 1161 "syncrep_gram.c"
     break;
 
   case 9: /* standby_name: NAME  */
-#line 75 "syncrep_gram.y"
+#line 73 "syncrep_gram.y"
                                                                 { (yyval.str) = (yyvsp[0].str); }
-#line 1219 "syncrep_gram.c"
+#line 1167 "syncrep_gram.c"
     break;
 
   case 10: /* standby_name: NUM  */
-#line 76 "syncrep_gram.y"
+#line 74 "syncrep_gram.y"
                                                                 { (yyval.str) = (yyvsp[0].str); }
-#line 1225 "syncrep_gram.c"
+#line 1173 "syncrep_gram.c"
     break;
 
 
-#line 1229 "syncrep_gram.c"
+#line 1177 "syncrep_gram.c"
 
       default: break;
     }
@@ -1419,7 +1367,7 @@ yyreturn:
   return yyresult;
 }
 
-#line 78 "syncrep_gram.y"
+#line 76 "syncrep_gram.y"
 
 
 static SyncRepConfigData *
@@ -1457,5 +1405,3 @@ create_syncrep_config(const char *num_sync, List *members, uint8 syncrep_method)
 
 	return config;
 }
-
-#include "syncrep_scanner.c"

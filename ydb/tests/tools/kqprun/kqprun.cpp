@@ -13,6 +13,7 @@
 
 #include <ydb/core/base/backtrace.h>
 
+#include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file.h>
 #include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file_comp_nodes.h>
@@ -305,7 +306,10 @@ protected:
             .DefaultValue("./configuration/app_config.conf")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 TString file(option->CurValOrDef());
-                if (!google::protobuf::TextFormat::ParseFromString(LoadFile(file), &RunnerOptions.YdbSettings.AppConfig)) {
+                if (file.EndsWith(".yaml")) {
+                    auto document = NKikimr::NFyaml::TDocument::Parse(LoadFile(file));
+                    RunnerOptions.YdbSettings.AppConfig = NKikimr::NYamlConfig::YamlToProto(document.Root());
+                } else if (!google::protobuf::TextFormat::ParseFromString(LoadFile(file), &RunnerOptions.YdbSettings.AppConfig)) {
                     ythrow yexception() << "Bad format of app configuration";
                 }
             });

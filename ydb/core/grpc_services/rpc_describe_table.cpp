@@ -6,6 +6,7 @@
 
 #include "service_table.h"
 #include "rpc_common/rpc_common.h"
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -153,7 +154,7 @@ private:
             record->MutableOptions()->SetReturnPartitionStats(true);
         }
 
-        if (AppData(ctx)->AllowPrivateTableDescribeForTest || path.EndsWith("/indexImplTable")) {
+        if (AppData(ctx)->AllowPrivateTableDescribeForTest || path.EndsWith(TStringBuilder() << "/" << NTableIndex::ImplTable)) {
             record->MutableOptions()->SetShowPrivateTable(true);
         }
 

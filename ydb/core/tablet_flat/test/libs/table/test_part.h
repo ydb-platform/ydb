@@ -52,6 +52,13 @@ namespace NTest {
             return Store->GetPageSize(groupId.Index, pageId);
         }
 
+        ui64 GetPageSize(ELargeObj lob, ui64 ref) const override
+        {
+            Y_UNUSED(lob);
+            Y_UNUSED(ref);
+            return 0;
+        }
+
         NPage::EPage GetPageType(NPage::TPageId pageId, NPage::TGroupId groupId) const override
         {
             return Store->GetPageType(groupId.Index, pageId);

@@ -3,7 +3,7 @@
  * parse_func.c
  *		handle function calls in parser
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -774,6 +774,7 @@ ParseFuncOrColumn(ParseState *pstate, List *funcname, List *fargs,
 		aggref->aggstar = agg_star;
 		aggref->aggvariadic = func_variadic;
 		aggref->aggkind = aggkind;
+		aggref->aggpresorted = false;
 		/* agglevelsup will be set by transformAggregateCall */
 		aggref->aggsplit = AGGSPLIT_SIMPLE; /* planner might change this */
 		aggref->aggno = -1;		/* planner will set aggno and aggtransno */
@@ -1631,7 +1632,6 @@ func_get_detail(List *funcname,
 		if (argdefaults && best_candidate->ndargs > 0)
 		{
 			Datum		proargdefaults;
-			bool		isnull;
 			char	   *str;
 			List	   *defaults;
 
@@ -1639,10 +1639,8 @@ func_get_detail(List *funcname,
 			if (best_candidate->ndargs > pform->pronargdefaults)
 				elog(ERROR, "not enough default arguments");
 
-			proargdefaults = SysCacheGetAttr(PROCOID, ftup,
-											 Anum_pg_proc_proargdefaults,
-											 &isnull);
-			Assert(!isnull);
+			proargdefaults = SysCacheGetAttrNotNull(PROCOID, ftup,
+													Anum_pg_proc_proargdefaults);
 			str = TextDatumGetCString(proargdefaults);
 			defaults = castNode(List, stringToNode(str));
 			pfree(str);
@@ -2610,6 +2608,9 @@ check_srf_call_placement(ParseState *pstate, Node *last_srf, int location)
 		case EXPR_KIND_VALUES_SINGLE:
 			/* okay, since we process this like a SELECT tlist */
 			pstate->p_hasTargetSRFs = true;
+			break;
+		case EXPR_KIND_MERGE_WHEN:
+			err = _("set-returning functions are not allowed in MERGE WHEN conditions");
 			break;
 		case EXPR_KIND_CHECK_CONSTRAINT:
 		case EXPR_KIND_DOMAIN_CHECK:

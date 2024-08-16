@@ -12,6 +12,7 @@ TExecFunc arrow_multirange_adjacent_multirange() { return MakeIndirectExec<true,
 TExecFunc arrow_multirange_adjacent_range() { return MakeIndirectExec<true, true>(&multirange_adjacent_range); }
 TExecFunc arrow_multirange_after_multirange() { return MakeIndirectExec<true, true>(&multirange_after_multirange); }
 TExecFunc arrow_multirange_after_range() { return MakeIndirectExec<true, true>(&multirange_after_range); }
+TExecFunc arrow_multirange_agg_transfn() { return MakeIndirectExec<false, true>(&multirange_agg_transfn); }
 TExecFunc arrow_multirange_before_multirange() { return MakeIndirectExec<true, true>(&multirange_before_multirange); }
 TExecFunc arrow_multirange_before_range() { return MakeIndirectExec<true, true>(&multirange_before_range); }
 TExecFunc arrow_multirange_cmp() { return MakeIndirectExec<true, true>(&multirange_cmp); }
@@ -123,3 +124,4 @@ TExecFunc arrow_spg_quad_inner_consistent() { return MakeIndirectExec<true, true
 TExecFunc arrow_spg_quad_leaf_consistent() { return MakeIndirectExec<true, true>(&spg_quad_leaf_consistent); }
 TExecFunc arrow_spg_quad_picksplit() { return MakeIndirectExec<true, true>(&spg_quad_picksplit); }
 TExecFunc arrow_spghandler() { return MakeIndirectExec<true, true>(&spghandler); }
+TExecFunc arrow_system_user() { return MakeIndirectExec<true, false>(&system_user); }

@@ -2,7 +2,6 @@
 #include "defs.h"
 
 #include <ydb/core/base/blobstorage.h>
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
 #include <ydb/core/control/immediate_control_board_wrapper.h>
 #include <ydb/core/protos/blobstorage.pb.h>

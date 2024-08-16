@@ -67,8 +67,7 @@ public:
         , StartedAt(startedAt)
     {
         RequestEv.reset(ev->Release().Release());
-
-        if (AppData()->FeatureFlags.GetEnableImplicitQueryParameterTypes() && !RequestEv->GetYdbParameters().empty()) {
+        if (tableServiceConfig.GetEnableImplicitQueryParameterTypes() && !RequestEv->GetYdbParameters().empty()) {
             QueryParameterTypes = std::make_shared<std::map<TString, Ydb::Type>>();
             for (const auto& [name, typedValue] : RequestEv->GetYdbParameters()) {
                 QueryParameterTypes->insert({name, typedValue.Gettype()});
@@ -313,10 +312,6 @@ public:
 
     bool NeedPersistentSnapshot() const {
         auto type = GetType();
-        if (type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY ||
-            type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY) {
-            return ::NKikimr::NKqp::HasOlapTableReadInTx(PreparedQuery->GetPhysicalQuery());
-        }
         return (
             type == NKikimrKqp::QUERY_TYPE_SQL_SCAN ||
             type == NKikimrKqp::QUERY_TYPE_AST_SCAN

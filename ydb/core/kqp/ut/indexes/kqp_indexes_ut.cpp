@@ -159,13 +159,12 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
         }
     }
 
-    void TestNoReadFromMainTableBeforeJoin(bool UseExtractPredicates) {
+    void TestNoReadFromMainTableBeforeJoin() {
         using namespace NYql;
         using namespace NYql::NNodes;
 
         TKikimrSettings settings;
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetPredicateExtract20(UseExtractPredicates);
         settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
@@ -259,8 +258,8 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(TestNoReadFromMainTableBeforeJoin, ExtractPredicate) {
-        TestNoReadFromMainTableBeforeJoin(ExtractPredicate);
+    Y_UNIT_TEST(TestNoReadFromMainTableBeforeJoin) {
+        TestNoReadFromMainTableBeforeJoin();
     }
 
     Y_UNIT_TEST(HandleWriteOnlyIndex) {

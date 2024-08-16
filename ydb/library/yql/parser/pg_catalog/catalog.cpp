@@ -7,6 +7,8 @@
 #include <util/string/cast.h>
 #include <util/string/split.h>
 #include <util/system/env.h>
+#include <util/system/mutex.h>
+#include <util/system/tempfile.h>
 #include <library/cpp/resource/resource.h>
 
 namespace NYql::NPg {
@@ -1585,70 +1587,13 @@ const TColumnInfoRaw AllStaticColumnsRaw[] = {
 #include "columns.generated.h"
 };
 
+const char* AllowedProcsRaw[] = {
+#include "safe_procs.h"
+#include "used_procs.h"
+};
+
 struct TCatalog {
-    TCatalog()
-        : ProhibitedProcs({
-            // revoked from public
-            "pg_start_backup",
-            "pg_stop_backup",
-            "pg_create_restore_point",
-            "pg_switch_wal",
-            "pg_wal_replay_pause",
-            "pg_wal_replay_resume",
-            "pg_rotate_logfile",
-            "pg_reload_conf",
-            "pg_current_logfile",
-            "pg_promote",
-            "pg_stat_reset",
-            "pg_stat_reset_shared",
-            "pg_stat_reset_slru",
-            "pg_stat_reset_single_table_counters",
-            "pg_stat_reset_single_function_counters",
-            "pg_stat_reset_replication_slot",
-            "lo_import",
-            "lo_export",
-            "pg_ls_logdir",
-            "pg_ls_waldir",
-            "pg_ls_archive_statusdir",
-            "pg_ls_tmpdir",
-            "pg_read_file",
-            "pg_read_binary_file",
-            "pg_replication_origin_advance",
-            "pg_replication_origin_create",
-            "pg_replication_origin_drop",
-            "pg_replication_origin_oid",
-            "pg_replication_origin_progress",
-            "pg_replication_origin_session_is_setup",
-            "pg_replication_origin_session_progress",
-            "pg_replication_origin_session_reset",
-            "pg_replication_origin_session_setup",
-            "pg_replication_origin_xact_reset",
-            "pg_replication_origin_xact_setup",
-            "pg_show_replication_origin_status",
-            "pg_stat_file",
-            "pg_ls_dir",
-            // transactions
-            "pg_last_committed_xact",
-            "pg_current_wal_lsn",
-            // large_objects
-            "lo_creat",
-            "lo_create",
-            "lo_import",
-            "lo_import_with_oid",
-            "lo_export",
-            "lo_open",
-            "lo_write",
-            "lo_read",
-            "lo_lseek",
-            "lo_lseek64",
-            "lo_tell",
-            "lo_tell64",
-            "lo_truncate",
-            "lo_truncate64",
-            "lo_close",
-            "lo_unlink"
-        })
-    {
+    TCatalog() {
         for (size_t i = 0; i < Y_ARRAY_SIZE(AllStaticTablesRaw); ++i) {
             const auto& raw = AllStaticTablesRaw[i];
             AllStaticTables.push_back(
@@ -1918,6 +1863,73 @@ struct TCatalog {
 
         Conversions = ParseConversions(conversionData, ProcByName);
         Languages = ParseLanguages(languagesData);
+
+        if (auto exportDir = GetEnv("YQL_EXPORT_PG_FUNCTIONS_DIR")) {
+            ExportFile.ConstructInPlace(MakeTempName(exportDir.c_str(), "procs"), CreateAlways | RdWr);
+            for (const auto& a : Aggregations) {
+                const auto& desc = a.second;
+                ExportFunction(desc.TransFuncId);
+                ExportFunction(desc.FinalFuncId);
+                ExportFunction(desc.CombineFuncId);
+                ExportFunction(desc.SerializeFuncId);
+                ExportFunction(desc.DeserializeFuncId);
+            }
+
+            for (const auto& t : Types) {
+                const auto& desc = t.second;
+                ExportFunction(desc.InFuncId);
+                ExportFunction(desc.OutFuncId);
+                ExportFunction(desc.SendFuncId);
+                ExportFunction(desc.ReceiveFuncId);
+                ExportFunction(desc.TypeModInFuncId);
+                ExportFunction(desc.TypeModOutFuncId);
+                ExportFunction(desc.TypeSubscriptFuncId);
+                ExportFunction(desc.LessProcId);
+                ExportFunction(desc.EqualProcId);
+                ExportFunction(desc.CompareProcId);
+                ExportFunction(desc.HashProcId);
+            }
+
+            for (const auto& o : Operators) {
+                const auto& desc = o.second;
+                ExportFunction(desc.ProcId);
+            }
+
+            for (const auto& c : Casts) {
+                const auto& desc = c.second;
+                ExportFunction(desc.FunctionId);
+            }
+        } else {
+            for (size_t i = 0; i < Y_ARRAY_SIZE(AllowedProcsRaw); ++i) {
+                const auto& raw = AllowedProcsRaw[i];
+                AllowedProcs.insert(raw);
+            }
+
+            for (const auto& t : Types) {
+                AllowedProcs.insert(t.second.Name);
+            }
+        }
+    }
+
+    void ExportFunction(ui32 procOid) const {
+        if (!procOid || !ExportFile) {
+            return;
+        }
+
+        auto procPtr = Procs.FindPtr(procOid);
+        Y_ENSURE(procPtr);
+        ExportFunction(procPtr->Name);
+    }
+
+    void ExportFunction(const TString& name) const {
+        if (!ExportFile) {
+            return;
+        }
+
+        TString line = TStringBuilder() << "\"" << name << "\",\n";
+        with_lock(ExportGuard) {
+            ExportFile->Write(line.Data(), line.Size());
+        }
     }
 
     static const TCatalog& Instance() {
@@ -1941,12 +1953,16 @@ struct TCatalog {
     THashMap<std::pair<ui32, ui32>, ui32> CastsByDir;
     THashMap<TString, TVector<ui32>> OperatorsByName;
     THashMap<TString, TVector<ui32>> AggregationsByName;
-    THashSet<TString> ProhibitedProcs;
 
     TVector<TTableInfo> AllStaticTables;
     TVector<TColumnInfo> AllStaticColumns;
     THashMap<TTableInfoKey, TTableInfo> StaticTables;
     THashMap<TTableInfoKey, TVector<TColumnInfo>> StaticColumns;
+
+    mutable TMaybe<TFile> ExportFile;
+    TMutex ExportGuard;
+
+    THashSet<TString> AllowedProcs;
 };
 
 bool ValidateProcArgs(const TProcDesc& d, const TVector<ui32>& argTypeIds) {
@@ -1961,21 +1977,22 @@ const TProcDesc& LookupProc(ui32 procId, const TVector<ui32>& argTypeIds) {
         throw yexception() << "No such proc: " << procId;
     }
 
+    if (!catalog.ExportFile && !catalog.AllowedProcs.contains(procPtr->Name)) {
+        throw yexception() << "No access to proc: " << procPtr->Name;
+    }
+
     if (!ValidateProcArgs(*procPtr, argTypeIds)) {
         throw yexception() << "Unable to find an overload for proc with oid " << procId << " with given argument types: " <<
             ArgTypesList(argTypeIds);
     }
 
+    catalog.ExportFunction(procId);
     return *procPtr;
 }
 
 const TProcDesc& LookupProc(const TString& name, const TVector<ui32>& argTypeIds) {
     const auto& catalog = TCatalog::Instance();
     auto lower = to_lower(name);
-    if (catalog.ProhibitedProcs.contains(lower)) {
-        throw yexception() << "No access to proc: " << name;
-    }
-
     auto procIdPtr = catalog.ProcByName.FindPtr(lower);
     if (!procIdPtr) {
         throw yexception() << "No such proc: " << name;
@@ -1984,10 +2001,15 @@ const TProcDesc& LookupProc(const TString& name, const TVector<ui32>& argTypeIds
     for (const auto& id : *procIdPtr) {
         const auto& d = catalog.Procs.FindPtr(id);
         Y_ENSURE(d);
+        if (!catalog.ExportFile && !catalog.AllowedProcs.contains(d->Name)) {
+            throw yexception() << "No access to proc: " << d->Name;
+        }
+
         if (!ValidateProcArgs(*d, argTypeIds)) {
             continue;
         }
 
+        catalog.ExportFunction(d->Name);
         return *d;
     }
 
@@ -2002,6 +2024,11 @@ const TProcDesc& LookupProc(ui32 procId) {
         throw yexception() << "No such proc: " << procId;
     }
 
+    if (!catalog.ExportFile && !catalog.AllowedProcs.contains(procPtr->Name)) {
+        throw yexception() << "No access to proc: " << procPtr->Name;
+    }
+
+    catalog.ExportFunction(procId);
     return *procPtr;
 }
 
@@ -2611,10 +2638,6 @@ bool IsCoercible(ui32 fromTypeId, ui32 toTypeId, ECoercionCode coercionType) {
 std::variant<const TProcDesc*, const TTypeDesc*> LookupProcWithCasts(const TString& name, const TVector<ui32>& argTypeIds) {
     const auto& catalog = TCatalog::Instance();
     auto lower = to_lower(name);
-    if (catalog.ProhibitedProcs.contains(lower)) {
-        throw yexception() << "No access to proc: " << name;
-    }
-
     auto procIdPtr = catalog.ProcByName.FindPtr(lower);
     if (!procIdPtr) {
         throw yexception() << "No such proc: " << name;
@@ -2626,6 +2649,10 @@ std::variant<const TProcDesc*, const TTypeDesc*> LookupProcWithCasts(const TStri
     for (const auto& id : *procIdPtr) {
         const auto& d = catalog.Procs.FindPtr(id);
         Y_ENSURE(d);
+
+        if (!catalog.ExportFile && !catalog.AllowedProcs.contains(d->Name)) {
+            throw yexception() << "No access to proc: " << d->Name;
+        }
 
         if (NPrivate::IsExactMatch(d->ArgTypes, d->VariadicType, argTypeIds)) {
             // At most one exact match is possible, so look no further

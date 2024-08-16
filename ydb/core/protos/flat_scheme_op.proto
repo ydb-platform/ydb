@@ -13,15 +13,16 @@ import "ydb/core/protos/follower_group.proto";
 import "ydb/core/protos/blob_depot_config.proto";
 import "ydb/public/api/protos/ydb_coordination.proto";
 import "ydb/public/api/protos/ydb_export.proto";
+import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/library/actors/protos/actors.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/core/protos/index_builder.proto";
-import "ydb/core/tx/columnshard/engines/scheme/statistics/protos/data.proto";
 import "ydb/core/tx/columnshard/engines/scheme/defaults/protos/data.proto";
 import "ydb/core/tx/columnshard/common/protos/snapshot.proto";
 
 import "google/protobuf/empty.proto";
+import "google/protobuf/struct.proto";
 
 package NKikimrSchemeOp;
 option java_package = "ru.yandex.kikimr.proto";
@@ -90,6 +91,7 @@ message TColumnDescription {
     oneof DefaultValue {
         string DefaultFromSequence = 7; // Path to sequence for default values
         Ydb.TypedValue DefaultFromLiteral = 10; // Literal default value
+        google.protobuf.NullValue EmptyDefault = 12; // Drop default case
     }
     optional bool NotNull = 8;
     // flag that indicates that column is currently under the build
@@ -449,6 +451,10 @@ message TRequestedBloomFilter {
     repeated string ColumnNames = 3;
 }
 
+message TRequestedMaxIndex {
+    optional string ColumnName = 1;
+}
+
 message TOlapIndexRequested {
     optional string Name = 1;
     optional TCompressionOptions Compression = 3;
@@ -457,6 +463,7 @@ message TOlapIndexRequested {
     optional string ClassName = 39;
     oneof Implementation {
         TRequestedBloomFilter BloomFilter = 40;
+        TRequestedMaxIndex MaxIndex = 41;
     }
 }
 
@@ -464,6 +471,10 @@ message TBloomFilter {
     optional double FalsePositiveProbability = 1 [default = 0.1];
     optional uint64 MaxBytesCount = 2 [default = 8196];
     repeated uint32 ColumnIds = 3;
+}
+
+message TMaxIndex {
+    optional uint32 ColumnId = 1;
 }
 
 message TOlapIndexDescription {
@@ -478,6 +489,7 @@ message TOlapIndexDescription {
     optional string ClassName = 40;
     oneof Implementation {
         TBloomFilter BloomFilter = 41;
+        TMaxIndex MaxIndex = 42;
     }
 }
 
@@ -541,7 +553,6 @@ message TColumnTableSchema {
 
     optional bool CompositeMarksDeprecated = 9 [ default = false ];
     repeated TOlapIndexDescription Indexes = 10;
-    repeated NKikimrColumnShardStatisticsProto.TOperatorContainer Statistics = 11;
     optional TColumnTableSchemeOptions Options = 12;
 }
 
@@ -558,8 +569,6 @@ message TAlterColumnTableSchema {
     repeated TOlapColumnDiff AlterColumns = 7;
     repeated TOlapIndexRequested UpsertIndexes = 8;
     repeated string DropIndexes = 9;
-    repeated NKikimrColumnShardStatisticsProto.TConstructorContainer UpsertStatistics = 10;
-    repeated string DropStatistics = 11;
     optional TColumnTableRequestedOptions Options = 12;
 }
 
@@ -913,10 +922,6 @@ message TCreateCdcStream {
     optional TCdcStreamDescription StreamDescription = 2;
     optional uint64 RetentionPeriodSeconds = 3 [default = 86400]; // 1d by default
     optional uint32 TopicPartitions = 4;
-    oneof IndexMode {
-        google.protobuf.Empty AllIndexes = 5; // Create topic per each index
-        string IndexName = 6;
-    }
 }
 
 message TAlterCdcStream {
@@ -973,6 +978,7 @@ enum EIndexType {
     EIndexTypeGlobal = 1;
     EIndexTypeGlobalAsync = 2;
     EIndexTypeGlobalUnique = 3;
+    EIndexTypeGlobalVectorKmeansTree = 4;
 }
 
 enum EIndexState {
@@ -980,6 +986,10 @@ enum EIndexState {
     EIndexStateReady = 1;
     EIndexStateNotReady = 2;
     EIndexStateWriteOnly = 3;
+}
+
+message TVectorIndexKmeansTreeDescription {
+    optional Ydb.Table.VectorIndexSettings Settings = 1;
 }
 
 message TIndexDescription {
@@ -1000,6 +1010,10 @@ message TIndexDescription {
     // DataSize + IndexSize of indexImplTable
     optional uint64 DataSize = 9;
     repeated TTableDescription IndexImplTableDescriptions = 10;
+
+    oneof SpecializedIndexDescription {
+        TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 11;
+    }
 }
 
 message TIndexCreationConfig {
@@ -1009,6 +1023,9 @@ message TIndexCreationConfig {
     repeated TTableDescription IndexImplTableDescriptions = 4; //description for index impl tables
     optional EIndexState State = 5; //state of index at the creation time
     repeated string DataColumnNames = 6; //columns to be denormalized to read data just from index
+    oneof SpecializedIndexDescription {
+        TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 7;
+    }
 }
 
 message TIndexAlteringConfig {
@@ -1420,6 +1437,7 @@ message TSequenceDescription {
     optional sint64 Increment = 9; // increment at each call, defaults to 1
     optional bool Cycle = 10; // true when cycle on overflow is allowed
     optional TSetVal SetVal = 11; // SetVal(NextValue, NextUsed) is executed atomically when creating
+    optional string DataType = 12; // data type of the sequence: Int64/pgint8, Int32/pgint4, Int16/pgint2, defaults to Int64/pgint8
 }
 
 message TSequenceSharding {
@@ -1631,7 +1649,6 @@ message TIndexBuildControl {
 
 message TLockConfig {
     optional string Name = 1;
-    optional bool AllowIndexImplLock = 2;
 }
 
 message TLockGuard {
@@ -1849,6 +1866,7 @@ enum EPathSubType {
     EPathSubTypeSyncIndexImplTable = 1;
     EPathSubTypeAsyncIndexImplTable = 2;
     EPathSubTypeStreamImpl = 3;
+    EPathSubTypeVectorKmeansTreeIndexImplTable = 4;
 }
 
 enum EPathState {

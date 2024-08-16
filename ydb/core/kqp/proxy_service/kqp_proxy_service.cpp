@@ -44,7 +44,7 @@
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/resource/resource.h>
-
+#include <util/generic/guid.h>
 
 namespace NKikimr::NKqp {
 
@@ -234,9 +234,14 @@ public:
         WhiteBoardService = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
 
         if (auto& cfg = TableServiceConfig.GetSpillingServiceConfig().GetLocalFileConfig(); cfg.GetEnable()) {
+            TString spillingRoot = cfg.GetRoot();
+            if (spillingRoot.empty()) {
+                spillingRoot = TStringBuilder() << "/tmp/ydb_spilling_" << CreateGuidAsString() << "/";
+            }
+
             SpillingService = TlsActivationContext->ExecutorThread.RegisterActor(NYql::NDq::CreateDqLocalFileSpillingService(
                 NYql::NDq::TFileSpillingServiceConfig{
-                    .Root = cfg.GetRoot(),
+                    .Root = spillingRoot,
                     .MaxTotalSize = cfg.GetMaxTotalSize(),
                     .MaxFileSize = cfg.GetMaxFileSize(),
                     .MaxFilePartSize = cfg.GetMaxFilePartSize(),

@@ -4,7 +4,7 @@
  *	  definition of the "large object" system catalog (pg_largeobject)
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_largeobject.h
@@ -44,8 +44,7 @@ CATALOG(pg_largeobject,2613,LargeObjectRelationId)
  */
 typedef FormData_pg_largeobject *Form_pg_largeobject;
 
-DECLARE_UNIQUE_INDEX_PKEY(pg_largeobject_loid_pn_index, 2683, on pg_largeobject using btree(loid oid_ops, pageno int4_ops));
-#define LargeObjectLOidPNIndexId  2683
+DECLARE_UNIQUE_INDEX_PKEY(pg_largeobject_loid_pn_index, 2683, LargeObjectLOidPNIndexId, on pg_largeobject using btree(loid oid_ops, pageno int4_ops));
 
 extern Oid	LargeObjectCreate(Oid loid);
 extern void LargeObjectDrop(Oid loid);

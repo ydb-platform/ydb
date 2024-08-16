@@ -1,6 +1,7 @@
 #include "scheme_helpers.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/external_sources.pb.h>
 
 namespace NKikimr::NKqp::NSchemeHelpers {
@@ -46,7 +47,7 @@ bool SplitTablePath(const TString& tableName, const TString& database, std::pair
 }
 
 TString CreateIndexTablePath(const TString& tableName, const TString& indexName) {
-    return tableName + "/" + indexName + "/indexImplTable";
+    return tableName + "/" + indexName + "/" + NTableIndex::ImplTable;
 }
 
 bool SetDatabaseForLoginOperation(TString& result, bool getDomainLoginOnly, TMaybe<TString> domainName,

@@ -11,6 +11,8 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/core/protos/statistics.pb.h>
+#include <ydb/core/protos/data_events.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -20,6 +22,12 @@
 
 namespace NKikimr {
 namespace NStat {
+
+static constexpr TDuration DefaultAggregateKeepAlivePeriod = TDuration::MilliSeconds(500);
+static constexpr TDuration DefaultAggregateKeepAliveTimeout = TDuration::Seconds(3);
+static constexpr TDuration DefaultAggregateKeepAliveAckTimeout = TDuration::Seconds(3);
+static constexpr size_t DefaultMaxInFlightTabletRequests = 5;
+static constexpr size_t DefaultFanOutFactor = 5;
 
 class THttpRequest : public TActorBootstrapped<THttpRequest> {
 public:
@@ -207,10 +215,105 @@ private:
     static const ui64 SecondRoundCookie = 2;
 };
 
+TStatServiceSettings::TStatServiceSettings()
+    : AggregateKeepAlivePeriod(DefaultAggregateKeepAlivePeriod)
+    , AggregateKeepAliveTimeout(DefaultAggregateKeepAliveTimeout)
+    , AggregateKeepAliveAckTimeout(DefaultAggregateKeepAliveAckTimeout)
+    , MaxInFlightTabletRequests(DefaultMaxInFlightTabletRequests)
+    , FanOutFactor(DefaultFanOutFactor)
+{}
+
+struct TAggregationStatistics {
+    using TColumnsStatistics = ::google::protobuf::RepeatedPtrField<::NKikimrStat::TColumn>;
+
+    TAggregationStatistics(size_t nodesCount)
+        : Nodes(nodesCount)
+    {}
+
+    struct TFailedTablet {
+        using EErrorType = NKikimrStat::TEvAggregateStatisticsResponse::EErrorType;
+
+        ui64 TabletId;
+        ui32 NodeId;
+        EErrorType Error;
+
+        TFailedTablet(ui64 tabletId, ui32 nodeId, EErrorType error)
+            : TabletId(tabletId)
+            , NodeId(nodeId)
+            , Error(error) {}
+    };
+
+    struct TTablets {
+        ui32 NodeId;
+        std::vector<ui64> Ids;
+    };
+
+    struct TNode {
+        enum class EStatus: ui8 {
+            None,
+            Processing,
+            Processed,
+            Unavailable
+        };
+
+        ui64 LastHeartbeat{ 0 };
+        std::vector<TTablets> Tablets;
+        TActorId Actor;
+        EStatus Status{ EStatus::None };
+    };
+
+    struct TLocalTablets {
+        size_t NextTablet{ 0 };
+        ui32 InFlight{ 0 };
+        std::vector<ui64> Ids;
+        std::unordered_set<ui64> FinishedTablets;
+    };
+
+    struct ColumnStatistics {
+        std::unique_ptr<TCountMinSketch> Statistics;
+        ui32 ContainedInResponse{ 0 };
+    };
+
+    ui64 Round{ 0 };
+    ui64 Cookie{ 0 };
+    TPathId PathId;
+    ui64 LastAckHeartbeat{ 0 };
+    TActorId ParentNode;
+    std::vector<TNode> Nodes;
+    size_t PprocessedNodes{ 0 };
+
+    std::unordered_map<ui32, ColumnStatistics> CountMinSketches;
+    ui32 TotalStatisticsResponse{ 0 };
+
+    std::vector<ui32> ColumnTags;
+    TLocalTablets LocalTablets;
+    std::vector<TFailedTablet> FailedTablets;
+
+    bool IsCompleted() const noexcept {
+        return PprocessedNodes == Nodes.size() && LocalTablets.InFlight == 0;
+    }
+
+    TNode* GetProcessingChildNode(ui32 nodeId) {
+        for (size_t i = 0; i < Nodes.size(); ++i) {
+            if (Nodes[i].Actor.NodeId() == nodeId) {
+                return Nodes[i].Status == TAggregationStatistics::TNode::EStatus::Processing
+                    ? &Nodes[i] : nullptr;
+            }
+        }
+        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "Child node with the specified id was not found");
+        return nullptr;
+    }
+};
 
 class TStatService : public TActorBootstrapped<TStatService> {
 public:
     using TBase = TActorBootstrapped<TStatService>;
+
+    TStatService(const TStatServiceSettings& settings)
+        : Settings(settings)
+        , AggregationStatistics(settings.FanOutFactor)
+    {}
 
     static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::STAT_SERVICE;
@@ -218,14 +321,36 @@ public:
 
     struct TEvPrivate {
         enum EEv {
-            EvRequestTimeout = EventSpaceBegin(TEvents::ES_PRIVATE),
+            EvRequestTimeout = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+            EvDispatchKeepAlive,
+            EvKeepAliveTimeout,
+            EvKeepAliveAckTimeout,
 
             EvEnd
         };
 
-        struct TEvRequestTimeout : public TEventLocal<TEvRequestTimeout, EvRequestTimeout> {
+        struct TEvRequestTimeout : public NActors::TEventLocal<TEvRequestTimeout, EvRequestTimeout> {
             std::unordered_set<ui64> NeedSchemeShards;
-            TActorId PipeClientId;
+            NActors::TActorId PipeClientId;
+        };
+
+        struct TEvDispatchKeepAlive: public NActors::TEventLocal<TEvDispatchKeepAlive, EvDispatchKeepAlive> {
+            TEvDispatchKeepAlive(ui64 round): Round(round) {}
+
+            ui64 Round;
+        };
+
+        struct TEvKeepAliveAckTimeout: public NActors::TEventLocal<TEvKeepAliveAckTimeout, EvKeepAliveAckTimeout> {
+            TEvKeepAliveAckTimeout(ui64 round): Round(round) {}
+
+            ui64 Round;
+        };
+
+        struct TEvKeepAliveTimeout: public NActors::TEventLocal<TEvKeepAliveTimeout, EvKeepAliveTimeout> {
+            TEvKeepAliveTimeout(ui64 round, ui32 nodeId): Round(round), NodeId(nodeId) {}
+
+            ui64 Round;
+            ui32 NodeId;
         };
     };
 
@@ -254,17 +379,29 @@ public:
             hFunc(TEvStatistics::TEvGetStatistics, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvStatistics::TEvPropagateStatistics, Handle);
+            hFunc(TEvStatistics::TEvAggregateStatistics, Handle);
             IgnoreFunc(TEvStatistics::TEvPropagateStatisticsResponse);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             hFunc(TEvStatistics::TEvStatisticsIsDisabled, Handle);
             hFunc(TEvStatistics::TEvLoadStatisticsQueryResponse, Handle);
             hFunc(TEvPrivate::TEvRequestTimeout, Handle);
+
+            hFunc(TEvStatistics::TEvAggregateKeepAliveAck, Handle);
+            hFunc(TEvPrivate::TEvKeepAliveAckTimeout, Handle);
+            hFunc(TEvStatistics::TEvAggregateKeepAlive, Handle);
+            hFunc(TEvPrivate::TEvDispatchKeepAlive, Handle);
+            hFunc(TEvPrivate::TEvKeepAliveTimeout, Handle);
+            hFunc(TEvPipeCache::TEvGetTabletNodeResult, Handle);
+            hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+            hFunc(TEvStatistics::TEvStatisticsResponse, Handle);
+            hFunc(TEvStatistics::TEvAggregateStatisticsResponse, Handle);
+
             hFunc(NMon::TEvHttpInfo, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
                 LOG_CRIT_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                    "NStat::TStatService: unexpected event# " << ev->GetTypeRewrite());
+                    "NStat::TStatService: unexpected event# " << ev->GetTypeRewrite() << " " << ev->ToString());
         }
     }
 
@@ -287,6 +424,497 @@ private:
         }
         auto response = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationResponse>(record);
         Send(ev->Sender, response.release(), 0, ev->Cookie);
+    }
+
+    bool IsNotCurrentRound(ui64 round) {
+        if (round != AggregationStatistics.Round) {
+            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "Event round " << round << " is different from the current " << AggregationStatistics.Round);
+            return true;
+        }
+        return false;
+    }
+
+    //
+    // returns true if the tablet processing has not been completed yet
+    //
+    bool OnTabletFinished(ui64 tabletId) {
+        auto& localTablets = AggregationStatistics.LocalTablets;
+        auto isFinished = !localTablets.FinishedTablets.emplace(tabletId).second;
+        if (isFinished) {
+            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                "OnTabletFinished: table " << tabletId << " has already been processed");
+            return false;
+        }
+
+        --localTablets.InFlight;
+        return true;
+    }
+
+    void OnAggregateStatisticsFinished() {
+        SendAggregateStatisticsResponse();
+
+        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+
+        TAggregationStatistics aggregationStatistics(Settings.FanOutFactor);
+        std::swap(AggregationStatistics, aggregationStatistics);
+    }
+
+    void SendRequestToNextTablet() {
+        auto& localTablets = AggregationStatistics.LocalTablets;
+        if (localTablets.NextTablet >= localTablets.Ids.size()) {
+            return;
+        }
+
+        const auto tabletId = localTablets.Ids[localTablets.NextTablet];
+        ++localTablets.NextTablet;
+        ++localTablets.InFlight;
+        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvGetTabletNode(tabletId), 0, AggregationStatistics.Round);
+    }
+
+    void Handle(TEvPipeCache::TEvGetTabletNodeResult::TPtr& ev) {
+        const auto msg = ev->Get();
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "Received TEvGetTabletNodeResult NodeId: " << msg->NodeId << ", TabletId: " << msg->TabletId);
+
+        const auto round = ev->Cookie;
+        if (IsNotCurrentRound(round)) {
+            return;
+        }
+
+        const auto currentNodeId = ev->Recipient.NodeId();
+
+        // there is no need for retries, as the tablet must be local
+        // no problems are expected in resolving
+        if (currentNodeId != msg->NodeId) {
+            const auto tabletFinished = OnTabletFinished(msg->TabletId);
+            Y_ABORT_UNLESS(tabletFinished);
+
+            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                "Tablet is not local. Table node: " << msg->NodeId << ", current node: " << ev->Recipient.NodeId());
+
+            const auto error = NKikimrStat::TEvAggregateStatisticsResponse::NonLocalTablet;
+            AggregationStatistics.FailedTablets.emplace_back(msg->TabletId, msg->NodeId, error);
+
+            SendRequestToNextTablet();
+
+            if (AggregationStatistics.IsCompleted()) {
+                OnAggregateStatisticsFinished();
+            }
+
+            return;
+        }
+
+        auto request = std::make_unique<TEvStatistics::TEvStatisticsRequest>();
+        auto& record = request->Record;
+        record.MutableTypes()->Add(NKikimr::NStat::COUNT_MIN_SKETCH);
+
+        auto path = record.MutableTableId();
+        path->SetOwnerId(AggregationStatistics.PathId.OwnerId);
+        path->SetTableId(AggregationStatistics.PathId.LocalPathId);
+
+        auto columnTags = record.MutableColumnTags();
+        for (const auto& tag : AggregationStatistics.ColumnTags) {
+            columnTags->Add(tag);
+        }
+
+        Send(MakePipePerNodeCacheID(false),
+            new TEvPipeCache::TEvForward(request.release(), msg->TabletId, true, round),
+            IEventHandle::FlagTrackDelivery, round);
+    }
+
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "Received TEvDeliveryProblem TabletId: " << ev->Get()->TabletId);
+
+        const auto round = ev->Cookie;
+        const auto tabletId = ev->Get()->TabletId;
+        if (IsNotCurrentRound(round)
+            || !OnTabletFinished(tabletId)) {
+            return;
+        }
+
+        const auto nodeId = ev->Recipient.NodeId();
+        const auto error = NKikimrStat::TEvAggregateStatisticsResponse::NonLocalTablet;
+        AggregationStatistics.FailedTablets.emplace_back(tabletId, nodeId, error);
+
+        SendRequestToNextTablet();
+
+        if (AggregationStatistics.IsCompleted()) {
+            OnAggregateStatisticsFinished();
+        }
+    }
+
+    void AggregateStatistics(const TAggregationStatistics::TColumnsStatistics& columnsStatistics) {
+        ++AggregationStatistics.TotalStatisticsResponse;
+
+        for (const auto& column : columnsStatistics) {
+            const auto tag = column.GetTag();
+
+            for (auto& statistic : column.GetStatistics()) {
+                if (statistic.GetType() == NKikimr::NStat::COUNT_MIN_SKETCH) {
+                    auto data = statistic.GetData().Data();
+                    auto sketch = reinterpret_cast<const TCountMinSketch*>(data);
+                    auto& current = AggregationStatistics.CountMinSketches[tag];
+
+                    if (current.Statistics == nullptr) {
+                        current.Statistics.reset(TCountMinSketch::Create());
+                    }
+
+                    ++current.ContainedInResponse;
+                    *current.Statistics += *sketch;
+                }
+            }
+        }
+    }
+
+    void Handle(TEvStatistics::TEvStatisticsResponse::TPtr& ev) {
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "Received TEvStatisticsResponse TabletId: " << ev->Get()->Record.GetShardTabletId());
+
+        const auto round = ev->Cookie;
+        const auto& record = ev->Get()->Record;
+        if (IsNotCurrentRound(round)
+            || !OnTabletFinished(record.GetShardTabletId())) {
+            return;
+        }
+
+        AggregateStatistics(record.GetColumns());
+
+        SendRequestToNextTablet();
+
+        if (AggregationStatistics.IsCompleted()) {
+            OnAggregateStatisticsFinished();
+        }
+    }
+
+    void Handle(TEvStatistics::TEvAggregateKeepAliveAck::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        const auto round = record.GetRound();
+        if (IsNotCurrentRound(round)) {
+            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                "Skip TEvAggregateKeepAliveAck");
+            return;
+        }
+
+        AggregationStatistics.LastAckHeartbeat = GetCycleCountFast();
+    }
+
+    void Handle(TEvPrivate::TEvKeepAliveAckTimeout::TPtr& ev) {
+        const auto round = ev->Get()->Round;
+        if (IsNotCurrentRound(round)) {
+            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                "Skip TEvKeepAliveAckTimeout");
+            return;
+        }
+
+        const auto maxDuration = DurationToCycles(Settings.AggregateKeepAliveAckTimeout);
+        const auto deadline = AggregationStatistics.LastAckHeartbeat + maxDuration;
+        const auto now = GetCycleCountFast();
+
+        if (deadline >= now) {
+            Schedule(Settings.AggregateKeepAliveAckTimeout, new TEvPrivate::TEvKeepAliveAckTimeout(round));
+            return;
+        }
+
+        // the parent node is unavailable
+        // invalidate the subtree with the root in the current node
+        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "Parent node " << AggregationStatistics.ParentNode.NodeId() << " is unavailable");
+
+        TAggregationStatistics aggregationStatistics(Settings.FanOutFactor);
+        std::swap(AggregationStatistics, aggregationStatistics);
+
+        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+    }
+
+    void Handle(TEvPrivate::TEvDispatchKeepAlive::TPtr& ev) {
+        const auto round = ev->Get()->Round;
+        if (IsNotCurrentRound(round)) {
+            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                "Skip TEvDispatchKeepAlive");
+            return;
+        }
+
+        auto keepAlive = std::make_unique<TEvStatistics::TEvAggregateKeepAlive>();
+        keepAlive->Record.SetRound(round);
+        Send(AggregationStatistics.ParentNode, keepAlive.release());
+        Schedule(Settings.AggregateKeepAlivePeriod, new TEvPrivate::TEvDispatchKeepAlive(round));
+    }
+
+    void Handle(TEvPrivate::TEvKeepAliveTimeout::TPtr& ev) {
+        const auto round = ev->Get()->Round;
+
+        if (IsNotCurrentRound(round)) {
+            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                "Skip TEvKeepAliveTimeout");
+            return;
+        }
+
+        const auto nodeId = ev->Get()->NodeId;
+        auto node = AggregationStatistics.GetProcessingChildNode(nodeId);
+
+        if (node == nullptr) {
+            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                "Skip TEvKeepAliveTimeout");
+            return;
+        }
+
+        const auto maxDuration = DurationToCycles(Settings.AggregateKeepAliveTimeout);
+        const auto deadline = node->LastHeartbeat + maxDuration;
+        const auto now = GetCycleCountFast();
+
+        if (deadline >= now) {
+            Schedule(Settings.AggregateKeepAliveTimeout, new TEvPrivate::TEvKeepAliveTimeout(round, nodeId));
+            return;
+        }
+
+        node->Status = TAggregationStatistics::TNode::EStatus::Unavailable;
+        ++AggregationStatistics.PprocessedNodes;
+        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "Node " << nodeId << " is unavailable");
+
+        if (AggregationStatistics.IsCompleted()) {
+            OnAggregateStatisticsFinished();
+        }
+    }
+
+    void Handle(TEvStatistics::TEvAggregateKeepAlive::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        const auto round = record.GetRound();
+
+        if (IsNotCurrentRound(round)) {
+            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                "Skip TEvAggregateKeepAlive");
+            return;
+        }
+
+        const auto nodeId = ev->Sender.NodeId();
+        auto node = AggregationStatistics.GetProcessingChildNode(nodeId);
+
+        if (node == nullptr) {
+            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                "Skip TEvAggregateKeepAlive");
+            return;
+        }
+
+        auto response = std::make_unique<TEvStatistics::TEvAggregateKeepAliveAck>();
+        response->Record.SetRound(round);
+        Send(ev->Sender, response.release());
+
+        node->LastHeartbeat = GetCycleCountFast();
+    }
+
+    void Handle(TEvStatistics::TEvAggregateStatisticsResponse::TPtr& ev) {
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "Received TEvAggregateStatisticsResponse SenderNodeId: " << ev->Sender.NodeId());
+
+        const auto& record = ev->Get()->Record;
+        const auto round = record.GetRound();
+
+        if (IsNotCurrentRound(round)) {
+            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                "Skip TEvAggregateStatisticsResponse");
+            return;
+        }
+
+        const auto nodeId = ev->Sender.NodeId();
+        auto node = AggregationStatistics.GetProcessingChildNode(nodeId);
+
+        if (node == nullptr) {
+            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                "Skip TEvAggregateStatisticsResponse");
+            return;
+        }
+
+        node->Status = TAggregationStatistics::TNode::EStatus::Processed;
+        ++AggregationStatistics.PprocessedNodes;
+
+        AggregateStatistics(record.GetColumns());
+
+        const auto size = AggregationStatistics.FailedTablets.size();
+        AggregationStatistics.FailedTablets.reserve(size + record.GetFailedTablets().size());
+
+        for (const auto& fail : record.GetFailedTablets()) {
+            AggregationStatistics.FailedTablets.emplace_back(
+                fail.GetTabletId(), fail.GetNodeId(), fail.GetError()
+            );
+        }
+
+        if (AggregationStatistics.IsCompleted()) {
+            OnAggregateStatisticsFinished();
+        }
+    }
+
+    void AddUnavailableTablets(const TAggregationStatistics::TNode& node,
+        NKikimrStat::TEvAggregateStatisticsResponse& response) {
+        if (node.Status != TAggregationStatistics::TNode::EStatus::Unavailable) {
+            return;
+        }
+
+        for (const auto& range : node.Tablets) {
+            for (const auto& tabletId : range.Ids) {
+                auto failedTablet = response.AddFailedTablets();
+                failedTablet->SetNodeId(range.NodeId);
+                failedTablet->SetTabletId(tabletId);
+                failedTablet->SetError(NKikimrStat::TEvAggregateStatisticsResponse::UnavailableNode);
+            }
+        }
+    }
+
+    void SendAggregateStatisticsResponse() {
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "Send aggregate statistics response to node: " << AggregationStatistics.ParentNode.NodeId());
+
+        auto response = std::make_unique<TEvStatistics::TEvAggregateStatisticsResponse>();
+        auto& record = response->Record;
+        record.SetRound(AggregationStatistics.Round);
+
+        const auto& countMinSketches = AggregationStatistics.CountMinSketches;
+
+        for (auto it = countMinSketches.begin(); it != countMinSketches.end(); ++it) {
+            if (it->second.ContainedInResponse != AggregationStatistics.TotalStatisticsResponse) {
+                continue;
+            }
+
+            auto column = record.AddColumns();
+            column->SetTag(it->first);
+
+            auto data = it->second.Statistics->AsStringBuf();
+            auto statistics = column->AddStatistics();
+            statistics->SetType(NKikimr::NStat::COUNT_MIN_SKETCH);
+            statistics->SetData(data.Data(), data.Size());
+        }
+
+        auto failedTablets = record.MutableFailedTablets();
+        failedTablets->Reserve(AggregationStatistics.FailedTablets.size());
+
+        for (const auto& fail : AggregationStatistics.FailedTablets) {
+            auto failedTablet = failedTablets->Add();
+            failedTablet->SetNodeId(fail.NodeId);
+            failedTablet->SetTabletId(fail.TabletId);
+            failedTablet->SetError(fail.Error);
+        }
+
+        for (auto& node : AggregationStatistics.Nodes) {
+            AddUnavailableTablets(node, record);
+        }
+
+        Send(AggregationStatistics.ParentNode, response.release(), 0, AggregationStatistics.Cookie);
+    }
+
+    void SendRequestToNode(TAggregationStatistics::TNode& node, const NKikimrStat::TEvAggregateStatistics& record) {
+        if (node.Tablets.empty()) {
+            node.Status = TAggregationStatistics::TNode::EStatus::Processed;
+            ++AggregationStatistics.PprocessedNodes;
+            return;
+        }
+
+        auto request = std::make_unique<TEvStatistics::TEvAggregateStatistics>();
+        request->Record.SetRound(AggregationStatistics.Round);
+        request->Record.MutableNodes()->Reserve(node.Tablets.size());
+
+        const auto& columnTags = record.GetColumnTags();
+        if (!columnTags.empty()) {
+            request->Record.MutableColumnTags()->Assign(columnTags.begin(), columnTags.end());
+        }
+
+        auto pathId = request->Record.MutablePathId();
+        pathId->SetOwnerId(AggregationStatistics.PathId.OwnerId);
+        pathId->SetLocalId(AggregationStatistics.PathId.LocalPathId);
+
+        for (const auto& range : node.Tablets) {
+            auto recordNode = request->Record.AddNodes();
+            recordNode->SetNodeId(range.NodeId);
+
+            auto tabletIds = recordNode->MutableTabletIds();
+            tabletIds->Reserve(range.Ids.size());
+
+            for (const auto& tabletId : range.Ids) {
+                tabletIds->Add(tabletId);
+            }
+        }
+
+        // sending the request to the first node of the range
+        const auto nodeId = node.Tablets[0].NodeId;
+        node.Actor = MakeStatServiceID(nodeId);
+        node.Status = TAggregationStatistics::TNode::EStatus::Processing;
+
+        Send(node.Actor, request.release());
+        Schedule(Settings.AggregateKeepAliveTimeout,
+                new TEvPrivate::TEvKeepAliveTimeout(AggregationStatistics.Round, nodeId));
+    }
+
+    void Handle(TEvStatistics::TEvAggregateStatistics::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        const auto round = record.GetRound();
+
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "Received TEvAggregateStatistics from node: " << ev->Sender.NodeId()
+            << ", Round: " << round << ", current Round: " << AggregationStatistics.Round);
+
+        // reset previous state
+        if (AggregationStatistics.Round != 0) {
+            TAggregationStatistics aggregationStatistics(Settings.FanOutFactor);
+            std::swap(AggregationStatistics, aggregationStatistics);
+        }
+
+        AggregationStatistics.Round = round;
+        AggregationStatistics.Cookie = ev->Cookie;
+        AggregationStatistics.ParentNode = ev->Sender;
+
+        // schedule keep alive with the parent node
+        Schedule(Settings.AggregateKeepAlivePeriod, new TEvPrivate::TEvDispatchKeepAlive(round));
+
+        const auto& pathId = record.GetPathId();
+        AggregationStatistics.PathId.OwnerId = pathId.GetOwnerId();
+        AggregationStatistics.PathId.LocalPathId = pathId.GetLocalId();
+
+        for (const auto tag : record.GetColumnTags()) {
+            AggregationStatistics.ColumnTags.emplace_back(tag);
+        }
+
+        const auto currentNodeId = ev->Recipient.NodeId();
+        const auto& nodes = record.GetNodes();
+
+        // divide the entire range of nodes into two parts,
+        // forming the right and left child nodes
+        size_t k = 0;
+        for (const auto& node : nodes) {
+            ++k;
+
+            if (node.GetNodeId() == currentNodeId) {
+                AggregationStatistics.LocalTablets.Ids.reserve(node.GetTabletIds().size());
+
+                for (const auto& tabletId : node.GetTabletIds()) {
+                    AggregationStatistics.LocalTablets.Ids.push_back(tabletId);
+                }
+                continue;
+            }
+
+            TAggregationStatistics::TTablets nodeTablets;
+            nodeTablets.NodeId = node.GetNodeId();
+            nodeTablets.Ids.reserve(node.GetTabletIds().size());
+            for (const auto& tabletId : node.GetTabletIds()) {
+                nodeTablets.Ids.push_back(tabletId);
+            }
+
+            AggregationStatistics.Nodes[k % Settings.FanOutFactor].Tablets.push_back(std::move(nodeTablets));
+        }
+
+        for (auto& node : AggregationStatistics.Nodes) {
+            SendRequestToNode(node, record);
+        }
+
+        // to check the locality of the tablets,
+        // send requests to receive the IDs of the nodes
+        // where the tablets are located
+        auto& localTablets = AggregationStatistics.LocalTablets;
+        const auto count = std::min(Settings.MaxInFlightTabletRequests,
+                                    localTablets.Ids.size());
+        for (size_t i = 0; i < count; ++i) {
+            SendRequestToNextTablet();
+        }
     }
 
     void Handle(TEvStatistics::TEvGetStatistics::TPtr& ev) {
@@ -837,6 +1465,9 @@ private:
     }
 
 private:
+    TStatServiceSettings Settings;
+    TAggregationStatistics AggregationStatistics;
+
     bool EnableStatistics = false;
     bool EnableColumnStatistics = false;
 
@@ -884,8 +1515,8 @@ private:
     static constexpr TDuration RequestTimeout = TDuration::MilliSeconds(100);
 };
 
-THolder<IActor> CreateStatService() {
-    return MakeHolder<TStatService>();
+THolder<IActor> CreateStatService(const TStatServiceSettings& settings) {
+    return MakeHolder<TStatService>(settings);
 }
 
 } // NStat

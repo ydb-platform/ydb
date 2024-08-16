@@ -7,7 +7,8 @@
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/mvp/core/mvp_test_runtime.h>
 #include "oidc_protected_page.h"
-#include "oidc_session_create.h"
+#include "oidc_protected_page_handler.h"
+#include "oidc_session_create_handler.h"
 
 namespace {
 
@@ -22,7 +23,7 @@ void EatWholeString(TIntrusivePtr<HttpType>& request, const TString& data) {
 }
 
 Y_UNIT_TEST_SUITE(Mvp) {
-    Y_UNIT_TEST(OpenIdConnectRequestWithIamToken) {
+    void OpenIdConnectRequestWithIamTokenTest(NMVP::EAuthProfile profile) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -32,7 +33,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AllowedProxyHosts = {allowedProxyHost}
+            .AllowedProxyHosts = {allowedProxyHost},
+            .AuthProfile = profile
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
@@ -41,7 +43,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         const TString iamToken {"protected_page_iam_token"};
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, "GET /" + allowedProxyHost + "/counters HTTP/1.1\r\n"
-                                "Host: oidcproxy.yandex.net\r\n"
+                                "Host: oidcproxy.net\r\n"
                                 "Authorization: Bearer " + iamToken + "\r\n");
         runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
         TAutoPtr<IEventHandle> handle;
@@ -59,7 +61,15 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Body, "this is test.");
     }
 
-    Y_UNIT_TEST(OpenIdConnectNonAuthorizeRequestWithOptionMethod) {
+    Y_UNIT_TEST(OpenIdConnectRequestWithIamTokenYandex) {
+        OpenIdConnectRequestWithIamTokenTest(NMVP::EAuthProfile::Yandex);
+    }
+
+    Y_UNIT_TEST(OpenIdConnectRequestWithIamTokenNebius) {
+        OpenIdConnectRequestWithIamTokenTest(NMVP::EAuthProfile::Nebius);
+    }
+
+    void OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAuthProfile profile) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -69,7 +79,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AllowedProxyHosts = {allowedProxyHost}
+            .AllowedProxyHosts = {allowedProxyHost},
+            .AuthProfile = profile
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
@@ -77,7 +88,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, "OPTIONS /" + allowedProxyHost + "/counters HTTP/1.1\r\n"
-                                "Host: oidcproxy.yandex.net\r\n");
+                                "Host: oidcproxy.net\r\n");
         runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
         TAutoPtr<IEventHandle> handle;
 
@@ -103,7 +114,15 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_STRINGS_EQUAL(headers.Get("Access-Control-Allow-Credentials"), "true");
     }
 
-    Y_UNIT_TEST(OpenIdConnectSessionServiceCheckValidCookie) {
+    Y_UNIT_TEST(OpenIdConnectNonAuthorizeRequestWithOptionMethodYandex) {
+        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAuthProfile::Yandex);
+    }
+
+    Y_UNIT_TEST(OpenIdConnectNonAuthorizeRequestWithOptionMethodNebius) {
+        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAuthProfile::Nebius);
+    }
+
+    void OpenIdConnectSessionServiceCheckValidCookieTest(NMVP::EAuthProfile profile) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -113,7 +132,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AllowedProxyHosts = {allowedProxyHost}
+            .AllowedProxyHosts = {allowedProxyHost},
+            .AuthProfile = profile
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
@@ -127,7 +147,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, "GET /" + allowedProxyHost + "/counters HTTP/1.1\r\n"
-                                "Host: oidcproxy.yandex.net\r\n"
+                                "Host: oidcproxy.net\r\n"
                                 "Cookie: yc_session=allowed_session_cookie\r\n\r\n");
         runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
         TAutoPtr<IEventHandle> handle;
@@ -145,6 +165,14 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Body, "this is test.");
     }
 
+    Y_UNIT_TEST(OpenIdConnectSessionServiceCheckValidCookieYandex) {
+        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAuthProfile::Yandex);
+    }
+
+    Y_UNIT_TEST(OpenIdConnectSessionServiceCheckValidCookieNebius) {
+        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAuthProfile::Nebius);
+    }
+
     Y_UNIT_TEST(OpenIdConnectProxyOnHttpsHost) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
@@ -155,7 +183,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AllowedProxyHosts = {allowedProxyHost}
+            .AllowedProxyHosts = {allowedProxyHost},
+            .AuthProfile = NMVP::EAuthProfile::Yandex
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
@@ -169,7 +198,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, "GET /" + allowedProxyHost + "/counters HTTP/1.1\r\n"
-                                "Host: oidcproxy.yandex.net\r\n"
+                                "Host: oidcproxy.net\r\n"
                                 "Cookie: yc_session=allowed_session_cookie\r\n\r\n");
         runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
         TAutoPtr<IEventHandle> handle;
@@ -205,6 +234,69 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Body, "this is test");
     }
 
+
+    Y_UNIT_TEST(OpenIdConnectExchangeNebius) {
+        TPortManager tp;
+        ui16 sessionServicePort = tp.GetPort(8655);
+        TMvpTestRuntime runtime;
+        runtime.Initialize();
+
+        const TString allowedProxyHost {"ydb.viewer.page"};
+
+        TOpenIdConnectSettings settings {
+            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
+            .AuthorizationServerAddress = "https://auth.test.net",
+            .AllowedProxyHosts = {allowedProxyHost},
+            .AuthProfile = NMVP::EAuthProfile::Nebius
+        };
+
+        const NActors::TActorId edge = runtime.AllocateEdgeActor();
+        const NActors::TActorId target = runtime.Register(new NMVP::TProtectedPageHandler(edge, settings));
+
+        TSessionServiceMock sessionServiceMock;
+        sessionServiceMock.AllowedCookies.second = "allowed_session_cookie";
+        grpc::ServerBuilder builder;
+        builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
+        std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
+
+        NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
+        EatWholeString(incomingRequest, "GET /" + allowedProxyHost + "/counters HTTP/1.1\r\n"
+                                "Host: oidcproxy.net\r\n"
+                                "Cookie: yc_session=allowed_session_cookie;"
+                                + CreateSecureCookie(settings.ClientId, "session_cookie") + "\r\n\r\n");
+        runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
+        TAutoPtr<IEventHandle> handle;
+
+        auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, "auth.test.net");
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/oauth2/session/exchange");
+        UNIT_ASSERT_EQUAL(outgoingRequestEv->Request->Secure, true);
+        NHttp::THttpIncomingResponsePtr incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
+        TString okResponseBody {"{\"access_token\": \"access_token\"}"};
+        EatWholeString(incomingResponse, "HTTP/1.1 200 OK\r\n"
+                                         "Connection: close\r\n"
+                                         "Content-Type: text/html\r\n"
+                                         "Content-Length: " + ToString(okResponseBody.size()) + "\r\n\r\n" + okResponseBody);
+        runtime.Send(new IEventHandle(handle->Sender, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(outgoingRequestEv->Request, incomingResponse)));
+
+        outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, allowedProxyHost);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/counters");
+        UNIT_ASSERT_STRING_CONTAINS(outgoingRequestEv->Request->Headers, "Authorization: Bearer access_token");
+        UNIT_ASSERT_EQUAL(outgoingRequestEv->Request->Secure, false);
+        incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
+        okResponseBody = "this is test";
+        EatWholeString(incomingResponse, "HTTP/1.1 200 OK\r\n"
+                                         "Connection: close\r\n"
+                                         "Content-Type: text/html\r\n"
+                                         "Content-Length: " + ToString(okResponseBody.size()) + "\r\n\r\n" + okResponseBody);
+
+        runtime.Send(new IEventHandle(handle->Sender, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(outgoingRequestEv->Request, incomingResponse)));
+        auto outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "200");
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Body, "this is test");
+    }
+
     Y_UNIT_TEST(OpenIdConnectSessionServiceCheckAuthorizationFail) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
@@ -230,7 +322,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
         EatWholeString(request, "GET /" + allowedProxyHost + "/counters HTTP/1.1\r\n"
-                                "Host: oidcproxy.yandex.net\r\n"
+                                "Host: oidcproxy.net\r\n"
                                 "Cookie: yc_session=allowed_session_cookie\r\n\r\n");
         runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
         TAutoPtr<IEventHandle> handle;
@@ -356,8 +448,9 @@ Y_UNIT_TEST_SUITE(Mvp) {
         const TString allowedProxyHost {"ydb.viewer.page"};
 
         TOpenIdConnectSettings settings {
+            .ClientId = "client_id",
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AuthorizationServerAddress = "https://auth.cloud.yandex.ru",
+            .AuthorizationServerAddress = "https://auth.test.net",
             .ClientSecret = "0123456789abcdef",
             .AllowedProxyHosts = {allowedProxyHost}
         };
@@ -375,7 +468,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         incomingRequest->Endpoint->Secure = true;
 
-        const TString hostProxy = "oidcproxy.yandex.net";
+        const TString hostProxy = "oidcproxy.net";
         const TString protectedPage = "/" + allowedProxyHost + "/counters";
 
         EatWholeString(incomingRequest, redirectStrategy.CreateRequest("GET " + protectedPage + " HTTP/1.1\r\n"
@@ -388,10 +481,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
         NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         redirectStrategy.CheckRedirectStatus(outgoingResponseEv);
         TString location = redirectStrategy.GetRedirectUrl(outgoingResponseEv);
-        UNIT_ASSERT_STRING_CONTAINS(location, "https://auth.cloud.yandex.ru/oauth/authorize");
+        UNIT_ASSERT_STRING_CONTAINS(location, "https://auth.test.net/oauth/authorize");
         UNIT_ASSERT_STRING_CONTAINS(location, "response_type=code");
         UNIT_ASSERT_STRING_CONTAINS(location, "scope=openid");
-        UNIT_ASSERT_STRING_CONTAINS(location, "client_id=" + TOpenIdConnectSettings::CLIENT_ID);
+        UNIT_ASSERT_STRING_CONTAINS(location, "client_id=" + settings.ClientId);
         UNIT_ASSERT_STRING_CONTAINS(location, "redirect_uri=https://" + hostProxy + "/auth/callback");
 
         NHttp::TUrlParameters urlParameters(location);
@@ -403,7 +496,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_STRING_CONTAINS(setCookie, CreateNameYdbOidcCookie(settings.ClientSecret, state));
         redirectStrategy.CheckSpecificHeaders(headers);
 
-        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreator(edge, settings));
+        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreateHandler(edge, settings));
         incomingRequest = new NHttp::THttpIncomingRequest();
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template&state=" << state << " HTTP/1.1\r\n";
@@ -474,8 +567,9 @@ Y_UNIT_TEST_SUITE(Mvp) {
         runtime.Initialize();
 
         TOpenIdConnectSettings settings {
+            .ClientId = "client_id",
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AuthorizationServerAddress = "https://auth.cloud.yandex.ru",
+            .AuthorizationServerAddress = "https://auth.test.net",
             .ClientSecret = "0123456789abcdef"
         };
 
@@ -487,10 +581,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
         builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
-        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreator(edge, settings));
+        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreateHandler(edge, settings));
         const TString state = "test_state";
         const TString wrongState = "wrong_state";
-        const TString hostProxy = "oidcproxy.yandex.net";
+        const TString hostProxy = "oidcproxy.net";
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template&state=" << state << " HTTP/1.1\r\n";
         request << "Host: " + hostProxy + "\r\n";
@@ -506,10 +600,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
         const NHttp::THeaders headers(outgoingResponseEv->Response->Headers);
         UNIT_ASSERT(headers.Has("Location"));
         TString location = TString(headers.Get("Location"));
-        UNIT_ASSERT_STRING_CONTAINS(location, "https://auth.cloud.yandex.ru/oauth/authorize");
+        UNIT_ASSERT_STRING_CONTAINS(location, "https://auth.test.net/oauth/authorize");
         UNIT_ASSERT_STRING_CONTAINS(location, "response_type=code");
         UNIT_ASSERT_STRING_CONTAINS(location, "scope=openid");
-        UNIT_ASSERT_STRING_CONTAINS(location, "client_id=" + TOpenIdConnectSettings::CLIENT_ID);
+        UNIT_ASSERT_STRING_CONTAINS(location, "client_id=" + settings.ClientId);
         UNIT_ASSERT_STRING_CONTAINS(location, "redirect_uri=https://" + hostProxy + "/auth/callback");
     }
 
@@ -531,12 +625,12 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AuthorizationServerAddress = "https://auth.cloud.yandex.ru",
+            .AuthorizationServerAddress = "https://auth.test.net",
             .ClientSecret = "123456789abcdef"
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
-        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreator(edge, settings));
+        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreateHandler(edge, settings));
 
         TSessionServiceMock sessionServiceMock;
         sessionServiceMock.IsTokenAllowed = false;
@@ -547,7 +641,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         const TString state = "test_state";
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template&state=" << state << " HTTP/1.1\r\n";
-        request << "Host: oidcproxy.yandex.net\r\n";
+        request << "Host: oidcproxy.net\r\n";
         const TString oidcCookie = CreateNameYdbOidcCookie(settings.ClientSecret, state);
         request << "Cookie: " << oidcCookie << "=" << GenerateCookie(state, "/requested/page", settings.ClientSecret, false) << "\r\n\r\n";
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
@@ -582,8 +676,9 @@ Y_UNIT_TEST_SUITE(Mvp) {
         runtime.Initialize();
 
         TOpenIdConnectSettings settings {
+            .ClientId = "client_id",
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AuthorizationServerAddress = "https://auth.cloud.yandex.ru",
+            .AuthorizationServerAddress = "https://auth.test.net",
             .ClientSecret = "123456789abcdef"
         };
 
@@ -595,11 +690,11 @@ Y_UNIT_TEST_SUITE(Mvp) {
         builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
-        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreator(edge, settings));
+        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreateHandler(edge, settings));
         const TString state = "test_state";
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template&state=" << state << " HTTP/1.1\r\n";
-        request << "Host: oidcproxy.yandex.net\r\n";
+        request << "Host: oidcproxy.net\r\n";
         request << "Cookie: " << CreateNameYdbOidcCookie(settings.ClientSecret, state) << "=" << GenerateCookie(state, "/requested/page", settings.ClientSecret, redirectStrategy.IsAjaxRequest()) << "\r\n";
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, redirectStrategy.CreateRequest(request));
@@ -622,11 +717,11 @@ Y_UNIT_TEST_SUITE(Mvp) {
         auto outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         redirectStrategy.CheckRedirectStatus(outgoingResponseEv);
         TString location = redirectStrategy.GetRedirectUrl(outgoingResponseEv);
-        UNIT_ASSERT_STRING_CONTAINS(location, "https://auth.cloud.yandex.ru/oauth/authorize");
+        UNIT_ASSERT_STRING_CONTAINS(location, "https://auth.test.net/oauth/authorize");
         UNIT_ASSERT_STRING_CONTAINS(location, "response_type=code");
         UNIT_ASSERT_STRING_CONTAINS(location, "scope=openid");
-        UNIT_ASSERT_STRING_CONTAINS(location, "client_id=" + TOpenIdConnectSettings::CLIENT_ID);
-        UNIT_ASSERT_STRING_CONTAINS(location, "redirect_uri=https://oidcproxy.yandex.net/auth/callback");
+        UNIT_ASSERT_STRING_CONTAINS(location, "client_id=" + settings.ClientId);
+        UNIT_ASSERT_STRING_CONTAINS(location, "redirect_uri=https://oidcproxy.net/auth/callback");
 
         NHttp::TUrlParameters urlParameters(location);
         const TString newState = urlParameters["state"];
@@ -656,12 +751,12 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AuthorizationServerAddress = "https://auth.cloud.yandex.ru",
+            .AuthorizationServerAddress = "https://auth.test.net",
             .ClientSecret = "123456789abcdef"
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
-        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreator(edge, settings));
+        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreateHandler(edge, settings));
 
         TSessionServiceMock sessionServiceMock;
         sessionServiceMock.IsOpenIdScopeMissed = true;
@@ -672,7 +767,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         const TString state = "test_state";
         TStringBuilder request;
         request << "GET /callback?code=code_template&state=" << state << " HTTP/1.1\r\n";
-        request << "Host: oidcproxy.yandex.net\r\n";
+        request << "Host: oidcproxy.net\r\n";
         const TString oidcCookie = CreateNameYdbOidcCookie(settings.ClientSecret, state);
         request << "Cookie: " << oidcCookie << "=" << GenerateCookie(state, "/requested/page", settings.ClientSecret, false) << "\r\n\r\n";
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
@@ -708,7 +803,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AuthorizationServerAddress = "https://auth.cloud.yandex.ru",
+            .AuthorizationServerAddress = "https://auth.test.net",
             .ClientSecret = "123456789abcdef"
         };
 
@@ -720,14 +815,14 @@ Y_UNIT_TEST_SUITE(Mvp) {
         builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
-        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreator(edge, settings));
+        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreateHandler(edge, settings));
         TStringBuf firstRequestState = "first_request_state";
         TStringBuf secondRequestState = "second_request_state";
         TString firstCookie {CreateNameYdbOidcCookie(settings.ClientSecret, firstRequestState) + "=" + GenerateCookie(firstRequestState, "/requested/page", settings.ClientSecret, redirectStrategy.IsAjaxRequest())};
         TString secondCookie {CreateNameYdbOidcCookie(settings.ClientSecret, secondRequestState) + "=" + GenerateCookie(secondRequestState, "/requested/page", settings.ClientSecret, redirectStrategy.IsAjaxRequest())};
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template&state=" << firstRequestState << " HTTP/1.1\r\n";
-        request << "Host: oidcproxy.yandex.net\r\n";
+        request << "Host: oidcproxy.net\r\n";
         request << "Cookie: " << firstCookie << "; " << secondCookie << "\r\n";
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, redirectStrategy.CreateRequest(request));
@@ -770,7 +865,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AuthorizationServerAddress = "https://auth.cloud.yandex.ru",
+            .AuthorizationServerAddress = "https://auth.test.net",
             .ClientSecret = "0123456789abcdef",
             .AllowedProxyHosts = {
                 "*.viewer.page",
@@ -788,7 +883,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
-        const TString hostProxy = "oidcproxy.yandex.net";
+        const TString hostProxy = "oidcproxy.net";
         const TString protectedPage = "/counters";
 
         auto checkAllowedHostList = [&] (const TString& requestedHost, const TString& expectedStatus) {

@@ -1818,6 +1818,32 @@ void TBalancer::Handle(TEvPQ::TEvBalanceConsumer::TPtr& ev, const TActorContext&
     }
 }
 
+void TBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) {
+    struct TData {
+        ui32 Generation;
+        ui64 Cookie;
+        const TString& Consumer;
+    };
+
+    std::unordered_map<ui32, std::vector<TData>> index;
+
+    const auto& record = ev->Get()->Record;
+    for (const auto& partResult : record.GetPartResult()) {
+        for (const auto& consumerResult : partResult.GetConsumerResult()) {
+            if (consumerResult.GetReadingFinished()) {
+                index[partResult.GetPartition()].push_back(TData{partResult.GetGeneration(), partResult.GetCookie(), consumerResult.GetConsumer()});
+            }
+        }
+    }
+
+    GetPartitionGraph().Travers([&](ui32 id) {
+        for (auto& d : index[id]) {
+            SetCommittedState(d.Consumer, id, d.Generation, d.Cookie, ctx);
+        }
+        return true;
+    });
+}
+
 TString TBalancer::GetPrefix() const {
     return TStringBuilder() << "balancer: [" << TopicActor.TabletID() << "] topic " << Topic() << " ";
 }

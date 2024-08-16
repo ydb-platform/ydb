@@ -33,6 +33,9 @@ namespace {
         } else if (input.Ptr()->IsCallable("FromPg")) {
             auto child = TExprBase(input.Ptr()->ChildRef(0));
             return IsAttribute(child, attributeName);
+        } else if (auto exists = input.Maybe<TCoExists>()) {
+            auto child = TExprBase(input.Ptr()->ChildRef(0));
+            return IsAttribute(child, attributeName);
         }
 
         return false;
@@ -182,30 +185,47 @@ namespace {
     }
 }
 
+template<typename T>
+TExprNode::TPtr FindNode(const TExprBase& input) {
+    for (const auto& child : input.Ptr()->Children()) {
+        if (TExprBase(child).Maybe<T>()) {
+            return child;
+        }
+
+        auto tmp = FindNode<T>(TExprBase(child));
+        if (tmp != nullptr) {
+            return tmp;
+        }
+    }
+
+    return nullptr;
+}
+
 /**
  * Compute the selectivity of a predicate given statistics about the input it operates on
  */
 double NYql::NDq::ComputePredicateSelectivity(const TExprBase& input, const std::shared_ptr<TOptimizerStatistics>& stats) {
-    double result = 1.0;
+    std::optional<double> resSelectivity;
 
     // Process OptionalIf, just return the predicate statistics
     if (auto optIf = input.Maybe<TCoOptionalIf>()) {
-        result = ComputePredicateSelectivity(optIf.Cast().Predicate(), stats);
+        resSelectivity = ComputePredicateSelectivity(optIf.Cast().Predicate(), stats);
     }
 
     // Same with Coalesce
     else if (auto coalesce = input.Maybe<TCoCoalesce>()) {
-        result = ComputePredicateSelectivity(coalesce.Cast().Predicate(), stats);
+        resSelectivity = ComputePredicateSelectivity(coalesce.Cast().Predicate(), stats);
     }
 
-    else if (input.Ptr()->IsCallable("FromPg")) {
+    else if (
+        input.Ptr()->IsCallable("FromPg") ||
+        input.Ptr()->IsCallable("Exists") ||
+        input.Ptr()->IsCallable("AssumeStrict") ||
+        input.Ptr()->IsCallable("Apply") ||
+        input.Ptr()->IsCallable("Udf")
+    ) {
         auto child = TExprBase(input.Ptr()->ChildRef(0));
-        result = ComputePredicateSelectivity(child, stats);
-    }
-
-    else if (input.Ptr()->IsCallable("Exists")) {
-        auto child = TExprBase(input.Ptr()->ChildRef(0));
-        result = ComputePredicateSelectivity(child, stats);
+        resSelectivity = ComputePredicateSelectivity(child, stats);
     }
 
     else if(input.Ptr()->IsCallable("Find") || input.Ptr()->IsCallable("StringContains")) {
@@ -214,7 +234,7 @@ double NYql::NDq::ComputePredicateSelectivity(const TExprBase& input, const std:
 
         TString attributeName;
         if (IsAttribute(member, attributeName) && IsConstantExpr(stringPred.Ptr())) {
-            result = 0.1;
+            resSelectivity = 0.1;
         }
     }
 
@@ -224,20 +244,20 @@ double NYql::NDq::ComputePredicateSelectivity(const TExprBase& input, const std:
     // In case of NOT we subtract the argument's selectivity from 1.0
 
     else if (auto andNode = input.Maybe<TCoAnd>()) {
-        double res = 1.0;
+        double tmpSelectivity = 1.0;
         for (size_t i = 0; i < andNode.Cast().ArgCount(); i++) {
-            res *= ComputePredicateSelectivity(andNode.Cast().Arg(i), stats);
+            tmpSelectivity *= ComputePredicateSelectivity(andNode.Cast().Arg(i), stats);
         }
-        result = res;
+        resSelectivity = tmpSelectivity;
     } else if (auto orNode = input.Maybe<TCoOr>()) {
-        double res = 0.0;
+        double tmpSelectivity = 0.0;
         for (size_t i = 0; i < orNode.Cast().ArgCount(); i++) {
-            res += ComputePredicateSelectivity(orNode.Cast().Arg(i), stats);
+            tmpSelectivity += ComputePredicateSelectivity(orNode.Cast().Arg(i), stats);
         }
-        result = std::max(res, 1.0);
+        resSelectivity = tmpSelectivity;
     } else if (auto notNode = input.Maybe<TCoNot>()) {
         double argSel = ComputePredicateSelectivity(notNode.Cast().Value(), stats);
-        result = 1.0 - (argSel == 1.0 ? 0.95 : argSel);
+        resSelectivity = 1.0 - (argSel == 1.0 ? 0.95 : argSel);
     }
 
     // Process the equality predicate
@@ -245,14 +265,14 @@ double NYql::NDq::ComputePredicateSelectivity(const TExprBase& input, const std:
         auto left = equality.Cast().Left();
         auto right = equality.Cast().Right();
 
-        result = ComputeEqualitySelectivity(left, right, stats);
+        resSelectivity = ComputeEqualitySelectivity(left, right, stats);
     }
 
     else if (input.Ptr()->IsCallable("PgResolvedOp") && input.Ptr()->ChildPtr(0)->Content()=="=") {
         auto left = TExprBase(input.Ptr()->ChildPtr(2));
         auto right = TExprBase(input.Ptr()->ChildPtr(3));
 
-        result = ComputeEqualitySelectivity(left, right, stats);
+        resSelectivity = ComputeEqualitySelectivity(left, right, stats);
     }
 
     // Process the not equal predicate
@@ -261,7 +281,7 @@ double NYql::NDq::ComputePredicateSelectivity(const TExprBase& input, const std:
         auto right = equality.Cast().Right();
 
         double eqSel = ComputeEqualitySelectivity(left, right, stats);
-        result = 1.0 - (eqSel == 1.0 ? 0.95 : eqSel);
+        resSelectivity = 1.0 - (eqSel == 1.0 ? 0.95 : eqSel);
     }
 
     else if (input.Ptr()->IsCallable("PgResolvedOp") && input.Ptr()->ChildPtr(0)->Content()=="<>") {
@@ -269,7 +289,7 @@ double NYql::NDq::ComputePredicateSelectivity(const TExprBase& input, const std:
         auto right = TExprBase(input.Ptr()->ChildPtr(3));
 
         double eqSel = ComputeEqualitySelectivity(left, right, stats);
-        result = 1.0 - (eqSel == 1.0 ? 0.95 : eqSel);
+        resSelectivity = 1.0 - (eqSel == 1.0 ? 0.95 : eqSel);
     }
 
     // Process all other comparison predicates
@@ -277,39 +297,62 @@ double NYql::NDq::ComputePredicateSelectivity(const TExprBase& input, const std:
         auto left = comparison.Cast().Left();
         auto right = comparison.Cast().Right();
 
-        result = ComputeComparisonSelectivity(left, right, stats);
+        resSelectivity = ComputeComparisonSelectivity(left, right, stats);
     }
 
     else if (input.Ptr()->IsCallable("PgResolvedOp") && PgInequalityPreds.contains(input.Ptr()->ChildPtr(0)->Content())){
         auto left = TExprBase(input.Ptr()->ChildPtr(2));
         auto right = TExprBase(input.Ptr()->ChildPtr(3));
 
-        result = ComputeComparisonSelectivity(left, right, stats);
+        resSelectivity = ComputeComparisonSelectivity(left, right, stats);
     }
 
     // Process SqlIn
     else if(input.Ptr()->IsCallable("SqlIn")) {
-        auto left = TExprBase(input.Ptr()->ChildPtr(0));
-        auto right = TExprBase(input.Ptr()->ChildPtr(1));
+        auto list = input.Ptr()->ChildPtr(0);
 
-        TString attributeName;
-
-        if (IsAttribute(right, attributeName) && IsConstantExpr(left.Ptr())) {
-            std::swap(left, right);
+        double tmpSelectivity = 0.0;
+        auto lhs = TExprBase(input.Ptr()->ChildPtr(1));
+        for (const auto& child: list->Children()) {
+            TExprBase rhs = TExprBase(child);
+            tmpSelectivity += ComputeEqualitySelectivity(lhs, rhs, stats);
         }
+        resSelectivity = tmpSelectivity;
+    }
 
-        if (IsAttribute(left, attributeName) && IsConstantExpr(right.Ptr())) {
-            if (right.Ptr()->IsCallable("AsList")) {
-                auto size = right.Ptr()->Child(0)->ChildrenSize();
-                if (stats->KeyColumns && stats->KeyColumns->Data.size()==1 && attributeName==stats->KeyColumns->Data[0]) {
-                    result = size / stats->Nrows;
-                } else {
-                    result = 0.1 + 0.2 / (1 + std::exp(size));
+    else if (input.Maybe<TCoAtom>()) {
+        auto atom = input.Cast<TCoAtom>();
+        // regexp
+        if (atom.StringValue().StartsWith("Re2")) {
+            resSelectivity = 0.5;
+        }
+    }
+
+    else if (auto maybeIfExpr = input.Maybe<TCoIf>()) {
+        auto ifExpr = maybeIfExpr.Cast();
+        
+        // attr in ('a', 'b', 'c' ...)
+        if (ifExpr.Predicate().Maybe<TCoExists>() && ifExpr.ThenValue().Maybe<TCoJust>() && ifExpr.ElseValue().Maybe<TCoNothing>()) {
+            auto list = FindNode<TExprList>(ifExpr.ThenValue());
+
+            if (list != nullptr) {
+                double tmpSelectivity = 0.0;
+                TExprBase lhs = ifExpr.Predicate();
+                for (const auto& child: list->Children()) {
+                    TExprBase rhs = TExprBase(child);
+                    tmpSelectivity += ComputeEqualitySelectivity(lhs, rhs, stats);
                 }
 
+                resSelectivity = tmpSelectivity;
             }
         }
     }
 
-    return result;
+    if (!resSelectivity.has_value()) {
+        auto dumped = input.Raw()->Dump();
+        YQL_CLOG(WARN, CoreDq) << "ComputePredicateSelectivity NOT FOUND : " << dumped;
+        return 1.0;
+    }
+
+    return std::min(1.0, resSelectivity.value());
 }

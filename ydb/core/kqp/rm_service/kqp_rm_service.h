@@ -94,6 +94,7 @@ public:
 
     virtual void FreeResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
     virtual void FreeResources(ui64 txId, ui64 taskId) = 0;
+    virtual TString GetTxResourcesUsageDebugInfo(ui64 txId) = 0;
 
     virtual void NotifyExternalResourcesAllocated(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
 

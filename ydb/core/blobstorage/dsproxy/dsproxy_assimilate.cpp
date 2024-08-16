@@ -2,7 +2,7 @@
 
 namespace NKikimr {
 
-class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor<TBlobStorageGroupAssimilateRequest> {
+class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor {
     std::optional<ui64> SkipBlocksUpTo;
     std::optional<std::tuple<ui64, ui8>> SkipBarriersUpTo;
     std::optional<TLogoBlobID> SkipBlobsUpTo;
@@ -256,12 +256,12 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor<
     ui32 RequestsInFlight = 0;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType(){
-        return NKikimrServices::TActivity::BS_GROUP_ASSIMILATE;
+    ::NMonitoring::TDynamicCounters::TCounterPtr& GetActiveCounter() const override {
+        return Mon->ActiveAssimilate;
     }
 
-    static const auto& ActiveCounter(const TIntrusivePtr<TBlobStorageGroupProxyMon>& mon) {
-        return mon->ActiveAssimilate;
+    ERequestType GetRequestType() const override {
+        return ERequestType::Assimilate;
     }
 
     TBlobStorageGroupAssimilateRequest(const TIntrusivePtr<TBlobStorageGroupInfo>& info,
@@ -270,7 +270,8 @@ public:
             NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters>& storagePoolCounters)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
             NKikimrServices::BS_PROXY_ASSIMILATE, false, {}, now, storagePoolCounters, ev->RestartCounter,
-            std::move(traceId), "DSProxy.Assimilate", ev, std::move(ev->ExecutionRelay))
+            std::move(traceId), "DSProxy.Assimilate", ev, std::move(ev->ExecutionRelay),
+            NKikimrServices::TActivity::BS_GROUP_ASSIMILATE)
         , SkipBlocksUpTo(ev->SkipBlocksUpTo)
         , SkipBarriersUpTo(ev->SkipBarriersUpTo)
         , SkipBlobsUpTo(ev->SkipBlobsUpTo)
@@ -280,13 +281,13 @@ public:
         Heap.reserve(PerVDiskInfo.size());
     }
 
-    void Bootstrap() {
+    void Bootstrap() override {
         A_LOG_INFO_S("BPA01", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
             << " RestartCounter# " << RestartCounter);
 
-        Become(&TThis::StateWork, TDuration::Seconds(10), new TEvents::TEvWakeup);
+        Become(&TBlobStorageGroupAssimilateRequest::StateWork, TDuration::Seconds(10), new TEvents::TEvWakeup);
 
         for (ui32 i = 0; i < PerVDiskInfo.size(); ++i) {
             Request(i);
@@ -326,7 +327,7 @@ public:
     }
 
     void Handle(TEvBlobStorage::TEvVAssimilateResult::TPtr ev) {
-        ProcessReplyFromQueue(ev);
+        ProcessReplyFromQueue(ev->Get());
 
         const auto& record = ev->Get()->Record;
         const TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
@@ -443,14 +444,14 @@ public:
         }
     }
 
-    std::unique_ptr<IEventBase> RestartQuery(ui32 counter) {
+    std::unique_ptr<IEventBase> RestartQuery(ui32 counter) override {
         ++*Mon->NodeMon->RestartAssimilate;
         auto ev = std::make_unique<TEvBlobStorage::TEvAssimilate>(SkipBlocksUpTo, SkipBarriersUpTo, SkipBlobsUpTo);
         ev->RestartCounter = counter;
         return ev;
     }
 
-    void ReplyAndDie(NKikimrProto::EReplyStatus status) {
+    void ReplyAndDie(NKikimrProto::EReplyStatus status) override {
         A_LOG_DEBUG_S("BPA04", "ReplyAndDie status# " << NKikimrProto::EReplyStatus_Name(status));
         for (const auto& item : PerVDiskInfo) {
             if (item.ErrorReason) {

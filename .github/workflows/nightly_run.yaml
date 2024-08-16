@@ -3,10 +3,6 @@ on:
   schedule:
     - cron: "0 1 * * *"  # At 01:00 every day
   workflow_dispatch:
-    inputs:
-      test_label_regexp:
-        required: false
-        type: string
 
 jobs:
   cmake_x86_64:
@@ -19,7 +15,6 @@ jobs:
     with:
       runner_label: auto-provisioned
       sanitizer: ${{matrix.sanitizer}}
-      test_label_regexp: ${{inputs.test_label_regexp}}
     secrets: inherit
 
   cmake_arm64:
@@ -32,7 +27,6 @@ jobs:
       runner_label: ARM64
       sanitizer: ${{matrix.sanitizer}}
       extra_compile_flags: "-DMKQL_DISABLE_CODEGEN"
-      test_label_regexp: ${{inputs.test_label_regexp}}
     secrets: inherit
 
   ya_x86_64:

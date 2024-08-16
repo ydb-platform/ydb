@@ -88,6 +88,10 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMoni
         DiscoverGroup.Init(group->GetSubgroup("request", "discover"));
         RangeGroup.Init(group->GetSubgroup("request", "range"));
         PatchGroup.Init(group->GetSubgroup("request", "patch"));
+        CollectGarbageGroup.Init(group->GetSubgroup("request", "collectGarbage"));
+        StatusGroup.Init(group->GetSubgroup("request", "status"));
+        AssimilateGroup.Init(group->GetSubgroup("request", "assimilate"));
+        BlockGroup.Init(group->GetSubgroup("request", "block"));
     }
 
     ActiveMultiGet = ActiveRequestsGroup->GetCounter("ActiveMultiGet");

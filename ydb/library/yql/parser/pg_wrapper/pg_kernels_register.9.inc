@@ -233,3 +233,7 @@ RegisterExec(4011, arrow_jsonb_path_match_opr());
 RegisterExec(4126, arrow_in_range_int8_int8());
 RegisterExec(5045, arrow_int8gcd());
 RegisterExec(5047, arrow_int8lcm());
+RegisterExec(6205, arrow_has_parameter_privilege_name_name());
+RegisterExec(6206, arrow_has_parameter_privilege_id_name());
+RegisterExec(6207, arrow_has_parameter_privilege_name());
+RegisterExec(6236, arrow_int8inc_support());

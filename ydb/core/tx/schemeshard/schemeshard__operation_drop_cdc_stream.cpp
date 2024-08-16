@@ -150,9 +150,12 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotAsyncReplicaTable()
-                .IsCommonSensePath()
                 .IsUnderOperation()
                 .IsUnderTheSameOperation(OperationId.GetTxId());
+
+            if (checks && !tablePath.IsInsideTableIndexPath()) {
+                checks.IsCommonSensePath();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -332,9 +335,12 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotAsyncReplicaTable()
-                .IsCommonSensePath()
                 .NotUnderDeleting()
                 .NotUnderOperation();
+
+            if (checks && !tablePath.IsInsideTableIndexPath()) {
+                checks.IsCommonSensePath();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -438,10 +444,10 @@ private:
 } // anonymous
 
 std::variant<TStreamPaths, ISubOperation::TPtr> DoDropStreamPathChecks(
-    const TOperationId& opId,
-    const TPath& workingDirPath,
-    const TString& tableName,
-    const TString& streamName)
+        const TOperationId& opId,
+        const TPath& workingDirPath,
+        const TString& tableName,
+        const TString& streamName)
 {
     const auto tablePath = workingDirPath.Child(tableName);
     {
@@ -454,9 +460,12 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoDropStreamPathChecks(
             .NotDeleted()
             .IsTable()
             .NotAsyncReplicaTable()
-            .IsCommonSensePath()
             .NotUnderDeleting()
             .NotUnderOperation();
+
+        if (checks && !tablePath.IsInsideTableIndexPath()) {
+            checks.IsCommonSensePath();
+        }
 
         if (!checks) {
             return CreateReject(opId, checks.GetStatus(), checks.GetError());
@@ -485,10 +494,11 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoDropStreamPathChecks(
 }
 
 ISubOperation::TPtr DoDropStreamChecks(
-    const TOperationId& opId,
-    const TPath& tablePath,
-    const TTxId lockTxId,
-    TOperationContext& context) {
+        const TOperationId& opId,
+        const TPath& tablePath,
+        const TTxId lockTxId,
+        TOperationContext& context)
+{
 
     TString errStr;
     if (!context.SS->CheckLocks(tablePath.Base()->PathId, lockTxId, errStr)) {
@@ -499,14 +509,14 @@ ISubOperation::TPtr DoDropStreamChecks(
 }
 
 void DoDropStream(
-    const NKikimrSchemeOp::TDropCdcStream& op,
-    const TOperationId& opId,
-    const TPath& workingDirPath,
-    const TPath& tablePath,
-    const TPath& streamPath,
-    const TTxId lockTxId,
-    TOperationContext& context,
-    TVector<ISubOperation::TPtr>& result)
+        TVector<ISubOperation::TPtr>& result,
+        const NKikimrSchemeOp::TDropCdcStream& op,
+        const TOperationId& opId,
+        const TPath& workingDirPath,
+        const TPath& tablePath,
+        const TPath& streamPath,
+        const TTxId lockTxId,
+        TOperationContext& context)
 {
     {
         auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamAtTable);
@@ -527,6 +537,14 @@ void DoDropStream(
         outTx.MutableLockGuard()->SetOwnerTxId(ui64(lockTxId));
 
         result.push_back(DropLock(NextPartId(opId, result), outTx));
+    }
+
+    if (workingDirPath.IsTableIndex()) {
+        auto outTx = TransactionTemplate(workingDirPath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
+        outTx.MutableAlterTableIndex()->SetName(workingDirPath.LeafName());
+        outTx.MutableAlterTableIndex()->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
+
+        result.push_back(CreateAlterTableIndex(NextPartId(opId, result), outTx));
     }
 
     {
@@ -615,7 +633,7 @@ TVector<ISubOperation::TPtr> CreateDropCdcStream(TOperationId opId, const TTxTra
 
     TVector<ISubOperation::TPtr> result;
 
-    DoDropStream(op, opId, workingDirPath, tablePath, streamPath, lockTxId, context, result);
+    DoDropStream(result, op, opId, workingDirPath, tablePath, streamPath, lockTxId, context);
 
     return result;
 }

@@ -79,10 +79,11 @@ void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& v
     throw yexception() << "WriteYsonValuePg: PG types are not supported";
 }
 
-void WriteYsonValueInTableFormatPg(TOutputBuf& buf, NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxedValuePod& value) {
+void WriteYsonValueInTableFormatPg(TOutputBuf& buf, NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxedValuePod& value, bool topLevel) {
     Y_UNUSED(buf);
     Y_UNUSED(type);
     Y_UNUSED(value);
+    Y_UNUSED(topLevel);
     throw yexception() << "WriteYsonValueInTableFormatPg: PG types are not supported";
 }
 

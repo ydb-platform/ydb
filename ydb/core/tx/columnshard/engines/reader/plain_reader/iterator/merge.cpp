@@ -71,7 +71,7 @@ TConclusionStatus TStartMergeTask::DoExecuteImpl() {
         TMemoryProfileGuard mGuard("SCAN_PROFILE::MERGE::EXCLUSIVE", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
         auto& container = Sources.begin()->second->GetStageResult().GetBatch();
         if (container && container->num_rows()) {
-            ResultBatch = container->BuildTable();
+            ResultBatch = container->BuildTableVerified();
             LastPK = Sources.begin()->second->GetLastPK();
             ResultBatch = NArrow::TColumnOperator().VerifyIfAbsent().Extract(ResultBatch, Context->GetProgramInputColumns()->GetColumnNamesVector());
             Context->GetCommonContext()->GetCounters().OnNoScanInterval(ResultBatch->num_rows());

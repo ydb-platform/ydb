@@ -64,6 +64,7 @@ struct TIndexDescription {
         GlobalSync = 0,
         GlobalAsync = 1,
         GlobalSyncUnique = 2,
+        GlobalSyncVectorKMeansTree = 3
     };
 
     // Index states here must be in sync with NKikimrSchemeOp::EIndexState protobuf
@@ -99,7 +100,7 @@ struct TIndexDescription {
         : Name(index.GetName())
         , KeyColumns(index.GetKeyColumnNames().begin(), index.GetKeyColumnNames().end())
         , DataColumns(index.GetDataColumnNames().begin(), index.GetDataColumnNames().end())
-        , Type(ConvertIndexType(index))
+        , Type(ConvertIndexType(index.GetType()))
         , State(static_cast<EIndexState>(index.GetState()))
         , SchemaVersion(index.GetSchemaVersion())
         , LocalPathId(index.GetLocalPathId())
@@ -117,15 +118,32 @@ struct TIndexDescription {
         , PathOwnerId(message->GetPathOwnerId())
     {}
 
-    static TIndexDescription::EType ConvertIndexType(const NKikimrSchemeOp::TIndexDescription& index) {
-        auto type = NYql::TIndexDescription::EType::GlobalSync;
-        if (index.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync) {
-            type = NYql::TIndexDescription::EType::GlobalAsync;
-        } else if (index.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique) {
-            type = NYql::TIndexDescription::EType::GlobalSyncUnique;
+    static TIndexDescription::EType ConvertIndexType(const NKikimrSchemeOp::EIndexType indexType) {
+        switch (indexType) {
+            case NKikimrSchemeOp::EIndexType::EIndexTypeGlobal:
+                return TIndexDescription::EType::GlobalSync;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync:
+                return TIndexDescription::EType::GlobalAsync;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique:
+                return TIndexDescription::EType::GlobalSyncUnique;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree:
+                return TIndexDescription::EType::GlobalSyncVectorKMeansTree;
+            default:
+                YQL_ENSURE(false, "Unexpected NKikimrSchemeOp::EIndexType::EIndexTypeInvalid");
         }
+    }
 
-        return type;
+    static NKikimrSchemeOp::EIndexType ConvertIndexType(const TIndexDescription::EType indexType) {
+        switch (indexType) {
+            case TIndexDescription::EType::GlobalSync:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeGlobal;
+            case TIndexDescription::EType::GlobalAsync:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync;
+            case TIndexDescription::EType::GlobalSyncUnique:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique;
+            case NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
+        }
     }
 
     void ToMessage(NKikimrKqp::TIndexDescriptionProto* message) const {
@@ -160,6 +178,8 @@ struct TIndexDescription {
                 return true;
             case EType::GlobalAsync:
                 return false;
+            case EType::GlobalSyncVectorKMeansTree:
+                return true;
         }
     }
 };
@@ -672,6 +692,7 @@ struct TSequenceSettings {
     TMaybe<i64> Increment;
     TMaybe<bool> Cycle;
     TMaybe<TString> OwnedBy;
+    TMaybe<TString> DataType;
 };
 
 struct TCreateSequenceSettings {

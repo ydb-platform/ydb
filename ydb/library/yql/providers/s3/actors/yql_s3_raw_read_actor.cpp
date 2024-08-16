@@ -111,6 +111,7 @@ public:
                 FileQueueBatchSizeLimit,
                 FileQueueBatchObjectCountLimit,
                 Gateway,
+                RetryPolicy,
                 Url,
                 AuthInfo,
                 Pattern,

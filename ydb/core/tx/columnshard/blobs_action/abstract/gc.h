@@ -33,7 +33,7 @@ protected:
     virtual bool DoIsEmpty() const = 0;
 public:
     void AddSharedBlobToNextIteration(const TUnifiedBlobId& blobId, const TTabletId ownerTabletId) {
-        BlobsToRemove.RemoveSharing(ownerTabletId, blobId);
+        AFL_VERIFY(BlobsToRemove.RemoveBorrowed(ownerTabletId, blobId));
     }
 
     void OnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs);

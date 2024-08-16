@@ -572,18 +572,7 @@ public:
                     for (const auto& index : metadata->Indexes) {
                         auto indexDesc = schemeTx.MutableCreateIndexedTable()->AddIndexDescription();
                         indexDesc->SetName(index.Name);
-                        switch (index.Type) {
-                            case NYql::TIndexDescription::EType::GlobalSync:
-                                indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobal);
-                                break;
-                            case NYql::TIndexDescription::EType::GlobalAsync:
-                                indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync);
-                                break;
-                            case NYql::TIndexDescription::EType::GlobalSyncUnique:
-                                indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique);
-                                break;
-                        }
-
+                        indexDesc->SetType(TIndexDescription::ConvertIndexType(index.Type));
                         indexDesc->SetState(static_cast<::NKikimrSchemeOp::EIndexState>(index.State));
                         for (const auto& col : index.KeyColumns) {
                             indexDesc->AddKeyColumnNames(col);
@@ -1504,6 +1493,15 @@ public:
             if (settings.SequenceSettings.Cycle) {
                 seqDesc->SetCycle(*settings.SequenceSettings.Cycle);
             }
+            if (settings.SequenceSettings.DataType) {
+                if (settings.SequenceSettings.DataType == "int8") {
+                    seqDesc->SetDataType("pgint8");
+                } else if (settings.SequenceSettings.DataType == "int4") {
+                    seqDesc->SetDataType("pgint4");
+                } else if (settings.SequenceSettings.DataType == "int2") {
+                    seqDesc->SetDataType("pgint2");
+                }
+            }
 
             if (IsPrepare()) {
                 auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
@@ -1623,6 +1621,15 @@ public:
             }
             if (settings.SequenceSettings.Cycle) {
                 seqDesc->SetCycle(*settings.SequenceSettings.Cycle);
+            }
+            if (settings.SequenceSettings.DataType) {
+                if (settings.SequenceSettings.DataType == "int8") {
+                    seqDesc->SetDataType("pgint8");
+                } else if (settings.SequenceSettings.DataType == "int4") {
+                    seqDesc->SetDataType("pgint4");
+                } else if (settings.SequenceSettings.DataType == "int2") {
+                    seqDesc->SetDataType("pgint2");
+                }
             }
 
             if (IsPrepare()) {

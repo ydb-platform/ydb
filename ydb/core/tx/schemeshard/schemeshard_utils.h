@@ -146,13 +146,21 @@ NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
     const NTableIndex::TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc);
 
-NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
-    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc);
 
-NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
-    const NKikimrSchemeOp::TTableDescription& baseTableDesc,
+NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
+    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const NTableIndex::TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc);
+
+NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
+    const NKikimrSchemeOp::TTableDescription &baseTableDescr,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const NTableIndex::TTableColumns& implTableColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc);    
 
 TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr& tableInfo);
 TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription& tableDesc);
@@ -189,21 +197,37 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
         return false;
     }
 
-    if (!IsCompatibleIndex(baseTableColumns, indexKeys, error)) {
+    if (!IsCompatibleIndex(indexDesc.GetType(), baseTableColumns, indexKeys, error)) {
         status = NKikimrScheme::EStatus::StatusInvalidParameter;
         return false;
     }
 
-    TColumnTypes columnsTypes;
-    if (!ExtractTypes(tableDesc, columnsTypes, error)) {
+    TColumnTypes baseColumnTypes;
+    if (!ExtractTypes(tableDesc, baseColumnTypes, error)) {
         status = NKikimrScheme::EStatus::StatusInvalidParameter;
         return false;
     }
 
-    implTableColumns = CalcTableImplDescription(baseTableColumns, indexKeys);
-    if (!IsCompatibleKeyTypes(columnsTypes, implTableColumns, uniformTable, error)) {
-        status = NKikimrScheme::EStatus::StatusInvalidParameter;
-        return false;
+    implTableColumns = CalcTableImplDescription(indexDesc.GetType(), baseTableColumns, indexKeys);
+
+    if (indexDesc.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+        //We have already checked this in IsCompatibleIndex
+        Y_ABORT_UNLESS(indexKeys.KeyColumns.size() == 1);
+
+        const TString& indexColumnName = indexKeys.KeyColumns[0];
+        Y_ABORT_UNLESS(baseColumnTypes.contains(indexColumnName));
+        auto typeInfo = baseColumnTypes.at(indexColumnName);
+
+        if (typeInfo.GetTypeId() != NScheme::NTypeIds::String) {
+            status = NKikimrScheme::EStatus::StatusInvalidParameter;
+            error = TStringBuilder() << "Index column '" << indexColumnName << "' expected type 'String' but got " << NScheme::TypeName(typeInfo); 
+            return false;
+        }
+    } else {
+        if (!IsCompatibleKeyTypes(baseColumnTypes, implTableColumns, uniformTable, error)) {
+            status = NKikimrScheme::EStatus::StatusInvalidParameter;
+            return false;
+        }
     }
 
     if (implTableColumns.Keys.size() > schemeLimits.MaxTableKeyColumns) {

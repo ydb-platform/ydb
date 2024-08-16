@@ -1,14 +1,12 @@
 #include "statestorage_impl.h"
 #include "tabletid.h"
 
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/library/actors/helpers/flow_controlled_queue.h>
 
 #include <util/digest/city.h>
 #include <util/generic/xrange.h>
@@ -235,15 +233,11 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     }
 
     template<typename TEv>
-    void PrepareInit(TEv *ev, bool allowFlowControlled) {
+    void PrepareInit(TEv *ev) {
         TabletID = ev->TabletID;
         Cookie = ev->Cookie;
         ProxyOptions = ev->ProxyOptions;
-
-        if (allowFlowControlled && FlowControlledInfo.Get() && KIKIMR_ALLOW_FLOWCONTROLLED_QUEUE_FOR_SSLOOKUP)
-            SelectRequestReplicas(FlowControlledInfo.Get());
-        else
-            SelectRequestReplicas(Info.Get());
+        SelectRequestReplicas(Info.Get());
     }
 
     // request setup
@@ -253,7 +247,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         BLOG_D("ProxyRequest::HandleInit ev: " << msg->ToString());
         Source = ev->Sender;
 
-        PrepareInit(msg, true);
+        PrepareInit(msg);
         SendRequest([this](ui64 cookie) { return new TEvStateStorage::TEvReplicaLookup(TabletID, cookie); });
 
         Become(&TThis::StateLookup, TDuration::MicroSeconds(StateStorageRequestTimeout), new TEvents::TEvWakeup());
@@ -264,7 +258,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         BLOG_D("ProxyRequest::HandleInit ev: %s" << msg->ToString());
         Source = ev->Sender;
 
-        PrepareInit(msg, false);
+        PrepareInit(msg);
 
         SuggestedLeader = msg->ProposedLeader;
         SuggestedLeaderTablet = msg->ProposedLeaderTablet;
@@ -286,7 +280,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         BLOG_D("ProxyRequest::HandleInit ev: " << msg->ToString());
         Source = ev->Sender;
 
-        PrepareInit(msg, false);
+        PrepareInit(msg);
 
         SuggestedLeader = msg->ProposedLeader;
         SuggestedGeneration = msg->ProposedGeneration;
@@ -741,8 +735,6 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
 
     TIntrusivePtr<TStateStorageInfo> FlowControlledInfo;
 
-    TMap<TActorId, TActorId> ReplicaProbes;
-
     THashMap<std::tuple<TActorId, ui64>, std::tuple<ui64, TIntrusivePtr<TStateStorageInfo> TThis::*>> Subscriptions;
     THashSet<std::tuple<TActorId, ui64>> SchemeBoardSubscriptions;
 
@@ -835,44 +827,11 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
         Send(ev->Sender, new TEvStateStorage::TEvListStateStorageResult(Info), 0, ev->Cookie);
     }
 
-    void Handle(TEvStateStorage::TEvReplicaProbeSubscribe::TPtr &ev) {
-        const auto *msg = ev->Get();
-
-        if (!KIKIMR_ALLOW_SSREPLICA_PROBES) {
-            Send(ev->Sender, new TEvStateStorage::TEvReplicaProbeConnected(msg->ReplicaId));
-            return;
-        }
-
-        auto it = ReplicaProbes.find(msg->ReplicaId);
-        if (it == ReplicaProbes.end()) {
-            Send(ev->Sender, new TEvStateStorage::TEvReplicaProbeDisconnected(msg->ReplicaId));
-            return;
-        }
-
-        TActivationContext::Send(ev->Forward(it->second));
-    }
-
-    void Handle(TEvStateStorage::TEvReplicaProbeUnsubscribe::TPtr &ev) {
-        if (!KIKIMR_ALLOW_SSREPLICA_PROBES)
-            return;
-
-        const auto *msg = ev->Get();
-
-        auto it = ReplicaProbes.find(msg->ReplicaId);
-        if (it != ReplicaProbes.end()) {
-            TActivationContext::Send(ev->Forward(it->second));
-        }
-    }
-
     void Handle(TEvStateStorage::TEvUpdateGroupConfig::TPtr &ev) {
         auto *msg = ev->Get();
-        TIntrusivePtr<TStateStorageInfo> old = Info;
-
         Info = msg->GroupConfig;
         BoardInfo = msg->BoardConfig;
         SchemeBoardInfo = msg->SchemeBoardConfig;
-
-        RegisterDerivedServices(TlsActivationContext->ExecutorThread.ActorSystem, old.Get());
 
         for (const auto& [key, value] : Subscriptions) {
             const auto& [sender, cookie] = key;
@@ -885,26 +844,6 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
         }
     }
 
-    void RegisterDerivedServices(TActorSystem *sys, const TStateStorageInfo *old) {
-        RegisterReplicaProbes(sys);
-        RegisterFlowContolled(sys, old);
-    }
-
-    void RegisterReplicaProbes(TActorSystem *sys) {
-        if (!KIKIMR_ALLOW_SSREPLICA_PROBES)
-            return;
-
-        for (auto &xpair : ReplicaProbes)
-            sys->Send(xpair.second, new TEvents::TEvPoisonPill());
-        ReplicaProbes.clear();
-
-        for (auto &ring : Info->Rings)
-            for (const TActorId replicaId : ring.Replicas) {
-                const TActorId probeId = sys->Register(CreateStateStorageReplicaProbe(replicaId));
-                ReplicaProbes.emplace(replicaId, probeId);
-            }
-    }
-
     template<typename TEventPtr>
     void ResolveReplicas(const TEventPtr &ev, ui64 tabletId, const TIntrusivePtr<TStateStorageInfo> &info) const {
         THolder<TStateStorageInfo::TSelection> selection(new TStateStorageInfo::TSelection());
@@ -914,67 +853,6 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
         reply->Replicas.insert(reply->Replicas.end(), selection->SelectedReplicas.Get(), selection->SelectedReplicas.Get() + selection->Sz);
         reply->ConfigContentHash = info->ContentHash();
         Send(ev->Sender, reply.Release(), 0, ev->Cookie);
-    }
-
-    void RegisterFlowContolled(TActorSystem *sys, const TStateStorageInfo *old) {
-        if (!KIKIMR_ALLOW_FLOWCONTROLLED_QUEUE_FOR_SSLOOKUP)
-            return;
-
-        TIntrusivePtr<TStateStorageInfo> updated = new TStateStorageInfo();
-        updated->NToSelect = Info->NToSelect;
-        updated->Rings.resize(Info->Rings.size());
-
-        const bool checkOldInfo = FlowControlledInfo && old
-            && updated->NToSelect == FlowControlledInfo->NToSelect
-            && updated->Rings.size() == FlowControlledInfo->Rings.size();
-
-        ui32 ringIdx = 0;
-        for (const ui32 ringsSz = Info->Rings.size(); ringIdx < ringsSz; ++ringIdx) {
-            const bool checkRing = checkOldInfo && (FlowControlledInfo->Rings[ringIdx].Replicas.size() == Info->Rings[ringIdx].Replicas.size());
-
-            TStateStorageInfo::TRing &ctring = updated->Rings[ringIdx];
-            TStateStorageInfo::TRing *fcring = checkRing ? &FlowControlledInfo->Rings[ringIdx] : nullptr;
-            const auto &srcring = Info->Rings[ringIdx];
-            const auto *oldring = checkRing ? &old->Rings[ringIdx] : nullptr;
-
-            ctring.Replicas.resize(srcring.Replicas.size());
-            ui32 replicaIdx = 0;
-            for (const ui32 srcSize = srcring.Replicas.size(); replicaIdx < srcSize; ++replicaIdx) {
-                if (checkRing && srcring.Replicas[replicaIdx] == oldring->Replicas[replicaIdx]) {
-                    ctring.Replicas[replicaIdx] = fcring->Replicas[replicaIdx];
-                    fcring->Replicas[replicaIdx] = TActorId();
-                } else {
-                    if (fcring && replicaIdx < fcring->Replicas.size())
-                        Send(fcring->Replicas[replicaIdx], new TEvents::TEvPoison());
-
-                    TFlowControlledQueueConfig flowConfig;
-                    flowConfig.MaxAllowedInFly = 10000;
-                    flowConfig.TargetDynamicRate = 250000;
-
-                    ctring.Replicas[replicaIdx] = sys->Register(
-                        CreateFlowControlledRequestQueue(srcring.Replicas[replicaIdx], NKikimrServices::TActivity::SS_PROXY_REQUEST, flowConfig),
-                        TMailboxType::ReadAsFilled
-                    );
-                }
-            }
-            if (fcring) {
-                for (const ui32 fcSize = fcring->Replicas.size(); replicaIdx < fcSize; ++replicaIdx) {
-                    Send(fcring->Replicas[replicaIdx], new TEvents::TEvPoison());
-                }
-            }
-        }
-        if (FlowControlledInfo) {
-            for (const ui32 oldSize = FlowControlledInfo->Rings.size(); ringIdx < oldSize; ++ringIdx) {
-                for (TActorId outdated : FlowControlledInfo->Rings[oldSize].Replicas)
-                    Send(outdated, new TEvents::TEvPoison());
-            }
-        }
-
-        FlowControlledInfo = std::move(updated);
-    }
-
-    void Registered(TActorSystem* sys, const TActorId&) {
-        RegisterDerivedServices(sys, nullptr);
     }
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -1005,8 +883,6 @@ public:
             hFunc(TEvStateStorage::TEvListSchemeBoard, Handle);
             hFunc(TEvStateStorage::TEvListStateStorage, Handle);
             hFunc(TEvStateStorage::TEvUpdateGroupConfig, Handle);
-            hFunc(TEvStateStorage::TEvReplicaProbeSubscribe, Handle);
-            hFunc(TEvStateStorage::TEvReplicaProbeUnsubscribe, Handle);
             fFunc(TEvents::TSystem::Unsubscribe, HandleUnsubscribe);
         default:
             TActivationContext::Forward(ev, RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, FlowControlledInfo)));

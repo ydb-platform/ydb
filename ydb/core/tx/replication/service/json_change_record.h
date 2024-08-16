@@ -139,6 +139,11 @@ struct TChangeRecordBuilderContextTrait<NReplication::NService::TChangeRecord> {
     TChangeRecordBuilderContextTrait()
         : MemoryPool(256)
     {}
+
+    // do not preserve any state between writers, just construct new one.
+    TChangeRecordBuilderContextTrait(const TChangeRecordBuilderContextTrait<NReplication::NService::TChangeRecord>&)
+        : MemoryPool(256)
+    {}
 };
 
 }

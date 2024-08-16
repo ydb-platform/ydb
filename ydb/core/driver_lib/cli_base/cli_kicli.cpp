@@ -1,3 +1,7 @@
+#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
+#include <ydb/public/lib/ydb_cli/commands/ydb_sdk_core_access.h>
+#include <ydb/core/driver_lib/cli_config_base/config_base.h>
 #include "cli_kicli.h"
 
 namespace NKikimr {
@@ -67,17 +71,22 @@ int InvokeThroughKikimr(TClientCommand::TConfig& config, std::function<int(NClie
     }
 
     if (!config.StaticCredentials.User.empty()) {
-        TAutoPtr<NMsgBusProxy::TBusLoginRequest> request = new NMsgBusProxy::TBusLoginRequest();
-        request.Get()->Record.SetUser(config.StaticCredentials.User);
-        request.Get()->Record.SetPassword(config.StaticCredentials.Password);
-        NClient::TResult result = kikimr.ExecuteRequest(request.Release()).GetValueSync();
-        if (result.GetStatus() == NMsgBusProxy::MSTATUS_OK) {
-            kikimr.SetSecurityToken(result.GetResponse<NMsgBusProxy::TBusResponse>().Record.GetUserToken());
-            config.SecurityToken = result.GetResponse<NMsgBusProxy::TBusResponse>().Record.GetUserToken();
-        } else {
-            Cerr << result.GetError().GetMessage() << Endl;
+        NYdb::TDriverConfig driverConfig;
+        driverConfig.SetEndpoint(TCommandConfig::ParseServerAddress(config.Address).Address);
+        NYdb::TDriver connection(driverConfig);
+        NYdb::NConsoleClient::TDummyClient client(connection);
+
+        auto credentialsProviderFactory = NYdb::CreateLoginCredentialsProviderFactory(config.StaticCredentials);
+        auto loginProvider = credentialsProviderFactory->CreateProvider(client.GetCoreFacility());
+        try {
+            config.SecurityToken = loginProvider->GetAuthInfo();
+        } catch (yexception& ex) {
+            Cerr << ex.what() << Endl;
+            connection.Stop();
             return 1;
         }
+        connection.Stop();
+        kikimr.SetSecurityToken(config.SecurityToken);
     }
 
     return handler(kikimr);

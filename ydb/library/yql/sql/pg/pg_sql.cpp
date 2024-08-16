@@ -1,24 +1,4 @@
-#include "util/charset/utf8.h"
-#include "utils.h"
-#include "ydb/public/api/protos/ydb_value.pb.h"
-#include <ydb/library/yql/sql/settings/partitioning.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/config.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/parser.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/raw_parser.h>
-#include <ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/catalog/pg_type_d.h>
-#include <ydb/library/yql/parser/pg_catalog/catalog.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/core/issue/yql_issue.h>
-#include <ydb/library/yql/core/yql_callable_names.h>
-#include <ydb/library/yql/parser/pg_catalog/catalog.h>
-#include <ydb/library/yql/utils/log/log_level.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <util/string/builder.h>
-#include <util/string/cast.h>
-#include <util/generic/scope.h>
-#include <util/generic/stack.h>
-#include <util/generic/hash_set.h>
+#include "../../parser/pg_wrapper/pg_compat.h"
 
 #ifdef _WIN32
 #define __restrict
@@ -45,6 +25,28 @@ extern "C" {
 #undef NOTICE
 }
 
+#include "util/charset/utf8.h"
+#include "utils.h"
+#include "ydb/public/api/protos/ydb_value.pb.h"
+#include <ydb/library/yql/sql/settings/partitioning.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/config.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/parser.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/raw_parser.h>
+#include <ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/catalog/pg_type_d.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/core/issue/yql_issue.h>
+#include <ydb/library/yql/core/yql_callable_names.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
+#include <ydb/library/yql/utils/log/log_level.h>
+#include <ydb/library/yql/utils/log/log.h>
+#include <util/string/builder.h>
+#include <util/string/cast.h>
+#include <util/generic/scope.h>
+#include <util/generic/stack.h>
+#include <util/generic/hash_set.h>
+
 constexpr auto PREPARED_PARAM_PREFIX =  "$p";
 constexpr auto AUTO_PARAM_PREFIX =  "a";
 constexpr auto DEFAULT_PARAM_TYPE = "unknown";
@@ -69,47 +71,61 @@ int NodeTag(const Node* node) {
     return nodeTag(node);
 }
 
-int NodeTag(const Value& node) {
-    return node.type;
+int NodeTag(const ValUnion& val) {
+    return NodeTag(&val.node);
 }
 
-int IntVal(const Value& node) {
-    Y_ENSURE(node.type == T_Integer);
-    return intVal(&node);
+int IntVal(const ValUnion& val) {
+    Y_ENSURE(val.node.type == T_Integer);
+    return intVal(&val.node);
 }
 
-const char* StrFloatVal(const Value& node) {
-    Y_ENSURE(node.type == T_Float);
-    return strVal(&node);
+bool BoolVal(const ValUnion& val) {
+    Y_ENSURE(val.node.type == T_Boolean);
+    return boolVal(&val.node);
 }
 
-const char* StrVal(const Value& node) {
-    Y_ENSURE(node.type == T_String || node.type == T_BitString);
-    return strVal(&node);
+const char* StrFloatVal(const ValUnion& val) {
+    Y_ENSURE(val.node.type == T_Float);
+    return strVal(&val.node);
+}
+
+const char* StrVal(const ValUnion& val) {
+    Y_ENSURE(val.node.type == T_String || val.node.type == T_BitString);
+    return strVal(&val.node);
 }
 
 int IntVal(const Node* node) {
     Y_ENSURE(node->type == T_Integer);
-    return intVal((const Value*)node);
+    return intVal(node);
 }
 
 double FloatVal(const Node* node) {
     Y_ENSURE(node->type == T_Float);
-    return floatVal((const Value*)node);
+    return floatVal(node);
 }
 
 const char* StrFloatVal(const Node* node) {
     Y_ENSURE(node->type == T_Float);
-    return strVal((const Value*)node);
+    return strVal(node);
 }
 
 const char* StrVal(const Node* node) {
     Y_ENSURE(node->type == T_String || node->type == T_BitString);
-    return strVal((const Value*)node);
+    return strVal(node);
 }
 
-bool ValueAsString(const Value& val, TString& ret) {
+bool ValueAsString(const ValUnion& val, bool isNull, TString& ret) {
+    if (isNull) {
+        ret = "NULL";
+        return true;
+    }
+
     switch (NodeTag(val)) {
+    case T_Boolean: {
+        ret = BoolVal(val) ? "t" : "f";
+        return true;
+    }
     case T_Integer: {
         ret = ToString(IntVal(val));
         return true;
@@ -121,10 +137,6 @@ bool ValueAsString(const Value& val, TString& ret) {
     case T_String:
     case T_BitString: {
         ret = StrVal(val);
-        return true;
-    }
-    case T_Null: {
-        ret = "NULL";
         return true;
     }
     default:
@@ -242,6 +254,7 @@ public:
     struct TPgConst {
         TMaybe<TString> value;
         enum class Type {
+            boolean,
             int4,
             int8,
             numeric,
@@ -253,6 +266,8 @@ public:
 
         static TString ToString(const TPgConst::Type& type) {
             switch (type) {
+                case TPgConst::Type::boolean:
+                    return "bool";
                 case TPgConst::Type::int4:
                     return "int4";
                 case TPgConst::Type::int8:
@@ -722,29 +737,28 @@ public:
         auto arg0 = ListNodeNth(value->args, 0);
         auto arg1 = ListNodeNth(value->args, 1);
         auto arg2 = ListNodeNth(value->args, 2);
-        if (NodeTag(arg2) != T_TypeCast) {
-            AddError(TStringBuilder() << "Expected type cast node as is_local arg, but got node with tag");
+        if (NodeTag(arg2) != T_A_Const) {
+            AddError(TStringBuilder() << "Expected AConst node as is_local arg, but got node with tag: " << NodeTag(arg2));
             return nullptr;
         }
-        auto isLocalCast = CAST_NODE(TypeCast, arg2)->arg;
-        if (NodeTag(isLocalCast) != T_A_Const) {
-            AddError(TStringBuilder() << "Expected a_const in cast, but got something wrong: " << NodeTag(isLocalCast));
+        auto isLocalConst = CAST_NODE(A_Const, arg2);
+        if (isLocalConst->isnull) {
+            AddError(TStringBuilder() << "Expected t/f, but got null");
             return nullptr;
         }
-        auto isLocalConst = CAST_NODE(A_Const, isLocalCast);
-        if (NodeTag(isLocalConst->val) != T_String) {
-            AddError(TStringBuilder() << "Expected string in const, but got something wrong: " << NodeTag(isLocalCast));
+        if (NodeTag(isLocalConst->val) != T_Boolean) {
+            AddError(TStringBuilder() << "Expected bool in const, but got something wrong: " << NodeTag(isLocalConst->val));
             return nullptr;
         }
-        auto rawVal = TString(StrVal(isLocalConst->val));
-        if (rawVal != "t" && rawVal != "f") {
-            AddError(TStringBuilder() << "Expected t/f, but got " << rawVal);
-            return nullptr;
-        }
-        config.is_local = rawVal == "t";
+        config.is_local = BoolVal(isLocalConst->val);
 
         if (NodeTag(arg0) != T_A_Const || NodeTag(arg1) != T_A_Const) {
             AddError(TStringBuilder() << "Expected const with string, but got something else: " << NodeTag(arg0));
+            return nullptr;
+        }
+
+        if (CAST_NODE(A_Const, arg0)->isnull || CAST_NODE(A_Const, arg1)->isnull) {
+            AddError(TStringBuilder() << "Expected string const as name arg, but got null");
             return nullptr;
         }
 
@@ -755,7 +769,7 @@ public:
             return nullptr;
         }
         config.name = (char*)StrVal(name);
-        config.args = list_make1((void*)(&val));
+        config.args = list_make1((void*)arg1);
         return ParseVariableSetStmt(&config, true);
     }
 
@@ -2272,20 +2286,11 @@ public:
             TVector<TString> values;
             for (int i = 0; i < ListLength(value->args); ++i) {
                 auto val = ListNodeNth(value->args, i);
-                if (!isSetConfig) {
-                    if (NodeTag(val) == T_A_Const) {
-                        val = (const Node*)&CAST_NODE(A_Const, val)->val;
-                    } else {
-                        AddError(TStringBuilder() << "VariableSetStmt, expected const for " << value->name << " option");
-                        return nullptr;
-                    }
-                }
-
-                if (NodeTag(val) != T_String) {
+                if (NodeTag(val) != T_A_Const || CAST_NODE(A_Const, val)->isnull || NodeTag(CAST_NODE(A_Const, val)->val) != T_String) {
                     AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
                     return nullptr;
                 }
-                TString rawStr = to_lower(TString(StrVal(val)));
+                TString rawStr = to_lower(TString(StrVal(CAST_NODE(A_Const, val)->val)));
                 if (visitedValues.emplace(rawStr).second) {
                     values.emplace_back(rawStr);
                 }
@@ -2771,6 +2776,9 @@ public:
                     if (defElem->arg) {
                         switch (NodeTag(defElem->arg))
                         {
+                            case T_Boolean:
+                                options.emplace_back(QL(QAX(nameElem), QA(ToString(boolVal(defElem->arg)))));
+                                break;
                             case T_Integer:
                                 options.emplace_back(QL(QAX(nameElem), QA(ToString(intVal(defElem->arg)))));
                                 break;
@@ -2835,7 +2843,6 @@ public:
 
         for (int i = 0; i < ListLength(value->options); ++i) {
             auto rawNode = ListNodeNth(value->options, i);
-
             switch (NodeTag(rawNode)) {
                 case T_DefElem: {
                     const auto* defElem = CAST_NODE(DefElem, rawNode);
@@ -2843,6 +2850,9 @@ public:
                     if (defElem->arg) {
                         switch (NodeTag(defElem->arg))
                         {
+                            case T_Boolean:
+                                options.emplace_back(QL(QAX(nameElem), QA(ToString(boolVal(defElem->arg)))));
+                                break;
                             case T_Integer:
                                 options.emplace_back(QL(QAX(nameElem), QA(ToString(intVal(defElem->arg)))));
                                 break;
@@ -2854,7 +2864,7 @@ public:
                                 if (ListLength(typeName->names) > 0) {
                                     options.emplace_back(QL(QAX(nameElem),
                                         QAX(StrVal(ListNodeNth(typeName->names, ListLength(typeName->names) - 1)))));
-                                    }
+                                }
                                 break;
                             }
                             default:
@@ -2903,6 +2913,10 @@ public:
                 case AT_ColumnDefault: { /* ALTER COLUMN DEFAULT */
                     const auto* def = cmd->def;
                     const auto* colName = cmd->name;
+                    if (def == nullptr) {
+                        alterColumns.push_back(QL(QAX(colName), QL(QA("setDefault"), QL(QA("Null")))));
+                        break;
+                    }
                     switch (NodeTag(def)) {
                         case T_FuncCall: {
                             const auto* newDefault = CAST_NODE(FuncCall, def);
@@ -3491,8 +3505,10 @@ public:
             );
         case SVFOP_CURRENT_USER:
         case SVFOP_CURRENT_ROLE:
-        case SVFOP_USER:
-            return L(A("PgConst"), QA("postgres"), L(A("PgType"), QA("name")));
+        case SVFOP_USER: {
+            auto user = Settings.GUCSettings->Get("ydb_user");
+            return L(A("PgConst"), user ? QAX(TString(*user))  : QA("postgres"), L(A("PgType"), QA("name")));
+        }
         case SVFOP_CURRENT_CATALOG: {
             std::optional<TString> database;
             if (Settings.GUCSettings) {
@@ -3628,8 +3644,18 @@ public:
 
     TMaybe<TPgConst> GetValueNType(const A_Const* value) {
         TPgConst pgConst;
+        if (value->isnull) {
+            pgConst.type = TPgConst::Type::nil;
+            return pgConst;
+        }
+
         const auto& val = value->val;
         switch (NodeTag(val)) {
+            case T_Boolean: {
+                pgConst.value = BoolVal(val) ? "t" : "f";
+                pgConst.type = TPgConst::Type::boolean;
+                return pgConst;
+            }
             case T_Integer: {
                 pgConst.value = ToString(IntVal(val));
                 pgConst.type = TPgConst::Type::int4;
@@ -3653,12 +3679,8 @@ public:
                 pgConst.type = TPgConst::Type::bit;
                 return pgConst;
             }
-            case T_Null: {
-                pgConst.type = TPgConst::Type::nil;
-                return pgConst;
-            }
             default: {
-                ValueNotImplemented(value, val);
+                NodeNotImplemented((const Node*)value);
                 return {};
             }
         }
@@ -3693,7 +3715,7 @@ public:
             return nullptr;
         }
 
-        TAstNode* pgTypeNode = NodeTag(val) != T_Null
+        TAstNode* pgTypeNode = !value->isnull
             ? L(A("PgType"), QA(TPgConst::ToString(valueNType->type)))
             : L(A("PgType"), QA("unknown"));
 
@@ -3701,20 +3723,22 @@ public:
             return AutoParametrizeConst(std::move(valueNType.GetRef()), pgTypeNode);
         }
 
+        if (value->isnull) {
+            return L(A("PgCast"), L(A("Null")), pgTypeNode);
+        }
+
         switch (NodeTag(val)) {
             case T_Integer:
             case T_Float: {
                 return L(A("PgConst"), QA(valueNType->value.GetRef()), pgTypeNode);
             }
+            case T_Boolean:
             case T_String:
             case T_BitString: {
                 return L(A("PgConst"), QAX(valueNType->value.GetRef()), pgTypeNode);
             }
-            case T_Null: {
-                return L(A("PgCast"), L(A("Null")), pgTypeNode);
-            }
             default: {
-                ValueNotImplemented(value, val);
+                NodeNotImplemented((const Node*)value);
                 return nullptr;
             }
         }
@@ -4118,7 +4142,7 @@ public:
 
         if (NodeTag(arg) == T_A_Const &&
             (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String ||
-            NodeTag(CAST_NODE(A_Const, arg)->val) == T_Null) &&
+            CAST_NODE(A_Const, arg)->isnull) &&
             supportedTypeName &&
             typeName->typemod == -1 &&
             ListLength(typeName->typmods) == 0 &&
@@ -4182,7 +4206,7 @@ public:
 
                         auto aConst = CAST_NODE(A_Const, typeMod);
                         TString s;
-                        if (!ValueAsString(aConst->val, s)) {
+                        if (!ValueAsString(aConst->val, aConst->isnull, s)) {
                             AddError("Unsupported format of typmod");
                             return nullptr;
                         }
@@ -4902,20 +4926,6 @@ public:
     void NodeNotImplemented(const T* outer, const Node* nodeptr) {
         Y_UNUSED(outer);
         NodeNotImplementedImpl<T>(nodeptr);
-    }
-
-    template <typename T>
-    void ValueNotImplementedImpl(const Value& value) {
-        TStringBuilder b;
-        b << TypeName<T>() << ": ";
-        b << "alternative is not implemented yet : " << NodeTag(value);
-        AddError(b);
-    }
-
-    template <typename T>
-    void ValueNotImplemented(const T* outer, const Value& value) {
-        Y_UNUSED(outer);
-        ValueNotImplementedImpl<T>(value);
     }
 
     void NodeNotImplemented(const Node* nodeptr) {

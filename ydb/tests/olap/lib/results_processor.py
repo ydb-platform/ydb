@@ -15,8 +15,10 @@ class ResultsProcessor:
             self._table = table
 
         def send_data(self, data):
-            self._driver.table_client.bulk_upsert(
-                os.path.join(self._db, self._table), [data], ResultsProcessor._columns_types
+            ydb.retry_operation_sync(
+                lambda: self._driver.table_client.bulk_upsert(
+                    os.path.join(self._db, self._table), [data], ResultsProcessor._columns_types
+                )
             )
 
     _endpoints : list[ResultsProcessor.Endpoint] = None

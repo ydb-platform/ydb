@@ -527,7 +527,7 @@ private:
                 readInfo.LookupBy.push_back(TString(keyColumn->GetName()));
             }
 
-            if (SerializerCtx.Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel)!=0) {
+            if (SerializerCtx.Config->CostBasedOptimizationLevel.Get().GetOrElse(SerializerCtx.Config->DefaultCostBasedOptimizationLevel)!=0) {
 
                 if (auto stats = SerializerCtx.TypeCtx.GetStats(tableLookup.Raw())) {
                     planNode.OptEstimates["E-Rows"] = TStringBuilder() << stats->Nrows;
@@ -1449,7 +1449,7 @@ private:
     }
 
     void AddOptimizerEstimates(TOperator& op, const TExprBase& expr) {
-        if (SerializerCtx.Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel)==0) {
+        if (SerializerCtx.Config->CostBasedOptimizationLevel.Get().GetOrElse(SerializerCtx.Config->DefaultCostBasedOptimizationLevel)==0) {
             return;
         }
 
@@ -2373,6 +2373,13 @@ void FillAggrStat(NJson::TJsonValue& node, const NYql::NDqProto::TDqStatsAggr& a
         aggrStat["Max"] = max;
         aggrStat["Sum"] = sum;
         aggrStat["Count"] = aggr.GetCnt();
+        if (aggr.GetHistory().size()) {
+            auto& aggrHistory = aggrStat.InsertValue("History", NJson::JSON_ARRAY);
+            for (auto& h : aggr.GetHistory()) {
+                aggrHistory.AppendValue(h.GetTimeMs());
+                aggrHistory.AppendValue(h.GetValue());
+            }
+        }
     }
 }
 
@@ -2549,6 +2556,10 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                 stats["Tasks"] = (*stat)->GetTotalTasksCount();
 
                 stats["StageDurationUs"] = (*stat)->GetStageDurationUs();
+
+                if ((*stat)->GetBaseTimeMs()) {
+                    stats["BaseTimeMs"] = (*stat)->GetBaseTimeMs();
+                }
 
                 if ((*stat)->HasDurationUs()) {
                     FillAggrStat(stats, (*stat)->GetDurationUs(), "DurationUs");

@@ -12270,6 +12270,20 @@
             "uri": "https://{canondata_backend}/1925821/85af800a282697ba458d7b0567031a1eadd214a4/resource.tar.gz#test_sql2yql.test_pg-nullif_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg-nulls]": [
+        {
+            "checksum": "dc93c046187455eddd3eaa7bde74e5cf",
+            "size": 5740,
+            "uri": "https://{canondata_backend}/1889210/b146620fd4d09c1c222f1b1341d4d70863b98fe6/resource.tar.gz#test_sql2yql.test_pg-nulls_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[pg-nulls_native]": [
+        {
+            "checksum": "2a270852bd9dda4f0cf7d41c40d96d80",
+            "size": 5830,
+            "uri": "https://{canondata_backend}/1889210/b146620fd4d09c1c222f1b1341d4d70863b98fe6/resource.tar.gz#test_sql2yql.test_pg-nulls_native_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg-numbers_to_pg]": [
         {
             "checksum": "cab84d866e037bed91a0a711ef8b4a4c",
@@ -12629,9 +12643,9 @@
     ],
     "test_sql2yql.test[pg-regoids]": [
         {
-            "checksum": "eab738419cb09d84413280147d5ebbe2",
-            "size": 3386,
-            "uri": "https://{canondata_backend}/1942415/fef0599b6207585cd5b6635353bbb33968e87399/resource.tar.gz#test_sql2yql.test_pg-regoids_/sql.yql"
+            "checksum": "cfee748ff3069e2026aa878742187dd1",
+            "size": 4216,
+            "uri": "https://{canondata_backend}/1600758/02851b6238039a3162d6f222d34d79a59e24c249/resource.tar.gz#test_sql2yql.test_pg-regoids_/sql.yql"
         }
     ],
     "test_sql2yql.test[pg-select_agg]": [
@@ -31119,6 +31133,20 @@
             "checksum": "5d29c0196b2255a7c85b2f7ca152c077",
             "size": 271,
             "uri": "https://{canondata_backend}/1925842/993f03733a95d23632abd85d6850807a0e17b52b/resource.tar.gz#test_sql_format.test_pg-interval_to_pg_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[pg-nulls]": [
+        {
+            "checksum": "4b8d181109c88cf02154ccb9771b356f",
+            "size": 576,
+            "uri": "https://{canondata_backend}/1889210/b146620fd4d09c1c222f1b1341d4d70863b98fe6/resource.tar.gz#test_sql_format.test_pg-nulls_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[pg-nulls_native]": [
+        {
+            "checksum": "0e202da52c6ad4b67bc30b6a9c6a00fe",
+            "size": 604,
+            "uri": "https://{canondata_backend}/1889210/b146620fd4d09c1c222f1b1341d4d70863b98fe6/resource.tar.gz#test_sql_format.test_pg-nulls_native_/formatted.sql"
         }
     ],
     "test_sql_format.test[pg-numbers_to_pg]": [

@@ -44,7 +44,7 @@
  * if the old one gets invalidated.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -120,7 +120,7 @@ static void PlanCacheObjectCallback(Datum arg, int cacheid, uint32 hashvalue);
 static void PlanCacheSysCallback(Datum arg, int cacheid, uint32 hashvalue);
 
 /* GUC parameter */
-__thread int			plan_cache_mode;
+__thread int			plan_cache_mode = PLAN_CACHE_MODE_AUTO;
 
 /*
  * InitPlanCache: initialize module during InitPostgres.
@@ -686,17 +686,17 @@ RevalidateCachedQuery(CachedPlanSource *plansource,
 	if (rawtree == NULL)
 		tlist = NIL;
 	else if (plansource->parserSetup != NULL)
-		tlist = pg_analyze_and_rewrite_params(rawtree,
+		tlist = pg_analyze_and_rewrite_withcb(rawtree,
 											  plansource->query_string,
 											  plansource->parserSetup,
 											  plansource->parserSetupArg,
 											  queryEnv);
 	else
-		tlist = pg_analyze_and_rewrite(rawtree,
-									   plansource->query_string,
-									   plansource->param_types,
-									   plansource->num_params,
-									   queryEnv);
+		tlist = pg_analyze_and_rewrite_fixedparams(rawtree,
+												   plansource->query_string,
+												   plansource->param_types,
+												   plansource->num_params,
+												   queryEnv);
 
 	/* Release snapshot if we got one */
 	if (snapshot_set)
@@ -1775,7 +1775,8 @@ AcquireExecutorLocks(List *stmt_list, bool acquire)
 		{
 			RangeTblEntry *rte = (RangeTblEntry *) lfirst(lc2);
 
-			if (rte->rtekind != RTE_RELATION)
+			if (!(rte->rtekind == RTE_RELATION ||
+				  (rte->rtekind == RTE_SUBQUERY && OidIsValid(rte->relid))))
 				continue;
 
 			/*
@@ -1851,6 +1852,14 @@ ScanQueryForLocks(Query *parsetree, bool acquire)
 				break;
 
 			case RTE_SUBQUERY:
+				/* If this was a view, must lock/unlock the view */
+				if (OidIsValid(rte->relid))
+				{
+					if (acquire)
+						LockRelationOid(rte->relid, rte->rellockmode);
+					else
+						UnlockRelationOid(rte->relid, rte->rellockmode);
+				}
 				/* Recurse into subquery-in-FROM */
 				ScanQueryForLocks(rte->subquery, acquire);
 				break;

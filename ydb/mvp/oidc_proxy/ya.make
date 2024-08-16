@@ -8,6 +8,8 @@ SRCS(
     mvp.cpp
     oidc_client.cpp
     openid_connect.cpp
+    oidc_protected_page_handler.cpp
+    oidc_session_create_handler.cpp
 )
 
 PEERDIR(

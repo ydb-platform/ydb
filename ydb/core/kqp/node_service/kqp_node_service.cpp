@@ -164,35 +164,6 @@ private:
             memoryPool = NRm::EKqpMemoryPool::Unspecified;
         }
 
-        TVector<ui64> allocatedTasks;
-        allocatedTasks.reserve(msg.GetTasks().size());
-        for (auto& task : *msg.MutableTasks()) {
-            NKqpNode::TTaskContext& taskCtx = request.InFlyTasks[task.GetId()];
-            YQL_ENSURE(taskCtx.TaskId == 0);
-            taskCtx.TaskId = task.GetId();
-
-            NRm::TKqpResourcesRequest resourcesRequest;
-            resourcesRequest.MemoryPool = memoryPool;
-            resourcesRequest.ExecutionUnits = 1;
-
-            // !!!!!!!!!!!!!!!!!!!!!
-            // we have to allocate memory instead of reserve only. currently, this memory will not be used for request processing.
-            resourcesRequest.Memory = (1 << 19) /* 512kb limit for check that memory exists for processing with minimal requirements */;
-
-            auto result = ResourceManager_->AllocateResources(txId, task.GetId(), resourcesRequest);
-
-            if (!result) {
-                for (ui64 taskId : allocatedTasks) {
-                    ResourceManager_->FreeResources(txId, taskId);
-                }
-
-                ReplyError(txId, request.Executer, msg, result.GetStatus(), result.GetFailReason());
-                return;
-            }
-
-            allocatedTasks.push_back(task.GetId());
-        }
-
         auto reply = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
         reply->Record.SetTxId(txId);
 
@@ -213,13 +184,8 @@ private:
         }
 
         const ui32 tasksCount = msg.GetTasks().size();
-        for (int i = 0; i < msg.GetTasks().size(); ++i) {
-            auto& dqTask = *msg.MutableTasks(i);
-            auto& taskCtx = request.InFlyTasks[dqTask.GetId()];
-            taskCtx.TaskId = dqTask.GetId();
-            YQL_ENSURE(taskCtx.TaskId != 0);
-
-            taskCtx.ComputeActorId = CaFactory_->CreateKqpComputeActor({
+        for (auto& dqTask: *msg.MutableTasks()) {
+            auto result = CaFactory_->CreateKqpComputeActor({
                 .ExecuterId = request.Executer,
                 .TxId = txId,
                 .Task = &dqTask,
@@ -238,6 +204,22 @@ private:
                 .ComputesByStages = &computesByStage,
                 .State = State_
             });
+
+            if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&result)) {
+                ReplyError(txId, request.Executer, msg, rmResult->GetStatus(), rmResult->GetFailReason());
+                bucket.NewRequest(std::move(request));
+                TerminateTx(txId, rmResult->GetFailReason());
+                return;
+            }
+
+            auto& taskCtx = request.InFlyTasks[dqTask.GetId()];
+            YQL_ENSURE(taskCtx.TaskId == 0);
+            taskCtx.TaskId = dqTask.GetId();
+            YQL_ENSURE(taskCtx.TaskId != 0);
+
+            TActorId* actorId = std::get_if<TActorId>(&result);
+            Y_ABORT_UNLESS(actorId);
+            taskCtx.ComputeActorId = *actorId;
 
             LOG_D("TxId: " << txId << ", executing task: " << taskCtx.TaskId << " on compute actor: " << taskCtx.ComputeActorId);
 

@@ -10,7 +10,7 @@
  *	  Index cost functions are located via the index AM's API struct,
  *	  which is obtained from the handler function registered in pg_am.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -123,6 +123,7 @@
 #include "statistics/statistics.h"
 #include "storage/bufmgr.h"
 #include "utils/acl.h"
+#include "utils/array.h"
 #include "utils/builtins.h"
 #include "utils/date.h"
 #include "utils/datum.h"
@@ -139,6 +140,7 @@
 #include "utils/timestamp.h"
 #include "utils/typcache.h"
 
+#define DEFAULT_PAGE_CPU_MULTIPLIER 50.0
 
 /* Hooks for plugins to get control when we ask for stats */
 __thread get_relation_stats_hook_type get_relation_stats_hook = NULL;
@@ -289,7 +291,7 @@ eqsel_internal(PG_FUNCTION_ARGS, bool negate)
  * This is exported so that some other estimation functions can use it.
  */
 double
-var_eq_const(VariableStatData *vardata, Oid operator, Oid collation,
+var_eq_const(VariableStatData *vardata, Oid oproid, Oid collation,
 			 Datum constval, bool constisnull,
 			 bool varonleft, bool negate)
 {
@@ -330,7 +332,7 @@ var_eq_const(VariableStatData *vardata, Oid operator, Oid collation,
 	}
 	else if (HeapTupleIsValid(vardata->statsTuple) &&
 			 statistic_proc_security_check(vardata,
-										   (opfuncoid = get_opcode(operator))))
+										   (opfuncoid = get_opcode(oproid))))
 	{
 		AttStatsSlot sslot;
 		bool		match = false;
@@ -460,7 +462,7 @@ var_eq_const(VariableStatData *vardata, Oid operator, Oid collation,
  * This is exported so that some other estimation functions can use it.
  */
 double
-var_eq_non_const(VariableStatData *vardata, Oid operator, Oid collation,
+var_eq_non_const(VariableStatData *vardata, Oid oproid, Oid collation,
 				 Node *other,
 				 bool varonleft, bool negate)
 {
@@ -2204,7 +2206,7 @@ rowcomparesel(PlannerInfo *root,
 	else
 	{
 		/*
-		 * Otherwise, it's a join if there's more than one relation used.
+		 * Otherwise, it's a join if there's more than one base relation used.
 		 */
 		is_join_clause = (NumRelids(root, (Node *) opargs) > 1);
 	}
@@ -2260,6 +2262,7 @@ eqjoinsel(PG_FUNCTION_ARGS)
 	Form_pg_statistic stats2 = NULL;
 	bool		have_mcvs1 = false;
 	bool		have_mcvs2 = false;
+	bool		get_mcv_stats;
 	bool		join_is_reversed;
 	RelOptInfo *inner_rel;
 
@@ -2274,11 +2277,25 @@ eqjoinsel(PG_FUNCTION_ARGS)
 	memset(&sslot1, 0, sizeof(sslot1));
 	memset(&sslot2, 0, sizeof(sslot2));
 
+	/*
+	 * There is no use in fetching one side's MCVs if we lack MCVs for the
+	 * other side, so do a quick check to verify that both stats exist.
+	 */
+	get_mcv_stats = (HeapTupleIsValid(vardata1.statsTuple) &&
+					 HeapTupleIsValid(vardata2.statsTuple) &&
+					 get_attstatsslot(&sslot1, vardata1.statsTuple,
+									  STATISTIC_KIND_MCV, InvalidOid,
+									  0) &&
+					 get_attstatsslot(&sslot2, vardata2.statsTuple,
+									  STATISTIC_KIND_MCV, InvalidOid,
+									  0));
+
 	if (HeapTupleIsValid(vardata1.statsTuple))
 	{
 		/* note we allow use of nullfrac regardless of security check */
 		stats1 = (Form_pg_statistic) GETSTRUCT(vardata1.statsTuple);
-		if (statistic_proc_security_check(&vardata1, opfuncoid))
+		if (get_mcv_stats &&
+			statistic_proc_security_check(&vardata1, opfuncoid))
 			have_mcvs1 = get_attstatsslot(&sslot1, vardata1.statsTuple,
 										  STATISTIC_KIND_MCV, InvalidOid,
 										  ATTSTATSSLOT_VALUES | ATTSTATSSLOT_NUMBERS);
@@ -2288,7 +2305,8 @@ eqjoinsel(PG_FUNCTION_ARGS)
 	{
 		/* note we allow use of nullfrac regardless of security check */
 		stats2 = (Form_pg_statistic) GETSTRUCT(vardata2.statsTuple);
-		if (statistic_proc_security_check(&vardata2, opfuncoid))
+		if (get_mcv_stats &&
+			statistic_proc_security_check(&vardata2, opfuncoid))
 			have_mcvs2 = get_attstatsslot(&sslot2, vardata2.statsTuple,
 										  STATISTIC_KIND_MCV, InvalidOid,
 										  ATTSTATSSLOT_VALUES | ATTSTATSSLOT_NUMBERS);
@@ -3391,7 +3409,7 @@ estimate_num_groups(PlannerInfo *root, List *groupExprs, double input_rows,
 	 * for normal cases with GROUP BY or DISTINCT, but it is possible for
 	 * corner cases with set operations.)
 	 */
-	if (groupExprs == NIL || (pgset && list_length(*pgset) < 1))
+	if (groupExprs == NIL || (pgset && *pgset == NIL))
 		return 1.0;
 
 	/*
@@ -3596,7 +3614,6 @@ estimate_num_groups(PlannerInfo *root, List *groupExprs, double input_rows,
 					 */
 					if (estinfo != NULL && varinfo2->isdefault)
 						estinfo->flags |= SELFLAG_USED_DEFAULT;
-
 				}
 
 				/* we're done with this relation */
@@ -3913,21 +3930,10 @@ estimate_multivariate_ndistinct(PlannerInfo *root, RelOptInfo *rel,
 	Oid			statOid = InvalidOid;
 	MVNDistinct *stats;
 	StatisticExtInfo *matched_info = NULL;
-	RangeTblEntry		*rte;
+	RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
 
 	/* bail out immediately if the table has no extended statistics */
 	if (!rel->statlist)
-		return false;
-
-	/*
-	 * When dealing with regular inheritance trees, ignore extended stats
-	 * (which were built without data from child rels, and thus do not
-	 * represent them). For partitioned tables data there's no data in the
-	 * non-leaf relations, so we build stats only for the inheritance tree.
-	 * So for partitioned tables we do consider extended stats.
-	 */
-	rte = planner_rt_fetch(rel->relid, root);
-	if (rte->inh && rte->relkind != RELKIND_PARTITIONED_TABLE)
 		return false;
 
 	/* look for the ndistinct statistics object matching the most vars */
@@ -3942,6 +3948,10 @@ estimate_multivariate_ndistinct(PlannerInfo *root, RelOptInfo *rel,
 
 		/* skip statistics of other kinds */
 		if (info->kind != STATS_EXT_NDISTINCT)
+			continue;
+
+		/* skip statistics with mismatching stxdinherit value */
+		if (info->inherit != rte->inh)
 			continue;
 
 		/*
@@ -4015,7 +4025,7 @@ estimate_multivariate_ndistinct(PlannerInfo *root, RelOptInfo *rel,
 
 	Assert(nmatches_vars + nmatches_exprs > 1);
 
-	stats = statext_ndistinct_load(statOid);
+	stats = statext_ndistinct_load(statOid, rte->inh);
 
 	/*
 	 * If we have a match, search it for the specific item that matches (there
@@ -4200,7 +4210,7 @@ estimate_multivariate_ndistinct(PlannerInfo *root, RelOptInfo *rel,
 			 * Process complex expressions, not just simple Vars.
 			 *
 			 * First, we search for an exact match of an expression. If we
-			 * find one, we can just discard the whole GroupExprInfo, with all
+			 * find one, we can just discard the whole GroupVarInfo, with all
 			 * the variables we extracted from it.
 			 *
 			 * Otherwise we inspect the individual vars, and try matching it
@@ -5070,6 +5080,18 @@ examine_variable(PlannerInfo *root, Node *node, int varRelid,
 		 */
 		ListCell   *ilist;
 		ListCell   *slist;
+		Oid			userid;
+
+		/*
+		 * Determine the user ID to use for privilege checks: either
+		 * onerel->userid if it's set (e.g., in case we're accessing the table
+		 * via a view), or the current user otherwise.
+		 *
+		 * If we drill down to child relations, we keep using the same userid:
+		 * it's going to be the same anyway, due to how we set up the relation
+		 * tree (q.v. build_simple_rel).
+		 */
+		userid = OidIsValid(onerel->userid) ? onerel->userid : GetUserId();
 
 		foreach(ilist, onerel->indexlist)
 		{
@@ -5140,16 +5162,9 @@ examine_variable(PlannerInfo *root, Node *node, int varRelid,
 							{
 								/* Get index's table for permission check */
 								RangeTblEntry *rte;
-								Oid			userid;
 
 								rte = planner_rt_fetch(index->rel->relid, root);
 								Assert(rte->rtekind == RTE_RELATION);
-
-								/*
-								 * Use checkAsUser if it's set, in case we're
-								 * accessing the table via a view.
-								 */
-								userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
 
 								/*
 								 * For simplicity, we insist on the whole
@@ -5201,8 +5216,6 @@ examine_variable(PlannerInfo *root, Node *node, int varRelid,
 										rte = planner_rt_fetch(varno, root);
 										Assert(rte->rtekind == RTE_RELATION);
 
-										userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
-
 										vardata->acl_ok =
 											rte->securityQuals == NIL &&
 											(pg_class_aclcheck(rte->relid,
@@ -5236,7 +5249,7 @@ examine_variable(PlannerInfo *root, Node *node, int varRelid,
 		foreach(slist, onerel->statlist)
 		{
 			StatisticExtInfo *info = (StatisticExtInfo *) lfirst(slist);
-			RangeTblEntry	 *rte = planner_rt_fetch(onerel->relid, root);
+			RangeTblEntry *rte = planner_rt_fetch(onerel->relid, root);
 			ListCell   *expr_item;
 			int			pos;
 
@@ -5247,19 +5260,12 @@ examine_variable(PlannerInfo *root, Node *node, int varRelid,
 			if (vardata->statsTuple)
 				break;
 
-			/*
-			 * When dealing with regular inheritance trees, ignore extended
-			 * stats (which were built without data from child rels, and thus
-			 * do not represent them). For partitioned tables data there's no
-			 * data in the non-leaf relations, so we build stats only for the
-			 * inheritance tree. So for partitioned tables we do consider
-			 * extended stats.
-			 */
-			if (rte->inh && rte->relkind != RELKIND_PARTITIONED_TABLE)
-				break;
-
 			/* skip stats without per-expression stats */
 			if (info->kind != STATS_EXT_EXPRESSIONS)
+				continue;
+
+			/* skip stats with mismatching stxdinherit value */
+			if (info->inherit != rte->inh)
 				continue;
 
 			pos = 0;
@@ -5276,28 +5282,14 @@ examine_variable(PlannerInfo *root, Node *node, int varRelid,
 				/* found a match, see if we can extract pg_statistic row */
 				if (equal(node, expr))
 				{
-					HeapTuple	t = statext_expressions_load(info->statOid, pos);
-
-					/* Get statistics object's table for permission check */
-					RangeTblEntry *rte;
-					Oid			userid;
-
-					vardata->statsTuple = t;
-
 					/*
 					 * XXX Not sure if we should cache the tuple somewhere.
 					 * Now we just create a new copy every time.
 					 */
+					vardata->statsTuple =
+						statext_expressions_load(info->statOid, rte->inh, pos);
+
 					vardata->freefunc = ReleaseDummy;
-
-					rte = planner_rt_fetch(onerel->relid, root);
-					Assert(rte->rtekind == RTE_RELATION);
-
-					/*
-					 * Use checkAsUser if it's set, in case we're accessing
-					 * the table via a view.
-					 */
-					userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
 
 					/*
 					 * For simplicity, we insist on the whole table being
@@ -5344,8 +5336,6 @@ examine_variable(PlannerInfo *root, Node *node, int varRelid,
 							/* Repeat access check on this rel */
 							rte = planner_rt_fetch(varno, root);
 							Assert(rte->rtekind == RTE_RELATION);
-
-							userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
 
 							vardata->acl_ok =
 								rte->securityQuals == NIL &&
@@ -5406,15 +5396,17 @@ examine_simple_variable(PlannerInfo *root, Var *var,
 
 		if (HeapTupleIsValid(vardata->statsTuple))
 		{
+			RelOptInfo *onerel = find_base_rel(root, var->varno);
 			Oid			userid;
 
 			/*
 			 * Check if user has permission to read this column.  We require
 			 * all rows to be accessible, so there must be no securityQuals
-			 * from security barrier views or RLS policies.  Use checkAsUser
-			 * if it's set, in case we're accessing the table via a view.
+			 * from security barrier views or RLS policies.  Use
+			 * onerel->userid if it's set, in case we're accessing the table
+			 * via a view.
 			 */
-			userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
+			userid = OidIsValid(onerel->userid) ? onerel->userid : GetUserId();
 
 			vardata->acl_ok =
 				rte->securityQuals == NIL &&
@@ -5483,8 +5475,10 @@ examine_simple_variable(PlannerInfo *root, Var *var,
 				rte = planner_rt_fetch(varno, root);
 				Assert(rte->rtekind == RTE_RELATION);
 
-				userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
-
+				/*
+				 * Fine to use the same userid as it's the same in all
+				 * relations of a given inheritance tree.
+				 */
 				vardata->acl_ok =
 					rte->securityQuals == NIL &&
 					((pg_class_aclcheck(rte->relid, userid,
@@ -5989,6 +5983,10 @@ get_actual_variable_range(PlannerInfo *root, VariableStatData *vardata,
 	/* If it has indexes it must be a plain relation */
 	rte = root->simple_rte_array[rel->relid];
 	Assert(rte->rtekind == RTE_RELATION);
+
+	/* ignore partitioned tables.  Any indexes here are not real indexes */
+	if (rte->relkind == RELKIND_PARTITIONED_TABLE)
+		return false;
 
 	/* Search through the indexes to see if any match our problem */
 	foreach(lc, rel->indexlist)
@@ -6675,10 +6673,10 @@ btcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 			   double *indexPages)
 {
 	IndexOptInfo *index = path->indexinfo;
-	GenericCosts costs;
+	GenericCosts costs = {0};
 	Oid			relid;
 	AttrNumber	colnum;
-	VariableStatData vardata;
+	VariableStatData vardata = {0};
 	double		numIndexTuples;
 	Cost		descentCost;
 	List	   *indexBoundQuals;
@@ -6830,7 +6828,6 @@ btcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 	/*
 	 * Now do generic index cost estimation.
 	 */
-	MemSet(&costs, 0, sizeof(costs));
 	costs.numIndexTuples = numIndexTuples;
 
 	genericcostestimate(root, path, loop_count, &costs);
@@ -6863,7 +6860,7 @@ btcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 	 * touched.  The number of such pages is btree tree height plus one (ie,
 	 * we charge for the leaf page too).  As above, charge once per SA scan.
 	 */
-	descentCost = (index->tree_height + 1) * 50.0 * cpu_operator_cost;
+	descentCost = (index->tree_height + 1) * DEFAULT_PAGE_CPU_MULTIPLIER * cpu_operator_cost;
 	costs.indexStartupCost += descentCost;
 	costs.indexTotalCost += costs.num_sa_scans * descentCost;
 
@@ -6875,8 +6872,6 @@ btcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 	 * ordering, but don't negate it entirely.  Before 8.0 we divided the
 	 * correlation by the number of columns, but that seems too strong.)
 	 */
-	MemSet(&vardata, 0, sizeof(vardata));
-
 	if (index->indexkeys[0] != 0)
 	{
 		/* Simple variable --- look to stats for the underlying table */
@@ -6980,9 +6975,7 @@ hashcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 				 Selectivity *indexSelectivity, double *indexCorrelation,
 				 double *indexPages)
 {
-	GenericCosts costs;
-
-	MemSet(&costs, 0, sizeof(costs));
+	GenericCosts costs = {0};
 
 	genericcostestimate(root, path, loop_count, &costs);
 
@@ -7025,10 +7018,8 @@ gistcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 				 double *indexPages)
 {
 	IndexOptInfo *index = path->indexinfo;
-	GenericCosts costs;
+	GenericCosts costs = {0};
 	Cost		descentCost;
-
-	MemSet(&costs, 0, sizeof(costs));
 
 	genericcostestimate(root, path, loop_count, &costs);
 
@@ -7064,7 +7055,7 @@ gistcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 	/*
 	 * Likewise add a per-page charge, calculated the same as for btrees.
 	 */
-	descentCost = (index->tree_height + 1) * 50.0 * cpu_operator_cost;
+	descentCost = (index->tree_height + 1) * DEFAULT_PAGE_CPU_MULTIPLIER * cpu_operator_cost;
 	costs.indexStartupCost += descentCost;
 	costs.indexTotalCost += costs.num_sa_scans * descentCost;
 
@@ -7082,10 +7073,8 @@ spgcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 				double *indexPages)
 {
 	IndexOptInfo *index = path->indexinfo;
-	GenericCosts costs;
+	GenericCosts costs = {0};
 	Cost		descentCost;
-
-	MemSet(&costs, 0, sizeof(costs));
 
 	genericcostestimate(root, path, loop_count, &costs);
 
@@ -7121,7 +7110,7 @@ spgcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 	/*
 	 * Likewise add a per-page charge, calculated the same as for btrees.
 	 */
-	descentCost = (index->tree_height + 1) * 50.0 * cpu_operator_cost;
+	descentCost = (index->tree_height + 1) * DEFAULT_PAGE_CPU_MULTIPLIER * cpu_operator_cost;
 	costs.indexStartupCost += descentCost;
 	costs.indexTotalCost += costs.num_sa_scans * descentCost;
 
@@ -7458,6 +7447,7 @@ gincostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 				qual_arg_cost,
 				spc_random_page_cost,
 				outer_scans;
+	Cost		descentCost;
 	Relation	indexRel;
 	GinStatsData ginStats;
 	ListCell   *lc;
@@ -7682,6 +7672,47 @@ gincostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 	 */
 	dataPagesFetched = ceil(numDataPages * partialScale);
 
+	*indexStartupCost = 0;
+	*indexTotalCost = 0;
+
+	/*
+	 * Add a CPU-cost component to represent the costs of initial entry btree
+	 * descent.  We don't charge any I/O cost for touching upper btree levels,
+	 * since they tend to stay in cache, but we still have to do about log2(N)
+	 * comparisons to descend a btree of N leaf tuples.  We charge one
+	 * cpu_operator_cost per comparison.
+	 *
+	 * If there are ScalarArrayOpExprs, charge this once per SA scan.  The
+	 * ones after the first one are not startup cost so far as the overall
+	 * plan is concerned, so add them only to "total" cost.
+	 */
+	if (numEntries > 1)			/* avoid computing log(0) */
+	{
+		descentCost = ceil(log(numEntries) / log(2.0)) * cpu_operator_cost;
+		*indexStartupCost += descentCost * counts.searchEntries;
+		*indexTotalCost += counts.arrayScans * descentCost * counts.searchEntries;
+	}
+
+	/*
+	 * Add a cpu cost per entry-page fetched. This is not amortized over a
+	 * loop.
+	 */
+	*indexStartupCost += entryPagesFetched * DEFAULT_PAGE_CPU_MULTIPLIER * cpu_operator_cost;
+	*indexTotalCost += entryPagesFetched * counts.arrayScans * DEFAULT_PAGE_CPU_MULTIPLIER * cpu_operator_cost;
+
+	/*
+	 * Add a cpu cost per data-page fetched. This is also not amortized over a
+	 * loop. Since those are the data pages from the partial match algorithm,
+	 * charge them as startup cost.
+	 */
+	*indexStartupCost += DEFAULT_PAGE_CPU_MULTIPLIER * cpu_operator_cost * dataPagesFetched;
+
+	/*
+	 * Since we add the startup cost to the total cost later on, remove the
+	 * initial arrayscan from the total.
+	 */
+	*indexTotalCost += dataPagesFetched * (counts.arrayScans - 1) * DEFAULT_PAGE_CPU_MULTIPLIER * cpu_operator_cost;
+
 	/*
 	 * Calculate cache effects if more than one scan due to nestloops or array
 	 * quals.  The result is pro-rated per nestloop scan, but the array qual
@@ -7705,7 +7736,7 @@ gincostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 	 * Here we use random page cost because logically-close pages could be far
 	 * apart on disk.
 	 */
-	*indexStartupCost = (entryPagesFetched + dataPagesFetched) * spc_random_page_cost;
+	*indexStartupCost += (entryPagesFetched + dataPagesFetched) * spc_random_page_cost;
 
 	/*
 	 * Now compute the number of data pages fetched during the scan.
@@ -7733,6 +7764,15 @@ gincostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 	if (dataPagesFetchedBySel > dataPagesFetched)
 		dataPagesFetched = dataPagesFetchedBySel;
 
+	/* Add one page cpu-cost to the startup cost */
+	*indexStartupCost += DEFAULT_PAGE_CPU_MULTIPLIER * cpu_operator_cost * counts.searchEntries;
+
+	/*
+	 * Add once again a CPU-cost for those data pages, before amortizing for
+	 * cache.
+	 */
+	*indexTotalCost += dataPagesFetched * counts.arrayScans * DEFAULT_PAGE_CPU_MULTIPLIER * cpu_operator_cost;
+
 	/* Account for cache effects, the same as above */
 	if (outer_scans > 1 || counts.arrayScans > 1)
 	{
@@ -7744,19 +7784,27 @@ gincostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 	}
 
 	/* And apply random_page_cost as the cost per page */
-	*indexTotalCost = *indexStartupCost +
+	*indexTotalCost += *indexStartupCost +
 		dataPagesFetched * spc_random_page_cost;
 
 	/*
-	 * Add on index qual eval costs, much as in genericcostestimate.  But we
-	 * can disregard indexorderbys, since GIN doesn't support those.
+	 * Add on index qual eval costs, much as in genericcostestimate. We charge
+	 * cpu but we can disregard indexorderbys, since GIN doesn't support
+	 * those.
 	 */
 	qual_arg_cost = index_other_operands_eval_cost(root, indexQuals);
 	qual_op_cost = cpu_operator_cost * list_length(indexQuals);
 
 	*indexStartupCost += qual_arg_cost;
 	*indexTotalCost += qual_arg_cost;
-	*indexTotalCost += (numTuples * *indexSelectivity) * (cpu_index_tuple_cost + qual_op_cost);
+
+	/*
+	 * Add a cpu cost per search entry, corresponding to the actual visited
+	 * entries.
+	 */
+	*indexTotalCost += (counts.searchEntries * counts.arrayScans) * (qual_op_cost);
+	/* Now add a cpu cost per tuple in the posting lists / trees */
+	*indexTotalCost += (numTuples * *indexSelectivity) * (cpu_index_tuple_cost);
 	*indexPages = dataPagesFetched;
 }
 
@@ -7906,7 +7954,7 @@ brincostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 				double		varCorrelation = 0.0;
 
 				if (sslot.nnumbers > 0)
-					varCorrelation = Abs(sslot.numbers[0]);
+					varCorrelation = fabs(sslot.numbers[0]);
 
 				if (varCorrelation > *indexCorrelation)
 					*indexCorrelation = varCorrelation;

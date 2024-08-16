@@ -45,20 +45,15 @@ static void CreateSampleTable(TSession session) {
     UNIT_ASSERT(session.ExecuteSchemeQuery(GetStatic("schema/tpch.sql")).GetValueSync().IsSuccess());
 
     UNIT_ASSERT(session.ExecuteSchemeQuery(GetStatic("schema/tpcds.sql")).GetValueSync().IsSuccess());
+
+    UNIT_ASSERT(session.ExecuteSchemeQuery(GetStatic("schema/tpcc.sql")).GetValueSync().IsSuccess());
+
 }
 
 static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false, TString stats = ""){
     TVector<NKikimrKqp::TKqpSetting> settings;
 
     NKikimrKqp::TKqpSetting setting;
-   
-    setting.SetName("CostBasedOptimizationLevel");
-    setting.SetValue("3");
-    settings.push_back(setting);
-
-    setting.SetName("OptEnableConstantFolding");
-    setting.SetValue("true");
-    settings.push_back(setting);
 
     if (stats != "") {
         setting.SetName("OverrideStatistics");
@@ -68,6 +63,7 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
 
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(useStreamLookupJoin);
+    appConfig.MutableTableServiceConfig()->SetEnableConstantFolding(true);
     appConfig.MutableTableServiceConfig()->SetCompileTimeoutMs(TDuration::Minutes(10).MilliSeconds());
 
     auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
@@ -328,6 +324,12 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             "queries/tpcds78.sql", "stats/tpcds1000s.json", "join_order/tpcds78_1000s.json", StreamLookupJoin
         );
     }
+
+    Y_UNIT_TEST(TPCC) {
+        JoinOrderTestWithOverridenStats(
+            "queries/tpcc.sql", "stats/tpcc.json", "join_order/tpcc.json", false);
+    }
+
 }
 }
 }

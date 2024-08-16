@@ -28,7 +28,16 @@ bool TRetryLimiter::UpdateOnRetry(const TInstant& lastSeenAt, const TRetryPolicy
             RetryRate = 0.0;
         }
     }
-    bool shouldRetry = RetryRate < policy.RetryCount;
+
+    bool shouldRetry = true;
+    if (RetryRate >= policy.RetryCount) {
+        shouldRetry = false;
+        LastError = TStringBuilder() << "failure rate " << RetryRate << " exceeds limit of "  << policy.RetryCount;
+    } else if (policy.RetryLimit && RetryCount >= policy.RetryLimit) {
+        shouldRetry = false;
+        LastError = TStringBuilder() << "retry count reached limit of "  << policy.RetryLimit;
+    }
+
     if (shouldRetry) {
         RetryCount++;
         RetryCounterUpdatedAt = now;
@@ -145,6 +154,7 @@ NConfig::TControlPlaneStorageConfig FillDefaultParameters(NConfig::TControlPlane
             policyMapping.AddStatusCode(NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
             auto& policy = *policyMapping.MutablePolicy();
             policy.SetRetryCount(10);
+            policy.SetRetryLimit(40);
             policy.SetRetryPeriod("1m");
             policy.SetBackoffPeriod("1s");
         }

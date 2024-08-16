@@ -313,6 +313,7 @@ namespace {
         createSequenceSettings.Name = TString(createSequence.Sequence());
         createSequenceSettings.Temporary = TString(createSequence.Temporary()) == "true" ? true : false;
         createSequenceSettings.SequenceSettings = ParseSequenceSettings(createSequence.SequenceSettings());
+        createSequenceSettings.SequenceSettings.DataType = TString(createSequence.ValueType());  
 
         return createSequenceSettings;
     }
@@ -327,6 +328,9 @@ namespace {
         TAlterSequenceSettings alterSequenceSettings;
         alterSequenceSettings.Name = TString(alterSequence.Sequence());
         alterSequenceSettings.SequenceSettings = ParseSequenceSettings(alterSequence.SequenceSettings());
+        if (TString(alterSequence.ValueType()) != "Null") {
+            alterSequenceSettings.SequenceSettings.DataType = TString(alterSequence.ValueType());
+        }
 
         return alterSequenceSettings;
     }
@@ -761,10 +765,11 @@ private:
 
         TVector<TExprBase> fakeReads;
         auto paramsType = NDq::CollectParameters(programLambda, ctx);
+        NDq::TSpillingSettings spillingSettings{SessionCtx->Config().GetEnabledSpillingNodes()};
         lambda = NDq::BuildProgram(
             programLambda, *paramsType, compiler, SessionCtx->Query().QueryData->GetAllocState()->TypeEnv,
                 *SessionCtx->Query().QueryData->GetAllocState()->HolderFactory.GetFunctionRegistry(),
-                ctx, fakeReads, {});
+                ctx, fakeReads, spillingSettings);
 
         NKikimr::NMiniKQL::TProgramBuilder programBuilder(SessionCtx->Query().QueryData->GetAllocState()->TypeEnv,
             *SessionCtx->Query().QueryData->GetAllocState()->HolderFactory.GetFunctionRegistry());
@@ -1323,7 +1328,7 @@ public:
                         bool hasNotNull = false;
                         if (columnTuple.Size() > 2) {
                             auto columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
-                            for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
+                            for (const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
                                 if (constraint.Name().Value() == "serial") {
                                     ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
                                         "Column addition with serial data type is unsupported"));
@@ -1397,15 +1402,25 @@ public:
                         auto alterColumnAction = TString(alterColumnList.Item(0).Cast<TCoAtom>());
                         if (alterColumnAction == "setDefault") {
                             auto setDefault = alterColumnList.Item(1).Cast<TCoAtomList>();
-                            auto func = TString(setDefault.Item(0).Cast<TCoAtom>());
-                            auto arg = TString(setDefault.Item(1).Cast<TCoAtom>());
-                            if (func != "nextval") {
-                                ctx.AddError(TIssue(ctx.GetPosition(setDefault.Pos()),
-                                    TStringBuilder() << "Unsupported function to set default: " << func));
-                                return SyncError();
+                            if (setDefault.Size() == 1) {
+                                auto defaultExpr = TString(setDefault.Item(0).Cast<TCoAtom>());
+                                if (defaultExpr != "Null") {
+                                    ctx.AddError(TIssue(ctx.GetPosition(setDefault.Pos()),
+                                        TStringBuilder() << "Unsupported value to set defualt: " << defaultExpr));
+                                    return SyncError();
+                                }
+                                alter_columns->set_empty_default(google::protobuf::NullValue());
+                            } else {
+                                auto func = TString(setDefault.Item(0).Cast<TCoAtom>());
+                                auto arg = TString(setDefault.Item(1).Cast<TCoAtom>());
+                                if (func != "nextval") {
+                                    ctx.AddError(TIssue(ctx.GetPosition(setDefault.Pos()),
+                                        TStringBuilder() << "Unsupported function to set default: " << func));
+                                    return SyncError();
+                                }
+                                auto fromSequence = alter_columns->mutable_from_sequence();
+                                fromSequence->set_name(arg);
                             }
-                            auto fromSequence = alter_columns->mutable_from_sequence();
-                            fromSequence->set_name(arg);
                         } else if (alterColumnAction == "setFamily") {
                             auto families = alterColumnList.Item(1).Cast<TCoAtomList>();
                             if (families.Size() > 1) {
@@ -1415,6 +1430,36 @@ public:
                             }
                             for (auto family : families) {
                                 alter_columns->set_family(TString(family.Value()));
+                            }
+                        } else if (alterColumnAction == "changeColumnConstraints") {
+                            auto constraintsList = alterColumnList.Item(1).Cast<TExprList>();
+
+                            if (constraintsList.Size() != 1) {
+                                ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder()
+                                    << "\". Several column constrains for a single column are not yet supported"));
+                                return SyncError();
+                            }
+
+                            auto constraint = constraintsList.Item(0).Cast<TCoAtomList>();
+
+                            if (constraint.Size() != 1) {
+                                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder()
+                                    << "changeColumnConstraints can get exactly one token \\in {\"drop_not_null\", \"set_not_null\"}"));
+                                return SyncError();
+                            }
+
+                            auto value = constraint.Item(0).Cast<TCoAtom>();
+
+                            if (value == "drop_not_null") {
+                                alter_columns->set_not_null(false);
+                            } else if (value == "set_not_null") {
+                                ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder()
+                                    << "SET NOT NULL is currently not supported."));
+                                return SyncError();
+                            } else {
+                                ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder()
+                                    << "Unknown operation in changeColumnConstraints"));
+                                return SyncError();
                             }
                         } else {
                             ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
@@ -1826,7 +1871,6 @@ public:
                     auto resultNode = ctx.NewWorld(input->Pos());
                     return resultNode;
                 });
-
         }
 
         if (auto maybeCreate = TMaybeNode<TKiCreateTopic>(input)) {

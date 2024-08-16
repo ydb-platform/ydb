@@ -64,8 +64,17 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "FullJoin (JoinDict)",
+                                                        "Node Type": "Filter-FullJoin (JoinDict)",
                                                         "Operators": [
+                                                            {
+                                                                "Inputs": [
+                                                                    {
+                                                                        "InternalOperatorId": 1
+                                                                    }
+                                                                ],
+                                                                "Name": "Filter",
+                                                                "Predicate": "Exist(item.yy_1.id)"
+                                                            },
                                                             {
                                                                 "Inputs": [
                                                                     {

@@ -294,10 +294,6 @@ struct TArgs_circle_sub_pt_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-struct TArgs_close_lb_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
 struct TArgs_close_ls_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
@@ -322,10 +318,6 @@ struct TArgs_close_sb_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-struct TArgs_close_sl_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
 struct TArgs_construct_point_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
@@ -333,10 +325,6 @@ struct TArgs_construct_point_Policy {
 struct TArgs_cr_circle_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,true};
-};
-struct TArgs_dist_bl_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
 struct TArgs_dist_bp_Policy {
     static constexpr bool VarArgs = false;
@@ -351,10 +339,6 @@ struct TArgs_dist_cpoint_Policy {
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
 struct TArgs_dist_cpoly_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_dist_lb_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
@@ -591,10 +575,6 @@ struct TArgs_path_add_pt_Policy {
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
 struct TArgs_path_area_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_path_center_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };

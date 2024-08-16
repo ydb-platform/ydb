@@ -121,9 +121,7 @@ std::vector<TWritePortionInfoWithBlobsConstructor> TChangesWithAppend::MakeAppen
         std::vector<TBatchSerializedSlice> pages = TBatchSerializedSlice::BuildSimpleSlices(batch, NSplitter::TSplitSettings(), context.Counters.SplitterCounters, schema);
         std::vector<TGeneralSerializedSlice> generalPages;
         for (auto&& i : pages) {
-            auto portionColumns = i.GetPortionChunksToHash();
-            resultSchema->GetIndexInfo().AppendIndexes(portionColumns);
-            generalPages.emplace_back(portionColumns, schema, context.Counters.SplitterCounters);
+            generalPages.emplace_back(i.GetPortionChunksToHash(), schema, context.Counters.SplitterCounters);
         }
 
         const NSplitter::TEntityGroups groups = resultSchema->GetIndexInfo().GetEntityGroupsByStorageId(IStoragesManager::DefaultStorageId, *SaverContext.GetStoragesManager());
@@ -132,10 +130,15 @@ std::vector<TWritePortionInfoWithBlobsConstructor> TChangesWithAppend::MakeAppen
 
         ui32 recordIdx = 0;
         for (auto&& i : packs) {
-            TGeneralSerializedSlice slice(std::move(i));
+            TGeneralSerializedSlice slicePrimary(std::move(i));
+            auto dataWithSecondary =
+                resultSchema->GetIndexInfo().AppendIndexes(slicePrimary.GetPortionChunksToHash(), SaverContext.GetStoragesManager()).DetachResult();
+            TGeneralSerializedSlice slice(dataWithSecondary.GetExternalData(), schema, context.Counters.SplitterCounters);
+
             auto b = batch->Slice(recordIdx, slice.GetRecordsCount());
-            auto constructor = TWritePortionInfoWithBlobsConstructor::BuildByBlobs(slice.GroupChunksByBlobs(groups), pathId, resultSchema->GetVersion(), snapshot, SaverContext.GetStoragesManager());
-            constructor.FillStatistics(resultSchema->GetIndexInfo());
+            auto constructor = TWritePortionInfoWithBlobsConstructor::BuildByBlobs(slice.GroupChunksByBlobs(groups),
+                dataWithSecondary.GetSecondaryInplaceData(), pathId, resultSchema->GetVersion(), snapshot, SaverContext.GetStoragesManager());
+
             constructor.GetPortionConstructor().AddMetadata(*resultSchema, b);
             constructor.GetPortionConstructor().MutableMeta().SetTierName(IStoragesManager::DefaultStorageId);
             out.emplace_back(std::move(constructor));

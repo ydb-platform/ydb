@@ -1,7 +1,6 @@
 #pragma once
 #include "defs.h"
 
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/blobstorage/crypto/crypto.h>
 
 namespace NKikimr {
@@ -13,19 +12,6 @@ namespace NPDisk {
 
 class TPDiskHashCalculator : public THashCalculator {
 public:
-    ui64 OldHashSector(const ui64 sectorOffset, const ui64 magic, const ui8 *sector,
-            const ui32 sectorSize) {
-        REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&sectorOffset, sizeof sectorOffset);
-        REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&magic, sizeof magic);
-        REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(sector, sectorSize - sizeof(ui64));
-
-        THashCalculator::Clear();
-        THashCalculator::Hash(&sectorOffset, sizeof sectorOffset);
-        THashCalculator::Hash(&magic, sizeof magic);
-        THashCalculator::Hash(sector, sectorSize - sizeof(ui64));
-        return THashCalculator::GetHashResult();
-    }
-
     template<class THasher>
     ui64 T1ha0HashSector(const ui64 sectorOffset, const ui64 magic, const ui8 *sector,
             const ui32 sectorSize) {
@@ -45,11 +31,7 @@ public:
 
     bool CheckSectorHash(const ui64 sectorOffset, const ui64 magic, const ui8 *sector,
             const ui32 sectorSize, const ui64 sectorHash) {
-        // On production servers may be two versions.
-        // If by default used OldHash version, then use it first
-        // If by default used T1ha0NoAvx version, then use it
-        return sectorHash == T1ha0HashSector<TT1ha0NoAvxHasher>(sectorOffset, magic, sector, sectorSize)
-            || sectorHash == OldHashSector(sectorOffset, magic, sector, sectorSize);
+        return sectorHash == T1ha0HashSector<TT1ha0NoAvxHasher>(sectorOffset, magic, sector, sectorSize);
     }
 };
 

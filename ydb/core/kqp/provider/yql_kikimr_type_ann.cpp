@@ -1373,17 +1373,26 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                     auto alterColumnAction = TString(alterColumnList.Item(0).Cast<TCoAtom>());
                     if (alterColumnAction == "setDefault") {
                         auto setDefault = alterColumnList.Item(1).Cast<TCoAtomList>();
-                        auto func = TString(setDefault.Item(0).Cast<TCoAtom>());
-                        auto arg = TString(setDefault.Item(1).Cast<TCoAtom>());
-                        if (func != "nextval") {
-                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
-                                TStringBuilder() << "Unsupported function to set default: " << func));
-                            return TStatus::Error;
-                        }
-                        if (setDefault.Size() > 2) {
-                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
-                                TStringBuilder() << "Function nextval has exactly one argument"));
-                            return TStatus::Error;
+                        if (setDefault.Size() == 1) {
+                            auto defaultExpr = TString(setDefault.Item(0).Cast<TCoAtom>());
+                            if (defaultExpr != "Null") {
+                                ctx.AddError(TIssue(ctx.GetPosition(setDefault.Pos()),
+                                    TStringBuilder() << "Unsupported value to set defualt: " << defaultExpr));
+                                return TStatus::Error;
+                            }
+                        } else {
+                            auto func = TString(setDefault.Item(0).Cast<TCoAtom>());
+                            auto arg = TString(setDefault.Item(1).Cast<TCoAtom>());
+                            if (func != "nextval") {
+                                ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
+                                    TStringBuilder() << "Unsupported function to set default: " << func));
+                                return TStatus::Error;
+                            }
+                            if (setDefault.Size() > 2) {
+                                ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
+                                    TStringBuilder() << "Function nextval has exactly one argument"));
+                                return TStatus::Error;
+                            }
                         }
                     } else if (alterColumnAction == "setFamily") {
                         auto families = alterColumnList.Item(1).Cast<TCoAtomList>();
@@ -1392,6 +1401,26 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                                 << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
                                 << " Column: \"" << name
                                 << "\". Several column families for a single column are not yet supported"));
+                            return TStatus::Error;
+                        }
+                    } else if (alterColumnAction == "changeColumnConstraints") {
+                        auto constraintsList = alterColumnList.Item(1).Cast<TExprList>();
+
+                        if (constraintsList.Size() != 1) {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() 
+                                << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                << " Column: \"" << name
+                                << "\". Several column constrains for a single column are not yet supported"));
+                            return TStatus::Error;
+                        }
+
+                        auto constraint = constraintsList.Item(0).Cast<TCoAtomList>();
+
+                        if (constraint.Size() != 1) {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() 
+                                << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                << " Column: \"" << name
+                                << "changeColumnConstraints can get exactly one token \\in {\"set_not_null\", \"drop_not_null\"}"));
                             return TStatus::Error;
                         }
                     } else {
@@ -1555,16 +1584,16 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             return TStatus::Error;
         }
 
-        TString valueType = TString(node.ValueType());
-        if (valueType != "int8") {
+        if (TString(node.Temporary()) == "true") {
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-                << "Unsupported value type: " << valueType));
+                << "Temporary sequences are currently not supported"));
             return TStatus::Error;
         }
 
-        if (TString(node.Temporary()) == "true") {
+        TString valueType = TString(node.ValueType());
+        if (valueType != "int8" && valueType != "int4" && valueType != "int2") {
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-                << "Temporary sequences is currently not supported"));
+                << "Unsupported value type for sequence: " << valueType));
             return TStatus::Error;
         }
 
@@ -1592,6 +1621,13 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         if (!node.Settings().Empty()) {
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
                 << "Unsupported sequence settings"));
+            return TStatus::Error;
+        }
+
+        TString valueType = TString(node.ValueType());
+        if (valueType != "Null" && valueType != "int8" && valueType != "int4" && valueType != "int2") {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+                << "Unsupported value type for sequence: " << valueType));
             return TStatus::Error;
         }
 

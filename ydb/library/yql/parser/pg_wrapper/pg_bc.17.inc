@@ -18,13 +18,17 @@ LLVM_BC(
     arrow_binary_upgrade_set_missing_value
     arrow_binary_upgrade_set_next_array_pg_type_oid
     arrow_binary_upgrade_set_next_heap_pg_class_oid
+    arrow_binary_upgrade_set_next_heap_relfilenode
     arrow_binary_upgrade_set_next_index_pg_class_oid
+    arrow_binary_upgrade_set_next_index_relfilenode
     arrow_binary_upgrade_set_next_multirange_array_pg_type_oid
     arrow_binary_upgrade_set_next_multirange_pg_type_oid
     arrow_binary_upgrade_set_next_pg_authid_oid
     arrow_binary_upgrade_set_next_pg_enum_oid
+    arrow_binary_upgrade_set_next_pg_tablespace_oid
     arrow_binary_upgrade_set_next_pg_type_oid
     arrow_binary_upgrade_set_next_toast_pg_class_oid
+    arrow_binary_upgrade_set_next_toast_relfilenode
     arrow_binary_upgrade_set_record_init_privs
     arrow_btnametextcmp
     arrow_bttext_pattern_cmp
@@ -114,7 +118,10 @@ LLVM_BC(
     arrow_pg_try_advisory_xact_lock_shared_int8
     arrow_replace_text
     arrow_split_part
+    arrow_string_agg_combine
+    arrow_string_agg_deserialize
     arrow_string_agg_finalfn
+    arrow_string_agg_serialize
     arrow_string_agg_transfn
     arrow_text_concat
     arrow_text_concat_ws

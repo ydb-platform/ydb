@@ -1,6 +1,12 @@
+TExecFunc arrow_array_agg_array_combine() { return MakeIndirectExec<false, true>(&array_agg_array_combine); }
+TExecFunc arrow_array_agg_array_deserialize() { return MakeIndirectExec<true, true>(&array_agg_array_deserialize); }
 TExecFunc arrow_array_agg_array_finalfn() { return MakeIndirectExec<false, false>(&array_agg_array_finalfn); }
+TExecFunc arrow_array_agg_array_serialize() { return MakeIndirectExec<true, false>(&array_agg_array_serialize); }
 TExecFunc arrow_array_agg_array_transfn() { return MakeIndirectExec<false, true>(&array_agg_array_transfn); }
+TExecFunc arrow_array_agg_combine() { return MakeIndirectExec<false, true>(&array_agg_combine); }
+TExecFunc arrow_array_agg_deserialize() { return MakeIndirectExec<true, true>(&array_agg_deserialize); }
 TExecFunc arrow_array_agg_finalfn() { return MakeIndirectExec<false, false>(&array_agg_finalfn); }
+TExecFunc arrow_array_agg_serialize() { return MakeIndirectExec<true, false>(&array_agg_serialize); }
 TExecFunc arrow_array_agg_transfn() { return MakeIndirectExec<false, true>(&array_agg_transfn); }
 TExecFunc arrow_array_append() { return MakeIndirectExec<false, false>(&array_append); }
 TExecFunc arrow_array_cat() { return MakeIndirectExec<false, false>(&array_cat); }
@@ -8,6 +14,8 @@ TExecFunc arrow_array_position() { return MakeIndirectExec<false, true>(&array_p
 TExecFunc arrow_array_position_start() { return MakeIndirectExec<false, true>(&array_position_start); }
 TExecFunc arrow_array_positions() { return MakeIndirectExec<false, false>(&array_positions); }
 TExecFunc arrow_array_prepend() { return MakeIndirectExec<false, false>(&array_prepend); }
+TExecFunc arrow_array_sample() { return MakeIndirectExec<true, false>(&array_sample); }
+TExecFunc arrow_array_shuffle() { return MakeIndirectExec<true, false>(&array_shuffle); }
 TExecFunc arrow_array_typanalyze() { return MakeIndirectExec<true, true>(&array_typanalyze); }
 TExecFunc arrow_bit() { return MakeIndirectExec<true, false>(&bit); }
 TExecFunc arrow_bit_and() { return MakeIndirectExec<true, false>(&bit_and); }
@@ -162,10 +170,12 @@ TExecFunc arrow_timestamptz_izone() { return MakeIndirectExec<true, true>(&times
 TExecFunc arrow_timestamptz_le_timestamp() { return MakeIndirectExec<true, true>(&timestamptz_le_timestamp); }
 TExecFunc arrow_timestamptz_lt_timestamp() { return MakeIndirectExec<true, true>(&timestamptz_lt_timestamp); }
 TExecFunc arrow_timestamptz_mi_interval() { return MakeIndirectExec<true, true>(&timestamptz_mi_interval); }
+TExecFunc arrow_timestamptz_mi_interval_at_zone() { return MakeIndirectExec<true, true>(&timestamptz_mi_interval_at_zone); }
 TExecFunc arrow_timestamptz_ne_timestamp() { return MakeIndirectExec<true, true>(&timestamptz_ne_timestamp); }
 TExecFunc arrow_timestamptz_out() { return MakeIndirectExec<true, false>(&timestamptz_out); }
 TExecFunc arrow_timestamptz_part() { return MakeIndirectExec<true, true>(&timestamptz_part); }
 TExecFunc arrow_timestamptz_pl_interval() { return MakeIndirectExec<true, true>(&timestamptz_pl_interval); }
+TExecFunc arrow_timestamptz_pl_interval_at_zone() { return MakeIndirectExec<true, true>(&timestamptz_pl_interval_at_zone); }
 TExecFunc arrow_timestamptz_recv() { return MakeIndirectExec<true, true>(&timestamptz_recv); }
 TExecFunc arrow_timestamptz_scale() { return MakeIndirectExec<true, true>(&timestamptz_scale); }
 TExecFunc arrow_timestamptz_send() { return MakeIndirectExec<true, false>(&timestamptz_send); }

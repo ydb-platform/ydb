@@ -24,6 +24,7 @@ NActors::IActor* CreateS3FileQueueActor(
         ui64 batchSizeLimit,
         ui64 batchObjectCountLimit,
         IHTTPGateway::TPtr gateway,
+        IHTTPGateway::TRetryPolicy::TPtr retryPolicy,
         TString url,
         TS3Credentials::TAuthInfo authInfo,
         TString pattern,

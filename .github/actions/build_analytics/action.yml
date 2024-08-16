@@ -35,7 +35,8 @@ runs:
         export TARGET_DIR=${{ inputs.build_target }}
         export build_preset="${{ inputs.build_preset }}" 
         export build_target="${{ inputs.build_target }}" 
-        ./ya tool bloat --linker-map $TARGET_DIR/$TARGET_NAME.map.lld --input $TARGET_DIR/$TARGET_NAME --save-html ya_bloat_html
+        ./ya tool bloat --linker-map $TARGET_DIR/$TARGET_NAME.map.lld --input $TARGET_DIR/$TARGET_NAME --save-html ya_bloat_html --save-json bloat.json
+        ./ydb/ci/build_bloat/template_bloat.py -j bloat.json -o template_bloat -t template_bloat_html
         ./ydb/ci/build_bloat/main.py --build-dir . --html-dir-cpp html_cpp_impact --html-dir-headers html_headers_impact
         ./ydb/ci/build_bloat/ydb_upload.py --html-dir-cpp html_cpp_impact --html-dir-headers html_headers_impact
 
@@ -45,7 +46,18 @@ runs:
         set -ex
         s3cmd sync -r --acl-public --stats --no-progress --no-mime-magic --guess-mime-type --no-check-md5 "ya_bloat_html/" "$S3_BUCKET_PATH/ya_bloat_html/"
         echo "[ya bloat tool]($S3_URL_PREFIX/ya_bloat_html/index.html) (better use Safari, because it is too large for Chrome)" >> $GITHUB_STEP_SUMMARY
-        
+
+        s3cmd sync -r --acl-public --stats --no-progress --no-mime-magic --guess-mime-type --no-check-md5 "template_bloat.by_size.txt" "$S3_BUCKET_PATH/template_bloat.by_size.txt"
+        TEMPLATE_BLOAT_BY_SIZE_URL=$S3_URL_PREFIX/template_bloat.by_size.txt
+
+        s3cmd sync -r --acl-public --stats --no-progress --no-mime-magic --guess-mime-type --no-check-md5 "template_bloat.by_count.txt" "$S3_BUCKET_PATH/template_bloat.by_count.txt"
+        TEMPLATE_BLOAT_BY_COUNT_URL=$S3_URL_PREFIX/template_bloat.by_count.txt
+
+        s3cmd sync -r --acl-public --stats --no-progress --no-mime-magic --guess-mime-type --no-check-md5 "template_bloat_html/" "$S3_BUCKET_PATH/template_bloat_html/"
+        TEMPLATE_BLOAT_TREEMAP_URL=$S3_URL_PREFIX/template_bloat_html/index.html
+
+        echo "[template bloat]($TEMPLATE_BLOAT_TREEMAP_URL) ([sorted by size]($TEMPLATE_BLOAT_BY_SIZE_URL), [sorted by count]($TEMPLATE_BLOAT_BY_COUNT_URL))" >> $GITHUB_STEP_SUMMARY
+
         s3cmd sync -r --acl-public --stats --no-progress --no-mime-magic --guess-mime-type --no-check-md5 "html_cpp_impact/" "$S3_BUCKET_PATH/html_cpp_impact/"
         echo "[cpp compilation time]($S3_URL_PREFIX/html_cpp_impact/index.html)" >> $GITHUB_STEP_SUMMARY
         

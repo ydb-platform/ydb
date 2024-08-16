@@ -10,12 +10,11 @@ using namespace NKikimrNodeBroker;
 
 class TNodeBroker::TTxRegisterNode : public TTransactionBase<TNodeBroker> {
 public:
-    TTxRegisterNode(TNodeBroker *self, TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
-                    const NActors::TScopeId& scopeId, const TSubDomainKey& servicedSubDomain)
+    TTxRegisterNode(TNodeBroker *self, TEvPrivate::TEvResolvedRegistrationRequest::TPtr &resolvedEv)
         : TBase(self)
-        , Event(ev)
-        , ScopeId(scopeId)
-        , ServicedSubDomain(servicedSubDomain)
+        , Event(resolvedEv->Get()->Request)
+        , ScopeId(resolvedEv->Get()->ScopeId)
+        , ServicedSubDomain(resolvedEv->Get()->ServicedSubDomain)
         , NodeId(0)
         , ExtendLease(false)
         , FixNodeId(false)
@@ -186,11 +185,9 @@ private:
     bool FixNodeId;
 };
 
-ITransaction *TNodeBroker::CreateTxRegisterNode(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
-                                                const NActors::TScopeId& scopeId,
-                                                const TSubDomainKey& servicedSubDomain)
+ITransaction *TNodeBroker::CreateTxRegisterNode(TEvPrivate::TEvResolvedRegistrationRequest::TPtr &ev)
 {
-    return new TTxRegisterNode(this, ev, scopeId, servicedSubDomain);
+    return new TTxRegisterNode(this, ev);
 }
 
 } // NNodeBroker

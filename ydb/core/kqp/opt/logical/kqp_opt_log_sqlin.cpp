@@ -90,10 +90,6 @@ TExprBase KqpRewriteSqlInToEquiJoin(const TExprBase& node, TExprContext& ctx, co
         return node;
     }
 
-    if ((!kqpCtx.Config->PredicateExtract20 || kqpCtx.Config->OldLookupJoinBehaviour) && pointSelection->Filter.IsValid()) {
-        return node;
-    }
-
     fixedPrefixLen = pointSelection->PrefixSize;
     tableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, pointSelection->LookupTableName);
 

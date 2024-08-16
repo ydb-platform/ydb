@@ -3,7 +3,7 @@
  * pg_proc_d.h
  *    Macro definitions for pg_proc
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -20,6 +20,8 @@
 
 #define ProcedureRelationId 1255
 #define ProcedureRelation_Rowtype_Id 81
+#define ProcedureOidIndexId 2690
+#define ProcedureNameArgsNspIndexId 2691
 
 #define Anum_pg_proc_oid 1
 #define Anum_pg_proc_proname 2

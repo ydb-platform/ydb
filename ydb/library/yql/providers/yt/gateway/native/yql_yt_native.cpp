@@ -2157,6 +2157,15 @@ private:
             }
         }
 
+        NYT::TNode securityTagsNode;
+        if (strOpts.contains(EYtSettingType::SecurityTags)) {
+            securityTagsNode = NYT::NodeFromYsonString(strOpts.at(EYtSettingType::SecurityTags));
+        }
+
+        if (EYtWriteMode::Append != mode && !securityTagsNode.IsUndefined()) {
+            yqlAttrs[SecurityTagsName] = securityTagsNode;
+        }
+
         const auto userAttrsIt = strOpts.find(EYtSettingType::UserAttrs);
         if (userAttrsIt != strOpts.cend()) {
             const NYT::TNode mapNode = NYT::NodeFromYsonString(userAttrsIt->second);
@@ -2212,7 +2221,8 @@ private:
                                     appendToSorted, initial, entry, dstPath, dstEpoch, yqlAttrs, combineChunks,
                                     dstCompressionCodec, dstErasureCodec, dstReplicationFactor, dstMedia, dstPrimaryMedium,
                                     nativeYtTypeCompatibility, publishTx, cluster,
-                                    commitCheckpoint, columnGroupsSpec = std::move(columnGroupsSpec)] (const auto& f) mutable
+                                    commitCheckpoint, columnGroupsSpec = std::move(columnGroupsSpec),
+                                    securityTagsNode] (const auto& f) mutable
             {
                 if (f.GetValue()) {
                     execCtx->QueryCacheItem.Destroy();
@@ -2243,6 +2253,12 @@ private:
                         path.TransactionId(entry->Tx->GetId());
                     }
                     mergeSpec.AddInput(path);
+                }
+
+                NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc();
+
+                if (EYtWriteMode::Append == mode && !securityTagsNode.IsUndefined()) {
+                    spec["additional_security_tags"] = securityTagsNode;
                 }
 
                 auto ytDst = TRichYPath(dstPath);
@@ -2293,7 +2309,6 @@ private:
                     mergeSpec.Mode(MM_ORDERED);
                 }
 
-                NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc();
                 EYtOpProps flags = EYtOpProp::PublishedAutoMerge;
                 if (combineChunks) {
                     flags |= EYtOpProp::PublishedChunkCombine;

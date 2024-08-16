@@ -3,6 +3,8 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <util/generic/size_literals.h>
+#include <util/string/split.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
 namespace NYql {
 
@@ -69,7 +71,21 @@ TKikimrConfiguration::TKikimrConfiguration() {
 
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
     REGISTER_SETTING(*this, CostBasedOptimizationLevel);
-    REGISTER_SETTING(*this, OptEnableConstantFolding);
+    REGISTER_SETTING(*this, EnableSpillingNodes)
+        .Parser([](const TString& v) {
+            ui64 res = 0;
+            TVector<TString> vec;
+            StringSplitter(v).SplitBySet(",;| ").AddTo(&vec);
+            for (auto& s: vec) {
+                if (s.empty()) {
+                    throw yexception() << "Empty value item";
+                }
+                auto value = FromStringWithDefault<NYql::TDqSettings::EEnabledSpillingNodes>(
+                    s, NYql::TDqSettings::EEnabledSpillingNodes::None);
+                res |= ui64(value);
+            }
+            return res;
+        });
 
     REGISTER_SETTING(*this, MaxDPccpDPTableSize);
 
@@ -126,8 +142,8 @@ bool TKikimrSettings::HasOptUseFinalizeByKey() const {
     return GetOptionalFlagValue(OptUseFinalizeByKey.Get()) != EOptionalFlag::Disabled;
 }
 
-bool TKikimrSettings::HasOptEnableConstantFolding() const {
-    return GetOptionalFlagValue(OptEnableConstantFolding.Get()) == EOptionalFlag::Enabled;
+ui64 TKikimrSettings::GetEnabledSpillingNodes() const {
+    return EnableSpillingNodes.Get().GetOrElse(0);
 }
 
 

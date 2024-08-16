@@ -76,13 +76,16 @@ protected:
             Set(std::unique_ptr<T>(response->Release().Release()));
         }
 
-        void Error(const TString& error) {
+        bool Error(const TString& error) {
+            bool result = false;
             if (!IsDone()) {
                 Span.EndError(error);
+                result = true;
             }
             if (!IsOk()) {
                 Response = error;
             }
+            return result;
         }
 
         bool IsOk() const {
@@ -105,8 +108,32 @@ protected:
             return std::get<std::unique_ptr<T>>(Response).get();
         }
 
-        T* operator ->() {
+        const T* Get() const {
             return std::get<std::unique_ptr<T>>(Response).get();
+        }
+
+        T& GetRef() {
+            return *Get();
+        }
+
+        const T& GetRef() const {
+            return *Get();
+        }
+
+        T* operator ->() {
+            return Get();
+        }
+
+        const T* operator ->() const {
+            return Get();
+        }
+
+        T& operator *() {
+            return GetRef();
+        }
+
+        const T& operator *() const {
+            return GetRef();
         }
 
         TString GetError() const {
@@ -236,6 +263,17 @@ protected:
         SendRequestToPipe(pipeClient, request.Release(), hiveId);
     }
 
+    TRequestResponse<TEvHive::TEvResponseHiveStorageStats> MakeRequestHiveStorageStats(NNodeWhiteboard::TTabletId hiveId) {
+        TActorId pipeClient = ConnectTabletPipe(hiveId);
+        THolder<TEvHive::TEvRequestHiveStorageStats> request = MakeHolder<TEvHive::TEvRequestHiveStorageStats>();
+        auto response = MakeRequestToPipe<TEvHive::TEvResponseHiveStorageStats>(pipeClient, request.Release(), hiveId);
+        if (response.Span) {
+            auto hive_id = "#" + ::ToString(hiveId);
+            response.Span.Attribute("hive_id", hive_id);
+        }
+        return response;
+    }
+
     NNodeWhiteboard::TTabletId GetConsoleId() {
         return MakeConsoleID();
     }
@@ -244,6 +282,12 @@ protected:
         TActorId pipeClient = ConnectTabletPipe(GetConsoleId());
         THolder<NConsole::TEvConsole::TEvListTenantsRequest> request = MakeHolder<NConsole::TEvConsole::TEvListTenantsRequest>();
         SendRequestToPipe(pipeClient, request.Release());
+    }
+
+    TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse> MakeRequestConsoleListTenants() {
+        TActorId pipeClient = ConnectTabletPipe(GetConsoleId());
+        THolder<NConsole::TEvConsole::TEvListTenantsRequest> request = MakeHolder<NConsole::TEvConsole::TEvListTenantsRequest>();
+        return MakeRequestToPipe<NConsole::TEvConsole::TEvListTenantsResponse>(pipeClient, request.Release());
     }
 
     void RequestConsoleGetTenantStatus(const TString& path) {
@@ -272,6 +316,14 @@ protected:
         SendRequestToPipe(pipeClient, request.Release());
     }
 
+    TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> MakeRequestBSControllerConfigWithStoragePools() {
+        TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+        THolder<TEvBlobStorage::TEvControllerConfigRequest> request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        request->Record.MutableRequest()->AddCommand()->MutableQueryBaseConfig();
+        request->Record.MutableRequest()->AddCommand()->MutableReadStoragePool()->SetBoxId(Max<ui64>());
+        return MakeRequestToPipe<TEvBlobStorage::TEvControllerConfigResponse>(pipeClient, request.Release());
+    }
+
     void RequestBSControllerInfo() {
         TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
         THolder<TEvBlobStorage::TEvRequestControllerInfo> request = MakeHolder<TEvBlobStorage::TEvRequestControllerInfo>();
@@ -281,6 +333,11 @@ protected:
     void RequestBSControllerSelectGroups(THolder<TEvBlobStorage::TEvControllerSelectGroups> request) {
         TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
         SendRequestToPipe(pipeClient, request.Release());
+    }
+
+    TRequestResponse<TEvBlobStorage::TEvControllerSelectGroupsResult> MakeRequestBSControllerSelectGroups(THolder<TEvBlobStorage::TEvControllerSelectGroups> request, ui64 cookie) {
+        TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+        return MakeRequestToPipe<TEvBlobStorage::TEvControllerSelectGroupsResult>(pipeClient, request.Release(), cookie);
     }
 
     void RequestBSControllerPDiskRestart(ui32 nodeId, ui32 pdiskId, bool force = false) {
@@ -336,6 +393,30 @@ protected:
         return MakeRequestToPipe<NSysView::TEvSysView::TEvGetVSlotsResponse>(pipeClient, request.release(), 0/*cookie*/);
     }
 
+    TRequestResponse<NSysView::TEvSysView::TEvGetGroupsResponse> RequestBSControllerGroups() {
+        TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+        auto request = std::make_unique<NSysView::TEvSysView::TEvGetGroupsRequest>();
+        return MakeRequestToPipe<NSysView::TEvSysView::TEvGetGroupsResponse>(pipeClient, request.release(), 0/*cookie*/);
+    }
+
+    TRequestResponse<NSysView::TEvSysView::TEvGetStoragePoolsResponse> RequestBSControllerPools() {
+        TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+        auto request = std::make_unique<NSysView::TEvSysView::TEvGetStoragePoolsRequest>();
+        return MakeRequestToPipe<NSysView::TEvSysView::TEvGetStoragePoolsResponse>(pipeClient, request.release(), 0/*cookie*/);
+    }
+
+    TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> RequestBSControllerVSlots() {
+        TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+        auto request = std::make_unique<NSysView::TEvSysView::TEvGetVSlotsRequest>();
+        return MakeRequestToPipe<NSysView::TEvSysView::TEvGetVSlotsResponse>(pipeClient, request.release(), 0/*cookie*/);
+    }
+
+    TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse> RequestBSControllerPDisks() {
+        TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+        auto request = std::make_unique<NSysView::TEvSysView::TEvGetPDisksRequest>();
+        return MakeRequestToPipe<NSysView::TEvSysView::TEvGetPDisksResponse>(pipeClient, request.release(), 0/*cookie*/);
+    }
+
     void RequestBSControllerPDiskUpdateStatus(const NKikimrBlobStorage::TUpdateDriveStatus& driveStatus, bool force = false) {
         TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
         THolder<TEvBlobStorage::TEvControllerConfigRequest> request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
@@ -366,6 +447,35 @@ protected:
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
         request->ResultSet.emplace_back(entry);
         SendRequest(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
+    }
+
+    TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(const TString& path, ui64 cookie = 0) {
+        THolder<NSchemeCache::TSchemeCacheNavigate> request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+        entry.Path = SplitPath(path);
+        entry.RedirectRequired = false;
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
+        request->ResultSet.emplace_back(entry);
+        auto response = MakeRequest<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0/*flags*/, cookie);
+        if (response.Span) {
+            response.Span.Attribute("cookie", "#" + ::ToString(cookie));
+        }
+        return response;
+    }
+
+    TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(const TPathId& pathId, ui64 cookie = 0) {
+        THolder<NSchemeCache::TSchemeCacheNavigate> request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+        entry.TableId.PathId = pathId;
+        entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
+        entry.RedirectRequired = false;
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
+        request->ResultSet.emplace_back(entry);
+        auto response = MakeRequest<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0/*flags*/, cookie);
+        if (response.Span) {
+            response.Span.Attribute("response", "#" + ::ToString(cookie));
+        }
+        return response;
     }
 
     void RequestTxProxyDescribe(const TString& path) {
@@ -443,6 +553,10 @@ protected:
         if (Requests == 0) {
             static_cast<TDerived*>(this)->ReplyAndPassAway();
         }
+    }
+
+    bool IsLastRequest() const {
+        return Requests == 1;
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {

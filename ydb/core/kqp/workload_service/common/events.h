@@ -30,6 +30,12 @@ struct TEvPrivate {
         EvStopPoolHandler,
         EvCancelRequest,
 
+        EvCpuQuotaRequest,
+        EvCpuQuotaResponse,
+        EvCpuLoadResponse,
+        EvNodesInfoRequest,
+        EvNodesInfoResponse,
+
         EvTablesCreationFinished,
         EvCleanupTableResponse,
         EvCleanupTablesFinished,
@@ -110,13 +116,19 @@ struct TEvPrivate {
     };
 
     struct TEvFinishRequestInPool : public NActors::TEventLocal<TEvFinishRequestInPool, EvFinishRequestInPool> {
-        TEvFinishRequestInPool(const TString& database, const TString& poolId)
+        TEvFinishRequestInPool(const TString& database, const TString& poolId, TDuration duration, TDuration cpuConsumed, bool adjustCpuQuota)
             : Database(database)
             , PoolId(poolId)
+            , Duration(duration)
+            , CpuConsumed(cpuConsumed)
+            , AdjustCpuQuota(adjustCpuQuota)
         {}
 
         const TString Database;
         const TString PoolId;
+        const TDuration Duration;
+        const TDuration CpuConsumed;
+        const bool AdjustCpuQuota;
     };
 
     struct TEvResignPoolHandler : public NActors::TEventLocal<TEvResignPoolHandler, EvResignPoolHandler> {
@@ -140,6 +152,48 @@ struct TEvPrivate {
         {}
 
         const TString SessionId;
+    };
+
+    // Cpu load requests
+    struct TEvCpuQuotaRequest : public NActors::TEventLocal<TEvCpuQuotaRequest, EvCpuQuotaRequest> {
+        explicit TEvCpuQuotaRequest(double maxClusterLoad)
+            : MaxClusterLoad(maxClusterLoad)
+        {}
+
+        const double MaxClusterLoad;
+    };
+
+    struct TEvCpuQuotaResponse : public NActors::TEventLocal<TEvCpuQuotaResponse, EvCpuQuotaResponse> {
+        explicit TEvCpuQuotaResponse(bool quotaAccepted)
+            : QuotaAccepted(quotaAccepted)
+        {}
+
+        const bool QuotaAccepted;
+    };
+
+    struct TEvCpuLoadResponse : public NActors::TEventLocal<TEvCpuLoadResponse, EvCpuLoadResponse> {
+        TEvCpuLoadResponse(Ydb::StatusIds::StatusCode status, double instantLoad, ui64 cpuNumber, NYql::TIssues issues)
+            : Status(status)
+            , InstantLoad(instantLoad)
+            , CpuNumber(cpuNumber)
+            , Issues(std::move(issues))
+        {}
+
+        const Ydb::StatusIds::StatusCode Status;
+        const double InstantLoad;
+        const ui64 CpuNumber;
+        const NYql::TIssues Issues;
+    };
+
+    struct TEvNodesInfoRequest : public NActors::TEventLocal<TEvNodesInfoRequest, EvNodesInfoRequest> {
+    };
+
+    struct TEvNodesInfoResponse : public NActors::TEventLocal<TEvNodesInfoResponse, EvNodesInfoResponse> {
+        explicit TEvNodesInfoResponse(ui32 nodeCount)
+            : NodeCount(nodeCount)
+        {}
+
+        const ui32 NodeCount;
     };
 
     // Tables queries events

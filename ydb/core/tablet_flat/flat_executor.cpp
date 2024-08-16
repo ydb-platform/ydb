@@ -27,7 +27,6 @@
 #include "util_fmt_desc.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/control/immediate_control_board_impl.h>

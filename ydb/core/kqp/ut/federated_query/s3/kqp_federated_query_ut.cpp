@@ -2130,6 +2130,46 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         }
     }
 
+    Y_UNIT_TEST(TestReadEmptyFileWithCsvFormat) {
+        const TString externalDataSourceName = "/Root/external_data_source";
+        const TString bucket = "test_bucket1";
+
+        CreateBucketWithObject(bucket, "test_object", "");
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        const TString query = fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{location}",
+                AUTH_METHOD="NONE"
+            );)",
+            "external_source"_a = externalDataSourceName,
+            "location"_a = GetBucketLocation(bucket)
+            );
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        const TString sql = fmt::format(R"(
+                SELECT * FROM `{external_source}`.`/`
+                WITH (
+                    SCHEMA = (
+                        data String
+                    ),
+                    FORMAT = "csv_with_names"
+                )
+            )", "external_source"_a=externalDataSourceName);
+
+        auto db = kikimr->GetQueryClient();
+        auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+        UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+
+        NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
+        UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
+    }
 }
 
 } // namespace NKikimr::NKqp

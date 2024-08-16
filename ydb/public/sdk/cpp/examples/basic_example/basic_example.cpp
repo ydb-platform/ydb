@@ -85,32 +85,6 @@ static void CreateTables(TQueryClient client, const TString& path) {
     }));
 }
 
-static void DropTables(TQueryClient client, const TString& path) {
-    ThrowOnError(client.RetryQuery([path](TSession session) {
-        auto query = Sprintf(R"(
-            PRAGMA TablePathPrefix("%s");
-            DROP TABLE series;
-        )", path.c_str());
-        return session.ExecuteQuery(query, TTxControl::NoTx());
-    }));
-
-    ThrowOnError(client.RetryQuery([path](TSession session) {
-        auto query = Sprintf(R"(
-            PRAGMA TablePathPrefix("%s");
-            DROP TABLE seasons;
-        )", path.c_str());
-        return session.ExecuteQuery(query, TTxControl::NoTx());
-    }));
-    
-    ThrowOnError(client.RetryQuery([path](TSession session) {
-        auto query = Sprintf(R"(
-            PRAGMA TablePathPrefix("%s");
-            DROP TABLE episodes;
-        )", path.c_str());
-        return session.ExecuteQuery(query, TTxControl::NoTx());
-    }));
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 
 //! Fills sample tables with data in single parameterized data query.
@@ -335,17 +309,15 @@ static TAsyncExecuteQueryResult MultiStepTransaction(TSession session, const TSt
 // In most cases it's better to use transaction control settings in ExecuteDataQuery calls instead
 // to avoid additional hops to YDB cluster and allow more efficient execution of queries.
 // WARNING: Do not use without RetryQuery!!!
-// Now, RetryQuery does not support explicit transactions.
 static TStatus ExplicitTclTransaction(TQueryClient client, const TString& path, const TInstant& airDate) { 
     auto session = client.GetSession().GetValueSync().GetSession();
-    auto beginResult = session.BeginTransaction(TTxSettings::SerializableRW());
-    auto beginResultValue = beginResult.GetValueSync();
-    if (!beginResultValue.IsSuccess()) {
-        return beginResultValue;
+    auto beginResult = session.BeginTransaction(TTxSettings::SerializableRW()).GetValueSync();
+    if (!beginResult.IsSuccess()) {
+        return beginResult;
     }
 
     // Get newly created transaction id
-    auto tx = beginResultValue.GetTransaction();
+    auto tx = beginResult.GetTransaction();
 
     auto query = Sprintf(R"(
         --!syntax_v1
@@ -366,19 +338,18 @@ static TStatus ExplicitTclTransaction(TQueryClient client, const TString& path, 
     // Transaction control settings continues active transaction (tx)
     auto updateResult = session.ExecuteQuery(query,
         TTxControl::Tx(tx.GetId()),
-        params);
-    auto updateResultValue = updateResult.GetValueSync();
+        params).GetValueSync();
 
-    if (!updateResultValue.IsSuccess()) {
-        return updateResultValue;
+    if (!updateResult.IsSuccess()) {
+        return updateResult;
     }
     // Commit active transaction (tx)
     return tx.Commit().GetValueSync();
 }
 
 // WARNING: Do not use without RetryQuery!!!
-// Now, RetryQuery does not support StreamExecuteQuery.
-static TStatus StreamQuerySelectTransaction(TQueryClient client, const TString& path) {
+static TStatus StreamQuerySelectTransaction(TQueryClient client, const TString& path, std::vector<TResultSet>& resultSets) {
+    resultSets.clear();
     auto query = Sprintf(R"(
         --!syntax_v1
         PRAGMA TablePathPrefix("%s");
@@ -400,17 +371,16 @@ static TStatus StreamQuerySelectTransaction(TQueryClient client, const TString& 
         .Build();
 
     // Executes stream query
-    auto resultStreamQuery = client.StreamExecuteQuery(query, TTxControl::NoTx(), parameters);
-    auto resultStreamQueryValue = resultStreamQuery.GetValueSync();
+    auto resultStreamQuery = client.StreamExecuteQuery(query, TTxControl::NoTx(), parameters).GetValueSync();
 
-    if (!resultStreamQueryValue.IsSuccess()) {
-        return resultStreamQueryValue;
+    if (!resultStreamQuery.IsSuccess()) {
+        return resultStreamQuery;
     }
 
     bool eos = false;
 
     while (!eos) {
-        auto streamPart = resultStreamQueryValue.ReadNext().ExtractValueSync();
+        auto streamPart = resultStreamQuery.ReadNext().ExtractValueSync();
 
         if (!streamPart.IsSuccess()) {
             eos = true;
@@ -420,25 +390,84 @@ static TStatus StreamQuerySelectTransaction(TQueryClient client, const TString& 
             continue;
         }
 
-        Cout << "> StreamQuery:" << Endl;
         if (streamPart.HasResultSet()) {
             auto rs = streamPart.ExtractResultSet();
-
-            TResultSetParser parser(rs);
-            while (parser.TryNextRow()) {
-                Cout << "Season"
-                     << ", SeriesId: " << parser.ColumnParser("series_id").GetOptionalUint64()
-                     << ", SeasonId: " << parser.ColumnParser("season_id").GetOptionalUint64()
-                     << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8()
-                     << ", Air date: " << parser.ColumnParser("first_aired").GetOptionalString()
-                     << Endl;
-            }
+            resultSets.push_back(rs);
         }
     }
     return TStatus(EStatus::SUCCESS, NYql::TIssues());
 }
 
+static void DropTables(TQueryClient client, const TString& path) {
+    ThrowOnError(client.RetryQuery([path](TSession session) {
+        auto query = Sprintf(R"(
+            PRAGMA TablePathPrefix("%s");
+            DROP TABLE series;
+        )", path.c_str());
+        return session.ExecuteQuery(query, TTxControl::NoTx());
+    }));
+
+    ThrowOnError(client.RetryQuery([path](TSession session) {
+        auto query = Sprintf(R"(
+            PRAGMA TablePathPrefix("%s");
+            DROP TABLE seasons;
+        )", path.c_str());
+        return session.ExecuteQuery(query, TTxControl::NoTx());
+    }));
+    
+    ThrowOnError(client.RetryQuery([path](TSession session) {
+        auto query = Sprintf(R"(
+            PRAGMA TablePathPrefix("%s");
+            DROP TABLE episodes;
+        )", path.c_str());
+        return session.ExecuteQuery(query, TTxControl::NoTx());
+    }));
+}
+
 ///////////////////////////////////////////////////////////////////////////////
+
+void FillTableData(TQueryClient client, const TString& path) {
+    ThrowOnError(client.RetryQuery([path](TSession session) {
+        return FillTableDataTransaction(session, path);
+    }));
+}
+
+void SelectSimple(TQueryClient client, const TString& path) {
+    TMaybe<TResultSet> resultSet;
+    ThrowOnError(client.RetryQuery([path](TSession session) {
+        return SelectSimpleTransaction(session, path);
+    }), resultSet);
+
+    TResultSetParser parser(*resultSet);
+    if (parser.TryNextRow()) {
+        Cout << "> SelectSimple:" << Endl << "Series"
+            << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64()
+            << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8()
+            << ", Release date: " << parser.ColumnParser("release_date").GetOptionalString()
+            << Endl;
+    }
+}
+
+void UpsertSimple(TQueryClient client, const TString& path) {
+    ThrowOnError(client.RetryQuery([path](TSession session) {
+        return UpsertSimpleTransaction(session, path);
+    }));
+}
+
+void SelectWithParams(TQueryClient client, const TString& path) {
+    TMaybe<TResultSet> resultSet;
+    ThrowOnError(client.RetryQuery([path](TSession session) {
+        return SelectWithParamsTransaction(session, path, 2, 3);
+    }), resultSet);
+
+    TResultSetParser parser(*resultSet);
+    if (parser.TryNextRow()) {
+        Cout << "> SelectWithParams:" << Endl << "Season"
+            << ", Title: " << parser.ColumnParser("season_title").GetOptionalUtf8()
+            << ", Series title: " << parser.ColumnParser("series_title").GetOptionalUtf8()
+            << Endl;
+    }
+}
 
 void MultiStep(TQueryClient client, const TString& path) {
     TMaybe<TResultSet> resultSet;
@@ -459,49 +488,32 @@ void MultiStep(TQueryClient client, const TString& path) {
     }
 }
 
-void SelectWithParams(TQueryClient client, const TString& path) {
-    TMaybe<TResultSet> resultSet;
-    ThrowOnError(client.RetryQuery([path](TSession session) {
-        return SelectWithParamsTransaction(session, path, 2, 3);
-    }), resultSet);
-
-    TResultSetParser parser(*resultSet);
-    if (parser.TryNextRow()) {
-        Cout << "> SelectWithParams:" << Endl << "Season"
-            << ", Title: " << parser.ColumnParser("season_title").GetOptionalUtf8()
-            << ", Series title: " << parser.ColumnParser("series_title").GetOptionalUtf8()
-            << Endl;
-    }
-}
-
-void UpsertSimple(TQueryClient client, const TString& path) {
-    ThrowOnError(client.RetryQuery([path](TSession session) {
-        return UpsertSimpleTransaction(session, path);
+void ExplicitTcl(TQueryClient client, const TString& path) {
+    ThrowOnError(client.RetryQuery([path](TQueryClient client) {
+        return ExplicitTclTransaction(client, path, TInstant::Now());
     }));
 }
 
-void SelectSimple(TQueryClient client, const TString& path) {
-    TMaybe<TResultSet> resultSet;
-    ThrowOnError(client.RetryQuery([path](TSession session) {
-        return SelectSimpleTransaction(session, path);
-    }), resultSet);
-
-    TResultSetParser parser(*resultSet);
-    if (parser.TryNextRow()) {
-        Cout << "> SelectSimple:" << Endl << "Series"
-            << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64()
-            << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8()
-            << ", Release date: " << parser.ColumnParser("release_date").GetOptionalString()
-            << Endl;
+void StreamQuerySelect(TQueryClient client, const TString& path) {
+    std::vector <TResultSet> resultSets;
+    ThrowOnError(client.RetryQuery([path, &resultSets](TQueryClient client) {
+        return StreamQuerySelectTransaction(client, path, resultSets);
+    }));
+    
+    Cout << "> StreamQuery:" << Endl;
+    for (auto rs : resultSets) {
+        TResultSetParser parser(rs);
+        while (parser.TryNextRow()) {
+            Cout << "Season"
+                    << ", SeriesId: " << parser.ColumnParser("series_id").GetOptionalUint64()
+                    << ", SeasonId: " << parser.ColumnParser("season_id").GetOptionalUint64()
+                    << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8()
+                    << ", Air date: " << parser.ColumnParser("first_aired").GetOptionalString()
+                    << Endl;
+        }
     }
 }
 
-
-void FillTableData(TQueryClient client, const TString& path) {
-    ThrowOnError(client.RetryQuery([path](TSession session) {
-            return FillTableDataTransaction(session, path);
-        }));
-}
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -520,9 +532,9 @@ bool Run(const TDriver& driver, const TString& path) {
 
         MultiStep(client, path);
 
-        ExplicitTclTransaction(client, path, TInstant::Now());
+        ExplicitTcl(client, path);
 
-        StreamQuerySelectTransaction(client, path);
+        StreamQuerySelect(client, path);
 
         DropTables(client, path);
     }

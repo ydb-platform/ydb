@@ -413,6 +413,8 @@ void TWriteSessionImpl::InitWriter() { // No Lock, very initial start - no race 
 
     Settings.CompressionExecutor_->Start();
     Settings.EventHandlers_.HandlersExecutor_->Start();
+
+    EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
 }
 
 // Client method
@@ -678,7 +680,6 @@ void TWriteSessionImpl::OnConnect(
         TPlainStatus&& st, typename IProcessor::TPtr&& processor, const NYdbGrpc::IQueueClientContextPtr& connectContext
 ) {
     THandleResult handleResult;
-    bool issueToken = false;
     with_lock (Lock) {
         if (ConnectContext == connectContext) {
             Cancel(ConnectTimeoutContext);
@@ -706,17 +707,10 @@ void TWriteSessionImpl::OnConnect(
                         )
                 );
             }
-        } else if (!FirstTokenIssued) {
-            issueToken = true;
-            FirstTokenIssued = true;
         }
     }
-    if (st.Ok()) {
-        if (issueToken) {
-            EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
-        }
+    if (st.Ok())
         ReadFromProcessor(); // Out of Init
-    }
     ProcessHandleResult(handleResult);
 }
 

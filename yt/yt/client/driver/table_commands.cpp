@@ -1103,6 +1103,15 @@ void TLookupRowsCommand::DoExecute(ICommandContextPtr context)
 
     auto clientBase = GetClientBase(context);
 
+    auto produceResponseParameters = [&] (const auto& result) {
+        ProduceResponseParameters(context, [&] (NYson::IYsonConsumer* consumer) {
+            if (!result.UnavailableKeyIndexes.empty()) {
+                BuildYsonMapFragmentFluently(consumer)
+                    .Item("unavailable_key_indexes").Value(result.UnavailableKeyIndexes);
+            }
+        });
+    };
+
     if (Versioned) {
         TVersionedLookupRowsOptions versionedOptions;
         versionedOptions.ColumnFilter = Options.ColumnFilter;
@@ -1113,32 +1122,37 @@ void TLookupRowsCommand::DoExecute(ICommandContextPtr context)
         versionedOptions.CachedSyncReplicasTimeout = Options.CachedSyncReplicasTimeout;
         versionedOptions.RetentionConfig = RetentionConfig;
         versionedOptions.ReplicaConsistency = Options.ReplicaConsistency;
-        auto asyncRowset = clientBase->VersionedLookupRows(
+        auto resultFuture = clientBase->VersionedLookupRows(
             Path.GetPath(),
             std::move(nameTable),
             std::move(keyRange),
             versionedOptions);
-        auto rowset = WaitFor(asyncRowset)
-            .ValueOrThrow()
-            .Rowset;
-        auto writer = CreateVersionedWriterForFormat(format, rowset->GetSchema(), output);
-        Y_UNUSED(writer->Write(rowset->GetRows()));
+        auto result = WaitFor(resultFuture)
+            .ValueOrThrow();
+        produceResponseParameters(result);
+        auto writer = CreateVersionedWriterForFormat(format, result.Rowset->GetSchema(), output);
+        Y_UNUSED(writer->Write(result.Rowset->GetRows()));
         WaitFor(writer->Close())
             .ThrowOnError();
     } else {
-        auto asyncRowset = clientBase->LookupRows(
+        auto resultFuture = clientBase->LookupRows(
             Path.GetPath(),
             std::move(nameTable),
             std::move(keyRange),
             Options);
-        auto rowset = WaitFor(asyncRowset)
-            .ValueOrThrow()
-            .Rowset;
-        auto writer = CreateSchemafulWriterForFormat(format, rowset->GetSchema(), output);
-        Y_UNUSED(writer->Write(rowset->GetRows()));
+        auto result = WaitFor(resultFuture)
+            .ValueOrThrow();
+        produceResponseParameters(result);
+        auto writer = CreateSchemafulWriterForFormat(format, result.Rowset->GetSchema(), output);
+        Y_UNUSED(writer->Write(result.Rowset->GetRows()));
         WaitFor(writer->Close())
             .ThrowOnError();
     }
+}
+
+bool TLookupRowsCommand::HasResponseParameters() const
+{
+    return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

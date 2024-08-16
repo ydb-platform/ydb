@@ -107,9 +107,11 @@ namespace NKikimr {
                             .TraceId = std::move(ev->TraceId),
                             .Event = ev->Get(),
                             .ExecutionRelay = ev->Get()->ExecutionRelay,
+                            .LogAccEnabled = ev->Get()->IsVerboseNoDataEnabled || ev->Get()->CollectDebugInfo,
                             .LatencyQueueKind = kind,
                         },
-                        .NodeLayout = TNodeLayoutInfoPtr(NodeLayoutInfo)
+                        .NodeLayout = TNodeLayoutInfoPtr(NodeLayoutInfo),
+                        .AccelerationParams = GetAccelerationParams(),
                     }),
                     ev->Get()->Deadline
                 );
@@ -222,6 +224,7 @@ namespace NKikimr {
                     .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
                     .Stats = PerDiskStats,
                     .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
+                    .AccelerationParams = GetAccelerationParams(),
                 }),
                 ev->Get()->Deadline
             );
@@ -292,9 +295,10 @@ namespace NKikimr {
         EnsureMonitoring(true);
         Mon->EventDiscover->Inc();
         EnableWilsonTracing(ev, Mon->DiscoverSamplePPM);
-        auto&& callback = Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
+        TErasureType::EErasureSpecies erasure = Info->Type.GetErasure();
+        auto&& callback = erasure == TBlobStorageGroupType::ErasureMirror3dc
             ? CreateBlobStorageGroupMirror3dcDiscoverRequest
-            : Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3of4
+            : erasure == TBlobStorageGroupType::ErasureMirror3of4
             ? CreateBlobStorageGroupMirror3of4DiscoverRequest
             : CreateBlobStorageGroupDiscoverRequest;
         PushRequest(callback(
@@ -310,7 +314,9 @@ namespace NKikimr {
                     .RestartCounter = ev->Get()->RestartCounter,
                     .TraceId = std::move(ev->TraceId),
                     .Event = ev->Get(),
-                    .ExecutionRelay = ev->Get()->ExecutionRelay
+                    .ExecutionRelay = ev->Get()->ExecutionRelay,
+                    .LogAccEnabled = (erasure != TBlobStorageGroupType::ErasureMirror3dc) &&
+                            (erasure != TBlobStorageGroupType::ErasureMirror3of4)
                 }
             }),
             ev->Get()->Deadline
@@ -492,6 +498,7 @@ namespace NKikimr {
                             .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
                             .Stats = PerDiskStats,
                             .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
+                            .AccelerationParams = GetAccelerationParams(),
                         }),
                         ev->Get()->Deadline
                     );
@@ -513,6 +520,7 @@ namespace NKikimr {
                             .HandleClass = handleClass,
                             .Tactic = tactic,
                             .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
+                            .AccelerationParams = GetAccelerationParams(),
                         }),
                         TInstant::Max()
                     );
@@ -958,5 +966,20 @@ namespace NKikimr {
         CheckPostponedQueue();
     }
 
+
+    void TBlobStorageGroupProxy::Handle(TEvGetQueuesInfo::TPtr ev) {
+        ui32 groupSize = Info->GetTotalVDisksNum();
+        std::unique_ptr<TEvQueuesInfo> res = std::make_unique<TEvQueuesInfo>(groupSize);
+        if (Sessions && Sessions->GroupQueues) {
+            for (ui32 orderNum = 0; orderNum < groupSize; ++orderNum) {
+                TGroupQueues::TVDisk* vdisk = Sessions->GroupQueues->DisksByOrderNumber[orderNum];
+                if (vdisk) {
+                    const TGroupQueues::TVDisk::TQueues::TQueue& queue = vdisk->Queues.GetQueue(ev->Get()->QueueId);
+                    res->AddInfoForQueue(orderNum, queue.ActorId, queue.FlowRecord);
+                }
+            }
+        }
+        TActivationContext::Send(ev->Sender, std::move(res));
+    }
 
 } // NKikimr

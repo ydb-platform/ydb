@@ -42,7 +42,7 @@
                                                 "TopSortBy": ""
                                             },
                                             {
-                                                "Condition": "joincol = joincol",
+                                                "Condition": "tt1.joincol = tt2.joincol",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 8
@@ -156,7 +156,10 @@
                     }
                 ]
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

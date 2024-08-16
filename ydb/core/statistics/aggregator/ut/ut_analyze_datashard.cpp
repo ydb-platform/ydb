@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
 
         runtime.SimulateSleep(TDuration::Seconds(30));
 
-        Analyze(runtime, {{pathId}}, saTabletId);
+        Analyze(runtime, saTabletId, {{pathId}});
 
         ValidateCountMin(runtime, pathId);
     }
@@ -62,7 +62,7 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
         auto pathId1 = ResolvePathId(runtime, "/Root/Database/Table1", nullptr, &saTabletId1);
         auto pathId2 = ResolvePathId(runtime, "/Root/Database/Table2");
 
-        Analyze(runtime, {pathId1, pathId2}, saTabletId1);
+        Analyze(runtime, saTabletId1, {pathId1, pathId2});
 
         ValidateCountMin(runtime, pathId1);
         ValidateCountMin(runtime, pathId2);
@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
         runtime.SimulateSleep(TDuration::Seconds(5));
         init2Thread.join();
 
-        Analyze(runtime, {pathId}, saTabletId);
+        Analyze(runtime, saTabletId, {pathId});
 
         runtime.SimulateSleep(TDuration::Seconds(60));
 

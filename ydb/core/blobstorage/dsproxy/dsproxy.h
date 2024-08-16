@@ -55,6 +55,9 @@ const ui32 MaskSizeBits = 32;
 constexpr bool DefaultEnablePutBatching = true;
 constexpr bool DefaultEnableVPatch = false;
 
+constexpr float DefaultSlowDiskThreshold = 2;
+constexpr float DefaultPredictedDelayMultiplier = 1;
+
 constexpr bool WithMovingPatchRequestToStaticNode = true;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -187,6 +190,11 @@ inline void SetExecutionRelay(IEventBase& ev, std::shared_ptr<TEvBlobStorage::TE
             Y_ABORT("unexpected event Type# 0x%08" PRIx32, type);
     }
 }
+
+struct TAccelerationParams {
+    double SlowDiskThreshold = 2;
+    double PredictedDelayMultiplier = 1;
+};
 
 class TBlobStorageGroupRequestActor : public TActor<TBlobStorageGroupRequestActor> {
 public:
@@ -362,6 +370,7 @@ struct TBlobStorageGroupPutParameters {
     bool TimeStatsEnabled;
     TDiskResponsivenessTracker::TPerDiskStatsPtr Stats;
     bool EnableRequestMod3x3ForMinLatency;
+    TAccelerationParams AccelerationParams;
 };
 IActor* CreateBlobStorageGroupPutRequest(TBlobStorageGroupPutParameters params);
 
@@ -379,6 +388,7 @@ struct TBlobStorageGroupMultiPutParameters {
     NKikimrBlobStorage::EPutHandleClass HandleClass;
     TEvBlobStorage::TEvPut::ETactic Tactic;
     bool EnableRequestMod3x3ForMinLatency;
+    TAccelerationParams AccelerationParams;
 
     static ui32 CalculateRestartCounter(TBatchedVec<TEvBlobStorage::TEvPut::TPtr>& events) {
         ui32 maxRestarts = 0;
@@ -398,6 +408,7 @@ struct TBlobStorageGroupGetParameters {
         .Activity = NKikimrServices::TActivity::BS_PROXY_GET_ACTOR,
     };
     TNodeLayoutInfoPtr NodeLayout;
+    TAccelerationParams AccelerationParams;
 };
 IActor* CreateBlobStorageGroupGetRequest(TBlobStorageGroupGetParameters params);
 
@@ -498,12 +509,20 @@ IActor* CreateBlobStorageGroupAssimilateRequest(TBlobStorageGroupAssimilateParam
 
 IActor* CreateBlobStorageGroupEjectedProxy(ui32 groupId, TIntrusivePtr<TDsProxyNodeMon> &nodeMon);
 
+struct TBlobStorageProxyParameters {
+    bool UseActorSystemTimeInBSQueue = false;
+
+    const TControlWrapper& EnablePutBatching;
+    const TControlWrapper& EnableVPatch;
+    const TControlWrapper& SlowDiskThreshold;
+    const TControlWrapper& PredictedDelayMultiplier;
+};
+
 IActor* CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>&& info,
     bool forceWaitAllDrives, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
-    TIntrusivePtr<TStoragePoolCounters>&& storagePoolCounters, const TControlWrapper &enablePutBatching,
-    const TControlWrapper &enableVPatch);
+    TIntrusivePtr<TStoragePoolCounters>&& storagePoolCounters, const TBlobStorageProxyParameters& params);
 
 IActor* CreateBlobStorageGroupProxyUnconfigured(ui32 groupId, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
-    const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch);
+    const TBlobStorageProxyParameters& params);
 
 }//NKikimr

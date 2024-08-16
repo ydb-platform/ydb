@@ -706,6 +706,10 @@ message THttpProxyConfig {
     optional string AccessServiceEndpoint = 9;
 
     optional string JwtFile = 10;
+
+    optional bool YandexCloudMode = 11 [default = false];
+    optional bool DataStreamsEnabled = 12 [default = true];
+    optional bool YmqEnabled = 13 [default = false];
 }
 
 message TS3ProxyResolverConfig {
@@ -1310,6 +1314,19 @@ message TImmediateControlsConfig {
             DefaultValue: 256 }];
     }
 
+    message TDSProxyControls {
+        optional uint64 SlowDiskThreshold = 1 [(ControlOptions) = {
+            Description: "The minimum ratio of slowest and second slowest disks, required to accelerate, actual value is divided by 1000",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 2000 }];
+        optional uint64 PredictedDelayMultiplier = 2 [(ControlOptions) = {
+            Description: "Predicted time of VDisk's response is multiplied by this value divided by 1000",
+            MinValue: 0,
+            MaxValue: 1000000,
+            DefaultValue: 1000 }];
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
@@ -1318,6 +1335,7 @@ message TImmediateControlsConfig {
     reserved 6;
     optional TVDiskControls VDiskControls = 7;
     optional TTabletControls TabletControls = 8;
+    optional TDSProxyControls DSProxyControls = 9;
 };
 
 message TMeteringConfig {
@@ -1777,8 +1795,15 @@ message TClientCertificateAuthorization {
         repeated string Suffixes = 3;
     }
 
+    // Matches subject alternative names (DNS) and Common Name (CN) in certificate
+    message TSubjectDns {
+        repeated string Values = 1;
+        repeated string Suffixes = 2;
+    }
+
     message TClientCertificateDefinition {
         repeated TSubjectTerm SubjectTerms = 1;
+        optional TSubjectDns SubjectDns = 5;
         optional bool CanCheckNodeHostByCN = 2 [default = false];
         repeated string MemberGroups = 3;
         optional bool RequireSameIssuer = 4 [default = true];

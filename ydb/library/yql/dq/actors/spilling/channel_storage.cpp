@@ -30,10 +30,11 @@ class TDqChannelStorage : public IDqChannelStorage {
         NThreading::TFuture<void> IsBlobWrittenFuture_;
     };
 public:
-    TDqChannelStorage(TTxId txId, ui64 channelId, TWakeUpCallback&& wakeUpCallback, TErrorCallback&& errorCallback, TActorSystem* actorSystem)
+    TDqChannelStorage(TTxId txId, ui64 channelId, TWakeUpCallback&& wakeUpCallback, TErrorCallback&& errorCallback, 
+        TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters, TActorSystem* actorSystem)
     : ActorSystem_(actorSystem)
     {
-        ChannelStorageActor_ = CreateDqChannelStorageActor(txId, channelId, std::move(wakeUpCallback), std::move(errorCallback), actorSystem);
+        ChannelStorageActor_ = CreateDqChannelStorageActor(txId, channelId, std::move(wakeUpCallback), std::move(errorCallback), spillingTaskCounters, actorSystem);
         ChannelStorageActorId_ = ActorSystem_->Register(ChannelStorageActor_->GetActor());
     }
 
@@ -119,12 +120,14 @@ private:
 
 } // anonymous namespace
 
+
 IDqChannelStorage::TPtr CreateDqChannelStorage(TTxId txId, ui64 channelId,
     TWakeUpCallback wakeUpCallback,
     TErrorCallback errorCallback,
+    TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters,
     TActorSystem* actorSystem)
 {
-    return new TDqChannelStorage(txId, channelId, std::move(wakeUpCallback), std::move(errorCallback), actorSystem);
+    return new TDqChannelStorage(txId, channelId, std::move(wakeUpCallback), std::move(errorCallback), spillingTaskCounters, actorSystem);
 }
 
 } // namespace NYql::NDq

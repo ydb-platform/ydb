@@ -124,18 +124,22 @@ public:
 
     TErrorOr(const std::exception& ex);
 
-    explicit TErrorOr(TString message);
-    TErrorOr(TErrorCode code, TString message);
+    struct TDisableFormat
+    { };
+    static constexpr TDisableFormat DisableFormat = {};
 
-    template <size_t Length, class... TArgs>
+    TErrorOr(TString message, TDisableFormat);
+    TErrorOr(TErrorCode code, TString message, TDisableFormat);
+
+    template <class... TArgs>
     explicit TErrorOr(
-        const char (&messageOrFormat)[Length],
+        TFormatString<TArgs...> format,
         TArgs&&... arg);
 
-    template <size_t Length, class... TArgs>
+    template <class... TArgs>
     TErrorOr(
         TErrorCode code,
-        const char (&messageOrFormat)[Length],
+        TFormatString<TArgs...> format,
         TArgs&&... args);
 
     TError& operator = (const TError& other);
@@ -188,8 +192,23 @@ public:
 
     bool IsOK() const;
 
+    template <class U>
+        requires (!CStringLiteral<std::remove_cvref_t<U>>)
+    void ThrowOnError(U&& u) const &;
     template <class... TArgs>
-    void ThrowOnError(TArgs&&... args) const;
+    void ThrowOnError(TFormatString<TArgs...> format, TArgs&&... args) const &;
+    template <class... TArgs>
+    void ThrowOnError(TErrorCode code, TFormatString<TArgs...> format, TArgs&&... args) const &;
+    inline void ThrowOnError() const &;
+
+    template <class U>
+        requires (!CStringLiteral<std::remove_cvref_t<U>>)
+    void ThrowOnError(U&& u) &&;
+    template <class... TArgs>
+    void ThrowOnError(TFormatString<TArgs...> format, TArgs&&... args) &&;
+    template <class... TArgs>
+    void ThrowOnError(TErrorCode code, TFormatString<TArgs...> format, TArgs&&... args) &&;
+    inline void ThrowOnError() &&;
 
     template <CInvocable<bool(const TError&)> TFilter>
     std::optional<TError> FindMatching(const TFilter& filter) const;
@@ -198,14 +217,22 @@ public:
     std::optional<TError> FindMatching(TErrorCode code) const;
     std::optional<TError> FindMatching(const THashSet<TErrorCode>& codes) const;
 
+    template <class U>
+        requires (!CStringLiteral<std::remove_cvref_t<U>>)
+    TError Wrap(U&& u) const &;
     template <class... TArgs>
-        requires std::constructible_from<TError, TArgs...>
-    TError Wrap(TArgs&&... args) const &;
+    TError Wrap(TFormatString<TArgs...> format, TArgs&&... args) const &;
+    template <class... TArgs>
+    TError Wrap(TErrorCode code, TFormatString<TArgs...> format, TArgs&&... args) const &;
     TError Wrap() const &;
 
+    template <class U>
+        requires (!CStringLiteral<std::remove_cvref_t<U>>)
+    TError Wrap(U&& u) &&;
     template <class... TArgs>
-        requires std::constructible_from<TError, TArgs...>
-    TError Wrap(TArgs&&... args) &&;
+    TError Wrap(TFormatString<TArgs...> format, TArgs&&... args) &&;
+    template <class... TArgs>
+    TError Wrap(TErrorCode code, TFormatString<TArgs...> format, TArgs&&... args) &&;
     TError Wrap() &&;
 
     //! Perform recursive aggregation of error codes and messages over the error tree.
@@ -349,11 +376,23 @@ struct TErrorAdaptor
 };
 
 // Make these to correctly forward TError to Wrap call.
-template <class TErrorLike, class... TArgs>
+template <class TErrorLike, class U>
     requires
         std::derived_from<std::remove_cvref_t<TErrorLike>, TError> &&
-        std::constructible_from<TError, TArgs...>
-void ThrowErrorExceptionIfFailed(TErrorLike&& error, TArgs&&... args);
+        (!CStringLiteral<std::remove_cvref_t<U>>)
+void ThrowErrorExceptionIfFailed(TErrorLike&& error, U&& u);
+
+template <class TErrorLike, class... TArgs>
+    requires std::derived_from<std::remove_cvref_t<TErrorLike>, TError>
+void ThrowErrorExceptionIfFailed(TErrorLike&& error, TFormatString<TArgs...> format, TArgs&&... args);
+
+template <class TErrorLike, class... TArgs>
+    requires std::derived_from<std::remove_cvref_t<TErrorLike>, TError>
+void ThrowErrorExceptionIfFailed(TErrorLike&& error, TErrorCode code, TFormatString<TArgs...> format, TArgs&&... args);
+
+template <class TErrorLike>
+    requires std::derived_from<std::remove_cvref_t<TErrorLike>, TError>
+void ThrowErrorExceptionIfFailed(TErrorLike&& error);
 
 } // namespace NDetail
 
@@ -411,14 +450,32 @@ public:
     T& Value() & Y_LIFETIME_BOUND;
     T&& Value() && Y_LIFETIME_BOUND;
 
+    template <class U>
+        requires (!CStringLiteral<std::remove_cvref_t<U>>)
+    const T& ValueOrThrow(U&& u) const & Y_LIFETIME_BOUND;
     template <class... TArgs>
-    const T& ValueOrThrow(TArgs&&... args) const & Y_LIFETIME_BOUND;
+    const T& ValueOrThrow(TFormatString<TArgs...> format, TArgs&&... args) const & Y_LIFETIME_BOUND;
+    template <class... TArgs>
+    const T& ValueOrThrow(TErrorCode code, TFormatString<TArgs...> format, TArgs&&... args) const & Y_LIFETIME_BOUND;
+    const T& ValueOrThrow() const & Y_LIFETIME_BOUND;
 
+    template <class U>
+        requires (!CStringLiteral<std::remove_cvref_t<U>>)
+    T& ValueOrThrow(U&& u) & Y_LIFETIME_BOUND;
     template <class... TArgs>
-    T& ValueOrThrow(TArgs&&... args) & Y_LIFETIME_BOUND;
+    T& ValueOrThrow(TFormatString<TArgs...> format, TArgs&&... args) & Y_LIFETIME_BOUND;
+    template <class... TArgs>
+    T& ValueOrThrow(TErrorCode code, TFormatString<TArgs...> format, TArgs&&... args) & Y_LIFETIME_BOUND;
+    T& ValueOrThrow() & Y_LIFETIME_BOUND;
 
+    template <class U>
+        requires (!CStringLiteral<std::remove_cvref_t<U>>)
+    T&& ValueOrThrow(U&& u) && Y_LIFETIME_BOUND;
     template <class... TArgs>
-    T&& ValueOrThrow(TArgs&&... args) && Y_LIFETIME_BOUND;
+    T&& ValueOrThrow(TFormatString<TArgs...> format, TArgs&&... args) && Y_LIFETIME_BOUND;
+    template <class... TArgs>
+    T&& ValueOrThrow(TErrorCode code, TFormatString<TArgs...> format, TArgs&&... args) && Y_LIFETIME_BOUND;
+    T&& ValueOrThrow() && Y_LIFETIME_BOUND;
 
     const T& ValueOrDefault(const T& defaultValue Y_LIFETIME_BOUND) const & Y_LIFETIME_BOUND;
     T& ValueOrDefault(T& defaultValue Y_LIFETIME_BOUND) & Y_LIFETIME_BOUND;

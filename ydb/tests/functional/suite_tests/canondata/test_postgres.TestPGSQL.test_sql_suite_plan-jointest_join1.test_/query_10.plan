@@ -42,7 +42,7 @@
                                                 "TopSortBy": ""
                                             },
                                             {
-                                                "Condition": "i = i",
+                                                "Condition": "J1_TBL.i = J2_TBL.i",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 8
@@ -159,7 +159,10 @@
                     }
                 ]
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

@@ -1691,7 +1691,7 @@ TEST(TProtobufToYsonTest, Success)
     }
 
     TEST_PROLOGUE()
-    Y_PROTOBUF_SUPPRESS_NODISCARD message.SerializeToCodedStream(&codedStream);
+    Y_UNUSED(message.SerializeToCodedStream(&codedStream));
     TEST_EPILOGUE(TMessage)
 
     auto writtenNode = ConvertToNode(TYsonString(yson));
@@ -1825,7 +1825,7 @@ TEST(TProtobufToYsonTest, Casing)
     message.set_enumfield(NYT::NYson::NProto::TCamelCaseStyleMessage::VALUE_FIRST);
 
     TEST_PROLOGUE()
-    Y_PROTOBUF_SUPPRESS_NODISCARD message.SerializeToCodedStream(&codedStream);
+    Y_UNUSED(message.SerializeToCodedStream(&codedStream));
     TEST_EPILOGUE(TCamelCaseStyleMessage)
 
     auto writtenNode = ConvertToNode(TYsonString(yson));

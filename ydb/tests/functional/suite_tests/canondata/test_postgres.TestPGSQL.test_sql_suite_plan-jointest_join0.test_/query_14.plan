@@ -41,7 +41,7 @@
                                                 "Name": "Limit"
                                             },
                                             {
-                                                "Condition": "id = yy_1.id",
+                                                "Condition": "xx.id = yy_1.id",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 11
@@ -180,7 +180,10 @@
                     }
                 ]
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

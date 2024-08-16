@@ -42,7 +42,7 @@
                                                 "TopSortBy": "argument.a.y"
                                             },
                                             {
-                                                "Condition": "x = x",
+                                                "Condition": "a.x = pv.x",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 15
@@ -215,7 +215,10 @@
                 ],
                 "Subplan Name": "CTE precompute_0_0"
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

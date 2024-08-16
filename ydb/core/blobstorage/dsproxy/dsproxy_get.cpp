@@ -57,6 +57,8 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
     ui32 PutsAccelerated = 0;
     bool IsPutAccelerateScheduled = false;
 
+    TAccelerationParams AccelerationParams;
+
     void Handle(TEvAccelerateGet::TPtr &ev) {
         IsGetAccelerateScheduled = false;
         RootCauseTrack.OnAccelerate(ev->Get()->CauseIdx);
@@ -322,13 +324,13 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         if (!IsGetAccelerateScheduled && GetsAccelerated < 2) {
             // Count VDisks that have requests in flight, if there is no more than 2 such VDisks, Accelerate
             if (CountDisksWithActiveRequests() <= 2) {
-                ui64 timeToAccelerateUs = GetImpl.GetTimeToAccelerateGetNs(LogCtx, GetsAccelerated) / 1000;
+                ui64 timeToAccelerateUs = GetImpl.GetTimeToAccelerateGetNs(LogCtx) / 1000;
+                TDuration timeToAccelerate = TDuration::MicroSeconds(timeToAccelerateUs);
                 TInstant now = TActivationContext::Now();
-                TDuration timeSinceStart = (now > StartTime) ? (now - StartTime) : TDuration::MilliSeconds(0);
-                if (timeSinceStart.MicroSeconds() < timeToAccelerateUs) {
+                TInstant nextAcceleration = StartTime + timeToAccelerate;
+                if (nextAcceleration > now) {
                     ui64 causeIdx = RootCauseTrack.RegisterAccelerate();
-                    Schedule(TDuration::MicroSeconds(timeToAccelerateUs - timeSinceStart.MicroSeconds()),
-                            new TEvAccelerateGet(causeIdx));
+                    Schedule(nextAcceleration - now, new TEvAccelerateGet(causeIdx));
                     IsGetAccelerateScheduled = true;
                 } else {
                     AccelerateGet();
@@ -341,13 +343,13 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         if (!IsPutAccelerateScheduled && PutsAccelerated < 2) {
             // Count VDisks that have requests in flight, if there is no more than 2 such VDisks, Accelerate
             if (CountDisksWithActiveRequests() <= 2) {
-                ui64 timeToAccelerateUs = GetImpl.GetTimeToAcceleratePutNs(LogCtx, PutsAccelerated) / 1000;
+                ui64 timeToAccelerateUs = GetImpl.GetTimeToAcceleratePutNs(LogCtx) / 1000;
+                TDuration timeToAccelerate = TDuration::MicroSeconds(timeToAccelerateUs);
                 TInstant now = TActivationContext::Now();
-                TDuration timeSinceStart = (now > StartTimePut) ? (now - StartTimePut) : TDuration::MilliSeconds(0);
-                if (timeSinceStart.MicroSeconds() < timeToAccelerateUs) {
+                TInstant nextAcceleration = StartTime + timeToAccelerate;
+                if (nextAcceleration > now) {
                     ui64 causeIdx = RootCauseTrack.RegisterAccelerate();
-                    Schedule(TDuration::MicroSeconds(timeToAccelerateUs - timeSinceStart.MicroSeconds()),
-                            new TEvAcceleratePut(causeIdx));
+                    Schedule(nextAcceleration - now, new TEvAcceleratePut(causeIdx));
                     IsPutAccelerateScheduled = true;
                 } else {
                     AcceleratePut();
@@ -395,16 +397,18 @@ public:
         return ERequestType::Get;
     }
 
+
     TBlobStorageGroupGetRequest(TBlobStorageGroupGetParameters& params)
         : TBlobStorageGroupRequestActor(params)
         , GetImpl(Info, GroupQueues, params.Common.Event, std::move(params.NodeLayout),
-                LogCtx.RequestPrefix)
+                params.AccelerationParams, LogCtx.RequestPrefix)
         , Orbit(std::move(params.Common.Event->Orbit))
         , Deadline(params.Common.Event->Deadline)
         , StartTime(params.Common.Now)
         , StartTimePut(StartTime)
         , GroupSize(Info->Type.BlobSubgroupSize())
         , ReportedBytes(0)
+        , AccelerationParams(params.AccelerationParams)
     {
         ReportBytes(sizeof(*this));
         MaxSaneRequests = params.Common.Event->QuerySize * Info->Type.TotalPartCount() *

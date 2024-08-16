@@ -4,6 +4,8 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/hive.h>
+#include <ydb/core/driver_lib/run/auto_config_initializer.h>
+#include <ydb/core/driver_lib/run/config_helpers.h>
 #include <ydb/core/viewer/viewer.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/grpc_services/db_metadata_cache.h>
@@ -13,6 +15,7 @@
 #include <ydb/services/fq/private_grpc.h>
 #include <ydb/services/cms/grpc_service.h>
 #include <ydb/services/datastreams/grpc_service.h>
+#include <ydb/services/ymq/grpc_service.h>
 #include <ydb/services/kesus/grpc_service.h>
 #include <ydb/core/grpc_services/grpc_mon.h>
 #include <ydb/services/ydb/ydb_clickhouse_internal.h>
@@ -234,6 +237,8 @@ namespace Tests {
         Runtime->SetupMonitoring(Settings->MonitoringPortOffset, Settings->MonitoringTypeAsync);
         Runtime->SetLogBackend(Settings->LogBackend);
 
+        SetupActorSystemConfig();
+
         Runtime->AddAppDataInit([this](ui32 nodeIdx, NKikimr::TAppData& appData) {
             Y_UNUSED(nodeIdx);
 
@@ -256,6 +261,7 @@ namespace Tests {
             appData.PersQueueMirrorReaderFactory = Settings->PersQueueMirrorReaderFactory.get();
             appData.HiveConfig.MergeFrom(Settings->AppConfig->GetHiveConfig());
             appData.GraphConfig.MergeFrom(Settings->AppConfig->GetGraphConfig());
+            appData.SqsConfig.MergeFrom(Settings->AppConfig->GetSqsConfig());
 
             appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig;
             auto dnConfig = appData.DynamicNameserviceConfig;
@@ -291,6 +297,34 @@ namespace Tests {
         SetupStorage();
     }
 
+    void TServer::SetupActorSystemConfig() {
+        if (!Settings->AppConfig->HasActorSystemConfig()) {
+            return;
+        }
+
+        auto actorSystemConfig = Settings->AppConfig->GetActorSystemConfig();
+        const bool useAutoConfig = actorSystemConfig.HasUseAutoConfig() && actorSystemConfig.GetUseAutoConfig();
+        if (useAutoConfig) {
+            NAutoConfigInitializer::ApplyAutoConfig(&actorSystemConfig);
+        }
+
+        TCpuManagerConfig cpuManager;
+        for (int poolId = 0; poolId < actorSystemConfig.GetExecutor().size(); poolId++) {
+            NActorSystemConfigHelpers::AddExecutorPool(cpuManager, actorSystemConfig.GetExecutor(poolId), actorSystemConfig, poolId, nullptr);
+        }
+
+        const NAutoConfigInitializer::TASPools pools = NAutoConfigInitializer::GetASPools(actorSystemConfig, useAutoConfig);
+
+        Runtime->SetupActorSystemConfig(TTestActorRuntime::TActorSystemSetupConfig{
+            .CpuManagerConfig = cpuManager,
+            .SchedulerConfig = NActorSystemConfigHelpers::CreateSchedulerConfig(actorSystemConfig.GetScheduler()),
+            .MonitorStuckActors = actorSystemConfig.GetMonitorStuckActors()
+        }, TTestActorRuntime::TActorSystemPools{
+            pools.SystemPoolId, pools.UserPoolId, pools.IOPoolId, pools.BatchPoolId,
+            NAutoConfigInitializer::GetServicePools(actorSystemConfig, useAutoConfig)
+        });
+    }
+
     void TServer::SetupMessageBus(ui16 port) {
         if (port) {
             Bus = NBus::CreateMessageQueue(NBus::TBusQueueConfig());
@@ -308,7 +342,9 @@ namespace Tests {
 
         auto system(Runtime->GetAnyNodeActorSystem());
 
-        Cerr << "TServer::EnableGrpc on GrpcPort " << options.Port << ", node " << system->NodeId << Endl;
+        if (Settings->Verbose) {
+            Cerr << "TServer::EnableGrpc on GrpcPort " << options.Port << ", node " << system->NodeId << Endl;
+        }
 
         const size_t proxyCount = Max(ui32{1}, Settings->AppConfig->GetGRpcConfig().GetGRpcProxyCount());
         TVector<TActorId> grpcRequestProxies;
@@ -390,6 +426,7 @@ namespace Tests {
         GRpcServer->AddService(new NGRpcService::TGRpcYdbObjectStorageService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NQuoter::TRateLimiterGRpcService(system, counters, grpcRequestProxies[0]));
         GRpcServer->AddService(new NGRpcService::TGRpcDataStreamsService(system, counters, grpcRequestProxies[0], true));
+        GRpcServer->AddService(new NGRpcService::TGRpcYmqService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::TGRpcMonitoringService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbQueryService(system, counters, grpcRequestProxies, true, 1));
         if (Settings->EnableYq) {
@@ -1146,7 +1183,7 @@ namespace Tests {
                 "TestTenant",
                 nullptr, // MakeIntrusive<NPq::NConfigurationManager::TConnections>(),
                 YqSharedResources,
-                NKikimr::NFolderService::CreateMockFolderServiceAdapterActor,
+                [](auto& config) { return NKikimr::NFolderService::CreateMockFolderServiceAdapterActor(config, "");},
                 /*IcPort = */0,
                 {}
                 );

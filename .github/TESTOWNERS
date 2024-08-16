@@ -1,0 +1,80 @@
+# TEAM:@ydb-platform/docs
+/*.md @ydb-platform/docs
+/ydb/docs/ @ydb-platform/docs
+
+# YQL @ydb-platform/yql
+/ydb/library/yql/ @ydb-platform/yql
+/ydb/library/yql/dq @ydb-platform/yql @ydb-platform/qp
+/ydb/library/yql/yt @Krock21 @Krisha11 @zlobober @gritukan
+
+
+
+#Группа разработки строковых таблиц @azevaykin TEAM:?
+/ydb/core/tablet_flat @azevaykin 
+/ydb/core/tx/datashard @azevaykin 
+/ydb/core/mon_alloc @azevaykin 
+
+# Сoordinator
+/ydb/core/tx/coordinator @snaury
+
+#Группа распределенной системной инфраструктуры @ijon TEAM:@ydb-platform/system-infra
+/ydb/core/mind/ @ydb-platform/system-infra
+/ydb/core/blob_depot @ydb-platform/system-infra
+/ydb/core/tx/schemeshard @ydb-platform/system-infra
+/ydb/core/tx/columnshard @ivanmorozov333 @ydb-platform/system-infra
+/ydb/services/ydb/ @ydb-platform/system-infra
+/ydb/core/util @ydb-platform/system-infra
+/ydb/core/persqueue @ydb-platform/system-infra
+/ydb/core/client @ydb-platform/system-infra
+/ydb/core/engine @ydb-platform/system-infra
+
+#YDB Query Execution Team @gridnevvvit TEAM:@ydb-platform/qp
+/ydb/core/kqp @ydb-platform/qp
+#YDB Query Optimizer Team @pavelvelikhov TEAM:@ydb-platform/qp
+/ydb/tests/functional/canonical @ydb-platform/qp
+
+#YDB Application Team @asmyasnikov TEAM:@ydb-platform/appteam
+/ydb/public/sdk @ydb-platform/appteam
+/ydb/tests/functional/ydb_cli @ydb-platform/appteam
+/ydb/public/lib/ydb_cli @ydb-platform/appteam
+
+#YDB Engineering Team @maximyurchuk 
+   # - пока не понятно
+
+#Группа разработки распределенного хранилища @the-ancient-1 TEAM:@ydb-platform/storage
+/ydb/core/blobstorage @ydb-platform/storage
+/ydb/core/mind/bscontroller @ydb-platform/storage
+
+#Группа функциональности ядра @CyberROFL TEAM:@ydb-platform/core
+
+/ydb/core/config/ut @ydb-platform/core
+/ydb/core/scheme @ydb-platform/core
+/ydb/core/cms @ydb-platform/core
+/ydb/tests/functional/cms @ydb-platform/core
+
+
+#Группа разработки систем поставки данных / LogBroker @alexnick88 TEAM:@ydb-platform/topics
+/ydb/tests/functional/sqs @ydb-platform/Topics
+/ydb/core/kafka_proxy @ydb-platform/Topics
+/ydb/core/persqueue @ydb-platform/Topics
+/ydb/services/datastreams @ydb-platform/Topics
+/ydb/services/deprecated/persqueue_v0 @ydb-platform/Topics
+/ydb/services/persqueue_v1 @ydb-platform/Topics
+
+#YDB Analytics TEAM:???
+
+#Federative query TEAM:@ydb-platform/fq
+/ydb/tests/fq @ydb-platform/fq
+/ydb/core/fq/ @ydb-platform/fq
+/ydb/services/fq/ @ydb-platform/fq
+/ydb/library/yql/providers/common/http_gateway @ydb-platform/fq
+/ydb/library/yql/providers/common/db_id_async_resolver @ydb-platform/fq
+/ydb/library/yql/providers/generic @ydb-platform/fq
+/ydb/library/yql/providers/pq @ydb-platform/fq
+/ydb/library/yql/providers/s3 @ydb-platform/fq
+/ydb/library/yql/providers/solomon @ydb-platform/fq
+/ydb/core/public_http/ @ydb-platform/fq
+
+#@ydb-platform/ui-backend
+/ydb/core/viewer @ydb-platform/ui-backend
+/ydb/core/protos/node_whiteboard.proto @ydb-platform/ui-backend

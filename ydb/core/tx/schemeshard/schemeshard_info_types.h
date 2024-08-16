@@ -231,6 +231,7 @@ struct TPartitionStats {
     ui64 RowCount = 0;
     ui64 DataSize = 0;
     ui64 IndexSize = 0;
+    ui64 ByKeyFilterSize = 0;
 
     struct TStoragePoolStats {
         ui64 DataSize = 0;

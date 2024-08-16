@@ -3204,6 +3204,16 @@ private:
         bool combineChunks = NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::CombineChunks);
         TMaybe<ui64> limit = GetLimit(merge.Settings().Ref());
 
+        const auto cluster = merge.DataSink().Cluster().StringValue();
+        const bool hasOutGroup = !execCtx->OutTables_.front().ColumnGroups.IsUndefined();
+        const bool lookup = execCtx->Options_.Config()->OptimizeFor.Get(cluster).GetOrElse(NYT::OF_LOOKUP_ATTR) == NYT::OF_LOOKUP_ATTR;
+        const bool enabledColGroup = execCtx->Options_.Config()->ColumnGroupMode.Get().GetOrElse(EColumnGroupMode::Disable) != EColumnGroupMode::Disable;
+        const bool hasNonTmpInput = AllOf(execCtx->InputTables_, [](const auto& table) { return table.Temp; });
+
+        forceTransform = forceTransform
+            || (!lookup && enabledColGroup != hasOutGroup)
+            || (!lookup && hasOutGroup && hasNonTmpInput);
+
         return execCtx->Session_->Queue_->Async([forceTransform, combineChunks, limit, execCtx]() {
             return execCtx->LookupQueryCacheAsync().Apply([forceTransform, combineChunks, limit, execCtx] (const auto& f) {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);

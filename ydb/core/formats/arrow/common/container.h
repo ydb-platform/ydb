@@ -24,14 +24,14 @@ public:
 
 class TGeneralContainer {
 private:
-    YDB_READONLY_DEF(std::optional<ui64>, RecordsCount);
+    std::optional<ui64> RecordsCount;
     YDB_READONLY_DEF(std::shared_ptr<NModifier::TSchema>, Schema);
     std::vector<std::shared_ptr<NAccessor::IChunkedArray>> Columns;
     void Initialize();
 public:
     TGeneralContainer(const ui32 recordsCount);
 
-    ui32 GetRecordsCountVerified() const {
+    ui32 GetRecordsCount() const {
         AFL_VERIFY(RecordsCount);
         return *RecordsCount;
     }

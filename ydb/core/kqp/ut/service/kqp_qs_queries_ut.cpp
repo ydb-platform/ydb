@@ -2,6 +2,8 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/core/testlib/common_helper.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
@@ -3039,6 +3041,11 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
             auto session = Kikimr->GetTableClient().CreateSession().GetValueSync().GetSession();
 
+            auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+            csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+            csController->SetLagForCompactionBeforeTierings(TDuration::Seconds(1));
+            csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
+
             const TString query = Sprintf(R"(
                 CREATE TABLE `/Root/DataShard` (
                     Col1 Uint64 NOT NULL,
@@ -3054,6 +3061,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
             DoExecute();
+            csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
+            csController->WaitIndexation(TDuration::Seconds(5));
         }
 
     };

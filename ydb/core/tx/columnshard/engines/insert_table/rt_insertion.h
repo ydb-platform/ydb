@@ -34,6 +34,14 @@ private:
     void OnEraseInserted(TPathInfo& pathInfo, const ui64 dataSize) noexcept;
     static TAtomicCounter CriticalInserted;
 public:
+    void MarkAsNotAbortable(const TWriteId writeId) {
+        auto it = Inserted.find(writeId);
+        if (it == Inserted.end()) {
+            return;
+        }
+        it->second.MarkAsNotAbortable();
+    }
+
     THashSet<TWriteId> GetInsertedByPathId(const ui64 pathId) const;
 
     THashSet<TWriteId> GetExpiredInsertions(const TInstant timeBorder, const ui64 limit) const;

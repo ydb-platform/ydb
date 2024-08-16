@@ -42,7 +42,7 @@
                                                 "TopSortBy": "argument.qr.y"
                                             },
                                             {
-                                                "Condition": "_equijoin_column_0 = x",
+                                                "Condition": "qr._equijoin_column_0 = pv.x",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 29
@@ -182,7 +182,7 @@
                                         "Node Type": "LeftJoin (MapJoin)",
                                         "Operators": [
                                             {
-                                                "Condition": "x = x",
+                                                "Condition": "a.x = qt.x",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 15

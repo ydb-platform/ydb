@@ -42,7 +42,7 @@
                                                 "TopSortBy": ""
                                             },
                                             {
-                                                "Condition": "x1 = y1",
+                                                "Condition": "x.x1 = y.y1",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 15

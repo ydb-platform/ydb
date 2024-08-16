@@ -1247,12 +1247,12 @@ private:
 
 class DIScopeAnnotator final {
 public:
-    explicit DIScopeAnnotator(DISubprogramAnnotator& subprogramAnnotator, const TSrcLocation& location = TSrcLocation::current());
+    explicit DIScopeAnnotator(DISubprogramAnnotator* subprogramAnnotator, const TSrcLocation& location = TSrcLocation::current());
 
     Instruction* operator()(Instruction* inst, const TSrcLocation& location = TSrcLocation::current()) const;
 
 private:
-    DISubprogramAnnotator& SubprogramAnnotator;
+    DISubprogramAnnotator* SubprogramAnnotator;
     DIScope* Scope;
 };
 

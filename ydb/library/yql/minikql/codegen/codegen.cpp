@@ -390,6 +390,9 @@ public:
 
         bool dumpTimers = compileOpts.Contains("time-passes");
         bool disableOpt = compileOpts.Contains("disable-opt");
+#ifndef NDEBUG
+        disableOpt = true;
+#endif
 
 #if defined(_msan_enabled_)
         ReverseGlobalMapping_[(const void*)&__emutls_get_address] = "__emutls_get_address";

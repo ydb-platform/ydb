@@ -42,7 +42,7 @@
                                                 "Name": "Limit"
                                             },
                                             {
-                                                "Condition": "k = p_1.k",
+                                                "Condition": "x.k = p_1.k",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 3
@@ -136,7 +136,7 @@
                                         "Node Type": "LeftJoin (MapJoin)",
                                         "Operators": [
                                             {
-                                                "Condition": "k = k",
+                                                "Condition": "p_1.k = c.k",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 15

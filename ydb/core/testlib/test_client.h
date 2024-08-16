@@ -265,6 +265,7 @@ namespace Tests {
     protected:
         void SetupStorage();
 
+        void SetupActorSystemConfig();
         void SetupMessageBus(ui16 port);
         void SetupDomains(TAppPrepare&);
         void CreateBootstrapTablets();

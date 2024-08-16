@@ -93,6 +93,7 @@ message TMetaCommonInfo {
     repeated uint32 Nodes = 15;
     repeated uint32 Disks = 16;
     repeated TACE ACL = 17;
+    bool InterruptInheritance = 40;
 
     TBackupInfo Backup = 18;
     TResources Resources = 19;

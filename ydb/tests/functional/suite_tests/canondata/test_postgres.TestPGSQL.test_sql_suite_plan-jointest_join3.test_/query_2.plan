@@ -42,7 +42,7 @@
                                                 "TopSortBy": "argument.p.k"
                                             },
                                             {
-                                                "Condition": "k = k",
+                                                "Condition": "p.k = c.k",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 15

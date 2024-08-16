@@ -4,6 +4,7 @@ SRCS(
     auto_config_initializer.cpp
     config.cpp
     config.h
+    config_helpers.cpp
     config_parser.cpp
     config_parser.h
     driver.h

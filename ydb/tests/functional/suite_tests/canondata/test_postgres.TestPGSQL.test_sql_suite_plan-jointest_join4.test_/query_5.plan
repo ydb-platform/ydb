@@ -41,7 +41,7 @@
                                                 "Name": "Limit"
                                             },
                                             {
-                                                "Condition": "i,i,i = x,y,x",
+                                                "Condition": "tqa.i,tqa.i,tqa.i = tqb.x,tqb.y,tqb.x",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 15

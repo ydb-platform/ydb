@@ -21,11 +21,22 @@ using namespace NTestUtils;
 using namespace fmt::literals;
 
 Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
+    TString GetSymbolsString(char start, char end, const TString& skip = "") {
+        TStringBuilder result;
+        for (char symbol = start; symbol <= end; ++symbol) {
+            if (skip.Contains(symbol)) {
+                continue;
+            }
+            result << symbol;
+        }
+        return result;
+    }
+
     Y_UNIT_TEST(ExecuteScriptWithExternalTableResolve) {
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString externalTableName = "/Root/test_binding_resolve";
         const TString bucket = "test_bucket1";
-        const TString object = "test_object";
+        const TString object = TStringBuilder() << "test_" << GetSymbolsString(' ', '~', "{}") << "_object";
 
         CreateBucketWithObject(bucket, object, TEST_CONTENT);
 
@@ -50,7 +61,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             "external_source"_a = externalDataSourceName,
             "external_table"_a = externalTableName,
             "location"_a = GetBucketLocation(bucket),
-            "object"_a = object
+            "object"_a = EscapeC(object)
             );
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
@@ -931,7 +942,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString externalTableName = "/Root/test_binding_resolve";
         const TString bucket = "test_bucket1";
-        const TString object = "year=1/month=2/test_object";
+        const TString object = TStringBuilder() << "year=1/month=2/test_" << GetSymbolsString(' ', '~') << "_object";
         const TString content = "data,year,month\ntest,1,2";
 
         CreateBucketWithObject(bucket, object, content);

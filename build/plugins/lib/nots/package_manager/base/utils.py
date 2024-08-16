@@ -38,6 +38,10 @@ def build_pj_path(p):
     return os.path.join(p, PACKAGE_JSON_FILENAME)
 
 
+def build_tmp_pj_path(p):
+    return os.path.join(p, "tmp." + PACKAGE_JSON_FILENAME)
+
+
 def build_nm_path(p):
     return os.path.join(p, NODE_MODULES_DIRNAME)
 

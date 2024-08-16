@@ -135,7 +135,7 @@ Y_UNIT_TEST(Write_Statistics_UseTx)
 
 Y_UNIT_TEST(WriteInTx)
 {
-    // In the test, 6 writers write messages within 10 minutes.
+    // In the test, 6 writers write messages within 10 seconds.
     // Then the number of recorded messages is checked. Commit transactions every second.
     // It is expected that at least 60 messages will be written.
 

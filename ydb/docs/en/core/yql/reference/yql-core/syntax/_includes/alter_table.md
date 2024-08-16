@@ -36,7 +36,7 @@ ALTER TABLE episodes DROP column is_deleted;
 ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 ```
 
-You can specify any index parameters from the [`CREATE TABLE`](../create_table.md#secondary_index) command.
+You can specify any index parameters from the [`CREATE TABLE`](../create_table/secondary_index.md) command.
 
 {% if backend_name == "YDB" %}
 
@@ -50,7 +50,7 @@ Indexes have type-specific parameters that can be tuned. Global indexes, whether
 
 {% note info %}
 
-Currently, specifying secondary index partitioning settings during index creation is not supported in either the [`ALTER TABLE ADD INDEX`](#add-index) or the [`CREATE TABLE INDEX`](../create_table.md#secondary_index) statements.
+Currently, specifying secondary index partitioning settings during index creation is not supported in either the [`ALTER TABLE ADD INDEX`](#add-index) or the [`CREATE TABLE INDEX`](../create_table/econdary_index.md) statements.
 
 {% endnote %}
 
@@ -258,7 +258,7 @@ Available types of storage devices depend on the {{ ydb-short-name }} cluster co
 
 {% endnote %}
 
-You can specify any parameters of a group of columns from the [`CREATE TABLE`](create_table.md#column-family) command.
+You can specify any parameters of a group of columns from the [`CREATE TABLE`](../create_table/family.md) command.
 
 
 ## Changing additional table parameters {#additional-alter}

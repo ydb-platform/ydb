@@ -131,7 +131,7 @@ There are two main approaches to representing tabular data in RAM or on disk dri
 
 #### Primary key {#primary-key}
 
-A **primary key** is an ordered list of columns, the values of which uniquely identify rows. It is used to build the [table's primary index](#primary-index). It is provided by the {{ ydb-short-name }} user during [table creation](../yql/reference/syntax/create_table.md) and dramatically impacts the performance of workloads interacting with that table.
+A **primary key** is an ordered list of columns, the values of which uniquely identify rows. It is used to build the [table's primary index](#primary-index). It is provided by the {{ ydb-short-name }} user during [table creation](../yql/reference/syntax/create_table/index.md) and dramatically impacts the performance of workloads interacting with that table.
 
 The guidelines on choosing primary keys are provided in [{#T}](../dev/primary-key/index.md).
 

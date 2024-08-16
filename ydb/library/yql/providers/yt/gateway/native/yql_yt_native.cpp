@@ -3208,7 +3208,7 @@ private:
         const bool hasOutGroup = !execCtx->OutTables_.front().ColumnGroups.IsUndefined();
         const bool lookup = execCtx->Options_.Config()->OptimizeFor.Get(cluster).GetOrElse(NYT::OF_LOOKUP_ATTR) == NYT::OF_LOOKUP_ATTR;
         const bool enabledColGroup = execCtx->Options_.Config()->ColumnGroupMode.Get().GetOrElse(EColumnGroupMode::Disable) != EColumnGroupMode::Disable;
-        const bool hasNonTmpInput = AllOf(execCtx->InputTables_, [](const auto& table) { return table.Temp; });
+        const bool hasNonTmpInput = !AllOf(execCtx->InputTables_, [](const auto& table) { return table.Temp; });
 
         forceTransform = forceTransform
             || (!lookup && enabledColGroup != hasOutGroup)

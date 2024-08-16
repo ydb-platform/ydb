@@ -125,7 +125,6 @@ public:
     void Handle(TEvPrivate::TEvCreateSessionResult::TPtr& ev);
     void Handle(TEvPrivate::TEvCreateSemaphoreResult::TPtr& ev);
     void Handle(TEvPrivate::TEvAcquireSemaphoreResult::TPtr& ev);
-   // void Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev);
     void Handle(TEvPrivate::TEvSessionStopped::TPtr& ev);
     void Handle(TEvPrivate::TEvTimeout::TPtr&);
     void Handle(TEvPrivate::TEvDescribeSemaphoreResult::TPtr& ev);
@@ -141,7 +140,6 @@ public:
         hFunc(TEvPrivate::TEvSessionStopped, Handle);
         hFunc(TEvPrivate::TEvTimeout, Handle);
         hFunc(TEvPrivate::TEvDescribeSemaphoreResult, Handle);
-        //hFunc(NFq::TEvRowDispatcher::TEvCoordinatorChanged, Handle);
         cFunc(NActors::TEvents::TSystem::Poison, PassAway);
     })
 
@@ -360,6 +358,8 @@ void TLeaderElection::PassAway() {
 void TLeaderElection::Handle(TEvPrivate::TEvSessionStopped::TPtr&) {
     LOG_ROW_DISPATCHER_DEBUG("TEvSessionStopped");
     Session.Clear();
+    PendingAcquire = false;
+    PendingDescribe = false;
     ResetState();
 }
 

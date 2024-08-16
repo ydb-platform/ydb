@@ -214,8 +214,6 @@ public:
                 YqlIssue({}, TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message));
         }
 
-        AlreadyReplied = true;
-
         auto& response = *ResponseEv->Record.MutableResponse();
 
         FillResponseStats(Ydb::StatusIds::SUCCESS);
@@ -282,6 +280,7 @@ public:
         ExecuterSpan.EndOk();
 
         Request.Transactions.crop(0);
+        AlreadyReplied = true;
         PassAway();
     }
 
@@ -2620,7 +2619,7 @@ private:
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleShutdown);
             hFunc(TEvents::TEvPoison, HandleShutdown);
             default:
-                ; // ignore all other events
+                LOG_E("Unexpected event: " << ev->GetTypeName()); // ignore all other events
         }
     }
 

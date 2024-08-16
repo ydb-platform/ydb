@@ -1686,6 +1686,7 @@ protected:
 
     void TimeoutError(TActorId abortSender) {
         if (AlreadyReplied) {
+            LOG_E("Timeout when we already replied - not good" << Endl << TBackTrace().PrintToString() << Endl);
             return;
         }
 
@@ -1747,6 +1748,7 @@ protected:
         google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* issues)
     {
         if (AlreadyReplied) {
+            LOG_E("Error when we already replied - not good" << Endl << TBackTrace().PrintToString() << Endl);
             return;
         }
 

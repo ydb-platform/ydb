@@ -254,10 +254,10 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffec
                         sideEffects.Send(actorToNotify, new TEvPrivate::TEvRestartComplete(tablet->GetFullTabletId(), "boot delay"));
                     }
                     tablet->ActorsToNotifyOnRestart.clear();
-                    if (tablet->IsFollower()) {
+                    /*if (tablet->IsFollower()) {
                         TLeaderTabletInfo& leader = tablet->GetLeader();
                         UpdateTabletFollowersNumber(leader, db, sideEffects);
-                    }
+                    }*/
                     BootQueue.AddToWaitQueue(record); // waiting for new node
                     continue;
                 }
@@ -770,16 +770,11 @@ void THive::Handle(TEvInterconnect::TEvNodeInfo::TPtr &ev) {
 }
 
 void THive::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev) {
-    THashSet<TDataCenterId> dataCenters;
     for (const TEvInterconnect::TNodeInfo& node : ev->Get()->Nodes) {
         NodesInfo[node.NodeId] = node;
-        dataCenters.insert(node.Location.GetDataCenterId());
-    }
-    dataCenters.erase(0); // remove default data center id if exists
-    if (!dataCenters.empty()) {
-        if (DataCenters != dataCenters.size()) {
-            DataCenters = dataCenters.size();
-            BLOG_D("TEvInterconnect::TEvNodesInfo DataCenters=" << DataCenters << " RegisteredDataCenters=" << RegisteredDataCenters);
+        auto dataCenterId = node.Location.GetDataCenterId();
+        if (dataCenterId != 0) {
+            DataCenters[dataCenterId]; // just create entry in hash map
         }
     }
     Execute(CreateLoadEverything());
@@ -2719,9 +2714,10 @@ void THive::SendReconnect(const TActorId& local) {
 }
 
 ui32 THive::GetDataCenters() {
-    return DataCenters ? DataCenters : 1;
+    return DataCenters.size() ? DataCenters.size() : 1;
 }
 
+/*
 ui32 THive::GetRegisteredDataCenters() {
     return RegisteredDataCenters ? RegisteredDataCenters : 1;
 }
@@ -2732,68 +2728,101 @@ void THive::UpdateRegisteredDataCenters() {
         RegisteredDataCenters = RegisteredDataCenterNodes.size();
     }
 }
+*/
 
 void THive::AddRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId) {
+    BLOG_D("AddRegisteredDataCentersNode(" << dataCenterId << ", " << nodeId << ")");
     if (dataCenterId != 0) { // ignore default data center id if exists
-        if (RegisteredDataCenterNodes[dataCenterId].insert(nodeId).second) {
-            if (RegisteredDataCenters != RegisteredDataCenterNodes.size()) {
-                UpdateRegisteredDataCenters();
-            }
+        auto& dataCenter = DataCenters[dataCenterId];
+        bool wasRegistered = dataCenter.IsRegistered();
+        dataCenter.RegisteredNodes.insert(nodeId);
+        BLOG_TRACE(wasRegistered << " " << dataCenter.UpdateScheduled);
+        if (!wasRegistered && !dataCenter.UpdateScheduled) {
+            BLOG_TRACE("Schedule Update dc");
+            dataCenter.UpdateScheduled = true;
+            //Execute(CreateUpdateDcFollowers(dataCenterId));
+            Schedule(TDuration::Seconds(1), new TEvPrivate::TEvUpdateDataCenterFollowers(dataCenterId));
         }
     }
 }
 
 void THive::RemoveRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId) {
+    BLOG_D("RemoveRegisteredDataCentersNode(" << dataCenterId << ", " << nodeId << ")");
     if (dataCenterId != 0) { // ignore default data center id if exists
-        RegisteredDataCenterNodes[dataCenterId].erase(nodeId);
-        if (RegisteredDataCenterNodes[dataCenterId].size() == 0) {
-            RegisteredDataCenterNodes.erase(dataCenterId);
-        }
-        if (RegisteredDataCenters != RegisteredDataCenterNodes.size()) {
-            UpdateRegisteredDataCenters();
+        auto& dataCenter = DataCenters[dataCenterId];
+        bool wasRegistered = dataCenter.IsRegistered();
+        dataCenter.RegisteredNodes.erase(nodeId);
+        if (wasRegistered && !dataCenter.IsRegistered() && !dataCenter.UpdateScheduled) {
+            dataCenter.UpdateScheduled = true;
+            //Execute(CreateUpdateDcFollowers(dataCenterId));
+            Schedule(TDuration::Seconds(1), new TEvPrivate::TEvUpdateDataCenterFollowers(dataCenterId));
         }
     }
 }
 
-void THive::UpdateTabletFollowersNumber(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db, TSideEffects& sideEffects) {
-    BLOG_D("UpdateTabletFollowersNumber Tablet " << tablet.ToString() << " RegisteredDataCenters=" << GetRegisteredDataCenters());
+void THive::CreateTabletFollowers(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db, TSideEffects& sideEffects) {
+    BLOG_D("CreateTabletFollowers Tablet " << tablet.ToString());
+
+    // In case tablet already has followers (happens if tablet is modified through CreateTablet), delete them
+    // But create new ones before deleting old ones, to avoid issues with reusing ids
+    decltype(tablet.Followers)::iterator oldFollowersIt;
+    if (tablet.Followers.empty()) {
+        oldFollowersIt = tablet.Followers.end();
+    } else {
+        oldFollowersIt = std::prev(tablet.Followers.end());
+    }
+
     for (TFollowerGroup& group : tablet.FollowerGroups) {
-        ui32 followerCount = tablet.GetActualFollowerCount(group.Id);
-        ui32 requiredFollowerCount = group.GetComputedFollowerCount(GetRegisteredDataCenters());
-
-        while (followerCount < requiredFollowerCount) {
-            BLOG_D("UpdateTabletFollowersNumber Tablet " << tablet.ToString() << " is increasing number of followers (" << followerCount << "<" << requiredFollowerCount << ")");
-
-            TFollowerTabletInfo& follower = tablet.AddFollower(group);
-            follower.Statistics.SetLastAliveTimestamp(TlsActivationContext->Now().MilliSeconds());
-            db.Table<Schema::TabletFollowerTablet>().Key(tablet.Id, follower.Id).Update(
-                        NIceDb::TUpdate<Schema::TabletFollowerTablet::GroupID>(follower.FollowerGroup.Id),
-                        NIceDb::TUpdate<Schema::TabletFollowerTablet::FollowerNode>(0),
-                        NIceDb::TUpdate<Schema::TabletFollowerTablet::Statistics>(follower.Statistics));
-            follower.InitTabletMetrics();
-            follower.BecomeStopped();
-            ++followerCount;
-        }
-
-        while (followerCount > requiredFollowerCount) {
-            BLOG_D("UpdateTabletFollowersNumber Tablet " << tablet.ToString() << " is decreasing number of followers (" << followerCount << ">" << requiredFollowerCount << ")");
-
-            auto itFollower = tablet.Followers.rbegin();
-            while (itFollower != tablet.Followers.rend() && itFollower->FollowerGroup.Id != group.Id) {
-                ++itFollower;
+        if (group.FollowerCountPerDataCenter) {
+            for (auto& [dataCenterId, dataCenter] : DataCenters) {
+                BLOG_TRACE("DataCenter " << dataCenterId << " " << dataCenter.IsRegistered() << " " << group.GetFollowerCountForDataCenter(dataCenterId));
+                if (!dataCenter.IsRegistered()) {
+                    continue;
+                }
+                for (ui32 i = 0; i < group.GetFollowerCountForDataCenter(dataCenterId); ++i) {
+                    TFollowerTabletInfo& follower = tablet.AddFollower(group);
+                    follower.NodeFilter.AllowedDataCenters = {dataCenterId};
+                    follower.Statistics.SetLastAliveTimestamp(TlsActivationContext->Now().MilliSeconds());
+                    db.Table<Schema::TabletFollowerTablet>().Key(tablet.Id, follower.Id).Update(
+                                NIceDb::TUpdate<Schema::TabletFollowerTablet::GroupID>(follower.FollowerGroup.Id),
+                                NIceDb::TUpdate<Schema::TabletFollowerTablet::FollowerNode>(0),
+                                NIceDb::TUpdate<Schema::TabletFollowerTablet::Statistics>(follower.Statistics),
+                                NIceDb::TUpdate<Schema::TabletFollowerTablet::DataCenter>(dataCenterId));
+                    follower.InitTabletMetrics();
+                    follower.BecomeStopped();
+                    dataCenter.Followers[{tablet.Id, group.Id}].push_back(std::prev(tablet.Followers.end()));
+                    BLOG_D("Created follower " << follower.GetFullTabletId() << " for dc " << dataCenterId);
+                }
             }
-            if (itFollower == tablet.Followers.rend()) {
-                break;
+        } else {
+            for (ui32 i = 0; i < group.GetRawFollowerCount(); ++i) {
+                TFollowerTabletInfo& follower = tablet.AddFollower(group);
+                follower.Statistics.SetLastAliveTimestamp(TlsActivationContext->Now().MilliSeconds());
+                db.Table<Schema::TabletFollowerTablet>().Key(tablet.Id, follower.Id).Update(
+                            NIceDb::TUpdate<Schema::TabletFollowerTablet::GroupID>(follower.FollowerGroup.Id),
+                            NIceDb::TUpdate<Schema::TabletFollowerTablet::FollowerNode>(0),
+                            NIceDb::TUpdate<Schema::TabletFollowerTablet::Statistics>(follower.Statistics));
+                follower.InitTabletMetrics();
+                follower.BecomeStopped();
+                BLOG_D("Created follower " << follower.GetFullTabletId());
             }
-            TFollowerTabletInfo& follower = *itFollower;
-            db.Table<Schema::TabletFollowerTablet>().Key(tablet.Id, follower.Id).Delete();
-            db.Table<Schema::Metrics>().Key(tablet.Id, follower.Id).Delete();
-            follower.InitiateStop(sideEffects);
-            tablet.Followers.erase(std::prev(itFollower.base()));
-            UpdateCounterTabletsTotal(-1);
-            --followerCount;
+
         }
     }
+
+    if (oldFollowersIt == tablet.Followers.end()) {
+        return;
+    }
+    auto endIt = std::next(oldFollowersIt);
+    for (auto followerIt = tablet.Followers.begin(); followerIt != endIt; ++followerIt) {
+        TFollowerTabletInfo& follower = *followerIt;
+        BLOG_D("Deleting follower " << follower.GetFullTabletId());
+        db.Table<Schema::TabletFollowerTablet>().Key(tablet.Id, follower.Id).Delete();
+        db.Table<Schema::Metrics>().Key(tablet.Id, follower.Id).Delete();
+        follower.InitiateStop(sideEffects);
+        UpdateCounterTabletsTotal(-1);
+    }
+    tablet.Followers.erase(tablet.Followers.begin(), endIt);
 }
 
 TDuration THive::GetBalancerCooldown(EBalancerType balancerType) const {
@@ -3018,6 +3047,7 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvHive::TEvUpdateDomain, Handle);
         hFunc(TEvPrivate::TEvDeleteNode, Handle);
         hFunc(TEvHive::TEvRequestTabletDistribution, Handle);
+        hFunc(TEvPrivate::TEvUpdateDataCenterFollowers, Handle);
     }
 }
 
@@ -3120,6 +3150,7 @@ STFUNC(THive::StateWork) {
         fFunc(TEvPrivate::TEvProcessStorageBalancer::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvDeleteNode::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvRequestTabletDistribution::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvUpdateDataCenterFollowers::EventType, EnqueueIncomingEvent);
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3415,6 +3446,10 @@ void THive::Handle(TEvHive::TEvRequestTabletDistribution::TPtr& ev) {
         }
     }
     Send(ev->Sender, response.release());
+}
+
+void THive::Handle(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev) {
+    Execute(CreateUpdateDcFollowers(ev->Get()->DataCenter));
 }
 
 TVector<TNodeId> THive::GetNodesForWhiteboardBroadcast(size_t maxNodesToReturn) {

@@ -123,7 +123,7 @@ public:
                     db.Table<Schema::Tablet>().Key(TabletId).Update(NIceDb::TUpdate<Schema::Tablet::LeaderNode>(tablet->NodeId),
                                                                     NIceDb::TUpdate<Schema::Tablet::KnownGeneration>(Generation),
                                                                     NIceDb::TUpdate<Schema::Tablet::Statistics>(tablet->Statistics));
-                    Self->UpdateTabletFollowersNumber(leader, db, SideEffects);
+                    //Self->UpdateTabletFollowersNumber(leader, db, SideEffects);
                 } else {
                     db.Table<Schema::TabletFollowerTablet>().Key(TabletId, FollowerId).Update(
                                 NIceDb::TUpdate<Schema::TabletFollowerTablet::GroupID>(tablet->AsFollower().FollowerGroup.Id),

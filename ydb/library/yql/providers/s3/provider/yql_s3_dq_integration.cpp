@@ -479,7 +479,7 @@ public:
                 range.Save(&out);
 
                 paths.clear();
-                ReadPathsList(srcDesc, {}, serialized, paths);
+                ReadPathsList({}, serialized, paths);
 
                 NDq::TS3ReadActorFactoryConfig readActorConfig;
                 ui64 fileSizeLimit = readActorConfig.FileSizeLimit;

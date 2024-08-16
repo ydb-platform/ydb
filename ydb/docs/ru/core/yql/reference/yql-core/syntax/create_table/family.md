@@ -1,6 +1,10 @@
 # Группы колонок
 
+{% if oss == true and backend_name == "YDB" %}
+
 {% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
+
+{% endif %}
 
 Колонки одной таблицы можно объединять в группы, для того чтобы задать следующие параметры:
 

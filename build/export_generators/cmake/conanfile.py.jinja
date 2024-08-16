@@ -19,15 +19,51 @@ class App(ConanFile):
 {%- endfor -%}
 }
 
-    requires =
-{%- for conan_require in conan.requires %} "{{ conan_require }}"
-{%-     if not loop.last -%},{%- endif -%}
-{%- endfor %}
+{%- set has_conan_os_depends_requires = conan.os_depends|selectattr('requires')|map(attribute='requires')|sum|length -%}
+{%- if (conan.requires|length) or (has_conan_os_depends_requires) %}
 
-    tool_requires =
-{%- for conan_tool_require in conan.tool_requires %} "{{ conan_tool_require }}"
-{%-     if not loop.last -%},{%- endif -%}
-{%- endfor %}
+    def requirements(self):
+{%-     if (conan.requires|length) %}
+{%-         for conan_require in conan.requires %}
+        self.requires("{{ conan_require }}")
+{%-         endfor -%}
+{%-     endif -%}
+
+{%-     if (has_conan_os_depends_requires) -%}
+{%-         for conan_os_depend in conan.os_depends|selectattr('requires') %}
+{%-             if (conan_os_depend.requires|length) %}
+        if self.settings.os == "{{ conan_os_depend.os }}":
+{%-                 for conan_require in conan_os_depend.requires %}
+            self.requires("{{ conan_require }}")
+{%-                 endfor -%}
+{%-             endif -%}
+{%-         endfor -%}
+{%-     endif -%}
+{%- endif -%}
+
+{%- set has_conan_os_depends_tool_requires = conan.os_depends|selectattr('tool_requires')|map(attribute='tool_requires')|sum|length -%}
+{%- if (conan.tool_requires|length) or (has_conan_os_depends_tool_requires) %}
+
+    def build_requirements(self):
+{%-     if (conan.tool_requires|length) %}
+{%-         for conan_tool_require in conan.tool_requires %}
+        self.tool_requires("{{ conan_tool_require }}")
+{%-         endfor -%}
+{%-     endif -%}
+
+{%-     if (has_conan_os_depends_tool_requires) -%}
+{%-         for conan_os_depend in conan.os_depends|selectattr('tool_requires') %}
+{%-             if (conan_os_depend.tool_requires|length) %}
+        if self.settings.os == "{{ conan_os_depend.os }}":
+{%-                 for conan_tool_require in conan_os_depend.tool_requires %}
+            self.tool_requires("{{ conan_tool_require }}")
+{%-                 endfor -%}
+{%-             endif -%}
+{%-         endfor -%}
+{%-     endif -%}
+{%- endif -%}
+
+{%- set has_conan_os_depends_imports = conan.os_depends|selectattr('imports')|map(attribute='imports')|sum|length -%}
 
 {%- if use_conan2 %}
 
@@ -40,32 +76,47 @@ class App(ConanFile):
 
         for dep in self.dependencies.values():
             if dep.cpp_info.bindirs:
-{%-         for conan_import in conan.imports -%}
-{%-             set search_and_dstdir = rsplit(conan_import|trim, "->", 2) -%}
-{%-             set search = search_and_dstdir[0]|trim -%}
-{%-             set dstdir = search_and_dstdir[1]|trim -%}
-{%-             set srcdir_and_mask = rsplit(search, ",", 2) -%}
-{%-             set srcdir = srcdir_and_mask[0]|trim -%}
-{%-             set mask = srcdir_and_mask[1]|trim %}
-                copy(self, pattern="{{ mask }}", src=dep.cpp_info.bindirs[0], dst=self.build_folder + "../../../../{{ dstdir }}")
-{%-         endfor %}
+{%-         if conan.imports|length -%}
+{%-             set conan_imports = conan.imports -%}
+{%-             set shift = "" -%}
+{%-             include "[generator]/conan_imports.jinja" -%}
+{%-         endif -%}
+{%-         if (has_conan_os_depends_imports) -%}
+{%-             for conan_os_depend in conan.os_depends|selectattr('imports') %}
+{%-                 if (conan_os_depend.imports|length) %}
+                if self.settings.os == "{{ conan_os_depend.os }}":
+{%-                     set conan_imports = conan_os_depend.imports -%}
+{%-                     set shift = "    " -%}
+{%-                     include "[generator]/conan_imports.jinja" -%}
+{%-                 endif -%}
+{%-             endfor -%}
+{%-         endif -%}
 
     def layout(self):
         cmake_layout(self)
 
-{%- else -%}
+{%- else %}
 
     generators = "cmake_find_package", "cmake_paths"
 
     def imports(self):
-{%-     for conan_import in conan.imports -%}
-{%-         set search_and_dstdir = rsplit(conan_import|trim, "->", 2) -%}
-{%-         set search = search_and_dstdir[0]|trim -%}
-{%-         set dstdir = search_and_dstdir[1]|trim -%}
-{%-         set srcdir_and_mask = rsplit(search, ",", 2) -%}
-{%-         set srcdir = srcdir_and_mask[0]|trim -%}
-{%-         set mask = srcdir_and_mask[1]|trim %}
-        self.copy(pattern="{{ mask }}", src="{{ srcdir }}", dst="{{ dstdir }}")
-{%-     endfor %}
+{%- if conan.imports|length -%}
+{%-     set conan_imports = conan.imports -%}
+{%-     set shift = "" -%}
+{%-     include "[generator]/conan_imports.jinja" -%}
+{%- endif -%}
 
-{%- endif %}
+{%- if (has_conan_os_depends_imports) -%}
+{%-     for conan_os_depend in conan.os_depends|selectattr('imports') %}
+{%-         if (conan_os_depend.imports|length) %}
+        if self.settings.os == "{{ conan_os_depend.os }}":
+{%-             set conan_imports = conan_os_depend.imports -%}
+{%-             set shift = "    " -%}
+{%-             include "[generator]/conan_imports.jinja" -%}
+{%-         endif -%}
+{%-     endfor -%}
+{%- endif -%}
+
+{%- endif -%}
+
+{%- include "[generator]/debug_conan.jinja" ignore missing %}

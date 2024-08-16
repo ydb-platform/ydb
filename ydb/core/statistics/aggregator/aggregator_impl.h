@@ -145,9 +145,7 @@ private:
 
     void PersistSysParam(NIceDb::TNiceDb& db, ui64 id, const TString& value);
     void PersistTraversal(NIceDb::TNiceDb& db);
-    void PersistForceTraversal(NIceDb::TNiceDb& db);
     void PersistStartKey(NIceDb::TNiceDb& db);
-    void PersistNextForceTraversalOperationId(NIceDb::TNiceDb& db);    
     void PersistGlobalTraversalRound(NIceDb::TNiceDb& db);
 
     void ResetTraversalState(NIceDb::TNiceDb& db);
@@ -241,8 +239,6 @@ private:
     std::queue<TEvStatistics::TEvRequestStats::TPtr> PendingRequests;
     bool ProcessUrgentInFlight = false;
 
-    TActorId ForceTraversalReplyToActorId = {};
-
     bool IsSchemeshardSeen = false;
     bool IsStatisticsTableCreated = false;
     bool PendingSaveStatistics = false;
@@ -306,15 +302,12 @@ private:
 
 private: // stored in local db
     
-    ui64 ForceTraversalOperationId = 0;    
-    ui64 ForceTraversalCookie = 0;
-    TString ForceTraversalColumnTags;
-    TString ForceTraversalTypes;
+    TString ForceTraversalOperationId;
+
     TTableId TraversalTableId; 
     bool TraversalIsColumnTable = false;
     TSerializedCellVec TraversalStartKey;
     TInstant TraversalStartTime;
-    ui64 NextForceTraversalOperationId = 0;
 
     size_t GlobalTraversalRound = 1; 
 
@@ -326,15 +319,32 @@ private: // stored in local db
         TTraversalsByTime;
     TTraversalsByTime ScheduleTraversalsByTime;
 
-    struct TForceTraversal {
-        ui64 OperationId = 0;
-        ui64 Cookie = 0;
+    struct TForceTraversalTable {
         TPathId PathId;
         TString ColumnTags;
+
+        enum class EStatus : ui8 {
+            None,
+            RequestSent,
+            ResponseReceived,
+        };
+        EStatus Status = EStatus::None;
+    };
+    struct TForceTraversalOperation {
+        TString OperationId;
+        std::list<TForceTraversalTable> Tables;
         TString Types;
         TActorId ReplyToActorId;
     };
-    std::list<TForceTraversal> ForceTraversals;
+    std::list<TForceTraversalOperation> ForceTraversals;
+
+private:
+    TForceTraversalOperation* CurrentForceTraversalOperation();
+    TForceTraversalOperation* ForceTraversalOperation(const TString& operationId);
+    void DeleteForceTraversalOperation(const TString& operationId, NIceDb::TNiceDb& db);
+
+    TForceTraversalTable* ForceTraversalTable(const TString& operationId, const TPathId& pathId);
+    TForceTraversalTable* CurrentForceTraversalTable();
 };
 
 } // NKikimr::NStat

@@ -1517,7 +1517,7 @@ bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& ty
     }
 }
 
-bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type) {
+bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, const TArrowConvertFailedCallback& onFail) {
     bool isOptional;
     auto unpacked = UnpackOptional(itemType, isOptional);
     if (unpacked->IsOptional() || isOptional && unpacked->IsPg()) {
@@ -1538,7 +1538,7 @@ bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type) {
 
         // previousType is always Optional
         std::shared_ptr<arrow::DataType> innerArrowType;
-        if (!ConvertArrowType(previousType, innerArrowType)) {
+        if (!ConvertArrowType(previousType, innerArrowType, onFail)) {
             return false;
         }
 
@@ -1560,7 +1560,7 @@ bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type) {
             std::shared_ptr<arrow::DataType> childType;
             const TString memberName(structType->GetMemberName(i));
             auto memberType = structType->GetMemberType(i);
-            if (!ConvertArrowType(memberType, childType)) {
+            if (!ConvertArrowType(memberType, childType, onFail)) {
                 return false;
             }
             members.emplace_back(std::make_shared<arrow::Field>(memberName, childType, memberType->IsOptional()));
@@ -1576,7 +1576,7 @@ bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type) {
         for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
             std::shared_ptr<arrow::DataType> childType;
             auto elementType = tupleType->GetElementType(i);
-            if (!ConvertArrowType(elementType, childType)) {
+            if (!ConvertArrowType(elementType, childType, onFail)) {
                 return false;
             }
 
@@ -1605,15 +1605,25 @@ bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type) {
     }
 
     if (!unpacked->IsData()) {
+        if (onFail) {
+            onFail(unpacked);
+        }
         return false;
     }
 
     auto slot = AS_TYPE(TDataType, unpacked)->GetDataSlot();
     if (!slot) {
+        if (onFail) {
+            onFail(unpacked);
+        }
         return false;
     }
 
-    return ConvertArrowType(*slot, type);
+    bool result = ConvertArrowType(*slot, type);
+    if (!result && onFail) {
+        onFail(unpacked);
+    }
+    return result;
 }
 
 void TArrowType::Export(ArrowSchema* out) const {

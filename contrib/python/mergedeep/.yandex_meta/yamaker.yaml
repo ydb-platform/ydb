@@ -1,0 +1,2 @@
+mark_as_tests:
+  - mergedeep/test_mergedeep.py

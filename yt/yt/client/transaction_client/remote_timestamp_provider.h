@@ -37,6 +37,11 @@ ITimestampProviderPtr CreateBatchingRemoteTimestampProvider(
     const TRemoteTimestampProviderConfigPtr& config,
     const NRpc::IChannelFactoryPtr& channelFactory);
 
+ITimestampProviderPtr CreateBatchingRemoteTimestampProvider(
+    const TRemoteTimestampProviderConfigPtr& config,
+    const NRpc::IChannelFactoryPtr& channelFactory,
+    bool allowOldClocks);
+
 TAlienRemoteTimestampProvidersMap CreateAlienTimestampProvidersMap(
     const std::vector<TAlienTimestampProviderConfigPtr>& configs,
     ITimestampProviderPtr nativeProvider,

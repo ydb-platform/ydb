@@ -97,7 +97,7 @@ private:
             *upsert.MutableTags() = {
                 ProtoBody.GetCdcDataChange().GetUpsert().GetTags().begin(),
                 ProtoBody.GetCdcDataChange().GetUpsert().GetTags().end()};
-            auto it = Schema->ValueColumns.find("__incrBackupImpl_deleted");
+            auto it = Schema->ValueColumns.find("__ydb_incrBackupImpl_deleted");
             Y_ABORT_UNLESS(it != Schema->ValueColumns.end(), "Invariant violation");
             upsert.AddTags(it->second.Tag);
 
@@ -119,7 +119,7 @@ private:
 
             for (const auto& [name, value] : Schema->ValueColumns) {
                 tags.push_back(value.Tag);
-                if (name != "__incrBackupImpl_deleted") {
+                if (name != "__ydb_incrBackupImpl_deleted") {
                     cells.emplace_back();
                 } else {
                     cells.emplace_back(TCell::Make<bool>(true));

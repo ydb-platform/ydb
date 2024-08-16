@@ -13,6 +13,8 @@
 
 #include <library/cpp/yt/misc/tls.h>
 
+#include <library/cpp/yt/system/exit.h>
+
 #include <util/generic/algorithm.h>
 
 #include <util/system/env.h>
@@ -106,7 +108,7 @@ public:
                     YT_ABORT();
                 } else {
                     ::fprintf(stderr, "*** Shutdown hung, exiting\n");
-                    ::_exit(options.HungExitCode);
+                    AbortProcess(options.HungExitCode);
                 }
             }
         });

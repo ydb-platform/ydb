@@ -3,6 +3,7 @@
 #include <arrow/table.h>
 #include <arrow/csv/options.h>
 #include <arrow/csv/reader.h>
+#include <parquet/arrow/reader.h>
 
 #include <ydb/core/external_sources/object_storage/events.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -202,12 +203,37 @@ std::variant<ArrowFields, TString> InferCsvTypes(std::shared_ptr<arrow::io::Rand
     return table->fields();
 }
 
+std::variant<ArrowFields, TString> InferParquetTypes(std::shared_ptr<arrow::io::RandomAccessFile> file) {
+    parquet::arrow::FileReaderBuilder builder;
+    builder.properties(parquet::ArrowReaderProperties(false));
+    auto openStatus = builder.Open(std::move(file));
+    if (!openStatus.ok()) {
+        return TStringBuilder{} << "couldn't parse parquet file, check format params: " << openStatus.ToString();
+    }
+
+    std::unique_ptr<parquet::arrow::FileReader> reader;
+    auto readerStatus = builder.Build(&reader);
+    if (!readerStatus.ok()) {
+        return TStringBuilder{} << "couldn't parse parquet file, check format params: " << openStatus.ToString();
+    }
+
+    std::shared_ptr<arrow::Schema> schema;
+    auto schemaRes = reader->GetSchema(&schema);
+    if (!schemaRes.ok()) {
+        return TStringBuilder{} << "couldn't parse parquet file, check format params: " << openStatus.ToString();
+    }
+
+    return schema->fields();
+}
+
 std::variant<ArrowFields, TString> InferType(EFileFormat format, std::shared_ptr<arrow::io::RandomAccessFile> file, const FormatConfig& config) {
     switch (format) {
     case EFileFormat::CsvWithNames:
         return InferCsvTypes(std::move(file), static_cast<const CsvConfig&>(config));
     case EFileFormat::TsvWithNames:
         return InferCsvTypes(std::move(file), static_cast<const TsvConfig&>(config));
+    case EFileFormat::Parquet:
+        return InferParquetTypes(std::move(file));
     case EFileFormat::Undefined:
     default:
         return std::variant<ArrowFields, TString>{std::in_place_type_t<TString>{}, TStringBuilder{} << "unexpected format: " << ConvertFileFormat(format)};
@@ -240,7 +266,10 @@ std::unique_ptr<FormatConfig> MakeFormatConfig(EFileFormat format, const THashMa
 
 class TArrowInferencinator : public NActors::TActorBootstrapped<TArrowInferencinator> {
 public:
-    TArrowInferencinator(NActors::TActorId arrowFetcher, EFileFormat format, const THashMap<TString, TString>& params)
+    TArrowInferencinator(
+        NActors::TActorId arrowFetcher,
+        EFileFormat format,
+        const THashMap<TString, TString>& params)
         : Format_{format}
         , Config_{MakeFormatConfig(Format_, params)}
         , ArrowFetcherId_{arrowFetcher}
@@ -270,7 +299,6 @@ public:
             ctx.Send(RequesterId_, MakeErrorSchema(file.Path, NFq::TIssuesIds::INTERNAL_ERROR, std::get<TString>(mbArrowFields)));
             return;
         }
-
         auto& arrowFields = std::get<ArrowFields>(mbArrowFields);
         std::vector<Ydb::Column> ydbFields;
         for (const auto& field : arrowFields) {
@@ -297,7 +325,11 @@ private:
     NActors::TActorId RequesterId_;
 };
 
-NActors::IActor* CreateArrowInferencinator(NActors::TActorId arrowFetcher, EFileFormat format, const THashMap<TString, TString>& params) {
+NActors::IActor* CreateArrowInferencinator(
+    NActors::TActorId arrowFetcher,
+    EFileFormat format,
+    const THashMap<TString, TString>& params) {
+
     return new TArrowInferencinator{arrowFetcher, format, params};
 }
 } // namespace NKikimr::NExternalSource::NObjectStorage::NInference

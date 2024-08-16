@@ -14,6 +14,6 @@ NActors::IActor* CreateMemoryController(
     TDuration interval,
     TIntrusiveConstPtr<IProcessMemoryInfoProvider> processMemoryInfoProvider,
     const NKikimrConfig::TMemoryControllerConfig& config, 
-    TIntrusivePtr<::NMonitoring::TDynamicCounters> counters);
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
 
 }

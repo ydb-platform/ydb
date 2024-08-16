@@ -645,6 +645,10 @@ Y_UNIT_TEST_SUITE(PgExtensions) {
     }
 
     Y_UNIT_TEST(ProcsAndType) {
+        if (NPg::AreAllFunctionsAllowed()) {
+            return;
+        }
+
         NPg::ClearExtensions();
         NPg::TExtensionDesc desc;
         TTempFileHandle h;
@@ -730,6 +734,57 @@ Y_UNIT_TEST_SUITE(PgExtensions) {
             UNIT_ASSERT_VALUES_EQUAL(data[rowStep * 0 + remap[1]], "a");
             UNIT_ASSERT(!data[rowStep * 1 + remap[0]].Defined());
             UNIT_ASSERT_VALUES_EQUAL(data[rowStep * 1 + remap[1]], "b");
+        };
+
+        validate();
+        auto exported = NPg::ExportExtensions();
+        NPg::ClearExtensions();
+        NPg::ImportExtensions(exported, true, nullptr);
+        validate();
+    }
+
+    Y_UNIT_TEST(Casts) {
+        if (NPg::AreAllFunctionsAllowed()) {
+            return;
+        }
+
+        NPg::ClearExtensions();
+        NPg::TExtensionDesc desc;
+        TTempFileHandle h;
+        TStringBuf sql = R"(
+            CREATE TYPE foo (
+                alignment = double,
+                internallength = variable
+            );
+
+            CREATE TYPE bar (
+                alignment = double,
+                internallength = variable
+            );
+
+            CREATE OR REPLACE FUNCTION bar(foo)
+                RETURNS bar
+                AS '$libdir/MyExt','foo_to_bar'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE CAST (foo AS bar) WITH FUNCTION bar(foo);
+        )";
+
+        h.Write(sql.Data(), sql.Size());
+        desc.Name = "MyExt";
+        desc.InstallName = "$libdir/MyExt";
+        desc.SqlPaths.push_back(h.Name());
+        NPg::RegisterExtensions({desc}, true, *NSQLTranslationPG::CreateExtensionSqlParser(), nullptr);
+        auto validate = [&]() {
+            auto sourceId = NPg::LookupType("foo").TypeId;
+            auto targetId = NPg::LookupType("bar").TypeId;
+            UNIT_ASSERT(NPg::HasCast(sourceId, targetId));
+            const auto& cast = NPg::LookupCast(sourceId, targetId);
+            UNIT_ASSERT_VALUES_EQUAL(cast.SourceId, sourceId);
+            UNIT_ASSERT_VALUES_EQUAL(cast.TargetId, targetId);
+            UNIT_ASSERT_VALUES_EQUAL((ui32)cast.Method, (ui32)NPg::ECastMethod::Function);
+            UNIT_ASSERT_VALUES_EQUAL(cast.CoercionCode, NPg::ECoercionCode::Explicit);
+            UNIT_ASSERT_VALUES_EQUAL(cast.FunctionId, NPg::LookupProc("bar",{sourceId}).ProcId);
         };
 
         validate();

@@ -224,6 +224,8 @@ enum EMultiplexingBand
     MB_CONTROL = 1;
     MB_HEAVY = 2;
     MB_INTERACTIVE = 3;
+    MB_REAL_TIME = 4;
+    MB_JOURNAL = 5;
 }
 
 enum ETableSchemaModification
@@ -502,6 +504,7 @@ message TReqLookupRows
 message TRspLookupRows
 {
     required TRowsetDescriptor rowset_descriptor = 200;
+    repeated int32 unavailable_key_indexes = 201;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -542,6 +545,7 @@ message TReqVersionedLookupRows
 message TRspVersionedLookupRows
 {
     required TRowsetDescriptor rowset_descriptor = 200;
+    repeated int32 unavailable_key_indexes = 201;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -577,8 +581,8 @@ message TRspMultiLookup
     message TSubresponse
     {
         required TRowsetDescriptor rowset_descriptor = 1;
-
         required int32 attachment_count = 2;
+        repeated int32 unavailable_key_indexes = 3;
     }
 
     repeated TSubresponse subresponses = 1;
@@ -3204,7 +3208,7 @@ message TReqStartQuery
     optional bool draft = 5;
     optional bytes annotations = 6; // YSON
     repeated TQueryFile files = 7;
-    optional string access_control_object = 8; // COMPAT
+    optional string access_control_object = 8; // COMPAT(mpereskokova)
     optional TAccessControlObjects access_control_objects = 9;
 }
 
@@ -3279,7 +3283,7 @@ message TQuery
     optional uint64 finish_time = 6; // TInstant
     optional bytes settings = 7; // YSON
     optional string user = 8;
-    optional string access_control_object = 9; // COMPAT
+    optional string access_control_object = 9; // COMPAT(mpereskokova)
     optional EQueryState state = 10;
     optional int64 result_count = 11;
     optional bytes progress = 12; // YSON
@@ -3340,7 +3344,7 @@ message TReqAlterQuery
     required string query_tracker_stage = 1;
     required NYT.NProto.TGuid query_id = 2;
     optional bytes annotations = 3; // YSON
-    optional string access_control_object = 4; // COMPAT
+    optional string access_control_object = 4; // COMPAT(mpereskokova)
     optional TAccessControlObjects access_control_objects = 5;
 }
 

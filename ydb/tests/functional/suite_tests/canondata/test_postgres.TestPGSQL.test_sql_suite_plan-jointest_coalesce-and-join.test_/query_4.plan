@@ -42,7 +42,7 @@
                                                 "TopSortBy": "argument.yy.pkyy"
                                             },
                                             {
-                                                "Condition": "_equijoin_column_0 = pkxx",
+                                                "Condition": "yy._equijoin_column_0 = xx.pkxx",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 15
@@ -215,7 +215,10 @@
                 ],
                 "Subplan Name": "CTE precompute_0_0"
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

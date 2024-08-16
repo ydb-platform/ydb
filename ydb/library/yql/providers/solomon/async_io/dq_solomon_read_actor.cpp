@@ -267,6 +267,7 @@ private:
     NHttp::THttpOutgoingRequestPtr BuildSolomonRequest(TStringBuf data) {
         NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Url);
         FillAuth(httpRequest);
+        httpRequest->Set("x-client-id", "yql");
         httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/json");
         httpRequest->Set<&NHttp::THttpRequest::Body>(data);
         return httpRequest;

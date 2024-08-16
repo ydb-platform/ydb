@@ -433,17 +433,18 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvStatTableCreationResponse::
 }
 
 void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeStatus::TPtr& ev) {
-    auto& inRecord = ev->Get()->Record;
-    auto pathId = PathIdFromPathId(inRecord.GetPathId());
+    const auto& inRecord = ev->Get()->Record;
+    const TString operationId = inRecord.GetOperationId();
 
     auto response = std::make_unique<TEvStatistics::TEvAnalyzeStatusResponse>();
     auto& outRecord = response->Record;
+    outRecord.SetOperationId(operationId);
 
-    if (TraversalTableId.PathId == pathId) {
+    if (ForceTraversalOperationId == operationId) {
         outRecord.SetStatus(NKikimrStat::TEvAnalyzeStatusResponse::STATUS_IN_PROGRESS);
     } else {
-        if (std::any_of(ForceTraversals.begin(), ForceTraversals.end(), 
-            [&pathId](const TForceTraversal& elem) { return elem.PathId == pathId;})) {
+        auto forceTraversalOperation = ForceTraversalOperation(operationId);
+        if (forceTraversalOperation) {
             outRecord.SetStatus(NKikimrStat::TEvAnalyzeStatusResponse::STATUS_ENQUEUED);
         } else {
             outRecord.SetStatus(NKikimrStat::TEvAnalyzeStatusResponse::STATUS_NO_OPERATION);
@@ -579,23 +580,35 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
 
     TPathId pathId;
 
-    if (!ForceTraversals.empty() && !LastTraversalWasForce) {
+    if (!LastTraversalWasForce) {
         LastTraversalWasForce = true;
 
-        TForceTraversal& operation = ForceTraversals.front();
-        pathId = operation.PathId;
+        for (TForceTraversalOperation& operation : ForceTraversals) {
+            for (TForceTraversalTable& operationTable : operation.Tables) {
+                if (operationTable.Status == TForceTraversalTable::EStatus::None) {
+                    operationTable.Status = TForceTraversalTable::EStatus::RequestSent;
+                    db.Table<Schema::ForceTraversalTables>().Key(operation.OperationId, operationTable.PathId.OwnerId, operationTable.PathId.LocalPathId)
+                        .Update(NIceDb::TUpdate<Schema::ForceTraversalTables::Status>((ui64)operationTable.Status));
 
-        ForceTraversalOperationId = operation.OperationId;
-        ForceTraversalCookie = operation.Cookie;
-        ForceTraversalColumnTags = operation.ColumnTags;
-        ForceTraversalTypes = operation.Types;
-        ForceTraversalReplyToActorId = operation.ReplyToActorId;
+                    pathId = operationTable.PathId;
+                    break;
+                }
+            }
+            
+            if (!pathId) {
+                SA_LOG_D("[" << TabletID() << "] All the force traversal tables sent the requests. OperationId=" << operation.OperationId);
+                continue;
+            }
 
-        PersistForceTraversal(db);
+            ForceTraversalOperationId = operation.OperationId;
+        }
 
-//        db.Table<Schema::ForceTraversals>().Key(operation.OperationId, operation.PathId.OwnerId, operation.PathId.LocalPathId).Delete();
-        ForceTraversals.pop_front();
-    } else if (!ScheduleTraversalsByTime.Empty()){
+        if (!pathId) {
+            SA_LOG_D("[" << TabletID() << "] All the force traversal operations sent the requests.");
+        }
+    }
+
+    if (!pathId && !ScheduleTraversalsByTime.Empty()){
         LastTraversalWasForce = false;
 
         auto* oldestTable = ScheduleTraversalsByTime.Top();
@@ -606,8 +619,10 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
         }
 
         pathId = oldestTable->PathId;
-    } else {
-        SA_LOG_E("[" << TabletID() << "] No schedule traversal from schemeshard.");
+    } 
+    
+    if (!pathId) {
+        SA_LOG_E("[" << TabletID() << "] No traversal from schemeshard.");
         return;       
     }
 
@@ -653,11 +668,64 @@ void TStatisticsAggregator::FinishTraversal(NIceDb::TNiceDb& db) {
         }
     }
 
+    auto forceTraversalOperation = CurrentForceTraversalOperation();
+    if (forceTraversalOperation) {
+        bool tablesRemained = std::any_of(forceTraversalOperation->Tables.begin(), forceTraversalOperation->Tables.end(), 
+        [](const TForceTraversalTable& elem) { return elem.Status == TForceTraversalTable::EStatus::None;});
+        if (!tablesRemained) {
+            DeleteForceTraversalOperation(ForceTraversalOperationId, db);
+        }
+    }
+    
     ResetTraversalState(db);
 }
 
 TString TStatisticsAggregator::LastTraversalWasForceString() const {
     return LastTraversalWasForce ? "force" : "schedule";
+}
+
+TStatisticsAggregator::TForceTraversalOperation* TStatisticsAggregator::CurrentForceTraversalOperation() {
+    return ForceTraversalOperation(ForceTraversalOperationId);
+}
+
+TStatisticsAggregator::TForceTraversalOperation* TStatisticsAggregator::ForceTraversalOperation(const TString& operationId) {
+    auto forceTraversalOperation = std::find_if(ForceTraversals.begin(), ForceTraversals.end(), 
+        [operationId](const TForceTraversalOperation& elem) { return elem.OperationId == operationId;});
+    
+    if (forceTraversalOperation == ForceTraversals.end()) {
+        return nullptr;
+    } else {
+        return &*forceTraversalOperation;
+    }
+}
+
+void TStatisticsAggregator::DeleteForceTraversalOperation(const TString& operationId, NIceDb::TNiceDb& db) {
+    db.Table<Schema::ForceTraversalOperations>().Key(ForceTraversalOperationId).Delete();
+    
+    auto operation = ForceTraversalOperation(operationId);
+    for(const TForceTraversalTable& table : operation->Tables) {
+        db.Table<Schema::ForceTraversalTables>().Key(operationId, table.PathId.OwnerId, table.PathId.LocalPathId).Delete();
+    }
+
+    ForceTraversals.remove_if([operationId](const TForceTraversalOperation& elem) { return elem.OperationId == operationId;});
+}
+
+TStatisticsAggregator::TForceTraversalTable* TStatisticsAggregator::ForceTraversalTable(const TString& operationId, const TPathId& pathId) {
+    for (TForceTraversalOperation& operation : ForceTraversals) {
+        if (operation.OperationId == operationId) {
+            for (TForceTraversalTable& operationTable : operation.Tables) {
+                if (operationTable.PathId == pathId) {
+                    return &operationTable;
+                }
+            } 
+        }
+    }
+    
+    return nullptr;
+}
+
+TStatisticsAggregator::TForceTraversalTable* TStatisticsAggregator::CurrentForceTraversalTable() {
+    return ForceTraversalTable(ForceTraversalOperationId, TraversalTableId.PathId); 
 }
 
 void TStatisticsAggregator::PersistSysParam(NIceDb::TNiceDb& db, ui64 id, const TString& value) {
@@ -676,34 +744,18 @@ void TStatisticsAggregator::PersistStartKey(NIceDb::TNiceDb& db) {
     PersistSysParam(db, Schema::SysParam_TraversalStartKey, TraversalStartKey.GetBuffer());
 }
 
-void TStatisticsAggregator::PersistForceTraversal(NIceDb::TNiceDb& db) {
-    PersistSysParam(db, Schema::SysParam_ForceTraversalOperationId, ToString(ForceTraversalOperationId));
-    PersistSysParam(db, Schema::SysParam_ForceTraversalCookie, ToString(ForceTraversalCookie));
-    PersistSysParam(db, Schema::SysParam_ForceTraversalColumnTags, ToString(ForceTraversalColumnTags));
-    PersistSysParam(db, Schema::SysParam_ForceTraversalTypes, ToString(ForceTraversalTypes));
-}
-
-void TStatisticsAggregator::PersistNextForceTraversalOperationId(NIceDb::TNiceDb& db) {
-    PersistSysParam(db, Schema::SysParam_NextForceTraversalOperationId, ToString(NextForceTraversalOperationId));
-}
-
 void TStatisticsAggregator::PersistGlobalTraversalRound(NIceDb::TNiceDb& db) {
     PersistSysParam(db, Schema::SysParam_GlobalTraversalRound, ToString(GlobalTraversalRound));
 }
 
 void TStatisticsAggregator::ResetTraversalState(NIceDb::TNiceDb& db) {
-    ForceTraversalOperationId = 0;
-    ForceTraversalCookie = 0;
+    ForceTraversalOperationId.clear();
     TraversalTableId.PathId = TPathId();
-    ForceTraversalColumnTags.clear();
-    ForceTraversalTypes.clear();
     TraversalStartTime = TInstant::MicroSeconds(0);
     PersistTraversal(db);
 
     TraversalStartKey = TSerializedCellVec();
     PersistStartKey(db);
-
-    ForceTraversalReplyToActorId = {};
 
     for (auto& [tag, _] : CountMinSketches) {
         db.Table<Schema::ColumnStatistics>().Key(tag).Delete();

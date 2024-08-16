@@ -2,7 +2,7 @@
 
 ## DEFINE SUBQUERY {#define-subquery}
 
-`DEFINE SUBQUERY` позволяет объявить шаблон подзапроса (subquery), который представляет собой параметризуемый блок из нескольких выражений верхнего уровня (statements), и затем многократно его использовать путем применения в секции `FROM` выражения [SELECT](../select.md){% if feature_mapreduce %} или входных данных в [PROCESS](../process.md)/[REDUCE](../reduce.md){% endif %} с указанием параметров.
+`DEFINE SUBQUERY` позволяет объявить шаблон подзапроса (subquery), который представляет собой параметризуемый блок из нескольких выражений верхнего уровня (statements), и затем многократно его использовать путем применения в секции `FROM` выражения [SELECT](../select/index.md){% if feature_mapreduce %} или входных данных в [PROCESS](../process.md)/[REDUCE](../reduce.md){% endif %} с указанием параметров.
 В отличие от [действий](../action.md) шаблон подзапроса должен заканчиваться выражением `SELECT`{% if feature_mapreduce %}/`PROCESS`/`REDUCE`{% endif %}, чей результат и является возвращаемым значением подзапроса. При этом выражение верхнего уровня `SELECT`{% if feature_mapreduce %}/`PROCESS`/`REDUCE`{% endif %} нельзя использовать более одного раза, как и модифицирующие выражения (например, `INSERT`).
 
  После `DEFINE SUBQUERY` указывается:

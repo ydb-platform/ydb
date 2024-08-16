@@ -258,10 +258,12 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     TPtr source,
     NKikimrSchemeOp::TTableDescription& op,
     const NScheme::TTypeRegistry& typeRegistry,
-    const TSchemeLimits& limits, const TSubDomainInfo& subDomain,
+    const TSchemeLimits& limits,
+    const TSubDomainInfo& subDomain,
     bool pgTypesEnabled,
     bool datetime64TypesEnabled,
-    TString& errStr, const THashSet<TString>& localSequences)
+    TString& errStr,
+    const THashSet<TString>& localSequences)
 {
     TAlterDataPtr alterData = new TTableInfo::TAlterTableInfo();
     alterData->TableDescriptionFull = NKikimrSchemeOp::TTableDescription();
@@ -290,6 +292,8 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         }
     }
 
+    bool allowSystemColumns = op.GetSystemColumnNamesAllowed();
+
     for (auto& col : *op.MutableColumns()) {
         TString colName = col.GetName();
 
@@ -300,7 +304,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             return nullptr;
         }
 
-        if (!IsValidColumnName(colName)) {
+        if (!IsValidColumnName(colName, allowSystemColumns)) {
             errStr = Sprintf("Invalid name for column '%s'", colName.data());
             return nullptr;
         }

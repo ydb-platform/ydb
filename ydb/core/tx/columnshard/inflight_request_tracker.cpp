@@ -1,6 +1,7 @@
-#include "inflight_request_tracker.h"
 #include "columnshard_impl.h"
 #include "columnshard_schema.h"
+#include "inflight_request_tracker.h"
+
 #include "data_sharing/common/transactions/tx_extension.h"
 #include "engines/column_engine.h"
 #include "engines/reader/plain_reader/constructor/read_metadata.h"
@@ -9,30 +10,29 @@
 namespace NKikimr::NColumnShard {
 
 void TInFlightReadsTracker::RemoveInFlightRequest(ui64 cookie, const NOlap::TVersionedIndex* /*index*/, const TInstant now) {
-    Y_ABORT_UNLESS(RequestsMeta.contains(cookie), "Unknown request cookie %" PRIu64, cookie);
-    const auto& readMetaList = RequestsMeta[cookie];
+    auto it = RequestsMeta.find(cookie);
+    AFL_VERIFY(it != RequestsMeta.end())("cookie", cookie);
+    const auto& readMetaList = it->second;
 
     for (const auto& readMetaBase : readMetaList) {
-        NOlap::NReader::NPlain::TReadMetadata::TConstPtr readMeta = std::dynamic_pointer_cast<const NOlap::NReader::NPlain::TReadMetadata>(readMetaBase);
-
-        if (!readMeta) {
-            continue;
-        }
         {
-            auto it = SnapshotsLive.find(readMeta->GetRequestSnapshot());
+            auto it = SnapshotsLive.find(readMetaBase->GetRequestSnapshot());
             AFL_VERIFY(it != SnapshotsLive.end());
             if (it->second.DelRequest(cookie, now)) {
                 SnapshotsLive.erase(it);
-                Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetSnapshotToClean());
             }
         }
 
-        auto insertStorage = StoragesManager->GetInsertOperator();
-        auto tracker = insertStorage->GetBlobsTracker();
-        for (const auto& committedBlob : readMeta->CommittedBlobs) {
-            tracker->FreeBlob(committedBlob.GetBlobRange().GetBlobId());
+        if (NOlap::NReader::NPlain::TReadMetadata::TConstPtr readMeta =
+                std::dynamic_pointer_cast<const NOlap::NReader::NPlain::TReadMetadata>(readMetaBase)) {
+            auto insertStorage = StoragesManager->GetInsertOperator();
+            auto tracker = insertStorage->GetBlobsTracker();
+            for (const auto& committedBlob : readMeta->CommittedBlobs) {
+                tracker->FreeBlob(committedBlob.GetBlobRange().GetBlobId());
+            }
         }
     }
+    Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetSnapshotToClean());
 
     RequestsMeta.erase(cookie);
 }
@@ -85,8 +85,7 @@ public:
         NColumnShard::TColumnShard* self, std::set<NOlap::TSnapshot>&& saveSnapshots, std::set<NOlap::TSnapshot>&& removeSnapshots)
         : TBase(self)
         , SaveSnapshots(std::move(saveSnapshots))
-        , RemoveSnapshots(std::move(removeSnapshots))
-    {
+        , RemoveSnapshots(std::move(removeSnapshots)) {
         AFL_VERIFY(SaveSnapshots.size() || RemoveSnapshots.size());
     }
 };
@@ -110,6 +109,7 @@ std::unique_ptr<NTabletFlatExecutor::ITransaction> TInFlightReadsTracker::Ping(
     for (auto&& i : snapshotsToFree) {
         SnapshotsLive.erase(i);
     }
+    Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetSnapshotToClean());
     if (snapshotsToFree.size() || snapshotsToSave.size()) {
         NYDBTest::TControllers::GetColumnShardController()->OnRequestTracingChanges(snapshotsToSave, snapshotsToFree);
         return std::make_unique<TTransactionSavePersistentSnapshots>(self, std::move(snapshotsToSave), std::move(snapshotsToFree));
@@ -138,4 +138,20 @@ bool TInFlightReadsTracker::LoadFromDatabase(NTable::TDatabase& tableDB) {
     return true;
 }
 
+NKikimr::TConclusion<ui64> TInFlightReadsTracker::AddInFlightRequest(
+    NOlap::NReader::TReadMetadataBase::TConstPtr readMeta, const NOlap::TVersionedIndex* index) {
+    const ui64 cookie = NextCookie++;
+    auto it = SnapshotsLive.find(readMeta->GetRequestSnapshot());
+    if (it == SnapshotsLive.end()) {
+        it = SnapshotsLive.emplace(readMeta->GetRequestSnapshot(), TSnapshotLiveInfo::BuildFromRequest(readMeta->GetRequestSnapshot())).first;
+        Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetSnapshotToClean());
+    }
+    it->second.AddRequest(cookie);
+    auto status = AddToInFlightRequest(cookie, readMeta, index);
+    if (!status) {
+        return status;
+    }
+    return cookie;
 }
+
+}   // namespace NKikimr::NColumnShard

@@ -374,6 +374,7 @@ private:
     NTableClient::TRetentionConfigPtr RetentionConfig;
 
     void DoExecute(ICommandContextPtr context) override;
+    bool HasResponseParameters() const override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

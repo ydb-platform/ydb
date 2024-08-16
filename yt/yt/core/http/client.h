@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include "yt/yt/core/http/http.h"
+
 #include <yt/yt/core/concurrency/public.h>
 
 #include <yt/yt/core/net/public.h>
@@ -63,6 +65,12 @@ struct IClient
     virtual TFuture<IActiveRequestPtr> StartPut(
         const TString& url,
         const THeadersPtr& headers = nullptr) = 0;
+
+    virtual TFuture<IResponsePtr> Request(
+        EMethod method,
+        const TString& url,
+        const std::optional<TSharedRef>& body,
+        const THeadersPtr& headers) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IClient)

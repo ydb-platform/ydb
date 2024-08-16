@@ -4,6 +4,9 @@ IF (SANITIZER_TYPE OR WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
+    REQUIREMENTS(
+        ram:32
+    )
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
@@ -24,10 +27,6 @@ PEERDIR(
     ydb/library/actors/interconnect/ut/protos
     library/cpp/testing/unittest
     ydb/library/actors/testlib
-)
-
-REQUIREMENTS(
-    ram:32
 )
 
 END()

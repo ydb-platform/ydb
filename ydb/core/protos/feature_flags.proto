@@ -151,4 +151,6 @@ message TFeatureFlags {
     optional bool EnableResourcePoolsOnServerless = 132 [default = false];
     optional bool EnableVectorIndex = 133 [default = false];
     optional bool EnableChangefeedsOnIndexTables = 134 [default = false];
+    optional bool EnableResourcePoolsCounters = 135 [default = false];
+    optional bool EnableOptionalColumnsInColumnShard = 136 [default = false];
 }

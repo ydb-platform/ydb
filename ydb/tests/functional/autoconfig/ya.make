@@ -5,9 +5,10 @@ TEST_SRCS(
     test_actorsystem.py
 )
 
-REQUIREMENTS(
-    ram:16
-)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:16)
+ENDIF()
+
 TIMEOUT(600)
 SIZE(MEDIUM)
 

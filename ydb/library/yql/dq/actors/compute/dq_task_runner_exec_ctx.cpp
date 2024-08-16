@@ -10,6 +10,7 @@ TDqTaskRunnerExecutionContext::TDqTaskRunnerExecutionContext(TTxId txId, TWakeUp
     : TxId_(txId)
     , WakeUpCallback_(std::move(wakeUpCallback))
     , ErrorCallback_(std::move(errorCallback))
+    , SpillingTaskCounters_(MakeIntrusive<TSpillingTaskCounters>())
 {
 }
 
@@ -17,9 +18,9 @@ IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64
     return CreateChannelStorage(channelId, withSpilling, NActors::TlsActivationContext->ActorSystem());
 }
 
-IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem) const {
+IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64 channelId, bool withSpilling,  NActors::TActorSystem* actorSystem) const {
     if (withSpilling) {
-        return CreateDqChannelStorage(TxId_, channelId, WakeUpCallback_, ErrorCallback_, actorSystem);
+        return CreateDqChannelStorage(TxId_, channelId, WakeUpCallback_, ErrorCallback_, SpillingTaskCounters_, actorSystem);
     } else {
         return nullptr;
     }
@@ -31,6 +32,10 @@ TWakeUpCallback TDqTaskRunnerExecutionContext::GetWakeupCallback() const {
 
 TErrorCallback TDqTaskRunnerExecutionContext::GetErrorCallback() const {
     return ErrorCallback_;
+}
+
+TIntrusivePtr<TSpillingTaskCounters> TDqTaskRunnerExecutionContext::GetSpillingTaskCounters() const {
+    return SpillingTaskCounters_;
 }
 
 TTxId TDqTaskRunnerExecutionContext::GetTxId() const {

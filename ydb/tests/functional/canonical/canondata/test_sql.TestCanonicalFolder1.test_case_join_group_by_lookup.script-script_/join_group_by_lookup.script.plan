@@ -48,7 +48,7 @@
                                                         "TopSortBy": ""
                                                     },
                                                     {
-                                                        "Condition": "Group = Group",
+                                                        "Condition": "a.Group = t.Group",
                                                         "Inputs": [
                                                             {
                                                                 "ExternalPlanNodeId": 17
@@ -251,7 +251,10 @@
                         ],
                         "Subplan Name": "CTE precompute_0_0"
                     }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {
@@ -318,7 +321,10 @@
                             }
                         ]
                     }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {

@@ -7,7 +7,6 @@ on:
       - 'stream-nb-*'
     paths-ignore:
       - 'ydb/docs/**'
-      - '*'
 jobs:
   build_and_test:
     if: ${{vars.CHECKS_SWITCH != '' && fromJSON(vars.CHECKS_SWITCH).postcommit_relwithdebinfo == true}}

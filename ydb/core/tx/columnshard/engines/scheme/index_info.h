@@ -28,6 +28,10 @@ namespace NIndexes::NMax {
 class TIndexMeta;
 }
 
+namespace NIndexes::NCountMinSketch {
+class TIndexMeta;
+}
+
 namespace NStorageOptimizer {
 class IOptimizerPlannerConstructor;
 }
@@ -225,6 +229,7 @@ public:
     }
 
     std::shared_ptr<NIndexes::NMax::TIndexMeta> GetIndexMax(const ui32 columnId) const;
+    std::shared_ptr<NIndexes::NCountMinSketch::TIndexMeta> GetIndexCountMinSketch(const std::set<ui32>& columnIds) const;
 
     [[nodiscard]] TConclusionStatus AppendIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData, const ui32 indexId,
         const std::shared_ptr<IStoragesManager>& operators, TSecondaryData& result) const;

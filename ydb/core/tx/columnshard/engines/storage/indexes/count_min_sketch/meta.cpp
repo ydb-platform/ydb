@@ -14,12 +14,9 @@ namespace NKikimr::NOlap::NIndexes::NCountMinSketch {
 using TCountMinSketch = TStackAllocatedCountMinSketch<256, 8>;
 
 TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader) const {
-    std::vector<TChunkedColumnReader>& columnReaders = reader.GetColumnReaders();
-    AFL_VERIFY(columnReaders.size() == ColumnIds.size());
-
     TCountMinSketch sketch;
 
-    for (auto&& colReader : columnReaders) {
+    for (auto& colReader : reader) {
         for (colReader.Start(); colReader.IsCorrect(); colReader.ReadNextChunk()) {
             auto array = colReader.GetCurrentChunk();
 

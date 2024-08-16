@@ -167,14 +167,6 @@ public:
         return Columns.size();
     }
 
-    std::vector<TChunkedColumnReader>& GetColumnReaders() {
-        return Columns;
-    }
-
-    const std::vector<TChunkedColumnReader>& GetColumnReaders() const {
-        return Columns;
-    }
-
     std::vector<TChunkedColumnReader>::const_iterator begin() const {
         return Columns.begin();
     }

@@ -1,6 +1,6 @@
 # PostgreSQL UDF
 
-[YQL](../../index.md) предоставляет возможность доступа из YQL к [функциям](https://www.postgresql.org/docs/16/functions.html) и [типам данных](https://www.postgresql.org/docs/16/datatype.html) PostgreSQL.
+[YQL](../../index.md) предоставляет возможность доступа к [функциям](https://www.postgresql.org/docs/16/functions.html) и [типам данных](https://www.postgresql.org/docs/16/datatype.html) PostgreSQL.
 
 
 Система типов в PostgreSQL существенно проще, чем в YQL:

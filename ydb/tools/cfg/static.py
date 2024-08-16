@@ -274,7 +274,7 @@ class StaticConfigGenerator(object):
     @property
     def table_service_config(self):
         return self.__cluster_details.get_service("table_service_config")
-    
+
     @property
     def column_shard_config(self):
         return self.__cluster_details.get_service("column_shard_config")

@@ -501,11 +501,13 @@ def is_canonize_yt(cfg):
             return True
     return False
 
+
 def is_with_final_result_issues(cfg):
     for item in cfg:
         if item[0] == 'with_final_result_issues':
             return True
     return False
+
 
 def skip_test_if_required(cfg):
     for item in cfg:

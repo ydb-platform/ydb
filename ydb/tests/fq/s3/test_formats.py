@@ -38,7 +38,7 @@ class TestS3Formats:
         assert result_set.rows[2].items[0].bytes_value == b"Pear"
         assert result_set.rows[2].items[1].int32_value == 15
         assert result_set.rows[2].items[2].int32_value == 33
-    
+
     def validate_result_inference(self, result_set):
         logging.debug(str(result_set))
         assert len(result_set.columns) == 3

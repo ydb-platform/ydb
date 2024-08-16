@@ -426,11 +426,6 @@ public:
                     AddMessage(ctx, info, skipIssues, State_->PassiveExecution);
                     return false;
                 }
-                auto sampleSetting = GetSetting(section.Settings().Ref(), EYtSettingType::Sample);
-                if (sampleSetting && sampleSetting->Child(1)->Child(0)->Content() == "system") {
-                    AddMessage(ctx, "system sampling", skipIssues, State_->PassiveExecution);
-                    return false;
-                }
                 for (auto path: section.Paths()) {
                     if (!path.Table().Maybe<TYtTable>()) {
                         AddMessage(ctx, "non-table path", skipIssues, State_->PassiveExecution);

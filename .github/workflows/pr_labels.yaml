@@ -47,6 +47,7 @@ jobs:
               }
             }
             // add first encountered label
+            if (!description) return;
             for (let pair of mapping) {
               if (!description.includes(pair[0])) continue;
               // add label

@@ -84,42 +84,50 @@ App code snippet for creating a session:
       logger.info('Dropping old tables and create new ones...');
       await driver.queryClient.do({
           fn: async (session) => {
-              await session.execute({
-                  text: `
-                      DROP TABLE IF EXISTS ${SERIES_TABLE};
-                      DROP TABLE IF EXISTS ${EPISODES_TABLE};
-                      DROP TABLE IF EXISTS ${SEASONS_TABLE};
-  
-                      CREATE TABLE ${SERIES_TABLE}
-                      (
-                          series_id    UInt64,
-                          title        Utf8,
-                          series_info  Utf8,
-                          release_date DATE,
-                          PRIMARY KEY (series_id)
-                      );
-  
-                      CREATE TABLE ${SEASONS_TABLE}
-                      (
-                          series_id   UInt64,
-                          season_id   UInt64,
-                          title UTF8,
-                          first_aired DATE,
-                          last_aired DATE,
-                          PRIMARY KEY (series_id, season_id)
-                      );
-  
-                      CREATE TABLE ${EPISODES_TABLE}
-                      (
-                          series_id  UInt64,
-                          season_id  UInt64,
-                          episode_id UInt64,
-                          title      UTf8,
-                          air_date   DATE,
-                          PRIMARY KEY (series_id, season_id, episode_id),
-                          INDEX      episodes_index GLOBAL ASYNC ON (air_date)
-                      );`,
-              });
+
+            try {
+                await session.execute({
+                    text: `
+                        DROP TABLE ${SERIES_TABLE};
+                        DROP TABLE ${EPISODES_TABLE};
+                        DROP TABLE ${SEASONS_TABLE};`,
+                });
+            } catch (err) { // Ignore if tables are missing
+                if (err instanceof SchemeError) throw err;
+            }
+
+            await session.execute({
+                text: `
+                    CREATE TABLE ${SERIES_TABLE}
+                    (
+                        series_id    UInt64,
+                        title        Utf8,
+                        series_info  Utf8,
+                        release_date DATE,
+                        PRIMARY KEY (series_id)
+                    );
+
+                    CREATE TABLE ${SEASONS_TABLE}
+                    (
+                        series_id   UInt64,
+                        season_id   UInt64,
+                        title UTF8,
+                        first_aired DATE,
+                        last_aired DATE,
+                        PRIMARY KEY (series_id, season_id)
+                    );
+
+                    CREATE TABLE ${EPISODES_TABLE}
+                    (
+                        series_id  UInt64,
+                        season_id  UInt64,
+                        episode_id UInt64,
+                        title      UTf8,
+                        air_date   DATE,
+                        PRIMARY KEY (series_id, season_id, episode_id),
+                        INDEX      episodes_index GLOBAL ASYNC ON (air_date)
+                    );`,
+            });
           },
       });
   }
@@ -391,6 +399,10 @@ prepared by `Session.prepareQuery()`.
                           '$episodeId': episode.getTypedValue('episodeId')
                       },
                       text: `
+                          DECLARE $seriesId AS Uint64;
+                          DECLARE $seasonId AS Uint64;
+                          DECLARE $episodeId AS Uint64;
+  
                           SELECT title,
                                  air_date
                           FROM episodes
@@ -469,6 +481,10 @@ prepared by `Session.prepareQuery()`.
                           '$episodeId': episode.getTypedValue('episodeId')
                       },
                       text: `
+                          DECLARE $seriesId AS Uint64;
+                          DECLARE $seasonId AS Uint64;
+                          DECLARE $episodeId AS Uint64;
+  
                           SELECT title,
                                  air_date
                           FROM episodes
@@ -543,6 +559,10 @@ and `Session.сommitTransaction()` calls to create and terminate a transaction:
                         '$episodeId': episode.getTypedValue('episodeId')
                     },
                     text: `
+                        DECLARE $seriesId AS Uint64;
+                        DECLARE $seasonId AS Uint64;
+                        DECLARE $episodeId AS Uint64;
+ 
                         UPDATE episodes
                         SET air_date = CurrentUtcDate()
                         WHERE series_id = $seriesId
@@ -574,6 +594,10 @@ and `Session.сommitTransaction()` calls to create and terminate a transaction:
                         '$episodeId': episode.getTypedValue('episodeId')
                     },
                     text: `
+                        DECLARE $seriesId AS Uint64;
+                        DECLARE $seasonId AS Uint64;
+                        DECLARE $episodeId AS Uint64;
+    
                         UPDATE episodes
                         SET air_date = CurrentUtcDate()
                         WHERE series_id = $seriesId

@@ -139,12 +139,25 @@ Y_UNIT_TEST(WriteInTx)
     // Then the number of recorded messages is checked. Commit transactions every second.
     // It is expected that at least 60 messages will be written.
 
-    ExecYdb({"init", "-p", "3"});
+    ExecYdb({"init",
+            "--partitions", "3"});
 
-    auto output = ExecYdb({"run", "write", "-t", "6", "--byte-rate", "102400", "-m", "10240", "--use-tx", "--commit-messages", "10", "--warmup", "2", "-s", "10"});
+    auto output = ExecYdb({"run", "write",
+                          "--threads", "6",
+                          "--byte-rate", "102400",
+                          "--message-size", "10240",
+                          "--use-tx",
+                          "--commit-messages", "10",
+                          "--warmup", "2",
+                          "--seconds", "10"});
     ui64 commitTimeValue = GetCommitTimeValue(output);
 
-    output = RunYdb({}, {"topic", "read", "workload-topic", "-c", "workload-consumer-0", "--commit", "0", "--format", "newline-delimited", "--limit", "200"});
+    output = RunYdb({},
+                    {"topic", "read", "workload-topic",
+                    "--consumer", "workload-consumer-0",
+                    "--commit", "0",
+                    "--format", "newline-delimited",
+                    "--limit", "200"});
     TVector<TString> lines;
     Split(output, "\n", lines);
 

@@ -85,7 +85,7 @@ SELECT
 ;
 ```
 
-Для некоторых типов в функции `PgConst` можно указать дополнительные модификаторы. Возможные модификаторы для типа `pginterval` перечислены в [документации](https://www.postgresql.org/docs/16/datatype-datetime.html).
+Для некоторых типов в функции `PgConst` можно указать дополнительные модификаторы. Возможные модификаторы для типа `pginterval` перечислены в [документации PostgreSQL](https://www.postgresql.org/docs/16/datatype-datetime.html).
 
 ``` sql
 SELECT

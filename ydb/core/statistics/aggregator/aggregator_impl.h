@@ -341,10 +341,22 @@ private: // stored in local db
         TTraversalsByTime;
     TTraversalsByTime ScheduleTraversalsByTime;
 
+
+    struct TAnalyzedShard {
+        ui64 ShardTabletId;
+
+        enum class EStatus : ui8 {
+            None,
+            AnalyzeStarted,
+            AnalyzeFinished,
+        };
+        EStatus Status = EStatus::None;
+    };
+
     struct TForceTraversalTable {
         TPathId PathId;
         TString ColumnTags;
-        std::unordered_set<ui64> ShardIdsToAnalyze;
+        std::vector<TAnalyzedShard> AnalyzedShards;
 
         enum class EStatus : ui8 {
             None,
@@ -357,7 +369,7 @@ private: // stored in local db
     };
     struct TForceTraversalOperation {
         TString OperationId;
-        std::list<TForceTraversalTable> Tables;
+        std::vector<TForceTraversalTable> Tables;
         TString Types;
         TActorId ReplyToActorId;
     };

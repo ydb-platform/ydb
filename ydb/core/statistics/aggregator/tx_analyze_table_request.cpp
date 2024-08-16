@@ -33,16 +33,16 @@ struct TStatisticsAggregator::TTxAnalyzeTableRequest : public TTxBase {
         for (TForceTraversalOperation& operation : Self->ForceTraversals) {
             for (TForceTraversalTable& operationTable : operation.Tables) {
                 if (operationTable.Status == TForceTraversalTable::EStatus::AnalyzeStarted) {
-                    while(!operationTable.ShardIdsToAnalyze.empty()) {
-                        auto shardId = operationTable.ShardIdsToAnalyze.begin();
-                        
-                        auto request = MakeRequest(operation.OperationId, operationTable);
-                        Events.push_back(std::make_unique<TEvPipeCache::TEvForward>(request.release(), *shardId, true));
-                        
-                        operationTable.ShardIdsToAnalyze.erase(shardId);
+                    for(TAnalyzedShard& analyzedShard : operationTable.AnalyzedShards) {
+                        if (analyzedShard.Status == TAnalyzedShard::EStatus::None) {
+                            analyzedShard.Status = TAnalyzedShard::EStatus::AnalyzeStarted;
 
-                        if (Events.size() == SendAnalyzeCount)
-                            return true;
+                            auto request = MakeRequest(operation.OperationId, operationTable);
+                            Events.push_back(std::make_unique<TEvPipeCache::TEvForward>(request.release(), analyzedShard.ShardTabletId, true));
+                            
+                            if (Events.size() == SendAnalyzeCount)
+                                return true;
+                        }
                     }
                 }
             }

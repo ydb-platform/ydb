@@ -24,7 +24,7 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
         Y_ABORT_UNLESS(Self->NavigatePathId);
 
         if (entry.Status == NSchemeCache::TSchemeCacheRequest::EStatus::PathErrorNotExist) {
-            // ShardIdsToAnalyze will be empty and Analyze will complete without sending event to shards
+            // AnalyzedShards will be empty and Analyze will complete without sending event to shards
             return true;
         }
 
@@ -40,18 +40,20 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
 
         for (auto& part : partitioning) {
             if (part.Range) {
-                forceTraversalTable->ShardIdsToAnalyze.insert(part.ShardId);
+                forceTraversalTable->AnalyzedShards.push_back({
+                    .ShardTabletId = part.ShardId,
+                    .Status = TAnalyzedShard::EStatus::None
+                });
             }
         }
         forceTraversalTable->Status = TForceTraversalTable::EStatus::AnalyzeStarted;
         db.Table<Schema::ForceTraversalTables>().Key(Self->NavigateOperationId, Self->NavigatePathId.OwnerId, Self->NavigatePathId.LocalPathId)
             .Update(
-                NIceDb::TUpdate<Schema::ForceTraversalTables::Status>((ui64)forceTraversalTable->Status),
-                NIceDb::TUpdate<Schema::ForceTraversalTables::ShardIdsToAnalyze>(JoinVectorIntoString(TVector<ui32>{forceTraversalTable->ShardIdsToAnalyze.begin(), forceTraversalTable->ShardIdsToAnalyze.end()}, ","))
+                NIceDb::TUpdate<Schema::ForceTraversalTables::Status>((ui64)forceTraversalTable->Status)
             );
 
         SA_LOG_D("[" << Self->TabletID() << "] TTxResolve::ExecuteAnalyze. Table OperationId " << Self->NavigateOperationId << ", PathId " << Self->NavigatePathId 
-            << ", ShardIdsToAnalyze " << forceTraversalTable->ShardIdsToAnalyze.size());
+            << ", AnalyzedShards " << forceTraversalTable->AnalyzedShards.size());
 
         return true;
     }

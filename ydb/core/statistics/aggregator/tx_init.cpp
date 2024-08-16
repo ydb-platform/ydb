@@ -228,15 +228,12 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 ui64 localPathId = rowset.GetValue<Schema::ForceTraversalTables::LocalPathId>();
                 TString columnTags = rowset.GetValue<Schema::ForceTraversalTables::ColumnTags>();
                 ui64 status = rowset.GetValue<Schema::ForceTraversalTables::Status>();
-                TString shardIdsToAnalyzeString = rowset.GetValue<Schema::ForceTraversalTables::ShardIdsToAnalyze>();
 
                 auto pathId = TPathId(ownerId, localPathId);
-                TVector<ui64> shardIdsToAnalyze = Scan<ui64>(SplitString(shardIdsToAnalyzeString, ","));
 
                 TForceTraversalTable operationTable {
                     .PathId = pathId,
                     .ColumnTags = columnTags,
-                    .ShardIdsToAnalyze = {shardIdsToAnalyze.begin(), shardIdsToAnalyze.end()},
                     .Status = (TForceTraversalTable::EStatus)status,
                 };
                 auto forceTraversalOperation = Self->ForceTraversalOperation(operationId);

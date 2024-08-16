@@ -695,6 +695,12 @@ void TStatisticsAggregator::FinishTraversal(NIceDb::TNiceDb& db) {
 
     auto forceTraversalOperation = CurrentForceTraversalOperation();
     if (forceTraversalOperation) {
+        auto operationTable = CurrentForceTraversalTable();
+
+        operationTable->Status = TForceTraversalTable::EStatus::TraversalFinished;
+        db.Table<Schema::ForceTraversalTables>().Key(forceTraversalOperation->OperationId, operationTable->PathId.OwnerId, operationTable->PathId.LocalPathId)
+            .Update(NIceDb::TUpdate<Schema::ForceTraversalTables::Status>((ui64)operationTable->Status));
+
         bool tablesRemained = std::any_of(forceTraversalOperation->Tables.begin(), forceTraversalOperation->Tables.end(), 
         [](const TForceTraversalTable& elem) { return elem.Status != TForceTraversalTable::EStatus::TraversalFinished;});
         if (!tablesRemained) {

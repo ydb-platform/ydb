@@ -223,7 +223,7 @@ class DockerComposeHelper:
             '-P',
             password,
             '-Q',
-            f"SELECT table_name FROM information_schema.tables WHERE table_type = 'BASE TABLE'",
+            "SELECT table_name FROM information_schema.tables WHERE table_type = 'BASE TABLE'",
         ]
 
         LOGGER.debug("calling command: " + " ".join(cmd))

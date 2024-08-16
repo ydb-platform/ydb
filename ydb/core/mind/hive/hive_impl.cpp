@@ -2408,7 +2408,6 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
         }
     }
 
-    Cerr << "MaxImbalance = " << ObjectDistributions.GetMaxImbalance() << Endl;
     if (ObjectDistributions.GetMaxImbalance() > GetObjectImbalanceToBalance()) {
         TInstant now = TActivationContext::Now();
         if (LastBalancerTrigger != EBalancerType::SpreadNeighbours

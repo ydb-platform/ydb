@@ -183,7 +183,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
-        auto tableClient = kikimr.GetTableClient();
+        auto client = kikimr.GetQueryClient();
 
         {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
@@ -204,7 +204,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 GROUP BY level
             )";
 
-            auto res = StreamExplainQuery(query, tableClient);
+            auto res = StreamExplainQuery(query, client);
             UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
 
             auto plan = CollectStreamResult(res);

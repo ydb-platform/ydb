@@ -941,7 +941,7 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std:
         ui32 currentPosition = 0;
         auto it = i->chunks().begin();
         ui32 length = 0;
-        const auto initializeIt = [&length, &it]() {
+        const auto initializeIt = [&length, &it, &i]() {
             for (; it != i->chunks().end() && !(*it)->length(); ++it) {
             }
             if (it != i->chunks().end()) {

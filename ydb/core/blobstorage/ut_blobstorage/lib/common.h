@@ -62,7 +62,7 @@ class TWeightedRandom {
 public:
     TWeightedRandom(ui64 seed = 0)
         : PrefixSum({ 0 })
-        , Mt64(seed)
+        , Mt64(new TMersenne<ui64>(seed))
     {}
 
     TWeightedRandom(const TWeightedRandom&) = default;
@@ -77,7 +77,7 @@ public:
 
     T GetRandom() {
         Y_ABORT_UNLESS(WeightSum() != 0);
-        return Get(Mt64() % WeightSum());
+        return Get((*Mt64)() % WeightSum());
     }
 
     T Get(ui64 w) {
@@ -95,5 +95,5 @@ public:
 private:
     std::vector<T> Values;
     std::vector<ui64> PrefixSum;
-    TMersenne<ui64> Mt64;
+    std::shared_ptr<TMersenne<ui64>> Mt64;
 };

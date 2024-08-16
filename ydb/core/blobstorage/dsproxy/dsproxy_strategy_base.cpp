@@ -420,9 +420,8 @@ ui32 TStrategyBase::MakeSlowSubgroupDiskMask(TBlobState &state, const TBlobStora
 
             // Mark slow disks
             for (size_t idx = 0; idx < state.Disks.size(); ++idx) {
-                state.Disks[idx].IsSlow = slowDiskSubgroupMask & (1 << worstDisks[idx].DiskIdx);
+                state.Disks[idx].IsSlow = slowDiskSubgroupMask & (1 << idx);
             }
-            Cerr << "Bin(slowDiskSubgroupMask) " << Bin(slowDiskSubgroupMask) << Endl;
             return slowDiskSubgroupMask;
         }
         case TBlackboard::AccelerationModeSkipMarked: {

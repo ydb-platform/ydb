@@ -43,7 +43,7 @@ public:
             }
             TBlobStorageGroupInfo::TSubgroupVDisks success(&info.GetTopology());
             TBlobStorageGroupInfo::TSubgroupVDisks error(&info.GetTopology());
-            Evaluate3dcSituation(state, NumFailRealms, NumFailDomainsPerFailRealm, info, true, success, error, degraded);
+            Evaluate3dcSituation(state, NumFailRealms, NumFailDomainsPerFailRealm, info, false, success, error, degraded);
             TBlobStorageGroupInfo::TSubgroupVDisks slow = TBlobStorageGroupInfo::TSubgroupVDisks::CreateFromMask(
                     &info.GetTopology(), slowDiskSubgroupMask);
             if ((success | error) & slow) {

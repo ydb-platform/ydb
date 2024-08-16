@@ -28,6 +28,7 @@ SRCS(
     ut_info_types.cpp
     ut_allocate_pq.cpp
     ut_table_pg_types.cpp
+    ut_commit_redo_limit.cpp
 )
 
 END()

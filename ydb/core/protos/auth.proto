@@ -51,6 +51,7 @@ message TAuthConfig {
     optional bool UseBuiltinDomain = 78 [default = true];
     optional string AccessServiceType = 79 [default = "Yandex_v2"]; // For now the following values are supported: "Yandex_v2", "Nebius_v1"
     optional string CertificateAuthenticationDomain = 80 [default = "cert"];
+    optional bool EnableLoginAuthentication = 81 [default = true];
 }
 
 message TUserRegistryConfig {
@@ -100,7 +101,7 @@ message TLdapAuthentication {
         optional TCertRequire CertRequire = 3 [default = DEMAND];
     }
 
-    optional string Host = 1;
+    optional string Host = 1; // DEPRECATED: Use Hosts instead it
     optional uint32 Port = 2;
     required string BaseDn = 3;
     required string BindDn = 4;
@@ -109,4 +110,6 @@ message TLdapAuthentication {
     optional string SearchAttribute = 7;
     optional TUseTls UseTls = 8;
     optional string RequestedGroupAttribute = 9;
+    repeated string Hosts = 10;
+    optional string Scheme = 11 [default = "ldap"];
 }

@@ -1517,6 +1517,7 @@ message TColumnShardConfig {
 
     optional TIndexMetadataMemoryLimit IndexMetadataMemoryLimit = 12;
     optional bool CleanupEnabled = 13 [default = true];
+    optional uint32 MaxInFlightIntervalsOnRequest = 16;
 }
 
 message TSchemeShardConfig {

@@ -186,6 +186,7 @@ SRCS(
     remove_lock_change_records.cpp
     remove_locks.cpp
     range_avl_tree.cpp
+    remove_schema_snapshots.cpp
     range_ops.cpp
     range_treap.cpp
     read_iterator.h

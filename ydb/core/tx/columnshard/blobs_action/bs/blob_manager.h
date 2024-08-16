@@ -195,8 +195,8 @@ public:
         const std::shared_ptr<TBlobManager>& manager, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobsInfo,
         const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters) noexcept;
 
-    void OnGCFinishedOnExecute(const TGenStep& genStep, IBlobManagerDb& db);
-    void OnGCFinishedOnComplete(const TGenStep& genStep);
+    void OnGCFinishedOnExecute(const std::optional<TGenStep>& genStep, IBlobManagerDb& db);
+    void OnGCFinishedOnComplete(const std::optional<TGenStep>& genStep);
 
     TBlobManagerCounters GetCountersUpdate() {
         TBlobManagerCounters res = CountersUpdate;

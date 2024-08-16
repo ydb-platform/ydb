@@ -1,7 +1,6 @@
 #pragma once
 #include <ydb/library/actors/core/log.h>
 #include "ticket_parser_log.h"
-#include "ldap_auth_provider.h"
 #include "ticket_parser_settings.h"
 
 #include <ydb/core/base/appdata.h>
@@ -10,6 +9,7 @@
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/security/certificate_check/cert_check.h>
+#include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -26,6 +26,7 @@
 #include <library/cpp/digest/md5/md5.h>
 
 #include <util/generic/queue.h>
+#include <util/string/vector.h>
 #include <util/stream/file.h>
 #include <util/string/vector.h>
 

@@ -136,7 +136,7 @@ namespace {
     struct TUuidHolder {
         union {
             ui16 Array[8];
-            char Str[16];
+            ui64 Halves[2];
         } Buf;
     };
 
@@ -188,7 +188,11 @@ namespace {
     }
 
     TStringBuf UuidToStringBuf(const TUuidHolder& uuid) {
-        return TStringBuf(uuid.Buf.Str, 16);
+        char uuidBuf[16];
+
+        NUuid::UuidHalfsToBytes(uuidBuf, 16, uuid.Buf.Halves[1], uuid.Buf.Halves[0]);
+
+        return TStringBuf(uuidBuf, 16);
     }
 
     template <typename T, typename U = T>

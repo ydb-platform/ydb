@@ -134,4 +134,5 @@ message TFeatureFlags {
     optional bool ExtendedPDiskSensors = 121 [default = true];
     optional bool EnableStableNodeNames = 122 [default = false];
     optional bool EnableVolatileTransactionArbiters = 124 [default = false];
+    optional bool EnableChangefeedsOnIndexTables = 134 [default = false];
 }

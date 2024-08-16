@@ -101,6 +101,7 @@ message TReadTableTransaction {
         optional string Name = 2;
         optional uint32 TypeId = 3;
         optional NKikimrProto.TTypeInfo TypeInfo = 4;
+        optional bool NotNull = 5 [default = false]; //If not set datashard will treat not null type as nullable (for compatibility)
     }
 
     optional NKikimrDataEvents.TTableId TableId = 1;
@@ -257,6 +258,8 @@ message TKqpReadRangesSourceSettings {
     optional uint64 MaxInFlightShards = 16;
     optional bool UseFollowers = 17 [default = false];
     optional bool AllowInconsistentReads = 18 [default = false];
+
+    repeated TKqpTransaction.TColumnMeta DuplicateCheckColumns = 19;
 }
 
 message TKqpTaskInfo {

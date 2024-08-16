@@ -169,6 +169,7 @@ message TKqpTableMetadataProto {
     repeated TKqpTableMetadataProto SecondaryGlobalIndexMetadata = 12;
     optional uint64 RecordsCount = 13;
     optional uint64 DataSize = 14;
+    optional bool StatsLoaded = 15;
 }
 
 message TRlPath {

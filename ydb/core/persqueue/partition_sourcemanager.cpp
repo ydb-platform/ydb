@@ -81,7 +81,8 @@ void TPartitionSourceManager::TModificationBatch::Cancel() {
 }
 
 bool TPartitionSourceManager::TModificationBatch::HasModifications() const {
-    return !SourceIdWriter.GetSourceIdsToWrite().empty();
+    return !SourceIdWriter.GetSourceIdsToWrite().empty()
+        || !SourceIdWriter.GetSourceIdsToDelete().empty();
 }
 
 void TPartitionSourceManager::TModificationBatch::FillRequest(TEvKeyValue::TEvRequest* request) {

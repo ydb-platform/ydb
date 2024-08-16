@@ -1847,7 +1847,7 @@ protected:
 
 protected:
     void PassAway() override {
-        YQL_ENSURE(ResponseEv);
+        YQL_ENSURE(AlreadyReplied && ResponseEv);
         this->Send(Target, ResponseEv.release());
 
         for (auto channelPair: ResultChannelProxies) {

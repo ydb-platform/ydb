@@ -2627,6 +2627,10 @@ private:
         if (ev->Get()->Record.GetState() == NDqProto::COMPUTE_STATE_FINISHED) {
             YQL_ENSURE(Planner);
 
+            if (ev->Get()->Record.GetStatusCode() != NDqProto::StatusIds::ABORTED) {
+                return;
+            }
+
             TActorId actor = ev->Sender;
             ui64 taskId = ev->Get()->Record.GetTaskId();
 
@@ -2636,7 +2640,7 @@ private:
                 DoShutdown();
             }
         } else {
-            // TODO: handle another states.
+            // TODO: handle other states.
         }
     }
 

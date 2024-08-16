@@ -516,7 +516,7 @@ protected:
         }
 
         // Send final state to executer to inform about termination.
-        {
+        if (!success) {
             auto ev = MakeHolder<TEvDqCompute::TEvState>();
             auto& record = ev->Record;
 

@@ -192,6 +192,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
         app.MutableResourceBrokerConfig()->CopyFrom(MakeResourceBrokerTestConfig(4));
 
+        app.MutableFeatureFlags()->SetEnableResourcePools(true);
+
         TKikimrRunner kikimr(app);
         CreateLargeTable(kikimr, 0, 0, 0);
 

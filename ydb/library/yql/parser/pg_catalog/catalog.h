@@ -177,6 +177,8 @@ struct TAggregateDesc {
     ui32 DeserializeFuncId = 0;
     TString InitValue;
     bool FinalExtra = false;
+    ui32 NumDirectArgs = 0;
+    ui32 ExtensionIndex = 0;
 };
 
 enum class EAmType {
@@ -406,6 +408,8 @@ public:
     virtual void PrepareOper(ui32 extensionIndex, const TString& name, const TVector<ui32>& args) = 0;
 
     virtual void UpdateOper(const TOperDesc& desc) = 0;
+
+    virtual void CreateAggregate(const TAggregateDesc& desc) = 0;
 };
 
 class IExtensionSqlParser {

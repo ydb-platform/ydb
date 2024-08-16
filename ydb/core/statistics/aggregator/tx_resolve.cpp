@@ -46,15 +46,11 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
                 });
             }
         }
-        forceTraversalTable->Status = TForceTraversalTable::EStatus::AnalyzeStarted;
-        db.Table<Schema::ForceTraversalTables>().Key(Self->NavigateAnalyzeOperationId, Self->NavigatePathId.OwnerId, Self->NavigatePathId.LocalPathId)
-            .Update(
-                NIceDb::TUpdate<Schema::ForceTraversalTables::Status>((ui64)forceTraversalTable->Status)
-            );
-
+        
         SA_LOG_D("[" << Self->TabletID() << "] TTxResolve::ExecuteAnalyze. Table OperationId " << Self->NavigateAnalyzeOperationId << ", PathId " << Self->NavigatePathId 
             << ", AnalyzedShards " << forceTraversalTable->AnalyzedShards.size());
 
+        Self->UpdateForceTraversalTableStatus(TForceTraversalTable::EStatus::AnalyzeStarted, Self->NavigateAnalyzeOperationId, *forceTraversalTable,  db);
         return true;
     }
 

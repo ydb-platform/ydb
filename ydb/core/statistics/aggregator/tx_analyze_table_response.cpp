@@ -47,11 +47,7 @@ struct TStatisticsAggregator::TTxAnalyzeTableResponse : public TTxBase {
             return true;   
         
         NIceDb::TNiceDb db(txc.DB);
-
-        operationTable->Status = TForceTraversalTable::EStatus::AnalyzeFinished; 
-        db.Table<Schema::ForceTraversalTables>().Key(operationId, pathId.OwnerId, pathId.LocalPathId)
-            .Update(NIceDb::TUpdate<Schema::ForceTraversalTables::Status>((ui64)operationTable->Status));
-
+        Self->UpdateForceTraversalTableStatus(TForceTraversalTable::EStatus::AnalyzeFinished, operationId, *operationTable,  db);
         return true;
     }
 

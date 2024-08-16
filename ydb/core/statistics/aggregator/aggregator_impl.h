@@ -383,6 +383,7 @@ private:
 
     TForceTraversalTable* ForceTraversalTable(const TString& operationId, const TPathId& pathId);
     TForceTraversalTable* CurrentForceTraversalTable();
+    void UpdateForceTraversalTableStatus(const TForceTraversalTable::EStatus status, const TString& operationId, TStatisticsAggregator::TForceTraversalTable& table, NIceDb::TNiceDb& db);
 };
 
 } // NKikimr::NStat

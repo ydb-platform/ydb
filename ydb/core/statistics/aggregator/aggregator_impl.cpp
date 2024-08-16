@@ -602,9 +602,7 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db) {
                     return;
                 } else {
                     SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze. Skip analyze for datashard table " << operationTable.PathId);
-                    operationTable.Status = TForceTraversalTable::EStatus::AnalyzeFinished;
-                    db.Table<Schema::ForceTraversalTables>().Key(operation.OperationId, operationTable.PathId.OwnerId, operationTable.PathId.LocalPathId)
-                        .Update(NIceDb::TUpdate<Schema::ForceTraversalTables::Status>((ui64)operationTable.Status));
+                    UpdateForceTraversalTableStatus(TForceTraversalTable::EStatus::AnalyzeFinished, operation.OperationId, operationTable,  db);
                     return;
                 }
             }
@@ -628,10 +626,7 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
         for (TForceTraversalOperation& operation : ForceTraversals) {
             for (TForceTraversalTable& operationTable : operation.Tables) {
                 if (operationTable.Status == TForceTraversalTable::EStatus::AnalyzeFinished) {
-                    operationTable.Status = TForceTraversalTable::EStatus::TraversalStarted;
-                    db.Table<Schema::ForceTraversalTables>().Key(operation.OperationId, operationTable.PathId.OwnerId, operationTable.PathId.LocalPathId)
-                        .Update(NIceDb::TUpdate<Schema::ForceTraversalTables::Status>((ui64)operationTable.Status));
-
+                    UpdateForceTraversalTableStatus(TForceTraversalTable::EStatus::TraversalStarted, operation.OperationId, operationTable,  db);
                     pathId = operationTable.PathId;
                     break;
                 }
@@ -715,9 +710,7 @@ void TStatisticsAggregator::FinishTraversal(NIceDb::TNiceDb& db) {
     if (forceTraversalOperation) {
         auto operationTable = CurrentForceTraversalTable();
 
-        operationTable->Status = TForceTraversalTable::EStatus::TraversalFinished;
-        db.Table<Schema::ForceTraversalTables>().Key(forceTraversalOperation->OperationId, operationTable->PathId.OwnerId, operationTable->PathId.LocalPathId)
-            .Update(NIceDb::TUpdate<Schema::ForceTraversalTables::Status>((ui64)operationTable->Status));
+        UpdateForceTraversalTableStatus(TForceTraversalTable::EStatus::TraversalFinished, forceTraversalOperation->OperationId, *operationTable,  db);
 
         bool tablesRemained = std::any_of(forceTraversalOperation->Tables.begin(), forceTraversalOperation->Tables.end(), 
         [](const TForceTraversalTable& elem) { return elem.Status != TForceTraversalTable::EStatus::TraversalFinished;});
@@ -791,6 +784,13 @@ TStatisticsAggregator::TForceTraversalTable* TStatisticsAggregator::ForceTravers
 TStatisticsAggregator::TForceTraversalTable* TStatisticsAggregator::CurrentForceTraversalTable() {
     return ForceTraversalTable(ForceTraversalOperationId, TraversalPathId); 
 }
+
+void TStatisticsAggregator::UpdateForceTraversalTableStatus(const TForceTraversalTable::EStatus status, const TString& operationId, TStatisticsAggregator::TForceTraversalTable& table, NIceDb::TNiceDb& db) {
+    table.Status = status;
+    db.Table<Schema::ForceTraversalTables>().Key(operationId, table.PathId.OwnerId, table.PathId.LocalPathId)
+        .Update(NIceDb::TUpdate<Schema::ForceTraversalTables::Status>((ui64)status));
+}
+
 
 void TStatisticsAggregator::PersistSysParam(NIceDb::TNiceDb& db, ui64 id, const TString& value) {
     db.Table<Schema::SysParams>().Key(id).Update(

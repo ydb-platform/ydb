@@ -29,7 +29,6 @@ class TFieldDescriptor
 public:
     const TString& GetName() const;
     TFieldTag GetTag() const;
-    bool IsDeprecated() const;
 
     const TFieldSchemaPtr& GetSchema() const;
 
@@ -39,7 +38,6 @@ private:
 
     TString Name_;
     TFieldTag Tag_;
-    bool Deprecated_ = false;
     int MinVersion_ = std::numeric_limits<int>::min();
     int MaxVersion_ = std::numeric_limits<int>::max();
 

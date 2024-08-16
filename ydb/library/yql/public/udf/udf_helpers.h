@@ -244,12 +244,12 @@ public:
 
     static const TType* ExtractArgFromUserType(::NYql::NUdf::TType const* userType, ::NYql::NUdf::IFunctionTypeInfoBuilder& builder) {
         if constexpr (CheckBlock) {
-            #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
             TBlockTypeInspector block(*builder.TypeInfoHelper(), userType);
             if (block) {
                 userType = block.GetItemType();
             }
-            #endif
+#endif
         }
 
         if constexpr (CheckOptional) {

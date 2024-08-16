@@ -1033,7 +1033,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`level` > IF(`level` > 0, 4 / `level`))",
             R"(`level` > IF(`level` == 0, NULL, 4 / `level`))",
 #endif
-#endif
         };
 
         for (const auto& predicate: testData) {

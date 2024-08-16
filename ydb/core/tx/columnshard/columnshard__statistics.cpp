@@ -28,25 +28,25 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
     AFL_VERIFY(HasIndex());
     auto index = GetIndexAs<NOlap::TColumnEngineForLogs>();
     auto spg = index.GetGranuleOptional(ev->Get()->Record.GetTable().GetPathId().GetLocalId());
+    AFL_VERIFY(spg);
+
     std::set<ui32> columnTagsRequested;
     for (ui32 tag : ev->Get()->Record.GetTable().GetColumnTags()) {
         columnTagsRequested.insert(tag);
     }
-    AFL_VERIFY(spg);
+    if (columnTagsRequested.empty()) {
+        auto schema = index.GetVersionedIndex().GetLastSchema();
+        auto allColumnIds = schema->GetIndexInfo().GetColumnIds(false);
+        columnTagsRequested = std::set<ui32>(allColumnIds.begin(), allColumnIds.end());
+    }
 
     std::map<ui32, TCountMinSketch> sketchesByColumns;
+    for (auto id : columnTagsRequested) {
+        sketchesByColumns[id] = TCountMinSketch();
+    }
 
     for (const auto& [indexKey, keyPortions] : spg->GetPortionsIndex().GetPoints()) {
         for (auto&& [_, portionInfo] : keyPortions.GetStart()) {
-            if (columnTagsRequested.empty()) {
-                columnTagsRequested = portionInfo->GetColumnIds();
-            }
-            if (sketchesByColumns.empty()) {
-                for (auto id : columnTagsRequested) {
-                    sketchesByColumns[id] = TCountMinSketch();
-                }
-            }
-
             std::shared_ptr<NOlap::ISnapshotSchema> portionSchema = portionInfo->GetSchema(index.GetVersionedIndex());
             for (ui32 columnId : columnTagsRequested) {
                 auto indexMeta = portionSchema->GetIndexInfo().GetIndexCountMinSketch({columnId});

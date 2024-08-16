@@ -46,7 +46,7 @@ protected:
 
 public:
     TIndexMeta() = default;
-    TIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, std::set<ui32>& columnIds)
+    TIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const std::set<ui32>& columnIds)
         : TBase(indexId, indexName, columnIds, storageId) {
     }
 

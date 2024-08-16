@@ -124,6 +124,7 @@ TString TColumnOrder::Find(const TString& name) const {
 TColumnOrder& TColumnOrder::operator=(const TColumnOrder& rhs) {
     GeneratedToOriginal_ = rhs.GeneratedToOriginal_;
     Order_ = rhs.Order_;
+    UseCountLcase_ = rhs.UseCountLcase_;
     UseCount_ = rhs.UseCount_;
     return *this;
 }
@@ -137,11 +138,12 @@ TColumnOrder::TColumnOrder(const TVector<TString>& order) {
 
 TString TColumnOrder::AddColumn(const TString& name) {
     auto lcase = to_lower(name);
-    if (uint64_t count = ++UseCount_[lcase]; count > 1) {
+    ++UseCountLcase_[lcase];
+    if (uint64_t count = ++UseCount_[name]; count > 1) {
         TString generated = name + "_generated_" + ToString(count);
         GeneratedToOriginal_[generated] = name;
         Order_.emplace_back(name, generated);
-        ++UseCount_[to_lower(generated)];
+        ++UseCount_[generated];
         return generated;
     }
     Order_.emplace_back(name, name);
@@ -149,20 +151,19 @@ TString TColumnOrder::AddColumn(const TString& name) {
     return name;
 }
 
-bool TColumnOrder::IsDuplicated(const TString& name) const {
-    auto it = UseCount_.find(to_lower(name));
-    return it != UseCount_.end() && it->second > 1;
+bool TColumnOrder::IsDuplicatedIgnoreCase(const TString& name) const {
+    auto it = UseCountLcase_.find(to_lower(name));
+    return it != UseCountLcase_.end() && it->second > 1;
 }
 
 void TColumnOrder::Shrink(size_t remain) {
     for (size_t i = remain; i < Order_.size(); ++i) {
-        auto logicalLcase = to_lower(Order_[i].LogicalName);
-        if (!--UseCount_[logicalLcase]) {
-            UseCount_.erase(logicalLcase);
+        --UseCountLcase_[to_lower(Order_[i].LogicalName)];
+        if (!--UseCount_[Order_[i].LogicalName]) {
+            UseCount_.erase(Order_[i].LogicalName);
         }
-        auto physicalLcase = to_lower(Order_[i].PhysicalName);
-        if (!--UseCount_[physicalLcase]) {
-            UseCount_.erase(physicalLcase);
+        if (!--UseCount_[Order_[i].PhysicalName]) {
+            UseCount_.erase(Order_[i].PhysicalName);
         }
         GeneratedToOriginal_.erase(Order_[i].PhysicalName);
     }
@@ -179,6 +180,7 @@ void TColumnOrder::Clear() {
     Order_.clear();
     GeneratedToOriginal_.clear();
     UseCount_.clear();
+    UseCountLcase_.clear();
 }
 
 void TColumnOrder::EraseIf(const std::function<bool(const TString&)>& fn) {

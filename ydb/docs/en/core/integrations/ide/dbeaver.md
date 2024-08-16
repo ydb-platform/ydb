@@ -39,7 +39,7 @@ Follow these steps to connect the downloaded JDBC driver:
 
 ### Creating a Connection to {{ ydb-name }} {#dbeaver_ydb_connection}
 
-Для создания подключения необходимо выполнить следующие шаги:
+Perform the following steps to establish a connection:
 
 1. In DBeaver, create a new connection, specifying the `YDB` connection type.
 1. In the window that opens, go to the **Main** section.

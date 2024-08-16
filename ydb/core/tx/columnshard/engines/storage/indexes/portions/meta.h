@@ -8,9 +8,9 @@ namespace NKikimr::NOlap::NIndexes {
 class TIndexByColumns: public IIndexMeta {
 private:
     using TBase = IIndexMeta;
+    std::shared_ptr<NArrow::NSerialization::ISerializer> Serializer;
 
 protected:
-    std::shared_ptr<NArrow::NSerialization::ISerializer> Serializer;
     std::set<ui32> ColumnIds;
 
     virtual TString DoBuildIndexImpl(TChunkedBatchReader& reader) const = 0;

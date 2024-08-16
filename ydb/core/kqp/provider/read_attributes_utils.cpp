@@ -203,7 +203,19 @@ static Ydb::Type CreateYdbType(const NKikimr::NScheme::TTypeInfo& typeInfo, bool
         auto& item = notNull
             ? ydbType
             : *ydbType.mutable_optional_type()->mutable_item();
-        item.set_type_id((Ydb::Type::PrimitiveTypeId)typeInfo.GetTypeId());
+        //
+        // DECIMAL is PrimitiveType with (22,9) defaults in Scheme
+        // and separate (non-primitive) type everywhere else
+        //
+        // NKikimr::NScheme::NTypeIds::Decimal is omitted in public API intentionally
+        //
+        if (typeInfo.GetTypeId() == NKikimr::NScheme::NTypeIds::Decimal) {
+            auto* decimal = item.mutable_decimal_type();
+            decimal->set_precision(NKikimr::NScheme::DECIMAL_PRECISION);
+            decimal->set_scale(NKikimr::NScheme::DECIMAL_SCALE);
+        } else {
+            item.set_type_id((Ydb::Type::PrimitiveTypeId)typeInfo.GetTypeId());
+        }
     }
     return ydbType;
 }

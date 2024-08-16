@@ -117,7 +117,7 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
     switch (mType) {
         case NEvWrite::EModificationType::Replace:
         case NEvWrite::EModificationType::Upsert: {
-                AFL_VERIFY(batch->num_columns() <= dstSchema->num_fields());
+            AFL_VERIFY(batch->num_columns() <= dstSchema->num_fields());
             if (batch->num_columns() < dstSchema->num_fields()) {
                 for (auto&& f : dstSchema->fields()) {
                     if (GetIndexInfo().IsNullableVerified(f->name())) {

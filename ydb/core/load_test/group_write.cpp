@@ -393,6 +393,8 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         TRequestDispatchingSettings WriteSettings;
         TMonotonic NextWriteTimestamp;
         ui64 TotalBytesWritten = 0;
+        ui64 OkPutResults = 0;
+        ui64 BadPutResults = 0;
         THashMap<ui64, ui64> SentTimestamp;
         ui64 WriteQueryId = 0;
         bool NextWriteInQueue = false;
@@ -784,6 +786,8 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 DUMP_PARAM(NextWriteTimestamp)
                 DUMP_PARAM(WriteSettings.InFlightTracker.ToString())
                 DUMP_PARAM_FINAL(TotalBytesWritten)
+                DUMP_PARAM_FINAL(OkPutResults)
+                DUMP_PARAM_FINAL(BadPutResults)
                 DUMP_PARAM_FINAL(WriteSettings.MaxTotalBytes)
                 DUMP_PARAM_FINAL(TotalBytesRead)
                 DUMP_PARAM(NextReadTimestamp)
@@ -888,24 +892,25 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 Y_ABORT_UNLESS(res);
 
                 WriteSettings.DelayManager->CountResponse();
-                if (!CheckStatus(ctx, res, {NKikimrProto::EReplyStatus::OK})) {
-                    return;
-                }
+                const bool ok = CheckStatus(ctx, res, {NKikimrProto::EReplyStatus::OK});
+                ++ (ok ? OkPutResults : BadPutResults);
 
                 const TLogoBlobID& id = res->Id;
                 const ui32 size = id.BlobSize();
 
-                // this blob has been confirmed -- update set
-                if (!ConfirmedBlobIds || id > ConfirmedBlobIds.back()) {
-                    ConfirmedBlobIds.push_back(id);
-                } else {
-                    // most likely inserted somewhere near the end
-                    ConfirmedBlobIds.insert(std::lower_bound(ConfirmedBlobIds.begin(), ConfirmedBlobIds.end(), id), id);
+                if (ok) {
+                    // this blob has been confirmed -- update set
+                    if (!ConfirmedBlobIds || id > ConfirmedBlobIds.back()) {
+                        ConfirmedBlobIds.push_back(id);
+                    } else {
+                        // most likely inserted somewhere near the end
+                        ConfirmedBlobIds.insert(std::lower_bound(ConfirmedBlobIds.begin(), ConfirmedBlobIds.end(), id), id);
+                    }
+                    TotalBytesWritten += size;
                 }
 
                 WriteSettings.InFlightTracker.Response(size);
 
-                TotalBytesWritten += size;
 
                 auto it = SentTimestamp.find(writeQueryId);
                 const auto sendCycles = it->second;

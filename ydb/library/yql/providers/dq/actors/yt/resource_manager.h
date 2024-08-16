@@ -73,7 +73,7 @@ namespace NYql {
 
         bool ForceIPv4 = false;
 
-        NYT::NYson::TYsonString AddressResolverConfig;
+        std::optional<NYT::NYson::TYsonString> AddressResolverConfig;
 
         // Pinger
         TString DieOnFileAbsence; // see YQL-14099

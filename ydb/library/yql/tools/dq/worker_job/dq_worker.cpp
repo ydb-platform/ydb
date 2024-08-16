@@ -172,7 +172,6 @@ namespace NYql::NDq::NWorker {
         TString fileCacheDir = GetEnv(NCommonJobVars::UDFS_PATH);
         TString ytCoordinatorStr = GetEnv(TString("YT_SECURE_VAULT_") + NCommonJobVars::YT_COORDINATOR);
         TString ytBackendStr = GetEnv(TString("YT_SECURE_VAULT_") + NCommonJobVars::YT_BACKEND);
-        NYT::NYson::TYsonString addressResolverYson = NYT::NYson::TYsonString(GetEnv(NCommonJobVars::ADDRESS_RESOLVER_CONFIG));
 
         TString operationId = GetEnv("YT_OPERATION_ID");
         TString jobId = GetEnv("YT_JOB_ID");
@@ -190,10 +189,19 @@ namespace NYql::NDq::NWorker {
         TRangeWalker<int> portWalker(startPort, startPort+100);
         auto ports = BindInRange(portWalker);
 
-        auto addressResolverConfig = NYT::NYTree::ConvertTo<NYT::NNet::TAddressResolverConfigPtr>(addressResolverYson);
-        NYT::NNet::TAddressResolver::Get()->Configure(addressResolverConfig);
-
         auto forceIPv4 = IsTrue(GetEnv(TString("YT_SECURE_VAULT_") + NCommonJobVars::YT_FORCE_IPV4, ""));
+
+        auto addressResolverStr = GetEnv(NCommonJobVars::ADDRESS_RESOLVER_CONFIG, "");
+        if (!addressResolverStr.Empty()) {
+            auto addressResolverConfig = NYT::NYTree::ConvertTo<NYT::NNet::TAddressResolverConfigPtr>(NYT::NYson::TYsonString(addressResolverStr));
+            NYT::NNet::TAddressResolver::Get()->Configure(addressResolverConfig);
+        } else if (forceIPv4) {
+            // Keep the previous behavior for compatibility.
+            auto config = NYT::New<NYT::NNet::TAddressResolverConfig>();
+            config->EnableIPv4 = true;
+            config->EnableIPv6 = false;
+            NYT::NNet::TAddressResolver::Get()->Configure(config);
+        }
 
         auto [host, ip] = NYql::NDqs::GetLocalAddress(
             coordinatorConfig.HasHostName() ? &coordinatorConfig.GetHostName() : nullptr,

@@ -1,4 +1,4 @@
-#include "kqp_columns_getter_transformer.h"
+#include "kqp_column_statistics_requester.h"
 
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/core/statistics/service/service.h>

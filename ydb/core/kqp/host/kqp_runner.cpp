@@ -5,7 +5,7 @@
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/opt/logical/kqp_opt_log.h>
 #include <ydb/core/kqp/opt/kqp_statistics_transformer.h>
-#include <ydb/core/kqp/opt/kqp_columns_getter_transformer.h>
+#include <ydb/core/kqp/opt/kqp_column_statistics_requester.h>
 #include <ydb/core/kqp/opt/kqp_constant_folding_transformer.h>
 #include <ydb/core/kqp/opt/logical/kqp_opt_cbo.h>
 

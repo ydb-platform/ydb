@@ -25,7 +25,7 @@ protected:
 
     virtual void DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const override;
 
-    virtual TString DoBuildIndexImpl(std::vector<TChunkedColumnReader>&& columnReaders) const override;
+    virtual TString DoBuildIndexImpl(TChunkedBatchReader& reader) const override;
 
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override {
         AFL_VERIFY(TBase::DoDeserializeFromProto(proto));
@@ -53,6 +53,11 @@ public:
     virtual TString GetClassName() const override {
         return GetClassNameStatic();
     }
+
+    const std::set<ui32>& GetColumnIds() const {
+        return ColumnIds;
+    }
+
 };
 
 }   // namespace NKikimr::NOlap::NIndexes

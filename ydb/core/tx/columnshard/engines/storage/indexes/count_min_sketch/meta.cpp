@@ -13,7 +13,8 @@ namespace NKikimr::NOlap::NIndexes::NCountMinSketch {
 
 using TCountMinSketch = TStackAllocatedCountMinSketch<256, 8>;
 
-TString TIndexMeta::DoBuildIndexImpl(std::vector<TChunkedColumnReader>&& columnReaders) const {
+TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader) const {
+    std::vector<TChunkedColumnReader>& columnReaders = reader.GetColumnReaders();
     AFL_VERIFY(columnReaders.size() == ColumnIds.size());
 
     std::vector<TCountMinSketch> sketchesByColumns;

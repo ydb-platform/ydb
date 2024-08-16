@@ -13,7 +13,7 @@ protected:
     std::shared_ptr<NArrow::NSerialization::ISerializer> Serializer;
     std::set<ui32> ColumnIds;
 
-    virtual TString DoBuildIndexImpl(std::vector<TChunkedColumnReader>&& columnReaders) const = 0;
+    virtual TString DoBuildIndexImpl(TChunkedBatchReader& reader) const = 0;
 
     virtual std::shared_ptr<IPortionDataChunk> DoBuildIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const override final;
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override;

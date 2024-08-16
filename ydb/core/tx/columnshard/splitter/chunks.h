@@ -61,7 +61,7 @@ private:
     ui32 CurrentRecordIndex = 0;
 public:
     TChunkedColumnReader(const std::vector<std::shared_ptr<IPortionDataChunk>>& chunks, const std::shared_ptr<TColumnLoader>& loader)
-        : Chunks(chunks) 
+        : Chunks(chunks)
         , Loader(loader)
     {
         Start();
@@ -165,6 +165,14 @@ public:
 
     ui32 GetColumnsCount() const {
         return Columns.size();
+    }
+
+    std::vector<TChunkedColumnReader>& GetColumnReaders() {
+        return Columns;
+    }
+
+    const std::vector<TChunkedColumnReader>& GetColumnReaders() const {
+        return Columns;
     }
 
     std::vector<TChunkedColumnReader>::const_iterator begin() const {

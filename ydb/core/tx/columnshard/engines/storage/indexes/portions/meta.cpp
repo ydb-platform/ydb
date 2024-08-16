@@ -20,7 +20,8 @@ std::shared_ptr<NKikimr::NOlap::IPortionDataChunk> TIndexByColumns::DoBuildIndex
     for (auto&& i : data.begin()->second) {
         recordsCount += i->GetRecordsCountVerified();
     }
-    const TString indexData = DoBuildIndexImpl(std::move(columnReaders));
+    TChunkedBatchReader reader(std::move(columnReaders));
+    const TString indexData = DoBuildIndexImpl(reader);
     return std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData);
 }
 

@@ -15,6 +15,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/process_stats.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/minikql/aligned_page_pool.h>
 
 namespace NKikimr::NMemory {
 
@@ -262,8 +263,20 @@ private:
         Counters->GetCounter("Stats/ConsumersLimit")->Set(consumersLimitBytes);
         memoryStats.SetConsumersLimit(consumersLimitBytes);
 
+        ui64 queryExecutionConsumption = TAlignedPagePool::GetGlobalPagePoolSize();
+        ui64 queryExecutionLimitBytes = GetQueryExecutionLimitBytes(Config, hardLimitBytes);
+        LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Consumer QueryExecution state:"
+            << " Consumption: " << queryExecutionConsumption << " Limit: " << queryExecutionLimitBytes);
+        Counters->GetCounter("Consumer/QueryExecution/Consumption")->Set(queryExecutionConsumption);
+        Counters->GetCounter("Consumer/QueryExecution/Limit")->Set(queryExecutionLimitBytes);
+        memoryStats.SetQueryExecutionConsumption(queryExecutionConsumption);
+        memoryStats.SetQueryExecutionLimit(queryExecutionLimitBytes);
+
         // Note: for now ResourceBroker and its queues aren't MemoryController consumers and don't share limits with other caches
-        ApplyResourceBrokerLimits(hardLimitBytes, activitiesLimitBytes);
+        ApplyResourceBrokerLimits({
+            activitiesLimitBytes,
+            queryExecutionLimitBytes
+        });
 
         Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), memoryStatsUpdate);
 
@@ -350,34 +363,22 @@ private:
         }
     }
 
-    void ApplyResourceBrokerLimits(ui64 hardLimitBytes, ui64 activitiesLimitBytes) {
-        ui64 queryExecutionLimitBytes = GetQueryExecutionLimitBytes(Config, hardLimitBytes);
-
-        TResourceBrokerLimits newLimits{
-            activitiesLimitBytes,
-            queryExecutionLimitBytes
-        };
-        
-        if (newLimits == CurrentResourceBrokerLimits) {
+    void ApplyResourceBrokerLimits(TResourceBrokerLimits limits) {
+        if (limits == CurrentResourceBrokerLimits) {
             return;
         }
 
-        CurrentResourceBrokerLimits = newLimits;
-
-        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::MEMORY_CONTROLLER, "Consumer QueryExecution state:"
-            << " Limit: " << newLimits.QueryExecutionLimitBytes);
-
-        Counters->GetCounter("Consumer/QueryExecution/Limit")->Set(newLimits.QueryExecutionLimitBytes);
-
         TAutoPtr<TEvResourceBroker::TEvConfigure> configure = new TEvResourceBroker::TEvConfigure();
         configure->Merge = true;
-        configure->Record.MutableResourceLimit()->SetMemory(activitiesLimitBytes);
+        configure->Record.MutableResourceLimit()->SetMemory(limits.LimitBytes);
 
         auto queue = configure->Record.AddQueues();
         queue->SetName(NLocalDb::KqpResourceManagerQueue);
-        queue->MutableLimit()->SetMemory(queryExecutionLimitBytes);
+        queue->MutableLimit()->SetMemory(limits.QueryExecutionLimitBytes);
 
         Send(MakeResourceBrokerID(), configure.Release());
+
+        CurrentResourceBrokerLimits.emplace(std::move(limits));
     }
 
     TConsumerCounters& GetConsumerCounters(EMemoryConsumerKind consumer) {

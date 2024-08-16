@@ -12,6 +12,39 @@ ui64 GetPercent(float percent, ui64 value) {
     return static_cast<ui64>(static_cast<double>(value) * (percent / 100.0));
 }
 
+#define GET_X_LIMIT(name) \
+    inline ui64 Get##name##Bytes(const NKikimrConfig::TMemoryControllerConfig& config, ui64 hardLimitBytes) { \
+        if (config.Has##name##Percent() && config.Has##name##Bytes()) { \
+            return Min(GetPercent(config.Get##name##Percent(), hardLimitBytes), config.Get##name##Bytes()); \
+        } \
+        if (config.Has##name##Bytes()) { \
+            return config.Get##name##Bytes(); \
+        } \
+        return GetPercent(config.Get##name##Percent(), hardLimitBytes); \
+    }
+
+#define GET_MIN_LIMIT(name) \
+    inline ui64 Get##name##MinBytes(const NKikimrConfig::TMemoryControllerConfig& config, ui64 hardLimitBytes) { \
+        if (config.Has##name##MinPercent() && config.Has##name##MinBytes()) { \
+            return Max(GetPercent(config.Get##name##MinPercent(), hardLimitBytes), config.Get##name##MinBytes()); \
+        } \
+        if (config.Has##name##MinBytes()) { \
+            return config.Get##name##MinBytes(); \
+        } \
+        return GetPercent(config.Get##name##MinPercent(), hardLimitBytes); \
+    }
+
+#define GET_MAX_LIMIT(name) \
+    inline ui64 Get##name##MaxBytes(const NKikimrConfig::TMemoryControllerConfig& config, ui64 hardLimitBytes) { \
+        if (config.Has##name##MaxPercent() && config.Has##name##MaxBytes()) { \
+            return Min(GetPercent(config.Get##name##MaxPercent(), hardLimitBytes), config.Get##name##MaxBytes()); \
+        } \
+        if (config.Has##name##MaxBytes()) { \
+            return config.Get##name##MaxBytes(); \
+        } \
+        return GetPercent(config.Get##name##MaxPercent(), hardLimitBytes); \
+    }
+
 };
 
 inline ui64 GetHardLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const TProcessMemoryInfo& info, bool& hasMemTotalHardLimit) {
@@ -32,84 +65,16 @@ inline ui64 GetHardLimitBytes(const NKikimrConfig::TMemoryControllerConfig& conf
     return 512_MB; // fallback
 }
 
-inline ui64 GetSoftLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, ui64 hardLimitBytes) {
-    if (config.HasSoftLimitPercent() && config.HasSoftLimitBytes()) {
-        return Min(GetPercent(config.GetSoftLimitPercent(), hardLimitBytes), config.GetSoftLimitBytes());
-    }
-    if (config.HasSoftLimitBytes()) {
-        return config.GetSoftLimitBytes();
-    }
-    return GetPercent(config.GetSoftLimitPercent(), hardLimitBytes);
-}
+GET_X_LIMIT(SoftLimit)
+GET_X_LIMIT(TargetUtilization)
+GET_X_LIMIT(ActivitiesLimit)
 
-inline ui64 GetTargetUtilizationBytes(const NKikimrConfig::TMemoryControllerConfig& config, ui64 hardLimitBytes) {
-    if (config.HasTargetUtilizationPercent() && config.HasTargetUtilizationBytes()) {
-        return Min(GetPercent(config.GetTargetUtilizationPercent(), hardLimitBytes), config.GetTargetUtilizationBytes());
-    }
-    if (config.HasTargetUtilizationBytes()) {
-        return config.GetTargetUtilizationBytes();
-    }
-    return GetPercent(config.GetTargetUtilizationPercent(), hardLimitBytes);
-}
+GET_MIN_LIMIT(MemTable)
+GET_MAX_LIMIT(MemTable)
 
-inline ui64 GetActivitiesLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, ui64 hardLimitBytes) {
-    if (config.HasActivitiesLimitPercent() && config.HasActivitiesLimitBytes()) {
-        return Min(GetPercent(config.GetActivitiesLimitPercent(), hardLimitBytes), config.GetActivitiesLimitBytes());
-    }
-    if (config.HasActivitiesLimitBytes()) {
-        return config.GetActivitiesLimitBytes();
-    }
-    return GetPercent(config.GetActivitiesLimitPercent(), hardLimitBytes);
-}
+GET_MIN_LIMIT(SharedCache)
+GET_MAX_LIMIT(SharedCache)
 
-inline ui64 GetMemTableMinBytes(const NKikimrConfig::TMemoryControllerConfig& config, ui64 hardLimitBytes) {
-    if (config.HasMemTableMinPercent() && config.HasMemTableMinBytes()) {
-        return Max(GetPercent(config.GetMemTableMinPercent(), hardLimitBytes), config.GetMemTableMinBytes());
-    }
-    if (config.HasMemTableMinBytes()) {
-        return config.GetMemTableMinBytes();
-    }
-    return GetPercent(config.GetMemTableMinPercent(), hardLimitBytes);
-}
-
-inline ui64 GetMemTableMaxBytes(const NKikimrConfig::TMemoryControllerConfig& config, ui64 hardLimitBytes) {
-    if (config.HasMemTableMaxPercent() && config.HasMemTableMaxBytes()) {
-        return Min(GetPercent(config.GetMemTableMaxPercent(), hardLimitBytes), config.GetMemTableMaxBytes());
-    }
-    if (config.HasMemTableMaxBytes()) {
-        return config.GetMemTableMaxBytes();
-    }
-    return GetPercent(config.GetMemTableMaxPercent(), hardLimitBytes);
-}
-
-inline ui64 GetSharedCacheMinBytes(const NKikimrConfig::TMemoryControllerConfig& config, ui64 hardLimitBytes) {
-    if (config.HasSharedCacheMinPercent() && config.HasSharedCacheMinBytes()) {
-        return Max(GetPercent(config.GetSharedCacheMinPercent(), hardLimitBytes), config.GetSharedCacheMinBytes());
-    }
-    if (config.HasSharedCacheMinBytes()) {
-        return config.GetSharedCacheMinBytes();
-    }
-    return GetPercent(config.GetSharedCacheMinPercent(), hardLimitBytes);
-}
-
-inline ui64 GetSharedCacheMaxBytes(const NKikimrConfig::TMemoryControllerConfig& config, ui64 hardLimitBytes) {
-    if (config.HasSharedCacheMaxPercent() && config.HasSharedCacheMaxBytes()) {
-        return Min(GetPercent(config.GetSharedCacheMaxPercent(), hardLimitBytes), config.GetSharedCacheMaxBytes());
-    }
-    if (config.HasSharedCacheMaxBytes()) {
-        return config.GetSharedCacheMaxBytes();
-    }
-    return GetPercent(config.GetSharedCacheMaxPercent(), hardLimitBytes);
-}
-
-inline ui64 GetQueryExecutionLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, ui64 hardLimitBytes) {
-    if (config.HasQueryExecutionLimitPercent() && config.HasQueryExecutionLimitBytes()) {
-        return Min(GetPercent(config.GetQueryExecutionLimitPercent(), hardLimitBytes), config.GetQueryExecutionLimitBytes());
-    }
-    if (config.HasQueryExecutionLimitBytes()) {
-        return config.GetQueryExecutionLimitBytes();
-    }
-    return GetPercent(config.GetQueryExecutionLimitPercent(), hardLimitBytes);
-}
+GET_X_LIMIT(QueryExecutionLimit)
 
 }

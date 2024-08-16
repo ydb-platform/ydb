@@ -50,10 +50,6 @@ public:
         }
     }
 
-    bool IsPipe(const TActorId& actorId) const {
-        return actorId == Pipe;
-    }
-
 private:
     const ui64 BalancerTabletId;
 

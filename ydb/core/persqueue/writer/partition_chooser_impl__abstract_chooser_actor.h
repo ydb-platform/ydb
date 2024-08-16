@@ -236,26 +236,21 @@ protected:
         TRACE_EVENT(NKikimrServices::PQ_PARTITION_CHOOSER);
         switch (ev->GetTypeRewrite()) {
             HFunc(NKikimr::TEvPQ::TEvCheckPartitionStatusResponse, Handle);
-            HFunc(TEvTabletPipe::TEvClientConnected, HandleOwnership);
-            HFunc(TEvTabletPipe::TEvClientDestroyed, HandleOwnership);
+            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             SFunc(TEvents::TEvPoison, TThis::Die);
         }
     }
 
 protected:
-    void HandleOwnership(TEvTabletPipe::TEvClientConnected::TPtr& ev, const NActors::TActorContext& ctx) {
-        auto msg = ev->Get();
-        if (PartitionHelper.IsPipe(ev->Sender) && msg->Status != NKikimrProto::OK) {
-            TableHelper.CloseKqpSession(ctx);
-            ReplyError(ErrorCode::INITIALIZING, "Pipe closed", ctx);
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const NActors::TActorContext& ctx) {
+        if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
+            ReplyError(ErrorCode::INITIALIZING, "Pipe connection fail", ctx);
         }
     }
 
-    void HandleOwnership(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const NActors::TActorContext& ctx) {
-        if (PartitionHelper.IsPipe(ev->Sender)) {
-            TableHelper.CloseKqpSession(ctx);
-            ReplyError(ErrorCode::INITIALIZING, "Pipe closed", ctx);
-        }
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& /*ev*/, const NActors::TActorContext& ctx) {
+        ReplyError(ErrorCode::INITIALIZING, "Pipe destroyed", ctx);
     }
 
 protected:

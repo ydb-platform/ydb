@@ -67,10 +67,6 @@ public:
         return OwnerCookie_;
     }
 
-    bool IsPipe(const TActorId& actorId) const {
-        return actorId == Pipe;
-    }
-
 private:
     THolder<TEvPersQueue::TEvRequest> MakeRequest(ui32 partitionId, TActorId pipe) {
         auto ev = MakeHolder<TEvPersQueue::TEvRequest>();

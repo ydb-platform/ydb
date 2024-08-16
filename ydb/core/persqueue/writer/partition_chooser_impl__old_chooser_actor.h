@@ -47,6 +47,12 @@ public:
         return TActor<TPartitionChooserActor<TPipeCreator>>::SelfId();
     }
 
+    void PassAway() override {
+        auto ctx = TActivationContext::ActorContextFor(SelfId());
+        PQRBHelper.Close(ctx);
+        TParentActor::PassAway();
+    }
+
     void OnSelected(const TActorContext &ctx) override {
         if (TThis::Partition) {
             return OnPartitionChosen(ctx);
@@ -84,23 +90,12 @@ private:
         OnPartitionChosen(ctx);
     }
 
-    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const NActors::TActorContext& ctx) {
-        if (PQRBHelper.IsPipe(ev->Sender) && ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
-            TThis::ReplyError(ErrorCode::INITIALIZING, "Pipe connection fail", ctx);
-        }
-    }
-
-    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const NActors::TActorContext& ctx) {
-        if(PQRBHelper.IsPipe(ev->Sender)) {
-            TThis::ReplyError(ErrorCode::INITIALIZING, "Pipe destroyed", ctx);
-        }
-    }
-
     STATEFN(StatePQRB) {
         TRACE_EVENT(NKikimrServices::PQ_PARTITION_CHOOSER);
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPersQueue::TEvGetPartitionIdForWriteResponse, Handle);
-            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            HFunc(TEvTabletPipe::TEvClientConnected, TParentActor::Handle);
+            HFunc(TEvTabletPipe::TEvClientDestroyed, TParentActor::Handle);
             SFunc(TEvents::TEvPoison, TThis::Die);
         }
     }

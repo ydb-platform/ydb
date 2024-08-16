@@ -138,8 +138,8 @@ private:
         TRACE_EVENT(NKikimrServices::PQ_PARTITION_CHOOSER);
         switch (ev->GetTypeRewrite()) {
             HFunc(NKikimr::TEvPQ::TEvCheckPartitionStatusResponse, HandleFast);
-            HFunc(TEvTabletPipe::TEvClientConnected, TThis::HandleOwnership);
-            HFunc(TEvTabletPipe::TEvClientDestroyed, TThis::HandleOwnership);
+            HFunc(TEvTabletPipe::TEvClientConnected, TThis::Handle);
+            HFunc(TEvTabletPipe::TEvClientDestroyed, TThis::Handle);
             SFunc(TEvents::TEvPoison, TThis::Die);
         }
     }
@@ -197,8 +197,8 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPersQueue::TEvResponse, HandleMaxSeqNo);
             SFunc(TEvents::TEvPoison, TThis::Die);
-            HFunc(TEvTabletPipe::TEvClientConnected, TThis::HandleOwnership);
-            HFunc(TEvTabletPipe::TEvClientDestroyed, TThis::HandleOwnership);
+            HFunc(TEvTabletPipe::TEvClientConnected, TThis::Handle);
+            HFunc(TEvTabletPipe::TEvClientDestroyed, TThis::Handle);
         }
     }
 

@@ -2436,7 +2436,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     ui64 numRows = static_cast<arrow::UInt64Array&>(*rows).Value(i);
                     ui64 numBytes = static_cast<arrow::UInt64Array&>(*bytes).Value(i);
                     ui64 numRawBytes = static_cast<arrow::UInt64Array&>(*rawBytes).Value(i);
-                    bool activity = static_cast<arrow::BooleanArray&>(*activities).Value(i);
+                    bool activity = static_cast<arrow::UInt8Array&>(*activities).Value(i);
                     if (!activity) {
                         continue;
                     }

@@ -401,12 +401,15 @@ private:
 public:
     TNormalForm() = default;
 
-    bool Add(const NSsa::TAssign& assign) {
+    bool Add(const NSsa::TAssign& assign, const TProgramContainer& program) {
         std::vector<std::shared_ptr<IRequestNode>> argNodes;
         for (auto&& arg : assign.GetArguments()) {
             if (arg.IsGenerated()) {
                 auto it = Nodes.find(arg.GetColumnName());
-                AFL_VERIFY(it != Nodes.end());
+                if (it == Nodes.end()) {
+                    AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "program_arg_is_missing")("program", program.DebugString());
+                    return false;
+                }
                 argNodes.emplace_back(it->second);
             } else {
                 argNodes.emplace_back(std::make_shared<TOriginalColumn>(arg.GetColumnName()));
@@ -443,7 +446,7 @@ std::shared_ptr<TDataForIndexesCheckers> TDataForIndexesCheckers::Build(const TP
     auto fStep = program.GetSteps().front();
     TNormalForm nForm;
     for (auto&& s : fStep->GetAssignes()) {
-        if (!nForm.Add(s)) {
+        if (!nForm.Add(s, program)) {
             return nullptr;
         }
     }

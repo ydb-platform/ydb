@@ -622,33 +622,36 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
 
     def start(self):
         if self.__slot_id is None:
-            return self.ssh_command("sudo start kikimr")
-        return self.ssh_command(
-            [
-                "sudo", "start",
-                "kikimr-multi",
-                "slot={}".format(self.__slot_id),
-                "tenant=/Root/db1",
-                "mbus={}".format(self.__mbus_port),
-                "grpc={}".format(self.__grpc_port),
-                "mon={}".format(self.__mon_port),
-                "ic={}".format(self.__ic_port),
-            ]
+            return self.ssh_command("sudo service kikimr start")
+
+        slot_dir = "/Berkanavt/kikimr_{slot}".format(slot=self.__slot_id)
+        slot_cfg = slot_dir + "/slot_cfg"
+        env_txt = slot_dir + "/env.txt"
+
+        cfg = """\
+tenant=/Root/db1
+grpc={grpc}
+mbus={mbus}
+ic={ic}
+mon={mon}""".format(
+            mbus=self.__mbus_port,
+            grpc=self.__grpc_port,
+            mon=self.__mon_port,
+            ic=self.__ic_port,
         )
+
+        self.ssh_command(["sudo", "mkdir", slot_dir])
+        self.ssh_command(["sudo", "touch", env_txt])
+        self.ssh_command(["/bin/echo", "-e", "\"{}\"".format(cfg),  "|", "sudo", "tee", slot_cfg])
+
+        return self.ssh_command(["sudo", "systemctl", "start", "kikimr-multi@{}".format(self.__slot_id)])
 
     def stop(self):
         if self.__slot_id is None:
-            return self.ssh_command("sudo stop kikimr")
+            return self.ssh_command("sudo service kikimr stop")
         return self.ssh_command(
             [
-                "sudo", "stop",
-                "kikimr-multi",
-                "slot={}".format(self.__slot_id),
-                "tenant=/Root/db1",
-                "mbus={}".format(self.__mbus_port),
-                "grpc={}".format(self.__grpc_port),
-                "mon={}".format(self.__mon_port),
-                "ic={}".format(self.__ic_port),
+                "sudo", "systemctl", "start", "kikimr-multi@{}".format(self.__slot_id),
             ]
         )
 

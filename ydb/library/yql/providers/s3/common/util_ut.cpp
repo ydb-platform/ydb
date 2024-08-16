@@ -13,17 +13,6 @@ Y_UNIT_TEST_SUITE(TestS3UrlEscape) {
 
         s = "hello%3dworld";
         UNIT_ASSERT_VALUES_EQUAL(NS3Util::UrlEscapeRet(s), "hello%253dworld");
-        NS3Util::UrlEscape(s);
-        UNIT_ASSERT_VALUES_EQUAL(s, "hello%253dworld");
-    }
-
-    Y_UNIT_TEST(EscapeUnescapeForce) {
-        TString s;
-
-        s = "hello%3dworld";
-        NS3Util::UrlEscape(s);
-        UrlUnescape(s);
-        UNIT_ASSERT_VALUES_EQUAL(s, "hello%3dworld");
     }
 
     Y_UNIT_TEST(EscapeUnescapeForceRet) {
@@ -38,8 +27,6 @@ Y_UNIT_TEST_SUITE(TestS3UrlEscape) {
         TString s = "hello#?world";
 
         UNIT_ASSERT_VALUES_EQUAL(NS3Util::UrlEscapeRet(s), "hello%23%3Fworld");
-        NS3Util::UrlEscape(s);
-        UNIT_ASSERT_VALUES_EQUAL(s, "hello%23%3Fworld");
     }
 }
 

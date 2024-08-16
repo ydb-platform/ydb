@@ -105,7 +105,7 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
                 NArrow::Append<arrow::UInt64Type>(*builders[10], 0);
                 NArrow::Append<arrow::UInt64Type>(*builders[11], bData->size());
             }
-            NArrow::Append<arrow::BooleanType>(*builders[12], activity);
+            NArrow::Append<arrow::UInt8Type>(*builders[12], activity);
             const auto tierName = portionSchema->GetIndexInfo().GetEntityStorageId(r->GetIndexId(), portion.GetMeta().GetTierName());
             std::string strTierName(tierName.data(), tierName.size());
             NArrow::Append<arrow::StringType>(*builders[13], strTierName);

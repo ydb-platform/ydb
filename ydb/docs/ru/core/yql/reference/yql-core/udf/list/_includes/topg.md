@@ -1,4 +1,4 @@
-| YQL | PostgreSQL | Название PostgreSQL-типа в YDB|
+| YQL | PostgreSQL | Название PostgreSQL-типа в {{ ydb-short-name }} |
 |---|---|---|
 | `Bool` | `bool` |`pgbool` |
 | `Int8` | `int2` |`pgint2` |

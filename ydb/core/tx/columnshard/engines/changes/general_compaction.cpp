@@ -142,6 +142,9 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
         shardingActualVersion = shardingActual->GetSnapshotVersion();
     }
     AppendedPortions = merger.Execute(stats, CheckPoints, resultFiltered, GranuleMeta->GetPathId(), shardingActualVersion);
+    for (auto&& p : AppendedPortions) {
+        p.GetPortionConstructor().MutableMeta().UpdateRecordsMeta(NPortion::EProduced::SPLIT_COMPACTED);
+    }
 }
 
 TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {

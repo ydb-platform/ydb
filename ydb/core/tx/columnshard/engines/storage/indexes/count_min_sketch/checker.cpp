@@ -7,20 +7,16 @@
 namespace NKikimr::NOlap::NIndexes::NCountMinSketch {
 
 void TCountMinSketchChecker::DoSerializeToProtoImpl(NKikimrSSA::TProgram::TOlapIndexChecker& proto) const {
-    Y_UNUSED(proto);
-    AFL_VERIFY(false)("message", "Not implemented");  // unimplemented, should not be used
+    proto.MutableCountMinSketch();
 }
 
 bool TCountMinSketchChecker::DoCheckImpl(const std::vector<TString>& blobs) const {
     Y_UNUSED(blobs);
-    AFL_VERIFY(false)("message", "Not implemented");  // unimplemented, should not be used
-    return false;
+    return true;
 }
 
 bool TCountMinSketchChecker::DoDeserializeFromProtoImpl(const NKikimrSSA::TProgram::TOlapIndexChecker& proto) {
-    Y_UNUSED(proto);
-    AFL_VERIFY(false)("message", "Not implemented");  // unimplemented, should not be used
-    return false;
+    return proto.HasCountMinSketch();
 }
 
 }   // namespace NKikimr::NOlap::NIndexes

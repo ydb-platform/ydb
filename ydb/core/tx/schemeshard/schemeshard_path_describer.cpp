@@ -73,6 +73,79 @@ static void FillTableStats(NKikimrSchemeOp::TPathDescription& pathDescription, c
     FillTableMetrics(pathDescription.MutableTabletMetrics(), stats);
 }
 
+static void FillColumns(
+    const TTableInfo& tableInfo,
+    google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription>& out
+) {
+    bool familyNamesBuilt = false;
+    THashMap<ui32, TString> familyNames;
+
+    out.Reserve(tableInfo.Columns.size());
+    for (const auto& col : tableInfo.Columns) {
+        const auto& cinfo = col.second;
+        if (cinfo.IsDropped())
+            continue;
+
+        auto* colDescr = out.Add();
+        colDescr->SetName(cinfo.Name);
+        colDescr->SetType(NScheme::TypeName(cinfo.PType, cinfo.PTypeMod));
+        auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(cinfo.PType, cinfo.PTypeMod);
+        colDescr->SetTypeId(columnType.TypeId);
+        if (columnType.TypeInfo) {
+            *colDescr->MutableTypeInfo() = *columnType.TypeInfo;
+        }
+        colDescr->SetId(cinfo.Id);
+        colDescr->SetNotNull(cinfo.NotNull);
+
+        if (cinfo.Family != 0) {
+            colDescr->SetFamily(cinfo.Family);
+
+            if (!familyNamesBuilt) {
+                for (const auto& family : tableInfo.PartitionConfig().GetColumnFamilies()) {
+                    if (family.HasName() && family.HasId()) {
+                        familyNames[family.GetId()] = family.GetName();
+                    }
+                }
+                familyNamesBuilt = true;
+            }
+
+            auto it = familyNames.find(cinfo.Family);
+            if (it != familyNames.end() && !it->second.empty()) {
+                colDescr->SetFamilyName(it->second);
+            }
+        }
+
+        colDescr->SetIsBuildInProgress(cinfo.IsBuildInProgress);
+
+        switch (cinfo.DefaultKind) {
+            case ETableColumnDefaultKind::None:
+                break;
+            case ETableColumnDefaultKind::FromSequence:
+                colDescr->SetDefaultFromSequence(cinfo.DefaultValue);
+                break;
+            case ETableColumnDefaultKind::FromLiteral:
+                Y_ABORT_UNLESS(colDescr->MutableDefaultFromLiteral()->ParseFromString(
+                    cinfo.DefaultValue));
+                break;
+        }
+    }
+}
+
+static void FillKeyColumns(
+    const TTableInfo& tableInfo,
+    google::protobuf::RepeatedPtrField<TProtoStringType>& names,
+    google::protobuf::RepeatedField<ui32>& ids
+) {
+    Y_ABORT_UNLESS(!tableInfo.KeyColumnIds.empty());
+    names.Reserve(tableInfo.KeyColumnIds.size());
+    ids.Reserve(tableInfo.KeyColumnIds.size());
+    for (ui32 keyColId : tableInfo.KeyColumnIds) {
+        *names.Add() = tableInfo.Columns.at(keyColId).Name;
+        *ids.Add() = keyColId;
+    }
+
+}
+
 void TPathDescriber::FillPathDescr(NKikimrSchemeOp::TDirEntry* descr, TPathElement::TPtr pathEl, TPathElement::EPathSubType subType) {
     FillChildDescr(descr, pathEl);
 
@@ -1189,67 +1262,10 @@ void TSchemeShard::DescribeTable(
     ) const
 {
     Y_UNUSED(typeRegistry);
-    THashMap<ui32, TString> familyNames;
-    bool familyNamesBuilt = false;
 
     entry->SetTableSchemaVersion(tableInfo.AlterVersion);
-    entry->MutableColumns()->Reserve(tableInfo.Columns.size());
-    for (auto col : tableInfo.Columns) {
-        const auto& cinfo = col.second;
-        if (cinfo.IsDropped())
-            continue;
-
-        auto colDescr = entry->AddColumns();
-        colDescr->SetName(cinfo.Name);
-        colDescr->SetType(NScheme::TypeName(cinfo.PType, cinfo.PTypeMod));
-        auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(cinfo.PType, cinfo.PTypeMod);
-        colDescr->SetTypeId(columnType.TypeId);
-        if (columnType.TypeInfo) {
-            *colDescr->MutableTypeInfo() = *columnType.TypeInfo;
-        }
-        colDescr->SetId(cinfo.Id);
-        colDescr->SetNotNull(cinfo.NotNull);
-
-        if (cinfo.Family != 0) {
-            colDescr->SetFamily(cinfo.Family);
-
-            if (!familyNamesBuilt) {
-                for (const auto& family : tableInfo.PartitionConfig().GetColumnFamilies()) {
-                    if (family.HasName() && family.HasId()) {
-                        familyNames[family.GetId()] = family.GetName();
-                    }
-                }
-                familyNamesBuilt = true;
-            }
-
-            auto it = familyNames.find(cinfo.Family);
-            if (it != familyNames.end() && !it->second.empty()) {
-                colDescr->SetFamilyName(it->second);
-            }
-        }
-
-        colDescr->SetIsBuildInProgress(cinfo.IsBuildInProgress);
-
-        switch (cinfo.DefaultKind) {
-            case ETableColumnDefaultKind::None:
-                break;
-            case ETableColumnDefaultKind::FromSequence:
-                colDescr->SetDefaultFromSequence(cinfo.DefaultValue);
-                break;
-            case ETableColumnDefaultKind::FromLiteral:
-                Y_ABORT_UNLESS(colDescr->MutableDefaultFromLiteral()->ParseFromString(
-                    cinfo.DefaultValue));
-                break;
-        }
-    }
-    Y_ABORT_UNLESS(!tableInfo.KeyColumnIds.empty());
-
-    entry->MutableKeyColumnNames()->Reserve(tableInfo.KeyColumnIds.size());
-    entry->MutableKeyColumnIds()->Reserve(tableInfo.KeyColumnIds.size());
-    for (ui32 keyColId : tableInfo.KeyColumnIds) {
-        entry->AddKeyColumnNames(tableInfo.Columns.at(keyColId).Name);
-        entry->AddKeyColumnIds(keyColId);
-    }
+    FillColumns(tableInfo, *entry->MutableColumns());
+    FillKeyColumns(tableInfo, *entry->MutableKeyColumnNames(), *entry->MutableKeyColumnIds());
 
     if (fillConfig) {
         FillPartitionConfig(tableInfo.PartitionConfig(), *entry->MutablePartitionConfig());

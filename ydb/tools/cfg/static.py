@@ -393,6 +393,9 @@ class StaticConfigGenerator(object):
         if self.column_shard_config:
             normalized_config["column_shard_config"] = self.column_shard_config
 
+        if self.__cluster_details.client_certificate_authorization is not None:
+            normalized_config["client_certificate_authorization"] = self.__cluster_details.client_certificate_authorization
+
         if self.__cluster_details.blob_storage_config is not None:
             normalized_config["blob_storage_config"] = self.__cluster_details.blob_storage_config
         else:

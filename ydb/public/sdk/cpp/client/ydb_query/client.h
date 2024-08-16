@@ -6,7 +6,6 @@
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
 #include <ydb/public/sdk/cpp/client/ydb_retry/retry.h>
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/retry/retry_sync.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/request_settings.h>
 
 #include <util/generic/maybe.h>

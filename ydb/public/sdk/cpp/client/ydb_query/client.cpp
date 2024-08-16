@@ -13,6 +13,7 @@
 
 #include <ydb/public/lib/operation_id/operation_id.h>
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/retry/retry_sync.h>
 #include <ydb/public/sdk/cpp/client/ydb_query/impl/exec_query.h>
 #include <ydb/public/sdk/cpp/client/ydb_retry/retry.h>
 

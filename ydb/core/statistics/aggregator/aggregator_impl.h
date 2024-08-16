@@ -161,6 +161,7 @@ private:
     void StartTraversal(NIceDb::TNiceDb& db);
     void FinishTraversal(NIceDb::TNiceDb& db);
 
+    std::optional<bool> IsColumnTable(const TPathId& pathId) const;
 
     TString LastTraversalWasForceString() const;
 
@@ -316,7 +317,7 @@ private:
         Traversal
     };
     ENavigateType NavigateType = Analyze;
-    TString NavigateOperationId;
+    TString NavigateAnalyzeOperationId;
     TPathId NavigatePathId;
 
     // alternate between forced and scheduled traversals

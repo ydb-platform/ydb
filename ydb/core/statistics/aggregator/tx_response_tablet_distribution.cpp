@@ -74,6 +74,7 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
 
         if (!distribution.empty() && Self->ResolveRound < Self->MaxResolveRoundCount) {
             // these tablets do not exist in Hive anymore
+            Self->NavigatePathId = Self->TraversalPathId;
             Action = EAction::ScheduleResolve;
             return true;
         }

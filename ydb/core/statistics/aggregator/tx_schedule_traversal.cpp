@@ -14,25 +14,30 @@ struct TStatisticsAggregator::TTxScheduleTrasersal : public TTxBase {
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleTrasersal::Execute");
 
-        Self->Schedule(Self->TraversalPeriod, new TEvPrivate::TEvScheduleTraversal());
-
         if (!Self->EnableColumnStatistics) {
             return true;
         }
 
         if (Self->TraversalPathId) {
             SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleTrasersal::Execute. Traverse is in progress. PathId " << Self->TraversalPathId);
-            return true; // traverse is in progress
+            return true;
+        }
+
+        if (!Self->IsSchemeshardSeen) {
+            SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleTrasersal. No info from schemeshard");
+            return true;
         }
 
         NIceDb::TNiceDb db(txc.DB);
 
         switch (Self->NavigateType) {
         case ENavigateType::Analyze:
-            Self->ScheduleNextAnalyze(db);
+            Self->NavigateType = ENavigateType::Traversal;
+            Self->ScheduleNextTraversal(db);
             break;
         case ENavigateType::Traversal:
-            Self->ScheduleNextTraversal(db);
+            Self->NavigateType = ENavigateType::Analyze;
+            Self->ScheduleNextAnalyze(db);
             break;
         }
 
@@ -41,6 +46,8 @@ struct TStatisticsAggregator::TTxScheduleTrasersal : public TTxBase {
 
     void Complete(const TActorContext&) override {
         SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleTrasersal::Complete");
+
+        Self->Schedule(Self->TraversalPeriod, new TEvPrivate::TEvScheduleTraversal());
     }
 };
 

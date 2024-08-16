@@ -20,7 +20,7 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_RESOLVE; }
 
     bool ExecuteAnalyze(const NSchemeCache::TSchemeCacheRequest::TEntry& entry, NIceDb::TNiceDb& db) {
-        Y_ABORT_UNLESS(Self->NavigateOperationId);
+        Y_ABORT_UNLESS(Self->NavigateAnalyzeOperationId);
         Y_ABORT_UNLESS(Self->NavigatePathId);
 
         if (entry.Status == NSchemeCache::TSchemeCacheRequest::EStatus::PathErrorNotExist) {
@@ -35,7 +35,7 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
 
         auto& partitioning = entry.KeyDescription->GetPartitions();
 
-        auto forceTraversalTable = Self->ForceTraversalTable(Self->NavigateOperationId, Self->NavigatePathId);
+        auto forceTraversalTable = Self->ForceTraversalTable(Self->NavigateAnalyzeOperationId, Self->NavigatePathId);
         Y_ABORT_UNLESS(forceTraversalTable);
 
         for (auto& part : partitioning) {
@@ -47,12 +47,12 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
             }
         }
         forceTraversalTable->Status = TForceTraversalTable::EStatus::AnalyzeStarted;
-        db.Table<Schema::ForceTraversalTables>().Key(Self->NavigateOperationId, Self->NavigatePathId.OwnerId, Self->NavigatePathId.LocalPathId)
+        db.Table<Schema::ForceTraversalTables>().Key(Self->NavigateAnalyzeOperationId, Self->NavigatePathId.OwnerId, Self->NavigatePathId.LocalPathId)
             .Update(
                 NIceDb::TUpdate<Schema::ForceTraversalTables::Status>((ui64)forceTraversalTable->Status)
             );
 
-        SA_LOG_D("[" << Self->TabletID() << "] TTxResolve::ExecuteAnalyze. Table OperationId " << Self->NavigateOperationId << ", PathId " << Self->NavigatePathId 
+        SA_LOG_D("[" << Self->TabletID() << "] TTxResolve::ExecuteAnalyze. Table OperationId " << Self->NavigateAnalyzeOperationId << ", PathId " << Self->NavigatePathId 
             << ", AnalyzedShards " << forceTraversalTable->AnalyzedShards.size());
 
         return true;
@@ -138,15 +138,13 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
 
         switch (Self->NavigateType) {
         case ENavigateType::Analyze:
-            Self->NavigateType = Traversal;
-            return;
+            break;
         case ENavigateType::Traversal:
             CompleteTraversal(ctx);
-            Self->NavigateType = Analyze;
-            return;
+            break;
         };
 
-        Self->NavigateOperationId.clear();
+        Self->NavigateAnalyzeOperationId.clear();
         Self->NavigatePathId = {};
     }
 };

@@ -481,6 +481,8 @@ void TStatisticsAggregator::InitializeStatisticsTable() {
 }
 
 void TStatisticsAggregator::Navigate() {
+    Y_ABORT_UNLESS(NavigateType == ENavigateType::Traversal  && !NavigateAnalyzeOperationId
+                || NavigateType == ENavigateType::Analyze && NavigateAnalyzeOperationId);
     Y_ABORT_UNLESS(NavigatePathId);
 
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;
@@ -496,6 +498,8 @@ void TStatisticsAggregator::Navigate() {
 }
 
 void TStatisticsAggregator::Resolve() {
+    Y_ABORT_UNLESS(NavigateType == ENavigateType::Traversal  && !NavigateAnalyzeOperationId
+                || NavigateType == ENavigateType::Analyze && NavigateAnalyzeOperationId);
     Y_ABORT_UNLESS(NavigatePathId);
         
     ++ResolveRound;
@@ -574,15 +578,35 @@ void TStatisticsAggregator::DeleteStatisticsFromTable() {
 
 void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db) {
     Y_UNUSED(db);
+    if (ForceTraversals.empty()) {
+        SA_LOG_T("[" << TabletID() << "] ScheduleNextAnalyze. Empty ForceTraversals");
+        return;
+    }    
     SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze");
 
     for (TForceTraversalOperation& operation : ForceTraversals) {
         for (TForceTraversalTable& operationTable : operation.Tables) {
             if (operationTable.Status == TForceTraversalTable::EStatus::None) {
-                NavigateOperationId = operation.OperationId;
-                NavigatePathId = operationTable.PathId;
-                Navigate();
-                return;
+                std::optional<bool> isColumnTable = IsColumnTable(operationTable.PathId);
+                if (!isColumnTable) {
+                    ForceTraversalOperationId = operation.OperationId;
+                    TraversalPathId = operationTable.PathId;
+                    DeleteStatisticsFromTable();
+                    return;
+                }
+
+                if (*isColumnTable) {
+                    NavigateAnalyzeOperationId = operation.OperationId;
+                    NavigatePathId = operationTable.PathId;
+                    Navigate();
+                    return;
+                } else {
+                    SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze. Skip analyze for datashard table " << operationTable.PathId);
+                    operationTable.Status = TForceTraversalTable::EStatus::AnalyzeFinished;
+                    db.Table<Schema::ForceTraversalTables>().Key(operation.OperationId, operationTable.PathId.OwnerId, operationTable.PathId.LocalPathId)
+                        .Update(NIceDb::TUpdate<Schema::ForceTraversalTables::Status>((ui64)operationTable.Status));
+                    return;
+                }
             }
         }
         
@@ -591,14 +615,9 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db) {
     }
 
     SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze. All the force traversal operations sent the requests.");
-    NavigateType = ENavigateType::Traversal;
 }
 
 void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
-    if (!IsSchemeshardSeen) {
-        SA_LOG_T("[" << TabletID() << "] ScheduleNextTraversal. No info from schemeshard");
-        return;
-    }
     SA_LOG_D("[" << TabletID() << "] ScheduleNextTraversal");
 
     TPathId pathId;
@@ -638,7 +657,6 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
         if (TInstant::Now() < oldestTable->LastUpdateTime + ScheduleTraversalPeriod) {
             SA_LOG_T("[" << TabletID() << "] A schedule traversal is skiped. " 
                 << "The oldest table " << oldestTable->PathId << " update time " << oldestTable->LastUpdateTime << " is too fresh.");
-            NavigateType = ENavigateType::Analyze;
             return;
         }
 
@@ -650,15 +668,15 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
         return;       
     }
 
-    auto itPath = ScheduleTraversals.find(pathId);
-    if (itPath != ScheduleTraversals.end()) {
-        TraversalIsColumnTable = itPath->second.IsColumnTable;
-    } else {
-        SA_LOG_E("[" << TabletID() << "] traversal path " << pathId << " is not known to schemeshard");
+    TraversalPathId = pathId;
+
+    std::optional<bool> isColumnTable = IsColumnTable(pathId);
+    if (!isColumnTable){
+        DeleteStatisticsFromTable();
         return;
     }
 
-    TraversalPathId = pathId;
+    TraversalIsColumnTable = *isColumnTable;
 
     SA_LOG_D("[" << TabletID() << "] Start " 
         << LastTraversalWasForceString()
@@ -728,6 +746,21 @@ TStatisticsAggregator::TForceTraversalOperation* TStatisticsAggregator::ForceTra
     } else {
         return &*forceTraversalOperation;
     }
+}
+
+std::optional<bool> TStatisticsAggregator::IsColumnTable(const TPathId& pathId) const {
+    Y_ABORT_UNLESS(IsSchemeshardSeen);
+
+    auto itPath = ScheduleTraversals.find(pathId);
+    if (itPath != ScheduleTraversals.end()) {
+        bool ret = itPath->second.IsColumnTable;
+        SA_LOG_D("[" << TabletID() << "] IsColumnTable. Path " << pathId << " is "
+            << (ret ? "column" : "data") << " table.");
+        return ret;
+    } else {
+        SA_LOG_E("[" << TabletID() << "] IsColumnTable. traversal path " << pathId << " is not known to schemeshard");
+        return {};
+    }    
 }
 
 void TStatisticsAggregator::DeleteForceTraversalOperation(const TString& operationId, NIceDb::TNiceDb& db) {

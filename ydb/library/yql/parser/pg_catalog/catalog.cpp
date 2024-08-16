@@ -1957,6 +1957,7 @@ struct TCatalog : public IExtensionSqlBuilder {
     void CreateProc(const TProcDesc& desc) final {
         Y_ENSURE(desc.ExtensionIndex);
         TProcDesc newDesc = desc;
+        newDesc.Name = to_lower(newDesc.Name);
         newDesc.ProcId = 16000 + State->Procs.size();
         State->Procs[newDesc.ProcId] = newDesc;
         State->ProcByName[newDesc.Name].push_back(newDesc.ProcId);
@@ -1964,9 +1965,16 @@ struct TCatalog : public IExtensionSqlBuilder {
 
     void PrepareType(ui32 extensionIndex, const TString& name) final {
         Y_ENSURE(extensionIndex);
-        Y_ENSURE(!State->TypeByName.contains(name));
+        auto lowerName = to_lower(name);
+        if (auto idPtr = State->TypeByName.FindPtr(lowerName)) {
+            auto typePtr = State->Types.FindPtr(*idPtr);
+            Y_ENSURE(typePtr);
+            Y_ENSURE(!typePtr->ExtensionIndex || typePtr->ExtensionIndex == extensionIndex);
+            return;
+        }
+
         TTypeDesc newDesc;
-        newDesc.Name = name;
+        newDesc.Name = lowerName;
         newDesc.TypeId = 16000 + State->Types.size();
         newDesc.ExtensionIndex = extensionIndex;
         newDesc.ArrayTypeId = newDesc.TypeId + 1;
@@ -1990,6 +1998,7 @@ struct TCatalog : public IExtensionSqlBuilder {
     }
 
     void UpdateType(const TTypeDesc& desc) final {
+        Y_ENSURE(desc.ExtensionIndex);
         auto byIdPtr = State->Types.FindPtr(desc.TypeId);
         Y_ENSURE(byIdPtr);
         Y_ENSURE(byIdPtr->Name == desc.Name);
@@ -2089,6 +2098,60 @@ struct TCatalog : public IExtensionSqlBuilder {
             Y_ENSURE(funcPtr);
             State->AllowedProcs.insert(funcPtr->Name);
         }
+    }
+
+    void PrepareOper(ui32 extensionIndex, const TString& name, const TVector<ui32>& args) final {
+        Y_ENSURE(args.size() >= 1 && args.size() <= 2);
+        Y_ENSURE(extensionIndex);
+        auto lowerName = to_lower(name);
+        auto operIdPtr = State->OperatorsByName.FindPtr(lowerName);
+        if (operIdPtr) {
+            for (const auto& id : *operIdPtr) {
+                const auto& d = State->Operators.FindPtr(id);
+                Y_ENSURE(d);
+                if (d->LeftType == args[0] && (args.size() == 1 || d->RightType == args[1])) {
+                    Y_ENSURE(!d->ExtensionIndex || d->ExtensionIndex == extensionIndex);
+                    return;
+                }
+            }
+        }
+
+        if (!operIdPtr) {
+            operIdPtr = &State->OperatorsByName[lowerName];
+        }
+
+        TOperDesc desc;
+        desc.Name = name;
+        desc.LeftType = args[0];
+        if (args.size() == 1) {
+            desc.Kind = EOperKind::LeftUnary;
+        } else {
+            desc.RightType = args[1];
+        }
+
+        auto id = 16000 + State->Operators.size();
+        desc.OperId = id;
+        desc.ExtensionIndex = extensionIndex;
+        Y_ENSURE(State->Operators.emplace(id, desc).second);
+        operIdPtr->push_back(id);
+    }
+
+    void UpdateOper(const TOperDesc& desc) final {
+        Y_ENSURE(desc.ExtensionIndex);
+        const auto& d = State->Operators.FindPtr(desc.OperId);
+        Y_ENSURE(d);
+        Y_ENSURE(d->Name == desc.Name);
+        Y_ENSURE(d->ExtensionIndex == desc.ExtensionIndex);
+        Y_ENSURE(d->LeftType == desc.LeftType);
+        Y_ENSURE(d->RightType == desc.RightType);
+        Y_ENSURE(d->Kind == desc.Kind);
+        d->ProcId = desc.ProcId;
+        d->ComId = desc.ComId;
+        d->NegateId = desc.NegateId;
+        d->ResultType = desc.ResultType;
+        auto procPtr = State->Procs.FindPtr(desc.ProcId);
+        Y_ENSURE(procPtr);
+        State->AllowedProcs.insert(procPtr->Name);
     }
 
     static const TCatalog& Instance() {
@@ -3689,6 +3752,32 @@ TString ExportExtensions(const TMaybe<TSet<ui32>>& filter) {
         protoCast->SetCoercionCode((ui32)desc.CoercionCode);
     }
 
+    TVector<ui32> extOpers;
+    for (const auto& o : catalog.State->Operators) {
+        const auto& desc = o.second;
+        if (!desc.ExtensionIndex) {
+            continue;
+        }
+
+        extOpers.push_back(o.first);
+    }
+
+    Sort(extOpers);
+    for (const auto o : extOpers) {
+        const auto& desc = *catalog.State->Operators.FindPtr(o);
+        auto protoOper = proto.AddOper();
+        protoOper->SetOperId(o);
+        protoOper->SetName(desc.Name);
+        protoOper->SetExtensionIndex(desc.ExtensionIndex);
+        protoOper->SetLeftType(desc.LeftType);
+        protoOper->SetRightType(desc.RightType);
+        protoOper->SetKind((ui32)desc.Kind);
+        protoOper->SetProcId(desc.ProcId);
+        protoOper->SetResultType(desc.ResultType);
+        protoOper->SetComId(desc.ComId);
+        protoOper->SetNegateId(desc.NegateId);
+    }
+
     return proto.SerializeAsString();
 }
 
@@ -3824,6 +3913,22 @@ void ImportExtensions(const TString& exported, bool typesOnly, IExtensionLoader*
             desc.CoercionCode = (ECoercionCode)protoCast.GetCoercionCode();
             Y_ENSURE(catalog.State->Casts.emplace(id, desc).second);
             Y_ENSURE(catalog.State->CastsByDir.insert(std::make_pair(std::make_pair(desc.SourceId, desc.TargetId), id)).second);
+        }
+
+        for (const auto& protoOper : proto.GetOper()) {
+            TOperDesc desc;
+            desc.OperId = protoOper.GetOperId();
+            desc.Name = protoOper.GetName();
+            desc.ExtensionIndex = protoOper.GetExtensionIndex();
+            desc.LeftType = protoOper.GetLeftType();
+            desc.RightType = protoOper.GetRightType();
+            desc.Kind = (EOperKind)protoOper.GetKind();
+            desc.ProcId = protoOper.GetProcId();
+            desc.ResultType = protoOper.GetResultType();
+            desc.ComId = protoOper.GetComId();
+            desc.NegateId = protoOper.GetNegateId();
+            Y_ENSURE(catalog.State->Operators.emplace(desc.OperId, desc).second);
+            catalog.State->OperatorsByName[desc.Name].push_back(desc.OperId);
         }
 
         if (!typesOnly && loader) {

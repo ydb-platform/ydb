@@ -1136,11 +1136,7 @@ struct TBinaryKernelOptExecsImpl
             return false;
         }
 
-        if constexpr(std::is_same_v<TOutput, NYql::NDecimal::TInt128>) {
-            *resPtr = resPod.GetInt128();
-        } else {
-            *resPtr = resPod.template Get<typename TPrimitiveDataType<TOutput>::TLayout>();
-        }
+        *resPtr = resPod.template Get<typename TPrimitiveDataType<TOutput>::TLayout>();
         return true;
     }
 
@@ -1161,11 +1157,7 @@ struct TBinaryKernelOptExecsImpl
             if (!valid2 || arrow::BitUtil::GetBit(valid2, i + offset2)) {
                 auto resPod = TFuncInstance::Execute(NUdf::TUnboxedValuePod(*val1Ptr), NUdf::TUnboxedValuePod(*val2Ptr));
                 if (resPod) {
-                    if constexpr(std::is_same_v<TOutput, NYql::NDecimal::TInt128>) {
-                        *resPtr = resPod.GetInt128();
-                    } else {
-                        *resPtr = resPod.template Get<typename TPrimitiveDataType<TOutput>::TLayout>();
-                    }
+                    *resPtr = resPod.template Get<typename TPrimitiveDataType<TOutput>::TLayout>();
                     arrow::BitUtil::SetBit(resValid, i);
                     continue;
                 }
@@ -1192,11 +1184,7 @@ struct TBinaryKernelOptExecsImpl
             if (!valid1 || arrow::BitUtil::GetBit(valid1, i + offset1)) {
                 auto resPod = TFuncInstance::Execute(NUdf::TUnboxedValuePod(*val1Ptr), NUdf::TUnboxedValuePod(*val2Ptr));
                 if (resPod) {
-                    if constexpr(std::is_same_v<TOutput, NYql::NDecimal::TInt128>) {
-                        *resPtr = resPod.GetInt128();
-                    } else {
-                        *resPtr = resPod.template Get<typename TPrimitiveDataType<TOutput>::TLayout>();
-                    }
+                    *resPtr = resPod.template Get<typename TPrimitiveDataType<TOutput>::TLayout>();
                     arrow::BitUtil::SetBit(resValid, i);
                     continue;
                 }
@@ -1223,11 +1211,7 @@ struct TBinaryKernelOptExecsImpl
                 (!valid2 || arrow::BitUtil::GetBit(valid2, i + offset2))) {
                 auto resPod = TFuncInstance::Execute(NUdf::TUnboxedValuePod(*val1Ptr), NUdf::TUnboxedValuePod(*val2Ptr));
                 if (resPod) {
-                    if constexpr(std::is_same_v<TOutput, NYql::NDecimal::TInt128>) {
-                        *resPtr = resPod.GetInt128();
-                    } else {
-                        *resPtr = resPod.template Get<typename TPrimitiveDataType<TOutput>::TLayout>();
-                    }
+                    *resPtr = resPod.template Get<typename TPrimitiveDataType<TOutput>::TLayout>();
                     arrow::BitUtil::SetBit(resValid, i);
                     continue;
                 }

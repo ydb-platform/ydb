@@ -378,7 +378,7 @@ void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationCont
         // Currently we just set the number to 10% before we have statistics and parse
         // the predicate
 
-        double selectivity = ComputePredicateSelectivity(flatmap.Lambda().Body(), inputStats);
+        double selectivity = TPredicateSelectivityComputer(inputStats).Compute(flatmap.Lambda().Body());
 
         auto outputStats = TOptimizerStatistics(inputStats->Type, inputStats->Nrows * selectivity, inputStats->Ncols, inputStats->ByteSize * selectivity, inputStats->Cost, inputStats->KeyColumns );
         outputStats.Labels = inputStats->Labels;
@@ -422,8 +422,7 @@ void InferStatisticsForFilter(const TExprNode::TPtr& input, TTypeAnnotationConte
     // Currently we just set the number to 10% before we have statistics and parse
     // the predicate
     auto filterBody = filter.Lambda().Body();
-    
-    double selectivity = ComputePredicateSelectivity(filterBody, inputStats);
+    double selectivity = TPredicateSelectivityComputer(inputStats).Compute(filterBody);
 
     auto outputStats = TOptimizerStatistics(inputStats->Type, inputStats->Nrows * selectivity, inputStats->Ncols, inputStats->ByteSize * selectivity, inputStats->Cost, inputStats->KeyColumns);
     outputStats.Selectivity *= selectivity;

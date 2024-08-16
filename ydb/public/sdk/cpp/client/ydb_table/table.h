@@ -1625,6 +1625,7 @@ struct TRenameTablesSettings : public TOperationRequestSettings<TRenameTablesSet
 
 struct TDescribeTableSettings : public TOperationRequestSettings<TDescribeTableSettings> {
     FLUENT_SETTING_DEFAULT(bool, WithKeyShardBoundary, false);
+    FLUENT_SETTING_DEFAULT(bool, WithIndexTableKeyShardBoundary, false);
     FLUENT_SETTING_DEFAULT(bool, WithTableStatistics, false);
     FLUENT_SETTING_DEFAULT(bool, WithPartitionStatistics, false);
 };

@@ -205,10 +205,13 @@ private:
         SetDatabase(navigateRequest.get(), *Request_);
         NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
         record->SetPath(path);
+
         if (req->include_shard_key_bounds()) {
             record->MutableOptions()->SetReturnBoundaries(true);
         }
-
+        if (req->include_index_table_shard_key_bounds()) {
+            record->MutableOptions()->SetReturnIndexTableBoundaries(true);
+        }
         if (req->include_partition_stats() && req->include_table_stats()) {
             record->MutableOptions()->SetReturnPartitionStats(true);
         }

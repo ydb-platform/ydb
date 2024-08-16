@@ -373,7 +373,9 @@ NTable::TTableDescription DescribeTable(TDriver driver, const TString& fullTable
     NTable::TTableClient client(driver);
 
     TStatus status = client.RetryOperationSync([fullTablePath, &desc](NTable::TSession session) {
-        auto settings = NTable::TDescribeTableSettings().WithKeyShardBoundary(true);
+        auto settings = NTable::TDescribeTableSettings()
+            .WithKeyShardBoundary(true)
+            .WithIndexTableKeyShardBoundary(true);
         auto result = session.DescribeTable(fullTablePath, settings).GetValueSync();
 
         VerifyStatus(result);

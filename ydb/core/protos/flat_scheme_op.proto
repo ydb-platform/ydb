@@ -1837,6 +1837,7 @@ message TDescribeOptions {
     optional bool ReturnChannelsBinding = 8 [default = false];
     optional bool ReturnRangeKey = 9 [default = true];
     optional bool ReturnSetVal = 10 [default = false];
+    optional bool ReturnIndexTableBoundaries = 11 [default = false];
 }
 
 // Request to read scheme for a specific path

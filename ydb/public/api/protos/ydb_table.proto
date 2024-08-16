@@ -72,7 +72,7 @@ message VectorIndexSettings {
         SIMILARITY_UNSPECIFIED = 0;
         SIMILARITY_COSINE = 1;
         SIMILARITY_INNER_PRODUCT = 2;
-    }   
+    }
 
     enum VectorType {
         VECTOR_TYPE_UNSPECIFIED = 0;
@@ -773,12 +773,16 @@ message DescribeTableRequest {
     // Full path
     string path = 2;
     Ydb.Operations.OperationParams operation_params = 4;
-    // Includes shard key distribution info
+    // Includes partition boundaries (the key values where the partitions are split)
     bool include_shard_key_bounds = 5;
     // Includes table statistics
     bool include_table_stats = 6;
     // Includes partition statistics (required include_table_statistics)
     bool include_partition_stats = 7;
+    // Note: The following flag applies only if the described table has indices.
+    // Includes partition boundaries (the key values where the partitions are split)
+    // for tables that implement indices of the described table.
+    bool include_index_table_shard_key_bounds = 8;
 }
 
 message DescribeTableResponse {

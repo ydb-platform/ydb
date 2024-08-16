@@ -645,11 +645,11 @@ Y_UNIT_TEST_SUITE(PgExtensions) {
     }
 
     Y_UNIT_TEST(ProcsAndType) {
+        NPg::ClearExtensions();
         if (NPg::AreAllFunctionsAllowed()) {
             return;
         }
 
-        NPg::ClearExtensions();
         NPg::TExtensionDesc desc;
         TTempFileHandle h;
         TStringBuf sql = R"(
@@ -744,11 +744,11 @@ Y_UNIT_TEST_SUITE(PgExtensions) {
     }
 
     Y_UNIT_TEST(Casts) {
+        NPg::ClearExtensions();
         if (NPg::AreAllFunctionsAllowed()) {
             return;
         }
 
-        NPg::ClearExtensions();
         NPg::TExtensionDesc desc;
         TTempFileHandle h;
         TStringBuf sql = R"(
@@ -785,6 +785,115 @@ Y_UNIT_TEST_SUITE(PgExtensions) {
             UNIT_ASSERT_VALUES_EQUAL((ui32)cast.Method, (ui32)NPg::ECastMethod::Function);
             UNIT_ASSERT_VALUES_EQUAL(cast.CoercionCode, NPg::ECoercionCode::Explicit);
             UNIT_ASSERT_VALUES_EQUAL(cast.FunctionId, NPg::LookupProc("bar",{sourceId}).ProcId);
+        };
+
+        validate();
+        auto exported = NPg::ExportExtensions();
+        NPg::ClearExtensions();
+        NPg::ImportExtensions(exported, true, nullptr);
+        validate();
+    }
+
+    Y_UNIT_TEST(Operators) {
+        NPg::ClearExtensions();
+        if (NPg::AreAllFunctionsAllowed()) {
+            return;
+        }
+
+        NPg::TExtensionDesc desc;
+        TTempFileHandle h;
+        TStringBuf sql = R"(
+            CREATE TYPE foo (
+                alignment = double,
+                internallength = variable
+            );
+
+            CREATE OR REPLACE FUNCTION foo_lt(foo, foo)
+                RETURNS bool
+                AS '$libdir/MyExt','foo_lt'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE OR REPLACE FUNCTION foo_le(foo, foo)
+                RETURNS bool
+                AS '$libdir/MyExt','foo_le'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE OR REPLACE FUNCTION foo_gt(foo, foo)
+                RETURNS bool
+                AS '$libdir/MyExt','foo_gt'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE OR REPLACE FUNCTION foo_ge(foo, foo)
+                RETURNS bool
+                AS '$libdir/MyExt','foo_ge'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE OPERATOR < (
+                LEFTARG = foo, RIGHTARG = foo, PROCEDURE = foo_lt,
+                COMMUTATOR = '>', NEGATOR = '>='
+            );
+
+            CREATE OPERATOR <= (
+                LEFTARG = foo, RIGHTARG = foo, PROCEDURE = foo_le,
+                COMMUTATOR = '>=', NEGATOR = '>'
+            );
+
+            CREATE OPERATOR > (
+                LEFTARG = foo, RIGHTARG = foo, PROCEDURE = foo_gt,
+                COMMUTATOR = '<', NEGATOR = '<='
+            );
+
+            CREATE OPERATOR >= (
+                LEFTARG = foo, RIGHTARG = foo, PROCEDURE = foo_ge,
+                COMMUTATOR = '<=', NEGATOR = '<'
+            );
+        )";
+
+        h.Write(sql.Data(), sql.Size());
+        desc.Name = "MyExt";
+        desc.InstallName = "$libdir/MyExt";
+        desc.SqlPaths.push_back(h.Name());
+        NPg::RegisterExtensions({desc}, true, *NSQLTranslationPG::CreateExtensionSqlParser(), nullptr);
+        auto validate = [&]() {
+            auto typeId = NPg::LookupType("foo").TypeId;
+            TVector<ui32> args { typeId, typeId };
+            auto lessProcId = NPg::LookupProc("foo_lt", args).ProcId;
+            auto lessOrEqualProcId = NPg::LookupProc("foo_le", args).ProcId;
+            auto greaterProcId = NPg::LookupProc("foo_gt", args).ProcId;
+            auto greaterOrEqualProcId = NPg::LookupProc("foo_ge", args).ProcId;
+
+            const auto& lessOp = NPg::LookupOper("<", args);
+            const auto& lessOrEqualOp = NPg::LookupOper("<=", args);
+            const auto& greaterOp = NPg::LookupOper(">", args);
+            const auto& greaterOrEqualOp = NPg::LookupOper(">=", args);
+
+            UNIT_ASSERT_VALUES_EQUAL(lessOp.Name, "<");
+            UNIT_ASSERT_VALUES_EQUAL(lessOp.LeftType, typeId);
+            UNIT_ASSERT_VALUES_EQUAL(lessOp.RightType, typeId);
+            UNIT_ASSERT_VALUES_EQUAL(lessOp.ProcId, lessProcId);
+            UNIT_ASSERT_VALUES_EQUAL(lessOp.ComId, greaterOp.OperId);
+            UNIT_ASSERT_VALUES_EQUAL(lessOp.NegateId, greaterOrEqualOp.OperId);
+
+            UNIT_ASSERT_VALUES_EQUAL(lessOrEqualOp.Name, "<=");
+            UNIT_ASSERT_VALUES_EQUAL(lessOrEqualOp.LeftType, typeId);
+            UNIT_ASSERT_VALUES_EQUAL(lessOrEqualOp.RightType, typeId);
+            UNIT_ASSERT_VALUES_EQUAL(lessOrEqualOp.ProcId, lessOrEqualProcId);
+            UNIT_ASSERT_VALUES_EQUAL(lessOrEqualOp.ComId, greaterOrEqualOp.OperId);
+            UNIT_ASSERT_VALUES_EQUAL(lessOrEqualOp.NegateId, greaterOp.OperId);
+
+            UNIT_ASSERT_VALUES_EQUAL(greaterOp.Name, ">");
+            UNIT_ASSERT_VALUES_EQUAL(greaterOp.LeftType, typeId);
+            UNIT_ASSERT_VALUES_EQUAL(greaterOp.RightType, typeId);
+            UNIT_ASSERT_VALUES_EQUAL(greaterOp.ProcId, greaterProcId);
+            UNIT_ASSERT_VALUES_EQUAL(greaterOp.ComId, lessOp.OperId);
+            UNIT_ASSERT_VALUES_EQUAL(greaterOp.NegateId, lessOrEqualOp.OperId);
+
+            UNIT_ASSERT_VALUES_EQUAL(greaterOrEqualOp.Name, ">=");
+            UNIT_ASSERT_VALUES_EQUAL(greaterOrEqualOp.LeftType, typeId);
+            UNIT_ASSERT_VALUES_EQUAL(greaterOrEqualOp.RightType, typeId);
+            UNIT_ASSERT_VALUES_EQUAL(greaterOrEqualOp.ProcId, greaterOrEqualProcId);
+            UNIT_ASSERT_VALUES_EQUAL(greaterOrEqualOp.ComId, lessOrEqualOp.OperId);
+            UNIT_ASSERT_VALUES_EQUAL(greaterOrEqualOp.NegateId, lessOp.OperId);
         };
 
         validate();

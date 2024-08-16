@@ -44,6 +44,7 @@ struct TOperDesc {
     ui32 ProcId = 0;
     ui32 ComId = 0;
     ui32 NegateId = 0;
+    ui32 ExtensionIndex = 0;
 };
 
 enum class EProcKind : char {
@@ -401,6 +402,10 @@ public:
         const TVector<TMaybe<TString>>& data) = 0; // row based layout
 
     virtual void CreateCast(const TCastDesc& desc) = 0;
+
+    virtual void PrepareOper(ui32 extensionIndex, const TString& name, const TVector<ui32>& args) = 0;
+
+    virtual void UpdateOper(const TOperDesc& desc) = 0;
 };
 
 class IExtensionSqlParser {

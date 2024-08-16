@@ -875,18 +875,24 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
     // Get*
 
 #define GET_METHOD(field, type)                                                 \
-    struct TGet##field##KernelExec : TUnaryKernelExec<TGet##field##KernelExec, TReaderTraits::TResource<false>, TFixedSizeArrayBuilder<type, false>> { \
-        template<typename TSink> \
-        static void Process(TBlockItem item, const IValueBuilder& valueBuilder, const TSink& sink) { \
-            Y_UNUSED(valueBuilder); \
-            sink(TBlockItem(Get##field(item))); \
-        } \
-    }; \
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(TGet##field, type(TAutoMap<TResource<TMResourceName>>)) { \
+    SIMPLE_STRICT_UDF(TGet##field, type(TAutoMap<TResource<TMResourceName>>)) { \
         Y_UNUSED(valueBuilder);                                                 \
         return TUnboxedValuePod(Get##field(args[0]));                           \
-    }  \
-    END_SIMPLE_ARROW_UDF_WITH_NULL_HANDLING(TGet##field, TGet##field##KernelExec::Do, arrow::compute::NullHandling::INTERSECTION);
+    }
+
+// #define GET_METHOD(field, type)                                                 \
+//     struct TGet##field##KernelExec : TUnaryKernelExec<TGet##field##KernelExec, TReaderTraits::TResource<false>, TFixedSizeArrayBuilder<type, false>> { \
+//         template<typename TSink> \
+//         static void Process(TBlockItem item, const IValueBuilder& valueBuilder, const TSink& sink) { \
+//             Y_UNUSED(valueBuilder); \
+//             sink(TBlockItem(Get##field(item))); \
+//         } \
+//     }; \
+//     BEGIN_SIMPLE_STRICT_ARROW_UDF(TGet##field, type(TAutoMap<TResource<TMResourceName>>)) { \
+//         Y_UNUSED(valueBuilder);                                                 \
+//         return TUnboxedValuePod(Get##field(args[0]));                           \
+//     }  \
+//     END_SIMPLE_ARROW_UDF_WITH_NULL_HANDLING(TGet##field, TGet##field##KernelExec::Do, arrow::compute::NullHandling::INTERSECTION);
 
     GET_METHOD(Year, ui16)
     GET_METHOD(DayOfYear, ui16)

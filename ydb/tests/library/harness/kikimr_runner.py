@@ -178,9 +178,11 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "--grpc-port=%s" % self.grpc_port,
                 "--mon-port=%d" % self.mon_port,
                 "--ic-port=%d" % self.ic_port,
-                "--pgwire-port=%d" % self.pgwire_port,
             ]
         )
+
+        if os.environ.get("YDB_ALLOCATE_PGWIRE_PORT", "") == "true":
+            command.append("--pgwire-port=%d" % self.pgwire_port)
 
         if self.__encryption_key is not None:
             command.extend(["--key-file", self.__encryption_key])

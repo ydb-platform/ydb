@@ -6,7 +6,6 @@
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
 #include <ydb/public/sdk/cpp/client/ydb_retry/retry.h>
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/retry/retry_sync.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/request_settings.h>
 
 #include <util/generic/maybe.h>
@@ -18,7 +17,11 @@ namespace NYdb {
     namespace NRetry::Async {
         template <typename TClient, typename TAsyncStatusType>
         class TRetryContext;
-    }
+    } // namespace NRetry::Async
+    namespace NRetry::Sync {
+        template <typename TClient, typename TStatusType>
+        class TRetryContext;
+    } // namespace NRetry::Sync
 }
 
 namespace NYdb::NQuery {
@@ -64,11 +67,10 @@ class TQueryClient {
 
 public:
     using TQueryResultFunc = std::function<TAsyncExecuteQueryResult(TSession session)>;
-    using TQueryStatusFunc = std::function<TAsyncStatus(TSession session)>;
-    using TQuerySyncStatusFunc = std::function<TStatus(TSession session)>;
-    using TQueryWithoutSessionFunc = std::function<TAsyncExecuteQueryResult(TQueryClient& client)>;
-    using TQueryWithoutSessionStatusFunc = std::function<TAsyncStatus(TQueryClient& client)>;
-    using TQueryWithoutSessionSyncStatusFunc = std::function<TStatus(TQueryClient& client)>;
+    using TQueryFunc = std::function<TAsyncStatus(TSession session)>;
+    using TQuerySyncFunc = std::function<TStatus(TSession session)>;
+    using TQueryWithoutSessionFunc = std::function<TAsyncStatus(TQueryClient& client)>;
+    using TQueryWithoutSessionSyncFunc = std::function<TStatus(TQueryClient& client)>;
     using TSettings = TClientSettings;
     using TSession = TSession;
     using TCreateSessionSettings = TCreateSessionSettings;
@@ -91,13 +93,13 @@ public:
 
     TAsyncExecuteQueryResult RetryQuery(TQueryResultFunc&& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
 
-    TAsyncStatus RetryQuery(TQueryStatusFunc&& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
+    TAsyncStatus RetryQuery(TQueryFunc&& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
 
-    TAsyncStatus RetryQuery(TQueryWithoutSessionStatusFunc&& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
+    TAsyncStatus RetryQuery(TQueryWithoutSessionFunc&& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
 
-    TStatus RetryQuery(const TQuerySyncStatusFunc& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
+    TStatus RetryQuery(const TQuerySyncFunc& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
 
-    TStatus RetryQuery(const TQueryWithoutSessionSyncStatusFunc& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
+    TStatus RetryQuery(const TQueryWithoutSessionSyncFunc& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
 
     TAsyncExecuteQueryResult RetryQuery(const TString& query, const TTxControl& txControl,
         TDuration timeout, bool isIndempotent);

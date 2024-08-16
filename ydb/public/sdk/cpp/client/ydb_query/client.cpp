@@ -13,13 +13,14 @@
 
 #include <ydb/public/lib/operation_id/operation_id.h>
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/retry/retry_sync.h>
 #include <ydb/public/sdk/cpp/client/ydb_query/impl/exec_query.h>
 #include <ydb/public/sdk/cpp/client/ydb_retry/retry.h>
 
 namespace NYdb::NQuery {
 
 using TRetryContextResultAsync = NRetry::Async::TRetryContext<TQueryClient, TAsyncExecuteQueryResult>;
-using TRetryContextStatusAsync = NRetry::Async::TRetryContext<TQueryClient, TAsyncStatus>;
+using TRetryContextAsync = NRetry::Async::TRetryContext<TQueryClient, TAsyncStatus>;
 
 NYdb::NRetry::TRetryOperationSettings GetRetrySettings(TDuration timeout, bool isIndempotent) {
     return NYdb::NRetry::TRetryOperationSettings()
@@ -581,22 +582,22 @@ TAsyncExecuteQueryResult TQueryClient::RetryQuery(TQueryResultFunc&& queryFunc, 
     return ctx->Execute();
 }
 
-TAsyncStatus TQueryClient::RetryQuery(TQueryStatusFunc&& queryFunc, TRetryOperationSettings settings) {
-    TRetryContextStatusAsync::TPtr ctx(new NRetry::Async::TRetryWithSession(*this, std::move(queryFunc), settings));
+TAsyncStatus TQueryClient::RetryQuery(TQueryFunc&& queryFunc, TRetryOperationSettings settings) {
+    TRetryContextAsync::TPtr ctx(new NRetry::Async::TRetryWithSession(*this, std::move(queryFunc), settings));
     return ctx->Execute();
 }
 
-TAsyncStatus TQueryClient::RetryQuery(TQueryWithoutSessionStatusFunc&& queryFunc, TRetryOperationSettings settings) {
-    TRetryContextStatusAsync::TPtr ctx(new NRetry::Async::TRetryWithoutSession(*this, std::move(queryFunc), settings));
+TAsyncStatus TQueryClient::RetryQuery(TQueryWithoutSessionFunc&& queryFunc, TRetryOperationSettings settings) {
+    TRetryContextAsync::TPtr ctx(new NRetry::Async::TRetryWithoutSession(*this, std::move(queryFunc), settings));
     return ctx->Execute();
 }
 
-TStatus TQueryClient::RetryQuery(const TQuerySyncStatusFunc& queryFunc, TRetryOperationSettings settings) {
+TStatus TQueryClient::RetryQuery(const TQuerySyncFunc& queryFunc, TRetryOperationSettings settings) {
     NRetry::Sync::TRetryWithSession ctx(*this, queryFunc, settings);
     return ctx.Execute();
 }
 
-TStatus TQueryClient::RetryQuery(const TQueryWithoutSessionSyncStatusFunc& queryFunc, TRetryOperationSettings settings) {
+TStatus TQueryClient::RetryQuery(const TQueryWithoutSessionSyncFunc& queryFunc, TRetryOperationSettings settings) {
     NRetry::Sync::TRetryWithoutSession ctx(*this, queryFunc, settings);
     return ctx.Execute();
 }

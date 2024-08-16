@@ -346,6 +346,7 @@ enum EServiceKikimr {
 
     DB_POOL = 1167;
     YTS = 1168;
+    OBJECT_STORAGE_INFERENCINATOR = 1169;
 
     // 1024 - 1099 is reserved for nbs
 
@@ -397,8 +398,6 @@ enum EServiceKikimr {
     BS_REQUEST_COST = 2500;
 
     GROUPED_MEMORY_LIMITER = 2700;
-
-    OBJECT_STORAGE_INFERENCINATOR = 2800;
 };
 
 message TActivity {

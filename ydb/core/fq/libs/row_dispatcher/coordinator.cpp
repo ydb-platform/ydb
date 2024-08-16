@@ -22,30 +22,6 @@ using NYql::TIssues;
 
 namespace {
 
-struct TEvCreateSemaphoreResult : NActors::TEventLocal<TEvCreateSemaphoreResult, TEventIds::EvDeleteRateLimiterResourceResponse> {
-    NYdb::NCoordination::TResult<void> Result;
-
-    explicit TEvCreateSemaphoreResult(NYdb::NCoordination::TResult<void> result)
-        : Result(std::move(result))
-    {}
-};
-
-struct TEvCreateSessionResult : NActors::TEventLocal<TEvCreateSessionResult, TEvRowDispatcher::EvCreateSemaphoreResult> {
-    NYdb::NCoordination::TSessionResult Result;
-
-    explicit TEvCreateSessionResult(NYdb::NCoordination::TSessionResult result)
-        : Result(std::move(result))
-    {}
-};
-
-struct TEvAcquireSemaphoreResult : NActors::TEventLocal<TEvAcquireSemaphoreResult, TEventIds::EvSchemaUpdated> { // TODO
-    NYdb::NCoordination::TResult<bool> Result;
-
-    explicit TEvAcquireSemaphoreResult(NYdb::NCoordination::TResult<bool> result)
-        : Result(std::move(result))
-    {}
-};
-
 ////////////////////////////////////////////////////////////////////////////////
 
 class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {

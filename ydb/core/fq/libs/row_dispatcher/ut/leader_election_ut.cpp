@@ -1,7 +1,6 @@
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/row_dispatcher/leader_election.h>
-#include <ydb/core/fq/libs/row_dispatcher/leader_detector.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/helpers.h>
@@ -27,9 +26,9 @@ public:
         auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
    
         RowDispatcher = Runtime.AllocateEdgeActor();
-        Coordinator = Runtime.AllocateEdgeActor();
-        Cerr << "RowDispatcher id " << RowDispatcher << Endl;
-        Cerr << "Coordinator id " << Coordinator << Endl;
+        Coordinator1 = Runtime.AllocateEdgeActor();
+        Coordinator2 = Runtime.AllocateEdgeActor();
+        Coordinator3 = Runtime.AllocateEdgeActor();
 
         NConfig::TRowDispatcherCoordinatorConfig config;
         config.SetEnabled(true);
@@ -41,7 +40,7 @@ public:
                 
         LeaderElection1 = Runtime.Register(NewLeaderElection(
             RowDispatcher,
-            Coordinator,
+            Coordinator1,
             config,
             NKikimr::CreateYdbCredentialsProviderFactory,
             yqSharedResources,
@@ -50,15 +49,17 @@ public:
 
         LeaderElection2 = Runtime.Register(NewLeaderElection(
             RowDispatcher,
-            Coordinator,
+            Coordinator2,
             config,
             NKikimr::CreateYdbCredentialsProviderFactory,
             yqSharedResources,
             "Tenant"
             ).release());
 
-        LeaderDetector = Runtime.Register(NewLeaderDetector(
+
+        LeaderElection3 = Runtime.Register(NewLeaderElection(
             RowDispatcher,
+            Coordinator3,
             config,
             NKikimr::CreateYdbCredentialsProviderFactory,
             yqSharedResources,
@@ -67,7 +68,7 @@ public:
 
         Runtime.EnableScheduleForActor(LeaderElection1);
         Runtime.EnableScheduleForActor(LeaderElection2);
-        Runtime.EnableScheduleForActor(LeaderDetector);
+        Runtime.EnableScheduleForActor(LeaderElection3);
 
         TDispatchOptions options;
         options.FinalEvents.emplace_back(NActors::TEvents::TSystem::Bootstrap, 3);
@@ -78,9 +79,10 @@ public:
     void TearDown(NUnitTest::TTestContext& /* context */) override {
     }
 
-    void ExpectCoordinatorChanged() {
+    NActors::TActorId ExpectCoordinatorChanged(NActors::TActorId /*rowDispatcherId*/) {
         auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvCoordinatorChanged>(RowDispatcher/*, TDuration::Seconds(20)*/);
         UNIT_ASSERT(eventHolder.Get() != nullptr);
+        return eventHolder.Get()->Get()->CoordinatorActorId;
     }
 
     TActorSystemStub actorSystemStub;
@@ -88,17 +90,50 @@ public:
     NActors::TActorId RowDispatcher;
     NActors::TActorId LeaderElection1;
     NActors::TActorId LeaderElection2;
-    NActors::TActorId Coordinator;
+    NActors::TActorId LeaderElection3;
+    NActors::TActorId Coordinator1;
+    NActors::TActorId Coordinator2;
+    NActors::TActorId Coordinator3;
     NActors::TActorId LeaderDetector;
 };
 
 Y_UNIT_TEST_SUITE(LeaderElectionTests) {
     Y_UNIT_TEST_F(Test1, TFixture) {
 
-      //  std::this_thread::sleep_for(std::chrono::milliseconds(10000));
-        ExpectCoordinatorChanged();
-    }
+        auto coordinatorId1 = ExpectCoordinatorChanged(RowDispatcher);
+        auto coordinatorId2 = ExpectCoordinatorChanged(RowDispatcher);
+        auto coordinatorId3 = ExpectCoordinatorChanged(RowDispatcher);
+        UNIT_ASSERT(coordinatorId1 == coordinatorId2);
+        UNIT_ASSERT(coordinatorId2 == coordinatorId3);
 
+        NActors::TActorId currentLeader;
+        NActors::TActorId notActive;
+        if (coordinatorId1 == Coordinator1) {
+            currentLeader = LeaderElection1;
+        } else if (coordinatorId1 == Coordinator2) {
+            currentLeader = LeaderElection2;
+        } else {
+            currentLeader = LeaderElection3;
+        }
+
+        Runtime.Send(new IEventHandle(currentLeader, RowDispatcher, new NActors::TEvents::TEvPoisonPill()));
+        auto coordinatorId4 = ExpectCoordinatorChanged(RowDispatcher);
+        auto coordinatorId5 = ExpectCoordinatorChanged(RowDispatcher);
+        UNIT_ASSERT(coordinatorId4 == coordinatorId5);
+        UNIT_ASSERT(coordinatorId4 != coordinatorId1);
+
+        if (coordinatorId4 == Coordinator1) {
+            currentLeader = LeaderElection1;
+        } else if (coordinatorId4 == Coordinator2) {
+            currentLeader = LeaderElection2;
+        } else {
+            currentLeader = LeaderElection3;
+        }
+
+        Runtime.Send(new IEventHandle(currentLeader, RowDispatcher, new NActors::TEvents::TEvPoisonPill()));
+        auto coordinatorId6 = ExpectCoordinatorChanged(RowDispatcher);
+        UNIT_ASSERT(coordinatorId6 != coordinatorId4);
+    }
 }
 
 }

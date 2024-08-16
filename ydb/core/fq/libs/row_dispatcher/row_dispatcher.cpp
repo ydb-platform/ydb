@@ -1,6 +1,5 @@
 #include "row_dispatcher.h"
 #include "coordinator.h"
-#include "leader_detector.h"
 
 #include <ydb/core/fq/libs/config/protos/storage.pb.h>
 #include <ydb/core/fq/libs/control_plane_storage/util.h>
@@ -187,7 +186,6 @@ void TRowDispatcher::Bootstrap() {
 
     if (Config.GetCoordinator().GetEnabled()) {
         const auto& config = Config.GetCoordinator();
-        Register(NewLeaderDetector(SelfId(), config, CredentialsProviderFactory, YqSharedResources, Tenant).release());
         auto coordinatorId = Register(NewCoordinator(SelfId(), config, CredentialsProviderFactory, YqSharedResources, Tenant).release());
         Register(NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, YqSharedResources, Tenant).release());
     }

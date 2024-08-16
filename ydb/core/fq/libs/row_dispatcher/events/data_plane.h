@@ -15,8 +15,7 @@ NActors::TActorId RowDispatcherServiceActorId();
 struct TEvRowDispatcher {
     // Event ids.
     enum EEv : ui32 {
-        EvCreateSemaphoreResult = YqEventSubspaceBegin(TYqEventSubspace::RowDispatcher),
-        EvCoordinatorChanged,
+        EvCoordinatorChanged = YqEventSubspaceBegin(TYqEventSubspace::RowDispatcher),
         EvStartSession,
         EvStartSessionAck,
         EvNewDataArrived,

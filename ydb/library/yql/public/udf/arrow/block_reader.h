@@ -555,7 +555,7 @@ std::unique_ptr<typename TTraits::TResult> MakeStringBlockReaderImpl(bool isOpti
 
 template<typename T>
 concept CanInstantiateBlockReaderForDecimal = requires {
-    T::template TFixedSize<T, true>();
+    T::template TFixedSize<NYql::NDecimal::TInt128, true>();
 };
 
 template <typename TTraits>

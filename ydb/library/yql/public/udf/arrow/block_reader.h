@@ -555,7 +555,7 @@ std::unique_ptr<typename TTraits::TResult> MakeStringBlockReaderImpl(bool isOpti
 
 template<typename T>
 concept CanInstantiateBlockReaderForDecimal = requires {
-    T::template TFixedSize<T, true, true>();
+    T::template TFixedSize<T, true>();
 };
 
 template <typename TTraits>
@@ -681,7 +681,7 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
             if constexpr (CanInstantiateBlockReaderForDecimal<TTraits>) {
                 return MakeFixedSizeBlockReaderImpl<TTraits, NYql::NDecimal::TInt128>(isOptional);
             } else {
-                Y_ENSURE(false, "Unsupported data slot for yson reader");
+                Y_ENSURE(false, "Unsupported data slot");
             }
         }
         case NUdf::EDataSlot::Uuid:

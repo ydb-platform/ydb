@@ -386,7 +386,7 @@ public:
     }
 
     NUdf::TBlockItem GetNotNull(TYsonReaderDetails& buf) override final {
-        if constexpr (std::is_same_v<T, bool> || std::is_same_v<T, signed char>) {
+        if constexpr (std::is_same_v<T, bool>) {
             YQL_ENSURE(buf.Current() == FalseMarker || buf.Current() == TrueMarker);
             bool res = buf.Current() == TrueMarker;
             buf.Next();

@@ -33,14 +33,12 @@ concept BitwiseOperable = requires(T a, T b) {
 
 template<typename T>
 inline T SelectArg(ui8 isFirst, T first, T second) {
-    if constexpr (std::is_floating_point<T>::value) {
-        return isFirst ? first : second;
-    } else if constexpr(BitwiseOperable<T>) {
+    if constexpr (std::is_arithmetic_v<T> && !std::is_floating_point_v<T>) {
         // isFirst == 1 -> mask 0xFF..FF, isFirst == 0 -> mask 0x00..00
         T mask = -T(isFirst);
         return (first & mask) | (second & ~mask);
     } else {
-        static_assert(BitwiseOperable<T>, "Type must support bitwise operations");
+        return isFirst ? first : second;
     }
 }
 

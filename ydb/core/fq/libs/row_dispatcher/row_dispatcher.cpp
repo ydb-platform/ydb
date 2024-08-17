@@ -3,8 +3,6 @@
 
 #include <ydb/core/fq/libs/config/protos/storage.pb.h>
 #include <ydb/core/fq/libs/control_plane_storage/util.h>
-
-//#include <ydb/core/fq/libs/row_dispatcher/events/events.h>
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -16,8 +14,8 @@
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/events/events.h>
 
+#include <ydb/core/fq/libs/row_dispatcher/actors_factory.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
-#include <ydb/core/fq/libs/row_dispatcher/topic_session.h>
 #include <ydb/core/fq/libs/row_dispatcher/consumer.h>
 #include <ydb/core/fq/libs/row_dispatcher/leader_election.h>
 #include <ydb/core/fq/libs/row_dispatcher/protos/events.pb.h>
@@ -27,8 +25,6 @@
 #include <util/stream/file.h>
 #include <util/string/join.h>
 #include <util/string/strip.h>
-
-
 
 
 namespace NFq {
@@ -51,6 +47,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> , public NYql::
     const TString LogPrefix;
     ui64 NextEventQueueId = 0;
     TString Tenant;
+    NFq::NRowDispatcher::IActorFactory::TPtr ActorFactory;
 
     using ConsumerSessionKey = std::pair<TActorId, ui32>;   // ReadActorId / PartitionId
     using TopicSessionKey = std::pair<TString, ui32>;       // TopicPath / PartitionId
@@ -108,7 +105,8 @@ public:
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const TYqSharedResources::TPtr& yqSharedResources,
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-        const TString& tenant);
+        const TString& tenant,
+        const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory);
 
     void Bootstrap();
 
@@ -170,14 +168,16 @@ TRowDispatcher::TRowDispatcher(
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    const TString& tenant)
+    const TString& tenant,
+    const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory)
     : Config(config)
     , CommonConfig(commonConfig)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , YqSharedResources(yqSharedResources)
     , CredentialsFactory(credentialsFactory)
     , LogPrefix("RowDispatcher: ")
-    , Tenant(tenant) {
+    , Tenant(tenant)
+    , ActorFactory(actorFactory) {
 }
 
 void TRowDispatcher::Bootstrap() {
@@ -304,7 +304,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
 
     if (topicSessionInfo.Sessions.empty() || readOffset) {
         LOG_ROW_DISPATCHER_DEBUG("Create new session " << readOffset);
-        sessionActorId = Register(NewTopicSession(
+        sessionActorId = ActorFactory->RegisterTopicSession(
             Config,
             SelfId(),
             ev->Get()->Record.GetPartitionId(),
@@ -312,7 +312,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
             CreateCredentialsProviderFactoryForStructuredToken(
                 CredentialsFactory,
                 ev->Get()->Record.GetToken(),
-                ev->Get()->Record.GetAddBearerToToken())).release());
+                ev->Get()->Record.GetAddBearerToToken()));
         SessionInfo& sessionInfo = topicSessionInfo.Sessions[sessionActorId];
         sessionInfo.Consumers[ev->Sender] = consumerInfo;
     } else {
@@ -473,9 +473,10 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    const TString& tenant)
+    const TString& tenant,
+    const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory)
 {
-    return std::unique_ptr<NActors::IActor>(new TRowDispatcher(config, commonConfig, credentialsProviderFactory, yqSharedResources, credentialsFactory, tenant));
+    return std::unique_ptr<NActors::IActor>(new TRowDispatcher(config, commonConfig, credentialsProviderFactory, yqSharedResources, credentialsFactory, tenant, actorFactory));
 }
 
 } // namespace NFq

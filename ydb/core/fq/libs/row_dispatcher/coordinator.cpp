@@ -29,9 +29,7 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
     using TPartitionKey = std::tuple<TString, TString, TString, ui64>;     // Endpoint / Database / TopicName / PartitionId 
 
     NConfig::TRowDispatcherCoordinatorConfig Config;
-  //  const NKikimr::TYdbCredentialsProviderFactory& CredentialsProviderFactory;
     TYqSharedResources::TPtr YqSharedResources;
-   // TMaybe<TActorId> LeaderActorId;
     TActorId LocalRowDispatcherId;
     const TString LogPrefix;
     const TString Tenant;
@@ -39,10 +37,8 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
 
     struct RowDispatcherInfo {
         bool Connected = false;
-   //     TActorId ActorId;
     };
     TMap<NActors::TActorId, RowDispatcherInfo> RowDispatchers;
-    //TVector<NActors::TActorId> RowDispatchers;
     THashMap<TPartitionKey, TActorId> PartitionLocations;
 
 public:

@@ -1,4 +1,5 @@
 #include "row_dispatcher_service.h"
+#include "actors_factory.h"
 
 #include "row_dispatcher.h"
 
@@ -16,7 +17,14 @@ std::unique_ptr<NActors::IActor> NewRowDispatcherService(
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const TString& tenant)
 {
-    return NewRowDispatcher(config, commonConfig, credentialsProviderFactory, yqSharedResources, credentialsFactory, tenant);
+    return NewRowDispatcher(
+        config,
+        commonConfig,
+        credentialsProviderFactory,
+        yqSharedResources,
+        credentialsFactory,
+        tenant,
+        NFq::NRowDispatcher::CreateActorFactory());
 }
 
 } // namespace NFq

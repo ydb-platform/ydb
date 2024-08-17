@@ -1,6 +1,7 @@
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher.h>
+#include <ydb/core/fq/libs/row_dispatcher/actors_factory.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/helpers.h>
@@ -11,6 +12,36 @@ namespace {
 
 using namespace NKikimr;
 using namespace NFq;
+
+struct TTestActorFactory : public NFq::NRowDispatcher::IActorFactory {
+    TTestActorFactory(NActors::TTestActorRuntime& runtime, NActors::TActorId edge)
+        : Runtime(runtime)
+        , Edge(edge)
+    {}
+
+    NActors::TActorId GetActorId() {
+        UNIT_ASSERT(!ActorIds.empty());
+        auto result = ActorIds.front();
+        ActorIds.pop();
+        return result;
+    }
+
+    NActors::TActorId RegisterTopicSession(
+        const NConfig::TRowDispatcherConfig& /*config*/,
+        NActors::TActorId /*rowDispatcherActorId*/,
+        ui32 /*partitionId*/,
+        NYdb::TDriver /*driver*/,
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> /*credentialsProviderFactory*/) const override {
+        auto actorId  = Runtime.AllocateEdgeActor();
+        ActorIds.push(actorId);
+        Cerr << "RegisterTopicSession , actor id " << actorId << Endl;
+        return actorId;
+    }
+
+    NActors::TTestActorRuntime& Runtime;
+    mutable TQueue<NActors::TActorId> ActorIds;
+    NActors::TActorId Edge;
+};
 
 class TFixture : public NUnitTest::TBaseFixture {
 
@@ -30,6 +61,12 @@ public:
         auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
    
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
+        EdgeActor = Runtime.AllocateEdgeActor();
+        ReadActorId1 = Runtime.AllocateEdgeActor();
+        ReadActorId2 = Runtime.AllocateEdgeActor();
+
+
+        TestActorFactory = MakeIntrusive<TTestActorFactory>(Runtime, EdgeActor);
 
         RowDispatcher = Runtime.Register(NewRowDispatcher(
             config,
@@ -37,12 +74,10 @@ public:
             credentialsProviderFactory,
             yqSharedResources,
             credentialsFactory,
-            "Tenant"
+            "Tenant",
+            TestActorFactory
             ).release());
 
-        EdgeActor = Runtime.AllocateEdgeActor();
-        ReadActorId1 = Runtime.AllocateEdgeActor();
-        ReadActorId2 = Runtime.AllocateEdgeActor();
         Runtime.EnableScheduleForActor(RowDispatcher);
 
         TDispatchOptions options;
@@ -62,13 +97,6 @@ public:
         settings.SetEndpoint("Endpoint");
         settings.MutableToken()->SetName("token");
         settings.SetDatabase("Database");
-        // if (watermarksPeriod) {
-        //     settings.MutableWatermarks()->SetEnabled(true);
-        //     settings.MutableWatermarks()->SetGranularityUs(watermarksPeriod->MicroSeconds());
-        // }
-        // settings.MutableWatermarks()->SetIdlePartitionsEnabled(idlePartitionsEnabled);
-        // settings.MutableWatermarks()->SetLateArrivalDelayUs(lateArrivalDelay.MicroSeconds());
-
         return settings;
     }
 
@@ -84,6 +112,20 @@ public:
         Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event));
     }
 
+    void ExpectStartSession(NActors::TActorId actorId) {
+        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvStartSession>(actorId/*, TDuration::Seconds(20)*/);
+        UNIT_ASSERT(eventHolder.Get() != nullptr);
+    }
+
+    void ExpectStartSessionAck(NActors::TActorId actorId) {
+        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvStartSessionAck>(actorId/*, TDuration::Seconds(20)*/);
+        UNIT_ASSERT(eventHolder.Get() != nullptr);
+    }
+
+    NActors::TActorId ExpectRegisterTopicSession() {
+        auto actorId = TestActorFactory->GetActorId();
+        return actorId;
+    }
 
     TActorSystemStub actorSystemStub;
     NActors::TTestActorRuntime Runtime;
@@ -91,6 +133,7 @@ public:
     NActors::TActorId EdgeActor;
     NActors::TActorId ReadActorId1;
     NActors::TActorId ReadActorId2;
+    TIntrusivePtr<TTestActorFactory> TestActorFactory;
 };
 
 Y_UNIT_TEST_SUITE(RowDispatcherTests) {
@@ -100,9 +143,15 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         Runtime.Send(new IEventHandle(RowDispatcher, EdgeActor, ev.release()));
 
         AddSession("topic", 0, ReadActorId1);
+        auto topicSessionId = ExpectRegisterTopicSession();
+        ExpectStartSessionAck(ReadActorId1);
+        ExpectStartSession(topicSessionId);
+
         AddSession("topic", 0, ReadActorId2);
-       
+        ExpectStartSessionAck(ReadActorId2);
+        ExpectStartSession(topicSessionId);
     }
+
 
 }
 

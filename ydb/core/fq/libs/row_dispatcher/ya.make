@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    actors_factory.cpp
     row_dispatcher.cpp
     row_dispatcher_service.cpp
     coordinator.cpp

@@ -79,7 +79,7 @@ public:
     void TearDown(NUnitTest::TTestContext& /* context */) override {
     }
 
-    NActors::TActorId ExpectCoordinatorChanged(NActors::TActorId /*rowDispatcherId*/) {
+    NActors::TActorId ExpectCoordinatorChanged() {
         auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvCoordinatorChanged>(RowDispatcher/*, TDuration::Seconds(20)*/);
         UNIT_ASSERT(eventHolder.Get() != nullptr);
         return eventHolder.Get()->Get()->CoordinatorActorId;
@@ -100,9 +100,9 @@ public:
 Y_UNIT_TEST_SUITE(LeaderElectionTests) {
     Y_UNIT_TEST_F(Test1, TFixture) {
 
-        auto coordinatorId1 = ExpectCoordinatorChanged(RowDispatcher);
-        auto coordinatorId2 = ExpectCoordinatorChanged(RowDispatcher);
-        auto coordinatorId3 = ExpectCoordinatorChanged(RowDispatcher);
+        auto coordinatorId1 = ExpectCoordinatorChanged();
+        auto coordinatorId2 = ExpectCoordinatorChanged();
+        auto coordinatorId3 = ExpectCoordinatorChanged();
         UNIT_ASSERT(coordinatorId1 == coordinatorId2);
         UNIT_ASSERT(coordinatorId2 == coordinatorId3);
 
@@ -117,8 +117,8 @@ Y_UNIT_TEST_SUITE(LeaderElectionTests) {
         }
 
         Runtime.Send(new IEventHandle(currentLeader, RowDispatcher, new NActors::TEvents::TEvPoisonPill()));
-        auto coordinatorId4 = ExpectCoordinatorChanged(RowDispatcher);
-        auto coordinatorId5 = ExpectCoordinatorChanged(RowDispatcher);
+        auto coordinatorId4 = ExpectCoordinatorChanged();
+        auto coordinatorId5 = ExpectCoordinatorChanged();
         UNIT_ASSERT(coordinatorId4 == coordinatorId5);
         UNIT_ASSERT(coordinatorId4 != coordinatorId1);
 
@@ -131,7 +131,7 @@ Y_UNIT_TEST_SUITE(LeaderElectionTests) {
         }
 
         Runtime.Send(new IEventHandle(currentLeader, RowDispatcher, new NActors::TEvents::TEvPoisonPill()));
-        auto coordinatorId6 = ExpectCoordinatorChanged(RowDispatcher);
+        auto coordinatorId6 = ExpectCoordinatorChanged();
         UNIT_ASSERT(coordinatorId6 != coordinatorId4);
     }
 }

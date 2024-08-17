@@ -415,7 +415,7 @@ public:
 
         YQL_ENSURE(buf.Current() == DoubleMarker);
         buf.Next();
-        return NUdf::TBlockItem(T(buf.NextDouble()));
+        return NUdf::TBlockItem(T(i64(buf.NextDouble())));
     }
 };
 

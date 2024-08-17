@@ -386,7 +386,7 @@ public:
     }
 
     NUdf::TBlockItem GetNotNull(TYsonReaderDetails& buf) override final {
-        if constexpr (std::is_same_v<T, bool>) {
+        if constexpr (std::is_same_v<T, bool> || std::is_same_v<T, signed char>) {
             YQL_ENSURE(buf.Current() == FalseMarker || buf.Current() == TrueMarker);
             bool res = buf.Current() == TrueMarker;
             buf.Next();
@@ -411,11 +411,13 @@ public:
                 buf.Next();
                 return NUdf::TBlockItem(T(buf.ReadVarUI64()));
             }
+        } else if constexpr (std::is_floating_point_v<T>) {
+            YQL_ENSURE(buf.Current() == DoubleMarker);
+            buf.Next();                
+            return NUdf::TBlockItem(T(buf.NextDouble()));
+        } else {
+            static_assert(std::is_floating_point_v<T>);
         }
-
-        YQL_ENSURE(buf.Current() == DoubleMarker);
-        buf.Next();
-        return NUdf::TBlockItem(T(i64(buf.NextDouble())));
     }
 };
 

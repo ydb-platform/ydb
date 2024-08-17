@@ -553,6 +553,11 @@ std::unique_ptr<typename TTraits::TResult> MakeStringBlockReaderImpl(bool isOpti
     }
 }
 
+template<typename T>
+concept CanInstantiateBlockReaderForDecimal = requires {
+    T::template TFixedSize<T, true, true>();
+};
+
 template <typename TTraits>
 std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHelper& typeInfoHelper, const TType* type, const IPgBuilder* pgBuilder) {
     const TType* unpacked = type;
@@ -672,8 +677,13 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
             return TTraits::template MakeTzDate<TTzDatetime64>(isOptional);
         case NUdf::EDataSlot::TzTimestamp64:
             return TTraits::template MakeTzDate<TTzTimestamp64>(isOptional);
-        case NUdf::EDataSlot::Decimal:
-            return MakeFixedSizeBlockReaderImpl<TTraits, NYql::NDecimal::TInt128>(isOptional);
+        case NUdf::EDataSlot::Decimal: {
+            if constexpr (CanInstantiateBlockReaderForDecimal<TTraits>) {
+                return MakeFixedSizeBlockReaderImpl<TTraits, NYql::NDecimal::TInt128>(isOptional);
+            } else {
+                Y_ENSURE(false, "Unsupported data slot for yson reader");
+            }
+        }
         case NUdf::EDataSlot::Uuid:
         case NUdf::EDataSlot::DyNumber:
             Y_ENSURE(false, "Unsupported data slot");

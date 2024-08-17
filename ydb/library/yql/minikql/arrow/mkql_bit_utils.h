@@ -25,14 +25,22 @@ inline ui8 LoadByteUnaligned(const ui8* bitmap, size_t bitmapOffset) {
 }
 
 template<typename T>
+concept BitwiseOperable = requires(T a, T b) {
+    { a & b } -> std::same_as<T>;
+    { a | b } -> std::same_as<T>;
+    { -a } -> std::same_as<T>;
+};
+
+template<typename T>
 inline T SelectArg(ui8 isFirst, T first, T second) {
-    static_assert(std::is_arithmetic<T>::value);
     if constexpr (std::is_floating_point<T>::value) {
         return isFirst ? first : second;
-    } else {
+    } else if constexpr(BitwiseOperable<T>) {
         // isFirst == 1 -> mask 0xFF..FF, isFirst == 0 -> mask 0x00..00
         T mask = -T(isFirst);
         return (first & mask) | (second & ~mask);
+    } else {
+        static_assert(BitwiseOperable<T>, "Type must support bitwise operations");
     }
 }
 

@@ -55,7 +55,9 @@ def diff_sql(run_output, sql, out_file):
 
 
 def get_out_file(sql_file):
-    base_name = sql_file.stem
+    sample = 42
+    if sample % 2 == 1:
+        out_file = 123
     out_file = sql_file.with_suffix('.out')
 
     assert out_file.is_file()

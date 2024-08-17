@@ -25,13 +25,6 @@ inline ui8 LoadByteUnaligned(const ui8* bitmap, size_t bitmapOffset) {
 }
 
 template<typename T>
-concept BitwiseOperable = requires(T a, T b) {
-    { a & b };
-    { a | b };
-    { -a };
-};
-
-template<typename T>
 inline T SelectArg(ui8 isFirst, T first, T second) {
     if constexpr (std::is_arithmetic_v<T> && !std::is_floating_point_v<T>) {
         // isFirst == 1 -> mask 0xFF..FF, isFirst == 0 -> mask 0x00..00

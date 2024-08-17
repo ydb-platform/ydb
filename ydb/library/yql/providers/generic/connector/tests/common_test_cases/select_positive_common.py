@@ -98,6 +98,7 @@ class Factory:
                     EDataSourceKind.POSTGRESQL,
                     EDataSourceKind.YDB,
                     EDataSourceKind.MYSQL,
+                    EDataSourceKind.MS_SQL_SERVER,
                 ),
             ),
             # SELECT COL1 FROM table
@@ -112,6 +113,7 @@ class Factory:
                     # NOTE: YQ-2264: doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
                     EDataSourceKind.YDB,
                     EDataSourceKind.MYSQL,
+                    EDataSourceKind.MS_SQL_SERVER,
                 ),
             ),
             # SELECT col1 FROM table
@@ -135,6 +137,7 @@ class Factory:
                     EDataSourceKind.POSTGRESQL,
                     EDataSourceKind.YDB,
                     EDataSourceKind.MYSQL,
+                    EDataSourceKind.MS_SQL_SERVER,
                 ),
             ),
             # SELECT col2, COL1 FROM table
@@ -149,6 +152,7 @@ class Factory:
                     # NOTE: YQ-2264: doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
                     EDataSourceKind.YDB,
                     EDataSourceKind.MYSQL,
+                    EDataSourceKind.MS_SQL_SERVER,
                 ),
             ),
             # SELECT col2, col1 FROM table
@@ -173,6 +177,7 @@ class Factory:
                     # NOTE: YQ-2264: doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
                     EDataSourceKind.YDB,
                     EDataSourceKind.MYSQL,
+                    EDataSourceKind.MS_SQL_SERVER,
                 ),
             ),
             # Select the same column multiple times with different aliases
@@ -194,6 +199,7 @@ class Factory:
                     EDataSourceKind.POSTGRESQL,
                     EDataSourceKind.YDB,
                     EDataSourceKind.MYSQL,
+                    EDataSourceKind.MS_SQL_SERVER,
                 ),
             ),
         )
@@ -291,11 +297,16 @@ class Factory:
             EDataSourceKind.POSTGRESQL: [EProtocol.NATIVE],
             EDataSourceKind.YDB: [EProtocol.NATIVE],
             EDataSourceKind.MYSQL: [EProtocol.NATIVE],
+            EDataSourceKind.MS_SQL_SERVER: [EProtocol.NATIVE],
         }
 
         base_test_cases = None
 
-        if data_source_kind in [EDataSourceKind.YDB, EDataSourceKind.MYSQL]:
+        if data_source_kind in [
+            EDataSourceKind.YDB,
+            EDataSourceKind.MYSQL,
+            EDataSourceKind.MS_SQL_SERVER,
+        ]:
             base_test_cases = self._column_selection()
         elif data_source_kind in [EDataSourceKind.CLICKHOUSE, EDataSourceKind.POSTGRESQL]:
             base_test_cases = list(

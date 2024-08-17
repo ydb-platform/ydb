@@ -1592,6 +1592,7 @@ void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
         newAggregatedStats.RowCount += newStats.RowCount;
         newAggregatedStats.DataSize += newStats.DataSize;
         newAggregatedStats.IndexSize += newStats.IndexSize;
+        newAggregatedStats.ByKeyFilterSize += newStats.ByKeyFilterSize;
         for (const auto& [poolKind, newStoragePoolStats] : newStats.StoragePoolsStats) {
             auto& [dataSize, indexSize] = newAggregatedStats.StoragePoolsStats[poolKind];
             dataSize += newStoragePoolStats.DataSize;
@@ -1678,6 +1679,7 @@ void TAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartition
     Aggregated.RowCount += (newStats.RowCount - oldStats.RowCount);
     Aggregated.DataSize += (newStats.DataSize - oldStats.DataSize);
     Aggregated.IndexSize += (newStats.IndexSize - oldStats.IndexSize);
+    Aggregated.ByKeyFilterSize += (newStats.ByKeyFilterSize - oldStats.ByKeyFilterSize);
     for (const auto& [poolKind, newStoragePoolStats] : newStats.StoragePoolsStats) {
         auto& [dataSize, indexSize] = Aggregated.StoragePoolsStats[poolKind];
         const auto* oldStoragePoolStats = oldStats.StoragePoolsStats.FindPtr(poolKind);

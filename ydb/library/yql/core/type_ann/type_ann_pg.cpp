@@ -1823,7 +1823,7 @@ bool ScanColumns(TExprNode::TPtr root, TInputs& inputs, const THashSet<TString>&
                             }
                         }
 
-                        if (x.Order && x.Order->IsDuplicated(TString(node->Tail().Content()))) {
+                        if (x.Order && x.Order->IsDuplicatedIgnoreCase(TString(node->Tail().Content()))) {
                             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()),
                                     TStringBuilder() << "Column reference is ambiguous: " << node->Tail().Content()));
                                 isError = true;

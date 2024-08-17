@@ -3183,7 +3183,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         CompareYson(output, R"([[1u;"test1";[10];["1"]];[2u;"test2";#;["2"]];[3u;"test3";[12];#];[4u;"test4";#;#];[100u;"test100";[1000];["100"]]])");
     }
 
-    Y_UNIT_TEST(TableSink_OltpReplace) {
+    Y_UNIT_TEST_TWIN(TableSink_OltpReplace, HasSecondaryIndex) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         auto settings = TKikimrSettings()
@@ -3195,14 +3195,15 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
-        const TString query = R"(
+        const TString query = Sprintf(R"(
             CREATE TABLE `/Root/DataShard` (
                 Col1 Uint64 NOT NULL,
                 Col2 Int32,
                 Col3 String,
+                %s
                 PRIMARY KEY (Col1)
             );
-        )";
+        )", (HasSecondaryIndex ? "INDEX idx_2 GLOBAL ON (Col2)," : ""));
 
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());

@@ -15,5 +15,5 @@ variable "subnet_id" {
 
 variable "github_runner_version" {
   type = string
-  default = "2.318.0"
+  default = "2.319.1"
 }

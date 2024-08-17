@@ -33,6 +33,7 @@ Generic {
 
 {% set CLICKHOUSE = 'CLICKHOUSE' %}
 {% set POSTGRESQL = 'POSTGRESQL' %}
+{% set MS_SQL_SERVER = 'MS_SQL_SERVER' %}
 {% set MYSQL = 'MYSQL' %}
 {% set ORACLE = 'ORACLE' %}
 
@@ -93,6 +94,20 @@ Generic {
     CLICKHOUSE_PROTOCOL,
     cluster.database,
     NONE,
+    NONE)
+}}
+{% endfor %}
+
+{% for cluster in generic_settings.ms_sql_server_clusters %}
+{{ data_source(
+    MS_SQL_SERVER,
+    settings.ms_sql_server.cluster_name,
+    settings.ms_sql_server.host_internal,
+    settings.ms_sql_server.port_internal,
+    settings.ms_sql_server.username,
+    settings.ms_sql_server.password,
+    NATIVE,
+    cluster.database,
     NONE)
 }}
 {% endfor %}

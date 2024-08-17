@@ -403,7 +403,6 @@ class TDataShard
 
         struct TEvAsyncTableStats : public TEventLocal<TEvAsyncTableStats, EvAsyncTableStats> {
             ui64 TableId = -1;
-            ui64 IndexSize = 0;
             TInstant StatsUpdateTime;
             NTable::TStats Stats;
             THashSet<ui64> PartOwners;
@@ -2634,7 +2633,7 @@ private:
             Schema::PlanQueue::TableId,
             Schema::DeadlineQueue::TableId
         };
-    THashSet<ui64> SysTablesPartOnwers;
+    THashSet<ui64> SysTablesPartOwners;
 
     // Sys table contents
     ui32 State;
@@ -2649,7 +2648,7 @@ private:
 
     NMiniKQL::IKeyAccessSampler::TPtr DisabledKeySampler;
     NMiniKQL::IKeyAccessSampler::TPtr EnabledKeySampler;
-    NMiniKQL::IKeyAccessSampler::TPtr CurrentKeySampler; // Points to enbaled or disabled
+    NMiniKQL::IKeyAccessSampler::TPtr CurrentKeySampler; // Points to enabled or disabled
     TInstant StartedKeyAccessSamplingAt;
     TInstant StopKeyAccessSamplingAt;
 
@@ -3241,6 +3240,7 @@ protected:
 
             ev->Record.MutableTableStats()->SetDataSize(ti.Stats.DataStats.DataSize.Size + ti.Stats.MemDataSize);
             ev->Record.MutableTableStats()->SetIndexSize(ti.Stats.DataStats.IndexSize.Size);
+            ev->Record.MutableTableStats()->SetByKeyFilterSize(ti.Stats.DataStats.ByKeyFilterSize);
             ev->Record.MutableTableStats()->SetInMemSize(ti.Stats.MemDataSize);
 
             TMap<ui8, std::tuple<ui64, ui64>> channels; // Channel -> (DataSize, IndexSize)
@@ -3294,7 +3294,7 @@ protected:
             for (const auto& pi : ti.Stats.PartOwners) {
                 ev->Record.AddUserTablePartOwners(pi);
             }
-            for (const auto& pi : SysTablesPartOnwers) {
+            for (const auto& pi : SysTablesPartOwners) {
                 ev->Record.AddSysTablesPartOwners(pi);
             }
 

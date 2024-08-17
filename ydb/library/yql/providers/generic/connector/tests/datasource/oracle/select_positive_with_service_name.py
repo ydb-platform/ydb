@@ -290,10 +290,7 @@ class Factory:
                     1,
                     '12',
                 ],
-                [
-                    2,
-                    None
-                ],
+                [2, None],
                 [
                     3,
                     None,
@@ -339,10 +336,7 @@ class Factory:
                     1,
                     'long',
                 ],
-                [
-                    2,
-                    None
-                ],
+                [2, None],
                 [
                     3,
                     None,

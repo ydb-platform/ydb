@@ -192,7 +192,7 @@ Pear,15,'''
         assert result_set.rows[2].items[1].text_value == ""
         assert result_set.rows[2].items[2].int64_value == 15
         assert sum(kikimr.control_plane.get_metering(1)) == 10
-    
+
     @yq_v2
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_inference_optional_types(self, kikimr, s3, client, unique_prefix):

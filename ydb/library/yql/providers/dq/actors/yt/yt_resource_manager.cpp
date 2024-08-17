@@ -656,7 +656,9 @@ namespace NYql {
                                                 .Item(NCommonJobVars::OPERATION_SIZE).Value(ToString(nodes.size()))
                                                 .Item(NCommonJobVars::UDFS_PATH).Value(fileCache)
                                                 .Item(NCommonJobVars::ACTOR_NODE_ID).Value(ToString(nodeId))
-                                                .Item(NCommonJobVars::ADDRESS_RESOLVER_CONFIG).Value(ToString(NYT::NYson::ConvertToYsonString(Options.AddressResolverConfig, NYT::NYson::EYsonFormat::Text)))
+                                                .DoIf(!!Options.AddressResolverConfig, [&](NYT::TFluentMap fluent) {
+                                                    fluent.Item(NCommonJobVars::ADDRESS_RESOLVER_CONFIG).Value(ToString(NYT::NYson::ConvertToYsonString(Options.AddressResolverConfig, NYT::NYson::EYsonFormat::Text)));
+                                                })
                                                 .DoIf(!!GetEnv("YQL_DETERMINISTIC_MODE"), [&](NYT::TFluentMap fluent) {
                                                     fluent.Item("YQL_DETERMINISTIC_MODE").Value("1");
                                                 })

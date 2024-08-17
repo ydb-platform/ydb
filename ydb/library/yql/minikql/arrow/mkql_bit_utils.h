@@ -26,9 +26,9 @@ inline ui8 LoadByteUnaligned(const ui8* bitmap, size_t bitmapOffset) {
 
 template<typename T>
 concept BitwiseOperable = requires(T a, T b) {
-    { a & b } -> std::same_as<T>;
-    { a | b } -> std::same_as<T>;
-    { -a } -> std::same_as<T>;
+    { a & b };
+    { a | b };
+    { -a };
 };
 
 template<typename T>

@@ -462,7 +462,8 @@ struct TYsonBlockReaderTraits {
     using TResult = IYsonBlockReader;
     template <bool Nullable>
     using TTuple = TYsonTupleBlockReader<Nullable, Native>;
-    template <typename T, bool Nullable>
+    // TODO: Implement reader for decimals
+    template <typename T, bool Nullable, typename = std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>>>
     using TFixedSize = TYsonFixedSizeBlockReader<T, Nullable, Native>;
     template <typename TStringType, bool Nullable, NKikimr::NUdf::EDataSlot OriginalT>
     using TStrings = TYsonStringBlockReader<TStringType, Nullable, OriginalT, Native>;

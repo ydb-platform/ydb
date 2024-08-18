@@ -883,6 +883,8 @@ public:
             LastAggregation.InitValue = value;
         } else if (key == "aggfinalextra") {
             LastAggregation.FinalExtra = (value == "t");;
+        } else if (key == "aggnumdirectargs") {
+            LastAggregation.NumDirectArgs = FromString<ui32>(value);
         }
     }
 
@@ -2152,6 +2154,33 @@ struct TCatalog : public IExtensionSqlBuilder {
         auto procPtr = State->Procs.FindPtr(desc.ProcId);
         Y_ENSURE(procPtr);
         State->AllowedProcs.insert(procPtr->Name);
+    }
+
+    void CreateAggregate(const TAggregateDesc& desc) final {
+        Y_ENSURE(desc.ExtensionIndex);
+        auto id = 16000 + State->Aggregations.size();
+        auto newDesc = desc;
+        newDesc.Name = to_lower(newDesc.Name);
+        newDesc.AggId = id;
+        Y_ENSURE(State->Aggregations.emplace(id, newDesc).second);
+        State->AggregationsByName[newDesc.Name].push_back(id);
+        if (desc.CombineFuncId) {
+            State->AllowedProcs.insert(State->Procs.FindPtr(desc.CombineFuncId)->Name);
+        }
+
+        if (desc.DeserializeFuncId) {
+            State->AllowedProcs.insert(State->Procs.FindPtr(desc.DeserializeFuncId)->Name);
+        }
+
+        if (desc.SerializeFuncId) {
+            State->AllowedProcs.insert(State->Procs.FindPtr(desc.SerializeFuncId)->Name);
+        }
+
+        if (desc.FinalFuncId) {
+            State->AllowedProcs.insert(State->Procs.FindPtr(desc.FinalFuncId)->Name);
+        }
+
+        State->AllowedProcs.insert(State->Procs.FindPtr(desc.TransFuncId)->Name);
     }
 
     static const TCatalog& Instance() {
@@ -3778,6 +3807,39 @@ TString ExportExtensions(const TMaybe<TSet<ui32>>& filter) {
         protoOper->SetNegateId(desc.NegateId);
     }
 
+    TVector<ui32> extAggs;
+    for (const auto& a : catalog.State->Aggregations) {
+        const auto& desc = a.second;
+        if (!desc.ExtensionIndex) {
+            continue;
+        }
+
+        extAggs.push_back(a.first);
+    }
+
+    Sort(extAggs);
+    for (const auto a : extAggs) {
+        const auto& desc = *catalog.State->Aggregations.FindPtr(a);
+        auto protoAggregation = proto.AddAggregation();
+        protoAggregation->SetAggId(a);
+        protoAggregation->SetName(desc.Name);
+        protoAggregation->SetExtensionIndex(desc.ExtensionIndex);
+        for (const auto argType : desc.ArgTypes) {
+            protoAggregation->AddArgType(argType);
+        }
+
+        protoAggregation->SetKind((ui32)desc.Kind);
+        protoAggregation->SetTransTypeId(desc.TransTypeId);
+        protoAggregation->SetTransFuncId(desc.TransFuncId);
+        protoAggregation->SetFinalFuncId(desc.FinalFuncId);
+        protoAggregation->SetCombineFuncId(desc.CombineFuncId);
+        protoAggregation->SetSerializeFuncId(desc.SerializeFuncId);
+        protoAggregation->SetDeserializeFuncId(desc.DeserializeFuncId);
+        protoAggregation->SetInitValue(desc.InitValue);
+        protoAggregation->SetFinalExtra(desc.FinalExtra);
+        protoAggregation->SetNumDirectArgs(desc.NumDirectArgs);
+    }
+
     return proto.SerializeAsString();
 }
 
@@ -3929,6 +3991,30 @@ void ImportExtensions(const TString& exported, bool typesOnly, IExtensionLoader*
             desc.NegateId = protoOper.GetNegateId();
             Y_ENSURE(catalog.State->Operators.emplace(desc.OperId, desc).second);
             catalog.State->OperatorsByName[desc.Name].push_back(desc.OperId);
+        }
+
+        for (const auto& protoAggregation : proto.GetAggregation()) {
+            TAggregateDesc desc;
+            desc.AggId = protoAggregation.GetAggId();
+            desc.Name = protoAggregation.GetName();
+            desc.ExtensionIndex = protoAggregation.GetExtensionIndex();
+            for (const auto argType : protoAggregation.GetArgType()) {
+                desc.ArgTypes.push_back(argType);
+            }
+
+            desc.Kind = (NPg::EAggKind)protoAggregation.GetKind();
+            desc.TransTypeId = protoAggregation.GetTransTypeId();
+            desc.TransFuncId = protoAggregation.GetTransFuncId();
+            desc.FinalFuncId = protoAggregation.GetFinalFuncId();
+            desc.CombineFuncId = protoAggregation.GetCombineFuncId();
+            desc.SerializeFuncId = protoAggregation.GetSerializeFuncId();
+            desc.DeserializeFuncId = protoAggregation.GetDeserializeFuncId();
+            desc.InitValue = protoAggregation.GetInitValue();
+            desc.FinalExtra = protoAggregation.GetFinalExtra();
+            desc.NumDirectArgs = protoAggregation.GetNumDirectArgs();
+
+            Y_ENSURE(catalog.State->Aggregations.emplace(desc.AggId, desc).second);
+            catalog.State->AggregationsByName[desc.Name].push_back(desc.AggId);
         }
 
         if (!typesOnly && loader) {

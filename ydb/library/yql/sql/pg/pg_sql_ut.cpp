@@ -902,4 +902,80 @@ Y_UNIT_TEST_SUITE(PgExtensions) {
         NPg::ImportExtensions(exported, true, nullptr);
         validate();
     }
+
+    Y_UNIT_TEST(Aggregates) {
+        NPg::ClearExtensions();
+        if (NPg::AreAllFunctionsAllowed()) {
+            return;
+        }
+
+        NPg::TExtensionDesc desc;
+        TTempFileHandle h;
+        TStringBuf sql = R"(
+            CREATE TYPE foo (
+                alignment = double,
+                internallength = variable
+            );
+
+            CREATE OR REPLACE FUNCTION foo_agg_trans(internal, foo)
+                RETURNS internal
+                AS '$libdir/MyExt','foo_agg_trans'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE OR REPLACE FUNCTION foo_agg_final(internal)
+                RETURNS foo
+                AS '$libdir/MyExt','foo_agg_final'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE OR REPLACE FUNCTION foo_agg_combine(internal, internal)
+                RETURNS internal
+                AS '$libdir/MyExt','foo_agg_combine'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE OR REPLACE FUNCTION foo_agg_serial(internal)
+                RETURNS bytea
+                AS '$libdir/MyExt','foo_agg_serial'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE OR REPLACE FUNCTION foo_agg_deserial(bytea, internal)
+                RETURNS internal
+                AS '$libdir/MyExt','foo_agg_deserial'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE AGGREGATE foo_agg(foo) (
+                sfunc = foo_agg_trans,
+                stype = internal,
+                serialfunc = foo_agg_serial,
+                deserialfunc = foo_agg_deserial,
+                combinefunc = foo_agg_combine,
+                finalfunc = foo_agg_final
+            );
+        )";
+
+        h.Write(sql.Data(), sql.Size());
+        desc.Name = "MyExt";
+        desc.InstallName = "$libdir/MyExt";
+        desc.SqlPaths.push_back(h.Name());
+        NPg::RegisterExtensions({desc}, true, *NSQLTranslationPG::CreateExtensionSqlParser(), nullptr);
+        auto validate = [&]() {
+            auto typeId = NPg::LookupType("foo").TypeId;
+            auto internalTypeId = NPg::LookupType("internal").TypeId;
+            auto byteaTypeId = NPg::LookupType("bytea").TypeId;
+            const auto& desc = NPg::LookupAggregation("foo_agg", { typeId });
+            UNIT_ASSERT_VALUES_EQUAL(desc.Name, "foo_agg");
+            UNIT_ASSERT_VALUES_EQUAL(desc.ArgTypes, TVector<ui32>{typeId});
+            UNIT_ASSERT_VALUES_EQUAL(desc.TransTypeId, internalTypeId);
+            UNIT_ASSERT_VALUES_EQUAL(desc.TransFuncId, NPg::LookupProc("foo_agg_trans", {internalTypeId, typeId}).ProcId);
+            UNIT_ASSERT_VALUES_EQUAL(desc.FinalFuncId, NPg::LookupProc("foo_agg_final", {internalTypeId}).ProcId);
+            UNIT_ASSERT_VALUES_EQUAL(desc.SerializeFuncId, NPg::LookupProc("foo_agg_serial", {internalTypeId}).ProcId);
+            UNIT_ASSERT_VALUES_EQUAL(desc.DeserializeFuncId, NPg::LookupProc("foo_agg_deserial", {byteaTypeId, internalTypeId}).ProcId);
+            UNIT_ASSERT_VALUES_EQUAL(desc.CombineFuncId, NPg::LookupProc("foo_agg_combine", {internalTypeId, internalTypeId}).ProcId);
+        };
+
+        validate();
+        auto exported = NPg::ExportExtensions();
+        NPg::ClearExtensions();
+        NPg::ImportExtensions(exported, true, nullptr);
+        validate();
+    }
 }

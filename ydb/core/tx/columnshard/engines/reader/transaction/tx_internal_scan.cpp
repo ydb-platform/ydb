@@ -9,7 +9,7 @@
 
 namespace NKikimr::NOlap::NReader {
 
-void TTxInternalScan::SendError(const TString& problem, const TString& details) const {
+void TTxInternalScan::SendError(const TString& problem, const TString& details, const TActorContext& ctx) const {
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan failed")("problem", problem)("details", details);
     auto& request = *InternalScanEvent->Get();
     auto scanComputeActor = InternalScanEvent->Sender;
@@ -60,7 +60,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
         {
             auto newRange = scannerConstructor->BuildReadMetadata(Self, read);
             if (!newRange) {
-                return SendError("cannot create read metadata", newRange.GetErrorMessage());
+                return SendError("cannot create read metadata", newRange.GetErrorMessage(), ctx);
             }
             readMetadataRange = TValidator::CheckNotNull(newRange.DetachResult());
         }

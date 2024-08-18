@@ -10,7 +10,7 @@ private:
     const ui32 ScanGen = 1;
     const ui32 TxId = 1;
     const ui32 ScanId = 1;
-    void SendError(const TString& problem, const TString& details) const;
+    void SendError(const TString& problem, const TString& details, const TActorContext& ctx) const;
 
 public:
     using TReadMetadataPtr = TReadMetadataBase::TConstPtr;

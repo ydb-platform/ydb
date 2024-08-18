@@ -7,7 +7,7 @@ namespace NKikimr::NOlap::NReader {
 class TTxScan: public NTabletFlatExecutor::TTransactionBase<NColumnShard::TColumnShard> {
 private:
     using TBase = NTabletFlatExecutor::TTransactionBase<NColumnShard::TColumnShard>;
-    void SendError(const TString& problem, const TString& details) const;
+    void SendError(const TString& problem, const TString& details, const TActorContext& ctx) const;
 
 public:
     using TReadMetadataPtr = TReadMetadataBase::TConstPtr;

@@ -114,9 +114,9 @@ static bool FillPredicatesFromRange(TReadDescription& read, const ::NKikimrTx::T
     return true;
 }
 
-void TTxScan::SendError(const TString& problem, const TString& details) const {
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan failed")("reason", "no metadata")("error", ErrorDescription);
-    const auto& record = Ev->Get()->Record;
+void TTxScan::SendError(const TString& problem, const TString& details, const TActorContext& ctx) const {
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan failed")("problem", problem)("details", details);
+    const auto& request = Ev->Get()->Record;
     const TString table = request.GetTablePath();
     const ui32 scanGen = request.GetGeneration();
     const auto scanComputeActor = Ev->Sender;
@@ -156,49 +156,50 @@ void TTxScan::Complete(const TActorContext& ctx) {
 
         LOG_S_DEBUG("TTxScan prepare txId: " << txId << " scanId: " << scanId << " at tablet " << Self->TabletID());
 
-        TReadDescription read(snapshot, record.GetReverse());
+        TReadDescription read(snapshot, request.GetReverse());
         read.TxId = txId;
-        read.PathId = record.GetLocalPathId();
+        read.PathId = request.GetLocalPathId();
         read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);
         read.TableName = table;
         bool isIndex = false;
         std::unique_ptr<IScannerConstructor> scannerConstructor = [&]() {
-            const ui64 itemsLimit = record.HasItemsLimit() ? record.GetItemsLimit() : 0;
+            const ui64 itemsLimit = request.HasItemsLimit() ? request.GetItemsLimit() : 0;
             auto sysViewPolicy = NSysView::NAbstract::ISysViewPolicy::BuildByPath(read.TableName);
             isIndex = !sysViewPolicy;
             if (!sysViewPolicy) {
-                return std::unique_ptr<IScannerConstructor>(new NPlain::TIndexScannerConstructor(snapshot, itemsLimit, record.GetReverse()));
+                return std::unique_ptr<IScannerConstructor>(new NPlain::TIndexScannerConstructor(snapshot, itemsLimit, request.GetReverse()));
             } else {
-                return sysViewPolicy->CreateConstructor(snapshot, itemsLimit, record.GetReverse());
+                return sysViewPolicy->CreateConstructor(snapshot, itemsLimit, request.GetReverse());
             }
         }();
-        read.ColumnIds.assign(record.GetColumnTags().begin(), record.GetColumnTags().end());
-        read.StatsMode = record.GetStatsMode();
+        read.ColumnIds.assign(request.GetColumnTags().begin(), request.GetColumnTags().end());
+        read.StatsMode = request.GetStatsMode();
 
         const TVersionedIndex* vIndex = Self->GetIndexOptional() ? &Self->GetIndexOptional()->GetVersionedIndex() : nullptr;
-        auto parseResult = scannerConstructor->ParseProgram(vIndex, record, read);
+        auto parseResult = scannerConstructor->ParseProgram(vIndex, request, read);
         if (!parseResult) {
-            return SendError("cannot parse program", parseResult.GetErrorMessage());
+            return SendError("cannot parse program", parseResult.GetErrorMessage(), ctx);
         }
 
-        if (!record.RangesSize()) {
+        if (!request.RangesSize()) {
             auto newRange = scannerConstructor->BuildReadMetadata(Self, read);
             if (newRange.IsSuccess()) {
                 readMetadataRange = TValidator::CheckNotNull(newRange.DetachResult());
             } else {
-                return SendError("cannot build metadata withno ranges", newRange.GetErrorMessage());
+                return SendError("cannot build metadata withno ranges", newRange.GetErrorMessage(), ctx);
             }
         } else {
             auto ydbKey = scannerConstructor->GetPrimaryKeyScheme(Self);
             auto* indexInfo = (vIndex && isIndex) ? &vIndex->GetSchema(snapshot)->GetIndexInfo() : nullptr;
-            for (auto& range : record.GetRanges()) {
-                if (!FillPredicatesFromRange(read, range, ydbKey, Self->TabletID(), indexInfo, ErrorDescription)) {
-                    return SendError("cannot fill predicates", ErrorDescription);
+            for (auto& range : request.GetRanges()) {
+                TString errorDescription;
+                if (!FillPredicatesFromRange(read, range, ydbKey, Self->TabletID(), indexInfo, errorDescription)) {
+                    return SendError("cannot fill predicates", errorDescription, ctx);
                 }
             }
             auto newRange = scannerConstructor->BuildReadMetadata(Self, read);
             if (!newRange) {
-                return SendError("cannot build metadata", newRange.GetErrorMessage());
+                return SendError("cannot build metadata", newRange.GetErrorMessage(), ctx);
             }
             readMetadataRange = TValidator::CheckNotNull(newRange.DetachResult());
         }

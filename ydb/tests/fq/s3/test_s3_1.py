@@ -482,6 +482,8 @@ Pear,15,33'''
         # 1024 x 1024 x 10 = 10 MB of raw data + little overhead for header, eols etc
         assert sum(kikimr.control_plane.get_metering(1)) == 21
 
+    # it looks like the runtime_listing for v1 doesn't work in case of 
+    # restart of query because the v1 keeps the compiled query in the cache
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", ["false", "true"])
@@ -502,11 +504,11 @@ Pear,15,33'''
 Banana,3,100
 Apple,2,22
 Pear,15,33'''
-        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='/2024-08-09.csv', ContentType='text/plain')
-        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='/2024-08-08.csv', ContentType='text/plain')
+        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='2024-08-09.csv', ContentType='text/plain')
+        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='2024-08-08.csv', ContentType='text/plain')
 
         kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = unique_prefix + "test_top_level_listing"
         client.create_storage_connection(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -518,7 +520,8 @@ Pear,15,33'''
                 Fruit String NOT NULL,
                 Price Int NOT NULL,
                 Weight Int NOT NULL
-            ));
+            )
+            );
             '''
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
@@ -534,7 +537,7 @@ Pear,15,33'''
         assert result_set.columns[1].type.type_id == ydb.Type.INT32
         assert result_set.columns[2].name == "Weight"
         assert result_set.columns[2].type.type_id == ydb.Type.INT32
-        assert len(result_set.rows) == 3
+        assert len(result_set.rows) == 6
         assert result_set.rows[0].items[0].bytes_value == b"Banana"
         assert result_set.rows[0].items[1].int32_value == 3
         assert result_set.rows[0].items[2].int32_value == 100
@@ -544,4 +547,13 @@ Pear,15,33'''
         assert result_set.rows[2].items[0].bytes_value == b"Pear"
         assert result_set.rows[2].items[1].int32_value == 15
         assert result_set.rows[2].items[2].int32_value == 33
+        assert result_set.rows[3].items[0].bytes_value == b"Banana"
+        assert result_set.rows[3].items[1].int32_value == 3
+        assert result_set.rows[3].items[2].int32_value == 100
+        assert result_set.rows[4].items[0].bytes_value == b"Apple"
+        assert result_set.rows[4].items[1].int32_value == 2
+        assert result_set.rows[4].items[2].int32_value == 22
+        assert result_set.rows[5].items[0].bytes_value == b"Pear"
+        assert result_set.rows[5].items[1].int32_value == 15
+        assert result_set.rows[5].items[2].int32_value == 33
         assert sum(kikimr.control_plane.get_metering(1)) == 10

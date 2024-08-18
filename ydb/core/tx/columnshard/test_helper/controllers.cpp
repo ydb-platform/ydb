@@ -10,12 +10,12 @@ void TWaitCompactionController::OnTieringModified(const std::shared_ptr<NKikimr:
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "OnTieringModified")("count", TiersModificationsCount);
 }
 
-void TWaitCompactionController::SetTiersSnapshot(TTestBasicRuntime& runtime, const TActorId& tabletActorId, const NMetadata::NFetcher::ISnapshot::TPtr& snapshot) {
+void TWaitCompactionController::SetTiersSnapshot(const TActorId& tabletActorId, const NMetadata::NFetcher::ISnapshot::TPtr& snapshot) {
     CurrentConfig = snapshot;
     ui32 startCount = TiersModificationsCount;
-    NTxUT::ProvideTieringSnapshot(runtime, tabletActorId, snapshot);
+    NTxUT::ProvideTieringSnapshot(*TestRuntime, tabletActorId, snapshot);
     while (TiersModificationsCount == startCount) {
-        runtime.SimulateSleep(TDuration::Seconds(1));
+        SimulateSleep(TDuration::Seconds(1));
     }
 }
 

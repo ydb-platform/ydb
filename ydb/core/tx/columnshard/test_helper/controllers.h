@@ -6,7 +6,7 @@ namespace NKikimr::NOlap {
 
 class TWaitCompactionController: public NYDBTest::NColumnShard::TController {
 private:
-    using TBase = NKikimr::NYDBTest::ICSController;
+    using TBase = NYDBTest::NColumnShard::TController;
     TAtomicCounter ExportsFinishedCount = 0;
     NMetadata::NFetcher::ISnapshot::TPtr CurrentConfig;
     ui32 TiersModificationsCount = 0;
@@ -40,6 +40,11 @@ public:
     TWaitCompactionController() {
         SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
     }
+    TWaitCompactionController(NActors::TTestBasicRuntime& runtime)
+        : TBase(runtime)
+    {
+        SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+    }
 
     ui32 GetFinishedExportsCount() const {
         return ExportsFinishedCount.Val();
@@ -51,7 +56,7 @@ public:
     virtual void OnMaxValueUsage() override {
         MaxValueUsageCount.Inc();
     }
-    void SetTiersSnapshot(TTestBasicRuntime& runtime, const TActorId& tabletActorId, const NMetadata::NFetcher::ISnapshot::TPtr& snapshot);
+    void SetTiersSnapshot(const TActorId& tabletActorId, const NMetadata::NFetcher::ISnapshot::TPtr& snapshot);
 
     virtual NMetadata::NFetcher::ISnapshot::TPtr GetFallbackTiersSnapshot() const override {
         if (CurrentConfig) {

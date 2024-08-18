@@ -172,6 +172,7 @@ static constexpr ui32 PORTION_ROWS = 80 * 1000;
 void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
              const std::vector<NArrow::NTest::TTestColumn>& ydbSchema = testYdbSchema)
 {
+    TTestBasicRuntime runtime;
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
     csControllerGuard->SetTasksActualizationLag(TDuration::Zero());
@@ -187,7 +188,6 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
         }
     }
 
-    TTestBasicRuntime runtime;
     TTester::Setup(runtime);
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_TRACE);
 
@@ -223,7 +223,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
                               TTestSchema::CreateInitShardTxBody(tableId, ydbSchema, testYdbPk, spec, "/Root/olapStore"),
                               NOlap::TSnapshot(++planStep, ++txId));
     if (spec.HasTiers()) {
-        csControllerGuard->SetTiersSnapshot(runtime, sender, TTestSchema::BuildSnapshot(spec));
+        csControllerGuard->SetTiersSnapshot(sender, TTestSchema::BuildSnapshot(spec));
     }
     //
 
@@ -277,7 +277,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
                          TTestSchema::AlterTableTxBody(tableId, 2, spec),
                          NOlap::TSnapshot(++planStep, ++txId));
     if (spec.HasTiers()) {
-        csControllerGuard->SetTiersSnapshot(runtime, sender, TTestSchema::BuildSnapshot(spec));
+        csControllerGuard->SetTiersSnapshot(sender, TTestSchema::BuildSnapshot(spec));
     }
 
     if (internal) {
@@ -304,7 +304,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
                          NOlap::TSnapshot(++planStep, ++txId));
     UNIT_ASSERT(ok);
     if (spec.HasTiers()) {
-        csControllerGuard->SetTiersSnapshot(runtime, sender, TTestSchema::BuildSnapshot(TTestSchema::TTableSpecials()));
+        csControllerGuard->SetTiersSnapshot(sender, TTestSchema::BuildSnapshot(TTestSchema::TTableSpecials()));
     }
     PlanSchemaTx(runtime, sender, NOlap::TSnapshot(planStep, txId));
 
@@ -567,7 +567,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
             TTestSchema::CreateInitShardTxBody(tableId, testYdbSchema, testYdbPk, specs[0], "/Root/olapStore"),
             NOlap::TSnapshot(++planStep, ++txId));
     if (specs[0].Tiers.size()) {
-        csControllerGuard->SetTiersSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[0]));
+        csControllerGuard->SetTiersSnapshot(sender, TTestSchema::BuildSnapshot(specs[0]));
     }
 
     for (auto& data : blobs) {
@@ -620,7 +620,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
                 NOlap::TSnapshot(++planStep, ++txId));
         }
         if (specs[i].HasTiers() || reboots) {
-            csControllerGuard->SetTiersSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[i]));
+            csControllerGuard->SetTiersSnapshot(sender, TTestSchema::BuildSnapshot(specs[i]));
         }
 
         if (eventLoss) {
@@ -663,7 +663,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
 
         if (tIdxCorrect) {
             specs[i].Tiers[*tIdxCorrect].S3.SetEndpoint(originalEndpoint);
-            csControllerGuard->SetTiersSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[i]));
+            csControllerGuard->SetTiersSnapshot(sender, TTestSchema::BuildSnapshot(specs[i]));
         }
 
 

@@ -138,4 +138,4 @@ bool TController::IsTrivialLinks() const {
     return result;
 }
 
-}
+} // namespace NKikimr::NYDBTest::NColumnShard

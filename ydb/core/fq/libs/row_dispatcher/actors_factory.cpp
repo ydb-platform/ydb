@@ -25,8 +25,7 @@ struct TActorFactory : public IActorFactory {
             driver,
             credentialsProviderFactory
         );
-        NActors::TActorId actorId = NActors::TlsActivationContext->ExecutorThread.RegisterActor(actorPtr.release(), NActors::TMailboxType::HTSwap, Max<ui32>());
-        return actorId;
+        return NActors::TlsActivationContext->ExecutorThread.RegisterActor(actorPtr.release(), NActors::TMailboxType::HTSwap, Max<ui32>());
     }
 };
 

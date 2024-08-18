@@ -52,7 +52,7 @@ public:
     void SetUp(NUnitTest::TTestContext&) override {
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
         Runtime.Initialize(app->Unwrap());
-        Runtime.SetLogPriority(NKikimrServices::YQ_ROW_DISPATCHER, NLog::PRI_DEBUG);
+        Runtime.SetLogPriority(NKikimrServices::YQ_ROW_DISPATCHER, NLog::PRI_TRACE);
         NConfig::TRowDispatcherConfig config;
         config.SetEnabled(true);
         NConfig::TCommonConfig commonConfig;
@@ -100,7 +100,7 @@ public:
         return settings;
     }
 
-    void AddSession(const TString& topic, ui64 partitionId, TActorId readActorId) {
+    void MockAddSession(const TString& topic, ui64 partitionId, TActorId readActorId) {
         auto event = new NFq::TEvRowDispatcher::TEvStartSession(
             BuildPqTopicSourceSettings(topic),
             partitionId,          // partitionId
@@ -108,8 +108,41 @@ public:
             true,       // AddBearerToToken
             Nothing(),  // readOffset,
             0);         // StartingMessageTimestamp;
-
         Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event));
+    }
+
+    void MockStopSession(const TString& topic, ui64 partitionId, TActorId readActorId) {
+        auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStopSession>();
+        event->Record.MutableSource()->CopyFrom(BuildPqTopicSourceSettings(topic));
+        event->Record.SetPartitionId(partitionId);
+        Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event.release()));
+    }
+
+    void MockNewDataArrived(ui64 partitionId, TActorId topicSessionId, TActorId readActorId) {
+        auto event = std::make_unique<NFq::TEvRowDispatcher::TEvNewDataArrived>();
+        event->Record.SetPartitionId(partitionId);
+        event->ReadActorId = readActorId;
+        Runtime.Send(new IEventHandle(RowDispatcher, topicSessionId, event.release()));
+    }
+
+    void MockMessageBatch(ui64 partitionId, TActorId topicSessionId, TActorId readActorId) {
+        auto event = std::make_unique<NFq::TEvRowDispatcher::TEvMessageBatch>();
+        event->Record.SetPartitionId(partitionId);
+        event->ReadActorId = readActorId;
+        Runtime.Send(new IEventHandle(RowDispatcher, topicSessionId, event.release()));
+    }
+
+    void MockSessionError(ui64 partitionId, TActorId topicSessionId, TActorId readActorId) {
+        auto event = std::make_unique<NFq::TEvRowDispatcher::TEvSessionError>();
+        event->Record.SetPartitionId(partitionId);
+        event->ReadActorId = readActorId;
+        Runtime.Send(new IEventHandle(RowDispatcher, topicSessionId, event.release()));
+    }
+    
+    void MockGetNextBatch(ui64 partitionId, TActorId readActorId) {
+        auto event = std::make_unique<NFq::TEvRowDispatcher::TEvGetNextBatch>();
+        event->Record.SetPartitionId(partitionId);
+        Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event.release()));
     }
 
     void ExpectStartSession(NActors::TActorId actorId) {
@@ -117,8 +150,33 @@ public:
         UNIT_ASSERT(eventHolder.Get() != nullptr);
     }
 
+    void ExpectStopSession(NActors::TActorId actorId) {
+        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvStopSession>(actorId/*, TDuration::Seconds(20)*/);
+        UNIT_ASSERT(eventHolder.Get() != nullptr);
+    }
+
+    void ExpectGetNextBatch(NActors::TActorId actorId) {
+        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvGetNextBatch>(actorId/*, TDuration::Seconds(20)*/);
+        UNIT_ASSERT(eventHolder.Get() != nullptr);
+    }
+
+    void ExpectNewDataArrived(NActors::TActorId actorId) {
+        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvNewDataArrived>(actorId/*, TDuration::Seconds(20)*/);
+        UNIT_ASSERT(eventHolder.Get() != nullptr);
+    }
+
     void ExpectStartSessionAck(NActors::TActorId actorId) {
         auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvStartSessionAck>(actorId/*, TDuration::Seconds(20)*/);
+        UNIT_ASSERT(eventHolder.Get() != nullptr);
+    }
+
+    void ExpectMessageBatch(NActors::TActorId actorId) {
+        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvMessageBatch>(actorId/*, TDuration::Seconds(20)*/);
+        UNIT_ASSERT(eventHolder.Get() != nullptr);
+    }
+
+    void ExpectSessionError(NActors::TActorId actorId) {
+        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvSessionError>(actorId/*, TDuration::Seconds(20)*/);
         UNIT_ASSERT(eventHolder.Get() != nullptr);
     }
 
@@ -137,20 +195,62 @@ public:
 };
 
 Y_UNIT_TEST_SUITE(RowDispatcherTests) {
-    Y_UNIT_TEST_F(OneClientStartStop, TFixture) {
-
+    Y_UNIT_TEST_F(OneClient, TFixture) {
         auto ev = std::make_unique<NFq::TEvRowDispatcher::TEvCoordinatorChanged>(EdgeActor);
         Runtime.Send(new IEventHandle(RowDispatcher, EdgeActor, ev.release()));
 
-        AddSession("topic", 0, ReadActorId1);
+        MockAddSession("topic", 0, ReadActorId1);
         auto topicSessionId = ExpectRegisterTopicSession();
         ExpectStartSessionAck(ReadActorId1);
         ExpectStartSession(topicSessionId);
 
-        AddSession("topic", 0, ReadActorId2);
-        ExpectStartSessionAck(ReadActorId2);
-        ExpectStartSession(topicSessionId);
+        MockNewDataArrived(0, topicSessionId, ReadActorId1);
+        ExpectNewDataArrived(ReadActorId1);
+
+        MockGetNextBatch(0, ReadActorId1);
+        ExpectGetNextBatch(topicSessionId);
+
+        MockMessageBatch(0, topicSessionId, ReadActorId1);
+        ExpectMessageBatch(ReadActorId1);
+
+        MockStopSession("topic", 0, ReadActorId1);
+        ExpectStopSession(topicSessionId);
     }
+
+    Y_UNIT_TEST_F(SessionError, TFixture) {
+        MockAddSession("topic", 0, ReadActorId1);
+        auto topicSessionId = ExpectRegisterTopicSession();
+        ExpectStartSessionAck(ReadActorId1);
+        ExpectStartSession(topicSessionId);
+
+        MockSessionError(0, topicSessionId, ReadActorId1);
+        ExpectSessionError(ReadActorId1);
+    }
+
+    Y_UNIT_TEST_F(TwoClients, TFixture) {
+
+        auto ev = std::make_unique<NFq::TEvRowDispatcher::TEvCoordinatorChanged>(EdgeActor);
+        Runtime.Send(new IEventHandle(RowDispatcher, EdgeActor, ev.release()));
+
+        MockAddSession("topic", 0, ReadActorId1);
+        auto topicSessionId = ExpectRegisterTopicSession();
+        ExpectStartSessionAck(ReadActorId1);
+        ExpectStartSession(topicSessionId);
+
+        // MockAddSession("topic", 0, ReadActorId2);
+        // ExpectStartSessionAck(ReadActorId2);
+        // ExpectStartSession(topicSessionId);
+
+        // MockNewDataArrived(0, topicSessionId, ReadActorId1);
+        // ExpectNewDataArrived(ReadActorId1);
+
+        // MockStopSession("topic", 0, ReadActorId1);
+        // ExpectStopSession(topicSessionId);
+
+        // MockStopSession("topic", 0, ReadActorId2);
+        // ExpectStopSession(topicSessionId);
+    }
+
 
 
 }

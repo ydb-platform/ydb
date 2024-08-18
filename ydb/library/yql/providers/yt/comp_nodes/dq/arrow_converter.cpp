@@ -401,7 +401,7 @@ public:
             }
         }
 
-        if constexpr (std::is_integral_v<T>) {
+        if constexpr (std::is_integral_v<T> && !std::is_same_v<T, NYql::NDecimal::TInt128>) {
             if constexpr (std::is_signed_v<T>) {
                 YQL_ENSURE(buf.Current() == Int64Marker);
                 buf.Next();
@@ -463,7 +463,7 @@ struct TYsonBlockReaderTraits {
     template <bool Nullable>
     using TTuple = TYsonTupleBlockReader<Nullable, Native>;
     // TODO: Implement reader for decimals
-    template <typename T, bool Nullable, typename = std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>>>
+    template <typename T, bool Nullable, typename = std::enable_if_t<!std::is_same_v<T, NYql::NDecimal::TInt128> && (std::is_integral_v<T> || std::is_floating_point_v<T>)>>
     using TFixedSize = TYsonFixedSizeBlockReader<T, Nullable, Native>;
     template <typename TStringType, bool Nullable, NKikimr::NUdf::EDataSlot OriginalT>
     using TStrings = TYsonStringBlockReader<TStringType, Nullable, OriginalT, Native>;

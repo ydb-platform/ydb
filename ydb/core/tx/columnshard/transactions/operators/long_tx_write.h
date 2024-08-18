@@ -16,6 +16,10 @@ namespace NKikimr::NColumnShard {
             return "LONG_TX_WRITE";
         }
 
+        bool TxWithDeadline() const override {
+            return true;
+        }
+
         virtual TProposeResult DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override;
         virtual void DoStartProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
 

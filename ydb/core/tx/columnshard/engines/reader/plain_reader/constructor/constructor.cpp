@@ -1,11 +1,13 @@
 #include "constructor.h"
-#include "resolver.h"
 #include "read_metadata.h"
+#include "resolver.h"
+
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
-NKikimr::TConclusionStatus TIndexScannerConstructor::ParseProgram(const TVersionedIndex* vIndex, const NKikimrTxDataShard::TEvKqpScan& proto, TReadDescription& read) const {
+NKikimr::TConclusionStatus TIndexScannerConstructor::ParseProgram(
+    const TVersionedIndex* vIndex, const NKikimrTxDataShard::TEvKqpScan& proto, TReadDescription& read) const {
     AFL_VERIFY(vIndex);
     auto& indexInfo = vIndex->GetSchema(Snapshot)->GetIndexInfo();
     TIndexColumnResolver columnResolver(indexInfo);
@@ -17,7 +19,8 @@ std::vector<TNameTypeInfo> TIndexScannerConstructor::GetPrimaryKeyScheme(const N
     return indexInfo.GetPrimaryKeyColumns();
 }
 
-NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructor::DoBuildReadMetadata(const NColumnShard::TColumnShard* self, const TReadDescription& read) const {
+NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructor::DoBuildReadMetadata(
+    const NColumnShard::TColumnShard* self, const TReadDescription& read) const {
     auto& insertTable = self->InsertTable;
     auto& index = self->TablesManager.GetPrimaryIndex();
     if (!insertTable || !index) {
@@ -25,7 +28,8 @@ NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructo
     }
 
     if (read.GetSnapshot().GetPlanInstant() < self->GetMinReadSnapshot().GetPlanInstant()) {
-        return TConclusionStatus::Fail(TStringBuilder() << "Snapshot too old: " << read.GetSnapshot());
+        return TConclusionStatus::Fail(TStringBuilder() << "Snapshot too old: " << read.GetSnapshot() << ". CS min read snapshot: "
+                                                        << self->GetMinReadSnapshot() << ". now: " << TInstant::Now());
     }
 
     TDataStorageAccessor dataAccessor(insertTable, index);
@@ -39,4 +43,4 @@ NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructo
     return static_pointer_cast<TReadMetadataBase>(readMetadata);
 }
 
-}
+}   // namespace NKikimr::NOlap::NReader::NPlain

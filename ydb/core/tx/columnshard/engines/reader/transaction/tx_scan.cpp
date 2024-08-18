@@ -114,69 +114,23 @@ static bool FillPredicatesFromRange(TReadDescription& read, const ::NKikimrTx::T
     return true;
 }
 
+void TTxScan::SendError(const TString& problem, const TString& details) const {
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan failed")("reason", "no metadata")("error", ErrorDescription);
+    const auto& record = Ev->Get()->Record;
+    const TString table = request.GetTablePath();
+    const ui32 scanGen = request.GetGeneration();
+    const auto scanComputeActor = Ev->Sender;
+
+    auto ev = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>(scanGen, Self->TabletID());
+    ev->Record.SetStatus(Ydb::StatusIds::BAD_REQUEST);
+    auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+        TStringBuilder() << "Table " << table << " (shard " << Self->TabletID() << ") scan failed, reason: " << problem << "/" << details);
+    NYql::IssueToMessage(issue, ev->Record.MutableIssues()->Add());
+
+    ctx.Send(scanComputeActor, ev.Release());
+}
+
 bool TTxScan::Execute(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) {
-    TMemoryProfileGuard mpg("TTxScan::Execute");
-    auto& record = Ev->Get()->Record;
-    TSnapshot snapshot(record.GetSnapshot().GetStep(), record.GetSnapshot().GetTxId());
-    const auto scanId = record.GetScanId();
-    const ui64 txId = record.GetTxId();
-
-    LOG_S_DEBUG("TTxScan prepare txId: " << txId << " scanId: " << scanId << " at tablet " << Self->TabletID());
-
-    TReadDescription read(snapshot, record.GetReverse());
-    read.TxId = txId;
-    read.PathId = record.GetLocalPathId();
-    read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);
-    read.TableName = record.GetTablePath();
-    bool isIndex = false;
-    std::unique_ptr<IScannerConstructor> scannerConstructor = [&]() {
-        const ui64 itemsLimit = record.HasItemsLimit() ? record.GetItemsLimit() : 0;
-        auto sysViewPolicy = NSysView::NAbstract::ISysViewPolicy::BuildByPath(read.TableName);
-        isIndex = !sysViewPolicy;
-        if (!sysViewPolicy) {
-            return std::unique_ptr<IScannerConstructor>(new NPlain::TIndexScannerConstructor(snapshot, itemsLimit, record.GetReverse()));
-        } else {
-            return sysViewPolicy->CreateConstructor(snapshot, itemsLimit, record.GetReverse());
-        }
-    }();
-    read.ColumnIds.assign(record.GetColumnTags().begin(), record.GetColumnTags().end());
-    read.StatsMode = record.GetStatsMode();
-
-    const TVersionedIndex* vIndex = Self->GetIndexOptional() ? &Self->GetIndexOptional()->GetVersionedIndex() : nullptr;
-    auto parseResult = scannerConstructor->ParseProgram(vIndex, record, read);
-    if (!parseResult) {
-        ErrorDescription = parseResult.GetErrorMessage();
-        return true;
-    }
-
-    if (!record.RangesSize()) {
-        auto range = scannerConstructor->BuildReadMetadata(Self, read);
-        if (range.IsSuccess()) {
-            ReadMetadataRange = range.DetachResult();
-        } else {
-            ErrorDescription = range.GetErrorMessage();
-        }
-        return true;
-    }
-
-    auto ydbKey = scannerConstructor->GetPrimaryKeyScheme(Self);
-    auto* indexInfo = (vIndex && isIndex) ? &vIndex->GetSchema(snapshot)->GetIndexInfo() : nullptr;
-    for (auto& range : record.GetRanges()) {
-        if (!FillPredicatesFromRange(read, range, ydbKey, Self->TabletID(), indexInfo, ErrorDescription)) {
-            ReadMetadataRange = nullptr;
-            return true;
-        }
-    }
-    {
-        auto newRange = scannerConstructor->BuildReadMetadata(Self, read);
-        if (!newRange) {
-            ErrorDescription = newRange.GetErrorMessage();
-            ReadMetadataRange = nullptr;
-            return true;
-        }
-        ReadMetadataRange = newRange.DetachResult();
-    }
-    AFL_VERIFY(ReadMetadataRange);
     return true;
 }
 
@@ -184,12 +138,12 @@ void TTxScan::Complete(const TActorContext& ctx) {
     TMemoryProfileGuard mpg("TTxScan::Complete");
     auto& request = Ev->Get()->Record;
     auto scanComputeActor = Ev->Sender;
-    const auto& snapshot = request.GetSnapshot();
+    const TSnapshot snapshot(request.GetSnapshot().GetStep(), request.GetSnapshot().GetTxId());
     const auto scanId = request.GetScanId();
     const ui64 txId = request.GetTxId();
     const ui32 scanGen = request.GetGeneration();
-    TString table = request.GetTablePath();
-    auto dataFormat = request.GetDataFormat();
+    const TString table = request.GetTablePath();
+    const auto dataFormat = request.GetDataFormat();
     const TDuration timeout = TDuration::MilliSeconds(request.GetTimeoutMs());
     if (scanGen > 1) {
         Self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_SCAN_RESTARTED);
@@ -197,40 +151,70 @@ void TTxScan::Complete(const TActorContext& ctx) {
     const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()
         ("tx_id", txId)("scan_id", scanId)("gen", scanGen)("table", table)("snapshot", snapshot)("tablet", Self->TabletID())("timeout", timeout);
 
-    if (!ReadMetadataRange) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan failed")("reason", "no metadata")("error", ErrorDescription);
+    TReadMetadataPtr readMetadataRange;
+    {
 
-        auto ev = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>(scanGen, Self->TabletID());
-        ev->Record.SetStatus(Ydb::StatusIds::BAD_REQUEST);
-        auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
-            << "Table " << table << " (shard " << Self->TabletID() << ") scan failed, reason: " << ErrorDescription ? ErrorDescription : "no metadata ranges");
-        NYql::IssueToMessage(issue, ev->Record.MutableIssues()->Add());
+        LOG_S_DEBUG("TTxScan prepare txId: " << txId << " scanId: " << scanId << " at tablet " << Self->TabletID());
 
-        ctx.Send(scanComputeActor, ev.Release());
-        return;
+        TReadDescription read(snapshot, record.GetReverse());
+        read.TxId = txId;
+        read.PathId = record.GetLocalPathId();
+        read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);
+        read.TableName = table;
+        bool isIndex = false;
+        std::unique_ptr<IScannerConstructor> scannerConstructor = [&]() {
+            const ui64 itemsLimit = record.HasItemsLimit() ? record.GetItemsLimit() : 0;
+            auto sysViewPolicy = NSysView::NAbstract::ISysViewPolicy::BuildByPath(read.TableName);
+            isIndex = !sysViewPolicy;
+            if (!sysViewPolicy) {
+                return std::unique_ptr<IScannerConstructor>(new NPlain::TIndexScannerConstructor(snapshot, itemsLimit, record.GetReverse()));
+            } else {
+                return sysViewPolicy->CreateConstructor(snapshot, itemsLimit, record.GetReverse());
+            }
+        }();
+        read.ColumnIds.assign(record.GetColumnTags().begin(), record.GetColumnTags().end());
+        read.StatsMode = record.GetStatsMode();
+
+        const TVersionedIndex* vIndex = Self->GetIndexOptional() ? &Self->GetIndexOptional()->GetVersionedIndex() : nullptr;
+        auto parseResult = scannerConstructor->ParseProgram(vIndex, record, read);
+        if (!parseResult) {
+            return SendError("cannot parse program", parseResult.GetErrorMessage());
+        }
+
+        if (!record.RangesSize()) {
+            auto newRange = scannerConstructor->BuildReadMetadata(Self, read);
+            if (newRange.IsSuccess()) {
+                readMetadataRange = TValidator::CheckNotNull(newRange.DetachResult());
+            } else {
+                return SendError("cannot build metadata withno ranges", newRange.GetErrorMessage());
+            }
+        } else {
+            auto ydbKey = scannerConstructor->GetPrimaryKeyScheme(Self);
+            auto* indexInfo = (vIndex && isIndex) ? &vIndex->GetSchema(snapshot)->GetIndexInfo() : nullptr;
+            for (auto& range : record.GetRanges()) {
+                if (!FillPredicatesFromRange(read, range, ydbKey, Self->TabletID(), indexInfo, ErrorDescription)) {
+                    return SendError("cannot fill predicates", ErrorDescription);
+                }
+            }
+            auto newRange = scannerConstructor->BuildReadMetadata(Self, read);
+            if (!newRange) {
+                return SendError("cannot build metadata", newRange.GetErrorMessage());
+            }
+            readMetadataRange = TValidator::CheckNotNull(newRange.DetachResult());
+        }
     }
+    AFL_VERIFY(readMetadataRange);
+
     TStringBuilder detailedInfo;
     if (IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_TRACE, NKikimrServices::TX_COLUMNSHARD)) {
-        detailedInfo << " read metadata: (" << *ReadMetadataRange << ")" << " req: " << request;
+        detailedInfo << " read metadata: (" << *readMetadataRange << ")" << " req: " << request;
     }
 
     const TVersionedIndex* index = nullptr;
     if (Self->HasIndex()) {
         index = &Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex();
     }
-    const TConclusion<ui64> requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(ReadMetadataRange, index);
-    if (!requestCookie) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan failed")("reason", requestCookie.GetErrorMessage())("trace_details", detailedInfo);
-        auto ev = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>(scanGen, Self->TabletID());
-
-        ev->Record.SetStatus(Ydb::StatusIds::INTERNAL_ERROR);
-        auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE, TStringBuilder()
-            << "Table " << table << " (shard " << Self->TabletID() << ") scan failed, reason: " << requestCookie.GetErrorMessage());
-        NYql::IssueToMessage(issue, ev->Record.MutableIssues()->Add());
-        Self->Counters.GetScanCounters().OnScanFinished(NColumnShard::TScanCounters::EStatusFinish::CannotAddInFlight, TDuration::Zero());
-        ctx.Send(scanComputeActor, ev.Release());
-        return;
-    }
+    const ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(readMetadataRange, index);
 
     Self->Counters.GetTabletCounters()->OnScanStarted(Self->InFlightReadsTracker.GetSelectStatsDelta());
 
@@ -238,7 +222,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     AFL_VERIFY(shardingPolicy.DeserializeFromProto(request.GetComputeShardingPolicy()));
 
     auto scanActor = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
-        shardingPolicy, scanId, txId, scanGen, *requestCookie, Self->TabletID(), timeout, ReadMetadataRange, dataFormat, Self->Counters.GetScanCounters()));
+        shardingPolicy, scanId, txId, scanGen, requestCookie, Self->TabletID(), timeout, readMetadataRange, dataFormat, Self->Counters.GetScanCounters()));
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan started")("actor_id", scanActor)("trace_detailed", detailedInfo);
 }

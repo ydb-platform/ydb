@@ -7,6 +7,8 @@ namespace NKikimr::NOlap::NReader {
 class TTxScan: public NTabletFlatExecutor::TTransactionBase<NColumnShard::TColumnShard> {
 private:
     using TBase = NTabletFlatExecutor::TTransactionBase<NColumnShard::TColumnShard>;
+    void SendError(const TString& problem, const TString& details) const;
+
 public:
     using TReadMetadataPtr = TReadMetadataBase::TConstPtr;
 
@@ -17,12 +19,12 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return NColumnShard::TXTYPE_START_SCAN; }
+    TTxType GetTxType() const override {
+        return NColumnShard::TXTYPE_START_SCAN;
+    }
 
 private:
-    TString ErrorDescription;
     TEvColumnShard::TEvScan::TPtr Ev;
-    TReadMetadataPtr ReadMetadataRange;
 };
 
-}
+}   // namespace NKikimr::NOlap::NReader

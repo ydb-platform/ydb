@@ -61,8 +61,6 @@ ELSEIF (OS_WINDOWS)
         Shlwapi.lib
         Winmm.lib
     )
-
-    # DISABLE(MSVC_INLINE_OPTIMIZED)
 ENDIF()
 
 SRCS(

@@ -36,9 +36,6 @@ def get_gateways_config(http_files, yql_http_file_server, force_blocks=False, is
             deactivate_dq = config_message.Dq.DefaultSettings.add()
             deactivate_dq.Name = "AnalyzeQuery"
             deactivate_dq.Value = "0"
-        enabled_spilling_nodes = config_message.Dq.DefaultSettings.add()
-        enabled_spilling_nodes.Name = "EnableSpillingNodes"
-        enabled_spilling_nodes.Value = "All"
 
         config = text_format.MessageToString(config_message)
 

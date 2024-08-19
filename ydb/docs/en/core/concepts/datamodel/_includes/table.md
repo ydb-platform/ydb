@@ -71,7 +71,7 @@ When choosing the minimum number of partitions, it makes sense to consider that 
 
 Partition size threshold in MB from `10 MB` to `2000 MB`. If exceeded, a shard may split. Takes effect when the [`AUTO_PARTITIONING_BY_SIZE`](#auto_partitioning_by_size) mode is enabled.
 
-The system may split a shard at its discretion. Or it might not split at all, even if the specific size is requested.
+This value is a recommendation for partitioning. There may be situations where partitioning will not occur, even if an explicit size is specified.
 
 #### AUTO_PARTITIONING_MIN_PARTITIONS_COUNT {#auto_partitioning_min_partitions_count}
 

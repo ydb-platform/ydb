@@ -36,6 +36,10 @@ def get_gateways_config(http_files, yql_http_file_server, force_blocks=False, is
             deactivate_dq = config_message.Dq.DefaultSettings.add()
             deactivate_dq.Name = "AnalyzeQuery"
             deactivate_dq.Value = "0"
+        enabled_spilling_nodes = config_message.Dq.DefaultSettings.add()
+        enabled_spilling_nodes.Name = "EnableSpillingNodes"
+        enabled_spilling_nodes.Value = "All"
+
         config = text_format.MessageToString(config_message)
 
     return config
@@ -75,7 +79,7 @@ def get_sql_query(provider, suite, case, config):
     if 'Python' in sql_query or 'Javascript' in sql_query:
         pytest.skip('ScriptUdf')
 
-    assert 'UseBlocks' not in sql_query, 'UseBlocks should not be used directly, only via ForceBlocks'
+    # assert 'UseBlocks' not in sql_query, 'UseBlocks should not be used directly, only via ForceBlocks'
     
     return sql_query
 

@@ -22,7 +22,7 @@ select  *
    group by w_warehouse_name, i_item_id) x
  where (case when inv_before > 0
              then inv_after / inv_before
-             else null::numeric
+             else null
              end) between (2.0/3.0)::numeric and (3.0/2.0)::numeric
  order by w_warehouse_name
          ,i_item_id

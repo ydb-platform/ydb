@@ -13,7 +13,7 @@ WITH (
 
 Here, `key` is the name of the parameter and `value` is its value.
 
-The list of allowable parameter names and their values is provided on the table description page {{ backend_name }}({{ concept_table }}).
+The list of allowable parameter names and their values is provided on the table description page [{{ backend_name }}]({{ concept_table }}).
 
 For example, such a query will create a string table with automatic partitioning enabled based on partition size and a preferred size of each partition being 512 megabytes:
 ```sql

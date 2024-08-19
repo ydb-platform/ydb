@@ -184,7 +184,7 @@ struct TRetryStuff {
         const TString& requestId,
         const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy
     ) : Gateway(std::move(gateway))
-      , Url(UrlEscapeRet(url, true))
+      , Url(NS3Util::UrlEscapeRet(url))
       , Headers(headers)
       , Offset(0U)
       , SizeLimit(sizeLimit)

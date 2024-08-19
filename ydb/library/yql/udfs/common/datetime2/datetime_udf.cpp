@@ -562,10 +562,10 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         static void Split(TBlockItem arg, TTMStorage& storage, const IValueBuilder& valueBuilder);
 
         template<typename TSink>
-        static void Process(TBlockItem arg, const IValueBuilder& valueBuilder, const TSink& sink) {
+        static void Process(const IValueBuilder* valueBuilder, TBlockItem arg, const TSink& sink) {
             try {
                 TBlockItem res {0};
-                Split(arg, Reference(res), valueBuilder);
+                Split(arg, Reference(res), *valueBuilder);
                 sink(res);
             } catch (const std::exception& e) {
                 UdfTerminate((TStringBuilder() << e.what()).data());
@@ -785,9 +785,9 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         static TBlockItem Make(TTMStorage& storage, const IValueBuilder& valueBuilder);
 
         template<typename TSink>
-        static void Process(TBlockItem item, const IValueBuilder& valueBuilder, const TSink& sink) {
+        static void Process(const IValueBuilder* valueBuilder, TBlockItem item, const TSink& sink) {
             auto& storage = Reference(item);
-            sink(TBlockItem(Make(storage, valueBuilder)));
+            sink(TBlockItem(Make(storage, *valueBuilder)));
         }
     };
 
@@ -898,54 +898,78 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
     GET_METHOD(DayOfYear, ui16)
     GET_METHOD(Month, ui8)
     
-    template<typename TValue>
-    TValue GetMonthNameValue(size_t idx) {
-        static const std::array<TValue, 12U> monthNames = {{
-            TValue::Embedded(TStringRef::Of("January")),
-            TValue::Embedded(TStringRef::Of("February")),
-            TValue::Embedded(TStringRef::Of("March")),
-            TValue::Embedded(TStringRef::Of("April")),
-            TValue::Embedded(TStringRef::Of("May")),
-            TValue::Embedded(TStringRef::Of("June")),
-            TValue::Embedded(TStringRef::Of("July")),
-            TValue::Embedded(TStringRef::Of("August")),
-            TValue::Embedded(TStringRef::Of("September")),
-            TValue::Embedded(TStringRef::Of("October")),
-            TValue::Embedded(TStringRef::Of("November")),
-            TValue::Embedded(TStringRef::Of("December"))
-        }};
-        return monthNames.at(idx);
-    }
+    // template<typename TValue>
+    // TValue GetMonthNameValue(size_t idx) {
+    //     static const std::array<TValue, 12U> monthNames = {{
+    //         TValue::Embedded(TStringRef::Of("January")),
+    //         TValue::Embedded(TStringRef::Of("February")),
+    //         TValue::Embedded(TStringRef::Of("March")),
+    //         TValue::Embedded(TStringRef::Of("April")),
+    //         TValue::Embedded(TStringRef::Of("May")),
+    //         TValue::Embedded(TStringRef::Of("June")),
+    //         TValue::Embedded(TStringRef::Of("July")),
+    //         TValue::Embedded(TStringRef::Of("August")),
+    //         TValue::Embedded(TStringRef::Of("September")),
+    //         TValue::Embedded(TStringRef::Of("October")),
+    //         TValue::Embedded(TStringRef::Of("November")),
+    //         TValue::Embedded(TStringRef::Of("December"))
+    //     }};
+    //     return monthNames.at(idx);
+    // }
 
-    struct TGetMonthNameKernelExec : TUnaryKernelExec<TGetMonthNameKernelExec, TReaderTraits::TResource<true>, TStringArrayBuilder<arrow::StringType, false>> {
-        template<typename TSink>
-        static void Process(TBlockItem item, const IValueBuilder& valueBuilder, const TSink& sink) {
-            Y_UNUSED(valueBuilder);
-            sink(GetMonthNameValue<TBlockItem>(GetMonth(item) - 1U));
-        }
-    };
+    // struct TGetMonthNameKernelExec : TUnaryKernelExec<TGetMonthNameKernelExec, TReaderTraits::TResource<true>, TStringArrayBuilder<arrow::StringType, false>> {
+    //     template<typename TSink>
+    //     static void Process(const IValueBuilder* valueBuilder, TBlockItem item, const TSink& sink) {
+    //         Y_UNUSED(valueBuilder);
+    //         sink(GetMonthNameValue<TBlockItem>(GetMonth(item) - 1U));
+    //     }
+    // };
 
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(TGetMonthName, char*(TAutoMap<TResource<TMResourceName>>)) {
+    // BEGIN_SIMPLE_STRICT_ARROW_UDF(TGetMonthName, char*(TAutoMap<TResource<TMResourceName>>)) {
+    //     Y_UNUSED(valueBuilder);
+    //     return GetMonthNameValue<TUnboxedValue>(GetMonth(*args) - 1U);
+    // }
+    // END_SIMPLE_ARROW_UDF_WITH_NULL_HANDLING(TGetMonthName, TGetMonthNameKernelExec::Do, arrow::compute::NullHandling::INTERSECTION);
+
+    SIMPLE_STRICT_UDF(TGetMonthName, char*(TAutoMap<TResource<TMResourceName>>)) {
         Y_UNUSED(valueBuilder);
-        return GetMonthNameValue<TUnboxedValue>(GetMonth(*args) - 1U);
+        static const std::array<TUnboxedValue, 12U> monthNames = {{
+            TUnboxedValuePod::Embedded(TStringRef::Of("January")),
+            TUnboxedValuePod::Embedded(TStringRef::Of("February")),
+            TUnboxedValuePod::Embedded(TStringRef::Of("March")),
+            TUnboxedValuePod::Embedded(TStringRef::Of("April")),
+            TUnboxedValuePod::Embedded(TStringRef::Of("May")),
+            TUnboxedValuePod::Embedded(TStringRef::Of("June")),
+            TUnboxedValuePod::Embedded(TStringRef::Of("July")),
+            TUnboxedValuePod::Embedded(TStringRef::Of("August")),
+            TUnboxedValuePod::Embedded(TStringRef::Of("September")),
+            TUnboxedValuePod::Embedded(TStringRef::Of("October")),
+            TUnboxedValuePod::Embedded(TStringRef::Of("November")),
+            TUnboxedValuePod::Embedded(TStringRef::Of("December"))
+        }};
+        return monthNames.at(GetMonth(*args) - 1U);
     }
-    END_SIMPLE_ARROW_UDF_WITH_NULL_HANDLING(TGetMonthName, TGetMonthNameKernelExec::Do, arrow::compute::NullHandling::INTERSECTION);
 
     GET_METHOD(WeekOfYear, ui8)
     GET_METHOD(WeekOfYearIso8601, ui8)
 
-    struct TGetDayOfMonthKernelExec : TUnaryKernelExec<TGetMonthNameKernelExec, TReaderTraits::TResource<true>, TFixedSizeArrayBuilder<ui8, false>> {
-        template<typename TSink>
-        static void Process(TBlockItem item, const TSink& sink) {
-            sink(GetDay(item));
-        }
-    };
+    // struct TGetDayOfMonthKernelExec : TUnaryKernelExec<TGetMonthNameKernelExec, TReaderTraits::TResource<false>, TFixedSizeArrayBuilder<ui8, false>> {
+    //     template<typename TSink>
+    //     static void Process(TBlockItem item, const TSink& sink) {
+    //         sink(GetDay(item));
+    //     }
+    // };
 
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(TGetDayOfMonth, ui8(TAutoMap<TResource<TMResourceName>>)) {
+    // BEGIN_SIMPLE_STRICT_ARROW_UDF(TGetDayOfMonth, ui8(TAutoMap<TResource<TMResourceName>>)) {
+    //     Y_UNUSED(valueBuilder);
+    //     return TUnboxedValuePod(GetDay(args[0]));
+    // }
+    // END_SIMPLE_ARROW_UDF_WITH_NULL_HANDLING(TGetDayOfMonth, TGetDayOfMonthKernelExec::Do, arrow::compute::NullHandling::INTERSECTION);
+    
+    SIMPLE_STRICT_UDF(TGetDayOfMonth, ui8(TAutoMap<TResource<TMResourceName>>)) {
         Y_UNUSED(valueBuilder);
         return TUnboxedValuePod(GetDay(args[0]));
     }
-    END_SIMPLE_ARROW_UDF_WITH_NULL_HANDLING(TGetDayOfMonth, TGetDayOfMonthKernelExec::Do, arrow::compute::NullHandling::INTERSECTION);
 
     GET_METHOD(DayOfWeek, ui8)
 
@@ -963,31 +987,35 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         return dayNames.at(idx);
     }
 
-    struct TGetDayOfWeekNameKernelExec : TUnaryKernelExec<TGetDayOfWeekNameKernelExec, TReaderTraits::TResource<true>, TStringArrayBuilder<arrow::StringType, false>> {
-        template<typename TSink>
-        static void Process(TBlockItem item, const IValueBuilder& valueBuilder, const TSink& sink) {
-            Y_UNUSED(valueBuilder);
-            sink(GetDayNameValue<TBlockItem>(GetDayOfWeek(item) - 1U));
-        }
-    };
-
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(TGetDayOfWeekName, char*(TAutoMap<TResource<TMResourceName>>)) {
+    SIMPLE_STRICT_UDF(TGetDayOfWeekName, char*(TAutoMap<TResource<TMResourceName>>)) {
         Y_UNUSED(valueBuilder);
         return GetDayNameValue<TUnboxedValuePod>(GetDayOfWeek(*args) - 1U);
     }
-    END_SIMPLE_ARROW_UDF_WITH_NULL_HANDLING(TGetDayOfWeekName, TGetDayOfWeekNameKernelExec::Do, arrow::compute::NullHandling::INTERSECTION);
+
+    // struct TGetDayOfWeekNameKernelExec : TUnaryKernelExec<TGetDayOfWeekNameKernelExec, TReaderTraits::TResource<true>, TStringArrayBuilder<arrow::StringType, false>> {
+    //     template<typename TSink>
+    //     static void Process(const IValueBuilder* valueBuilder, TBlockItem item, const TSink& sink) {
+    //         Y_UNUSED(valueBuilder);
+    //         sink(GetDayNameValue<TBlockItem>(GetDayOfWeek(item) - 1U));
+    //     }
+    // };
+
+    // BEGIN_SIMPLE_STRICT_ARROW_UDF(TGetDayOfWeekName, char*(TAutoMap<TResource<TMResourceName>>)) {
+    //     Y_UNUSED(valueBuilder);
+    //     return GetDayNameValue<TUnboxedValuePod>(GetDayOfWeek(*args) - 1U);
+    // }
+    // END_SIMPLE_ARROW_UDF_WITH_NULL_HANDLING(TGetDayOfWeekName, TGetDayOfWeekNameKernelExec::Do, arrow::compute::NullHandling::INTERSECTION);
 
     GET_METHOD(TimezoneId, ui16)
 
-    struct TTGetTimezoneNameKernelExec : TUnaryKernelExec<TTGetTimezoneNameKernelExec, TReaderTraits::TResource<true>, TStringArrayBuilder<arrow::StringType, true>> {
+    struct TTGetTimezoneNameKernelExec : TUnaryKernelExec<TTGetTimezoneNameKernelExec, TReaderTraits::TResource<false>, TStringArrayBuilder<arrow::BinaryType, false>> {
         template<typename TSink>
-        static void Process(TBlockItem item, const IValueBuilder& valueBuilder, const TSink& sink) {
+        static void Process(const IValueBuilder* valueBuilder, TBlockItem item, const TSink& sink) {
             auto timezoneId = GetTimezoneId(item);
             if (timezoneId >= NUdf::GetTimezones().size()) {
                 sink(TBlockItem{});
             } else {
-                auto str = valueBuilder.NewString(NUdf::GetTimezones()[timezoneId]);
-                sink(str);
+                sink(TBlockItem{NUdf::GetTimezones()[timezoneId]});
             }
         }
     };
@@ -1243,8 +1271,8 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
     template<auto Core>
     struct TStartOfKernelExec : TUnaryKernelExec<TStartOfKernelExec<Core>, TResourceBlockReader<false>, TResourceArrayBuilder<true>> {
         template<typename TSink>
-        static void Process(TBlockItem item, const IValueBuilder& valueBuilder, const TSink& sink) {
-            if (auto res = Core(Reference(item), valueBuilder)) {
+        static void Process(const IValueBuilder* valueBuilder, TBlockItem item, const TSink& sink) {
+            if (auto res = Core(Reference(item), *valueBuilder)) {
                 Reference(item) = res.GetRef();
                 sink(item);
             } else {
@@ -1415,7 +1443,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
 
     struct TStartOfBinaryKernelExec : TBinaryKernelExec<TStartOfBinaryKernelExec> {
         template<typename TSink>
-        static void Process(TBlockItem arg1, TBlockItem arg2, const IValueBuilder& valueBuilder, const TSink& sink) {
+        static void Process(const IValueBuilder* valueBuilder, TBlockItem arg1, TBlockItem arg2, const TSink& sink) {
             auto& storage = Reference(arg1);
             ui64 interval = std::abs(arg2.Get<i64>());
             if (interval == 0) {
@@ -1423,7 +1451,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
                 return;
             }
 
-            if (auto res = StartOf(storage, interval, valueBuilder)) {
+            if (auto res = StartOf(storage, interval, *valueBuilder)) {
                 storage = res.GetRef();
                 sink(arg1);
             } else {
@@ -1448,7 +1476,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
     
     struct TTimeOfDayKernelExec : TUnaryKernelExec<TTimeOfDayKernelExec, TReaderTraits::TResource<false>, TFixedSizeArrayBuilder<TDataType<TInterval>::TLayout, false>> {
         template<typename TSink>
-        static void Process(TBlockItem item, const IValueBuilder& valueBuilder, const TSink& sink) {
+        static void Process(const IValueBuilder* valueBuilder, TBlockItem item, const TSink& sink) {
             Y_UNUSED(valueBuilder);
             auto& storage = Reference(item);
             sink(TBlockItem{(TDataType<TInterval>::TLayout)storage.ToTimeOfDay()});
@@ -1469,8 +1497,8 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
     template<auto Core>
     struct TAddKernelExec : TBinaryKernelExec<TAddKernelExec<Core>> {
         template<typename TSink>
-        static void Process(TBlockItem date, TBlockItem arg, const IValueBuilder& valueBuilder, const TSink& sink) {
-            sink(Core(date, arg.Get<i32>(), valueBuilder.GetDateBuilder()));
+        static void Process(const IValueBuilder* valueBuilder, TBlockItem date, TBlockItem arg, const TSink& sink) {
+            sink(Core(date, arg.Get<i32>(), valueBuilder->GetDateBuilder()));
         }
     };
     

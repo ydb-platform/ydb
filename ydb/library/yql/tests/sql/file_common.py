@@ -75,7 +75,7 @@ def get_sql_query(provider, suite, case, config):
     if 'Python' in sql_query or 'Javascript' in sql_query:
         pytest.skip('ScriptUdf')
 
-    # assert 'UseBlocks' not in sql_query, 'UseBlocks should not be used directly, only via ForceBlocks'
+    assert 'UseBlocks' not in sql_query, 'UseBlocks should not be used directly, only via ForceBlocks'
     
     return sql_query
 

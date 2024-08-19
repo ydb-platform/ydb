@@ -27,7 +27,6 @@ public:
         , RowType(nullptr)
         , UseBlocks(typesCtx.IsBlockEngineEnabled() && !allowSpilling)
     {
-        std::cerr << "MISHA ENABLE SPILLING: "<< allowSpilling << std::endl;
         PreMap = Ctx.Builder(node->Pos())
             .Lambda()
                 .Param("premap")

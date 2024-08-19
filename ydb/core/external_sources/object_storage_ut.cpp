@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(ObjectStorageTest) {
 
         {  // location
             NKikimrExternalSources::TGeneral general;
-            general.mutable_attributes()->insert({"location", "}"});
+            general.set_location("}");
             UNIT_ASSERT_EXCEPTION_CONTAINS(source->Pack(schema, general), NExternalSource::TExternalSourceException, "Location '}' contains invalid wildcard:");
         }
 
@@ -45,13 +45,13 @@ Y_UNIT_TEST_SUITE(ObjectStorageTest) {
             NKikimrExternalSources::TGeneral general;
             general.mutable_attributes()->insert({"file_pattern", "}"});
             UNIT_ASSERT_EXCEPTION_CONTAINS(source->Pack(schema, general), NExternalSource::TExternalSourceException, "File pattern '}' contains invalid wildcard:");
-            general.mutable_attributes()->insert({"location", "/test_file"});
+            general.set_location("/test_file");
             UNIT_ASSERT_EXCEPTION_CONTAINS(source->Pack(schema, general), NExternalSource::TExternalSourceException, "Path pattern cannot be used with file_pattern");
         }
 
         {  // partitioned by
             NKikimrExternalSources::TGeneral general;
-            general.mutable_attributes()->insert({"location", "*"});
+            general.set_location("*");
             general.mutable_attributes()->insert({"partitioned_by", "[year]"});
             UNIT_ASSERT_EXCEPTION_CONTAINS(source->Pack(schema, general), NExternalSource::TExternalSourceException, "Location '*' contains wildcards");
         }

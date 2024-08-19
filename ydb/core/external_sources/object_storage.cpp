@@ -46,7 +46,6 @@ struct TObjectStorageExternalSource : public IExternalSource {
 
     virtual TString Pack(const NKikimrExternalSources::TSchema& schema,
                          const NKikimrExternalSources::TGeneral& general) const override {
-        TString location;
         NKikimrExternalSources::TObjectStorage objectStorage;
         for (const auto& [key, value]: general.attributes()) {
             auto lowerKey = to_lower(key);
@@ -63,14 +62,12 @@ struct TObjectStorageExternalSource : public IExternalSource {
                 }
             } else if (IsIn({"file_pattern"sv, "data.interval.unit"sv, "data.datetime.format_name"sv, "data.datetime.format"sv, "data.timestamp.format_name"sv, "data.timestamp.format"sv, "csv_delimiter"sv}, lowerKey)) {
                 objectStorage.mutable_format_setting()->insert({lowerKey, value});
-            } else if (lowerKey == "location") {
-                location = value;
             } else {
                 ythrow TExternalSourceException() << "Unknown attribute " << key;
             }
         }
 
-        if (auto issues = Validate(schema, objectStorage, PathsLimit, location)) {
+        if (auto issues = Validate(schema, objectStorage, PathsLimit, general.location())) {
             ythrow TExternalSourceException() << issues.ToString();
         }
 

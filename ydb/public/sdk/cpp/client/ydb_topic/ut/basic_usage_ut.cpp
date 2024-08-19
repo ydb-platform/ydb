@@ -112,8 +112,11 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                 .RetryPolicy(IRetryPolicy::GetNoRetryPolicy());
             auto writeSession = client.CreateWriteSession(writeSettings);
 
-            auto event = writeSession->GetEvent(true);
-            UNIT_ASSERT(event.Defined() && std::holds_alternative<TSessionClosedEvent>(event.GetRef()));
+            auto event1 = writeSession->GetEvent(true);
+            UNIT_ASSERT(event1.Defined() && std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event1.GetRef()));
+
+            auto event2 = writeSession->GetEvent(true);
+            UNIT_ASSERT(event2.Defined() && std::holds_alternative<TSessionClosedEvent>(event2.GetRef()));
         }
 
         {
@@ -129,8 +132,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                 .RetryPolicy(IRetryPolicy::GetNoRetryPolicy());
             auto writeSession = client.CreateWriteSession(writeSettings);
 
-            auto event = writeSession->GetEvent(true);
-            UNIT_ASSERT(event.Defined() && !std::holds_alternative<TSessionClosedEvent>(event.GetRef()));
+            auto event1 = writeSession->GetEvent(true);
+            UNIT_ASSERT(event1.Defined() && std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event1.GetRef()));
         }
     }
 
@@ -661,23 +664,21 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
     }
 
     Y_UNIT_TEST(ConflictingWrites) {
-
         TTopicSdkTestSetup setup(TEST_CASE_NAME);
 
-        NTopic::TWriteSessionSettings writeSettings;
-        writeSettings.Path(setup.GetTopicPath()).MessageGroupId(TEST_MESSAGE_GROUP_ID);
-        writeSettings.Path(setup.GetTopicPath()).ProducerId(TEST_MESSAGE_GROUP_ID);
-        writeSettings.Codec(NTopic::ECodec::RAW);
-        NTopic::IExecutor::TPtr executor = new NTopic::TSyncExecutor();
-        writeSettings.CompressionExecutor(executor);
-
-        ui64 count = 100u;
-
+        auto executor = new NTopic::TSyncExecutor();
+        auto writeSettings = NTopic::TWriteSessionSettings()
+            .Path(setup.GetTopicPath())
+            .MessageGroupId(TEST_MESSAGE_GROUP_ID)
+            .ProducerId(TEST_MESSAGE_GROUP_ID)
+            .Codec(NTopic::ECodec::RAW)
+            .CompressionExecutor(executor);
         auto client = setup.MakeClient();
         auto session = client.CreateSimpleBlockingWriteSession(writeSettings);
 
         TString messageBase = "message----";
 
+        ui64 count = 100u;
         for (auto i = 0u; i < count; i++) {
             auto res = session->Write(messageBase);
             UNIT_ASSERT(res);

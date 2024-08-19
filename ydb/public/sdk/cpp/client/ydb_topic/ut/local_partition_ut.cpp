@@ -427,36 +427,54 @@ namespace NYdb::NTopic::NTests {
             driverConfig.SetLog(CreateCompositeLogBackend({new TStreamLogBackend(&Cerr), tracingBackend}));
             TDriver driver(driverConfig);
             TTopicClient client(driver);
+
             auto retryPolicy = std::make_shared<TYdbPqTestRetryPolicy>();
-            auto sessionSettings = TWriteSessionSettings()
+            auto gotAck = NThreading::NewPromise();
+            auto gotToken = NThreading::NewPromise();
+            TMaybe<TContinuationToken> token;
+            auto writerSettings = TWriteSessionSettings()
                 .Path(TEST_TOPIC)
                 .MessageGroupId(TEST_MESSAGE_GROUP_ID)
                 .DirectWriteToPartition(true)
                 .RetryPolicy(retryPolicy);
+            writerSettings.EventHandlers_
+                .ReadyToAcceptHandler([&](TWriteSessionEvent::TReadyToAcceptEvent& ev) {
+                    token = std::move(ev.ContinuationToken);
+                    if (!gotToken.HasValue()) {
+                        gotToken.SetValue();
+                    }
+                })
+                .AcksHandler([&](TWriteSessionEvent::TAcksEvent&) {
+                    gotAck.SetValue();
+                });
 
             retryPolicy->Initialize();
             retryPolicy->ExpectBreakDown();
-            auto writeSession = client.CreateSimpleBlockingWriteSession(sessionSettings);
-            UNIT_ASSERT(writeSession->Write("message"));
+            auto writer = client.CreateWriteSession(writerSettings);
+            gotToken.GetFuture().Wait();
+            writer->Write(std::move(*token), "message");
+            gotAck.GetFuture().Wait();
+            auto repaired = NThreading::NewPromise();
+            retryPolicy->WaitForRepair(repaired);
             setup->GetServer().KillTopicPqTablets(setup->GetTopicPath());
-            retryPolicy->WaitForRepairSync();
-            writeSession->Close();
+            repaired.GetFuture().Wait();
+            writer->Close();
 
             auto node0_id = std::to_string(setup->GetRuntime().GetNodeId(0));
             TExpectedTrace expected{
                 "InitRequest !partition_id !partition_with_generation",
                 "InitResponse partition_id=0 session_id",
                 "DescribePartitionRequest partition_id=0",
-                std::format("DescribePartitionResponse partition_id=0 pl_generation=1 pl_node_id={}", node0_id),
-                std::format("PreferredPartitionLocation Generation=1 NodeId={}", node0_id),
+                "DescribePartitionResponse partition_id=0 pl_generation=1 pl_node_id=" + node0_id,
+                "PreferredPartitionLocation Generation=1 NodeId=" + node0_id,
                 "InitRequest !partition_id pwg_partition_id=0 pwg_generation=1",
                 "InitResponse partition_id=0 session_id",
                 "Error status=UNAVAILABLE",
 
-                // The tablet has been killed, find out the partition node the tablet ends up.
+                // The tablet has been killed, find out the node the partition tablet ends up on.
                 "DescribePartitionRequest partition_id=0",
-                std::format("DescribePartitionResponse partition_id=0 pl_generation=2 pl_node_id={}", node0_id),
-                std::format("PreferredPartitionLocation Generation=2 NodeId={}", node0_id),
+                "DescribePartitionResponse partition_id=0 pl_generation=2 pl_node_id=" + node0_id,
+                "PreferredPartitionLocation Generation=2 NodeId=" + node0_id,
                 "InitRequest !partition_id pwg_partition_id=0 pwg_generation=2",
                 "InitResponse partition_id=0 session_id",
             };

@@ -436,7 +436,6 @@ private:
     IExecutor::TPtr Executor;
     IExecutor::TPtr CompressionExecutor;
     size_t MemoryUsage = 0; //!< Estimated amount of memory used
-    bool FirstTokenSent = false;
 
     TMessageBatch CurrentBatch;
 

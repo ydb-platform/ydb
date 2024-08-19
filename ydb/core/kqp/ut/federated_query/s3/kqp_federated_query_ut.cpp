@@ -1798,7 +1798,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
         CreateBucketWithObject(bucket, "test_object", "");
 
-        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto kikimr = MakeKikimrRunner(NYql::IHTTPGateway::Make());
 
         auto tc = kikimr->GetTableClient();
         auto session = tc.CreateSession().GetValueSync().GetSession();

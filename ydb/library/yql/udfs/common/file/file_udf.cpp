@@ -434,6 +434,7 @@ namespace {
 
     public:
         static void DeclareSignature(
+            TStringRef name,
             TType* userType,
             IFunctionTypeInfoBuilder& builder,
             bool typesOnly)
@@ -612,7 +613,7 @@ namespace {
     };
 
     SIMPLE_MODULE(TFileModule,
-        TUserDataTypeFuncFactory<false, ByLineFuncName, TByLinesFunc, const char*, TUtf8, TYson, TJson, i8, ui8, i16, ui16, ui32, ui64, i32, i64, float, double, bool>,
+        TUserDataTypeFuncFactory<false, false, ByLineFuncName, TByLinesFunc, const char*, TUtf8, TYson, TJson, i8, ui8, i16, ui16, ui32, ui64, i32, i64, float, double, bool>,
         TFolderListFromFile
     )
 

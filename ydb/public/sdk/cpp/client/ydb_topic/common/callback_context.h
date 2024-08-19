@@ -31,9 +31,13 @@ public:
         ~TBorrowed() {
             if (!Parent) return;
 
-            std::lock_guard lock(Parent->Mutex);
-            --Parent->BorrowCounter;
-            if (Parent->Die && Parent->BorrowCounter == 0) {
+            bool notify = false;
+            {
+                std::lock_guard lock(Parent->Mutex);
+                --Parent->BorrowCounter;
+                notify = Parent->Die && Parent->BorrowCounter == 0;
+            }
+            if (notify) {
                 Parent->AllDied.notify_one();
             }
         }
@@ -60,10 +64,13 @@ public:
 // (relation of 1 owner : n impls)
 public:
     void Cancel() {
+        std::shared_ptr<TGuardedObject> waste;
         std::unique_lock lock(Mutex);
         Die = true;
         AllDied.wait(lock, [this] { return BorrowCounter == 0; });
-        GuardedObjectPtr.reset();
+
+        // Swap to the waste object, so it's not destroyed under the lock, which may cause deadlocks.
+        swap(GuardedObjectPtr, waste);
     }
 
     std::shared_ptr<TGuardedObject> TryGet() const {

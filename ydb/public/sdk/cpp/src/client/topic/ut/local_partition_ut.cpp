@@ -2,7 +2,7 @@
 
 #include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
 
-#include <ydb/public/sdk/src/cpp/client/persqueue_public/ut/ut_utils/ut_utils.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/ut_utils.h>
 
 #include <ydb/public/sdk/cpp/src/client/topic/common/trace_lazy.h>
 #include <ydb-cpp-sdk/client/topic/client.h>

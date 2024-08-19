@@ -1,9 +1,10 @@
 LIBRARY()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/headers.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
 
 SRCS(
     credentials.cpp
+    from_file.cpp
     jwt_token_source.cpp
 )
 
@@ -13,10 +14,11 @@ PEERDIR(
     library/cpp/http/misc
     library/cpp/http/simple
     library/cpp/json
+    library/cpp/retry
+    library/cpp/string_utils/base64
     library/cpp/uri
     ydb/public/sdk/cpp/src/client/types
     ydb/public/sdk/cpp/src/client/types/credentials
-    
 )
 
 END()

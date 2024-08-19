@@ -1,19 +1,21 @@
 #include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/jwt_token_source.h>
-
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <jwt-cpp/jwt.h>
-
-#include <string>
 
 extern const std::string TestRSAPrivateKeyContent;
 extern const std::string TestRSAPublicKeyContent;
 
 struct TJwtCheck {
     using TSelf = TJwtCheck;
+#ifdef YDB_SDK_USE_NEW_JWT
+    using TDecodedJwt = jwt::decoded_jwt<jwt::traits::kazuho_picojson>;
+#else
+    using TDecodedJwt = jwt::decoded_jwt;
+#endif
 
     struct IAlgCheck {
-        virtual void Check(const jwt::decoded_jwt& decoded) const = 0;
+        virtual void Check(const TDecodedJwt& decoded) const = 0;
         virtual ~IAlgCheck() = default;
     };
 
@@ -23,11 +25,19 @@ struct TJwtCheck {
             : Alg(publicKey)
         {}
 
-        void Check(const jwt::decoded_jwt& decoded) const override {
+        void Check(const TDecodedJwt& decoded) const override {
             UNIT_ASSERT_VALUES_EQUAL(decoded.get_algorithm(), Alg.name());
             const std::string data = decoded.get_header_base64() + "." + decoded.get_payload_base64();
 		    const std::string signature = decoded.get_signature();
+#ifdef YDB_SDK_USE_NEW_JWT
+            std::error_code ec;
+            Alg.verify(data, signature, ec);
+            if (ec) {
+                throw std::runtime_error(ec.message());
+            }
+#else
             Alg.verify(data, signature); // Throws
+#endif
         }
 
         TAlg Alg;
@@ -35,10 +45,10 @@ struct TJwtCheck {
 
     template <class TAlg>
     TSelf& Alg(const std::string& publicKey) {
-        Alg_.Reset(new TAlgCheck<TAlg>(publicKey));
+        Alg_.reset(new TAlgCheck<TAlg>(publicKey));
         return *this;
     }
-    THolder<IAlgCheck> Alg_ = MakeHolder<TAlgCheck<jwt::algorithm::rs256>>(TestRSAPublicKeyContent);
+    std::unique_ptr<IAlgCheck> Alg_ = std::make_unique<TAlgCheck<jwt::algorithm::rs256>>(TestRSAPublicKeyContent);
 
     FLUENT_SETTING_OPTIONAL(std::string, KeyId);
 
@@ -49,7 +59,8 @@ struct TJwtCheck {
     FLUENT_SETTING_DEFAULT(TDuration, TokenTtl, TDuration::Hours(1));
 
     void Check(const std::string& token) {
-        jwt::decoded_jwt decoded(token);
+        TDecodedJwt decoded(token);
+
         UNIT_ASSERT_VALUES_EQUAL(decoded.get_type(), "JWT");
         Alg_->Check(decoded);
 

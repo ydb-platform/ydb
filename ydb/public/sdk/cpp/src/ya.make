@@ -47,5 +47,6 @@ RECURSE(
     client/types/operation
     client/types/status
     client/value
+    client/ymq
     library
 )

@@ -1327,6 +1327,19 @@ message TImmediateControlsConfig {
             DefaultValue: 1000 }];
     }
 
+    message TPDiskControls {
+        optional uint64 MaxCommonLogChunksHDD = 1 [(ControlOptions) = {
+            Description: "Regulate the maximum of log chunks on the PDisk, setting for HDD",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 200 }];
+        optional uint64 MaxCommonLogChunksSSD = 2 [(ControlOptions) = {
+            Description: "Regulate the maximum of log chunks on the PDisk, setting for SSD, NVME",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 200 }];
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
@@ -1336,6 +1349,7 @@ message TImmediateControlsConfig {
     optional TVDiskControls VDiskControls = 7;
     optional TTabletControls TabletControls = 8;
     optional TDSProxyControls DSProxyControls = 9;
+    optional TPDiskControls PDiskControls = 10;
 };
 
 message TMeteringConfig {

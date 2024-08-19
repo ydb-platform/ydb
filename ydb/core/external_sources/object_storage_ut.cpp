@@ -1,7 +1,6 @@
 #include "object_storage.h"
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <library/cpp/scheme/scheme.h>
 #include <util/random/random.h>
 #include <ydb/core/protos/external_sources.pb.h>
 

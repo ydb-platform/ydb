@@ -3,12 +3,14 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
+#include <util/string/vector.h>
+
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxResolve : public TTxBase {
     std::unique_ptr<NSchemeCache::TSchemeCacheRequest> Request;
     bool Cancelled = false;
-    bool DoSend = true;
+    bool StartColumnShardEventDistribution = true;
 
     TTxResolve(TSelf* self, NSchemeCache::TSchemeCacheRequest* request)
         : TTxBase(self)
@@ -17,14 +19,42 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
 
     TTxType GetTxType() const override { return TXTYPE_RESOLVE; }
 
-    bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxResolve::Execute");
+    bool ExecuteAnalyze(const NSchemeCache::TSchemeCacheRequest::TEntry& entry, NIceDb::TNiceDb& db) {
+        Y_ABORT_UNLESS(Self->NavigateAnalyzeOperationId);
+        Y_ABORT_UNLESS(Self->NavigatePathId);
 
-        NIceDb::TNiceDb db(txc.DB);
+        if (entry.Status == NSchemeCache::TSchemeCacheRequest::EStatus::PathErrorNotExist) {
+            // AnalyzedShards will be empty and Analyze will complete without sending event to shards
+            return true;
+        }
 
-        Y_ABORT_UNLESS(Request->ResultSet.size() == 1);
-        const auto& entry = Request->ResultSet.front();
+        if (entry.Status != NSchemeCache::TSchemeCacheRequest::EStatus::OkData) {
+            Cancelled = true;
+            return true;
+        }
 
+        auto& partitioning = entry.KeyDescription->GetPartitions();
+
+        auto forceTraversalTable = Self->ForceTraversalTable(Self->NavigateAnalyzeOperationId, Self->NavigatePathId);
+        Y_ABORT_UNLESS(forceTraversalTable);
+
+        for (auto& part : partitioning) {
+            if (part.Range) {
+                forceTraversalTable->AnalyzedShards.push_back({
+                    .ShardTabletId = part.ShardId,
+                    .Status = TAnalyzedShard::EStatus::None
+                });
+            }
+        }
+        
+        SA_LOG_D("[" << Self->TabletID() << "] TTxResolve::ExecuteAnalyze. Table OperationId " << Self->NavigateAnalyzeOperationId << ", PathId " << Self->NavigatePathId 
+            << ", AnalyzedShards " << forceTraversalTable->AnalyzedShards.size());
+
+        Self->UpdateForceTraversalTableStatus(TForceTraversalTable::EStatus::AnalyzeStarted, Self->NavigateAnalyzeOperationId, *forceTraversalTable,  db);
+        return true;
+    }
+
+    bool ExecuteTraversal(const NSchemeCache::TSchemeCacheRequest::TEntry& entry, NIceDb::TNiceDb& db) {
         if (entry.Status != NSchemeCache::TSchemeCacheRequest::EStatus::OkData) {
             Cancelled = true;
 
@@ -61,26 +91,57 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
 
         if (Self->TraversalIsColumnTable && Self->TabletsForReqDistribution.empty()) {
             Self->FinishTraversal(db);
-            DoSend = false;
+            StartColumnShardEventDistribution = false;
         }
 
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxResolve::Complete");
 
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        SA_LOG_D("[" << Self->TabletID() << "] TTxResolve::Execute");
+
+        NIceDb::TNiceDb db(txc.DB);
+
+        Y_ABORT_UNLESS(Request->ResultSet.size() == 1);
+        const auto& entry = Request->ResultSet.front();
+
+        switch (Self->NavigateType) {
+        case ENavigateType::Analyze:
+            return ExecuteAnalyze(entry, db);
+        case ENavigateType::Traversal:
+            return ExecuteTraversal(entry, db);
+        };
+        
+    }
+
+    void CompleteTraversal(const TActorContext& ctx) {
         if (Cancelled) {
             return;
         }
 
         if (Self->TraversalIsColumnTable) {
-            if (DoSend) {
+            if (StartColumnShardEventDistribution) {
                 ctx.Send(Self->SelfId(), new TEvPrivate::TEvRequestDistribution);
             }
         } else {
             Self->ScanNextDatashardRange();
         }
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        SA_LOG_D("[" << Self->TabletID() << "] TTxResolve::Complete");
+
+        switch (Self->NavigateType) {
+        case ENavigateType::Analyze:
+            break;
+        case ENavigateType::Traversal:
+            CompleteTraversal(ctx);
+            break;
+        };
+
+        Self->NavigateAnalyzeOperationId.clear();
+        Self->NavigatePathId = {};
     }
 };
 

@@ -397,6 +397,7 @@ message TInterconnectConfig {
     optional bool BindOnAllAddresses = 16 [default = true];
     optional EEncryptionMode EncryptionMode = 17 [default = DISABLED];
     optional bool TlsAuthOnly = 38; // do not encrypt traffic
+    repeated string ForbiddenSignatureAlgorithms = 50;
     optional bool EnforceScopeValidation = 18;
     optional bytes Certificate = 30; // in PEM format
     optional bytes PrivateKey = 31; // in PEM format

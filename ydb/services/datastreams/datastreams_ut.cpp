@@ -2758,7 +2758,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
 
         {
             ui64 txId = 107;
-            SplitPartition(*kikimr->GetRuntime(), txId, 1, "a");
+            NPQ::NTest::SplitPartition(*kikimr->GetRuntime(), txId, 1, "a");
         }
 
         {

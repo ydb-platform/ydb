@@ -6,18 +6,22 @@ ADDINCL(
     ydb/library/yql/udfs/common/clickhouse/client/src
 )
 
-SRCS(
-    arrow_fetcher.cpp
-    arrow_inferencinator.cpp
-)
+IF (CLANG AND NOT WITH_VALGRIND)
 
-PEERDIR(
-    contrib/libs/apache/arrow
+    SRCS(
+        arrow_fetcher.cpp
+        arrow_inferencinator.cpp
+    )
 
-    ydb/core/external_sources/object_storage
+    PEERDIR(
+        contrib/libs/apache/arrow
 
-    ydb/library/yql/providers/s3/compressors
-)
+        ydb/core/external_sources/object_storage
+
+        ydb/library/yql/providers/s3/compressors
+    )
+
+ENDIF()
 
 END()
 

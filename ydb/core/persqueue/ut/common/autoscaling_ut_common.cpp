@@ -453,6 +453,7 @@ template<SdkVersion Sdk>
 void TTestReadSession<Sdk>::TImpl::Acquire() {
     Cerr << ">>>>> " << Name << " Acquire()" << Endl << Flush;
     Semaphore.Acquire();
+    Cerr << ">>>>> " << Name << " Acquired" << Endl << Flush;
 }
 
 template<SdkVersion Sdk>

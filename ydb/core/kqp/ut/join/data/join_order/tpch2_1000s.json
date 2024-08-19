@@ -19,16 +19,16 @@
                     "table":"supplier"
                   },
                   {
-                    "op_name":"LookupJoin",
+                    "op_name":"InnerJoin (MapJoin)",
                     "args":
                       [
                         {
-                          "op_name":"TableFullScan",
-                          "table":"nation"
-                        },
-                        {
                           "op_name":"TableLookup",
                           "table":"region"
+                        },
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"nation"
                         }
                       ]
                   }
@@ -57,16 +57,16 @@
                           "table":"supplier"
                         },
                         {
-                          "op_name":"LookupJoin",
+                          "op_name":"InnerJoin (MapJoin)",
                           "args":
                             [
                               {
-                                "op_name":"TableFullScan",
-                                "table":"nation"
-                              },
-                              {
                                 "op_name":"TableLookup",
                                 "table":"region"
+                              },
+                              {
+                                "op_name":"TableFullScan",
+                                "table":"nation"
                               }
                             ]
                         }

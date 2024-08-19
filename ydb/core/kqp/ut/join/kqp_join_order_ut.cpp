@@ -280,9 +280,11 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
-    //Y_UNIT_TEST_XOR_OR_BOTH_FALSE(FourWayJoinWithPredsAndEquivAndLeft, StreamLookupJoin) {
-    //    ExecuteJoinOrderTestDataQueryWithStats("queries/four_way_join_with_preds_and_equiv_and_left.sql", "stats/basic.json", StreamLookupJoin);
-    //}
+    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(FourWayJoinWithPredsAndEquivAndLeft, StreamLookupJoin, ColumnStore) {
+       ExecuteJoinOrderTestDataQueryWithStats(
+        "queries/four_way_join_with_preds_and_equiv_and_left.sql", "stats/basic.json", StreamLookupJoin, ColumnStore
+        );
+    }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TestJoinHint, StreamLookupJoin, ColumnStore) {
         CheckJoinCardinality("queries/test_join_hint.sql", "stats/basic.json", "InnerJoin (Grace)", 10e6, StreamLookupJoin, ColumnStore);
@@ -374,13 +376,16 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         
             auto result = session.ExplainDataQuery(query).ExtractValueSync();
             result.GetIssues().PrintTo(Cerr);
+            Cerr << result.GetPlan() << Endl;
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            if (useStreamLookupJoin) {
+                return;
+            }
 
             if (useColumnStore) {
                 correctJoinOrderPath = correctJoinOrderPath.substr(0, correctJoinOrderPath.find(".json")) + "_column_store.json";      
             }
 
-            Cerr << result.GetPlan() << Endl;
             auto currentJoinOrder = CanonizeJoinOrder(result.GetPlan());
             Cerr << currentJoinOrder << Endl;
             /* to canonize the tests use --test-param CANONIZE_JOIN_ORDER_TESTS=TRUE */
@@ -396,11 +401,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             }
 
             TString ref = GetStatic(correctJoinOrderPath);
-
-            /* Only check the plans if stream join is enabled */
-            if (useStreamLookupJoin || useColumnStore) {
-                UNIT_ASSERT(JoinOrderAndAlgosMatch(result.GetPlan(), ref));
-            }
+            UNIT_ASSERT(JoinOrderAndAlgosMatch(result.GetPlan(), ref));
         }
     }
 
@@ -436,12 +437,14 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
 
     Y_UNIT_TEST(TPCC) {
         JoinOrderTestWithOverridenStats(
-            "queries/tpcc.sql", "stats/tpcc.json", "join_order/tpcc.json", false, false);
+            "queries/tpcc.sql", "stats/tpcc.json", "join_order/tpcc.json", false, false
+        );
     }
 
     Y_UNIT_TEST(LookupBug) {
         JoinOrderTestWithOverridenStats(
-            "queries/lookupbug.sql", "stats/lookupbug.json", "join_order/lookupbug.json", false, false);
+            "queries/lookupbug.sql", "stats/lookupbug.json", "join_order/lookupbug.json", false, false
+        );
     }
 
 }

@@ -97,7 +97,6 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
 
       The `YDB_USE_IN_MEMORY_PDISKS` setting makes all data volatile, stored only in RAM. Currently, data persistence by turning it off is supported only on x86_64 processors. Learn more about [configuring Docker container](./reference/docker/environment.md).
 
-
 - Minikube
 
    1. Install the Kubernetes CLI [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl) and [Helm 3](https://helm.sh/docs/intro/install/) package manager.

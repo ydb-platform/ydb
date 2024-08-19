@@ -365,7 +365,10 @@
                             }
                         ]
                     }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {

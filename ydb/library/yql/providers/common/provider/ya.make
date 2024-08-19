@@ -13,6 +13,7 @@ PEERDIR(
     ydb/library/yql/public/udf
     ydb/library/yql/sql # fixme
     ydb/library/yql/core
+    ydb/library/yql/parser/pg_catalog
 )
 
 YQL_LAST_ABI_VERSION()

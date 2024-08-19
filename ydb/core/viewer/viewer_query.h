@@ -31,6 +31,8 @@ class TJsonQuery : public TViewerPipeClient {
     TString TransactionMode;
     bool Direct = false;
     bool IsBase64Encode = true;
+    int LimitRows = 10000;
+    int TotalRows = 0;
 
     enum ESchemaType {
         Classic,
@@ -62,31 +64,74 @@ public:
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), false);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 60000);
-        Query = params.Get("query");
-        Database = params.Get("database");
-        Stats = params.Get("stats");
-        Action = params.Get("action");
-        TString schemaStr = params.Get("schema");
-        Schema = StringToSchemaType(schemaStr);
-        Syntax = params.Get("syntax");
-        QueryId = params.Get("query_id");
-        TransactionMode = params.Get("transaction_mode");
+        if (params.Has("query")) {
+            Query = params.Get("query");
+        }
+        if (params.Has("database")) {
+            Database = params.Get("database");
+        }
+        if (params.Has("stats")) {
+            Stats = params.Get("stats");
+        }
+        if (params.Has("action")) {
+            Action = params.Get("action");
+        }
+        if (params.Has("schema")) {
+            Schema = StringToSchemaType(params.Get("schema"));
+        }
+        if (params.Has("syntax")) {
+            Syntax = params.Get("syntax");
+        }
+        if (params.Has("query_id")) {
+            QueryId = params.Get("query_id");
+        }
+        if (params.Has("transaction_mode")) {
+            TransactionMode = params.Get("transaction_mode");
+        }
+        if (params.Has("base64")) {
+            IsBase64Encode = FromStringWithDefault<bool>(params.Get("base64"), true);
+        }
+        if (params.Has("limit_rows")) {
+            LimitRows = std::clamp<int>(FromStringWithDefault<int>(params.Get("limit_rows"), 10000), 1, 100000);
+        }
         Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
-        IsBase64Encode = FromStringWithDefault<bool>(params.Get("base64"), true);
     }
 
-    bool ParsePostContent(const TStringBuf& content) {
+    bool ParsePostContent(TStringBuf content) {
         static NJson::TJsonReaderConfig JsonConfig;
         NJson::TJsonValue requestData;
         bool success = NJson::ReadJsonTree(content, &JsonConfig, &requestData);
         if (success) {
-            Query = Query.empty() ? requestData["query"].GetStringSafe({}) : Query;
-            Database = Database.empty() ? requestData["database"].GetStringSafe({}) : Database;
-            Stats = Stats.empty() ? requestData["stats"].GetStringSafe({}) : Stats;
-            Action = Action.empty() ? requestData["action"].GetStringSafe({}) : Action;
-            Syntax = Syntax.empty() ? requestData["syntax"].GetStringSafe({}) : Syntax;
-            QueryId = QueryId.empty() ? requestData["query_id"].GetStringSafe({}) : QueryId;
-            TransactionMode = TransactionMode.empty() ? requestData["transaction_mode"].GetStringSafe({}) : TransactionMode;
+            if (requestData.Has("query")) {
+                Query = requestData["query"].GetStringRobust();
+            }
+            if (requestData.Has("database")) {
+                Database = requestData["database"].GetStringRobust();
+            }
+            if (requestData.Has("stats")) {
+                Stats = requestData["stats"].GetStringRobust();
+            }
+            if (requestData.Has("action")) {
+                Action = requestData["action"].GetStringRobust();
+            }
+            if (requestData.Has("schema")) {
+                Schema = StringToSchemaType(requestData["schema"].GetStringRobust());
+            }
+            if (requestData.Has("syntax")) {
+                Syntax = requestData["syntax"].GetStringRobust();
+            }
+            if (requestData.Has("query_id")) {
+                QueryId = requestData["query_id"].GetStringRobust();
+            }
+            if (requestData.Has("transaction_mode")) {
+                TransactionMode = requestData["transaction_mode"].GetStringRobust();
+            }
+            if (requestData.Has("base64")) {
+                IsBase64Encode = requestData["base64"].GetBooleanRobust();
+            }
+            if (requestData.Has("limit_rows")) {
+                LimitRows = std::clamp<int>(requestData["limit_rows"].GetIntegerRobust(), 1, 100000);
+            }
         }
         return success;
     }
@@ -270,7 +315,13 @@ public:
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT);
         }
-        if (Stats == "profile") {
+        if (Stats == "none") {
+            request.SetStatsMode(NYql::NDqProto::DQ_STATS_MODE_NONE);
+            request.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE);
+        } else if (Stats == "basic") {
+            request.SetStatsMode(NYql::NDqProto::DQ_STATS_MODE_BASIC);
+            request.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC);
+        } else if (Stats == "profile") {
             request.SetStatsMode(NYql::NDqProto::DQ_STATS_MODE_PROFILE);
             request.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE);
         } else if (Stats == "full") {
@@ -400,7 +451,13 @@ private:
         }
 
         TStringStream stream;
+        constexpr ui32 doubleNDigits = std::numeric_limits<double>::max_digits10;
+        constexpr ui32 floatNDigits = std::numeric_limits<float>::max_digits10;
+        constexpr EFloatToStringMode floatMode = EFloatToStringMode::PREC_NDIGITS;
         NJson::WriteJson(&stream, &jsonResponse, {
+            .DoubleNDigits = doubleNDigits,
+            .FloatNDigits = floatNDigits,
+            .FloatToStringMode = floatMode,
             .ValidateUtf8 = false,
             .WriteNanAsString = true,
         });
@@ -436,13 +493,23 @@ private:
     }
 
     void HandleReply(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev) {
-        const NKikimrKqp::TEvExecuterStreamData& data(ev->Get()->Record);
+        NKikimrKqp::TEvExecuterStreamData& data(ev->Get()->Record);
 
-        ResultSets.emplace_back();
-        ResultSets.back() = std::move(data.GetResultSet());
+        if (TotalRows < LimitRows) {
+            int rowsAvailable = LimitRows - TotalRows;
+            if (data.GetResultSet().rows_size() > rowsAvailable) {
+                data.MutableResultSet()->mutable_rows()->Truncate(rowsAvailable);
+                data.MutableResultSet()->set_truncated(true);
+            }
+            TotalRows += data.GetResultSet().rows_size();
+            ResultSets.emplace_back() = std::move(*data.MutableResultSet());
+        }
 
         THolder<NKqp::TEvKqpExecuter::TEvStreamDataAck> ack = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
         ack->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
+        if (TotalRows >= LimitRows) {
+            ack->Record.SetEnough(true);
+        }
         Send(ev->Sender, ack.Release());
     }
 
@@ -469,7 +536,7 @@ private:
     void MakeErrorReply(NJson::TJsonValue& jsonResponse, const NYdb::TStatus& status) {
         TString message;
 
-        NViewer::MakeErrorReply(jsonResponse, message, status);
+        MakeJsonErrorReply(jsonResponse, message, status);
 
         if (Span) {
             Span.EndError(message);
@@ -574,6 +641,9 @@ private:
                             NJson::TJsonValue& jsonColumn = jsonRow.AppendValue({});
                             jsonColumn = ColumnValueToJsonValue(rsParser.ColumnParser(columnNum));
                         }
+                    }
+                    if (resultSet.Truncated()) {
+                        jsonResult["truncated"] = true;
                     }
                 }
             }
@@ -731,4 +801,3 @@ public:
 };
 
 }
-

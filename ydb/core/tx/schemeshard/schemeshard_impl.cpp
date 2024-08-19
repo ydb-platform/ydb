@@ -2506,6 +2506,7 @@ void TSchemeShard::PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId
         NIceDb::TUpdate<Schema::TablePartitionStats::RowCount>(stats.RowCount),
         NIceDb::TUpdate<Schema::TablePartitionStats::DataSize>(stats.DataSize),
         NIceDb::TUpdate<Schema::TablePartitionStats::IndexSize>(stats.IndexSize),
+        NIceDb::TUpdate<Schema::TablePartitionStats::ByKeyFilterSize>(stats.ByKeyFilterSize),
 
         NIceDb::TUpdate<Schema::TablePartitionStats::LastAccessTime>(stats.LastAccessTime.GetValue()),
         NIceDb::TUpdate<Schema::TablePartitionStats::LastUpdateTime>(stats.LastUpdateTime.GetValue()),
@@ -6978,7 +6979,10 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(
             std::vector<TString>(hostnamePatterns.begin(), hostnamePatterns.end()),
             nullptr,
-            appConfig.GetQueryServiceConfig().GetS3().GetGeneratorPathsLimit()
+            appConfig.GetQueryServiceConfig().GetS3().GetGeneratorPathsLimit(),
+            nullptr,
+            appConfig.GetFeatureFlags().GetEnableExternalSourceSchemaInference(),
+            appConfig.GetQueryServiceConfig().GetS3().GetAllowLocalFiles()
         );
     }
 

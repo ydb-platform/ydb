@@ -22,8 +22,9 @@ class TTreeBuilder
     , public ITreeBuilder
 {
 public:
-    explicit TTreeBuilder(INodeFactory* factory)
+    TTreeBuilder(INodeFactory* factory, int treeSizeLimit)
         : Factory_(factory)
+        , TreeSizeLimit_(treeSizeLimit)
     {
         YT_ASSERT(Factory_);
     }
@@ -143,11 +144,19 @@ private:
     std::unique_ptr<TAttributeConsumer> AttributeConsumer_;
     IAttributeDictionaryPtr Attributes_;
 
+    const int TreeSizeLimit_;
+    int TreeSize_ = 0;
+
     void AddNode(INodePtr node, bool push)
     {
         if (Attributes_) {
             node->MutableAttributes()->MergeFrom(*Attributes_);
             Attributes_ = nullptr;
+        }
+
+        if (++TreeSize_ > TreeSizeLimit_) {
+            THROW_ERROR_EXCEPTION("Tree size limit exceeded")
+                << TErrorAttribute("tree_size_limit", TreeSizeLimit_);
         }
 
         if (NodeStack_.empty()) {
@@ -170,9 +179,17 @@ private:
     }
 };
 
-std::unique_ptr<ITreeBuilder> CreateBuilderFromFactory(INodeFactory* factory)
+std::unique_ptr<ITreeBuilder> CreateBuilderFromFactory(
+    INodeFactory* factory,
+    int treeSizeLimit)
 {
-    return std::unique_ptr<ITreeBuilder>(new TTreeBuilder(std::move(factory)));
+    return std::unique_ptr<ITreeBuilder>(new TTreeBuilder(std::move(factory), treeSizeLimit));
+}
+
+std::unique_ptr<ITreeBuilder> CreateBuilderFromFactory(
+    INodeFactory* factory)
+{
+    return CreateBuilderFromFactory(factory, std::numeric_limits<int>::max());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

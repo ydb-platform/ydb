@@ -220,7 +220,8 @@ void TKqpScanComputeActor::DoBootstrap() {
     TBase::SetTaskRunner(taskRunner);
 
     auto wakeup = [this] { ContinueExecute(); };
-    TBase::PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, std::move(wakeup)));
+    auto errorCallback = [this](const TString& error){ SendError(error); };
+    TBase::PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, std::move(wakeup), std::move(errorCallback)));
 
     ComputeCtx.AddTableScan(0, Meta, GetStatsMode());
     ScanData = &ComputeCtx.GetTableScan(0);

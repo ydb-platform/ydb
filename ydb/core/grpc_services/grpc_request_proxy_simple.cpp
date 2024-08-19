@@ -172,9 +172,22 @@ void TGRpcRequestProxySimple::HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev
 
 bool TGRpcRequestProxySimple::IsAuthStateOK(const IRequestProxyCtx& ctx) {
     const auto& state = ctx.GetAuthState();
-    return state.State == NYdbGrpc::TAuthState::AS_OK ||
-           state.State == NYdbGrpc::TAuthState::AS_FAIL && state.NeedAuth == false ||
-           state.NeedAuth == false && !ctx.GetYdbToken();
+    if (state.State == NYdbGrpc::TAuthState::AS_OK) {
+        return true;
+    }
+
+    const bool authorizationParamsAreSet = ctx.GetYdbToken() || !ctx.FindClientCertPropertyValues().empty();
+    if (!state.NeedAuth && !authorizationParamsAreSet) {
+        return true;
+    }
+
+    if (!state.NeedAuth && state.State == NYdbGrpc::TAuthState::AS_FAIL) {
+        if (AppData()->EnforceUserTokenCheckRequirement && authorizationParamsAreSet) {
+            return false;
+        }
+        return true;
+    }
+    return false;
 }
 
 template<typename TEvent>

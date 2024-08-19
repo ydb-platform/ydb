@@ -14,6 +14,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/metadata/manager/abstract.h>
+#include <ydb/services/persqueue_v1/actors/events.h>
 
 #include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
@@ -708,6 +709,13 @@ struct TCreateExternalTableSettings {
     TVector<std::pair<TString, TString>> SourceTypeParameters;
 };
 
+struct TAlterTopicSettings {
+    Ydb::Topic::AlterTopicRequest Request;
+    TString Name;
+    TString WorkDir;
+    bool MissingOk;
+};
+
 struct TSequenceSettings {
     TMaybe<i64> MinValue;
     TMaybe<i64> MaxValue;
@@ -816,6 +824,11 @@ struct TAlterReplicationSettings {
 struct TDropReplicationSettings {
     TString Name;
     bool Cascade = false;
+};
+
+struct TAnalyzeSettings {
+    TString TablePath;
+    TVector<TString> Columns;
 };
 
 struct TKikimrListPathItem {
@@ -981,11 +994,13 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> DropTable(const TString& cluster, const TDropTableSettings& settings) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> CreateTopic(const TString& cluster, Ydb::Topic::CreateTopicRequest&& request) = 0;
+    virtual NThreading::TFuture<TGenericResult> CreateTopic(const TString& cluster, Ydb::Topic::CreateTopicRequest&& request, bool existingOk) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> AlterTopic(const TString& cluster, Ydb::Topic::AlterTopicRequest&& request) = 0;
+    virtual NThreading::TFuture<TGenericResult> AlterTopic(const TString& cluster, Ydb::Topic::AlterTopicRequest&& request, bool missingOk) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> DropTopic(const TString& cluster, const TString& topic) = 0;
+    virtual NThreading::TFuture<NKikimr::NGRpcProxy::V1::TAlterTopicResponse> AlterTopicPrepared(TAlterTopicSettings&& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> DropTopic(const TString& cluster, const TString& topic, bool missingOk) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateReplication(const TString& cluster, const TCreateReplicationSettings& settings) = 0;
 
@@ -1042,6 +1057,8 @@ public:
     virtual NThreading::TFuture<TGenericResult> AlterExternalTable(const TString& cluster, const TAlterExternalTableSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> DropExternalTable(const TString& cluster, const TDropExternalTableSettings& settings, bool missingOk) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> Analyze(const TString& cluster, const TAnalyzeSettings& settings) = 0;
 
     virtual TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() = 0;
 

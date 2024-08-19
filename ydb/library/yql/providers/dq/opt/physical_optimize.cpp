@@ -255,7 +255,8 @@ protected:
         const auto join = node.Cast<TDqJoin>();
         const TParentsMap* parentsMap = getParents();
         const auto mode = Config->HashJoinMode.Get().GetOrElse(EHashJoinMode::Off);
-        return DqBuildJoin(join, ctx, optCtx, *parentsMap, IsGlobal, /* pushLeftStage = */ false /* TODO */, mode);
+        const auto useGraceJoin = Config->UseGraceJoinCoreForMap.Get().GetOrElse(false);
+        return DqBuildJoin(join, ctx, optCtx, *parentsMap, IsGlobal, /* pushLeftStage = */ false /* TODO */, mode, true, useGraceJoin);
     }
 
     template <bool IsGlobal>

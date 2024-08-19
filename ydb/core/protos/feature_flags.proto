@@ -123,7 +123,7 @@ message TFeatureFlags {
     optional bool EnableUniqConstraint = 104 [default = false];
     optional bool EnableChangefeedDebeziumJsonFormat = 105 [default = false];
     optional bool EnableStatistics = 106 [default = true];
-    optional bool EnableUuidAsPrimaryKey = 107 [default = false];
+    optional bool EnableUuidAsPrimaryKey = 107 [default = true];
     optional bool EnableTablePgTypes = 108 [default = false];
     optional bool EnableLocalDBBtreeIndex = 109 [default = true];
     optional bool EnablePDiskHighHDDInFlight = 110 [default = false];
@@ -151,4 +151,6 @@ message TFeatureFlags {
     optional bool EnableResourcePoolsOnServerless = 132 [default = false];
     optional bool EnableVectorIndex = 133 [default = false];
     optional bool EnableChangefeedsOnIndexTables = 134 [default = false];
+    optional bool EnableResourcePoolsCounters = 135 [default = false];
+    optional bool EnableOptionalColumnsInColumnShard = 136 [default = false];
 }

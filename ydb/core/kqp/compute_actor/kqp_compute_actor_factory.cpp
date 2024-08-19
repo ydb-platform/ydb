@@ -14,15 +14,13 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
         , std::shared_ptr<IKqpNodeState> state
         , TIntrusivePtr<NRm::TTxState> tx
         , TIntrusivePtr<NRm::TTaskState> task
-        , ui64 limit
-        , ui64 reasonableSpillingTreshold)
+        , ui64 limit)
     : NYql::NDq::TGuaranteeQuotaManager(limit, limit)
     , ResourceManager(std::move(resourceManager))
     , MemoryPool(memoryPool)
     , State(std::move(state))
     , Tx(std::move(tx))
     , Task(std::move(task))
-    , ReasonableSpillingTreshold(reasonableSpillingTreshold)
     {
     }
 
@@ -57,7 +55,7 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
     }
 
     bool IsReasonableToUseSpilling() const override {
-        return Tx->GetExtraMemoryAllocatedSize() >= ReasonableSpillingTreshold;
+        return Task->IsReasonableToStartSpilling();
     }
 
     TString MemoryConsumptionDetails() const override {
@@ -88,7 +86,8 @@ class TKqpCaFactory : public IKqpNodeComputeActorFactory {
     std::atomic<ui64> MkqlLightProgramMemoryLimit = 0;
     std::atomic<ui64> MkqlHeavyProgramMemoryLimit = 0;
     std::atomic<ui64> MinChannelBufferSize = 0;
-    std::atomic<ui64> ReasonableSpillingTreshold = 0;
+    std::atomic<ui64> MinMemAllocSize = 8_MB;
+    std::atomic<ui64> MinMemFreeSize = 32_MB;
 
 public:
     TKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
@@ -107,7 +106,8 @@ public:
         MkqlLightProgramMemoryLimit.store(config.GetMkqlLightProgramMemoryLimit());
         MkqlHeavyProgramMemoryLimit.store(config.GetMkqlHeavyProgramMemoryLimit());
         MinChannelBufferSize.store(config.GetMinChannelBufferSize());
-        ReasonableSpillingTreshold.store(config.GetReasonableSpillingTreshold());
+        MinMemAllocSize.store(config.GetMinMemAllocSize());
+        MinMemFreeSize.store(config.GetMinMemFreeSize());
     }
 
     TActorStartResult CreateKqpComputeActor(TCreateArgs&& args) override {
@@ -115,6 +115,8 @@ public:
         memoryLimits.ChannelBufferSize = 0;
         memoryLimits.MkqlLightProgramMemoryLimit = MkqlLightProgramMemoryLimit.load();
         memoryLimits.MkqlHeavyProgramMemoryLimit = MkqlHeavyProgramMemoryLimit.load();
+        memoryLimits.MinMemAllocSize = MinMemAllocSize.load();
+        memoryLimits.MinMemFreeSize = MinMemFreeSize.load();
 
         auto estimation = ResourceManager_->EstimateTaskResources(*args.Task, args.NumberOfTasks);
         NRm::TKqpResourcesRequest resourcesRequest;
@@ -158,8 +160,7 @@ public:
             std::move(args.State),
             std::move(args.TxInfo),
             std::move(task),
-            limit,
-            ReasonableSpillingTreshold.load());
+            limit);
 
         auto runtimeSettings = args.RuntimeSettings;
         runtimeSettings.ExtraMemoryAllocationPool = args.MemoryPool;

@@ -69,6 +69,10 @@ sql_stmt_core:
   | create_backup_collection_stmt
   | alter_backup_collection_stmt
   | drop_backup_collection_stmt
+  | analyze_stmt
+  | create_resource_pool_classifier_stmt
+  | alter_resource_pool_classifier_stmt
+  | drop_resource_pool_classifier_stmt
 ;
 
 expr:
@@ -836,12 +840,25 @@ alter_resource_pool_stmt: ALTER RESOURCE POOL object_ref
   alter_resource_pool_action (COMMA alter_resource_pool_action)*
 ;
 alter_resource_pool_action:
-    alter_table_set_table_setting_uncompat
-  | alter_table_set_table_setting_compat
+    alter_table_set_table_setting_compat
   | alter_table_reset_table_setting
 ;
 
 drop_resource_pool_stmt: DROP RESOURCE POOL object_ref;
+
+create_resource_pool_classifier_stmt: CREATE RESOURCE POOL CLASSIFIER object_ref
+  with_table_settings
+;
+
+alter_resource_pool_classifier_stmt: ALTER RESOURCE POOL CLASSIFIER object_ref
+  alter_resource_pool_classifier_action (COMMA alter_resource_pool_classifier_action)*
+;
+alter_resource_pool_classifier_action:
+    alter_table_set_table_setting_compat
+  | alter_table_reset_table_setting
+;
+
+drop_resource_pool_classifier_stmt: DROP RESOURCE POOL CLASSIFIER object_ref;
 
 create_replication_stmt: CREATE ASYNC REPLICATION object_ref
     FOR replication_target (COMMA replication_target)*
@@ -898,7 +915,7 @@ multiple_column_assignment: set_target_list EQUALS LPAREN simple_values_source R
 set_target_list: LPAREN set_target (COMMA set_target)* RPAREN;
 
 // topics
-create_topic_stmt: CREATE TOPIC topic_ref create_topic_entries? with_topic_settings?;
+create_topic_stmt: CREATE TOPIC (IF NOT EXISTS)? topic_ref create_topic_entries? with_topic_settings?;
 
 create_topic_entries: LPAREN create_topic_entry (COMMA create_topic_entry)* RPAREN;
 create_topic_entry:
@@ -906,7 +923,7 @@ create_topic_entry:
 ;
 with_topic_settings: WITH LPAREN topic_settings RPAREN;
 
-alter_topic_stmt: ALTER TOPIC topic_ref alter_topic_action (COMMA alter_topic_action)*;
+alter_topic_stmt: ALTER TOPIC (IF EXISTS)? topic_ref alter_topic_action (COMMA alter_topic_action)*;
 alter_topic_action:
     alter_topic_add_consumer
   | alter_topic_alter_consumer
@@ -932,7 +949,7 @@ topic_alter_consumer_reset: RESET LPAREN an_id (COMMA an_id)* RPAREN;
 alter_topic_set_settings: SET LPAREN topic_settings RPAREN;
 alter_topic_reset_settings: RESET LPAREN an_id (COMMA an_id_pure)* RPAREN;
 
-drop_topic_stmt: DROP TOPIC topic_ref;
+drop_topic_stmt: DROP TOPIC (IF EXISTS)? topic_ref;
 
 topic_settings: topic_settings_entry (COMMA topic_settings_entry)*;
 topic_settings_entry: an_id EQUALS topic_setting_value;
@@ -1007,6 +1024,10 @@ named_nodes_stmt: bind_parameter_list EQUALS (expr | subselect_stmt);
 commit_stmt: COMMIT;
 
 rollback_stmt: ROLLBACK;
+
+analyze_table: simple_table_ref (LPAREN column_list RPAREN)?;
+analyze_table_list: analyze_table (COMMA analyze_table)* COMMA?;
+analyze_stmt: ANALYZE analyze_table_list;
 
 // Special rules that allow to use certain keywords as identifiers.
 identifier: ID_PLAIN | ID_QUOTED;
@@ -1228,6 +1249,7 @@ keyword_as_compat:
   | CASCADE
   | CHANGEFEED
   | CHECK
+  | CLASSIFIER
   // | COLLATE
   | COLLECTION
   | COMMIT
@@ -1442,6 +1464,7 @@ keyword_compat: (
   | CASCADE
   | CHANGEFEED
   | CHECK
+  | CLASSIFIER
   | COLLATE
   | COLLECTION
   | COMMIT
@@ -1761,6 +1784,7 @@ CASE: C A S E;
 CAST: C A S T;
 CHANGEFEED: C H A N G E F E E D;
 CHECK: C H E C K;
+CLASSIFIER: C L A S S I F I E R;
 COLLATE: C O L L A T E;
 COLUMN: C O L U M N;
 COLUMNS: C O L U M N S;

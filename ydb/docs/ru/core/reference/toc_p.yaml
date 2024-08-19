@@ -14,6 +14,7 @@ items:
     mode: link
     path: embedded-ui/toc_p.yaml
 - name: Интеграции
+  href: ../integrations/index.md
   include: 
     mode: link
     path: ../integrations/toc_p.yaml

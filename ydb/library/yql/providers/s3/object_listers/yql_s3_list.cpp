@@ -255,7 +255,7 @@ public:
             MakeFilter(listingRequest.Pattern, listingRequest.PatternType, sharedCtx);
 
         auto request = listingRequest;
-        request.Url = UrlEscapeRet(request.Url, true);
+        request.Url = NS3Util::UrlEscapeRet(request.Url);
         auto ctx = TListingContext{
             std::move(sharedCtx),
             std::move(filter),

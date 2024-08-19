@@ -408,48 +408,28 @@ protected:
             }
         }
 
+        YQL_ENSURE(Planner);
+        bool populateChannels = Planner->AcknowledgeCA(taskId, computeActor, &state);
+
         switch (state.GetState()) {
             case NYql::NDqProto::COMPUTE_STATE_UNKNOWN: {
                 YQL_ENSURE(false, "unexpected state from " << computeActor << ", task: " << taskId);
                 return;
             }
 
-            case NYql::NDqProto::COMPUTE_STATE_FAILURE: {
-                ReplyErrorAndDie(NYql::NDq::DqStatusToYdbStatus(state.GetStatusCode()), state.MutableIssues());
-                return;
-            }
-
             case NYql::NDqProto::COMPUTE_STATE_EXECUTING: {
-                // initial TEvState event from Compute Actor
-                // there can be race with RM answer
-                if (Planner) {
-                    if (Planner->GetPendingComputeTasks().erase(taskId)) {
-                        auto it = Planner->GetPendingComputeActors().emplace(computeActor, TProgressStat());
-                        YQL_ENSURE(it.second);
-
-                        if (state.HasStats()) {
-                            it.first->second.Set(state.GetStats());
-                        }
-
-                        auto& task = TasksGraph.GetTask(taskId);
-                        task.ComputeActorId = computeActor;
-
-                        THashMap<TActorId, THashSet<ui64>> updates;
-                        CollectTaskChannelsUpdates(task, updates);
-                        PropagateChannelsUpdates(updates);
-                    } else {
-                        auto it = Planner->GetPendingComputeActors().find(computeActor);
-                        if (it != Planner->GetPendingComputeActors().end()) {
-                            if (state.HasStats()) {
-                                it->second.Set(state.GetStats());
-                            }
-                        }
-                    }
+                if (populateChannels) {
+                    auto& task = TasksGraph.GetTask(taskId);
+                    THashMap<TActorId, THashSet<ui64>> updates;
+                    CollectTaskChannelsUpdates(task, updates);
+                    PropagateChannelsUpdates(updates);
                 }
                 break;
             }
 
+            case NYql::NDqProto::COMPUTE_STATE_FAILURE:
             case NYql::NDqProto::COMPUTE_STATE_FINISHED: {
+                ExtraData[computeActor].Swap(state.MutableExtraData());
                 if (Stats) {
                     Stats->AddComputeActorStats(
                         computeActor.NodeId(),
@@ -457,35 +437,17 @@ protected:
                         TDuration::MilliSeconds(AggregationSettings.GetCollectLongTasksStatsTimeoutMs())
                     );
                 }
-                ExtraData[computeActor].Swap(state.MutableExtraData());
 
                 LastTaskId = taskId;
                 LastComputeActorId = computeActor.ToString();
-
-                if (Planner) {
-                    auto it = Planner->GetPendingComputeActors().find(computeActor);
-                    if (it == Planner->GetPendingComputeActors().end()) {
-                        LOG_W("Got execution state for compute actor: " << computeActor
-                            << ", task: " << taskId
-                            << ", state: " << NYql::NDqProto::EComputeState_Name((NYql::NDqProto::EComputeState) state.GetState())
-                            << ", too early (waiting reply from RM)");
-
-                        if (Planner && Planner->GetPendingComputeTasks().erase(taskId)) {
-                            LOG_E("Got execution state for compute actor: " << computeActor
-                                << ", for unknown task: " << state.GetTaskId()
-                                << ", state: " << NYql::NDqProto::EComputeState_Name((NYql::NDqProto::EComputeState) state.GetState()));
-                            return;
-                        }
-                    } else {
-                        if (state.HasStats()) {
-                            it->second.Set(state.GetStats());
-                        }
-                        LastStats.emplace_back(std::move(it->second));
-                        Planner->GetPendingComputeActors().erase(it);
-                        YQL_ENSURE(Planner->GetPendingComputeTasks().find(taskId) == Planner->GetPendingComputeTasks().end());
-                    }
-                }
+                YQL_ENSURE(Planner);
+                Planner->CompletedCA(taskId, computeActor);
             }
+        }
+
+        if (state.GetState() == NYql::NDqProto::COMPUTE_STATE_FAILURE) {
+            ReplyErrorAndDie(NYql::NDq::DqStatusToYdbStatus(state.GetStatusCode()), state.MutableIssues());
+            return;
         }
 
         static_cast<TDerived*>(this)->CheckExecutionComplete();
@@ -683,20 +645,14 @@ protected:
             auto taskId = startedTask.GetTaskId();
             auto& task = TasksGraph.GetTask(taskId);
 
-            task.ComputeActorId = ActorIdFromProto(startedTask.GetActorId());
-
-            LOG_D("Executing task: " << taskId << " on compute actor: " << task.ComputeActorId);
-
-            if (Planner) {
-                if (Planner->GetPendingComputeTasks().erase(taskId) == 0) {
-                    LOG_D("Executing task: " << taskId << ", compute actor: " << task.ComputeActorId << ", already finished");
-                } else {
-                    auto result = Planner->GetPendingComputeActors().emplace(std::make_pair(task.ComputeActorId, TProgressStat()));
-                    YQL_ENSURE(result.second);
-
-                    CollectTaskChannelsUpdates(task, channelsUpdates);
-                }
+            TActorId computeActorId = ActorIdFromProto(startedTask.GetActorId());
+            LOG_D("Executing task: " << taskId << " on compute actor: " << computeActorId);
+            YQL_ENSURE(Planner);
+            bool channelUpdates = Planner->AcknowledgeCA(taskId, computeActorId, nullptr);
+            if (channelUpdates) {
+                CollectTaskChannelsUpdates(task, channelsUpdates);
             }
+
         }
 
         PropagateChannelsUpdates(channelsUpdates);
@@ -789,16 +745,9 @@ protected:
         LastResourceUsageUpdate = now;
 
         TProgressStat::TEntry consumption;
-        if (Planner) {
-            for (const auto& p : Planner->GetPendingComputeActors()) {
-                const auto& t = p.second.GetLastUsage();
-                consumption += t;
-            }
-        }
 
-        for (const auto& p : LastStats) {
-            const auto& t = p.GetLastUsage();
-            consumption += t;
+        if (Planner) {
+            consumption += Planner->CalculateConsumptionUpdate();
         }
 
         auto ru = NRuCalc::CalcRequestUnit(consumption);
@@ -811,13 +760,7 @@ protected:
             return;
 
         if (Planner) {
-            for (auto& p : Planner->GetPendingComputeActors()) {
-                p.second.Update();
-            }
-        }
-
-        for (auto& p : LastStats) {
-            p.Update();
+            Planner->ShiftConsumption();
         }
 
         if (Request.RlPath) {
@@ -1319,13 +1262,9 @@ protected:
             const auto& input = stage.GetInputs(inputIndex);
 
             // Current assumptions:
-            // 1. `Broadcast` can not be the 1st stage input unless it's a single input
-            // 2. All stage's inputs, except 1st one, must be a `Broadcast` or `UnionAll`
-            if (inputIndex == 0) {
-                if (stage.InputsSize() > 1) {
-                    YQL_ENSURE(input.GetTypeCase() != NKqpProto::TKqpPhyConnection::kBroadcast);
-                }
-            } else {
+            // 1. All stage's inputs, except 1st one, must be a `Broadcast` or `UnionAll`
+            // 2. Stages where 1st input is `Broadcast` are not partitioned.
+            if (inputIndex > 0) {
                 switch (input.GetTypeCase()) {
                     case NKqpProto::TKqpPhyConnection::kBroadcast:
                     case NKqpProto::TKqpPhyConnection::kHashShuffle:
@@ -1758,7 +1697,7 @@ protected:
             ExecuterSpan.EndError(TStringBuilder() << NYql::NDqProto::StatusIds_StatusCode_Name(status));
         }
 
-        static_cast<TDerived*>(this)->FillResponseStats(Ydb::StatusIds::TIMEOUT);
+        FillResponseStats(Ydb::StatusIds::TIMEOUT);
 
         // TEvAbortExecution can come from either ComputeActor or SessionActor (== Target).
         if (abortSender != Target) {
@@ -1773,6 +1712,34 @@ protected:
         Request.Transactions.crop(0);
         TerminateComputeActors(Ydb::StatusIds::TIMEOUT, message);
         this->PassAway();
+    }
+
+    void FillResponseStats(Ydb::StatusIds::StatusCode status) {
+        auto& response = *ResponseEv->Record.MutableResponse();
+
+        response.SetStatus(status);
+
+        if (Stats) {
+            ReportEventElapsedTime();
+
+            Stats->FinishTs = TInstant::Now();
+            Stats->Finish();
+
+            if (Stats->CollectStatsByLongTasks || CollectFullStats(Request.StatsMode)) {
+                for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
+                    const auto& tx = Request.Transactions[txId].Body;
+                    auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats());
+                    response.MutableResult()->MutableStats()->AddTxPlansWithStats(planWithStats);
+                }
+            }
+
+            if (Stats->CollectStatsByLongTasks) {
+                const auto& txPlansWithStats = response.GetResult().GetStats().GetTxPlansWithStats();
+                if (!txPlansWithStats.empty()) {
+                    LOG_N("Full stats: " << txPlansWithStats);
+                }
+            }
+        }
     }
 
     virtual void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status,
@@ -1794,7 +1761,8 @@ protected:
         AlreadyReplied = true;
         auto& response = *ResponseEv->Record.MutableResponse();
 
-        response.SetStatus(status);
+        FillResponseStats(status);
+
         response.MutableIssues()->Swap(issues);
 
         LOG_T("ReplyErrorAndDie. Response: " << response.DebugString()
@@ -1971,8 +1939,6 @@ protected:
     TActorId KqpTableResolverId;
     TActorId KqpShardsResolverId;
     THashMap<TActorId, NYql::NDqProto::TComputeActorExtraData> ExtraData;
-
-    TVector<TProgressStat> LastStats;
 
     TInstant StartResolveTime;
     TInstant LastResourceUsageUpdate;

@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 
+#include <ydb/core/tablet/resource_broker.h>
 #include <util/random/random.h>
 
 namespace NKikimr {
@@ -10,6 +11,38 @@ namespace NKqp {
 
 using namespace NYdb;
 using namespace NYdb::NTable;
+
+using namespace NResourceBroker;
+
+NKikimrResourceBroker::TResourceBrokerConfig MakeResourceBrokerTestConfig(ui32 multiplier = 1) {
+    NKikimrResourceBroker::TResourceBrokerConfig config;
+
+    auto queue = config.AddQueues();
+    queue->SetName("queue_default");
+    queue->SetWeight(5);
+    queue->MutableLimit()->AddResource(4);
+
+    queue = config.AddQueues();
+    queue->SetName("queue_kqp_resource_manager");
+    queue->SetWeight(20);
+    queue->MutableLimit()->AddResource(4);
+    queue->MutableLimit()->AddResource(33554453 * multiplier);
+
+    auto task = config.AddTasks();
+    task->SetName("unknown");
+    task->SetQueueName("queue_default");
+    task->SetDefaultDuration(TDuration::Seconds(5).GetValue());
+
+    task = config.AddTasks();
+    task->SetName(NLocalDb::KqpResourceManagerTaskName);
+    task->SetQueueName("queue_kqp_resource_manager");
+    task->SetDefaultDuration(TDuration::Seconds(5).GetValue());
+
+    config.MutableResourceLimit()->AddResource(10);
+    config.MutableResourceLimit()->AddResource(100'000);
+
+    return config;
+}
 
 namespace {
     bool IsRetryable(const EStatus& status) {
@@ -133,6 +166,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(10);
         app.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(2000);
 
+        app.MutableResourceBrokerConfig()->CopyFrom(MakeResourceBrokerTestConfig());
+
         TKikimrRunner kikimr(app);
         CreateLargeTable(kikimr, 0, 0, 0);
 
@@ -147,6 +182,39 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         result.GetIssues().PrintTo(Cerr);
 
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::OVERLOADED);
+        UNIT_ASSERT_C(result.GetIssues().ToString().Contains("Mkql memory limit exceeded"), result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(ComputeActorMemoryAllocationFailureQueryService) {
+        auto app = NKikimrConfig::TAppConfig();
+        app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(10);
+        app.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(2000);
+
+        app.MutableResourceBrokerConfig()->CopyFrom(MakeResourceBrokerTestConfig(4));
+
+        app.MutableFeatureFlags()->SetEnableResourcePools(true);
+
+        TKikimrRunner kikimr(app);
+        CreateLargeTable(kikimr, 0, 0, 0);
+
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_SLOW_LOG, NActors::NLog::PRI_ERROR);
+
+        auto db = kikimr.GetQueryClient();
+        NYdb::NQuery::TExecuteQuerySettings querySettings;
+        querySettings.StatsMode(NYdb::NQuery::EStatsMode::Full);
+
+        auto result = db.ExecuteQuery(Q1_(R"(
+            SELECT * FROM `/Root/LargeTable`;
+        )"), NQuery::TTxControl::BeginTx().CommitTx(), querySettings).ExtractValueSync();
+        result.GetIssues().PrintTo(Cerr);
+
+        auto stats = result.GetStats();
+
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::OVERLOADED);
+        UNIT_ASSERT_C(result.GetIssues().ToString().Contains("Mkql memory limit exceeded"), result.GetIssues().ToString());
+        UNIT_ASSERT(stats.Defined());
+
+        Cerr << stats->ToString(true) << Endl;
     }
 
     Y_UNIT_TEST(DatashardProgramSize) {
@@ -1003,6 +1071,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT(result.GetStats());
+        Cerr << result.GetStats()->ToString(true) << Endl;
         UNIT_ASSERT(result.GetStats()->GetPlan());
 
         NJson::TJsonValue plan;
@@ -1010,7 +1079,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
         UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Node Type"].GetStringSafe(), "Query");
         UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Node Type"].GetStringSafe(), "ResultSet");
-        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Node Type"].GetStringSafe(), "Collect");
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Node Type"].GetStringSafe(), "Stage");
         UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Node Type"].GetStringSafe(), "Merge");
         UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["SortColumns"].GetArraySafe()[0], "Key (Asc)");
 

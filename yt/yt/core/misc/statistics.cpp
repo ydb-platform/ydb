@@ -93,8 +93,8 @@ bool TSummary::operator ==(const TSummary& other) const
 
 TSummary& TStatistics::GetSummary(const NYPath::TYPath& path)
 {
-    auto [iterator, _] = CheckedEmplaceStatistic(Data_, path, TSummary());
-    return iterator->second;
+    auto [it, _] = CheckedEmplaceStatistic(Data_, path, TSummary());
+    return it->second;
 }
 
 void TStatistics::AddSample(const NYPath::TYPath& path, i64 sample)

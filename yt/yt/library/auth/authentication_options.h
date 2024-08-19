@@ -18,6 +18,7 @@ struct TAuthenticationOptions
     static TAuthenticationOptions FromAuthenticationIdentity(const NRpc::TAuthenticationIdentity& identity);
     static TAuthenticationOptions FromToken(const TString& token);
     static TAuthenticationOptions FromServiceTicketAuth(const IServiceTicketAuthPtr& ticketAuth);
+    static TAuthenticationOptions FromUserTicket(const TString& userTicket);
 
     const TString& GetAuthenticatedUser() const;
     NRpc::TAuthenticationIdentity GetAuthenticationIdentity() const;
@@ -36,6 +37,7 @@ struct TAuthenticationOptions
     std::optional<TString> SessionId;
     std::optional<TString> SslSessionId;
     std::optional<IServiceTicketAuthPtr> ServiceTicketAuth;
+    std::optional<TString> UserTicket;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

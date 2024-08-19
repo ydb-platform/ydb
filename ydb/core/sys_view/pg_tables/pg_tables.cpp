@@ -19,6 +19,7 @@ namespace NSysView {
 using namespace NActors;
 
 TStringBuf TPgTablesScanBase::GetColumnName(NTable::TTag tag) const {
+    Y_ENSURE(tag > 0 && tag <= SchemaColumns_.size());
     return SchemaColumns_.at(tag - 1)._ColumnName;
 }
 
@@ -124,8 +125,13 @@ void TPgTablesScanBase::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeRe
     ExpandBatchWithStaticTables(batch);
 
     for (size_t i = 0; i < record.GetPathDescription().ChildrenSize(); ++i) {
+        const auto& childrenDescription = record.GetPathDescription().GetChildren(i);
+        if (childrenDescription.GetPathType() == NKikimrSchemeOp::EPathTypeDir) {
+            continue;
+        }
+
         TVector<TString> cellData;
-        const auto& tableName = record.GetPathDescription().GetChildren(i).GetName();
+        const auto& tableName = childrenDescription.GetName();
         const auto& tableOwner = record.GetPathDescription().GetSelf().GetOwner();
         TVector<TCell> cells = MakePgTablesRow(tableName, tableOwner, cellData);
         if (!ConvertError_.Empty()) {

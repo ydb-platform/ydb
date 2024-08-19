@@ -5,6 +5,7 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/external_sources/external_source_factory.h>
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/library/yql/ast/yql_gc_nodes.h>
@@ -240,6 +241,7 @@ enum class TYdbOperation : ui32 {
     CreateReplication    = 1 << 24,
     AlterReplication     = 1 << 25,
     DropReplication      = 1 << 26,
+    Analyze              = 1 << 27,
 };
 
 Y_DECLARE_FLAGS(TYdbOperations, TYdbOperation);
@@ -442,12 +444,14 @@ public:
         TIntrusivePtr<ITimeProvider> timeProvider,
         TIntrusivePtr<IRandomProvider> randomProvider,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-        TIntrusivePtr<TKikimrTransactionContextBase> txCtx = nullptr)
+        TIntrusivePtr<TKikimrTransactionContextBase> txCtx = nullptr,
+        const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext>& userRequestContext = nullptr)
         : Configuration(config)
         , TablesData(MakeIntrusive<TKikimrTablesData>())
         , QueryCtx(MakeIntrusive<TKikimrQueryContext>(functionRegistry, timeProvider, randomProvider))
         , TxCtx(txCtx)
         , UserToken(userToken)
+        , UserRequestContext(userRequestContext)
     {}
 
     TKikimrSessionContext(const TKikimrSessionContext&) = delete;
@@ -529,6 +533,10 @@ public:
         return UserToken;
     }
 
+    const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext>& GetUserRequestContext() const {
+        return UserRequestContext;
+    }
+
 private:
     TString UserName;
     TString Cluster;
@@ -540,6 +548,7 @@ private:
     TIntrusivePtr<TKikimrTransactionContextBase> TxCtx;
     NKikimr::NKqp::TKqpTempTablesState::TConstPtr TempTablesState;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    TIntrusivePtr<NKikimr::NKqp::TUserRequestContext> UserRequestContext;
 };
 
 TIntrusivePtr<IDataProvider> CreateKikimrDataSource(
@@ -548,7 +557,8 @@ TIntrusivePtr<IDataProvider> CreateKikimrDataSource(
     TIntrusivePtr<IKikimrGateway> gateway,
     TIntrusivePtr<TKikimrSessionContext> sessionCtx,
     const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& sourceFactory,
-    bool isInternalCall);
+    bool isInternalCall,
+    TGUCSettings::TPtr gucSettings);
 
 TIntrusivePtr<IDataProvider> CreateKikimrDataSink(
     const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,

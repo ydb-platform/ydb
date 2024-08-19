@@ -39,8 +39,8 @@ The invocation of `CREATE TABLE` creates {% if concept_table %}a [table]({{ conc
 
 {{ ydb-short-name }} supports two types of tables:
 
-* [Row-oriented] tables(../../../../concepts/datamodel/table.md#row-oriented-tables).
-* [Column-oriented] tables(../../../../concepts/datamodel/table.md#column-oriented-tables).
+* [Row-oriented](../../../../concepts/datamodel/table.md#row-oriented-tables) tables.
+* [Column-oriented](../../../../concepts/datamodel/table.md#column-oriented-tables) tables.
 
 The table type is specified by the `STORE` parameter in the `WITH` clause, where `ROW` indicates a [row-oriented](../../../../concepts/datamodel/table.md#row-oriented-tables) table and `COLUMN` indicates a [column-oriented](../../../../concepts/datamodel/table.md#column-oriented-tables) table:
 ```sql

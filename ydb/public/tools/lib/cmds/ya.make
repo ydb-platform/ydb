@@ -7,7 +7,6 @@ PEERDIR(
     contrib/python/six
     library/python/testing/recipe
     ydb/tests/library
-    contrib/python/deepmerge
 )
 
 END()

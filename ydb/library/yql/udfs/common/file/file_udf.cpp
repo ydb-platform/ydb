@@ -439,6 +439,7 @@ namespace {
             IFunctionTypeInfoBuilder& builder,
             bool typesOnly)
         {
+            Y_UNUSED(name);
             builder.UserType(userType);
             builder.SimpleSignature<TListType<TUserType>(char*)>();
             if (!typesOnly) {

@@ -29,7 +29,9 @@ CREATE OBJECT {{data_source}}_local_password (TYPE SECRET) WITH (value = "{{pass
 CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
     SOURCE_TYPE="{{kind}}",
     LOCATION="{{host}}:{{port}}",
+    {% if database %}
     DATABASE_NAME="{{database}}",
+    {% endif %}
     AUTH_METHOD="BASIC",
     LOGIN="{{login}}",
     PASSWORD_SECRET_NAME="{{data_source}}_local_password",
@@ -72,6 +74,36 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
     CLICKHOUSE_PROTOCOL,
     cluster.database,
     NONE)
+}}
+{% endfor %}
+
+{% for cluster in generic_settings.mysql_clusters %}
+{{ create_data_source(
+    MYSQL,
+    settings.mysql.cluster_name,
+    settings.mysql.host_internal,
+    settings.mysql.port_internal,
+    settings.mysql.username,
+    settings.mysql.password,
+    NONE,
+    cluster.database,
+    NONE,
+    NONE)
+}}
+{% endfor %}
+
+{% for cluster in generic_settings.oracle_clusters %}
+{{ create_data_source(
+    ORACLE,
+    settings.oracle.cluster_name,
+    settings.oracle.host_internal,
+    settings.oracle.port_internal,
+    settings.oracle.username,
+    settings.oracle.password,
+    NONE,
+    NONE,
+    NONE,
+    cluster.service_name)
 }}
 {% endfor %}
 

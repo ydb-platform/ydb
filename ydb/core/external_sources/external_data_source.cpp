@@ -36,8 +36,8 @@ struct TExternalDataSource : public IExternalSource {
         ythrow TExternalSourceException() << "Only external table supports parameters";
     }
 
-    bool IsRDBMSDataSource(const TProtoStringType& sourceType) const {
-        return IsIn({"Greenplum", "PostgreSQL", "MySQL", "MsSQLServer", "ClickHouse", "Oracle"}, sourceType);
+    bool DataSourceMustHaveDataBaseName(const TProtoStringType& sourceType) const {
+        return IsIn({"Greenplum", "PostgreSQL", "MySQL", "MsSQLServer", "ClickHouse"}, sourceType);
     }
 
     virtual void ValidateExternalDataSource(const TString& externalDataSourceDescription) const override {
@@ -53,7 +53,7 @@ struct TExternalDataSource : public IExternalSource {
             ythrow TExternalSourceException() << "Unsupported property: " << key;
         }
 
-        if (IsRDBMSDataSource(proto.GetSourceType()) && !proto.GetProperties().GetProperties().contains("database_name")) {
+        if (DataSourceMustHaveDataBaseName(proto.GetSourceType()) && !proto.GetProperties().GetProperties().contains("database_name")) {
             ythrow TExternalSourceException() << proto.GetSourceType() << " source must provide database_name";
         }
 

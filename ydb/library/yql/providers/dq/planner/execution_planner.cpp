@@ -42,7 +42,7 @@ using namespace Yql::DqsProto;
 
 namespace {
     TString RemoveAliases(TString attributeName) {
-        if (auto idx = attributeName.find_last_of('.') != TString::npos) {
+        if (auto idx = attributeName.find_last_of('.'); idx != TString::npos) {
             return attributeName.substr(idx+1);
         }
         return attributeName;

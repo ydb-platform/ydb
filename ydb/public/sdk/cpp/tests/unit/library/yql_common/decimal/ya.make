@@ -1,6 +1,6 @@
 UNITTEST()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/headers.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
 
 SRCS(
     yql_decimal_ut.cpp

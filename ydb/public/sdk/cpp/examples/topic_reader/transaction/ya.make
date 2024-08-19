@@ -1,6 +1,6 @@
 PROGRAM(read_from_topic_in_transaction)
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/headers.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
 
 SRCS(
     application.cpp

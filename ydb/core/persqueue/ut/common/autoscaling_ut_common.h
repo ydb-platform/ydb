@@ -1,4 +1,4 @@
-#include <ydb-cpp-sdk/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
+#include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>

@@ -26,18 +26,19 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
 
         localHelper.CreateTestOlapTable();
         testHelper.CreateTier("tier1");
-        const TString tiering_rule = testHelper.CreateTieringRule("tier1", "timestamp");
+        const TString tieringRule = testHelper.CreateTieringRule("tier1", "timestamp");
 
         for (ui64 i = 0; i < 100; ++i) {
             WriteTestData(testHelper.GetKikimr(), "/Root/olapStore/olapTable", 0, i * 10000, 1000);
         }
 
-        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
 
+        ui64 columnRawBytes = 0;
         {
             auto selectQuery = TString(R"(
                 SELECT
-                    TierName
+                    TierName, SUM(ColumnRawBytes) As RawBytes
                 FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
                 WHERE Activity == 1
                 GROUP BY TierName
@@ -46,15 +47,17 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("TierName")), "__DEFAULT");
+
+            columnRawBytes = GetUint64(rows[0].at("RawBytes"));
         }
 
-        testHelper.SetTiering("/Root/olapStore/olapTable", tiering_rule);
-        csController->WaitCompactions(TDuration::Seconds(5));
+        testHelper.SetTiering("/Root/olapStore/olapTable", tieringRule);
+        csController->WaitActualization(TDuration::Seconds(5));
 
         {
             auto selectQuery = TString(R"(
                 SELECT
-                    TierName
+                    TierName, SUM(ColumnRawBytes) As RawBytes
                 FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
                 WHERE Activity == 1
                 GROUP BY TierName
@@ -63,6 +66,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("TierName")), "tier1");
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("RawBytes")), columnRawBytes);
         }
 
         testHelper.ResetTiering("/Root/olapStore/olapTable");
@@ -71,7 +75,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         {
             auto selectQuery = TString(R"(
                 SELECT
-                    TierName
+                    TierName, SUM(ColumnRawBytes) As RawBytes
                 FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
                 WHERE Activity == 1
                 GROUP BY TierName
@@ -80,6 +84,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("TierName")), "__DEFAULT");
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("RawBytes")), columnRawBytes);
         }
     }
 }

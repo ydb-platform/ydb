@@ -166,12 +166,12 @@ Finished preparing query: PreparedSelectTransaction
 
 Выполняется потоковый запрос данных, результатом исполнения которого является стрим. Стрим позволяет считать неограниченное количество строк и объем данных.
 
-**ВНИМАНИЕ**: Без RertyQuery не стоит использовать. На данный момент RetryQuery не поддерживает использование StreamExecuteQuery.
+**ВНИМАНИЕ**: Не стоит использовать без RertyQuery.
 
 ```c++
 // WARNING: Do not use without RetryQuery!!!
-// Now, RetryQuery does not support StreamExecuteQuery
-static TStatus StreamQuerySelectTransaction(TQueryClient client, const TString& path) {
+static TStatus StreamQuerySelectTransaction(TQueryClient client, const TString& path, std::vector<TResultSet>& resultSets) {
+    resultSets.clear();
     auto query = Sprintf(R"(
         --!syntax_v1
         PRAGMA TablePathPrefix("%s");
@@ -193,19 +193,16 @@ static TStatus StreamQuerySelectTransaction(TQueryClient client, const TString& 
         .Build();
 
     // Executes stream query
-    auto resultStreamQuery = client.StreamExecuteQuery(query, TTxControl::NoTx(), parameters);
-    auto resultStreamQueryValue = resultStreamQuery.GetValueSync();
+    auto resultStreamQuery = client.StreamExecuteQuery(query, TTxControl::NoTx(), parameters).GetValueSync();
 
-    if (!resultStreamQueryValue.IsSuccess()) {
-        return resultStreamQueryValue;
+    if (!resultStreamQuery.IsSuccess()) {
+        return resultStreamQuery;
     }
-```
-`StreamExecuteQuery` возвращает `TAsyncExecuteQueryIterator`. Ниже выполняется вычитывание данных из итератора (потока):
-```c++
+
     bool eos = false;
 
     while (!eos) {
-        auto streamPart = resultStreamQueryValue.ReadNext().ExtractValueSync();
+        auto streamPart = resultStreamQuery.ReadNext().ExtractValueSync();
 
         if (!streamPart.IsSuccess()) {
             eos = true;
@@ -215,19 +212,9 @@ static TStatus StreamQuerySelectTransaction(TQueryClient client, const TString& 
             continue;
         }
 
-        Cout << "> StreamQuery:" << Endl;
         if (streamPart.HasResultSet()) {
             auto rs = streamPart.ExtractResultSet();
-
-            TResultSetParser parser(rs);
-            while (parser.TryNextRow()) {
-                Cout << "Season"
-                    << ", SeriesId: " << parser.ColumnParser("series_id").GetOptionalUint64()
-                    << ", SeasonId: " << parser.ColumnParser("season_id").GetOptionalUint64()
-                    << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8()
-                    << ", Air date: " << parser.ColumnParser("first_aired").GetOptionalString()
-                    << Endl;
-            }
+            resultSets.push_back(rs);
         }
     }
     return TStatus(EStatus::SUCCESS, NYql::TIssues());
@@ -350,24 +337,21 @@ Episode 3, Season: 5, title: Chief Operating Officer, Air date: Sun Apr 08, 2018
 
 Фрагмент кода, демонстрирующий явное использование вызовов `BeginTransaction` и `tx.Commit()`:
 
-**ВНИМАНИЕ**: Без RertyQuery не стоит использовать. На данный момент RetryQuery не поддерживает использование явных транзакций.
-
+**ВНИМАНИЕ**: Не стоит использовать без RetryQuery.
 ```c++
 // Show usage of explicit Begin/Commit transaction control calls.
 // In most cases it's better to use transaction control settings in ExecuteDataQuery calls instead
 // to avoid additional hops to YDB cluster and allow more efficient execution of queries.
 // WARNING: Do not use without RetryQuery!!!
-// Now, RetryQuery does not support explicit transactions
 static TStatus ExplicitTclTransaction(TQueryClient client, const TString& path, const TInstant& airDate) { 
     auto session = client.GetSession().GetValueSync().GetSession();
-    auto beginResult = session.BeginTransaction(TTxSettings::SerializableRW());
-    auto beginResultValue = beginResult.GetValueSync();
-    if (!beginResultValue.IsSuccess()) {
-        return beginResultValue;
+    auto beginResult = session.BeginTransaction(TTxSettings::SerializableRW()).GetValueSync();
+    if (!beginResult.IsSuccess()) {
+        return beginResult;
     }
 
     // Get newly created transaction id
-    auto tx = beginResultValue.GetTransaction();
+    auto tx = beginResult.GetTransaction();
 
     auto query = Sprintf(R"(
         --!syntax_v1
@@ -388,11 +372,10 @@ static TStatus ExplicitTclTransaction(TQueryClient client, const TString& path, 
     // Transaction control settings continues active transaction (tx)
     auto updateResult = session.ExecuteQuery(query,
         TTxControl::Tx(tx.GetId()),
-        params);
-    auto updateResultValue = updateResult.GetValueSync();
+        params).GetValueSync();
 
-    if (!updateResultValue.IsSuccess()) {
-        return updateResultValue;
+    if (!updateResult.IsSuccess()) {
+        return updateResult;
     }
     // Commit active transaction (tx)
     return tx.Commit().GetValueSync();

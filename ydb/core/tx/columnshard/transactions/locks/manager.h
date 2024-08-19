@@ -47,15 +47,12 @@ public:
 
 class TManager {
 private:
-    const ui64 Generation;
     TInteractionsContext InteractionsContext;
     THashMap<ui64, TTxState> Transactions;
     TTxConflicts TxConflicts;
 
 public:
-    TManager(const ui64 generation)
-        : Generation(generation) {
-    }
+    TManager() = default;
 
     const TInteractionsContext& GetInteractionContext() const {
         return InteractionsContext;

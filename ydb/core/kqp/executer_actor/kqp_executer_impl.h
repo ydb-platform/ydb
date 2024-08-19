@@ -1713,7 +1713,7 @@ protected:
         LOG_E("Sending timeout response to: " << Target);
 
         Request.Transactions.crop(0);
-        this->PassAway();
+        this->Shutdown();
     }
 
     void FillResponseStats(Ydb::StatusIds::StatusCode status) {
@@ -1778,7 +1778,7 @@ protected:
         ExecuterStateSpan.EndError(response.DebugString());
 
         Request.Transactions.crop(0);
-        this->PassAway();
+        this->Shutdown();
     }
 
 protected:
@@ -1846,6 +1846,12 @@ protected:
     }
 
 protected:
+    // Introduced separate method from `PassAway()` - to not get confused with expectations from other actors,
+    // that `PassAway()` should kill actor immediately.
+    virtual void Shutdown() {
+        PassAway();
+    }
+
     void PassAway() override {
         YQL_ENSURE(AlreadyReplied && ResponseEv);
         this->Send(Target, ResponseEv.release());

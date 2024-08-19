@@ -2598,10 +2598,10 @@ private:
         }
     }
 
-    void PassAway() override {
+    void Shutdown() override {
         if (Planner) {
             if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
-                DoShutdown();
+                PassAway();
             } else {
                 this->Become(&TThis::WaitShutdownState);
                 LOG_I("Waiting for shutdown of " << Planner->GetPendingComputeTasks().size() << " tasks and "
@@ -2609,8 +2609,25 @@ private:
                 TActivationContext::Schedule(TDuration::Seconds(10), new IEventHandle(SelfId(), SelfId(), new TEvents::TEvPoison));
             }
         } else {
-            DoShutdown();
+            PassAway();
         }
+    }
+
+    void PassAway() override {
+        auto totalTime = TInstant::Now() - StartTime;
+        Counters->Counters->DataTxTotalTimeHistogram->Collect(totalTime.MilliSeconds());
+
+        // TxProxyMon compatibility
+        Counters->TxProxyMon->TxTotalTimeHgram->Collect(totalTime.MilliSeconds());
+        Counters->TxProxyMon->TxExecuteTimeHgram->Collect(totalTime.MilliSeconds());
+
+        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+
+        if (GetUseFollowers()) {
+            Send(MakePipePerNodeCacheID(true), new TEvPipeCache::TEvUnlink(0));
+        }
+
+        TBase::PassAway();
     }
 
     STATEFN(WaitShutdownState) {
@@ -2637,7 +2654,7 @@ private:
             Planner->CompletedCA(taskId, actor);
 
             if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
-                DoShutdown();
+                PassAway();
             }
         } else {
             // TODO: handle other states.
@@ -2661,32 +2678,17 @@ private:
         }
 
         if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
-            DoShutdown();
+            PassAway();
         }
     }
 
     void HandleShutdown(TEvents::TEvPoison::TPtr& ev) {
         // Self-poison means timeout - don't wait anymore.
+        LOG_I("Timed out on waiting for Compute Actors to finish - forcing shutdown");
+
         if (ev->Sender == SelfId()) {
-            DoShutdown();
+            PassAway();
         }
-    }
-
-    void DoShutdown() {
-        auto totalTime = TInstant::Now() - StartTime;
-        Counters->Counters->DataTxTotalTimeHistogram->Collect(totalTime.MilliSeconds());
-
-        // TxProxyMon compatibility
-        Counters->TxProxyMon->TxTotalTimeHgram->Collect(totalTime.MilliSeconds());
-        Counters->TxProxyMon->TxExecuteTimeHgram->Collect(totalTime.MilliSeconds());
-
-        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
-
-        if (GetUseFollowers()) {
-            Send(MakePipePerNodeCacheID(true), new TEvPipeCache::TEvUnlink(0));
-        }
-
-        TBase::PassAway();
     }
 
 private:

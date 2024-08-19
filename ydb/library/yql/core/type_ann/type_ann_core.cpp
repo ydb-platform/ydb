@@ -356,7 +356,7 @@ namespace NTypeAnnImpl {
                     .Build(), ctx.MakeType<TDataExprType>(EDataSlot::Yson) };
             }
 
-            if (resType->GetTag() == "DateTime2.TM") {
+            if (resType->GetTag() == "DateTime2.TM") { // TODO bigdate
                 return { ctx.Builder(input->Pos())
                     .Callable("Apply")
                         .Callable(0, "Udf")

@@ -2,6 +2,8 @@
 
 #include <util/datetime/base.h>
 
+#include "datetime.h"
+
 namespace NYql::DateTime {
 
 struct TTM64Storage {
@@ -35,6 +37,21 @@ struct TTM64Storage {
         Second = 0;
         Microsecond = 0;
         TimezoneId = 0;
+    }
+
+    inline void FromNarrow(const TTMStorage& narrow) {
+        Year = narrow.Year;
+        DayOfYear = narrow.DayOfYear;
+        WeekOfYear = narrow.WeekOfYear;
+        WeekOfYearIso8601 = narrow.WeekOfYearIso8601;
+        DayOfWeek = narrow.DayOfWeek;
+        Month = narrow.Month;
+        Day = narrow.Day;
+        Hour = narrow.Hour;
+        Minute = narrow.Minute;
+        Second = narrow.Second;
+        Microsecond = narrow.Microsecond;
+        TimezoneId = narrow.TimezoneId;
     }
 
     // TODO add to UDF ABI interface

@@ -1,5 +1,6 @@
 /* syntax version 1 */
 select
+    DateTime::MakeDate32(DateTime::Split(d16)) as d16_32, -- TODO accept narrow TMStorage
     DateTime::MakeDate32(DateTime::Split(d32)) as d32,
     DateTime::MakeDatetime64(DateTime::Split(dt64)) as dt64,
     DateTime::MakeTimestamp64(DateTime::Split(ts64)) as ts64

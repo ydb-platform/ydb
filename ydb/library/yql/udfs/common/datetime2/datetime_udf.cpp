@@ -995,8 +995,18 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
     }
     END_SIMPLE_ARROW_UDF(TMakeTzTimestamp, TMakeDateKernelExec<TTzTimestamp>::Do);
 
+
+    SIMPLE_STRICT_UDF(TConvert, TResource<TM64ResourceName>(TAutoMap<TResource<TMResourceName>>)) {
+        valueBuilder->GetDateBuilder();
+        TUnboxedValuePod result(0);
+        auto& arg = Reference(args[0]);
+        auto& storage = Reference64(result);
+        storage.FromNarrow(arg);
+        return result;
+    }
+
     SIMPLE_STRICT_UDF(TMakeDate32, TDate32(TAutoMap<TResource<TM64ResourceName>>)) {
-        valueBuilder->GetDateBuilder(); // TODO
+        valueBuilder->GetDateBuilder();
         auto& storage = Reference64(args[0]);
         return TUnboxedValuePod(storage.ToDate32());
     }
@@ -2355,6 +2365,8 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         TMakeTzDate,
         TMakeTzDatetime,
         TMakeTzTimestamp,
+
+        TConvert,
 
         TMakeDate32,
         TMakeDatetime64,

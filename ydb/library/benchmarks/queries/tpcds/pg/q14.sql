@@ -37,7 +37,7 @@ with  cross_items as
       and i_category_id = category_id
 ),
  avg_sales as
- (select avg(quantity::numeric*list_price) average_sales
+ (select avg(quantity*list_price) average_sales
   from (select ss_quantity quantity
              ,ss_list_price list_price
        from {{store_sales}}
@@ -61,7 +61,7 @@ with  cross_items as
   select  channel, i_brand_id,i_class_id,i_category_id,sum(sales) sum_sales, sum(number_sales) sum_num_sales
  from(
        select 'store' channel, i_brand_id,i_class_id
-             ,i_category_id,sum(ss_quantity::numeric*ss_list_price) sales
+             ,i_category_id,sum(ss_quantity*ss_list_price) sales
              , count(*) number_sales
        from {{store_sales}}
            ,{{item}}
@@ -72,9 +72,9 @@ with  cross_items as
          and d_year = 2000+2
          and d_moy = 11
        group by i_brand_id,i_class_id,i_category_id
-       having sum(ss_quantity::numeric*ss_list_price) > (select average_sales from avg_sales)
+       having sum(ss_quantity*ss_list_price) > (select average_sales from avg_sales)
        union all
-       select 'catalog' channel, i_brand_id,i_class_id,i_category_id, sum(cs_quantity::numeric*cs_list_price) sales, count(*) number_sales
+       select 'catalog' channel, i_brand_id,i_class_id,i_category_id, sum(cs_quantity*cs_list_price) sales, count(*) number_sales
        from {{catalog_sales}}
            ,{{item}}
            ,{{date_dim}}
@@ -84,9 +84,9 @@ with  cross_items as
          and d_year = 2000+2
          and d_moy = 11
        group by i_brand_id,i_class_id,i_category_id
-       having sum(cs_quantity::numeric*cs_list_price) > (select average_sales from avg_sales)
+       having sum(cs_quantity*cs_list_price) > (select average_sales from avg_sales)
        union all
-       select 'web' channel, i_brand_id,i_class_id,i_category_id, sum(ws_quantity::numeric*ws_list_price) sales , count(*) number_sales
+       select 'web' channel, i_brand_id,i_class_id,i_category_id, sum(ws_quantity*ws_list_price) sales , count(*) number_sales
        from {{web_sales}}
            ,{{item}}
            ,{{date_dim}}
@@ -96,7 +96,7 @@ with  cross_items as
          and d_year = 2000+2
          and d_moy = 11
        group by i_brand_id,i_class_id,i_category_id
-       having sum(ws_quantity::numeric*ws_list_price) > (select average_sales from avg_sales)
+       having sum(ws_quantity*ws_list_price) > (select average_sales from avg_sales)
  ) y
  group by rollup (channel, i_brand_id,i_class_id,i_category_id)
  order by channel nulls first,i_brand_id nulls first,i_class_id nulls first,i_category_id nulls first
@@ -138,7 +138,7 @@ with  cross_items as
       and i_category_id = category_id
 ),
  avg_sales as
-(select avg(quantity::numeric*list_price) average_sales
+(select avg(quantity*list_price) average_sales
   from (select ss_quantity quantity
              ,ss_list_price list_price
        from {{store_sales}}
@@ -173,7 +173,7 @@ with  cross_items as
                            ,last_year.number_sales ly_number_sales
  from
  (select 'store' channel, i_brand_id,i_class_id,i_category_id
-        ,sum(ss_quantity::numeric*ss_list_price) sales, count(*) number_sales
+        ,sum(ss_quantity*ss_list_price) sales, count(*) number_sales
  from {{store_sales}}
      ,{{item}}
      ,{{date_dim}}
@@ -186,9 +186,9 @@ with  cross_items as
                        and d_moy = 12
                        and d_dom = 15)
  group by i_brand_id,i_class_id,i_category_id
- having sum(ss_quantity::numeric*ss_list_price) > (select average_sales from avg_sales)) this_year,
+ having sum(ss_quantity*ss_list_price) > (select average_sales from avg_sales)) this_year,
  (select 'store' channel, i_brand_id,i_class_id
-        ,i_category_id, sum(ss_quantity::numeric*ss_list_price) sales, count(*) number_sales
+        ,i_category_id, sum(ss_quantity*ss_list_price) sales, count(*) number_sales
  from {{store_sales}}
      ,{{item}}
      ,{{date_dim}}
@@ -201,7 +201,7 @@ with  cross_items as
                        and d_moy = 12
                        and d_dom = 15)
  group by i_brand_id,i_class_id,i_category_id
- having sum(ss_quantity::numeric*ss_list_price) > (select average_sales from avg_sales)) last_year
+ having sum(ss_quantity*ss_list_price) > (select average_sales from avg_sales)) last_year
  where this_year.i_brand_id= last_year.i_brand_id
    and this_year.i_class_id = last_year.i_class_id
    and this_year.i_category_id = last_year.i_category_id

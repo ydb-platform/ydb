@@ -111,17 +111,17 @@ By default, if the `STORE` parameter is not specified, a row-oriented table is c
 
 - Creating a column-oriented table
 
- ```sql
-  CREATE TABLE table_name (
-    a Uint64 NOT NULL,
-    b Uint64 NOT NULL,
-    c Float,
-    PRIMARY KEY (a, b)
-  )
-  WITH (
-    STORE = COLUMN
-  );
-  ```  
+  ```sql
+    CREATE TABLE table_name (
+      a Uint64 NOT NULL,
+      b Uint64 NOT NULL,
+      c Float,
+      PRIMARY KEY (a, b)
+    )
+    WITH (
+      STORE = COLUMN
+    );
+    ```  
 
 {% endlist %}
 

@@ -1,4 +1,6 @@
 #include "tx_controller.h"
+
+#include "locks/manager.h"
 #include "transactions/tx_finish_async.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
@@ -7,7 +9,8 @@ namespace NKikimr::NColumnShard {
 
 TTxController::TTxController(TColumnShard& owner)
     : Owner(owner)
-    , Counters(owner.Counters.GetCSCounters().TxProgress) {
+    , Counters(owner.Counters.GetCSCounters().TxProgress)
+    , InteractionsManager(std::make_unique<NTxInteractions::TManager>(owner.Generation())) {
 }
 
 bool TTxController::HaveOutdatedTxs() const {
@@ -40,6 +43,10 @@ TTxController::TPlanQueueItem TTxController::GetFrontTx() const {
 
 bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
+
+    if (!InteractionsManager->LoadFromDatabase(txc)) {
+        return false;
+    }
 
     auto rowset = db.Table<Schema::TxInfo>().GreaterOrEqual(0).Select();
     if (!rowset.IsReady()) {
@@ -104,7 +111,8 @@ TTxController::ITransactionOperator::TPtr TTxController::GetVerifiedTxOperator(c
     return it->second;
 }
 
-std::shared_ptr<TTxController::ITransactionOperator> TTxController::UpdateTxSourceInfo(const TFullTxInfo& tx, NTabletFlatExecutor::TTransactionContext& txc) {
+std::shared_ptr<TTxController::ITransactionOperator> TTxController::UpdateTxSourceInfo(
+    const TFullTxInfo& tx, NTabletFlatExecutor::TTransactionContext& txc) {
     auto op = GetVerifiedTxOperator(tx.GetTxId());
     op->ResetStatusOnUpdate();
     auto& txInfo = op->MutableTxInfo();
@@ -117,7 +125,8 @@ std::shared_ptr<TTxController::ITransactionOperator> TTxController::UpdateTxSour
     return op;
 }
 
-TTxController::TTxInfo TTxController::RegisterTx(const std::shared_ptr<TTxController::ITransactionOperator>& txOperator, const TString& txBody, NTabletFlatExecutor::TTransactionContext& txc) {
+TTxController::TTxInfo TTxController::RegisterTx(const std::shared_ptr<TTxController::ITransactionOperator>& txOperator, const TString& txBody,
+    NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
     auto& txInfo = txOperator->GetTxInfo();
     AFL_VERIFY(txInfo.MaxStep == Max<ui64>());
@@ -128,7 +137,8 @@ TTxController::TTxInfo TTxController::RegisterTx(const std::shared_ptr<TTxContro
     return txInfo;
 }
 
-TTxController::TTxInfo TTxController::RegisterTxWithDeadline(const std::shared_ptr<TTxController::ITransactionOperator>& txOperator, const TString& txBody, NTabletFlatExecutor::TTransactionContext& txc) {
+TTxController::TTxInfo TTxController::RegisterTxWithDeadline(const std::shared_ptr<TTxController::ITransactionOperator>& txOperator,
+    const TString& txBody, NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
 
     auto& txInfo = txOperator->MutableTxInfo();
@@ -310,7 +320,8 @@ std::shared_ptr<TTxController::ITransactionOperator> TTxController::StartPropose
     NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("method", "TTxController::StartProposeOnExecute")(
         "tx_info", txInfo.DebugString())("tx_info", txInfo.DebugString());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start");
-    std::shared_ptr<TTxController::ITransactionOperator> txOperator(TTxController::ITransactionOperator::TFactory::Construct(txInfo.TxKind, txInfo));
+    std::shared_ptr<TTxController::ITransactionOperator> txOperator(
+        TTxController::ITransactionOperator::TFactory::Construct(txInfo.TxKind, txInfo));
     AFL_VERIFY(!!txOperator);
     if (!txOperator->Parse(Owner, txBody)) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse txOperator");
@@ -322,8 +333,8 @@ std::shared_ptr<TTxController::ITransactionOperator> TTxController::StartPropose
     if (!!txInfoPtr) {
         if (!txOperator->CheckAllowUpdate(*txInfoPtr)) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "incorrect duplication")("actual_tx", txInfoPtr->DebugString());
-            TTxController::TProposeResult proposeResult(
-                NKikimrTxColumnShard::EResultStatus::ERROR, TStringBuilder() << "Another commit TxId# " << txInfo.TxId << " has already been proposed");
+            TTxController::TProposeResult proposeResult(NKikimrTxColumnShard::EResultStatus::ERROR,
+                TStringBuilder() << "Another commit TxId# " << txInfo.TxId << " has already been proposed");
             txOperator->SetProposeStartInfo(proposeResult);
             return txOperator;
         } else {
@@ -386,7 +397,8 @@ void TTxController::FinishProposeOnComplete(const ui64 txId, const TActorContext
 }
 
 void TTxController::ITransactionOperator::SwitchStateVerified(const EStatus from, const EStatus to) {
-    AFL_VERIFY(!Status || *Status == from)("error", "incorrect expected status")("real_state", *Status)("expected", from)("details", DebugString());
+    AFL_VERIFY(!Status || *Status == from)("error", "incorrect expected status")("real_state", *Status)("expected", from)(
+                              "details", DebugString());
     Status = to;
 }
 

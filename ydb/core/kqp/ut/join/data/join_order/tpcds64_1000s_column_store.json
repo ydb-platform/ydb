@@ -101,12 +101,12 @@
                                                                                             "args":
                                                                                               [
                                                                                                 {
-                                                                                                  "op_name":"TableLookup",
-                                                                                                  "table":"test\/ds\/store_sales"
+                                                                                                  "op_name":"TableFullScan",
+                                                                                                  "table":"test\/ds\/item"
                                                                                                 },
                                                                                                 {
                                                                                                   "op_name":"TableFullScan",
-                                                                                                  "table":"test\/ds\/item"
+                                                                                                  "table":"test\/ds\/store_sales"
                                                                                                 }
                                                                                               ]
                                                                                           }
@@ -285,12 +285,12 @@
                                                                                             "args":
                                                                                               [
                                                                                                 {
-                                                                                                  "op_name":"TableLookup",
-                                                                                                  "table":"test\/ds\/store_sales"
+                                                                                                  "op_name":"TableFullScan",
+                                                                                                  "table":"test\/ds\/item"
                                                                                                 },
                                                                                                 {
                                                                                                   "op_name":"TableFullScan",
-                                                                                                  "table":"test\/ds\/item"
+                                                                                                  "table":"test\/ds\/store_sales"
                                                                                                 }
                                                                                               ]
                                                                                           }

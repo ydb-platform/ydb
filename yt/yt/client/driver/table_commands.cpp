@@ -404,6 +404,15 @@ void TGetTableColumnarStatisticsCommand::DoExecute(ICommandContextPtr context)
                                         }
                                     });
                             })
+                            .DoIf(statistics.HasLargeStatistics(), [&](TFluentMap fluent) {
+                                fluent
+                                    .Item("column_estimated_unique_counts").DoMap([&](TFluentMap fluent) {
+                                        const auto& largeStat = statistics.LargeStatistics;
+                                        for (int index = 0; index < std::ssize(largeStat.ColumnHyperLogLogDigests); ++index) {
+                                            fluent.Item(columns[index]).Value(largeStat.ColumnHyperLogLogDigests[index].EstimateCardinality());
+                                        }
+                                    });
+                            })
                             .OptionalItem("chunk_row_count", statistics.ChunkRowCount)
                             .OptionalItem("legacy_chunk_row_count", statistics.LegacyChunkRowCount)
                         .EndMap();

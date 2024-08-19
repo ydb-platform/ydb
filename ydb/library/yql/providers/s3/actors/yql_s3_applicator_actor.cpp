@@ -273,23 +273,28 @@ public:
         hFunc(TEvPrivate::TEvListParts, Handle);
     )
 
-    bool RetryOperation(IHTTPGateway::TResult& operationResult, const TString& url, const TString& operationName) {
+    bool RetryOperation(IHTTPGateway::TResult&& operationResult, const TString& url, const TString& operationName) {
         const auto curlResponseCode = operationResult.CurlResponseCode;
         const auto httpResponseCode = operationResult.Content.HttpResponseCode;
         const auto result = RetryCount && GetRetryState(operationName)->GetNextRetryDelay(curlResponseCode, httpResponseCode);
 
+        NYql::TIssues issues = std::move(operationResult.Issues);
+        TStringBuilder errorMessage = TStringBuilder() << "Retry operation " << operationName << ", curl error: " << curl_easy_strerror(curlResponseCode) << ", url: " << url;
         if (const TString errorText = operationResult.Content.Extract()) {
             TString errorCode;
             TString message;
             if (!ParseS3ErrorResponse(errorText, errorCode, message)) {
                 message = errorText;
             }
-            RetryIssues.AddIssues(NS3Util::AddParentIssue(
-                TStringBuilder() << "Retry operation " << operationName << ", curl error: " << curl_easy_strerror(curlResponseCode) << ", url: " << url,
-                BuildIssues(httpResponseCode, errorCode, message)
-            ));
+            issues.AddIssues(BuildIssues(httpResponseCode, errorCode, message));
         } else {
-            RetryIssues.AddIssue(TStringBuilder() << "Retry operation " << operationName << ", HTTP code: " << httpResponseCode << ", curl error: " << curl_easy_strerror(curlResponseCode) << ", url: " << url);
+            errorMessage << ", HTTP code: " << httpResponseCode;
+        }
+
+        if (issues) {
+            RetryIssues.AddIssues(NS3Util::AddParentIssue(errorMessage, std::move(issues)));
+        } else {
+            RetryIssues.AddIssue(errorMessage);
         }
 
         if (result) {
@@ -399,7 +404,7 @@ public:
         }
         const TString& url = ev->Get()->State->BuildUrl();
         LOG_D("CommitMultipartUpload ERROR " << url);
-        if (RetryOperation(result, url, "CommitMultipartUpload")) {
+        if (RetryOperation(std::move(result), url, "CommitMultipartUpload")) {
             PushCommitMultipartUpload(ev->Get()->State);
         }
     }
@@ -476,7 +481,7 @@ public:
         }
         const TString& url = ev->Get()->State->BuildUrl();
         LOG_D("ListMultipartUploads ERROR " << url);
-        if (RetryOperation(result, url, "ListMultipartUploads")) {
+        if (RetryOperation(std::move(result), url, "ListMultipartUploads")) {
             PushListMultipartUploads(ev->Get()->State);
         }
     }
@@ -500,7 +505,7 @@ public:
         }
         const TString& url = ev->Get()->State->BuildUrl();
         LOG_D("AbortMultipartUpload ERROR " << url);
-        if (RetryOperation(result, url, "AbortMultipartUpload")) {
+        if (RetryOperation(std::move(result), url, "AbortMultipartUpload")) {
             PushAbortMultipartUpload(ev->Get()->State);
         }
     }
@@ -551,7 +556,7 @@ public:
         }
         const TString& url = ev->Get()->State->BuildUrl();
         LOG_D("ListParts ERROR " << url);
-        if (RetryOperation(result, url, "ListParts")) {
+        if (RetryOperation(std::move(result), url, "ListParts")) {
             PushListParts(ev->Get()->State);
         }
     }

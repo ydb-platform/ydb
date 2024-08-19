@@ -49,6 +49,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("TierName")), "__DEFAULT");
 
             columnRawBytes = GetUint64(rows[0].at("RawBytes"));
+            UNIT_ASSERT_GT(columnRawBytes, 0);
         }
 
         testHelper.SetTiering("/Root/olapStore/olapTable", tieringRule);
@@ -66,7 +67,8 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("TierName")), "tier1");
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("RawBytes")), columnRawBytes);
+            UNIT_ASSERT_VALUES_EQUAL_C(GetUint64(rows[0].at("RawBytes")), columnRawBytes,
+                TStringBuilder() << "RawBytes changed after eviction: before=" << columnRawBytes << " after=" << rows[0].at("RawBytes"));
         }
 
         testHelper.ResetTiering("/Root/olapStore/olapTable");
@@ -84,7 +86,9 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("TierName")), "__DEFAULT");
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("RawBytes")), columnRawBytes);
+            UNIT_ASSERT_VALUES_EQUAL_C(GetUint64(rows[0].at("RawBytes")), columnRawBytes,
+                TStringBuilder() << "RawBytes changed after resetting tiering: before=" << columnRawBytes
+                                 << " after=" << rows[0].at("RawBytes"));
         }
     }
 }

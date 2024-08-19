@@ -9,6 +9,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
 #define LOG_E(name, stream) \

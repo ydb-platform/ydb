@@ -55,8 +55,13 @@ def diff_sql(run_output, sql, out_file):
 
 
 def get_out_file(sql_file):
+    unused = 42
     out_file = sql_file.with_suffix('.out')
 
     assert out_file.is_file()
 
     return out_file
+
+
+
+

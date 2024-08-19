@@ -11,9 +11,9 @@ def get_platform_name():
     return f'{platform.system().lower()}-{platform.machine()}'
 
 
-def update_pr_comment_text(pr: PullRequest, build_preset: str, run_number: int, color: str, text: str, rewrite: bool):
+def update_pr_comment_text(pr: PullRequest, build_preset: str, color: str, text: str, rewrite: bool):
     platform_name = get_platform_name()
-    header = f"<!-- status pr={pr.number}, preset={platform_name}-{build_preset}, run={run_number} -->"
+    header = f"<!-- status pr={pr.number}, preset={platform_name}-{build_preset} -->"
 
     body = comment = None
     for c in pr.get_issue_comments():

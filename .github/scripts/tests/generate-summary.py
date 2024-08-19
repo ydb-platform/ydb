@@ -399,7 +399,6 @@ def main():
 
     if os.environ.get("GITHUB_EVENT_NAME") in ("pull_request", "pull_request_target"):
         gh = Github(auth=GithubAuth.Token(os.environ["GITHUB_TOKEN"]))
-        run_number = int(os.environ.get("GITHUB_RUN_NUMBER"))
 
         with open(os.environ["GITHUB_EVENT_PATH"]) as fp:
             event = json.load(fp)
@@ -407,7 +406,7 @@ def main():
         pr = gh.create_from_raw_data(PullRequest, event["pull_request"])
         color, text = get_comment_text(pr, summary, args.summary_links, is_last_retry=bool(args.is_last_retry))
 
-        update_pr_comment_text(pr, args.build_preset, run_number, color, text='\n'.join(text), rewrite=False)
+        update_pr_comment_text(pr, args.build_preset, color, text='\n'.join(text), rewrite=False)
 
     if args.status_report_file:
         with open(args.status_report_file, 'w') as fo:

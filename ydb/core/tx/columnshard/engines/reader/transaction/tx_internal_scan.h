@@ -10,6 +10,8 @@ private:
     const ui32 ScanGen = 1;
     const ui32 TxId = 1;
     const ui32 ScanId = 1;
+    void SendError(const TString& problem, const TString& details, const TActorContext& ctx) const;
+
 public:
     using TReadMetadataPtr = TReadMetadataBase::TConstPtr;
 
@@ -23,9 +25,7 @@ public:
     TTxType GetTxType() const override { return NColumnShard::TXTYPE_START_INTERNAL_SCAN; }
 
 private:
-    TString ErrorDescription;
     TEvColumnShard::TEvInternalScan::TPtr InternalScanEvent;
-    TReadMetadataPtr ReadMetadataRange;
 };
 
 }

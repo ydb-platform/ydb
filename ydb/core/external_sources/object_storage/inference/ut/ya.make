@@ -1,5 +1,3 @@
-IF (NOT OS_WINDOWS)
-
 GTEST()
 
 PEERDIR(
@@ -15,5 +13,3 @@ SRCS(
 )
 
 END()
-
-ENDIF()

@@ -809,6 +809,11 @@ private:
         const auto count = ev->Get()->Record.GetCount();
         Y_ASSERT(count != 0);
 
+        if (!Workers.Capacity()) {
+            Send(ev->Sender, new TEvAllocateWorkersResponse("Empty workers capacity", NYql::NDqProto::StatusIds::OVERLOADED));
+            return;
+        }
+
         if (!Scheduler->Suspend(NDq::IScheduler::TWaitInfo(ev->Get()->Record, ev->Sender))) {
             Send(ev->Sender, new TEvAllocateWorkersResponse("Too many dq operations", NYql::NDqProto::StatusIds::OVERLOADED));
             return;

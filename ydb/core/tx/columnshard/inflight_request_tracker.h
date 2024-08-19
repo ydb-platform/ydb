@@ -91,7 +91,7 @@ public:
     [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> Ping(TColumnShard* self, const TDuration critDuration, const TInstant now);
 
     // Returns a unique cookie associated with this request
-    [[nodiscard]] TConclusion<ui64> AddInFlightRequest(
+    [[nodiscard]] ui64 AddInFlightRequest(
         NOlap::NReader::TReadMetadataBase::TConstPtr readMeta, const NOlap::TVersionedIndex* index);
 
     void RemoveInFlightRequest(ui64 cookie, const NOlap::TVersionedIndex* index, const TInstant now);
@@ -108,7 +108,7 @@ public:
     }
 
 private:
-    [[nodiscard]] TConclusionStatus AddToInFlightRequest(
+    void AddToInFlightRequest(
         const ui64 cookie, NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase, const NOlap::TVersionedIndex* index);
 
 private:

@@ -6,10 +6,7 @@ namespace NFq::NRowDispatcher {
 
 
 struct TActorFactory : public IActorFactory {
-  //  friend class NActors::IActor;
-
-    TActorFactory()
-    {}
+    TActorFactory() {}
 
     NActors::TActorId RegisterTopicSession(
         const NConfig::TRowDispatcherConfig& config,

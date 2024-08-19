@@ -508,11 +508,10 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
             GetVector(ev->Get()->Record.GetSource().GetColumnTypes()),
             predicate,
             [&, actorId = clientInfo.ReadActorId](ui64 offset, const TString& json){
-                TString LogPrefix{"asdasddsa"};
-                LOG_ROW_DISPATCHER_TRACE("Send ");
+                TString LogPrefix{"TopicSession"};
+                LOG_ROW_DISPATCHER_TRACE("Send");
 
                 Send(SelfId(), new NFq::TEvPrivate::TEvDataParsed(offset, json, actorId));
-                //Send(SelfId(), new NFq::TEvPrivate::TEvPqEventsReady());
             });
             
         LOG_ROW_DISPATCHER_INFO("New client: offset " << clientInfo.NextMessageOffset << ", predicate: " << clientInfo.Settings.GetSource().GetPredicate());

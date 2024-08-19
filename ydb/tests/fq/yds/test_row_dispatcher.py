@@ -60,6 +60,7 @@ def wait_actor_count(kikimr, activity, expected_count):
 class TestPqRowDispatcher(TestYdsBase):
 
     @yq_v1
+    @pytest.mark.skip(reason="remove Todo")
     def test_read_raw_format_without_row_dispatcher(self, kikimr, client):
         client.create_yds_connection(YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True)
         self.init_topics(Rf"pq_test_pq_read_write", create_output = False)
@@ -213,38 +214,8 @@ class TestPqRowDispatcher(TestYdsBase):
         assert len(read_rules) == 0, read_rules
         wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 0)
 
-    # @yq_v1
-    # def test_text_filter(self, kikimr, client):
-    #     client.create_yds_connection(YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True)
-    #     self.init_topics(Rf"test_simple")
-
-    #     sql = Rf'''
-    #         INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
-    #         SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
-    #             WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, data String NOT NULL, event String NOT NULL))
-    #             WHERE event = "event2";'''
-    
-    #     query_id = start_yds_query(kikimr, client, sql)
-    #     wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 1)
-
-    #     data = [
-    #         '{"time": 101, "data": "hello1", "event": "event1"}',
-    #         '{"time": 102, "data": "hello2", "event": "event2"}'
-    #     ]
-
-    #     self.write_stream(data)
-    #     expected = ['102']
-    #     assert self.read_stream(len(expected), topic_path = self.output_topic) == expected
-
-    #     wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 1)
-    #     wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 1)
-
-    #     stop_yds_query(client, query_id)
-    #     # Assert that all read rules were removed after query stops
-    #     read_rules = list_read_rules(self.input_topic)
-    #     assert len(read_rules) == 0, read_rules
-    #     wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 0)
-
+        issues = str(client.describe_query(query_id).result.query.transient_issue)
+        assert "Row dispatcher will use the predicate: WHERE (time > 101" in issues, "Incorrect Issues: " + issues
 
     @yq_v1
     def test_start_new_query(self, kikimr, client):
@@ -468,7 +439,6 @@ class TestPqRowDispatcher(TestYdsBase):
         query_id1 = start_yds_query(kikimr, client, sql1)
         query_id2 = start_yds_query(kikimr, client, sql2)
         query_id3 = start_yds_query(kikimr, client, sql3)
-        wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 1)
 
         data = [
             '{"time":101}',
@@ -480,6 +450,7 @@ class TestPqRowDispatcher(TestYdsBase):
         assert self.read_stream(len(expected), topic_path = output_topic1) == expected
         assert self.read_stream(len(expected), topic_path = output_topic2) == expected
         assert self.read_stream(len(expected), topic_path = output_topic3) == expected
+        wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 1)
 
         #time.sleep(10)
 

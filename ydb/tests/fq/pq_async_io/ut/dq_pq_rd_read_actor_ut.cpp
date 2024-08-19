@@ -11,62 +11,111 @@ namespace NYql::NDq {
 
 struct TFixture : public TPqIoTestFixture {
 
+    TFixture() {
+        LocalRowDispatcherId = CaSetup->Runtime->AllocateEdgeActor();
+        Coordinator1Id = CaSetup->Runtime->AllocateEdgeActor();
+        Coordinator2Id = CaSetup->Runtime->AllocateEdgeActor();
+        RowDispatcher1 = CaSetup->Runtime->AllocateEdgeActor();
+        RowDispatcher2 = CaSetup->Runtime->AllocateEdgeActor();
+    }
+
+    void InitRdSource(
+        NYql::NPq::NProto::TDqPqTopicSource&& settings,
+        i64 freeSpace = 1_MB)
+    {
+        CaSetup->Execute([&](TFakeActor& actor) {
+            NPq::NProto::TDqReadTaskParams params;
+            auto* partitioninigParams = params.MutablePartitioningParams();
+            partitioninigParams->SetTopicPartitionsCount(1);
+            partitioninigParams->SetEachTopicPartitionGroupId(0);
+            partitioninigParams->SetDqPartitionsCount(1);
+
+            TString serializedParams;
+            Y_PROTOBUF_SUPPRESS_NODISCARD params.SerializeToString(&serializedParams);
+
+            const THashMap<TString, TString> secureParams;
+            const THashMap<TString, TString> taskParams { {"pq", serializedParams} };
+
+            auto [dqSource, dqSourceAsActor] = CreateDqPqRdReadActor(
+                std::move(settings),
+                0,
+                NYql::NDq::TCollectStatsLevel::None,
+                "query_1",
+                0,
+                secureParams,
+                taskParams,
+                nullptr,                // credentialsFactory
+                actor.SelfId(),         // computeActorId
+                LocalRowDispatcherId,
+                actor.GetHolderFactory(),
+                //MakeIntrusive<NMonitoring::TDynamicCounters>(), // TODO
+                freeSpace);
+
+            actor.InitAsyncInput(dqSource, dqSourceAsActor);
+        });
+    }
+
     void ExpectCoordinatorChangesSubscribe() {
         auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe>(LocalRowDispatcherId, TDuration::Seconds(5));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
     }
 
-    void ExpectCoordinatorRequest() {
-        auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvCoordinatorRequest>(Coordinator1Id, TDuration::Seconds(5));
+    void ExpectCoordinatorRequest(NActors::TActorId coordinatorId) {
+        auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvCoordinatorRequest>(coordinatorId, TDuration::Seconds(5));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
     }
 
-    void ExpectStartSession(ui64 expectedOffset) {
-        auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvStartSession>(RemoteRowDispatcher, TDuration::Seconds(5));
+    void ExpectStartSession(ui64 expectedOffset, NActors::TActorId rowDispatcherId) {
+        auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvStartSession>(rowDispatcherId, TDuration::Seconds(5));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
         UNIT_ASSERT(eventHolder->Get()->Record.GetOffset() == expectedOffset);
     }
 
-    void ExpectGetNextBatch() {
-        auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvGetNextBatch>(RemoteRowDispatcher, TDuration::Seconds(5));
+    void ExpectStopSession(NActors::TActorId rowDispatcherId) {
+        auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvStopSession>(rowDispatcherId, TDuration::Seconds(5));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
     }
 
-    void MockCoordinatorChanged() {
+    void ExpectGetNextBatch(NActors::TActorId rowDispatcherId) {
+        auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvGetNextBatch>(rowDispatcherId, TDuration::Seconds(5));
+        UNIT_ASSERT(eventHolder.Get() != nullptr);
+    }
+
+    void MockCoordinatorChanged(NActors::TActorId coordinatorId) {
         CaSetup->Execute([&](TFakeActor& actor) {
-            auto event = new NFq::TEvRowDispatcher::TEvCoordinatorChanged(Coordinator1Id);
+            auto event = new NFq::TEvRowDispatcher::TEvCoordinatorChanged(coordinatorId);
             CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, LocalRowDispatcherId, event));
         });
     }
 
-    void MockCoordinatorResult() {
+    void MockCoordinatorResult(NActors::TActorId rowDispatcherId) {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NFq::TEvRowDispatcher::TEvCoordinatorResult();
             auto* partitions = event->Record.AddPartitions();
             partitions->AddPartitionId(0);
-            ActorIdToProto(RemoteRowDispatcher, partitions->MutableActorId());
+            ActorIdToProto(rowDispatcherId, partitions->MutableActorId());
             CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, Coordinator1Id, event));
         });
     }
 
-    void MockAck() {
+    void MockAck(NActors::TActorId rowDispatcherId) {
         CaSetup->Execute([&](TFakeActor& actor) {
             NFq::NRowDispatcherProto::TEvStartSession proto;
             proto.SetPartitionId(0);
             auto event = new NFq::TEvRowDispatcher::TEvStartSessionAck(proto);
-            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, RemoteRowDispatcher, event));
+            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event));
         });
     }
 
-    void MockNewDataArrived() {
+    void MockNewDataArrived(NActors::TActorId rowDispatcherId) {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NFq::TEvRowDispatcher::TEvNewDataArrived();
             event->Record.SetPartitionId(0);
-            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, RemoteRowDispatcher, event));
+            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event));
         });
     }
 
-    void MockMessageBatch(ui64 offset, const std::vector<TString>& jsons) {
+    void MockMessageBatch(ui64 offset, const std::vector<TString>& jsons, NActors::TActorId rowDispatcherId) {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NFq::TEvRowDispatcher::TEvMessageBatch();
             for (const auto& json :jsons) {
@@ -76,7 +125,7 @@ struct TFixture : public TPqIoTestFixture {
                 event->Record.AddMessages()->CopyFrom(message);
             }
             event->Record.SetPartitionId(0);
-            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, RemoteRowDispatcher, event));
+            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event));
         });
     }
 
@@ -85,7 +134,7 @@ struct TFixture : public TPqIoTestFixture {
             auto event = new NFq::TEvRowDispatcher::TEvSessionError();
             event->Record.SetMessage("A problem has been detected and session has been shut down to prevent damage your life");
             event->Record.SetPartitionId(0);
-            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, RemoteRowDispatcher, event));
+            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, RowDispatcher1, event));
         });
     }
 
@@ -119,7 +168,7 @@ struct TFixture : public TPqIoTestFixture {
     void MockDisconnected() {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NActors::TEvInterconnect::TEvNodeDisconnected(CaSetup->Runtime->GetNodeId(0));
-            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, RemoteRowDispatcher, event));
+            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, RowDispatcher1, event));
         });
     }
 
@@ -128,19 +177,19 @@ struct TFixture : public TPqIoTestFixture {
         SourceRead<TString>(UVParser);
         ExpectCoordinatorChangesSubscribe();
     
-        MockCoordinatorChanged();
-        ExpectCoordinatorRequest();
+        MockCoordinatorChanged(Coordinator1Id);
+        ExpectCoordinatorRequest(Coordinator1Id);
 
-        MockCoordinatorResult();
-        ExpectStartSession(0);
-        MockAck();
+        MockCoordinatorResult(RowDispatcher1);
+        ExpectStartSession(0, RowDispatcher1);
+        MockAck(RowDispatcher1);
     }
 
-    void ProcessSomeJsons(ui64 offset, const std::vector<TString>& jsons) {
-        MockNewDataArrived();
-        ExpectGetNextBatch();
+    void ProcessSomeJsons(ui64 offset, const std::vector<TString>& jsons, NActors::TActorId rowDispatcherId) {
+        MockNewDataArrived(rowDispatcherId);
+        ExpectGetNextBatch(rowDispatcherId);
 
-        MockMessageBatch(offset, jsons);
+        MockMessageBatch(offset, jsons, rowDispatcherId);
 
         auto result = SourceReadDataUntil<TString>(UVParser, jsons.size());
         AssertDataWithWatermarks(result, jsons, {});
@@ -150,13 +199,19 @@ struct TFixture : public TPqIoTestFixture {
     const TString Json2 = "{\"dt\":200,\"value\":\"value2\"}";
     const TString Json3 = "{\"dt\":300,\"value\":\"value3\"}";
     const TString Json4 = "{\"dt\":400,\"value\":\"value4\"}";
+
+    NActors::TActorId LocalRowDispatcherId;
+    NActors::TActorId Coordinator1Id;
+    NActors::TActorId Coordinator2Id;
+    NActors::TActorId RowDispatcher1;
+    NActors::TActorId RowDispatcher2;
 };
 
 Y_UNIT_TEST_SUITE(TDqPqRdReadActorTest) {
     Y_UNIT_TEST_F(TestReadFromTopic2, TFixture) {
         StartSession();
 
-        ProcessSomeJsons(0, {Json1, Json2});
+        ProcessSomeJsons(0, {Json1, Json2}, RowDispatcher1);
     }
 
     Y_UNIT_TEST_F(SessionError, TFixture) {
@@ -181,14 +236,14 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTest) {
     Y_UNIT_TEST_F(ReadWithFreeSpace, TFixture) {
         StartSession();
 
-        MockNewDataArrived();
-        ExpectGetNextBatch();
+        MockNewDataArrived(RowDispatcher1);
+        ExpectGetNextBatch(RowDispatcher1);
 
         const std::vector<TString> data1 = {Json1, Json2};
-        MockMessageBatch(0, data1);
+        MockMessageBatch(0, data1, RowDispatcher1);
 
         const std::vector<TString> data2 = {Json3, Json4};
-        MockMessageBatch(2, data2);
+        MockMessageBatch(2, data2, RowDispatcher1);
 
         auto result = SourceReadDataUntil<TString>(UVParser, 1, 1);
         std::vector<TString> expected{data1};
@@ -203,7 +258,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTest) {
         {
             TFixture f;
             f.StartSession();
-            f.ProcessSomeJsons(0, {f.Json1, f.Json2});  // offsets: 0, 1
+            f.ProcessSomeJsons(0, {f.Json1, f.Json2}, f.RowDispatcher1);  // offsets: 0, 1
 
             f.SaveSourceState(CreateCheckpoint(), state);
             Cerr << "State saved" << Endl;
@@ -216,14 +271,14 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTest) {
             f.SourceRead<TString>(UVParser);
             f.ExpectCoordinatorChangesSubscribe();
     
-            f.MockCoordinatorChanged();
-            f.ExpectCoordinatorRequest();
+            f.MockCoordinatorChanged(f.Coordinator1Id);
+            f.ExpectCoordinatorRequest(f.Coordinator1Id);
 
-            f.MockCoordinatorResult();
-            f.ExpectStartSession(2);
-            f.MockAck();
+            f.MockCoordinatorResult(f.RowDispatcher1);
+            f.ExpectStartSession(2, f.RowDispatcher1);
+            f.MockAck(f.RowDispatcher1);
 
-            f.ProcessSomeJsons(2, {f.Json3});  // offsets: 2
+            f.ProcessSomeJsons(2, {f.Json3}, f.RowDispatcher1);  // offsets: 2
             state.Data.clear();
             f.SaveSourceState(CreateCheckpoint(), state);
             Cerr << "State saved" << Endl;
@@ -236,20 +291,42 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTest) {
             f.SourceRead<TString>(UVParser);
             f.ExpectCoordinatorChangesSubscribe();
     
-            f.MockCoordinatorChanged();
-            f.ExpectCoordinatorRequest();
+            f.MockCoordinatorChanged(f.Coordinator1Id);
+            f.ExpectCoordinatorRequest(f.Coordinator1Id);
 
-            f.MockCoordinatorResult();
-            f.ExpectStartSession(3);
-            f.MockAck();
+            f.MockCoordinatorResult(f.RowDispatcher1);
+            f.ExpectStartSession(3, f.RowDispatcher1);
+            f.MockAck(f.RowDispatcher1);
 
-            f.ProcessSomeJsons(3, {f.Json4});  // offsets: 3
+            f.ProcessSomeJsons(3, {f.Json4}, f.RowDispatcher1);  // offsets: 3
         }
     }
 
+    Y_UNIT_TEST_F(CoordinatorChanged, TFixture) {
+        StartSession();
+        ProcessSomeJsons(0, {Json1, Json2}, RowDispatcher1);
+        MockMessageBatch(2, {Json3}, RowDispatcher1);
+
+        // change active Coordinator 
+        MockCoordinatorChanged(Coordinator2Id);
+        ExpectStopSession(RowDispatcher1);
+
+        auto result = SourceReadDataUntil<TString>(UVParser, 1);
+        AssertDataWithWatermarks(result, {Json3}, {});
+
+        ExpectCoordinatorRequest(Coordinator2Id);
+        MockCoordinatorResult(RowDispatcher2);
+
+        ExpectStartSession(3, RowDispatcher2);
+        MockAck(RowDispatcher2);
+
+        ProcessSomeJsons(3, {Json4}, RowDispatcher2);
+    }
+
+
     Y_UNIT_TEST_F(DisconnectFromRowDispatcher, TFixture) {
         StartSession();
-        ProcessSomeJsons(0, {Json1, Json2});
+        ProcessSomeJsons(0, {Json1, Json2}, RowDispatcher1);
         MockDisconnected();
 
         TInstant deadline = Now() + TDuration::Seconds(5);

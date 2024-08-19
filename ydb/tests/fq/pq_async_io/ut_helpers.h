@@ -34,10 +34,6 @@ TString GetDefaultPqDatabase();
 struct TPqIoTestFixture : public NUnitTest::TBaseFixture {
     std::unique_ptr<TFakeCASetup> CaSetup = std::make_unique<TFakeCASetup>();
     NYdb::TDriver Driver = NYdb::TDriver(NYdb::TDriverConfig().SetLog(CreateLogBackend("cerr")));
-    NActors::TActorId LocalRowDispatcherId;
-    NActors::TActorId Coordinator1Id;
-    NActors::TActorId Coordinator2Id;
-    NActors::TActorId RemoteRowDispatcher;
 
     TPqIoTestFixture();
     ~TPqIoTestFixture();
@@ -52,10 +48,6 @@ struct TPqIoTestFixture : public NUnitTest::TBaseFixture {
     {
         InitSource(BuildPqTopicSourceSettings(topic), freeSpace);
     }
-
-    void InitRdSource(
-        NYql::NPq::NProto::TDqPqTopicSource&& settings,
-        i64 freeSpace = 1_MB);
 
     template<typename T>
     std::vector<std::variant<T, TInstant>> SourceRead(const TReadValueParser<T> parser, i64 freeSpace = 12345) {

@@ -33,7 +33,6 @@ struct TTestActorFactory : public NFq::NRowDispatcher::IActorFactory {
         std::shared_ptr<NYdb::ICredentialsProviderFactory> /*credentialsProviderFactory*/) const override {
         auto actorId  = Runtime.AllocateEdgeActor();
         ActorIds.push(actorId);
-        Cerr << "RegisterTopicSession , actor id " << actorId << Endl;
         return actorId;
     }
 
@@ -147,40 +146,40 @@ public:
     }
 
     void ExpectStartSession(NActors::TActorId actorId) {
-        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvStartSession>(actorId/*, TDuration::Seconds(20)*/);
+        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvStartSession>(actorId);
         UNIT_ASSERT(eventHolder.Get() != nullptr);
     }
 
     void ExpectStopSession(NActors::TActorId actorId, ui64 partitionId) {
-        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvStopSession>(actorId/*, TDuration::Seconds(20)*/);
+        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvStopSession>(actorId);
         UNIT_ASSERT(eventHolder.Get() != nullptr);
         UNIT_ASSERT(eventHolder->Get()->Record.GetPartitionId() == partitionId);
     }
 
     void ExpectGetNextBatch(NActors::TActorId topicSessionId, ui64 partitionId) {
-        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvGetNextBatch>(topicSessionId/*, TDuration::Seconds(20)*/);
+        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvGetNextBatch>(topicSessionId);
         UNIT_ASSERT(eventHolder.Get() != nullptr);
         UNIT_ASSERT(eventHolder->Get()->Record.GetPartitionId() == partitionId);
     }
 
     void ExpectNewDataArrived(NActors::TActorId readActorId, ui64 partitionId) {
-        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvNewDataArrived>(readActorId/*, TDuration::Seconds(20)*/);
+        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvNewDataArrived>(readActorId);
         UNIT_ASSERT(eventHolder.Get() != nullptr);
         UNIT_ASSERT(eventHolder->Get()->Record.GetPartitionId() == partitionId);
     }
 
     void ExpectStartSessionAck(NActors::TActorId readActorId) {
-        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvStartSessionAck>(readActorId/*, TDuration::Seconds(20)*/);
+        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvStartSessionAck>(readActorId);
         UNIT_ASSERT(eventHolder.Get() != nullptr);
     }
 
     void ExpectMessageBatch(NActors::TActorId readActorId) {
-        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvMessageBatch>(readActorId/*, TDuration::Seconds(20)*/);
+        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvMessageBatch>(readActorId);
         UNIT_ASSERT(eventHolder.Get() != nullptr);
     }
 
     void ExpectSessionError(NActors::TActorId readActorId, ui64 partitionId) {
-        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvSessionError>(readActorId/*, TDuration::Seconds(20)*/);
+        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvSessionError>(readActorId);
         UNIT_ASSERT(eventHolder.Get() != nullptr);
         UNIT_ASSERT(eventHolder->Get()->Record.GetPartitionId() == partitionId);
     }
@@ -259,7 +258,7 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         MockSessionError(PartitionId0, topicSessionId, ReadActorId1);
         ExpectSessionError(ReadActorId1, PartitionId0);
     }
-    
+
     Y_UNIT_TEST_F(CoordinatorSubscribe, TFixture) {
         Runtime.Send(new IEventHandle(RowDispatcher, EdgeActor, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(Coordinator)));
         Runtime.Send(new IEventHandle(RowDispatcher, ReadActorId1, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe));

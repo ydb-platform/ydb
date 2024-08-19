@@ -52,7 +52,6 @@ void FillPqClusterConfig(NYql::TPqClusterConfig& clusterConfig,
     clusterConfig.SetAddBearerToToken(useBearerForYdb);
     clusterConfig.SetClusterType(TPqClusterConfig::CT_DATA_STREAMS);
     clusterConfig.SetUseRowDispatcher(ds.use_row_dispatcher());
-
     FillClusterAuth(clusterConfig, ds.auth(), authToken, accountIdSignatures);
 }
 

@@ -90,47 +90,6 @@ void TPqIoTestFixture::InitSource(
     });
 }
 
-void TPqIoTestFixture::InitRdSource(
-    NYql::NPq::NProto::TDqPqTopicSource&& settings,
-    i64 freeSpace)
-{
-    LocalRowDispatcherId = CaSetup->Runtime->AllocateEdgeActor();
-    Coordinator1Id = CaSetup->Runtime->AllocateEdgeActor();
-    Coordinator2Id = CaSetup->Runtime->AllocateEdgeActor();
-    RemoteRowDispatcher = CaSetup->Runtime->AllocateEdgeActor();
-
-    CaSetup->Execute([&](TFakeActor& actor) {
-        NPq::NProto::TDqReadTaskParams params;
-        auto* partitioninigParams = params.MutablePartitioningParams();
-        partitioninigParams->SetTopicPartitionsCount(1);
-        partitioninigParams->SetEachTopicPartitionGroupId(0);
-        partitioninigParams->SetDqPartitionsCount(1);
-
-        TString serializedParams;
-        Y_PROTOBUF_SUPPRESS_NODISCARD params.SerializeToString(&serializedParams);
-
-        const THashMap<TString, TString> secureParams;
-        const THashMap<TString, TString> taskParams { {"pq", serializedParams} };
-
-        auto [dqSource, dqSourceAsActor] = CreateDqPqRdReadActor(
-            std::move(settings),
-            0,
-            NYql::NDq::TCollectStatsLevel::None,
-            "query_1",
-            0,
-            secureParams,
-            taskParams,
-            nullptr,                // credentialsFactory
-            actor.SelfId(),         // computeActorId
-            LocalRowDispatcherId,
-            actor.GetHolderFactory(),
-            //MakeIntrusive<NMonitoring::TDynamicCounters>(), // TODO
-            freeSpace);
-
-        actor.InitAsyncInput(dqSource, dqSourceAsActor);
-    });
-}
-
 void TPqIoTestFixture::InitAsyncOutput(
     NPq::NProto::TDqPqTopicSink&& settings,
     i64 freeSpace)

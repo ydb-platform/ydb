@@ -187,7 +187,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& 
 
     CoordinatorActorId = ev->Get()->CoordinatorActorId;
     if (!CoordinatorActorId) {
-
+// TODO
     }
     Send(*CoordinatorActorId, new NActors::TEvents::TEvPing(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
     for (auto actorId : CoordinatorChangedSubscribers) {
@@ -199,14 +199,14 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& 
 }
 
 void TRowDispatcher::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
-    LOG_ROW_DISPATCHER_DEBUG("EvNodeConnected " << ev->Get()->NodeId);
+    LOG_ROW_DISPATCHER_DEBUG("EvNodeConnected, node id " << ev->Get()->NodeId);
     for (auto& [actorId, consumer] : Consumers) {
         consumer->EventsQueue.HandleNodeConnected(ev->Get()->NodeId);
     }
 }
 
 void TRowDispatcher::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvNodeDisconnected " << ev->Get()->NodeId);
+    LOG_ROW_DISPATCHER_DEBUG("TEvNodeDisconnected, node id " << ev->Get()->NodeId);
     for (auto& [actorId, consumer] : Consumers) {
         consumer->EventsQueue.HandleNodeDisconnected(ev->Get()->NodeId);
     }

@@ -151,7 +151,6 @@ public:
             return TStatus::Error;
         }
 
-        //const auto stringType = ctx.MakeType<TDataExprType>(EDataSlot::String);
         auto rowSchema = topic.RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
         YQL_CLOG(DEBUG, ProviderGeneric) << "struct column order " << rowSchema->ToString();
 

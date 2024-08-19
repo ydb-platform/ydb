@@ -18,7 +18,7 @@ with customer_total_return as
  from customer_total_return ctr1
      ,{{customer_address}}
      ,{{customer}}
- where ctr1.ctr_total_return > (select avg(ctr_total_return)*1.2
+ where ctr1.ctr_total_return > (select avg(ctr_total_return)*1.2::numeric
  			  from customer_total_return ctr2
                   	  where ctr1.ctr_state = ctr2.ctr_state)
        and ca_address_sk = c_current_addr_sk

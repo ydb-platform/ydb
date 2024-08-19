@@ -8,7 +8,7 @@ with cs_ui as
   where cs_item_sk = cr_item_sk
     and cs_order_number = cr_order_number
   group by cs_item_sk
-  having sum(cs_ext_list_price)>2*sum(cr_refunded_cash+cr_reversed_charge+cr_store_credit)),
+  having sum(cs_ext_list_price)>2::numeric*sum(cr_refunded_cash+cr_reversed_charge+cr_store_credit)),
 cross_sales as
  (select i_product_name product_name
      ,i_item_sk item_sk
@@ -67,8 +67,8 @@ cross_sales as
          hd2.hd_income_band_sk = ib2.ib_income_band_sk and
          cd1.cd_marital_status <> cd2.cd_marital_status and
          i_color in ('azure','gainsboro','misty','blush','hot','lemon') and
-         i_current_price between 80 and (80 + 10) and
-         i_current_price between (80 + 1) and (80 + 15)
+         i_current_price between 80::numeric and (80 + 10)::numeric and
+         i_current_price between (80 + 1)::numeric and (80 + 15)::numeric
 group by i_product_name
        ,i_item_sk
        ,s_store_name

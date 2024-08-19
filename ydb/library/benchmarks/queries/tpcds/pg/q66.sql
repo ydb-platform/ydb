@@ -21,18 +21,18 @@ select
  	,sum(oct_sales) as oct_sales
  	,sum(nov_sales) as nov_sales
  	,sum(dec_sales) as dec_sales
- 	,sum(jan_sales/w_warehouse_sq_ft) as jan_sales_per_sq_foot
- 	,sum(feb_sales/w_warehouse_sq_ft) as feb_sales_per_sq_foot
- 	,sum(mar_sales/w_warehouse_sq_ft) as mar_sales_per_sq_foot
- 	,sum(apr_sales/w_warehouse_sq_ft) as apr_sales_per_sq_foot
- 	,sum(may_sales/w_warehouse_sq_ft) as may_sales_per_sq_foot
- 	,sum(jun_sales/w_warehouse_sq_ft) as jun_sales_per_sq_foot
- 	,sum(jul_sales/w_warehouse_sq_ft) as jul_sales_per_sq_foot
- 	,sum(aug_sales/w_warehouse_sq_ft) as aug_sales_per_sq_foot
- 	,sum(sep_sales/w_warehouse_sq_ft) as sep_sales_per_sq_foot
- 	,sum(oct_sales/w_warehouse_sq_ft) as oct_sales_per_sq_foot
- 	,sum(nov_sales/w_warehouse_sq_ft) as nov_sales_per_sq_foot
- 	,sum(dec_sales/w_warehouse_sq_ft) as dec_sales_per_sq_foot
+ 	,sum(jan_sales/w_warehouse_sq_ft::numeric) as jan_sales_per_sq_foot
+ 	,sum(feb_sales/w_warehouse_sq_ft::numeric) as feb_sales_per_sq_foot
+ 	,sum(mar_sales/w_warehouse_sq_ft::numeric) as mar_sales_per_sq_foot
+ 	,sum(apr_sales/w_warehouse_sq_ft::numeric) as apr_sales_per_sq_foot
+ 	,sum(may_sales/w_warehouse_sq_ft::numeric) as may_sales_per_sq_foot
+ 	,sum(jun_sales/w_warehouse_sq_ft::numeric) as jun_sales_per_sq_foot
+ 	,sum(jul_sales/w_warehouse_sq_ft::numeric) as jul_sales_per_sq_foot
+ 	,sum(aug_sales/w_warehouse_sq_ft::numeric) as aug_sales_per_sq_foot
+ 	,sum(sep_sales/w_warehouse_sq_ft::numeric) as sep_sales_per_sq_foot
+ 	,sum(oct_sales/w_warehouse_sq_ft::numeric) as oct_sales_per_sq_foot
+ 	,sum(nov_sales/w_warehouse_sq_ft::numeric) as nov_sales_per_sq_foot
+ 	,sum(dec_sales/w_warehouse_sq_ft::numeric) as dec_sales_per_sq_foot
  	,sum(jan_net) as jan_net
  	,sum(feb_net) as feb_net
  	,sum(mar_net) as mar_net
@@ -56,53 +56,53 @@ select
  	,'MSC' || ',' || 'GERMA' as ship_carriers
        ,d_year as year
  	,sum(case when d_moy = 1
- 		then ws_sales_price* ws_quantity else 0 end) as jan_sales
+ 		then ws_sales_price* ws_quantity::numeric else 0::numeric end) as jan_sales
  	,sum(case when d_moy = 2
- 		then ws_sales_price* ws_quantity else 0 end) as feb_sales
+ 		then ws_sales_price* ws_quantity::numeric else 0::numeric end) as feb_sales
  	,sum(case when d_moy = 3
- 		then ws_sales_price* ws_quantity else 0 end) as mar_sales
+ 		then ws_sales_price* ws_quantity::numeric else 0::numeric end) as mar_sales
  	,sum(case when d_moy = 4
- 		then ws_sales_price* ws_quantity else 0 end) as apr_sales
+ 		then ws_sales_price* ws_quantity::numeric else 0::numeric end) as apr_sales
  	,sum(case when d_moy = 5
- 		then ws_sales_price* ws_quantity else 0 end) as may_sales
+ 		then ws_sales_price* ws_quantity::numeric else 0::numeric end) as may_sales
  	,sum(case when d_moy = 6
- 		then ws_sales_price* ws_quantity else 0 end) as jun_sales
+ 		then ws_sales_price* ws_quantity::numeric else 0::numeric end) as jun_sales
  	,sum(case when d_moy = 7
- 		then ws_sales_price* ws_quantity else 0 end) as jul_sales
+ 		then ws_sales_price* ws_quantity::numeric else 0::numeric end) as jul_sales
  	,sum(case when d_moy = 8
- 		then ws_sales_price* ws_quantity else 0 end) as aug_sales
+ 		then ws_sales_price* ws_quantity::numeric else 0::numeric end) as aug_sales
  	,sum(case when d_moy = 9
- 		then ws_sales_price* ws_quantity else 0 end) as sep_sales
+ 		then ws_sales_price* ws_quantity::numeric else 0::numeric end) as sep_sales
  	,sum(case when d_moy = 10
- 		then ws_sales_price* ws_quantity else 0 end) as oct_sales
+ 		then ws_sales_price* ws_quantity::numeric else 0::numeric end) as oct_sales
  	,sum(case when d_moy = 11
- 		then ws_sales_price* ws_quantity else 0 end) as nov_sales
+ 		then ws_sales_price* ws_quantity::numeric else 0::numeric end) as nov_sales
  	,sum(case when d_moy = 12
- 		then ws_sales_price* ws_quantity else 0 end) as dec_sales
+ 		then ws_sales_price* ws_quantity::numeric else 0::numeric end) as dec_sales
  	,sum(case when d_moy = 1
- 		then ws_net_paid_inc_ship_tax * ws_quantity else 0 end) as jan_net
+ 		then ws_net_paid_inc_ship_tax * ws_quantity::numeric else 0::numeric end) as jan_net
  	,sum(case when d_moy = 2
- 		then ws_net_paid_inc_ship_tax * ws_quantity else 0 end) as feb_net
+ 		then ws_net_paid_inc_ship_tax * ws_quantity::numeric else 0::numeric end) as feb_net
  	,sum(case when d_moy = 3
- 		then ws_net_paid_inc_ship_tax * ws_quantity else 0 end) as mar_net
+ 		then ws_net_paid_inc_ship_tax * ws_quantity::numeric else 0::numeric end) as mar_net
  	,sum(case when d_moy = 4
- 		then ws_net_paid_inc_ship_tax * ws_quantity else 0 end) as apr_net
+ 		then ws_net_paid_inc_ship_tax * ws_quantity::numeric else 0::numeric end) as apr_net
  	,sum(case when d_moy = 5
- 		then ws_net_paid_inc_ship_tax * ws_quantity else 0 end) as may_net
+ 		then ws_net_paid_inc_ship_tax * ws_quantity::numeric else 0::numeric end) as may_net
  	,sum(case when d_moy = 6
- 		then ws_net_paid_inc_ship_tax * ws_quantity else 0 end) as jun_net
+ 		then ws_net_paid_inc_ship_tax * ws_quantity::numeric else 0::numeric end) as jun_net
  	,sum(case when d_moy = 7
- 		then ws_net_paid_inc_ship_tax * ws_quantity else 0 end) as jul_net
+ 		then ws_net_paid_inc_ship_tax * ws_quantity::numeric else 0::numeric end) as jul_net
  	,sum(case when d_moy = 8
- 		then ws_net_paid_inc_ship_tax * ws_quantity else 0 end) as aug_net
+ 		then ws_net_paid_inc_ship_tax * ws_quantity::numeric else 0::numeric end) as aug_net
  	,sum(case when d_moy = 9
- 		then ws_net_paid_inc_ship_tax * ws_quantity else 0 end) as sep_net
+ 		then ws_net_paid_inc_ship_tax * ws_quantity::numeric else 0::numeric end) as sep_net
  	,sum(case when d_moy = 10
- 		then ws_net_paid_inc_ship_tax * ws_quantity else 0 end) as oct_net
+ 		then ws_net_paid_inc_ship_tax * ws_quantity::numeric else 0::numeric end) as oct_net
  	,sum(case when d_moy = 11
- 		then ws_net_paid_inc_ship_tax * ws_quantity else 0 end) as nov_net
+ 		then ws_net_paid_inc_ship_tax * ws_quantity::numeric else 0::numeric end) as nov_net
  	,sum(case when d_moy = 12
- 		then ws_net_paid_inc_ship_tax * ws_quantity else 0 end) as dec_net
+ 		then ws_net_paid_inc_ship_tax * ws_quantity::numeric else 0::numeric end) as dec_net
      from
           {{web_sales}}
          ,{{warehouse}}
@@ -136,53 +136,53 @@ select
  	,'MSC' || ',' || 'GERMA' as ship_carriers
        ,d_year as year
  	,sum(case when d_moy = 1
- 		then cs_ext_list_price* cs_quantity else 0 end) as jan_sales
+ 		then cs_ext_list_price* cs_quantity::numeric else 0::numeric end) as jan_sales
  	,sum(case when d_moy = 2
- 		then cs_ext_list_price* cs_quantity else 0 end) as feb_sales
+ 		then cs_ext_list_price* cs_quantity::numeric else 0::numeric end) as feb_sales
  	,sum(case when d_moy = 3
- 		then cs_ext_list_price* cs_quantity else 0 end) as mar_sales
+ 		then cs_ext_list_price* cs_quantity::numeric else 0::numeric end) as mar_sales
  	,sum(case when d_moy = 4
- 		then cs_ext_list_price* cs_quantity else 0 end) as apr_sales
+ 		then cs_ext_list_price* cs_quantity::numeric else 0::numeric end) as apr_sales
  	,sum(case when d_moy = 5
- 		then cs_ext_list_price* cs_quantity else 0 end) as may_sales
+ 		then cs_ext_list_price* cs_quantity::numeric else 0::numeric end) as may_sales
  	,sum(case when d_moy = 6
- 		then cs_ext_list_price* cs_quantity else 0 end) as jun_sales
+ 		then cs_ext_list_price* cs_quantity::numeric else 0::numeric end) as jun_sales
  	,sum(case when d_moy = 7
- 		then cs_ext_list_price* cs_quantity else 0 end) as jul_sales
+ 		then cs_ext_list_price* cs_quantity::numeric else 0::numeric end) as jul_sales
  	,sum(case when d_moy = 8
- 		then cs_ext_list_price* cs_quantity else 0 end) as aug_sales
+ 		then cs_ext_list_price* cs_quantity::numeric else 0::numeric end) as aug_sales
  	,sum(case when d_moy = 9
- 		then cs_ext_list_price* cs_quantity else 0 end) as sep_sales
+ 		then cs_ext_list_price* cs_quantity::numeric else 0::numeric end) as sep_sales
  	,sum(case when d_moy = 10
- 		then cs_ext_list_price* cs_quantity else 0 end) as oct_sales
+ 		then cs_ext_list_price* cs_quantity::numeric else 0::numeric end) as oct_sales
  	,sum(case when d_moy = 11
- 		then cs_ext_list_price* cs_quantity else 0 end) as nov_sales
+ 		then cs_ext_list_price* cs_quantity::numeric else 0::numeric end) as nov_sales
  	,sum(case when d_moy = 12
- 		then cs_ext_list_price* cs_quantity else 0 end) as dec_sales
+ 		then cs_ext_list_price* cs_quantity::numeric else 0::numeric end) as dec_sales
  	,sum(case when d_moy = 1
- 		then cs_net_paid_inc_ship * cs_quantity else 0 end) as jan_net
+ 		then cs_net_paid_inc_ship * cs_quantity::numeric else 0::numeric end) as jan_net
  	,sum(case when d_moy = 2
- 		then cs_net_paid_inc_ship * cs_quantity else 0 end) as feb_net
+ 		then cs_net_paid_inc_ship * cs_quantity::numeric else 0::numeric end) as feb_net
  	,sum(case when d_moy = 3
- 		then cs_net_paid_inc_ship * cs_quantity else 0 end) as mar_net
+ 		then cs_net_paid_inc_ship * cs_quantity::numeric else 0::numeric end) as mar_net
  	,sum(case when d_moy = 4
- 		then cs_net_paid_inc_ship * cs_quantity else 0 end) as apr_net
+ 		then cs_net_paid_inc_ship * cs_quantity::numeric else 0::numeric end) as apr_net
  	,sum(case when d_moy = 5
- 		then cs_net_paid_inc_ship * cs_quantity else 0 end) as may_net
+ 		then cs_net_paid_inc_ship * cs_quantity::numeric else 0::numeric end) as may_net
  	,sum(case when d_moy = 6
- 		then cs_net_paid_inc_ship * cs_quantity else 0 end) as jun_net
+ 		then cs_net_paid_inc_ship * cs_quantity::numeric else 0::numeric end) as jun_net
  	,sum(case when d_moy = 7
- 		then cs_net_paid_inc_ship * cs_quantity else 0 end) as jul_net
+ 		then cs_net_paid_inc_ship * cs_quantity::numeric else 0::numeric end) as jul_net
  	,sum(case when d_moy = 8
- 		then cs_net_paid_inc_ship * cs_quantity else 0 end) as aug_net
+ 		then cs_net_paid_inc_ship * cs_quantity::numeric else 0::numeric end) as aug_net
  	,sum(case when d_moy = 9
- 		then cs_net_paid_inc_ship * cs_quantity else 0 end) as sep_net
+ 		then cs_net_paid_inc_ship * cs_quantity::numeric else 0::numeric end) as sep_net
  	,sum(case when d_moy = 10
- 		then cs_net_paid_inc_ship * cs_quantity else 0 end) as oct_net
+ 		then cs_net_paid_inc_ship * cs_quantity::numeric else 0::numeric end) as oct_net
  	,sum(case when d_moy = 11
- 		then cs_net_paid_inc_ship * cs_quantity else 0 end) as nov_net
+ 		then cs_net_paid_inc_ship * cs_quantity::numeric else 0::numeric end) as nov_net
  	,sum(case when d_moy = 12
- 		then cs_net_paid_inc_ship * cs_quantity else 0 end) as dec_net
+ 		then cs_net_paid_inc_ship * cs_quantity::numeric else 0::numeric end) as dec_net
      from
           {{catalog_sales}}
          ,{{warehouse}}

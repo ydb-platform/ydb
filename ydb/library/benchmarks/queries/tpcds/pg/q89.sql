@@ -22,7 +22,7 @@ where ss_item_sk = i_item_sk and
         ))
 group by i_category, i_class, i_brand,
          s_store_name, s_company_name, d_moy) tmp1
-where case when (avg_monthly_sales <> 0) then (abs(sum_sales - avg_monthly_sales) / avg_monthly_sales) else null end > 0.1
+where case when (avg_monthly_sales <> 0::numeric) then (abs(sum_sales - avg_monthly_sales) / avg_monthly_sales) else null::numeric end > 0.1::numeric
 order by sum_sales - avg_monthly_sales, s_store_name
 limit 100;
 

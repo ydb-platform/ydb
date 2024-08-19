@@ -16,7 +16,7 @@ where i_color in ('orchid','chiffon','lace'))
  and     d_year                  = 2000
  and     d_moy                   = 1
  and     ss_addr_sk              = ca_address_sk
- and     ca_gmt_offset           = -8
+ and     ca_gmt_offset           = -8::numeric
  group by i_item_id),
  cs as (
  select i_item_id,sum(cs_ext_sales_price) total_sales
@@ -35,7 +35,7 @@ where i_color in ('orchid','chiffon','lace'))
  and     d_year                  = 2000
  and     d_moy                   = 1
  and     cs_bill_addr_sk         = ca_address_sk
- and     ca_gmt_offset           = -8 
+ and     ca_gmt_offset           = -8::numeric 
  group by i_item_id),
  ws as (
  select i_item_id,sum(ws_ext_sales_price) total_sales
@@ -54,7 +54,7 @@ where i_color in ('orchid','chiffon','lace'))
  and     d_year                  = 2000
  and     d_moy                   = 1
  and     ws_bill_addr_sk         = ca_address_sk
- and     ca_gmt_offset           = -8
+ and     ca_gmt_offset           = -8::numeric
  group by i_item_id)
   select  i_item_id ,sum(total_sales) total_sales
  from  (select * from ss 

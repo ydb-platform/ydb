@@ -11,7 +11,7 @@ select  ca_zip
  	and ( substr(ca_zip,1,5) in ('85669', '86197','88274','83405','86475',
                                    '85392', '85460', '80348', '81792')
  	      or ca_state in ('CA','WA','GA')
- 	      or cs_sales_price > 500)
+ 	      or cs_sales_price > 500::numeric)
  	and cs_sold_date_sk = d_date_sk
  	and d_qoy = 2 and d_year = 1998
  group by ca_zip

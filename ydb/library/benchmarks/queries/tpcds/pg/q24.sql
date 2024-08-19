@@ -46,7 +46,7 @@ where i_color = 'show'
 group by c_last_name
         ,c_first_name
         ,s_store_name
-having sum(netpaid) > (select 0.05*avg(netpaid)
+having sum(netpaid) > (select 0.05::numeric*avg(netpaid)
                                  from ssales)
 order by c_last_name
         ,c_first_name
@@ -98,7 +98,7 @@ where i_color = 'chiffon'
 group by c_last_name
         ,c_first_name
         ,s_store_name
-having sum(netpaid) > (select 0.05*avg(netpaid)
+having sum(netpaid) > (select 0.05::numeric*avg(netpaid)
                            from ssales)
 order by c_last_name
         ,c_first_name

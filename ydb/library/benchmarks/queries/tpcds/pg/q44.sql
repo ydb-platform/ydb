@@ -7,7 +7,7 @@ from(select *
                  from {{store_sales}} ss1
                  where ss_store_sk = 366
                  group by ss_item_sk
-                 having avg(ss_net_profit) > 0.9*(select avg(ss_net_profit) rank_col
+                 having avg(ss_net_profit) > 0.9::numeric*(select avg(ss_net_profit) rank_col
                                                   from {{store_sales}}
                                                   where ss_store_sk = 366
                                                     and ss_hdemo_sk is null
@@ -19,7 +19,7 @@ from(select *
                  from {{store_sales}} ss1
                  where ss_store_sk = 366
                  group by ss_item_sk
-                 having avg(ss_net_profit) > 0.9*(select avg(ss_net_profit) rank_col
+                 having avg(ss_net_profit) > 0.9::numeric*(select avg(ss_net_profit) rank_col
                                                   from {{store_sales}}
                                                   where ss_store_sk = 366
                                                     and ss_hdemo_sk is null

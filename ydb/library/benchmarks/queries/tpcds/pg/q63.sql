@@ -21,7 +21,7 @@ from (select i_manager_id
               and i_brand in ('amalgimporto #1','edu packscholar #1','exportiimporto #1',
 		                 'importoamalg #1')))
 group by i_manager_id, d_moy) tmp1
-where case when avg_monthly_sales > 0 then abs (sum_sales - avg_monthly_sales) / avg_monthly_sales else null end > 0.1
+where case when avg_monthly_sales > 0::numeric then abs (sum_sales - avg_monthly_sales) / avg_monthly_sales else null::numeric end > 0.1::numeric
 order by i_manager_id
         ,avg_monthly_sales
         ,sum_sales

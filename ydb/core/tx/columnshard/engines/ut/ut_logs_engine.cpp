@@ -699,7 +699,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         TTestDbWrapper db;
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(testColumns, testKey);
         auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
-        csDefaultControllerGuard->SetTasksActualizationLag(TDuration::Zero());
+        csDefaultControllerGuard->SetOverrideTasksActualizationLag(TDuration::Zero());
 
         ui64 pathId = 1;
         ui32 step = 1000;

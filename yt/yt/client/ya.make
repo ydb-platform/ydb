@@ -61,6 +61,7 @@ SRCS(
 
     hydra/version.cpp
 
+    chaos_client/config.cpp
     chaos_client/helpers.cpp
     chaos_client/replication_card.cpp
     chaos_client/replication_card_cache.cpp

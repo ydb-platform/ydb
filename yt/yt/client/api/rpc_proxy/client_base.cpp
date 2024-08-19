@@ -392,7 +392,7 @@ TFuture<void> TClientBase::MultisetAttributesNode(
     std::sort(children.begin(), children.end());
     for (const auto& [attribute, value] : children) {
         auto* protoSubrequest = req->add_subrequests();
-        protoSubrequest->set_attribute(attribute);
+        protoSubrequest->set_attribute(ToProto<TProtobufString>(attribute));
         protoSubrequest->set_value(ConvertToYsonString(value).ToString());
     }
 

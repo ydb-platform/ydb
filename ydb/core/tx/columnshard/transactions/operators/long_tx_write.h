@@ -6,7 +6,7 @@
 
 namespace NKikimr::NColumnShard {
 
-    class TLongTxTransactionOperator: public IProposeTxOperator {
+    class TLongTxTransactionOperator: public IProposeTxOperator, public TMonitoringObjectsCounter<TLongTxTransactionOperator> {
         using TBase = IProposeTxOperator;
         using TProposeResult = TTxController::TProposeResult;
         static inline auto Registrator = TFactory::TRegistrator<TLongTxTransactionOperator>(NKikimrTxColumnShard::TX_KIND_COMMIT);
@@ -14,6 +14,10 @@ namespace NKikimr::NColumnShard {
     private:
         virtual TString DoDebugString() const override {
             return "LONG_TX_WRITE";
+        }
+
+        bool TxWithDeadline() const override {
+            return true;
         }
 
         virtual TProposeResult DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override;

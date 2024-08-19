@@ -67,16 +67,24 @@ void TRetryingRemoteDynamicStoreReaderConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TReplicationCollocationOptions::Register(TRegistrar registrar)
+{
+    registrar.Parameter("preferred_sync_replica_clusters", &TThis::PreferredSyncReplicaClusters)
+        .Default(std::nullopt);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TReplicatedTableOptions::Register(TRegistrar registrar)
 {
-    registrar.Parameter("enable_replicated_table_tracker", &TThis::EnableReplicatedTableTracker)
-        .Default(false);
-
     registrar.Parameter("max_sync_replica_count", &TThis::MaxSyncReplicaCount)
         .Alias("sync_replica_count")
         .Optional();
     registrar.Parameter("min_sync_replica_count", &TThis::MinSyncReplicaCount)
         .Optional();
+
+    registrar.Parameter("enable_replicated_table_tracker", &TThis::EnableReplicatedTableTracker)
+        .Default(false);
 
     registrar.Parameter("sync_replica_lag_threshold", &TThis::SyncReplicaLagThreshold)
         .Default(TDuration::Minutes(10));
@@ -90,9 +98,6 @@ void TReplicatedTableOptions::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("incomplete_preload_grace_period", &TThis::IncompletePreloadGracePeriod)
         .Default(TDuration::Minutes(5));
-
-    registrar.Parameter("preferred_sync_replica_clusters", &TThis::PreferredSyncReplicaClusters)
-        .Default(std::nullopt);
 
     registrar.Postprocessor([] (TThis* config) {
         if (config->MaxSyncReplicaCount && config->MinSyncReplicaCount && *config->MinSyncReplicaCount > *config->MaxSyncReplicaCount) {

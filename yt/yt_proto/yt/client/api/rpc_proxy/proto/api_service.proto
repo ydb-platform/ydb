@@ -6,8 +6,9 @@ option java_multiple_files = true;
 
 option go_package = "a.yandex-team.ru/yt/go/proto/client/api/rpc_proxy";
 
-import "yt_proto/yt/core/misc/proto/guid.proto";
 import "yt_proto/yt/core/misc/proto/error.proto";
+import "yt_proto/yt/core/misc/proto/guid.proto";
+import "yt_proto/yt/core/misc/proto/hyperloglog.proto";
 import "yt_proto/yt/core/ytree/proto/attributes.proto";
 import "yt_proto/yt/core/ytree/proto/request_complexity_limits.proto";
 import "yt_proto/yt/client/chunk_client/proto/data_statistics.proto";
@@ -2062,6 +2063,9 @@ message TColumnarStatistics
     optional int64 chunk_row_count = 12;
     // Total number of rows in legacy chunks whose meta misses columnar statistics.
     optional int64 legacy_chunk_row_count = 13;
+
+    // Per-column hyperloglog digest to approximate number of unique values
+    repeated NYT.NProto.THyperLogLog column_hyperloglog_digests = 14;
 }
 
 message TRspGetColumnarStatistics

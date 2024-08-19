@@ -117,6 +117,34 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         UNIT_ASSERT(!response2);
     }
 
+    Y_UNIT_TEST(AnalyzeRebootSa) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        auto tableInfo = CreateDatabaseTables(env, 1, 1)[0];
+
+        auto sender = runtime.AllocateEdgeActor();
+
+        bool eventSeen = false;
+        auto observer = runtime.AddObserver<TEvStatistics::TEvAnalyzeTableResponse>([&](auto&) {
+            if (!eventSeen) {
+                RebootTablet(runtime, tableInfo.SaTabletId, sender);
+                eventSeen = true;
+            }
+        });
+
+        auto analyzeRequest1 = MakeAnalyzeRequest({tableInfo.PathId});
+        runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest1.release());
+
+        runtime.WaitFor("blocked 1st TEvAnalyzeTableResponse event", [&]{ return eventSeen; });
+
+        RebootTablet(runtime, tableInfo.SaTabletId, sender);
+
+        auto analyzeRequest2 = MakeAnalyzeRequest({tableInfo.PathId});
+        runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest2.release());
+
+        runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
+    }    
+
 }
 
 } // NStat

@@ -3,6 +3,8 @@
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/feature_flags.h>
 
+#include <util/string/vector.h>
+
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxInit : public TTxBase {
@@ -57,14 +59,14 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                         SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal start key");
                         break;
                     case Schema::SysParam_TraversalTableOwnerId:
-                        Self->TraversalTableId.PathId.OwnerId = FromString<ui64>(value);
+                        Self->TraversalPathId.OwnerId = FromString<ui64>(value);
                         SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal table owner id: "
-                            << Self->TraversalTableId.PathId.OwnerId);
+                            << Self->TraversalPathId.OwnerId);
                         break;
                     case Schema::SysParam_TraversalTableLocalPathId:
-                        Self->TraversalTableId.PathId.LocalPathId = FromString<ui64>(value);
+                        Self->TraversalPathId.LocalPathId = FromString<ui64>(value);
                         SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal table local path id: "
-                            << Self->TraversalTableId.PathId.LocalPathId);
+                            << Self->TraversalPathId.LocalPathId);
                         break;
                     case Schema::SysParam_TraversalStartTime: {
                         auto us = FromString<ui64>(value);
@@ -232,7 +234,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 TForceTraversalTable operationTable {
                     .PathId = pathId,
                     .ColumnTags = columnTags,
-                    .Status = (TForceTraversalTable::EStatus)status
+                    .Status = (TForceTraversalTable::EStatus)status,
                 };
                 auto forceTraversalOperation = Self->ForceTraversalOperation(operationId);
                 if (!forceTraversalOperation) {
@@ -264,10 +266,13 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
 
         Self->Schedule(Self->PropagateInterval, new TEvPrivate::TEvPropagate());
         Self->Schedule(Self->TraversalPeriod, new TEvPrivate::TEvScheduleTraversal());
+        Self->Schedule(Self->SendAnalyzePeriod, new TEvPrivate::TEvSendAnalyze());
 
         Self->InitializeStatisticsTable();
 
-        if (Self->TraversalTableId.PathId) {
+        if (Self->TraversalPathId) {
+            Self->NavigateType = ENavigateType::Traversal;
+            Self->NavigatePathId = Self->TraversalPathId;
             Self->Navigate();
         }
 

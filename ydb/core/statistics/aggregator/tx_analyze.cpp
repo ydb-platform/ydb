@@ -6,11 +6,11 @@
 
 namespace NKikimr::NStat {
 
-struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
+struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
     const NKikimrStat::TEvAnalyze& Record;
     TActorId ReplyToActorId;    
 
-    TTxAnalyzeTable(TSelf* self, const NKikimrStat::TEvAnalyze& record, TActorId replyToActorId)
+    TTxAnalyze(TSelf* self, const NKikimrStat::TEvAnalyze& record, TActorId replyToActorId)
         : TTxBase(self)
         , Record(record)
         , ReplyToActorId(replyToActorId)
@@ -19,7 +19,7 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_ANALYZE_TABLE; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeTable::Execute. ReplyToActorId " << ReplyToActorId << " , Record " << Record);
+        SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. ReplyToActorId " << ReplyToActorId << " , Record " << Record);
 
         if (!Self->EnableColumnStatistics) {
             return true;
@@ -35,16 +35,16 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
         // update existing force traversal
         if (existingOperation) {
             if (existingOperation->Tables.size() == Record.TablesSize()) {
-                SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeTable::Execute. Update existing force traversal. OperationId " << operationId << " , ReplyToActorId " << ReplyToActorId);
+                SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Update existing force traversal. OperationId " << operationId << " , ReplyToActorId " << ReplyToActorId);
                 existingOperation->ReplyToActorId = ReplyToActorId;
                 return true;
             } else {
-                SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeTable::Execute. Delete broken force traversal. OperationId " << operationId << " , ReplyToActorId " << ReplyToActorId);
+                SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Delete broken force traversal. OperationId " << operationId << " , ReplyToActorId " << ReplyToActorId);
                 Self->DeleteForceTraversalOperation(operationId, db);
             }
         }
 
-        SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeTable::Execute. Create new force traversal operation, OperationId=" << operationId);
+        SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Create new force traversal operation, OperationId=" << operationId);
         const TString types = JoinVectorIntoString(TVector<ui32>(Record.GetTypes().begin(), Record.GetTypes().end()), ",");
 
         // create new force trasersal
@@ -58,9 +58,9 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
         for (const auto& table : Record.GetTables()) {
             const TPathId pathId = PathIdFromPathId(table.GetPathId());
             const TString columnTags = JoinVectorIntoString(TVector<ui32>{table.GetColumnTags().begin(),table.GetColumnTags().end()},",");
-            const TForceTraversalTable::EStatus status = TForceTraversalTable::EStatus::None;
+            const auto status = TForceTraversalTable::EStatus::None;
 
-            SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeTable::Execute. Create new force traversal operation, OperationId=" << operationId << " , PathId " << pathId);
+            SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Create new force traversal table, OperationId=" << operationId << " , PathId " << pathId);
 
             // create new force traversal
             TForceTraversalTable operationTable {
@@ -90,12 +90,12 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
     }
 
     void Complete(const TActorContext& /*ctx*/) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeTable::Complete");
+        SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Complete");
     }
 };
 
 void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyze::TPtr& ev) {
-    Execute(new TTxAnalyzeTable(this, ev->Get()->Record, ev->Sender), TActivationContext::AsActorContext());
+    Execute(new TTxAnalyze(this, ev->Get()->Record, ev->Sender), TActivationContext::AsActorContext());
 }
 
 } // NKikimr::NStat

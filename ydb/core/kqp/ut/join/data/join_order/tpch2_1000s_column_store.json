@@ -23,12 +23,12 @@
                     "args":
                       [
                         {
-                          "op_name":"TableLookup",
-                          "table":"region"
+                          "op_name":"TableFullScan",
+                          "table":"nation"
                         },
                         {
                           "op_name":"TableFullScan",
-                          "table":"nation"
+                          "table":"region"
                         }
                       ]
                   }
@@ -61,12 +61,12 @@
                           "args":
                             [
                               {
-                                "op_name":"TableLookup",
-                                "table":"region"
+                                "op_name":"TableFullScan",
+                                "table":"nation"
                               },
                               {
                                 "op_name":"TableFullScan",
-                                "table":"nation"
+                                "table":"region"
                               }
                             ]
                         }

@@ -5,7 +5,6 @@
 #include <ydb/core/fq/libs/events/event_subspace.h>
 
 #include <ydb/core/fq/libs/row_dispatcher/protos/events.pb.h>
-#include <ydb/core/fq/libs/row_dispatcher/consumer.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 
 namespace NFq {

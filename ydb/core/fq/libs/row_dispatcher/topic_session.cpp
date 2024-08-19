@@ -593,6 +593,7 @@ void TTopicSession::FatalError(const TString& message, const std::unique_ptr<TJs
     }
     StopReadSession();
     Become(&TTopicSession::ErrorState);
+    PassAway();
 }
 
 void TTopicSession::StopReadSession() {

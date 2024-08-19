@@ -1,30 +1,21 @@
 #include "row_dispatcher.h"
 #include "coordinator.h"
 
-#include <ydb/core/fq/libs/config/protos/storage.pb.h>
-#include <ydb/core/fq/libs/control_plane_storage/util.h>
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/yql/dq/actors/compute/retry_queue.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
-#include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/events/events.h>
 
 #include <ydb/core/fq/libs/row_dispatcher/actors_factory.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
-#include <ydb/core/fq/libs/row_dispatcher/consumer.h>
 #include <ydb/core/fq/libs/row_dispatcher/leader_election.h>
 #include <ydb/core/fq/libs/row_dispatcher/protos/events.pb.h>
 
-
 #include <util/generic/queue.h>
-#include <util/stream/file.h>
-#include <util/string/join.h>
-#include <util/string/strip.h>
 
 
 namespace NFq {
@@ -50,7 +41,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> , public NYql::
     NFq::NRowDispatcher::IActorFactory::TPtr ActorFactory;
 
     using ConsumerSessionKey = std::pair<TActorId, ui32>;   // ReadActorId / PartitionId
-    using TopicSessionKey = std::pair<TString, ui32>;       // TopicPath / PartitionId
+    using TopicSessionKey = std::tuple<TString, TString, TString, ui32>;       // Endpoint / Database / TopicPath / PartitionId
 
     struct ConsumerInfo {
         ConsumerInfo(
@@ -245,12 +236,12 @@ void TRowDispatcher::Handle(NActors::TEvents::TEvPong::TPtr &) {
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe::TPtr &ev) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvCoordinatorChangesSubscribe ");
+    LOG_ROW_DISPATCHER_DEBUG("TEvCoordinatorChangesSubscribe from " << ev->Sender);
+    CoordinatorChangedSubscribers.insert(ev->Sender);
     if (!CoordinatorActorId) {
         return;
     }
     Send(ev->Sender, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(*CoordinatorActorId), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
-    CoordinatorChangedSubscribers.insert(ev->Sender);
 }
 
 void TRowDispatcher::PrintInternalState(const TString& prefix) {
@@ -258,14 +249,14 @@ void TRowDispatcher::PrintInternalState(const TString& prefix) {
     str << "Consumers:\n";
 
     for (auto& [key, consumerInfo] : Consumers) {
-        str << "    read actor id: " << key.first << ",  partId: " << key.second << "\n";
+        str << "    read actor id: " << key.first << ", partId: " << key.second << "\n";
     }
 
     str << "\nSessions:\n";
     for (auto& [key, sessionInfo1] : TopicSessions) {
-        str << "  topic: " << key.first << ",  partId: " << key.second << "\n";
+        str << "  endpoint: " << std::get<0>(key) << ", database: " << std::get<1>(key) << ", topic: " << std::get<2>(key) << ",  partId: " << std::get<3>(key) << "\n";
         for (auto& [actorId, sessionInfo2] : sessionInfo1.Sessions) {
-            str << "    session actor id: " << actorId << ",  partId: " << key.second << "\n";
+            str << "    session actor id: " << actorId << "\n";
             for (auto& [actorId2, consumer] : sessionInfo2.Consumers) {
                 str << "      read actor id: " << actorId2  << "\n";
             }
@@ -287,22 +278,26 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
     ConsumerSessionKey key{ev->Sender, ev->Get()->Record.GetPartitionId()};
     auto it = Consumers.find(key);
     if (it != Consumers.end()) {
-        LOG_ROW_DISPATCHER_DEBUG("Wrong"); // TODO
+        LOG_ROW_DISPATCHER_ERROR("Сonsumer already exist, ignore StartSession");
         return;
     }
 
     TActorId sessionActorId;
-
-    TopicSessionKey key2{ev->Get()->Record.GetSource().GetTopicPath(), ev->Get()->Record.GetPartitionId()};
-    TopicSessionInfo& topicSessionInfo = TopicSessions[key2];
+    TopicSessionKey topicKey{
+        ev->Get()->Record.GetSource().GetEndpoint(),
+        ev->Get()->Record.GetSource().GetDatabase(),
+        ev->Get()->Record.GetSource().GetTopicPath(),
+        ev->Get()->Record.GetPartitionId()};
+    TopicSessionInfo& topicSessionInfo = TopicSessions[topicKey];
     LOG_ROW_DISPATCHER_DEBUG("Topic session count " << topicSessionInfo.Sessions.size());
+    Y_ENSURE(topicSessionInfo.Sessions.size() <= 1);
 
     auto consumerInfo = MakeAtomicShared<ConsumerInfo>(ev->Sender, SelfId(), NextEventQueueId++, ev->Get()->Record, this, TActorId());
     Consumers[key] = consumerInfo;
     ConsumersByEventQueueId[consumerInfo->EventQueueId] = consumerInfo;
     consumerInfo->EventsQueue.OnEventReceived(ev);
 
-    if (topicSessionInfo.Sessions.empty() || readOffset) {
+    if (topicSessionInfo.Sessions.empty()) {
         LOG_ROW_DISPATCHER_DEBUG("Create new session " << readOffset);
         sessionActorId = ActorFactory->RegisterTopicSession(
             Config,
@@ -316,8 +311,6 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
         SessionInfo& sessionInfo = topicSessionInfo.Sessions[sessionActorId];
         sessionInfo.Consumers[ev->Sender] = consumerInfo;
     } else {
-        // TODO
-        // use any
         auto sessionIt = topicSessionInfo.Sessions.begin();
         SessionInfo& sessionInfo = sessionIt->second;
         sessionInfo.Consumers[ev->Sender] = consumerInfo;
@@ -331,12 +324,12 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr &ev) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvGetNextBatch ");
+    LOG_ROW_DISPATCHER_TRACE("TEvGetNextBatch from " << ev->Sender);
 
     ConsumerSessionKey key{ev->Sender, ev->Get()->Record.GetPartitionId()};
     auto it = Consumers.find(key);
     if (it == Consumers.end()) {
-        LOG_ROW_DISPATCHER_DEBUG("Wrong"); // TODO
+        LOG_ROW_DISPATCHER_WARN("Ignore TEvGetNextBatch, no such session");
         return;
     }
     if (!it->second->EventsQueue.OnEventReceived(ev)) {
@@ -375,7 +368,7 @@ void TRowDispatcher::DeleteConsumer(const ConsumerSessionKey& key) {
 
     auto consumerIt = Consumers.find(key);
     if (consumerIt == Consumers.end()) {
-        LOG_ROW_DISPATCHER_DEBUG("Wrong consumer"); // TODO
+        LOG_ROW_DISPATCHER_WARN("Ignore DeleteConsumer, no such session");
         return;
     }
     const auto& consumer = consumerIt->second;
@@ -384,7 +377,11 @@ void TRowDispatcher::DeleteConsumer(const ConsumerSessionKey& key) {
     event->Record.SetPartitionId(consumer->PartitionId);
     Send(new IEventHandle(consumerIt->second->TopicSessionId, consumer->ReadActorId, event.release(), 0));
 
-    TopicSessionKey topicKey{consumer->SourceParams.GetTopicPath(), consumer->PartitionId};
+    TopicSessionKey topicKey{
+        consumer->SourceParams.GetEndpoint(),
+        consumer->SourceParams.GetDatabase(),
+        consumer->SourceParams.GetTopicPath(),
+        consumer->PartitionId};
     TopicSessionInfo& topicSessionInfo = TopicSessions[topicKey];
     SessionInfo& sessionInfo = topicSessionInfo.Sessions[consumerIt->second->TopicSessionId];
     Y_ENSURE(sessionInfo.Consumers.count(consumer->ReadActorId));
@@ -393,6 +390,9 @@ void TRowDispatcher::DeleteConsumer(const ConsumerSessionKey& key) {
         LOG_ROW_DISPATCHER_DEBUG("Session is not used, sent TEvPoisonPill");
         topicSessionInfo.Sessions.erase(consumerIt->second->TopicSessionId);
         Send(consumerIt->second->TopicSessionId, new NActors::TEvents::TEvPoisonPill());
+        if (topicSessionInfo.Sessions.empty()) {
+            TopicSessions.erase(topicKey);
+        }
     }
     ConsumersByEventQueueId.erase(consumerIt->second->EventQueueId);
     Consumers.erase(consumerIt);
@@ -431,10 +431,11 @@ void TRowDispatcher::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvPing::TPtr
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr &ev) {
+    LOG_ROW_DISPATCHER_TRACE("TEvNewDataArrived from " << ev->Sender);
     ConsumerSessionKey key{ev->Get()->ReadActorId, ev->Get()->Record.GetPartitionId()};
     auto it = Consumers.find(key);
     if (it == Consumers.end()) {
-        LOG_ROW_DISPATCHER_DEBUG("Wrong consumer"); // TODO
+        LOG_ROW_DISPATCHER_WARN("Ignore MessageBatch, no such session");
         return;
     }
     LOG_ROW_DISPATCHER_TRACE("Resend TEvNewDataArrived to " << ev->Get()->ReadActorId);
@@ -442,10 +443,11 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr &ev) 
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev) {
+    LOG_ROW_DISPATCHER_TRACE("TEvMessageBatch from " << ev->Sender);
     ConsumerSessionKey key{ev->Get()->ReadActorId, ev->Get()->Record.GetPartitionId()};
     auto it = Consumers.find(key);
     if (it == Consumers.end()) {
-        LOG_ROW_DISPATCHER_DEBUG("Wrong consumer"); // TODO
+        LOG_ROW_DISPATCHER_WARN("Ignore MessageBatch, no such session");
         return;
     }
     LOG_ROW_DISPATCHER_TRACE("Resend TEvMessageBatch to " << ev->Get()->ReadActorId);
@@ -453,14 +455,16 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev) {
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr &ev) {
+    LOG_ROW_DISPATCHER_TRACE("TEvSessionError from " << ev->Sender);
     ConsumerSessionKey key{ev->Get()->ReadActorId, ev->Get()->Record.GetPartitionId()};
     auto it = Consumers.find(key);
     if (it == Consumers.end()) {
-        LOG_ROW_DISPATCHER_DEBUG("Wrong consumer"); // TODO
+        LOG_ROW_DISPATCHER_WARN("Ignore MessageBatch, no such session");
         return;
     }
     LOG_ROW_DISPATCHER_TRACE("Resend TEvSessionError to " << ev->Get()->ReadActorId);
     it->second->EventsQueue.Send(ev.Release()->Release().Release());
+    DeleteConsumer(key);
 }
 
 } // namespace

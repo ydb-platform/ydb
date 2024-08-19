@@ -5,7 +5,6 @@ SRCS(
     row_dispatcher.cpp
     row_dispatcher_service.cpp
     coordinator.cpp
-    leader_detector.cpp
     leader_election.cpp
     topic_session.cpp
     json_filter.cpp

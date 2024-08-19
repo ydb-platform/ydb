@@ -90,30 +90,33 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
     return TKikimrRunner(serverSettings);
 }
 
-class TChainConstructor {
+class TChainTester {
 public:
-    TChainConstructor(size_t chainSize)
+    TChainTester(size_t chainSize)
         : Kikimr(GetKikimrWithJoinSettings())
         , TableClient(Kikimr.GetTableClient())
         , Session(TableClient.CreateSession().GetValueSync().GetSession())
         , ChainSize(chainSize)
     {}
 
+public:
+    void Test() {
+        CreateTables();
+        JoinTables();
+    }
+
+private:
     void CreateTables() {
         for (size_t i = 0; i < ChainSize; ++i) {
-            TString tableName;
-            
-            tableName
-                .append("/Root/table_").append(ToString(i));;
+            TString tableName = Sprintf("/Root/table_%ld", i);
 
-            TString createTable;
-            createTable
-                += "CREATE TABLE `" +  tableName + "` (id"
-                +  ToString(i) + " Int32, " 
-                +  "PRIMARY KEY (id" + ToString(i) + "));";
+            TString createTable = Sprintf(
+                "CREATE TABLE `%s` (id%ld Int32, PRIMARY KEY (id%ld));",
+                tableName.c_str(), i, i
+            );
 
             auto result = Session.ExecuteSchemeQuery(createTable).GetValueSync();
-            result.GetIssues().PrintTo(Cout);
+            result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
     }
@@ -124,23 +127,23 @@ public:
         joinRequest.append("SELECT * FROM `/Root/table_0` as t0 ");
 
         for (size_t i = 1; i < ChainSize; ++i) {
-            TString table = "/Root/table_" + ToString(i);
+            TString table = Sprintf("/Root/table_%ld", i);
 
-            TString prevAliasTable = "t" + ToString(i - 1);
-            TString aliasTable = "t" + ToString(i);
+            TString prevAliasTable = Sprintf("t%ld", i - 1);
+            TString aliasTable = Sprintf("t%ld", i);
 
-            joinRequest
-                += "INNER JOIN `" + table + "`" + " AS " + aliasTable + " ON "
-                +  aliasTable + ".id" + ToString(i) + "=" + prevAliasTable + ".id" 
-                +  ToString(i-1) + " ";
+            joinRequest +=
+                Sprintf(
+                    "INNER JOIN `%s` AS %s ON %s.id%ld = %s.id%ld ",
+                    table.c_str(), aliasTable.c_str(), aliasTable.c_str(), i, prevAliasTable.c_str(), i - 1
+                );
         }
 
         auto result = Session.ExecuteDataQuery(joinRequest, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        result.GetIssues().PrintTo(Cout);
+        result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
     }
 
-private:
     TKikimrRunner Kikimr;
     NYdb::NTable::TTableClient TableClient;
     TSession Session;
@@ -164,8 +167,8 @@ void ExplainJoinOrderTestDataQuery(const TString& queryPath, bool useStreamLooku
 
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-        Cout << result.GetPlan() << Endl;
-        Cout << CanonizeJoinOrder(result.GetPlan()) << Endl;
+        Cerr << result.GetPlan() << Endl;
+        Cerr << CanonizeJoinOrder(result.GetPlan()) << Endl;
     }
 }
 
@@ -188,9 +191,7 @@ void ExecuteJoinOrderTestDataQuery(const TString& queryPath, bool useStreamLooku
 
 Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     Y_UNIT_TEST(Chain65Nodes) {
-        TChainConstructor chain(65);
-        chain.CreateTables();
-        chain.JoinTables();
+        TChainTester(65).Test();
     }
 
     void ExecuteJoinOrderTestDataQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore) {
@@ -205,9 +206,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             const TString query = GetStatic(queryPath);
             
             auto execRes = db.StreamExecuteScanQuery(query, TStreamExecScanQuerySettings().Explain(true)).ExtractValueSync();
-            execRes.GetIssues().PrintTo(Cout);
+            execRes.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_VALUES_EQUAL(execRes.GetStatus(), EStatus::SUCCESS);
-            Cout << CollectStreamResult(execRes).PlanJson;
+            Cerr << CollectStreamResult(execRes).PlanJson;
         }
     }
 
@@ -223,7 +224,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             const TString query = GetStatic(queryPath);
 
             auto result = session.ExplainDataQuery(query).ExtractValueSync();
-            Cout << result.GetPlan() << Endl;
+            Cerr << result.GetPlan() << Endl;
             NJson::TJsonValue plan;
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
 
@@ -379,9 +380,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
                 correctJoinOrderPath = correctJoinOrderPath.substr(0, correctJoinOrderPath.find(".json")) + "_column_store.json";      
             }
 
-            Cout << result.GetPlan() << Endl;
+            Cerr << result.GetPlan() << Endl;
             auto currentJoinOrder = CanonizeJoinOrder(result.GetPlan());
-            Cout << currentJoinOrder << Endl;
+            Cerr << currentJoinOrder << Endl;
             /* to canonize the tests use --test-param CANONIZE_JOIN_ORDER_TESTS=TRUE */
             TString canonize = GetTestParam("CANONIZE_JOIN_ORDER_TESTS"); canonize.to_lower();
             if (canonize.equal("true")) {

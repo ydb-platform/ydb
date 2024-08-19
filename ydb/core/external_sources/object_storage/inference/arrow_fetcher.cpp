@@ -15,7 +15,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
-#if not defined(_win_)
+#if defined(_linux_) || defined(_darwin_)
 #include <ydb/library/yql/providers/s3/compressors/factory.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBufferFromString.h>
 #endif
@@ -171,7 +171,7 @@ private:
     // Cutting file
 
     TMaybe<TString> DecompressFile(const TString& data, const TRequest& request, const NActors::TActorContext& ctx) {
-#if not defined(_win_)
+#if defined(_linux_) || defined(_darwin_)
         try {
             NDB::ReadBufferFromString dataBuffer(data);
             auto decompressorBuffer = NYql::MakeDecompressor(dataBuffer, *DecompressionFormat_);

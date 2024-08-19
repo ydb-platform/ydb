@@ -276,6 +276,10 @@ namespace NInterconnect {
             RSA_free(rsa);
         }
 
+        void operator ()(EVP_PKEY *pKey) const {
+            EVP_PKEY_free(pKey);
+        }
+
         void operator ()(SSL_CTX *ctx) const {
             SSL_CTX_free(ctx);
         }
@@ -297,7 +301,7 @@ namespace NInterconnect {
             Y_ABORT_UNLESS(Ctx, "SSL_CTX_new() failed");
             ret = SSL_CTX_set_min_proto_version(Ctx.get(), TLS1_2_VERSION);
             Y_ABORT_UNLESS(ret == 1, "failed to set min proto version");
-            ret = SSL_CTX_set_max_proto_version(Ctx.get(), TLS1_2_VERSION);
+            ret = SSL_CTX_set_max_proto_version(Ctx.get(), TLS1_3_VERSION);
             Y_ABORT_UNLESS(ret == 1, "failed to set max proto version");
 #endif
             SSL_CTX_set_verify(Ctx.get(), SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, &Verify);
@@ -328,9 +332,9 @@ namespace NInterconnect {
             if (privateKey) {
                 std::unique_ptr<BIO, TDeleter> bio(BIO_new_mem_buf(privateKey.data(), privateKey.size()));
                 Y_ABORT_UNLESS(bio);
-                std::unique_ptr<RSA, TDeleter> pkey(PEM_read_bio_RSAPrivateKey(bio.get(), nullptr, nullptr, nullptr));
+                std::unique_ptr<EVP_PKEY, TDeleter> pkey(PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr));
                 Y_ABORT_UNLESS(pkey);
-                ret = SSL_CTX_use_RSAPrivateKey(Ctx.get(), pkey.get());
+                ret = SSL_CTX_use_PrivateKey(Ctx.get(), pkey.get());
                 Y_ABORT_UNLESS(ret == 1);
             }
             if (caFilePath) {

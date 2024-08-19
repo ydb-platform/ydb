@@ -69,7 +69,9 @@ When choosing the minimum number of partitions, it makes sense to consider that 
 * Type: `Uint64`.
 * Default value: `2000 MB` ( `2 GB` ).
 
-Partition size threshold in MB. If exceeded, a shard splits. Takes effect when the [`AUTO_PARTITIONING_BY_SIZE`](#auto_partitioning_by_size) mode is enabled.
+Partition size threshold in MB from `10 MB` to `2000 MB`. If exceeded, a shard may split. Takes effect when the [`AUTO_PARTITIONING_BY_SIZE`](#auto_partitioning_by_size) mode is enabled.
+
+The system may split a shard at its discretion. Or it might not split at all, even if the specific size is requested.
 
 #### AUTO_PARTITIONING_MIN_PARTITIONS_COUNT {#auto_partitioning_min_partitions_count}
 

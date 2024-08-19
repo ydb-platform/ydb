@@ -81,7 +81,7 @@ namespace {
             });
     }
 
-    void TestBlockJoinOnUint64(EJoinKind joinKind) {
+    void DoTestBlockJoinOnUint64(EJoinKind joinKind, size_t blockSize, size_t testSize) {
         TSetup<false> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -131,7 +131,6 @@ namespace {
         const auto& holderFactory = graph->GetHolderFactory();
         auto& ctx = graph->GetContext();
 
-        constexpr size_t testSize = 256;
         TVector<ui64> keys(testSize);
         TVector<ui64> subkeys;
         std::iota(keys.begin(), keys.end(), 1);
@@ -142,7 +141,6 @@ namespace {
         std::transform(keys.cbegin(), keys.cend(), std::back_inserter(payloads),
             [](const auto& value) { return twoLetterPayloads[value].c_str(); });
 
-        const size_t blockSize = 64;
         size_t current = 0;
         TDefaultListRepresentation leftListValues;
         while (current < testSize) {
@@ -188,11 +186,18 @@ namespace {
         UNIT_ASSERT(blockLengthDatum.is_scalar());
         const auto blockLength = blockLengthDatum.scalar_as<arrow::UInt64Scalar>().value;
         const auto dictSize = std::count_if(dictKeys.cbegin(), dictKeys.cend(),
-            [](ui64 key) { return key < testSize; });
+            [testSize](ui64 key) { return key < testSize; });
         const auto expectedLength = joinKind == EJoinKind::LeftSemi ? dictSize
                                   : joinKind == EJoinKind::LeftOnly ? testSize - dictSize
                                   : -1;
         UNIT_ASSERT_VALUES_EQUAL(expectedLength, blockLength);
+    }
+
+    void TestBlockJoinOnUint64(EJoinKind joinKind) {
+        const size_t testSize = 512;
+        for (size_t blockSize = 8; blockSize <= testSize; blockSize <<= 2) {
+            DoTestBlockJoinOnUint64(joinKind, blockSize, testSize);
+        }
     }
 } // namespace
 

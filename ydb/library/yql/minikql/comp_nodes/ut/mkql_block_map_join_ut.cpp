@@ -73,7 +73,7 @@ namespace {
             });
 
         const auto keyList = pgmBuilder.NewList(keyType, keyListItems);
-        return pgmBuilder.ToSortedDict(keyList, false,
+        return pgmBuilder.ToHashedDict(keyList, false,
             [&](TRuntimeNode item) {
                 return item;
             }, [&](TRuntimeNode) {

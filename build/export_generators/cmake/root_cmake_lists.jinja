@@ -6,13 +6,10 @@ if (POLICY CMP0132)
 endif()
 
 project({{ project_name }} LANGUAGES
-{%- set has_asm = false -%}
 {%- for project_language in project_languages -%}
-{%-     if project_language == "ASM" -%}
-{%          set has_asm = true %}
-{%-     else  %} {{ project_language }}
+{%-     if project_language != "ASM" %} {{ project_language }}
 {%-     endif  -%}
-{%-     if (loop.last) and (has_asm) %} ASM
+{%-     if (loop.last) and ("ASM" in project_languages) %} ASM
 {%-     endif  -%}
 {%- endfor -%}
 )

@@ -92,6 +92,7 @@ void FillCreateExternalTableColumnDesc(NKikimrSchemeOp::TExternalTableDescriptio
     for (const auto& [key, value]: settings.SourceTypeParameters) {
         attributes.insert({key, value});
     }
+    attributes.insert({"location", settings.Location});
     externalTableDesc.SetContent(general.SerializeAsString());
 }
 

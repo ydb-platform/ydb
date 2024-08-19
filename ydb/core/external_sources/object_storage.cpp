@@ -46,6 +46,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
 
     virtual TString Pack(const NKikimrExternalSources::TSchema& schema,
                          const NKikimrExternalSources::TGeneral& general) const override {
+        TString location;
         NKikimrExternalSources::TObjectStorage objectStorage;
         for (const auto& [key, value]: general.attributes()) {
             auto lowerKey = to_lower(key);
@@ -62,12 +63,14 @@ struct TObjectStorageExternalSource : public IExternalSource {
                 }
             } else if (IsIn({"file_pattern"sv, "data.interval.unit"sv, "data.datetime.format_name"sv, "data.datetime.format"sv, "data.timestamp.format_name"sv, "data.timestamp.format"sv, "csv_delimiter"sv}, lowerKey)) {
                 objectStorage.mutable_format_setting()->insert({lowerKey, value});
+            } else if (lowerKey == "location") {
+                location = value;
             } else {
                 ythrow TExternalSourceException() << "Unknown attribute " << key;
             }
         }
 
-        if (auto issues = Validate(schema, objectStorage, PathsLimit)) {
+        if (auto issues = Validate(schema, objectStorage, PathsLimit, location)) {
             ythrow TExternalSourceException() << issues.ToString();
         }
 
@@ -136,9 +139,15 @@ struct TObjectStorageExternalSource : public IExternalSource {
     }
 
     template<typename TScheme, typename TObjectStorage>
-    static NYql::TIssues Validate(const TScheme& schema, const TObjectStorage& objectStorage, size_t pathsLimit) {
+    static NYql::TIssues Validate(const TScheme& schema, const TObjectStorage& objectStorage, size_t pathsLimit, const TString& location) {
         NYql::TIssues issues;
-        issues.AddIssues(ValidateFormatSetting(objectStorage.format(), objectStorage.format_setting()));
+        if (TString errorString; !NYql::NS3::ValidateWildcards(location, errorString)) {
+            issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Location '" << location << "' contains invalid wildcard: " << errorString));
+        }
+        if (objectStorage.partitioned_by_size() && NYql::NS3::HasWildcards(location)) {
+            issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Location '" << location << "' contains wildcards"));
+        }
+        issues.AddIssues(ValidateFormatSetting(objectStorage.format(), objectStorage.format_setting(), location));
         issues.AddIssues(ValidateRawFormat(objectStorage.format(), schema, objectStorage.partitioned_by()));
         if (objectStorage.projection_size() || objectStorage.partitioned_by_size()) {
             try {
@@ -160,11 +169,17 @@ struct TObjectStorageExternalSource : public IExternalSource {
         return issues;
     }
 
-    static NYql::TIssues ValidateFormatSetting(const TString& format, const google::protobuf::Map<TString, TString>& formatSetting) {
+    static NYql::TIssues ValidateFormatSetting(const TString& format, const google::protobuf::Map<TString, TString>& formatSetting, const TString& location) {
         NYql::TIssues issues;
         issues.AddIssues(ValidateDateFormatSetting(formatSetting));
         for (const auto& [key, value]: formatSetting) {
             if (key == "file_pattern"sv) {
+                if (TString errorString; !NYql::NS3::ValidateWildcards(value, errorString)) {
+                    issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "File pattern '" << value << "' contains invalid wildcard: " << errorString));
+                }
+                if (value && !location.EndsWith("/")) {
+                    issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, "Path pattern cannot be used with file_pattern"));
+                }
                 continue;
             }
 
@@ -631,8 +646,8 @@ IExternalSource::TPtr CreateObjectStorageExternalSource(const std::vector<TRegEx
     return MakeIntrusive<TObjectStorageExternalSource>(hostnamePatterns, actorSystem, pathsLimit, std::move(credentialsFactory), enableInfer, allowLocalFiles);
 }
 
-NYql::TIssues Validate(const FederatedQuery::Schema& schema, const FederatedQuery::ObjectStorageBinding::Subset& objectStorage, size_t pathsLimit) {
-    return TObjectStorageExternalSource::Validate(schema, objectStorage, pathsLimit);
+NYql::TIssues Validate(const FederatedQuery::Schema& schema, const FederatedQuery::ObjectStorageBinding::Subset& objectStorage, size_t pathsLimit, const TString& location) {
+    return TObjectStorageExternalSource::Validate(schema, objectStorage, pathsLimit, location);
 }
 
 NYql::TIssues ValidateDateFormatSetting(const google::protobuf::Map<TString, TString>& formatSetting, bool matchAllSettings) {

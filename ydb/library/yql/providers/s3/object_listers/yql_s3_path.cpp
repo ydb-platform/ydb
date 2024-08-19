@@ -47,22 +47,23 @@ TString RegexFromWildcards(const std::string_view& pattern) {
     const auto& escaped = EscapeRegex(pattern);
     TStringBuilder result;
     bool slash = false;
-    bool group = false;
+    size_t groupCount = 0;
 
     for (const char& c : escaped) {
         switch (c) {
             case '{':
                 result << "(?:";
-                group = true;
+                groupCount++;
                 slash = false;
                 break;
             case '}':
+                Y_ENSURE(groupCount, "Unexpected group end");
                 result << ')';
-                group = false;
+                groupCount--;
                 slash = false;
                 break;
             case ',':
-                if (group)
+                if (groupCount)
                     result << '|';
                 else
                     result << "\\,";
@@ -89,7 +90,29 @@ TString RegexFromWildcards(const std::string_view& pattern) {
                 break;
         }
     }
+    Y_ENSURE(!groupCount, "Found " << groupCount << " unterminated groups");
+    Y_ENSURE(!slash, "Expected symbol after slash");
     return result;
+}
+
+bool ValidateWildcards(const std::string_view& pattern, TString& errorString) {
+    size_t groupCount = 0;
+    for (size_t i = 0; i < pattern.size(); ++i) {
+        if (pattern[i] == '{') {
+            groupCount++;
+        } else if (pattern[i] == '}') {
+            if (!groupCount) {
+                errorString = TStringBuilder() << "found unexpected group end at position " << i;
+                return false;
+            }
+            groupCount--;
+        }
+    }
+    if (groupCount) {
+        errorString = TStringBuilder() << "found " << groupCount << " unterminated groups";
+        return false;
+    }
+    return true;
 }
 
 }

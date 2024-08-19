@@ -8,14 +8,8 @@ namespace NKikimr::NOlap {
 std::unique_ptr<NKikimr::TEvColumnShard::TEvInternalScan> TModificationRestoreTask::DoBuildRequestInitiator() const {
     auto request = std::make_unique<TEvColumnShard::TEvInternalScan>(LocalPathId);
     request->ReadToSnapshot = Snapshot;
-    request->RangesFilter = std::make_shared<TPKRangesFilter>(false);
     auto pkData = NArrow::TColumnOperator().VerifyIfAbsent().Extract(IncomingData, ActualSchema->GetPKColumnNames());
-    for (ui32 i = 0; i < pkData->num_rows(); ++i) {
-        auto batch = pkData->Slice(i, 1);
-        auto pFrom = std::make_shared<NOlap::TPredicate>(NKernels::EOperation::GreaterEqual, batch);
-        auto pTo = std::make_shared<NOlap::TPredicate>(NKernels::EOperation::LessEqual, batch);
-        AFL_VERIFY(request->RangesFilter->Add(pFrom, pTo, &ActualSchema->GetIndexInfo()));
-    }
+    request->RangesFilter = TPKRangesFilter::BuildFromRecordBatchLines(pkData, false);
     for (auto&& i : ActualSchema->GetIndexInfo().GetColumnIds(false)) {
         request->AddColumn(i, ActualSchema->GetIndexInfo().GetColumnName(i));
     }

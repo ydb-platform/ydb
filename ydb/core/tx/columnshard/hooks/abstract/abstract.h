@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/tiering/snapshot.h>
+#include <ydb/core/tx/columnshard/common/limits.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/services/metadata/abstract/fetcher.h>
@@ -84,13 +85,60 @@ protected:
     virtual void DoOnDataSharingStarted(const ui64 /*tabletId*/, const TString& /*sessionId*/) {
     }
 
+    virtual TDuration DoGetPingCheckPeriod(const TDuration defaultValue) const {
+        return defaultValue;
+    }
+    virtual TDuration DoGetOverridenGCPeriod(const TDuration defaultValue) const {
+        return defaultValue;
+    }
+    virtual TDuration DoGetCompactionActualizationLag(const TDuration defaultValue) const {
+        return defaultValue;
+    }
+    virtual TDuration DoGetActualizationTasksLag(const TDuration defaultValue) const {
+        return defaultValue;
+    }
+    virtual ui64 DoGetReduceMemoryIntervalLimit(const ui64 defaultValue) const {
+        return defaultValue;
+    }
+    virtual ui64 DoGetRejectMemoryIntervalLimit(const ui64 defaultValue) const {
+        return defaultValue;
+    }
+    virtual ui64 DoGetReadSequentiallyBufferSize(const ui64 defaultValue) const {
+        return defaultValue;
+    }
+    virtual ui64 DoGetSmallPortionSizeDetector(const ui64 defaultValue) const {
+        return defaultValue;
+    }
+    virtual TDuration DoGetReadTimeoutClean(const TDuration defaultValue) const {
+        return defaultValue;
+    }
+    virtual TDuration DoGetGuaranteeIndexationInterval(const TDuration defaultValue) const {
+        return defaultValue;
+    }
+    virtual TDuration DoGetPeriodicWakeupActivationPeriod(const TDuration defaultValue) const {
+        return defaultValue;
+    }
+    virtual TDuration DoGetStatsReportInterval(const TDuration defaultValue) const {
+        return defaultValue;
+    }
+    virtual ui64 DoGetGuaranteeIndexationStartBytesLimit(const ui64 defaultValue) const {
+        return defaultValue;
+    }
+    virtual TDuration DoGetOptimizerFreshnessCheckDuration(const TDuration defaultValue) const {
+        return defaultValue;
+    }
+    virtual TDuration DoGetLagForCompactionBeforeTierings(const TDuration defaultValue) const {
+        return defaultValue;
+    }
+
 public:
     virtual void OnRequestTracingChanges(
         const std::set<NOlap::TSnapshot>& /*snapshotsToSave*/, const std::set<NOlap::TSnapshot>& /*snapshotsToRemove*/) {
     }
 
-    virtual TDuration GetPingCheckPeriod(const TDuration def) const {
-        return def;
+    TDuration GetPingCheckPeriod() const {
+        const TDuration defaultValue = 0.6 * GetReadTimeoutClean();
+        return DoGetPingCheckPeriod(defaultValue);
     }
 
     virtual bool IsBackgroundEnabled(const EBackground /*id*/) const {
@@ -100,15 +148,17 @@ public:
     using TPtr = std::shared_ptr<ICSController>;
     virtual ~ICSController() = default;
 
-    virtual TDuration GetOverridenGCPeriod(const TDuration def) const {
-        return def;
+    TDuration GetOverridenGCPeriod() const {
+        const TDuration defaultValue = TDuration::MilliSeconds(AppDataVerified().ColumnShardConfig.GetGCIntervalMs());
+        return DoGetOverridenGCPeriod(defaultValue);
     }
 
     virtual void OnSelectShardingFilter() {
     }
 
-    virtual TDuration GetCompactionActualizationLag(const TDuration def) const {
-        return def;
+    TDuration GetCompactionActualizationLag() const {
+        const TDuration defaultValue = TDuration::MilliSeconds(AppDataVerified().ColumnShardConfig.GetCompactionActualizationLagMs());
+        return DoGetCompactionActualizationLag(defaultValue);
     }
 
     virtual NColumnShard::TBlobPutResult::TPtr OverrideBlobPutResultOnCompaction(
@@ -116,25 +166,25 @@ public:
         return original;
     }
 
-    virtual TDuration GetRemovedPortionLivetime(const TDuration def) const {
-        return def;
+    TDuration GetActualizationTasksLag() const {
+        const TDuration defaultValue = TDuration::MilliSeconds(AppDataVerified().ColumnShardConfig.GetActualizationTasksLagMs());
+        return DoGetActualizationTasksLag(defaultValue);
     }
 
-    virtual TDuration GetActualizationTasksLag(const TDuration d) const {
-        return d;
+    ui64 GetReduceMemoryIntervalLimit() const {
+        const ui64 defaultValue = NOlap::TGlobalLimits::DefaultReduceMemoryIntervalLimit;
+        return DoGetReduceMemoryIntervalLimit(defaultValue);
     }
-
-    virtual ui64 GetReduceMemoryIntervalLimit(const ui64 def) const {
-        return def;
-    }
-    virtual ui64 GetRejectMemoryIntervalLimit(const ui64 def) const {
-        return def;
+    ui64 GetRejectMemoryIntervalLimit() const {
+        const ui64 defaultValue = NOlap::TGlobalLimits::DefaultRejectMemoryIntervalLimit;
+        return DoGetRejectMemoryIntervalLimit(defaultValue);
     }
     virtual bool NeedForceCompactionBacketsConstruction() const {
         return false;
     }
-    virtual ui64 GetSmallPortionSizeDetector(const ui64 def) const {
-        return def;
+    ui64 GetSmallPortionSizeDetector() const {
+        const ui64 defaultValue = AppDataVerified().ColumnShardConfig.GetSmallPortionDetectSizeLimit();
+        return DoGetSmallPortionSizeDetector(defaultValue);
     }
     virtual void OnExportFinished() {
     }
@@ -158,8 +208,9 @@ public:
     virtual void OnMaxValueUsage() {
     }
 
-    virtual TDuration GetLagForCompactionBeforeTierings(const TDuration def) const {
-        return def;
+    virtual TDuration GetLagForCompactionBeforeTierings() const {
+        const TDuration defaultValue = TDuration::MilliSeconds(AppDataVerified().ColumnShardConfig.GetLagForCompactionBeforeTieringsMs());
+        return DoGetLagForCompactionBeforeTierings(defaultValue);
     }
 
     void OnTabletInitCompleted(const NColumnShard::TColumnShard& shard) {
@@ -188,29 +239,20 @@ public:
     }
     virtual void OnIndexSelectProcessed(const std::optional<bool> /*result*/) {
     }
-    virtual TDuration GetReadTimeoutClean(const TDuration def) {
-        return def;
+    TDuration GetReadTimeoutClean() const {
+        const TDuration defaultValue = TDuration::MilliSeconds(AppDataVerified().ColumnShardConfig.GetMaxReadStaleness_ms());
+        return DoGetReadTimeoutClean(defaultValue);
     }
     virtual EOptimizerCompactionWeightControl GetCompactionControl() const {
         return EOptimizerCompactionWeightControl::Force;
     }
-    virtual TDuration GetTTLDefaultWaitingDuration(const TDuration defaultValue) const {
-        return defaultValue;
-    }
-    virtual TDuration GetGuaranteeIndexationInterval(const TDuration defaultValue) const {
-        return defaultValue;
-    }
-    virtual TDuration GetPeriodicWakeupActivationPeriod(const TDuration defaultValue) const {
-        return defaultValue;
-    }
-    virtual TDuration GetStatsReportInterval(const TDuration defaultValue) const {
-        return defaultValue;
-    }
-    virtual ui64 GetGuaranteeIndexationStartBytesLimit(const ui64 defaultValue) const {
-        return defaultValue;
-    }
-    virtual TDuration GetOptimizerFreshnessCheckDuration(const TDuration defaultValue) const {
-        return defaultValue;
+    TDuration GetGuaranteeIndexationInterval() const;
+    TDuration GetPeriodicWakeupActivationPeriod() const;
+    TDuration GetStatsReportInterval() const;
+    ui64 GetGuaranteeIndexationStartBytesLimit() const;
+    TDuration GetOptimizerFreshnessCheckDuration() const {
+        const TDuration defaultValue = TDuration::MilliSeconds(AppDataVerified().ColumnShardConfig.GetOptimizerFreshnessCheckDurationMs());
+        return DoGetOptimizerFreshnessCheckDuration(defaultValue);
     }
 
     virtual void OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& /*tiers*/) {

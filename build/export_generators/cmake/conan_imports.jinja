@@ -5,29 +5,8 @@
 {%-     set srcdir_and_mask = rsplit(search, ",", 2) -%}
 {%-     set srcdir = srcdir_and_mask[0]|trim -%}
 {%-     set mask = srcdir_and_mask[1]|trim -%}
-{%-     if use_conan2 -%}
-{%-         if "bin" in srcdir %}
-            for bindir in dep.cpp_info.bindirs:
-                {{ shift }}copy(self, pattern="{{ mask }}", src=bindir, dst=self.build_folder + "../../../../{{ dstdir }}")
-{%-         elif "res" in srcdir %}
-            for resdir in dep.cpp_info.resdirs:
-                {{ shift }}copy(self, pattern="{{ mask }}", src=resdir, dst=self.build_folder + "../../../../{{ dstdir }}")
-{%-         elif "build" in srcdir %}
-            for builddir in dep.cpp_info.builddirs:
-                {{ shift }}copy(self, pattern="{{ mask }}", src=builddir, dst=self.build_folder + "../../../../{{ dstdir }}")
-{%-         elif ("src" in srcdir) or ("source" in srcdir) %}
-            for srcdir in dep.cpp_info.srcdirs:
-                {{ shift }}copy(self, pattern="{{ mask }}", src=srcdir, dst=self.build_folder + "../../../../{{ dstdir }}")
-{%-         elif "lib" in srcdir %}
-            for libdir in dep.cpp_info.libdirs:
-                {{ shift }}copy(self, pattern="{{ mask }}", src=libdir, dst=self.build_folder + "../../../../{{ dstdir }}")
-{%-         elif "include" in srcdir %}
-            for includedir in dep.cpp_info.includedirs:
-                {{ shift }}copy(self, pattern="{{ mask }}", src=includedir, dst=self.build_folder + "../../../../{{ dstdir }}")
-{%-         elif "frame" in srcdir %}
-            for framedir in dep.cpp_info.frameworkdirs:
-                {{ shift }}copy(self, pattern="{{ mask }}", src=framedir, dst=self.build_folder + "../../../../{{ dstdir }}")
-{%-         endif -%}
+{%-     if use_conan2 %}
+                {{ shift }}copy(self, pattern="{{ mask }}", src=dep.cpp_info.bindirs[0], dst=self.build_folder + "../../../../{{ dstdir }}")
 {%-     else %}
         {{ shift }}self.copy(pattern="{{ mask }}", src="{{ srcdir }}", dst="{{ dstdir }}")
 {%-     endif -%}

@@ -46,10 +46,6 @@ struct bhtraits_base
       template rebind_pointer<T>::type                               pointer;
    typedef typename pointer_traits<node_ptr>::
       template rebind_pointer<const T>::type                         const_pointer;
-   typedef typename pointer_traits<node_ptr>::
-      template rebind_pointer<node_holder_type>::type                node_holder_ptr;
-   typedef typename pointer_traits<node_ptr>::
-      template rebind_pointer<const node_holder_type>::type          const_node_holder_ptr;
    typedef T &                                                       reference;
    typedef const T &                                                 const_reference;
    typedef node_holder_type &                                        node_holder_reference;
@@ -59,14 +55,16 @@ struct bhtraits_base
 
    inline static pointer to_value_ptr(node_ptr n)
    {
-      return pointer_traits<pointer>::
-         static_cast_from(pointer_traits<node_holder_ptr>::static_cast_from(n));
+      pointer p = pointer_traits<pointer>::pointer_to
+         (static_cast<reference>(static_cast<node_holder_reference>(*n)));
+      return p;
    }
 
    inline static const_pointer to_value_ptr(const_node_ptr n)
    {
-      return pointer_traits<const_pointer>::
-         static_cast_from(pointer_traits<const_node_holder_ptr>::static_cast_from(n));
+      const_pointer p = pointer_traits<const_pointer>::pointer_to
+         (static_cast<const_reference>(static_cast<const_node_holder_reference>(*n)));
+      return p;
    }
 
    inline static node_ptr to_node_ptr(reference value)

@@ -200,7 +200,7 @@ void ToProto(NProto::Span* proto, const TTraceContextPtr& traceContext)
     for (const auto& traceId : traceContext->GetAsyncChildren()) {
         auto* tag = proto->add_tags();
 
-        tag->set_key(Format("yt.async_trace_id.%v", i++));
+        tag->set_key(Format("yt.async_trace_id.%d", i++));
         tag->set_v_str(ToString(traceId));
     }
 

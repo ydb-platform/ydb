@@ -132,7 +132,7 @@
     #endif
 #endif
 
-// to cheat compiler about strict aliasing or similar problems
+//to cheat compiler about strict aliasing or similar problems
 #if defined(__GNUC__)
     #define Y_FAKE_READ(X)                  \
         do {                                \
@@ -666,7 +666,7 @@ Y_FORCE_INLINE void DoNotOptimizeAway(const T&) = delete;
  * an object or reference refers to another object with a shorter lifetime.
  */
 #if defined(__clang__) && defined(__cplusplus) && defined(__has_cpp_attribute)
-    #if defined(__CUDACC__) && (!Y_CUDA_AT_LEAST(11, 0) || (__clang_major__ < 13))
+    #if defined(__CUDACC__) && !Y_CUDA_AT_LEAST(11, 0)
         #define Y_LIFETIME_BOUND
     #elif __has_cpp_attribute(clang::lifetimebound)
         #define Y_LIFETIME_BOUND [[clang::lifetimebound]]

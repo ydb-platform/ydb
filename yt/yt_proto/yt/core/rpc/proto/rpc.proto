@@ -106,7 +106,6 @@ message TBalancingExt
     optional bool enable_stickiness = 1;
     optional int32 sticky_group_size = 2 [default = 1];
     optional bool enable_client_stickiness = 3;
-    optional uint64 balancing_hint = 4;
 }
 
 message TCredentialsExt

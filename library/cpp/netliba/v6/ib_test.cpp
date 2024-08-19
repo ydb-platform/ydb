@@ -17,8 +17,9 @@ namespace NNetliba {
 
     class TIPSocket {
         TNetSocket s;
-
-        static constexpr int HDR_SIZE = UDP_LOW_LEVEL_HEADER_SIZE;
+        enum {
+            HDR_SIZE = UDP_LOW_LEVEL_HEADER_SIZE
+        };
 
     public:
         void Init(int port) {

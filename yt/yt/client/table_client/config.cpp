@@ -169,9 +169,6 @@ void TChunkWriterConfig::Register(TRegistrar registrar)
         .DefaultNew();
     registrar.Parameter("key_prefix_filter", &TThis::KeyPrefixFilter)
         .DefaultNew();
-
-    registrar.Parameter("enable_large_columnar_statistics", &TThis::EnableLargeColumnarStatistics)
-        .Default(false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

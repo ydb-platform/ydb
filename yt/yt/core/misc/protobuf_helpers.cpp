@@ -442,8 +442,7 @@ void Deserialize(TExtensionSet& extensionSet, NYTree::INodePtr node)
 {
     auto mapNode = node->AsMap();
     for (const auto& [name, value] : mapNode->GetChildren()) {
-        // TODO(babenko): migrate to std::string
-        const auto* extensionDescriptor = IProtobufExtensionRegistry::Get()->FindDescriptorByName(TString(name));
+        const auto* extensionDescriptor = IProtobufExtensionRegistry::Get()->FindDescriptorByName(name);
         // Do not parse unknown extensions.
         if (!extensionDescriptor) {
             continue;

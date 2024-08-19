@@ -183,12 +183,10 @@ static TEnumerationDescription CreateEnumerationMap(
         const auto& valueNode = enumValue.second;
         switch (valueNode->GetType()) {
             case ENodeType::Uint64:
-                // TODO(babenko): migrate to std::string
-                result.Add(TString(name), valueNode->GetValue<ui64>());
+                result.Add(name, valueNode->GetValue<ui64>());
                 break;
             case ENodeType::Int64:
-                // TODO(babenko): migrate to std::string
-                result.Add(TString(name), valueNode->GetValue<i64>());
+                result.Add(name, valueNode->GetValue<i64>());
                 break;
             default:
                 THROW_ERROR_EXCEPTION("Invalid specification of %Qv enumeration: expected type \"int64\" or \"uint64\", actual type %Qlv",
@@ -1005,15 +1003,13 @@ void TProtobufFormatDescriptionBase<TType>::InitFromProtobufSchema(
 {
     if (config->Enumerations) {
         const auto& enumerationConfigMap = config->Enumerations;
-        for (const auto& [name_, field] : enumerationConfigMap->GetChildren()) {
-            // TODO(babenko): migrate to std::string
-            auto name = TString(name_);
+        for (const auto& [name, field] : enumerationConfigMap->GetChildren()) {
             if (field->GetType() != ENodeType::Map) {
                 THROW_ERROR_EXCEPTION(R"(Invalid enumeration specification type: expected "map", found %Qlv)",
                     field->GetType());
             }
             const auto& enumerationConfig = field->AsMap();
-            EnumerationDescriptionMap_.emplace(name, CreateEnumerationMap(TimestampColumnName, enumerationConfig));
+            EnumerationDescriptionMap_.emplace(name, CreateEnumerationMap(name, enumerationConfig));
         }
     }
 

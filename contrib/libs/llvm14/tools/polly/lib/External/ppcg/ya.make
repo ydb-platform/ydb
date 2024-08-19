@@ -2,8 +2,6 @@
 
 LIBRARY()
 
-VERSION(14.0.6)
-
 LICENSE(MIT)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)

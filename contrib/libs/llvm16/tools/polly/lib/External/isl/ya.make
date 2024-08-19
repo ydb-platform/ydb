@@ -2,8 +2,6 @@
 
 LIBRARY()
 
-VERSION(16.0.0)
-
 LICENSE(
     BSD-3-Clause AND
     MIT

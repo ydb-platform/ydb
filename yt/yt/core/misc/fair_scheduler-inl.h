@@ -20,7 +20,7 @@ class TFairScheduler
     : public IFairScheduler<TTask>
 {
 public:
-    void Enqueue(TTask task, const std::string& user) override
+    void Enqueue(TTask task, const TString& user) override
     {
         auto guard = Guard(Lock_);
 
@@ -84,7 +84,7 @@ public:
         return BucketHeap_.empty();
     }
 
-    void ChargeUser(const std::string& user, TDuration time) override
+    void ChargeUser(const TString& user, TDuration time) override
     {
         auto guard = Guard(Lock_);
 
@@ -99,11 +99,11 @@ private:
 
     struct TUserBucket
     {
-        explicit TUserBucket(const std::string& userName)
-            : UserName(userName)
+        explicit TUserBucket(TString userName)
+            : UserName(std::move(userName))
         { }
 
-        std::string UserName;
+        TString UserName;
         TDuration ExcessTime;
         //! Typically equals ExcessTime; however when a user is charged we just update ExcessTime
         //! and leave HeapKey intact. Upon extracting heap's top we check if its ExcessTime matches its HeapKey
@@ -121,14 +121,14 @@ private:
         }
     };
 
-    THashMap<std::string, TUserBucket> NameToUserBucket_;
+    THashMap<TString, TUserBucket> NameToUserBucket_;
     TDuration ExcessBaseline_;
 
     //! Min-heap ordered by TUserBucket::ExcessTime.
     //! A bucket is only present here iff it has at least one task.
     std::vector<TUserBucket*> BucketHeap_;
 
-    TUserBucket* GetOrCreateBucket(const std::string& userName)
+    TUserBucket* GetOrCreateBucket(const TString& userName)
     {
         VERIFY_SPINLOCK_AFFINITY(Lock_);
 

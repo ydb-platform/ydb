@@ -825,10 +825,8 @@ class Fraction(numbers.Rational):
                 # A fractional power will generally produce an
                 # irrational number.
                 return float(a) ** float(b)
-        elif isinstance(b, (float, complex)):
-            return float(a) ** b
         else:
-            return NotImplemented
+            return float(a) ** b
 
     def __rpow__(b, a):
         """a ** b"""

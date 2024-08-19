@@ -243,7 +243,6 @@ DECLARE_REFCOUNTED_CLASS(TTableMountCacheDynamicConfig)
 DECLARE_REFCOUNTED_CLASS(TRemoteDynamicStoreReaderConfig)
 DECLARE_REFCOUNTED_CLASS(TRetryingRemoteDynamicStoreReaderConfig)
 DECLARE_REFCOUNTED_CLASS(TReplicatedTableOptions)
-DECLARE_REFCOUNTED_CLASS(TReplicationCollocationOptions)
 
 DECLARE_REFCOUNTED_STRUCT(TTableMountInfo)
 DECLARE_REFCOUNTED_STRUCT(TTabletInfo)

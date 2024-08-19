@@ -2,8 +2,6 @@
 
 LIBRARY()
 
-VERSION(14.0.6)
-
 LICENSE(
     Apache-2.0 WITH LLVM-exception AND
     MIT

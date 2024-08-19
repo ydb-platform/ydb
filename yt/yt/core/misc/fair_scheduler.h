@@ -10,12 +10,13 @@ template <class TTask>
 struct IFairScheduler
     : public TRefCounted
 {
-    virtual void Enqueue(TTask task, const std::string& user) = 0;
+    virtual void Enqueue(TTask task, const TString& user) = 0;
+
     virtual TTask Dequeue() = 0;
 
     virtual bool IsEmpty() const = 0;
 
-    virtual void ChargeUser(const std::string& user, TDuration time) = 0;
+    virtual void ChargeUser(const TString& user, TDuration time) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

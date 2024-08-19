@@ -921,9 +921,7 @@ void TSimpleProcess::AsyncPeriodicTryWait()
 
     Finished_ = true;
     auto error = ProcessInfoToError(processInfo);
-    YT_LOG_DEBUG(error, "Process finished (Pid: %v, MajorFaults: %v)",
-        ProcessId_,
-        rusage.ru_majflt);
+    YT_LOG_DEBUG("Process finished (Pid: %v, MajFaults: %d, Error: %v)", ProcessId_, rusage.ru_majflt, error);
 
     FinishedPromise_.Set(error);
 #else

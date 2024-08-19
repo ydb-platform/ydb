@@ -113,12 +113,6 @@ void Serialize(double value, IYsonConsumer* consumer)
     consumer->OnDoubleScalar(value);
 }
 
-// std::string
-void Serialize(const std::string& value, IYsonConsumer* consumer)
-{
-    consumer->OnStringScalar(value);
-}
-
 // TString
 void Serialize(const TString& value, IYsonConsumer* consumer)
 {
@@ -236,12 +230,6 @@ void Deserialize(double& value, INodePtr node)
     } else {
         value = node->AsDouble()->GetValue();
     }
-}
-
-// std::string
-void Deserialize(std::string& value, INodePtr node)
-{
-    value = node->AsString()->GetValue();
 }
 
 // TString

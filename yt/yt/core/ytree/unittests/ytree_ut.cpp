@@ -101,7 +101,7 @@ TEST(TYTreeTest, TestMultisetAttributesByPath)
     SyncYPathMultisetAttributes(node, "/@a", attributes3);
 
     auto attribute = ConvertToNode(node->Attributes().GetYson("a"))->AsMap();
-    EXPECT_EQ(attribute->GetKeys(), std::vector<std::string>({"b", "c"}));
+    EXPECT_EQ(attribute->GetKeys(), std::vector<TString>({"b", "c"}));
 }
 
 TEST(TYTreeTest, TestGetWithAttributes)

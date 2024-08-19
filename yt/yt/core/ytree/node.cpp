@@ -13,7 +13,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-INodePtr IMapNode::GetChildOrThrow(const std::string& key) const
+INodePtr IMapNode::GetChildOrThrow(const TString& key) const
 {
     auto child = FindChild(key);
     if (!child) {
@@ -22,7 +22,7 @@ INodePtr IMapNode::GetChildOrThrow(const std::string& key) const
     return child;
 }
 
-std::string IMapNode::GetChildKeyOrThrow(const IConstNodePtr& child)
+TString IMapNode::GetChildKeyOrThrow(const IConstNodePtr& child)
 {
     auto optionalKey = FindChildKey(child);
     if (!optionalKey) {

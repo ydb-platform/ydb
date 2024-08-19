@@ -19,7 +19,7 @@
 #ifndef ORC_CONFIG_HH
 #define ORC_CONFIG_HH
 
-#define ORC_VERSION "2.0.2"
+#define ORC_VERSION "2.0.1"
 
 #define ORC_CXX_HAS_CSTDINT
 

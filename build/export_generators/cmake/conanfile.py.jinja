@@ -75,6 +75,7 @@ class App(ConanFile):
 {%-     endfor %}
 
         for dep in self.dependencies.values():
+            if dep.cpp_info.bindirs:
 {%-         if conan.imports|length -%}
 {%-             set conan_imports = conan.imports -%}
 {%-             set shift = "" -%}

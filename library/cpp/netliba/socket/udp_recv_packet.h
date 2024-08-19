@@ -7,7 +7,7 @@
 #include "allocator.h"
 
 namespace NNetlibaSocket {
-    constexpr int UDP_MAX_PACKET_SIZE = 8900;
+    enum { UDP_MAX_PACKET_SIZE = 8900 };
 
     class TUdpHostRecvBufAlloc;
     struct TUdpRecvPacket: public TWithCustomAllocator {

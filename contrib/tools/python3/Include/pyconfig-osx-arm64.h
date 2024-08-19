@@ -807,13 +807,13 @@
 #define HAVE_MKFIFO 1
 
 /* Define to 1 if you have the `mkfifoat' function. */
-#define HAVE_MKFIFOAT 1
+/* #undef HAVE_MKFIFOAT */
 
 /* Define to 1 if you have the `mknod' function. */
 #define HAVE_MKNOD 1
 
 /* Define to 1 if you have the `mknodat' function. */
-#define HAVE_MKNODAT 1
+/* #undef HAVE_MKNODAT */
 
 /* Define to 1 if you have the `mktime' function. */
 #define HAVE_MKTIME 1

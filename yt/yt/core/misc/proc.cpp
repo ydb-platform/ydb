@@ -1199,7 +1199,7 @@ void SendSignal(const std::vector<int>& pids, const TString& signalName)
     auto sig = FindSignalIdBySignalName(signalName);
     for (int pid : pids) {
         if (kill(pid, *sig) != 0 && errno != ESRCH) {
-            THROW_ERROR_EXCEPTION("Unable to kill process %v", pid)
+            THROW_ERROR_EXCEPTION("Unable to kill process %d", pid)
                 << TError::FromSystem();
         }
     }

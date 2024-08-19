@@ -89,5 +89,5 @@ AttributeMacros: [Y_PRINTF_FORMAT, Y_NO_SANITIZE, Y_FORCE_INLINE, Y_NO_INLINE, Y
 IndentExternBlock: Indent
 TypenameMacros: [Y_THREAD, Y_STATIC_THREAD, Y_POD_THREAD, Y_POD_STATIC_THREAD]
 SpacesInLineCommentPrefix:
- Minimum: 1
- Maximum: 1
+ Minimum: 0
+ Maximum: -1

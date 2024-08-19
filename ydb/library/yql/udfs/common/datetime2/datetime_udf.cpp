@@ -1011,6 +1011,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
     struct TTGetTimezoneNameKernelExec : TUnaryKernelExec<TTGetTimezoneNameKernelExec, TReaderTraits::TResource<false>, TStringArrayBuilder<arrow::BinaryType, false>> {
         template<typename TSink>
         static void Process(const IValueBuilder* valueBuilder, TBlockItem item, const TSink& sink) {
+            Y_UNUSED(valueBuilder1);
             auto timezoneId = GetTimezoneId(item);
             if (timezoneId >= NUdf::GetTimezones().size()) {
                 sink(TBlockItem{});

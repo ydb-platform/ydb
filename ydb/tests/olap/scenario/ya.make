@@ -11,6 +11,7 @@ PY3TEST()
     TEST_SRCS(
         test_simple.py
         test_scheme_load.py
+        test_alter_tiering.py
     )
 
     PEERDIR(

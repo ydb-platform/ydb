@@ -2887,6 +2887,9 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         TTestHelper helper(serverSettings);
 
+        // Don't allow granular timecast side-stepping mediator time hacks in this test
+        TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> blockGranularUpdate(*helper.Server->GetRuntime());
+
         auto waitFor = [&](const auto& condition, const TString& description) {
             if (!condition()) {
                 Cerr << "... waiting for " << description << Endl;
@@ -3017,6 +3020,9 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
             .SetUseRealThreads(false);
 
         TTestHelper helper(serverSettings);
+
+        // Don't allow granular timecast side-stepping mediator time hacks in this test
+        TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> blockGranularUpdate(*helper.Server->GetRuntime());
 
         auto waitFor = [&](const auto& condition, const TString& description) {
             if (!condition()) {

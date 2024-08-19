@@ -153,4 +153,5 @@ message TFeatureFlags {
     optional bool EnableChangefeedsOnIndexTables = 134 [default = false];
     optional bool EnableResourcePoolsCounters = 135 [default = false];
     optional bool EnableOptionalColumnsInColumnShard = 136 [default = false];
+    optional bool EnableGranularTimecast = 137 [default = true];
 }

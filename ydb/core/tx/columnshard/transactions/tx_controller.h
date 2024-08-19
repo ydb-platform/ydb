@@ -371,7 +371,7 @@ private:
     TTxProgressCounters Counters;
 
     THashMap<ui64, ITransactionOperator::TPtr> Operators;
-    std::unique_ptr<NOlap::NTxInteractions::TManager> InteractionsManager;
+    std::shared_ptr<NOlap::NTxInteractions::TManager> InteractionsManager;
 
 private:
     ui64 GetAllowedStep() const;

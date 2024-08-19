@@ -10,7 +10,7 @@ namespace NKikimr::NColumnShard {
 TTxController::TTxController(TColumnShard& owner)
     : Owner(owner)
     , Counters(owner.Counters.GetCSCounters().TxProgress)
-    , InteractionsManager(std::make_unique<NTxInteractions::TManager>(owner.Generation())) {
+    , InteractionsManager(std::make_shared<NOlap::NTxInteractions::TManager>(owner.Generation())) {
 }
 
 bool TTxController::HaveOutdatedTxs() const {

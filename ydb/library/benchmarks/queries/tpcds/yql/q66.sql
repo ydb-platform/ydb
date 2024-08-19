@@ -106,11 +106,11 @@ select
  	,sum(case when d_moy = 12
  		then $upscale(ws_net_paid_inc_ship_tax)* $upscale(ws_quantity) else $upscale($z0) end) as dec_net
      from
-          hahn.`home/yql_perf/tpcds1s/web_sales` as web_sales
-         cross join hahn.`home/yql_perf/tpcds1s/warehouse` as warehouse
-         cross join hahn.`home/yql_perf/tpcds1s/date_dim` as date_dim
-         cross join hahn.`home/yql_perf/tpcds1s/time_dim` as time_dim
- 	  cross join hahn.`home/yql_perf/tpcds1s/ship_mode` as ship_mode
+          {{web_sales}} as web_sales
+         cross join {{warehouse}} as warehouse
+         cross join {{date_dim}} as date_dim
+         cross join {{time_dim}} as time_dim
+ 	  cross join {{ship_mode}} as ship_mode
      where
             ws_warehouse_sk =  w_warehouse_sk
         and ws_sold_date_sk = d_date_sk

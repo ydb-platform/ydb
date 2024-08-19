@@ -97,16 +97,16 @@
                                                                                             "table":"test\/ds\/store_returns"
                                                                                           },
                                                                                           {
-                                                                                            "op_name":"LookupJoin",
+                                                                                            "op_name":"InnerJoin (MapJoin)",
                                                                                             "args":
                                                                                               [
                                                                                                 {
-                                                                                                  "op_name":"TableFullScan",
-                                                                                                  "table":"test\/ds\/item"
-                                                                                                },
-                                                                                                {
                                                                                                   "op_name":"TableLookup",
                                                                                                   "table":"test\/ds\/store_sales"
+                                                                                                },
+                                                                                                {
+                                                                                                  "op_name":"TableFullScan",
+                                                                                                  "table":"test\/ds\/item"
                                                                                                 }
                                                                                               ]
                                                                                           }
@@ -281,16 +281,16 @@
                                                                                             "table":"test\/ds\/store_returns"
                                                                                           },
                                                                                           {
-                                                                                            "op_name":"LookupJoin",
+                                                                                            "op_name":"InnerJoin (MapJoin)",
                                                                                             "args":
                                                                                               [
                                                                                                 {
-                                                                                                  "op_name":"TableFullScan",
-                                                                                                  "table":"test\/ds\/item"
-                                                                                                },
-                                                                                                {
                                                                                                   "op_name":"TableLookup",
                                                                                                   "table":"test\/ds\/store_sales"
+                                                                                                },
+                                                                                                {
+                                                                                                  "op_name":"TableFullScan",
+                                                                                                  "table":"test\/ds\/item"
                                                                                                 }
                                                                                               ]
                                                                                           }

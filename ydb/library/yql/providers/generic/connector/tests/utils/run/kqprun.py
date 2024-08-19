@@ -29,7 +29,9 @@ CREATE OBJECT {{data_source}}_local_password (TYPE SECRET) WITH (value = "{{pass
 CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
     SOURCE_TYPE="{{kind}}",
     LOCATION="{{host}}:{{port}}",
+    {% if database %}
     DATABASE_NAME="{{database}}",
+    {% endif %}
     AUTH_METHOD="BASIC",
     LOGIN="{{login}}",
     PASSWORD_SECRET_NAME="{{data_source}}_local_password",
@@ -121,7 +123,7 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
     settings.oracle.username,
     settings.oracle.password,
     NONE,
-    cluster.database,
+    NONE,
     NONE,
     cluster.service_name)
 }}

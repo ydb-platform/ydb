@@ -190,6 +190,7 @@ protected:
     }
 
 public:
+    using TBase::TBase;
     virtual TDuration GetRemovedPortionLivetime(const TDuration /*def*/) const override {
         return TDuration::Zero();
     }
@@ -264,4 +265,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NYDBTest::NColumnShard

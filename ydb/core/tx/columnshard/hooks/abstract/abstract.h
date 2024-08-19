@@ -261,9 +261,9 @@ public:
     };
 
     template <class T, class... Types>
-    static TGuard<T> RegisterCSControllerGuard(Types... args) {
-        auto result = std::make_shared<T>(args...);
-        Singleton<TControllers>()->CSController = result;
+    static TGuard<T> RegisterCSControllerGuard(Types&&... args) {
+        auto result = std::make_shared<T>(std::forward<Types&&>(args)...);
+        Singleton<TControllers>()->CSController = std::move(result);
         return result;
     }
 

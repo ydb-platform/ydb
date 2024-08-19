@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/testlib/basics/runtime.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NYDBTest::NColumnShard {
@@ -35,6 +36,9 @@ private:
     YDB_READONLY(TAtomicCounter, RequestTracingSnapshotsRemove, 0);
 
     YDB_ACCESSOR(TAtomicCounter, CompactionsLimit, 10000000);
+
+protected:
+    NActors::TTestBasicRuntime* const TestRuntime = nullptr;
 
 protected:
     virtual void OnRequestTracingChanges(
@@ -71,7 +75,20 @@ protected:
         return EOptimizerCompactionWeightControl::Force;
     }
 
+protected:
+    void SimulateSleep(const TDuration& duration) const {
+        if (TestRuntime) {
+            TestRuntime->SimulateSleep(duration);
+        } else {
+            Sleep(TDuration::Seconds(1));
+        }
+    }
+
 public:
+    TReadOnlyController() = default;
+    TReadOnlyController(NActors::TTestBasicRuntime& runtime)
+        : TestRuntime(&runtime)
+    {}
     virtual TDuration GetOverridenGCPeriod(const TDuration /*def*/) const override {
         return TDuration::Zero();
     }
@@ -91,14 +108,14 @@ public:
 
     void WaitIndexation(const TDuration d) const {
         TInstant start = TInstant::Now();
-        ui32 insertsStart = GetInsertStartedCounter().Val();
+        ui32 insertsStart = GetInsertStartedCounter().Val();        
         while (Now() - start < d) {
             if (insertsStart != GetInsertStartedCounter().Val()) {
                 insertsStart = GetInsertStartedCounter().Val();
                 start = TInstant::Now();
             }
             Cerr << "WAIT_INDEXATION: " << GetInsertStartedCounter().Val() << Endl;
-            Sleep(TDuration::Seconds(1));
+            SimulateSleep(TDuration::Seconds(1));
         }
     }
 
@@ -111,7 +128,7 @@ public:
                 start = TInstant::Now();
             }
             Cerr << "WAIT_CLEANING: " << GetCleaningStartedCounter().Val() << Endl;
-            Sleep(TDuration::Seconds(1));
+            SimulateSleep(TDuration::Seconds(1));
         }
     }
 
@@ -140,7 +157,7 @@ public:
                 predVal = NeedActualizationCount.Val();
                 start = TInstant::Now();
             }
-            Sleep(TDuration::Seconds(1));
+            SimulateSleep(TDuration::Seconds(1));
         }
         AFL_VERIFY(!NeedActualizationCount.Val());
     }
@@ -156,4 +173,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NYDBTest::NColumnShard

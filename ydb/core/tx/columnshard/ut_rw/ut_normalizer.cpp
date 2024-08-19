@@ -254,8 +254,9 @@ public:
 template <class TLocalDBModifier>
 class TPrepareLocalDBController: public NKikimr::NYDBTest::NColumnShard::TController {
 private:
-    using TBase = NKikimr::NYDBTest::ICSController;
+    using TBase = NKikimr::NYDBTest::NColumnShard::TController;
 public:
+    using TBase::TBase;
     NYDBTest::ILocalDBModifier::TPtr BuildLocalBaseModifier() const override {
         return std::make_shared<TLocalDBModifier>();
     }
@@ -266,9 +267,9 @@ Y_UNIT_TEST_SUITE(Normalizers) {
     template <class TLocalDBModifier>
     void TestNormalizerImpl(const TNormalizerChecker& checker = TNormalizerChecker()) {
         using namespace NArrow;
-        auto csControllerGuard = NYDBTest::TControllers::RegisterCSControllerGuard<TPrepareLocalDBController<TLocalDBModifier>>();
-
         TTestBasicRuntime runtime;
+        auto csControllerGuard = NYDBTest::TControllers::RegisterCSControllerGuard<TPrepareLocalDBController<TLocalDBModifier>>(runtime);
+
         TTester::Setup(runtime);
 
         const ui64 ownerId = 0;

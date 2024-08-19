@@ -61,4 +61,4 @@ bool TReadOnlyController::DoOnWriteIndexStart(const ui64 tabletId, NOlap::TColum
     return true;
 }
 
-}   // namespace NKikimr::NYDBTest::NColumnShard
+} // namespace NKikimr::NYDBTest::NColumnShard

@@ -18,11 +18,6 @@ TFieldTag TFieldDescriptor::GetTag() const
     return Tag_;
 }
 
-bool TFieldDescriptor::IsDeprecated() const
-{
-    return Deprecated_;
-}
-
 const TFieldSchemaPtr& TFieldDescriptor::GetSchema() const
 {
     std::call_once(
@@ -31,7 +26,6 @@ const TFieldSchemaPtr& TFieldDescriptor::GetSchema() const
             Schema_ = New<TFieldSchema>();
             Schema_->Name = Name_;
             Schema_->Tag = Tag_;
-            Schema_->Deprecated = Deprecated_;
         });
     return Schema_;
 }

@@ -380,9 +380,9 @@
     ],
     "test.test[blocks-add_decimal--Peephole]": [
         {
-            "checksum": "4be1a7c6b0407ec937324149ea3edd73",
-            "size": 1646,
-            "uri": "https://{canondata_backend}/1597364/32529e94173a652cdfc0171aa011006fdaa6c446/resource.tar.gz#test.test_blocks-add_decimal--Peephole_/opt.yql"
+            "checksum": "c76fdcde51bf7270b8a356c8a1517a63",
+            "size": 1864,
+            "uri": "https://{canondata_backend}/1942671/42bc1fa614d4198e673f23bbf63c0897c63820a2/resource.tar.gz#test.test_blocks-add_decimal--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-add_decimal--Plan]": [

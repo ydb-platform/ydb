@@ -5204,6 +5204,8 @@ public:
             return ParseDefineType(value);
         case OBJECT_OPERATOR:
             return ParseDefineOperator(value);
+        case OBJECT_AGGREGATE:
+            return ParseDefineAggregate(value);
         default:
             return false;
         }
@@ -5460,6 +5462,172 @@ public:
         desc.ProcId = procDesc.ProcId;
         desc.ResultType = procDesc.ResultType;
         Builder.UpdateOper(desc);
+        return true;
+    }
+
+    [[nodiscard]]
+    bool ParseDefineAggregate(const DefineStmt* value) {
+        if (ListLength(value->defnames) != 1) {
+            return false;
+        }
+
+        auto nameNode = ListNodeNth(value->defnames, 0);
+        auto name = to_lower(TString(StrVal(nameNode)));
+        TString sfunc;
+        ui32 stype;
+        TString combinefunc;
+        TString finalfunc;
+        TString serialfunc;
+        TString deserialfunc;
+        bool hypothetical = false;
+        for (int i = 0; i < ListLength(value->definition); ++i) {
+            auto node = LIST_CAST_NTH(DefElem, value->definition, i);
+            auto defnameStr = to_lower(TString(node->defname));
+            if (defnameStr == "sfunc") {
+                if (NodeTag(node->arg) != T_TypeName) {
+                    return false;
+                }
+
+                TString value;
+                if (!ParseTypeName(CAST_NODE_EXT(PG_TypeName, T_TypeName, node->arg), value)) {
+                    return false;
+                }
+
+                sfunc = value;
+            } else if (defnameStr == "stype") {
+                if (NodeTag(node->arg) != T_TypeName) {
+                    return false;
+                }
+
+                TString value;
+                if (!ParseTypeName(CAST_NODE_EXT(PG_TypeName, T_TypeName, node->arg), value)) {
+                    return false;
+                }
+
+                stype = NPg::LookupType(value).TypeId;
+            } else if (defnameStr == "combinefunc") {
+                if (NodeTag(node->arg) != T_TypeName) {
+                    return false;
+                }
+
+                TString value;
+                if (!ParseTypeName(CAST_NODE_EXT(PG_TypeName, T_TypeName, node->arg), value)) {
+                    return false;
+                }
+
+                combinefunc = value;
+            } else if (defnameStr == "finalfunc") {
+                if (NodeTag(node->arg) != T_TypeName) {
+                    return false;
+                }
+
+                TString value;
+                if (!ParseTypeName(CAST_NODE_EXT(PG_TypeName, T_TypeName, node->arg), value)) {
+                    return false;
+                }
+
+                finalfunc = value;
+            } else if (defnameStr == "serialfunc") {
+                if (NodeTag(node->arg) != T_TypeName) {
+                    return false;
+                }
+
+                TString value;
+                if (!ParseTypeName(CAST_NODE_EXT(PG_TypeName, T_TypeName, node->arg), value)) {
+                    return false;
+                }
+
+                serialfunc = value;
+            } else if (defnameStr == "deserialfunc") {
+                if (NodeTag(node->arg) != T_TypeName) {
+                    return false;
+                }
+
+                TString value;
+                if (!ParseTypeName(CAST_NODE_EXT(PG_TypeName, T_TypeName, node->arg), value)) {
+                    return false;
+                }
+
+                deserialfunc = value;
+            } else if (defnameStr == "hypothetical") {
+                if (NodeTag(node->arg) != T_Boolean) {
+                    return false;
+                }
+
+                if (BoolVal(node->arg)) {
+                    hypothetical = true;
+                }
+            }
+        }
+
+        if (!sfunc || !stype) {
+            return false;
+        }
+
+        NPg::TAggregateDesc desc;
+        desc.Name = name;
+        desc.ExtensionIndex = ExtensionIndex;
+        if (ListLength(value->args) != 2) {
+            return false;
+        }
+
+        auto numDirectArgs = intVal(lsecond(value->args));
+        if (numDirectArgs >= 0) {
+            desc.NumDirectArgs = numDirectArgs;
+            desc.Kind = NPg::EAggKind::OrderedSet;
+            Y_ENSURE(!hypothetical);
+        } else if (hypothetical) {
+            desc.Kind = NPg::EAggKind::Hypothetical;
+        }
+
+        auto args = linitial_node(List, value->args);
+        for (int i = 0; i < ListLength(args); ++i) {
+            auto node = LIST_CAST_NTH(FunctionParameter, args, i);
+            if (node->mode == FUNC_PARAM_IN || node->mode == FUNC_PARAM_DEFAULT) {
+                if (node->defexpr) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+
+            TString argTypeStr;
+            if (!ParseTypeName(node->argType, argTypeStr)) {
+                return false;
+            }
+
+            Builder.PrepareType(ExtensionIndex, argTypeStr);
+            auto argTypeId = NPg::LookupType(argTypeStr).TypeId;
+            desc.ArgTypes.push_back(argTypeId);
+        }
+
+        desc.TransTypeId = stype;
+        TVector<ui32> stateWithArgs;
+        stateWithArgs.push_back(stype);
+        stateWithArgs.insert(stateWithArgs.end(), desc.ArgTypes.begin(), desc.ArgTypes.end());
+        desc.TransFuncId = NPg::LookupProc(sfunc, stateWithArgs).ProcId;
+        if (!finalfunc.empty()) {
+            desc.FinalFuncId = NPg::LookupProc(finalfunc, { stype }).ProcId;
+        }
+
+        if (!combinefunc.empty()) {
+            desc.CombineFuncId = NPg::LookupProc(combinefunc, { stype, stype }).ProcId;
+        }
+
+        if (!serialfunc.empty()) {
+            const auto& procDesc = NPg::LookupProc(serialfunc, { stype });
+            Y_ENSURE(procDesc.ResultType == NPg::LookupType("bytea").TypeId);
+            desc.SerializeFuncId = procDesc.ProcId;
+        }
+
+        if (!deserialfunc.empty()) {
+            Y_ENSURE(!serialfunc.empty());
+            const auto& procDesc = NPg::LookupProc(deserialfunc, { NPg::LookupType("bytea").TypeId, stype });
+            Y_ENSURE(procDesc.ResultType == stype);
+            desc.DeserializeFuncId = procDesc.ProcId;
+        }
+
+        Builder.CreateAggregate(desc);
         return true;
     }
 

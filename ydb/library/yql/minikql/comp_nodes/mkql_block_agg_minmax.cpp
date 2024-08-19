@@ -87,7 +87,6 @@ struct TState;
 
 template<typename TIn, bool IsMin>
 constexpr TIn InitialStateValue() {
-    static_assert(std::is_arithmetic<TIn>::value);
     if constexpr (std::is_floating_point<TIn>::value) {
         static_assert(std::numeric_limits<TIn>::has_infinity && std::numeric_limits<TIn>::has_quiet_NaN);
         if constexpr (IsMin) {
@@ -102,12 +101,14 @@ constexpr TIn InitialStateValue() {
         } else {
             return -NYql::NDecimal::Inf();
         }
-    } else {
+    } else if constexpr (std::is_arithmetic<TIn>::value) {
         if constexpr (IsMin) {
             return std::numeric_limits<TIn>::max();
         } else {
             return std::numeric_limits<TIn>::min();
         }
+    } else {
+        static_assert(std::is_arithmetic<TIn>::value);
     }
 }
 

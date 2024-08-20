@@ -58,7 +58,7 @@ During the scanning process, depending on the table update frequency, you might 
 
 ## Record structure {#record-structure}
 
-Depending on the [changefeed parameters](../yql/reference/syntax/alter_table.md/changefeed.md), the structure of a record may differ.
+Depending on the [changefeed parameters](../yql/reference/syntax/alter_table/changefeed.md), the structure of a record may differ.
 
 ### JSON format {#json-record-structure}
 

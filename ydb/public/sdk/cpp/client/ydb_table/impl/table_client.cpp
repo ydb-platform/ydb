@@ -513,16 +513,14 @@ TAsyncDescribeTableResult TTableClient::TImpl::DescribeTable(const TString& sess
     auto request = MakeOperationRequest<Ydb::Table::DescribeTableRequest>(settings);
     request.set_session_id(sessionId);
     request.set_path(path);
-
     if (settings.WithKeyShardBoundary_) {
         request.set_include_shard_key_bounds(true);
     }
-    if (settings.WithIndexTableKeyShardBoundary_) {
-        request.set_include_index_table_shard_key_bounds(true);
-    }
+
     if (settings.WithTableStatistics_) {
         request.set_include_table_stats(true);
     }
+
     if (settings.WithPartitionStatistics_) {
         request.set_include_partition_stats(true);
     }

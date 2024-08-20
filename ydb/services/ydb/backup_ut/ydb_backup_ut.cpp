@@ -416,28 +416,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
-    Y_UNIT_TEST(RestoreIndexTableSplitBoundaries) {
-        TKikimrWithGrpcAndRootSchema server;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
-        TTableClient tableClient(driver);
-        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
-        TTempDir tempDir;
-        const auto& pathToBackup = tempDir.Path();
-
-        constexpr const char* table = "/Root/table";
-        constexpr const char* index = "byValue";
-        constexpr ui64 indexPartitions = 10;
-
-        TestIndexTableSplitBoundariesArePreserved(
-            table,
-            index,
-            indexPartitions,
-            session,
-            CreateBackupLambda(driver, pathToBackup, true),
-            CreateRestoreLambda(driver, pathToBackup)
-        );
-    }
-
+    // TO DO: test index impl table split boundaries restoration from a backup
 }
 
 Y_UNIT_TEST_SUITE(BackupRestoreS3) {

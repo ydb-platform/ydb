@@ -414,7 +414,7 @@ message TTableDescription {
 
     oneof IncomingStreamConfig {
         TTableReplicationConfig ReplicationConfig = 40;
-        TTableIncrementalBackupConfig IncrementalBackupConfig = 42;
+        TTableIncrementalBackupConfig IncrementalBackupConfig = 43;
     }
 
     optional bool Temporary = 41;

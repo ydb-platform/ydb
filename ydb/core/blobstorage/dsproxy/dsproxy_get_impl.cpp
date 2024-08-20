@@ -131,16 +131,34 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
                 outResponse.Shift = query.Shift;
                 outResponse.RequestedSize = query.Size;
 
+                if (PhantomCheck) {
+                    continue;
+                }
+
                 ui32 shift = Min(query.Shift, query.Id.BlobSize());
                 ui32 size = query.Size ? Min(query.Size, query.Id.BlobSize() - shift) : query.Id.BlobSize() - shift;
+                TRope data = blobState.Whole.Data.Read(shift, size);
 
-                if (!PhantomCheck) {
-                    TRope data = blobState.Whole.Data.Read(shift, size);
-                    DecryptInplace(data, 0, shift, size, query.Id, *Info);
-                    outResponse.Buffer = std::move(data);
-                    Y_ABORT_UNLESS(outResponse.Buffer, "%s empty response buffer", RequestPrefix.data());
-                    ReplyBytes += outResponse.Buffer.size();
+                if (IntegrityCheck) {
+                    TStackVec<TRope, TypicalPartsInBlob> partData(Info->Type.TotalPartCount());
+                    ErasureSplit((TErasureType::ECrcMode)blobState.Id.CrcMode(), Info->Type, data, partData);
+                    
+                    for (const auto &item : blobState.PartMap) {
+                        if (item.Data.IsEmpty()) {
+                            continue;
+                        }
+                        if (item.Data != partData[item.PartIdRequested - 1]) {
+                            outResponse.Status = NKikimrProto::ERROR;
+                            outResponse.IntegrityCheckFailed = true;
+                            break;
+                        }
+                    }
                 }
+                
+                DecryptInplace(data, 0, shift, size, query.Id, *Info);
+                outResponse.Buffer = std::move(data);
+                Y_ABORT_UNLESS(outResponse.Buffer, "%s empty response buffer", RequestPrefix.data());
+                ReplyBytes += outResponse.Buffer.size();
             } else if (blobState.WholeSituation == TBlobState::ESituation::Error) {
                 outResponse.Status = NKikimrProto::ERROR;
             } else {
@@ -278,7 +296,7 @@ void TGetImpl::PrepareRequests(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBl
                 TEvBlobStorage::TEvVGet::EFlags::None, {}, {}, ForceBlockTabletData);
         }
         std::optional<ui64> cookie;
-        if (ReportDetailedPartMap) {
+        if (ReportDetailedPartMap || IntegrityCheck) {
             cookie = Blackboard.AddPartMap(get.Id, get.OrderNumber, RequestIndex);
         }
         vget->AddExtremeQuery(get.Id, get.Shift, get.Size, cookie ? &cookie.value() : nullptr);
@@ -321,7 +339,7 @@ void TGetImpl::PrepareVPuts(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBlobS
 
 EStrategyOutcome TGetImpl::RunBoldStrategy(TLogContext &logCtx) {
     TStackVec<IStrategy*, 1> strategies;
-    TBoldStrategy s1(PhantomCheck);
+    TBoldStrategy s1(PhantomCheck || IntegrityCheck);
     strategies.push_back(&s1);
     TRestoreStrategy s2;
     if (MustRestoreFirst) {
@@ -348,19 +366,25 @@ EStrategyOutcome TGetImpl::RunMirror3of4Strategy(TLogContext &logCtx) {
 }
 
 EStrategyOutcome TGetImpl::RunStrategies(TLogContext &logCtx) {
-    if (Info->Type.GetErasure() == TErasureType::ErasureMirror3dc) {
+    auto erasureType = Info->Type.GetErasure();
+    auto erasureFamily = Info->Type.ErasureFamily();
+
+    if (erasureType == TErasureType::ErasureMirror3dc) {
         return RunMirror3dcStrategy(logCtx);
-    } else if (Info->Type.GetErasure() == TErasureType::ErasureMirror3of4) {
+    }
+    if (erasureType == TErasureType::ErasureMirror3of4) {
         return RunMirror3of4Strategy(logCtx);
-    } else if (MustRestoreFirst || PhantomCheck) {
-        return RunBoldStrategy(logCtx);
-    } else if (Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock) {
-        return Blackboard.RunStrategy(logCtx, TMinIopsBlockStrategy(), AccelerationParams);
-    } else if (Info->Type.ErasureFamily() == TErasureType::ErasureMirror) {
-        return Blackboard.RunStrategy(logCtx, TMinIopsMirrorStrategy(), AccelerationParams);
-    } else {
+    }
+    if (MustRestoreFirst || PhantomCheck || IntegrityCheck) {
         return RunBoldStrategy(logCtx);
     }
+    if (erasureFamily == TErasureType::ErasureParityBlock) {
+        return Blackboard.RunStrategy(logCtx, TMinIopsBlockStrategy());
+    }
+    if (erasureFamily == TErasureType::ErasureMirror) {
+        return Blackboard.RunStrategy(logCtx, TMinIopsMirrorStrategy());
+    }
+    return RunBoldStrategy(logCtx);
 }
 
 void TGetImpl::OnVPutResult(TLogContext &logCtx, TEvBlobStorage::TEvVPutResult &ev,

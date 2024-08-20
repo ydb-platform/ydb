@@ -76,6 +76,15 @@ public:
         }
     }
 
+    void SetCorrupted() {
+        for (auto it = Blobs.begin(); it != Blobs.end(); ++it) {
+            TString &str = it->second;
+            if (!str.empty()) {
+                str[0] = (str[0] == '#') ? '*' : '#';
+            }
+        }
+    }
+
     void SetNotYet(const TLogoBlobID blobID) {
         auto it = Blobs.find(blobID);
         if (it != Blobs.end()) {
@@ -428,6 +437,12 @@ public:
     void SetError(ui32 domainIdx, NKikimrProto::EReplyStatus status) {
         for (ui64 driveIdx = 0; driveIdx < DrivesPerFailDomain; ++driveIdx) {
             GetVDisk(domainIdx, driveIdx).SetError(status);
+        }
+    }
+
+    void SetCorrupted(ui32 domainIdx) {
+        for (ui64 driveIdx = 0; driveIdx < DrivesPerFailDomain; ++driveIdx) {
+            GetVDisk(domainIdx, driveIdx).SetCorrupted();
         }
     }
 

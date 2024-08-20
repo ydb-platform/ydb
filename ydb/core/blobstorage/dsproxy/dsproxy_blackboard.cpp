@@ -374,7 +374,7 @@ EStrategyOutcome TBlackboard::RunStrategies(TLogContext &logCtx, const TStackVec
             ++it;
             continue;
         }
-
+        
         // recalculate blob outcome if it is not yet determined
         NKikimrProto::EReplyStatus status = NKikimrProto::OK;
         TString errorReason;
@@ -449,11 +449,13 @@ ssize_t TBlackboard::AddPartMap(const TLogoBlobID &id, ui32 diskOrderNumber, ui3
             requestIndex,
             Max<ui32>(),
             {},
+            {}
         });
     return ret;
 }
 
-void TBlackboard::ReportPartMapStatus(const TLogoBlobID &id, ssize_t partMapIndex, ui32 responseIndex, NKikimrProto::EReplyStatus status) {
+void TBlackboard::ReportPartMapStatus(const TLogoBlobID &id, ssize_t partMapIndex, ui32 responseIndex, 
+        NKikimrProto::EReplyStatus status, const TRope &data) {
     Y_ABORT_UNLESS(id);
     Y_ABORT_UNLESS(partMapIndex >= 0);
     TBlobState &state = GetState(id);
@@ -462,6 +464,9 @@ void TBlackboard::ReportPartMapStatus(const TLogoBlobID &id, ssize_t partMapInde
     Y_ABORT_UNLESS(item.ResponseIndex == responseIndex || item.ResponseIndex == Max<ui32>());
     item.ResponseIndex = responseIndex;
     item.Status.emplace_back(id.PartId(), status);
+    if (!data.IsEmpty()) {
+        item.Data = data;
+    }
 }
 
 void TBlackboard::GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues,

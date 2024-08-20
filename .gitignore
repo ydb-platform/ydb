@@ -82,3 +82,4 @@ bin/config.json
 
 # handy for local junk, which is not intended to appear in the repo
 junk/
+*.vsix

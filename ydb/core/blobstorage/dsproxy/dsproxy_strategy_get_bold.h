@@ -6,10 +6,10 @@
 namespace NKikimr {
 
 class TBoldStrategy : public TStrategyBase {
-    const bool PhantomCheck;
+    const bool IsCheck;
 public:
-    TBoldStrategy(bool phantomCheck) :
-        PhantomCheck(phantomCheck) {
+    TBoldStrategy(bool isCheck) :
+        IsCheck(isCheck) {
     };
 
     EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
@@ -19,7 +19,7 @@ public:
         // Look at the current layout and set the status if possible
         const ui32 totalPartCount = info.Type.TotalPartCount();
         bool doLook = true;
-        if (PhantomCheck) {
+        if (IsCheck) {
             for (ui32 diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {
                 bool isHandoff = (diskIdx >= totalPartCount);
                 ui32 beginPartIdx = (isHandoff ? 0 : diskIdx);

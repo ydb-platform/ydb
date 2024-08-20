@@ -68,7 +68,8 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("TierName")), "tier1");
             UNIT_ASSERT_VALUES_EQUAL_C(GetUint64(rows[0].at("RawBytes")), columnRawBytes,
-                TStringBuilder() << "RawBytes changed after eviction: before=" << columnRawBytes << " after=" << rows[0].at("RawBytes"));
+                TStringBuilder() << "RawBytes changed after eviction: before=" << columnRawBytes
+                                 << " after=" << GetUint64(rows[0].at("RawBytes")));
         }
 
         testHelper.ResetTiering("/Root/olapStore/olapTable");

@@ -13,11 +13,10 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 namespace {
-    TMap<const TString, ui64> NameToIndex(const TStructType* structType) {
-        TMap<const TString, ui64> map;
+    TMap<const TStringBuf, ui64> NameToIndex(const TStructType* structType) {
+        TMap<const TStringBuf, ui64> map;
         for (size_t i = 0; i < structType->GetMembersCount(); i++) {
-            const TString name(structType->GetMemberName(i));
-            map[name] = i;
+            map[structType->GetMemberName(i)] = i;
         }
         return map;
     }

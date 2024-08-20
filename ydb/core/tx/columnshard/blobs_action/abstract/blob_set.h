@@ -89,7 +89,18 @@ public:
     bool IsEmpty() const {
         return Data.empty();
     }
-
+    using TGenStep = std::tuple<ui32, ui32>;
+    std::deque<TUnifiedBlobId> GroupByGenStep() const {
+        std::deque<TUnifiedBlobId> result;
+        for (const auto& i : Data) {
+            result.emplace_back(i.first);
+        }
+        const auto pred = [](const TUnifiedBlobId& l, const TUnifiedBlobId& r) {
+            return TGenStep(l.GetLogoBlobId().Generation(), l.GetLogoBlobId().Step()) < TGenStep(r.GetLogoBlobId().Generation(), r.GetLogoBlobId().Step());
+        };
+        std::sort(result.begin(), result.end(), pred);
+        return result;
+    }
     template <class TFilter>
     TTabletsByBlob ExtractBlobs(const TFilter& filter, const std::optional<ui32> countLimit = {}) {
         TTabletsByBlob result;

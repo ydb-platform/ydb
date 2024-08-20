@@ -92,6 +92,7 @@ struct TGraphMeta {
     std::unordered_map<ui64, TActorId> ResultChannelProxies;
     TActorId ExecuterId;
     bool UseFollowers = false;
+    bool AllowInconsistentReads = false;
     TIntrusivePtr<TProtoArenaHolder> Arena;
     TString Database;
     NKikimrConfig::TTableServiceConfig::EChannelTransportVersion ChannelTransportVersion;

@@ -8,7 +8,8 @@ TExprNode::TPtr RewriteReadFromView(
     const TExprNode::TPtr& node,
     TExprContext& ctx,
     const TString& query,
-    const TString& cluster
+    const TString& cluster,
+    IModuleResolver::TPtr moduleResolver
 );
 
 }

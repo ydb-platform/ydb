@@ -74,8 +74,10 @@ namespace NActors {
         bool Orange;
         bool Red;
         i64 ClockSkew;
+        bool ReportClockSkew;
 
-        TWhiteboardSessionStatus(TActorSystem* actorSystem, ui32 peerId, const TString& peer, bool connected, bool green, bool yellow, bool orange, bool red, i64 clockSkew)
+        TWhiteboardSessionStatus(TActorSystem* actorSystem, ui32 peerId, const TString& peer, bool connected,
+                                        bool green, bool yellow, bool orange, bool red, i64 clockSkew, bool reportClockSkew)
             : ActorSystem(actorSystem)
             , PeerId(peerId)
             , Peer(peer)
@@ -85,6 +87,7 @@ namespace NActors {
             , Orange(orange)
             , Red(red)
             , ClockSkew(clockSkew)
+            , ReportClockSkew(reportClockSkew)
             {}
     };
 

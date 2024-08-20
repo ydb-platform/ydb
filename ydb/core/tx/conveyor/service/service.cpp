@@ -36,7 +36,7 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& ev) {
     Counters.ExecuteHistogram->Collect(dExecution.MilliSeconds());
     if (Waiting.size()) {
         auto task = Waiting.pop();
-        Counters.WaitingHistogram->Collect((ev->Get()->GetStartInstant() - task.GetCreateInstant()).MilliSeconds());
+        Counters.WaitingHistogram->Collect((now - task.GetCreateInstant()).MilliSeconds());
         task.OnBeforeStart();
         Send(ev->Sender, new TEvInternal::TEvNewTask(task));
     } else {

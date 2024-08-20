@@ -7,7 +7,7 @@ bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const NOlap::TWideSeriali
     meta.SetNumRows(batch->GetRowsCount());
     meta.SetRawBytes(batch->GetRawBytes());
     meta.SetDirtyWriteTimeSeconds(batch.GetStartInstant().Seconds());
-    meta.SetSpecialKeysRawData(batch->GetSpecialKeysSafe().SerializeToString());
+    meta.SetSpecialKeysRawData(batch->GetSpecialKeysSafe());
 
     const auto& blobRange = batch.GetRange();
     Y_ABORT_UNLESS(blobRange.GetBlobId().IsValid());

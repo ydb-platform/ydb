@@ -3,7 +3,9 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 #include <ydb/core/kqp/runtime/kqp_read_actor.h>
+#include <ydb/core/kqp/runtime/kqp_stream_lookup_actor.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
@@ -291,13 +293,12 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
     }
 
-    void ExecSQL(Tests::TServer::TPtr server,
+    void ExecSQL(NActors::TTestActorRuntime& runtime,
                  TActorId sender,
                  const TString &sql,
                  bool dml = true,
                  Ydb::StatusIds::StatusCode code = Ydb::StatusIds::SUCCESS)
     {
-        auto &runtime = *server->GetRuntime();
         TAutoPtr<IEventHandle> handle;
 
         auto request = MakeSQLRequest(sql, dml);
@@ -385,19 +386,28 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
     template <SortOrder OPT>                                                                                            \
     void TTestCase##N<OPT>::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
 
+    enum class ETestActorType {
+        SorceRead,
+        StreamLookup
+    };
+
     struct TTestSetup {
-        TTestSetup(TString table = "/Root/KeyValueLargePartition", Tests::TServer* providedServer = nullptr)
+        TTestSetup(ETestActorType testActorType, TString table = "/Root/KeyValueLargePartition", Tests::TServer* providedServer = nullptr)
             : Table(table)
         {
-            InterceptReadActorPipeCache(MakePipePeNodeCacheID(false));
+            if (testActorType == ETestActorType::SorceRead) {
+                InterceptReadActorPipeCache(MakePipePeNodeCacheID(false));
+            } else if (testActorType == ETestActorType::StreamLookup) {
+                InterceptStreamLookupActorPipeCache(MakePipePeNodeCacheID(false));
+            }
+            
             if (providedServer) {
                 Server = providedServer;
             } else {
                 TKikimrSettings settings;
                 NKikimrConfig::TAppConfig appConfig;
-                appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
-                appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(false);
-                appConfig.MutableTableServiceConfig()->SetEnablePredicateExtractForScanQueries(true);
+                appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(testActorType == ETestActorType::SorceRead);
+                appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(testActorType == ETestActorType::StreamLookup);
                 settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
                 settings.SetAppConfig(appConfig);
 
@@ -456,7 +466,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
     };
 
     Y_UNIT_TEST_SORT(AfterResolve, Order) {
-        TTestSetup s;
+        TTestSetup s(ETestActorType::SorceRead);
 
         auto shards = s.Shards();
         auto* shim = new TReadActorPipeCacheStub();
@@ -476,17 +486,17 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
     }
 
     Y_UNIT_TEST_SORT(AfterResult, Order) {
-        TTestSetup s;
+        TTestSetup s(ETestActorType::SorceRead);
         auto shards = s.Shards();
 
         NKikimrTxDataShard::TEvRead evread;
         evread.SetMaxRowsInResult(8);
         evread.SetMaxRows(8);
-        InjectRangeEvReadSettings(evread);
+        SetDefaultReadSettings(evread);
 
         NKikimrTxDataShard::TEvReadAck evreadack;
         evreadack.SetMaxRows(8);
-        InjectRangeEvReadAckSettings(evreadack);
+        SetDefaultReadAckSettings(evreadack);
 
         auto* shim = new TReadActorPipeCacheStub();
         shim->SetupCapture(1, 1);
@@ -518,17 +528,17 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
             ";
 
     Y_UNIT_TEST_SORT(AfterResultMultiRange, Order) {
-        TTestSetup s;
+        TTestSetup s(ETestActorType::SorceRead);
         NKikimrTxDataShard::TEvRead evread;
         evread.SetMaxRowsInResult(5);
         evread.SetMaxRows(5);
-        InjectRangeEvReadSettings(evread);
+        SetDefaultReadSettings(evread);
 
         auto shards = s.Shards();
 
         NKikimrTxDataShard::TEvReadAck evreadack;
         evreadack.SetMaxRows(5);
-        InjectRangeEvReadAckSettings(evreadack);
+        SetDefaultReadAckSettings(evreadack);
 
         auto* shim = new TReadActorPipeCacheStub();
         shim->SetupCapture(1, 1);
@@ -549,17 +559,17 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
     }
 
     Y_UNIT_TEST_SORT(AfterResultMultiRangeSegmentPartition, Order) {
-        TTestSetup s;
+        TTestSetup s(ETestActorType::SorceRead);
         auto shards = s.Shards();
 
         NKikimrTxDataShard::TEvRead evread;
         evread.SetMaxRowsInResult(5);
         evread.SetMaxRows(5);
-        InjectRangeEvReadSettings(evread);
+        SetDefaultReadSettings(evread);
 
         NKikimrTxDataShard::TEvReadAck evreadack;
         evreadack.SetMaxRows(5);
-        InjectRangeEvReadAckSettings(evreadack);
+        SetDefaultReadAckSettings(evreadack);
 
         auto* shim = new TReadActorPipeCacheStub();
         shim->SetupCapture(1, 1);
@@ -580,17 +590,17 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
     }
 
     Y_UNIT_TEST_SORT(ChoosePartition, Order) {
-        TTestSetup s;
+        TTestSetup s(ETestActorType::SorceRead);
         auto shards = s.Shards();
 
         NKikimrTxDataShard::TEvRead evread;
         evread.SetMaxRowsInResult(8);
         evread.SetMaxRows(8);
-        InjectRangeEvReadSettings(evread);
+        SetDefaultReadSettings(evread);
 
         NKikimrTxDataShard::TEvReadAck evreadack;
         evreadack.SetMaxRows(8);
-        InjectRangeEvReadAckSettings(evreadack);
+        SetDefaultReadAckSettings(evreadack);
 
         auto* shim = new TReadActorPipeCacheStub();
         shim->SetupCapture(2, 1);
@@ -612,17 +622,17 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
 
 
     Y_UNIT_TEST_SORT(BorderKeys, Order) {
-        TTestSetup s;
+        TTestSetup s(ETestActorType::SorceRead);
         auto shards = s.Shards();
 
         NKikimrTxDataShard::TEvRead evread;
         evread.SetMaxRowsInResult(12);
         evread.SetMaxRows(12);
-        InjectRangeEvReadSettings(evread);
+        SetDefaultReadSettings(evread);
 
         NKikimrTxDataShard::TEvReadAck evreadack;
         evreadack.SetMaxRows(12);
-        InjectRangeEvReadAckSettings(evreadack);
+        SetDefaultReadAckSettings(evreadack);
 
         auto* shim = new TReadActorPipeCacheStub();
         shim->SetupCapture(1, 1);
@@ -647,7 +657,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
     }
 
     Y_UNIT_TEST_SORT(IntersectionLosesRange, Order) {
-        TTestSetup s;
+        TTestSetup s(ETestActorType::SorceRead);
         auto shards = s.Shards();
 
         auto* shim = new TReadActorPipeCacheStub();
@@ -680,7 +690,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
 
         server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_DEBUG);
         server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
-        TTestSetup s("/Root/Test", server.Get());
+        TTestSetup s(ETestActorType::SorceRead, "/Root/Test", server.Get());
 
         NThreading::TPromise<bool> captured = NThreading::NewPromise<bool>();
         TVector<THolder<IEventHandle>> evts;
@@ -703,7 +713,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
                 return TTestActorRuntime::EEventAction::PROCESS;
             });
 
-        ExecSQL(server, s.Sender, R"(
+        ExecSQL(*server->GetRuntime(), s.Sender, R"(
             CREATE TABLE `/Root/Test` (
                 Key Uint64,
                 Value String,
@@ -712,7 +722,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
             )",
             false);
 
-        ExecSQL(server, s.Sender, R"(
+        ExecSQL(*server->GetRuntime(), s.Sender, R"(
             REPLACE INTO `/Root/Test` (Key, Value) VALUES
                 (201u, "Value1"),
                 (202u, "Value2"),
@@ -742,6 +752,204 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
 
         s.AssertSuccess();
         UNIT_ASSERT_VALUES_EQUAL(Format(s.CollectedKeys), ",202");
+    }
+
+    Y_UNIT_TEST(StreamLookupSplitBeforeReading) {
+        TTestSetup s(ETestActorType::StreamLookup, "/Root/TestIndex");
+
+        ExecSQL(*s.Runtime, s.Sender, R"(
+            CREATE TABLE `/Root/TestIndex` (
+                Key Uint64,
+                Fk Uint64,
+                Value String,
+                PRIMARY KEY (Key),
+                INDEX Index GLOBAL ON (Fk)
+            );
+        )", false);
+
+        ExecSQL(*s.Runtime, s.Sender, R"(
+            REPLACE INTO `/Root/TestIndex` (Key, Fk, Value) VALUES
+                (1u, 10u, "Value1"),
+                (2u, 10u, "Value2"),
+                (3u, 10u, "Value3"),
+                (4u, 11u, "Value4"),
+                (5u, 12u, "Value5");
+        )", true);
+
+        auto shards = s.Shards();
+        auto* shim = new TReadActorPipeCacheStub();
+
+        InterceptStreamLookupActorPipeCache(s.Runtime->Register(shim));
+        shim->SetupCapture(0, 1);
+        s.SendScanQuery(
+            "SELECT Key, Value FROM `/Root/TestIndex` VIEW Index where Fk in (10, 11) ORDER BY Key"
+        );
+
+        shim->ReadsReceived.WaitI();
+        Cerr << "starting split -----------------------------------------------------------" << Endl;
+        s.Split(shards.at(0), 3);
+        Cerr << "resume evread -----------------------------------------------------------" << Endl;
+        shim->SkipAll();
+        shim->SendCaptured(s.Runtime);
+
+        s.AssertSuccess();
+        UNIT_ASSERT_VALUES_EQUAL(Format(Canonize(s.CollectedKeys, SortOrder::Ascending)), ",1,2,3,4");
+    }
+
+    Y_UNIT_TEST(StreamLookupSplitAfterFirstResult) {
+        TTestSetup s(ETestActorType::StreamLookup, "/Root/TestIndex");
+
+        ExecSQL(*s.Runtime, s.Sender, R"(
+            CREATE TABLE `/Root/TestIndex` (
+                Key Uint64,
+                Fk Uint64,
+                Value String,
+                PRIMARY KEY (Key),
+                INDEX Index GLOBAL ON (Fk)
+            );
+        )", false);
+
+        ExecSQL(*s.Runtime, s.Sender, R"(
+            REPLACE INTO `/Root/TestIndex` (Key, Fk, Value) VALUES
+                (1u, 10u, "Value1"),
+                (2u, 10u, "Value2"),
+                (3u, 10u, "Value3"),
+                (4u, 11u, "Value4"),
+                (5u, 12u, "Value5");
+        )", true);
+
+        auto shards = s.Shards();
+
+        NKikimrTxDataShard::TEvRead evread;
+        evread.SetMaxRowsInResult(2);
+        evread.SetMaxRows(2);
+        SetDefaultReadSettings(evread);
+
+        NKikimrTxDataShard::TEvReadAck evreadack;
+        evreadack.SetMaxRows(2);
+        SetDefaultReadAckSettings(evreadack);
+
+        auto* shim = new TReadActorPipeCacheStub();
+        shim->SetupCapture(1, 1);
+        shim->SetupResultsCapture(1);
+        InterceptStreamLookupActorPipeCache(s.Runtime->Register(shim));
+        s.SendScanQuery(
+            "SELECT Key, Value FROM `/Root/TestIndex` VIEW Index where Fk in (10, 11) ORDER BY Key"
+        );
+
+        shim->ReadsReceived.WaitI();
+        Cerr << "starting split -----------------------------------------------------------" << Endl;
+        s.Split(shards.at(0), 3);
+        Cerr << "resume evread -----------------------------------------------------------" << Endl;
+        shim->SkipAll();
+        shim->AllowResults();
+        shim->SendCaptured(s.Runtime);
+
+        s.AssertSuccess();
+        UNIT_ASSERT_VALUES_EQUAL(Format(Canonize(s.CollectedKeys, SortOrder::Ascending)), ",1,2,3,4");
+    }
+
+    Y_UNIT_TEST(StreamLookupRetryAttemptForFinishedRead) {
+        TTestSetup s(ETestActorType::StreamLookup, "/Root/TestIndex");
+
+        auto settings = MakeIntrusive<TIteratorReadBackoffSettings>();
+        settings->StartRetryDelay = TDuration::MilliSeconds(250);
+        settings->MaxShardAttempts = 4;
+        // set small read response timeout (for frequent retries)
+        settings->ReadResponseTimeout = TDuration::MilliSeconds(1);
+        SetReadIteratorBackoffSettings(settings);
+
+        ExecSQL(*s.Runtime, s.Sender, R"(
+            CREATE TABLE `/Root/TestIndex` (
+                Key Uint64,
+                Fk Uint64,
+                Value String,
+                PRIMARY KEY (Key),
+                INDEX Index GLOBAL ON (Fk)
+            );
+        )", false);
+
+        ExecSQL(*s.Runtime, s.Sender, R"(
+            REPLACE INTO `/Root/TestIndex` (Key, Fk, Value) VALUES
+                (1u, 10u, "Value1"),
+                (2u, 10u, "Value2"),
+                (3u, 10u, "Value3"),
+                (4u, 11u, "Value4"),
+                (5u, 12u, "Value5");
+        )", true);
+
+        auto shards = s.Shards();
+        auto* shim = new TReadActorPipeCacheStub();
+
+        InterceptStreamLookupActorPipeCache(s.Runtime->Register(shim));
+        // capture first evread, retry attempt for this read was scheduled
+        shim->SetupCapture(0, 1);
+
+        s.SendScanQuery(
+            "SELECT Key, Value FROM `/Root/TestIndex` VIEW Index where Fk in (10, 11) ORDER BY Key"
+        );
+
+        shim->ReadsReceived.WaitI();
+        
+        UNIT_ASSERT_EQUAL(shards.size(), 1);
+        auto undelivery = MakeHolder<TEvPipeCache::TEvDeliveryProblem>(shards[0], true);
+
+        UNIT_ASSERT_EQUAL(shim->Captured.size(), 1);
+        // send delivery problem, read should be restarted (it will be second retry attempt for this read)
+        s.Runtime->Send(shim->Captured[0]->Sender, s.Sender, undelivery.Release());
+
+        shim->SkipAll();
+
+        s.AssertSuccess();
+        UNIT_ASSERT_VALUES_EQUAL(Format(Canonize(s.CollectedKeys, SortOrder::Ascending)), ",1,2,3,4");
+    }
+
+    Y_UNIT_TEST(StreamLookupDeliveryProblem) {
+        TTestSetup s(ETestActorType::StreamLookup, "/Root/TestIndex");
+
+        ExecSQL(*s.Runtime, s.Sender, R"(
+            CREATE TABLE `/Root/TestIndex` (
+                Key Uint64,
+                Fk Uint64,
+                Value String,
+                PRIMARY KEY (Key),
+                INDEX Index GLOBAL ON (Fk)
+            );
+        )", false);
+
+        ExecSQL(*s.Runtime, s.Sender, R"(
+            REPLACE INTO `/Root/TestIndex` (Key, Fk, Value) VALUES
+                (1u, 10u, "Value1"),
+                (2u, 10u, "Value2"),
+                (3u, 10u, "Value3"),
+                (4u, 11u, "Value4"),
+                (5u, 12u, "Value5");
+        )", true);
+
+        auto shards = s.Shards();
+        auto* shim = new TReadActorPipeCacheStub();
+
+        InterceptStreamLookupActorPipeCache(s.Runtime->Register(shim));
+        shim->SetupCapture(0, 1);
+
+        s.SendScanQuery(
+            "SELECT Key, Value FROM `/Root/TestIndex` VIEW Index where Fk in (10, 11) ORDER BY Key"
+        );
+
+        shim->ReadsReceived.WaitI();
+        
+        UNIT_ASSERT_EQUAL(shards.size(), 1);
+        auto undelivery = MakeHolder<TEvPipeCache::TEvDeliveryProblem>(shards[0], true);
+
+        UNIT_ASSERT_EQUAL(shim->Captured.size(), 1);
+        s.Runtime->Send(shim->Captured[0]->Sender, s.Sender, undelivery.Release());
+
+        shim->SkipAll();
+        shim->SendCaptured(s.Runtime);
+
+        s.AssertSuccess();
+        UNIT_ASSERT_VALUES_EQUAL(Format(Canonize(s.CollectedKeys, SortOrder::Ascending)), ",1,2,3,4");
+
     }
 
     // TODO: rework test for stream lookups

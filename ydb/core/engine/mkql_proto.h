@@ -16,6 +16,7 @@ class THolderFactory;
 bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
                     const NKikimrMiniKQL::TValue& tupleValue,
                     const TConstArrayRef<NScheme::TTypeInfo>& expectedTypes,
+                    TVector<bool> notNullTypes,
                     bool allowCastFromString,
                     TVector<TCell>& key,
                     TString& errStr,

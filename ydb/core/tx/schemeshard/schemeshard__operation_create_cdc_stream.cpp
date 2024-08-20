@@ -128,8 +128,11 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotAsyncReplicaTable()
-                .IsCommonSensePath()
                 .NotUnderDeleting();
+
+            if (checks && !tablePath.IsInsideTableIndexPath()) {
+                checks.IsCommonSensePath();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -522,9 +525,12 @@ public:
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
-                .IsCommonSensePath()
                 .IsLikeDirectory()
                 .NotUnderDeleting();
+
+            if (checks && !workingDirPath.IsTableIndex()) {
+                checks.IsCommonSensePath();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -543,10 +549,12 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotAsyncReplicaTable()
-                .IsCommonSensePath()
                 .NotUnderDeleting();
 
             if (checks) {
+                if (!tablePath.IsInsideTableIndexPath()) {
+                    checks.IsCommonSensePath();
+                }
                 if (InitialScan) {
                     checks.IsUnderTheSameOperation(OperationId.GetTxId()); // lock op
                 } else {
@@ -675,9 +683,23 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
             .NotDeleted()
             .IsTable()
             .NotAsyncReplicaTable()
-            .IsCommonSensePath()
             .NotUnderDeleting()
             .NotUnderOperation();
+
+        if (checks) {
+            if (!tablePath.IsInsideTableIndexPath()) {
+                checks.IsCommonSensePath();
+            } else {
+                if (!tablePath.Parent().IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobal)) {
+                    return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
+                        "Cannot add changefeed to index table")};
+                }
+                if (!AppData()->FeatureFlags.GetEnableChangefeedsOnIndexTables()) {
+                    return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
+                        "Changefeed on index table is not supported yet")};
+                }
+            }
+        }
 
         if (!checks) {
             return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
@@ -793,6 +815,14 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
         outTx.MutableLockConfig()->SetName(tablePath.LeafName());
 
         result.push_back(CreateLock(NextPartId(opId, result), outTx));
+    }
+
+    if (workingDirPath.IsTableIndex()) {
+        auto outTx = TransactionTemplate(workingDirPath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
+        outTx.MutableAlterTableIndex()->SetName(workingDirPath.LeafName());
+        outTx.MutableAlterTableIndex()->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
+
+        result.push_back(CreateAlterTableIndex(NextPartId(opId, result), outTx));
     }
 
     {

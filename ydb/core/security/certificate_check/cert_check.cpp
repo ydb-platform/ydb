@@ -78,6 +78,7 @@ TCertificateChecker::TReadClientSubjectResult TCertificateChecker::ReadSubjectFr
         result.Error = { .Message = "Cannot extract subject from client certificate", .Retryable = false };
         return result;
     }
+    result.SubjectDns = X509CertificateReader::ReadSubjectDns(pemCertificates.ClientCertX509, result.SubjectDn);
     return result;
 }
 
@@ -91,14 +92,14 @@ TString TCertificateChecker::CreateUserSidFromSubjectDn(const std::vector<std::p
     return userSid;
 }
 
-TEvTicketParser::TError TCertificateChecker::CheckClientSubject(const std::vector<std::pair<TString, TString>>& subjectDn, const TCertificateAuthorizationParams& authParams) const {
+TEvTicketParser::TError TCertificateChecker::CheckClientSubject(const TReadClientSubjectResult& subjectInfo, const TCertificateAuthorizationParams& authParams) const {
     std::unordered_map<TString, std::vector<TString>> subjectDescription;
-    for (const auto& [attribute, value] : subjectDn) {
+    for (const auto& [attribute, value] : subjectInfo.SubjectDn) {
         auto& attributeValues = subjectDescription[attribute];
         attributeValues.push_back(value);
     }
 
-    if (!authParams.CheckSubject(subjectDescription)) {
+    if (!authParams.CheckSubject(subjectDescription, subjectInfo.SubjectDns)) {
         return { .Message = "Client certificate failed verification", .Retryable = false };
     }
     return {};
@@ -135,7 +136,7 @@ TCertificateChecker::TCertificateCheckResult TCertificateChecker::CheckClientCer
             continue;
         }
 
-        auto checkClientSubjectError = CheckClientSubject(readClientSubjectResult.SubjectDn, authParams);
+        auto checkClientSubjectError = CheckClientSubject(readClientSubjectResult, authParams);
         if (!checkClientSubjectError.empty()) {
             continue;
         }

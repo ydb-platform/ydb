@@ -481,11 +481,21 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
     SignalTabletActive(DEPRECATED_CTX);
     ReadyForConnections = true;
     RequestPoolsInformation();
+    std::vector<TNodeInfo*> unimportantNodes; // ping nodes with tablets first
+    unimportantNodes.reserve(Nodes.size());
     for (auto& [id, node] : Nodes) {
         if (node.IsUnknown() && node.Local) {
-            node.Ping();
+            if (node.GetTabletsTotal() > 0) {
+                node.Ping();
+            } else {
+                unimportantNodes.push_back(&node);
+            }
         }
     }
+    for (auto* node : unimportantNodes) {
+        node->Ping();
+    }
+    ProcessNodePingQueue();
     TVector<TTabletId> tabletsToReleaseFromParent;
     TSideEffects sideEffects;
     sideEffects.Reset(SelfId());
@@ -676,11 +686,13 @@ void THive::Cleanup() {
 
 void THive::Handle(TEvLocal::TEvStatus::TPtr& ev) {
     BLOG_D("Handle TEvLocal::TEvStatus for Node " << ev->Sender.NodeId() << ": " << ev->Get()->Record.ShortDebugString());
+    RemoveFromPingInProgress(ev->Sender.NodeId());
     Execute(CreateStatus(ev->Sender, ev->Get()->Record));
 }
 
 void THive::Handle(TEvLocal::TEvSyncTablets::TPtr& ev) {
     BLOG_D("THive::Handle::TEvSyncTablets");
+    RemoveFromPingInProgress(ev->Sender.NodeId());
     Execute(CreateSyncTablets(ev->Sender, ev->Get()->Record));
 }
 
@@ -733,7 +745,10 @@ void THive::Handle(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
 void THive::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
     TNodeId nodeId = ev->Get()->NodeId;
     BLOG_W("Handle TEvInterconnect::TEvNodeDisconnected, NodeId " << nodeId);
-    ConnectedNodes.erase(nodeId);
+    RemoveFromPingInProgress(nodeId);
+    if (ConnectedNodes.erase(nodeId)) {
+       UpdateCounterNodesConnected(-1);
+    }
     Execute(CreateDisconnectNode(THolder<TEvInterconnect::TEvNodeDisconnected>(ev->Release().Release())));
 }
 
@@ -903,6 +918,7 @@ void THive::Handle(TEvents::TEvUndelivered::TPtr &ev) {
     case TEvLocal::EvPing: {
         TNodeId nodeId = ev->Cookie;
         TNodeInfo* node = FindNode(nodeId);
+        NodePingsInProgress.erase(nodeId);
         if (node != nullptr && ev->Sender == node->Local) {
             if (node->IsDisconnecting()) {
                 // ping continiousily until we fully disconnected from the node
@@ -911,6 +927,7 @@ void THive::Handle(TEvents::TEvUndelivered::TPtr &ev) {
                 KillNode(node->Id, node->Local);
             }
         }
+        ProcessNodePingQueue();
         break;
     }
     };
@@ -1672,6 +1689,13 @@ void THive::UpdateCounterNodesConnected(i64 nodesConnectedDiff) {
         auto& counter = TabletCounters->Simple()[NHive::COUNTER_NODES_CONNECTED];
         auto newValue = counter.Get() + nodesConnectedDiff;
         counter.Set(newValue);
+    }
+}
+
+void THive::UpdateCounterPingQueueSize() {
+    if (TabletCounters != nullptr) {
+        auto& counter = TabletCounters->Simple()[NHive::COUNTER_PINGQUEUE_SIZE];
+        counter.Set(NodePingQueue.size());
     }
 }
 
@@ -2637,6 +2661,25 @@ THolder<TGroupFilter> THive::BuildGroupParametersForChannel(const TLeaderTabletI
 
 void THive::ExecuteStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external) {
     Execute(CreateStartTablet(tabletId, local, cookie, external));
+}
+
+void THive::QueuePing(const TActorId& local) {
+    NodePingQueue.push(local);
+}
+
+void THive::ProcessNodePingQueue() {
+    while (!NodePingQueue.empty() && NodePingsInProgress.size() < GetMaxPingsInFlight()) {
+        TActorId local = NodePingQueue.front();
+        TNodeId node = local.NodeId();
+        NodePingQueue.pop();
+        NodePingsInProgress.insert(node);
+        SendPing(local, node);
+    }
+}
+
+void THive::RemoveFromPingInProgress(TNodeId node) {
+    NodePingsInProgress.erase(node);
+    ProcessNodePingQueue();
 }
 
 void THive::SendPing(const TActorId& local, TNodeId id) {

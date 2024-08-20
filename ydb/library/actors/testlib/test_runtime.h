@@ -254,7 +254,13 @@ namespace NActors {
         TIntrusivePtr<IMonotonicTimeProvider> GetMonotonicTimeProvider();
         TInstant GetCurrentTime() const;
         TMonotonic GetCurrentMonotonicTime() const;
-        void UpdateCurrentTime(TInstant newTime);
+        /**
+         * When `rewind` is true allows time to go backwards. This is unsafe,
+         * since both wallclock and monotonic times are currently linked and
+         * both go backwards, but it may be necessary for testing wallclock
+         * time oddities.
+         */
+        void UpdateCurrentTime(TInstant newTime, bool rewind = false);
         void AdvanceCurrentTime(TDuration duration);
         void AddLocalService(const TActorId& actorId, TActorSetupCmd cmd, ui32 nodeIndex = 0);
         virtual void Initialize();

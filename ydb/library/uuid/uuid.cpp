@@ -30,7 +30,7 @@ static void WriteHex(ui16 bytes, IOutputStream& out, bool reverseBytes = false) 
 
 TString UuidBytesToString(const TString& in) {
     TStringStream ss;
-    
+
     UuidBytesToString(in, ss);
 
     return ss.Str();
@@ -79,4 +79,3 @@ void UuidHalfsToByteString(ui64 low, ui64 hi, IOutputStream& out) {
 
 }
 }
-

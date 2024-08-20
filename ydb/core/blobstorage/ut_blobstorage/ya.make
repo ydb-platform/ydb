@@ -20,6 +20,7 @@ SRCS(
     ds_proxy_lwtrace.cpp
     encryption.cpp
     extra_block_checks.cpp
+    gc.cpp
     gc_quorum_3dc.cpp
     group_reconfiguration.cpp
     incorrect_queries.cpp

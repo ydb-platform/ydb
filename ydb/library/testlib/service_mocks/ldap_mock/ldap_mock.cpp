@@ -31,8 +31,8 @@ void LdapRequestHandler(TAtomicSharedPtr<TLdapSocketWrapper> socket, const TLdap
         if (!response.Send(socket)) {
             break;
         }
-        if (response.EnableTls()) {
-            socket->SslAccept();
+        if (response.EnableTls() && !socket->IsSecure()) {
+            socket->EnableSecureConnection();
         }
     }
 }

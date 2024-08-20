@@ -1053,6 +1053,7 @@ message TQueryServiceConfig {
     optional NYql.TGenericGatewayConfig Generic = 11;
     optional TFinalizeScriptServiceConfig FinalizeScriptServiceConfig = 12;
     optional uint64 ProgressStatsPeriodMs = 14 [default = 0]; // 0 = disabled
+    optional bool EnableMatchRecognize = 20 [default = false];
 }
 
 // Config describes immediate controls and allows
@@ -1482,6 +1483,7 @@ message THiveConfig {
     optional double MinStorageScatterToBalance = 71 [default = 999]; // storage balancer trigger is disabled by default
     optional double MinGroupUsageToBalance = 72 [default = 0.1];
     optional uint64 StorageBalancerInflight = 73 [default = 1];
+    optional uint64 MaxPingsInFlight = 78 [default = 1000];
 }
 
 message TColumnShardConfig {
@@ -1517,6 +1519,7 @@ message TColumnShardConfig {
 
     optional TIndexMetadataMemoryLimit IndexMetadataMemoryLimit = 12;
     optional bool CleanupEnabled = 13 [default = true];
+    optional uint32 MaxInFlightIntervalsOnRequest = 16;
 }
 
 message TSchemeShardConfig {
@@ -1751,8 +1754,15 @@ message TClientCertificateAuthorization {
         repeated string Suffixes = 3;
     }
 
+    // Matches subject alternative names (DNS) and Common Name (CN) in certificate
+    message TSubjectDns {
+        repeated string Values = 1;
+        repeated string Suffixes = 2;
+    }
+
     message TClientCertificateDefinition {
         repeated TSubjectTerm SubjectTerms = 1;
+        optional TSubjectDns SubjectDns = 5;
         optional bool CanCheckNodeHostByCN = 2 [default = false];
         repeated string MemberGroups = 3;
         optional bool RequireSameIssuer = 4 [default = true];

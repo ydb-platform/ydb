@@ -13,6 +13,11 @@ private:
     void BuildAppendedPortionsByChunks(TConstructionContext& context, std::vector<TPortionInfoWithBlobs>&& portions) noexcept;
 protected:
     virtual TConclusionStatus DoConstructBlobs(TConstructionContext& context) noexcept override;
+
+    virtual bool NeedDiskWriteLimiter() const override {
+        return true;
+    }
+
     virtual TPortionMeta::EProduced GetResultProducedClass() const override {
         return TPortionMeta::EProduced::SPLIT_COMPACTED;
     }

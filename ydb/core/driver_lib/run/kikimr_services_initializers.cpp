@@ -116,7 +116,7 @@
 #include <ydb/core/scheme/scheme_type_registry.h>
 
 #include <ydb/core/security/ticket_parser.h>
-#include <ydb/core/security/ldap_auth_provider.h>
+#include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
 #include <ydb/core/security/ticket_parser_settings.h>
 
 #include <ydb/core/sys_view/processor/processor.h>
@@ -714,8 +714,10 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                         data.Yellow ? NKikimrWhiteboard::EFlag::Yellow :
                         data.Orange ? NKikimrWhiteboard::EFlag::Orange :
                         data.Red ? NKikimrWhiteboard::EFlag::Red : NKikimrWhiteboard::EFlag()));
-                    data.ActorSystem->Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvClockSkewUpdate(
-                        data.PeerId, data.ClockSkew));
+                    if (data.ReportClockSkew) {
+                        data.ActorSystem->Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvClockSkewUpdate(
+                            data.PeerId, data.ClockSkew));
+                    }
                 };
             }
 
@@ -1629,7 +1631,7 @@ void TSecurityServicesInitializer::InitializeServices(NActors::TActorSystemSetup
             .AuthConfig = Config.GetAuthConfig(),
             .CertificateAuthValues = {
                 .ClientCertificateAuthorization = Config.GetClientCertificateAuthorization(),
-                .ServerCertificateFilePath = grpcConfig.GetCert(),
+                .ServerCertificateFilePath = grpcConfig.HasPathToCertificateFile() ? grpcConfig.GetPathToCertificateFile() : grpcConfig.GetCert(),
                 .Domain = Config.GetAuthConfig().GetCertificateAuthenticationDomain()
             }
         };

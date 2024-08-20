@@ -118,7 +118,8 @@ protected:
                 true,               // defaultWatermarksMode
                 true);              // syncActor
         } else {
-            output = DqRewriteAggregate(node, ctx, TypesCtx, false, KqpCtx.Config->HasOptEnableOlapPushdown() || KqpCtx.Config->HasOptUseFinalizeByKey(), KqpCtx.Config->HasOptUseFinalizeByKey());
+            NDq::TSpillingSettings spillingSettings(KqpCtx.Config->GetEnabledSpillingNodes());
+            output = DqRewriteAggregate(node, ctx, TypesCtx, false, KqpCtx.Config->HasOptEnableOlapPushdown() || KqpCtx.Config->HasOptUseFinalizeByKey(), KqpCtx.Config->HasOptUseFinalizeByKey(), spillingSettings.IsAggregationSpillingEnabled());
         }
         if (output) {
             DumpAppliedRule("RewriteAggregate", node.Ptr(), output.Cast().Ptr(), ctx);

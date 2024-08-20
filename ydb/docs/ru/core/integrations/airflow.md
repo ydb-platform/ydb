@@ -76,7 +76,7 @@ with DAG(
 
     get_birth_date = YDBExecuteQueryOperator(
         task_id="get_birth_date",
-        sql="SELECT * FROM pet WHERE birth_date BETWEEN '{{params.begin_date}}' AND '{{params.end_date}}'",
+        sql="SELECT * FROM pet WHERE birth_date BETWEEN 'not_var{{params.begin_date}}' AND 'not_var{{params.end_date}}'",
         params={"begin_date": "2020-01-01", "end_date": "2020-12-31"},
         ydb_conn_id="test_ydb_connection"
     )

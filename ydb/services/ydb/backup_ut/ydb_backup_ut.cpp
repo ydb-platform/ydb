@@ -279,7 +279,7 @@ void TestIndexTableSplitBoundariesArePreserved(
             .AddNullableColumn("Key", EPrimitiveType::Uint32)
             .AddNullableColumn("Value", EPrimitiveType::Uint32)
             .SetPrimaryKeyColumn("Key")
-            .AddSecondaryIndex("byValue", EIndexType::GlobalSync, { "Value" }, {}, indexSettings);
+            .AddSecondaryIndex(TIndexDescription("byValue", EIndexType::GlobalSync, { "Value" }, {}, { indexSettings }));
 
         const auto result = session.CreateTable(table, tableBuilder.Build()).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());

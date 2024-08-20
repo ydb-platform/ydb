@@ -469,14 +469,8 @@ public:
         Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, dataColumns));
     }
 
-    void AddSecondaryIndex(
-        const TString& indexName,
-        EIndexType type,
-        const TVector<TString>& indexColumns,
-        const TVector<TString>& dataColumns,
-        const TGlobalIndexSettings& globalIndexSettings
-    ) {
-        Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, dataColumns, { globalIndexSettings }));
+    void AddSecondaryIndex(const TIndexDescription& indexDescription) {
+        Indexes_.emplace_back(indexDescription);
     }
 
     void AddVectorIndex(const TString& indexName, EIndexType type, const TVector<TString>& indexColumns, const TVectorIndexSettings& vectorIndexSettings) {
@@ -759,14 +753,8 @@ void TTableDescription::AddSecondaryIndex(const TString& indexName, EIndexType t
     Impl_->AddSecondaryIndex(indexName, type, indexColumns, dataColumns);
 }
 
-void TTableDescription::AddSecondaryIndex(
-    const TString& indexName,
-    EIndexType type,
-    const TVector<TString>& indexColumns,
-    const TVector<TString>& dataColumns,
-    const TGlobalIndexSettings& globalIndexSettings
-) {
-    Impl_->AddSecondaryIndex(indexName, type, indexColumns, dataColumns, globalIndexSettings);
+void TTableDescription::AddSecondaryIndex(const TIndexDescription& indexDescription) {
+    Impl_->AddSecondaryIndex(indexDescription);
 }
 
 void TTableDescription::AddSyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns) {
@@ -1193,14 +1181,8 @@ TTableBuilder& TTableBuilder::SetPrimaryKeyColumn(const TString& primaryKeyColum
     return *this;
 }
 
-TTableBuilder& TTableBuilder::AddSecondaryIndex(
-    const TString& indexName,
-    EIndexType type,
-    const TVector<TString>& indexColumns,
-    const TVector<TString>& dataColumns,
-    const TGlobalIndexSettings& globalIndexSettings
-) {
-    TableDescription_.AddSecondaryIndex(indexName, type, indexColumns, dataColumns, globalIndexSettings);
+TTableBuilder& TTableBuilder::AddSecondaryIndex(const TIndexDescription& indexDescription) {
+    TableDescription_.AddSecondaryIndex(indexDescription);
     return *this;
 }
 

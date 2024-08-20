@@ -516,7 +516,7 @@ public:
         // replication config is not copied
         schema.ClearReplicationConfig();
 
-        // replication config is not copied
+        // incr backup config is not copied
         schema.ClearIncrementalBackupConfig();
 
         NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;

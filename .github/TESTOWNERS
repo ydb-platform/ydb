@@ -9,10 +9,10 @@
 
 
 
-#Группа разработки строковых таблиц @azevaykin TEAM:?
-/ydb/core/tablet_flat @azevaykin 
-/ydb/core/tx/datashard @azevaykin 
-/ydb/core/mon_alloc @azevaykin 
+#Группа разработки строковых таблиц @azevaykin TEAM:@ydb-platform/datashard
+/ydb/core/tablet_flat @ydb-platform/datashard
+/ydb/core/tx/datashard @ydb-platform/datashard
+/ydb/core/mon_alloc @ydb-platform/datashard
 
 # Сoordinator
 /ydb/core/tx/coordinator @snaury
@@ -53,6 +53,7 @@
 /ydb/core/scheme @ydb-platform/core
 /ydb/core/cms @ydb-platform/core
 /ydb/tests/functional/cms @ydb-platform/core
+/ydb/core/quoter @ydb-platform/core
 
 
 #Группа разработки систем поставки данных / LogBroker @alexnick88 TEAM:@ydb-platform/topics

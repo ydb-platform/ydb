@@ -17,4 +17,6 @@ items:
   href: import-jdbc.md
 - name: DBeaver
   href: ide/dbeaver.md
+- name: Мониторинг подсистем кластера YDB (HealthCheck)
+  href: health-check-mon.md
 

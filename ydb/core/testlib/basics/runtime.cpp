@@ -17,6 +17,7 @@ namespace NActors {
     void TTestBasicRuntime::Initialize(TEgg egg)
     {
         AddICStuff();
+        AddAuditLogStuff();
 
         TTestActorRuntime::Initialize(std::move(egg));
     }
@@ -73,6 +74,23 @@ namespace NActors {
                 auto listener = new TInterconnectListenerTCP(nameNode.first, nameNode.second, common);
                 AddLocalService({}, TActorSetupCmd(listener, TMailboxType::Simple, InterconnectPoolId()), num);
                 AddLocalService(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(), TMailboxType::Simple, 0), num);
+            }
+        }
+    }
+
+    void TTestBasicRuntime::AddAuditLogStuff()
+    {
+        if (AuditLogBackends) {
+            for (ui32 nodeIndex = 0; nodeIndex < GetNodeCount(); ++nodeIndex) {
+                AddLocalService(
+                    NKikimr::NAudit::MakeAuditServiceID(),
+                    TActorSetupCmd(
+                        NKikimr::NAudit::CreateAuditWriter(std::move(AuditLogBackends)).Release(),
+                        TMailboxType::HTSwap,
+                        0
+                    ),
+                    nodeIndex
+                );
             }
         }
     }

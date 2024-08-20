@@ -2461,6 +2461,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         appConfig.MutableTableServiceConfig()->SetBlockChannelsMode(blockChannelsMode);
+        appConfig.MutableTableServiceConfig()->SetEnableSpillingNodes("None");
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
             .SetWithSampleTables(true);

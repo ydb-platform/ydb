@@ -24,11 +24,11 @@ struct TTM64Storage {
         Zero(*this);
     }
 
-    inline static bool IsUniversal(ui16 tzId) {
+    static bool IsUniversal(ui16 tzId) {
         return tzId == 0;
     }
 
-    inline void MakeDefault() {
+    void MakeDefault() {
         Year = 1970;
         Month = 1;
         Day = 1;
@@ -39,7 +39,7 @@ struct TTM64Storage {
         TimezoneId = 0;
     }
 
-    inline void FromNarrow(const TTMStorage& narrow) {
+    void From(const TTMStorage& narrow) {
         Year = narrow.Year;
         DayOfYear = narrow.DayOfYear;
         WeekOfYear = narrow.WeekOfYear;
@@ -54,29 +54,75 @@ struct TTM64Storage {
         TimezoneId = narrow.TimezoneId;
     }
 
-    // TODO add to UDF ABI interface
-    void FromDate32(i32 value);
-    void FromTzDate32(i32 value, ui16 tzId);
+    void FromDate32(const NUdf::IDateBuilder& builder, i32 value, ui16 tzId = 0) {
+        i32 year;
+        ui32 month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
 
-    void FromDatetime64(i64 value);
-    void FromTzDatetime64(i64 value, ui16 tzId);
+        if (!builder.SplitTzDate32(value, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId)) {
+            ythrow yexception() << "Error in SplitTzDate32";
+        }
 
-    void FromTimestamp64(i64 value);
-    void FromTzTimestamp64(i64 value, ui16 tzId);
-
-    i32 ToDate32() const;
-    i32 ToTzDate32() const;
-
-    i64 ToDatetime64() const;
-    i64 ToTzDatetime64() const;
-
-    inline i64 ToTimestamp64() const {
-        return ToDatetime64() * 1000000ll + Microsecond;
+        TimezoneId = tzId;
+        Year = year;
+        Month = month;
+        Day = day;
+        DayOfYear = dayOfYear;
+        WeekOfYear = weekOfYear;
+        WeekOfYearIso8601 = weekOfYearIso8601;
+        DayOfWeek = dayOfWeek;
     }
 
-    inline i64 ToTzTimestamp64() const {
-        return ToTzDatetime64() * 1000000ll + Microsecond;
+    void FromDatetime64(const NUdf::IDateBuilder& builder, i64 value, ui16 tzId = 0) {
+        i32 year;
+        ui32 month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
+        ui32 hour, minute, second;
+
+        if (!builder.SplitTzDatetime64(
+                value, year, month, day, hour, minute, second,
+                dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId))
+        {
+            ythrow yexception() << "Error in SplitTzDatetime64";
+        }
+
+        TimezoneId = tzId;
+        Year = year;
+        Month = month;
+        Day = day;
+        Hour = hour;
+        Minute = minute;
+        Second = second;
+        DayOfYear = dayOfYear;
+        WeekOfYear = weekOfYear;
+        WeekOfYearIso8601 = weekOfYearIso8601;
+        DayOfWeek = dayOfWeek;
     }
+
+    void FromTimestamp64(const NUdf::IDateBuilder& builder, i64 value, ui16 tzId = 0) {
+        const i64 datetime = (value >= 0 ? value : (value - 1000000ll)) / 1000000ll;
+        FromDatetime64(builder, datetime, tzId);
+        Microsecond = value - datetime * 1000000ll;
+    }
+
+    i32 ToDate32(const NUdf::IDateBuilder& builder) const {
+        i32 date;
+        if (!builder.MakeTzDate32(Year, Month, Day, date, TimezoneId)) {
+            ythrow yexception() << "Error in MakeTzDate32";
+        }
+        return date;
+    }
+
+    i64 ToDatetime64(const NUdf::IDateBuilder& builder) const {
+        i64 datetime;
+        if (!builder.MakeTzDatetime64(Year, Month, Day, Hour, Minute, Second, datetime, TimezoneId)) {
+            ythrow yexception() << "Error in MakeTzDatetime64";
+        }
+        return datetime;
+    }
+
+    i64 ToTimestamp64(const NUdf::IDateBuilder& builder) const {
+        return ToDatetime64(builder) * 1000000ll + Microsecond;
+    }
+
 };
 
 }

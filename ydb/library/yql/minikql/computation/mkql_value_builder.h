@@ -91,6 +91,15 @@ public:
 
     NUdf::TUnboxedValue NewArray64(ui64 count, NUdf::TUnboxedValue*& itemsPtr) const final;
 
+    bool SplitTzDate32(i32 date, i32& year, ui32& month, ui32& day,
+            ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId = 0) const final;
+    bool SplitTzDatetime64(i64 datetime, i32& year, ui32& month, ui32& day,
+            ui32& hour, ui32& minute, ui32& second,
+            ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId = 0) const final;
+    bool MakeTzDate32(i32 year, ui32 month, ui32 day, i32& date, ui16 timezoneId = 0) const final;
+    bool MakeTzDatetime64(i32 year, ui32 month, ui32 day,
+            ui32 hour, ui32 minute, ui32 second, i64& datetime, ui16 timezoneId = 0) const final;
+
 private:
     const THolderFactory& HolderFactory_;
     NUdf::EValidatePolicy Policy_;

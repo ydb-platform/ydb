@@ -97,7 +97,27 @@ public:
 };
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 24)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 37)
+class IDateBuilder4: public IDateBuilder3
+{
+public:
+    virtual bool SplitTzDate32(i32 date, i32& year, ui32& month, ui32& day,
+            ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId = 0) const = 0;
+    virtual bool SplitTzDatetime64(i64 datetime, i32& year, ui32& month, ui32& day,
+            ui32& hour, ui32& minute, ui32& second,
+            ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId = 0) const = 0;
+    virtual bool MakeTzDate32(i32 year, ui32 month, ui32 day, i32& date, ui16 timezoneId = 0) const = 0;
+    virtual bool MakeTzDatetime64(i32 year, ui32 month, ui32 day,
+            ui32 hour, ui32 minute, ui32 second, i64& datetime, ui16 timezoneId = 0) const = 0;
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 37)
+class IDateBuilder: public IDateBuilder4 {
+protected:
+    IDateBuilder();
+};
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 24)
 class IDateBuilder: public IDateBuilder3 {
 protected:
     IDateBuilder();

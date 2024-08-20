@@ -331,5 +331,30 @@ bool TDefaultValueBuilder::GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef
     return false;
 }
 
+bool TDefaultValueBuilder::SplitTzDate32(i32 date, i32& year, ui32& month, ui32& day,
+        ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId) const
+{
+    return ::NKikimr::NMiniKQL::SplitTzDate32(date, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, timezoneId);
+}
+
+bool TDefaultValueBuilder::SplitTzDatetime64(i64 datetime, i32& year, ui32& month, ui32& day,
+        ui32& hour, ui32& minute, ui32& second,
+        ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId) const
+{
+    return ::NKikimr::NMiniKQL::SplitTzDatetime64(
+                datetime, year, month, day, hour, minute, second,
+                dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, timezoneId);
+}
+
+bool TDefaultValueBuilder::MakeTzDate32(i32 year, ui32 month, ui32 day, i32& date, ui16 timezoneId) const {
+    return ::NKikimr::NMiniKQL::MakeTzDate32(year, month, day, date, timezoneId);
+}
+
+bool TDefaultValueBuilder::MakeTzDatetime64(i32 year, ui32 month, ui32 day,
+        ui32 hour, ui32 minute, ui32 second, i64& datetime, ui16 timezoneId) const
+{
+    return ::NKikimr::NMiniKQL::MakeTzDatetime64(year, month, day, hour, minute, second, datetime, timezoneId);
+}
+
 } // namespace NMiniKQL
 } // namespace Nkikimr

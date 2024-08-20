@@ -919,7 +919,6 @@ public:
         }
     }
 
-    // TODO return OK/NOK status ?
     void SplitDate32(i32 date, i32& year, ui32& month, ui32& day,
             ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) const
     {
@@ -969,7 +968,7 @@ public:
         SplitTime(value, hour, min, sec);
     }
 
-    void SplitTzDatetime64(i64 value, i32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec,
+    bool SplitTzDatetime64(i64 value, i32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec,
             ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId) const
     {
         if (tzId) {
@@ -978,11 +977,14 @@ public:
             if (year <= 0) {
                 year--;
             }
-            MakeDate32(year, month, day, date);
+            if (!MakeDate32(year, month, day, date)) {
+                return false;
+            }
             SplitDate32(date, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
         } else {
             SplitDatetime64(value, year, month, day, hour, min, sec, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
         }
+        return true;
     }
 
     void SplitTimestamp64(i64 value, i32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec, ui32& usec,
@@ -994,7 +996,7 @@ public:
         SplitTime(time, hour, min, sec);
     }
 
-    void SplitTzTimestamp64(i64 value, i32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec, ui32& usec,
+    bool SplitTzTimestamp64(i64 value, i32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec, ui32& usec,
             ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId) const
     {
         if (tzId) {
@@ -1002,10 +1004,13 @@ public:
             usec = value - utcSeconds * 1000000ll;
             ToLocalTime64(utcSeconds, tzId, year, month, day, hour, min, sec);
             i32 date;
-            MakeDate32((year > 0) ? year : year - 1, month, day, date);
+            if (!MakeDate32((year > 0) ? year : year - 1, month, day, date)) {
+                return false;
+            }
         } else {
             SplitTimestamp64(value, year, month, day, hour, min, sec, usec, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
         }
+        return true;
     }
 
     bool GetDateOffset(ui32 year, ui32 month, ui32 day, ui16& value) const {
@@ -1416,39 +1421,43 @@ bool SplitTzDate(ui16 value, ui32& year, ui32& month, ui32& day, ui32& dayOfYear
     return TDateTable::Instance().EnrichByOffset(value, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
 }
 
-void SplitDate32(i32 value, i32& year, ui32& month, ui32& day, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) {
+bool SplitDate32(i32 value, i32& year, ui32& month, ui32& day, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) {
     TDateTable::Instance().SplitDate32(value, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
+    return true;
 }
 
-void SplitTzDate32(i32 value, i32& year, ui32& month, ui32& day, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId) {
-    TDateTable::Instance().SplitTzDate32(value, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
+bool SplitTzDate32(i32 value, i32& year, ui32& month, ui32& day, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId) {
+    return TDateTable::Instance().SplitTzDate32(value, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
 }
 
-void SplitDatetime64(i64 value, i32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec,
+/*
+bool SplitDatetime64(i64 value, i32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec,
         ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek)
 {
-    TDateTable::Instance().SplitDatetime64(value, year, month, day, hour, min, sec,
+    return TDateTable::Instance().SplitDatetime64(value, year, month, day, hour, min, sec,
         dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
 }
 
-void SplitTzDatetime64(i64 value, i32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec,
+bool SplitTimestamp64(i64 value, i32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec, ui32& usec,
+        ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek)
+{
+    return TDateTable::Instance().SplitTimestamp64(value, year, month, day, hour, min, sec, usec,
+        dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
+}
+
+*/
+
+bool SplitTzDatetime64(i64 value, i32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec,
         ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId)
 {
-    TDateTable::Instance().SplitTzDatetime64(value, year, month, day, hour, min, sec,
+    return TDateTable::Instance().SplitTzDatetime64(value, year, month, day, hour, min, sec,
         dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
 }
 
-void SplitTimestamp64(i64 value, i32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec, ui32& usec,
-        ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek)
-{
-    TDateTable::Instance().SplitTimestamp64(value, year, month, day, hour, min, sec, usec,
-        dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
-}
-
-void SplitTzTimestamp64(i64 value, i32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec, ui32& usec,
+bool SplitTzTimestamp64(i64 value, i32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec, ui32& usec,
         ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId)
 {
-    TDateTable::Instance().SplitTzTimestamp64(value, year, month, day, hour, min, sec, usec,
+    return TDateTable::Instance().SplitTzTimestamp64(value, year, month, day, hour, min, sec, usec,
         dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
 }
 

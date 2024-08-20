@@ -23,7 +23,6 @@ from helpers.table_helper import AlterTable
 
 from ydb.tests.olap.lib.utils import get_external_param
 from ydb import PrimitiveType
-from ydb import StatusCode
 import datetime
 import random
 import threading
@@ -69,10 +68,10 @@ class TestAlterTiering(BaseTestSet):
             sth.bulk_upsert(
                 table,
                 dg.DataGeneratorPerColumn(self.schema1, 1000)
-                    .with_column('timestamp', dg.ColumnValueGeneratorRandom(null_probability=0))
-                    .with_column('writer', dg.ColumnValueGeneratorConst(writer_id))
-                    .with_column('value', dg.ColumnValueGeneratorSequential(rows_written))
-                    .with_column('data', dg.ColumnValueGeneratorConst(random.randbytes(1024)))
+                .with_column('timestamp', dg.ColumnValueGeneratorRandom(null_probability=0))
+                .with_column('writer', dg.ColumnValueGeneratorConst(writer_id))
+                .with_column('value', dg.ColumnValueGeneratorSequential(rows_written))
+                .with_column('data', dg.ColumnValueGeneratorConst(random.randbytes(1024)))
             )
             rows_written += 1000
             i += 1
@@ -98,12 +97,12 @@ class TestAlterTiering(BaseTestSet):
 
         s3_configs = [
             ObjectStorageParams(
-                scheme = 'HTTP',
-                verify_ssl = False,
-                endpoint = s3_endpoint,
-                bucket = bucket,
-                access_key = s3_access_key,
-                secret_key = s3_secret_key
+                scheme='HTTP',
+                verify_ssl=False,
+                endpoint=s3_endpoint,
+                bucket=bucket,
+                access_key=s3_access_key,
+                secret_key=s3_secret_key
             ) for bucket in s3_buckets
         ]
 
@@ -146,9 +145,8 @@ class TestAlterTiering(BaseTestSet):
             sth.execute_scheme_query(DropTieringRule(tiering))
         for tier in tiers:
             sth.execute_scheme_query(DropTier(tier))
-        
+
         sth.execute_scheme_query(AlterTable('store/table').set_ttl('P1D', 'timestamp'))
 
         while sth.execute_scan_query(f'SELECT COUNT(*) FROM `{sth.get_full_path('store/table')}`').result_set.rows[0][0]:
             time.sleep(10)
-        

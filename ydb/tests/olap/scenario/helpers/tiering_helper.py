@@ -48,7 +48,7 @@ class TieringPolicy:
 
     def __init__(self):
         self.rules = []
-    
+
     def with_rule(self, rule: TieringRule):
         self.rules.append(rule)
         return self
@@ -218,7 +218,7 @@ class DropObjectBase(ScenarioTestHelper.IYqlble):
     @override
     def to_yql(self, ctx: TestContext) -> str:
         return f'DROP OBJECT `{self._name}` (TYPE {self._object_type()})'
-    
+
     @abstractmethod
     def _object_type(self) -> str:
         pass

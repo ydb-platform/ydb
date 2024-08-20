@@ -45,7 +45,7 @@ PEERDIR(
     ydb/library/persqueue/tests
     ydb/library/persqueue/topic_parser
     ydb/public/api/grpc
-    ydb/public/sdk/cpp/src/client/persqueue_core/ut/ut_utils
+    ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
     ydb/public/sdk/cpp/src/client/persqueue_public
     ydb/public/sdk/cpp/src/client/table
     ydb/public/sdk/cpp/src/client/topic

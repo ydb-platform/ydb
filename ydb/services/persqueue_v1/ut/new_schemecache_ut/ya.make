@@ -29,7 +29,7 @@ PEERDIR(
     ydb/core/testlib/default
     ydb/public/api/grpc
     ydb/public/sdk/cpp/src/client/resources
-    ydb/public/sdk/cpp/src/client/persqueue_core/ut/ut_utils
+    ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
     ydb/public/sdk/cpp/src/client/table
     ydb/services/persqueue_v1
 )

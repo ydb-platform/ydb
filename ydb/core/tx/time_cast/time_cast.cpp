@@ -385,7 +385,6 @@ void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvUpdate::TPtr &ev, co
         << " HANDLE "<< ev->Get()->ToString());
 
     const NKikimrTxMediatorTimecast::TEvUpdate &record = ev->Get()->Record;
-    Y_ABORT_UNLESS(record.ExemptionSize() == 0, "exemption lists are not supported yet");
 
     const ui64 mediatorTabletId = record.GetMediator();
     auto it = Mediators.find(mediatorTabletId);

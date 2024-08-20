@@ -646,6 +646,10 @@ Y_UNIT_TEST_SUITE(PgExtensions) {
 
     Y_UNIT_TEST(ProcsAndType) {
         NPg::ClearExtensions();
+        if (NPg::AreAllFunctionsAllowed()) {
+            return;
+        }
+
         NPg::TExtensionDesc desc;
         TTempFileHandle h;
         TStringBuf sql = R"(
@@ -730,6 +734,242 @@ Y_UNIT_TEST_SUITE(PgExtensions) {
             UNIT_ASSERT_VALUES_EQUAL(data[rowStep * 0 + remap[1]], "a");
             UNIT_ASSERT(!data[rowStep * 1 + remap[0]].Defined());
             UNIT_ASSERT_VALUES_EQUAL(data[rowStep * 1 + remap[1]], "b");
+        };
+
+        validate();
+        auto exported = NPg::ExportExtensions();
+        NPg::ClearExtensions();
+        NPg::ImportExtensions(exported, true, nullptr);
+        validate();
+    }
+
+    Y_UNIT_TEST(Casts) {
+        NPg::ClearExtensions();
+        if (NPg::AreAllFunctionsAllowed()) {
+            return;
+        }
+
+        NPg::TExtensionDesc desc;
+        TTempFileHandle h;
+        TStringBuf sql = R"(
+            CREATE TYPE foo (
+                alignment = double,
+                internallength = variable
+            );
+
+            CREATE TYPE bar (
+                alignment = double,
+                internallength = variable
+            );
+
+            CREATE OR REPLACE FUNCTION bar(foo)
+                RETURNS bar
+                AS '$libdir/MyExt','foo_to_bar'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE CAST (foo AS bar) WITH FUNCTION bar(foo);
+        )";
+
+        h.Write(sql.Data(), sql.Size());
+        desc.Name = "MyExt";
+        desc.InstallName = "$libdir/MyExt";
+        desc.SqlPaths.push_back(h.Name());
+        NPg::RegisterExtensions({desc}, true, *NSQLTranslationPG::CreateExtensionSqlParser(), nullptr);
+        auto validate = [&]() {
+            auto sourceId = NPg::LookupType("foo").TypeId;
+            auto targetId = NPg::LookupType("bar").TypeId;
+            UNIT_ASSERT(NPg::HasCast(sourceId, targetId));
+            const auto& cast = NPg::LookupCast(sourceId, targetId);
+            UNIT_ASSERT_VALUES_EQUAL(cast.SourceId, sourceId);
+            UNIT_ASSERT_VALUES_EQUAL(cast.TargetId, targetId);
+            UNIT_ASSERT_VALUES_EQUAL((ui32)cast.Method, (ui32)NPg::ECastMethod::Function);
+            UNIT_ASSERT_VALUES_EQUAL(cast.CoercionCode, NPg::ECoercionCode::Explicit);
+            UNIT_ASSERT_VALUES_EQUAL(cast.FunctionId, NPg::LookupProc("bar",{sourceId}).ProcId);
+        };
+
+        validate();
+        auto exported = NPg::ExportExtensions();
+        NPg::ClearExtensions();
+        NPg::ImportExtensions(exported, true, nullptr);
+        validate();
+    }
+
+    Y_UNIT_TEST(Operators) {
+        NPg::ClearExtensions();
+        if (NPg::AreAllFunctionsAllowed()) {
+            return;
+        }
+
+        NPg::TExtensionDesc desc;
+        TTempFileHandle h;
+        TStringBuf sql = R"(
+            CREATE TYPE foo (
+                alignment = double,
+                internallength = variable
+            );
+
+            CREATE OR REPLACE FUNCTION foo_lt(foo, foo)
+                RETURNS bool
+                AS '$libdir/MyExt','foo_lt'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE OR REPLACE FUNCTION foo_le(foo, foo)
+                RETURNS bool
+                AS '$libdir/MyExt','foo_le'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE OR REPLACE FUNCTION foo_gt(foo, foo)
+                RETURNS bool
+                AS '$libdir/MyExt','foo_gt'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE OR REPLACE FUNCTION foo_ge(foo, foo)
+                RETURNS bool
+                AS '$libdir/MyExt','foo_ge'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE OPERATOR < (
+                LEFTARG = foo, RIGHTARG = foo, PROCEDURE = foo_lt,
+                COMMUTATOR = '>', NEGATOR = '>='
+            );
+
+            CREATE OPERATOR <= (
+                LEFTARG = foo, RIGHTARG = foo, PROCEDURE = foo_le,
+                COMMUTATOR = '>=', NEGATOR = '>'
+            );
+
+            CREATE OPERATOR > (
+                LEFTARG = foo, RIGHTARG = foo, PROCEDURE = foo_gt,
+                COMMUTATOR = '<', NEGATOR = '<='
+            );
+
+            CREATE OPERATOR >= (
+                LEFTARG = foo, RIGHTARG = foo, PROCEDURE = foo_ge,
+                COMMUTATOR = '<=', NEGATOR = '<'
+            );
+        )";
+
+        h.Write(sql.Data(), sql.Size());
+        desc.Name = "MyExt";
+        desc.InstallName = "$libdir/MyExt";
+        desc.SqlPaths.push_back(h.Name());
+        NPg::RegisterExtensions({desc}, true, *NSQLTranslationPG::CreateExtensionSqlParser(), nullptr);
+        auto validate = [&]() {
+            auto typeId = NPg::LookupType("foo").TypeId;
+            TVector<ui32> args { typeId, typeId };
+            auto lessProcId = NPg::LookupProc("foo_lt", args).ProcId;
+            auto lessOrEqualProcId = NPg::LookupProc("foo_le", args).ProcId;
+            auto greaterProcId = NPg::LookupProc("foo_gt", args).ProcId;
+            auto greaterOrEqualProcId = NPg::LookupProc("foo_ge", args).ProcId;
+
+            const auto& lessOp = NPg::LookupOper("<", args);
+            const auto& lessOrEqualOp = NPg::LookupOper("<=", args);
+            const auto& greaterOp = NPg::LookupOper(">", args);
+            const auto& greaterOrEqualOp = NPg::LookupOper(">=", args);
+
+            UNIT_ASSERT_VALUES_EQUAL(lessOp.Name, "<");
+            UNIT_ASSERT_VALUES_EQUAL(lessOp.LeftType, typeId);
+            UNIT_ASSERT_VALUES_EQUAL(lessOp.RightType, typeId);
+            UNIT_ASSERT_VALUES_EQUAL(lessOp.ProcId, lessProcId);
+            UNIT_ASSERT_VALUES_EQUAL(lessOp.ComId, greaterOp.OperId);
+            UNIT_ASSERT_VALUES_EQUAL(lessOp.NegateId, greaterOrEqualOp.OperId);
+
+            UNIT_ASSERT_VALUES_EQUAL(lessOrEqualOp.Name, "<=");
+            UNIT_ASSERT_VALUES_EQUAL(lessOrEqualOp.LeftType, typeId);
+            UNIT_ASSERT_VALUES_EQUAL(lessOrEqualOp.RightType, typeId);
+            UNIT_ASSERT_VALUES_EQUAL(lessOrEqualOp.ProcId, lessOrEqualProcId);
+            UNIT_ASSERT_VALUES_EQUAL(lessOrEqualOp.ComId, greaterOrEqualOp.OperId);
+            UNIT_ASSERT_VALUES_EQUAL(lessOrEqualOp.NegateId, greaterOp.OperId);
+
+            UNIT_ASSERT_VALUES_EQUAL(greaterOp.Name, ">");
+            UNIT_ASSERT_VALUES_EQUAL(greaterOp.LeftType, typeId);
+            UNIT_ASSERT_VALUES_EQUAL(greaterOp.RightType, typeId);
+            UNIT_ASSERT_VALUES_EQUAL(greaterOp.ProcId, greaterProcId);
+            UNIT_ASSERT_VALUES_EQUAL(greaterOp.ComId, lessOp.OperId);
+            UNIT_ASSERT_VALUES_EQUAL(greaterOp.NegateId, lessOrEqualOp.OperId);
+
+            UNIT_ASSERT_VALUES_EQUAL(greaterOrEqualOp.Name, ">=");
+            UNIT_ASSERT_VALUES_EQUAL(greaterOrEqualOp.LeftType, typeId);
+            UNIT_ASSERT_VALUES_EQUAL(greaterOrEqualOp.RightType, typeId);
+            UNIT_ASSERT_VALUES_EQUAL(greaterOrEqualOp.ProcId, greaterOrEqualProcId);
+            UNIT_ASSERT_VALUES_EQUAL(greaterOrEqualOp.ComId, lessOrEqualOp.OperId);
+            UNIT_ASSERT_VALUES_EQUAL(greaterOrEqualOp.NegateId, lessOp.OperId);
+        };
+
+        validate();
+        auto exported = NPg::ExportExtensions();
+        NPg::ClearExtensions();
+        NPg::ImportExtensions(exported, true, nullptr);
+        validate();
+    }
+
+    Y_UNIT_TEST(Aggregates) {
+        NPg::ClearExtensions();
+        if (NPg::AreAllFunctionsAllowed()) {
+            return;
+        }
+
+        NPg::TExtensionDesc desc;
+        TTempFileHandle h;
+        TStringBuf sql = R"(
+            CREATE TYPE foo (
+                alignment = double,
+                internallength = variable
+            );
+
+            CREATE OR REPLACE FUNCTION foo_agg_trans(internal, foo)
+                RETURNS internal
+                AS '$libdir/MyExt','foo_agg_trans'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE OR REPLACE FUNCTION foo_agg_final(internal)
+                RETURNS foo
+                AS '$libdir/MyExt','foo_agg_final'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE OR REPLACE FUNCTION foo_agg_combine(internal, internal)
+                RETURNS internal
+                AS '$libdir/MyExt','foo_agg_combine'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE OR REPLACE FUNCTION foo_agg_serial(internal)
+                RETURNS bytea
+                AS '$libdir/MyExt','foo_agg_serial'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE OR REPLACE FUNCTION foo_agg_deserial(bytea, internal)
+                RETURNS internal
+                AS '$libdir/MyExt','foo_agg_deserial'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE AGGREGATE foo_agg(foo) (
+                sfunc = foo_agg_trans,
+                stype = internal,
+                serialfunc = foo_agg_serial,
+                deserialfunc = foo_agg_deserial,
+                combinefunc = foo_agg_combine,
+                finalfunc = foo_agg_final
+            );
+        )";
+
+        h.Write(sql.Data(), sql.Size());
+        desc.Name = "MyExt";
+        desc.InstallName = "$libdir/MyExt";
+        desc.SqlPaths.push_back(h.Name());
+        NPg::RegisterExtensions({desc}, true, *NSQLTranslationPG::CreateExtensionSqlParser(), nullptr);
+        auto validate = [&]() {
+            auto typeId = NPg::LookupType("foo").TypeId;
+            auto internalTypeId = NPg::LookupType("internal").TypeId;
+            auto byteaTypeId = NPg::LookupType("bytea").TypeId;
+            const auto& desc = NPg::LookupAggregation("foo_agg", { typeId });
+            UNIT_ASSERT_VALUES_EQUAL(desc.Name, "foo_agg");
+            UNIT_ASSERT_VALUES_EQUAL(desc.ArgTypes, TVector<ui32>{typeId});
+            UNIT_ASSERT_VALUES_EQUAL(desc.TransTypeId, internalTypeId);
+            UNIT_ASSERT_VALUES_EQUAL(desc.TransFuncId, NPg::LookupProc("foo_agg_trans", {internalTypeId, typeId}).ProcId);
+            UNIT_ASSERT_VALUES_EQUAL(desc.FinalFuncId, NPg::LookupProc("foo_agg_final", {internalTypeId}).ProcId);
+            UNIT_ASSERT_VALUES_EQUAL(desc.SerializeFuncId, NPg::LookupProc("foo_agg_serial", {internalTypeId}).ProcId);
+            UNIT_ASSERT_VALUES_EQUAL(desc.DeserializeFuncId, NPg::LookupProc("foo_agg_deserial", {byteaTypeId, internalTypeId}).ProcId);
+            UNIT_ASSERT_VALUES_EQUAL(desc.CombineFuncId, NPg::LookupProc("foo_agg_combine", {internalTypeId, internalTypeId}).ProcId);
         };
 
         validate();

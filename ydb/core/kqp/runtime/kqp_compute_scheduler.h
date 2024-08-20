@@ -74,6 +74,7 @@ public:
 
     void SetPriorities(TDistributionRule rootRule, double cores, TMonotonic now);
     void SetMaxDeviation(TDuration);
+    void SetForgetInterval(TDuration);
     ::NMonitoring::TDynamicCounters::TCounterPtr GetGroupUsageCounter(TString group) const;
 
     TSchedulerEntityHandle Enroll(TString group, double weight, TMonotonic now);

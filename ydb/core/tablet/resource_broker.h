@@ -191,6 +191,7 @@ struct TEvResourceBroker {
     struct TEvConfigure : public TEventPB<TEvConfigure,
                                           NKikimrResourceBroker::TResourceBrokerConfig,
                                           EvConfigure> {
+        bool Merge = false;
     };
 
     struct TEvConfigureResult : public TEventPB<TEvConfigureResult,

@@ -1,4 +1,5 @@
 #include "auto_config_initializer.h"
+#include "config_helpers.h"
 #include "config.h"
 #include "kikimr_services_initializers.h"
 #include "service_initializer.h"
@@ -187,6 +188,9 @@
 #include <ydb/core/tx/limiter/usage/config.h>
 #include <ydb/core/tx/limiter/usage/service.h>
 
+#include <ydb/core/tx/limiter/grouped_memory/usage/config.h>
+#include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
+
 #include <ydb/core/backup/controller/tablet.h>
 
 #include <ydb/services/ext_index/common/config.h>
@@ -274,42 +278,6 @@ IKikimrServicesInitializer::IKikimrServicesInitializer(const TKikimrRunConfig& r
 
 // TBasicServicesInitializer
 
-template <class TConfig>
-static TCpuMask ParseAffinity(const TConfig& cfg) {
-    TCpuMask result;
-    if (cfg.GetCpuList()) {
-        result = TCpuMask(cfg.GetCpuList());
-    } else if (cfg.GetX().size() > 0) {
-        result = TCpuMask(cfg.GetX().data(), cfg.GetX().size());
-    } else { // use all processors
-        TAffinity available;
-        available.Current();
-        result = available;
-    }
-    if (cfg.GetExcludeCpuList()) {
-        result = result - TCpuMask(cfg.GetExcludeCpuList());
-    }
-    return result;
-}
-
-TDuration GetSelfPingInterval(const NKikimrConfig::TActorSystemConfig& systemConfig) {
-    return systemConfig.HasSelfPingInterval()
-        ? TDuration::MicroSeconds(systemConfig.GetSelfPingInterval())
-        : TDuration::MilliSeconds(10);
-}
-
-
-NActors::EASProfile ConvertActorSystemProfile(NKikimrConfig::TActorSystemConfig::EActorSystemProfile profile) {
-    switch (profile) {
-    case NKikimrConfig::TActorSystemConfig::DEFAULT:
-        return NActors::EASProfile::Default;
-    case NKikimrConfig::TActorSystemConfig::LOW_CPU_CONSUMPTION:
-        return NActors::EASProfile::LowCpuConsumption;
-    case NKikimrConfig::TActorSystemConfig::LOW_LATENCY:
-        return NActors::EASProfile::LowLatency;
-    }
-}
-
 void AddExecutorPool(
     TCpuManagerConfig& cpuManager,
     const NKikimrConfig::TActorSystemConfig::TExecutor& poolConfig,
@@ -318,55 +286,7 @@ void AddExecutorPool(
     const NKikimr::TAppData* appData)
 {
     const auto counters = GetServiceCounters(appData->Counters, "utils");
-    switch (poolConfig.GetType()) {
-    case NKikimrConfig::TActorSystemConfig::TExecutor::BASIC: {
-        TBasicExecutorPoolConfig basic;
-        basic.PoolId = poolId;
-        basic.PoolName = poolConfig.GetName();
-        if (poolConfig.HasMaxAvgPingDeviation()) {
-            auto poolGroup = counters->GetSubgroup("execpool", basic.PoolName);
-            auto &poolInfo = cpuManager.PingInfoByPool[poolId];
-            poolInfo.AvgPingCounter = poolGroup->GetCounter("SelfPingAvgUs", false);
-            poolInfo.AvgPingCounterWithSmallWindow = poolGroup->GetCounter("SelfPingAvgUsIn1s", false);
-            TDuration maxAvgPing = GetSelfPingInterval(systemConfig) + TDuration::MicroSeconds(poolConfig.GetMaxAvgPingDeviation());
-            poolInfo.MaxAvgPingUs = maxAvgPing.MicroSeconds();
-        }
-        basic.Threads = Max(poolConfig.GetThreads(), poolConfig.GetMaxThreads());
-        basic.SpinThreshold = poolConfig.GetSpinThreshold();
-        basic.Affinity = ParseAffinity(poolConfig.GetAffinity());
-        basic.RealtimePriority = poolConfig.GetRealtimePriority();
-        basic.HasSharedThread = poolConfig.GetHasSharedThread();
-        if (poolConfig.HasTimePerMailboxMicroSecs()) {
-            basic.TimePerMailbox = TDuration::MicroSeconds(poolConfig.GetTimePerMailboxMicroSecs());
-        } else if (systemConfig.HasTimePerMailboxMicroSecs()) {
-            basic.TimePerMailbox = TDuration::MicroSeconds(systemConfig.GetTimePerMailboxMicroSecs());
-        }
-        if (poolConfig.HasEventsPerMailbox()) {
-            basic.EventsPerMailbox = poolConfig.GetEventsPerMailbox();
-        } else if (systemConfig.HasEventsPerMailbox()) {
-            basic.EventsPerMailbox = systemConfig.GetEventsPerMailbox();
-        }
-        basic.ActorSystemProfile = ConvertActorSystemProfile(systemConfig.GetActorSystemProfile());
-        Y_ABORT_UNLESS(basic.EventsPerMailbox != 0);
-        basic.MinThreadCount = poolConfig.GetMinThreads();
-        basic.MaxThreadCount = poolConfig.GetMaxThreads();
-        basic.DefaultThreadCount = poolConfig.GetThreads();
-        basic.Priority = poolConfig.GetPriority();
-        cpuManager.Basic.emplace_back(std::move(basic));
-        break;
-    }
-    case NKikimrConfig::TActorSystemConfig::TExecutor::IO: {
-        TIOExecutorPoolConfig io;
-        io.PoolId = poolId;
-        io.PoolName = poolConfig.GetName();
-        io.Threads = poolConfig.GetThreads();
-        io.Affinity = ParseAffinity(poolConfig.GetAffinity());
-        cpuManager.IO.emplace_back(std::move(io));
-        break;
-    }
-    default:
-        Y_ABORT();
-    }
+    NActorSystemConfigHelpers::AddExecutorPool(cpuManager, poolConfig, systemConfig, poolId, counters);
 }
 
 static TCpuManagerConfig CreateCpuManagerConfig(const NKikimrConfig::TActorSystemConfig& config,
@@ -378,16 +298,6 @@ static TCpuManagerConfig CreateCpuManagerConfig(const NKikimrConfig::TActorSyste
         AddExecutorPool(cpuManager, config.GetExecutor(poolId), config, poolId, appData);
     }
     return cpuManager;
-}
-
-static TSchedulerConfig CreateSchedulerConfig(const NKikimrConfig::TActorSystemConfig::TScheduler &config) {
-    const ui64 resolution = config.HasResolution() ? config.GetResolution() : 1024;
-    Y_DEBUG_ABORT_UNLESS((resolution & (resolution - 1)) == 0);  // resolution must be power of 2
-    const ui64 spinThreshold = config.HasSpinThreshold() ? config.GetSpinThreshold() : 0;
-    const ui64 progressThreshold = config.HasProgressThreshold() ? config.GetProgressThreshold() : 10000;
-    const bool useSchedulerActor = config.HasUseSchedulerActor() ? config.GetUseSchedulerActor() : false;
-
-    return TSchedulerConfig(resolution, spinThreshold, progressThreshold, useSchedulerActor);
 }
 
 static bool IsServiceInitialized(NActors::TActorSystemSetup* setup, TActorId service)
@@ -487,6 +397,9 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
             break;
     }
     result.TlsAuthOnly = config.GetTlsAuthOnly();
+    if (const auto& forbidden = config.GetForbiddenSignatureAlgorithms(); !forbidden.empty()) {
+        result.ForbiddenSignatureAlgorithms = {forbidden.begin(), forbidden.end()};
+    }
 
     if (config.HasTCPSocketBufferSize())
         result.TCPSocketBufferSize = config.GetTCPSocketBufferSize();
@@ -598,7 +511,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     setup->CpuManager = CreateCpuManagerConfig(systemConfig, appData);
     setup->MonitorStuckActors = systemConfig.GetMonitorStuckActors();
 
-    auto schedulerConfig = CreateSchedulerConfig(systemConfig.GetScheduler());
+    auto schedulerConfig = NActorSystemConfigHelpers::CreateSchedulerConfig(systemConfig.GetScheduler());
     schedulerConfig.MonCounters = GetServiceCounters(counters, "utils");
     setup->Scheduler.Reset(CreateSchedulerThread(schedulerConfig));
     setup->LocalServices.emplace_back(MakeIoDispatcherActorId(), TActorSetupCmd(CreateIoDispatcherActor(
@@ -1262,7 +1175,7 @@ void TSchedulerActorInitializer::InitializeServices(
             NActors::TActorSystemSetup* setup,
             const NKikimr::TAppData* appData) {
     auto& systemConfig = Config.GetActorSystemConfig();
-    NActors::IActor *schedulerActor = CreateSchedulerActor(CreateSchedulerConfig(systemConfig.GetScheduler()));
+    NActors::IActor *schedulerActor = CreateSchedulerActor(NActorSystemConfigHelpers::CreateSchedulerConfig(systemConfig.GetScheduler()));
     if (schedulerActor) {
         NActors::TActorSetupCmd schedulerActorCmd(schedulerActor, NActors::TMailboxType::ReadAsFilled, appData->SystemPoolId);
         setup->LocalServices.emplace_back(MakeSchedulerActorId(), std::move(schedulerActorCmd));
@@ -1669,7 +1582,7 @@ void TSecurityServicesInitializer::InitializeServices(NActors::TActorSystemSetup
             .AuthConfig = Config.GetAuthConfig(),
             .CertificateAuthValues = {
                 .ClientCertificateAuthorization = Config.GetClientCertificateAuthorization(),
-                .ServerCertificateFilePath = grpcConfig.GetCert(),
+                .ServerCertificateFilePath = grpcConfig.HasPathToCertificateFile() ? grpcConfig.GetPathToCertificateFile() : grpcConfig.GetCert(),
                 .Domain = Config.GetAuthConfig().GetCertificateAuthenticationDomain()
             }
         };
@@ -2005,7 +1918,8 @@ TPersQueueL2CacheInitializer::TPersQueueL2CacheInitializer(const TKikimrRunConfi
 {}
 
 void TPersQueueL2CacheInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    static const ui64 DEFAULT_PQ_L2_MAX_SIZE_MB = 8 * 1024;
+    static const ui64 DEFAULT_PQ_L2_MAX_SIZE_MB =
+        NKikimrNodeLimits::TNodeLimitsConfig_TPersQueueNodeConfig::default_instance().GetSharedCacheSizeMb();
     static const TDuration DEFAULT_PQ_L2_KEEP_TIMEOUT = TDuration::Seconds(10);
 
     NPQ::TCacheL2Parameters params;
@@ -2213,6 +2127,26 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpFinalizeScriptServiceId(NodeId),
             TActorSetupCmd(finalize, TMailboxType::HTSwap, appData->UserPoolId)));
+    }
+}
+
+TGroupedMemoryLimiterInitializer::TGroupedMemoryLimiterInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig) {
+}
+
+void TGroupedMemoryLimiterInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    NOlap::NGroupedMemoryManager::TConfig serviceConfig;
+    Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetGroupedMemoryLimiterConfig()));
+
+    if (serviceConfig.IsEnabled()) {
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup = tabletGroup->GetSubgroup("type", "TX_GROUPED_MEMORY_LIMITER");
+
+        auto service = NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(serviceConfig, countersGroup);
+
+        setup->LocalServices.push_back(std::make_pair(
+            NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::MakeServiceId(NodeId),
+            TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
     }
 }
 

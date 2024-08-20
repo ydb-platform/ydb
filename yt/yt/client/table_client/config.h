@@ -154,6 +154,8 @@ public:
 
     double SampleRate;
 
+    bool EnableLargeColumnarStatistics;
+
     TChunkIndexesWriterConfigPtr ChunkIndexes;
 
     TSlimVersionedWriterConfigPtr Slim;

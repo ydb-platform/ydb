@@ -68,6 +68,7 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/library/yql/udfs/common/histogram
     ydb/library/yql/udfs/common/hyperloglog
     ydb/library/yql/udfs/common/hyperscan
+    ydb/library/yql/udfs/common/json
     ydb/library/yql/udfs/common/json2
     ydb/library/yql/udfs/common/math
     ydb/library/yql/udfs/common/pire

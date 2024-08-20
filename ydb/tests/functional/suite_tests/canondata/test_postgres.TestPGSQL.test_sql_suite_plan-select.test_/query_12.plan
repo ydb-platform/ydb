@@ -41,7 +41,7 @@
                                                 "Name": "Limit"
                                             },
                                             {
-                                                "Condition": "unique1,stringu1 = i,j",
+                                                "Condition": "onek.unique1,onek.stringu1 = v.i,v.j",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 2
@@ -110,7 +110,10 @@
                     }
                 ]
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

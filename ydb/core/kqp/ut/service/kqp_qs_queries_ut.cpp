@@ -268,6 +268,47 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
+    Y_UNIT_TEST(ExecuteQueryWithResourcePoolClassifier) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableResourcePools(true);
+
+        auto kikimr = TKikimrRunner(TKikimrSettings()
+            .SetAppConfig(config)
+            .SetEnableResourcePools(true));
+        auto db = kikimr.GetQueryClient();
+
+        const TString userSID = TStringBuilder() << "test@" << BUILTIN_ACL_DOMAIN;
+        const TString schemeSql = TStringBuilder() << R"(
+            CREATE RESOURCE POOL MyPool WITH (
+                CONCURRENT_QUERY_LIMIT=0
+            );
+            CREATE RESOURCE POOL CLASSIFIER MyPoolClassifier WITH (
+                RESOURCE_POOL="MyPool",
+                MEMBERNAME=")" << userSID << R"("
+            );
+            GRANT ALL ON `/Root` TO `)" << userSID << R"(`;
+        )";
+        auto schemeResult = db.ExecuteQuery(schemeSql, TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(schemeResult.GetStatus(), EStatus::SUCCESS, schemeResult.GetIssues().ToString());
+
+        auto testUserClient = kikimr.GetQueryClient(TClientSettings().AuthToken(userSID));
+        const TDuration timeout = TDuration::Seconds(5);
+        const TInstant start = TInstant::Now();
+        while (TInstant::Now() - start <= timeout) {
+            const TString query = "SELECT 42;";
+            auto result = testUserClient.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            if (!result.IsSuccess()) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pool MyPool was disabled due to zero concurrent query limit");
+                return;
+            }
+
+            Cerr << "Wait resource pool classifier " << TInstant::Now() - start << ": status = " << result.GetStatus() << ", issues = " << result.GetIssues().ToOneLineString() << "\n";
+            Sleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_C(false, "Waiting resource pool classifier timeout. Spent time " << TInstant::Now() - start << " exceeds limit " << timeout);
+    }
+
     std::pair<ui32, ui32> CalcRowsAndBatches(TExecuteQueryIterator& it) {
         ui32 totalRows = 0;
         ui32 totalBatches = 0;
@@ -3142,7 +3183,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         CompareYson(output, R"([[1u;"test1";[10];["1"]];[2u;"test2";#;["2"]];[3u;"test3";[12];#];[4u;"test4";#;#];[100u;"test100";[1000];["100"]]])");
     }
 
-    Y_UNIT_TEST(TableSink_OltpReplace) {
+    Y_UNIT_TEST_TWIN(TableSink_OltpReplace, HasSecondaryIndex) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         auto settings = TKikimrSettings()
@@ -3154,14 +3195,15 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
-        const TString query = R"(
+        const TString query = Sprintf(R"(
             CREATE TABLE `/Root/DataShard` (
                 Col1 Uint64 NOT NULL,
                 Col2 Int32,
                 Col3 String,
+                %s
                 PRIMARY KEY (Col1)
             );
-        )";
+        )", (HasSecondaryIndex ? "INDEX idx_2 GLOBAL ON (Col2)," : ""));
 
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());

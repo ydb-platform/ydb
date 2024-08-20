@@ -187,20 +187,23 @@ namespace NKikimr::NDataStreams::V1 {
             }
 
             auto& s = GetProtoRequest()->partitioning_settings();
-            auto* t = topicRequest.mutable_partitioning_settings();
-            t->set_min_active_partitions(s.min_active_partitions());
-            t->set_max_active_partitions(s.max_active_partitions());
-
             auto& as = s.auto_partitioning_settings();
+
+            auto* t = topicRequest.mutable_partitioning_settings();
             auto* at = t->mutable_auto_partitioning_settings();
+
             at->set_strategy(static_cast<::Ydb::Topic::AutoPartitioningStrategy>(as.strategy()));
+            if (at->strategy() != ::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED) {
+                t->set_min_active_partitions(s.min_active_partitions());
+                t->set_max_active_partitions(s.max_active_partitions());
 
-            auto& ws = as.partition_write_speed();
-            auto* wt = at->mutable_partition_write_speed();
+                auto& ws = as.partition_write_speed();
+                auto* wt = at->mutable_partition_write_speed();
 
-            wt->mutable_stabilization_window()->CopyFrom(ws.stabilization_window());
-            wt->set_up_utilization_percent(ws.up_utilization_percent());
-            wt->set_down_utilization_percent(ws.down_utilization_percent());
+                wt->mutable_stabilization_window()->CopyFrom(ws.stabilization_window());
+                wt->set_up_utilization_percent(ws.up_utilization_percent());
+                wt->set_down_utilization_percent(ws.down_utilization_percent());
+            }
         }
 
         auto pqDescr = modifyScheme.MutableCreatePersQueueGroup();
@@ -507,17 +510,21 @@ namespace NKikimr::NDataStreams::V1 {
                     break;
             }
 
-            t->SetMinPartitionCount(s.min_active_partitions() ? s.min_active_partitions() : 1);
-            if (!s.max_active_partitions() && t->GetPartitionStrategyType() != NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED) {
-                t->SetMaxPartitionCount(1);
-            } else {
-                t->SetMaxPartitionCount(s.max_active_partitions());
-            }
+            if (t->GetPartitionStrategyType() != NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED) {
+                t->SetMinPartitionCount(s.min_active_partitions() ? s.min_active_partitions() : 1);
+                if (!s.max_active_partitions() && t->GetPartitionStrategyType() != NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED) {
+                    t->SetMaxPartitionCount(1);
+                } else {
+                    t->SetMaxPartitionCount(s.max_active_partitions());
+                }
 
-            auto& ws = as.partition_write_speed();
-            t->SetScaleThresholdSeconds(ws.stabilization_window().seconds() ? ws.stabilization_window().seconds() : 300);
-            t->SetScaleUpPartitionWriteSpeedThresholdPercent(ws.up_utilization_percent() ? ws.up_utilization_percent() : 90);
-            t->SetScaleDownPartitionWriteSpeedThresholdPercent(ws.down_utilization_percent() ? ws.down_utilization_percent() : 30);
+                auto& ws = as.partition_write_speed();
+                t->SetScaleThresholdSeconds(ws.stabilization_window().seconds() ? ws.stabilization_window().seconds() : 300);
+                t->SetScaleUpPartitionWriteSpeedThresholdPercent(ws.up_utilization_percent() ? ws.up_utilization_percent() : 90);
+                t->SetScaleDownPartitionWriteSpeedThresholdPercent(ws.down_utilization_percent() ? ws.down_utilization_percent() : 30);
+            } else if (0 == s.max_active_partitions()) {
+                t->SetMaxPartitionCount(0);
+            }
         }
 
         auto serviceTypes = GetSupportedClientServiceTypes(pqConfig);

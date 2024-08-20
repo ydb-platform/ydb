@@ -65,7 +65,8 @@ std::shared_ptr<TJoinOptimizerNodeInternal> MakeJoinInternal(
     const TVector<TString>& rightJoinKeys,
     EJoinKind joinKind,
     EJoinAlgoType joinAlgo,
-    IProviderContext& ctx
+    IProviderContext& ctx,
+    TCardinalityHints::TCardinalityHint* maybeHint = nullptr
 );
 
 /**

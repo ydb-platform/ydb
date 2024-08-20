@@ -36,6 +36,8 @@ DEFINE_ENUM(EMultiplexingBand,
     ((RealTime)              (4))
 );
 
+EMultiplexingBand GetDefaultValue(EMultiplexingBand);
+
 YT_DEFINE_ERROR_ENUM(
     ((TransportError)       (100))
     ((SslError)             (119))
@@ -59,4 +61,3 @@ extern const TString LocalNetworkName;
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NBus
-

@@ -192,7 +192,7 @@ Pear,15,'''
         assert result_set.rows[2].items[1].text_value == ""
         assert result_set.rows[2].items[2].int64_value == 15
         assert sum(kikimr.control_plane.get_metering(1)) == 10
-    
+
     @yq_v2
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_inference_optional_types(self, kikimr, s3, client, unique_prefix):
@@ -309,6 +309,39 @@ Apple,2,22,
         assert result_set.rows[2].items[1].int64_value == 2
         assert result_set.rows[2].items[2].int64_value == 3
         assert sum(kikimr.control_plane.get_metering(1)) == 10
+
+    @yq_v2
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_inference_file_error(self, kikimr, s3, client, unique_prefix):
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("fbucket")
+        bucket.create(ACL='public-read')
+        bucket.objects.all().delete()
+
+        s3_client = boto3.client(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        read_data = '''{"a" : [10, 20, 30]}'''
+        s3_client.put_object(Body=read_data, Bucket='fbucket', Key='data.json', ContentType='text/plain')
+        kikimr.control_plane.wait_bootstrap(1)
+        storage_connection_name = unique_prefix + "json_bucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            SELECT *
+            FROM `{storage_connection_name}`.`data.json`
+            WITH (format=csv_with_names, with_infer='true');
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        assert "couldn\\'t parse csv/tsv file, check format and compression params:" in str(
+            client.describe_query(query_id).result
+        )
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)

@@ -40,11 +40,11 @@ public:
     void CompressScriptArtifacts() const {
         auto& description = Request->Get()->Description;
 
-        bool truncated = false;
+        TString astTruncateDescription;
         if (size_t planSize = description.QueryPlan.value_or("").size(); description.QueryAst && description.QueryAst->size() + planSize > MAX_ARTIFACTS_SIZE_BYTES) {
+            astTruncateDescription = TStringBuilder() << "Query artifacts size is " << description.QueryAst->size() + planSize << " bytes (plan + ast), that is larger than allowed limit " << MAX_ARTIFACTS_SIZE_BYTES << " bytes, ast was truncated";
             size_t toRemove = std::min(description.QueryAst->size() + planSize - MAX_ARTIFACTS_SIZE_BYTES, description.QueryAst->size());
             description.QueryAst = TruncateString(*description.QueryAst, description.QueryAst->size() - toRemove);
-            truncated = true;
         }
 
         auto ast = description.QueryAst;
@@ -55,13 +55,13 @@ public:
         }
 
         if (description.QueryAst && description.QueryAst->size() > NDataShard::NLimits::MaxWriteValueSize) {
+            astTruncateDescription = TStringBuilder() << "Query ast size is " << description.QueryAst->size() << " bytes, that is larger than allowed limit " << NDataShard::NLimits::MaxWriteValueSize << " bytes, ast was truncated";
             description.QueryAst = TruncateString(*ast, NDataShard::NLimits::MaxWriteValueSize - 1_KB);
             description.QueryAstCompressionMethod = std::nullopt;
-            truncated = true;
         }
 
-        if (truncated) {
-            NYql::TIssue astTruncatedIssue("Query ast was truncated");
+        if (astTruncateDescription) {
+            NYql::TIssue astTruncatedIssue(astTruncateDescription);
             astTruncatedIssue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
             description.Issues.AddIssue(astTruncatedIssue);
         }

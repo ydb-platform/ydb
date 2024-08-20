@@ -21,7 +21,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyState(NTabletFlatExecutor::TTran
 
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(buildId);
         Y_VERIFY_S(buildInfoPtr, "IndexBuilds has no " << buildId);
-        auto& buildInfo = **buildInfoPtr;
+        auto& buildInfo = *buildInfoPtr->Get();
         LOG_I("Change state from " << buildInfo.State << " to " << state);
         buildInfo.State = state;
 
@@ -92,7 +92,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
 
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(buildId);
         Y_VERIFY_S(buildInfoPtr, "IndexBuilds has no " << buildId);
-        auto& buildInfo = **buildInfoPtr;
+        auto& buildInfo = *buildInfoPtr->Get();
 
         TBillingStats toBill = buildInfo.Processed - buildInfo.Billed;
         if (!toBill) {

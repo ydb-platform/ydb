@@ -269,7 +269,7 @@ public:
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(BuildId);
         Y_ABORT_UNLESS(buildInfoPtr);
-        auto& buildInfo = **buildInfoPtr;
+        auto& buildInfo = *buildInfoPtr->Get();
 
         LOG_I("TTxBuildProgress: Resume"
               << ": id# " << BuildId);
@@ -544,7 +544,7 @@ public:
         if (!buildInfoPtr) {
             return true;
         }
-        auto& buildInfo = **buildInfoPtr;
+        auto& buildInfo = *buildInfoPtr->Get();
 
         if (!GotScheduledBilling(buildInfo)) {
             return true;
@@ -601,7 +601,7 @@ public:
         if (!buildInfoPtr) {
             return true;
         }
-        auto& buildInfo = **buildInfoPtr;
+        auto& buildInfo = *buildInfoPtr->Get();
 
         if (!buildInfo.Shards.contains(shardIdx)) {
             return true;
@@ -673,7 +673,7 @@ public:
         if (!buildInfoPtr) {
             return true;
         }
-        auto& buildInfo = **buildInfoPtr;
+        auto& buildInfo = *buildInfoPtr->Get();
         LOG_D("TTxReply : TEvBuildIndexProgressResponse"
               << ", TIndexBuildInfo: " << buildInfo
               << ", record: " << record.ShortDebugString());
@@ -851,7 +851,7 @@ public:
         const auto buildId = *buildIdPtr;
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(buildId);
         Y_ABORT_UNLESS(buildInfoPtr);
-        auto& buildInfo = **buildInfoPtr;
+        auto& buildInfo = *buildInfoPtr->Get();
         LOG_I("TTxReply : TEvNotifyTxCompletionResult"
               << ", txId# " << txId
               << ", buildInfoId: " << buildInfo.Id);
@@ -1139,7 +1139,7 @@ public:
 
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(buildId);
         Y_ABORT_UNLESS(buildInfoPtr);
-        auto& buildInfo = **buildInfoPtr;
+        auto& buildInfo = *buildInfoPtr->Get();
 
         LOG_D("TTxReply : TEvAllocateResult"
               << ", buildInfo: " << buildInfo);

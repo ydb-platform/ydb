@@ -101,7 +101,7 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
                             << " index build in-flight"
                             << ", txId: " << txId
                             << ", at schemeshard: " << Self->TabletID());
-            auto& indexInfo = **indexInfoPtr;
+            auto& indexInfo = *indexInfoPtr->Get();
             if (indexInfo.IsFinished()) {
                 LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                            "NotifyTxCompletion"

@@ -233,7 +233,7 @@ void TSchemeShard::SetupRouting(const TDeque<TIndexBuildId>& indexIds, const TAc
         if (!buildInfoPtr) {
             continue;
         }
-        const auto& buildInfo = **buildInfoPtr;
+        const auto& buildInfo = *buildInfoPtr->Get();
 
         auto handle = [&] (auto txId) {
             if (txId) {

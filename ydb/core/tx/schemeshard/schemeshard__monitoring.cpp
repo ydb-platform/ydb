@@ -704,7 +704,7 @@ private:
                 }
                 return;
             }
-            const auto& info = **indexInfoPtr;
+            const auto& info = *indexInfoPtr->Get();
             TAG(TH4) {str << "Fields";}
             PRE () {
                 str << "BuildInfoId:                   " << info.Id << Endl

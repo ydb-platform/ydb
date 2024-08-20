@@ -4427,7 +4427,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
                     Y_VERIFY_S(buildInfoPtr, "BuildIndex not found"
                                    << ": id# " << id);
-                    auto& buildInfo = **buildInfoPtr;
+                    auto& buildInfo = *buildInfoPtr->Get();
                     buildInfo.AddIndexColumnInfo(rowset);
 
                     if (!rowset.Next()) {
@@ -4447,7 +4447,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
                     Y_VERIFY_S(buildInfoPtr, "BuildIndex not found"
                                    << ": id# " << id);
-                    auto& buildInfo = **buildInfoPtr;
+                    auto& buildInfo = *buildInfoPtr->Get();
                     buildInfo.AddBuildColumnInfo(rowset);
 
                     if (!rowset.Next()) {
@@ -4468,7 +4468,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
                     Y_VERIFY_S(buildInfoPtr, "BuildIndex not found"
                                    << ": id# " << id);
-                    auto& buildInfo = **buildInfoPtr;
+                    auto& buildInfo = *buildInfoPtr->Get();
                     buildInfo.AddShardStatus(rowset);
 
                     if (!rowset.Next()) {

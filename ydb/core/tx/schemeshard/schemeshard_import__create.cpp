@@ -476,7 +476,7 @@ private:
             return InvalidTxId;
         }
 
-        return TTxId(ui64((**infoPtr).Id));
+        return TTxId(ui64((*infoPtr)->Id));
     }
 
     static TString MakeIndexBuildUid(TImportInfo::TPtr importInfo, ui32 itemIdx) {
@@ -558,7 +558,7 @@ private:
     TMaybe<TString> GetIssues(TIndexBuildId indexBuildId) {
         const auto* indexInfoPtr = Self->IndexBuilds.FindPtr(indexBuildId);
         Y_ABORT_UNLESS(indexInfoPtr);
-        const auto& indexInfo = **indexInfoPtr;
+        const auto& indexInfo = *indexInfoPtr->Get();
 
         if (indexInfo.IsDone()) {
             return Nothing();

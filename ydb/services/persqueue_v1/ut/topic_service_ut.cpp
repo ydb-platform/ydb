@@ -1,7 +1,7 @@
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
 #include <ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb-cpp-sdk/client/persqueue_core/ut/ut_utils/test_server.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h >
 #include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb-cpp-sdk/client/types/status_codes.h>
 

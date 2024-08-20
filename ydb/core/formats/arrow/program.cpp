@@ -678,6 +678,27 @@ IStepFunction<TAggregateAssign>::TPtr TAggregateAssign::GetFunction(arrow::compu
     return std::make_shared<TAggregateFunction>(ctx);
 }
 
+TString TAggregateAssign::DebugString() const {
+    TStringBuilder sb;
+    sb << "{";
+    if (Operation != EAggregate::Unspecified) {
+        sb << "op=" << GetFunctionName(Operation) << ";";
+    }
+    if (Arguments.size()) {
+        sb << "arguments=[";
+        for (auto&& i : Arguments) {
+            sb << i.DebugString() << ";";
+        }
+        sb << "];";
+    }
+    sb << "options=" << ScalarOpts.ToString() << ";";
+    if (KernelFunction) {
+        sb << "kernel=" << KernelFunction->name() << ";";
+    }
+    sb << "column=" << Column.DebugString() << ";";
+    sb << "}";
+    return sb;
+}
 
 arrow::Status TProgramStep::ApplyAssignes(TDatumBatch& batch, arrow::compute::ExecContext* ctx) const {
     if (Assignes.empty()) {

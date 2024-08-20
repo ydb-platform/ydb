@@ -323,6 +323,7 @@ public:
     const arrow::compute::ScalarAggregateOptions* GetOptions() const { return &ScalarOpts; }
 
     IStepFunction<TAggregateAssign>::TPtr GetFunction(arrow::compute::ExecContext* ctx) const;
+    TString DebugString() const;
 
 private:
     TColumnInfo Column;
@@ -372,10 +373,18 @@ public:
             sb << "];";
         }
         if (GroupBy.size()) {
-            sb << "group_by_count=" << GroupBy.size() << "; ";
+            sb << "group_by_assignes=[";
+            for (auto&& i : GroupBy) {
+                sb << i.DebugString() << ";";
+            }
+            sb << "];";
         }
         if (GroupByKeys.size()) {
-            sb << "group_by_keys_count=" << GroupByKeys.size() << ";";
+            sb << "group_by_keys=[";
+            for (auto&& i : GroupByKeys) {
+                sb << i.DebugString() << ";";
+            }
+            sb << "];";
         }
 
         sb << "projections=[";

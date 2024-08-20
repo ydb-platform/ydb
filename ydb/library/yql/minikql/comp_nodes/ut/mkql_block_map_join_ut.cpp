@@ -87,6 +87,48 @@ namespace {
             });
     }
 
+    const TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder,
+        EJoinKind joinKind, TVector<ui32> keyColumns,
+        TRuntimeNode& leftArg, TType* leftStruct, const TVector<TStringBuf>& leftItems,
+        const TRuntimeNode& dictNode, const TVector<TStringBuf>& dictItems = {}
+    ) {
+        const auto structType = AS_TYPE(TStructType, leftStruct);
+        const auto listStructType = pgmBuilder.NewListType(leftStruct);
+        leftArg = pgmBuilder.Arg(listStructType);
+
+        const auto leftWideFlow = pgmBuilder.ExpandMap(pgmBuilder.ToFlow(leftArg),
+            [&](TRuntimeNode structNode) -> TRuntimeNode::TList {
+                TRuntimeNode::TList wide;
+                wide.reserve(leftItems.size() + 1);
+                for (const auto& member : leftItems) {
+                    Y_DEBUG_ABORT_UNLESS(structType->FindMemberIndex(member));
+                    wide.emplace_back(pgmBuilder.Member(structNode, member));
+                }
+                Y_DEBUG_ABORT_UNLESS(structType->FindMemberIndex(BlockLengthName));
+                wide.emplace_back(pgmBuilder.Member(structNode, BlockLengthName));
+                return wide;
+            });
+
+        const auto joinNode = pgmBuilder.BlockMapJoinCore(leftWideFlow, dictNode, joinKind, keyColumns);
+
+        const auto rootNode = pgmBuilder.Collect(pgmBuilder.NarrowMap(joinNode,
+            [&](TRuntimeNode::TList items) -> TRuntimeNode {
+                TVector<std::pair<std::string_view, TRuntimeNode>> structMembers;
+                structMembers.reserve(leftItems.size() + dictItems.size() + 1);
+                size_t itemsIndex = 0;
+                for (size_t i = 0; i < leftItems.size(); i++, itemsIndex++) {
+                    structMembers.emplace_back(leftItems[i], items[itemsIndex]);
+                }
+                for (size_t i = 0; i < dictItems.size(); i++, itemsIndex++) {
+                    structMembers.emplace_back(dictItems[i], items[itemsIndex]);
+                }
+                structMembers.emplace_back(BlockLengthName, items[itemsIndex]);
+                return pgmBuilder.NewStruct(structMembers);
+            }));
+
+        return rootNode;
+    }
+
     void DoTestBlockJoinOnUint64(EJoinKind joinKind, size_t blockSize, size_t testSize) {
         TSetup<false> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -105,31 +147,10 @@ namespace {
             {BlockLengthName, blockLenType}
         });
         const auto fields = NameToIndex(AS_TYPE(TStructType, structType));
-        const auto listStructType = pb.NewListType(structType);
 
-        const auto leftArg = pb.Arg(listStructType);
-
-        const auto leftWideFlow = pb.ExpandMap(pb.ToFlow(leftArg),
-            [&](TRuntimeNode item) -> TRuntimeNode::TList {
-                return {
-                    pb.Member(item, "key"),
-                    pb.Member(item, "subkey"),
-                    pb.Member(item, "payload"),
-                    pb.Member(item, BlockLengthName)
-                };
-            });
-
-        const auto joinNode = pb.BlockMapJoinCore(leftWideFlow, dict, joinKind, {0});
-
-        const auto rootNode = pb.Collect(pb.NarrowMap(joinNode,
-            [&](TRuntimeNode::TList items) -> TRuntimeNode {
-                return pb.NewStruct(structType, {
-                    {"key", items[0]},
-                    {"subkey", items[1]},
-                    {"payload", items[2]},
-                    {BlockLengthName, items[3]}
-                });
-            }));
+        TRuntimeNode leftArg;
+        const auto rootNode = BuildBlockJoin(pb, joinKind, {0}, leftArg,
+            structType, {"key", "subkey", "payload"}, dict);
 
         const auto graph = setup.BuildGraph(rootNode, {leftArg.GetNode()});
         const auto& leftBlocks = graph->GetEntryPoint(0, true);

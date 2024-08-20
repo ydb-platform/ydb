@@ -1629,7 +1629,7 @@ void TSecurityServicesInitializer::InitializeServices(NActors::TActorSystemSetup
             .AuthConfig = Config.GetAuthConfig(),
             .CertificateAuthValues = {
                 .ClientCertificateAuthorization = Config.GetClientCertificateAuthorization(),
-                .ServerCertificateFilePath = grpcConfig.GetCert(),
+                .ServerCertificateFilePath = grpcConfig.HasPathToCertificateFile() ? grpcConfig.GetPathToCertificateFile() : grpcConfig.GetCert(),
                 .Domain = Config.GetAuthConfig().GetCertificateAuthenticationDomain()
             }
         };

@@ -45,6 +45,7 @@ class TestSetupForStability(object):
     artifacts = (
         yatest_common.binary_path('ydb/tests/tools/nemesis/driver/nemesis'),
         yatest_common.binary_path('ydb/tools/simple_queue/simple_queue'),
+        yatest_common.binary_path('ydb/tools/olap_workload/olap_workload'),
     )
 
     @classmethod
@@ -113,6 +114,21 @@ class TestSetupForStability(object):
         for node_id, node in enumerate(self.kikimr_cluster.nodes.values()):
             node.ssh_command(
                 'screen -d -m bash -c "while true; do /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 ; done"',
+                raise_on_error=True
+            )
+        sleep_time_min = 90
+
+        logger.info('Sleeping for {} minute(s)'.format(sleep_time_min))
+        time.sleep(sleep_time_min * 60)
+
+        self._stop_nemesis()
+
+    def test_olap_workload(self):
+        self._start_nemesis()
+
+        for node_id, node in enumerate(self.kikimr_cluster.nodes.values()):
+            node.ssh_command(
+                'screen -d -m bash -c "while true; do /Berkanavt/nemesis/bin/olap_workload --database /Root/db1 ; done"',
                 raise_on_error=True
             )
         sleep_time_min = 90

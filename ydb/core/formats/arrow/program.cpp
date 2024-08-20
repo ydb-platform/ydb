@@ -63,7 +63,7 @@ public:
         arrow::Result<arrow::Datum> result = arrow::Status::UnknownError<std::string>("unknown function");
         for (const auto& funcName : funcNames) {
             if (funcName == "num_rows") {
-                return PrepareResult(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(batch.Rows)), assign);
+                return PrepareResult(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(batch.GetRecordsCount())), assign);
             }
             if (TBase::Ctx && TBase::Ctx->func_registry()->GetFunction(funcName).ok()) {
                 result = arrow::compute::CallFunction(funcName, *arguments, assign.GetOptions(), TBase::Ctx);

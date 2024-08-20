@@ -354,8 +354,7 @@ struct TBlobStorageGroupRangeParameters {
     TBlobStorageGroupRequestActor::TTypeSpecificParameters TypeSpecific = {
         .LogComponent = NKikimrServices::BS_PROXY_RANGE,
         .Name = "DSProxy.Range",
-        .Activity = NKikimrServices::TActivity::BS_GROUP_RANGE
-        ,
+        .Activity = NKikimrServices::TActivity::BS_GROUP_RANGE,
     };
 };
 IActor* CreateBlobStorageGroupRangeRequest(TBlobStorageGroupRangeParameters params);

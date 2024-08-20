@@ -385,10 +385,8 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
 
         if (TActivationContext::Now() - StartTime >= LongRequestThreshold) {
             if (AllowToReport(GetImpl.GetHandleClass())) {
-                TStringStream str;
-                LogCtx.LogAcc.Output(str);
-                R_LOG_WARN_S("BPG71", "Request was being processed for more than " << LongRequestThreshold
-                        << ", accumulated log# " << str.Str());
+                R_LOG_WARN_S("BPG71", "TEvGet Request was being processed for more than " << LongRequestThreshold
+                        << ", serialized RootCause# " << RootCauseTrack.ToString());
             }
         }
         return SendResponseAndDie(std::unique_ptr<TEvBlobStorage::TEvGetResult>(evResult.Release()));

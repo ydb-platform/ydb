@@ -2,6 +2,7 @@
 #include "dsproxy_mon.h"
 #include "root_cause.h"
 #include "dsproxy_put_impl.h"
+#include <ydb/core/blobstorage/dsproxy/dsproxy_request_reporting.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
@@ -82,6 +83,8 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
     std::vector<TIncarnationRecord> IncarnationRecords;
 
     TBlobStorageGroupInfo::TGroupVDisks ExpiredVDiskSet;
+
+    TDuration LongRequestThreshold;
 
     void SanityCheck() {
         if (RequestsSent <= MaxSaneRequests) {
@@ -472,6 +475,13 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
                 PutImpl.Blobs[blobIdx].Recipient, PutImpl.Blobs[blobIdx].Cookie, false);
             PutImpl.Blobs[blobIdx].Replied = true;
         }
+
+        if (TActivationContext::Monotonic() - StartTime >= LongRequestThreshold) {
+            if (AllowToReport(HandleClass)) {
+                R_LOG_WARN_S("BPG71", "TEvGet Request was being processed for more than " << LongRequestThreshold
+                        << ", serialized RootCause# " << RootCauseTrack.ToString());
+            }
+        }
     }
 
     TString BlobIdSequenceToString() const {
@@ -535,6 +545,7 @@ public:
         , AccelerationParams(params.AccelerationParams)
         , IncarnationRecords(Info->GetTotalVDisksNum())
         , ExpiredVDiskSet(&Info->GetTopology())
+        , LongRequestThreshold(params.LongRequestThreshold)
     {
         if (params.Common.Event->Orbit.HasShuttles()) {
             RootCauseTrack.IsOn = true;
@@ -560,6 +571,7 @@ public:
         , AccelerationParams(params.AccelerationParams)
         , IncarnationRecords(Info->GetTotalVDisksNum())
         , ExpiredVDiskSet(&Info->GetTopology())
+        , LongRequestThreshold(params.LongRequestThreshold)
     {
         Y_DEBUG_ABORT_UNLESS(params.Events.size() <= MaxBatchedPutRequests);
         for (auto &ev : params.Events) {

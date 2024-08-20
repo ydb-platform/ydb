@@ -21,7 +21,7 @@ private:
     YDB_ACCESSOR(std::optional<TDuration>, OverrideOptimizerFreshnessCheckDuration, TDuration::Zero());
     YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideCompactionActualizationLag);
     YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideTasksActualizationLag);
-    YDB_ACCESSOR(std::optional<TDuration>, OverrideReadTimeoutClean, TDuration::Zero());
+    YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideReadTimeoutClean);
     EOptimizerCompactionWeightControl CompactionControl = EOptimizerCompactionWeightControl::Force;
 
     YDB_ACCESSOR(std::optional<ui64>, OverrideReduceMemoryIntervalLimit, 1024);

@@ -14,17 +14,30 @@
 /ydb/core/mon_alloc @ydb-platform/datashard
 /ydb/core/tx/coordinator @ydb-platform/datashard
 
+#Column Tables Development Team @zverevgeny TEAM:@ydb-platform/cs
+/ydb/core/tx/columnshard @ydb-platform/cs
+
+
 #Distributed System Infrastructure Team @ijon TEAM:@ydb-platform/system-infra
-/ydb/core/mind/ @ydb-platform/system-infra
-/ydb/core/blob_depot @ydb-platform/system-infra
+/ydb/core/mind/hive @ydb-platform/system-infra
 /ydb/core/tx/schemeshard @ydb-platform/system-infra
 /ydb/core/tx/columnshard @ivanmorozov333 @ydb-platform/system-infra
-/ydb/services/ydb/ @ydb-platform/system-infra
 /ydb/core/util @ydb-platform/system-infra
-/ydb/core/persqueue @ydb-platform/system-infra
 /ydb/core/client @ydb-platform/system-infra
 /ydb/core/engine @ydb-platform/system-infra
 /ydb/tests/functional/hive @ydb-platform/system-infra
+/ydb/core/tx/scheme_board @ydb-platform/system-infra
+/ydb/core/tx/scheme_cache @ydb-platform/system-infra
+/ydb/core/audit @ydb-platform/system-infra
+/ydb/core/security @ydb-platform/system-infra
+/ydb/core/health_check @ydb-platform/system-infra
+/ydb/library/aclib @ydb-platform/system-infra
+/ydb/mvp/oidc_proxy @ydb-platform/system-infra
+/ydb/tests/functional/audit @ydb-platform/system-infra
+/ydb/tests/functional/limits @ydb-platform/system-infra
+/ydb/tests/functional/scheme_shard @ydb-platform/system-infra
+/ydb/tests/functional/tenants @ydb-platform/system-infra
+/ydb/services/ydb/table_split_ut @ydb-platform/system-infra
 
 #YDB Query Execution Team @gridnevvvit TEAM:@ydb-platform/qp
 /ydb/core/kqp @ydb-platform/qp
@@ -41,7 +54,13 @@
 /ydb/apps/ydb @ydb-platform/appteam
 
 #YDB Engineering Team @maximyurchuk 
-   # - пока не понятно
+   # - tbd
+
+#Orphan components @spuchin @maximyurchuk @kirrysin @ydb-platform/duty
+/ydb/services/ydb @ydb-platform/duty
+/ydb/core/util @ydb-platform/duty
+/ydb/core/client @ydb-platform/duty
+/ydb/core/engine @ydb-platform/duty
 
 #Distributed Storage Team @the-ancient-1 TEAM:@ydb-platform/storage
 /ydb/core/blobstorage @ydb-platform/storage

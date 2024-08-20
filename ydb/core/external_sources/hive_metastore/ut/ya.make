@@ -48,7 +48,7 @@ IF (OPENSOURCE)
     # otherwise CI system would be overloaded due to simultaneous launch of many Docker containers.
     # See DEVTOOLSSUPPORT-44103, YA-1759 for details.
     TAG(ya:not_autocheck)
-    REQUIREMENTS(cpu:all)
+    # REQUIREMENTS(cpu:all)
 ENDIF()
 
 SRCS(

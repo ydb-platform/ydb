@@ -1,13 +1,13 @@
 services:
   fq-connector-go:
-    container_name: fq-tests-my-fq-connector-go
+    container_name: fq-tests-oracle-fq-connector-go
     image: ghcr.io/ydb-platform/fq-connector-go:v0.5.2@sha256:c007dc10b89aa0342bea93d843cca7097e66b2e45310010d9321259aeee453cc
     ports:
     - 2130
     volumes:
     - ../../fq-connector-go/:/opt/ydb/cfg/
   oracle:
-    container_name: fq-tests-my-oracle
+    container_name: fq-tests-oracle-oracle
     environment:
       ORACLE_PWD: password
       TEST_USER_NAME: C##ADMIN # used in list oracle tables. "C##*" - common user.

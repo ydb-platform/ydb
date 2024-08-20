@@ -330,7 +330,7 @@ NSsa::TAggregateAssign TProgramBuilder::MakeAggregate(const NSsa::TColumnInfo& n
         }
     } else if (func.ArgumentsSize() == 0 && func.GetId() == TId::AGG_COUNT) {
         // COUNT(*) case
-        return TAggregateAssign(name, EAggregate::Count);
+        return TAggregateAssign(name, EAggregate::NumRows);
     }
     return TAggregateAssign(name); // !ok()
 }

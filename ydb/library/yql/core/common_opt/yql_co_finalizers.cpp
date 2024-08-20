@@ -94,6 +94,9 @@ void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedM
 
         TCoFlatMapBase parentFlatMap(parent);
         if (auto cond = parentFlatMap.Lambda().Body().Maybe<TCoConditionalValueBase>()) {
+            if (IsDepended(parentFlatMap.Lambda().Ref(), *node)) {
+                return;
+            }
             likelyCount += bool(cond.Cast().Predicate().Maybe<TCoLikely>());
             auto pos = cond.Cast().Predicate().Pos();
             parentFilterLambdas.push_back(ctx.NewLambda(pos,

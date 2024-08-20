@@ -237,7 +237,7 @@ Currently, the ability to explicitly specify the number of topic partitions is a
 
 ## Creating and deleting a changefeed {#ddl}
 
-You can add a changefeed to an existing table or erase it using the [ADD CHANGEFEED and DROP CHANGEFEED](../yql/reference/syntax/alter_table.md/changefeed.md) directives of the YQL `ALTER TABLE` statement. When erasing a table, the changefeed added to it is also deleted.
+You can add a changefeed to an existing table or erase it using the [ADD CHANGEFEED and DROP CHANGEFEED](../yql/reference/syntax/alter_table/changefeed.md) directives of the YQL `ALTER TABLE` statement. When erasing a table, the changefeed added to it is also deleted.
 
 ## CDC purpose and use {#best_practices}
 

@@ -49,14 +49,16 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorConte
         } else {
             ACFL_DEBUG("event", "TEvWriteIndex")("count", ev->Get()->IndexChanges->GetWritePortionsCount());
             AFL_VERIFY(ev->Get()->IndexChanges->GetWritePortionsCount());
-
+            const bool needDiskLimiter = ev->Get()->IndexChanges->NeedDiskWriteLimiter();
             auto writeController = std::make_shared<NOlap::TCompactedWriteController>(ctx.SelfID, ev->Release());
             const TConclusion<bool> needDraftTransaction = writeController->GetBlobsAction().NeedDraftWritingTransaction();
             AFL_VERIFY(needDraftTransaction.IsSuccess())("error", needDraftTransaction.GetErrorMessage());
             if (*needDraftTransaction) {
                 Execute(new TTxWriteDraft(this, writeController));
-            } else {
+            } else if (needDiskLimiter) {
                 NLimiter::TCompDiskOperator::AskResource(std::make_shared<TDiskResourcesRequest>(writeController, TabletID()));
+            } else {
+                Register(CreateWriteActor(TabletID(), writeController, TInstant::Max()));
             }
         }
     } else {

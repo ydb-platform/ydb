@@ -940,7 +940,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`resource_id` = "10001")",
             R"(`resource_id` != "10001")",
             R"("XXX" == "YYY" OR `resource_id` != "10001")",
-            R"(`resource_id` != "10001" XOR "XXX" == "YYY")",
             R"(`level` = 1)",
             R"(`level` = Int8("1"))",
             R"(`level` = Int16("1"))",

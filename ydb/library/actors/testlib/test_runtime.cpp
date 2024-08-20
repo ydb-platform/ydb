@@ -828,7 +828,7 @@ namespace NActors {
         return TMonotonic::MicroSeconds(CurrentTimestamp);
     }
 
-    void TTestActorRuntimeBase::UpdateCurrentTime(TInstant newTime) {
+    void TTestActorRuntimeBase::UpdateCurrentTime(TInstant newTime, bool rewind) {
         static int counter = 0;
         ++counter;
         if (VERBOSE) {
@@ -836,7 +836,7 @@ namespace NActors {
         }
         TGuard<TMutex> guard(Mutex);
         Y_ABORT_UNLESS(!UseRealThreads);
-        if (newTime.MicroSeconds() > CurrentTimestamp) {
+        if (rewind || newTime.MicroSeconds() > CurrentTimestamp) {
             CurrentTimestamp = newTime.MicroSeconds();
             for (auto& kv : Nodes) {
                 AtomicStore(kv.second->ActorSystemTimestamp, CurrentTimestamp);

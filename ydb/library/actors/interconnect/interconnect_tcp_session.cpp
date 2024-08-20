@@ -999,6 +999,10 @@ namespace NActors {
                 } while (false);
             }
 
+            // we need track clockskew only if it's one tenant nodes connection
+            // they have one scope in this case
+            bool reportClockSkew = Proxy->Common->LocalScopeId.first != 0 && Proxy->Common->LocalScopeId == Params.PeerScopeId;
+
             callback({TlsActivationContext->ExecutorThread.ActorSystem,
                      Proxy->PeerNodeId,
                      Proxy->Metrics->GetHumanFriendlyPeerHostName(),
@@ -1007,7 +1011,8 @@ namespace NActors {
                      flagState == EFlag::YELLOW,
                      flagState == EFlag::ORANGE,
                      flagState == EFlag::RED,
-                     ReceiveContext->ClockSkew_us.load()});
+                     ReceiveContext->ClockSkew_us.load(),
+                     reportClockSkew});
         }
 
         if (connected) {

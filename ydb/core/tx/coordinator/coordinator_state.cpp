@@ -80,6 +80,7 @@ void TCoordinatorStateActor::PreserveState() {
         Y_ABORT_UNLESS(ok);
     }
 
+    Owner->VolatileState.Preserved = true;
 }
 
 STFUNC(TCoordinatorStateActor::StateWork) {

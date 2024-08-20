@@ -1720,7 +1720,6 @@ public:
     void StartTracing(NWilson::TSpan&& span) override {
         Span = std::move(span);
     }
-
     void FinishSpan() override {
         Span.End();
     }
@@ -1835,15 +1834,15 @@ public:
         return false;
     }
 
-    TVector<TStringBuf> FindClientCert() const override {
-        return {};
-    }
-
     TMaybe<TString> GetSdkBuildInfo() const {
         return {};
     }
 
     TMaybe<TString> GetGrpcUserAgent() const {
+        return {};
+    }
+
+    TVector<TStringBuf> FindClientCert() const override {
         return {};
     }
 

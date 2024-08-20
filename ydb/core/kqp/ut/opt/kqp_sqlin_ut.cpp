@@ -1016,11 +1016,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
             CompareYson(R"([[[1u];["One"]]])", FormatResultSetYson(result.GetResultSet(0)));
 
             const Ydb::TableStats::QueryStats stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            if (serverSettings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-                UNIT_ASSERT_EQUAL_C(1, stats.query_phases_size(), stats.DebugString());
-            } else {
-                UNIT_ASSERT_EQUAL_C(2, stats.query_phases_size(), stats.DebugString());
-            }
+            UNIT_ASSERT_EQUAL_C(2, stats.query_phases_size(), stats.DebugString());
         }
 
         // complex (tuple) key
@@ -1058,11 +1054,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
             CompareYson(R"([[[3500u];["None"];[1u];["Anna"]]])", FormatResultSetYson(result.GetResultSet(0)));
 
             const Ydb::TableStats::QueryStats stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            if (serverSettings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-                UNIT_ASSERT_EQUAL_C(1, stats.query_phases_size(), stats.DebugString());
-            } else {
-                UNIT_ASSERT_EQUAL_C(2, stats.query_phases_size(), stats.DebugString());
-            }
+            UNIT_ASSERT_EQUAL_C(2, stats.query_phases_size(), stats.DebugString());
         }
     }
 }

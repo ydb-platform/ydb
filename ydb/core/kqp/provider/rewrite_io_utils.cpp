@@ -28,7 +28,8 @@ NSQLTranslation::TTranslationSettings CreateViewTranslationSettings(const TStrin
 TExprNode::TPtr CompileViewQuery(
     const TString& query,
     TExprContext& ctx,
-    const TString& cluster
+    const TString& cluster,
+    IModuleResolver::TPtr moduleResolver
 ) {
     TAstParseResult queryAst;
     queryAst = NSQLTranslation::SqlToYql(query, CreateViewTranslationSettings(cluster));
@@ -39,7 +40,7 @@ TExprNode::TPtr CompileViewQuery(
     }
 
     TExprNode::TPtr queryGraph;
-    if (!CompileExpr(*queryAst.Root, queryGraph, ctx, nullptr, nullptr)) {
+    if (!CompileExpr(*queryAst.Root, queryGraph, ctx, moduleResolver.get(), nullptr)) {
         return nullptr;
     }
 
@@ -123,14 +124,15 @@ TExprNode::TPtr RewriteReadFromView(
     const TExprNode::TPtr& node,
     TExprContext& ctx,
     const TString& query,
-    const TString& cluster
+    const TString& cluster,
+    IModuleResolver::TPtr moduleResolver
 ) {
     const TCoRead readNode(node->ChildPtr(0));
     const auto worldBeforeThisRead = readNode.World().Ptr();
 
     TExprNode::TPtr queryGraph = FindSavedQueryGraph(readNode.Ptr());
     if (!queryGraph) {
-        queryGraph = CompileViewQuery(query, ctx, cluster);
+        queryGraph = CompileViewQuery(query, ctx, cluster, moduleResolver);
         if (!queryGraph) {
             ctx.AddError(TIssue(ctx.GetPosition(readNode.Pos()),
                          "The query stored in the view cannot be compiled."));

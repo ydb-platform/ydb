@@ -616,11 +616,18 @@ public:
                         tenant.SetStorageGroups(storageGroups);
                         auto& ssdUsage = *tenant.AddStorageUsage();
                         ssdUsage.SetType(NKikimrViewer::TStorageUsage::SSD);
-                        ssdUsage.SetSize(storageAllocatedSize);
-                        ssdUsage.SetLimit(storageAllocatedLimit);
-                        // TODO(andrew-rykov)
-                        auto& hddUsage = *tenant.AddStorageUsage();
-                        hddUsage.SetType(NKikimrViewer::TStorageUsage::HDD);
+                        if (entry.DomainDescription
+                            && entry.DomainDescription->Description.HasDatabaseQuotas()
+                            && entry.DomainDescription->Description.HasDiskSpaceUsage()) {
+                            ssdUsage.SetSize(entry.DomainDescription->Description.GetDiskSpaceUsage().GetTables().GetTotalSize());
+                            ssdUsage.SetLimit(entry.DomainDescription->Description.GetDatabaseQuotas().data_size_hard_quota());
+                        } else {
+                            ssdUsage.SetSize(storageAllocatedSize);
+                            ssdUsage.SetLimit(storageAllocatedLimit);
+                        }
+                        //// TODO(andrew-rykov)
+                        //auto& hddUsage = *tenant.AddStorageUsage();
+                        //hddUsage.SetType(NKikimrViewer::TStorageUsage::HDD);
                     }
                 }
 

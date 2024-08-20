@@ -169,6 +169,7 @@ message TKqpTableMetadataProto {
     repeated TKqpTableMetadataProto SecondaryGlobalIndexMetadata = 12;
     optional uint64 RecordsCount = 13;
     optional uint64 DataSize = 14;
+    optional bool StatsLoaded = 15;
 }
 
 message TRlPath {
@@ -668,6 +669,7 @@ message TKqpStreamLookupSettings {
      optional bool ImmediateTx = 6;
      repeated string LookupKeyColumns = 7;
      optional NKqpProto.EStreamLookupStrategy LookupStrategy = 8;
+     optional bool AllowInconsistentReads = 9 [default = false];
 }
 
 message TKqpSequencerSettings {

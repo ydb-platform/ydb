@@ -7,15 +7,12 @@
 /ydb/library/yql/dq @ydb-platform/yql @ydb-platform/qp
 /ydb/library/yql/yt @Krock21 @Krisha11 @zlobober @gritukan
 
-
-
 #Группа разработки строковых таблиц @azevaykin TEAM:@ydb-platform/datashard
 /ydb/core/tablet_flat @ydb-platform/datashard
 /ydb/core/tx/datashard @ydb-platform/datashard
 /ydb/core/mon_alloc @ydb-platform/datashard
-
 # Сoordinator
-/ydb/core/tx/coordinator @snaury
+/ydb/core/tx/coordinator @ydb-platform/datashard
 
 #Группа распределенной системной инфраструктуры @ijon TEAM:@ydb-platform/system-infra
 /ydb/core/mind/ @ydb-platform/system-infra
@@ -55,7 +52,6 @@
 /ydb/tests/functional/cms @ydb-platform/core
 /ydb/core/quoter @ydb-platform/core
 
-
 #Группа разработки систем поставки данных / LogBroker @alexnick88 TEAM:@ydb-platform/topics
 /ydb/tests/functional/sqs @ydb-platform/Topics
 /ydb/core/kafka_proxy @ydb-platform/Topics
@@ -66,7 +62,7 @@
 
 #YDB Analytics TEAM:???
 
-#Federative query TEAM:@ydb-platform/fq
+#Federative query @vitalyisaev2 TEAM:@ydb-platform/fq
 /ydb/tests/fq @ydb-platform/fq
 /ydb/core/fq/ @ydb-platform/fq
 /ydb/services/fq/ @ydb-platform/fq

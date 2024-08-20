@@ -15,8 +15,6 @@ config = configparser.ConfigParser()
 config_file_path = f"{dir}/../../config/ydb_qa_db.ini"
 config.read(config_file_path)
 
-build_preset = os.environ.get("build_preset")
-branch = os.environ.get("branch_to_compare")
 
 DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
 DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]

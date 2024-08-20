@@ -27,6 +27,7 @@
 /ydb/core/persqueue @ydb-platform/system-infra
 /ydb/core/client @ydb-platform/system-infra
 /ydb/core/engine @ydb-platform/system-infra
+/ydb/tests/functional/hive @ydb-platform/system-infra
 
 #YDB Query Execution Team @gridnevvvit TEAM:@ydb-platform/qp
 /ydb/core/kqp @ydb-platform/qp
@@ -44,6 +45,7 @@
 #Группа разработки распределенного хранилища @the-ancient-1 TEAM:@ydb-platform/storage
 /ydb/core/blobstorage @ydb-platform/storage
 /ydb/core/mind/bscontroller @ydb-platform/storage
+/ydb/library/actors @ydb-platform/storage
 
 #Группа функциональности ядра @CyberROFL TEAM:@ydb-platform/core
 

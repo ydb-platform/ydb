@@ -94,7 +94,7 @@ with DAG(
 
 ## Установка {#setup}
 
-Для установки необходимо выполнить следующие команды:
+Для корректной работы пакета `apache-airflow-providers-ydb` необходимо на всех хостах {{ airflow-name }} выполнить следующие команды:
 
 ```shell
 pip install ydb
@@ -118,7 +118,7 @@ pip install apache-airflow-providers-ydb
 Опциональные аргументы:
 * `ydb_conn_id` — идентификатор подключения с типом `YDB`, содержащий параметры соединения с {{ ydb-full-name }}. Если не указан, то используется соединение с именем `ydb_default`. Соединение `ydb_default` предустанавливается в составе {{ airflow-name }}, отдельно его заводить не нужно.
 * `is_ddl` — признак, что выполняется [SQL DDL](https://en.wikipedia.org/wiki/Data_definition_language) запрос. Если аргумент не указан, или установлен в `False`, то будет выполняться [SQL DML](https://ru.wikipedia.org/wiki/Data_Manipulation_Language) запрос.
-* `params` — словарь параметров
+* `params` — словарь [параметров запроса](https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/params.html).
 
 Пример:
 

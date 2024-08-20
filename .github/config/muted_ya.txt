@@ -52,7 +52,6 @@ ydb/core/viewer/ut Viewer.TabletMerging
 ydb/core/viewer/ut Viewer.TabletMergingPacked
 ydb/library/actors/http/ut HttpProxy.TooLongHeader
 ydb/library/actors/http/ut sole*
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb* *
 ydb/public/sdk/cpp/client/ydb_persqueue_core/ut [*/*]
 ydb/public/sdk/cpp/client/ydb_persqueue_core/ut RetryPolicy.TWriteSession_TestBrokenPolicy
 ydb/public/sdk/cpp/client/ydb_persqueue_public/ut RetryPolicy.TWriteSession_TestBrokenPolicy

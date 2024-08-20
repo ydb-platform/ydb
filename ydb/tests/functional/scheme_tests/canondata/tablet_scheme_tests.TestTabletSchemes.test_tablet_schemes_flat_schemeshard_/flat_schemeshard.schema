@@ -362,6 +362,11 @@
                 "ColumnId": 12,
                 "ColumnName": "OwnerActorId",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "IncrementalBackupConfig",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -379,7 +384,8 @@
                     9,
                     10,
                     11,
-                    12
+                    12,
+                    13
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -3591,6 +3597,11 @@
                 "ColumnId": 13,
                 "ColumnName": "OwnerActorId",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "IncrementalBackupConfig",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -3609,7 +3620,8 @@
                     10,
                     11,
                     12,
-                    13
+                    13,
+                    14
                 ],
                 "RoomID": 0,
                 "Codec": 0,

@@ -227,14 +227,19 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 ui64 ownerId = rowset.GetValue<Schema::ForceTraversalTables::OwnerId>();
                 ui64 localPathId = rowset.GetValue<Schema::ForceTraversalTables::LocalPathId>();
                 TString columnTags = rowset.GetValue<Schema::ForceTraversalTables::ColumnTags>();
-                ui64 status = rowset.GetValue<Schema::ForceTraversalTables::Status>();
+                TForceTraversalTable::EStatus status = (TForceTraversalTable::EStatus)rowset.GetValue<Schema::ForceTraversalTables::Status>();
+
+                if (status == TForceTraversalTable::EStatus::AnalyzeStarted) {
+                    // Resent TEvAnalyzeTable to shards
+                    status = TForceTraversalTable::EStatus::None;
+                }
 
                 auto pathId = TPathId(ownerId, localPathId);
 
                 TForceTraversalTable operationTable {
                     .PathId = pathId,
                     .ColumnTags = columnTags,
-                    .Status = (TForceTraversalTable::EStatus)status,
+                    .Status = status,
                 };
                 auto forceTraversalOperation = Self->ForceTraversalOperation(operationId);
                 if (!forceTraversalOperation) {
@@ -270,7 +275,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
 
         Self->InitializeStatisticsTable();
 
-        if (Self->TraversalPathId) {
+        if (Self->TraversalPathId && Self->TraversalStartKey) {
             Self->NavigateType = ENavigateType::Traversal;
             Self->NavigatePathId = Self->TraversalPathId;
             Self->Navigate();

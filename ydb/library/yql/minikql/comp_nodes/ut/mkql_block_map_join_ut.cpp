@@ -13,6 +13,9 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 namespace {
+
+    const TStringBuf BlockLengthName = "_yql_block_length";
+
     TMap<const TStringBuf, ui64> NameToIndex(const TStructType* structType) {
         TMap<const TStringBuf, ui64> map;
         for (size_t i = 0; i < structType->GetMembersCount(); i++) {
@@ -96,7 +99,7 @@ namespace {
             {"key", ui64BlockType},
             {"subkey", ui64BlockType},
             {"payload", strBlockType},
-            {"_yql_block_length", blockLenType}
+            {BlockLengthName, blockLenType}
         });
         const auto fields = NameToIndex(AS_TYPE(TStructType, structType));
         const auto listStructType = pb.NewListType(structType);
@@ -109,7 +112,7 @@ namespace {
                     pb.Member(item, "key"),
                     pb.Member(item, "subkey"),
                     pb.Member(item, "payload"),
-                    pb.Member(item, "_yql_block_length")
+                    pb.Member(item, BlockLengthName)
                 };
             });
 
@@ -121,7 +124,7 @@ namespace {
                     {"key", items[0]},
                     {"subkey", items[1]},
                     {"payload", items[2]},
-                    {"_yql_block_length", items[3]}
+                    {BlockLengthName, items[3]}
                 });
             }));
 
@@ -166,7 +169,7 @@ namespace {
             items[fields.at("key")] = holderFactory.CreateArrowBlock(keysData);
             items[fields.at("subkey")] = holderFactory.CreateArrowBlock(subkeysData);
             items[fields.at("payload")] = holderFactory.CreateArrowBlock(payloadsData);
-            items[fields.at("_yql_block_length")] = MakeBlockCount(holderFactory, blockSize);
+            items[fields.at(BlockLengthName)] = MakeBlockCount(holderFactory, blockSize);
             leftListValues = leftListValues.Append(std::move(structObj));
         }
         leftBlocks->SetValue(ctx, holderFactory.CreateDirectListHolder(std::move(leftListValues)));
@@ -180,7 +183,7 @@ namespace {
 
         UNIT_ASSERT_VALUES_EQUAL(joinResult.size(), 1);
         const auto blocks = joinResult.front();
-        const auto blockLengthValue = blocks.GetElement(fields.at("_yql_block_length"));
+        const auto blockLengthValue = blocks.GetElement(fields.at(BlockLengthName));
         const auto blockLengthDatum = TArrowBlock::From(blockLengthValue).GetDatum();
         UNIT_ASSERT(blockLengthDatum.is_scalar());
         const auto blockLength = blockLengthDatum.scalar_as<arrow::UInt64Scalar>().value;

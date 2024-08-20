@@ -197,7 +197,7 @@ namespace {
 
     void TestBlockJoinOnUint64(EJoinKind joinKind) {
         const size_t testSize = 512;
-        for (size_t blockSize = 8; blockSize <= testSize; blockSize <<= 2) {
+        for (size_t blockSize = 8; blockSize <= testSize; blockSize <<= 1) {
             DoTestBlockJoinOnUint64(joinKind, blockSize, testSize);
         }
     }

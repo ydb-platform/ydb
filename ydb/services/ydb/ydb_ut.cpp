@@ -174,6 +174,38 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
         UNIT_ASSERT(allDoneOk);
     }
 
+    std::pair<Ydb::StatusIds::StatusCode, grpc::StatusCode> MakeTestRequest(NGRpcProxy::TGRpcClientConfig& clientConfig, const TString& database, const TString& token) {
+        NYdbGrpc::TCallMeta meta;
+        if (token) { // empty token => no token
+            meta.Aux.push_back({YDB_AUTH_TICKET_HEADER, token});
+        }
+        meta.Aux.push_back({YDB_DATABASE_HEADER, database});
+
+        NYdbGrpc::TGRpcClientLow clientLow;
+        auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Table::V1::TableService>(clientConfig);
+
+        Ydb::StatusIds::StatusCode status;
+        grpc::StatusCode gStatus;
+
+        do {
+            auto promise = NThreading::NewPromise<void>();
+            Ydb::Table::CreateSessionRequest request;
+            NYdbGrpc::TResponseCallback<Ydb::Table::CreateSessionResponse> responseCb =
+                [&status, &gStatus, promise](NYdbGrpc::TGrpcStatus&& grpcStatus, Ydb::Table::CreateSessionResponse&& response)  mutable {
+                    UNIT_ASSERT(!grpcStatus.InternalError);
+                    gStatus = grpc::StatusCode(grpcStatus.GRpcStatusCode);
+                    auto deferred = response.operation();
+                    status = deferred.status();
+                    promise.SetValue();
+                };
+
+            connection->DoRequest(request, std::move(responseCb), &Ydb::Table::V1::TableService::Stub::AsyncCreateSession, meta);
+            promise.GetFuture().Wait();
+        } while (status == Ydb::StatusIds::UNAVAILABLE);
+        Cerr << "TestRequest(database=\"" << database << "\", token=\"" << token << "\") => {" << Ydb::StatusIds::StatusCode_Name(status) << ", " << int(gStatus) << "}" << Endl;
+        return std::make_pair(status, gStatus);
+    }
+
     Y_UNIT_TEST(GrpcRequestProxy) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
@@ -182,38 +214,10 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
         auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
-        auto doTest = [&](const TString& database) {
-            NYdbGrpc::TCallMeta meta;
-            meta.Aux.push_back({YDB_AUTH_TICKET_HEADER, "root@builtin"});
-            meta.Aux.push_back({YDB_DATABASE_HEADER, database});
 
-            NYdbGrpc::TGRpcClientLow clientLow;
-            auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Table::V1::TableService>(clientConfig);
-
-            Ydb::StatusIds::StatusCode status;
-            int gStatus;
-
-            do {
-                auto promise = NThreading::NewPromise<void>();
-                Ydb::Table::CreateSessionRequest request;
-                NYdbGrpc::TResponseCallback<Ydb::Table::CreateSessionResponse> responseCb =
-                    [&status, &gStatus, promise](NYdbGrpc::TGrpcStatus&& grpcStatus, Ydb::Table::CreateSessionResponse&& response)  mutable {
-                        UNIT_ASSERT(!grpcStatus.InternalError);
-                        gStatus = grpcStatus.GRpcStatusCode;
-                        auto deferred = response.operation();
-                        status = deferred.status();
-                        promise.SetValue();
-                    };
-
-                connection->DoRequest(request, std::move(responseCb), &Ydb::Table::V1::TableService::Stub::AsyncCreateSession, meta);
-                promise.GetFuture().Wait();
-            } while (status == Ydb::StatusIds::UNAVAILABLE);
-            return std::make_pair(status, gStatus);
-        };
-
-        UNIT_ASSERT_VALUES_EQUAL(doTest("/Root"), std::make_pair(Ydb::StatusIds::SUCCESS, 0));
-        UNIT_ASSERT_VALUES_EQUAL(doTest("/blabla"), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, 16));
-        UNIT_ASSERT_VALUES_EQUAL(doTest("blabla"), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, 16));
+        UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "/Root", "root@builtin"), std::make_pair(Ydb::StatusIds::SUCCESS, grpc::StatusCode::OK));
+        UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "/blabla", "root@builtin"), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
+        UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "blabla", "root@builtin"), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
     }
 
     Y_UNIT_TEST(GrpcRequestProxyWithoutToken) {
@@ -224,37 +228,47 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
         auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
-        auto doTest = [&](const TString& database) {
-            NYdbGrpc::TCallMeta meta;
-            meta.Aux.push_back({YDB_DATABASE_HEADER, database});
 
-            NYdbGrpc::TGRpcClientLow clientLow;
-            auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Table::V1::TableService>(clientConfig);
+        UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "/Root", ""), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
+        UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "/blabla", ""), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
+        UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "blabla", ""), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
+    }
 
-            Ydb::StatusIds::StatusCode status;
-            grpc::StatusCode gStatus;
+    void GrpcRequestProxyCheckTokenWhenItIsSpecified(bool enforceUserTokenCheckRequirement) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(false);
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenCheckRequirement(enforceUserTokenCheckRequirement);
+        TKikimrWithGrpcAndRootSchemaWithAuth server(appConfig);
 
-            do {
-                auto promise = NThreading::NewPromise<void>();
-                Ydb::Table::CreateSessionRequest request;
-                NYdbGrpc::TResponseCallback<Ydb::Table::CreateSessionResponse> responseCb =
-                    [&status, &gStatus, promise](NYdbGrpc::TGrpcStatus&& grpcStatus, Ydb::Table::CreateSessionResponse&& response)  mutable {
-                        UNIT_ASSERT(!grpcStatus.InternalError);
-                        gStatus = grpc::StatusCode(grpcStatus.GRpcStatusCode);
-                        auto deferred = response.operation();
-                        status = deferred.status();
-                        promise.SetValue();
-                    };
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
 
-                connection->DoRequest(request, std::move(responseCb), &Ydb::Table::V1::TableService::Stub::AsyncCreateSession, meta);
-                promise.GetFuture().Wait();
-            } while (status == Ydb::StatusIds::UNAVAILABLE);
-            return std::make_pair(status, gStatus);
-        };
+        UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "/Root", ""), std::make_pair(Ydb::StatusIds::SUCCESS, grpc::StatusCode::OK));
+        UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "/blabla", ""), std::make_pair(Ydb::StatusIds::SUCCESS, grpc::StatusCode::OK));
+        UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "blabla", ""), std::make_pair(Ydb::StatusIds::SUCCESS, grpc::StatusCode::OK));
 
-        UNIT_ASSERT_EQUAL(doTest("/Root").second, grpc::StatusCode::UNAUTHENTICATED);
-        UNIT_ASSERT_EQUAL(doTest("/blabla").second, grpc::StatusCode::UNAUTHENTICATED);
-        UNIT_ASSERT_EQUAL(doTest("blabla").second, grpc::StatusCode::UNAUTHENTICATED);
+        UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "/Root", "root@builtin"), std::make_pair(Ydb::StatusIds::SUCCESS, grpc::StatusCode::OK));
+        UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "/blabla", "root@builtin"), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
+        UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "blabla", "root@builtin"), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
+
+        const auto reqResultWithInvalidToken = MakeTestRequest(clientConfig, "/Root", "invalid token");
+        if (enforceUserTokenCheckRequirement) {
+            UNIT_ASSERT_EQUAL(reqResultWithInvalidToken, std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
+        } else {
+            UNIT_ASSERT_EQUAL(reqResultWithInvalidToken, std::make_pair(Ydb::StatusIds::SUCCESS, grpc::StatusCode::OK));
+        }
+
+        UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "/blabla", "invalid token"), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
+        UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "blabla", "invalid token"), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
+    }
+
+    Y_UNIT_TEST(GrpcRequestProxyCheckTokenWhenItIsSpecified_Ignore) {
+        GrpcRequestProxyCheckTokenWhenItIsSpecified(false);
+    }
+
+    Y_UNIT_TEST(GrpcRequestProxyCheckTokenWhenItIsSpecified_Check) {
+        GrpcRequestProxyCheckTokenWhenItIsSpecified(true);
     }
 
     Y_UNIT_TEST(BiStreamPing) {

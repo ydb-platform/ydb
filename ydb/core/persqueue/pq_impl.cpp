@@ -1619,12 +1619,17 @@ void TPersQueue::CreateTopicConverter(const NKikimrPQ::TPQTabletConfig& config,
     Y_ABORT_UNLESS(topicConverter->IsValid(), "%s", topicConverter->GetReason().c_str());
 }
 
+int GetVersion(const NKikimrPQ::TPQTabletConfig& config)
+{
+    return config.GetVersion();
+}
+
 void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConfig> ev, const TActorId& sender, const TActorContext& ctx)
 {
     auto& record = ev->Record;
 
-    int oldConfigVersion = Config.HasVersion() ? Config.GetVersion() : -1;
-    int newConfigVersion = NewConfig.HasVersion() ? NewConfig.GetVersion() : oldConfigVersion;
+    int oldConfigVersion = Config.HasVersion() ? GetVersion(Config) : -1;
+    int newConfigVersion = NewConfig.HasVersion() ? GetVersion(NewConfig) : oldConfigVersion;
 
     Y_ABORT_UNLESS(newConfigVersion >= oldConfigVersion);
 

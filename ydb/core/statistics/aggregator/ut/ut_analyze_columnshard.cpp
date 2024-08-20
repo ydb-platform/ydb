@@ -137,7 +137,6 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
 
         runtime.WaitFor("blocked 1st TEvAnalyzeTableResponse event", [&]{ return eventSeen; });
 
-
         auto analyzeRequest2 = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest2.release());
 

@@ -204,12 +204,19 @@ enum class EOpClassMethod {
     Hash
 };
 
+struct TOpFamilyDesc {
+    TString Name;
+    ui32 FamilyId = 0;
+    ui32 ExtensionIndex = 0;
+};
+
 struct TOpClassDesc {
     EOpClassMethod Method = EOpClassMethod::Btree;
     ui32 TypeId = 0;
     TString Name;
     TString Family;
     ui32 FamilyId = 0;
+    ui32 ExtensionIndex = 0;
 };
 
 struct TAmOpDesc {
@@ -219,6 +226,7 @@ struct TAmOpDesc {
     ui32 LeftType = 0;
     ui32 RightType = 0;
     ui32 OperId = 0;
+    ui32 ExtensionIndex = 0;
 };
 
 enum class EBtreeAmStrategy {
@@ -236,6 +244,7 @@ struct TAmProcDesc {
     ui32 LeftType = 0;
     ui32 RightType = 0;
     ui32 ProcId = 0;
+    ui32 ExtensionIndex = 0;
 };
 
 enum class EBtreeAmProcNum {
@@ -410,6 +419,8 @@ public:
     virtual void UpdateOper(const TOperDesc& desc) = 0;
 
     virtual void CreateAggregate(const TAggregateDesc& desc) = 0;
+
+    virtual void CreateOpClass(const TOpClassDesc& opclass, const TVector<TAmOpDesc>& ops, const TVector<TAmProcDesc>& procs) = 0;
 };
 
 class IExtensionSqlParser {

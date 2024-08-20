@@ -62,6 +62,10 @@ public:
 
         arrow::Result<arrow::Datum> result = arrow::Status::UnknownError<std::string>("unknown function");
         for (const auto& funcName : funcNames) {
+            // TODO: refactor
+            if (funcName == "num_rows") {
+                return PrepareResult(arrow::Datum(batch.Rows).scalar()->CastTo(std::make_shared<arrow::UInt64Type>()), assign);
+            }
             if (TBase::Ctx && TBase::Ctx->func_registry()->GetFunction(funcName).ok()) {
                 result = arrow::compute::CallFunction(funcName, *arguments, assign.GetOptions(), TBase::Ctx);
             } else {
@@ -398,6 +402,8 @@ const char * GetFunctionName(EAggregate op) {
             return "min_max";
         case EAggregate::Sum:
             return "sum";
+        case EAggregate::NumRows:
+            return "num_rows";
 #if 0 // TODO
         case EAggregate::Avg:
             return "mean";

@@ -21,6 +21,7 @@ enum class EAggregate {
     Max = 4,
     Sum = 5,
     //Avg = 6,
+    NumRows = 7,
 };
 
 }

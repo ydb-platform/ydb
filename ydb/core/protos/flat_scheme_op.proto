@@ -348,7 +348,6 @@ message TTableReplicationConfig {
     enum EReplicationMode {
         REPLICATION_MODE_NONE = 0;
         REPLICATION_MODE_READ_ONLY = 1;
-        REPLICATION_MODE_RESTORE_INCREMENTAL_BACKUP = 2;
     }
 
     enum EConsistency {
@@ -358,6 +357,22 @@ message TTableReplicationConfig {
     }
 
     optional EReplicationMode Mode = 1;
+    optional EConsistency Consistency = 2;
+}
+
+message TTableIncrementalBackupConfig {
+    enum ERestoreMode {
+        RESTORE_MODE_NONE = 0;
+        RESTORE_MODE_INCREMENTAL_BACKUP = 1;
+    }
+
+    enum EConsistency {
+        CONSISTENCY_UNKNOWN = 0;
+        CONSISTENCY_STRONG = 1;
+        CONSISTENCY_WEAK = 2;
+    }
+
+    optional ERestoreMode Mode = 1;
     optional EConsistency Consistency = 2;
 }
 
@@ -397,7 +412,10 @@ message TTableDescription {
     repeated TCdcStreamDescription CdcStreams = 38;
     repeated TSequenceDescription Sequences = 39;
 
-    optional TTableReplicationConfig ReplicationConfig = 40;
+    oneof IncomingStreamConfig {
+        TTableReplicationConfig ReplicationConfig = 40;
+        TTableIncrementalBackupConfig IncrementalBackupConfig = 43;
+    }
 
     optional bool Temporary = 41;
 

@@ -8,6 +8,7 @@
 /ydb/library/yql/yt @Krock21 @Krisha11 @zlobober @gritukan
 
 #Группа разработки строковых таблиц @azevaykin TEAM:@ydb-platform/datashard
+/ydb/core/scheme @ydb-platform/datashard 
 /ydb/core/tablet_flat @ydb-platform/datashard
 /ydb/core/tx/datashard @ydb-platform/datashard
 /ydb/core/mon_alloc @ydb-platform/datashard
@@ -32,6 +33,9 @@
 /ydb/core/kqp @ydb-platform/qp
 #YDB Query Optimizer Team @pavelvelikhov TEAM:@ydb-platform/qp
 /ydb/tests/functional/canonical @ydb-platform/qp
+/ydb/tests/functional/suite_tests @ydb-platform/qp
+/ydb/tests/functional/clickbench @ydb-platform/qp
+/ydb/tests/functional/postgresql @ydb-platform/qp
 
 #YDB Application Team @asmyasnikov TEAM:@ydb-platform/appteam
 /ydb/public/sdk @ydb-platform/appteam
@@ -47,9 +51,7 @@
 /ydb/library/actors @ydb-platform/storage
 
 #Группа функциональности ядра @CyberROFL TEAM:@ydb-platform/core
-
 /ydb/core/config/ut @ydb-platform/core
-/ydb/core/scheme @ydb-platform/core
 /ydb/core/cms @ydb-platform/core
 /ydb/tests/functional/cms @ydb-platform/core
 /ydb/core/quoter @ydb-platform/core
@@ -61,6 +63,8 @@
 /ydb/services/datastreams @ydb-platform/Topics
 /ydb/services/deprecated/persqueue_v0 @ydb-platform/Topics
 /ydb/services/persqueue_v1 @ydb-platform/Topics
+/ydb/core/ymq @ydb-platform/Topics
+/ydb/core/http_proxy @ydb-platform/Topics
 
 #YDB Analytics TEAM:???
 

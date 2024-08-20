@@ -7,7 +7,7 @@ services:
     volumes:
     - ../../fq-connector-go/:/opt/ydb/cfg/
   oracle:
-    container_name: fq-tests-oracle-oracle
+    container_name: fq-tests-oracle
     environment:
       ORACLE_PWD: password
       TEST_USER_NAME: C##ADMIN # used in list oracle tables. "C##*" - common user.

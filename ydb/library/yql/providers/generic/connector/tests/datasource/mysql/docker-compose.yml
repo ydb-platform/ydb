@@ -7,7 +7,7 @@ services:
     volumes:
     - ../../fq-connector-go/:/opt/ydb/cfg/
   mysql:
-    container_name: fq-tests-mysql-mysql
+    container_name: fq-tests-mysql
     environment:
       MYSQL_DATABASE: db
       MYSQL_ROOT_PASSWORD: password

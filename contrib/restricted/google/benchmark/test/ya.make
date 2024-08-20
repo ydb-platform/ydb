@@ -4,6 +4,8 @@ GTEST(benchmark_gtest)
 
 WITHOUT_LICENSE_TEXTS()
 
+VERSION(1.8.5)
+
 LICENSE(Apache-2.0)
 
 PEERDIR(

@@ -72,7 +72,7 @@
 {%-     set current_target = target -%}
 {%-     include '[generator]/target_cmake_lists.jinja' -%}
 {%- endif -%}
-{%- if extra_targets is defined -%}
+{%- if extra_targets|length -%}
 {%-     for current_target in extra_targets -%}
 {%-         include '[generator]/target_cmake_lists.jinja' -%}
 {%-     endfor -%}

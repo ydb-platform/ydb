@@ -42,10 +42,11 @@ Y_UNIT_TEST_SUITE(Replication)
             auto res = session.ExecuteSchemeQuery(R"(
                 CREATE TABLE `/local/ProducerUuidValue` (
                     Key Uint32,
+                    Key2 Uuid,
                     v01 Uuid,
                     v02 Uuid NOT NULL,
                     v03 Double,
-                    PRIMARY KEY (Key)
+                    PRIMARY KEY (Key, Key2)
                 );
             )").GetValueSync();
             UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
@@ -57,8 +58,9 @@ Y_UNIT_TEST_SUITE(Replication)
             auto s = sessionResult.GetSession();
 
             {
-                const TString query = "UPSERT INTO ProducerUuidValue (Key,v01,v02,v03) VALUES"
+                const TString query = "UPSERT INTO ProducerUuidValue (Key,Key2,v01,v02,v03) VALUES"
                     "(1, "
+                      "CAST(\"5b99a330-04ef-4f1a-9b64-ba6d5f44ea00\" as Uuid), "
                       "CAST(\"5b99a330-04ef-4f1a-9b64-ba6d5f44ea01\" as Uuid), "
                       "UNWRAP(CAST(\"5b99a330-04ef-4f1a-9b64-ba6d5f44ea02\" as Uuid)), "
                       "CAST(\"311111111113.222222223\" as Double) "
@@ -88,6 +90,7 @@ Y_UNIT_TEST_SUITE(Replication)
         UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
 
         auto s = sessionResult.GetSession();
+        TUuidValue expectedKey2("5b99a330-04ef-4f1a-9b64-ba6d5f44ea00");
         TUuidValue expectedV1("5b99a330-04ef-4f1a-9b64-ba6d5f44ea01");
         TUuidValue expectedV2("5b99a330-04ef-4f1a-9b64-ba6d5f44ea02");
         double expectedV3 = 311111111113.222222223;
@@ -97,11 +100,13 @@ Y_UNIT_TEST_SUITE(Replication)
             if (res.first == 1) {
                 const Ydb::ResultSet& proto = res.second;
                 UNIT_ASSERT_VALUES_EQUAL(proto.rows(0).items(0).uint32_value(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(proto.rows(0).items(1).low_128(), expectedV1.Buf_.Halfs[0]);
-                UNIT_ASSERT_VALUES_EQUAL(proto.rows(0).items(1).high_128(), expectedV1.Buf_.Halfs[1]);
-                UNIT_ASSERT_VALUES_EQUAL(proto.rows(0).items(2).low_128(), expectedV2.Buf_.Halfs[0]);
-                UNIT_ASSERT_VALUES_EQUAL(proto.rows(0).items(2).high_128(), expectedV2.Buf_.Halfs[1]);
-                UNIT_ASSERT_DOUBLES_EQUAL(proto.rows(0).items(3).double_value(), expectedV3, 0.0001);
+                UNIT_ASSERT_VALUES_EQUAL(proto.rows(0).items(1).low_128(), expectedKey2.Buf_.Halfs[0]);
+                UNIT_ASSERT_VALUES_EQUAL(proto.rows(0).items(1).high_128(), expectedKey2.Buf_.Halfs[1]);
+                UNIT_ASSERT_VALUES_EQUAL(proto.rows(0).items(2).low_128(), expectedV1.Buf_.Halfs[0]);
+                UNIT_ASSERT_VALUES_EQUAL(proto.rows(0).items(2).high_128(), expectedV1.Buf_.Halfs[1]);
+                UNIT_ASSERT_VALUES_EQUAL(proto.rows(0).items(3).low_128(), expectedV2.Buf_.Halfs[0]);
+                UNIT_ASSERT_VALUES_EQUAL(proto.rows(0).items(3).high_128(), expectedV2.Buf_.Halfs[1]);
+                UNIT_ASSERT_DOUBLES_EQUAL(proto.rows(0).items(4).double_value(), expectedV3, 0.0001);
                 break;
             }
             Sleep(TDuration::Seconds(1));

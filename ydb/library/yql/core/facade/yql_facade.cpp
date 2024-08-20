@@ -505,13 +505,6 @@ TString TProgram::GetSessionId() const {
     }
 }
 
-TString TProgram::TakeSessionId() {
-    // post-condition: SessionId_ will be empty
-    with_lock(SessionIdLock_) {
-        return std::move(SessionId_);
-    }
-}
-
 void TProgram::AddCredentials(const TVector<std::pair<TString, TCredential>>& credentials) {
     Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
 
@@ -1702,14 +1695,22 @@ NThreading::TFuture<void> TProgram::CleanupLastSession() {
 NThreading::TFuture<void> TProgram::CloseLastSession() {
     YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetSessionId());
 
-    TString sessionId = TakeSessionId();
-    if (sessionId.empty()) {
-        return MakeFuture();
-    }
-
     TVector<TDataProviderInfo> dataProviders;
     with_lock (DataProvidersLock_) {
         dataProviders = DataProviders_;
+    }
+
+    auto promise = NThreading::NewPromise<void>();
+
+    TString sessionId;
+    with_lock(SessionIdLock_) {
+        // post-condition: SessionId_ will be empty
+        sessionId = std::move(SessionId_);
+        if (sessionId.empty()) {
+            return CloseLastSessionFuture_;
+        }
+
+        CloseLastSessionFuture_ = promise.GetFuture();
     }
 
     TVector<NThreading::TFuture<void>> closeFutures;
@@ -1719,11 +1720,14 @@ NThreading::TFuture<void> TProgram::CloseLastSession() {
             dp.CloseSession(sessionId);
         }
         if (dp.CloseSessionAsync) {
-            dp.CloseSessionAsync(sessionId);
+            closeFutures.push_back(dp.CloseSessionAsync(sessionId));
         }
     }
 
-    return NThreading::WaitExceptionOrAll(closeFutures);
+    return NThreading::WaitExceptionOrAll(closeFutures)
+        .Apply([promise = std::move(promise)](const NThreading::TFuture<void>&) mutable {
+            promise.SetValue();
+        });
 }
 
 TString TProgram::ResultsAsString() const {

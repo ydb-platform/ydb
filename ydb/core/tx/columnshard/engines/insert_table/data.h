@@ -33,8 +33,13 @@ public:
 
 private:
     YDB_READONLY(ui64, SchemaVersion, 0);
+    YDB_READONLY_FLAG(NotAbortable, false);
 
 public:
+    void MarkAsNotAbortable() {
+        NotAbortableFlag = true;
+    }
+
     std::optional<TString> GetBlobData() const {
         if (BlobDataGuard) {
             return BlobDataGuard->GetData();
@@ -104,7 +109,7 @@ public:
     /// One of them wins and becomes committed. Original DedupId would be lost then.
     /// After commit we use original Initiator:WriteId as DedupId of inserted blob inside {PlanStep, TxId}.
     /// pathId, initiator, {writeId}, {dedupId} -> pathId, planStep, txId, {dedupId}
-    void Commit(ui64 planStep, ui64 txId) {
+    void Commit(const ui64 planStep, const ui64 txId) {
         DedupId = ToString(PlanStep) + ":" + ToString((ui64)WriteTxId);
         PlanStep = planStep;
         WriteTxId = txId;

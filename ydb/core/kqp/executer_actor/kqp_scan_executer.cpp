@@ -272,32 +272,6 @@ private:
 
 public:
 
-    void FillResponseStats(Ydb::StatusIds::StatusCode status) {
-        auto& response = *ResponseEv->Record.MutableResponse();
-
-        response.SetStatus(status);
-
-        if (Stats) {
-            ReportEventElapsedTime();
-
-            Stats->FinishTs = TInstant::Now();
-            Stats->Finish();
-
-            if (Stats->CollectStatsByLongTasks || CollectFullStats(Request.StatsMode)) {
-                const auto& tx = Request.Transactions[0].Body;
-                auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats());
-                response.MutableResult()->MutableStats()->AddTxPlansWithStats(planWithStats);
-            }
-
-            if (Stats->CollectStatsByLongTasks) {
-                const auto& txPlansWithStats = response.GetResult().GetStats().GetTxPlansWithStats();
-                if (!txPlansWithStats.empty()) {
-                    LOG_N("Full stats: " << txPlansWithStats);
-                }
-            }
-        }
-    }
-
     void Finalize() {
         FillResponseStats(Ydb::StatusIds::SUCCESS);
 

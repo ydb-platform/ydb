@@ -475,7 +475,7 @@ TEST(TErrorTest, ErrorSkeletonStubImplementation)
 
 TEST(TErrorTest, FormatCtor)
 {
-    EXPECT_EQ("Some error %v", TError("Some error %v").GetMessage());
+    // EXPECT_EQ("Some error %v", TError("Some error %v").GetMessage()); // No longer compiles due to static analysis.
     EXPECT_EQ("Some error hello", TError("Some error %v", "hello").GetMessage());
 }
 
@@ -851,6 +851,82 @@ TEST(TErrorTest, AttributeSerialization)
         "        L1\n"
         "        L2\n"
         "        L3\n"));
+}
+
+TEST(TErrorTest, MacroStaticAnalysis)
+{
+    auto swallow = [] (auto expr) {
+        try {
+            expr();
+        } catch (...) {
+        }
+    };
+
+    swallow([] {
+        THROW_ERROR_EXCEPTION("Foo");
+    });
+    swallow([] {
+        THROW_ERROR_EXCEPTION("Hello, %v", "World");
+    });
+    swallow([] {
+        THROW_ERROR_EXCEPTION(NYT::EErrorCode::Generic, "Foo");
+    });
+    swallow([] {
+        THROW_ERROR_EXCEPTION(NYT::EErrorCode::Generic, "Foo%v", "Bar");
+    });
+    swallow([] {
+        THROW_ERROR_EXCEPTION(NYT::EErrorCode::Generic, "Foo%v%v", "Bar", "Baz");
+    });
+    swallow([] {
+        THROW_ERROR_EXCEPTION_IF_FAILED(TError{}, "Foo");
+    });
+    swallow([] {
+        THROW_ERROR_EXCEPTION_IF_FAILED(TError{}, "Foo%v", "Bar");
+    });
+    swallow([] {
+        THROW_ERROR_EXCEPTION_IF_FAILED(TError{}, "Foo%v%v", "Bar", "Baz");
+    });
+    swallow([] {
+        THROW_ERROR_EXCEPTION_IF_FAILED(TError{}, NYT::EErrorCode::Generic, "Foo%v", "Bar");
+    });
+    swallow([] {
+        THROW_ERROR_EXCEPTION_IF_FAILED(TError{}, NYT::EErrorCode::Generic, "Foo%v%v", "Bar", "Baz");
+    });
+}
+
+TEST(TErrorTest, WrapStaticAnalysis)
+{
+    TError error;
+    Y_UNUSED(error.Wrap());
+    Y_UNUSED(error.Wrap(std::exception{}));
+    Y_UNUSED(error.Wrap("Hello"));
+    Y_UNUSED(error.Wrap("Hello, %v", "World"));
+    Y_UNUSED(error.Wrap(TRuntimeFormat{"Hello, %v"}));
+}
+
+// NB(arkady-e1ppa): Uncomment these occasionally to see
+// that static analysis is still working.
+TEST(TErrorTest, MacroStaticAnalysisBrokenFormat)
+{
+    // auto swallow = [] (auto expr) {
+    //     try {
+    //         expr();
+    //     } catch (...) {
+    //     }
+    // };
+
+    // swallow([] {
+    //     THROW_ERROR_EXCEPTION("Hello, %v");
+    // });
+    // swallow([] {
+    //     THROW_ERROR_EXCEPTION(TErrorCode{}, "Foo%v");
+    // });
+    // swallow([] {
+    //     THROW_ERROR_EXCEPTION_IF_FAILED(TError{}, "Foo%v");
+    // });
+    // swallow([] {
+    //     THROW_ERROR_EXCEPTION_IF_FAILED(TError{}, TErrorCode{}, "Foo%v");
+    // });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

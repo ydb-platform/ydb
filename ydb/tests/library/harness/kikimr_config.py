@@ -392,10 +392,10 @@ class KikimrConfigGenerator(object):
             self.yaml_config["feature_flags"]['enable_temp_tables'] = True
             self.yaml_config["feature_flags"]['enable_table_pg_types'] = True
             self.yaml_config['feature_flags']['enable_uniq_constraint'] = True
-            if not "local_pg_wire_config" in self.yaml_config:
+            if "local_pg_wire_config" not in self.yaml_config:
                 self.yaml_config["local_pg_wire_config"] = {}
 
-            ydb_pgwire_port=self.port_allocator.get_node_port_allocator(node_id).pgwire_port
+            ydb_pgwire_port = self.port_allocator.get_node_port_allocator(node_id).pgwire_port
             self.yaml_config['local_pg_wire_config']['listening_port'] = ydb_pgwire_port
 
             # https://github.com/ydb-platform/ydb/issues/5152

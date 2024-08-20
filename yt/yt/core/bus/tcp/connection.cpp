@@ -214,7 +214,8 @@ void TTcpConnection::Start()
     }
 
     if (!Poller_->TryRegister(this)) {
-        Abort(TError(NBus::EErrorCode::TransportError, "Cannot register connection pollable"));
+        auto error = TError(NBus::EErrorCode::TransportError, "Cannot register connection pollable");
+        Abort(error, NLogging::ELogLevel::Warning);
         return;
     }
 
@@ -223,8 +224,8 @@ void TTcpConnection::Start()
     try {
         InitBuffers();
     } catch (const std::exception& ex) {
-        Abort(TError(NBus::EErrorCode::TransportError, "I/O buffers allocation error")
-            << ex);
+        auto error = TError(NBus::EErrorCode::TransportError, "I/O buffers allocation error") << ex;
+        Abort(error, NLogging::ELogLevel::Warning);
         return;
     }
 
@@ -504,7 +505,7 @@ void TTcpConnection::SetupNetwork(const TNetworkAddress& address)
     }
 }
 
-void TTcpConnection::Abort(const TError& error)
+void TTcpConnection::Abort(const TError& error, NLogging::ELogLevel logLevel)
 {
     AbortSslSession();
 
@@ -542,7 +543,7 @@ void TTcpConnection::Abort(const TError& error)
         PendingControl_.fetch_or(static_cast<ui64>(EPollControl::Shutdown));
     }
 
-    YT_LOG_DEBUG(detailedError, "Connection aborted");
+    YT_LOG_EVENT(Logger, logLevel, detailedError, "Connection aborted");
 
     // OnShutdown() will be called after draining events from thread pools.
     YT_UNUSED_FUTURE(Poller_->Unregister(this));

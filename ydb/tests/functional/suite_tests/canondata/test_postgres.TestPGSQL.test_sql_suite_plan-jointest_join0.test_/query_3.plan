@@ -48,7 +48,7 @@
                                                 "Name": "Aggregate"
                                             },
                                             {
-                                                "Condition": "hundred = thousand",
+                                                "Condition": "a.hundred = b.thousand",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 2
@@ -179,7 +179,10 @@
                     }
                 ]
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

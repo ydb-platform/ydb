@@ -6,6 +6,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/protos/index_builder.pb.h>
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
@@ -166,11 +167,8 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
 
         CreateShardedTableForIndex(server, sender, "/Root", "table-2", 1, false);
 
-        auto observer = runtime.AddObserver<TEvDataShard::TEvCompactBorrowed>([&](TEvDataShard::TEvCompactBorrowed::TPtr& event) {
-            Cerr << "Captured TEvDataShard::TEvCompactBorrowed from " << runtime.FindActorName(event->Sender) << " to " << runtime.FindActorName(event->GetRecipientRewrite()) << Endl;
-            if (runtime.FindActorName(event->Sender) == "FLAT_SCHEMESHARD_ACTOR") {
-                event.Reset();
-            }
+        TBlockEvents<TEvDataShard::TEvCompactBorrowed> block(runtime, [&](TEvDataShard::TEvCompactBorrowed::TPtr& event) {
+            return runtime.FindActorName(event->Sender) == "FLAT_SCHEMESHARD_ACTOR";
         });
 
         auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1" });

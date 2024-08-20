@@ -1064,19 +1064,6 @@ public:
         }
     }
 
-    static TPathId GetPathId(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        if (ev->Get()->Request->ResultSet.size() == 1) {
-            if (ev->Get()->Request->ResultSet.begin()->Self) {
-                const auto& info = ev->Get()->Request->ResultSet.begin()->Self->Info;
-                return TPathId(info.GetSchemeshardId(), info.GetPathId());
-            }
-            if (ev->Get()->Request->ResultSet.begin()->TableId) {
-                return ev->Get()->Request->ResultSet.begin()->TableId.PathId;
-            }
-        }
-        return {};
-    }
-
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         bool firstNavigate = (ev->Cookie == 0);
         TPathId pathId = GetPathId(ev);

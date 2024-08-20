@@ -20,11 +20,22 @@ using namespace NTestUtils;
 using namespace fmt::literals;
 
 Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
+    TString GetSymbolsString(char start, char end, const TString& skip = "") {
+        TStringBuilder result;
+        for (char symbol = start; symbol <= end; ++symbol) {
+            if (skip.Contains(symbol)) {
+                continue;
+            }
+            result << symbol;
+        }
+        return result;
+    }
+
     Y_UNIT_TEST(ExecuteScriptWithExternalTableResolve) {
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString externalTableName = "/Root/test_binding_resolve";
         const TString bucket = "test_bucket1";
-        const TString object = "test_object";
+        const TString object = TStringBuilder() << "test_" << GetSymbolsString(' ', '~', "{}") << "_object";
 
         CreateBucketWithObject(bucket, object, TEST_CONTENT);
 
@@ -49,7 +60,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             "external_source"_a = externalDataSourceName,
             "external_table"_a = externalTableName,
             "location"_a = GetBucketLocation(bucket),
-            "object"_a = object
+            "object"_a = EscapeC(object)
             );
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
@@ -930,7 +941,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString externalTableName = "/Root/test_binding_resolve";
         const TString bucket = "test_bucket1";
-        const TString object = "year=1/month=2/test_object";
+        const TString object = TStringBuilder() << "year=1/month=2/test_" << GetSymbolsString(' ', '~') << "_object";
         const TString content = "data,year,month\ntest,1,2";
 
         CreateBucketWithObject(bucket, object, content);
@@ -2130,6 +2141,46 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         }
     }
 
+    Y_UNIT_TEST(TestReadEmptyFileWithCsvFormat) {
+        const TString externalDataSourceName = "/Root/external_data_source";
+        const TString bucket = "test_bucket1";
+
+        CreateBucketWithObject(bucket, "test_object", "");
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        const TString query = fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{location}",
+                AUTH_METHOD="NONE"
+            );)",
+            "external_source"_a = externalDataSourceName,
+            "location"_a = GetBucketLocation(bucket)
+            );
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        const TString sql = fmt::format(R"(
+                SELECT * FROM `{external_source}`.`/`
+                WITH (
+                    SCHEMA = (
+                        data String
+                    ),
+                    FORMAT = "csv_with_names"
+                )
+            )", "external_source"_a=externalDataSourceName);
+
+        auto db = kikimr->GetQueryClient();
+        auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+        UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+
+        NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
+        UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
+    }
 }
 
 } // namespace NKikimr::NKqp

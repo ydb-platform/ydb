@@ -60,7 +60,7 @@
                                                 "Predicate": "Exist(item.y.y2)"
                                             },
                                             {
-                                                "Condition": "x1 = y1",
+                                                "Condition": "x.x1 = y.y1",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 15
@@ -237,7 +237,10 @@
                 ],
                 "Subplan Name": "CTE precompute_0_0"
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

@@ -20,6 +20,7 @@ void PrepareScheme(NKikimrSchemeOp::TTableDescription* schema, const TString& na
     //inherit all from Src except PartitionConfig, PartitionConfig could be altered
     completedSchema.MutablePartitionConfig()->CopyFrom(schema->GetPartitionConfig());
     schema->Swap(&completedSchema);
+    schema->SetSystemColumnNamesAllowed(true);
 }
 
 class TConfigureParts: public TSubOperationState {

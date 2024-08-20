@@ -558,9 +558,9 @@ private:
                 requestControl,
                 responseHandler,
                 TStringBuf("Request timed out"),
-                TError(NYT::EErrorCode::Timeout, aborted
+                TError(NYT::EErrorCode::Timeout, TRuntimeFormat(aborted
                     ? "Request timed out or timer was aborted"
-                    : "Request timed out"));
+                    : "Request timed out")));
         }
 
         void HandleAcknowledgementTimeout(const TClientRequestControlPtr& requestControl, bool aborted)

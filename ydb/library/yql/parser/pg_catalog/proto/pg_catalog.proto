@@ -54,9 +54,34 @@ message TPgTable {
     repeated bool DataNull = 8;
 }
 
+message TPgCast {
+    optional uint32 Id = 1;
+    optional uint32 SourceId = 2;
+    optional uint32 TargetId = 3;
+    optional uint32 ExtensionIndex = 4;
+    optional uint32 Method = 5;
+    optional uint32 FunctionId = 6;
+    optional uint32 CoercionCode = 7;
+}
+
+message TPgOper {
+    optional uint32 OperId = 1;
+    optional string Name = 2;
+    optional uint32 ExtensionIndex = 3;
+    optional uint32 LeftType = 4;
+    optional uint32 RightType = 5;
+    optional uint32 Kind = 6;
+    optional uint32 ProcId = 7;
+    optional uint32 ResultType = 8;
+    optional uint32 ComId = 9;
+    optional uint32 NegateId = 10;
+}
+
 message TPgCatalog {
-    repeated TPgType Type = 1;
-    repeated TPgProc Proc = 2;
-    repeated TPgTable Table = 3;
-    repeated TPgExtension Extension = 4;
+    repeated TPgExtension Extension = 1;
+    repeated TPgType Type = 2;
+    repeated TPgProc Proc = 3;
+    repeated TPgTable Table = 4;
+    repeated TPgCast Cast = 5;
+    repeated TPgOper Oper = 6;
 }

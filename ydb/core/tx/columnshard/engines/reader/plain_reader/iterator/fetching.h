@@ -222,7 +222,7 @@ public:
 class TAllocateMemoryStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
-    std::shared_ptr<TColumnsSet> Columns;
+    TColumnsSetIds Columns;
     const EStageFeaturesIndexes StageIndex;
 
 protected:
@@ -245,38 +245,36 @@ protected:
         return 0;
     }
     virtual TString DoDebugString() const override {
-        return TStringBuilder() << "columns=" << Columns->DebugString() << ";stage=" << StageIndex << ";";
+        return TStringBuilder() << "columns=" << Columns.DebugString() << ";stage=" << StageIndex << ";";
     }
 
 public:
-    TAllocateMemoryStep(const std::shared_ptr<TColumnsSet>& columns, const EStageFeaturesIndexes stageIndex)
+    TAllocateMemoryStep(const TColumnsSetIds& columns, const EStageFeaturesIndexes stageIndex)
         : TBase("ALLOCATE_MEMORY::" + ::ToString(stageIndex))
         , Columns(columns)
         , StageIndex(stageIndex) {
-        AFL_VERIFY(Columns);
-        AFL_VERIFY(Columns->GetColumnsCount());
+        AFL_VERIFY(Columns.GetColumnsCount());
     }
 };
 
 class TColumnBlobsFetchingStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
-    std::shared_ptr<TColumnsSet> Columns;
+    TColumnsSetIds Columns;
 
 protected:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     virtual ui64 DoPredictRawBytes(const std::shared_ptr<IDataSource>& source) const override;
     virtual TString DoDebugString() const override {
-        return TStringBuilder() << "columns=" << Columns->DebugString() << ";";
+        return TStringBuilder() << "columns=" << Columns.DebugString() << ";";
     }
 
 public:
     virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const override;
-    TColumnBlobsFetchingStep(const std::shared_ptr<TColumnsSet>& columns)
+    TColumnBlobsFetchingStep(const TColumnsSetIds& columns)
         : TBase("FETCHING_COLUMNS")
         , Columns(columns) {
-        AFL_VERIFY(Columns);
-        AFL_VERIFY(Columns->GetColumnsCount());
+        AFL_VERIFY(Columns.GetColumnsCount());
     }
 };
 

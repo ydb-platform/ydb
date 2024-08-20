@@ -400,6 +400,11 @@ message TTableDescription {
     optional TTableReplicationConfig ReplicationConfig = 40;
 
     optional bool Temporary = 41;
+
+    // This flag is create-only, and has to be set up
+    // on table creation to allow system column names (started with __ydb_)
+    // It won't be present on describes and won't be preserved
+    optional bool SystemColumnNamesAllowed = 42;
 }
 
 message TDictionaryEncodingSettings {

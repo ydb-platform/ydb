@@ -425,7 +425,7 @@ TError::TErrorOr(TError&& other) noexcept
 TError::TErrorOr(const std::exception& ex)
 {
     if (auto simpleException = dynamic_cast<const TSimpleException*>(&ex)) {
-        *this = TError(NYT::EErrorCode::Generic, simpleException->GetMessage());
+        *this = TError(NYT::EErrorCode::Generic, TRuntimeFormat(simpleException->GetMessage()));
         // NB: clang-14 is incapable of capturing structured binding variables
         //  so we force materialize them via this function call.
         auto addAttribute = [this] (const auto& key, const auto& value) {
@@ -446,16 +446,16 @@ TError::TErrorOr(const std::exception& ex)
     } else if (const auto* errorEx = dynamic_cast<const TErrorException*>(&ex)) {
         *this = errorEx->Error();
     } else {
-        *this = TError(NYT::EErrorCode::Generic, ex.what());
+        *this = TError(NYT::EErrorCode::Generic, TRuntimeFormat(ex.what()));
     }
     YT_VERIFY(!IsOK());
 }
 
-TError::TErrorOr(TString message)
+TError::TErrorOr(TString message, TDisableFormat)
     : Impl_(std::make_unique<TImpl>(std::move(message)))
 { }
 
-TError::TErrorOr(TErrorCode code, TString message)
+TError::TErrorOr(TErrorCode code, TString message, TDisableFormat)
     : Impl_(std::make_unique<TImpl>(code, std::move(message)))
 { }
 
@@ -482,7 +482,7 @@ TError TError::FromSystem()
 
 TError TError::FromSystem(int error)
 {
-    return TError(TErrorCode(LinuxErrorCodeBase + error), LastSystemErrorText(error)) <<
+    return TError(TErrorCode(LinuxErrorCodeBase + error), TRuntimeFormat(LastSystemErrorText(error))) <<
         TErrorAttribute("errno", error);
 }
 

@@ -25,6 +25,7 @@ static void FillTableStats(NKikimrTableStats::TTableStats* stats, const TPartiti
     stats->SetRowCount(tableStats.RowCount);
     stats->SetDataSize(tableStats.DataSize);
     stats->SetIndexSize(tableStats.IndexSize);
+    stats->SetByKeyFilterSize(tableStats.ByKeyFilterSize);
     stats->SetLastAccessTime(tableStats.LastAccessTime.MilliSeconds());
     stats->SetLastUpdateTime(tableStats.LastUpdateTime.MilliSeconds());
     stats->SetImmediateTxCompleted(tableStats.ImmediateTxCompleted);

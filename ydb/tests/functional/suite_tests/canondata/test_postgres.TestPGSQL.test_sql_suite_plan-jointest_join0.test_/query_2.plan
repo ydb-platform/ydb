@@ -77,7 +77,7 @@
                                                 "Name": "CrossJoin"
                                             },
                                             {
-                                                "Condition": "thousand = Sum0",
+                                                "Condition": "t.thousand = b.Sum0",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 4
@@ -221,7 +221,10 @@
                 ],
                 "Subplan Name": "CTE precompute_0_0"
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

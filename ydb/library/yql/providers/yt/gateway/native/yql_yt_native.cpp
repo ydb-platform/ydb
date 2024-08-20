@@ -233,17 +233,22 @@ public:
     TFuture<void> CloseSession(TCloseSessionOptions&& options) final {
         YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
 
+        TSession::TPtr session;
         with_lock(Mutex_) {
             auto it = Sessions_.find(options.SessionId());
             if (it != Sessions_.end()) {
-                auto session = it->second;
+                session = it->second;
                 Sessions_.erase(it);
-                try {
-                    session->Close();
-                } catch (...) {
-                    YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
-                    return MakeErrorFuture<void>(std::current_exception());
-                }
+            }
+        }
+
+        // Do final destruction outside of mutex, because it may do some transaction aborts on YT clusters
+        if (session) {
+            try {
+                session->Close();
+            } catch (...) {
+                YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+                return MakeErrorFuture<void>(std::current_exception());
             }
         }
 
@@ -3198,6 +3203,16 @@ private:
         bool forceTransform = NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::ForceTransform);
         bool combineChunks = NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::CombineChunks);
         TMaybe<ui64> limit = GetLimit(merge.Settings().Ref());
+
+        const auto cluster = merge.DataSink().Cluster().StringValue();
+        const bool hasOutGroup = !execCtx->OutTables_.front().ColumnGroups.IsUndefined();
+        const bool lookup = execCtx->Options_.Config()->OptimizeFor.Get(cluster).GetOrElse(NYT::OF_LOOKUP_ATTR) == NYT::OF_LOOKUP_ATTR;
+        const bool enabledColGroup = execCtx->Options_.Config()->ColumnGroupMode.Get().GetOrElse(EColumnGroupMode::Disable) != EColumnGroupMode::Disable;
+        const bool hasNonTmpInput = !AllOf(execCtx->InputTables_, [](const auto& table) { return table.Temp; });
+
+        forceTransform = forceTransform
+            || (!lookup && enabledColGroup != hasOutGroup)
+            || (!lookup && hasOutGroup && hasNonTmpInput);
 
         return execCtx->Session_->Queue_->Async([forceTransform, combineChunks, limit, execCtx]() {
             return execCtx->LookupQueryCacheAsync().Apply([forceTransform, combineChunks, limit, execCtx] (const auto& f) {

@@ -305,7 +305,7 @@ message TTableServiceConfig {
 
     message TSubPoolsConfiguration {
         repeated TComputePoolConfiguration SubPools = 1;
-    };
+    }
 
     message TComputePoolConfiguration {
         optional double MaxCpuShare = 1;
@@ -313,8 +313,15 @@ message TTableServiceConfig {
             string Name = 2;
             TSubPoolsConfiguration SubPoolsConfiguration = 3;
         }
-    };
+    }
+
+    message TComputeSchedulerSettings {
+        optional uint64 AdvanceTimeIntervalUsec = 1 [default = 50000];
+        optional uint64 ForgetOverflowTimeoutUsec = 2 [default = 2000000];
+    }
+
     optional TComputePoolConfiguration PoolsConfiguration = 68;
+    optional TComputeSchedulerSettings ComputeSchedulerSettings = 70;
 
     optional bool EnableRowsDuplicationCheck = 69 [ default = false ];
 };

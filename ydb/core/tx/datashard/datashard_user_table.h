@@ -354,7 +354,6 @@ struct TUserTable : public TThrRefBase {
 
     struct TStats {
         NTable::TStats DataStats;
-        ui64 IndexSize = 0;
         ui64 MemRowCount = 0;
         ui64 MemDataSize = 0;
         TInstant AccessTime;
@@ -371,14 +370,6 @@ struct TUserTable : public TThrRefBase {
         ui64 BackgroundCompactionCount = 0;
         ui64 CompactBorrowedCount = 0;
         NTable::TKeyAccessSample AccessStats;
-
-        void Update(NTable::TStats&& dataStats, ui64 indexSize, THashSet<ui64>&& partOwners, ui64 partCount, TInstant statsUpdateTime) {
-            DataStats = dataStats;
-            IndexSize = indexSize;
-            PartOwners = partOwners;
-            PartCount = partCount;
-            StatsUpdateTime = statsUpdateTime;
-        }
     };
 
     struct TSpecialUpdate {

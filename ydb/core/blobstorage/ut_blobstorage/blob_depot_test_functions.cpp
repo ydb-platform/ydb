@@ -1,4 +1,5 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
 #include <ydb/core/blob_depot/events.h>
 
 #include <algorithm>
@@ -460,14 +461,18 @@ void TestVerifiedRandom(TBlobDepotTestEnvironment& tenv, ui32 nodeCount, ui64 ta
         COLLECT_GARBAGE_HARD,
         COLLECT_GARBAGE_SOFT,
         RESTART_BLOB_DEPOT,
+        __COUNT__,
     };
 
     std::vector<std::string> actionName = {
         "ALTER", "PUT", "GET", "MULTIGET", "RANGE", "BLOCK", "DISCOVER", "COLLECT_GARBAGE_HARD", "COLLECT_GARBAGE_SOFT", "RESTART_BLOB_DEPOT"
     };
 
-    std::vector<ui32> probs = probabilities;
-    TIntervals act(probs);
+    TWeightedRandom<ui32> act(tenv.RandomSeed + 0xABCD);
+    Y_ABORT_UNLESS(probabilities.size() == EActions::__COUNT__);
+    for (ui32 i = 0; i < probabilities.size(); ++i) {
+        act.AddValue(i, probabilities[i]);
+    }
 
     std::vector<ui64> tablets = {tabletId0, tabletId0 + 1, tabletId0 + 2};
     std::vector<ui32> tabletGen = {1, 1, 1};
@@ -508,7 +513,7 @@ void TestVerifiedRandom(TBlobDepotTestEnvironment& tenv, ui32 nodeCount, ui64 ta
         ui32 hardCollectGen = state[tabletId].Channels[channel].HardCollectGen;
         ui32 hardCollectStep = state[tabletId].Channels[channel].HardCollectStep;
 
-        ui32 action = act.GetInterval(tenv.Rand(act.UpperLimit()));
+        ui32 action = act.GetRandom();
         // Cerr << "iteration# " << iteration << " action# " << actionName[action] << " timer# " << timer.Passed() << Endl;
         switch (action) {
         case EActions::ALTER:
@@ -689,13 +694,13 @@ void TestVerifiedRandom(TBlobDepotTestEnvironment& tenv, ui32 nodeCount, ui64 ta
             break;
 
         default:
-            UNIT_FAIL("TIntervals failed");
+            UNIT_FAIL("Unknown action# " << action);
         }
     }
 }
 
 void TestLoadPutAndGet(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 groupId, ui32 blobsNum, ui32 maxBlobSize,
-        ui32 readsNum, bool decommit, ui32 timeLimitSec, std::vector<ui32> probablities) {
+        ui32 readsNum, bool decommit, ui32 timeLimitSec, std::vector<ui32> probabilities) {
     enum EActions {
         GET,
         MULTIGET,
@@ -703,9 +708,14 @@ void TestLoadPutAndGet(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 grou
         DISCOVER,
         CATCH_ALL,
         RESTART_BLOB_DEPOT,
+        __COUNT__,
     };
-    std::vector<ui32> probs = probablities;
-    TIntervals act(probs);
+    
+    TWeightedRandom<ui32> act(tenv.RandomSeed + 0xABCD);
+    Y_ABORT_UNLESS(probabilities.size() == EActions::__COUNT__);
+    for (ui32 i = 0; i < probabilities.size(); ++i) {
+        act.AddValue(i, probabilities[i]);
+    }
 
     std::vector<TBlobInfo> blobs;
     std::map<TLogoBlobID, TBlobInfo*> mappedBlobs;
@@ -748,7 +758,7 @@ void TestLoadPutAndGet(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 grou
     THPTimer timer;
 
     for (ui32 iteration = 0; iteration < readsNum; ++iteration) {
-        ui32 action = act.GetInterval(tenv.Rand(act.UpperLimit()));
+        ui32 action = act.GetRandom();
         if (iteration == readsNum - 1) { // Catch all results on the last iteration
             action = EActions::CATCH_ALL;
         }
@@ -875,7 +885,7 @@ void TestLoadPutAndGet(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 grou
             break;
 
         default:
-            UNIT_FAIL("TIntervals failed");
+            UNIT_FAIL("Unknown action# " << action);
         }
     }
 }

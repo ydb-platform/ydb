@@ -7,6 +7,11 @@ namespace NKikimr::NOlap::NIndexes::NCountMinSketch {
 
 std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TCountMinSketchConstructor::DoCreateIndexMeta(const ui32 indexId, const TString& indexName, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
     std::set<ui32> columnIds;
+    if (ColumnNames.empty()) {
+        for (const auto& [id, _] : currentSchema.GetColumns().GetColumns()) {
+            AFL_VERIFY(columnIds.emplace(id).second);
+        }
+    }
     for (auto&& i : ColumnNames) {
         auto* columnInfo = currentSchema.GetColumns().GetByName(i);
         if (!columnInfo) {

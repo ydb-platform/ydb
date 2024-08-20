@@ -523,11 +523,11 @@ public:
                 Progress(BuildId);
             }
             break;
-        }
         case TIndexBuildInfo::EState::Rejected:
             SendNotificationsIfFinished(buildInfo);
             // stay calm keep status/issues
             break;
+        }
 
         return true;
     }

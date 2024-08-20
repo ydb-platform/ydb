@@ -6,8 +6,9 @@ option java_multiple_files = true;
 
 option go_package = "a.yandex-team.ru/yt/go/proto/client/api/rpc_proxy";
 
-import "yt_proto/yt/core/misc/proto/guid.proto";
 import "yt_proto/yt/core/misc/proto/error.proto";
+import "yt_proto/yt/core/misc/proto/guid.proto";
+import "yt_proto/yt/core/misc/proto/hyperloglog.proto";
 import "yt_proto/yt/core/ytree/proto/attributes.proto";
 import "yt_proto/yt/core/ytree/proto/request_complexity_limits.proto";
 import "yt_proto/yt/client/chunk_client/proto/data_statistics.proto";
@@ -224,6 +225,8 @@ enum EMultiplexingBand
     MB_CONTROL = 1;
     MB_HEAVY = 2;
     MB_INTERACTIVE = 3;
+    MB_REAL_TIME = 4;
+    MB_JOURNAL = 5;
 }
 
 enum ETableSchemaModification
@@ -502,6 +505,7 @@ message TReqLookupRows
 message TRspLookupRows
 {
     required TRowsetDescriptor rowset_descriptor = 200;
+    repeated int32 unavailable_key_indexes = 201;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -542,6 +546,7 @@ message TReqVersionedLookupRows
 message TRspVersionedLookupRows
 {
     required TRowsetDescriptor rowset_descriptor = 200;
+    repeated int32 unavailable_key_indexes = 201;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -577,8 +582,8 @@ message TRspMultiLookup
     message TSubresponse
     {
         required TRowsetDescriptor rowset_descriptor = 1;
-
         required int32 attachment_count = 2;
+        repeated int32 unavailable_key_indexes = 3;
     }
 
     repeated TSubresponse subresponses = 1;
@@ -2058,6 +2063,9 @@ message TColumnarStatistics
     optional int64 chunk_row_count = 12;
     // Total number of rows in legacy chunks whose meta misses columnar statistics.
     optional int64 legacy_chunk_row_count = 13;
+
+    // Per-column hyperloglog digest to approximate number of unique values
+    repeated NYT.NProto.THyperLogLog column_hyperloglog_digests = 14;
 }
 
 message TRspGetColumnarStatistics
@@ -2992,6 +3000,7 @@ message TOperation
     optional bytes events = 18; // YSON
     optional bytes result = 19; // YSON
 
+    optional bytes scheduling_attributes_per_pool_tree = 28; // YSON
     optional bytes slot_index_per_pool_tree = 20; // YSON
 
     optional bytes task_names = 21; // YSON
@@ -3102,6 +3111,7 @@ message TJob
     optional bool has_probing_competitors = 26;
     optional uint64 job_cookie = 27;
     optional bytes archive_features = 29; // YSON
+    optional string monitoring_descriptor = 30;
 }
 
 message TListJobsStatistics
@@ -3202,7 +3212,7 @@ message TReqStartQuery
     optional bool draft = 5;
     optional bytes annotations = 6; // YSON
     repeated TQueryFile files = 7;
-    optional string access_control_object = 8; // deprecated
+    optional string access_control_object = 8; // COMPAT(mpereskokova)
     optional TAccessControlObjects access_control_objects = 9;
 }
 
@@ -3277,7 +3287,7 @@ message TQuery
     optional uint64 finish_time = 6; // TInstant
     optional bytes settings = 7; // YSON
     optional string user = 8;
-    optional string access_control_object = 9; // deprecated
+    optional string access_control_object = 9; // COMPAT(mpereskokova)
     optional EQueryState state = 10;
     optional int64 result_count = 11;
     optional bytes progress = 12; // YSON
@@ -3338,7 +3348,7 @@ message TReqAlterQuery
     required string query_tracker_stage = 1;
     required NYT.NProto.TGuid query_id = 2;
     optional bytes annotations = 3; // YSON
-    optional string access_control_object = 4; // deprecated
+    optional string access_control_object = 4; // COMPAT(mpereskokova)
     optional TAccessControlObjects access_control_objects = 5;
 }
 

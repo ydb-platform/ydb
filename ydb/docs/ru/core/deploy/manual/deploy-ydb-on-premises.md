@@ -282,7 +282,7 @@ sudo chmod 700 /opt/ydb/certs
 
 ## Создайте базу данных {#create-db}
 
-Для работы с таблицами необходимо создать как минимум одну базу данных и запустить процесс или процессы, обслуживающие эту базу данных (динамические узлы).
+Для работы со строковыми или колоночными таблицами необходимо создать как минимум одну базу данных и запустить процесс или процессы, обслуживающие эту базу данных (динамические узлы).
 
 Для выполнения административной команды создания базы данных потребуется файл сертификата центра регистрации `ca.crt`, аналогично описанному выше порядку выполнения действий по инициализации кластера.
 
@@ -440,14 +440,25 @@ sudo chmod 700 /opt/ydb/certs
 
 1. Установите {{ ydb-short-name }} CLI, как описано в [документации](../../reference/ydb-cli/install.md).
 
-1. Создайте тестовую таблицу `test_table`:
+1. Создайте тестовую строковую (`test_row_table`) или колоночную таблицу (`test_column_table`):
 
-   ```bash
-   ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
-       yql -s 'CREATE TABLE `testdir/test_table` (id Uint64, title Utf8, PRIMARY KEY (id));'
-   ```
+{% list tabs %}
 
-   Где `<node.ydb.tech>` - FQDN сервера, на котором запущен динамический узел, обслуживающий базу `/Root/testdb`.
+- Создание строковой таблицы
+    ```bash
+    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
+        yql -s 'CREATE TABLE `testdir/test_row_table` (id Uint64, title Utf8, PRIMARY KEY (id));'
+    ```
+
+- Создание колоночной таблицы
+    ```bash
+    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
+        yql -s 'CREATE TABLE `testdir/test_column_table` (id Uint64, title Utf8, PRIMARY KEY (id)) WITH (STORE = COLUMN);'
+    ```
+
+{% endlist %}
+
+Где `<node.ydb.tech>` - FQDN сервера, на котором запущен динамический узел, обслуживающий базу `/Root/testdb`.
 
 ## Проверка доступа ко встроенному web-интерфейсу
 

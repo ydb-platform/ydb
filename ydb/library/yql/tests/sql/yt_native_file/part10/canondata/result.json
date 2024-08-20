@@ -507,6 +507,34 @@
             "uri": "https://{canondata_backend}/1775059/f7233eab470e14ecb29d15fd37372b772f337134/resource.tar.gz#test.test_blocks-complex_scalars--Results_/results.txt"
         }
     ],
+    "test.test[blocks-decimal_op_decimal_scalar--Debug]": [
+        {
+            "checksum": "7ab03080f37134e8ac44adf0535447e4",
+            "size": 2649,
+            "uri": "https://{canondata_backend}/1925842/b4ba828fa1381ceb904718b3893838f55fa7ae74/resource.tar.gz#test.test_blocks-decimal_op_decimal_scalar--Debug_/opt.yql"
+        }
+    ],
+    "test.test[blocks-decimal_op_decimal_scalar--Peephole]": [
+        {
+            "checksum": "7b521ba23685f70f19441403c16518e5",
+            "size": 2355,
+            "uri": "https://{canondata_backend}/1925842/b4ba828fa1381ceb904718b3893838f55fa7ae74/resource.tar.gz#test.test_blocks-decimal_op_decimal_scalar--Peephole_/opt.yql"
+        }
+    ],
+    "test.test[blocks-decimal_op_decimal_scalar--Plan]": [
+        {
+            "checksum": "9927995c7376075836fdc6f7d6e7ac46",
+            "size": 4278,
+            "uri": "https://{canondata_backend}/1925842/b4ba828fa1381ceb904718b3893838f55fa7ae74/resource.tar.gz#test.test_blocks-decimal_op_decimal_scalar--Plan_/plan.txt"
+        }
+    ],
+    "test.test[blocks-decimal_op_decimal_scalar--Results]": [
+        {
+            "checksum": "4e84ae929fdb8539ace517e09f953118",
+            "size": 12764,
+            "uri": "https://{canondata_backend}/1925842/b4ba828fa1381ceb904718b3893838f55fa7ae74/resource.tar.gz#test.test_blocks-decimal_op_decimal_scalar--Results_/results.txt"
+        }
+    ],
     "test.test[blocks-interval_add_date_scalar--Debug]": [
         {
             "checksum": "f14bab10ca73965043abe5a326708cf8",
@@ -2254,6 +2282,13 @@
             "checksum": "5df827089086461a82767b8b8858ac85",
             "size": 1897,
             "uri": "https://{canondata_backend}/1809005/81aef895e3303f900cc0cb6245596fe9a0da6573/resource.tar.gz#test.test_pg-values-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[pg_duplicated-ambigous_order_by_with_duplicates--Debug]": [],
+    "test.test[pg_duplicated-ambigous_order_by_with_duplicates--Plan]": [],
+    "test.test[pg_duplicated-ambigous_order_by_with_duplicates--Results]": [
+        {
+            "uri": "file://test.test_pg_duplicated-ambigous_order_by_with_duplicates--Results_/extracted"
         }
     ],
     "test.test[produce-process_multi_in_trivial_lambda--Debug]": [

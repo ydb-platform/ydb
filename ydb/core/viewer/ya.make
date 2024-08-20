@@ -4,78 +4,97 @@ RECURSE_FOR_TESTS(
 
 LIBRARY()
 
+IF(NOT OS_WINDOWS)
+IF(BUILD_TYPE == RELEASE OR BUILD_TYPE == RELWITHDEBINFO)
+    CXXFLAGS(-Oz)
+ENDIF()
+ENDIF()
+
 SRCS(
     browse_db.h
-    browse_pq.h
+    browse_events.h
     browse.h
-    check_access.h
+    browse_pq.h
     counters_hosts.h
-    json_acl.h
-    json_autocomplete.h
-    json_blobindexstat.h
-    json_browse.h
-    json_bscontrollerinfo.h
-    json_bsgroupinfo.h
-    json_cluster.h
-    json_compute.h
-    json_config.h
-    json_content.h
-    json_counters.h
-    json_describe.h
-    json_describe_consumer.h
-    json_describe_topic.h
-    json_local_rpc.h
-    json_getblob.h
-    json_graph.h
+    healthcheck_record.h
+    json_handlers.cpp
+    json_handlers.h
+    json_handlers_browse.cpp
     json_handlers_operation.cpp
     json_handlers_pdisk.cpp
     json_handlers_scheme.cpp
     json_handlers_storage.cpp
     json_handlers_vdisk.cpp
     json_handlers_viewer.cpp
-    json_healthcheck.h
-    json_hiveinfo.h
-    json_hotkeys.h
-    json_labeledcounters.h
-    json_metainfo.h
-    json_netinfo.h
-    json_nodeinfo.h
-    json_nodelist.h
-    json_nodes.h
-    json_pdiskinfo.h
-    json_query.h
-    json_query_old.h
-    json_render.h
-    json_storage.h
-    json_sysinfo.h
-    json_tabletcounters.h
-    json_tabletinfo.h
-    json_tenants.h
-    json_tenantinfo.h
-    json_topicinfo.h
-    json_pqconsumerinfo.h
+    json_handlers_pq.cpp
+    json_local_rpc.h
+    json_pipe_req.cpp
+    json_pipe_req.h
+    json_storage_base.h
     json_vdisk_req.h
-    json_vdisk_evict.h
-    json_vdiskinfo.h
-    json_vdiskstat.h
+    json_wb_req.cpp
     json_wb_req.h
-    json_whoami.h
     log.h
     operation_cancel.h
     operation_forget.h
     operation_get.h
     operation_list.h
     pdisk_info.h
+    pdisk_restart.h
     pdisk_status.h
-    scheme_directory.h
-    storage_groups.cpp
     query_autocomplete_helper.h
-    viewer_capabilities.cpp
+    scheme_directory.h
+    storage_groups.h
+    vdisk_blobindexstat.h
+    vdisk_evict.h
+    vdisk_getblob.h
+    vdisk_vdiskstat.h
+    viewer_acl.h
+    viewer_autocomplete.h
+    viewer_browse.h
+    viewer_bscontrollerinfo.h
+    viewer_bsgroupinfo.h
+    viewer_capabilities.h
+    viewer_check_access.h
+    viewer_cluster.h
+    viewer_compute.h
+    viewer_config.h
+    viewer_content.h
+    viewer_counters.h
+    viewer_describe_consumer.h
+    viewer_describe.h
+    viewer_describe_topic.h
+    viewer_graph.h
+    viewer_healthcheck.h
+    viewer_helper.h
+    viewer_hiveinfo.h
+    viewer_hivestats.h
+    viewer_hotkeys.h
+    viewer_labeled_counters.h
+    viewer_metainfo.h
+    viewer_netinfo.h
+    viewer_nodeinfo.h
+    viewer_nodelist.h
+    viewer_nodes.h
+    viewer_pdiskinfo.h
+    viewer_pqconsumerinfo.h
+    viewer_query.h
+    viewer_query_old.h
+    viewer_render.h
     viewer_request.cpp
     viewer_request.h
-    viewer.cpp
+    viewer_storage.h
+    viewer_storage_usage.h
+    viewer_sysinfo.h
+    viewer_tabletcounters.h
+    viewer_tabletinfo.h
+    viewer_tenantinfo.h
+    viewer_tenants.h
+    viewer_topicinfo.h
+    viewer_vdiskinfo.h
+    viewer_whoami.h
     viewer.h
-    viewer_probes.cpp
+    viewer.cpp
     wb_aggregate.cpp
     wb_aggregate.h
     wb_filter.cpp
@@ -83,6 +102,7 @@ SRCS(
     wb_group.h
     wb_merge.cpp
     wb_merge.h
+    wb_req.h
 )
 
 IF (NOT EXPORT_CMAKE)
@@ -91,14 +111,14 @@ IF (NOT EXPORT_CMAKE)
         monitoring/asset-manifest.json monitoring/asset-manifest.json
         monitoring/index.html monitoring/index.html
         monitoring/static/css/1551.d5e5efc2.chunk.css monitoring/static/css/1551.d5e5efc2.chunk.css
-        monitoring/static/css/163.e73c0662.chunk.css monitoring/static/css/163.e73c0662.chunk.css
+        monitoring/static/css/163.1284ddc4.chunk.css monitoring/static/css/163.1284ddc4.chunk.css
         monitoring/static/css/2418.3ce054a3.chunk.css monitoring/static/css/2418.3ce054a3.chunk.css
         monitoring/static/css/321.e12415cc.chunk.css monitoring/static/css/321.e12415cc.chunk.css
         monitoring/static/css/328.a726d329.chunk.css monitoring/static/css/328.a726d329.chunk.css
         monitoring/static/css/4983.5c3e5de4.chunk.css monitoring/static/css/4983.5c3e5de4.chunk.css
         monitoring/static/css/5246.49d67ade.chunk.css monitoring/static/css/5246.49d67ade.chunk.css
         monitoring/static/css/5715.07ca45c9.chunk.css monitoring/static/css/5715.07ca45c9.chunk.css
-        monitoring/static/css/7045.6b9718cb.chunk.css monitoring/static/css/7045.6b9718cb.chunk.css
+        monitoring/static/css/7045.ebbcb0f7.chunk.css monitoring/static/css/7045.ebbcb0f7.chunk.css
         monitoring/static/css/7542.9a1fbaca.chunk.css monitoring/static/css/7542.9a1fbaca.chunk.css
         monitoring/static/css/8076.5d26c70c.chunk.css monitoring/static/css/8076.5d26c70c.chunk.css
         monitoring/static/css/8424.308a04db.chunk.css monitoring/static/css/8424.308a04db.chunk.css
@@ -124,7 +144,7 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/1551.2e8e3e50.chunk.js monitoring/static/js/1551.2e8e3e50.chunk.js
         monitoring/static/js/1551.2e8e3e50.chunk.js.LICENSE.txt monitoring/static/js/1551.2e8e3e50.chunk.js.LICENSE.txt
         monitoring/static/js/1616.8a217b93.chunk.js monitoring/static/js/1616.8a217b93.chunk.js
-        monitoring/static/js/163.b7149f64.chunk.js monitoring/static/js/163.b7149f64.chunk.js
+        monitoring/static/js/163.2451f8a1.chunk.js monitoring/static/js/163.2451f8a1.chunk.js
         monitoring/static/js/1736.9f4a6b02.chunk.js monitoring/static/js/1736.9f4a6b02.chunk.js
         monitoring/static/js/1746.a8ba5c62.chunk.js monitoring/static/js/1746.a8ba5c62.chunk.js
         monitoring/static/js/1747.b4331799.chunk.js monitoring/static/js/1747.b4331799.chunk.js
@@ -145,7 +165,7 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/214.99a17949.chunk.js.LICENSE.txt monitoring/static/js/214.99a17949.chunk.js.LICENSE.txt
         monitoring/static/js/2141.26c930aa.chunk.js monitoring/static/js/2141.26c930aa.chunk.js
         monitoring/static/js/2141.26c930aa.chunk.js.LICENSE.txt monitoring/static/js/2141.26c930aa.chunk.js.LICENSE.txt
-        monitoring/static/js/2180.42e3bbba.chunk.js monitoring/static/js/2180.42e3bbba.chunk.js
+        monitoring/static/js/2180.adcde51c.chunk.js monitoring/static/js/2180.adcde51c.chunk.js
         monitoring/static/js/2183.e2318c37.chunk.js monitoring/static/js/2183.e2318c37.chunk.js
         monitoring/static/js/2183.e2318c37.chunk.js.LICENSE.txt monitoring/static/js/2183.e2318c37.chunk.js.LICENSE.txt
         monitoring/static/js/2190.27f354f5.chunk.js monitoring/static/js/2190.27f354f5.chunk.js
@@ -334,7 +354,7 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/6392.134ee5e4.chunk.js monitoring/static/js/6392.134ee5e4.chunk.js
         monitoring/static/js/6393.b0de2d9e.chunk.js monitoring/static/js/6393.b0de2d9e.chunk.js
         monitoring/static/js/6521.371403ec.chunk.js monitoring/static/js/6521.371403ec.chunk.js
-        monitoring/static/js/6531.ccf726a0.chunk.js monitoring/static/js/6531.ccf726a0.chunk.js
+        monitoring/static/js/6531.fbd78a3e.chunk.js monitoring/static/js/6531.fbd78a3e.chunk.js
         monitoring/static/js/6619.9e1de7a6.chunk.js monitoring/static/js/6619.9e1de7a6.chunk.js
         monitoring/static/js/6619.9e1de7a6.chunk.js.LICENSE.txt monitoring/static/js/6619.9e1de7a6.chunk.js.LICENSE.txt
         monitoring/static/js/6679.6e0a87d5.chunk.js monitoring/static/js/6679.6e0a87d5.chunk.js
@@ -357,7 +377,7 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/6961.f4888ae1.chunk.js monitoring/static/js/6961.f4888ae1.chunk.js
         monitoring/static/js/7016.4a34a027.chunk.js monitoring/static/js/7016.4a34a027.chunk.js
         monitoring/static/js/704.45771d88.chunk.js monitoring/static/js/704.45771d88.chunk.js
-        monitoring/static/js/7045.4262de32.chunk.js monitoring/static/js/7045.4262de32.chunk.js
+        monitoring/static/js/7045.53fa1aaf.chunk.js monitoring/static/js/7045.53fa1aaf.chunk.js
         monitoring/static/js/7119.e94f8dac.chunk.js monitoring/static/js/7119.e94f8dac.chunk.js
         monitoring/static/js/7202.fefd43ee.chunk.js monitoring/static/js/7202.fefd43ee.chunk.js
         monitoring/static/js/7257.8ce0d045.chunk.js monitoring/static/js/7257.8ce0d045.chunk.js
@@ -451,8 +471,8 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/9917.67d792e3.chunk.js monitoring/static/js/9917.67d792e3.chunk.js
         monitoring/static/js/9923.270f0a19.chunk.js monitoring/static/js/9923.270f0a19.chunk.js
         monitoring/static/js/9923.270f0a19.chunk.js.LICENSE.txt monitoring/static/js/9923.270f0a19.chunk.js.LICENSE.txt
-        monitoring/static/js/main.86ea0d29.js monitoring/static/js/main.86ea0d29.js
-        monitoring/static/js/main.86ea0d29.js.LICENSE.txt monitoring/static/js/main.86ea0d29.js.LICENSE.txt
+        monitoring/static/js/main.9fede0a0.js monitoring/static/js/main.9fede0a0.js
+        monitoring/static/js/main.9fede0a0.js.LICENSE.txt monitoring/static/js/main.9fede0a0.js.LICENSE.txt
         monitoring/static/media/403.271ae19f0d1101a2c67a904146bbd4d3.svg monitoring/static/media/403.271ae19f0d1101a2c67a904146bbd4d3.svg
         monitoring/static/media/403.6367e52f9464706633f52a2488a41958.svg monitoring/static/media/403.6367e52f9464706633f52a2488a41958.svg
         monitoring/static/media/codicon.762fced46d6cddbda272.ttf monitoring/static/media/codicon.762fced46d6cddbda272.ttf
@@ -533,6 +553,7 @@ PEERDIR(
     ydb/core/grpc_services
     ydb/core/grpc_services/local_rpc
     ydb/core/health_check
+    ydb/core/mon
     ydb/core/node_whiteboard
     ydb/core/protos
     ydb/core/scheme

@@ -173,10 +173,11 @@ public:
         IHTTPGateway::TPtr gateway,
         IHTTPGateway::TRetryPolicy::TPtr retryPolicy,
         TString url,
-        TS3Credentials::TAuthInfo authInfo,
+        const TS3Credentials& credentials,
         TString pattern,
         NS3Lister::ES3PatternVariant patternVariant,
-        NS3Lister::ES3PatternType patternType)
+        NS3Lister::ES3PatternType patternType,
+        bool allowLocalFiles)
         : TxId(std::move(txId))
         , PrefetchSize(prefetchSize)
         , FileSizeLimit(fileSizeLimit)
@@ -189,10 +190,11 @@ public:
         , Gateway(std::move(gateway))
         , RetryPolicy(std::move(retryPolicy))
         , Url(std::move(url))
-        , AuthInfo(std::move(authInfo))
+        , Credentials(credentials)
         , Pattern(std::move(pattern))
         , PatternVariant(patternVariant)
-        , PatternType(patternType) {
+        , PatternType(patternType)
+        , AllowLocalFiles(allowLocalFiles) {
         for (size_t i = 0; i < paths.size(); ++i) {
             NS3::FileQueue::TObjectPath object;
             object.SetPath(paths[i].Path);
@@ -493,14 +495,14 @@ private:
                 RetryPolicy,
                 NS3Lister::TListingRequest{
                     Url,
-                    AuthInfo,
+                    Credentials,
                     PatternVariant == NS3Lister::ES3PatternVariant::PathPattern
                         ? Pattern
                         : TStringBuilder{} << object.GetPath() << Pattern,
                     PatternType,
                     object.GetPath()},
                 Nothing(),
-                false);
+                AllowLocalFiles);
             Fetch();
             return true;
         }
@@ -616,10 +618,11 @@ private:
     const IHTTPGateway::TPtr Gateway;
     const IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
     const TString Url;
-    const TS3Credentials::TAuthInfo AuthInfo;
+    const TS3Credentials Credentials;
     const TString Pattern;
     const NS3Lister::ES3PatternVariant PatternVariant;
     const NS3Lister::ES3PatternType PatternType;
+    const bool AllowLocalFiles;
 
     static constexpr TDuration PoisonTimeout = TDuration::Hours(3);
     static constexpr TDuration RoundRobinStageTimeout = TDuration::Seconds(3);
@@ -638,10 +641,11 @@ NActors::IActor* CreateS3FileQueueActor(
         IHTTPGateway::TPtr gateway,
         IHTTPGateway::TRetryPolicy::TPtr retryPolicy,
         TString url,
-        TS3Credentials::TAuthInfo authInfo,
+        const TS3Credentials& credentials,
         TString pattern,
         NS3Lister::ES3PatternVariant patternVariant,
-        NS3Lister::ES3PatternType patternType) {
+        NS3Lister::ES3PatternType patternType,
+        bool allowLocalFiles) {
     return new TS3FileQueueActor(
         txId,
         paths,
@@ -655,10 +659,11 @@ NActors::IActor* CreateS3FileQueueActor(
         gateway,
         retryPolicy,
         url,
-        authInfo,
+        credentials,
         pattern,
         patternVariant,
-        patternType
+        patternType,
+        allowLocalFiles
     );
 }
 

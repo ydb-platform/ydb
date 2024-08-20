@@ -90,10 +90,7 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStat
         LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session is aborting and will not restart");
         return result;
     }
-    LOG_LAZY(DbDriverState->Log, TLOG_ERR,
-        LogPrefix() << "Got error. Status: " << status.Status
-            << ". Description: " << IssuesSingleLineString(status.Issues)
-    );
+
     SessionEstablished = false;
     TMaybe<TDuration> nextDelay = TDuration::Zero();
     if (!RetryState) {
@@ -104,13 +101,11 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStat
     if (nextDelay) {
         result.StartDelay = *nextDelay;
         result.DoRestart = true;
-        LOG_LAZY(DbDriverState->Log,
-            TLOG_DEBUG,
-            LogPrefix() << "Write session will restart in " << result.StartDelay.MilliSeconds() << " ms"
-        );
+        LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Got error. " << status.ToDebugString());
+        LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Write session will restart in " << result.StartDelay);
         ResetForRetryImpl();
-
     } else {
+        LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "Got error. " << status.ToDebugString());
         LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "Write session will not restart after a fatal error");
         result.DoStop = true;
         CheckHandleResultImpl(result);

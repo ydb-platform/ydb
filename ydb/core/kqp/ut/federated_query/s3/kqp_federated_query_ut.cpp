@@ -20,11 +20,22 @@ using namespace NTestUtils;
 using namespace fmt::literals;
 
 Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
+    TString GetSymbolsString(char start, char end, const TString& skip = "") {
+        TStringBuilder result;
+        for (char symbol = start; symbol <= end; ++symbol) {
+            if (skip.Contains(symbol)) {
+                continue;
+            }
+            result << symbol;
+        }
+        return result;
+    }
+
     Y_UNIT_TEST(ExecuteScriptWithExternalTableResolve) {
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString externalTableName = "/Root/test_binding_resolve";
         const TString bucket = "test_bucket1";
-        const TString object = "test_object";
+        const TString object = TStringBuilder() << "test_" << GetSymbolsString(' ', '~', "{}") << "_object";
 
         CreateBucketWithObject(bucket, object, TEST_CONTENT);
 
@@ -49,7 +60,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             "external_source"_a = externalDataSourceName,
             "external_table"_a = externalTableName,
             "location"_a = GetBucketLocation(bucket),
-            "object"_a = object
+            "object"_a = EscapeC(object)
             );
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
@@ -930,7 +941,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString externalTableName = "/Root/test_binding_resolve";
         const TString bucket = "test_bucket1";
-        const TString object = "year=1/month=2/test_object";
+        const TString object = TStringBuilder() << "year=1/month=2/test_" << GetSymbolsString(' ', '~') << "_object";
         const TString content = "data,year,month\ntest,1,2";
 
         CreateBucketWithObject(bucket, object, content);
@@ -1960,6 +1971,215 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         }
 
         ValidateTables(client, oltpTable, olapTable);
+    }
+
+    Y_UNIT_TEST(OverridePlannerDefaults) {
+        const TString root = "/Root/";
+        const TString source = "source";
+        const TString table1 = "table1";
+        const TString table2 = "table2";
+        const TString bucket  = "bucket";
+        const TString object1 = "object1";
+        const TString object2 = "object2";
+        const TString content1 = "foo,bar\naaa,0\nbbb,2";
+        const TString content2 = "foo,bar\naaa,1\nbbb,3";
+
+        Aws::S3::S3Client s3Client = MakeS3Client();
+        CreateBucket(bucket, s3Client);
+        UploadObject(bucket, table1 + "/" + object1, content1, s3Client);
+        UploadObject(bucket, table1 + "/" + object2, content2, s3Client);
+        UploadObject(bucket, table2 + "/" + object1, content1, s3Client);
+        UploadObject(bucket, table2 + "/" + object2, content2, s3Client);
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        const TString query = fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `{source}` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{location}",
+                AUTH_METHOD="NONE"
+            );
+            CREATE EXTERNAL TABLE `{table1}` (
+                foo STRING NOT NULL,
+                bar UINT32 NOT NULL
+            ) WITH (
+                DATA_SOURCE="{source}",
+                LOCATION="/{location_table1}/",
+                FORMAT="csv_with_names"
+            );
+            CREATE EXTERNAL TABLE `{table2}` (
+                foo STRING NOT NULL,
+                bar UINT32 NOT NULL
+            ) WITH (
+                DATA_SOURCE="{source}",
+                LOCATION="/{location_table2}/",
+                FORMAT="csv_with_names"
+            );
+            )",
+            "source"_a = root + source,
+            "table1"_a = root + table1,
+            "table2"_a = root + table2,
+            "location_table1"_a = table1,
+            "location_table2"_a = table2,
+            "location"_a = TStringBuilder() << GetEnv("S3_ENDPOINT") << '/' << bucket
+            );
+
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        ui32 source1_id = 0;
+        ui32 source2_id = 0;
+        ui32 join_id = 0;
+        ui32 limit_id = 0;
+        auto queryClient = kikimr->GetQueryClient();
+
+        {
+            // default planner values
+
+            const TString sql = fmt::format(R"(
+                    SELECT SUM(t1.bar + t2.bar) as sum FROM `{table1}` as t1 JOIN /*+grace()*/ `{table2}`as t2 ON t1.foo = t2.foo
+                )",
+                "table1"_a = root + table1,
+                "table2"_a = root + table2);
+
+            TExecuteQueryResult queryResult = queryClient.ExecuteQuery(
+                sql,
+                TTxControl::BeginTx().CommitTx(),
+                TExecuteQuerySettings().ExecMode(EExecMode::Execute).StatsMode(EStatsMode::Full)).GetValueSync();
+
+            UNIT_ASSERT_C(queryResult.IsSuccess(), queryResult.GetIssues().ToString());
+            UNIT_ASSERT(queryResult.GetStats());
+            UNIT_ASSERT(queryResult.GetStats()->GetPlan());
+            NJson::TJsonValue plan;
+            UNIT_ASSERT(NJson::ReadJsonTree(*queryResult.GetStats()->GetPlan(), &plan));
+            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][1]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
+
+            source1_id = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["PhysicalStageId"].GetIntegerSafe();
+            source2_id = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][1]["Plans"][0]["Stats"]["PhysicalStageId"].GetIntegerSafe();
+            join_id    = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["PhysicalStageId"].GetIntegerSafe();
+            limit_id   = plan["Plan"]["Plans"][0]["Plans"][0]["Stats"]["PhysicalStageId"].GetIntegerSafe();
+        }
+
+        {
+            // scale down
+
+            const TString sql = fmt::format(R"(
+                    pragma ydb.OverridePlanner = @@ [
+                        {{ "tx": 0, "stage": {source1_id}, "tasks": 1 }},
+                        {{ "tx": 0, "stage": {source2_id}, "tasks": 1 }},
+                        {{ "tx": 0, "stage": {join_id}, "tasks": 1 }},
+                        {{ "tx": 0, "stage": {limit_id}, "tasks": 1 }}
+                    ] @@;
+
+                    SELECT SUM(t1.bar + t2.bar) as sum FROM `{table1}` as t1 JOIN /*+grace()*/ `{table2}`as t2 ON t1.foo = t2.foo
+                )",
+                "source1_id"_a = source1_id,
+                "source2_id"_a = source2_id,
+                "join_id"_a = join_id,
+                "limit_id"_a = limit_id,
+                "table1"_a = root + table1,
+                "table2"_a = root + table2);
+
+            TExecuteQueryResult queryResult = queryClient.ExecuteQuery(
+                sql,
+                TTxControl::BeginTx().CommitTx(),
+                TExecuteQuerySettings().ExecMode(EExecMode::Execute).StatsMode(EStatsMode::Full)).GetValueSync();
+
+            UNIT_ASSERT_C(queryResult.IsSuccess(), queryResult.GetIssues().ToString());
+            UNIT_ASSERT(queryResult.GetStats());
+            UNIT_ASSERT(queryResult.GetStats()->GetPlan());
+            NJson::TJsonValue plan;
+            UNIT_ASSERT(NJson::ReadJsonTree(*queryResult.GetStats()->GetPlan(), &plan));
+            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][1]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
+        }
+
+        {
+            // scale up
+
+            const TString sql = fmt::format(R"(
+                    pragma ydb.OverridePlanner = @@ [
+                        {{ "tx": 0, "stage": {source1_id}, "tasks": 10 }},
+                        {{ "tx": 0, "stage": {source2_id}, "tasks": 10 }},
+                        {{ "tx": 0, "stage": {join_id}, "tasks": 10 }},
+                        {{ "tx": 0, "stage": {limit_id}, "tasks": 10 }}
+                    ] @@;
+
+                    SELECT SUM(t1.bar + t2.bar) as sum FROM `{table1}` as t1 JOIN /*+grace()*/ `{table2}`as t2 ON t1.foo = t2.foo
+                )",
+                "source1_id"_a = source1_id,
+                "source2_id"_a = source2_id,
+                "join_id"_a = join_id,
+                "limit_id"_a = limit_id,
+                "table1"_a = root + table1,
+                "table2"_a = root + table2);
+
+            TExecuteQueryResult queryResult = queryClient.ExecuteQuery(
+                sql,
+                TTxControl::BeginTx().CommitTx(),
+                TExecuteQuerySettings().ExecMode(EExecMode::Execute).StatsMode(EStatsMode::Full)).GetValueSync();
+
+            UNIT_ASSERT_C(queryResult.IsSuccess(), queryResult.GetIssues().ToString());
+            UNIT_ASSERT(queryResult.GetStats());
+            UNIT_ASSERT(queryResult.GetStats()->GetPlan());
+            NJson::TJsonValue plan;
+            UNIT_ASSERT(NJson::ReadJsonTree(*queryResult.GetStats()->GetPlan(), &plan));
+            // only 2 files => sources stay with 2 tasks
+            // join scales to 10 tasks
+            // limit ignores hint and keeps being in the only task
+            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][1]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 10);
+            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
+        }
+    }
+
+    Y_UNIT_TEST(TestReadEmptyFileWithCsvFormat) {
+        const TString externalDataSourceName = "/Root/external_data_source";
+        const TString bucket = "test_bucket1";
+
+        CreateBucketWithObject(bucket, "test_object", "");
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        const TString query = fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{location}",
+                AUTH_METHOD="NONE"
+            );)",
+            "external_source"_a = externalDataSourceName,
+            "location"_a = GetBucketLocation(bucket)
+            );
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        const TString sql = fmt::format(R"(
+                SELECT * FROM `{external_source}`.`/`
+                WITH (
+                    SCHEMA = (
+                        data String
+                    ),
+                    FORMAT = "csv_with_names"
+                )
+            )", "external_source"_a=externalDataSourceName);
+
+        auto db = kikimr->GetQueryClient();
+        auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+        UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+
+        NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
+        UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
     }
 }
 

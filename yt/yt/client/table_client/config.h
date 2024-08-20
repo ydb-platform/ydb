@@ -154,6 +154,8 @@ public:
 
     double SampleRate;
 
+    bool EnableLargeColumnarStatistics;
+
     TChunkIndexesWriterConfigPtr ChunkIndexes;
 
     TSlimVersionedWriterConfigPtr Slim;
@@ -425,6 +427,7 @@ public:
     bool EnableColumnarValueStatistics;
     bool EnableRowCountInColumnarStatistics;
     bool EnableSegmentMetaInBlocks;
+    bool EnableColumnMetaInChunkMeta;
 
     NYTree::INodePtr CastAnyToCompositeNode;
 

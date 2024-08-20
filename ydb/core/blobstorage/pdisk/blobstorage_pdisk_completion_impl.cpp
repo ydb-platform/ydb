@@ -53,7 +53,8 @@ void TCompletionLogWrite::Exec(TActorSystem *actorSystem) {
                 HPMilliSecondsFloat(now - evLog.CreationTime),
                 HPMilliSecondsFloat(evLog.InputTime - evLog.CreationTime),
                 HPMilliSecondsFloat(evLog.ScheduleTime - evLog.InputTime),
-                HPMilliSecondsFloat(now - evLog.ScheduleTime));
+                HPMilliSecondsFloat(now - evLog.ScheduleTime),
+                HPMilliSecondsFloat(GetTime - SubmitTime));
         if (evLog.Result->Results) {
             evLog.Result->Results.front().Orbit = std::move(evLog.Orbit);
         }
@@ -274,7 +275,8 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
         endBadUserOffset = 0xffffffff;
     }
 
-    LWTRACK(PDiskChunkReadPieceComplete, Read->Orbit, PDisk->PDiskId, RawReadSize, CommonBufferOffset);
+    double deviceTimeMs = HPMilliSecondsFloat(GetTime - SubmitTime);
+    LWTRACK(PDiskChunkReadPieceComplete, Read->Orbit, PDisk->PDiskId, RawReadSize, CommonBufferOffset, deviceTimeMs);
     CumulativeCompletion->PartReadComplete(actorSystem);
     CumulativeCompletion = nullptr;
 

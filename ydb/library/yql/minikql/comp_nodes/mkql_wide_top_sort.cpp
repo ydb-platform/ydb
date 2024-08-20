@@ -404,6 +404,7 @@ public:
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
+        DIScopeAnnotator annotate(ctx.Annotator);
 
         const auto valueType = Type::getInt128Ty(context);
         const auto ptrValueType = PointerType::getUnqual(valueType);
@@ -417,16 +418,16 @@ public:
 
         const auto outputType = ArrayType::get(valueType, Representations.size());
         const auto outputPtrType = PointerType::getUnqual(outputType);
-        const auto outs = new AllocaInst(outputPtrType, 0U, "outs", &ctx.Func->getEntryBlock().back());
+        const auto outs = annotate(new AllocaInst(outputPtrType, 0U, "outs", &ctx.Func->getEntryBlock().back()));
 
         ICodegeneratorInlineWideNode::TGettersList getters(Representations.size());
 
         for (auto i = 0U; i < getters.size(); ++i) {
             getters[Indexes[i]] = [i, outs, indexType, valueType, outputPtrType, outputType](const TCodegenContext& ctx, BasicBlock*& block) {
-                Y_UNUSED(ctx);
-                const auto values = new LoadInst(outputPtrType, outs, "values", block);
-                const auto pointer = GetElementPtrInst::CreateInBounds(outputType, values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, (TString("ptr_") += ToString(i)).c_str(), block);
-                return new LoadInst(valueType, pointer, (TString("load_") += ToString(i)).c_str(), block);
+                DIScopeAnnotator annotate(ctx.Annotator);
+                const auto values = annotate(new LoadInst(outputPtrType, outs, "values", block));
+                const auto pointer = annotate(GetElementPtrInst::CreateInBounds(outputType, values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, (TString("ptr_") += ToString(i)).c_str(), block));
+                return annotate(new LoadInst(valueType, pointer, (TString("load_") += ToString(i)).c_str(), block));
             };
         }
 
@@ -434,35 +435,35 @@ public:
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         const auto more = BasicBlock::Create(context, "more", ctx.Func);
 
-        BranchInst::Create(main, make, HasValue(statePtr, block), block);
+        annotate(BranchInst::Create(main, make, HasValue(statePtr, block), block));
         block = make;
 
         const auto count = GetNodeValue(Count, ctx, block);
         const auto trunc = GetterFor<ui64>(count, context, block);
 
         const auto arrayType = ArrayType::get(Type::getInt1Ty(context), Directions.size());
-        const auto dirs = new AllocaInst(arrayType, 0U, "dirs", block);
+        const auto dirs = annotate(new AllocaInst(arrayType, 0U, "dirs", block));
         for (auto i = 0U; i < Directions.size(); ++i) {
             const auto dir = GetNodeValue(Directions[i], ctx, block);
             const auto cut = GetterFor<bool>(dir, context, block);
-            const auto ptr = GetElementPtrInst::CreateInBounds(arrayType, dirs, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, "ptr", block);
-            new StoreInst(cut, ptr, block);
+            const auto ptr = annotate(GetElementPtrInst::CreateInBounds(arrayType, dirs, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, "ptr", block));
+            annotate(new StoreInst(cut, ptr, block));
         }
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
-        const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
+        const auto self = annotate(CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block));
         const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TWideTopWrapper::MakeState));
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType(), trunc->getType(), dirs->getType()}, false);
-        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
-        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr, trunc, dirs}, "", block);
-        BranchInst::Create(main, block);
+        const auto makeFuncPtr = annotate(CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block));
+        annotate(CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr, trunc, dirs}, "", block));
+        annotate(BranchInst::Create(main, block));
 
         block = main;
 
-        const auto state = new LoadInst(valueType, statePtr, "state", block);
-        const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
-        const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
-        BranchInst::Create(more, block);
+        const auto state = annotate(new LoadInst(valueType, statePtr, "state", block));
+        const auto half = annotate(CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block));
+        const auto stateArg = annotate(CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block));
+        annotate(BranchInst::Create(more, block));
 
         block = more;
 
@@ -471,11 +472,11 @@ public:
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
         const auto result = PHINode::Create(statusType, 3U, "result", over);
 
-        const auto statusPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetStatus()}, "last", block);
-        const auto last = new LoadInst(statusType, statusPtr, "last", block);
-        const auto finish = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, last, ConstantInt::get(last->getType(), static_cast<i32>(EFetchResult::Finish)), "finish", block);
+        const auto statusPtr = annotate(GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetStatus()}, "last", block));
+        const auto last = annotate(new LoadInst(statusType, statusPtr, "last", block));
+        const auto finish = annotate(CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, last, ConstantInt::get(last->getType(), static_cast<i32>(EFetchResult::Finish)), "finish", block));
 
-        BranchInst::Create(full, loop, finish, block);
+        annotate(BranchInst::Create(full, loop, finish, block));
 
         {
             const auto rest = BasicBlock::Create(context, "rest", ctx.Func);
@@ -487,44 +488,44 @@ public:
 
             result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
 
-            const auto choise = SwitchInst::Create(getres.first, good, 2U, block);
+            const auto choise = static_cast<SwitchInst*>(annotate(SwitchInst::Create(getres.first, good, 2U, block)));
             choise->addCase(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), over);
             choise->addCase(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), rest);
 
             block = rest;
 
-            new StoreInst(ConstantInt::get(last->getType(), static_cast<i32>(EFetchResult::Finish)), statusPtr, block);
+            annotate(new StoreInst(ConstantInt::get(last->getType(), static_cast<i32>(EFetchResult::Finish)), statusPtr, block));
             const auto sealFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState<Sort>::Seal));
             const auto sealType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType()}, false);
-            const auto sealPtr = CastInst::Create(Instruction::IntToPtr, sealFunc, PointerType::getUnqual(sealType), "seal", block);
-            CallInst::Create(sealType, sealPtr, {stateArg}, "", block);
+            const auto sealPtr = annotate(CastInst::Create(Instruction::IntToPtr, sealFunc, PointerType::getUnqual(sealType), "seal", block));
+            annotate(CallInst::Create(sealType, sealPtr, {stateArg}, "", block));
 
-            BranchInst::Create(full, block);
+            annotate(BranchInst::Create(full, block));
 
             block = good;
 
-            const auto tonguePtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetTongue() }, "tongue_ptr", block);
-            const auto tongue = new LoadInst(ptrValueType, tonguePtr, "tongue", block);
+            const auto tonguePtr = annotate(GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetTongue() }, "tongue_ptr", block));
+            const auto tongue = annotate(new LoadInst(ptrValueType, tonguePtr, "tongue", block));
 
             std::vector<Value*> placeholders(Representations.size());
             for (auto i = 0U; i < placeholders.size(); ++i) {
-                placeholders[i] = GetElementPtrInst::CreateInBounds(valueType, tongue, {ConstantInt::get(indexType, i)}, (TString("placeholder_") += ToString(i)).c_str(), block);
+                placeholders[i] = annotate(GetElementPtrInst::CreateInBounds(valueType, tongue, {ConstantInt::get(indexType, i)}, (TString("placeholder_") += ToString(i)).c_str(), block));
             }
 
             for (auto i = 0U; i < Keys.size(); ++i) {
                 const auto item = getres.second[Indexes[i]](ctx, block);
-                new StoreInst(item, placeholders[i], block);
+                annotate(new StoreInst(item, placeholders[i], block));
             }
 
             const auto pushFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState<Sort>::Put));
             const auto pushType = FunctionType::get(Type::getInt1Ty(context), {stateArg->getType()}, false);
-            const auto pushPtr = CastInst::Create(Instruction::IntToPtr, pushFunc, PointerType::getUnqual(pushType), "function", block);
-            const auto accepted = CallInst::Create(pushType, pushPtr, {stateArg}, "accepted", block);
+            const auto pushPtr = annotate(CastInst::Create(Instruction::IntToPtr, pushFunc, PointerType::getUnqual(pushType), "function", block));
+            const auto accepted = annotate(CallInst::Create(pushType, pushPtr, {stateArg}, "accepted", block));
 
             const auto push = BasicBlock::Create(context, "push", ctx.Func);
             const auto skip = BasicBlock::Create(context, "skip", ctx.Func);
 
-            BranchInst::Create(push, skip, accepted, block);
+            annotate(BranchInst::Create(push, skip, accepted, block));
 
             block = push;
 
@@ -535,19 +536,19 @@ public:
             for (auto i = Keys.size(); i < Representations.size(); ++i) {
                 const auto item = getres.second[Indexes[i]](ctx, block);
                 ValueAddRef(Representations[i], item, ctx, block);
-                new StoreInst(item, placeholders[i], block);
+                annotate(new StoreInst(item, placeholders[i], block));
             }
 
-            BranchInst::Create(loop, block);
+            annotate(BranchInst::Create(loop, block));
 
             block = skip;
 
             for (auto i = 0U; i < Keys.size(); ++i) {
                 ValueCleanup(Representations[i], placeholders[i], ctx, block);
-                new StoreInst(ConstantInt::get(valueType, 0), placeholders[i], block);
+                annotate(new StoreInst(ConstantInt::get(valueType, 0), placeholders[i], block));
             }
 
-            BranchInst::Create(loop, block);
+            annotate(BranchInst::Create(loop, block));
         }
 
         {
@@ -557,20 +558,20 @@ public:
 
             const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState<Sort>::Extract));
             const auto extractType = FunctionType::get(outputPtrType, {stateArg->getType()}, false);
-            const auto extractPtr = CastInst::Create(Instruction::IntToPtr, extractFunc, PointerType::getUnqual(extractType), "extract", block);
-            const auto out = CallInst::Create(extractType, extractPtr, {stateArg}, "out", block);
-            const auto has = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, out, ConstantPointerNull::get(outputPtrType), "has", block);
+            const auto extractPtr = annotate(CastInst::Create(Instruction::IntToPtr, extractFunc, PointerType::getUnqual(extractType), "extract", block));
+            const auto out = annotate(CallInst::Create(extractType, extractPtr, {stateArg}, "out", block));
+            const auto has = annotate(CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, out, ConstantPointerNull::get(outputPtrType), "has", block));
 
             result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), block);
 
-            BranchInst::Create(good, over, has, block);
+            annotate(BranchInst::Create(good, over, has, block));
 
             block = good;
 
-            new StoreInst(out, outs, block);
+            annotate(new StoreInst(out, outs, block));
 
             result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::One)), block);
-            BranchInst::Create(over, block);
+            annotate(BranchInst::Create(over, block));
         }
 
         block = over;
@@ -926,6 +927,7 @@ public:
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
+        DIScopeAnnotator annotate(ctx.Annotator);
 
         const auto valueType = Type::getInt128Ty(context);
         const auto ptrValueType = PointerType::getUnqual(valueType);
@@ -939,16 +941,16 @@ public:
 
         const auto outputType = ArrayType::get(valueType, Representations.size());
         const auto outputPtrType = PointerType::getUnqual(outputType);
-        const auto outs = new AllocaInst(outputPtrType, 0U, "outs", &ctx.Func->getEntryBlock().back());
+        const auto outs = annotate(new AllocaInst(outputPtrType, 0U, "outs", &ctx.Func->getEntryBlock().back()));
 
         ICodegeneratorInlineWideNode::TGettersList getters(Representations.size());
 
         for (auto i = 0U; i < getters.size(); ++i) {
             getters[Indexes[i]] = [i, outs, indexType, valueType, outputPtrType, outputType](const TCodegenContext& ctx, BasicBlock*& block) {
-                Y_UNUSED(ctx);
-                const auto values = new LoadInst(outputPtrType, outs, "values", block);
-                const auto pointer = GetElementPtrInst::CreateInBounds(outputType, values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, (TString("ptr_") += ToString(i)).c_str(), block);
-                return new LoadInst(valueType, pointer, (TString("load_") += ToString(i)).c_str(), block);
+                DIScopeAnnotator annotate(ctx.Annotator);
+                const auto values = annotate(new LoadInst(outputPtrType, outs, "values", block));
+                const auto pointer = annotate(GetElementPtrInst::CreateInBounds(outputType, values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, (TString("ptr_") += ToString(i)).c_str(), block));
+                return annotate(new LoadInst(valueType, pointer, (TString("load_") += ToString(i)).c_str(), block));
             };
         }
 
@@ -956,33 +958,33 @@ public:
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         const auto more = BasicBlock::Create(context, "more", ctx.Func);
 
-        BranchInst::Create(main, make, HasValue(statePtr, block), block);
+        annotate(BranchInst::Create(main, make, HasValue(statePtr, block), block));
         block = make;
 
         const auto arrayType = ArrayType::get(Type::getInt1Ty(context), Directions.size());
-        const auto dirs = new AllocaInst(arrayType, 0U, "dirs", block);
+        const auto dirs = annotate(new AllocaInst(arrayType, 0U, "dirs", block));
         for (auto i = 0U; i < Directions.size(); ++i) {
             const auto dir = GetNodeValue(Directions[i], ctx, block);
             const auto cut = GetterFor<bool>(dir, context, block);
-            const auto ptr = GetElementPtrInst::CreateInBounds(arrayType, dirs, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, "ptr", block);
-            new StoreInst(cut, ptr, block);
+            const auto ptr = annotate(GetElementPtrInst::CreateInBounds(arrayType, dirs, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, "ptr", block));
+            annotate(new StoreInst(cut, ptr, block));
         }
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
-        const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
+        const auto self = annotate(CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block));
         const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TWideSortWrapper::MakeState));
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType(), dirs->getType()}, false);
-        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
-        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr, dirs}, "", block);
-        BranchInst::Create(main, block);
+        const auto makeFuncPtr = annotate(CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block));
+        annotate(CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr, dirs}, "", block));
+        annotate(BranchInst::Create(main, block));
 
         block = main;
 
-        const auto state = new LoadInst(valueType, statePtr, "state", block);
-        const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
-        const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
+        const auto state = annotate(new LoadInst(valueType, statePtr, "state", block));
+        const auto half = annotate(CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block));
+        const auto stateArg = annotate(CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block));
         const auto boolFuncType = FunctionType::get(Type::getInt1Ty(context), {stateArg->getType()}, false);
-        BranchInst::Create(more, block);
+        annotate(BranchInst::Create(more, block));
 
         block = more;
 
@@ -991,11 +993,11 @@ public:
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
         const auto result = PHINode::Create(statusType, 5U, "result", over);
 
-        const auto statusPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetStatus()}, "last", block);
-        const auto last = new LoadInst(statusType, statusPtr, "last", block);
-        const auto finish = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, last, ConstantInt::get(last->getType(), static_cast<i32>(EFetchResult::Finish)), "finish", block);
+        const auto statusPtr = annotate(GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetStatus()}, "last", block));
+        const auto last = annotate(new LoadInst(statusType, statusPtr, "last", block));
+        const auto finish = annotate(CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, last, ConstantInt::get(last->getType(), static_cast<i32>(EFetchResult::Finish)), "finish", block));
 
-        BranchInst::Create(full, loop, finish, block);
+        annotate(BranchInst::Create(full, loop, finish, block));
 
         {
             const auto rest = BasicBlock::Create(context, "rest", ctx.Func);
@@ -1005,12 +1007,12 @@ public:
             block = loop;
 
             const auto readyFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::IsReadyToContinue));
-            const auto readyPtr = CastInst::Create(Instruction::IntToPtr, readyFunc, PointerType::getUnqual(boolFuncType), "ready", block);
-            const auto process = CallInst::Create(boolFuncType, readyPtr, {stateArg}, "process", block);
+            const auto readyPtr = annotate(CastInst::Create(Instruction::IntToPtr, readyFunc, PointerType::getUnqual(boolFuncType), "ready", block));
+            const auto process = annotate(CallInst::Create(boolFuncType, readyPtr, {stateArg}, "process", block));
 
             result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
 
-            BranchInst::Create(pull, over, process, block);
+            annotate(BranchInst::Create(pull, over, process, block));
 
             block = pull;
 
@@ -1018,43 +1020,43 @@ public:
 
             result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
 
-            const auto choise = SwitchInst::Create(getres.first, good, 2U, block);
+            const auto choise = static_cast<SwitchInst*>(annotate(SwitchInst::Create(getres.first, good, 2U, block)));
             choise->addCase(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), over);
             choise->addCase(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), rest);
 
             block = rest;
 
-            new StoreInst(ConstantInt::get(last->getType(), static_cast<i32>(EFetchResult::Finish)), statusPtr, block);
+            annotate(new StoreInst(ConstantInt::get(last->getType(), static_cast<i32>(EFetchResult::Finish)), statusPtr, block));
             const auto sealFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::Seal));
-            const auto sealPtr = CastInst::Create(Instruction::IntToPtr, sealFunc, PointerType::getUnqual(boolFuncType), "seal", block);
-            const auto stop = CallInst::Create(boolFuncType, sealPtr, {stateArg}, "stop", block);
+            const auto sealPtr = annotate(CastInst::Create(Instruction::IntToPtr, sealFunc, PointerType::getUnqual(boolFuncType), "seal", block));
+            const auto stop = annotate(CallInst::Create(boolFuncType, sealPtr, {stateArg}, "stop", block));
 
             result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
 
-            BranchInst::Create(full, over, stop, block);
+            annotate(BranchInst::Create(full, over, stop, block));
 
             block = good;
 
-            const auto tonguePtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetTongue() }, "tongue_ptr", block);
-            const auto tongue = new LoadInst(ptrValueType, tonguePtr, "tongue", block);
+            const auto tonguePtr = annotate(GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetTongue() }, "tongue_ptr", block));
+            const auto tongue = annotate(new LoadInst(ptrValueType, tonguePtr, "tongue", block));
 
             std::vector<Value*> placeholders(Representations.size());
             for (auto i = 0U; i < placeholders.size(); ++i) {
-                placeholders[i] = GetElementPtrInst::CreateInBounds(valueType, tongue, {ConstantInt::get(indexType, i)}, (TString("placeholder_") += ToString(i)).c_str(), block);
+                placeholders[i] = annotate(GetElementPtrInst::CreateInBounds(valueType, tongue, {ConstantInt::get(indexType, i)}, (TString("placeholder_") += ToString(i)).c_str(), block));
             }
 
             for (auto i = 0U; i < Representations.size(); ++i) {
                 const auto item = getres.second[Indexes[i]](ctx, block);
                 ValueAddRef(Representations[i], item, ctx, block);
-                new StoreInst(item, placeholders[i], block);
+                annotate(new StoreInst(item, placeholders[i], block));
             }
 
             const auto pushFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::Put));
             const auto pushType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType()}, false);
-            const auto pushPtr = CastInst::Create(Instruction::IntToPtr, pushFunc, PointerType::getUnqual(pushType), "function", block);
-            CallInst::Create(pushType, pushPtr, {stateArg}, "", block);
+            const auto pushPtr = annotate(CastInst::Create(Instruction::IntToPtr, pushFunc, PointerType::getUnqual(pushType), "function", block));
+            annotate(CallInst::Create(pushType, pushPtr, {stateArg}, "", block));
 
-            BranchInst::Create(loop, block);
+            annotate(BranchInst::Create(loop, block));
         }
 
         {
@@ -1065,31 +1067,31 @@ public:
 
             const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::Extract));
             const auto extractType = FunctionType::get(outputPtrType, {stateArg->getType()}, false);
-            const auto extractPtr = CastInst::Create(Instruction::IntToPtr, extractFunc, PointerType::getUnqual(extractType), "extract", block);
-            const auto out = CallInst::Create(extractType, extractPtr, {stateArg}, "out", block);
-            const auto has = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, out, ConstantPointerNull::get(outputPtrType), "has", block);
+            const auto extractPtr = annotate(CastInst::Create(Instruction::IntToPtr, extractFunc, PointerType::getUnqual(extractType), "extract", block));
+            const auto out = annotate(CallInst::Create(extractType, extractPtr, {stateArg}, "out", block));
+            const auto has = annotate(CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, out, ConstantPointerNull::get(outputPtrType), "has", block));
 
-            BranchInst::Create(good, last, has, block);
+            annotate(BranchInst::Create(good, last, has, block));
 
             block = good;
 
-            new StoreInst(out, outs, block);
+            annotate(new StoreInst(out, outs, block));
 
             result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::One)), block);
-            BranchInst::Create(over, block);
+            annotate(BranchInst::Create(over, block));
 
             block = last;
 
             const auto finishedFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::IsFinished));
-            const auto finishedPtr = CastInst::Create(Instruction::IntToPtr, finishedFunc, PointerType::getUnqual(boolFuncType), "finished_ptr", block);
-            const auto finished = CallInst::Create(boolFuncType, finishedPtr, {stateArg}, "finished", block);
+            const auto finishedPtr = annotate(CastInst::Create(Instruction::IntToPtr, finishedFunc, PointerType::getUnqual(boolFuncType), "finished_ptr", block));
+            const auto finished = annotate(CallInst::Create(boolFuncType, finishedPtr, {stateArg}, "finished", block));
             const auto output = SelectInst::Create(finished,
                 ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)),
                 ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)),
                 "output", block);
 
             result->addIncoming(output, block);
-            BranchInst::Create(over, block);
+            annotate(BranchInst::Create(over, block));
         }
 
         block = over;

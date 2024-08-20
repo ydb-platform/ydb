@@ -73,6 +73,8 @@ private:
     virtual TStatus HandleModifyPermissions(NNodes::TKiModifyPermissions node, TExprContext& ctx) = 0;
 
     virtual TStatus HandleReturningList(NNodes::TKiReturningList node, TExprContext& ctx) = 0;
+
+    virtual TStatus HandleAnalyze(NNodes::TKiAnalyzeTable node, TExprContext& ctx) = 0;
 };
 
 class TKikimrKey {
@@ -240,6 +242,10 @@ void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperat
     NProtoBuf::RepeatedPtrField<NKqpProto::TKqpTableInfo>& infos);
 void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperation op,
     TVector<NKqpProto::TKqpTableInfo>& infos);
+
+Ydb::Table::VectorIndexSettings_Distance VectorIndexSettingsParseDistance(std::string_view distance);
+Ydb::Table::VectorIndexSettings_Similarity VectorIndexSettingsParseSimilarity(std::string_view similarity);
+Ydb::Table::VectorIndexSettings_VectorType VectorIndexSettingsParseVectorType(std::string_view vectorType);  
 
 bool IsPgNullExprNode(const NNodes::TExprBase& maybeLiteral);
 std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TTypeAnnotationNode* valueType, Ydb::TypedValue& proto);

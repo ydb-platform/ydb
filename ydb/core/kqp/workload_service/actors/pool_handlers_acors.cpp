@@ -54,6 +54,12 @@ class TPoolHandlerActorBase : public TActor<TDerived> {
             UpdateConfigCounters(poolConfig);
         }
 
+        void CollectRequestLatency(TInstant continueTime) {
+            if (continueTime) {
+                RequestsLatencyMs->Collect((TInstant::Now() - continueTime).MilliSeconds());
+            }
+        }
+
         void UpdateConfigCounters(const NResourcePool::TPoolSettings& poolConfig) {
             InFlightLimit->Set(std::max(poolConfig.ConcurrentQueryLimit, 0));
             QueueSizeLimit->Set(std::max(poolConfig.QueueSize, 0));
@@ -106,6 +112,7 @@ protected:
         const TActorId WorkerActorId;
         const TString SessionId;
         const TInstant StartTime = TInstant::Now();
+        TInstant ContinueTime;
 
         EState State = EState::Pending;
         bool Started = false;  // after TEvContinueRequest success
@@ -131,6 +138,7 @@ public:
         sFunc(TEvents::TEvPoison, HandlePoison);
         sFunc(TEvPrivate::TEvStopPoolHandler, HandleStop);
         hFunc(TEvPrivate::TEvResolvePoolResponse, Handle);
+        hFunc(TEvPrivate::TEvUpdatePoolSubscription, Handle);
 
         // Pool handler events
         hFunc(TEvPrivate::TEvCancelRequest, Handle);
@@ -141,7 +149,7 @@ public:
 
         // Schemeboard events
         hFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
-        IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted);
+        hFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted, Handle);
         IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable);
     )
 
@@ -149,6 +157,8 @@ public:
         if (WatchPathId) {
             this->Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchRemove(0));
         }
+
+        SendPoolInfoUpdate(std::nullopt, std::nullopt, Subscribers);
 
         Counters.OnCleanup();
 
@@ -171,6 +181,8 @@ private:
     }
 
     void Handle(TEvPrivate::TEvResolvePoolResponse::TPtr& ev) {
+        this->Send(MakeKqpWorkloadServiceId(this->SelfId().NodeId()), new TEvPrivate::TEvPlaceRequestIntoPoolResponse(Database, PoolId));
+
         auto event = std::move(ev->Get()->Event);
         const TActorId& workerActorId = event->Sender;
         if (!InFlightLimit) {
@@ -195,8 +207,6 @@ private:
         UpdatePoolConfig(ev->Get()->PoolConfig);
         UpdateSchemeboardSubscription(ev->Get()->PathId);
         OnScheduleRequest(request);
-
-        this->Send(MakeKqpWorkloadServiceId(this->SelfId().NodeId()), new TEvPrivate::TEvPlaceRequestIntoPoolResponse(Database, PoolId));
     }
 
     void Handle(TEvCleanupRequest::TPtr& ev) {
@@ -232,6 +242,14 @@ private:
         OnCleanupRequest(request);
     }
 
+    void Handle(TEvPrivate::TEvUpdatePoolSubscription::TPtr& ev) {
+        const auto& newSubscribers = ev->Get()->Subscribers;
+        if (!UpdateSchemeboardSubscription(ev->Get()->PathId)) {
+            SendPoolInfoUpdate(PoolConfig, SecurityObject, newSubscribers);
+        }
+        Subscribers.insert(newSubscribers.begin(), newSubscribers.end());
+    }
+
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev) {
         if (ev->Get()->Key != WatchKey) {
             // Skip old paths watch notifications
@@ -254,6 +272,23 @@ private:
         NResourcePool::TPoolSettings poolConfig;
         ParsePoolSettings(result->GetPathDescription().GetResourcePoolDescription(), poolConfig);
         UpdatePoolConfig(poolConfig);
+
+        const auto& pathDescription = result->GetPathDescription().GetSelf();
+        SecurityObject = NACLib::TSecurityObject(pathDescription.GetOwner(), false);
+        if (!SecurityObject->MutableACL()->ParseFromString(pathDescription.GetEffectiveACL())) {
+            SecurityObject = std::nullopt;
+        }
+        SendPoolInfoUpdate(poolConfig, SecurityObject, Subscribers);
+    }
+
+    void Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev) {
+        if (ev->Get()->Key != WatchKey) {
+            // Skip old paths watch notifications
+            return;
+        }
+
+        LOG_D("Got delete notification");
+        SendPoolInfoUpdate(std::nullopt, std::nullopt, Subscribers);
     }
 
 public:
@@ -267,6 +302,7 @@ public:
         if (status == Ydb::StatusIds::SUCCESS) {
             LocalInFlight++;
             request->Started = true;
+            request->ContinueTime = TInstant::Now();
             Counters.LocalInFly->Inc();
             Counters.ContinueOk->Inc();
             Counters.DelayedTimeMs->Collect((TInstant::Now() - request->StartTime).MilliSeconds());
@@ -316,6 +352,12 @@ public:
         }
 
         RemoveRequest(request);
+    }
+
+    void SendPoolInfoUpdate(const std::optional<NResourcePool::TPoolSettings>& config, const std::optional<NACLib::TSecurityObject>& securityObject, const std::unordered_set<TActorId>& subscribers) const {
+        for (const auto& subscriber : subscribers) {
+            this->Send(subscriber, new TEvUpdatePoolInfo(Database, PoolId, config, securityObject));
+        }
     }
 
 protected:
@@ -387,7 +429,7 @@ private:
 
         if (status == Ydb::StatusIds::SUCCESS) {
             Counters.CleanupOk->Inc();
-            Counters.RequestsLatencyMs->Collect((TInstant::Now() - request->StartTime).MilliSeconds());
+            Counters.CollectRequestLatency(request->ContinueTime);
             LOG_D("Reply cleanup success to " << request->WorkerActorId << ", session id: " << request->SessionId << ", local in flight: " << LocalInFlight);
         } else {
             Counters.CleanupError->Inc();
@@ -401,13 +443,13 @@ private:
         this->Send(MakeKqpProxyID(this->SelfId().NodeId()), ev.release());
 
         Counters.Cancelled->Inc();
-        Counters.RequestsLatencyMs->Collect((TInstant::Now() - request->StartTime).MilliSeconds());
+        Counters.CollectRequestLatency(request->ContinueTime);
         LOG_I("Cancel request for worker " << request->WorkerActorId << ", session id: " << request->SessionId << ", local in flight: " << LocalInFlight);
     }
 
-    void UpdateSchemeboardSubscription(TPathId pathId) {
+    bool UpdateSchemeboardSubscription(TPathId pathId) {
         if (WatchPathId && *WatchPathId == pathId) {
-            return;
+            return false;
         }
 
         if (WatchPathId) {
@@ -420,6 +462,7 @@ private:
         LOG_D("Subscribed on schemeboard notifications for path: " << pathId.ToString());
         WatchPathId = std::make_unique<TPathId>(pathId);
         this->Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchPathId(*WatchPathId, WatchKey));
+        return true;
     }
 
     void UpdatePoolConfig(const NResourcePool::TPoolSettings& poolConfig) {
@@ -461,10 +504,12 @@ protected:
 
 private:
     NResourcePool::TPoolSettings PoolConfig;
+    std::optional<NACLib::TSecurityObject> SecurityObject;
 
     // Scheme board settings
     std::unique_ptr<TPathId> WatchPathId;
     ui64 WatchKey = 0;
+    std::unordered_set<TActorId> Subscribers;
 
     // Pool state
     ui64 LocalInFlight = 0;
@@ -577,7 +622,7 @@ protected:
     }
 
     void OnScheduleRequest(TRequest* request) override {
-        if (PendingRequests.size() >= MAX_PENDING_REQUESTS || GetLocalSessionsCount() - GetLocalInFlight() > QueueSizeLimit + 1) {
+        if (PendingRequests.size() >= MAX_PENDING_REQUESTS || SaturationSub(GetLocalSessionsCount() - GetLocalInFlight(), InFlightLimit) > QueueSizeLimit) {
             ReplyContinue(request, Ydb::StatusIds::OVERLOADED, TStringBuilder() << "Too many pending requests for pool " << PoolId);
             return;
         }
@@ -695,8 +740,8 @@ private:
         size_t delayedRequestsCount = DelayedRequests.size();
         DoStartPendingRequest(GetLoadCpuThreshold());
 
-        if (GlobalState.DelayedRequests + PendingRequests.size() > QueueSizeLimit) {
-            RemoveBackRequests(PendingRequests, std::min(GlobalState.DelayedRequests + PendingRequests.size() - QueueSizeLimit, PendingRequests.size()), [this](TRequest* request) {
+        if (const ui64 delayedRequests = SaturationSub(GlobalState.AmountRequests() + PendingRequests.size(), InFlightLimit); delayedRequests > QueueSizeLimit) {
+            RemoveBackRequests(PendingRequests, std::min(delayedRequests - QueueSizeLimit, PendingRequests.size()), [this](TRequest* request) {
                 ReplyContinue(request, Ydb::StatusIds::OVERLOADED, TStringBuilder() << "Too many pending requests for pool " << PoolId);
             });
             FifoCounters.PendingRequestsCount->Set(PendingRequests.size());
@@ -847,7 +892,7 @@ private:
         }
 
         bool canStartRequest = QueueSizeLimit == 0 && GlobalState.RunningRequests < InFlightLimit;
-        canStartRequest |= !GetLoadCpuThreshold() && NodeCount && GlobalState.RunningRequests + NodeCount < InFlightLimit;
+        canStartRequest |= !GetLoadCpuThreshold() && DelayedRequests.size() + GlobalState.DelayedRequests == 0 && NodeCount && GlobalState.RunningRequests + NodeCount < InFlightLimit;
         if (!PendingRequests.empty() && canStartRequest) {
             RunningOperation = true;
             const TString& sessionId = PopPendingRequest();

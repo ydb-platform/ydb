@@ -653,7 +653,7 @@ public:
             writer.OnBeginMap();
             if (NCommon::HasResOrPullOption(*node, "type")) {
                 writer.OnKeyedItem("Type");
-                NCommon::WriteResOrPullType(writer, node->Child(0)->GetTypeAnn(), columns);
+                NCommon::WriteResOrPullType(writer, node->Child(0)->GetTypeAnn(), TColumnOrder(columns));
             }
 
             bool truncated = false;
@@ -1141,6 +1141,10 @@ private:
         info.YqlCompatibleScheme = ValidateTableSchema(
             req.Table(), attrs, req.IgnoreYamrDsv(), req.IgnoreWeakSchema()
         );
+
+        if (attrs.AsMap().contains("schema_mode") && attrs["schema_mode"].AsString() == "weak") {
+            info.Attrs["schema_mode"] = attrs["schema_mode"].AsString();
+        }
 
         NYT::TNode schemaAttrs;
         if (req.ForceInferSchema() && req.InferSchemaRows() > 0) {

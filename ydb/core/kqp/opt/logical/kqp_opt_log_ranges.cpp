@@ -21,11 +21,6 @@ TMaybeNode<TExprBase> KqpRewriteLiteralLookup(const TExprBase& node, TExprContex
     }
 
     const TKqlLookupTable& lookup = node.Cast<TKqlLookupTable>();
-
-    if (!kqpCtx.Config->EnableKqpDataQuerySourceRead) {
-        return {};
-    }
-
     TMaybeNode<TExprBase> lookupKeys = lookup.LookupKeys();
     TMaybeNode<TCoSkipNullMembers> skipNullMembers;
     if (lookupKeys.Maybe<TCoSkipNullMembers>()) {
@@ -66,7 +61,7 @@ TMaybeNode<TExprBase> KqpRewriteLiteralLookup(const TExprBase& node, TExprContex
             if (!structType->FindItem(keyColumnName)) {
                 break;
             }
-            
+
             usedColumns.emplace_back(keyColumnName);
         }
 

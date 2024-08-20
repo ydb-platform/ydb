@@ -4,7 +4,7 @@
 #include "type_decl.h"
 #endif
 
-namespace NYT::NPhoenix2 {
+namespace NYT::NPhoenix2::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -28,8 +28,8 @@ private: \
     template <class TThis, class TContext> \
     friend std::unique_ptr<::NYT::NPhoenix2::NDetail::TRuntimeTypeLoadSchedule<TThis, TContext>> NYT::NPhoenix2::NDetail::BuildRuntimeTypeLoadSchedule( \
         const ::NYT::NPhoenix2::NDetail::TTypeLoadSchedule* schedule); \
-    template <auto Member, class TThis, class TContext, class TFieldSerializer> \
-    friend class ::NYT::NPhoenix2::NDetail::TFieldLoadRegistrar
+    template <class TThis> \
+    friend struct ::NYT::NPhoenix2::NDetail::TTraits
 
 #define PHOENIX_DECLARE_TYPE__IMPL(type, typeTagValue, saveLoadModifier) \
     PHOENIX_DECLARE_TYPE__PROLOGUE(type, typeTagValue); \
@@ -40,6 +40,10 @@ public: \
     \
 private: \
     static const ::NYT::NPhoenix2::NDetail::TRuntimeFieldDescriptorMap<type, TLoadContext>& GetRuntimeFieldDescriptorMap()
+
+#define PHOENIX_DECLARE_FRIEND() \
+    template <class T> \
+    friend struct TPhoenixTypeInitializer__;
 
 #define PHOENIX_DECLARE_TYPE(type, typeTag) \
     PHOENIX_DECLARE_TYPE__IMPL(type, typeTag, )

@@ -1,25 +1,13 @@
 #pragma once
-
-#pragma once
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/interconnect.h>
-#include <ydb/library/actors/core/mon.h>
-
-#include <ydb/library/services/services.pb.h>
-#include <ydb/core/node_whiteboard/node_whiteboard.h>
-#include <ydb/core/viewer/json/json.h>
-#include <ydb/core/base/nameservice.h>
-#include <ydb/library/actors/interconnect/interconnect.h>
-#include <library/cpp/time_provider/time_provider.h>
-#include "viewer.h"
 #include "json_pipe_req.h"
-#include "wb_merge.h"
-#include "wb_group.h"
-#include "wb_filter.h"
 #include "log.h"
+#include "viewer.h"
+#include "wb_filter.h"
+#include "wb_group.h"
+#include "wb_merge.h"
+#include <ydb/library/actors/interconnect/interconnect.h>
 
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 using namespace NActors;
 using namespace NNodeWhiteboard;
@@ -41,11 +29,11 @@ struct TEvPrivate {
     };
 };
 
-template<typename TDerived, typename TRequestEventType, typename TResponseEventType>
-class TWhiteboardRequest : public TViewerPipeClient<TDerived> {
+template<typename TRequestEventType, typename TResponseEventType>
+class TWhiteboardRequest : public TViewerPipeClient {
 protected:
-    using TThis = TWhiteboardRequest<TDerived, TRequestEventType, TResponseEventType>;
-    using TBase = TViewerPipeClient<TDerived>;
+    using TThis = TWhiteboardRequest<TRequestEventType, TResponseEventType>;
+    using TBase = TViewerPipeClient;
     using TResponseType = typename TResponseEventType::ProtoRecordType;
     TRequestSettings RequestSettings;
     THolder<TRequestEventType> Request;
@@ -57,17 +45,16 @@ protected:
     TString LogPrefix;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     TString GetLogPrefix() {
         return LogPrefix;
     }
 
     TWhiteboardRequest() = default;
+    TWhiteboardRequest(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+        : TBase(viewer, ev)
+    {}
 
-    THolder<TRequestEventType> BuildRequest() {
+    virtual THolder<TRequestEventType> BuildRequest() {
         THolder<TRequestEventType> request = MakeHolder<TRequestEventType>();
         constexpr bool hasFormat = requires(const TRequestEventType* r) {r->Record.GetFormat();};
         if constexpr (hasFormat) {
@@ -108,7 +95,7 @@ public:
         TBase::PassAway();
     }
 
-    virtual void Bootstrap() {
+    void Bootstrap() override {
         std::replace(RequestSettings.FilterNodeIds.begin(),
                      RequestSettings.FilterNodeIds.end(),
                      (ui32)0,
@@ -172,7 +159,7 @@ public:
         if (TBase::Requests > 0) {
             TBase::Become(&TThis::StateRequestedNodeInfo);
         } else {
-            static_cast<TDerived*>(this)->ReplyAndPassAway();
+            ReplyAndPassAway();
         }
     }
 
@@ -208,7 +195,7 @@ public:
         if (TBase::Requests > 0) {
             TBase::Become(&TThis::StateRequestedNodeInfo);
         } else {
-            static_cast<TDerived*>(this)->ReplyAndPassAway();
+            ReplyAndPassAway();
         }
     }
 
@@ -296,9 +283,8 @@ public:
     }
 
     void HandleTimeout() {
-        static_cast<TDerived*>(this)->ReplyAndPassAway();
+        ReplyAndPassAway();
     }
 };
 
-}
 }

@@ -13,7 +13,6 @@
 #include "datashard_repl_offsets_client.h"
 #include "datashard_repl_offsets_server.h"
 #include "datashard_write.h"
-#include "build_index.h"
 #include "cdc_stream_heartbeat.h"
 #include "cdc_stream_scan.h"
 #include "change_exchange.h"
@@ -24,6 +23,7 @@
 #include "volatile_tx.h"
 #include "conflicts_cache.h"
 #include "reject_reason.h"
+#include "scan_common.h"
 
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
@@ -252,6 +252,7 @@ class TDataShard
 
     class TTxHandleSafeKqpScan;
     class TTxHandleSafeBuildIndexScan;
+    class TTxHandleSafeSampleKScan;
     class TTxHandleSafeStatisticsScan;
 
     class TTxMediatorStateRestored;
@@ -402,7 +403,6 @@ class TDataShard
 
         struct TEvAsyncTableStats : public TEventLocal<TEvAsyncTableStats, EvAsyncTableStats> {
             ui64 TableId = -1;
-            ui64 IndexSize = 0;
             TInstant StatsUpdateTime;
             NTable::TStats Stats;
             THashSet<ui64> PartOwners;
@@ -1322,6 +1322,8 @@ class TDataShard
     void Handle(TEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanRegistered::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TActorContext& ctx);
@@ -1563,6 +1565,15 @@ public:
     bool IsReplicated() const {
         for (const auto& [_, info] : TableInfos) {
             if (info->IsReplicated()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool IsIncrementalRestore() const {
+        for (const auto& [_, info] : TableInfos) {
+            if (info->IsIncrementalRestore()) {
                 return true;
             }
         }
@@ -1966,7 +1977,7 @@ public:
         return SnapshotManager.PromoteCompleteEdge(std::forward<Args>(args)...);
     }
 
-    TBuildIndexManager& GetBuildIndexManager() { return BuildIndexManager; }
+    TScanManager& GetScanManager() { return ScanManager; }
 
     // Returns true when datashard is working in mvcc mode
     bool IsMvccEnabled() const;
@@ -2631,7 +2642,7 @@ private:
             Schema::PlanQueue::TableId,
             Schema::DeadlineQueue::TableId
         };
-    THashSet<ui64> SysTablesPartOnwers;
+    THashSet<ui64> SysTablesPartOwners;
 
     // Sys table contents
     ui32 State;
@@ -2646,7 +2657,7 @@ private:
 
     NMiniKQL::IKeyAccessSampler::TPtr DisabledKeySampler;
     NMiniKQL::IKeyAccessSampler::TPtr EnabledKeySampler;
-    NMiniKQL::IKeyAccessSampler::TPtr CurrentKeySampler; // Points to enbaled or disabled
+    NMiniKQL::IKeyAccessSampler::TPtr CurrentKeySampler; // Points to enabled or disabled
     TInstant StartedKeyAccessSamplingAt;
     TInstant StopKeyAccessSamplingAt;
 
@@ -2665,7 +2676,7 @@ private:
 
     TReplicationSourceOffsetsServerLink ReplicationSourceOffsetsServer;
 
-    TBuildIndexManager BuildIndexManager;
+    TScanManager ScanManager;
 
     TS3UploadsManager S3Uploads;
     TS3DownloadsManager S3Downloads;
@@ -3102,6 +3113,7 @@ protected:
             HFunc(TEvDataShard::TEvRefreshVolatileSnapshotRequest, Handle);
             HFunc(TEvDataShard::TEvDiscardVolatileSnapshotRequest, Handle);
             HFuncTraced(TEvDataShard::TEvBuildIndexCreateRequest, Handle);
+            HFunc(TEvDataShard::TEvSampleKRequest, Handle);
             HFunc(TEvDataShard::TEvCdcStreamScanRequest, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanRegistered, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanProgress, Handle);
@@ -3237,6 +3249,7 @@ protected:
 
             ev->Record.MutableTableStats()->SetDataSize(ti.Stats.DataStats.DataSize.Size + ti.Stats.MemDataSize);
             ev->Record.MutableTableStats()->SetIndexSize(ti.Stats.DataStats.IndexSize.Size);
+            ev->Record.MutableTableStats()->SetByKeyFilterSize(ti.Stats.DataStats.ByKeyFilterSize);
             ev->Record.MutableTableStats()->SetInMemSize(ti.Stats.MemDataSize);
 
             TMap<ui8, std::tuple<ui64, ui64>> channels; // Channel -> (DataSize, IndexSize)
@@ -3290,7 +3303,7 @@ protected:
             for (const auto& pi : ti.Stats.PartOwners) {
                 ev->Record.AddUserTablePartOwners(pi);
             }
-            for (const auto& pi : SysTablesPartOnwers) {
+            for (const auto& pi : SysTablesPartOwners) {
                 ev->Record.AddSysTablesPartOwners(pi);
             }
 
@@ -3318,6 +3331,10 @@ protected:
     bool AllowCancelROwithReadsets() const;
 
     void ResolveTablePath(const TActorContext &ctx);
+
+public:
+    NMonitoring::TDynamicCounters::TCounterPtr CounterReadIteratorLastKeyReset;
+    void IncCounterReadIteratorLastKeyReset();
 };
 
 NKikimrTxDataShard::TError::EKind ConvertErrCode(NMiniKQL::IEngineFlat::EResult code);

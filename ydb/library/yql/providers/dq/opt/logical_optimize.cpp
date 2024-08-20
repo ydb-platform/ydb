@@ -38,6 +38,74 @@ bool IsStreamLookup(const TCoEquiJoinTuple& joinTuple) {
 
 }
 
+/**
+ * DQ Specific cost function and join applicability cost function
+*/
+struct TDqCBOProviderContext : public NYql::TBaseProviderContext {
+    TDqCBOProviderContext(TTypeAnnotationContext& typeCtx, const TDqConfiguration::TPtr& config)
+        : NYql::TBaseProviderContext()
+        , Config(config)
+        , TypesCtx(typeCtx) {}
+
+    virtual bool IsJoinApplicable(const std::shared_ptr<NYql::IBaseOptimizerNode>& left,
+        const std::shared_ptr<NYql::IBaseOptimizerNode>& right,
+        const std::set<std::pair<NYql::NDq::TJoinColumn, NYql::NDq::TJoinColumn>>& joinConditions,
+        const TVector<TString>& leftJoinKeys, const TVector<TString>& rightJoinKeys,
+        NYql::EJoinAlgoType joinAlgo,  NYql::EJoinKind joinKind) override;
+
+    virtual double ComputeJoinCost(const NYql::TOptimizerStatistics& leftStats, const NYql::TOptimizerStatistics& rightStats, const double outputRows, const double outputByteSize, NYql::EJoinAlgoType joinAlgo) const override;
+
+    TDqConfiguration::TPtr Config;
+    TTypeAnnotationContext& TypesCtx;
+};
+
+
+bool TDqCBOProviderContext::IsJoinApplicable(const std::shared_ptr<NYql::IBaseOptimizerNode>& left,
+        const std::shared_ptr<NYql::IBaseOptimizerNode>& right,
+        const std::set<std::pair<NYql::NDq::TJoinColumn, NYql::NDq::TJoinColumn>>& joinConditions,
+        const TVector<TString>& leftJoinKeys, const TVector<TString>& rightJoinKeys,
+        NYql::EJoinAlgoType joinAlgo,  NYql::EJoinKind joinKind) {
+    Y_UNUSED(left);
+    Y_UNUSED(right);
+    Y_UNUSED(joinConditions);
+    Y_UNUSED(leftJoinKeys);
+    Y_UNUSED(rightJoinKeys);
+
+    switch(joinAlgo) {
+
+    case EJoinAlgoType::MapJoin:
+        if (joinKind == EJoinKind::OuterJoin || joinKind == EJoinKind::Exclusion)
+            return false;
+        if (auto hashJoinMode = Config->HashJoinMode.Get().GetOrElse(EHashJoinMode::Off);
+                hashJoinMode == EHashJoinMode::Off || hashJoinMode == EHashJoinMode::Map)
+            return true;
+        break;
+
+    case EJoinAlgoType::GraceJoin:
+        return true;
+
+    default:
+        break;
+    }
+    return false;
+}
+
+
+double TDqCBOProviderContext::ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, const double outputRows, const double outputByteSize, EJoinAlgoType joinAlgo) const  {
+    Y_UNUSED(outputByteSize);
+
+    switch(joinAlgo) {
+        case EJoinAlgoType::MapJoin:
+            return 1.5 * (leftStats.Nrows + 1.8 * rightStats.Nrows + outputRows);
+        case EJoinAlgoType::GraceJoin:
+            return 1.5 * (leftStats.Nrows + 2.0 * rightStats.Nrows + outputRows);
+        default:
+            Y_ENSURE(false, "Illegal join type encountered");
+            return 0;
+    }
+}
+
+
 class TDqsLogicalOptProposalTransformer : public TOptimizeTransformerBase {
 public:
     TDqsLogicalOptProposalTransformer(TTypeAnnotationContext* typeCtx, const TDqConfiguration::TPtr& config)
@@ -137,7 +205,8 @@ protected:
                 bool syncActor = Config->ComputeActorType.Get() != "async";
                 return NHopping::RewriteAsHoppingWindow(node, ctx, input.Cast(), analyticsHopping, lateArrivalDelay, defaultWatermarksMode, syncActor);
             } else {
-                return DqRewriteAggregate(node, ctx, TypesCtx, true, Config->UseAggPhases.Get().GetOrElse(false), Config->UseFinalizeByKey.Get().GetOrElse(false));
+                NDq::TSpillingSettings spillingSettings(Config->GetEnabledSpillingNodes());
+                return DqRewriteAggregate(node, ctx, TypesCtx, true, Config->UseAggPhases.Get().GetOrElse(false), Config->UseFinalizeByKey.Get().GetOrElse(false), spillingSettings.IsAggregationSpillingEnabled());
             }
         }
         return node;
@@ -206,7 +275,7 @@ protected:
             };
 
             std::unique_ptr<IOptimizerNew> opt;
-            TBaseProviderContext pctx;
+            TDqCBOProviderContext pctx(TypesCtx, Config);
 
             switch (TypesCtx.CostBasedOptimizer) {
             case ECostBasedOptimizerType::Native:
@@ -225,7 +294,7 @@ protected:
                 rels.push_back(rel);
             };
 
-            return DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, 1, *opt, providerCollect);
+            return DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, 2, *opt, providerCollect);
         } else {
             return node;
         }

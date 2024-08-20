@@ -29,9 +29,7 @@ IOutputStream& operator<<(IOutputStream& stream, const TListingRequest& request)
                   << ",.Prefix=" << request.Prefix
                   << ",.Pattern=" << request.Pattern
                   << ",.PatternType=" << request.PatternType
-                  << ",.AwsUserPwd=<some token with length" << request.AuthInfo.GetAwsUserPwd().length() << ">"
-                  << ",.AwsSigV4=" << request.AuthInfo.GetAwsSigV4().length()
-                  << ",.Token=<some token with length " << request.AuthInfo.GetToken().length() << ">}";
+                  << ",.Credentials=" << request.Credentials << "}";
 }
 
 namespace {
@@ -257,7 +255,7 @@ public:
             MakeFilter(listingRequest.Pattern, listingRequest.PatternType, sharedCtx);
 
         auto request = listingRequest;
-        request.Url = UrlEscapeRet(request.Url, true);
+        request.Url = NS3Util::UrlEscapeRet(request.Url);
         auto ctx = TListingContext{
             std::move(sharedCtx),
             std::move(filter),
@@ -287,7 +285,8 @@ public:
     ~TS3Lister() override = default;
 private:
     static void SubmitRequestIntoGateway(TListingContext& ctx) {
-        IHTTPGateway::THeaders headers = IHTTPGateway::MakeYcHeaders(ctx.RequestId, ctx.ListingRequest.AuthInfo.GetToken(), {}, ctx.ListingRequest.AuthInfo.GetAwsUserPwd(), ctx.ListingRequest.AuthInfo.GetAwsSigV4());
+        const auto& authInfo = ctx.ListingRequest.Credentials.GetAuthInfo();
+        IHTTPGateway::THeaders headers = IHTTPGateway::MakeYcHeaders(ctx.RequestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4());
 
         // We have to sort the cgi parameters for the correct aws signature
         // This requirement will be fixed in the curl library

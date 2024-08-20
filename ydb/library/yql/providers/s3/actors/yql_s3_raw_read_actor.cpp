@@ -42,7 +42,7 @@ public:
         IHTTPGateway::TPtr gateway,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         const TString& url,
-        const TS3Credentials::TAuthInfo& authInfo,
+        const TS3Credentials& credentials,
         const TString& pattern,
         NYql::NS3Lister::ES3PatternVariant patternVariant,
         NYql::NS3Details::TPathList&& paths,
@@ -59,7 +59,8 @@ public:
         NActors::TActorId fileQueueActor,
         ui64 fileQueueBatchSizeLimit,
         ui64 fileQueueBatchObjectCountLimit,
-        ui64 fileQueueConsumersCountDelta)
+        ui64 fileQueueConsumersCountDelta,
+        bool allowLocalFiles)
         : ReadActorFactoryCfg(readActorFactoryCfg)
         , Gateway(std::move(gateway))
         , HolderFactory(holderFactory)
@@ -69,13 +70,14 @@ public:
         , RetryPolicy(retryPolicy)
         , ActorSystem(NActors::TActivationContext::ActorSystem())
         , Url(url)
-        , AuthInfo(authInfo)
+        , Credentials(credentials)
         , Pattern(pattern)
         , PatternVariant(patternVariant)
         , Paths(std::move(paths))
         , FileQueueActor(fileQueueActor)
         , AddPathIndex(addPathIndex)
         , SizeLimit(sizeLimit)
+        , AllowLocalFiles(allowLocalFiles)
         , Counters(counters)
         , TaskCounters(taskCounters)
         , FileSizeLimit(fileSizeLimit)
@@ -113,10 +115,11 @@ public:
                 Gateway,
                 RetryPolicy,
                 Url,
-                AuthInfo,
+                Credentials,
                 Pattern,
                 PatternVariant,
-                NYql::NS3Lister::ES3PatternType::Wildcard));
+                NYql::NS3Lister::ES3PatternType::Wildcard,
+                AllowLocalFiles));
         }
 
         LOG_D("TS3ReadActor", "Bootstrap" << ", InputIndex: " << InputIndex << ", FileQueue: " << FileQueueActor << (UseRuntimeListing ? " (remote)" : " (local"));
@@ -164,10 +167,11 @@ public:
         auto url = Url + object.GetPath();
         auto id = object.GetPathIndex();
         const TString requestId = CreateGuidAsString();
+        const auto& authInfo = Credentials.GetAuthInfo();
         LOG_D("TS3ReadActor", "Download: " << url << ", ID: " << id << ", request id: [" << requestId << "]");
         Gateway->Download(
-            UrlEscapeRet(url, true),
-            IHTTPGateway::MakeYcHeaders(requestId, AuthInfo.GetToken(), {}, AuthInfo.GetAwsUserPwd(), AuthInfo.GetAwsSigV4()),
+            NS3Util::UrlEscapeRet(url),
+            IHTTPGateway::MakeYcHeaders(requestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
             0U,
             std::min(object.GetSize(), SizeLimit),
             std::bind(&TS3ReadActor::OnDownloadFinished, ActorSystem, SelfId(), requestId, std::placeholders::_1, id, object.GetPath()),
@@ -456,7 +460,7 @@ private:
     NActors::TActorSystem* const ActorSystem;
 
     const TString Url;
-    const TS3Credentials::TAuthInfo AuthInfo;
+    const TS3Credentials Credentials;
     const TString Pattern;
     const NYql::NS3Lister::ES3PatternVariant PatternVariant;
     NYql::NS3Details::TPathList Paths;
@@ -466,6 +470,7 @@ private:
     const bool AddPathIndex;
     const ui64 SizeLimit;
     TDuration CpuTime;
+    const bool AllowLocalFiles;
 
     std::queue<std::tuple<IHTTPGateway::TContent, ui64>> Blocks;
 
@@ -503,7 +508,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateRawRead
     IHTTPGateway::TPtr gateway,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     const TString& url,
-    const TS3Credentials::TAuthInfo& authInfo,
+    const TS3Credentials& credentials,
     const TString& pattern,
     NYql::NS3Lister::ES3PatternVariant patternVariant,
     NYql::NS3Details::TPathList&& paths,
@@ -520,21 +525,22 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateRawRead
     NActors::TActorId fileQueueActor,
     ui64 fileQueueBatchSizeLimit,
     ui64 fileQueueBatchObjectCountLimit,
-    ui64 fileQueueConsumersCountDelta
+    ui64 fileQueueConsumersCountDelta,
+    bool allowLocalFiles
 ) {
     const auto actor = new TS3ReadActor(
         inputIndex,
         statsLevel,
         txId,
         std::move(gateway),
-        holderFactory, 
-        url, 
-        authInfo, 
+        holderFactory,
+        url,
+        credentials,
         pattern,
         patternVariant,
         std::move(paths),
         addPathIndex,
-        computeActorId, 
+        computeActorId,
         sizeLimit,
         retryPolicy,
         readActorFactoryCfg,
@@ -546,7 +552,8 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateRawRead
         fileQueueActor,
         fileQueueBatchSizeLimit,
         fileQueueBatchObjectCountLimit,
-        fileQueueConsumersCountDelta
+        fileQueueConsumersCountDelta,
+        allowLocalFiles
     );
 
     return {actor, actor};

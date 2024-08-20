@@ -99,7 +99,6 @@ public:
     TBusNetworkStatistics GetBusStatistics() const;
 
     // IPollable implementation.
-    NConcurrency::EPollablePriority GetPriority() const override;
     const TString& GetLoggingTag() const override;
     void OnEvent(NConcurrency::EPollControl control) override;
     void OnShutdown() override;
@@ -289,7 +288,7 @@ private:
     void Close();
     void CloseSslSession(ESslState newSslState);
 
-    void Abort(const TError& error);
+    void Abort(const TError& error, NLogging::ELogLevel logLevel = NLogging::ELogLevel::Debug);
     bool AbortIfNetworkingDisabled();
     void AbortSslSession();
 

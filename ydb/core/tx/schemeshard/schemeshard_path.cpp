@@ -391,6 +391,11 @@ const TPath::TChecker& TPath::TChecker::NotAsyncReplicaTable(EStatus status) con
         return *this;
     }
 
+    // do not treat incr backup tables as async replica
+    if (Path->IsIncrementalBackupTable()) {
+        return *this;
+    }
+
     return Fail(status, TStringBuilder() << "path is an async replica table"
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }

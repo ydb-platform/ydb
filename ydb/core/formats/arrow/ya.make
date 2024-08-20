@@ -7,11 +7,14 @@ LIBRARY()
 PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/scheme
+    ydb/core/formats/arrow/accessor
     ydb/core/formats/arrow/serializer
     ydb/core/formats/arrow/simple_builder
     ydb/core/formats/arrow/dictionary
     ydb/core/formats/arrow/transformer
     ydb/core/formats/arrow/reader
+    ydb/core/formats/arrow/save_load
+    ydb/core/formats/arrow/splitter
     ydb/core/formats/arrow/modifier
     ydb/core/formats/arrow/scalar
     ydb/core/formats/arrow/hash

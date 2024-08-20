@@ -547,6 +547,16 @@ namespace {
                     return false;
                 }
             }
+            else if (name == "TypeAnnNodeRepeatLimit") {
+                if (args.size() != 1) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
+                    return false;
+                }
+                if (!TryFromString(args[0], ctx.TypeAnnNodeRepeatLimit)) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
+                    return false;
+                }
+            }
             else if (name == "PureDataSource") {
                 if (args.size() != 1) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));

@@ -1,5 +1,11 @@
 #include "pull_parser_deserialize.h"
 
+#include "protobuf_interop.h"
+
+#include <yt/yt/core/misc/protobuf_helpers.h>
+
+#include <library/cpp/yt/yson/consumer.h>
+
 #include <library/cpp/yt/misc/cast.h>
 
 namespace NYT::NYson {
@@ -235,6 +241,24 @@ void Deserialize(TGuid& value, TYsonPullParserCursor* cursor)
     EnsureYsonToken("GUID", *cursor, EYsonItemType::StringValue);
     value = TGuid::FromString((*cursor)->UncheckedAsString());
     cursor->Next();
+}
+
+void DeserializeProtobufMessage(
+    google::protobuf::Message& message,
+    const TProtobufMessageType* type,
+    NYson::TYsonPullParserCursor* cursor,
+    const NYson::TProtobufWriterOptions& options)
+{
+    TProtobufString wireBytes;
+    google::protobuf::io::StringOutputStream outputStream(&wireBytes);
+    auto protobufWriter = CreateProtobufWriter(&outputStream, type, options);
+
+    cursor->TransferComplexValue(protobufWriter.get());
+
+    if (!message.ParseFromArray(wireBytes.data(), wireBytes.size())) {
+        THROW_ERROR_EXCEPTION("Error parsing %v from wire bytes",
+            message.GetTypeName());
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

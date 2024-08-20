@@ -13,7 +13,7 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>
 #include <ydb/core/statistics/events.h>
-#include <ydb/core/statistics/stat_service.h>
+#include <ydb/core/statistics/service/service.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
@@ -2506,6 +2506,7 @@ void TSchemeShard::PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId
         NIceDb::TUpdate<Schema::TablePartitionStats::RowCount>(stats.RowCount),
         NIceDb::TUpdate<Schema::TablePartitionStats::DataSize>(stats.DataSize),
         NIceDb::TUpdate<Schema::TablePartitionStats::IndexSize>(stats.IndexSize),
+        NIceDb::TUpdate<Schema::TablePartitionStats::ByKeyFilterSize>(stats.ByKeyFilterSize),
 
         NIceDb::TUpdate<Schema::TablePartitionStats::LastAccessTime>(stats.LastAccessTime.GetValue()),
         NIceDb::TUpdate<Schema::TablePartitionStats::LastUpdateTime>(stats.LastUpdateTime.GetValue()),
@@ -2635,6 +2636,11 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
         Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->ReplicationConfig().SerializeToString(&replicationConfig);
     }
 
+    TString incrementalBackupConfig;
+    if (tableInfo->HasIncrementalBackupConfig()) {
+        Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->IncrementalBackupConfig().SerializeToString(&incrementalBackupConfig);
+    }
+
     if (pathId.OwnerId == TabletID()) {
         db.Table<Schema::Tables>().Key(pathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::Tables::NextColId>(tableInfo->NextColumnId),
@@ -2646,7 +2652,8 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
             NIceDb::TUpdate<Schema::Tables::IsBackup>(tableInfo->IsBackup),
             NIceDb::TUpdate<Schema::Tables::ReplicationConfig>(replicationConfig),
             NIceDb::TUpdate<Schema::Tables::IsTemporary>(tableInfo->IsTemporary),
-            NIceDb::TUpdate<Schema::Tables::OwnerActorId>(tableInfo->OwnerActorId.ToString()));
+            NIceDb::TUpdate<Schema::Tables::OwnerActorId>(tableInfo->OwnerActorId.ToString()),
+            NIceDb::TUpdate<Schema::Tables::OwnerActorId>(incrementalBackupConfig));
     } else {
         db.Table<Schema::MigratedTables>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::MigratedTables::NextColId>(tableInfo->NextColumnId),
@@ -2658,7 +2665,8 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
             NIceDb::TUpdate<Schema::MigratedTables::IsBackup>(tableInfo->IsBackup),
             NIceDb::TUpdate<Schema::MigratedTables::ReplicationConfig>(replicationConfig),
             NIceDb::TUpdate<Schema::MigratedTables::IsTemporary>(tableInfo->IsTemporary),
-            NIceDb::TUpdate<Schema::MigratedTables::OwnerActorId>(tableInfo->OwnerActorId.ToString()));
+            NIceDb::TUpdate<Schema::MigratedTables::OwnerActorId>(tableInfo->OwnerActorId.ToString()),
+            NIceDb::TUpdate<Schema::MigratedTables::OwnerActorId>(incrementalBackupConfig));
     }
 
     for (auto col : tableInfo->Columns) {
@@ -4447,6 +4455,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableReplaceIfExistsForExternalEntities = appData->FeatureFlags.GetEnableReplaceIfExistsForExternalEntities();
     EnableTempTables = appData->FeatureFlags.GetEnableTempTables();
     EnableTableDatetime64 = appData->FeatureFlags.GetEnableTableDatetime64();
+    EnableVectorIndex = appData->FeatureFlags.GetEnableVectorIndex();
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
@@ -6547,6 +6556,12 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
         proto->MutableReplicationConfig()->CopyFrom(tableInfo->ReplicationConfig());
     }
 
+    if (alterData->TableDescriptionFull.Defined() && alterData->TableDescriptionFull->HasIncrementalBackupConfig()) {
+        proto->MutableIncrementalBackupConfig()->CopyFrom(alterData->TableDescriptionFull->GetIncrementalBackupConfig());
+    } else if (tableInfo->HasIncrementalBackupConfig()) {
+        proto->MutableIncrementalBackupConfig()->CopyFrom(tableInfo->IncrementalBackupConfig());
+    }
+
     TString txBody;
     Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
     return txBody;
@@ -6662,6 +6677,10 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
 
     if (tinfo->HasReplicationConfig()) {
         tableDescr->MutableReplicationConfig()->CopyFrom(tinfo->ReplicationConfig());
+    }
+
+    if (tinfo->HasIncrementalBackupConfig()) {
+        tableDescr->MutableIncrementalBackupConfig()->CopyFrom(tinfo->IncrementalBackupConfig());
     }
 
     if (AppData()->DisableRichTableDescriptionForTest) {
@@ -6977,7 +6996,10 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(
             std::vector<TString>(hostnamePatterns.begin(), hostnamePatterns.end()),
             nullptr,
-            appConfig.GetQueryServiceConfig().GetS3().GetGeneratorPathsLimit()
+            appConfig.GetQueryServiceConfig().GetS3().GetGeneratorPathsLimit(),
+            nullptr,
+            appConfig.GetFeatureFlags().GetEnableExternalSourceSchemaInference(),
+            appConfig.GetQueryServiceConfig().GetS3().GetAllowLocalFiles()
         );
     }
 
@@ -7012,6 +7034,8 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableTempTables = featureFlags.GetEnableTempTables();
     EnableReplaceIfExistsForExternalEntities = featureFlags.GetEnableReplaceIfExistsForExternalEntities();
     EnableTableDatetime64 = featureFlags.GetEnableTableDatetime64();
+    EnableResourcePoolsOnServerless = featureFlags.GetEnableResourcePoolsOnServerless();
+    EnableVectorIndex = featureFlags.GetEnableVectorIndex();
 }
 
 void TSchemeShard::ConfigureStatsBatching(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext& ctx) {
@@ -7370,6 +7394,7 @@ void TSchemeShard::SendBaseStatsToSA() {
         entryPathId->SetLocalId(pathId.LocalPathId);
         entry->SetRowCount(aggregated.RowCount);
         entry->SetBytesSize(aggregated.DataSize);
+        entry->SetIsColumnTable(false);
         ++count;
     }
     auto columnTablesPathIds = ColumnTables.GetAllPathIds();
@@ -7382,6 +7407,7 @@ void TSchemeShard::SendBaseStatsToSA() {
         entryPathId->SetLocalId(pathId.LocalPathId);
         entry->SetRowCount(aggregated.RowCount);
         entry->SetBytesSize(aggregated.DataSize);
+        entry->SetIsColumnTable(true);
         ++count;
     }
 

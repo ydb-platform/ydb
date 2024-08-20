@@ -64,16 +64,17 @@ namespace NYql::NDq {
             IHTTPGateway::TPtr gateway,
             const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
             const TS3ReadActorFactoryConfig& cfg,
-            ::NMonitoring::TDynamicCounterPtr counters) override {
+            ::NMonitoring::TDynamicCounterPtr counters,
+            bool allowLocalFiles) override {
 
             #if defined(_linux_) || defined(_darwin_)
                 NDB::registerFormats();
                 factory.RegisterSource<NS3::TSource>("S3Source",
-                    [credentialsFactory, gateway, retryPolicy, cfg, counters](NS3::TSource&& settings, IDqAsyncIoFactory::TSourceArguments&& args) {
+                    [credentialsFactory, gateway, retryPolicy, cfg, counters, allowLocalFiles](NS3::TSource&& settings, IDqAsyncIoFactory::TSourceArguments&& args) {
                         return CreateS3ReadActor(args.TypeEnv, args.HolderFactory, gateway,
                             std::move(settings), args.InputIndex, args.StatsLevel, args.TxId, args.SecureParams,
                             args.TaskParams, args.ReadRanges, args.ComputeActorId, credentialsFactory, retryPolicy, cfg,
-                            counters, args.TaskCounters, args.MemoryQuotaManager);
+                            counters, args.TaskCounters, args.MemoryQuotaManager, allowLocalFiles);
                     });
             #else
                 Y_UNUSED(factory);

@@ -23,7 +23,7 @@ message TTableServiceConfig {
         optional uint32 ComputeActorsCount = 1 [default = 10000];
         optional uint64 ChannelBufferSize = 2 [default = 8388608];              //  8 MB
         reserved 3;
-        optional uint64 MkqlLightProgramMemoryLimit = 4 [default = 524288];   // 512 KB
+        optional uint64 MkqlLightProgramMemoryLimit = 4 [default = 1048576];   // 1 MiB
         optional uint64 MkqlHeavyProgramMemoryLimit = 5 [default = 31457280];   // 30 MB
         optional uint64 QueryMemoryLimit = 6 [default = 32212254720];           // 30 GB
         optional uint32 PublishStatisticsIntervalSec = 7 [default = 2];
@@ -42,7 +42,10 @@ message TTableServiceConfig {
         optional TInfoExchangerSettings InfoExchangerSettings = 19;
         optional uint64 KqpPatternCachePatternAccessTimesBeforeTryToCompile = 20 [default = 5];
         optional uint64 KqpPatternCacheCompiledCapacityBytes = 21 [default = 104857600]; // 100 MiB
-        optional uint64 ReasonableSpillingTreshold = 22 [default = 104857600]; // 100 MiB
+        optional double SpillingPercent = 22 [default = 80]; // 100 MiB
+
+        optional uint64 MinMemAllocSize = 23 [default = 8388608]; // 8 MiB
+        optional uint64 MinMemFreeSize = 24  [default = 33554432]; // 32 MiB
     }
 
     message TSpillingServiceConfig {
@@ -221,7 +224,7 @@ message TTableServiceConfig {
     reserved 25; // optional bool EnableKqpPatternCacheCompute = 25 [default = false];
 
     optional bool EnableKqpScanQuerySourceRead = 26 [default = false];
-    optional bool EnableKqpDataQuerySourceRead = 27 [default = true];
+    reserved 27; // EnableKqpDataQuerySourceRead
     optional uint64 SessionIdleDurationSeconds = 28 [default = 600];
     optional TAggregationConfig AggregationConfig = 29;
     optional bool EnableKqpScanQueryStreamLookup = 30 [default = true];
@@ -274,7 +277,7 @@ message TTableServiceConfig {
 
     optional uint64 ExtractPredicateRangesLimit = 54 [default = 10000];
 
-    optional bool EnableOlapSink = 55 [default = true];
+    optional bool EnableOlapSink = 55 [default = false];
 
     optional bool EnablePerStatementQueryExecution = 56 [default = false];
     optional bool EnableCreateTableAs = 57 [default = true];
@@ -289,7 +292,7 @@ message TTableServiceConfig {
         BLOCK_CHANNELS_AUTO = 1;
         BLOCK_CHANNELS_FORCE = 2;
     }
-    optional EBlockChannelsMode BlockChannelsMode = 61 [default = BLOCK_CHANNELS_SCALAR];
+    optional EBlockChannelsMode BlockChannelsMode = 61 [default = BLOCK_CHANNELS_AUTO];
 
     optional uint64 QueryReplayCacheUploadTTLSec = 62 [default = 36000];
 
@@ -298,6 +301,30 @@ message TTableServiceConfig {
     optional uint32 DefaultCostBasedOptimizationLevel = 64 [default = 3];
 
     optional bool EnableConstantFolding = 65 [ default = true ];
-    
+
     optional bool EnableImplicitQueryParameterTypes = 66 [ default = true ];
+
+    optional string EnableSpillingNodes = 67 [ default = "All" ];
+
+    message TSubPoolsConfiguration {
+        repeated TComputePoolConfiguration SubPools = 1;
+    }
+
+    message TComputePoolConfiguration {
+        optional double MaxCpuShare = 1;
+        oneof ResourceConfiguration {
+            string Name = 2;
+            TSubPoolsConfiguration SubPoolsConfiguration = 3;
+        }
+    }
+
+    message TComputeSchedulerSettings {
+        optional uint64 AdvanceTimeIntervalUsec = 1 [default = 50000];
+        optional uint64 ForgetOverflowTimeoutUsec = 2 [default = 2000000];
+    }
+
+    optional TComputePoolConfiguration PoolsConfiguration = 68;
+    optional TComputeSchedulerSettings ComputeSchedulerSettings = 70;
+
+    optional bool EnableRowsDuplicationCheck = 69 [ default = false ];
 };

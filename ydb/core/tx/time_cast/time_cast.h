@@ -59,8 +59,11 @@ struct TEvMediatorTimecast {
 
         // mediator part
         EvWatch = EvRegisterTablet + 2 * 512,
+        EvGranularWatch,
+        EvGranularWatchModify,
 
         EvUpdate = EvRegisterTablet + 3 * 512,
+        EvGranularUpdate,
 
         EvEnd
     };
@@ -283,6 +286,14 @@ struct TEvMediatorTimecast {
     };
 
     struct TEvUpdate : public TEventPB<TEvUpdate, NKikimrTxMediatorTimecast::TEvUpdate, EvUpdate> {
+        TEvUpdate() = default;
+
+        TEvUpdate(ui64 mediator, ui32 bucket, ui64 timeBarrier) {
+            Record.SetMediator(mediator);
+            Record.SetBucket(bucket);
+            Record.SetTimeBarrier(timeBarrier);
+        }
+
         TString ToString() const {
             TStringStream str;
             str << "{TEvUpdate ";
@@ -295,11 +306,51 @@ struct TEvMediatorTimecast {
             if (Record.HasTimeBarrier()) {
                 str << " TimeBarrier# " << Record.GetTimeBarrier();
             }
-            for (size_t i = 0; i < Record.ExemptionSize(); ++i) {
-                str << " Exemption# " << Record.GetExemption(i);
-            }
             str << "}";
             return str.Str();
+        }
+    };
+
+    struct TEvGranularWatch
+        : public TEventPB<
+            TEvGranularWatch,
+            NKikimrTxMediatorTimecast::TEvGranularWatch,
+            EvGranularWatch>
+    {
+        TEvGranularWatch() = default;
+
+        TEvGranularWatch(ui32 bucket, ui64 subscriptionId) {
+            Record.SetBucket(bucket);
+            Record.SetSubscriptionId(subscriptionId);
+        }
+    };
+
+    struct TEvGranularWatchModify
+        : public TEventPB<
+            TEvGranularWatchModify,
+            NKikimrTxMediatorTimecast::TEvGranularWatchModify,
+            EvGranularWatchModify>
+    {
+        TEvGranularWatchModify() = default;
+
+        TEvGranularWatchModify(ui32 bucket, ui64 subscriptionId) {
+            Record.SetBucket(bucket);
+            Record.SetSubscriptionId(subscriptionId);
+        }
+    };
+
+    struct TEvGranularUpdate
+        : public TEventPB<
+            TEvGranularUpdate,
+            NKikimrTxMediatorTimecast::TEvGranularUpdate,
+            EvGranularUpdate>
+    {
+        TEvGranularUpdate() = default;
+
+        TEvGranularUpdate(ui64 mediator, ui32 bucket, ui64 subscriptionId) {
+            Record.SetMediator(mediator);
+            Record.SetBucket(bucket);
+            Record.SetSubscriptionId(subscriptionId);
         }
     };
 };

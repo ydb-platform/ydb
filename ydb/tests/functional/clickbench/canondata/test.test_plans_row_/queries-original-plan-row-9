@@ -51,7 +51,10 @@
                                                 "PlanNodeId": 8,
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Map",
+                                                        "KeyColumns": [
+                                                            "RegionID"
+                                                        ],
+                                                        "Node Type": "HashShuffle",
                                                         "PlanNodeId": 7,
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
@@ -73,10 +76,7 @@
                                                                 "PlanNodeId": 6,
                                                                 "Plans": [
                                                                     {
-                                                                        "KeyColumns": [
-                                                                            "RegionID"
-                                                                        ],
-                                                                        "Node Type": "HashShuffle",
+                                                                        "Node Type": "UnionAll",
                                                                         "PlanNodeId": 5,
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
@@ -113,10 +113,7 @@
                                                                         ]
                                                                     },
                                                                     {
-                                                                        "KeyColumns": [
-                                                                            "RegionID"
-                                                                        ],
-                                                                        "Node Type": "HashShuffle",
+                                                                        "Node Type": "UnionAll",
                                                                         "PlanNodeId": 3,
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
@@ -165,7 +162,10 @@
                             }
                         ]
                     }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {

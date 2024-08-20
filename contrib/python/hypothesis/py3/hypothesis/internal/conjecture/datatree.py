@@ -14,7 +14,12 @@ from typing import List, Optional, Union
 
 import attr
 
-from hypothesis.errors import Flaky, HypothesisException, StopTest
+from hypothesis.errors import (
+    FlakyReplay,
+    FlakyStrategyDefinition,
+    HypothesisException,
+    StopTest,
+)
 from hypothesis.internal import floats as flt
 from hypothesis.internal.compat import int_to_bytes
 from hypothesis.internal.conjecture.data import (
@@ -45,7 +50,7 @@ class PreviouslyUnseenBehaviour(HypothesisException):
 
 
 def inconsistent_generation():
-    raise Flaky(
+    raise FlakyStrategyDefinition(
         "Inconsistent data generation! Data generation behaved differently "
         "between different runs. Is your data generation depending on external "
         "state?"
@@ -280,22 +285,18 @@ def all_children(ir_type, kwargs):
                         continue
                     yield n
         else:
-            # hard case: only one bound was specified. Here we probe either upwards
-            # or downwards with our full 128 bit generation, but only half of these
-            # (plus one for the case of generating zero) result in a probe in the
-            # direction we want. ((2**128 - 1) // 2) + 1 == a range of 2 ** 127.
-            #
-            # strictly speaking, I think this is not actually true: if
-            # max_value > shrink_towards then our range is ((-2**127) + 1, max_value),
-            # and it only narrows when max_value < shrink_towards. But it
-            # really doesn't matter for this case because (even half) unbounded
-            # integers generation is hit extremely rarely.
             assert (min_value is None) ^ (max_value is None)
+            # hard case: only one bound was specified. Here we probe in 128 bits
+            # around shrink_towards, and discard those above max_value or below
+            # min_value respectively.
+            shrink_towards = kwargs["shrink_towards"]
             if min_value is None:
-                yield from range(max_value - (2**127) + 1, max_value)
+                shrink_towards = min(max_value, shrink_towards)
+                yield from range(shrink_towards - (2**127) + 1, max_value)
             else:
                 assert max_value is None
-                yield from range(min_value, min_value + (2**127) - 1)
+                shrink_towards = max(min_value, shrink_towards)
+                yield from range(min_value, shrink_towards + (2**127) - 1)
 
     if ir_type == "boolean":
         p = kwargs["p"]
@@ -469,7 +470,7 @@ class TreeNode:
         Splits the tree so that it can incorporate a decision at the draw call
         corresponding to the node at position i.
 
-        Raises Flaky if node i was forced.
+        Raises FlakyStrategyDefinition if node i was forced.
         """
 
         if i in self.forced:
@@ -1142,10 +1143,13 @@ class TreeRecordingObserver(DataObserver):
                 node.transition.status != Status.INTERESTING
                 or new_transition.status != Status.VALID
             ):
-                raise Flaky(
+                old_origin = node.transition.interesting_origin
+                new_origin = new_transition.interesting_origin
+                raise FlakyReplay(
                     f"Inconsistent results from replaying a test case!\n"
-                    f"  last: {node.transition.status.name} from {node.transition.interesting_origin}\n"
-                    f"  this: {new_transition.status.name} from {new_transition.interesting_origin}"
+                    f"  last: {node.transition.status.name} from {old_origin}\n"
+                    f"  this: {new_transition.status.name} from {new_origin}",
+                    (old_origin, new_origin),
                 )
         else:
             node.transition = new_transition

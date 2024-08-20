@@ -11,11 +11,15 @@ enum ETxTypes {
     TXTYPE_INIT = 1                [(TxTypeOpts) = {Name: "TxInit"}];
     TXTYPE_CONFIGURE = 2           [(TxTypeOpts) = {Name: "TxConfigure"}];
     TXTYPE_SCHEMESHARD_STATS = 3   [(TxTypeOpts) = {Name: "TxSchemeShardStats"}];
-    TXTYPE_SCAN_TABLE = 4          [(TxTypeOpts) = {Name: "TxScanTable"}];
+    TXTYPE_ANALYZE_TABLE = 4       [(TxTypeOpts) = {Name: "TxAnalyzeTable"}];
     TXTYPE_NAVIGATE = 5            [(TxTypeOpts) = {Name: "TxNavigate"}];
     TXTYPE_RESOLVE = 6             [(TxTypeOpts) = {Name: "TxResolve"}];
     TXTYPE_SCAN_RESPONSE = 7       [(TxTypeOpts) = {Name: "TxScanResponse"}];
-    TXTYPE_SAVE_QUERY_RESPONSE = 8 [(TxTypeOpts) = {Name: "TxSaveQueryResponse"}];
-    TXTYPE_SCHEDULE_SCAN = 9       [(TxTypeOpts) = {Name: "TxScheduleScan"}];
-    TXTYPE_DELETE_QUERY_RESPONSE = 10 [(TxTypeOpts) = {Name: "TxDeleteQueryResponse"}];
+    TXTYPE_FINISH_TRAVERSAL = 8 [(TxTypeOpts) = {Name: "TxFinishTraversak"}];
+    TXTYPE_SCHEDULE_TRAVERSAL = 9  [(TxTypeOpts) = {Name: "TxScheduleTraversal"}];
+    TXTYPE_AGGR_STAT_RESPONSE = 10 [(TxTypeOpts) = {Name: "TxAggregateStatisticsResponse"}];
+    TXTYPE_RESPONSE_TABLET_DISTRIBUTION = 11 [(TxTypeOpts) = {Name: "TxResponseTabletDistribution"}];
+    TXTYPE_ACK_TIMEOUT = 12        [(TxTypeOpts) = {Name: "TxAckTimeout"}];
+    TXTYPE_ANALYZE_TABLE_REQUEST = 13 [(TxTypeOpts) = {Name: "TxAnalyzeTableRequest"}];
+    TXTYPE_ANALYZE_TABLE_RESPONSE = 14 [(TxTypeOpts) = {Name: "TxAnalyzeTableResponse"}];
 }

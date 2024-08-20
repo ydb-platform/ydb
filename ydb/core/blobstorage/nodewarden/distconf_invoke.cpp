@@ -144,6 +144,9 @@ namespace NKikimr::NStorage {
                 case TQuery::kReassignStateStorageNode:
                     return ReassignStateStorageNode(record.GetReassignStateStorageNode());
 
+                case TQuery::kAdvanceGeneration:
+                    return AdvanceGeneration();
+
                 case TQuery::REQUEST_NOT_SET:
                     return FinishWithError(TResult::ERROR, "Request field not set");
             }
@@ -154,6 +157,9 @@ namespace NKikimr::NStorage {
         void Handle(TEvNodeConfigGather::TPtr ev) {
             auto& record = ev->Get()->Record;
             STLOG(PRI_DEBUG, BS_NODE, NWDC44, "Handle(TEvNodeConfigGather)", (SelfId, SelfId()), (Record, record));
+            if (record.GetAborted()) {
+                return FinishWithError(TResult::ERROR, "scatter task was aborted due to loss of quorum or other error");
+            }
             switch (record.GetResponseCase()) {
                 case TEvGather::kProposeStorageConfig: {
                     std::unique_ptr<TEvNodeConfigInvokeOnRootResult> ev;
@@ -597,6 +603,14 @@ namespace NKikimr::NStorage {
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Configuration proposition
+
+        void AdvanceGeneration() {
+            if (RunCommonChecks()) {
+                NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+                config.SetGeneration(config.GetGeneration() + 1);
+                StartProposition(&config);
+            }
+        }
 
         void StartProposition(NKikimrBlobStorage::TStorageConfig *config) {
             config->MutablePrevConfig()->CopyFrom(*Self->StorageConfig);

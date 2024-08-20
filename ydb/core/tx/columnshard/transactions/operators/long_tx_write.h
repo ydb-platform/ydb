@@ -6,7 +6,7 @@
 
 namespace NKikimr::NColumnShard {
 
-    class TLongTxTransactionOperator: public IProposeTxOperator {
+    class TLongTxTransactionOperator: public IProposeTxOperator, public TMonitoringObjectsCounter<TLongTxTransactionOperator> {
         using TBase = IProposeTxOperator;
         using TProposeResult = TTxController::TProposeResult;
         static inline auto Registrator = TFactory::TRegistrator<TLongTxTransactionOperator>(NKikimrTxColumnShard::TX_KIND_COMMIT);
@@ -16,6 +16,10 @@ namespace NKikimr::NColumnShard {
             return "LONG_TX_WRITE";
         }
 
+        bool TxWithDeadline() const override {
+            return true;
+        }
+
         virtual TProposeResult DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override;
         virtual void DoStartProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
 
@@ -23,6 +27,9 @@ namespace NKikimr::NColumnShard {
         virtual void DoFinishProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) override {
         }
         virtual void DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
+        }
+        virtual TString DoGetOpType() const override {
+            return "LongTxWrite";
         }
         virtual bool DoIsAsync() const override {
             return false;
@@ -37,7 +44,7 @@ namespace NKikimr::NColumnShard {
     public:
         using TBase::TBase;
 
-        void OnTabletInit(TColumnShard& owner) override {
+        virtual void DoOnTabletInit(TColumnShard& owner) override {
             for (auto&& writeId : WriteIds) {
                 AFL_VERIFY(owner.LongTxWrites.contains(writeId))("problem", "ltx_not_exists_for_write_id")("txId", GetTxId())("writeId", (ui64)writeId);
                 owner.AddLongTxWrite(writeId, GetTxId());
@@ -54,9 +61,9 @@ namespace NKikimr::NColumnShard {
 
             auto counters = owner.InsertTable->Commit(dbTable, version.GetPlanStep(), version.GetTxId(), WriteIds, pathExists);
 
-            owner.IncCounter(COUNTER_BLOBS_COMMITTED, counters.Rows);
-            owner.IncCounter(COUNTER_BYTES_COMMITTED, counters.Bytes);
-            owner.IncCounter(COUNTER_RAW_BYTES_COMMITTED, counters.RawBytes);
+            owner.Counters.GetTabletCounters()->IncCounter(COUNTER_BLOBS_COMMITTED, counters.Rows);
+            owner.Counters.GetTabletCounters()->IncCounter(COUNTER_BYTES_COMMITTED, counters.Bytes);
+            owner.Counters.GetTabletCounters()->IncCounter(COUNTER_RAW_BYTES_COMMITTED, counters.RawBytes);
 
             NIceDb::TNiceDb db(txc.DB);
             for (TWriteId writeId : WriteIds) {

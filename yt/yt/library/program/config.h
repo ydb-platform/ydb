@@ -35,7 +35,7 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class THeapSizeLimit
+class THeapSizeLimitConfig
     : public virtual NYTree::TYsonStruct
 {
 public:
@@ -46,12 +46,16 @@ public:
     //! If true tcmalloc crashes when system allocates more memory than #ContainerMemoryRatio.
     bool Hard;
 
-    REGISTER_YSON_STRUCT(THeapSizeLimit);
+    bool DumpMemoryProfileOnViolation;
+    TDuration DumpMemoryProfileTimeout;
+    TString DumpMemoryProfilePath;
+
+    REGISTER_YSON_STRUCT(THeapSizeLimitConfig);
 
     static void Register(TRegistrar registrar);
 };
 
-DEFINE_REFCOUNTED_TYPE(THeapSizeLimit)
+DEFINE_REFCOUNTED_TYPE(THeapSizeLimitConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -75,7 +79,7 @@ public:
     //! size <= 256 KiB will be under GWP-ASAN.
     std::optional<i64> GuardedSamplingRate;
 
-    THeapSizeLimitPtr HeapSizeLimit;
+    THeapSizeLimitConfigPtr HeapSizeLimit;
 
     REGISTER_YSON_STRUCT(TTCMallocConfig);
 

@@ -48,8 +48,8 @@ private:
     static bool IsFileReadable(const fs::path& p) {
         std::error_code ec; // For noexcept overload usage.
         auto perms = fs::status(p, ec).permissions();
-        if ((perms & fs::perms::owner_read)  != fs::perms::none &&
-            (perms & fs::perms::group_read)  != fs::perms::none &&
+        if ((perms & fs::perms::owner_read)  != fs::perms::none ||
+            (perms & fs::perms::group_read)  != fs::perms::none ||
             (perms & fs::perms::others_read) != fs::perms::none   )
         {
             return true;
@@ -196,6 +196,7 @@ class TDefaultNodeBrokerClient
             const TGrpcSslSettings& grpcSettings,
             const TString addr,
             const NYdb::NDiscovery::TNodeRegistrationSettings& settings,
+            const TString& nodeRegistrationToken,
             const IEnv& env)
     {
         TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(addr);
@@ -210,7 +211,9 @@ class TDefaultNodeBrokerClient
                 config.UseClientCertificate(certificate.c_str(), privateKey.c_str());
             }
         }
-        config.SetAuthToken(BUILTIN_ACL_ROOT);
+        if (nodeRegistrationToken) {
+            config.SetAuthToken(nodeRegistrationToken);
+        }
         config.SetEndpoint(endpoint.Address);
         auto connection = NYdb::TDriver(config);
 
@@ -224,6 +227,7 @@ class TDefaultNodeBrokerClient
         const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
         const NYdb::NDiscovery::TNodeRegistrationSettings& settings,
+        const TString& nodeRegistrationToken,
         const IEnv& env,
         IInitLogger& logger)
     {
@@ -234,6 +238,7 @@ class TDefaultNodeBrokerClient
                 result = TryToRegisterDynamicNode(grpcSettings,
                                                   addr,
                                                   settings,
+                                                  nodeRegistrationToken,
                                                   env);
                 if (result.IsSuccess()) {
                     logger.Out() << "Success. Registered as " << result.GetNodeId() << Endl;
@@ -289,6 +294,7 @@ public:
        NYdb::NDiscovery::TNodeRegistrationResult result = RegisterDynamicNodeImpl(grpcSettings,
                                                                                   addrs,
                                                                                   newRegSettings,
+                                                                                  regSettings.NodeRegistrationToken,
                                                                                   env,
                                                                                   logger);
 

@@ -59,18 +59,8 @@
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "Aggregate-TableFullScan",
+                                                                "Node Type": "TableFullScan",
                                                                 "Operators": [
-                                                                    {
-                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1)}",
-                                                                        "GroupBy": "item.AdvEngineID",
-                                                                        "Inputs": [
-                                                                            {
-                                                                                "InternalOperatorId": 1
-                                                                            }
-                                                                        ],
-                                                                        "Name": "Aggregate"
-                                                                    },
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TableFullScan",
@@ -125,10 +115,32 @@
                                                                                     }
                                                                                 },
                                                                                 {
+                                                                                    "GroupBy": {
+                                                                                        "Aggregates": [
+                                                                                            {
+                                                                                                "Column": {
+                                                                                                    "Id": 108
+                                                                                                },
+                                                                                                "Function": {
+                                                                                                    "Id": 2
+                                                                                                }
+                                                                                            }
+                                                                                        ],
+                                                                                        "KeyColumns": [
+                                                                                            {
+                                                                                                "Id": 41
+                                                                                            }
+                                                                                        ]
+                                                                                    }
+                                                                                },
+                                                                                {
                                                                                     "Projection": {
                                                                                         "Columns": [
                                                                                             {
                                                                                                 "Id": 41
+                                                                                            },
+                                                                                            {
+                                                                                                "Id": 108
                                                                                             }
                                                                                         ]
                                                                                     }
@@ -157,7 +169,10 @@
                             }
                         ]
                     }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {

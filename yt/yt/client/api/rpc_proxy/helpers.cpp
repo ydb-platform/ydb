@@ -708,6 +708,10 @@ void ToProto(NProto::TOperation* protoOperation, const NApi::TOperation& operati
         protoOperation->set_slot_index_per_pool_tree(operation.SlotIndexPerPoolTree.ToString());
     }
 
+    if (operation.SchedulingAttributesPerPoolTree) {
+        protoOperation->set_scheduling_attributes_per_pool_tree(operation.SchedulingAttributesPerPoolTree.ToString());
+    }
+
     if (operation.TaskNames) {
         protoOperation->set_task_names(operation.TaskNames.ToString());
     }
@@ -840,6 +844,12 @@ void FromProto(NApi::TOperation* operation, const NProto::TOperation& protoOpera
         operation->SlotIndexPerPoolTree = TYsonString();
     }
 
+    if (protoOperation.has_scheduling_attributes_per_pool_tree()) {
+        operation->SchedulingAttributesPerPoolTree = TYsonString(protoOperation.scheduling_attributes_per_pool_tree());
+    } else {
+        operation->SchedulingAttributesPerPoolTree = TYsonString();
+    }
+
     if (protoOperation.has_task_names()) {
         operation->TaskNames = TYsonString(protoOperation.task_names());
     } else {
@@ -965,6 +975,9 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     }
     if (job.ArchiveFeatures) {
         protoJob->set_archive_features(job.ArchiveFeatures.ToString());
+    }
+    if (job.MonitoringDescriptor) {
+        protoJob->set_monitoring_descriptor(*job.MonitoringDescriptor);
     }
 }
 
@@ -1110,6 +1123,11 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
     } else {
         job->ArchiveFeatures = TYsonString();
     }
+    if (protoJob.has_monitoring_descriptor()) {
+        job->MonitoringDescriptor = protoJob.monitoring_descriptor();
+    } else {
+        job->MonitoringDescriptor.reset();
+    }
 }
 
 void ToProto(
@@ -1215,6 +1233,8 @@ void ToProto(
     if (statistics.LegacyChunkRowCount) {
         protoStatistics->set_legacy_chunk_row_count(*statistics.LegacyChunkRowCount);
     }
+
+    ToProto(protoStatistics->mutable_column_hyperloglog_digests(), statistics.LargeStatistics.ColumnHyperLogLogDigests);
 }
 
 void FromProto(
@@ -1243,6 +1263,8 @@ void FromProto(
     } else {
         statistics->LegacyChunkRowCount.reset();
     }
+
+    FromProto(&statistics->LargeStatistics.ColumnHyperLogLogDigests, protoStatistics.column_hyperloglog_digests());
 }
 
 void ToProto(

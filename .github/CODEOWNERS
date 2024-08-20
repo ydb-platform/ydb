@@ -1,5 +1,16 @@
 /*.md @ydb-platform/docs
 
+/build @ydb-platform/ci
+/certs @ydb-platform/ci
+/contrib @ydb-platform/ci
+/devtools @ydb-platform/ci
+/library @ydb-platform/ci
+/scripts @ydb-platform/ci
+/tools @ydb-platform/ci
+/util @ydb-platform/ci
+/vendor @ydb-platform/ci
+/yt @ydb-platform/ci
+
 /ydb/core/fq/ @ydb-platform/fq
 /ydb/core/public_http/ @ydb-platform/fq
 
@@ -13,6 +24,7 @@
 /ydb/library/yql/providers/pq @ydb-platform/fq
 /ydb/library/yql/providers/s3 @ydb-platform/fq
 /ydb/library/yql/providers/solomon @ydb-platform/fq
+/ydb/library/yql/udfs/common/clickhouse/client @ydb-platform/fq
 
 /ydb/library/yql/yt @Krock21 @Krisha11 @zlobober @gritukan
 
@@ -25,3 +37,6 @@
 /ydb/services/persqueue_v1 @ydb-platform/Topics
 
 /ydb/core/config/ut @ydb-platform/core
+
+/ydb/core/viewer @ydb-platform/ui-backend
+/ydb/core/protos/node_whiteboard.proto @ydb-platform/ui-backend

@@ -33,7 +33,13 @@ public:
 
 private:
     YDB_READONLY(ui64, SchemaVersion, 0);
+    YDB_READONLY_FLAG(NotAbortable, false);
+
 public:
+    void MarkAsNotAbortable() {
+        NotAbortableFlag = true;
+    }
+
     std::optional<TString> GetBlobData() const {
         if (BlobDataGuard) {
             return BlobDataGuard->GetData();
@@ -55,8 +61,8 @@ public:
     TInsertedData(ui64 planStep, ui64 writeTxId, ui64 pathId, TString dedupId, const TBlobRange& blobRange,
         const NKikimrTxColumnShard::TLogicalMetadata& proto, const ui64 schemaVersion, const std::optional<TString>& blobData);
 
-    TInsertedData(ui64 writeTxId, ui64 pathId, TString dedupId, const TBlobRange& blobRange,
-        const NKikimrTxColumnShard::TLogicalMetadata& proto, const ui64 schemaVersion, const std::optional<TString>& blobData)
+    TInsertedData(ui64 writeTxId, ui64 pathId, TString dedupId, const TBlobRange& blobRange, const NKikimrTxColumnShard::TLogicalMetadata& proto,
+        const ui64 schemaVersion, const std::optional<TString>& blobData)
         : TInsertedData(0, writeTxId, pathId, dedupId, blobRange, proto, schemaVersion, blobData)
     {}
 
@@ -103,7 +109,7 @@ public:
     /// One of them wins and becomes committed. Original DedupId would be lost then.
     /// After commit we use original Initiator:WriteId as DedupId of inserted blob inside {PlanStep, TxId}.
     /// pathId, initiator, {writeId}, {dedupId} -> pathId, planStep, txId, {dedupId}
-    void Commit(ui64 planStep, ui64 txId) {
+    void Commit(const ui64 planStep, const ui64 txId) {
         DedupId = ToString(PlanStep) + ":" + ToString((ui64)WriteTxId);
         PlanStep = planStep;
         WriteTxId = txId;
@@ -137,6 +143,8 @@ private:
     YDB_READONLY(bool, IsDelete, false);
     YDB_READONLY_DEF(std::optional<NArrow::TReplaceKey>, First);
     YDB_READONLY_DEF(std::optional<NArrow::TReplaceKey>, Last);
+    YDB_READONLY_DEF(NArrow::TSchemaSubset, SchemaSubset);
+
 public:
     ui64 GetSize() const {
         return BlobRange.Size;
@@ -153,7 +161,7 @@ public:
     }
 
     TCommittedBlob(const TBlobRange& blobRange, const TSnapshot& snapshot, const ui64 schemaVersion, const ui64 recordsCount, const std::optional<NArrow::TReplaceKey>& first, 
-        const std::optional<NArrow::TReplaceKey>& last, const bool isDelete)
+        const std::optional<NArrow::TReplaceKey>& last, const bool isDelete, const NArrow::TSchemaSubset& subset)
         : BlobRange(blobRange)
         , CommitSnapshot(snapshot)
         , SchemaVersion(schemaVersion)
@@ -161,6 +169,7 @@ public:
         , IsDelete(isDelete)
         , First(first)
         , Last(last)
+        , SchemaSubset(subset)
     {}
 
     /// It uses trick then we place key with planStep:txId in container and find them later by BlobId only.

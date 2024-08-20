@@ -548,7 +548,7 @@ std::shared_ptr<arrow::Scalar> DefaultScalar(const std::shared_ptr<arrow::DataTy
         }
         return true;
     });
-    Y_ABORT_UNLESS(out);
+    AFL_VERIFY(out)("type", type->ToString());
     return out;
 }
 
@@ -631,6 +631,19 @@ int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y) {
 int ScalarCompare(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y) {
     Y_ABORT_UNLESS(x);
     Y_ABORT_UNLESS(y);
+    return ScalarCompare(*x, *y);
+}
+
+int ScalarCompareNullable(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y) {
+    if (!x && !!y) {
+        return -1;
+    }
+    if (!!x && !y) {
+        return 1;
+    }
+    if (!x && !y) {
+        return 0;
+    }
     return ScalarCompare(*x, *y);
 }
 
@@ -862,6 +875,18 @@ std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::Recor
     return DeserializeBatch(SerializeBatch(original, arrow::ipc::IpcWriteOptions::Defaults()), original->schema());
 }
 
+std::shared_ptr<arrow::Table> ReallocateBatch(const std::shared_ptr<arrow::Table>& original) {
+    if (!original) {
+        return original;
+    }
+    auto batches = NArrow::SliceToRecordBatches(original);
+    for (auto&& i : batches) {
+        i = NArrow::TStatusValidator::GetValid(
+            NArrow::NSerialization::TNativeSerializer().Deserialize(NArrow::NSerialization::TNativeSerializer().SerializeFull(i)));
+    }
+    return NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches(batches));
+}
+
 std::shared_ptr<arrow::RecordBatch> MergeColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches) {
     std::vector<std::shared_ptr<arrow::Array>> columns;
     std::vector<std::shared_ptr<arrow::Field>> fields;
@@ -909,25 +934,44 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std:
     }
     std::sort(positions.begin(), positions.end());
     positions.erase(std::unique(positions.begin(), positions.end()), positions.end());
-
+    AFL_VERIFY(positions.size() > 1)("size", positions.size())("positions", JoinSeq(",", positions));
     std::vector<std::vector<std::shared_ptr<arrow::Array>>> slicedData;
     slicedData.resize(positions.size() - 1);
-    {
-        for (auto&& i : t->columns()) {
-            for (ui32 idx = 0; idx + 1 < positions.size(); ++idx) {
-                auto slice = i->Slice(positions[idx], positions[idx + 1] - positions[idx]);
-                AFL_VERIFY(slice->num_chunks() == 1);
-                slicedData[idx].emplace_back(slice->chunks().front());
+    for (auto&& i : t->columns()) {
+        ui32 currentPosition = 0;
+        auto it = i->chunks().begin();
+        ui32 length = 0;
+        const auto initializeIt = [&length, &it, &i]() {
+            for (; it != i->chunks().end() && !(*it)->length(); ++it) {
             }
+            if (it != i->chunks().end()) {
+                length = (*it)->length();
+            }
+        };
+        initializeIt();
+        for (ui32 idx = 0; idx + 1 < positions.size(); ++idx) {
+            AFL_VERIFY(it != i->chunks().end());
+            AFL_VERIFY(positions[idx + 1] - currentPosition <= length)("length", length)("idx+1", positions[idx + 1])("pos", currentPosition);
+            auto chunk = (*it)->Slice(positions[idx] - currentPosition, positions[idx + 1] - positions[idx]);
+            AFL_VERIFY_DEBUG(chunk->length() == positions[idx + 1] - positions[idx])("length", chunk->length())("expect", positions[idx + 1] - positions[idx]);
+            if (positions[idx + 1] - currentPosition == length) {
+                ++it;
+                initializeIt();
+                currentPosition = positions[idx + 1];
+            }
+            slicedData[idx].emplace_back(chunk);
         }
     }
     std::vector<std::shared_ptr<arrow::RecordBatch>> result;
     ui32 count = 0;
     for (auto&& i : slicedData) {
+        AFL_VERIFY(i.size());
+        AFL_VERIFY(i.front()->length());
         result.emplace_back(arrow::RecordBatch::Make(t->schema(), i.front()->length(), i));
         count += result.back()->num_rows();
     }
-    AFL_VERIFY(count == t->num_rows())("count", count)("t", t->num_rows());
+    AFL_VERIFY(count == t->num_rows())("count", count)("t", t->num_rows())("sd_size", slicedData.size())("columns", t->num_columns())(
+                            "schema", t->schema()->ToString());
     return result;
 }
 

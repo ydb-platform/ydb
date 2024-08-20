@@ -11,6 +11,7 @@
 namespace NKikimr::NOlap {
 
 void TBuildBatchesTask::ReplyError(const TString& message) {
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "cannot build batch for insert")("reason", message)("data", WriteData.GetWriteMeta().GetLongTxIdOptional());
     auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
     TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(*writeDataPtr) });
     auto result = NColumnShard::TEvPrivate::TEvWriteBlobsResult::Error(NKikimrProto::EReplyStatus::CORRUPTED, std::move(buffer), message);
@@ -41,12 +42,14 @@ TConclusionStatus TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*t
                 NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
                 return TConclusionStatus::Success();
             } else {
-                auto conclusion = ActualSchema->BuildDefaultBatch(ActualSchema->GetIndexInfo().ArrowSchema()->fields(), 1);
+                auto insertionConclusion = ActualSchema->CheckColumnsDefault(defaultFields);
+                auto conclusion = ActualSchema->BuildDefaultBatch(ActualSchema->GetIndexInfo().ArrowSchema()->fields(), 1, true);
                 AFL_VERIFY(!conclusion.IsFail())("error", conclusion.GetErrorMessage());
                 auto batchDefault = conclusion.DetachResult();
                 NArrow::NMerger::TSortableBatchPosition pos(
                     batchDefault, 0, batchDefault->schema()->field_names(), batchDefault->schema()->field_names(), false);
-                merger = std::make_shared<TUpdateMerger>(batch, ActualSchema, pos);
+                merger = std::make_shared<TUpdateMerger>(
+                    batch, ActualSchema, insertionConclusion.IsSuccess() ? "" : insertionConclusion.GetErrorMessage(), pos);
                 break;
             }
         }
@@ -55,7 +58,7 @@ TConclusionStatus TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*t
             break;
         }
         case NEvWrite::EModificationType::Update: {
-            merger = std::make_shared<TUpdateMerger>(batch, ActualSchema);
+            merger = std::make_shared<TUpdateMerger>(batch, ActualSchema, "");
             break;
         }
         case NEvWrite::EModificationType::Replace:

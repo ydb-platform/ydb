@@ -386,7 +386,6 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
     Y_UNIT_TEST(DistributedWriteLaterSnapshotBlockedThenCommit) {
         TPortManager pm;
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -476,7 +475,6 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
     Y_UNIT_TEST(DistributedWriteLaterSnapshotBlockedThenAbort) {
         TPortManager pm;
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -1226,8 +1224,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 "value:   [\n"
                 "    2\n"
                 "  ]\n");
+        }
 
-            msg = readResults.back()->Get<TEvDataShard::TEvReadResult>();
+        SimulateSleep(runtime, TDuration::MilliSeconds(0));
+
+        {
+            auto* msg = readResults.back()->Get<TEvDataShard::TEvReadResult>();
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetFinished(), true);
         }

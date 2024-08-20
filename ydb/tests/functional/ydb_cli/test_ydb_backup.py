@@ -2,9 +2,10 @@
 
 from ydb.tests.library.common import yatest_common
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.oss.ydb_sdk_import import ydb
 
-from hamcrest import assert_that, is_, is_not, contains_inanyorder, has_item, has_items
+from hamcrest import assert_that, is_, is_not, contains_inanyorder, has_items
 import os
 import logging
 import pytest
@@ -143,7 +144,7 @@ def list_all_dirs(prefix, path=""):
 class BaseTestBackupInFiles(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory()
+        cls.cluster = kikimr_cluster_factory(KikimrConfigGenerator(extra_feature_flags=["enable_resource_pools"]))
         cls.cluster.start()
         cls.root_dir = "/Root"
         driver_config = ydb.DriverConfig(
@@ -192,12 +193,12 @@ class BaseTestBackupInFiles(object):
             if check_data:
                 assert_that(
                     os.listdir(backup_files_dir + "/" + _dir),
-                    contains_inanyorder("data_00.csv", "scheme.pb")
+                    contains_inanyorder("data_00.csv", "scheme.pb", "permissions.pb")
                 )
             else:
                 assert_that(
                     os.listdir(backup_files_dir + "/" + _dir),
-                    has_item("scheme.pb")
+                    has_items("scheme.pb", "permissions.pb")
                 )
 
 
@@ -213,7 +214,7 @@ class TestBackupSingle(BaseTestBackupInFiles):
 
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            is_(["table", ".sys"])
+            contains_inanyorder("table", ".metadata", ".sys")
         )
 
 
@@ -229,7 +230,7 @@ class TestBackupSingleNotNull(BaseTestBackupInFiles):
 
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            is_(["table", ".sys"])
+            contains_inanyorder("table", ".metadata", ".sys")
         )
 
 
@@ -428,7 +429,7 @@ class TestSingleBackupRestore(BaseTestBackupInFiles):
         )
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            is_(["folder", ".sys"])
+            contains_inanyorder("folder", ".metadata", ".sys")
         )
 
         # Restore table
@@ -447,7 +448,7 @@ class TestSingleBackupRestore(BaseTestBackupInFiles):
 
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            contains_inanyorder("folder", "restored" + postfix, ".sys")
+            contains_inanyorder("folder", "restored" + postfix, ".metadata", ".sys")
         )
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root/restored" + postfix).children],
@@ -491,7 +492,7 @@ class TestBackupRestoreInRoot(BaseTestBackupInFiles):
         )
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            is_(["folder", ".sys"])
+            contains_inanyorder("folder", ".metadata", ".sys")
         )
 
         # Restore table
@@ -508,7 +509,7 @@ class TestBackupRestoreInRoot(BaseTestBackupInFiles):
         )
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            contains_inanyorder("folder", "table", ".sys")
+            contains_inanyorder("folder", "table", ".metadata", ".sys")
         )
         assert_that(
             is_tables_the_same(session, "/Root/folder/table", "/Root/table"),
@@ -547,7 +548,7 @@ class TestBackupRestoreInRootSchemeOnly(BaseTestBackupInFiles):
         )
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            is_(["folder", ".sys"])
+            contains_inanyorder("folder", ".metadata", ".sys")
         )
 
         # Restore table
@@ -564,7 +565,7 @@ class TestBackupRestoreInRootSchemeOnly(BaseTestBackupInFiles):
         )
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            contains_inanyorder("folder", "table", ".sys")
+            contains_inanyorder("folder", "table", ".metadata", ".sys")
         )
         assert_that(
             is_tables_the_same(session, "/Root/folder/table", "/Root/table", False),
@@ -601,7 +602,7 @@ class TestIncompleteBackup(BaseTestBackupInFiles):
         )
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            is_(["folder", ".sys"])
+            contains_inanyorder("folder", ".metadata", ".sys")
         )
 
         # Create "incomplete" file in folder with backup files
@@ -627,7 +628,7 @@ class TestIncompleteBackup(BaseTestBackupInFiles):
         )
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            is_(["folder", ".sys"])
+            contains_inanyorder("folder", ".metadata", ".sys")
         )
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root/folder").children],
@@ -653,7 +654,7 @@ class TestIncompleteBackup(BaseTestBackupInFiles):
         )
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            is_(["folder", ".sys"])
+            contains_inanyorder("folder", ".metadata", ".sys")
         )
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root/folder").children],
@@ -717,7 +718,7 @@ class TestAlterBackupRestore(BaseTestBackupInFiles):
         )
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            is_(["folder", ".sys"])
+            contains_inanyorder("folder", ".metadata", ".sys")
         )
 
         # Restore table
@@ -734,7 +735,7 @@ class TestAlterBackupRestore(BaseTestBackupInFiles):
         )
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            contains_inanyorder("folder", "restored", ".sys")
+            contains_inanyorder("folder", "restored", ".metadata", ".sys")
         )
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root/restored").children],

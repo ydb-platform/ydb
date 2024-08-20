@@ -21,7 +21,11 @@ TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQ
     return {};
 }
 
-}  // NSQLTranslationPG
+std::unique_ptr<NYql::NPg::IExtensionSqlParser> CreateExtensionSqlParser() {
+    throw yexception() << "CreateExtensionSqlParser: PG types are not supported";
+}
+
+} // NSQLTranslationPG
 
 namespace NYql {
 namespace NCommon {
@@ -159,6 +163,10 @@ void PgReleaseThreadContext(void* ctx) {
 void PgSetGUCSettings(void* ctx, const TGUCSettings::TPtr& GUCSettings) {
     Y_UNUSED(ctx);
     Y_UNUSED(GUCSettings);
+}
+
+std::unique_ptr<NYql::NPg::IExtensionLoader> CreateExtensionLoader() {
+    throw yexception() << "PG types are not supported";
 }
 
 std::optional<std::string> PGGetGUCSetting(const std::string& key) {

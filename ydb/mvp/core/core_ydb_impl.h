@@ -519,7 +519,8 @@ struct THandlerActorYdb {
             {"CoordinationNode", "coordination"},
             {"ColumnStore", "column-store"},
             {"ExternalTable", "external-table"},
-            {"ExternalDataSource", "external-data-source"}
+            {"ExternalDataSource", "external-data-source"},
+            {"ResourcePool", "resource-pool"}
         };
         if (const auto* mapping = specialCases.FindPtr(schemeEntry)) {
             return *mapping;

@@ -2,6 +2,8 @@
 
 #include "token.h"
 
+#include <yt/yt/core/ytree/serialize.h>
+
 namespace NYT::NYson {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -31,5 +33,32 @@ const ETokenType EntityToken = ETokenType::Hash;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class T>
+struct TYsonFormatTraits
+{
+    static constexpr bool UseYsonFormatter = false;
+};
+
+struct TYsonTextFormatTraits
+{
+    static constexpr bool UseYsonFormatter = true;
+    static constexpr EYsonFormat YsonFormat = EYsonFormat::Text;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+concept CYsonFormattable =
+    NYTree::CYsonSerializable<T> &&
+    TYsonFormatTraits<T>::UseYsonFormatter &&
+    requires {
+        { TYsonFormatTraits<T>::YsonFormat } -> std::same_as<const EYsonFormat&>;
+    };
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NYson
 
+#define FORMAT_INL_H_
+#include "format-inl.h"
+#undef FORMAT_INL_H_

@@ -181,7 +181,11 @@ private:
 
     void Handle(NFq::TEvents::TEvEffectApplicationResult::TPtr& ev) {
         if (ev->Get()->FatalError) {
-            FinishScriptFinalization(Ydb::StatusIds::BAD_REQUEST, std::move(ev->Get()->Issues));
+            NYql::TIssue rootIssue("Failed to commit/abort s3 multipart uploads");
+            for (const NYql::TIssue& issue : ev->Get()->Issues) {
+                rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
+            }
+            FinishScriptFinalization(Ydb::StatusIds::BAD_REQUEST, {rootIssue});
         } else {
             FinishScriptFinalization();
         }

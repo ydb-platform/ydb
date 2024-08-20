@@ -50,4 +50,4 @@ Available types of storage devices depend on the {{ ydb-short-name }} cluster co
 
 {% endnote %}
 
-You can specify any parameters of a group of columns from the [`CREATE TABLE`](create_table.md#column-family) command.
+You can specify any parameters of a group of columns from the [`CREATE TABLE`](../create_table.md) command.

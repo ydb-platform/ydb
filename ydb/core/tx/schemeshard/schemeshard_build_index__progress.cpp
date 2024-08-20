@@ -433,8 +433,6 @@ public:
             }
             break;
         case TIndexBuildInfo::EState::Done:
-        case TIndexBuildInfo::EState::Cancelled:
-        case TIndexBuildInfo::EState::Rejected:
             SendNotificationsIfFinished(buildInfo);
             // stay calm keep status/issues
             break;
@@ -462,6 +460,10 @@ public:
                 Progress(BuildId);
             }
             break;
+        case TIndexBuildInfo::EState::Cancelled:
+            SendNotificationsIfFinished(buildInfo);
+            // stay calm keep status/issues
+            break;
         case TIndexBuildInfo::EState::Rejection_Applying:
             if (buildInfo.ApplyTxId == InvalidTxId) {
                 Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(BuildId));
@@ -487,6 +489,10 @@ public:
             }
             break;
         }
+        case TIndexBuildInfo::EState::Rejected:
+            SendNotificationsIfFinished(buildInfo);
+            // stay calm keep status/issues
+            break;
 
         return true;
     }

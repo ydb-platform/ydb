@@ -141,12 +141,13 @@ struct TObjectStorageExternalSource : public IExternalSource {
         if (TString errorString; !NYql::NS3::ValidateWildcards(location, errorString)) {
             issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Location '" << location << "' contains invalid wildcard: " << errorString));
         }
-        if (objectStorage.partitioned_by_size() && NYql::NS3::HasWildcards(location)) {
-            issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Location '" << location << "' contains wildcards"));
-        }
-        issues.AddIssues(ValidateFormatSetting(objectStorage.format(), objectStorage.format_setting(), location));
+        const bool hasPartitioning = objectStorage.projection_size() || objectStorage.partitioned_by_size();
+        issues.AddIssues(ValidateFormatSetting(objectStorage.format(), objectStorage.format_setting(), location, hasPartitioning));
         issues.AddIssues(ValidateRawFormat(objectStorage.format(), schema, objectStorage.partitioned_by()));
-        if (objectStorage.projection_size() || objectStorage.partitioned_by_size()) {
+        if (hasPartitioning) {
+            if (NYql::NS3::HasWildcards(location)) {
+                issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Location '" << location << "' contains wildcards"));
+            }
             try {
                 TVector<TString> partitionedBy{objectStorage.partitioned_by().begin(), objectStorage.partitioned_by().end()};
                 issues.AddIssues(ValidateProjectionColumns(schema, partitionedBy));
@@ -166,7 +167,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
         return issues;
     }
 
-    static NYql::TIssues ValidateFormatSetting(const TString& format, const google::protobuf::Map<TString, TString>& formatSetting, const TString& location) {
+    static NYql::TIssues ValidateFormatSetting(const TString& format, const google::protobuf::Map<TString, TString>& formatSetting, const TString& location, bool hasPartitioning) {
         NYql::TIssues issues;
         issues.AddIssues(ValidateDateFormatSetting(formatSetting));
         for (const auto& [key, value]: formatSetting) {
@@ -174,7 +175,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
                 if (TString errorString; !NYql::NS3::ValidateWildcards(value, errorString)) {
                     issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "File pattern '" << value << "' contains invalid wildcard: " << errorString));
                 }
-                if (value && !location.EndsWith("/")) {
+                if (value && !hasPartitioning && !location.EndsWith("/")) {
                     issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, "Path pattern cannot be used with file_pattern"));
                 }
                 continue;

@@ -332,8 +332,6 @@ protected:
     ui32 ConfigurationGeneration = 0;
     ui64 TabletsTotal = 0;
     ui64 TabletsAlive = 0;
-    /*ui32 DataCenters = 1;
-    ui32 RegisteredDataCenters = 1;*/
     TObjectDistributions ObjectDistributions;
     double StorageScatter = 0;
     std::set<TTabletTypes::EType> SeenTabletTypes;
@@ -681,8 +679,6 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     void FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TLeaderTabletInfo* info, const NKikimrHive::TEvRequestHiveInfo& req);
     void ExecuteStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external);
     ui32 GetDataCenters();
-    //ui32 GetRegisteredDataCenters();
-    //void UpdateRegisteredDataCenters();
     void AddRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId);
     void RemoveRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId);
     void QueuePing(const TActorId& local);

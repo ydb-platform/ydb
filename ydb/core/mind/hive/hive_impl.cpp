@@ -254,10 +254,6 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffec
                         sideEffects.Send(actorToNotify, new TEvPrivate::TEvRestartComplete(tablet->GetFullTabletId(), "boot delay"));
                     }
                     tablet->ActorsToNotifyOnRestart.clear();
-                    /*if (tablet->IsFollower()) {
-                        TLeaderTabletInfo& leader = tablet->GetLeader();
-                        UpdateTabletFollowersNumber(leader, db, sideEffects);
-                    }*/
                     BootQueue.AddToWaitQueue(record); // waiting for new node
                     continue;
                 }
@@ -2717,30 +2713,14 @@ ui32 THive::GetDataCenters() {
     return DataCenters.size() ? DataCenters.size() : 1;
 }
 
-/*
-ui32 THive::GetRegisteredDataCenters() {
-    return RegisteredDataCenters ? RegisteredDataCenters : 1;
-}
-
-void THive::UpdateRegisteredDataCenters() {
-    if (RegisteredDataCenters != RegisteredDataCenterNodes.size()) {
-        BLOG_D("THive (UpdateRegisteredDC) DataCenters=" << DataCenters << " RegisteredDataCenters=" << RegisteredDataCenters << "->" << RegisteredDataCenterNodes.size());
-        RegisteredDataCenters = RegisteredDataCenterNodes.size();
-    }
-}
-*/
-
 void THive::AddRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId) {
     BLOG_D("AddRegisteredDataCentersNode(" << dataCenterId << ", " << nodeId << ")");
     if (dataCenterId != 0) { // ignore default data center id if exists
         auto& dataCenter = DataCenters[dataCenterId];
         bool wasRegistered = dataCenter.IsRegistered();
         dataCenter.RegisteredNodes.insert(nodeId);
-        BLOG_TRACE(wasRegistered << " " << dataCenter.UpdateScheduled);
         if (!wasRegistered && !dataCenter.UpdateScheduled) {
-            BLOG_TRACE("Schedule Update dc");
             dataCenter.UpdateScheduled = true;
-            //Execute(CreateUpdateDcFollowers(dataCenterId));
             Schedule(TDuration::Seconds(1), new TEvPrivate::TEvUpdateDataCenterFollowers(dataCenterId));
         }
     }
@@ -2754,7 +2734,6 @@ void THive::RemoveRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId 
         dataCenter.RegisteredNodes.erase(nodeId);
         if (wasRegistered && !dataCenter.IsRegistered() && !dataCenter.UpdateScheduled) {
             dataCenter.UpdateScheduled = true;
-            //Execute(CreateUpdateDcFollowers(dataCenterId));
             Schedule(TDuration::Seconds(1), new TEvPrivate::TEvUpdateDataCenterFollowers(dataCenterId));
         }
     }
@@ -2775,7 +2754,6 @@ void THive::CreateTabletFollowers(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db
     for (TFollowerGroup& group : tablet.FollowerGroups) {
         if (group.FollowerCountPerDataCenter) {
             for (auto& [dataCenterId, dataCenter] : DataCenters) {
-                BLOG_TRACE("DataCenter " << dataCenterId << " " << dataCenter.IsRegistered() << " " << group.GetFollowerCountForDataCenter(dataCenterId));
                 if (!dataCenter.IsRegistered()) {
                     continue;
                 }

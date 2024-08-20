@@ -42,8 +42,12 @@ namespace {
         return payload;
     }
 
-    constexpr size_t payloadSize = 2;
-    static const TVector<TString> twoLetterPayloads = GeneratePayload(payloadSize);
+    constexpr size_t payloadSize = 3;
+    static const TVector<TString> threeLetterPayloads = GeneratePayload(payloadSize);
+    static const TVector<ui64> fib = {
+        1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377,
+        610, 987, 1597, 2584, 4181, 6765, 10946, 17711
+    };
 
     template <typename T, bool isOptional = false>
     const TRuntimeNode MakeSimpleKey(
@@ -87,8 +91,7 @@ namespace {
         TSetup<false> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        const TVector<ui64> dictKeys = {1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144};
-        const auto dict = MakeSet(pb, dictKeys);
+        const auto dict = MakeSet(pb, fib);
 
         const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
         const auto strType = pb.NewDataType(NUdf::TDataType<char*>::Id);
@@ -141,7 +144,7 @@ namespace {
 
         TVector<const char*> payloads;
         std::transform(keys.cbegin(), keys.cend(), std::back_inserter(payloads),
-            [](const auto& value) { return twoLetterPayloads[value].c_str(); });
+            [](const auto& value) { return threeLetterPayloads[value].c_str(); });
 
         size_t current = 0;
         TDefaultListRepresentation leftListValues;
@@ -187,7 +190,7 @@ namespace {
         const auto blockLengthDatum = TArrowBlock::From(blockLengthValue).GetDatum();
         UNIT_ASSERT(blockLengthDatum.is_scalar());
         const auto blockLength = blockLengthDatum.scalar_as<arrow::UInt64Scalar>().value;
-        const auto dictSize = std::count_if(dictKeys.cbegin(), dictKeys.cend(),
+        const auto dictSize = std::count_if(fib.cbegin(), fib.cend(),
             [testSize](ui64 key) { return key < testSize; });
         const auto expectedLength = joinKind == EJoinKind::LeftSemi ? dictSize
                                   : joinKind == EJoinKind::LeftOnly ? testSize - dictSize
@@ -196,7 +199,7 @@ namespace {
     }
 
     void TestBlockJoinOnUint64(EJoinKind joinKind) {
-        const size_t testSize = 512;
+        const size_t testSize = 1 << 14;
         for (size_t blockSize = 8; blockSize <= testSize; blockSize <<= 1) {
             DoTestBlockJoinOnUint64(joinKind, blockSize, testSize);
         }

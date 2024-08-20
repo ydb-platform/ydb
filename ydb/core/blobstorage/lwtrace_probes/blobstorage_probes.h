@@ -207,13 +207,13 @@ struct TEventTypeField {
       NAMES("pdisk", "schedStep")) \
     PROBE(PDiskChunkReadPieceAddToScheduler, GROUPS("PDisk", "PDiskRequest"), \
       TYPES(TPDiskIdField, ui32, ui64, ui64), \
-      NAMES("pdisk", "pieceIdx", "size", "offset")) \
-    PROBE(PDiskChunkReadPieceSendToDevice, GROUPS("PDisk", "PDiskRequest"), \
-      TYPES(TPDiskIdField, ui64), \
-      NAMES("pdisk", "size")) \
+      NAMES("pdisk", "pieceIdx", "offset", "size")) \
+    PROBE(PDiskChunkReadPiecesSendToDevice, GROUPS("PDisk", "PDiskRequest"), \
+      TYPES(TPDiskIdField), \
+      NAMES("pdisk")) \
     PROBE(PDiskChunkReadPieceComplete, GROUPS("PDisk", "PDiskRequest"), \
-      TYPES(TPDiskIdField, ui64, ui64), \
-      NAMES("pdisk", "size", "relativeOffset")) \
+      TYPES(TPDiskIdField, ui64, ui64, double), \
+      NAMES("pdisk", "size", "relativeOffset", "deviceTimeMs")) \
     PROBE(PDiskAddWritePieceToScheduler, GROUPS("PDisk", "PDiskRequest"), \
       TYPES(TPDiskIdField, ui64, double, ui64, bool, ui64, ui64), \
       NAMES("pdisk", "reqId", "creationTimeSec", "owner", "isFast", "priorityClass", "size")) \
@@ -221,8 +221,8 @@ struct TEventTypeField {
       TYPES(TPDiskIdField, ui64, ui64, ui64, ui64), \
       NAMES("pdisk", "owner", "chunkIdx", "pieceOffset", "pieceSize")) \
     PROBE(PDiskLogWriteComplete, GROUPS("PDisk", "PDiskRequest"), \
-      TYPES(TPDiskIdField, ui64, double, double, double, double, double, double), \
-      NAMES("pdisk", "reqId", "creationTimeSec", "costMs", "responseTimeMs", "inputTimeMs", "scheduleTimeMs", "deviceTotalTimeMs")) \
+      TYPES(TPDiskIdField, ui64, double, double, double, double, double, double, double), \
+      NAMES("pdisk", "reqId", "creationTimeSec", "costMs", "responseTimeMs", "inputTimeMs", "scheduleTimeMs", "deviceTotalTimeMs", "deviceOnlyTimeMs")) \
     PROBE(PDiskChunkResponseTime, GROUPS("PDisk", "PDiskRequest"), \
       TYPES(TPDiskIdField, ui64, ui64, double, ui64), \
       NAMES("pdisk", "reqId", "priorityClass", "responseTimeMs", "sizeBytes")) \
@@ -235,6 +235,12 @@ struct TEventTypeField {
     PROBE(PDiskDeviceWriteDuration, GROUPS("PDisk"), \
       TYPES(TPDiskIdField, double, ui64), \
       NAMES("pdisk", "deviceTimeMs", "size")) \
+    PROBE(PDiskDeviceGetFromDevice, GROUPS("PDisk"), \
+      TYPES(), \
+      NAMES()) \
+    PROBE(PDiskDeviceGetFromWaiting, GROUPS("PDisk"), \
+      TYPES(), \
+      NAMES()) \
     PROBE(PDiskDeviceTrimDuration, GROUPS("PDisk"), \
       TYPES(TPDiskIdField, double, ui64), \
       NAMES("pdisk", "trimTimeMs", "trimOffset")) \

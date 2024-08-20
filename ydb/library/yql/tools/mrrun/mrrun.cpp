@@ -1,6 +1,6 @@
 #include "mrrun.h"
 
-#include <ydb/public/sdk/cpp/src/persqueue_public/codecs/codecs.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/codecs/codecs.h>
 
 #include <ydb/library/yql/providers/yt/lib/log/yt_logger.h>
 #include <ydb/library/yql/providers/yt/lib/yt_download/yt_download.h>

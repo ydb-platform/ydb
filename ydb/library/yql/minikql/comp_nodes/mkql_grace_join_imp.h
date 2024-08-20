@@ -11,7 +11,7 @@ namespace NMiniKQL {
 namespace GraceJoin {
 
 class TTableBucketSpiller;
-#define GRACEJOIN_DEBUG DEBUG
+#define GRACEJOIN_DEBUG INFO //DEBUG
 #define GRACEJOIN_TRACE TRACE
         
 const ui64 BitsForNumberOfBuckets = 5; // 2^5 = 32
@@ -163,6 +163,8 @@ struct TTableBucket {
     ui64 TuplesNum = 0;             // Total number of tuples in bucket
     ui64 StringValuesTotalSize = 0; // Total size of StringsValues. Used to correctly calculate StringsOffsets.
     ui64 KeyIntValsTotalSize = 0;   // Total size of KeyIntVals. Used to correctly calculate StringsOffsets.
+    ui32 SlotSize = 0;
+    bool HashtableMatches = false;
  };
 
 struct TupleData {

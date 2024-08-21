@@ -72,6 +72,9 @@ public:
             return;
         }
 
+        SerializedToken = ev->Get()->SerializedToken;
+        Ticket = ev->Get()->Ticket;
+
         SendResponseAndDie();
     }
 

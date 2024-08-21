@@ -3,6 +3,8 @@
 #include <arrow/table.h>
 #include <arrow/csv/options.h>
 #include <arrow/csv/reader.h>
+#include <arrow/json/options.h>
+#include <arrow/json/reader.h>
 #include <parquet/arrow/reader.h>
 
 #include <ydb/core/external_sources/object_storage/events.h>
@@ -173,6 +175,10 @@ struct CsvConfig : public FormatConfig {
     arrow::csv::ConvertOptions ConvOpts = arrow::csv::ConvertOptions::Defaults();
 };
 
+struct JsonConfig : public FormatConfig {
+    arrow::json::ParseOptions ParseOpts = arrow::json::ParseOptions::Defaults();
+};
+
 using TsvConfig = CsvConfig;
 
 namespace {
@@ -197,7 +203,7 @@ std::variant<ArrowFields, TString> InferCsvTypes(std::shared_ptr<arrow::io::Rand
     auto tableRes = reader->Read().Value(&table);
 
     if (!tableRes.ok()) {
-        return TStringBuilder{} << "couldn't parse csv/tsv file, check format and compression params: " << readerStatus.ToString();
+        return TStringBuilder{} << "couldn't parse csv/tsv file, check format and compression params: " << tableRes.ToString();
     }
 
     return table->fields();
@@ -214,16 +220,38 @@ std::variant<ArrowFields, TString> InferParquetTypes(std::shared_ptr<arrow::io::
     std::unique_ptr<parquet::arrow::FileReader> reader;
     auto readerStatus = builder.Build(&reader);
     if (!readerStatus.ok()) {
-        return TStringBuilder{} << "couldn't parse parquet file, check format params: " << openStatus.ToString();
+        return TStringBuilder{} << "couldn't parse parquet file, check format params: " << readerStatus.ToString();
     }
 
     std::shared_ptr<arrow::Schema> schema;
     auto schemaRes = reader->GetSchema(&schema);
     if (!schemaRes.ok()) {
-        return TStringBuilder{} << "couldn't parse parquet file, check format params: " << openStatus.ToString();
+        return TStringBuilder{} << "couldn't parse parquet file, check format params: " << schemaRes.ToString();
     }
 
     return schema->fields();
+}
+
+std::variant<ArrowFields, TString> InferJsonTypes(std::shared_ptr<arrow::io::RandomAccessFile> file, const JsonConfig& config) {
+    std::shared_ptr<arrow::json::TableReader> reader;
+    auto fileSize = static_cast<int32_t>(file->GetSize().ValueOr(1 << 20));
+    fileSize = std::min(fileSize, 1 << 20);
+    auto readerStatus = arrow::json::TableReader::Make(
+        arrow::default_memory_pool(), std::move(file), arrow::json::ReadOptions{.use_threads = false, .block_size = fileSize}, config.ParseOpts
+    ).Value(&reader);
+
+    if (!readerStatus.ok()) {
+        return TString{TStringBuilder{} << "couldn't parse json file, check format and compression params: " << readerStatus.ToString()};
+    }
+
+    std::shared_ptr<arrow::Table> table;
+    auto tableRes = reader->Read().Value(&table);
+
+    if (!tableRes.ok()) {
+        return TString{TStringBuilder{} << "couldn't parse json file, check format and compression params: " << tableRes.ToString()};
+    }
+
+    return table->fields();
 }
 
 std::variant<ArrowFields, TString> InferType(EFileFormat format, std::shared_ptr<arrow::io::RandomAccessFile> file, const FormatConfig& config) {
@@ -234,6 +262,9 @@ std::variant<ArrowFields, TString> InferType(EFileFormat format, std::shared_ptr
         return InferCsvTypes(std::move(file), static_cast<const TsvConfig&>(config));
     case EFileFormat::Parquet:
         return InferParquetTypes(std::move(file));
+    case EFileFormat::JsonEachRow:
+    case EFileFormat::JsonList:
+        return InferJsonTypes(std::move(file), static_cast<const JsonConfig&>(config));
     case EFileFormat::Undefined:
     default:
         return std::variant<ArrowFields, TString>{std::in_place_type_t<TString>{}, TStringBuilder{} << "unexpected format: " << ConvertFileFormat(format)};
@@ -250,12 +281,19 @@ std::unique_ptr<TsvConfig> MakeTsvConfig(const THashMap<TString, TString>& param
     return config;
 }
 
+std::unique_ptr<JsonConfig> MakeJsonConfig(const THashMap<TString, TString>&) {
+    return std::make_unique<JsonConfig>();
+}
+
 std::unique_ptr<FormatConfig> MakeFormatConfig(EFileFormat format, const THashMap<TString, TString>& params) {
     switch (format) {
     case EFileFormat::CsvWithNames:
         return MakeCsvConfig(params);
     case EFileFormat::TsvWithNames:
         return MakeTsvConfig(params);
+    case EFileFormat::JsonEachRow:
+    case EFileFormat::JsonList:
+        return MakeJsonConfig(params);
     case EFileFormat::Undefined:
     default:
         return nullptr;

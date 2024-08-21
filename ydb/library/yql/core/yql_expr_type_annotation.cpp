@@ -233,30 +233,6 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
 
             return IGraphTransformer::TStatus::Repeat;
 
-        } else if ((GetDataTypeInfo(fromSlot).Features & (NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TzDateType)) && to == "DateTime2.TM") {
-            node = ctx.Builder(node->Pos())
-                .Callable("Apply")
-                    .Callable(0, "Udf")
-                        .Atom(0, "DateTime2.Split", TNodeFlags::Default)
-                        .Callable(1, "Void")
-                        .Seal()
-                        .Callable(2, "TupleType")
-                            .Callable(0, "TupleType")
-                                .Callable(0, "DataType")
-                                    .Atom(0, sourceType.Cast<TDataExprType>()->GetName(), TNodeFlags::Default)
-                                .Seal()
-                            .Seal()
-                            .Callable(1, "StructType")
-                            .Seal()
-                            .Callable(2, "TupleType")
-                            .Seal()
-                        .Seal()
-                    .Seal()
-                    .Add(1, std::move(node))
-                .Seal()
-                .Build();
-
-            return IGraphTransformer::TStatus::Repeat;
         } else if (to == "DateTime2.TM64"
                 && GetDataTypeInfo(fromSlot).Features & (NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TzDateType)
                 && !(GetDataTypeInfo(fromSlot).Features & NUdf::EDataTypeFeatures::BigDateType))
@@ -289,6 +265,30 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                         .Atom(0, "DateTime2.Convert", TNodeFlags::Default)
                         .Seal()
                     .Add(1, std::move(resource))
+                .Seal()
+                .Build();
+
+            return IGraphTransformer::TStatus::Repeat;
+        } else if ((GetDataTypeInfo(fromSlot).Features & (NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TzDateType)) && (to == "DateTime2.TM" || to == "DateTime2.TM64")) {
+            node = ctx.Builder(node->Pos())
+                .Callable("Apply")
+                    .Callable(0, "Udf")
+                        .Atom(0, "DateTime2.Split", TNodeFlags::Default)
+                        .Callable(1, "Void")
+                        .Seal()
+                        .Callable(2, "TupleType")
+                            .Callable(0, "TupleType")
+                                .Callable(0, "DataType")
+                                    .Atom(0, sourceType.Cast<TDataExprType>()->GetName(), TNodeFlags::Default)
+                                .Seal()
+                            .Seal()
+                            .Callable(1, "StructType")
+                            .Seal()
+                            .Callable(2, "TupleType")
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                    .Add(1, std::move(node))
                 .Seal()
                 .Build();
 

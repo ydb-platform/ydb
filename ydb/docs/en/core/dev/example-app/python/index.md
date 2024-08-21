@@ -488,4 +488,58 @@ A code snippet demonstrating the explicit use of `transaction().begin()` and `tx
 {% endlist %}
 
 However, it is worth remembering that a transaction can be opened implicitly at the first request. It could be commited automatically with the explicit indication of the `commit_tx=True` flag.
-Implicit transaction management is preferable because it requires fewer server calls.
+Implicit transaction management is preferable because it requires fewer server calls. An example of implicit control will be demonstrated in the next block.
+
+## Huge Selects {#huge-selects}
+
+To perform `SELECT` operations with an unlimited number of found rows, you must also use the `transaction().execute(query)` method. As mentioned above, the result of the work is an iterator - unlike `pool.execute_with_retries(query)`, it allows you to go through the selection without first loading it into memory.
+
+Example of a `SELECT` with unlimited data and implicit transaction control:
+
+{% list tabs %}
+
+- Synchronous
+
+   ```python
+   def huge_select(pool: ydb.QuerySessionPool, path: str):
+       def callee(session: ydb.QuerySessionSync):
+           query = f"""
+           PRAGMA TablePathPrefix("{path}");
+           SELECT * from episodes;
+           """
+
+           with session.transaction().execute(
+               query,
+               commit_tx=True,
+           ) as result_sets:
+               print("\n> Huge SELECT call")
+               for result_set in result_sets:
+                   for row in result_set.rows:
+                       print("episode title:", row.title, ", air date:", row.air_date)
+
+       return pool.retry_operation_sync(callee)
+   ```
+
+- Asynchronous
+
+   ```python
+   async def huge_select(pool: ydb.aio.QuerySessionPoolAsync, path: str):
+       async def callee(session: ydb.aio.QuerySessionAsync):
+           query = f"""
+           PRAGMA TablePathPrefix("{path}");
+           SELECT * from episodes;
+           """
+
+           async with await session.transaction().execute(
+               query,
+               commit_tx=True,
+           ) as result_sets:
+               print("\n> Huge SELECT call")
+               async for result_set in result_sets:
+                   for row in result_set.rows:
+                       print("episode title:", row.title, ", air date:", row.air_date)
+
+       return await pool.retry_operation_async(callee)
+   ```
+
+{% endlist %}

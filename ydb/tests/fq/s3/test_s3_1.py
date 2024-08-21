@@ -482,7 +482,7 @@ Pear,15,33'''
         # 1024 x 1024 x 10 = 10 MB of raw data + little overhead for header, eols etc
         assert sum(kikimr.control_plane.get_metering(1)) == 21
 
-    # it looks like the runtime_listing for v1 doesn't work in case of 
+    # it looks like the runtime_listing for v1 doesn't work in case of
     # restart of query because the v1 keeps the compiled query in the cache
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)

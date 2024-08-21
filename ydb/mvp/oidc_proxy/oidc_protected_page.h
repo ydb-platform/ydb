@@ -214,7 +214,7 @@ protected:
 
 private:
     bool NeedSendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response) const {
-        if (response->Status == "400" && RequestedPageScheme.empty()) {
+        if ((response->Status == "400" || response->Status.empty()) && RequestedPageScheme.empty()) {
             NHttp::THttpOutgoingRequestPtr request = response->GetRequest();
             if (!request->Secure) {
                 static const TStringBuf bodyContent = "The plain HTTP request was sent to HTTPS port";

@@ -17,6 +17,7 @@ class TJsonFeatureFlags : public TViewerPipeClient {
     THashMap<ui64, TString> DatabaseByCookie;
     ui64 Cookie = 0;
     TString DomainPath;
+    bool Direct = false;
 
     TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse> TenantsResponse;
     THashMap<TString, TRequestResponse<NConsole::TEvConsole::TEvGetNodeConfigResponse>> NodeConfigResponses;
@@ -38,13 +39,18 @@ public:
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
         FilterDatabase = params.Get("database");
         StringSplitter(params.Get("features")).Split(',').SkipEmpty().Collect(&FilterFeatures);
+        Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
 
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         auto* domain = domains->GetDomain();
         DomainPath = "/" + domain->Name;
 
-        if (!FilterDatabase) {
+        Direct |= Event->Get()->Request.GetUri().StartsWith("/node/"); // we're already forwarding
+        Direct |= (FilterDatabase == AppData()->TenantName); // we're already on the right node
+        if (FilterDatabase && !Direct) {
+            RequestStateStorageEndpointsLookup(FilterDatabase); // to find some dynamic node and redirect there
+        } else if (!FilterDatabase) {
             MakeNodeConfigRequest(DomainPath);
             TenantsResponse = MakeRequestConsoleListTenants();
         } else {
@@ -54,8 +60,13 @@ public:
         Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }
 
+    void HandleReply(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
+        TBase::ReplyAndPassAway(MakeForward(GetNodesFromBoardReply(ev)));
+    }
+
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(TEvStateStorage::TEvBoardInfo, HandleReply);
             hFunc(NConsole::TEvConsole::TEvListTenantsResponse, Handle);
             hFunc(NConsole::TEvConsole::TEvGetNodeConfigResponse, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, TBase::Handle);
@@ -143,6 +154,11 @@ public:
             .Name = "features",
             .Description = "comma separated list of features",
             .Type = "string",
+        });
+        yaml.AddParameter({
+            .Name = "direct",
+            .Description = "direct request to the node",
+            .Type = "boolean",
         });
         yaml.AddParameter({
             .Name = "timeout",

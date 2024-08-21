@@ -1720,7 +1720,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
-        headers["X-Want-Trace"] = "1";
         const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoGet("/viewer/feature_flags?timeout=600000&base64=false", &responseStream, headers);
         const TString response = responseStream.ReadAll();
         UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);

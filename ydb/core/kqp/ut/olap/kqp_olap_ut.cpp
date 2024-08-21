@@ -2778,7 +2778,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto it = client.StreamExecuteScanQuery(R"(
                 --!syntax_v1
 
-                SELECT COUNT(*)
+                SELECT COUNT(*), COUNT(level)
                 FROM `/Root/olapStore/olapTable`
                 WHERE level IS NULL
             )").GetValueSync();
@@ -2786,8 +2786,25 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             TString result = StreamResultToYson(it);
             Cout << result << Endl;
-            CompareYson("[[100u]]", result);
+            CompareYson("[[100u;0u]]", result);
         }
+
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+
+                SELECT COUNT(*), COUNT(level)
+                FROM `/Root/olapStore/olapTable`
+                WHERE level IS NULL
+                GROUP BY level
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << result << Endl;
+            CompareYson("[[100u;0u]]", result);
+        }
+        
     }
 }
 

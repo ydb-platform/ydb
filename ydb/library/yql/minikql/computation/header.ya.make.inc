@@ -18,6 +18,9 @@ COPY_FILE(TEXT
        llvm/IR/DerivedTypes.h
        llvm/IR/Instructions.h
        llvm/IR/Constants.h
+       llvm/IR/DebugInfoMetadata.h
+       llvm/IR/DIBuilder.h
+       source_location
 )
 
 COPY_FILE(TEXT

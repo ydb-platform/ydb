@@ -5192,6 +5192,8 @@ public:
             return ParseInsertStmt(CAST_NODE(InsertStmt, node));
         case T_CreateCastStmt:
             return ParseCreateCastStmt(CAST_NODE(CreateCastStmt, node));
+        case T_CreateOpClassStmt:
+            return ParseCreateOpClassStmt(CAST_NODE(CreateOpClassStmt, node));
         default:
             return false;
         }
@@ -5879,6 +5881,106 @@ public:
         }
 
         Builder.CreateCast(desc);
+        return true;
+    }
+
+    [[nodiscard]]
+    bool ParseCreateOpClassStmt(const CreateOpClassStmt* value) {
+        if (!value->isDefault) {
+            return false;
+        }
+
+        if (ListLength(value->opclassname) != 1) {
+            return false;
+        }
+
+        auto opClassName = to_lower(TString(StrVal(ListNodeNth(value->opclassname, 0))));
+        if (ListLength(value->opfamilyname) > 1) {
+            return false;
+        }
+
+        TString familyName;
+        if (ListLength(value->opfamilyname) == 1) {
+            familyName = to_lower(TString(StrVal(ListNodeNth(value->opfamilyname, 0))));
+        }
+
+        auto amName = to_lower(TString(value->amname));
+        NPg::EOpClassMethod method;
+        if (amName == "btree") {
+            method = NPg::EOpClassMethod::Btree;
+        } else if (amName == "hash") {
+            method = NPg::EOpClassMethod::Hash;
+        } else {
+            return false;
+        }
+
+        TString dataType;
+        if (!ParseTypeName(value->datatype, dataType)) {
+            return false;
+        }
+
+        auto typeId = NPg::LookupType(dataType).TypeId;
+        NPg::TOpClassDesc desc;
+        desc.ExtensionIndex = ExtensionIndex;
+        desc.Method = method;
+        desc.TypeId = typeId;
+        desc.Name = opClassName;
+        if (familyName.empty()) {
+            familyName = amName + "/" + opClassName;
+        }
+
+        desc.Family = familyName;
+        TVector<NPg::TAmOpDesc> ops;
+        TVector<NPg::TAmProcDesc> procs;
+        
+        for (int i = 0; i < ListLength(value->items); ++i) {
+            auto node = LIST_CAST_NTH(CreateOpClassItem, value->items, i);
+            if (node->itemtype != OPCLASS_ITEM_OPERATOR && node->itemtype != OPCLASS_ITEM_FUNCTION) {
+                continue;
+            }
+            
+            if (ListLength(node->name->objname) != 1) {
+                return false;
+            }
+
+            TString funcName = StrVal(ListNodeNth(node->name->objname, 0));
+            if (node->itemtype == OPCLASS_ITEM_OPERATOR) {
+                NPg::TAmOpDesc amOpDesc;
+                amOpDesc.ExtensionIndex = ExtensionIndex;
+                amOpDesc.Family = familyName;
+                amOpDesc.Strategy = node->number;
+                amOpDesc.LeftType = typeId;
+                amOpDesc.RightType = typeId;
+                amOpDesc.OperId = NPg::LookupOper(funcName, {typeId,typeId}).OperId;
+                ops.push_back(amOpDesc);
+            } else {
+                NPg::TAmProcDesc amProcDesc;
+                amProcDesc.ExtensionIndex = ExtensionIndex;
+                amProcDesc.Family = familyName;
+                amProcDesc.ProcNum = node->number;
+                amProcDesc.LeftType = typeId;
+                amProcDesc.RightType = typeId;
+                TVector<ui32> argTypes;
+                for (int i = 0; i < ListLength(node->name->objargs); ++i) {
+                    auto typeName = ListNodeNth(node->name->objargs, i);
+                    if (NodeTag(typeName) != T_TypeName) {
+                        return false;
+                    }
+
+                    TString value;
+                    if (!ParseTypeName(CAST_NODE_EXT(PG_TypeName, T_TypeName, typeName), value)) {
+                        return false;
+                    }
+
+                    argTypes.push_back(NPg::LookupType(value).TypeId);
+                }
+
+                amProcDesc.ProcId = NPg::LookupProc(funcName, argTypes).ProcId;
+                procs.push_back(amProcDesc);
+            }
+        }
+
+        Builder.CreateOpClass(desc, ops, procs);
         return true;
     }
 

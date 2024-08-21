@@ -1263,6 +1263,10 @@ void TSchemeShard::DescribeTable(
         entry->MutableReplicationConfig()->CopyFrom(tableInfo.ReplicationConfig());
     }
 
+    if (tableInfo.HasIncrementalBackupConfig()) {
+        entry->MutableIncrementalBackupConfig()->CopyFrom(tableInfo.IncrementalBackupConfig());
+    }
+
     entry->SetIsBackup(tableInfo.IsBackup);
 }
 

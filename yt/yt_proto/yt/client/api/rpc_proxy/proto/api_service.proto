@@ -225,8 +225,6 @@ enum EMultiplexingBand
     MB_CONTROL = 1;
     MB_HEAVY = 2;
     MB_INTERACTIVE = 3;
-    MB_REAL_TIME = 4;
-    MB_JOURNAL = 5;
 }
 
 enum ETableSchemaModification

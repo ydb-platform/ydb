@@ -310,18 +310,26 @@ def pq_client_service_types(arguments):
 def enable_pqcd(arguments):
     return (getattr(arguments, 'enable_pqcd', False) or os.getenv('YDB_ENABLE_PQCD') == 'true')
 
-def merge_two_yaml_configs(data_1, data_2): # library mergedeep did not have a version for PY2, library deepmerge didn't have the necessary functionality
+
+def merge_two_yaml_configs(data_1, data_2):
+    if not (isinstance(data_1, (dict, list)) or data_1 == None):
+        raise TypeError("data_1 is not a dict, list or None")
+    if not (isinstance(data_2, (dict, list)) or data_2 == None):
+        raise TypeError("data_2 is not a dict, list or None")
     if isinstance(data_1, dict) and isinstance(data_2, dict):
         new_dict = {}
         d2_keys = list(data_2.keys())
         for d1k in data_1.keys():
             if d1k in d2_keys:
                 d2_keys.remove(d1k)
+                check_types_for_merge(data_1.get(d1k), data_2.get(d1k))
                 new_dict[d1k] = merge_two_yaml_configs(data_1.get(d1k), data_2.get(d1k))
             else:
                 new_dict[d1k] = data_1.get(d1k)
-                for d2k in d2_keys:
-                    new_dict[d2k] = data_2.get(d2k)
+                        
+        for d2k in d2_keys:
+            new_dict[d2k] = data_2.get(d2k)
+
         return new_dict
     else:
         if data_2 == None:
@@ -329,6 +337,13 @@ def merge_two_yaml_configs(data_1, data_2): # library mergedeep did not have a v
         else:
             return data_2
 
+
+def check_types_for_merge(data_1, data_2):
+    if isinstance(data_1, dict) and isinstance(data_2, list):
+        raise TypeError("Type mismatch - dict data_1 cannot be merged with list data_2")
+    elif isinstance(data_2, dict) and isinstance(data_1, list):
+        raise TypeError("Type mismatch - dict data_2 cannot be merged with list data_1")
+        
 
 def get_additional_yaml_config(arguments, path):
     if arguments.ydb_working_dir:
@@ -338,6 +353,7 @@ def get_additional_yaml_config(arguments, path):
         raise Exception("No working directory")
 
     return additional_yaml_config
+
 
 def deploy(arguments):
     initialize_working_dir(arguments)

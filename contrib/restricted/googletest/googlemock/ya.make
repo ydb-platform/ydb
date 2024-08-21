@@ -6,6 +6,8 @@ LICENSE(BSD-3-Clause)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
+VERSION(1.15.2)
+
 PEERDIR(
     contrib/restricted/googletest/googletest
 )

@@ -59,12 +59,8 @@ TSparsedArray::TSparsedArray(const IChunkedArray& defaultArray, const std::share
             pos = current->GetAddress().GetGlobalFinishPosition();
             AFL_VERIFY(pos <= GetRecordsCount());
         }
-        std::vector<std::shared_ptr<arrow::Field>> fields = { std::make_shared<arrow::Field>("index", arrow::uint32()),
-            std::make_shared<arrow::Field>("value", GetDataType()) };
-        auto schema = std::make_shared<arrow::Schema>(fields);
-        std::vector<std::shared_ptr<arrow::Array>> columns = { NArrow::TStatusValidator::GetValid(builderIndex->Finish()),
-            NArrow::TStatusValidator::GetValid(builderValue->Finish()) };
-        records = arrow::RecordBatch::Make(schema, sparsedRecordsCount, columns);
+
+        records = MakeRecords(builderIndex, builderValue, GetDataType(), sparsedRecordsCount);
         AFL_VERIFY_DEBUG(records->ValidateFull().ok());
         return true;
     }));

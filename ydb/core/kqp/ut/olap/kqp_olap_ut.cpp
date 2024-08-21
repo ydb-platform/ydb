@@ -2795,6 +2795,21 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
                 SELECT COUNT(*), COUNT(level)
                 FROM `/Root/olapStore/olapTable`
+                WHERE level IS NULL AND uid IS NOT NULL
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << result << Endl;
+            CompareYson("[[100u;0u]]", result);
+        }
+
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+
+                SELECT COUNT(*), COUNT(level)
+                FROM `/Root/olapStore/olapTable`
                 WHERE level IS NULL
                 GROUP BY level
             )").GetValueSync();

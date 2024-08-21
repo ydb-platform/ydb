@@ -415,7 +415,6 @@ const char * GetHouseFunctionName(EAggregate op) {
         case EAggregate::Some:
             return "ch.any";
         case EAggregate::Count:
-        case EAggregate::NumRows:
             return "ch.count";
         case EAggregate::Min:
             return "ch.min";
@@ -427,6 +426,8 @@ const char * GetHouseFunctionName(EAggregate op) {
         case EAggregate::Avg:
             return "ch.avg";
 #endif
+        case EAggregate::NumRows:
+            return "ch.num_rows";
         default:
             break;
     }
@@ -440,7 +441,6 @@ CH::AggFunctionId GetHouseFunction(EAggregate op) {
         case EAggregate::Some:
             return CH::AggFunctionId::AGG_ANY;
         case EAggregate::Count:
-        case EAggregate::NumRows:
             return CH::AggFunctionId::AGG_COUNT;
         case EAggregate::Min:
             return CH::AggFunctionId::AGG_MIN;
@@ -452,6 +452,8 @@ CH::AggFunctionId GetHouseFunction(EAggregate op) {
         case EAggregate::Avg:
             return CH::AggFunctionId::AGG_AVG;
 #endif
+        case EAggregate::NumRows:
+            return CH::AggFunctionId::AGG_NUM_ROWS;
         default:
             break;
     }

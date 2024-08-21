@@ -13,6 +13,7 @@
 #include <AggregateFunctions/AggregateFunctionMinMaxAny.h>
 #include <AggregateFunctions/AggregateFunctionSum.h>
 #include <AggregateFunctions/AggregateFunctionAvg.h>
+#include <AggregateFunctions/AggregateFunctionNumRows.h>
 #endif
 
 namespace cp = ::arrow::compute;
@@ -75,6 +76,7 @@ static void RegisterHouseAggregates(cp::FunctionRegistry* registry) {
         Y_ABORT_UNLESS(registry->AddFunction(std::make_shared<CH::WrappedMax>(GetHouseFunctionName(EAggregate::Max))).ok());
         Y_ABORT_UNLESS(registry->AddFunction(std::make_shared<CH::WrappedSum>(GetHouseFunctionName(EAggregate::Sum))).ok());
         //Y_ABORT_UNLESS(registry->AddFunction(std::make_shared<CH::WrappedAvg>(GetHouseFunctionName(EAggregate::Avg))).ok());
+        Y_ABORT_UNLESS(registry->AddFunction(std::make_shared<CH::WrappedNumRows>(GetHouseFunctionName(EAggregate::NumRows))).ok());
 
         Y_ABORT_UNLESS(registry->AddFunction(std::make_shared<CH::ArrowGroupBy>(GetHouseGroupByName())).ok());
     } catch (const std::exception& /*ex*/) {

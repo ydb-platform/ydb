@@ -8,6 +8,28 @@ namespace NYT::NPhoenix2::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TTypeLoadSchedule;
+
+template <class TThis, class TContext>
+struct TRuntimeTypeLoadSchedule;
+
+template <class TThis, class TContext>
+struct TRuntimeFieldDescriptor;
+
+template <auto Member, class TThis, class TContext, class TFieldSerializer>
+class TFieldLoadRegistrar;
+
+template <class TThis, class TContext>
+using TRuntimeFieldDescriptorMap = THashMap<TFieldTag, TRuntimeFieldDescriptor<TThis, TContext>>;
+
+template <class TThis, class TContext>
+std::unique_ptr<TRuntimeTypeLoadSchedule<TThis, TContext>> BuildRuntimeTypeLoadSchedule(const TTypeLoadSchedule* schedule);
+
+template <class TThis>
+struct TTraits;
+
+////////////////////////////////////////////////////////////////////////////////
+
 #undef PHOENIX_DECLARE_TYPE
 #undef PHOENIX_DECLARE_POLYMORPHIC_TYPE
 #undef PHOENIX_DECLARE_TEMPLATE_TYPE

@@ -9,23 +9,26 @@ import pytest
 
 import yatest
 
-from ydb.tests.postgres_integrations.library import IntegrationTests,PgTestWrapper
+from ydb.tests.postgres_integrations import library as tl
 
 from . import conftest
 
-integrations = IntegrationTests(yatest.common.source_path("ydb/tests/postgres_integrations/go-libpq/data"))
+def filter_formatter(test_names: typing.List[str])->str:
+    test_names = [item[len("golang-lib-pq/"):] for item in test_names]
+    return "^(" + "|".join(test_names) + ")$"
 
-class TestWrapper(PgTestWrapper):
-    @classmethod
-    def setup_class(cls):
-        print('"rekby setup class')
-        cls.initialize(integrations, conftest.selected_items)
+tl.set_filter_formatter(filter_formatter)
+tl.set_tests_folder(yatest.common.source_path("ydb/tests/postgres_integrations/go-libpq/data"))
 
-    @classmethod
-    def filter_format(cls, test_names: typing.List[str])->str:
-        test_names = [item[len("golang-lib-pq/"):] for item in test_names]
-        return "^(" + "|".join(test_names) + ")$"
+def setup_module(module: pytest.Module):
+    tl.setup_module(module)
+
+def teardown_module(module: pytest.Module):
+    tl.teardown_module(module)
+
+def test_pg_generated(testname):
+    tl.execute_test(testname)
 
 def pytest_generate_tests(metafunc: pytest.Metafunc):
     if metafunc.definition.name == "test_pg_generated":
-        integrations.pytest_generate_tests(metafunc)
+        tl.pytest_generate_tests(metafunc)

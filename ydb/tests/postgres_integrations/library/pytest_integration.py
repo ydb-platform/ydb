@@ -1,7 +1,8 @@
-from typing import Callable, Dict, List, Set, Optional
 import os
-from os import path
+import shutil
 
+from typing import Callable, Dict, List, Set, Optional, Union
+from os import path
 from dataclasses import dataclass
 from enum import Enum
 
@@ -28,173 +29,164 @@ class TestCase:
     state: TestState
     log: str
 
+
+_selected_tests_name: pytest.Session = []
 _filter_format_function = Callable[[List[str]], str]
+_filter_formatter: Optional[_filter_format_function] = None
+_tests_folder: Optional[str] = None
+_test_results: Optional[Dict[str, TestCase]] = None
+_all_tests: Optional[List[str]] = None
+_kikimr_factory: KiKiMR = kikimr_cluster_factory()
 
-class IntegrationTests:
-    _folder: str
-    _image_name: str
-    _all_tests: List[str]
-    _selected_test: Set[str]
-    _docker_executed: bool
-    _test_results: Dict[str, TestCase]
-    _kikimr_factory: KiKiMR
+def pytest_collection_finish(session: pytest.Session):
+    global _selected_tests_name
 
-    def __init__(self, folder: str, image_name: str = 'ydb-pg-test-image'):
-        self._folder = folder
-        self._image_name = image_name
+    print("rekby set selected items: ", session.items)
+    selected_tests = []
+    for item in session.items:
+        print(f"rekby, selected item name: '{item.name}'", )
+        if item.name.startswith("test_pg_generated["):
+            print("rekby selected test item:", item)
+            test_name = item.callspec.id
+            print(f"rekby selected test: {test_name}")
+            selected_tests.append(test_name)
+    selected_tests.sort()
+    print("rekby: result selected tests", selected_tests)
+    _selected_tests_name = selected_tests
 
-        self._all_tests = _read_tests(folder)  # sorted test list
-        self._selected_test = []
-
-        self._docker_executed = False
-        self._test_results = dict()
-        self._kikimr_factory = kikimr_cluster_factory()
-        self._filter_formatter: Optional[_filter_format_function] = None
-
-    def tearup(self):
-        filter = self._filter_formatter(self._selected_test)
-        self._run_tests_in_docker(filter)
-        print(f"rekby docker test finished")
-
-        test_results_file=path.join(self._test_result_folder, "raw", "result.xml")
-        self._test_results = _read_tests_result(test_results_file)
-        print(f"rekby result parsed tests:\n\n{self._test_results}")
+def set_filter_formatter(f: _filter_format_function):
+    global _filter_formatter
+    _filter_formatter = f
 
 
-    def teardown(self):
+def set_tests_folder(folder: str):
+    global _tests_folder, _all_tests
+    _tests_folder = folder
+    _all_tests = _read_tests(folder)
+
+def setup_module(module: pytest.Module):
+    global _test_results
+    try:
+        exchange_folder=path.join(yatest.common.output_path(), "exchange")
+        os.mkdir(exchange_folder)
+    except FileExistsError:
         pass
 
-    def set_filter_formatter(self, f: _filter_format_function):
-        print("rekby, set filter formatter")
-        self._filter_formatter = f
+    tests_result_folder = path.join(yatest.common.output_path(), "test-result")
+    shutil.rmtree(tests_result_folder, ignore_errors=True)
+    os.mkdir(tests_result_folder)
 
-    def set_selected_items(self, selected_items: List[pytest.Function]):
-        print("rekby set selected items: ", selected_items)
-        selected_tests = []
-        for item in selected_items:
-            print(f"rekby, selected item name: '{item.name}'", )
-            if item.name.startswith("test_pg_generated["):
-                print("rekby selected test item:", item)
-                test_name = item.callspec.id
-                print(f"rekby selected test: {test_name}")
-                selected_tests.append(test_name)
-        selected_tests.sort()
-        self._selected_test = selected_tests
+    image = _docker_build(_tests_folder)
 
-    def pytest_generate_tests(self, metafunc: pytest.Metafunc):
-        """
-        Return tests for run through pytest.
-        """
-        metafunc.parametrize('testname', self._all_tests, ids=self._all_tests)
+    pg_port = _run_ydb()
+    env = _prepare_docker_env(pg_port, _selected_tests_name)
+    _run_tests_in_docker(image, env, exchange_folder, tests_result_folder)
 
-    def execute_test(self, testname: str):
-        self._check_test_results(testname)
+    test_results_file=path.join(tests_result_folder, "raw", "result.xml")
+    _test_results = _read_tests_result(test_results_file)
 
-    def _check_test_results(self, testname: str):
-        try:
-            test = self._test_results[testname]
-        except KeyError:
-            pytest.fail("test result not found, may be the test was not run")
+def teardown_module(module):
+    """teardown any state that was previously setup with a setup_module
+    method.
+    """
+    _stop_ydb()
 
-        if test.state == TestState.PASSED:
-            logging.getLogger().log(logging.INFO, test.log)
-            return
-        if test.state == TestState.SKIPPED:
-            logging.getLogger().log(logging.INFO, test.log)
-            pytest.skip()
-        if test.state == TestState.FAILED:
-            logging.getLogger().log(logging.ERROR, test.log)
-            pytest.fail()
+def _run_ydb() -> int:
+    """
+    Run YDB cluster and return pgwire port number.
+    """
+    _kikimr_factory.start()
+    node = _kikimr_factory.nodes[1]
+    print("rekby: pgwire port", node.pgwire_port)
+    return node.pgwire_port
 
-        raise Exception(f"Unexpected test state: '{test.state}'")
+def _stop_ydb():
+    _kikimr_factory.stop()
 
-    def _run_tests_in_docker(self, test_filter: str):
-        if self._docker_executed:
-            return
-        self._docker_executed = True
-        print("rekby start docker tests")
+def _prepare_docker_env(pgwire_port: str, test_names: List[str]) -> List[str]:
+    test_filter = _filter_formatter(test_names)
+    return [
+        "PGUSER=root",
+        "PGPASSWORD=1234",
+        "PGHOST=localhost",
+        f"PGPORT={pgwire_port}",
+        "PGDATABASE=local",
+        "PQGOSSLTESTS=0",
+        "PQSSLCERTTEST_PATH=certs",
+        f"YDB_PG_TESTFILTER={test_filter}",
+    ]
 
-        try:
-            print("rekby, start ydbd")
-            self._kikimr_factory.start()
-            print("rekby, ydbd started")
-            print("rekby, ydbd nodes", self._kikimr_factory.nodes)
-            node = self._kikimr_factory.nodes[1]
-            pgwire_port = node.pgwire_port
-            print("rekby, pgwire port: ", pgwire_port)
+def _docker_build(folder: str) -> str:
+    image_name = 'ydb-pg-test-image'
 
-            client: docker.Client = docker.from_env()
+    client: docker.Client = docker.from_env()
+    client.images.build(
+        path=folder,
+        tag=image_name,
+        rm=True,
+        network_mode='host',
+    )
+    return image_name
 
-            client.images.build(
-                path = self._folder,
-                tag=self._image_name,
-                network_mode='host',
-            )
+def _run_tests_in_docker(
+    image: str,
+    env: Union[List[str], Dict[str, str]],
+    exchange_folder: str,
+    results_folder: str,
+    ):
+    # TODO: run YDB with scripts/receipt and get connection port/database with runtime
+    client: docker.Client = docker.from_env()
 
-            try:
-                exchange_folder=path.join(yatest.common.output_path(), "exchange")
-                os.mkdir(exchange_folder)
-            except FileExistsError:
-                pass
+    container = client.containers.create(
+        image=image,
+        # command="/docker-start.bash",
+        # detach=True,
+        # auto_remove=True,
+        environment = env,
+        mounts = [
+            docker.types.Mount(
+                target="/exchange",
+                source=exchange_folder,
+                type="bind",
+            ),
+            docker.types.Mount(
+                target="/test-result",
+                source=results_folder,
+                type="bind",
+            ),
+        ],
+        network_mode='host',
+    )
+    try:
+        container.start()
+        container.wait()
+        print(container.logs().decode())
+    finally:
+        container.remove()
 
-            try:
-                os.mkdir(self._test_result_folder)
-            except FileExistsError:
-                pass
+def pytest_generate_tests(metafunc: pytest.Metafunc):
+    """
+    Return tests for run through pytest.
+    """
+    metafunc.parametrize('testname', _all_tests, ids=_all_tests)
 
+def execute_test(testname: str):
+    try:
+        test = _test_results[testname]
+    except KeyError:
+        pytest.fail("test result not found, may be the test was not run")
 
-            # TODO: run YDB with scripts/receipt and get connection port/database with runtime
-            container = client.containers.create(
-                image=self._image_name,
-                # command="/docker-start.bash",
-                # detach=True,
-                # auto_remove=True,
-                environment = [
-                    "PGUSER=root",
-                    "PGPASSWORD=1234",
-                    "PGHOST=localhost",
-                    f"PGPORT={pgwire_port}",
-                    "PGDATABASE=local",
-                    "PQGOSSLTESTS=0",
-                    "PQSSLCERTTEST_PATH=certs",
-                    f"YDB_PG_TESTFILTER={test_filter}",
-                ],
-                mounts = [
-                    docker.types.Mount(
-                        target="/exchange",
-                        source=exchange_folder,
-                        type="bind",
-                    ),
-                    docker.types.Mount(
-                        target="/test-result",
-                        source=self._test_result_folder,
-                        type="bind",
-                    ),
-                ],
-                network_mode='host',
-            )
-            try:
-                container.start()
-                container.wait()
-                print(container.logs().decode())
-            finally:
-                container.remove()
-        except BaseException as e:
-            print("rekby ydbd exception: ", e)
-            raise
-        finally:
-            print("rekby, stop ydbd")
-            try:
-                self._kikimr_factory.stop()
-            except RuntimeError as e:
-                print("rekby, stop ydbd runtime failed:", e)
-                # TODO
-                # handle crash ydbdb as mark in tests
+    if test.state == TestState.PASSED:
+        logging.getLogger().log(logging.INFO, test.log)
+        return
+    if test.state == TestState.SKIPPED:
+        logging.getLogger().log(logging.INFO, test.log)
+        pytest.skip()
+    if test.state == TestState.FAILED:
+        logging.getLogger().log(logging.ERROR, test.log)
+        pytest.fail()
 
-
-    @property
-    def _test_result_folder(self):
-        return path.join(yatest.common.output_path(), "test-result")
+    raise Exception(f"Unexpected test state: '{test.state}'")
 
 def _read_tests(folder: str) -> Set[str]:
     with open(path.join(folder, "full-test-list.txt"), "rt") as f:
@@ -251,26 +243,3 @@ def _read_tests_result(filepath: str) -> Dict[str, TestCase]:
         )
 
     return res
-
-class PgTestWrapper:
-    integrations: IntegrationTests
-
-    @classmethod
-    def initialize(cls, integrations: IntegrationTests, selected_items: List[pytest.Function]):
-        print("rekby wrapper initialize")
-        cls.integrations = integrations
-        integrations.set_selected_items(selected_items)
-
-        print("rekby wrapper settings filter formatter")
-        integrations.set_filter_formatter(cls.filter_format)
-        integrations.tearup()
-
-    def test_initialization(self):
-        # for collect initializations log
-        pass
-
-    def test_pg_generated(self, testname):
-        self.integrations.execute_test(testname)
-
-    def filter_format(cls, test_names: List[str])->str:
-        raise NotImplemented()

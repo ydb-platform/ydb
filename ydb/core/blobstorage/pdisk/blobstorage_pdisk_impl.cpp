@@ -2977,7 +2977,6 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
 
             auto result = std::make_unique<TEvChunkWriteResult>(NKikimrProto::OK, ev.ChunkIdx, ev.Cookie,
                         GetStatusFlags(ev.Owner, ev.OwnerGroupType), TString());
-            result->Orbit = std::move(ev.Orbit);
 
             ++state.OperationsInProgress;
             ++ownerData.InFlight->ChunkWrites;
@@ -3219,7 +3218,7 @@ void TPDisk::PushRequestToForseti(TRequestBase *request) {
                 TChunkWritePiece *piece = new TChunkWritePiece(whole, smallJobCount * smallJobSize, largeJobSize, std::move(span));
                 piece->EstimateCost(DriveModel);
                 AddJobToForseti(cbs, piece, request->JobKind);
-                LWTRACK(PDiskAddWritePieceToScheduler, request->Orbit, PDiskId, request->ReqId.Id,
+                LWTRACK(PDiskChunkWriteAddToScheduler, request->Orbit, PDiskId, request->ReqId.Id,
                         HPSecondsFloat(HPNow() - request->CreationTime), request->Owner, request->IsFast,
                         request->PriorityClass, whole->TotalSize);
             } else if (request->GetType() == ERequestType::RequestChunkRead) {

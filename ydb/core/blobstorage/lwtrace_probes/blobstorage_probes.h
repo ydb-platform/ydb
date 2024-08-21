@@ -214,7 +214,7 @@ struct TEventTypeField {
     PROBE(PDiskChunkReadPieceComplete, GROUPS("PDisk", "PDiskRequest"), \
       TYPES(TPDiskIdField, ui64, ui64, double), \
       NAMES("pdisk", "size", "relativeOffset", "deviceTimeMs")) \
-    PROBE(PDiskAddWritePieceToScheduler, GROUPS("PDisk", "PDiskRequest"), \
+    PROBE(PDiskChunkWriteAddToScheduler, GROUPS("PDisk", "PDiskRequest"), \
       TYPES(TPDiskIdField, ui64, double, ui64, bool, ui64, ui64), \
       NAMES("pdisk", "reqId", "creationTimeSec", "owner", "isFast", "priorityClass", "size")) \
     PROBE(PDiskChunkWritePieceSendToDevice, GROUPS("PDisk", "PDiskRequest"), \
@@ -223,7 +223,7 @@ struct TEventTypeField {
     PROBE(PDiskLogWriteComplete, GROUPS("PDisk", "PDiskRequest"), \
       TYPES(TPDiskIdField, ui64, double, double, double, double, double, double, double), \
       NAMES("pdisk", "reqId", "creationTimeSec", "costMs", "responseTimeMs", "inputTimeMs", "scheduleTimeMs", "deviceTotalTimeMs", "deviceOnlyTimeMs")) \
-    PROBE(PDiskChunkResponseTime, GROUPS("PDisk", "PDiskRequest"), \
+    PROBE(PDiskChunkWriteResponseTime, GROUPS("PDisk", "PDiskRequest"), \
       TYPES(TPDiskIdField, ui64, ui64, double, ui64), \
       NAMES("pdisk", "reqId", "priorityClass", "responseTimeMs", "sizeBytes")) \
     PROBE(PDiskTrimResponseTime, GROUPS("PDisk", "PDiskRequest"), \

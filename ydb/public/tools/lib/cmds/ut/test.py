@@ -26,14 +26,13 @@ def test_kikimr_config_generator_generic_connector_config():
     assert actual == expected
 
 def test_merge_two_yaml_configs():
-    first_dict = {'data': {'user': 'root', 'password': '1234'}}
-    second_dict = {'data': {'password': '12345678'}}
+    with open("config.yaml", 'r') as fh:
+        data_1 = yaml.load(fh, Loader=yaml.FullLoader)
+    
+    with open("patch.yaml", 'r') as fh:
+        data_2 = yaml.load(fh, Loader=yaml.FullLoader)
 
-    final_dict = {'data': {'user': 'root', 'password': '12345678'}}
-    assert merge_two_yaml_configs(first_dict, second_dict) == final_dict
+    with open("patched.yaml", 'r') as fh:
+        final_data = yaml.load(fh, Loader=yaml.FullLoader)
 
-    first_dict = {'data': {'user': 'root', 'password': '1234'}}
-    second_dict = {}
-
-    final_dict = {'data': {'user': 'root', 'password': '1234'}}
-    assert merge_two_yaml_configs(first_dict, second_dict) == final_dict
+    assert merge_two_yaml_configs(data_1, data_2) == final_data

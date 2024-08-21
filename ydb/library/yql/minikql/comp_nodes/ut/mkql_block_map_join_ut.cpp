@@ -14,6 +14,9 @@ namespace NMiniKQL {
 
 namespace {
 
+    using TKSV = std::tuple<ui64, ui64, TStringBuf>;
+    using TArrayPtr = std::shared_ptr<arrow::ArrayData>;
+
     const TStringBuf BlockLengthName = "_yql_block_length";
 
     TMap<const TStringBuf, ui64> NameToIndex(const TStructType* structType) {
@@ -85,6 +88,28 @@ namespace {
             }, [&](TRuntimeNode) {
                 return pgmBuilder.NewVoid();
             });
+    }
+
+    std::array<TArrayPtr, std::tuple_size_v<TKSV>> KSVToArrays(const TVector<TKSV>& ksvVector,
+        size_t current, size_t blockSize, arrow::MemoryPool* memoryPool
+    ) {
+        std::array<TArrayPtr, std::tuple_size_v<TKSV>> arrays;
+        arrow::UInt64Builder keysBuilder(memoryPool);
+        arrow::UInt64Builder subkeysBuilder(memoryPool);
+        arrow::BinaryBuilder valuesBuilder(memoryPool);
+        ARROW_OK(keysBuilder.Reserve(blockSize));
+        ARROW_OK(subkeysBuilder.Reserve(blockSize));
+        ARROW_OK(valuesBuilder.Reserve(blockSize));
+        for (size_t i = 0; i < blockSize; i++) {
+            keysBuilder.UnsafeAppend(std::get<0>(ksvVector[current + i]));
+            subkeysBuilder.UnsafeAppend(std::get<1>(ksvVector[current + i]));
+            const TStringBuf string(std::get<2>(ksvVector[current + i]));
+            ARROW_OK(valuesBuilder.Append(string.data(), string.size()));
+        }
+        ARROW_OK(keysBuilder.FinishInternal(&arrays[0]));
+        ARROW_OK(subkeysBuilder.FinishInternal(&arrays[1]));
+        ARROW_OK(valuesBuilder.FinishInternal(&arrays[2]));
+        return arrays;
     }
 
     const TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder,
@@ -163,36 +188,26 @@ namespace {
         std::transform(keys.cbegin(), keys.cend(), std::back_inserter(subkeys),
             [](const auto& value) { return value * 1001; });
 
-        TVector<const char*> payloads;
+        TVector<TStringBuf> payloads;
         std::transform(keys.cbegin(), keys.cend(), std::back_inserter(payloads),
-            [](const auto& value) { return threeLetterPayloads[value].c_str(); });
+            [](const auto& value) { return threeLetterPayloads[value]; });
+
+        TVector<TKSV> testKSV;
+        for (size_t i = 0; i < testSize; i++) {
+            testKSV.push_back(std::make_tuple(keys[i], subkeys[i], payloads[i]));
+        }
 
         size_t current = 0;
         TDefaultListRepresentation leftListValues;
         while (current < testSize) {
-            arrow::UInt64Builder keysBuilder(&ctx.ArrowMemoryPool);
-            arrow::UInt64Builder subkeysBuilder(&ctx.ArrowMemoryPool);
-            arrow::BinaryBuilder payloadsBuilder(&ctx.ArrowMemoryPool);
-            ARROW_OK(keysBuilder.Reserve(blockSize));
-            ARROW_OK(subkeysBuilder.Reserve(blockSize));
-            ARROW_OK(payloadsBuilder.Reserve(blockSize));
-            for (size_t i = 0; i < blockSize; i++, current++) {
-                keysBuilder.UnsafeAppend(keys[current]);
-                subkeysBuilder.UnsafeAppend(subkeys[current]);
-                ARROW_OK(payloadsBuilder.Append(payloads[current], payloadSize));
-            }
-            std::shared_ptr<arrow::ArrayData> keysData;
-            ARROW_OK(keysBuilder.FinishInternal(&keysData));
-            std::shared_ptr<arrow::ArrayData> subkeysData;
-            ARROW_OK(subkeysBuilder.FinishInternal(&subkeysData));
-            std::shared_ptr<arrow::ArrayData> payloadsData;
-            ARROW_OK(payloadsBuilder.FinishInternal(&payloadsData));
+            const auto arrays = KSVToArrays(testKSV, current, blockSize, &ctx.ArrowMemoryPool);
+            current += blockSize;
 
             NUdf::TUnboxedValue* items = nullptr;
             const auto structObj = holderFactory.CreateDirectArrayHolder(fields.size(), items);
-            items[fields.at("key")] = holderFactory.CreateArrowBlock(keysData);
-            items[fields.at("subkey")] = holderFactory.CreateArrowBlock(subkeysData);
-            items[fields.at("payload")] = holderFactory.CreateArrowBlock(payloadsData);
+            items[fields.at("key")] = holderFactory.CreateArrowBlock(arrays[0]);
+            items[fields.at("subkey")] = holderFactory.CreateArrowBlock(arrays[1]);
+            items[fields.at("payload")] = holderFactory.CreateArrowBlock(arrays[2]);
             items[fields.at(BlockLengthName)] = MakeBlockCount(holderFactory, blockSize);
             leftListValues = leftListValues.Append(std::move(structObj));
         }

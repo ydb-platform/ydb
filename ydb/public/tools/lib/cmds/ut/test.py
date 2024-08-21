@@ -37,4 +37,4 @@ def test_merge_two_yaml_configs():
     with open(patched_yaml, "w") as res:
         res.write(yaml.dump(merge_two_yaml_configs(data_1, data_2), default_flow_style=False))
 
-    return yatest.common.canonical_file(patched_yaml)
+    return yatest.common.canonical_file(patched_yaml, local=True)

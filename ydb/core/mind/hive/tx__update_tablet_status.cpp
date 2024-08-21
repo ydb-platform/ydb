@@ -124,6 +124,14 @@ public:
                                                                     NIceDb::TUpdate<Schema::Tablet::KnownGeneration>(Generation),
                                                                     NIceDb::TUpdate<Schema::Tablet::Statistics>(tablet->Statistics));
                     Self->UpdateTabletFollowersNumber(leader, db, SideEffects);
+
+                    // tablet booted successfully, we may actually cut history now
+                    while (!leader.DeletedHistory.empty() && leader.DeletedHistory.front().DeletedAtGeneration < leader.KnownGeneration) {
+                        leader.WasAliveSinceCutHistory = true;
+                        const auto& entry = leader.DeletedHistory.front();
+                        db.Table<Schema::TabletChannelGen>().Key(TabletId, entry.Channel, entry.Entry.FromGeneration).Delete();
+                        leader.DeletedHistory.pop();
+                    }
                 } else {
                     db.Table<Schema::TabletFollowerTablet>().Key(TabletId, FollowerId).Update(
                                 NIceDb::TUpdate<Schema::TabletFollowerTablet::GroupID>(tablet->AsFollower().FollowerGroup.Id),
@@ -160,13 +168,6 @@ public:
                             db.Table<Schema::Tablet>().Key(TabletId).Update(NIceDb::TUpdate<Schema::Tablet::LeaderNode>(0),
                                                                             NIceDb::TUpdate<Schema::Tablet::KnownGeneration>(leader.KnownGeneration),
                                                                             NIceDb::TUpdate<Schema::Tablet::Statistics>(tablet->Statistics));
-
-                            // tablet booted successfully, we may actually cut history now
-                            leader.WasAliveSinceCutHistory = true;
-                            for (const auto& entry : leader.DeletedHistory) {
-                                db.Table<Schema::TabletChannelGen>().Key(TabletId, entry.Channel, entry.Entry.FromGeneration).Delete();
-                            }
-                            leader.DeletedHistory.clear();
                         } else {
                             db.Table<Schema::TabletFollowerTablet>().Key(TabletId, FollowerId).Update(
                                         NIceDb::TUpdate<Schema::TabletFollowerTablet::GroupID>(tablet->AsFollower().FollowerGroup.Id),

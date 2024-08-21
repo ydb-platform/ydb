@@ -89,12 +89,12 @@ public: \
         return map; \
     } \
     \
-    void Save(TSaveContext& context) const \
+    void Save(TSaveContext& context) const saveLoadModifier \
     { \
         ::NYT::NPhoenix2::NDetail::SaveImpl(this, context); \
     } \
     \
-    void Load(TLoadContext& context) \
+    void Load(TLoadContext& context) saveLoadModifier \
     { \
         ::NYT::NPhoenix2::NDetail::LoadImpl(this, context); \
     }

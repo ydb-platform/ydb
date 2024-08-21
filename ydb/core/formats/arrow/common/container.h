@@ -1,5 +1,5 @@
 #pragma once
-#include "accessor.h"
+#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 
 #include <ydb/core/formats/arrow/modifier/schema.h>
 
@@ -24,11 +24,18 @@ public:
 
 class TGeneralContainer {
 private:
-    YDB_READONLY_DEF(std::optional<ui64>, RecordsCount);
+    std::optional<ui64> RecordsCount;
     YDB_READONLY_DEF(std::shared_ptr<NModifier::TSchema>, Schema);
     std::vector<std::shared_ptr<NAccessor::IChunkedArray>> Columns;
     void Initialize();
 public:
+    TGeneralContainer(const ui32 recordsCount);
+
+    ui32 GetRecordsCount() const {
+        AFL_VERIFY(RecordsCount);
+        return *RecordsCount;
+    }
+
     TString DebugString() const;
 
     [[nodiscard]] TConclusionStatus SyncSchemaTo(const std::shared_ptr<arrow::Schema>& schema,
@@ -67,7 +74,6 @@ public:
 
     [[nodiscard]] TConclusionStatus AddField(const std::shared_ptr<arrow::Field>& f, const std::shared_ptr<arrow::ChunkedArray>& data);
 
-    TGeneralContainer() = default;
     TGeneralContainer(const std::shared_ptr<arrow::Table>& table);
     TGeneralContainer(const std::shared_ptr<arrow::RecordBatch>& table);
     TGeneralContainer(const std::shared_ptr<arrow::Schema>& schema, std::vector<std::shared_ptr<NAccessor::IChunkedArray>>&& columns);

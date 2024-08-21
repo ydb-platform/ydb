@@ -172,7 +172,7 @@ private:
     NYTree::IAttributeDictionaryPtr Attributes_;
 };
 
-bool operator== (const TRichYPath& lhs, const TRichYPath& rhs);
+bool operator==(const TRichYPath& lhs, const TRichYPath& rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 

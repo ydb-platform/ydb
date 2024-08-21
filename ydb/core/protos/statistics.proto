@@ -68,37 +68,68 @@ message TEvPropagateStatisticsResponse {
 message TEvStatisticsIsDisabled {
 }
 
-message TEvScanTable {
-    optional NKikimrProto.TPathID PathId = 1;
+enum EColumnStatisticType {
+    TYPE_UNSPECIFIED = 0;
+    TYPE_COUNT_MIN_SKETCH = 1;
 }
 
-message TEvScanTableAccepted {
-    optional uint64 OperationId = 1;
+// table to gather statistics from
+message TTable {
+    optional NKikimrProto.TPathID PathId = 1; // table path
+    repeated uint32 ColumnTags = 2; // list of columns to gather statistics from. Empty means asking for every column.
 }
 
-message TEvScanTableResponse {
+// KQP -> SA
+message TEvAnalyze {
+    optional bytes OperationId = 1; // unique identifier to match response item
+    repeated TTable Tables = 2; // list of analyzed tables and columns
+    repeated EColumnStatisticType Types = 3; // list of statistics types requested. Empty means asking for all available.
 }
 
-message TEvGetScanStatus {
-    optional NKikimrProto.TPathID PathId = 1;
+// SA -> KQP
+message TEvAnalyzeResponse {
+    optional bytes OperationId = 1;
 }
 
-message TEvGetScanStatusResponse {
+// KQP -> SA
+message TEvAnalyzeStatus {
+    optional bytes OperationId = 1; // unique identifier to match response item
+}
+
+// SA -> KQP
+message TEvAnalyzeStatusResponse {
+    optional bytes OperationId = 1;
+
     enum EStatus {
-        NO_OPERATION = 0;
-        ENQUEUED = 1;
-        IN_PROGRESS = 2;
+        STATUS_UNSPECIFIED = 0;
+        STATUS_NO_OPERATION = 1;
+        STATUS_ENQUEUED = 2;
+        STATUS_IN_PROGRESS = 3;
     }
-    optional EStatus Status = 1;
+    optional EStatus Status = 2;
 }
+
+// SA -> Shard
+message TEvAnalyzeTable {
+    optional bytes OperationId = 1; // unique identifier to match response item
+    optional TTable Table = 2;  // analyzed table
+    repeated EColumnStatisticType Types = 3; // list of statistics types requested. Empty means asking for all available.
+}
+
+// Shard -> SA
+message TEvAnalyzeTableResponse {
+    optional bytes OperationId = 1; 
+    optional NKikimrProto.TPathID PathId = 2; 
+    optional fixed64 ShardTabletId = 3;  
+}
+
 
 message TEvStatisticsRequest {
-    optional NKikimrDataEvents.TTableId TableId = 1;
+    optional TTable Table = 1;
+
     optional bytes StartKey = 2;
-    // list of columns to gather statistics from. Empty means asking for every column.
-    repeated uint32 ColumnTags = 3;
-    // list of statistics types requested. Empty means asking for all available.
-    repeated uint32 Types = 4;
+
+    repeated EColumnStatisticType Types = 3;
 }
 
 message TStatistic {
@@ -106,18 +137,20 @@ message TStatistic {
     optional bytes Data = 2;
 }
 
-message TColumn {
+message TColumnStatistics {
     optional uint32 Tag = 1;
     repeated TStatistic Statistics = 2;
 }
 
 message TEvStatisticsResponse {
-    repeated TColumn Columns = 1;
+    repeated TColumnStatistics Columns = 1;
 
     enum EStatus {
-        SUCCESS = 1;
-        ABORTED = 2;
-        ERROR = 3;
+        STATUS_UNSPECIFIED = 0;
+        STATUS_SUCCESS = 1;
+        STATUS_PROCESSING = 2;
+        STATUS_ABORTED = 3;
+        STATUS_ERROR = 4;
     }
     optional EStatus Status = 2;
     optional fixed64 ShardTabletId = 3;
@@ -144,10 +177,11 @@ message TEvAggregateKeepAliveAck {
 
 message TEvAggregateStatisticsResponse {
     optional uint64 Round = 1;
-    repeated TColumn Columns = 2;
+    repeated TColumnStatistics Columns = 2;
     enum EErrorType {
-        UnavailableNode = 1;
-        NonLocalTablet = 2;
+        TYPE_UNSPECIFIED = 0;
+        TYPE_UNAVAILABLE_NODE = 1;
+        TYPE_NON_LOCAL_TABLET = 2;
     }
     message TFailedTablet {
         optional EErrorType Error = 1;

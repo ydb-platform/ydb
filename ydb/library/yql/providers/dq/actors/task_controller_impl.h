@@ -600,7 +600,7 @@ private:
 
 public:
     void OnQueryResult(TEvQueryResponse::TPtr& ev) {
-        YQL_ENSURE(!ev->Get()->Record.HasResultSet() && ev->Get()->Record.GetYson().empty());
+        YQL_ENSURE(!ev->Get()->Record.SampleSize());
         FinalStat().FlushCounters(ev->Get()->Record);
         if (!Issues.Empty()) {
             IssuesToMessage(Issues.ToIssues(), ev->Get()->Record.MutableIssues());

@@ -72,6 +72,7 @@ ENDIF()
         ydb/library/yql/utils/failure_injector
         ydb/library/yql/core/url_preprocessing
         ydb/library/yql/core/url_lister
+        ydb/library/yql/core/pg_ext
         ydb/library/yql/providers/yt/actors
         ydb/library/yql/providers/yt/comp_nodes/dq
         ydb/library/yql/providers/yt/dq_task_preprocessor

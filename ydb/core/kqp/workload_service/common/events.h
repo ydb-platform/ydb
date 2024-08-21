@@ -22,6 +22,7 @@ struct TEvPrivate {
         EvRefreshPoolState = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvResolvePoolResponse,
         EvFetchPoolResponse,
+        EvFetchDatabaseResponse,
         EvCreatePoolResponse,
         EvPrepareTablesRequest,
         EvPlaceRequestIntoPoolResponse,
@@ -29,6 +30,7 @@ struct TEvPrivate {
         EvResignPoolHandler,
         EvStopPoolHandler,
         EvCancelRequest,
+        EvUpdatePoolSubscription,
 
         EvCpuQuotaRequest,
         EvCpuQuotaResponse,
@@ -43,6 +45,8 @@ struct TEvPrivate {
         EvDelayRequestResponse,
         EvStartRequestResponse,
         EvCleanupRequestsResponse,
+
+        EvRanksCheckerResponse,
 
         EvEnd
     };
@@ -72,16 +76,34 @@ struct TEvPrivate {
     };
 
     struct TEvFetchPoolResponse : public NActors::TEventLocal<TEvFetchPoolResponse, EvFetchPoolResponse> {
-        TEvFetchPoolResponse(Ydb::StatusIds::StatusCode status, const NResourcePool::TPoolSettings& poolConfig, TPathId pathId, NYql::TIssues issues)
+        TEvFetchPoolResponse(Ydb::StatusIds::StatusCode status, const TString& database, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, TPathId pathId, NYql::TIssues issues)
             : Status(status)
+            , Database(database)
+            , PoolId(poolId)
             , PoolConfig(poolConfig)
             , PathId(pathId)
             , Issues(std::move(issues))
         {}
 
         const Ydb::StatusIds::StatusCode Status;
+        const TString Database;
+        const TString PoolId;
         const NResourcePool::TPoolSettings PoolConfig;
         const TPathId PathId;
+        const NYql::TIssues Issues;
+    };
+
+    struct TEvFetchDatabaseResponse : public NActors::TEventLocal<TEvFetchDatabaseResponse, EvFetchDatabaseResponse> {
+        TEvFetchDatabaseResponse(Ydb::StatusIds::StatusCode status, const TString& database, bool serverless, NYql::TIssues issues)
+            : Status(status)
+            , Database(database)
+            , Serverless(serverless)
+            , Issues(std::move(issues))
+        {}
+
+        const Ydb::StatusIds::StatusCode Status;
+        const TString Database;
+        const bool Serverless;
         const NYql::TIssues Issues;
     };
 
@@ -152,6 +174,16 @@ struct TEvPrivate {
         {}
 
         const TString SessionId;
+    };
+
+    struct TEvUpdatePoolSubscription : public NActors::TEventLocal<TEvUpdatePoolSubscription, EvUpdatePoolSubscription> {
+        explicit TEvUpdatePoolSubscription(TPathId pathId, const std::unordered_set<TActorId>& subscribers)
+            : PathId(pathId)
+            , Subscribers(subscribers)
+        {}
+
+        const TPathId PathId;
+        const std::unordered_set<TActorId> Subscribers;
     };
 
     // Cpu load requests
@@ -278,6 +310,21 @@ struct TEvPrivate {
 
         const Ydb::StatusIds::StatusCode Status;
         const std::vector<TString> SesssionIds;
+        const NYql::TIssues Issues;
+    };
+
+    // Resource pool classifier events
+    struct TEvRanksCheckerResponse : public TEventLocal<TEvRanksCheckerResponse, EvRanksCheckerResponse> {
+        TEvRanksCheckerResponse(Ydb::StatusIds::StatusCode status, i64 maxRank, ui64 numberClassifiers, NYql::TIssues issues)
+            : Status(status)
+            , MaxRank(maxRank)
+            , NumberClassifiers(numberClassifiers)
+            , Issues(std::move(issues))
+        {}
+
+        const Ydb::StatusIds::StatusCode Status;
+        const i64 MaxRank;
+        const ui64 NumberClassifiers;
         const NYql::TIssues Issues;
     };
 };

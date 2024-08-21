@@ -2,6 +2,7 @@
 
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/util/ulid.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -9,10 +10,16 @@
 namespace NKikimr {
 namespace NStat {
 
+TString MakeOperationId() {
+    TULIDGenerator ulidGen;
+    return ulidGen.Next(TActivationContext::Now()).ToBinary();
+}
+
 THttpRequest::THttpRequest(EType type, const TString& path, TActorId replyToActorId)
     : Type(type)
     , Path(path)
     , ReplyToActorId(replyToActorId)
+    , OperationId(MakeOperationId() )
 {}    
 
 void THttpRequest::Bootstrap() {
@@ -100,21 +107,28 @@ void THttpRequest::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& 
     }
 }
 
-void THttpRequest::Handle(TEvStatistics::TEvScanTableAccepted::TPtr&) {
-    HttpReply("Scan accepted");
-}
-
-void THttpRequest::Handle(TEvStatistics::TEvGetScanStatusResponse::TPtr& ev) {
+void THttpRequest::Handle(TEvStatistics::TEvAnalyzeStatusResponse::TPtr& ev) {
     auto& record = ev->Get()->Record;
+
+    if (record.GetOperationId() != OperationId) {
+        ALOG_ERROR(NKikimrServices::STATISTICS, 
+            "THttpRequest, TEvAnalyzeStatusResponse has operationId=" << record.GetOperationId() 
+            << " , but expected " << OperationId);
+        HttpReply("Wrong OperationId");
+    }
+
     switch (record.GetStatus()) {
-    case NKikimrStat::TEvGetScanStatusResponse::NO_OPERATION:
-        HttpReply("No scan operation");
+    case NKikimrStat::TEvAnalyzeStatusResponse::STATUS_UNSPECIFIED:
+        HttpReply("Status is unspecified");
         break;
-    case NKikimrStat::TEvGetScanStatusResponse::ENQUEUED:
-        HttpReply("Scan is enqueued");
+    case NKikimrStat::TEvAnalyzeStatusResponse::STATUS_NO_OPERATION:
+        HttpReply("No analyze operation");
         break;
-    case NKikimrStat::TEvGetScanStatusResponse::IN_PROGRESS:
-        HttpReply("Scan is in progress");
+    case NKikimrStat::TEvAnalyzeStatusResponse::STATUS_ENQUEUED:
+        HttpReply("Analyze is enqueued");
+        break;
+    case NKikimrStat::TEvAnalyzeStatusResponse::STATUS_IN_PROGRESS:
+        HttpReply("Analyze is in progress");
         break;
     }
 }
@@ -130,16 +144,19 @@ void THttpRequest::ResolveSuccess() {
     }
 
     if (Type == ANALYZE) {
-        auto scanTable = std::make_unique<TEvStatistics::TEvScanTable>();
-        auto& record = scanTable->Record;
-        PathIdFromPathId(PathId, record.MutablePathId());
+        auto analyze = std::make_unique<TEvStatistics::TEvAnalyze>();
+        auto& record = analyze->Record;
+        record.SetOperationId(OperationId);
+        PathIdFromPathId(PathId, record.AddTables()->MutablePathId());
 
         Send(MakePipePerNodeCacheID(false),
-            new TEvPipeCache::TEvForward(scanTable.release(), StatisticsAggregatorId, true));
+            new TEvPipeCache::TEvForward(analyze.release(), StatisticsAggregatorId, true));
+
+        HttpReply("Analyze sent");
     } else {
-        auto getStatus = std::make_unique<TEvStatistics::TEvGetScanStatus>();
+        auto getStatus = std::make_unique<TEvStatistics::TEvAnalyzeStatus>();
         auto& record = getStatus->Record;
-        PathIdFromPathId(PathId, record.MutablePathId());
+        record.SetOperationId(OperationId);
 
         Send(MakePipePerNodeCacheID(false),
             new TEvPipeCache::TEvForward(getStatus.release(), StatisticsAggregatorId, true));

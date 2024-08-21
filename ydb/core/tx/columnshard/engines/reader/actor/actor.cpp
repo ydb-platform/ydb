@@ -209,7 +209,7 @@ bool TColumnShardScan::ProduceResults() noexcept {
         return false;
     }
 
-    std::optional<TPartialReadResult> resultOpt = resultConclusion.DetachResult();
+    std::shared_ptr<TPartialReadResult> resultOpt = resultConclusion.DetachResult();
     if (!resultOpt) {
         ACFL_DEBUG("stage", "no data is ready yet")("iterator", ScanIterator->DebugString());
         return false;
@@ -402,7 +402,7 @@ void TColumnShardScan::Finish(const NColumnShard::TScanCounters::EStatusFinish s
 
     Send(ColumnShardActorId, new NColumnShard::TEvPrivate::TEvReadFinished(RequestCookie, TxId));
     AFL_VERIFY(StartInstant);
-    ScanCountersPool.OnScanDuration(status, TMonotonic::Now() - *StartInstant);
+    ScanCountersPool.OnScanFinished(status, TMonotonic::Now() - *StartInstant);
     ReportStats();
     PassAway();
 }

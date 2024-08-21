@@ -24,13 +24,16 @@ class LockfilePackageMeta(object):
         self.sky_id = sky_id
         self.integrity = integrity
         self.integrity_algorithm = integrity_algorithm
-        self.tarball_path = "/".join(parts[-3:])  # @scope%2fname/-/name-0.0.1.tgz
+        self.tarball_path = "/".join(parts[-3:]).replace("%2f", "/")  # @scope%2fname/-/name-0.0.1.tgz
 
     def to_str(self):
         return " ".join([self.tarball_url, self.sky_id, self.integrity, self.integrity_algorithm])
 
     def to_uri(self):
-        pkg_uri = f"{self.tarball_url}#integrity={self.integrity_algorithm}-{self.integrity}"
+        tarball_url: str = self.tarball_url
+        if not tarball_url.startswith("https://") and not tarball_url.startswith("http://"):
+            tarball_url = "https://npm.yandex-team.ru/" + tarball_url
+        pkg_uri = f"{tarball_url}#integrity={self.integrity_algorithm}-{self.integrity}"
         return pkg_uri
 
 

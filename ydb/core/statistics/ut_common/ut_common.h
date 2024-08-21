@@ -1,7 +1,13 @@
 #pragma once
 
+#include <ydb/core/statistics/events.h>
+
 #include <ydb/core/testlib/test_client.h>
 #include <library/cpp/testing/unittest/registar.h>
+
+namespace NKikimrStat {
+    class TTable;
+}
 
 namespace NKikimr {
 namespace NStat {
@@ -14,7 +20,7 @@ NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSettings(
     
 class TTestEnv {
 public:
-    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 1, ui32 storagePools = 1);
+    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 1, ui32 storagePools = 1, bool useRealThreads = false);
     ~TTestEnv();
 
     Tests::TServer& GetServer() const {
@@ -60,8 +66,35 @@ void CreateDatabase(TTestEnv& env, const TString& databaseName, size_t nodeCount
 
 void CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, TPathId resourcesDomainKey);
 
-TPathId ResolvePathId(TTestActorRuntime& runtime, const TString& path,
-    TPathId* domainKey = nullptr, ui64* tabletId = nullptr);
+TPathId ResolvePathId(TTestActorRuntime& runtime, const TString& path, TPathId* domainKey = nullptr, ui64* saTabletId = nullptr);
+
+
+TVector<ui64> GetTableShards(TTestActorRuntime& runtime, TActorId sender, const TString &path);
+TVector<ui64> GetColumnTableShards(TTestActorRuntime& runtime, TActorId sender,const TString &path);
+
+void CreateUniformTable(TTestEnv& env, const TString& databaseName, const TString& tableName);
+void CreateColumnStoreTable(TTestEnv& env, const TString& databaseName, const TString& tableName, int shardCount);
+void DropTable(TTestEnv& env, const TString& databaseName, const TString& tableName);
+
+std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, TPathId pathId, ui64 columnTag = 1);
+void ValidateCountMin(TTestActorRuntime& runtime, TPathId pathId);
+void ValidateCountMinAbsense(TTestActorRuntime& runtime, TPathId pathId);
+
+struct TAnalyzedTable {
+    TPathId PathId;
+    std::vector<ui32> ColumnTags;
+    
+    TAnalyzedTable(const TPathId& pathId);
+    TAnalyzedTable(const TPathId& pathId, const std::vector<ui32>& columnTags);
+    void ToProto(NKikimrStat::TTable& tableProto) const;
+};
+
+std::unique_ptr<TEvStatistics::TEvAnalyze> MakeAnalyzeRequest(const std::vector<TAnalyzedTable>& tables, const TString operationId = "operationId");
+
+void Analyze(TTestActorRuntime& runtime, ui64 saTabletId, const std::vector<TAnalyzedTable>& table, const TString operationId = "operationId");
+void AnalyzeTable(TTestActorRuntime& runtime, ui64 shardTabletId, const TAnalyzedTable& table);
+void AnalyzeStatus(TTestActorRuntime& runtime, ui64 saTabletId, const TString operationId, const NKikimrStat::TEvAnalyzeStatusResponse::EStatus expectedStatus);
+
 
 } // namespace NStat
 } // namespace NKikimr

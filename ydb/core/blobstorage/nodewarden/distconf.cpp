@@ -145,36 +145,58 @@ namespace NKikimr::NStorage {
             }
         }
 
-        for (const auto& [nodeId, sessionId] : SubscribedSessions) {
+        for (const auto& [nodeId, subs] : SubscribedSessions) {
             bool okay = false;
             if (Binding && Binding->NodeId == nodeId) {
-                Y_ABORT_UNLESS(sessionId == Binding->SessionId);
+                Y_VERIFY_S(subs.SessionId == Binding->SessionId || !Binding->SessionId,
+                    "Binding# " << Binding->ToString() << " Subscription# " << subs.ToString());
                 okay = true;
             }
             if (const auto it = DirectBoundNodes.find(nodeId); it != DirectBoundNodes.end()) {
-                Y_ABORT_UNLESS(!sessionId || sessionId == it->second.SessionId);
+                Y_VERIFY_S(!subs.SessionId || subs.SessionId == it->second.SessionId, "sessionId# " << subs.SessionId
+                    << " node.SessionId# " << it->second.SessionId);
                 okay = true;
             }
-            if (!sessionId) {
+            if (!subs.SessionId) {
                 okay = true; // may be just obsolete subscription request
             }
             if (ConnectedDynamicNodes.contains(nodeId)) {
                 okay = true;
             }
             Y_ABORT_UNLESS(okay);
+            if (subs.SubscriptionCookie) {
+                const auto it = SubscriptionCookieMap.find(subs.SubscriptionCookie);
+                Y_ABORT_UNLESS(it != SubscriptionCookieMap.end());
+                Y_ABORT_UNLESS(it->second == nodeId);
+            }
+        }
+        for (const auto& [cookie, nodeId] : SubscriptionCookieMap) {
+            const auto it = SubscribedSessions.find(nodeId);
+            Y_ABORT_UNLESS(it != SubscribedSessions.end());
+            const TSessionSubscription& subs = it->second;
+            Y_VERIFY_S(subs.SubscriptionCookie == cookie, "SubscriptionCookie# " << subs.SubscriptionCookie
+                << " cookie# " << cookie);
         }
 
         if (Binding) {
             Y_ABORT_UNLESS(SubscribedSessions.contains(Binding->NodeId));
         }
         for (const auto& [nodeId, info] : DirectBoundNodes) {
-            Y_ABORT_UNLESS(SubscribedSessions.contains(nodeId));
+            Y_VERIFY_S(SubscribedSessions.contains(nodeId), "NodeId# " << nodeId);
         }
 
         Y_ABORT_UNLESS(!StorageConfig || CheckFingerprint(*StorageConfig));
         Y_ABORT_UNLESS(!ProposedStorageConfig || CheckFingerprint(*ProposedStorageConfig));
         Y_ABORT_UNLESS(CheckFingerprint(BaseConfig));
         Y_ABORT_UNLESS(!InitialConfig.GetFingerprint() || CheckFingerprint(InitialConfig));
+
+        if (Scepter) {
+            Y_ABORT_UNLESS(HasQuorum());
+            Y_ABORT_UNLESS(RootState != ERootState::INITIAL && RootState != ERootState::ERROR_TIMEOUT);
+            Y_ABORT_UNLESS(!Binding);
+        } else {
+            Y_ABORT_UNLESS(RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT);
+        }
     }
 #endif
 
@@ -229,6 +251,13 @@ namespace NKikimr::NStorage {
     }
 
     STFUNC(TDistributedConfigKeeper::StateFunc) {
+        STLOG(PRI_DEBUG, BS_NODE, NWDC15, "StateFunc", (Type, ev->GetTypeRewrite()), (Sender, ev->Sender),
+            (SessionId, ev->InterconnectSession), (Cookie, ev->Cookie));
+        const ui32 senderNodeId = ev->Sender.NodeId();
+        if (ev->InterconnectSession && SubscribedSessions.contains(senderNodeId)) {
+            // keep session actors intact
+            SubscribeToPeerNode(senderNodeId, ev->InterconnectSession);
+        }
         STRICT_STFUNC_BODY(
             hFunc(TEvNodeConfigPush, Handle);
             hFunc(TEvNodeConfigReversePush, Handle);
@@ -239,7 +268,6 @@ namespace NKikimr::NStorage {
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
             hFunc(TEvInterconnect::TEvNodeConnected, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
-            hFunc(TEvents::TEvUndelivered, Handle);
             cFunc(TEvPrivate::EvErrorTimeout, HandleErrorTimeout);
             hFunc(TEvPrivate::TEvStorageConfigLoaded, Handle);
             hFunc(TEvPrivate::TEvStorageConfigStored, Handle);
@@ -252,6 +280,12 @@ namespace NKikimr::NStorage {
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             cFunc(TEvents::TSystem::Poison, PassAway);
         )
+        for (ui32 nodeId : std::exchange(UnsubscribeQueue, {})) {
+            UnsubscribeInterconnect(nodeId);
+        }
+        if (IsSelfStatic && StorageConfig && NodeListObtained) {
+            IssueNextBindRequest();
+        }
         ConsistencyCheck();
     }
 

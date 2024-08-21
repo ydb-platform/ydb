@@ -905,7 +905,7 @@ namespace NActors {
         TGuard<TMutex> guard(Mutex);
         TNodeDataBase* node = Nodes[FirstNodeId + nodeIndex].Get();
         if (UseRealThreads) {
-            Y_ABORT_UNLESS(poolId < node->ExecutorPools.size());
+            Y_ABORT_UNLESS(node->ExecutorPools.contains(poolId));
             return node->ExecutorPools[poolId]->Register(actor, mailboxType, revolvingCounter, parentId);
         }
 
@@ -973,7 +973,7 @@ namespace NActors {
         TGuard<TMutex> guard(Mutex);
         TNodeDataBase* node = Nodes[FirstNodeId + nodeIndex].Get();
         if (UseRealThreads) {
-            Y_ABORT_UNLESS(poolId < node->ExecutorPools.size());
+            Y_ABORT_UNLESS(node->ExecutorPools.contains(poolId));
             return node->ExecutorPools[poolId]->Register(actor, mailbox, hint, parentId);
         }
 
@@ -1166,6 +1166,26 @@ namespace NActors {
             tempEdgeEventsCaptor.Reset(new TTempEdgeEventsCaptor(*this));
         }
 
+        auto checkStopConditions = [&](bool perMessage = false) -> bool {
+            // Note: too many tests expect unrelated messages to be
+            // processed before simulation is stopped.
+            if (!perMessage) {
+                if (localContext.FinalEventFound) {
+                    return true;
+                }
+
+                if (!localContext.FoundNonEmptyMailboxes.empty()) {
+                    return true;
+                }
+            }
+
+            if (options.CustomFinalCondition && options.CustomFinalCondition()) {
+                return true;
+            }
+
+            return false;
+        };
+
         TEventMailBoxList& currentMailboxes = useRestrictedMailboxes ? restrictedMailboxes : Mailboxes;
         while (!currentMailboxes.empty()) {
             bool hasProgress = true;
@@ -1195,7 +1215,8 @@ namespace NActors {
                     isEmpty = true;
                     auto mboxIt = startWithMboxIt;
                     TDeque<TEventMailboxId> suspectedBoxes;
-                    while (true) {
+                    bool stopCondition = false;
+                    while (!stopCondition) {
                         auto& mbox = *mboxIt;
                         bool isIgnored = true;
                         if (!mbox.second->IsEmpty()) {
@@ -1264,6 +1285,9 @@ namespace NActors {
                                         case EEventAction::PROCESS:
                                             UpdateFinalEventsStatsForEachContext(*ev);
                                             SendInternal(ev.Release(), mbox.first.NodeId - FirstNodeId, false);
+                                            if (checkStopConditions(/* perMessage */ true)) {
+                                                stopCondition = true;
+                                            }
                                             break;
                                         case EEventAction::DROP:
                                             // do nothing
@@ -1305,18 +1329,16 @@ namespace NActors {
                             currentMailboxes.erase(it);
                         }
                     }
+
+                    if (stopCondition) {
+                        return true;
+                    }
                 }
             }
 
-            if (localContext.FinalEventFound) {
+            if (checkStopConditions()) {
                 return true;
             }
-
-            if (!localContext.FoundNonEmptyMailboxes.empty())
-                return true;
-
-            if (options.CustomFinalCondition && options.CustomFinalCondition())
-                return true;
 
             if (options.FinalEvents.empty()) {
                 for (auto& mbox : currentMailboxes) {
@@ -1718,7 +1740,7 @@ namespace NActors {
     THolder<TActorSystem> TTestActorRuntimeBase::MakeActorSystem(ui32 nodeIndex, TNodeDataBase* node) {
         auto setup = MakeActorSystemSetup(nodeIndex, node);
 
-        node->ExecutorPools.resize(setup->ExecutorsCount);
+        node->ExecutorPools.reserve(setup->ExecutorsCount);
         for (ui32 i = 0; i < setup->ExecutorsCount; ++i) {
             IExecutorPool* executor = setup->Executors[i].Get();
             node->ExecutorPools[i] = executor;
@@ -1786,7 +1808,18 @@ namespace NActors {
             setup->LocalServices.push_back(std::move(loggerActorPair));
         }
 
-        return THolder<TActorSystem>(new TActorSystem(setup, node->GetAppData(), node->LogSettings));
+        auto actorSystem = THolder<TActorSystem>(new TActorSystem(setup, node->GetAppData(), node->LogSettings));
+
+        if (node->ExecutorPools.empty()) {
+            // Initialize pools from actor system (except IO pool)
+            const auto& pools = actorSystem->GetBasicExecutorPools();
+            node->ExecutorPools.reserve(pools.size());
+            for (IExecutorPool* pool : pools) {
+                node->ExecutorPools[pool->PoolId] = pool;
+            }
+        }
+
+        return actorSystem;
     }
 
     TActorSystem* TTestActorRuntimeBase::SingleSys() const {

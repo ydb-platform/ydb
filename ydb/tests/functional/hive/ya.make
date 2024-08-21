@@ -7,11 +7,9 @@ TEST_SRCS(
     test_drain.py
 )
 
-
-REQUIREMENTS(
-    cpu:4
-    ram:16
-)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:16)
+ENDIF()
 
 IF (SANITIZER_TYPE == "thread")
     TIMEOUT(1200)
@@ -19,7 +17,6 @@ IF (SANITIZER_TYPE == "thread")
     TAG(ya:fat)
     REQUIREMENTS(
         ram:32
-        cpu:4
     )
     SPLIT_FACTOR(20)
 ELSE()

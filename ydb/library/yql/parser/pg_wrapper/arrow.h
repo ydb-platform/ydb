@@ -634,12 +634,12 @@ private:
             }
 
             Zero(TransFuncInfo_);
-            fmgr_info(AggDesc_.TransFuncId, &TransFuncInfo_);
+            GetPgFuncAddr(AggDesc_.TransFuncId, TransFuncInfo_);
             Y_ENSURE(TransFuncInfo_.fn_addr);
             auto nargs = NPg::LookupProc(AggDesc_.TransFuncId).ArgTypes.size();
             if constexpr (HasSerialize) {
                 Zero(SerializeFuncInfo_);
-                fmgr_info(AggDesc_.SerializeFuncId, &SerializeFuncInfo_);
+                GetPgFuncAddr(AggDesc_.SerializeFuncId, SerializeFuncInfo_);
                 Y_ENSURE(SerializeFuncInfo_.fn_addr);
             }
 
@@ -652,7 +652,7 @@ private:
                 }
 
                 TypeIOParam_ = MakeTypeIOParam(transTypeDesc);
-                fmgr_info(inFuncId, &InFuncInfo_);
+                GetPgFuncAddr(inFuncId, InFuncInfo_);
                 Y_ENSURE(InFuncInfo_.fn_addr);
 
                 LOCAL_FCINFO(inCallInfo, 3);

@@ -135,6 +135,7 @@ SRCS(
     misc/linear_probe.cpp
     misc/memory_usage_tracker.cpp
     misc/relaxed_mpsc_queue.cpp
+    misc/origin_attributes.cpp
     misc/parser_helpers.cpp
     misc/pattern_formatter.cpp
     misc/phoenix.cpp
@@ -152,8 +153,10 @@ SRCS(
     misc/shutdown.cpp
     misc/signal_registry.cpp
     misc/slab_allocator.cpp
+    misc/statistic_path.cpp
     misc/statistics.cpp
     misc/string_helpers.cpp
+    misc/stripped_error.cpp
     misc/cache_config.cpp
     misc/utf8_decoder.cpp
     misc/zerocopy_output_writer.cpp
@@ -327,6 +330,8 @@ PEERDIR(
     library/cpp/streams/brotli
     library/cpp/yt/assert
     library/cpp/yt/containers
+    library/cpp/yt/global
+    library/cpp/yt/error
     library/cpp/yt/logging
     library/cpp/yt/logging/plain_text_formatter
     library/cpp/yt/misc

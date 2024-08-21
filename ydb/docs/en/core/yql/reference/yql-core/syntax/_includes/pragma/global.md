@@ -33,7 +33,7 @@ EACH uses [TablePathPrefix](#table-path-prefix) for each list item.
 
 | Value type | Default |
 | --- | --- |
-| 1. Action<br>2. Warning code or "*" | — |
+| 1. Action<br/>2. Warning code or "*" | — |
 
 Action:
 
@@ -242,4 +242,3 @@ Increasing the limit on the number of dimensions in [GROUP BY](../../group_by.md
 Use this option with care, because the computational complexity of the query grows exponentially with the number of dimensions.
 
 {% endif %}
-

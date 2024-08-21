@@ -1,8 +1,8 @@
 #pragma once
 #include <ydb/core/formats/arrow/common/container.h>
 
-#include <ydb/core/tx/columnshard/engines/scheme/abstract/saver.h>
-#include <ydb/core/tx/columnshard/engines/scheme/abstract/loader.h>
+#include <ydb/core/formats/arrow/save_load/saver.h>
+#include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
 
 #include <ydb/core/tx/columnshard/common/snapshot.h>
@@ -21,18 +21,18 @@ public:
     using TPtr = std::shared_ptr<ISnapshotSchema>;
 
     virtual ~ISnapshotSchema() {}
-    virtual std::shared_ptr<TColumnLoader> GetColumnLoaderOptional(const ui32 columnId) const = 0;
-    std::shared_ptr<TColumnLoader> GetColumnLoaderVerified(const ui32 columnId) const;
-    std::shared_ptr<TColumnLoader> GetColumnLoaderOptional(const std::string& columnName) const;
-    std::shared_ptr<TColumnLoader> GetColumnLoaderVerified(const std::string& columnName) const;
+    virtual std::shared_ptr<NArrow::NAccessor::TColumnLoader> GetColumnLoaderOptional(const ui32 columnId) const = 0;
+    std::shared_ptr<NArrow::NAccessor::TColumnLoader> GetColumnLoaderVerified(const ui32 columnId) const;
+    std::shared_ptr<NArrow::NAccessor::TColumnLoader> GetColumnLoaderOptional(const std::string& columnName) const;
+    std::shared_ptr<NArrow::NAccessor::TColumnLoader> GetColumnLoaderVerified(const std::string& columnName) const;
 
     bool IsSpecialColumnId(const ui32 columnId) const;
 
-    virtual TColumnSaver GetColumnSaver(const ui32 columnId) const = 0;
-    TColumnSaver GetColumnSaver(const TString& columnName) const {
+    virtual NArrow::NAccessor::TColumnSaver GetColumnSaver(const ui32 columnId) const = 0;
+    NArrow::NAccessor::TColumnSaver GetColumnSaver(const TString& columnName) const {
         return GetColumnSaver(GetColumnId(columnName));
     }
-    TColumnSaver GetColumnSaver(const std::string& columnName) const {
+    NArrow::NAccessor::TColumnSaver GetColumnSaver(const std::string& columnName) const {
         return GetColumnSaver(TString(columnName.data(), columnName.size()));
     }
 

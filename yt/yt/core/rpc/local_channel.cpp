@@ -133,9 +133,9 @@ public:
         return 0;
     }
 
-    IMemoryUsageTrackerPtr GetChannelMemoryTracker() override
+    const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override
     {
-        return GetNullMemoryUsageTracker();
+        return MemoryUsageTracker_;
     }
 
 private:
@@ -143,6 +143,7 @@ private:
     using TSessionPtr = TIntrusivePtr<TSession>;
 
     const IServerPtr Server_;
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_ = GetNullMemoryUsageTracker();
 
     TSingleShotCallbackList<void(const TError&)> Terminated_;
 

@@ -94,14 +94,12 @@ TResourceBrokerConfig MakeResourceBrokerTestConfig() {
     return config;
 }
 
-NKikimrConfig::TTableServiceConfig::TResourceManager MakeKqpResourceManagerConfig(
-        bool EnablePublishResourcesByExchanger = false) {
+NKikimrConfig::TTableServiceConfig::TResourceManager MakeKqpResourceManagerConfig() {
     NKikimrConfig::TTableServiceConfig::TResourceManager config;
 
     config.SetComputeActorsCount(100);
     config.SetPublishStatisticsIntervalSec(0);
     config.SetQueryMemoryLimit(1000);
-    config.SetEnablePublishResourcesByExchanger(EnablePublishResourcesByExchanger);
 
     auto* infoExchangerRetrySettings = config.MutableInfoExchangerSettings();
     auto* exchangerSettings = infoExchangerRetrySettings->MutableExchangerSettings();
@@ -186,7 +184,7 @@ public:
     }
 
     TIntrusivePtr<NRm::TTxState> MakeTx(ui64 txId, std::shared_ptr<NRm::IKqpResourceManager> rm) {
-        return MakeIntrusive<NRm::TTxState>(txId, TInstant::Now(), rm->GetCounters());
+        return MakeIntrusive<NRm::TTxState>(txId, TInstant::Now(), rm->GetCounters(), "", (double)100, "");
     }
 
     TIntrusivePtr<NRm::TTaskState> MakeTask(ui64 taskId, TIntrusivePtr<NRm::TTxState> tx) {
@@ -276,12 +274,9 @@ public:
         UNIT_TEST(NotEnoughMemory);
         UNIT_TEST(NotEnoughExecutionUnits);
         UNIT_TEST(ResourceBrokerNotEnoughResources);
-        UNIT_TEST(SingleSnapshotByStateStorage);
         UNIT_TEST(SingleSnapshotByExchanger);
         UNIT_TEST(Reduce);
-        UNIT_TEST(SnapshotSharingByStateStorage);
         UNIT_TEST(SnapshotSharingByExchanger);
-        UNIT_TEST(NodesMembershipByStateStorage);
         UNIT_TEST(NodesMembershipByExchanger);
         UNIT_TEST(DisonnectNodes);
     UNIT_TEST_SUITE_END();
@@ -291,15 +286,12 @@ public:
     void NotEnoughMemory();
     void NotEnoughExecutionUnits();
     void ResourceBrokerNotEnoughResources();
-    void Snapshot(bool byExchanger);
-    void SingleSnapshotByStateStorage();
+    void Snapshot();
     void SingleSnapshotByExchanger();
     void Reduce();
-    void SnapshotSharing(bool byExchanger);
-    void SnapshotSharingByStateStorage();
+    void SnapshotSharing();
     void SnapshotSharingByExchanger();
-    void NodesMembership(bool byExchanger);
-    void NodesMembershipByStateStorage();
+    void NodesMembership();
     void NodesMembershipByExchanger();
     void DisonnectNodes();
 
@@ -450,8 +442,8 @@ void KqpRm::ResourceBrokerNotEnoughResources() {
     AssertResourceBrokerSensors(0, 1000, 0, 0, 1);
 }
 
-void KqpRm::Snapshot(bool byExchanger) {
-    StartRms({MakeKqpResourceManagerConfig(byExchanger), MakeKqpResourceManagerConfig(byExchanger)});
+void KqpRm::Snapshot() {
+    StartRms({MakeKqpResourceManagerConfig(), MakeKqpResourceManagerConfig()});
     NKikimr::TActorSystemStub stub;
 
     auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
@@ -490,12 +482,8 @@ void KqpRm::Snapshot(bool byExchanger) {
     CheckSnapshot(0, {{1000, 100}, {1000, 100}}, rm);
 }
 
-void KqpRm::SingleSnapshotByStateStorage() {
-    Snapshot(false);
-}
-
 void KqpRm::SingleSnapshotByExchanger() {
-    Snapshot(true);
+    Snapshot();
 }
 
 void KqpRm::Reduce() {
@@ -537,8 +525,8 @@ void KqpRm::Reduce() {
     AssertResourceBrokerSensors(0, 30, 0, 0, 1);
 }
 
-void KqpRm::SnapshotSharing(bool byExchanger) {
-    StartRms({MakeKqpResourceManagerConfig(byExchanger), MakeKqpResourceManagerConfig(byExchanger)});
+void KqpRm::SnapshotSharing() {
+    StartRms({MakeKqpResourceManagerConfig(), MakeKqpResourceManagerConfig()});
     NKikimr::TActorSystemStub stub;
 
     auto rm_first = GetKqpResourceManager(ResourceManagers[0].NodeId());
@@ -607,16 +595,12 @@ void KqpRm::SnapshotSharing(bool byExchanger) {
     }
 }
 
-void KqpRm::SnapshotSharingByStateStorage() {
-    SnapshotSharing(false);
-}
-
 void KqpRm::SnapshotSharingByExchanger() {
-    SnapshotSharing(true);
+    SnapshotSharing();
 }
 
-void KqpRm::NodesMembership(bool byExchanger) {
-    StartRms({MakeKqpResourceManagerConfig(byExchanger), MakeKqpResourceManagerConfig(byExchanger)});
+void KqpRm::NodesMembership() {
+    StartRms({MakeKqpResourceManagerConfig(), MakeKqpResourceManagerConfig()});
     NKikimr::TActorSystemStub stub;
 
     auto rm_first = GetKqpResourceManager(ResourceManagers[0].NodeId());
@@ -641,16 +625,13 @@ void KqpRm::NodesMembership(bool byExchanger) {
     CheckSnapshot(0, {{1000, 100}}, rm_first);
 }
 
-void KqpRm::NodesMembershipByStateStorage() {
-    NodesMembership(false);
-}
 
 void KqpRm::NodesMembershipByExchanger() {
-    NodesMembership(true);
+    NodesMembership();
 }
 
 void KqpRm::DisonnectNodes() {
-    StartRms({MakeKqpResourceManagerConfig(true), MakeKqpResourceManagerConfig(true)});
+    StartRms({MakeKqpResourceManagerConfig(), MakeKqpResourceManagerConfig()});
     NKikimr::TActorSystemStub stub;
 
     auto rm_first = GetKqpResourceManager(ResourceManagers[0].NodeId());

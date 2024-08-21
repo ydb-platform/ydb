@@ -39,13 +39,14 @@ namespace NYT::NApi::NRpcProxy {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using namespace NYPath;
-using namespace NYson;
+using namespace NConcurrency;
+using namespace NObjectClient;
 using namespace NTableClient;
 using namespace NTabletClient;
-using namespace NObjectClient;
 using namespace NTransactionClient;
+using namespace NYPath;
 using namespace NYTree;
+using namespace NYson;
 
 using NYT::ToProto;
 using NYT::FromProto;
@@ -391,7 +392,7 @@ TFuture<void> TClientBase::MultisetAttributesNode(
     std::sort(children.begin(), children.end());
     for (const auto& [attribute, value] : children) {
         auto* protoSubrequest = req->add_subrequests();
-        protoSubrequest->set_attribute(attribute);
+        protoSubrequest->set_attribute(ToProto<TProtobufString>(attribute));
         protoSubrequest->set_value(ConvertToYsonString(value).ToString());
     }
 
@@ -747,7 +748,10 @@ TFuture<ITableReaderPtr> TClientBase::CreateTableReader(
     ToProto(req->mutable_transactional_options(), options);
     ToProto(req->mutable_suppressable_access_tracking_options(), options);
 
-    return NRpcProxy::CreateTableReader(std::move(req));
+    return NRpc::CreateRpcClientInputStream(std::move(req))
+        .Apply(BIND([=] (IAsyncZeroCopyInputStreamPtr inputStream) {
+            return NRpcProxy::CreateTableReader(std::move(inputStream));
+        }));
 }
 
 TFuture<ITableWriterPtr> TClientBase::CreateTableWriter(
@@ -766,7 +770,20 @@ TFuture<ITableWriterPtr> TClientBase::CreateTableWriter(
 
     ToProto(req->mutable_transactional_options(), options);
 
-    return NRpcProxy::CreateTableWriter(std::move(req));
+    auto schema = New<TTableSchema>();
+    return NRpc::CreateRpcClientOutputStream(
+        std::move(req),
+        BIND ([=] (const TSharedRef& metaRef) {
+            NApi::NRpcProxy::NProto::TWriteTableMeta meta;
+            if (!TryDeserializeProto(&meta, metaRef)) {
+                THROW_ERROR_EXCEPTION("Failed to deserialize schema for table writer");
+            }
+
+            FromProto(schema.Get(), meta.schema());
+        }))
+        .Apply(BIND([=] (IAsyncZeroCopyOutputStreamPtr outputStream) {
+            return NRpcProxy::CreateTableWriter(std::move(outputStream), std::move(schema));
+        })).As<ITableWriterPtr>();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -861,6 +878,7 @@ TFuture<TVersionedLookupRowsResult> TClientBase::VersionedLookupRows(
             MergeRefsToRef<TRpcProxyClientBufferTag>(rsp->Attachments()));
         return TVersionedLookupRowsResult{
             .Rowset = std::move(rowset),
+            .UnavailableKeyIndexes = FromProto<std::vector<int>>(rsp->unavailable_key_indexes()),
         };
     }));
 }
@@ -935,6 +953,7 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookupRows(
                 MergeRefsToRef<TRpcProxyClientBufferTag>(std::move(subresponseAttachments)));
             result.push_back({
                 .Rowset = std::move(rowset),
+                .UnavailableKeyIndexes = FromProto<std::vector<int>>(subresponse.unavailable_key_indexes()),
             });
 
             beginAttachmentIndex = endAttachmentIndex;

@@ -120,8 +120,8 @@ private:
         serverSettings.SetFrFactory(functionRegistryFactory);
     }
 
-    NKikimr::Tests::TServerSettings GetServerSettings() {
-        ui32 msgBusPort = PortManager_.GetPort();
+    NKikimr::Tests::TServerSettings GetServerSettings(ui32 grpcPort) {
+        const ui32 msgBusPort = PortManager_.GetPort();
 
         NKikimr::Tests::TServerSettings serverSettings(msgBusPort, Settings_.AppConfig.GetAuthConfig(), Settings_.AppConfig.GetPQConfig());
         serverSettings.SetNodeCount(Settings_.NodeCount);
@@ -142,6 +142,7 @@ private:
         serverSettings.SetYtGateway(Settings_.YtGateway);
         serverSettings.S3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
         serverSettings.SetInitializeFederatedQuerySetupFactory(true);
+        serverSettings.SetVerbose(false);
 
         SetLoggerSettings(serverSettings);
         SetFunctionRegistry(serverSettings);
@@ -152,14 +153,22 @@ private:
             serverSettings.SetNeedStatsCollectors(true);
         }
 
+        if (Settings_.GrpcEnabled) {
+            serverSettings.SetGrpcPort(grpcPort);
+        }
+
         return serverSettings;
     }
 
-    void InitializeServer() {
-        NKikimr::Tests::TServerSettings serverSettings = GetServerSettings();
+    void InitializeServer(ui32 grpcPort) {
+        NKikimr::Tests::TServerSettings serverSettings = GetServerSettings(grpcPort);
 
         Server_ = MakeHolder<NKikimr::Tests::TServer>(serverSettings);
         Server_->GetRuntime()->SetDispatchTimeout(TDuration::Max());
+
+        if (Settings_.GrpcEnabled) {
+            Server_->EnableGRpc(grpcPort);
+        }
 
         Client_ = MakeHolder<NKikimr::Tests::TClient>(serverSettings);
         Client_->InitRootScheme();
@@ -190,7 +199,7 @@ private:
 
     void WaitResourcesPublishing() const {
         auto promise = NThreading::NewPromise();
-        GetRuntime()->Register(CreateResourcesWaiterActor(promise, Settings_.NodeCount));
+        GetRuntime()->Register(CreateResourcesWaiterActor(promise, Settings_.NodeCount), 0, GetRuntime()->GetAppData().SystemPoolId);
 
         try {
             promise.GetFuture().GetValue(Settings_.InitializationTimeout);
@@ -204,14 +213,20 @@ public:
         : Settings_(settings)
         , CoutColors_(NColorizer::AutoColors(Cout))
     {
+        const ui32 grpcPort = Settings_.GrpcPort ? Settings_.GrpcPort : PortManager_.GetPort();
+
         InitializeYqlLogger();
-        InitializeServer();
+        InitializeServer(grpcPort);
         WaitResourcesPublishing();
 
         if (Settings_.MonitoringEnabled) {
             for (ui32 nodeIndex = 0; nodeIndex < Settings_.NodeCount; ++nodeIndex) {
                 Cout << CoutColors_.Cyan() << "Monitoring port" << (Settings_.NodeCount > 1 ? TStringBuilder() << " for node " << nodeIndex + 1 : TString()) << ": " << CoutColors_.Default() << Server_->GetRuntime()->GetMonPort(nodeIndex) << Endl;
             }
+        }
+
+        if (Settings_.GrpcEnabled) {
+            Cout << CoutColors_.Cyan() << "gRPC port: " << CoutColors_.Default() << grpcPort << Endl;
         }
     }
 
@@ -232,7 +247,7 @@ public:
     TQueryResponse QueryRequest(const TRequestOptions& query, TProgressCallback progressCallback) const {
         auto request = GetQueryRequest(query);
         auto promise = NThreading::NewPromise<TQueryResponse>();
-        GetRuntime()->Register(CreateRunScriptActorMock(std::move(request), promise, progressCallback));
+        GetRuntime()->Register(CreateRunScriptActorMock(std::move(request), promise, progressCallback), 0, GetRuntime()->GetAppData().UserPoolId);
 
         return promise.GetFuture().GetValueSync();
     }
@@ -260,7 +275,7 @@ public:
         auto sizeLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultSizeLimit();
         NActors::IActor* fetchActor = NKikimr::NKqp::CreateGetScriptExecutionResultActor(edgeActor, Settings_.DomainName, executionId, resultSetId, 0, rowsLimit, sizeLimit, TInstant::Max());
 
-        GetRuntime()->Register(fetchActor, nodeIndex);
+        GetRuntime()->Register(fetchActor, nodeIndex, GetRuntime()->GetAppData(nodeIndex).UserPoolId);
 
         return GetRuntime()->GrabEdgeEvent<NKikimr::NKqp::TEvFetchScriptResultsResponse>(edgeActor);
     }
@@ -274,7 +289,7 @@ public:
 
     void QueryRequestAsync(const TRequestOptions& query) {
         if (!AsyncQueryRunnerActorId_) {
-            AsyncQueryRunnerActorId_ = GetRuntime()->Register(CreateAsyncQueryRunnerActor(Settings_.InFlightLimit));
+            AsyncQueryRunnerActorId_ = GetRuntime()->Register(CreateAsyncQueryRunnerActor(Settings_.AsyncQueriesSettings), 0, GetRuntime()->GetAppData().UserPoolId);
         }
 
         auto request = GetQueryRequest(query);

@@ -1677,6 +1677,14 @@ void TPDisk::WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 user
             "Incorrect disk parameters! Total chunks# " << diskSizeChunks
             << ", System chunks needed# " << format.SystemChunkCount << ", cant run with < 3 free chunks!"
             << " Debug format# " << format.ToString());
+
+        ChunkState = TVector<TChunkState>(diskSizeChunks);
+        for (ui32 i = 0; i < format.SystemChunkCount; ++i) {
+            ChunkState[i].OwnerId = OwnerSystem;
+        }
+        for (ui32 i = format.SystemChunkCount; i < diskSizeChunks; ++i) {
+            ChunkState[i].OwnerId = OwnerUnallocated;
+        }
     }
     // Trim the entire device
     if (trimEntireDevice && DriveModel.IsTrimSupported()) {
@@ -1703,7 +1711,7 @@ void TPDisk::WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 user
     if (metadata) {
         // Prepare chunks for metadata, if needed.
         InitFormattedMetadata();
-        WriteMetadataSync(std::move(*metadata));
+        WriteMetadataSync(std::move(*metadata), format);
     }
 
     // Prepare initial SysLogRecord
@@ -2281,6 +2289,7 @@ void TPDisk::ProcessChunkReadQueue() {
                 bool isComplete = false;
                 ui8 priorityClass = read->PriorityClass;
                 NHPTimer::STime creationTime = read->CreationTime;
+                LWTRACK(PDiskChunkReadPiecesSendToDevice, read->Orbit, PDiskId);
                 if (!read->IsReplied) {
                     LOG_DEBUG_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDiskId
                         << " ReqId# " << reqId
@@ -3231,7 +3240,7 @@ void TPDisk::PushRequestToForseti(TRequestBase *request) {
                     // Schedule small job.
                     auto piece = new TChunkReadPiece(read, idx * smallJobSize,
                             smallJobSize * Format.SectorSize, false, std::move(span));
-                    LWTRACK(PDiskChunkReadPieceAddToScheduler, read->Orbit, PDiskId, idx, idx * smallJobSize,
+                    LWTRACK(PDiskChunkReadPieceAddToScheduler, read->Orbit, PDiskId, idx, idx * smallJobSize * Format.SectorSize,
                             smallJobSize * Format.SectorSize);
                     piece->EstimateCost(DriveModel);
                     piece->SelfPointer = piece;
@@ -3243,7 +3252,7 @@ void TPDisk::PushRequestToForseti(TRequestBase *request) {
                 auto piece = new TChunkReadPiece(read, smallJobCount * smallJobSize,
                         largeJobSize * Format.SectorSize, true, std::move(span));
                 LWTRACK(PDiskChunkReadPieceAddToScheduler, read->Orbit, PDiskId, smallJobCount,
-                        smallJobCount * smallJobSize, largeJobSize * Format.SectorSize);
+                        smallJobCount * smallJobSize * Format.SectorSize, largeJobSize * Format.SectorSize);
                 piece->EstimateCost(DriveModel);
                 piece->SelfPointer = piece;
                 AddJobToForseti(cbs, piece, request->JobKind);

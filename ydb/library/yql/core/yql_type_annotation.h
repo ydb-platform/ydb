@@ -170,7 +170,7 @@ public:
     explicit TColumnOrder(const TVector<TString>& order);
     TString AddColumn(const TString& name);
 
-    bool IsDuplicated(const TString& name) const;
+    bool IsDuplicatedIgnoreCase(const TString& name) const;
 
     void Shrink(size_t remain);
 
@@ -213,6 +213,7 @@ public:
 private:
     THashMap<TString, TString> GeneratedToOriginal_;
     THashMap<TString, uint64_t> UseCount_;
+    THashMap<TString, uint64_t> UseCountLcase_;
     // (name, generated_name)
     TVector<TOrderedItem> Order_;
 };
@@ -280,6 +281,7 @@ struct TUdfCachedInfo {
 };
 
 struct TTypeAnnotationContext: public TThrRefBase {
+    THashMap<TString, TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>> ColumnStatisticsByTableName;
     THashMap<const TExprNode*, std::shared_ptr<TOptimizerStatistics>> StatisticsMap;
     TIntrusivePtr<ITimeProvider> TimeProvider;
     TIntrusivePtr<IRandomProvider> RandomProvider;
@@ -334,6 +336,8 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui32 FolderSubDirsLimit = 1000;
     bool UseBlocks = false;
     EBlockEngineMode BlockEngineMode = EBlockEngineMode::Disable;
+    THashMap<TString, size_t> NoBlockRewriteCallableStats;
+    THashMap<TString, size_t> NoBlockRewriteTypeStats;
     TMaybe<bool> PgEmitAggApply;
     IArrowResolver::TPtr ArrowResolver;
     TFileStoragePtr FileStorage;
@@ -441,6 +445,14 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool IsBlockEngineEnabled() const {
         return BlockEngineMode != EBlockEngineMode::Disable || UseBlocks;
     }
+
+    void IncNoBlockCallable(TStringBuf callableName);
+    void IncNoBlockType(const TTypeAnnotationNode& type);
+    void IncNoBlockType(ETypeAnnotationKind kind);
+    void IncNoBlockType(NUdf::EDataSlot slot);
+
+    TVector<TString> GetTopNoBlocksCallables(size_t maxCount) const;
+    TVector<TString> GetTopNoBlocksTypes(size_t maxCount) const;
 };
 
 template <> inline

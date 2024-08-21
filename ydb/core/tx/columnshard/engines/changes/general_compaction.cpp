@@ -81,7 +81,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
     auto resultSchema = context.SchemaVersions.GetLastSchema();
     auto shardingActual = context.SchemaVersions.GetShardingInfoActual(GranuleMeta->GetPathId());
 
-    std::shared_ptr<TSerializationStats> stats = std::make_shared<TSerializationStats>();
+    std::shared_ptr<NArrow::NSplitter::TSerializationStats> stats = std::make_shared<NArrow::NSplitter::TSerializationStats>();
     std::shared_ptr<TFilteredSnapshotSchema> resultFiltered;
     NCompaction::TMerger merger(context, SaverContext);
     {
@@ -115,12 +115,11 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
                 pkColumnIds.emplace((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG);
             }
         }
-
         resultFiltered = std::make_shared<TFilteredSnapshotSchema>(resultSchema, dataColumnIds);
         {
             auto seqDataColumnIds = dataColumnIds;
             for (auto&& i : pkColumnIds) {
-                AFL_VERIFY(seqDataColumnIds.erase(i));
+                AFL_VERIFY(seqDataColumnIds.erase(i))("id", i);
             }
             THashSet<ui64> usedPortionIds;
             for (auto&& i : portions) {
@@ -142,6 +141,9 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
         shardingActualVersion = shardingActual->GetSnapshotVersion();
     }
     AppendedPortions = merger.Execute(stats, CheckPoints, resultFiltered, GranuleMeta->GetPathId(), shardingActualVersion);
+    for (auto&& p : AppendedPortions) {
+        p.GetPortionConstructor().MutableMeta().UpdateRecordsMeta(NPortion::EProduced::SPLIT_COMPACTED);
+    }
 }
 
 TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {
@@ -193,17 +195,15 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
 void TGeneralCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
     TBase::DoWriteIndexOnComplete(self, context);
     if (self) {
-        self->IncCounter(
-            context.FinishedSuccessfully ? NColumnShard::COUNTER_SPLIT_COMPACTION_SUCCESS : NColumnShard::COUNTER_SPLIT_COMPACTION_FAIL);
-        self->IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_BLOBS_WRITTEN, context.BlobsWritten);
-        self->IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_BYTES_WRITTEN, context.BytesWritten);
+        self->Counters.GetTabletCounters()->OnCompactionWriteIndexCompleted(
+            context.FinishedSuccessfully, context.BlobsWritten, context.BytesWritten);
     }
 }
 
 void TGeneralCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     TBase::DoStart(self);
     auto& g = *GranuleMeta;
-    self.CSCounters.OnSplitCompactionInfo(
+    self.Counters.GetCSCounters().OnSplitCompactionInfo(
         g.GetAdditiveSummary().GetCompacted().GetTotalPortionsSize(), g.GetAdditiveSummary().GetCompacted().GetPortionsCount());
 }
 
@@ -213,7 +213,7 @@ NColumnShard::ECumulativeCounters TGeneralCompactColumnEngineChanges::GetCounter
 
 void TGeneralCompactColumnEngineChanges::AddCheckPoint(
     const NArrow::NMerger::TSortableBatchPosition& position, const bool include) {
-    CheckPoints.AddPosition(position, include);
+    CheckPoints.InsertPosition(position, include);
 }
 
 std::shared_ptr<TGeneralCompactColumnEngineChanges::IMemoryPredictor> TGeneralCompactColumnEngineChanges::BuildMemoryPredictor() {

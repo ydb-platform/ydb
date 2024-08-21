@@ -50,9 +50,13 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> UseLlvm;
     NCommon::TConfSetting<bool, false> EnableLlvm;
     NCommon::TConfSetting<NDq::EHashJoinMode, false> HashJoinMode;
-    NCommon::TConfSetting<TString, false> OverrideStatistics;
     NCommon::TConfSetting<ui64, false> EnableSpillingNodes;
     NCommon::TConfSetting<TString, false> OverridePlanner;
+    NCommon::TConfSetting<bool, false> UseGraceJoinCoreForMap;
+
+    NCommon::TConfSetting<TString, false> OptOverrideStatistics;
+    NCommon::TConfSetting<TString, false> OptCardinalityHints;
+    NCommon::TConfSetting<TString, false> OptJoinAlgoHints;
 
     /* Disable optimizer rules */
     NCommon::TConfSetting<bool, false> OptDisableTopSort;

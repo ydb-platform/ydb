@@ -54,6 +54,7 @@
 #include <util/generic/size_literals.h>
 #include <util/stream/file.h>
 #include <util/string/builder.h>
+#include <util/folder/dirut.h>
 
 #include <memory>
 #include <vector>
@@ -540,6 +541,23 @@ private:
         TTypeEnvironment& typeEnv,
         TUserDataTable& files) const
     {
+        if (!localRun) {
+            for (const auto& file : files) {
+                const auto& fileName = file.first.Alias();
+                const auto& block = file.second;
+                if (fileName == NCommon::PgCatalogFileName || block.Usage.Test(EUserDataBlockUsage::PgExt)) {
+                    auto f = IDqGateway::TFileResource();
+                    auto filePath = block.FrozenFile->GetPath().GetPath();
+                    f.SetLocalPath(RealPath(filePath));
+                    f.SetName(fileName);
+                    f.SetObjectId(block.FrozenFile->GetMd5());
+                    f.SetObjectType(IDqGateway::TFileResource::EUSER_FILE);
+                    f.SetSize(block.FrozenFile->GetSize());
+                    uploadList->emplace(f);
+                }
+            }
+        }
+
         if (!State->Settings->_SkipRevisionCheck.Get().GetOrElse(false)) {
             if (State->VanillaJobPath.empty()) {
                 auto f = IDqGateway::TFileResource();

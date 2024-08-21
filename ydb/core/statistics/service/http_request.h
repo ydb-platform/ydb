@@ -31,10 +31,9 @@ private:
     STFUNC(StateWork) {
         switch(ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-            hFunc(TEvStatistics::TEvScanTableAccepted, Handle);
-            hFunc(TEvStatistics::TEvGetScanStatusResponse, Handle);
+            hFunc(TEvStatistics::TEvAnalyzeStatusResponse, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
-            IgnoreFunc(TEvStatistics::TEvScanTableResponse);
+            IgnoreFunc(TEvStatistics::TEvAnalyzeResponse);
             default:
                 LOG_CRIT_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
                     "NStat::THttpRequest: unexpected event# " << ev->GetTypeRewrite());
@@ -42,8 +41,7 @@ private:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
-    void Handle(TEvStatistics::TEvScanTableAccepted::TPtr&);
-    void Handle(TEvStatistics::TEvGetScanStatusResponse::TPtr& ev);
+    void Handle(TEvStatistics::TEvAnalyzeStatusResponse::TPtr& ev);
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&);
 
     void ResolveSuccess();
@@ -57,6 +55,7 @@ private:
     const TActorId ReplyToActorId;
 
     TPathId PathId;
+    TString OperationId;
     ui64 StatisticsAggregatorId = 0;
 
     static const ui64 FirstRoundCookie = 1;

@@ -564,7 +564,7 @@ namespace NSQLTranslationV1 {
         bool DoInit(TContext& ctx, ISource* src) override;
     public:
         TWinCumeDist(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args);
-    };    
+    };
 
     class TWinNTile final: public TWinAggrEmulation {
         TPtr DoClone() const final {
@@ -576,7 +576,7 @@ namespace NSQLTranslationV1 {
 
     private:
         TSourcePtr FakeSource;
-    };    
+    };
 
     class TWinLeadLag final: public TWinAggrEmulation {
         TPtr DoClone() const final {
@@ -723,7 +723,7 @@ namespace NSQLTranslationV1 {
         void Merge(const TColumns& columns);
         void SetPrefix(const TString& prefix);
         void SetAll();
-        bool IsColumnPossible(TContext& ctx, const TString& column);
+        bool IsColumnPossible(TContext& ctx, const TString& column) const;
     };
 
     class TSortSpecification: public TSimpleRefCount<TSortSpecification> {
@@ -838,6 +838,7 @@ namespace NSQLTranslationV1 {
         void SetAsNotReliable();
         bool IsReliable() const;
         bool IsUseSourceAsColumn() const;
+        bool IsUseSource() const;
         bool CanBeType() const;
 
     private:
@@ -1242,6 +1243,12 @@ namespace NSQLTranslationV1 {
         bool Temporary = false;
     };
 
+    struct TTableRef;
+    struct TAnalyzeParams {
+        std::shared_ptr<TTableRef> Table;
+        TVector<TString> Columns;
+    };
+
     struct TAlterTableParameters {
         TVector<TColumnSchema> AddColumns;
         TVector<TString> DropColumns;
@@ -1295,17 +1302,31 @@ namespace NSQLTranslationV1 {
     };
     struct TTopicSettings {
         NYql::TResetableSetting<TNodePtr, void> MinPartitions;
-        NYql::TResetableSetting<TNodePtr, void> PartitionsLimit;
+        NYql::TResetableSetting<TNodePtr, void> MaxPartitions;
         NYql::TResetableSetting<TNodePtr, void> RetentionPeriod;
         NYql::TResetableSetting<TNodePtr, void> RetentionStorage;
         NYql::TResetableSetting<TNodePtr, void> SupportedCodecs;
         NYql::TResetableSetting<TNodePtr, void> PartitionWriteSpeed;
         NYql::TResetableSetting<TNodePtr, void> PartitionWriteBurstSpeed;
         NYql::TResetableSetting<TNodePtr, void> MeteringMode;
+        NYql::TResetableSetting<TNodePtr, void> AutoPartitioningStabilizationWindow;
+        NYql::TResetableSetting<TNodePtr, void> AutoPartitioningUpUtilizationPercent;
+        NYql::TResetableSetting<TNodePtr, void> AutoPartitioningDownUtilizationPercent;
+        NYql::TResetableSetting<TNodePtr, void> AutoPartitioningStrategy;
 
         bool IsSet() const {
-            return MinPartitions || PartitionsLimit || RetentionPeriod || RetentionStorage
-                   || SupportedCodecs || PartitionWriteSpeed|| PartitionWriteBurstSpeed || MeteringMode
+            return MinPartitions ||
+                   MaxPartitions ||
+                   RetentionPeriod ||
+                   RetentionStorage ||
+                   SupportedCodecs ||
+                   PartitionWriteSpeed ||
+                   PartitionWriteBurstSpeed ||
+                   MeteringMode ||
+                   AutoPartitioningStabilizationWindow ||
+                   AutoPartitioningUpUtilizationPercent ||
+                   AutoPartitioningDownUtilizationPercent ||
+                   AutoPartitioningStrategy
             ;
         }
     };
@@ -1313,6 +1334,7 @@ namespace NSQLTranslationV1 {
     struct TCreateTopicParameters {
         TVector<TTopicConsumerDescription> Consumers;
         TTopicSettings TopicSettings;
+        bool ExistingOk;
     };
 
     struct TAlterTopicParameters {
@@ -1320,6 +1342,11 @@ namespace NSQLTranslationV1 {
         THashMap<TString, TTopicConsumerDescription> AlterConsumers;
         TVector<TIdentifier> DropConsumers;
         TTopicSettings TopicSettings;
+        bool MissingOk;
+    };
+
+    struct TDropTopicParameters {
+        bool MissingOk;
     };
 
     TString IdContent(TContext& ctx, const TString& str);
@@ -1454,7 +1481,8 @@ namespace NSQLTranslationV1 {
                               TScopedStatePtr scoped);
     TNodePtr BuildAlterTopic(TPosition pos, const TTopicRef& tr, const TAlterTopicParameters& params,
                               TScopedStatePtr scoped);
-    TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& topic, TScopedStatePtr scoped);
+    TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& topic, const TDropTopicParameters& params,
+                            TScopedStatePtr scoped);
 
     template<class TContainer>
     TMaybe<TString> FindMistypeIn(const TContainer& container, const TString& name) {

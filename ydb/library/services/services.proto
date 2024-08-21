@@ -207,6 +207,7 @@ enum EServiceKikimr {
     DB_METADATA_CACHE = 501;
 
     MEMORY_PROFILER = 510;
+    MEMORY_CONTROLLER = 511;
 
     DATASHARD_BACKUP = 522;
 
@@ -345,6 +346,7 @@ enum EServiceKikimr {
 
     DB_POOL = 1167;
     YTS = 1168;
+    OBJECT_STORAGE_INFERENCINATOR = 1169;
 
     // 1024 - 1099 is reserved for nbs
 
@@ -394,6 +396,8 @@ enum EServiceKikimr {
 
     // Distributed storage debugging
     BS_REQUEST_COST = 2500;
+
+    GROUPED_MEMORY_LIMITER = 2700;
 };
 
 message TActivity {
@@ -1044,5 +1048,7 @@ message TActivity {
         BACKUP_PQ_OFFLOAD_ACTOR = 641;
         REPLICATION_CONTROLLER_TARGET_DESCRIBER = 642;
         SAMPLE_K_SCAN_ACTOR = 643;
+        MEMORY_CONTROLLER = 644;
+        BUILD_COLUMNS_SCAN_ACTOR = 645;
     };
 };

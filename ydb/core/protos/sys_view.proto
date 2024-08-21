@@ -44,6 +44,8 @@ message TPartitionStats {
     optional uint64 TxRejectedBySpace = 19;
 
     optional TTtlStats TtlStats = 20;
+
+    optional uint64 ByKeyFilterSize = 21;
 }
 
 message TPartitionStatsResult {

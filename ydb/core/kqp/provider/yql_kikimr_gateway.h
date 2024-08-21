@@ -14,6 +14,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/metadata/manager/abstract.h>
+#include <ydb/services/persqueue_v1/actors/events.h>
 
 #include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
@@ -407,6 +408,7 @@ ETableType GetTableTypeFromString(const TStringBuf& tableType);
 bool GetTopicMeteringModeFromString(const TString& meteringMode,
                                                         Ydb::Topic::MeteringMode& result);
 TVector<Ydb::Topic::Codec> GetTopicCodecsFromString(const TStringBuf& codecsStr);
+bool GetTopicAutoPartitioningStrategyFromString(const TString& strategy, Ydb::Topic::AutoPartitioningStrategy& result);
 
 
 enum class EStoreType : ui32 {
@@ -464,6 +466,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
     ui64 DataSize = 0;
     ui64 MemorySize = 0;
     ui32 ShardsCount = 0;
+    bool StatsLoaded = false;
 
     TInstant LastAccessTime;
     TInstant LastUpdateTime;
@@ -500,6 +503,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
         , Kind(static_cast<EKikimrTableKind>(message->GetKind()))
         , RecordsCount(message->GetRecordsCount())
         , DataSize(message->GetDataSize())
+        , StatsLoaded(message->GetStatsLoaded())
         , KeyColumnNames(message->GetKeyColunmNames().begin(), message->GetKeyColunmNames().end())
 
     {
@@ -565,6 +569,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
         PathId.ToMessage(message->MutablePathId());
         message->SetSchemaVersion(SchemaVersion);
         message->SetKind(static_cast<ui32>(Kind));
+        message->SetStatsLoaded(StatsLoaded);
         message->SetRecordsCount(RecordsCount);
         message->SetDataSize(DataSize);
         for(auto& [key, value] : Attributes) {
@@ -704,6 +709,13 @@ struct TCreateExternalTableSettings {
     TVector<std::pair<TString, TString>> SourceTypeParameters;
 };
 
+struct TAlterTopicSettings {
+    Ydb::Topic::AlterTopicRequest Request;
+    TString Name;
+    TString WorkDir;
+    bool MissingOk;
+};
+
 struct TSequenceSettings {
     TMaybe<i64> MinValue;
     TMaybe<i64> MaxValue;
@@ -814,6 +826,11 @@ struct TDropReplicationSettings {
     bool Cascade = false;
 };
 
+struct TAnalyzeSettings {
+    TString TablePath;
+    TVector<TString> Columns;
+};
+
 struct TKikimrListPathItem {
     TKikimrListPathItem(TString name, bool isDirectory) {
         Name = name;
@@ -884,7 +901,6 @@ public:
     struct TQueryResult : public TGenericResult {
         TString SessionId;
         TVector<NKikimrMiniKQL::TResult*> Results;
-        TMaybe<NKikimrKqp::TQueryProfile> Profile; // TODO: Deprecate.
         NKqpProto::TKqpStatsQuery QueryStats;
         std::unique_ptr<NKikimrKqp::TPreparedQuery> PreparingQuery;
         std::shared_ptr<const NKikimrKqp::TPreparedQuery> PreparedQuery;
@@ -978,11 +994,13 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> DropTable(const TString& cluster, const TDropTableSettings& settings) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> CreateTopic(const TString& cluster, Ydb::Topic::CreateTopicRequest&& request) = 0;
+    virtual NThreading::TFuture<TGenericResult> CreateTopic(const TString& cluster, Ydb::Topic::CreateTopicRequest&& request, bool existingOk) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> AlterTopic(const TString& cluster, Ydb::Topic::AlterTopicRequest&& request) = 0;
+    virtual NThreading::TFuture<TGenericResult> AlterTopic(const TString& cluster, Ydb::Topic::AlterTopicRequest&& request, bool missingOk) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> DropTopic(const TString& cluster, const TString& topic) = 0;
+    virtual NThreading::TFuture<NKikimr::NGRpcProxy::V1::TAlterTopicResponse> AlterTopicPrepared(TAlterTopicSettings&& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> DropTopic(const TString& cluster, const TString& topic, bool missingOk) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateReplication(const TString& cluster, const TCreateReplicationSettings& settings) = 0;
 
@@ -1039,6 +1057,8 @@ public:
     virtual NThreading::TFuture<TGenericResult> AlterExternalTable(const TString& cluster, const TAlterExternalTableSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> DropExternalTable(const TString& cluster, const TDropExternalTableSettings& settings, bool missingOk) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> Analyze(const TString& cluster, const TAnalyzeSettings& settings) = 0;
 
     virtual TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() = 0;
 

@@ -3,6 +3,8 @@
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/feature_flags.h>
 
+#include <util/string/vector.h>
+
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxInit : public TTxBase {
@@ -19,16 +21,18 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
 
         { // precharge
             auto sysParamsRowset = db.Table<Schema::SysParams>().Range().Select();
-            auto baseStatsRowset = db.Table<Schema::BaseStats>().Range().Select();
-            auto statisticsRowset = db.Table<Schema::Statistics>().Range().Select();
-            auto scanTablesRowset = db.Table<Schema::ScanTables>().Range().Select();
-            auto scanOperationsRowset = db.Table<Schema::ScanOperations>().Range().Select();
+            auto baseStatisticsRowset = db.Table<Schema::BaseStatistics>().Range().Select();
+            auto statisticsRowset = db.Table<Schema::ColumnStatistics>().Range().Select();
+            auto scheduleTraversalRowset = db.Table<Schema::ScheduleTraversals>().Range().Select();
+            auto forceTraversalOperationsRowset = db.Table<Schema::ForceTraversalOperations>().Range().Select();
+            auto forceTraversalTablesRowset = db.Table<Schema::ForceTraversalTables>().Range().Select();
 
             if (!sysParamsRowset.IsReady() ||
-                !baseStatsRowset.IsReady() ||
+                !baseStatisticsRowset.IsReady() ||
                 !statisticsRowset.IsReady() ||
-                !scanTablesRowset.IsReady() ||
-                !scanOperationsRowset.IsReady())
+                !scheduleTraversalRowset.IsReady() ||
+                !forceTraversalOperationsRowset.IsReady() ||
+                !forceTraversalTablesRowset.IsReady())
             {
                 return false;
             }
@@ -48,41 +52,36 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 switch (id) {
                     case Schema::SysParam_Database:
                         Self->Database = value;
-                        SA_LOG_D("[" << Self->TabletID() << "] Loading database: " << Self->Database);
+                        SA_LOG_D("[" << Self->TabletID() << "] Loaded database: " << Self->Database);
                         break;
-                    case Schema::SysParam_StartKey:
-                        Self->StartKey = TSerializedCellVec(value);
-                        SA_LOG_D("[" << Self->TabletID() << "] Loading start key");
+                    case Schema::SysParam_TraversalStartKey:
+                        Self->TraversalStartKey = TSerializedCellVec(value);
+                        SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal start key");
                         break;
-                    case Schema::SysParam_ScanTableOwnerId:
-                        Self->ScanTableId.PathId.OwnerId = FromString<ui64>(value);
-                        SA_LOG_D("[" << Self->TabletID() << "] Loading scan table owner id: "
-                            << Self->ScanTableId.PathId.OwnerId);
+                    case Schema::SysParam_TraversalTableOwnerId:
+                        Self->TraversalPathId.OwnerId = FromString<ui64>(value);
+                        SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal table owner id: "
+                            << Self->TraversalPathId.OwnerId);
                         break;
-                    case Schema::SysParam_ScanTableLocalPathId:
-                        Self->ScanTableId.PathId.LocalPathId = FromString<ui64>(value);
-                        SA_LOG_D("[" << Self->TabletID() << "] Loading scan table local path id: "
-                            << Self->ScanTableId.PathId.LocalPathId);
+                    case Schema::SysParam_TraversalTableLocalPathId:
+                        Self->TraversalPathId.LocalPathId = FromString<ui64>(value);
+                        SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal table local path id: "
+                            << Self->TraversalPathId.LocalPathId);
                         break;
-                    case Schema::SysParam_ScanStartTime: {
+                    case Schema::SysParam_TraversalStartTime: {
                         auto us = FromString<ui64>(value);
-                        Self->ScanStartTime = TInstant::MicroSeconds(us);
-                        SA_LOG_D("[" << Self->TabletID() << "] Loading scan start time: " << us);
+                        Self->TraversalStartTime = TInstant::MicroSeconds(us);
+                        SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal start time: " << us);
                         break;
                     }
-                    case Schema::SysParam_LastScanOperationId: {
-                        Self->LastScanOperationId = FromString<ui64>(value);
-                        SA_LOG_D("[" << Self->TabletID() << "] Loading last scan operation id: " << value);
-                        break;
-                    }
-                    case Schema::SysParam_IsColumnTable: {
-                        Self->IsColumnTable = FromString<bool>(value);
-                        SA_LOG_D("[" << Self->TabletID() << "] Loading IsColumnTable: " << value);
+                    case Schema::SysParam_TraversalIsColumnTable: {
+                        Self->TraversalIsColumnTable = FromString<bool>(value);
+                        SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal IsColumnTable: " << value);
                         break;
                     }
                     case Schema::SysParam_GlobalTraversalRound: {
                         Self->GlobalTraversalRound = FromString<ui64>(value);
-                        SA_LOG_D("[" << Self->TabletID() << "] Loading global traversal round: " << value);
+                        SA_LOG_D("[" << Self->TabletID() << "] Loaded global traversal round: " << value);
                         break;
                     }
                     default:
@@ -95,42 +94,42 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
             }
         }
 
-        // BaseStats
+        // BaseStatistics
         {
-            Self->BaseStats.clear();
+            Self->BaseStatistics.clear();
 
-            auto rowset = db.Table<Schema::BaseStats>().Range().Select();
+            auto rowset = db.Table<Schema::BaseStatistics>().Range().Select();
             if (!rowset.IsReady()) {
                 return false;
             }
 
             while (!rowset.EndOfSet()) {
-                ui64 schemeShardId = rowset.GetValue<Schema::BaseStats::SchemeShardId>();
-                TString stats = rowset.GetValue<Schema::BaseStats::Stats>();
+                ui64 schemeShardId = rowset.GetValue<Schema::BaseStatistics::SchemeShardId>();
+                TString stats = rowset.GetValue<Schema::BaseStatistics::Stats>();
 
-                Self->BaseStats[schemeShardId] = stats;
+                Self->BaseStatistics[schemeShardId] = stats;
 
                 if (!rowset.Next()) {
                     return false;
                 }
             }
 
-            SA_LOG_D("[" << Self->TabletID() << "] Loading base stats: "
-                << "schemeshard count# " << Self->BaseStats.size());
+            SA_LOG_D("[" << Self->TabletID() << "] Loaded BaseStatistics: "
+                << "schemeshard count# " << Self->BaseStatistics.size());
         }
 
-        // Statistics
+        // ColumnStatistics
         {
             Self->CountMinSketches.clear();
 
-            auto rowset = db.Table<Schema::Statistics>().Range().Select();
+            auto rowset = db.Table<Schema::ColumnStatistics>().Range().Select();
             if (!rowset.IsReady()) {
                 return false;
             }
 
             while (!rowset.EndOfSet()) {
-                ui32 columnTag = rowset.GetValue<Schema::Statistics::ColumnTag>();
-                TString sketch = rowset.GetValue<Schema::Statistics::CountMinSketch>();
+                ui32 columnTag = rowset.GetValue<Schema::ColumnStatistics::ColumnTag>();
+                TString sketch = rowset.GetValue<Schema::ColumnStatistics::CountMinSketch>();
 
                 Self->CountMinSketches[columnTag].reset(
                     TCountMinSketch::FromString(sketch.data(), sketch.size()));
@@ -140,78 +139,122 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 }
             }
 
-            SA_LOG_D("[" << Self->TabletID() << "] Loading statistics: "
+            SA_LOG_D("[" << Self->TabletID() << "] Loaded ColumnStatistics: "
                 << "column count# " << Self->CountMinSketches.size());
         }
 
-        // ScanTables
+        // ScheduleTraversals
         {
-            Self->ScanTablesByTime.Clear();
-            Self->ScanTablesBySchemeShard.clear();
-            Self->ScanTables.clear();
+            Self->ScheduleTraversalsByTime.Clear();
+            Self->ScheduleTraversalsBySchemeShard.clear();
+            Self->ScheduleTraversals.clear();
 
-            auto rowset = db.Table<Schema::ScanTables>().Range().Select();
+            auto rowset = db.Table<Schema::ScheduleTraversals>().Range().Select();
             if (!rowset.IsReady()) {
                 return false;
             }
 
             while (!rowset.EndOfSet()) {
-                ui64 ownerId = rowset.GetValue<Schema::ScanTables::OwnerId>();
-                ui64 localPathId = rowset.GetValue<Schema::ScanTables::LocalPathId>();
-                ui64 lastUpdateTime = rowset.GetValue<Schema::ScanTables::LastUpdateTime>();
-                ui64 schemeShardId = rowset.GetValue<Schema::ScanTables::SchemeShardId>();
-                bool isColumnTable = rowset.GetValue<Schema::ScanTables::IsColumnTable>();
+                ui64 ownerId = rowset.GetValue<Schema::ScheduleTraversals::OwnerId>();
+                ui64 localPathId = rowset.GetValue<Schema::ScheduleTraversals::LocalPathId>();
+                ui64 lastUpdateTime = rowset.GetValue<Schema::ScheduleTraversals::LastUpdateTime>();
+                ui64 schemeShardId = rowset.GetValue<Schema::ScheduleTraversals::SchemeShardId>();
+                bool isColumnTable = rowset.GetValue<Schema::ScheduleTraversals::IsColumnTable>();
 
                 auto pathId = TPathId(ownerId, localPathId);
 
-                TScanTable scanTable;
-                scanTable.PathId = pathId;
-                scanTable.SchemeShardId = schemeShardId;
-                scanTable.LastUpdateTime = TInstant::MicroSeconds(lastUpdateTime);
-                scanTable.IsColumnTable = isColumnTable;
+                TScheduleTraversal scheduleTraversal;
+                scheduleTraversal.PathId = pathId;
+                scheduleTraversal.SchemeShardId = schemeShardId;
+                scheduleTraversal.LastUpdateTime = TInstant::MicroSeconds(lastUpdateTime);
+                scheduleTraversal.IsColumnTable = isColumnTable;
 
-                auto [it, _] = Self->ScanTables.emplace(pathId, scanTable);
-                Self->ScanTablesByTime.Add(&it->second);
-                Self->ScanTablesBySchemeShard[schemeShardId].insert(pathId);
+                auto [it, _] = Self->ScheduleTraversals.emplace(pathId, scheduleTraversal);
+                Self->ScheduleTraversalsByTime.Add(&it->second);
+                Self->ScheduleTraversalsBySchemeShard[schemeShardId].insert(pathId);
 
                 if (!rowset.Next()) {
                     return false;
                 }
             }
 
-            SA_LOG_D("[" << Self->TabletID() << "] Loading scan tables: "
-                << "table count# " << Self->ScanTables.size());
+            SA_LOG_D("[" << Self->TabletID() << "] Loaded ScheduleTraversals: "
+                << "table count# " << Self->ScheduleTraversals.size());
         }
 
-        // ScanOperations
+        // ForceTraversalOperations
         {
-            Self->ScanOperations.Clear();
-            Self->ScanOperationsByPathId.clear();
+            Self->ForceTraversals.clear();
 
-            auto rowset = db.Table<Schema::ScanOperations>().Range().Select();
+            auto rowset = db.Table<Schema::ForceTraversalOperations>().Range().Select();
             if (!rowset.IsReady()) {
                 return false;
             }
 
             while (!rowset.EndOfSet()) {
-                ui64 operationId = rowset.GetValue<Schema::ScanOperations::OperationId>();
-                ui64 ownerId = rowset.GetValue<Schema::ScanOperations::OwnerId>();
-                ui64 localPathId = rowset.GetValue<Schema::ScanOperations::LocalPathId>();
+                TString operationId = rowset.GetValue<Schema::ForceTraversalOperations::OperationId>();
+                TString types = rowset.GetValue<Schema::ForceTraversalOperations::Types>();
 
-                auto pathId = TPathId(ownerId, localPathId);
-
-                TScanOperation& operation = Self->ScanOperationsByPathId[pathId];
-                operation.PathId = pathId;
-                operation.OperationId = operationId;
-                Self->ScanOperations.PushBack(&operation);
+                TForceTraversalOperation operation {
+                    .OperationId = operationId,
+                    .Tables = {},
+                    .Types = types,
+                    .ReplyToActorId = {}
+                };
+                Self->ForceTraversals.emplace_back(operation);
 
                 if (!rowset.Next()) {
                     return false;
                 }
             }
 
-            SA_LOG_D("[" << Self->TabletID() << "] Loading scan operations: "
-                << "table count# " << Self->ScanOperationsByPathId.size());
+            SA_LOG_D("[" << Self->TabletID() << "] Loaded ForceTraversalOperations: "
+                << "table count# " << Self->ForceTraversals.size());
+        }
+
+        // ForceTraversalTables
+        {
+            auto rowset = db.Table<Schema::ForceTraversalTables>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            size_t size = 0;
+            while (!rowset.EndOfSet()) {
+                ++size;
+
+                TString operationId = rowset.GetValue<Schema::ForceTraversalTables::OperationId>();
+                ui64 ownerId = rowset.GetValue<Schema::ForceTraversalTables::OwnerId>();
+                ui64 localPathId = rowset.GetValue<Schema::ForceTraversalTables::LocalPathId>();
+                TString columnTags = rowset.GetValue<Schema::ForceTraversalTables::ColumnTags>();
+                TForceTraversalTable::EStatus status = (TForceTraversalTable::EStatus)rowset.GetValue<Schema::ForceTraversalTables::Status>();
+
+                if (status == TForceTraversalTable::EStatus::AnalyzeStarted) {
+                    // Resent TEvAnalyzeTable to shards
+                    status = TForceTraversalTable::EStatus::None;
+                }
+
+                auto pathId = TPathId(ownerId, localPathId);
+
+                TForceTraversalTable operationTable {
+                    .PathId = pathId,
+                    .ColumnTags = columnTags,
+                    .Status = status,
+                };
+                auto forceTraversalOperation = Self->ForceTraversalOperation(operationId);
+                if (!forceTraversalOperation) {
+                    SA_LOG_E("[" << Self->TabletID() << "] ForceTraversalTables contains unknown operationId: " << operationId);
+                    continue;
+                }
+                forceTraversalOperation->Tables.emplace_back(operationTable);
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+
+            SA_LOG_D("[" << Self->TabletID() << "] Loaded ForceTraversalTables: "
+                << "table count# " << size);
         }
 
         return true;
@@ -227,11 +270,14 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
         Self->SubscribeForConfigChanges(ctx);
 
         Self->Schedule(Self->PropagateInterval, new TEvPrivate::TEvPropagate());
-        Self->Schedule(Self->ScheduleScanIntervalTime, new TEvPrivate::TEvScheduleScan());
+        Self->Schedule(Self->TraversalPeriod, new TEvPrivate::TEvScheduleTraversal());
+        Self->Schedule(Self->SendAnalyzePeriod, new TEvPrivate::TEvSendAnalyze());
 
         Self->InitializeStatisticsTable();
 
-        if (Self->ScanTableId.PathId) {
+        if (Self->TraversalPathId && Self->TraversalStartKey) {
+            Self->NavigateType = ENavigateType::Traversal;
+            Self->NavigatePathId = Self->TraversalPathId;
             Self->Navigate();
         }
 

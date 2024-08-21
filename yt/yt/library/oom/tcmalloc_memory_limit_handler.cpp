@@ -13,6 +13,8 @@
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 
+#include <library/cpp/yt/system/exit.h>
+
 #include <util/datetime/base.h>
 #include <util/stream/file.h>
 #include <util/stream/output.h>
@@ -49,7 +51,7 @@ void CollectAndDumpMemoryProfile(const TString& memoryProfilePath)
 void MemoryProfileTimeoutHandler(int /*signal*/)
 {
     WriteToStderr("*** Process hung during dumping heap profile ***\n");
-    ::_exit(1);
+    AbortProcess(ToUnderlying(EProcessExitCode::GenericError));
 }
 
 void SetupMemoryProfileTimeout(int timeout)
@@ -93,6 +95,7 @@ public:
 
 private:
     const TTCMallocLimitHandlerOptions Options_;
+
     bool Fired_ = false;
     bool NeedToHandle_ = false;
     std::mutex Mutex_;
@@ -123,17 +126,17 @@ private:
             SetupMemoryProfileTimeout(Options_.Timeout.Seconds());
             CollectAndDumpMemoryProfile(heapDumpPath);
 
-            Cerr << "TTCMallocLimitHandler: Heap profile written." << Endl;
-            ::_exit(0);
+            Cerr << "TTCMallocLimitHandler: Heap profile written" << Endl;
+            AbortProcess(ToUnderlying(EProcessExitCode::OK));
         }
 
         if (childPid < 0) {
-            Cerr << "TTCMallocLimitHandler: fork failed with code:" << LastSystemErrorText() << Endl;
-            ::_exit(1);
+            Cerr << "TTCMallocLimitHandler: Fork failed: " << LastSystemErrorText() << Endl;
+            AbortProcess(ToUnderlying(EProcessExitCode::GenericError));
         }
 
         ExecWaitForChild(childPid);
-        ::_exit(0);
+        AbortProcess(ToUnderlying(EProcessExitCode::OK));
     }
 
     TString GetHeapDumpPath() const
@@ -180,26 +183,28 @@ void SetSoftMemoryLimitHandler(THandler handler)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static TAtomicIntrusivePtr<TTCMallocLimitHandler> LimitHandler_;
+namespace {
 
-////////////////////////////////////////////////////////////////////////////////
+YT_DEFINE_GLOBAL(TAtomicIntrusivePtr<TTCMallocLimitHandler>, LimitHandler);
 
 void HandleTCMallocLimit()
 {
-    if (auto handler = LimitHandler_.Acquire()) {
+    if (auto handler = LimitHandler().Acquire()) {
         handler->Fire();
     }
 }
 
+} // namespace
+
 void EnableTCMallocLimitHandler(TTCMallocLimitHandlerOptions options)
 {
     {
-        if (LimitHandler_.Acquire()) {
+        if (LimitHandler().Acquire()) {
             return;
         }
 
-        TAtomicIntrusivePtr<TTCMallocLimitHandler>::TRawPtr expected{nullptr};
-        LimitHandler_.CompareAndSwap(expected, New<TTCMallocLimitHandler>(options));
+        TAtomicIntrusivePtr<TTCMallocLimitHandler>::TRawPtr expected = nullptr;
+        LimitHandler().CompareAndSwap(expected, New<TTCMallocLimitHandler>(options));
     }
 
     SetSoftMemoryLimitHandler<tcmalloc::MallocExtension>(&HandleTCMallocLimit);
@@ -207,7 +212,9 @@ void EnableTCMallocLimitHandler(TTCMallocLimitHandlerOptions options)
 
 void DisableTCMallocLimitHandler()
 {
-    LimitHandler_.Reset();
+    LimitHandler().Reset();
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

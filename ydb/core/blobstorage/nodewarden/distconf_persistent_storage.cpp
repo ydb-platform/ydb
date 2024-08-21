@@ -37,13 +37,22 @@ namespace NKikimr::NStorage {
                 const size_t index = ev->Cookie;
                 Y_ABORT_UNLESS(index < Paths.size());
                 const TString& path = Paths[index];
+                auto& record = msg->Record;
 
                 STLOG(PRI_DEBUG, BS_NODE, NWDC50, "TReaderActor result", (Path, path), (Outcome, msg->Outcome),
-                    (Guid, msg->Guid), (Record, msg->Record));
+                    (Guid, msg->Guid), (Record, record));
 
                 switch (msg->Outcome) {
                     case NPDisk::EPDiskMetadataOutcome::OK:
-                        Response->MetadataPerPath.emplace_back(path, std::move(msg->Record), msg->Guid);
+                        if (record.HasProposedStorageConfig() && !CheckFingerprint(record.GetProposedStorageConfig())) {
+                            Y_DEBUG_ABORT("ProposedStorageConfig metadata fingerprint incorrect");
+                            Response->Errors.push_back(path);
+                        } else if (record.HasCommittedStorageConfig() && !CheckFingerprint(record.GetCommittedStorageConfig())) {
+                            Y_DEBUG_ABORT("CommittedStorageConfig metadata fingerprint incorrect");
+                            Response->Errors.push_back(path);
+                        } else {
+                            Response->MetadataPerPath.emplace_back(path, std::move(record), msg->Guid);
+                        }
                         break;
 
                     case NPDisk::EPDiskMetadataOutcome::NO_METADATA:

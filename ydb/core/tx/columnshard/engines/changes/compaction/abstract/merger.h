@@ -4,12 +4,17 @@
 
 namespace NKikimr::NOlap::NCompaction {
 class IColumnMerger {
+public:
+    using TFactory = NObjectFactory::TParametrizedObjectFactory<IColumnMerger, TString, const TColumnMergeContext&>;
 private:
     bool Started = false;
 
     virtual std::vector<TColumnPortionResult> DoExecute(
-        const NCompaction::TColumnMergeContext& context, const arrow::UInt16Array& pIdxArray, const arrow::UInt32Array& pRecordIdxArray) = 0;
+        const TChunkMergeContext& context, const arrow::UInt16Array& pIdxArray, const arrow::UInt32Array& pRecordIdxArray) = 0;
     virtual void DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input) = 0;
+
+protected:
+    const TColumnMergeContext& Context;
 
 public:
     static inline const TString PortionIdFieldName = "$$__portion_id";
@@ -19,16 +24,16 @@ public:
     static inline const std::shared_ptr<arrow::Field> PortionRecordIndexField =
         std::make_shared<arrow::Field>(PortionRecordIndexFieldName, std::make_shared<arrow::UInt32Type>());
 
+    IColumnMerger(const TColumnMergeContext& context)
+        : Context(context)
+    {
+    
+    }
     virtual ~IColumnMerger() = default;
 
-    void Start(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input) {
-        AFL_VERIFY(!Started);
-        Started = true;
-        return DoStart(input);
-    }
+    void Start(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input);
 
-    std::vector<TColumnPortionResult> Execute(
-        const NCompaction::TColumnMergeContext& context, const std::shared_ptr<arrow::RecordBatch>& remap) {
+    std::vector<TColumnPortionResult> Execute(const TChunkMergeContext& context, const std::shared_ptr<arrow::RecordBatch>& remap) {
 
         auto columnPortionIdx = remap->GetColumnByName(IColumnMerger::PortionIdFieldName);
         auto columnPortionRecordIdx = remap->GetColumnByName(IColumnMerger::PortionRecordIndexFieldName);

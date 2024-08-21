@@ -6,38 +6,39 @@ from typing import (
 )
 
 from .session import (
-    QuerySessionSync,
+    QuerySessionAsync,
 )
-from ..retries import (
+from ...retries import (
     RetrySettings,
-    retry_operation_sync,
+    retry_operation_async,
 )
-from .. import convert
-from .._grpc.grpcwrapper import common_utils
-
+from ... import convert
+from ..._grpc.grpcwrapper import common_utils
 
 logger = logging.getLogger(__name__)
 
 
-class QuerySessionPool:
-    """QuerySessionPool is an object to simplify operations with sessions of Query Service."""
+class QuerySessionPoolAsync:
+    """QuerySessionPoolAsync is an object to simplify operations with sessions of Query Service."""
 
     def __init__(self, driver: common_utils.SupportedDriverType):
         """
         :param driver: A driver instance
         """
 
-        logger.warning("QuerySessionPool is an experimental API, which could be changed.")
+        logger.warning("QuerySessionPoolAsync is an experimental API, which could be changed.")
         self._driver = driver
 
-    def checkout(self) -> "SimpleQuerySessionCheckout":
+    def checkout(self) -> "SimpleQuerySessionCheckoutAsync":
         """WARNING: This API is experimental and could be changed.
         Return a Session context manager, that opens session on enter and closes session on exit.
         """
 
-        return SimpleQuerySessionCheckout(self)
+        return SimpleQuerySessionCheckoutAsync(self)
 
-    def retry_operation_sync(self, callee: Callable, retry_settings: Optional[RetrySettings] = None, *args, **kwargs):
+    async def retry_operation_async(
+        self, callee: Callable, retry_settings: Optional[RetrySettings] = None, *args, **kwargs
+    ):
         """WARNING: This API is experimental and could be changed.
         Special interface to execute a bunch of commands with session in a safe, retriable way.
 
@@ -49,13 +50,13 @@ class QuerySessionPool:
 
         retry_settings = RetrySettings() if retry_settings is None else retry_settings
 
-        def wrapped_callee():
-            with self.checkout() as session:
-                return callee(session, *args, **kwargs)
+        async def wrapped_callee():
+            async with self.checkout() as session:
+                return await callee(session, *args, **kwargs)
 
-        return retry_operation_sync(wrapped_callee, retry_settings)
+        return await retry_operation_async(wrapped_callee, retry_settings)
 
-    def execute_with_retries(
+    async def execute_with_retries(
         self,
         query: str,
         parameters: Optional[dict] = None,
@@ -77,31 +78,31 @@ class QuerySessionPool:
 
         retry_settings = RetrySettings() if retry_settings is None else retry_settings
 
-        def wrapped_callee():
-            with self.checkout() as session:
-                it = session.execute(query, parameters, *args, **kwargs)
-                return [result_set for result_set in it]
+        async def wrapped_callee():
+            async with self.checkout() as session:
+                it = await session.execute(query, parameters, *args, **kwargs)
+                return [result_set async for result_set in it]
 
-        return retry_operation_sync(wrapped_callee, retry_settings)
+        return await retry_operation_async(wrapped_callee, retry_settings)
 
-    def stop(self, timeout=None):
+    async def stop(self, timeout=None):
         pass  # TODO: implement
 
-    def __enter__(self):
+    async def __aenter__(self):
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.stop()
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.stop()
 
 
-class SimpleQuerySessionCheckout:
-    def __init__(self, pool: QuerySessionPool):
+class SimpleQuerySessionCheckoutAsync:
+    def __init__(self, pool: QuerySessionPoolAsync):
         self._pool = pool
-        self._session = QuerySessionSync(pool._driver)
+        self._session = QuerySessionAsync(pool._driver)
 
-    def __enter__(self) -> QuerySessionSync:
-        self._session.create()
+    async def __aenter__(self) -> QuerySessionAsync:
+        await self._session.create()
         return self._session
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self._session.delete()
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self._session.delete()

@@ -71,6 +71,7 @@ void TPQWriteServiceImpl::TSession::OnDone() {
     SendEvent(new TEvPQProxy::TEvDone());
 }
 
+
 TPQWriteServiceImpl::TSession::TSession(std::shared_ptr<TPQWriteServiceImpl> proxy,
              grpc::ServerCompletionQueue* cq, ui64 cookie, const TActorId& schemeCache,
              TIntrusivePtr<NMonitoring::TDynamicCounters> counters, bool needDiscoverClusters)
@@ -121,7 +122,12 @@ bool TPQWriteServiceImpl::TSession::CreateActor(const TString &localCluster) {
 }
 
 void TPQWriteServiceImpl::TSession::SendEvent(IEventBase* ev) {
-    if (ActorId) {
+    bool hasActor;
+    {
+        TGuard<TSpinLock> lock(Lock);
+        hasActor = !!ActorId;
+    }
+    if (hasActor) {
         Proxy->ActorSystem->Send(ActorId, ev);
     }
 }

@@ -109,11 +109,11 @@ default:
     zivaykin:
       name: Александр Зевайкин
       position: Технический лидер
-      profile:   
+      profile: https://www.linkedin.com/in/alexander-zevaykin-6bb8162bb/   
     zverev:
       name: Евгений Зверев
       position: Разработчик
-      profile:     
+      profile:  
     zinal:
       name: Максим Зиналь
       profile: https://www.linkedin.com/in/maxzinal

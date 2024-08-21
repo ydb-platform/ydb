@@ -8,6 +8,7 @@
 #include "polymorphic.h"
 #include "context.h"
 #include "descriptors.h"
+#include "type_decl.h"
 #include "type_registry.h"
 
 #include <yt/yt/core/concurrency/fls.h>
@@ -695,9 +696,6 @@ struct TRuntimeFieldDescriptor
     TFieldLoadHandler<TThis, TContext> LoadHandler = nullptr;
     TFieldMissingHandler<TThis, TContext> MissingHandler = nullptr;
 };
-
-template <class TThis, class TContext>
-using TRuntimeFieldDescriptorMap = THashMap<TFieldTag, TRuntimeFieldDescriptor<TThis, TContext>>;
 
 template <auto Member, class TThis, class TContext, class TFieldSerializer>
 class PHOENIX_REGISTRAR_NODISCARD TRuntimeFieldDescriptorBuilderRegistar

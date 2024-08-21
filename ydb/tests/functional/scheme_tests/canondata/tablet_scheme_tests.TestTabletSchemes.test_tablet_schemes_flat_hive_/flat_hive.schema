@@ -878,6 +878,11 @@
                 "ColumnId": 5,
                 "ColumnName": "Statistics",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "DataCenter",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -888,7 +893,8 @@
                     2,
                     3,
                     4,
-                    5
+                    5,
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,

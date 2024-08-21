@@ -2047,8 +2047,29 @@ void TMemoryControllerInitializer::InitializeServices(
     NActors::TActorSystemSetup* setup,
     const NKikimr::TAppData* appData)
 {
-    auto config = appData->MemoryControllerConfig;
-    auto* actor = NMemory::CreateMemoryController(TDuration::Seconds(1), ProcessMemoryInfoProvider, config, appData->Counters);
+    NMemory::TResourceBrokerConfig resourceBrokerSelfConfig;
+    auto mergeResourceBrokerConfigs = [&](const NKikimrResourceBroker::TResourceBrokerConfig& resourceBrokerConfig) {
+        if (resourceBrokerConfig.HasResourceLimit() && resourceBrokerConfig.GetResourceLimit().HasMemory()) {
+            resourceBrokerSelfConfig.LimitBytes = resourceBrokerConfig.GetResourceLimit().GetMemory();
+        }
+        for (const auto& queue : resourceBrokerConfig.GetQueues()) {
+            if (queue.GetName() == NLocalDb::KqpResourceManagerQueue) {
+                if (queue.HasLimit() && queue.GetLimit().HasMemory()) {
+                    resourceBrokerSelfConfig.QueryExecutionLimitBytes = queue.GetLimit().GetMemory();
+                }
+            }
+        }
+    };
+    if (Config.HasBootstrapConfig() && Config.GetBootstrapConfig().HasResourceBroker()) {
+        mergeResourceBrokerConfigs(Config.GetBootstrapConfig().GetResourceBroker());
+    }
+    if (Config.HasResourceBrokerConfig()) {
+        mergeResourceBrokerConfigs(Config.GetResourceBrokerConfig());
+    }
+
+    auto* actor = NMemory::CreateMemoryController(TDuration::Seconds(1), ProcessMemoryInfoProvider, 
+        Config.GetMemoryControllerConfig(), resourceBrokerSelfConfig, 
+        appData->Counters);
     setup->LocalServices.emplace_back(
         NMemory::MakeMemoryControllerId(0),
         TActorSetupCmd(actor, TMailboxType::HTSwap, appData->BatchPoolId)

@@ -29,6 +29,7 @@ public:
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
         Runtime.Initialize(app->Unwrap());
         Runtime.SetLogPriority(NKikimrServices::YQ_ROW_DISPATCHER, NLog::PRI_TRACE);
+        Runtime.SetDispatchTimeout(TDuration::Seconds(5));
 
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
 
@@ -37,9 +38,10 @@ public:
         RowDispatcherActorId = Runtime.AllocateEdgeActor();
     }
 
-    void Init(const TString& topic) {
+    void Init(const TString& topic, ui64 maxSessionUsedMemory = std::numeric_limits<ui64>::max()) {
         Settings = BuildPqTopicSourceSettings(topic);
         Config.SetTimeoutBeforeStartSessionSec(TimeoutBeforeStartSessionSec);
+        Config.SetMaxSessionUsedMemory(maxSessionUsedMemory);
 
         TopicSession = Runtime.Register(NewTopicSession(
             Config,
@@ -114,6 +116,14 @@ public:
         auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvNewDataArrived>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
         UNIT_ASSERT(eventHolder->Get()->ReadActorId == readActorId);
+    }
+
+    size_t ReadMessages(NActors::TActorId readActorId) {
+        Runtime.Send(new IEventHandle(TopicSession, readActorId, new TEvRowDispatcher::TEvGetNextBatch()));
+        auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvMessageBatch>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
+        UNIT_ASSERT(eventHolder.Get() != nullptr);
+        UNIT_ASSERT(eventHolder->Get()->ReadActorId == readActorId);
+        return eventHolder->Get()->Record.MessagesSize();
     }
 
     TActorSystemStub actorSystemStub;
@@ -266,6 +276,52 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         ExpectSessionError(ReadActorId1, "no path");
         StopSession(ReadActorId1);
     }
+
+    Y_UNIT_TEST_F(SlowSession, TFixture) {
+        const TString topicName = "topic7";
+        PQCreateStream(topicName);
+        Init(topicName, 50);
+        StartSession(ReadActorId1);
+        StartSession(ReadActorId2);
+
+        size_t messagesSize = 5;
+        for (size_t i = 0; i < messagesSize; ++i) {
+            const std::vector<TString> data = { Json1 };
+            PQWrite(data, topicName);
+        }
+        ExpectNewDataArrived(ReadActorId1);
+        ExpectNewDataArrived(ReadActorId2);
+
+        auto readMessages = ReadMessages(ReadActorId1);
+        UNIT_ASSERT(readMessages == messagesSize);
+
+        // Reading from yds is stopped.
+
+        for (size_t i = 0; i < messagesSize; ++i) {
+            const std::vector<TString> data = { Json1 };
+            PQWrite(data, topicName);
+        }
+        Sleep(TDuration::MilliSeconds(100));
+        Runtime.DispatchEvents({}, Runtime.GetCurrentTime() - TDuration::MilliSeconds(1));
+
+        readMessages = ReadMessages(ReadActorId1);
+        UNIT_ASSERT(readMessages == 0);
+
+        readMessages = ReadMessages(ReadActorId2);
+        UNIT_ASSERT(readMessages == messagesSize);
+
+        Sleep(TDuration::MilliSeconds(100));
+        Runtime.DispatchEvents({}, Runtime.GetCurrentTime() - TDuration::MilliSeconds(1));
+
+        readMessages = ReadMessages(ReadActorId1);
+        UNIT_ASSERT(readMessages == messagesSize);
+
+        readMessages = ReadMessages(ReadActorId2);
+        UNIT_ASSERT(readMessages == messagesSize);
+
+        StopSession(ReadActorId1);
+        StopSession(ReadActorId2);
+    } 
 }
 
 }

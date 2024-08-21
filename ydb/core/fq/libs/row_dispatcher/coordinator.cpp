@@ -134,13 +134,8 @@ void TActorCoordinator::PrintInternalState() {
 
 void TActorCoordinator::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
     LOG_ROW_DISPATCHER_DEBUG("EvNodeConnected " << ev->Get()->NodeId);
-
-    for (auto& [actorId, info] : RowDispatchers) {
-        if (ev->Get()->NodeId != actorId.NodeId()) {
-            continue;
-        }
-        info.Connected = true;
-    }
+    // Dont set Connected = false.
+    // Wait TEvPing from row dispatchers.
 }
 
 void TActorCoordinator::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {

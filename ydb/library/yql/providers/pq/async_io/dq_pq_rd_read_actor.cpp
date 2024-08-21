@@ -194,6 +194,8 @@ public:
     void SessionClosed(ui64 eventQueueId) override;
 
     STFUNC(StateFunc) {
+        SRC_LOG_D("New event ");
+
         switch (const ui32 type = ev->GetTypeRewrite()) {
             hFunc(NFq::TEvRowDispatcher::TEvCoordinatorChanged, Handle);
             hFunc(NFq::TEvRowDispatcher::TEvCoordinatorResult, Handle);
@@ -213,6 +215,7 @@ public:
             SRC_LOG_D("unexpected message " <<  type);
             Y_DEBUG_ABORT("unexpected event Type# %08" PRIx32, type);
         }
+        SRC_LOG_D("New event end");
     }
     static constexpr char ActorName[] = "DQ_PQ_READ_ACTOR";
 
@@ -303,10 +306,6 @@ void TDqPqRdReadActor::ProcessState() {
                     readOffset = offsetIt->second;
                 }
 
-                // for ([[maybe_unused]]const auto& batch: ReadyBuffer) {
-                    
-                // }
-
                 SRC_LOG_D("Send TEvStartSession to " << sessionInfo.RowDispatcherActorId 
                         << ", offset " << readOffset 
                         << ", partitionId " << partitionId);
@@ -347,7 +346,7 @@ void TDqPqRdReadActor::SaveState(const NDqProto::TCheckpoint& /*checkpoint*/, TS
         partitionState->SetCluster(cluster);
         partitionState->SetPartition(partition);
         partitionState->SetOffset(offset);
-        SRC_LOG_D("TDqPqRdReadActor::SaveState offset " << offset);
+        SRC_LOG_D("SaveState offset " << offset);
     }
 
     stateProto.SetStartingMessageTimestampMs(StartingMessageTimestamp.MilliSeconds());
@@ -570,14 +569,13 @@ void TDqPqRdReadActor::ReInit() {
     if (!ReadyBuffer.empty()) {
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
-    // TODO: update offsets
 }
 
 void TDqPqRdReadActor::Stop(const TString& message) {
     NYql::TIssues issues;
     issues.AddIssue(NYql::TIssue{message});
     SRC_LOG_E("Stop read actor, error: " << message);
-    Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::BAD_REQUEST));
+    Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::BAD_REQUEST)); // TODO: use UNAVAILABLE ?
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr &ev) {
@@ -611,7 +609,9 @@ void TDqPqRdReadActor::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::
     for (auto& [partitionId, sessionInfo] : Sessions) {
         sessionInfo.EventsQueue.HandleNodeDisconnected(ev->Get()->NodeId);
     }
-    Stop(TString{"Node disconnected, nodeId "} + ToString(ev->Get()->NodeId));
+    // In case of row dispatcher disconnection: wait connected or SessionClosed(). TODO: Stop actor after timeout.
+    // In case of row dispatcher disconnection: wait CoordinatorChanged().
+    //Stop(TString{"Node disconnected, nodeId "} + ToString(ev->Get()->NodeId));
 }
 
 void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) {
@@ -660,7 +660,7 @@ std::pair<NUdf::TUnboxedValuePod, i64> TDqPqRdReadActor::CreateItem(const TStrin
 }
 
 void TDqPqRdReadActor::SessionClosed(ui64 eventQueueId) {
-    SRC_LOG_D("Session closed to " << eventQueueId);
+    SRC_LOG_D("Session closed, event queue id " << eventQueueId);
     Stop("SessionClosed");
 }
 

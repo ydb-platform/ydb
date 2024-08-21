@@ -396,11 +396,11 @@ void TRowDispatcher::DeleteConsumer(const ConsumerSessionKey& key) {
     }
     ConsumersByEventQueueId.erase(consumerIt->second->EventQueueId);
     Consumers.erase(consumerIt);
-    PrintInternalState("After DeleteConsumer:");
+    PrintInternalState("After DeleteConsumer");
 }
 
 void TRowDispatcher::SessionClosed(ui64 eventQueueId) {
-    LOG_ROW_DISPATCHER_WARN("SessionClosed " << eventQueueId);
+    LOG_ROW_DISPATCHER_WARN("Session closed, event queue id " << eventQueueId);
     for (auto& [consumerKey, consumer] : Consumers) {
         if (consumer->EventQueueId != eventQueueId) {
             continue;

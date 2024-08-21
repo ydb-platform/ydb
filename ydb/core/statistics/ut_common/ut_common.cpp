@@ -11,6 +11,9 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 
+// TODO remove thread
+#include <thread>
+
 using namespace NYdb;
 using namespace NYdb::NTable;
 using namespace NYdb::NScheme;
@@ -252,6 +255,32 @@ void CreateColumnStoreTable(TTestEnv& env, const TString& databaseName, const TS
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
+std::vector<TTableInfo> CreateDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount) {
+    auto init = [&] () {
+        CreateDatabase(env, "Database");
+        for (ui8 tableId = 1; tableId <= tableCount; tableId++) {
+            CreateColumnStoreTable(env, "Database", Sprintf("Table%u", tableId), shardCount);
+        }
+    };
+    std::thread initThread(init);
+
+    auto& runtime = *env.GetServer().GetRuntime();
+    auto sender = runtime.AllocateEdgeActor();
+
+    runtime.SimulateSleep(TDuration::Seconds(10));
+    initThread.join();
+
+    std::vector<TTableInfo> ret;
+    for (ui8 tableId = 1; tableId <= tableCount; tableId++) {
+        TTableInfo tableInfo;
+        const TString path = Sprintf("/Root/Database/Table%u", tableId);
+        tableInfo.ShardIds = GetColumnTableShards(runtime, sender, path);
+        tableInfo.PathId = ResolvePathId(runtime, path, &tableInfo.DomainKey, &tableInfo.SaTabletId);
+        ret.emplace_back(tableInfo);
+    }
+    return ret;
+}
+
 void DropTable(TTestEnv& env, const TString& databaseName, const TString& tableName) {
     TTableClient client(env.GetDriver());
     auto session = client.CreateSession().GetValueSync().GetSession();
@@ -289,7 +318,7 @@ std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, con
     return stat.CountMin;
 }
 
-void CheckCountMin(TTestActorRuntime& runtime, const TPathId& pathId, ui64 expectedProbe) {
+void ValidateCountMinColumnshard(TTestActorRuntime& runtime, const TPathId& pathId, ui64 expectedProbe) {
     auto countMin = ExtractCountMin(runtime, pathId);
 
     ui32 value = 1;
@@ -297,7 +326,7 @@ void CheckCountMin(TTestActorRuntime& runtime, const TPathId& pathId, ui64 expec
     UNIT_ASSERT_VALUES_EQUAL(actualProbe, expectedProbe);
 }
 
-void ValidateCountMin(TTestActorRuntime& runtime, TPathId pathId) {
+void ValidateCountMinDatashard(TTestActorRuntime& runtime, TPathId pathId) {
     auto countMin = ExtractCountMin(runtime, pathId);
 
     for (ui32 i = 0; i < 4; ++i) {
@@ -307,7 +336,7 @@ void ValidateCountMin(TTestActorRuntime& runtime, TPathId pathId) {
     }
 }
 
-void ValidateCountMinAbsense(TTestActorRuntime& runtime, TPathId pathId) {
+void ValidateCountMinDatashardAbsense(TTestActorRuntime& runtime, TPathId pathId) {
     auto statServiceId = NStat::MakeStatServiceID(runtime.GetNodeId(1));
 
     NStat::TRequest req;

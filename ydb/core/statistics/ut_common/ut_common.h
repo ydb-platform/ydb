@@ -66,6 +66,14 @@ void CreateDatabase(TTestEnv& env, const TString& databaseName, size_t nodeCount
 
 void CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, TPathId resourcesDomainKey);
 
+struct TTableInfo {
+    std::vector<ui64> ShardIds;
+    ui64 SaTabletId; 
+    TPathId DomainKey;
+    TPathId PathId;
+};
+std::vector<TTableInfo> CreateDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount);
+
 TPathId ResolvePathId(TTestActorRuntime& runtime, const TString& path, TPathId* domainKey = nullptr, ui64* saTabletId = nullptr);
 
 
@@ -77,10 +85,10 @@ void CreateColumnStoreTable(TTestEnv& env, const TString& databaseName, const TS
 void DropTable(TTestEnv& env, const TString& databaseName, const TString& tableName);
 
 std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, const TPathId& pathId, ui64 columnTag = 1);
-void CheckCountMin(TTestActorRuntime& runtime, const TPathId& pathId, ui64 expectedProbe);
+void ValidateCountMinColumnshard(TTestActorRuntime& runtime, const TPathId& pathId, ui64 expectedProbe);
 
-void ValidateCountMin(TTestActorRuntime& runtime, TPathId pathId);
-void ValidateCountMinAbsense(TTestActorRuntime& runtime, TPathId pathId);
+void ValidateCountMinDatashard(TTestActorRuntime& runtime, TPathId pathId);
+void ValidateCountMinDatashardAbsense(TTestActorRuntime& runtime, TPathId pathId);
 
 struct TAnalyzedTable {
     TPathId PathId;

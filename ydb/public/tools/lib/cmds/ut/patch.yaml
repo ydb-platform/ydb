@@ -1,0 +1,7 @@
+table_service_config:
+  sql_version: 1
+  index_auto_choose_mode: MAX_USED_PREFIX
+  enable_kqp_data_query_stream_lookup: true
+
+feature_flags:
+  enable_views: true

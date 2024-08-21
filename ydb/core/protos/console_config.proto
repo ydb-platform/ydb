@@ -253,6 +253,7 @@ message TConfigureResponse {
 message TSetYamlConfigRequest {
     optional Ydb.DynamicConfig.SetConfigRequest Request = 1;
     optional bytes UserToken = 2;
+    optional string PeerName = 3;
 }
 
 message TSetYamlConfigResponse {
@@ -262,6 +263,7 @@ message TSetYamlConfigResponse {
 message TReplaceYamlConfigRequest {
     optional Ydb.DynamicConfig.ReplaceConfigRequest Request = 1;
     optional bytes UserToken = 2;
+    optional string PeerName = 3;
 }
 
 message TReplaceYamlConfigResponse {

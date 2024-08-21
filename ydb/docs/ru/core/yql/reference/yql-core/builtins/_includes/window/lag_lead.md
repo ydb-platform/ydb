@@ -30,7 +30,7 @@ WINDOW w As (
 
 /* Output:
 item	odd	lag1
--------------
+--------------------
 2	0	NULL
 4	0	2
 6	0	4

@@ -7,7 +7,7 @@ namespace NConsoleClient {
 
 class TAdaptiveTabbedTable {
 public:
-    TAdaptiveTabbedTable(const TVector<NScheme::TSchemeEntry>& entries);
+    TAdaptiveTabbedTable(const std::vector<NScheme::TSchemeEntry>& entries);
     void Print(IOutputStream& o) const;
 
 private:
@@ -21,7 +21,7 @@ private:
     void InitializeColumnInfo(size_t maxCols, size_t minColumnWidth);
     void CalculateColumns();
 
-    const TVector<NScheme::TSchemeEntry>& Entries;
+    const std::vector<NScheme::TSchemeEntry>& Entries;
     TVector<TColumnInfo> ColumnInfo;
     size_t ColumnCount;
 };

@@ -103,7 +103,7 @@ private:
     TAsyncStatus UpsertParquetBuffer(const TString& dbPath, const TString& buffer, const TString& strSchema);
 
     TType GetTableType();
-    std::map<TString, TType> GetColumnTypes();
+    std::map<std::string, TType> GetColumnTypes();
     void ValidateTValueUpsertTable();
 };
 

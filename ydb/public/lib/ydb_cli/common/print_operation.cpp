@@ -24,7 +24,7 @@ namespace {
 
         auto& row = table.AddRow();
         row
-            .Column(0, ProtoToString(operation.Id()))
+            .Column(0, operation.Id().ToString())
             .Column(1, operation.Ready() ? "true" : "false")
             .Column(2, status.GetStatus() == NYdb::EStatus::STATUS_UNDEFINED ? "" : ToString(status.GetStatus()));
 
@@ -61,7 +61,7 @@ namespace {
             return result;
         }
 
-        if (!metadata.ItemsProgress) {
+        if (metadata.ItemsProgress.empty()) {
             return result;
         }
 
@@ -94,11 +94,11 @@ namespace {
 
         auto& row = table.AddRow();
         row
-            .Column(0, ProtoToString(operation.Id()))
+            .Column(0, operation.Id().ToString())
             .Column(1, operation.Ready() ? "true" : "false")
             .Column(2, status.GetStatus())
             .Column(3, PrintProgress<decltype(metadata.Progress)>(metadata))
-            .Column(4, TStringBuilder() << settings.Host_ << ":" << settings.Port_.GetOrElse(80));
+            .Column(4, TStringBuilder() << settings.Host_ << ":" << settings.Port_.value_or(80));
 
         TStringBuilder freeText;
 
@@ -154,7 +154,7 @@ namespace {
 
         auto& row = table.AddRow();
         row
-            .Column(0, ProtoToString(operation.Id()))
+            .Column(0, operation.Id().ToString())
             .Column(1, operation.Ready() ? "true" : "false")
             .Column(2, status.GetStatus())
             .Column(3, PrintProgress<decltype(metadata.Progress)>(metadata))
@@ -185,11 +185,11 @@ namespace {
         }
 
         if (settings.Description_) {
-            freeText << "Description: " << settings.Description_.GetRef() << Endl;
+            freeText << "Description: " << settings.Description_.value() << Endl;
         }
 
         if (settings.NumberOfRetries_) {
-            freeText << "Number of retries: " << settings.NumberOfRetries_.GetRef() << Endl;
+            freeText << "Number of retries: " << settings.NumberOfRetries_.value() << Endl;
         }
 
         if (!operation.CreatedBy().empty()) {
@@ -236,7 +236,7 @@ namespace {
 
         auto& row = table.AddRow();
         row
-            .Column(0, ProtoToString(operation.Id()))
+            .Column(0, operation.Id().ToString())
             .Column(1, operation.Ready() ? "true" : "false")
             .Column(2, status.GetStatus() == NYdb::EStatus::STATUS_UNDEFINED ? "" : ToString(status.GetStatus()))
             .Column(3, metadata.State)
@@ -267,7 +267,7 @@ namespace {
 
         auto& row = table.AddRow();
         row
-            .Column(0, ProtoToString(operation.Id()))
+            .Column(0, operation.Id().ToString())
             .Column(1, operation.Ready() ? "true" : "false")
             .Column(2, status.GetStatus() == NYdb::EStatus::STATUS_UNDEFINED ? "" : ToString(status.GetStatus()))
             .Column(3, metadata.ExecutionId)

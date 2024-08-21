@@ -19,7 +19,7 @@ public:
     );
 
     static TDriver CreateDriver(const TConfig& config);
-    static TDriver CreateDriver(const TConfig& config, THolder<TLogBackend>&& loggingBackend);
+    static TDriver CreateDriver(const TConfig& config, std::unique_ptr<TLogBackend>&& loggingBackend);
 
 private:
     static TDriverConfig CreateDriverConfig(const TConfig& config);

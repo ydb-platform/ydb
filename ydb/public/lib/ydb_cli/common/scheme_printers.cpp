@@ -83,7 +83,7 @@ void TDefaultSchemePrinter::PrintDirectory(
     const TString& relativePath,
     const NScheme::TListDirectoryResult& entryResult)
 {
-    TVector<NScheme::TSchemeEntry> children = entryResult.GetChildren();
+    std::vector<NScheme::TSchemeEntry> children = entryResult.GetChildren();
     NScheme::TSchemeEntry entry = entryResult.GetEntry();
 
     if (Settings.Recursive) {
@@ -140,7 +140,7 @@ void TTableSchemePrinter::PrintDirectory(
         // Do not print target directory itself
         if (!Settings.Recursive) {
             for (const auto& child : entryResult.GetChildren()) {
-                PrintEntry(child.Name, child);
+                PrintEntry(TString{child.Name}, child);
             }
         }
     }
@@ -159,7 +159,7 @@ void TTableSchemePrinter::PrintTable(const TString& relativePath, const NScheme:
     auto tableDescription = tableResult.GetTableDescription();
 
     // Empty relative path in case of a single non-directory object in Path
-    TString actualRelativePath = relativePath ? relativePath : entry.Name;
+    TString actualRelativePath = relativePath ? relativePath : TString{entry.Name};
 
     Table.AddRow()
         .Column(0, EntryTypeToString(entry.Type))
@@ -173,7 +173,7 @@ void TTableSchemePrinter::PrintTable(const TString& relativePath, const NScheme:
 
 void TTableSchemePrinter::PrintOther(const TString& relativePath, const NScheme::TSchemeEntry& entry) {
     // Empty relative path in case of a single non-directory object in Path
-    TString actualRelativePath = relativePath ? relativePath : entry.Name;
+    TString actualRelativePath = relativePath ? relativePath : TString{entry.Name};
     Table.AddRow()
         .Column(0, EntryTypeToString(entry.Type))
         .Column(1, entry.Owner)
@@ -210,7 +210,7 @@ void TJsonSchemePrinter::PrintDirectory(const TString& relativePath, const NSche
             NeedToCloseList = true;
         } else {
             for (const auto& child : entryResult.GetChildren()) {
-                PrintEntry(child.Name, child);
+                PrintEntry(TString{child.Name}, child);
             }
             Writer.EndList();
             Cout << Writer.Str() << Endl;
@@ -255,7 +255,7 @@ void TJsonSchemePrinter::PrintOther(const TString& relativePath, const NScheme::
 
 void TJsonSchemePrinter::PrintCommonInfo(const TString& relativePath, const NScheme::TSchemeEntry& entry) {
     // Empty relative path in case of a single non-directory object in Path
-    TString actualRelativePath = relativePath ? relativePath : entry.Name;
+    TString actualRelativePath = relativePath ? relativePath : TString{entry.Name};
     Writer.WriteKey("type");
     Writer.WriteString(EntryTypeToString(entry.Type));
     Writer.WriteKey("path");

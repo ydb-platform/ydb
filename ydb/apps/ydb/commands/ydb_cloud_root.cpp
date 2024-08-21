@@ -27,7 +27,7 @@ void TClientCommandRoot::SetCredentialsGetter(TConfig& config) {
             return CreateOAuthCredentialsProviderFactory(config.SecurityToken);
         }
         if (config.UseStaticCredentials) {
-            if (config.StaticCredentials.User) {
+            if (!config.StaticCredentials.User.empty()) {
                 return CreateLoginCredentialsProviderFactory(config.StaticCredentials);
             }
         }

@@ -2,6 +2,8 @@
 
 #include <ydb-cpp-sdk/client/types/credentials/credentials.h>
 
+#include <util/generic/string.h>
+
 #include <memory>
 
 namespace NKikimr {

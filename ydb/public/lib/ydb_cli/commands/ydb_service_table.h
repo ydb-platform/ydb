@@ -60,7 +60,7 @@ public:
 
 private:
     TVector<TString> Columns;
-    TVector<TString> PrimaryKeys;
+    std::vector<std::string> PrimaryKeys;
     TVector<TString> Indexes;
     TString PresetName;
     TString ExecutionPolicy;
@@ -115,7 +115,7 @@ public:
     template <typename TIterator>
     bool PrintQueryResponse(TIterator& result);
 
-    void PrintFlameGraph(const TMaybe<TString>& plan);
+    void PrintFlameGraph(const std::optional<std::string>& plan);
 
 private:
     TString CollectStatsMode;
@@ -135,7 +135,7 @@ public:
     virtual int Run(TConfig& config) override;
 
 private:
-    static void SaveDiagnosticsToFile(const TString& diagnostics);
+    static void SaveDiagnosticsToFile(const std::string& diagnostics);
 
     bool PrintAst = false;
     TString QueryType;
@@ -207,7 +207,7 @@ public:
     virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 private:
-    TString IndexName;
+    std::string IndexName;
 };
 
 class TCommandIndexRename : public TYdbCommand, public TCommandWithPath {
@@ -229,7 +229,7 @@ public:
     virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 private:
-    THashMap<TString, TString> Attributes;
+    std::unordered_map<std::string, std::string> Attributes;
 };
 
 class TCommandAttributeDrop : public TYdbCommand, public TCommandWithPath {

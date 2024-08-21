@@ -122,12 +122,8 @@ bool TPQWriteServiceImpl::TSession::CreateActor(const TString &localCluster) {
 }
 
 void TPQWriteServiceImpl::TSession::SendEvent(IEventBase* ev) {
-    bool hasActor;
-    {
-        TGuard<TSpinLock> lock(Lock);
-        hasActor = !!ActorId;
-    }
-    if (hasActor) {
+    TGuard<TSpinLock> lock(Lock);
+    if (ActorId) {
         Proxy->ActorSystem->Send(ActorId, ev);
     }
 }

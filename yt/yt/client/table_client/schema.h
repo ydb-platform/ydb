@@ -477,6 +477,19 @@ std::vector<TColumnStableName> MapNamesToStableNames(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TNestedColumn
+{
+    TStringBuf NestedTableName;
+    bool IsKey;
+    TStringBuf Aggregate;
+};
+
+std::optional<TNestedColumn> TryParseNestedAggregate(TStringBuf description);
+
+EValueType GetNestedColumnElementType(const TLogicalType* logicalType);
+
+////////////////////////////////////////////////////////////////////////////////
+
 void ValidateKeyColumns(const TKeyColumns& keyColumns);
 
 void ValidateDynamicTableKeyColumnCount(int count);

@@ -6,7 +6,9 @@ import yatest
 from ydb.tests.postgres_integrations.library import pytest_integration
 from ydb.tests.postgres_integrations.library.pytest_integration import TestCase, TestState
 
-TEST_DATA_FOLDER=yatest.common.source_path("ydb/tests/postgres_integrations/library/ut/data")
+
+TEST_DATA_FOLDER = yatest.common.source_path("ydb/tests/postgres_integrations/library/ut/data")
+
 
 @pytest.mark.parametrize(
     "test",
@@ -26,6 +28,7 @@ def test_read_jtest_results(test):
 
     parsed_test = parsed_result[test.name]
     assert test == parsed_test
+
 
 def test_read_jtest_with_one_result():
     filepath = path.join(TEST_DATA_FOLDER, "test-results-example1.xml")

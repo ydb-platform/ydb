@@ -1,4 +1,4 @@
-__all__ = [
+__all__ = [ # noqa
     'IntegrationTests',
     'PgTestWrapper',
     'pytest_collection_finish',
@@ -8,8 +8,6 @@ __all__ = [
     'teardown_module',
     'execute_test',
     'pytest_generate_tests',
-    'execute_test',
 ]
 
-from .pytest_integration import *
-
+from .pytest_integration import * # noqa

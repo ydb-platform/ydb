@@ -14,14 +14,15 @@ import yatest
 
 import logging
 
-from ydb.tests.library.harness.daemon import DaemonError
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
+
 
 class TestState(Enum):
     PASSED = 1
     FAILED = 2
     SKIPPED = 3
+
 
 @dataclass
 class TestCase:
@@ -37,6 +38,7 @@ _tests_folder: Optional[str] = None
 _test_results: Optional[Dict[str, TestCase]] = None
 _all_tests: Optional[List[str]] = None
 _kikimr_factory: KiKiMR = kikimr_cluster_factory()
+
 
 def pytest_collection_finish(session: pytest.Session):
     global _selected_tests_name
@@ -54,6 +56,7 @@ def pytest_collection_finish(session: pytest.Session):
     print("rekby: result selected tests", selected_tests)
     _selected_tests_name = selected_tests
 
+
 def set_filter_formatter(f: _filter_format_function):
     global _filter_formatter
     _filter_formatter = f
@@ -64,10 +67,11 @@ def set_tests_folder(folder: str):
     _tests_folder = folder
     _all_tests = _read_tests(folder)
 
+
 def setup_module(module: pytest.Module):
     global _test_results
     try:
-        exchange_folder=path.join(yatest.common.output_path(), "exchange")
+        exchange_folder = path.join(yatest.common.output_path(), "exchange")
         os.mkdir(exchange_folder)
     except FileExistsError:
         pass
@@ -82,14 +86,16 @@ def setup_module(module: pytest.Module):
     env = _prepare_docker_env(pg_port, _selected_tests_name)
     _run_tests_in_docker(image, env, exchange_folder, tests_result_folder)
 
-    test_results_file=path.join(tests_result_folder, "raw", "result.xml")
+    test_results_file = path.join(tests_result_folder, "raw", "result.xml")
     _test_results = _read_tests_result(test_results_file)
+
 
 def teardown_module(module):
     """teardown any state that was previously setup with a setup_module
     method.
     """
     _stop_ydb()
+
 
 def _run_ydb() -> int:
     """
@@ -100,8 +106,10 @@ def _run_ydb() -> int:
     print("rekby: pgwire port", node.pgwire_port)
     return node.pgwire_port
 
+
 def _stop_ydb():
     _kikimr_factory.stop()
+
 
 def _prepare_docker_env(pgwire_port: str, test_names: List[str]) -> List[str]:
     test_filter = _filter_formatter(test_names)
@@ -116,6 +124,7 @@ def _prepare_docker_env(pgwire_port: str, test_names: List[str]) -> List[str]:
         f"YDB_PG_TESTFILTER={test_filter}",
     ]
 
+
 def _docker_build(folder: str) -> str:
     image_name = 'ydb-pg-test-image'
 
@@ -128,12 +137,14 @@ def _docker_build(folder: str) -> str:
     )
     return image_name
 
+
 def _run_tests_in_docker(
-    image: str,
-    env: Union[List[str], Dict[str, str]],
-    exchange_folder: str,
-    results_folder: str,
-    ):
+        image: str,
+        env: Union[List[str], Dict[str, str]],
+        exchange_folder: str,
+        results_folder: str,
+        ):
+
     # TODO: run YDB with scripts/receipt and get connection port/database with runtime
     client: docker.Client = docker.from_env()
 
@@ -142,8 +153,8 @@ def _run_tests_in_docker(
         # command="/docker-start.bash",
         # detach=True,
         # auto_remove=True,
-        environment = env,
-        mounts = [
+        environment=env,
+        mounts=[
             docker.types.Mount(
                 target="/exchange",
                 source=exchange_folder,
@@ -164,11 +175,13 @@ def _run_tests_in_docker(
     finally:
         container.remove()
 
+
 def pytest_generate_tests(metafunc: pytest.Metafunc):
     """
     Return tests for run through pytest.
     """
     metafunc.parametrize('testname', _all_tests, ids=_all_tests)
+
 
 def execute_test(testname: str):
     try:
@@ -188,6 +201,7 @@ def execute_test(testname: str):
 
     raise Exception(f"Unexpected test state: '{test.state}'")
 
+
 def _read_tests(folder: str) -> Set[str]:
     with open(path.join(folder, "full-test-list.txt"), "rt") as f:
         all = set(line.strip() for line in f.readlines())
@@ -199,6 +213,7 @@ def _read_tests(folder: str) -> Set[str]:
     test_list_for_run.sort()
     return test_list_for_run
 
+
 def _read_tests_result(filepath: str) -> Dict[str, TestCase]:
     with open(filepath, "rt") as f:
         data = f.read()
@@ -209,12 +224,12 @@ def _read_tests_result(filepath: str) -> Dict[str, TestCase]:
 
     res: Dict[str, TestCase] = dict()
 
-    def get_text(test_case, field_name: str)->str:
+    def get_text(test_case, field_name: str) -> str:
         field_val = test_case[field_name]
-        if type(field_val) == str:
+        if type(field_val) is str:
             return field_val
-        elif type(field_val) == dict:
-            prefix=field_val.get("@message", "") + "\n"
+        elif type(field_val) is dict:
+            prefix = field_val.get("@message", "") + "\n"
             if prefix == "\n":
                 prefix = ""
             return prefix + field_val.get("#text", "")

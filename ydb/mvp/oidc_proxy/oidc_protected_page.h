@@ -77,6 +77,10 @@ public:
                 SendSecureHttpRequest(response, ctx);
                 return;
             }
+            if (NeedRedirect(response->Status)) {
+                DoRedirect(response, ctx);
+                return;
+            }
             NHttp::THeadersBuilder headers = GetResponseHeaders(response);
             TStringBuf contentType = headers.Get("Content-Type").NextTok(';');
             if (contentType == "text/html") {
@@ -220,6 +224,38 @@ private:
         LOG_DEBUG_S(ctx, EService::MVP, "Try to send request to HTTPS port");
         NHttp::THeadersBuilder headers {request->Headers};
         ForwardUserRequest(headers.Get(AUTH_HEADER_NAME), ctx, true);
+    }
+
+    bool NeedRedirect(TStringBuf status) const {
+        static const std::unordered_set<TString> REDIRECT_STATUS_WHITE_LIST {
+            "301", "302", "303", "307", "308"
+        };
+        return REDIRECT_STATUS_WHITE_LIST.contains(TString(status));
+    }
+
+    void DoRedirect(const NHttp::THttpIncomingResponsePtr& response, const NActors::TActorContext& ctx) const {
+        LOG_DEBUG_S(ctx, EService::MVP, "Do redirect");
+        NHttp::THttpOutgoingRequestPtr previousRequest = response->GetRequest();
+        TStringBuf method = (response->Status == "303" ? "GET" : previousRequest->Method);
+        NHttp::THeadersBuilder responseHeaders(response->Headers);
+        TStringBuf locationHeader = responseHeaders.Get("Location");
+        NHttp::THttpOutgoingRequestPtr httpRequest = nullptr;
+        if (locationHeader.StartsWith('/')) {
+            TStringBuf scheme, host, uri;
+            NHttp::CrackURL(ProtectedPageUrl, scheme, host, uri);
+            httpRequest = NHttp::THttpOutgoingRequest::CreateHttpRequest(method, host, locationHeader);
+        } else {
+            httpRequest = NHttp::THttpOutgoingRequest::CreateRequest(method, locationHeader);
+        }
+        NHttp::THeadersBuilder previousRequestHeaders(previousRequest->Headers);
+        for (const auto& [headerName, headerValue] : previousRequestHeaders.Data) {
+            httpRequest->Set(headerName, headerValue);
+        }
+        if (!previousRequest->Body.empty()) {
+            httpRequest->SetBody(previousRequest->Body);
+        }
+        httpRequest->Secure = previousRequest->Secure;
+        ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
     }
 };
 

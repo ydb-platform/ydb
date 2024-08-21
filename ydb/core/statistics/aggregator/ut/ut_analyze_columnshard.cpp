@@ -2,6 +2,8 @@
 
 #include <ydb/library/actors/testlib/test_runtime.h>
 
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+
 #include <thread>
 
 namespace NKikimr {
@@ -117,7 +119,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         UNIT_ASSERT(!response2);
     }
 
-    Y_UNIT_TEST(AnalyzeRebootSa) {
+    Y_UNIT_TEST(AnalyzeRebootSaBeforeAnalyzeTableResponse) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
         auto tableInfo = CreateDatabaseTables(env, 1, 1)[0];
@@ -126,16 +128,135 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
 
         bool eventSeen = false;
         auto observer = runtime.AddObserver<TEvStatistics::TEvAnalyzeTableResponse>([&](auto&) {
-            if (!eventSeen) {
-                RebootTablet(runtime, tableInfo.SaTabletId, sender);
-                eventSeen = true;
-            }
+            eventSeen = true;
         });
 
         auto analyzeRequest1 = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest1.release());
 
-        runtime.WaitFor("blocked 1st TEvAnalyzeTableResponse event", [&]{ return eventSeen; });
+        runtime.WaitFor("TEvAnalyzeTableResponse", [&]{ return eventSeen; });
+        RebootTablet(runtime, tableInfo.SaTabletId, sender);
+
+        auto analyzeRequest2 = MakeAnalyzeRequest({tableInfo.PathId});
+        runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest2.release());
+
+        runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
+    }
+
+    Y_UNIT_TEST(AnalyzeRebootSaBeforeResolve) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        auto tableInfo = CreateDatabaseTables(env, 1, 1)[0];
+
+        auto sender = runtime.AllocateEdgeActor();
+
+        int observerCount = 0;
+        auto observer = runtime.AddObserver<TEvTxProxySchemeCache::TEvResolveKeySetResult>([&](auto&){
+            observerCount++;
+        });
+
+        auto analyzeRequest1 = MakeAnalyzeRequest({tableInfo.PathId});
+        runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest1.release());
+
+        runtime.WaitFor("TEvResolveKeySetResult", [&]{ return observerCount == 3; });
+        RebootTablet(runtime, tableInfo.SaTabletId, sender);
+
+        auto analyzeRequest2 = MakeAnalyzeRequest({tableInfo.PathId});
+        runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest2.release());
+
+        runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
+    }
+
+    Y_UNIT_TEST(AnalyzeRebootSaBeforeReqDistribution) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        auto tableInfo = CreateDatabaseTables(env, 1, 1)[0];
+
+        auto sender = runtime.AllocateEdgeActor();
+
+        bool eventSeen = false;
+        auto observer = runtime.AddObserver<TEvHive::TEvRequestTabletDistribution>([&](auto&) {
+            eventSeen = true;
+        });
+
+        auto analyzeRequest1 = MakeAnalyzeRequest({tableInfo.PathId});
+        runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest1.release());
+
+        runtime.WaitFor("TEvRequestTabletDistribution", [&]{ return eventSeen; });
+        RebootTablet(runtime, tableInfo.SaTabletId, sender);
+
+        auto analyzeRequest2 = MakeAnalyzeRequest({tableInfo.PathId});
+        runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest2.release());
+
+        runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
+    }
+
+    Y_UNIT_TEST(AnalyzeRebootSaBeforeAggregate) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        auto tableInfo = CreateDatabaseTables(env, 1, 1)[0];
+
+        auto sender = runtime.AllocateEdgeActor();
+
+        bool eventSeen = false;
+        auto observer = runtime.AddObserver<TEvStatistics::TEvAggregateStatistics>([&](auto&){
+            eventSeen = true;
+        });
+
+        auto analyzeRequest1 = MakeAnalyzeRequest({tableInfo.PathId});
+        runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest1.release());
+
+        runtime.WaitFor("TEvAggregateStatistics", [&]{ return eventSeen; });
+        RebootTablet(runtime, tableInfo.SaTabletId, sender);
+
+        auto analyzeRequest2 = MakeAnalyzeRequest({tableInfo.PathId});
+        runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest2.release());
+
+        runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
+    }
+
+    Y_UNIT_TEST(AnalyzeRebootSaBeforeSave) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        auto tableInfo = CreateDatabaseTables(env, 1, 1)[0];
+
+        auto sender = runtime.AllocateEdgeActor();
+
+        bool eventSeen = false;
+        auto observer = runtime.AddObserver<TEvStatistics::TEvAggregateStatisticsResponse>([&](auto&){
+            eventSeen = true;
+        });
+
+        auto analyzeRequest1 = MakeAnalyzeRequest({tableInfo.PathId});
+        runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest1.release());
+
+        runtime.WaitFor("TEvAggregateStatisticsResponse", [&]{ return eventSeen; });
+        RebootTablet(runtime, tableInfo.SaTabletId, sender);
+
+        auto analyzeRequest2 = MakeAnalyzeRequest({tableInfo.PathId});
+        runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest2.release());
+
+        runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
+    }
+
+    //
+    Y_UNIT_TEST(AnalyzeRebootSaInAggregate) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        auto tableInfo = CreateDatabaseTables(env, 1, 10)[0];
+
+        auto sender = runtime.AllocateEdgeActor();
+        
+        int observerCount = 0;
+        auto observer = runtime.AddObserver<TEvStatistics::TEvStatisticsRequest>([&](auto&) {
+            observerCount++;
+        });
+
+        auto analyzeRequest1 = MakeAnalyzeRequest({tableInfo.PathId});
+        runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest1.release());
+
+        runtime.WaitFor("5th TEvStatisticsRequest", [&]{ return observerCount == 5; });
+        RebootTablet(runtime, tableInfo.SaTabletId, sender);
 
         auto analyzeRequest2 = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest2.release());

@@ -745,6 +745,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
     if (WaitingForPreviousBlobQuota() || WaitingForSubDomainQuota(ctx)) {
         SetDeadlinesForWrites(ctx);
     }
+    PQ_LOG_D("WriteInflightSize: add " << WriteInflightSize << ", " << size);
     WriteInflightSize += size;
 
     // TODO: remove decReservedSize == 0
@@ -1120,6 +1121,11 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     auto& sourceIdBatch = parameters.SourceIdBatch;
     auto sourceId = sourceIdBatch.GetSource(p.Msg.SourceId);
 
+    PQ_LOG_D("WriteInflightSize: sub " << WriteInflightSize << ", " << p.Msg.Data.size());
+    Y_ABORT_UNLESS(WriteInflightSize >= p.Msg.Data.size(),
+                   "PQ %" PRIu64 ", Partition {%" PRIu32 ", %" PRIu32 "}, WriteInflightSize=%" PRIu64 ", p.Msg.Data.size=%" PRISZT,
+                   TabletID, Partition.OriginalPartitionId, Partition.InternalPartitionId,
+                   WriteInflightSize, p.Msg.Data.size());
     WriteInflightSize -= p.Msg.Data.size();
 
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_RECEIVE_QUEUE].IncrementFor(ctx.Now().MilliSeconds() - p.Msg.ReceiveTimestamp);
@@ -1538,6 +1544,10 @@ void TPartition::FilterDeadlinedWrites(const TActorContext& ctx, TMessageQueue& 
 
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ERROR].Increment(1);
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(msg.Data.size() + msg.SourceId.size());
+            PQ_LOG_D("WriteInflightSize: sub " << WriteInflightSize << ", " << msg.Data.size());
+            Y_ABORT_UNLESS(WriteInflightSize >= msg.Data.size(),
+                           "WriteInflightSize=%" PRIu64 ", msg.Data.size=%" PRISZT,
+                           WriteInflightSize, msg.Data.size());
             WriteInflightSize -= msg.Data.size();
         }
 
@@ -1734,6 +1744,7 @@ void TPartition::EndAppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, co
                 .HeartbeatVersion = std::nullopt,
             }, std::nullopt};
 
+            PQ_LOG_D("WriteInflightSize: add " << WriteInflightSize << ", " << heartbeat->Data.size());
             WriteInflightSize += heartbeat->Data.size();
             ExecRequest(hbMsg, *Parameters, request);
 

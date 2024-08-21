@@ -238,9 +238,21 @@ void CreateColumnStoreTable(TTestEnv& env, const TString& databaseName, const TS
     )", fullTableName.c_str(), shardCount)).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
+    result = session.ExecuteSchemeQuery(Sprintf(R"(
+        ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_key, TYPE=COUNT_MIN_SKETCH,
+                    FEATURES=`{"column_names" : ['Key']}`);
+    )", fullTableName.c_str())).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    result = session.ExecuteSchemeQuery(Sprintf(R"(
+        ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_value, TYPE=COUNT_MIN_SKETCH,
+                    FEATURES=`{"column_names" : ['Value']}`);
+    )", fullTableName.c_str())).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
     NYdb::TValueBuilder rows;
     rows.BeginList();
-    for (size_t i = 0; i < 100; ++i) {
+    for (size_t i = 0; i < 1000000; ++i) {
         auto key = TValueBuilder().Uint64(i).Build();
         auto value = TValueBuilder().OptionalUint64(i).Build();
         rows.AddListItem();

@@ -4,17 +4,15 @@
 #include <ydb/core/formats/arrow/hash/calcer.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
-#include <ydb/library/minsketch/stack_count_min_sketch.h>
+#include <ydb/library/minsketch/count_min_sketch.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
 
 namespace NKikimr::NOlap::NIndexes::NCountMinSketch {
 
-using TCountMinSketch = TStackAllocatedCountMinSketch<256, 8>;
-
 TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader) const {
-    TCountMinSketch sketch;
+    auto sketch = std::unique_ptr<TCountMinSketch>(TCountMinSketch::Create());
 
     for (auto& colReader : reader) {
         for (colReader.Start(); colReader.IsCorrect(); colReader.ReadNextChunk()) {
@@ -28,14 +26,14 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader) const {
                 if constexpr (arrow::has_c_type<typename TWrap::T>()) {
                     for (int64_t i = 0; i < arrTyped.length(); ++i) {
                         auto cell = TCell::Make(arrTyped.Value(i));
-                        sketch.Count(cell.Data(), cell.Size());
+                        sketch->Count(cell.Data(), cell.Size());
                     }
                     return true;
                 }
                 if constexpr (arrow::has_string_view<typename TWrap::T>()) {
                     for (int64_t i = 0; i < arrTyped.length(); ++i) {
                         auto view = arrTyped.GetView(i);
-                        sketch.Count(view.data(), view.size());
+                        sketch->Count(view.data(), view.size());
                     }
                     return true;
                 }
@@ -45,7 +43,7 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader) const {
         }
     }
 
-    TString result(sketch.AsStringBuf());
+    TString result(sketch->AsStringBuf());
     return result;
 }
 

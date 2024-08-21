@@ -5,6 +5,9 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
+#include <ydb/library/minsketch/stack_count_min_sketch.h>
+
+#include <ydb/core/statistics/events.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -68,15 +71,6 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         }
         {
             auto alterQuery = TStringBuilder() <<
-                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=cms_level, TYPE=COUNT_MIN_SKETCH,
-                    FEATURES=`{"column_names" : ["level"]}`);
-                )";
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
-        }
-        {
-            auto alterQuery = TStringBuilder() <<
                 R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id, TYPE=BLOOM_FILTER,
                     FEATURES=`{"column_names" : ["resource_id", "level"], "false_positive_probability" : 0.05}`);
                 )";
@@ -111,6 +105,129 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0);
             AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < csController->GetIndexesSkippingOnSelect().Val() * 0.4)
                 ("approve", csController->GetIndexesApprovedOnSelect().Val())("skip", csController->GetIndexesSkippingOnSelect().Val());
+        }
+    }
+
+    Y_UNIT_TEST(CountMinSketchIndex) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto tableClient = kikimr.GetTableClient();
+
+        Tests::NCommon::TLoggerInit(kikimr).SetComponents({NKikimrServices::TX_COLUMNSHARD}, "CS").SetPriority(NActors::NLog::PRI_DEBUG).Initialize();
+
+        {
+            auto alterQuery = TStringBuilder() <<
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=cms_ts, TYPE=COUNT_MIN_SKETCH,
+                    FEATURES=`{"column_names" : ['timestamp']}`);
+                )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        {
+            auto alterQuery = TStringBuilder() <<
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=cms_res_id, TYPE=COUNT_MIN_SKETCH,
+                    FEATURES=`{"column_names" : ['resource_id']}`);
+                )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        {
+            auto alterQuery = TStringBuilder() <<
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=cms_uid, TYPE=COUNT_MIN_SKETCH,
+                    FEATURES=`{"column_names" : ['uid']}`);
+                )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        {
+            auto alterQuery = TStringBuilder() <<
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=cms_level, TYPE=COUNT_MIN_SKETCH,
+                    FEATURES=`{"column_names" : ['level']}`);
+                )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        {
+            auto alterQuery = TStringBuilder() <<
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=cms_message, TYPE=COUNT_MIN_SKETCH,
+                    FEATURES=`{"column_names" : ['message']}`);
+                )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1100000, 300100000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1200000, 300200000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1300000, 300300000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1400000, 300400000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 2000000, 200000000, 70000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 3000000, 100000000, 110000);
+
+        csController->WaitActualization(TDuration::Seconds(10));
+        {
+            auto runtime = kikimr.GetTestServer().GetRuntime();
+            auto sender = runtime->AllocateEdgeActor();
+
+            TAutoPtr<IEventHandle> handle;
+
+            size_t shard = 0;
+            std::set<ui64> pathids;
+            for (auto&& i : csController->GetShardActualIds()) {
+                Cerr << ">>> shard actual id: " << i << Endl;
+                for (auto&& j : csController->GetPathIds(i)) {
+                    Cerr << ">>> path id: " << j << Endl;
+                    pathids.insert(j);
+                }
+                if (++shard == 3)
+                    break;
+            }
+
+            UNIT_ASSERT(pathids.size() == 1);
+            ui64 pathId = *pathids.begin();
+
+            shard = 0;
+            for (auto&& i : csController->GetShardActualIds()) {
+                auto request = std::make_unique<NStat::TEvStatistics::TEvStatisticsRequest>();
+                request->Record.MutableTable()->MutablePathId()->SetLocalId(pathId);
+
+                runtime->Send(MakePipePerNodeCacheID(false), sender, new TEvPipeCache::TEvForward(
+                    request.release(), i, false));
+                if (++shard == 3)
+                    break;
+            }
+
+            auto sketch = std::unique_ptr<TCountMinSketch>(TCountMinSketch::Create());
+            for (size_t shard = 0; shard < 3; ++shard) {
+                auto event = runtime->GrabEdgeEvent<NStat::TEvStatistics::TEvStatisticsResponse>(handle);
+                UNIT_ASSERT(event);
+
+                auto& response = event->Record;
+                // Cerr << response << Endl;
+                UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), NKikimrStat::TEvStatisticsResponse::STATUS_SUCCESS);
+                UNIT_ASSERT(response.ColumnsSize() == 5);
+                TString someData = response.GetColumns(0).GetStatistics(0).GetData();
+                *sketch += *std::unique_ptr<TCountMinSketch>(TCountMinSketch::FromString(someData.data(), someData.size()));
+                Cerr << ">>> sketch.GetElementCount() = " << sketch->GetElementCount() << Endl;
+                UNIT_ASSERT(sketch->GetElementCount() > 0);
+            }
         }
     }
 

@@ -5,12 +5,10 @@
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 
-#include <ydb/library/minsketch/stack_count_min_sketch.h>
+#include <ydb/library/minsketch/count_min_sketch.h>
 
 
 namespace NKikimr::NColumnShard {
-
-using TCountMinSketch = TStackAllocatedCountMinSketch<256, 8>;
 
 void TColumnShard::Handle(NStat::TEvStatistics::TEvAnalyzeTable::TPtr& ev, const TActorContext&) {
     auto& requestRecord = ev->Get()->Record;
@@ -44,9 +42,9 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
         columnTagsRequested = std::set<ui32>(allColumnIds.begin(), allColumnIds.end());
     }
 
-    std::map<ui32, TCountMinSketch> sketchesByColumns;
+    std::map<ui32, std::unique_ptr<TCountMinSketch>> sketchesByColumns;
     for (auto id : columnTagsRequested) {
-        sketchesByColumns[id] = TCountMinSketch();
+        sketchesByColumns.emplace(id, TCountMinSketch::Create());
     }
 
     for (const auto& [indexKey, keyPortions] : spg->GetPortionsIndex().GetPoints()) {
@@ -64,9 +62,8 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
                 const std::vector<TString> data = portionInfo->GetIndexInplaceDataVerified(indexMeta->GetIndexId());
 
                 for (const auto& sketchAsString : data) {
-                    AFL_VERIFY(sketchAsString.size() == TCountMinSketch::GetSize());
-                    auto* sketch = reinterpret_cast<const TCountMinSketch*>(sketchAsString.data());
-                    sketchesByColumns[columnId] += *sketch;
+                    auto sketch = std::unique_ptr<TCountMinSketch>(TCountMinSketch::FromString(sketchAsString.data(), sketchAsString.size()));
+                    *sketchesByColumns[columnId] += *sketch;
                 }
             }
         }
@@ -84,7 +81,7 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
 
         auto* statistic = column->AddStatistics();
         statistic->SetType(NStat::COUNT_MIN_SKETCH);
-        statistic->SetData(TString(sketchesByColumns[columnTag].AsStringBuf()));
+        statistic->SetData(TString(sketchesByColumns[columnTag]->AsStringBuf()));
     }
 
     Send(ev->Sender, response.release(), 0, ev->Cookie);

@@ -123,7 +123,6 @@ SRCS(
     misc/digest.cpp
     misc/error.cpp
     misc/error_code.cpp
-    misc/ema_counter.cpp
     misc/fs.cpp
     # NB: it is necessary to prevent linker optimization of
     # REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION macros for TGuid.

@@ -1,6 +1,6 @@
 # Приложение на Java
 
-На этой странице подробно разбирается код [тестового приложения](https://github.com/ydb-platform/ydb-java-examples/tree/master/basic_example), доступного в составе [Java SDK Examples](https://github.com/ydb-platform/ydb-java-examples) {{ ydb-short-name }}.
+На этой странице подробно разбирается код [тестового приложения](https://github.com/ydb-platform/ydb-java-examples/tree/master/query-example), доступного в составе [Java SDK Examples](https://github.com/ydb-platform/ydb-java-examples) {{ ydb-short-name }}.
 
 ## Скачивание SDK Examples и запуск примера {#download}
 
@@ -15,13 +15,12 @@ git clone https://github.com/ydb-platform/ydb-java-examples
 Далее выполните сборку SDK Examples
 
 ``` bash
-( cd ydb-java-examples && mvn package )
+mvn package -f ./ydb-java-examples
 ```
 
 Далее из этой же рабочей директории выполните команду запуска тестового приложения, которая будет отличаться в зависимости от того, к какой базе данных необходимо подключиться.
 
 {% include [run_options.md](_includes/run_options.md) %}
-
 
 {% include [init.md](../_includes/steps/01_init.md) %}
 
@@ -36,81 +35,59 @@ git clone https://github.com/ydb-platform/ydb-java-examples
 this.transport = GrpcTransport.forConnectionString(connectionString)
         .withAuthProvider(CloudAuthHelper.getAuthProviderFromEnviron())
         .build();
-this.tableClient = TableClient.newClient(transport).build();
+this.queryClient = QueryClient.newClient(transport).build();
 ```
 
-Все операции с YDB рекомендуется выполнять с помощью класса-хелпера `SessionRetryContext`, который обеспечивает корректное повторное выполнение операции в случае частичной недоступности. Фрагмент кода для инициализации контекста ретраев:
+Все операции с YDB [рекомендуется](../../../recipes/ydb-sdk/retry.md) выполнять с помощью класса-хелпера `SessionRetryContext`, который обеспечивает корректное повторное выполнение операции в случае частичной недоступности. Фрагмент кода для инициализации контекста ретраев:
 
 ```java
-this.retryCtx = SessionRetryContext.create(tableClient).build();
+this.retryCtx = SessionRetryContext.create(queryClient).build();
 ```
 
 {% include [create_table.md](../_includes/steps/02_create_table.md) %}
 
-Для создания таблиц используется метод `Session.createTable()`:
+Для создания таблиц используется режим транзакции `TxMode.NONE`, который позволяет выполнять схемные запросы:
 
 ```java
 private void createTables() {
-    TableDescription seriesTable = TableDescription.newBuilder()
-        .addNullableColumn("series_id", PrimitiveType.Uint64)
-        .addNullableColumn("title", PrimitiveType.Text)
-        .addNullableColumn("series_info", PrimitiveType.Text)
-        .addNullableColumn("release_date", PrimitiveType.Date)
-        .setPrimaryKey("series_id")
-        .build();
+    retryCtx.supplyResult(session -> session.createQuery(""
+            + "CREATE TABLE series ("
+            + "  series_id UInt64,"
+            + "  title Text,"
+            + "  series_info Text,"
+            + "  release_date Date,"
+            + "  PRIMARY KEY(series_id)"
+            + ")", TxMode.NONE).execute()
+    ).join().getStatus().expectSuccess("Can't create table series");
 
-    retryCtx.supplyStatus(session -> session.createTable(database + "/series", seriesTable))
-            .join().expectSuccess("Can't create table /series");
+    retryCtx.supplyResult(session -> session.createQuery(""
+            + "CREATE TABLE seasons ("
+            + "  series_id UInt64,"
+            + "  season_id UInt64,"
+            + "  title Text,"
+            + "  first_aired Date,"
+            + "  last_aired Date,"
+            + "  PRIMARY KEY(series_id, season_id)"
+            + ")", TxMode.NONE).execute()
+    ).join().getStatus().expectSuccess("Can't create table seasons");
 
-    TableDescription seasonsTable = TableDescription.newBuilder()
-        .addNullableColumn("series_id", PrimitiveType.Uint64)
-        .addNullableColumn("season_id", PrimitiveType.Uint64)
-        .addNullableColumn("title", PrimitiveType.Text)
-        .addNullableColumn("first_aired", PrimitiveType.Date)
-        .addNullableColumn("last_aired", PrimitiveType.Date)
-        .setPrimaryKeys("series_id", "season_id")
-        .build();
-
-    retryCtx.supplyStatus(session -> session.createTable(database + "/seasons", seasonsTable))
-            .join().expectSuccess("Can't create table /seasons");
-
-    TableDescription episodesTable = TableDescription.newBuilder()
-        .addNullableColumn("series_id", PrimitiveType.Uint64)
-        .addNullableColumn("season_id", PrimitiveType.Uint64)
-        .addNullableColumn("episode_id", PrimitiveType.Uint64)
-        .addNullableColumn("title", PrimitiveType.Text)
-        .addNullableColumn("air_date", PrimitiveType.Date)
-        .setPrimaryKeys("series_id", "season_id", "episode_id")
-        .build();
-
-    retryCtx.supplyStatus(session -> session.createTable(database + "/episodes", episodesTable))
-            .join().expectSuccess("Can't create table /episodes");
+    retryCtx.supplyResult(session -> session.createQuery(""
+            + "CREATE TABLE episodes ("
+            + "  series_id UInt64,"
+            + "  season_id UInt64,"
+            + "  episode_id UInt64,"
+            + "  title Text,"
+            + "  air_date Date,"
+            + "  PRIMARY KEY(series_id, season_id, episode_id)"
+            + ")", TxMode.NONE).execute()
+    ).join().getStatus().expectSuccess("Can't create table episodes");
 }
 ```
 
-С помощью метода `Session.describeTable()` можно вывести информацию о структуре таблицы и убедиться, что она успешно создалась:
-
-```java
-private void describeTables() {
-    logger.info("--[ DescribeTables ]--");
-
-    Arrays.asList("series", "seasons", "episodes").forEach(tableName -> {
-        String tablePath = database + '/' + tableName;
-        TableDescription tableDesc = retryCtx.supplyResult(session -> session.describeTable(tablePath))
-                .join().getValue();
-
-        List<String> primaryKeys = tableDesc.getPrimaryKeys();
-        logger.info(" table {}", tableName);
-        for (TableColumn column : tableDesc.getColumns()) {
-            boolean isPrimary = primaryKeys.contains(column.getName());
-            logger.info("     {}: {} {}", column.getName(), column.getType(), isPrimary ? " (PK)" : "");
-        }
-    });
-}
-```
 {% include [../steps/03_write_queries.md](../_includes/steps/03_write_queries.md) %}
 
-Фрагмент кода, демонстрирующий выполнение запроса на запись/изменение данных:
+Для выполнения YQL-запросов используется метод `QuerySession.createQuery()`. Он создаёт новый объект `QueryStream`, который позволяет выполнить запрос и подписаться на получение данных от сервера с результатами. Поскольку в запросах на запись никаких результатов не ожидается, используется метод `QueryStream.execute()` без параметров — он просто выполняет запрос и ждёт завершения стрима.
+Фрагмент кода, демонстрирующий эту логику:
 
 ```java
 private void upsertSimple() {
@@ -118,21 +95,14 @@ private void upsertSimple() {
             = "UPSERT INTO episodes (series_id, season_id, episode_id, title) "
             + "VALUES (2, 6, 1, \"TBD\");";
 
-    // Begin new transaction with SerializableRW mode
-    TxControl txControl = TxControl.serializableRw().setCommitTx(true);
-
     // Executes data query with specified transaction control settings.
-    retryCtx.supplyResult(session -> session.executeDataQuery(query, txControl))
+    retryCtx.supplyResult(session -> session.createQuery(query, TxMode.SERIALIZABLE_RW).execute())
         .join().getValue();
-}
 ```
 
 {% include [steps/04_query_processing.md](../_includes/steps/04_query_processing.md) %}
 
-Для выполнения YQL-запросов используется метод `Session.executeDataQuery()`.
-SDK позволяет в явном виде контролировать выполнение транзакций и настраивать необходимый режим выполнения транзакций с помощью класса `TxControl`.
-
-В фрагменте кода, приведенного ниже, транзакция выполняется с помощью метода `session.executeDataQuery()`. Устанавливается режим выполнения транзакции `TxControl txControl = TxControl.serializableRw().setCommitTx(true);` и флаг автоматического завершения транзакции `setCommitTx(true)`. Тело запроса описано с помощью синтаксиса YQL и как параметр передается методу `executeDataQuery`.
+Прямое использование класса `QueryStream` для получения результатов не всегда может быть удобным — он подразумевает асинхронное получение данных от сервера через callback в методе `QueryStream.execute()`. Если ожидаемое количество строк в результате невелико, можно воспользоваться встроенным в SDK хелпером `QueryReader`, который сначала самостоятельно вычитывает все данные из стрима, а затем передаёт их пользователю в упорядоченном виде.
 
 ```java
 private void selectSimple() {
@@ -140,12 +110,10 @@ private void selectSimple() {
             = "SELECT series_id, title, release_date "
             + "FROM series WHERE series_id = 1;";
 
-    // Begin new transaction with SerializableRW mode
-    TxControl txControl = TxControl.serializableRw().setCommitTx(true);
-
     // Executes data query with specified transaction control settings.
-    DataQueryResult result = retryCtx.supplyResult(session -> session.executeDataQuery(query, txControl))
-            .join().getValue();
+    QueryReader result = retryCtx.supplyResult(
+            session -> QueryReader.readFrom(session.createQuery(query, TxMode.SERIALIZABLE_RW))
+    ).join().getValue();
 
     logger.info("--[ SelectSimple ]--");
 
@@ -160,7 +128,7 @@ private void selectSimple() {
 }
 ```
 
-В результате исполнения запроса формируется объект класса `DataQueryResult`, который может содержать несколько выборок, получаемых методом `getResultSet( <index> )`. Так как запрос содержал только одну команду `SELECT`, то результат содержит только одну выборку под индексом `0`. Приведенный фрагмент кода при запуске выводит на консоль текст:
+В результате исполнения запроса формируется объект класса `QueryReader`, который может содержать несколько выборок, получаемых методом `getResultSet( <index> )`. Так как запрос содержал только одну команду `SELECT`, то результат содержит только одну выборку под индексом `0`. Приведенный фрагмент кода при запуске выводит на консоль текст:
 
 ```bash
 12:06:36.548 INFO  App - --[ SelectSimple ]--
@@ -169,7 +137,7 @@ private void selectSimple() {
 
 {% include [param_queries.md](../_includes/steps/06_param_queries.md) %}
 
-Фрагмент кода, приведенный ниже, демонстрирует использование параметризованных запросов и класс `Params` для формирования параметров и передачи их методу `executeDataQuery`.
+Фрагмент кода, приведенный ниже, демонстрирует использование параметризованных запросов и класс `Params` для формирования параметров и передачи их методу `QuerySession.createQuery`.
 
 ```java
 private void selectWithParams(long seriesID, long seasonID) {
@@ -204,10 +172,12 @@ private void selectWithParams(long seriesID, long seasonID) {
 }
 ```
 
-{% include [scan_query.md](../_includes/steps/08_scan_query.md) %}
+{% include [async_requests.md](../_includes/steps/11_async_requests.md) %}
+
+Если ожидаемое количество данных от запроса велико, не следует пытаться загружать их полностью в оперативную память с помощью `QueryReader`. В таком случае лучше использовать более сложную логику, предусматривающую обработку результата по мере получения данных. Важно отметить, что здесь, как и раньше, используется `SessionRetryContext` для повторных попыток выполнения запроса при ошибках. Соответственно, необходимо учитывать, что чтение может быть прервано в любой момент, и в таком случае весь процесс выполнения запроса начнётся заново.
 
 ```java
-private void scanQueryWithParams(long seriesID, long seasonID) {
+private void asyncSelectRead(long seriesID, long seasonID) {
     String query
             = "DECLARE $seriesId AS Uint64; "
             + "DECLARE $seasonId AS Uint64; "
@@ -223,10 +193,12 @@ private void scanQueryWithParams(long seriesID, long seasonID) {
             "$seasonId", PrimitiveValue.newUint64(seasonID)
     );
 
-    logger.info("--[ ExecuteScanQueryWithParams ]--");
-    retryCtx.supplyStatus(session -> {
-        ExecuteScanQuerySettings settings = ExecuteScanQuerySettings.newBuilder().build();
-        return session.executeScanQuery(query, params, settings, rs -> {
+    logger.info("--[ ExecuteAsyncQueryWithParams ]--");
+    retryCtx.supplyResult(session -> {
+        QueryStream asyncQuery = session.createQuery(query, TxMode.SNAPSHOT_RO, params);
+        return asyncQuery.execute(part -> {
+            ResultSetReader rs = part.getResultSetReader();
+            logger.info("read {} rows of result set {}", rs.getRowCount(), part.getResultSetIndex());
             while (rs.next()) {
                 logger.info("read episode {} of {} for {}",
                         rs.getColumn("episode_title").getText(),
@@ -235,7 +207,7 @@ private void scanQueryWithParams(long seriesID, long seasonID) {
                 );
             }
         });
-    }).join().expectSuccess("scan query problem");
+    }).join().getStatus().expectSuccess("execute query problem");
 }
 ```
 
@@ -247,14 +219,13 @@ private void scanQueryWithParams(long seriesID, long seasonID) {
 ```java
 private void multiStepTransaction(long seriesID, long seasonID) {
     retryCtx.supplyStatus(session -> {
-        // Multiple operations with session
-        ...
+        QueryTransaction transaction = session.createNewTransaction(TxMode.SNAPSHOT_RO);
 
-        // return success status to SessionRetryContext
+        //...
+
         return CompletableFuture.completedFuture(Status.SUCCESS);
     }).join().expectSuccess("multistep transaction problem");
 }
-
 ```
 
 Первый шаг — подготовка и выполнение первого запроса:
@@ -266,14 +237,11 @@ private void multiStepTransaction(long seriesID, long seasonID) {
             + "SELECT MIN(first_aired) AS from_date FROM seasons "
             + "WHERE series_id = $seriesId AND season_id = $seasonId;";
 
-    // Execute first query to get the required values to the client.
-    // Transaction control settings don't set CommitTx flag to keep transaction active
-    // after query execution.
-    TxControl tx1 = TxControl.serializableRw().setCommitTx(false);
-    DataQueryResult res1 = session.executeDataQuery(query1, tx1, Params.of(
+    // Execute first query to start a new transaction
+    QueryReader res1 = QueryReader.readFrom(transaction.createQuery(query1, Params.of(
             "$seriesId", PrimitiveValue.newUint64(seriesID),
             "$seasonId", PrimitiveValue.newUint64(seasonID)
-    )).join().getValue();
+    ))).join().getValue();
 ```
 
 Затем мы можем выполнить некоторую клиентскую обработку полученных данных:
@@ -292,7 +260,7 @@ private void multiStepTransaction(long seriesID, long seasonID) {
 
 ```java
     // Get active transaction id
-    String txId = res1.getTxId();
+    logger.info("started new transaction {}", transaction.getId());
 ```
 
 Следующий шаг — создание следующего запроса, использующего результаты выполнения кода на стороне клиентского приложения:
@@ -306,15 +274,12 @@ private void multiStepTransaction(long seriesID, long seasonID) {
             + "SELECT season_id, episode_id, title, air_date FROM episodes "
             + "WHERE series_id = $seriesId AND air_date >= $fromDate AND air_date <= $toDate;";
 
-    // Execute second query.
-    // Transaction control settings continues active transaction (tx) and
-    // commits it at the end of second query execution.
-    TxControl tx2 = TxControl.id(txId).setCommitTx(true);
-    DataQueryResult res2 = session.executeDataQuery(query2, tx2, Params.of(
+    // Execute second query with commit at end.
+    QueryReader res2 = QueryReader.readFrom(transaction.createQueryWithCommit(query2, Params.of(
         "$seriesId", PrimitiveValue.newUint64(seriesID),
         "$fromDate", PrimitiveValue.newDate(fromDate),
         "$toDate", PrimitiveValue.newDate(toDate)
-    )).join().getValue();
+    ))).join().getValue();
 
     logger.info("--[ MultiStep ]--");
     ResultSetReader rs = res2.getResultSet(0);
@@ -341,8 +306,8 @@ private void multiStepTransaction(long seriesID, long seasonID) {
 
 ```java
 private void tclTransaction() {
-    retryCtx.supplyStatus(session -> {
-        Transaction transaction = session.beginTransaction(Transaction.Mode.SERIALIZABLE_READ_WRITE)
+    retryCtx.supplyResult(session -> {
+        QueryTransaction transaction = session.beginTransaction(TxMode.SERIALIZABLE_RW)
             .join().getValue();
 
         String query
@@ -353,15 +318,14 @@ private void tclTransaction() {
 
         // Execute data query.
         // Transaction control settings continues active transaction (tx)
-        TxControl txControl = TxControl.id(transaction).setCommitTx(false);
-        DataQueryResult result = session.executeDataQuery(query, txControl, params)
+        QueryReader reader = QueryReader.readFrom(transaction.createQuery(query, params))
             .join().getValue();
 
-        logger.info("get transaction {}", result.getTxId());
+        logger.info("get transaction {}", transaction.getId());
 
         // Commit active transaction (tx)
         return transaction.commit();
-    }).join().expectSuccess("tcl transaction problem");
+    }).join().getStatus().expectSuccess("tcl transaction problem");
 }
 ```
 

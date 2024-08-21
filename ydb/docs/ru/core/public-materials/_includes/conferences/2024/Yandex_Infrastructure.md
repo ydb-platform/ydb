@@ -2,7 +2,7 @@
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 
-Шина данных уровня Яндекса требует нестандартных решений. [{{ team.zevaykin.name }}]({{ team.zevaykin.profile }})({{ team.zevaykin.position }}) рассказал о том, как появился сервис {{ ydb-short-name }} Topics, и что такое применённые оптимизации. Также Александр рассказал об архитектуре {{ ydb-short-name }} Topics и раскрыл причины отказа от Kafka. 
+Шина данных уровня Яндекса требует нестандартных решений. [{{ team.zevaykin.name }}]({{ team.zevaykin.profile }}) ({{ team.zevaykin.position }}) рассказал о том, как появился сервис {{ ydb-short-name }} Topics, и что такое применённые оптимизации. Также Александр рассказал об архитектуре {{ ydb-short-name }} Topics и раскрыл причины отказа от Kafka. 
 
 @[YouTube](https://youtu.be/lZ5SUzdQO7k?si=cWx3sE6eDE_sx7f8)
 

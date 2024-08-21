@@ -231,7 +231,25 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         auto outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "200");
-        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Body, "this is test");
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Body, okResponseBody);
+
+        runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
+        outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, allowedProxyHost);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/counters");
+        UNIT_ASSERT_STRING_CONTAINS(outgoingRequestEv->Request->Headers, "Authorization: Bearer protected_page_iam_token");
+        UNIT_ASSERT_EQUAL(outgoingRequestEv->Request->Secure, false);
+        incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
+        const TString errorJsonResponseBody {"{\"status\":\"400\", \"message\":\"Table does not exist\"}"};
+        EatWholeString(incomingResponse, "HTTP/1.1 400 Bad Request\r\n"
+                                         "Connection: close\r\n"
+                                         "Content-Type: application/json; charset=utf-8\r\n"
+                                         "Content-Length: " + ToString(errorJsonResponseBody.size()) + "\r\n\r\n" + errorJsonResponseBody);
+        runtime.Send(new IEventHandle(handle->Sender, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(outgoingRequestEv->Request, incomingResponse)));
+
+        outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "400");
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Body, errorJsonResponseBody);
     }
 
 

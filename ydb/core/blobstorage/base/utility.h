@@ -147,28 +147,5 @@ namespace NKikimr {
         TActorId NotifyId;
     };
 
-    template<class T>
-    class TParameterByHandleClass {
-    public:
-        TParameterByHandleClass(const T& putLog, const T& fastRead, const T& async)
-            : Parameters({ putLog, async, async, fastRead, async, async, async })
-        {}
-
-        TParameterByHandleClass(const T& common)
-            : TParameterByHandleClass(common, common, common)
-        {}
-
-        const T& Get(NKikimrBlobStorage::EPutHandleClass handleClass) {
-            return Parameters[(ui32)handleClass];
-        }
-
-        const T& Get(NKikimrBlobStorage::EGetHandleClass handleClass) {
-            return Parameters[(ui32)handleClass + 3];
-        }
-
-    private:
-        std::array<T, 7> Parameters;
-    };
-
 } // NKikimr
 

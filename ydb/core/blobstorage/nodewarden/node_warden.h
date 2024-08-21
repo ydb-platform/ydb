@@ -35,10 +35,8 @@ namespace NKikimr {
         bool CachePDisks = false;
         bool CacheVDisks = false;
         bool EnableVDiskCooldownTimeout = false;
-        TDuration RequestReportingThrottlerDelay = TDuration::Seconds(1);
-        TParameterByHandleClass<TDuration> LongRequestThreshold = TParameterByHandleClass<TDuration>(
-            TDuration::Seconds(20), TDuration::Seconds(20), TDuration::Seconds(60)
-        );
+        TDuration RequestReportingThrottlerDelay = TDuration::Seconds(60);
+        TDuration LongRequestThreshold = TDuration::Seconds(50);
 
         // debugging options
         bool VDiskReplPausedAtStart = false;

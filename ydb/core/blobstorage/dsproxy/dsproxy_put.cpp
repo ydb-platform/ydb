@@ -280,11 +280,11 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
                 GetTotalTimeMs(record.GetTimestamps()) - GetVDiskTimeMs(record.GetTimestamps()),
                 NKikimrBlobStorage::EPutHandleClass_Name(PutImpl.GetPutHandleClass()),
                 NKikimrProto::EReplyStatus_Name(status));
-        //if (RootCauseTrack.IsOn) {
-        //    RootCauseTrack.OnReply(cookie.GetCauseIdx(),
-        //        GetTotalTimeMs(record.GetTimestamps()) - GetVDiskTimeMs(record.GetTimestamps()),
-        //        GetVDiskTimeMs(record.GetTimestamps()));
-        //}
+        if (RootCauseTrack.IsOn) {
+            RootCauseTrack.OnReply(record.GetCookie(),
+                GetTotalTimeMs(record.GetTimestamps()) - GetVDiskTimeMs(record.GetTimestamps()),
+                GetVDiskTimeMs(record.GetTimestamps()));
+        }
 
         if (status == NKikimrProto::BLOCKED || status == NKikimrProto::DEADLINE) {
             TString error = TStringBuilder() << "Got VPutResult status# " << status << " from VDiskId# " << vdiskId;
@@ -362,14 +362,14 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         }
 
         // Handle put results
-        //bool isCauseRegistered = !RootCauseTrack.IsOn;
+        bool isCauseRegistered = !RootCauseTrack.IsOn;
         TPutImpl::TPutResultVec putResults;
         for (auto &item : record.GetItems()) {
-            //if (!isCauseRegistered) {
-            //    isCauseRegistered = RootCauseTrack.OnReply(cookie.GetCauseIdx(),
-            //        GetTotalTimeMs(record.GetTimestamps()) - GetVDiskTimeMs(record.GetTimestamps()),
-            //        GetVDiskTimeMs(record.GetTimestamps()));
-            //}
+            if (!isCauseRegistered) {
+                isCauseRegistered = RootCauseTrack.OnReply(record.GetCookie(),
+                    GetTotalTimeMs(record.GetTimestamps()) - GetVDiskTimeMs(record.GetTimestamps()),
+                    GetVDiskTimeMs(record.GetTimestamps()));
+            }
 
             Y_ABORT_UNLESS(item.HasStatus());
             Y_ABORT_UNLESS(item.HasBlobID());
@@ -477,8 +477,11 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         }
 
         if (TActivationContext::Monotonic() - StartTime >= LongRequestThreshold) {
-            if (AllowToReport(HandleClass)) {
-                R_LOG_WARN_S("BPG71", "TEvGet Request was being processed for more than " << LongRequestThreshold
+            bool allowToReport = AllowToReport(HandleClass);
+            R_LOG_WARN_S("DEBUG", TActivationContext::Monotonic() - StartTime << " " << LongRequestThreshold << " " << allowToReport << " "
+                    << NKikimrBlobStorage::EPutHandleClass_Name(PutImpl.GetPutHandleClass()));
+            if (allowToReport) {
+                R_LOG_WARN_S("BPP71", "TEvPut Request was being processed for more than " << LongRequestThreshold
                         << ", serialized RootCause# " << RootCauseTrack.ToString());
             }
         }
@@ -677,12 +680,10 @@ public:
     void UpdatePengingVDiskResponseCount(const TDeque<TPutImpl::TPutEvent>& putEvents) {
         for (auto& event : putEvents) {
             std::visit([&](auto& event) {
-                //Y_ABORT_UNLESS(event->Record.HasCookie());
-                //TCookie cookie(event->Record.GetCookie());
-                //if (RootCauseTrack.IsOn) {
-                //    cookie.SetCauseIdx(RootCauseTrack.RegisterCause());
-                //    event->Record.SetCookie(cookie);
-                //}
+                ui64 causeIdx = RootCauseTrack.RegisterCause();
+                if (event->Record.HasCookie() && RootCauseTrack.IsOn) {
+                    event->Record.SetCookie(causeIdx);
+                }
                 const ui32 orderNumber = Info->GetOrderNumber(VDiskIDFromVDiskID(event->Record.GetVDiskID()));
                 Y_ABORT_UNLESS(orderNumber < WaitingVDiskResponseCount.size());
                 WaitingVDiskCount += !WaitingVDiskResponseCount[orderNumber]++;

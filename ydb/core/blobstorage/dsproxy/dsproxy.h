@@ -513,9 +513,8 @@ IActor* CreateBlobStorageGroupEjectedProxy(ui32 groupId, TIntrusivePtr<TDsProxyN
 
 struct TBlobStorageProxyParameters {
     bool UseActorSystemTimeInBSQueue = false;
-    TDuration RequestReportingThrottlerDelay = TDuration::Seconds(1);
-    TParameterByHandleClass<TDuration> LongRequestThreshold =
-            TParameterByHandleClass<TDuration>(TDuration::Seconds(60));
+    TDuration RequestReportingThrottlerDelay = TDuration::Seconds(60);
+    TDuration LongRequestThreshold = TDuration::Seconds(50);
 
     const TControlWrapper& EnablePutBatching;
     const TControlWrapper& EnableVPatch;

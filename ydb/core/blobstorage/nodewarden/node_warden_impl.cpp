@@ -265,6 +265,8 @@ void TNodeWarden::Bootstrap() {
     StartDistributedConfigKeeper();
 
     HandleGroupPendingQueueTick();
+
+    StartRequestReportingThrottler();
 }
 
 void TNodeWarden::HandleReadCache() {

@@ -76,7 +76,7 @@ struct TRootCause {
     }
 
     ui64 RegisterCause() {
-        if (IsOn && Items.size() < InvalidCauseIdx - 1) {
+        if (Items.size() < InvalidCauseIdx - 1) {
             Items.emplace_back(CurrentCauseIdx, GetCycleCountFast(), false);
             return Items.size() - 1;
         } else {
@@ -85,7 +85,7 @@ struct TRootCause {
     }
 
     ui64 RegisterAccelerate() {
-        if (IsOn && Items.size() < InvalidCauseIdx - 1) {
+        if (Items.size() < InvalidCauseIdx - 1) {
             Items.emplace_back(CurrentCauseIdx, GetCycleCountFast(), true);
             return Items.size() - 1;
         } else {

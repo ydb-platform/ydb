@@ -1117,7 +1117,7 @@ private:
         }
 
         // Schedule other actions.
-        for (int threadIndex : MakeRange(threadIds.data(), requestCount)) {
+        for (int threadIndex : TRange(threadIds.data(), requestCount)) {
             if (threadRequests[threadIndex]) {
                 if (otherActionCount > 0) {
                     ServeBeginExecute(&ThreadStates_[threadIndex], currentInstant, std::move(OtherActions_[--otherActionCount]));

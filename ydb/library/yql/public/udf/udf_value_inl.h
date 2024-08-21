@@ -752,6 +752,12 @@ inline bool TUnboxedValuePod::GetOrDefault<bool>(bool def) const
 }
 
 template <>
+inline NYql::NDecimal::TInt128 TUnboxedValuePod::Get<NYql::NDecimal::TInt128>() const
+{
+    return GetInt128();
+}
+
+template <>
 inline TUnboxedValuePod::TUnboxedValuePod(bool value)
 {
     Raw.Simple.ui8_ = value ? 1 : 0;

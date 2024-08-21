@@ -521,6 +521,28 @@
         }
     ],
     "test.test[blocks-complex_scalars--Results]": [],
+    "test.test[blocks-decimal_op_decimal_scalar--Analyze]": [
+        {
+            "checksum": "21809403de49161e8caf6a65aa2503bc",
+            "size": 4725,
+            "uri": "https://{canondata_backend}/1925842/c1066aab7478fbe8c5b14337f793c111997cc324/resource.tar.gz#test.test_blocks-decimal_op_decimal_scalar--Analyze_/plan.txt"
+        }
+    ],
+    "test.test[blocks-decimal_op_decimal_scalar--Debug]": [
+        {
+            "checksum": "b5273c7b3fb77a23a3c124d5afce30a4",
+            "size": 2300,
+            "uri": "https://{canondata_backend}/1925842/c1066aab7478fbe8c5b14337f793c111997cc324/resource.tar.gz#test.test_blocks-decimal_op_decimal_scalar--Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[blocks-decimal_op_decimal_scalar--Plan]": [
+        {
+            "checksum": "21809403de49161e8caf6a65aa2503bc",
+            "size": 4725,
+            "uri": "https://{canondata_backend}/1925842/c1066aab7478fbe8c5b14337f793c111997cc324/resource.tar.gz#test.test_blocks-decimal_op_decimal_scalar--Plan_/plan.txt"
+        }
+    ],
+    "test.test[blocks-decimal_op_decimal_scalar--Results]": [],
     "test.test[blocks-interval_add_date_scalar--Analyze]": [
         {
             "checksum": "13bf2d11ab5bc079dc45be91f40f6dd3",

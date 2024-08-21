@@ -37,15 +37,47 @@ const char * GetHouseFunctionName(EAggregate op);
 inline const char * GetHouseGroupByName() { return "ch.group_by"; }
 EOperation ValidateOperation(EOperation op, ui32 argsSize);
 
-struct TDatumBatch {
-    std::shared_ptr<arrow::Schema> Schema;
-    std::vector<arrow::Datum> Datums;
+class TDatumBatch {
+private:
+    std::shared_ptr<arrow::Schema> SchemaBase;
+    THashMap<std::string, ui32> NewColumnIds;
+    std::vector<std::shared_ptr<arrow::Field>> NewColumnsPtr;
     int64_t Rows = 0;
+
+public:
+    std::vector<arrow::Datum> Datums;
+
+    ui64 GetRecordsCount() const {
+        return Rows;
+    }
+
+    void SetRecordsCount(const ui64 value) {
+        Rows = value;
+    }
+
+    TDatumBatch(const std::shared_ptr<arrow::Schema>& schema, std::vector<arrow::Datum>&& datums, const i64 rows);
+
+    const std::shared_ptr<arrow::Schema>& GetSchema() {
+        if (NewColumnIds.size()) {
+            std::vector<std::shared_ptr<arrow::Field>> fields = SchemaBase->fields();
+            fields.insert(fields.end(), NewColumnsPtr.begin(), NewColumnsPtr.end());
+            SchemaBase = std::make_shared<arrow::Schema>(fields);
+            NewColumnIds.clear();
+            NewColumnsPtr.clear();
+        }
+        return SchemaBase;
+    }
 
     arrow::Status AddColumn(const std::string& name, arrow::Datum&& column);
     arrow::Result<arrow::Datum> GetColumnByName(const std::string& name) const;
-    std::shared_ptr<arrow::Table> ToTable() const;
-    std::shared_ptr<arrow::RecordBatch> ToRecordBatch() const;
+    bool HasColumn(const std::string& name) const {
+        if (NewColumnIds.contains(name)) {
+            return true;
+        }
+        return SchemaBase->GetFieldIndex(name) > -1;
+    }
+    std::shared_ptr<arrow::Table> ToTable();
+    std::shared_ptr<arrow::RecordBatch> ToRecordBatch();
     static std::shared_ptr<TDatumBatch> FromRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch);
     static std::shared_ptr<TDatumBatch> FromTable(const std::shared_ptr<arrow::Table>& batch);
 };
@@ -405,7 +437,6 @@ public:
         return Filters.size() && (!GroupBy.size() && !GroupByKeys.size());
     }
 
-    [[nodiscard]] arrow::Result<std::shared_ptr<NArrow::TColumnFilter>> BuildFilter(const std::shared_ptr<arrow::Table>& t) const;
     [[nodiscard]] arrow::Result<std::shared_ptr<NArrow::TColumnFilter>> BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& t) const;
 };
 

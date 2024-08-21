@@ -19,9 +19,17 @@ namespace NKikimr::NMetadata::NModifications {
 
 using TOperationParsingResult = TConclusion<NInternal::TTableRecord>;
 
-struct TAlterOperationContext {
-    TString SessionId;
-    TString TransactionId;
+class TAlterOperationContext {
+private:
+    YDB_READONLY_DEF(TString, SessionId);
+    YDB_READONLY_DEF(TString, TransactionId);
+    YDB_READONLY_DEF(NInternal::TTableRecords, RestoreObjectIds);
+public:
+    TAlterOperationContext(const TString& sessionId, const TString& transactionId, const NInternal::TTableRecords& RestoreObjectIds)
+        : SessionId(sessionId)
+        , TransactionId(transactionId)
+        , RestoreObjectIds(RestoreObjectIds) {
+        }
 };
 
 class TColumnInfo {

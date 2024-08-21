@@ -2300,6 +2300,27 @@
             "uri": "https://{canondata_backend}/937458/4ef5c22fa3a7e5fd4e0ef2192cee531d67d22319/resource.tar.gz#test.test_pragma-release_temp_data_chain_pull--Results_/results.txt"
         }
     ],
+    "test.test[produce-process_lambda_opt_args-default.txt-Debug]": [
+        {
+            "checksum": "e0f2a60056375db797d93f91152a4429",
+            "size": 2064,
+            "uri": "https://{canondata_backend}/1031349/58ce630c12e9fbb5d612967cd2d5c6e30429d817/resource.tar.gz#test.test_produce-process_lambda_opt_args-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[produce-process_lambda_opt_args-default.txt-Plan]": [
+        {
+            "checksum": "9816950a9f9605af40ab6cfaad4af11f",
+            "size": 7680,
+            "uri": "https://{canondata_backend}/1031349/58ce630c12e9fbb5d612967cd2d5c6e30429d817/resource.tar.gz#test.test_produce-process_lambda_opt_args-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[produce-process_lambda_opt_args-default.txt-Results]": [
+        {
+            "checksum": "fe42b877468bdc4f554baebbe16b029e",
+            "size": 6730,
+            "uri": "https://{canondata_backend}/1031349/58ce630c12e9fbb5d612967cd2d5c6e30429d817/resource.tar.gz#test.test_produce-process_lambda_opt_args-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[produce-process_multi_in_single_out--Debug]": [
         {
             "checksum": "f565d7aff1e516d638a9f39059b6d9af",

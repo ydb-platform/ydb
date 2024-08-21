@@ -179,8 +179,8 @@ protected:
     void StartRequest() override {
         LOG_D("Start pool fetching");
         auto event = NTableCreator::BuildSchemeCacheNavigateRequest(
-            {{".resource_pools", PoolId}},
-            Database,
+            {{".metadata/workload_manager/pools", PoolId}},
+            Database ? Database : AppData()->TenantName,
             UserToken
         );
         event->ResultSet[0].Access |= NACLib::SelectRow;
@@ -326,7 +326,7 @@ protected:
         auto event = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
 
         auto& schemeTx = *event->Record.MutableTransaction()->MutableModifyScheme();
-        schemeTx.SetWorkingDir(JoinPath({Database, ".resource_pools"}));
+        schemeTx.SetWorkingDir(JoinPath({Database ? Database : AppData()->TenantName, ".metadata/workload_manager/pools"}));
         schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateResourcePool);
         schemeTx.SetInternal(true);
 
@@ -483,7 +483,13 @@ public:
                 }
                 return;
             case EStatus::Ok:
-                Serverless = result.DomainInfo && result.DomainInfo->IsServerless();
+                if (result.DomainInfo) {
+                    Serverless = result.DomainInfo->IsServerless();
+                    if (result.Self->Info.GetPathId() != result.DomainInfo->DomainKey.LocalPathId) {
+                        Reply(Ydb::StatusIds::UNSUPPORTED, TStringBuilder() << "Invalid database " << Database << ", domain path id is different");
+                        return;
+                    }
+                }
                 Reply(Ydb::StatusIds::SUCCESS);
                 return;
         }
@@ -500,7 +506,11 @@ public:
 protected:
     void StartRequest() override {
         LOG_D("Start database fetching");
-        auto event = NTableCreator::BuildSchemeCacheNavigateRequest({{}}, Database, UserToken);
+        auto event = NTableCreator::BuildSchemeCacheNavigateRequest(
+            {{}},
+            Database ? Database : AppData()->TenantName,
+            UserToken
+        );
         event->ResultSet[0].Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
         event->ResultSet[0].Access |= CheckAccess;
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(event.Release()), IEventHandle::FlagTrackDelivery);

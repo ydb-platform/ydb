@@ -67,11 +67,11 @@ public:
                 auto leftKey = left.AttributeName;
                 auto rightKey = right.AttributeName;
 
-                if (auto idx = leftKey.find_last_of('.') != TString::npos) {
+                if (auto idx = leftKey.find_last_of('.'); idx != TString::npos) {
                     leftKey =  leftKey.substr(idx+1);
                 }
 
-                if (auto idx = rightKey.find_last_of('.') != TString::npos) {
+                if (auto idx = rightKey.find_last_of('.'); idx != TString::npos) {
                     rightKey =  rightKey.substr(idx+1);
                 }
 

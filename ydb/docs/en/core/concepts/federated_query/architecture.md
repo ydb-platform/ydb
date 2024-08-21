@@ -32,6 +32,7 @@ Users can deploy [one of the ready-made connectors](../../deploy/manual/connecto
 |--------|---------|
 | [ClickHouse](https://clickhouse.com/) | Via connector [fq-connector-go](../../deploy/manual/connector.md#fq-connector-go) |
 | [Greenplum](https://www.greenplum.org/) | Via connector [fq-connector-go](../../deploy/manual/connector.md#fq-connector-go) |
+| [Microsoft SQL Server](https://learn.microsoft.com/en-us/sql/?view=sql-server-ver16) | Via connector [fq-connector-go](../../deploy/manual/connector.md#fq-connector-go) |
 | [MySQL](https://www.mysql.com/) | Via connector [fq-connector-go](../../deploy/manual/connector.md#fq-connector-go) |
 | [PostgreSQL](https://www.postgresql.org/) | Via connector [fq-connector-go](../../deploy/manual/connector.md#fq-connector-go) |
 | [S3](https://aws.amazon.com/ru/s3/) | Built into `ydbd` |

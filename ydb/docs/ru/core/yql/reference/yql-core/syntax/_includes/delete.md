@@ -6,7 +6,7 @@
 
 {% include [OLAP_not_allow_text](../../../../_includes/not_allow_for_olap_text.md) %}
 
-Вместо `DELETE FROM` для удаления данных из колоночных таблиц можно воспользоваться механизмом удаления строк по времени — [TTL](../../../../concepts/ttl.md). TTL можно задать при [создании](../create_table.md) таблицы через `CREATE TABLE` или [измененить позже](../alter_table.md) через `ALTER TABLE`.
+Вместо `DELETE FROM` для удаления данных из колоночных таблиц можно воспользоваться механизмом удаления строк по времени — [TTL](../../../../concepts/ttl.md). TTL можно задать при [создании](../create_table.md) таблицы через `CREATE TABLE` или [измененить позже](../alter_table/index.md) через `ALTER TABLE`.
 
 {% endnote %}
 

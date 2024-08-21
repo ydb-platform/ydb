@@ -1,4 +1,5 @@
 #include "checker.h"
+#include "fetcher.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -153,7 +154,7 @@ public:
             return;
         }
 
-        if (ev->Get()->NumberClassifiers >= CLASSIFIER_COUNT_LIMIT) {
+        if (Context.GetActivityType() == NMetadata::NModifications::IOperationsManager::EActivityType::Create && ev->Get()->NumberClassifiers >= CLASSIFIER_COUNT_LIMIT) {
             FailAndPassAway(TStringBuilder() << "Number of resource pool classifiers reached limit in " << CLASSIFIER_COUNT_LIMIT);
             return;
         }
@@ -204,11 +205,28 @@ public:
         CheckFeatureFlag(ev->Get()->Config->GetFeatureFlags());
     }
 
+    void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
+        const auto& snapshot = ev->Get()->GetSnapshotAs<TResourcePoolClassifierSnapshot>();
+        for (const auto& objectRecord : AlterContext.GetRestoreObjectIds().GetTableRecords()) {
+            TResourcePoolClassifierConfig object;
+            TResourcePoolClassifierConfig::TDecoder::DeserializeFromRecord(object, objectRecord);
+
+            if (!snapshot->GetClassifierConfig(CanonizePath(object.GetDatabase()), object.GetName())) {
+                FailAndPassAway(TStringBuilder() << "Classifier with name " << object.GetName() << " not found in database " << object.GetDatabase());
+                return;
+            }
+        }
+
+        ExistenceChecked = true;
+        TryFinish();
+    }
+
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvRanksCheckerResponse, Handle);
         hFunc(TEvPrivate::TEvFetchDatabaseResponse, Handle);
         hFunc(TEvents::TEvUndelivered, Handle);
         hFunc(NConsole::TEvConfigsDispatcher::TEvGetConfigResponse, Handle);
+        hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle)
     )
 
 private:
@@ -237,14 +255,14 @@ private:
         }
 
         Register(new TQueryRetryActor<TRanksCheckerActor, TEvPrivate::TEvRanksCheckerResponse, TString, TString, TString, std::unordered_map<i64, TString>>(
-            SelfId(), Context.GetExternalData().GetDatabase(), AlterContext.SessionId, AlterContext.TransactionId, ranksToNames
+            SelfId(), Context.GetExternalData().GetDatabase(), AlterContext.GetSessionId(), AlterContext.GetTransactionId(), ranksToNames
         ));
     }
 
     void CheckFeatureFlag(const NKikimrConfig::TFeatureFlags& featureFlags) {
         if (Context.GetActivityType() == NMetadata::NModifications::IOperationsManager::EActivityType::Drop) {
             FeatureFlagChecked = true;
-            TryFinish();
+            ValidateExistence();
             return;
         }
 
@@ -258,6 +276,16 @@ private:
         }
 
         FeatureFlagChecked = true;
+        ValidateExistence();
+    }
+
+    void ValidateExistence() {
+        if (Context.GetActivityType() != NMetadata::NModifications::IOperationsManager::EActivityType::Create && NMetadata::NProvider::TServiceOperator::IsEnabled()) {
+            Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<TResourcePoolClassifierSnapshotsFetcher>()));
+            return;
+        }
+
+        ExistenceChecked = true;
         TryFinish();
     }
 
@@ -271,7 +299,7 @@ private:
     }
 
     void TryFinish() {
-        if (!FeatureFlagChecked || !RanksChecked) {
+        if (!FeatureFlagChecked || !RanksChecked || !ExistenceChecked) {
             return;
         }
 
@@ -286,6 +314,7 @@ private:
     bool Serverless = false;
     bool FeatureFlagChecked = false;
     bool RanksChecked = false;
+    bool ExistenceChecked = false;
 
     NMetadata::NModifications::IAlterPreparationController<TResourcePoolClassifierConfig>::TPtr Controller;
     std::vector<TResourcePoolClassifierConfig> PatchedObjects;

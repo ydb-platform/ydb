@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
 
         Analyze(runtime, saTabletId, {pathId});
 
-        runtime.SimulateSleep(TDuration::Seconds(60));
+        runtime.SimulateSleep(TDuration::Seconds(10));
 
         ValidateCountMinAbsense(runtime, pathId);
     }

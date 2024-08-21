@@ -334,8 +334,8 @@ class TRealBlockDevice : public IBlockDevice {
     class TSharedCallback : public ICallback {
         ui64 NextPossibleNoop = 0;
         ui64 EndOffset = 0;
-        ui64 PrevEventGotAtCycle = HPNow();
-        ui64 PrevEstimationAtCycle = HPNow();
+        NHPTimer::STime PrevEventGotAtCycle = HPNow();
+        NHPTimer::STime PrevEstimationAtCycle = HPNow();
         ui64 PrevEstimatedCostNs = 0;
         ui64 PrevActualCostNs = 0;
 
@@ -366,29 +366,32 @@ class TRealBlockDevice : public IBlockDevice {
         void Exec(TAsyncIoOperationResult *event) {
             IAsyncIoOperation *op = event->Operation;
             // Add up the execution time of all the events
-            ui64 totalExecutionCycles = 0;
-            ui64 totalCostNs = 0;
-            ui64 eventGotAtCycle = HPNow();
+            NHPTimer::STime eventGotAtCycle = HPNow();
             AtomicSet(Device.Mon.LastDoneOperationTimestamp, eventGotAtCycle);
 
             TCompletionAction *completionAction = static_cast<TCompletionAction*>(op->GetCookie());
             FillCompletionAction(completionAction, op, event->Result);
+            completionAction->GetTime = eventGotAtCycle;
+            LWTRACK(PDiskDeviceGetFromDevice, completionAction->Orbit);
+            if (completionAction->FlushAction) {
+                completionAction->FlushAction->GetTime = eventGotAtCycle;
+                LWTRACK(PDiskDeviceGetFromDevice, completionAction->FlushAction->Orbit);
+            }
 
             Device.QuitCounter.Decrement();
             Device.IdleCounter.Decrement();
             Device.FlightControl.MarkComplete(completionAction->OperationIdx);
 
-            ui64 startCycle = Max((ui64)completionAction->SubmitTime, PrevEventGotAtCycle);
-            ui64 durationCycles = (eventGotAtCycle > startCycle) ? eventGotAtCycle - startCycle : 0;
-            totalExecutionCycles = Max(totalExecutionCycles, durationCycles);
-            totalCostNs += completionAction->CostNs;
+            NHPTimer::STime startCycle = Max(completionAction->SubmitTime, (i64)PrevEventGotAtCycle);
+            NHPTimer::STime durationCycles = (eventGotAtCycle > startCycle) ? eventGotAtCycle - startCycle : 0;
+            NHPTimer::STime totalExecutionCycles = durationCycles;
+            NHPTimer::STime totalCostNs = completionAction->CostNs;
 
-            bool isSeekExpected =
-                ((ui64)completionAction->SubmitTime + Device.SeekCostNs / 25ull >= PrevEventGotAtCycle);
+            bool isSeekExpected = (completionAction->SubmitTime + (NHPTimer::STime)Device.SeekCostNs / 25ll >= PrevEventGotAtCycle);
 
             const ui64 opSize = op->GetSize();
             Device.DecrementMonInFlight(op->GetType(), opSize);
-            if (opSize == 0) {
+            if (opSize == 0) { // Special case for flush operation, which is a read operation with 0 bytes size
                 if (op->GetType() == IAsyncIoOperation::EType::PRead) {
                     Y_ABORT_UNLESS(WaitingNoops[completionAction->OperationIdx % MaxWaitingNoops] == nullptr);
                     WaitingNoops[completionAction->OperationIdx % MaxWaitingNoops] = completionAction;
@@ -432,6 +435,9 @@ class TRealBlockDevice : public IBlockDevice {
             while (NextPossibleNoop < firstIncompleteIdx) {
                 ui64 i = NextPossibleNoop % MaxWaitingNoops;
                 if (WaitingNoops[i] && WaitingNoops[i]->OperationIdx == NextPossibleNoop) {
+                    LWTRACK(PDiskDeviceGetFromWaiting, WaitingNoops[i]->Orbit);
+                    double durationMs = HPMilliSecondsFloat(HPNow() - WaitingNoops[i]->GetTime);
+                    Device.Mon.DeviceFlushDuration.Increment(durationMs);
                     Device.CompletionThread->Schedule(WaitingNoops[i]);
                     WaitingNoops[i] = nullptr;
                 }

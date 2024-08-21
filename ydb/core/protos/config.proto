@@ -397,6 +397,7 @@ message TInterconnectConfig {
     optional bool BindOnAllAddresses = 16 [default = true];
     optional EEncryptionMode EncryptionMode = 17 [default = DISABLED];
     optional bool TlsAuthOnly = 38; // do not encrypt traffic
+    repeated string ForbiddenSignatureAlgorithms = 50;
     optional bool EnforceScopeValidation = 18;
     optional bytes Certificate = 30; // in PEM format
     optional bytes PrivateKey = 31; // in PEM format
@@ -1795,8 +1796,15 @@ message TClientCertificateAuthorization {
         repeated string Suffixes = 3;
     }
 
+    // Matches subject alternative names (DNS) and Common Name (CN) in certificate
+    message TSubjectDns {
+        repeated string Values = 1;
+        repeated string Suffixes = 2;
+    }
+
     message TClientCertificateDefinition {
         repeated TSubjectTerm SubjectTerms = 1;
+        optional TSubjectDns SubjectDns = 5;
         optional bool CanCheckNodeHostByCN = 2 [default = false];
         repeated string MemberGroups = 3;
         optional bool RequireSameIssuer = 4 [default = true];

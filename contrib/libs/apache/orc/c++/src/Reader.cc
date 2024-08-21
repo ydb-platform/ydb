@@ -565,7 +565,7 @@ namespace orc {
     mutableFooter->CopyFrom(*footer);
     tail.set_file_length(fileLength);
     tail.set_postscript_length(postscriptLength);
-    TProtoStringType result;
+    TProtobufString result;
     if (!tail.SerializeToString(&result)) {
       throw ParseError("Failed to serialize file tail");
     }
@@ -691,7 +691,7 @@ namespace orc {
 
   std::string ReaderImpl::getMetadataValue(const std::string& key) const {
     for (int i = 0; i < footer->metadata_size(); ++i) {
-      if (footer->metadata(i).name() == TProtoStringType(key)) {
+      if (footer->metadata(i).name() == TProtobufString(key)) {
         return footer->metadata(i).value();
       }
     }
@@ -741,7 +741,7 @@ namespace orc {
 
   bool ReaderImpl::hasMetadataValue(const std::string& key) const {
     for (int i = 0; i < footer->metadata_size(); ++i) {
-      if (footer->metadata(i).name() == TProtoStringType(key)) {
+      if (footer->metadata(i).name() == TProtobufString(key)) {
         return true;
       }
     }
@@ -1367,7 +1367,7 @@ namespace orc {
     if (serializedFooter.length() != 0) {
       // Parse the file tail from the serialized one.
       proto::FileTail tail;
-      if (!tail.ParseFromString(TProtoStringType(serializedFooter))) {
+      if (!tail.ParseFromString(TProtobufString(serializedFooter))) {
         throw ParseError("Failed to parse the file tail from string");
       }
       contents->postscript = std::make_unique<proto::PostScript>(tail.postscript());

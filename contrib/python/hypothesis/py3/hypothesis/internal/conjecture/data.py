@@ -41,7 +41,7 @@ from typing import (
 import attr
 
 from hypothesis.errors import Frozen, InvalidArgument, StopTest
-from hypothesis.internal.cache import LRUReusedCache
+from hypothesis.internal.cache import LRUCache
 from hypothesis.internal.compat import add_note, floor, int_from_bytes, int_to_bytes
 from hypothesis.internal.conjecture.floats import float_to_lex, lex_to_float
 from hypothesis.internal.conjecture.junkdrawer import (
@@ -200,9 +200,11 @@ NASTY_FLOATS = sorted(
 NASTY_FLOATS = list(map(float, NASTY_FLOATS))
 NASTY_FLOATS.extend([-x for x in NASTY_FLOATS])
 
-FLOAT_INIT_LOGIC_CACHE = LRUReusedCache(4096)
-
-POOLED_KWARGS_CACHE = LRUReusedCache(4096)
+# These caches, especially the kwargs cache, can be quite hot and so we prefer
+# LRUCache over LRUReusedCache for performance. We lose scan resistance, but
+# that's probably fine here.
+FLOAT_INIT_LOGIC_CACHE = LRUCache(4096)
+POOLED_KWARGS_CACHE = LRUCache(4096)
 
 DRAW_STRING_DEFAULT_MAX_SIZE = 10**10  # "arbitrarily large"
 
@@ -2083,11 +2085,17 @@ class ConjectureData:
             assert len(weights) == width
 
         if forced is not None and (min_value is None or max_value is None):
-            # We draw `forced=forced - shrink_towards` here internally. If that
-            # grows larger than a 128 bit signed integer, we can't represent it.
+            # We draw `forced=forced - shrink_towards` here internally, after clamping.
+            # If that grows larger than a 128 bit signed integer, we can't represent it.
             # Disallow this combination for now.
             # Note that bit_length() = 128 -> signed bit size = 129.
-            assert (forced - shrink_towards).bit_length() < 128
+            _shrink_towards = shrink_towards
+            if min_value is not None:
+                _shrink_towards = max(min_value, _shrink_towards)
+            if max_value is not None:
+                _shrink_towards = min(max_value, _shrink_towards)
+
+            assert (forced - _shrink_towards).bit_length() < 128
         if forced is not None and min_value is not None:
             assert min_value <= forced
         if forced is not None and max_value is not None:

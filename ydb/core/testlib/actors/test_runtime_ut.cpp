@@ -1,4 +1,5 @@
 #include <ydb/core/testlib/actors/test_runtime.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
@@ -717,6 +718,114 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         runtime.WaitFor("value = 42", [&]{ return value == 42; });
         UNIT_ASSERT_VALUES_EQUAL(value, 42);
     }
-};
+
+    Y_UNIT_TEST(TestBlockEvents) {
+        enum EEv {
+            EvTrigger = EventSpaceBegin(TEvents::ES_PRIVATE)
+        };
+
+        struct TEvTrigger : public TEventLocal<TEvTrigger, EvTrigger> {
+            int Value;
+
+            TEvTrigger(int value)
+                : Value(value)
+            {}
+        };
+
+        class TTargetActor : public TActorBootstrapped<TTargetActor> {
+        public:
+            TTargetActor(std::vector<int>* ptr)
+                : Ptr(ptr)
+            {}
+
+            void Bootstrap() {
+                Become(&TThis::StateWork);
+            }
+
+        private:
+            STFUNC(StateWork) {
+                switch (ev->GetTypeRewrite()) {
+                    hFunc(TEvTrigger, Handle);
+                }
+            }
+
+            void Handle(TEvTrigger::TPtr& ev) {
+                Ptr->push_back(ev->Get()->Value);
+            }
+
+        private:
+            std::vector<int>* Ptr;
+        };
+
+        class TSourceActor : public TActorBootstrapped<TSourceActor> {
+        public:
+            TSourceActor(const TActorId& target)
+                : Target(target)
+            {}
+
+            void Bootstrap() {
+                Become(&TThis::StateWork);
+                Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
+            }
+
+        private:
+            STFUNC(StateWork) {
+                switch (ev->GetTypeRewrite()) {
+                    hFunc(TEvents::TEvWakeup, Handle);
+                }
+            }
+
+            void Handle(TEvents::TEvWakeup::TPtr&) {
+                Send(Target, new TEvTrigger(++Counter));
+                Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
+            }
+
+        private:
+            TActorId Target;
+            int Counter = 0;
+        };
+
+        TTestActorRuntime runtime(2);
+        runtime.Initialize(MakeEgg());
+
+        std::vector<int> values;
+        auto target = runtime.Register(new TTargetActor(&values), /* nodeIdx */ 1);
+        auto source = runtime.Register(new TSourceActor(target), /* nodeIdx */ 1);
+        runtime.EnableScheduleForActor(source);
+
+        TBlockEvents<TEvTrigger> block(runtime, [&](TEvTrigger::TPtr& ev){ return ev->GetRecipientRewrite() == target; });
+        runtime.WaitFor("blocked 3 events", [&]{ return block.size() >= 3; });
+        UNIT_ASSERT_VALUES_EQUAL(block.size(), 3u);
+        UNIT_ASSERT_VALUES_EQUAL(values.size(), 0u);
+
+        block.Unblock(2);
+        UNIT_ASSERT_VALUES_EQUAL(block.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(values.size(), 0u);
+
+        runtime.WaitFor("blocked 1 more event", [&]{ return block.size() >= 2; });
+        UNIT_ASSERT_VALUES_EQUAL(block.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(values.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(values.at(0), 1);
+        UNIT_ASSERT_VALUES_EQUAL(values.at(1), 2);
+        values.clear();
+
+        block.Stop();
+        runtime.WaitFor("processed 2 more events", [&]{ return values.size() >= 2; });
+        UNIT_ASSERT_VALUES_EQUAL(block.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(values.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(values.at(0), 5);
+        UNIT_ASSERT_VALUES_EQUAL(values.at(1), 6);
+        values.clear();
+
+        block.Unblock();
+        UNIT_ASSERT_VALUES_EQUAL(block.size(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(values.size(), 0u);
+        runtime.WaitFor("processed 3 more events", [&]{ return values.size() >= 3; });
+        UNIT_ASSERT_VALUES_EQUAL(values.size(), 3u);
+        UNIT_ASSERT_VALUES_EQUAL(values.at(0), 3);
+        UNIT_ASSERT_VALUES_EQUAL(values.at(1), 4);
+        UNIT_ASSERT_VALUES_EQUAL(values.at(2), 7);
+    }
+}
 
 }

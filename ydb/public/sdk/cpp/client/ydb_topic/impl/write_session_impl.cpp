@@ -958,8 +958,7 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
                 FirstTokenSent = true;
             }
             // Kickstart send after session reestablishment
-            FormGrpcMessagesImpl();
-            SendGrpcMessages();
+            SendImpl();
             break;
         }
         case TServerMessage::kWriteResponse: {
@@ -982,17 +981,23 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
             writeStat->PartitionQuotedTime = durationConv(stat.partition_quota_wait_time());
             writeStat->TopicQuotedTime = durationConv(stat.topic_quota_wait_time());
 
-            for (size_t messageIndex = 0, endIndex = batchWriteResponse.acks_size(); messageIndex != endIndex; ++messageIndex) {
+            for (const auto& ack : batchWriteResponse.acks()) {
                 // TODO: Fill writer statistics
-                auto ack = batchWriteResponse.acks(messageIndex);
                 ui64 sequenceNumber = ack.seq_no();
 
-                Y_ABORT_UNLESS(ack.has_written() || ack.has_skipped());
-                auto msgWriteStatus = ack.has_written()
-                                ? TWriteSessionEvent::TWriteAck::EES_WRITTEN
-                                : (ack.skipped().reason() == Ydb::Topic::StreamWriteMessage_WriteResponse_WriteAck_Skipped_Reason::StreamWriteMessage_WriteResponse_WriteAck_Skipped_Reason_REASON_ALREADY_WRITTEN
-                                    ? TWriteSessionEvent::TWriteAck::EES_ALREADY_WRITTEN
-                                    : TWriteSessionEvent::TWriteAck::EES_DISCARDED);
+                Y_ABORT_UNLESS(ack.has_written() || ack.has_skipped() || ack.has_written_in_tx());
+
+                TWriteSessionEvent::TWriteAck::EEventState msgWriteStatus;
+                if (ack.has_written_in_tx()) {
+                    msgWriteStatus = TWriteSessionEvent::TWriteAck::EES_WRITTEN_IN_TX;
+                } else if (ack.has_written()) {
+                    msgWriteStatus = TWriteSessionEvent::TWriteAck::EES_WRITTEN;
+                } else {
+                    msgWriteStatus =
+                        (ack.skipped().reason() == Ydb::Topic::StreamWriteMessage_WriteResponse_WriteAck_Skipped_Reason::StreamWriteMessage_WriteResponse_WriteAck_Skipped_Reason_REASON_ALREADY_WRITTEN)
+                        ? TWriteSessionEvent::TWriteAck::EES_ALREADY_WRITTEN
+                        : TWriteSessionEvent::TWriteAck::EES_DISCARDED;
+                }
 
                 ui64 offset = ack.has_written() ? ack.written().offset() : 0;
 
@@ -1141,15 +1146,13 @@ void TWriteSessionImpl::CompressImpl(TBlock&& block_) {
 
 void TWriteSessionImpl::OnCompressed(TBlock&& block, bool isSyncCompression) {
     TMemoryUsageChange memoryUsage;
-    if (isSyncCompression) {
-        // The Lock is already held somewhere up the stack.
-        memoryUsage = OnCompressedImpl(std::move(block));
-    } else {
+    if (!isSyncCompression) {
         with_lock(Lock) {
             memoryUsage = OnCompressedImpl(std::move(block));
         }
+    } else {
+        memoryUsage = OnCompressedImpl(std::move(block));
     }
-    SendGrpcMessages();
     if (memoryUsage.NowOk && !memoryUsage.WasOk) {
         EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
     }
@@ -1165,7 +1168,7 @@ TMemoryUsageChange TWriteSessionImpl::OnCompressedImpl(TBlock&& block) {
     (*Counters->BytesInflightCompressed) += block.Data.size();
 
     PackedMessagesToSend.emplace(std::move(block));
-    FormGrpcMessagesImpl();
+    SendImpl();
     return memoryUsage;
 }
 
@@ -1282,7 +1285,7 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
     }
     CurrentBatch.Reset();
     if (skipCompression) {
-        FormGrpcMessagesImpl();
+        SendImpl();
     }
     return size;
 }
@@ -1346,16 +1349,7 @@ bool TWriteSessionImpl::TxIsChanged(const Ydb::Topic::StreamWriteMessage_WriteRe
     return GetTransactionId(*writeRequest) != GetTransactionId(OriginalMessagesToSend.front().Tx);
 }
 
-void TWriteSessionImpl::SendGrpcMessages() {
-    with_lock(ProcessorLock) {
-        TClientMessage message;
-        while (GrpcMessagesToSend.Dequeue(&message)) {
-            Processor->Write(std::move(message));
-        }
-    }
-}
-
-void TWriteSessionImpl::FormGrpcMessagesImpl() {
+void TWriteSessionImpl::SendImpl() {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     // External cycle splits ready blocks into multiple gRPC messages. Current gRPC message size hard limit is 64MiB.
@@ -1425,7 +1419,7 @@ void TWriteSessionImpl::FormGrpcMessagesImpl() {
                 << OriginalMessagesToSend.size() << " left), first sequence number is "
                 << writeRequest->messages(0).seq_no()
         );
-        GrpcMessagesToSend.Enqueue(std::move(clientMessage));
+        Processor->Write(std::move(clientMessage));
     }
 }
 
@@ -1487,7 +1481,6 @@ void TWriteSessionImpl::HandleWakeUpImpl() {
             with_lock(self->Lock) {
                 self->HandleWakeUpImpl();
             }
-            self->SendGrpcMessages();
         }
     };
     if (TInstant::Now() - LastTokenUpdate > UPDATE_TOKEN_PERIOD) {

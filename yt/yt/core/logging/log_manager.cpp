@@ -8,6 +8,7 @@
 #include "formatter.h"
 #include "file_log_writer.h"
 #include "stream_log_writer.h"
+#include "system_log_event_provider.h"
 
 #include <yt/yt/core/concurrency/profiling_helpers.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>
@@ -383,7 +384,9 @@ public:
         , SystemWriters_({
             CreateStderrLogWriter(
                 std::make_unique<TPlainTextLogFormatter>(),
-                TString(StderrSystemWriterName))
+                CreateDefaultSystemLogEventProvider(/*systemMessagesEnabled*/ true, /*systemMessageFamily*/ ELogFamily::PlainText),
+                TString(StderrSystemWriterName),
+                New<TStderrLogWriterConfig>())
         })
         , DiskProfilingExecutor_(New<TPeriodicExecutor>(
             EventQueue_,
@@ -417,8 +420,8 @@ public:
             /*threadCount*/ 1,
             /*threadNamePrefix*/ "LogCompress"))
     {
-        RegisterWriterFactory(TString(TFileLogWriterConfig::Type), GetFileLogWriterFactory());
-        RegisterWriterFactory(TString(TStderrLogWriterConfig::Type), GetStderrLogWriterFactory());
+        RegisterWriterFactory(TString(TFileLogWriterConfig::WriterType), GetFileLogWriterFactory());
+        RegisterWriterFactory(TString(TStderrLogWriterConfig::WriterType), GetStderrLogWriterFactory());
     }
 
     void Initialize()
@@ -501,6 +504,12 @@ public:
             // Wait for all previously enqueued messages to be flushed
             // but no more than ShutdownGraceTimeout to prevent hanging.
             Synchronize(TInstant::Now() + Config_->ShutdownGraceTimeout);
+        }
+
+        // For now this is the only way to wait for log writers that perform asynchronous flushes.
+        // TODO(achulkov2): Refactor log manager to support asynchronous operations.
+        if (Config_->ShutdownBusyTimeout) {
+            Sleep(Config_->ShutdownBusyTimeout);
         }
 
         EventQueue_->Shutdown();
@@ -843,7 +852,6 @@ private:
         switch (writerConfig->Format) {
             case ELogFormat::PlainText:
                 return std::make_unique<TPlainTextLogFormatter>(
-                    writerConfig->AreSystemMessagesEnabled(),
                     writerConfig->EnableSourceLocation);
 
             case ELogFormat::Json: [[fallthrough]];
@@ -851,9 +859,9 @@ private:
                 return std::make_unique<TStructuredLogFormatter>(
                     writerConfig->Format,
                     writerConfig->CommonFields,
-                    writerConfig->AreSystemMessagesEnabled(),
                     writerConfig->EnableSourceLocation,
                     writerConfig->EnableSystemFields,
+                    writerConfig->EnableHostField,
                     writerConfig->JsonFormat);
 
             default:

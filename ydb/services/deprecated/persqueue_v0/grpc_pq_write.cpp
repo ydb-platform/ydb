@@ -25,8 +25,8 @@ void TPQWriteServiceImpl::TSession::OnCreated() {            // Start waiting fo
         ReplyWithError("proxy overloaded", NPersQueue::NErrorCode::OVERLOAD);
         return;
     }
+    TMaybe<TString> localCluster = Proxy->AvailableLocalCluster();
     if (NeedDiscoverClusters) {
-        TMaybe<TString> localCluster = Proxy->AvailableLocalCluster();
         if (!localCluster.Defined()) {
             ReplyWithError("initializing", NPersQueue::NErrorCode::INITIALIZING);
             return;

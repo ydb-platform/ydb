@@ -161,7 +161,7 @@ void TAnalyzeActor::Handle(TEvAnalyzePrivate::TEvAnalyzeRetry::TPtr& ev, const T
     auto analyzeRequest = std::make_unique<NStat::TEvStatistics::TEvAnalyze>();
     analyzeRequest->Record = Request.Record;
     Send(
-        MakePipePerNodeCacheID(true),
+        MakePipePerNodeCacheID(false),
         new TEvPipeCache::TEvForward(analyzeRequest.release(), StatisticsAggregatorId.value(), true),
         IEventHandle::FlagTrackDelivery
     );
@@ -204,7 +204,7 @@ void TAnalyzeActor::SendStatisticsAggregatorAnalyze(const NSchemeCache::TSchemeC
     auto analyzeRequest = std::make_unique<NStat::TEvStatistics::TEvAnalyze>();
     analyzeRequest->Record = Request.Record;
     Send(
-        MakePipePerNodeCacheID(true),
+        MakePipePerNodeCacheID(false),
         new TEvPipeCache::TEvForward(analyzeRequest.release(), entry.DomainInfo->Params.GetStatisticsAggregator(), true),
         IEventHandle::FlagTrackDelivery
     );

@@ -9,9 +9,9 @@ TEST_SRCS(
     test.py
 )
 
-DATA(
-    ydb/ydb/public/tools/lib/cmds/ut/config.yaml
-    ydb/ydb/public/tools/lib/cmds/ut/patch.yaml
+FILES(
+    ydb/public/tools/lib/cmds/ut/config.yaml
+    ydb/public/tools/lib/cmds/ut/patch.yaml
 )
 
 END()

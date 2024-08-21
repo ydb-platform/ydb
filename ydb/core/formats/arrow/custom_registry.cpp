@@ -62,6 +62,10 @@ static void RegisterYdbCast(cp::FunctionRegistry* registry) {
     Y_ABORT_UNLESS(registry->AddFunction(std::make_shared<YdbCastMetaFunction>()).ok());
 }
 
+static void RegisterCustomAggregates(cp::FunctionRegistry* registry) {
+    Y_ABORT_UNLESS(registry->AddFunction(std::make_shared<TNumRows>(GetFunctionName(EAggregate::NumRows))).ok());
+}
+
 static void RegisterHouseAggregates(cp::FunctionRegistry* registry) {
 #ifndef WIN32
     try {
@@ -88,6 +92,7 @@ static std::unique_ptr<cp::FunctionRegistry> CreateCustomRegistry() {
     RegisterRound(registry.get());
     RegisterArithmetic(registry.get());
     RegisterYdbCast(registry.get());
+    RegisterCustomAggregates(registry.get());
     RegisterHouseAggregates(registry.get());
     return registry;
 }

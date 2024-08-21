@@ -512,3 +512,28 @@ class TestS3(object):
         assert result_set.columns[0].type.type_id == ydb.Type.STRING
         assert len(result_set.rows) == 1
         assert result_set.rows[0].items[0].text_value == ""
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_insert_without_format_error(self, kikimr, s3, client, unique_prefix):
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("insert_bucket")
+        bucket.create(ACL='public-read-write')
+        bucket.objects.all().delete()
+
+        storage_connection_name = unique_prefix + "ibucket"
+        client.create_storage_connection(storage_connection_name, "insert_bucket")
+
+        sql = f'''
+            insert into `{storage_connection_name}`.`/test/`
+            select * from AS_TABLE([<|foo:123, bar:"xxx"u|>,<|foo:456, bar:"yyy"u|>]);
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        issues = str(client.describe_query(query_id).result.query.issue)
+
+        assert "Missing format - please use WITH FORMAT when writing into S3" in issues, "Incorrect Issues: " + issues

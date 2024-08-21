@@ -1504,6 +1504,8 @@ message THiveConfig {
     optional double NodeUsageRangeToKick = 75 [default = 0.2];
     optional bool LessSystemTabletsMoves = 77 [default = true];
     optional uint64 MaxPingsInFlight = 78 [default = 1000];
+    optional string CutHistoryDenyList = 76 [default = "ColumnShard,KeyValue,PersQueue,BlobDepot"];
+    optional string CutHistoryAllowList = 79 [default = "DataShard"];
 }
 
 message TBlobCacheConfig {

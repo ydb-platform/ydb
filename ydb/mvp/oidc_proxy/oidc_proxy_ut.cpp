@@ -252,6 +252,84 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Body, errorJsonResponseBody);
     }
 
+    Y_UNIT_TEST(OpenIdConnectReceiveRedirectCode) {
+        TPortManager tp;
+        ui16 sessionServicePort = tp.GetPort(8655);
+        TMvpTestRuntime runtime;
+        runtime.Initialize();
+
+        const TString allowedProxyHost {"ydb.viewer.page"};
+
+        TOpenIdConnectSettings settings {
+            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
+            .AllowedProxyHosts = {allowedProxyHost},
+            .AccessServiceType = NMvp::yandex_v2
+        };
+
+        const NActors::TActorId edge = runtime.AllocateEdgeActor();
+        const NActors::TActorId target = runtime.Register(new NMVP::TProtectedPageHandler(edge, settings));
+
+        TSessionServiceMock sessionServiceMock;
+        sessionServiceMock.AllowedCookies.second = "allowed_session_cookie";
+        grpc::ServerBuilder builder;
+        builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
+        std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
+
+        NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
+        EatWholeString(incomingRequest, "GET /" + allowedProxyHost + "/counters HTTP/1.1\r\n"
+                                "Host: oidcproxy.net\r\n"
+                                "Cookie: yc_session=allowed_session_cookie\r\n\r\n");
+        runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
+        TAutoPtr<IEventHandle> handle;
+
+        auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, allowedProxyHost);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/counters");
+        UNIT_ASSERT_STRING_CONTAINS(outgoingRequestEv->Request->Headers, "Authorization: Bearer protected_page_iam_token");
+        UNIT_ASSERT_EQUAL(outgoingRequestEv->Request->Secure, false);
+        NHttp::THttpIncomingResponsePtr incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
+        // const TString errorResponseBody {"The plain HTTP request was sent to HTTPS port"};
+        EatWholeString(incomingResponse, "HTTP/1.1 301 Moved Permanently\r\n"
+                                         "Connection: close\r\n"
+                                         "Location: /node/12345/counters\r\n"
+                                         "Content-Length:0\r\n\r\n");
+        runtime.Send(new IEventHandle(handle->Sender, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(outgoingRequestEv->Request, incomingResponse)));
+
+        outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, allowedProxyHost);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/node/12345/counters");
+        UNIT_ASSERT_STRING_CONTAINS(outgoingRequestEv->Request->Headers, "Authorization: Bearer protected_page_iam_token");
+        UNIT_ASSERT_EQUAL(outgoingRequestEv->Request->Secure, false);
+        incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
+        const TString okResponseBody {"this is test"};
+        EatWholeString(incomingResponse, "HTTP/1.1 200 OK\r\n"
+                                         "Connection: close\r\n"
+                                         "Content-Type: text/html\r\n"
+                                         "Content-Length: " + ToString(okResponseBody.size()) + "\r\n\r\n" + okResponseBody);
+        runtime.Send(new IEventHandle(handle->Sender, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(outgoingRequestEv->Request, incomingResponse)));
+
+        auto outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "200");
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Body, okResponseBody);
+
+        // runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
+        // outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
+        // UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, allowedProxyHost);
+        // UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/counters");
+        // UNIT_ASSERT_STRING_CONTAINS(outgoingRequestEv->Request->Headers, "Authorization: Bearer protected_page_iam_token");
+        // UNIT_ASSERT_EQUAL(outgoingRequestEv->Request->Secure, false);
+        // incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
+        // const TString errorJsonResponseBody {"{\"status\":\"400\", \"message\":\"Table does not exist\"}"};
+        // EatWholeString(incomingResponse, "HTTP/1.1 400 Bad Request\r\n"
+        //                                  "Connection: close\r\n"
+        //                                  "Content-Type: application/json; charset=utf-8\r\n"
+        //                                  "Content-Length: " + ToString(errorJsonResponseBody.size()) + "\r\n\r\n" + errorJsonResponseBody);
+        // runtime.Send(new IEventHandle(handle->Sender, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(outgoingRequestEv->Request, incomingResponse)));
+
+        // outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        // UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "400");
+        // UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Body, errorJsonResponseBody);
+    }
 
     Y_UNIT_TEST(OpenIdConnectExchangeNebius) {
         TPortManager tp;

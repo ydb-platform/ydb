@@ -238,7 +238,7 @@ private:
         NHttp::THttpOutgoingRequestPtr previousRequest = response->GetRequest();
         TStringBuf method = (response->Status == "303" ? "GET" : previousRequest->Method);
         NHttp::THeadersBuilder responseHeaders(response->Headers);
-        TStringBuf locationHeader = responseHeaders.Get("Location");
+        TString locationHeader = TString(responseHeaders.Get("Location"));
         NHttp::THttpOutgoingRequestPtr httpRequest = nullptr;
         if (locationHeader.StartsWith('/')) {
             TStringBuf scheme, host, uri;
@@ -247,11 +247,13 @@ private:
         } else {
             httpRequest = NHttp::THttpOutgoingRequest::CreateRequest(method, locationHeader);
         }
+        ForwardRequestHeaders(httpRequest);
         NHttp::THeadersBuilder previousRequestHeaders(previousRequest->Headers);
-        for (const auto& [headerName, headerValue] : previousRequestHeaders.Data) {
-            httpRequest->Set(headerName, headerValue);
+        if (TString authHeaderValue = TString(previousRequestHeaders.Get(AUTH_HEADER_NAME)); !authHeaderValue.empty()) {
+            httpRequest->Set(AUTH_HEADER_NAME, authHeaderValue);
         }
         if (!previousRequest->Body.empty()) {
+
             httpRequest->SetBody(previousRequest->Body);
         }
         httpRequest->Secure = previousRequest->Secure;

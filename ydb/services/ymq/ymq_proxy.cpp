@@ -785,7 +785,7 @@ namespace NKikimr::NYmq::V1 {
             auto result = requestHolder->MutableSendMessageBatch();
             result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->Getqueue_url())->second);
             for (auto& requestEntry : GetProtoRequest()->Getentries()) {
-                auto entry = requestHolder->MutableSendMessageBatch()->AddEntries();
+                auto entry = requestHolder->MutableSendMessageBatch()->MutableEntries()->Add();
                 entry->SetId(requestEntry.Getid());
                 for (auto& srcAttribute: requestEntry.Getmessage_attributes()) {
                     auto dstAttribute = entry->MutableMessageAttributes()->Add();
@@ -797,6 +797,59 @@ namespace NKikimr::NYmq::V1 {
                 entry->SetMessageDeduplicationId(requestEntry.Getmessage_deduplication_id());
                 entry->SetMessageGroupId(requestEntry.Getmessage_group_id());
                 entry->SetMessageBody(requestEntry.Getmessage_body());
+            }
+            return result;
+        }
+    };
+
+    class TDeleteMessageBatchReplyCallback : public TReplyCallback<
+            NKikimr::NSQS::TDeleteMessageBatchResponse,
+            Ydb::Ymq::V1::DeleteMessageBatchResult> {
+    public:
+        using TReplyCallback::TReplyCallback;
+
+    private:
+        const NKikimr::NSQS::TDeleteMessageBatchResponse& GetResponse(const NKikimrClient::TSqsResponse& resp) override {
+            return resp.GetDeleteMessageBatch();
+        }
+
+        Ydb::Ymq::V1::DeleteMessageBatchResult GetResult(const NKikimrClient::TSqsResponse& response) override {
+            Ydb::Ymq::V1::DeleteMessageBatchResult result;
+            auto entries = response.GetDeleteMessageBatch().GetEntries();
+            for (auto i = 0; i < entries.size(); i++) {
+            auto &entry = response.GetDeleteMessageBatch().GetEntries()[i];
+                if (entry.GetError().HasErrorCode()) {
+                    auto currentFailed = result.Addfailed();
+                    currentFailed->Setcode(entry.GetError().GetErrorCode());
+                    currentFailed->Setid(entry.GetId());
+                    currentFailed->Setmessage(entry.GetError().GetMessage());
+
+                    ui32 httpStatus = NSQS::TErrorClass::GetHttpStatus(entry.GetError().GetErrorCode()).GetOrElse(400);
+                    currentFailed->Setsender_fault(400 <= httpStatus && httpStatus < 500);
+                } else {
+                    auto currentSuccessful = result.Addsuccessful();
+                    currentSuccessful->Setid(entry.GetId());
+                }
+            }
+            return result;
+        }
+    };
+
+    class TDeleteMessageBatchActor : public TRpcRequestActor<
+            TEvYmqDeleteMessageBatchRequest,
+            NKikimr::NSQS::TDeleteMessageBatchRequest,
+            TDeleteMessageBatchReplyCallback> {
+    public:
+        using TRpcRequestActor::TRpcRequestActor;
+
+    private:
+        NKikimr::NSQS::TDeleteMessageBatchRequest* GetRequest(THolder<TSqsRequest>& requestHolder) override {
+            auto result = requestHolder->MutableDeleteMessageBatch();
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->Getqueue_url())->second);
+            for (auto& requestEntry : GetProtoRequest()->Getentries()) {
+                auto entry = requestHolder->MutableDeleteMessageBatch()->AddEntries();
+                entry->SetId(requestEntry.Getid());
+                entry->SetReceiptHandle(requestEntry.Getreceipt_handle());
             }
             return result;
         }
@@ -826,5 +879,6 @@ DECLARE_RPC(DeleteQueue);
 DECLARE_RPC(ChangeMessageVisibility);
 DECLARE_RPC(SetQueueAttributes);
 DECLARE_RPC(SendMessageBatch);
+DECLARE_RPC(DeleteMessageBatch);
 
 }

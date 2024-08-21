@@ -22,4 +22,5 @@ service YmqService {
     rpc ChangeMessageVisibility(ChangeMessageVisibilityRequest) returns (ChangeMessageVisibilityResponse);
     rpc SetQueueAttributes(SetQueueAttributesRequest) returns (SetQueueAttributesResponse);
     rpc SendMessageBatch(SendMessageBatchRequest) returns (SendMessageBatchResponse);
+    rpc DeleteMessageBatch(DeleteMessageBatchRequest) returns (DeleteMessageBatchResponse);
 }

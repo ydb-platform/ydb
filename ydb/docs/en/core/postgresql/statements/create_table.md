@@ -11,7 +11,8 @@ The `CREATE TABLE` statement is used to create an empty table in the current dat
 
 
 When creating a table, you can specify:
-1. **Table Type**: {% include [temp-table-description.md](../../_includes/temp-table-description.md) %}
+1. **Table Type**:
+{% include [temp-table-description.md](../../_includes/temp-table-description.md) %}
 2. **Table Name**: `<table name>` – you can use English letters in lowercase, numbers, underscores and dollar signs ($). For example, the table name "People" will be stored as "people". For more information, see [Identifiers and Key Words](https://www.postgresql.org/docs/current/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS).
 3. **Column Name**: `<column name>` – the same naming rules apply as for table names.
 4. **Data Type**: `<column data type>` – [standard PostgreSQL data types](https://www.postgresql.org/docs/14/datatype.html) are specified.

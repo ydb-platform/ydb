@@ -80,7 +80,7 @@ void TCommandDump::Config(TConfig& config) {
             " If this option is enabled, ACL and owner will be saved to dump."
             " In this case, the dump may not be restored if it is restored with an older version of the CLI."
             " By default this option is disabled and the user who will perform the restore will be used"
-            " as the owner of the restored objects")
+            " as the owner of the restored objects.")
         .StoreTrue(&PreserveACL);
 }
 

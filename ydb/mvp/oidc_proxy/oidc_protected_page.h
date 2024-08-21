@@ -137,6 +137,8 @@ protected:
         ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
     }
 
+    virtual bool NeedSendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response) const = 0;
+
     static TString FixReferenceInHtml(TStringBuf html, TStringBuf host, TStringBuf findStr) {
         TStringBuilder result;
         size_t n = html.find(findStr);
@@ -213,20 +215,6 @@ protected:
     }
 
 private:
-    bool NeedSendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response) const {
-        if ((response->Status == "400" || response->Status.empty()) && RequestedPageScheme.empty()) {
-            NHttp::THttpOutgoingRequestPtr request = response->GetRequest();
-            if (!request->Secure) {
-                static const TStringBuf bodyContent = "The plain HTTP request was sent to HTTPS port";
-                NHttp::THeadersBuilder headers(response->Headers);
-                TStringBuf contentType = headers.Get("Content-Type").NextTok(';');
-                TStringBuf body = response->Body;
-                return contentType == "text/html" && body.find(bodyContent) != TStringBuf::npos;
-            }
-        }
-        return false;
-    }
-
     void SendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response, const NActors::TActorContext& ctx) {
         NHttp::THttpOutgoingRequestPtr request = response->GetRequest();
         LOG_DEBUG_S(ctx, EService::MVP, "Try to send request to HTTPS port");

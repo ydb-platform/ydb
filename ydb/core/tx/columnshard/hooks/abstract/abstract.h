@@ -136,7 +136,7 @@ private:
 
     static const NKikimrConfig::TColumnShardConfig& GetAppDataConfig() {
         if (HasAppData()) {
-            return GetAppDataConfig();
+            return AppDataVerified().ColumnShardConfig;
         }
         return DefaultAppDataConfig;
     }

@@ -26,13 +26,15 @@ def test_kikimr_config_generator_generic_connector_config():
     assert actual == expected
 
 def test_merge_two_yaml_configs():
-    with open("config.yaml", 'r') as fh:
+    patched_yaml = yatest.common.output_path("patched.yaml")
+
+    with open(yatest.common.source_path("ydb/public/tools/lib/cmds/ut/config.yaml"), 'r') as fh:
         data_1 = yaml.load(fh, Loader=yaml.FullLoader)
     
-    with open("patch.yaml", 'r') as fh:
+    with open(yatest.common.source_path("ydb/public/tools/lib/cmds/ut/patch.yaml"), 'r') as fh:
         data_2 = yaml.load(fh, Loader=yaml.FullLoader)
 
-    with open("patched.yaml", 'r') as fh:
-        final_data = yaml.load(fh, Loader=yaml.FullLoader)
+    with open(patched_yaml, "w") as res:
+        res.write(yaml.dump(merge_two_yaml_configs(data_1, data_2), default_flow_style=False))
 
-    assert merge_two_yaml_configs(data_1, data_2) == final_data
+    return yatest.common.canonical_file(patched_yaml)

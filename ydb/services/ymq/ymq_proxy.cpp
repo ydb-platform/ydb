@@ -854,6 +854,58 @@ namespace NKikimr::NYmq::V1 {
             return result;
         }
     };
+
+    class TChangeMessageVisibilityBatchReplyCallback : public TReplyCallback<
+            NKikimr::NSQS::TChangeMessageVisibilityBatchResponse,
+            Ydb::Ymq::V1::ChangeMessageVisibilityBatchResult> {
+    public:
+        using TReplyCallback::TReplyCallback;
+
+    private:
+        const NKikimr::NSQS::TChangeMessageVisibilityBatchResponse& GetResponse(const NKikimrClient::TSqsResponse& resp) override {
+            return resp.GetChangeMessageVisibilityBatch();
+        }
+
+        Ydb::Ymq::V1::ChangeMessageVisibilityBatchResult GetResult(const NKikimrClient::TSqsResponse& response) override {
+            Ydb::Ymq::V1::ChangeMessageVisibilityBatchResult result;
+            for (auto& entry : response.GetChangeMessageVisibilityBatch().GetEntries()) {
+                if (entry.GetError().HasErrorCode()) {
+                    auto currentFailed = result.Addfailed();
+                    currentFailed->Setcode(entry.GetError().GetErrorCode());
+                    currentFailed->Setid(entry.GetId());
+                    currentFailed->Setmessage(entry.GetError().GetMessage());
+
+                    ui32 httpStatus = NSQS::TErrorClass::GetHttpStatus(entry.GetError().GetErrorCode()).GetOrElse(400);
+                    currentFailed->Setsender_fault(400 <= httpStatus && httpStatus < 500);
+                } else {
+                    auto currentSuccessful = result.Addsuccessful();
+                    currentSuccessful->Setid(entry.GetId());
+                }
+            }
+            return result;
+        }
+    };
+
+    class TChangeMessageVisibilityBatchActor : public TRpcRequestActor<
+            TEvYmqChangeMessageVisibilityBatchRequest,
+            NKikimr::NSQS::TChangeMessageVisibilityBatchRequest,
+            TChangeMessageVisibilityBatchReplyCallback> {
+    public:
+        using TRpcRequestActor::TRpcRequestActor;
+
+    private:
+        NKikimr::NSQS::TChangeMessageVisibilityBatchRequest* GetRequest(THolder<TSqsRequest>& requestHolder) override {
+            auto result = requestHolder->MutableChangeMessageVisibilityBatch();
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->Getqueue_url())->second);
+            for (auto& requestEntry : GetProtoRequest()->Getentries()) {
+                auto entry = requestHolder->MutableChangeMessageVisibilityBatch()->MutableEntries()->Add();
+                entry->SetId(requestEntry.Getid());
+                entry->SetVisibilityTimeout(requestEntry.Getvisibility_timeout());
+                entry->SetReceiptHandle(requestEntry.Getreceipt_handle());
+            }
+            return result;
+        }
+    };
 }
 
 namespace NKikimr::NGRpcService {
@@ -880,5 +932,6 @@ DECLARE_RPC(ChangeMessageVisibility);
 DECLARE_RPC(SetQueueAttributes);
 DECLARE_RPC(SendMessageBatch);
 DECLARE_RPC(DeleteMessageBatch);
+DECLARE_RPC(ChangeMessageVisibilityBatch);
 
 }

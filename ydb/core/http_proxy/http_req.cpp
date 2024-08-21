@@ -534,6 +534,8 @@ namespace NKikimr::NHttpProxy {
                         action = NSQS::EAction::SendMessageBatch;
                     }else if (Method == "DeleteMessageBatch") {
                         action = NSQS::EAction::DeleteMessageBatch;
+                    } else if (Method == "ChangeMessageVisibilityBatch") {
+                        action = NSQS::EAction::ChangeMessageVisibilityBatch;
                     }
 
                     requestHolder->SetRequestId(HttpContext.RequestId);
@@ -1072,6 +1074,7 @@ namespace NKikimr::NHttpProxy {
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(SetQueueAttributes);
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(SendMessageBatch);
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(DeleteMessageBatch);
+        DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(ChangeMessageVisibilityBatch);
         #undef DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN
     }
 

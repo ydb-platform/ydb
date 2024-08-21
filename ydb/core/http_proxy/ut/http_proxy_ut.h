@@ -1995,4 +1995,5 @@ Y_UNIT_TEST_SUITE(TestHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 0);
 
     }
+
 } // Y_UNIT_TEST_SUITE(TestHttpProxy)

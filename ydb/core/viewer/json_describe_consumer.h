@@ -39,6 +39,12 @@ public:
             return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'consumer' is required"));
         }
 
+        if (params.Has("path")) {
+            Request.set_path(params.Get("path"));
+        } else {
+            return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'path' is required"));
+        }
+
         if (params.Has("include_stats")) {
             Request.set_include_stats(FromStringWithDefault<bool>(params.Get("include_stats"), false));
         }

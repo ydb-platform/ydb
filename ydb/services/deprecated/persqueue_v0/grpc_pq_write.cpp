@@ -25,23 +25,23 @@ void TPQWriteServiceImpl::TSession::OnCreated() {            // Start waiting fo
         ReplyWithError("proxy overloaded", NPersQueue::NErrorCode::OVERLOAD);
         return;
     }
-    if (IsDone) {
-        return ReplyWithError("is done", NPersQueue::NErrorCode::INITIALIZING);
-    }
-    TMaybe<TString> localCluster = Proxy->AvailableLocalCluster();
     if (NeedDiscoverClusters) {
+        TMaybe<TString> localCluster = Proxy->AvailableLocalCluster();
         if (!localCluster.Defined()) {
             ReplyWithError("initializing", NPersQueue::NErrorCode::INITIALIZING);
             return;
         } else if (localCluster->empty()) {
             ReplyWithError("cluster disabled", NPersQueue::NErrorCode::CLUSTER_DISABLED);
             return;
-        } else {
-            CreateActor(*localCluster);
+        } else if (!CreateActor(*localCluster)) {
+            Proxy->ReleaseSession(this);
+            return;
         }
-    } else {
-        CreateActor(TString());
+    } else if (!CreateActor(TString())) {
+        Proxy->ReleaseSession(this);
+        return;
     }
+
     ReadyForNextRead();
 }
 
@@ -64,7 +64,10 @@ void TPQWriteServiceImpl::TSession::OnRead(const TWriteRequest& request) {
 }
 
 void TPQWriteServiceImpl::TSession::OnDone() {
-    IsDone = true;
+    {
+        TGuard<TSpinLock> lock(Lock);
+        IsDone = true;
+    }
     SendEvent(new TEvPQProxy::TEvDone());
 }
 
@@ -101,7 +104,12 @@ bool TPQWriteServiceImpl::TSession::IsShuttingDown() const {
     return Proxy->IsShuttingDown();
 }
 
-void TPQWriteServiceImpl::TSession::CreateActor(const TString &localCluster) {
+bool TPQWriteServiceImpl::TSession::CreateActor(const TString &localCluster) {
+    TGuard<TSpinLock> lock(Lock);
+    if (IsDone) {
+        ReplyWithError("is done", NPersQueue::NErrorCode::INITIALIZING);
+        return false;
+    }
 
     auto classifier = Proxy->GetClassifier();
     ActorId = Proxy->ActorSystem->Register(
@@ -109,6 +117,7 @@ void TPQWriteServiceImpl::TSession::CreateActor(const TString &localCluster) {
                                         classifier ? classifier->ClassifyAddress(GetPeerName())
                                                    : "unknown"), TMailboxType::Simple, 0
     );
+    return true;
 }
 
 void TPQWriteServiceImpl::TSession::SendEvent(IEventBase* ev) {

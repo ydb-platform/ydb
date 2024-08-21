@@ -38,7 +38,7 @@ class TPQWriteServiceImpl : public IPQClustersUpdaterCallback, public std::enabl
         bool IsShuttingDown() const override;
 
     private:
-        void CreateActor(const TString& localCluster);
+        [[nodiscard]] bool CreateActor(const TString& localCluster);
         void SendEvent(NActors::IEventBase* ev);
 
     private:

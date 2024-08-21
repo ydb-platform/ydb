@@ -104,6 +104,7 @@ SRCS(
     logging/log_writer_detail.cpp
     logging/file_log_writer.cpp
     logging/stream_log_writer.cpp
+    logging/system_log_event_provider.cpp
     logging/random_access_gzip.cpp
     logging/zstd_compression.cpp
 

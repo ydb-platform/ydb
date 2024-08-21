@@ -395,6 +395,7 @@ struct TExtensionDesc {
     TString LibraryPath;        // file path
     bool TypesOnly = false;     // Can't be loaded if true
     TString LibraryMD5;         // optional
+    TString Version;            // version of extension
 };
 
 class IExtensionSqlBuilder {

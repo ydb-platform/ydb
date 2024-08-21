@@ -103,6 +103,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
 
         runtime.WaitFor("TEvAnalyzeTableResponse", [&]{ return eventSeen; });
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
+        runtime.SimulateSleep(TDuration::Seconds(30));
 
         auto analyzeRequest2 = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest2.release());
@@ -126,6 +127,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
 
         runtime.WaitFor("TEvResolveKeySetResult", [&]{ return observerCount == 3; });
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
+        runtime.SimulateSleep(TDuration::Seconds(30));
 
         auto analyzeRequest2 = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest2.release());
@@ -149,6 +151,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
 
         runtime.WaitFor("TEvRequestTabletDistribution", [&]{ return eventSeen; });
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
+        runtime.SimulateSleep(TDuration::Seconds(30));
 
         auto analyzeRequest2 = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest2.release());
@@ -172,6 +175,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
 
         runtime.WaitFor("TEvAggregateStatistics", [&]{ return eventSeen; });
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
+        runtime.SimulateSleep(TDuration::Seconds(30));
 
         auto analyzeRequest2 = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest2.release());
@@ -195,6 +199,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
 
         runtime.WaitFor("TEvAggregateStatisticsResponse", [&]{ return eventSeen; });
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
+        runtime.SimulateSleep(TDuration::Seconds(30));
 
         auto analyzeRequest2 = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest2.release());
@@ -219,6 +224,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
 
         runtime.WaitFor("5th TEvStatisticsRequest", [&]{ return observerCount == 5; });
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
+        runtime.SimulateSleep(TDuration::Seconds(30));
 
         auto analyzeRequest2 = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest2.release());

@@ -35,6 +35,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
 
         runtime.WaitFor("TEvResolveKeySetResult", [&]{ return eventCount == 3; });
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
+        runtime.SimulateSleep(TDuration::Seconds(30));
 
         ValidateCountMinColumnshard(runtime, tableInfo.PathId, 10);
     }
@@ -52,6 +53,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
 
         runtime.WaitFor("TEvRequestTabletDistribution", [&]{ return eventSeen; });
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
+        runtime.SimulateSleep(TDuration::Seconds(30));
 
         ValidateCountMinColumnshard(runtime, tableInfo.PathId, 10);
     }
@@ -69,6 +71,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
 
         runtime.WaitFor("TEvAggregateStatistics", [&]{ return eventSeen; });
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
+        runtime.SimulateSleep(TDuration::Seconds(30));
 
         ValidateCountMinColumnshard(runtime, tableInfo.PathId, 10);
     }
@@ -86,6 +89,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
 
         runtime.WaitFor("TEvAggregateStatisticsResponse", [&]{ return eventSeen; });
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
+        runtime.SimulateSleep(TDuration::Seconds(30));
 
         ValidateCountMinColumnshard(runtime, tableInfo.PathId, 10);
     }
@@ -103,6 +107,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
 
         runtime.WaitFor("5th TEvStatisticsRequest", [&]{ return observerCount == 5; });
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
+        runtime.SimulateSleep(TDuration::Seconds(30));
 
         ValidateCountMinColumnshard(runtime, tableInfo.PathId, 10);
     }

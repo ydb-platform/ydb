@@ -52,6 +52,7 @@ class TPQWriteServiceImpl : public IPQClustersUpdaterCallback, public std::enabl
         TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
 
         bool NeedDiscoverClusters;
+        bool IsDone = false;
     };
     using TSessionRef = TIntrusivePtr<TSession>;
 

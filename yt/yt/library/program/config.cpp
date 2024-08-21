@@ -8,7 +8,7 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void THeapSizeLimit::Register(TRegistrar registrar)
+void THeapSizeLimitConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("container_memory_ratio", &TThis::ContainerMemoryRatio)
         .Optional();
@@ -94,7 +94,8 @@ void TSingletonsConfig::Register(TRegistrar registrar)
     registrar.Parameter("solomon_exporter", &TThis::SolomonExporter)
         .DefaultNew();
     registrar.Parameter("logging", &TThis::Logging)
-        .DefaultCtor([] { return NLogging::TLogManagerConfig::CreateDefault(); });
+        .DefaultCtor([] { return NLogging::TLogManagerConfig::CreateDefault(); })
+        .ResetOnLoad();
     registrar.Parameter("jaeger", &TThis::Jaeger)
         .DefaultNew();
     registrar.Parameter("tracing_transport", &TThis::TracingTransport)

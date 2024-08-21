@@ -10,6 +10,7 @@
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 
 namespace NKikimr::NExternalSource::NObjectStorage {
 
@@ -118,20 +119,28 @@ struct TEvArrowFile : public NActors::TEventLocal<TEvArrowFile, EvArrowFile> {
 };
 
 struct TEvInferFileSchema : public NActors::TEventLocal<TEvInferFileSchema, EvInferFileSchema> {
-    explicit TEvInferFileSchema(TString&& path)
+    explicit TEvInferFileSchema(TString&& path, ui64 size)
         : Path{std::move(path)}
+        , Size{size}
     {}
 
     TString Path;
+    ui64 Size = 0;
 };
 
 struct TEvInferredFileSchema : public NActors::TEventLocal<TEvInferredFileSchema, EvInferredFileSchema> {
     TEvInferredFileSchema(TString path, std::vector<Ydb::Column>&& fields)
         : Path{std::move(path)}
+        , Status{NYdb::EStatus::SUCCESS, {}}
         , Fields{std::move(fields)}
+    {}
+    TEvInferredFileSchema(TString path, NYql::TIssues&& issues)
+        : Path{std::move(path)}
+        , Status{NYdb::EStatus::INTERNAL_ERROR, std::move(issues)}
     {}
 
     TString Path;
+    NYdb::TStatus Status;
     std::vector<Ydb::Column> Fields;
 };
 

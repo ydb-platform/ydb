@@ -6,7 +6,7 @@
 namespace NKikimr::NColumnShard {
 
 void TColumnShard::Handle(NStat::TEvStatistics::TEvAnalyzeTable::TPtr& ev, const TActorContext&) {
-
+    auto& requestRecord = ev->Get()->Record;
     // TODO Start a potentially long analysis process.
     // ...
 
@@ -14,6 +14,10 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvAnalyzeTable::TPtr& ev, const
 
     // Return the response when the analysis is completed
     auto response = std::make_unique<NStat::TEvStatistics::TEvAnalyzeTableResponse>();
+    auto& responseRecord = response->Record;
+    responseRecord.SetOperationId(requestRecord.GetOperationId());
+    responseRecord.MutablePathId()->CopyFrom(requestRecord.GetTable().GetPathId());
+    responseRecord.SetShardTabletId(TabletID());
     Send(ev->Sender, response.release(), 0, ev->Cookie);
 }
 

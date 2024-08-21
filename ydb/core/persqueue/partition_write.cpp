@@ -78,6 +78,8 @@ void TPartition::ReplyWrite(
     write->SetTotalTimeInPartitionQueueMs(queueTime.MilliSeconds());
     write->SetWriteTimeMs(writeTime.MilliSeconds());
 
+    write->SetWrittenInTx(IsSupportive());
+
     ctx.Send(Tablet, response.Release());
 }
 
@@ -165,6 +167,12 @@ void TPartition::ProcessReserveRequests(const TActorContext& ctx) {
         const ui64& size = ReserveRequests.front()->Size;
         const ui64& cookie = ReserveRequests.front()->Cookie;
         const bool& lastRequest = ReserveRequests.front()->LastRequest;
+
+        if (!IsActive()) {
+            ReplyOk(ctx, cookie);
+            ReserveRequests.pop_front();
+            continue;
+        }
 
         auto it = Owners.find(owner);
         if (ClosedInternalPartition) {

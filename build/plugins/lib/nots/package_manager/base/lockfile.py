@@ -24,7 +24,7 @@ class LockfilePackageMeta(object):
         self.sky_id = sky_id
         self.integrity = integrity
         self.integrity_algorithm = integrity_algorithm
-        self.tarball_path = "/".join(parts[-3:])  # @scope%2fname/-/name-0.0.1.tgz
+        self.tarball_path = "/".join(parts[-3:]).replace("%2f", "/")  # @scope%2fname/-/name-0.0.1.tgz
 
     def to_str(self):
         return " ".join([self.tarball_url, self.sky_id, self.integrity, self.integrity_algorithm])

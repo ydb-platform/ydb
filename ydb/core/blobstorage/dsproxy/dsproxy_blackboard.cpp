@@ -178,12 +178,17 @@ ui64 TBlobState::GetPredictedDelayNs(const TBlobStorageGroupInfo &info, TGroupQu
 }
 
 void TBlobState::GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues,
-        NKikimrBlobStorage::EVDiskQueueId queueId, ui32 nWorst, TDiskDelayPredictions *outNWorst) const {
+        NKikimrBlobStorage::EVDiskQueueId queueId, TDiskDelayPredictions *outNWorst,
+        double multiplier) const {
     outNWorst->resize(Disks.size());
     for (ui32 diskIdx = 0; diskIdx < Disks.size(); ++diskIdx) {
-        (*outNWorst)[diskIdx] = { GetPredictedDelayNs(info, groupQueues, diskIdx, queueId), diskIdx };
+        (*outNWorst)[diskIdx] = {
+            static_cast<ui64>(GetPredictedDelayNs(info, groupQueues, diskIdx, queueId) * multiplier),
+            diskIdx
+        };
     }
-    std::partial_sort(outNWorst->begin(), outNWorst->begin() + std::min(nWorst, (ui32)Disks.size()), outNWorst->end());
+    ui32 sortedPrefixSize = std::min(3u, (ui32)Disks.size());
+    std::partial_sort(outNWorst->begin(), outNWorst->begin() + sortedPrefixSize, outNWorst->end());
 }
 
 bool TBlobState::HasWrittenQuorum(const TBlobStorageGroupInfo& info, const TBlobStorageGroupInfo::TGroupVDisks& expired) const {
@@ -361,7 +366,8 @@ void TBlackboard::AddErrorResponse(const TLogoBlobID &id, ui32 orderNumber) {
 }
 
 EStrategyOutcome TBlackboard::RunStrategies(TLogContext &logCtx, const TStackVec<IStrategy*, 1>& s,
-        TBatchedVec<TFinishedBlob> *finished, const TBlobStorageGroupInfo::TGroupVDisks *expired) {
+        const TAccelerationParams& accelerationParams, TBatchedVec<TFinishedBlob> *finished,
+        const TBlobStorageGroupInfo::TGroupVDisks *expired) {
     for (auto it = BlobStates.begin(); it != BlobStates.end(); ) {
         auto& blob = it->second;
         if (!std::exchange(blob.IsChanged, false)) {
@@ -373,7 +379,7 @@ EStrategyOutcome TBlackboard::RunStrategies(TLogContext &logCtx, const TStackVec
         NKikimrProto::EReplyStatus status = NKikimrProto::OK;
         TString errorReason;
         for (IStrategy *strategy : s) {
-            switch (auto res = strategy->Process(logCtx, blob, *Info, *this, GroupDiskRequests)) {
+            switch (auto res = strategy->Process(logCtx, blob, *Info, *this, GroupDiskRequests, accelerationParams)) {
                 case EStrategyOutcome::IN_PROGRESS:
                     status = NKikimrProto::UNKNOWN;
                     break;
@@ -415,8 +421,9 @@ EStrategyOutcome TBlackboard::RunStrategies(TLogContext &logCtx, const TStackVec
 }
 
 EStrategyOutcome TBlackboard::RunStrategy(TLogContext &logCtx, const IStrategy& s,
-        TBatchedVec<TFinishedBlob> *finished, const TBlobStorageGroupInfo::TGroupVDisks *expired) {
-    return RunStrategies(logCtx, {const_cast<IStrategy*>(&s)}, finished, expired);
+        const TAccelerationParams& accelerationParams, TBatchedVec<TFinishedBlob> *finished,
+        const TBlobStorageGroupInfo::TGroupVDisks *expired) {
+    return RunStrategies(logCtx, {const_cast<IStrategy*>(&s)}, accelerationParams, finished, expired);
 }
 
 TBlobState& TBlackboard::GetState(const TLogoBlobID &id) {
@@ -458,13 +465,17 @@ void TBlackboard::ReportPartMapStatus(const TLogoBlobID &id, ssize_t partMapInde
 }
 
 void TBlackboard::GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues,
-        NKikimrBlobStorage::EVDiskQueueId queueId, ui32 nWorst, TDiskDelayPredictions *outNWorst) const {
+        NKikimrBlobStorage::EVDiskQueueId queueId, TDiskDelayPredictions *outNWorst,
+        double multiplier) const {
     ui32 totalVDisks = info.GetTotalVDisksNum();
     outNWorst->resize(totalVDisks);
     for (ui32 orderNumber = 0; orderNumber < totalVDisks; ++orderNumber) {
-        (*outNWorst)[orderNumber] = { groupQueues.GetPredictedDelayNsByOrderNumber(orderNumber, queueId), orderNumber };
+        (*outNWorst)[orderNumber] = { 
+            static_cast<ui64>(groupQueues.GetPredictedDelayNsByOrderNumber(orderNumber, queueId) * multiplier),
+            orderNumber
+        };
     }
-    std::partial_sort(outNWorst->begin(), outNWorst->begin() + std::min(nWorst, totalVDisks), outNWorst->end());
+    std::partial_sort(outNWorst->begin(), outNWorst->begin() + std::min(3u, totalVDisks), outNWorst->end());
 }
 
 void TBlackboard::RegisterBlobForPut(const TLogoBlobID& id, size_t blobIdx) {

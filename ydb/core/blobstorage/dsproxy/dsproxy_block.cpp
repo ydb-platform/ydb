@@ -132,20 +132,13 @@ public:
         return ERequestType::Block;
     }
 
-    TBlobStorageGroupBlockRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-            const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
-            const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvBlock *ev,
-            ui64 cookie, NWilson::TTraceId&& traceId, TInstant now,
-            TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
-        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
-                NKikimrServices::BS_PROXY_BLOCK, false, {}, now, storagePoolCounters, ev->RestartCounter,
-                std::move(traceId), "DSProxy.Block", ev, std::move(ev->ExecutionRelay),
-                NKikimrServices::TActivity::BS_GROUP_BLOCK)
-        , TabletId(ev->TabletId)
-        , Generation(ev->Generation)
-        , Deadline(ev->Deadline)
-        , IssuerGuid(ev->IssuerGuid)
-        , StartTime(now)
+    TBlobStorageGroupBlockRequest(TBlobStorageGroupBlockParameters& params)
+        : TBlobStorageGroupRequestActor(params)
+        , TabletId(params.Common.Event->TabletId)
+        , Generation(params.Common.Event->Generation)
+        , Deadline(params.Common.Event->Deadline)
+        , IssuerGuid(params.Common.Event->IssuerGuid)
+        , StartTime(params.Common.Now)
         , QuorumTracker(Info.Get())
     {}
 
@@ -176,11 +169,8 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupBlockRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-        const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
-        const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvBlock *ev,
-        ui64 cookie, NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
-    return new TBlobStorageGroupBlockRequest(info, state, source, mon, ev, cookie, std::move(traceId), now, storagePoolCounters);
+IActor* CreateBlobStorageGroupBlockRequest(TBlobStorageGroupBlockParameters params) {
+    return new TBlobStorageGroupBlockRequest(params);
 }
 
 } // NKikimr

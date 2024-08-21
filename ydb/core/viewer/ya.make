@@ -4,8 +4,10 @@ RECURSE_FOR_TESTS(
 
 LIBRARY()
 
+IF(NOT OS_WINDOWS)
 IF(BUILD_TYPE == RELEASE OR BUILD_TYPE == RELWITHDEBINFO)
     CXXFLAGS(-Oz)
+ENDIF()
 ENDIF()
 
 SRCS(
@@ -551,6 +553,7 @@ PEERDIR(
     ydb/core/grpc_services
     ydb/core/grpc_services/local_rpc
     ydb/core/health_check
+    ydb/core/mon
     ydb/core/node_whiteboard
     ydb/core/protos
     ydb/core/scheme

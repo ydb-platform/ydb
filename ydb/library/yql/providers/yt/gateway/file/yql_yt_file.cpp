@@ -1142,6 +1142,10 @@ private:
             req.Table(), attrs, req.IgnoreYamrDsv(), req.IgnoreWeakSchema()
         );
 
+        if (attrs.AsMap().contains("schema_mode") && attrs["schema_mode"].AsString() == "weak") {
+            info.Attrs["schema_mode"] = attrs["schema_mode"].AsString();
+        }
+
         NYT::TNode schemaAttrs;
         if (req.ForceInferSchema() && req.InferSchemaRows() > 0) {
             info.Attrs.erase(YqlRowSpecAttribute);

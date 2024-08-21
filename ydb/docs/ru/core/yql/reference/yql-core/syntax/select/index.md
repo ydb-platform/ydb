@@ -6,6 +6,8 @@
 
 {% include [x](../_includes/select/combining_queries.md) %}
 
+{% include [x](../_includes/select/functional_tables.md) %}
+
 ## Поддерживаемые конструкции в SELECT
 
 * [FROM](from.md)

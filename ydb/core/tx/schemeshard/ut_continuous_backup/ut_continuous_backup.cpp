@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(TContinuousBackupTests) {
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/IncrBackupImpl"), {
             NLs::PathExist,
             NLs::IsTable,
-            NLs::CheckColumns("IncrBackupImpl", {"key", "value", "__incrBackupImpl_deleted"}, {}, {"key"}),
+            NLs::CheckColumns("IncrBackupImpl", {"key", "value", "__ydb_incrBackupImpl_deleted"}, {}, {"key"}),
         });
     }
 } // TCdcStreamWithInitialScanTests

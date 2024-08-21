@@ -17,12 +17,13 @@ using namespace NYql::NNodes;
 namespace NYql::NDq {
 
 TExprBase DqRewriteAggregate(TExprBase node, TExprContext& ctx, TTypeAnnotationContext& typesCtx, bool compactForDistinct,
-    bool usePhases, const bool useFinalizeByKey)
+    bool usePhases, const bool useFinalizeByKey, const bool allowSpilling)
 {
     if (!node.Maybe<TCoAggregateBase>()) {
         return node;
     }
-    TAggregateExpander aggExpander(!typesCtx.IsBlockEngineEnabled() && !useFinalizeByKey, useFinalizeByKey, node.Ptr(), ctx, typesCtx, false, compactForDistinct, usePhases);
+    TAggregateExpander aggExpander(!typesCtx.IsBlockEngineEnabled() && !useFinalizeByKey,
+        useFinalizeByKey, node.Ptr(), ctx, typesCtx, false, compactForDistinct, usePhases, allowSpilling);
     auto result = aggExpander.ExpandAggregate();
     YQL_ENSURE(result);
 

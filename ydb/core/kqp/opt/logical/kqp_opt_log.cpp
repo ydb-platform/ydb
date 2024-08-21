@@ -118,7 +118,8 @@ protected:
                 true,               // defaultWatermarksMode
                 true);              // syncActor
         } else {
-            output = DqRewriteAggregate(node, ctx, TypesCtx, false, KqpCtx.Config->HasOptEnableOlapPushdown() || KqpCtx.Config->HasOptUseFinalizeByKey(), KqpCtx.Config->HasOptUseFinalizeByKey());
+            NDq::TSpillingSettings spillingSettings(KqpCtx.Config->GetEnabledSpillingNodes());
+            output = DqRewriteAggregate(node, ctx, TypesCtx, false, KqpCtx.Config->HasOptEnableOlapPushdown() || KqpCtx.Config->HasOptUseFinalizeByKey(), KqpCtx.Config->HasOptUseFinalizeByKey(), spillingSettings.IsAggregationSpillingEnabled());
         }
         if (output) {
             DumpAppliedRule("RewriteAggregate", node.Ptr(), output.Cast().Ptr(), ctx);
@@ -153,7 +154,9 @@ protected:
             *opt, [](auto& rels, auto label, auto node, auto stat) {
                 rels.emplace_back(std::make_shared<TKqpRelOptimizerNode>(TString(label), stat, node));
             },
-            KqpCtx.EquiJoinsCount);
+            KqpCtx.EquiJoinsCount,
+            KqpCtx.GetCardinalityHints(),
+            KqpCtx.GetJoinAlgoHints());
         DumpAppliedRule("OptimizeEquiJoinWithCosts", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

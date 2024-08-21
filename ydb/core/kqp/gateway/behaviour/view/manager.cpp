@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/gateway/actors/scheme.h>
+#include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
 namespace NKikimr::NKqp {
@@ -36,6 +37,15 @@ std::pair<TString, TString> SplitPathByDb(const TString& objectId,
     return pathPair;
 }
 
+std::pair<TString, TString> SplitPathByObjectId(const TString& objectId) {
+    std::pair<TString, TString> pathPair;
+    TString error;
+    if (!NSchemeHelpers::TrySplitTablePath(objectId, pathPair, error)) {
+        ythrow TBadArgumentException() << error;
+    }
+    return pathPair;
+}
+
 void FillCreateViewProposal(NKikimrSchemeOp::TModifyScheme& modifyScheme,
                             const NYql::TCreateObjectSettings& settings,
                             const TString& database) {
@@ -54,10 +64,9 @@ void FillCreateViewProposal(NKikimrSchemeOp::TModifyScheme& modifyScheme,
 }
 
 void FillDropViewProposal(NKikimrSchemeOp::TModifyScheme& modifyScheme,
-                         const NYql::TDropObjectSettings& settings,
-                         const TString& database) {
+                         const NYql::TDropObjectSettings& settings) {
 
-    const auto pathPair = SplitPathByDb(settings.GetObjectId(), database);
+    const auto pathPair = SplitPathByObjectId(settings.GetObjectId());
     modifyScheme.SetWorkingDir(pathPair.first);
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropView);
 
@@ -103,7 +112,7 @@ NThreading::TFuture<TYqlConclusionStatus> DropView(const NYql::TDropObjectSettin
         proposal->Record.SetUserToken(context.GetExternalData().GetUserToken()->GetSerializedToken());
     }
     auto& schemeTx = *proposal->Record.MutableTransaction()->MutableModifyScheme();
-    FillDropViewProposal(schemeTx, settings, context.GetExternalData().GetDatabase());
+    FillDropViewProposal(schemeTx, settings);
 
     return SendSchemeRequest(proposal.Release(), context.GetExternalData().GetActorSystem(), false);
 }
@@ -115,9 +124,8 @@ void PrepareCreateView(NKqpProto::TKqpSchemeOperation& schemeOperation,
 }
 
 void PrepareDropView(NKqpProto::TKqpSchemeOperation& schemeOperation,
-                     const NYql::TObjectSettingsImpl& settings,
-                     TInternalModificationContext& context) {
-    FillDropViewProposal(*schemeOperation.MutableDropView(), settings, context.GetExternalData().GetDatabase());
+                     const NYql::TObjectSettingsImpl& settings) {
+    FillDropViewProposal(*schemeOperation.MutableDropView(), settings);
 }
 
 }
@@ -173,7 +181,7 @@ TViewManager::TYqlConclusionStatus TViewManager::DoPrepare(NKqpProto::TKqpScheme
                 PrepareCreateView(schemeOperation, settings, context);
                 break;
             case EActivityType::Drop:
-                PrepareDropView(schemeOperation, settings, context);
+                PrepareDropView(schemeOperation, settings);
                 break;
         }
     } catch (...) {

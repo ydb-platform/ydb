@@ -315,6 +315,7 @@ struct TCommonAppOptions {
     TString GRpcPublicHost = "";
     ui32 GRpcPublicPort = 0;
     ui32 GRpcsPublicPort = 0;
+    TString PGWireAddress = "";
     ui32 PGWirePort = 0;
     TVector<TString> GRpcPublicAddressesV4;
     TVector<TString> GRpcPublicAddressesV6;
@@ -384,7 +385,8 @@ struct TCommonAppOptions {
         opts.AddLongOption("grpc-public-host", "set public gRPC host for discovery").RequiredArgument("HOST").StoreResult(&GRpcPublicHost);
         opts.AddLongOption("grpc-public-port", "set public gRPC port for discovery").RequiredArgument("PORT").StoreResult(&GRpcPublicPort);
         opts.AddLongOption("grpcs-public-port", "set public gRPC SSL port for discovery").RequiredArgument("PORT").StoreResult(&GRpcsPublicPort);
-        opts.AddLongOption("pgwire-port", "set public port for listenin postgres protocol").OptionalArgument("PORT").StoreResult(&PGWirePort);
+        opts.AddLongOption("pgwire-address", "set host for listen postgres protocol").RequiredArgument("ADDR").StoreResult(&PGWireAddress);
+        opts.AddLongOption("pgwire-port", "set port for listen postgres protocol").OptionalArgument("PORT").StoreResult(&PGWirePort);
         opts.AddLongOption("grpc-public-address-v4", "set public ipv4 address for discovery").RequiredArgument("ADDR").EmplaceTo(&GRpcPublicAddressesV4);
         opts.AddLongOption("grpc-public-address-v6", "set public ipv6 address for discovery").RequiredArgument("ADDR").EmplaceTo(&GRpcPublicAddressesV6);
         opts.AddLongOption("grpc-public-target-name-override", "set public hostname override for TLS in discovery").RequiredArgument("HOST").StoreResult(&GRpcPublicTargetNameOverride);
@@ -598,6 +600,9 @@ struct TCommonAppOptions {
                 }
             }
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+        }
+        if (PGWireAddress) {
+            appConfig.MutableLocalPgWireConfig()->SetAddress(PGWireAddress);
         }
         if (PGWirePort) {
             appConfig.MutableLocalPgWireConfig()->SetListeningPort(PGWirePort);
@@ -1252,6 +1257,7 @@ public:
             cf.FixedNodeID,
             cf.InterconnectPort,
             cf.CreateNodeLocation(),
+            AppConfig.GetAuthConfig().GetNodeRegistrationToken(),
         };
 
         auto result = NodeBrokerClient.RegisterDynamicNode(cf.GrpcSslSettings, addrs, settings, Env, Logger);

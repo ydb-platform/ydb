@@ -13,6 +13,7 @@
 #include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/s3/credentials/credentials.h>
 #include <ydb/library/yql/providers/s3/object_listers/yql_s3_list.h>
+#include <ydb/library/yql/providers/s3/object_listers/yql_s3_path.h>
 #include <ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h>
 #include <ydb/library/yql/providers/s3/proto/credentials.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -33,12 +34,14 @@ struct TObjectStorageExternalSource : public IExternalSource {
                                           NActors::TActorSystem* actorSystem,
                                           size_t pathsLimit,
                                           std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> credentialsFactory,
-                                          bool enableInfer)
+                                          bool enableInfer,
+                                          bool allowLocalFiles)
         : HostnamePatterns(hostnamePatterns)
         , PathsLimit(pathsLimit)
         , ActorSystem(actorSystem)
         , CredentialsFactory(std::move(credentialsFactory))
         , EnableInfer(enableInfer)
+        , AllowLocalFiles(allowLocalFiles)
     {}
 
     virtual TString Pack(const NKikimrExternalSources::TSchema& schema,
@@ -307,7 +310,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
             structuredTokenBuilder.SetNoAuth();
         }
 
-        auto effectiveFilePattern = meta->TableLocation;
+        auto effectiveFilePattern = NYql::NS3::NormalizePath(meta->TableLocation);
         if (meta->TableLocation.EndsWith('/')) {
             effectiveFilePattern += '*';
         } 
@@ -319,7 +322,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
             .Url = meta->DataSourceLocation,
             .Credentials = credentials,
             .Pattern = effectiveFilePattern,
-        }, Nothing(), false);
+        }, Nothing(), AllowLocalFiles);
         auto afterListing = s3Lister->Next().Apply([path = effectiveFilePattern](const NThreading::TFuture<NYql::NS3Lister::TListResult>& listResFut) {
             auto& listRes = listResFut.GetValue();
             if (std::holds_alternative<NYql::NS3Lister::TListError>(listRes)) {
@@ -332,7 +335,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
             }
             for (const auto& entry : entries.Objects) {
                 if (entry.Size > 0) {
-                    return entry.Path;
+                    return entry;
                 }
             }
             throw yexception() << "couldn't find any files for type inference, please check that the right path is provided";
@@ -348,12 +351,16 @@ struct TObjectStorageExternalSource : public IExternalSource {
         meta->Attributes.erase("withinfer");
 
         auto fileFormat = NObjectStorage::NInference::ConvertFileFormat(*format);
-        auto arrowFetcherId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowFetchingActor(s3FetcherId, fileFormat));
+        auto arrowFetcherId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowFetchingActor(s3FetcherId, fileFormat, meta->Attributes));
         auto arrowInferencinatorId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowInferencinator(arrowFetcherId, fileFormat, meta->Attributes));
 
-        return afterListing.Apply([arrowInferencinatorId, meta, actorSystem = ActorSystem](const NThreading::TFuture<TString>& pathFut) {
+        return afterListing.Apply([arrowInferencinatorId, meta, actorSystem = ActorSystem](const NThreading::TFuture<NYql::NS3Lister::TObjectListEntry>& entryFut) {
             auto promise = NThreading::NewPromise<TMetadataResult>();
             auto schemaToMetadata = [meta](NThreading::TPromise<TMetadataResult> metaPromise, NObjectStorage::TEvInferredFileSchema&& response) {
+                if (!response.Status.IsSuccess()) {
+                    metaPromise.SetValue(NYql::NCommon::ResultFromError<TMetadataResult>(response.Status.GetIssues()));
+                    return;
+                }
                 meta->Changed = true;
                 meta->Schema.clear_column();
                 for (const auto& column : response.Fields) {
@@ -365,9 +372,10 @@ struct TObjectStorageExternalSource : public IExternalSource {
                 result.Metadata = meta;
                 metaPromise.SetValue(std::move(result));
             };
+            auto [path, size, _] = entryFut.GetValue();
             actorSystem->Register(new NKqp::TActorRequestHandler<NObjectStorage::TEvInferFileSchema, NObjectStorage::TEvInferredFileSchema, TMetadataResult>(
                 arrowInferencinatorId,
-                new NObjectStorage::TEvInferFileSchema(TString{pathFut.GetValue()}),
+                new NObjectStorage::TEvInferFileSchema(TString{path}, size),
                 promise,
                 std::move(schemaToMetadata)
             ));
@@ -608,6 +616,7 @@ private:
     NActors::TActorSystem* ActorSystem = nullptr;
     std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> CredentialsFactory;
     const bool EnableInfer = false;
+    const bool AllowLocalFiles;
 };
 
 }
@@ -617,8 +626,9 @@ IExternalSource::TPtr CreateObjectStorageExternalSource(const std::vector<TRegEx
                                                         NActors::TActorSystem* actorSystem,
                                                         size_t pathsLimit,
                                                         std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> credentialsFactory,
-                                                        bool enableInfer) {
-    return MakeIntrusive<TObjectStorageExternalSource>(hostnamePatterns, actorSystem, pathsLimit, std::move(credentialsFactory), enableInfer);
+                                                        bool enableInfer,
+                                                        bool allowLocalFiles) {
+    return MakeIntrusive<TObjectStorageExternalSource>(hostnamePatterns, actorSystem, pathsLimit, std::move(credentialsFactory), enableInfer, allowLocalFiles);
 }
 
 NYql::TIssues Validate(const FederatedQuery::Schema& schema, const FederatedQuery::ObjectStorageBinding::Subset& objectStorage, size_t pathsLimit) {

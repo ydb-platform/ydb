@@ -10,6 +10,57 @@ message TEvWatch {
 message TEvUpdate {
     optional uint64 Mediator = 1;
     optional uint32 Bucket = 2;
+
+    // This is the lower bound mediator time, i.e. there are no tablets in the
+    // given bucket that have unacknowledged transactions at the specified step
+    // or below.
     optional fixed64 TimeBarrier = 4;
-    repeated fixed64 Exemption = 5;
+
+    reserved 5; // was: Exemption
+}
+
+// sent from local timecast to mediator for granular per-tablet watches
+message TEvGranularWatch {
+    optional uint32 Bucket = 1;
+
+    // non-decreasing subscription id, identifying reconnect attempts
+    // any subscription or change with a lower id will be dropped
+    optional uint64 SubscriptionId = 2;
+
+    // The list of tablets the client is currently tracking
+    repeated fixed64 Tablets = 3 [packed = true];
+}
+
+// sent from local timecast to mediator to change the list of tablets
+message TEvGranularWatchModify {
+    optional uint32 Bucket = 1;
+
+    // An updated subscription id, allowing clients to detect when updates
+    // reflect the updated tablet list. May match current subscription id,
+    // any message with a lower subscription id will be ignored.
+    optional uint64 SubscriptionId = 2;
+
+    // The list of tablets to add or remove
+    repeated fixed64 AddTablets = 3 [packed = true];
+    repeated fixed64 RemoveTablets = 4 [packed = true];
+}
+
+message TEvGranularUpdate {
+    optional fixed64 Mediator = 1;
+    optional uint32 Bucket = 2;
+    optional uint64 SubscriptionId = 3;
+
+    // This is the upper bound mediator time, i.e. coordinators have steps
+    // planned up to the specified step. Most idle tablets move to this time.
+    optional uint64 LatestStep = 4;
+
+    // The list of tablets that have mediator time lower than the latest step
+    // This list only includes changes within the same subscription
+    repeated fixed64 FrozenTablets = 5 [packed = true];
+
+    // A frozen step for each frozen tablet
+    repeated uint64 FrozenSteps = 6 [packed = true];
+
+    // The list of previously frozen tablets that now match the latest step
+    repeated fixed64 UnfrozenTablets = 7 [packed = true];
 }

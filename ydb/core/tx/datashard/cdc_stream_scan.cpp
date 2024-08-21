@@ -218,7 +218,7 @@ class TDataShard::TTxCdcStreamScanProgress
             const auto tag = tags.at(pos);
             auto it = table->Columns.find(tag);
             Y_ABORT_UNLESS(it != table->Columns.end());
-            if (it->second.Name == "__incrBackupImpl_deleted") {
+            if (it->second.Name == "__ydb_incrBackupImpl_deleted") {
                 if (const auto& cell = cells.at(pos); !cell.IsNull() && cell.AsValue<bool>()) {
                     return std::nullopt;
                 }

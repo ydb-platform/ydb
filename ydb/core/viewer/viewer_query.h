@@ -31,6 +31,8 @@ class TJsonQuery : public TViewerPipeClient {
     TString TransactionMode;
     bool Direct = false;
     bool IsBase64Encode = true;
+    int LimitRows = 10000;
+    int TotalRows = 0;
 
     enum ESchemaType {
         Classic,
@@ -89,6 +91,9 @@ public:
         if (params.Has("base64")) {
             IsBase64Encode = FromStringWithDefault<bool>(params.Get("base64"), true);
         }
+        if (params.Has("limit_rows")) {
+            LimitRows = std::clamp<int>(FromStringWithDefault<int>(params.Get("limit_rows"), 10000), 1, 100000);
+        }
         Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
     }
 
@@ -123,6 +128,9 @@ public:
             }
             if (requestData.Has("base64")) {
                 IsBase64Encode = requestData["base64"].GetBooleanRobust();
+            }
+            if (requestData.Has("limit_rows")) {
+                LimitRows = std::clamp<int>(requestData["limit_rows"].GetIntegerRobust(), 1, 100000);
             }
         }
         return success;
@@ -297,6 +305,10 @@ public:
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
             request.SetKeepSession(false);
             SetTransactionMode(request);
+            if (!request.txcontrol().has_begin_tx()) {
+                request.mutable_txcontrol()->mutable_begin_tx()->mutable_serializable_read_write();
+                request.mutable_txcontrol()->set_commit_tx(true);
+            }
         } else if (Action == "explain" || Action == "explain-ast" || Action == "explain-data") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
@@ -307,7 +319,13 @@ public:
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT);
         }
-        if (Stats == "profile") {
+        if (Stats == "none") {
+            request.SetStatsMode(NYql::NDqProto::DQ_STATS_MODE_NONE);
+            request.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE);
+        } else if (Stats == "basic") {
+            request.SetStatsMode(NYql::NDqProto::DQ_STATS_MODE_BASIC);
+            request.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC);
+        } else if (Stats == "profile") {
             request.SetStatsMode(NYql::NDqProto::DQ_STATS_MODE_PROFILE);
             request.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE);
         } else if (Stats == "full") {
@@ -437,7 +455,13 @@ private:
         }
 
         TStringStream stream;
+        constexpr ui32 doubleNDigits = std::numeric_limits<double>::max_digits10;
+        constexpr ui32 floatNDigits = std::numeric_limits<float>::max_digits10;
+        constexpr EFloatToStringMode floatMode = EFloatToStringMode::PREC_NDIGITS;
         NJson::WriteJson(&stream, &jsonResponse, {
+            .DoubleNDigits = doubleNDigits,
+            .FloatNDigits = floatNDigits,
+            .FloatToStringMode = floatMode,
             .ValidateUtf8 = false,
             .WriteNanAsString = true,
         });
@@ -473,13 +497,23 @@ private:
     }
 
     void HandleReply(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev) {
-        const NKikimrKqp::TEvExecuterStreamData& data(ev->Get()->Record);
+        NKikimrKqp::TEvExecuterStreamData& data(ev->Get()->Record);
 
-        ResultSets.emplace_back();
-        ResultSets.back() = std::move(data.GetResultSet());
+        if (TotalRows < LimitRows) {
+            int rowsAvailable = LimitRows - TotalRows;
+            if (data.GetResultSet().rows_size() > rowsAvailable) {
+                data.MutableResultSet()->mutable_rows()->Truncate(rowsAvailable);
+                data.MutableResultSet()->set_truncated(true);
+            }
+            TotalRows += data.GetResultSet().rows_size();
+            ResultSets.emplace_back() = std::move(*data.MutableResultSet());
+        }
 
         THolder<NKqp::TEvKqpExecuter::TEvStreamDataAck> ack = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
         ack->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
+        if (TotalRows >= LimitRows) {
+            ack->Record.SetEnough(true);
+        }
         Send(ev->Sender, ack.Release());
     }
 
@@ -506,7 +540,7 @@ private:
     void MakeErrorReply(NJson::TJsonValue& jsonResponse, const NYdb::TStatus& status) {
         TString message;
 
-        NViewer::MakeErrorReply(jsonResponse, message, status);
+        MakeJsonErrorReply(jsonResponse, message, status);
 
         if (Span) {
             Span.EndError(message);
@@ -611,6 +645,9 @@ private:
                             NJson::TJsonValue& jsonColumn = jsonRow.AppendValue({});
                             jsonColumn = ColumnValueToJsonValue(rsParser.ColumnParser(columnNum));
                         }
+                    }
+                    if (resultSet.Truncated()) {
+                        jsonResult["truncated"] = true;
                     }
                 }
             }
@@ -768,4 +805,3 @@ public:
 };
 
 }
-

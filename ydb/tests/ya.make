@@ -7,6 +7,7 @@ RECURSE(
     oss
     perf
     postgres_integrations
+    stability
     supp
     tools
 )

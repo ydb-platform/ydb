@@ -284,7 +284,7 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
             {"create table user(index user local on (user) cover (user,user))",
              "CREATE TABLE user (\n\tINDEX user LOCAL ON (user) COVER (user, user)\n);\n"},
             {"create table user(index idx global using subtype on (col) cover (col) with (setting = foo, another_setting = bar));",
-             "CREATE TABLE user (\n\tINDEX idx GLOBAL USING subtype ON (col) COVER (col) WITH (setting = foo, another_setting = bar)\n);\n"}, 
+             "CREATE TABLE user (\n\tINDEX idx GLOBAL USING subtype ON (col) COVER (col) WITH (setting = foo, another_setting = bar)\n);\n"},
             {"create table user(family user (user='foo'))",
              "CREATE TABLE user (\n\tFAMILY user (user = 'foo')\n);\n"},
             {"create table user(family user (user='foo',user='bar'))",
@@ -465,7 +465,7 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
             {"alter table user alter index idx reset (setting, another_setting)",
              "ALTER TABLE user\n\tALTER INDEX idx RESET (setting, another_setting);\n"},
             {"alter table user add index idx global using subtype on (col) cover (col) with (setting = foo, another_setting = 'bar');",
-             "ALTER TABLE user\n\tADD INDEX idx GLOBAL USING subtype ON (col) COVER (col) WITH (setting = foo, another_setting = 'bar');\n"}, 
+             "ALTER TABLE user\n\tADD INDEX idx GLOBAL USING subtype ON (col) COVER (col) WITH (setting = foo, another_setting = 'bar');\n"},
             {"alter table user drop index user",
              "ALTER TABLE user\n\tDROP INDEX user;\n"},
             {"alter table user rename to user",
@@ -513,6 +513,7 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
         TSetup setup;
         setup.Run(cases);
     }
+
     Y_UNIT_TEST(AlterTopic) {
         TCases cases = {
              {"alter topic topic1 alter consumer c1 set (important = false)",
@@ -529,10 +530,25 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
         TSetup setup;
         setup.Run(cases);
     }
+
     Y_UNIT_TEST(DropTopic) {
         TCases cases = {
             {"drop topic topic1",
              "DROP TOPIC topic1;\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(TopicExistsStatement) {
+        TCases cases = {
+            {"drop topic if exists topic1",
+             "DROP TOPIC IF EXISTS topic1;\n"},
+            {"create topic if not exists topic1 with (partition_count_limit = 5)",
+             "CREATE TOPIC IF NOT EXISTS topic1 WITH (\n\tpartition_count_limit = 5\n);\n"},
+             {"alter topic if exists topic1 alter consumer c1 set (important = false)",
+             "ALTER TOPIC IF EXISTS topic1\n\tALTER CONSUMER c1 SET (important = FALSE);\n"},
         };
 
         TSetup setup;

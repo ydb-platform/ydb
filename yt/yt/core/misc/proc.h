@@ -2,7 +2,7 @@
 
 #include "common.h"
 
-#include <yt/yt/core/misc/error.h>
+#include <yt/yt/core/misc/stripped_error.h>
 
 #include <util/system/file.h>
 

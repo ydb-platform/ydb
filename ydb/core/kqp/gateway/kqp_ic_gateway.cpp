@@ -977,7 +977,11 @@ public:
         return NotImplemented<TGenericResult>();
     }
 
-    TFuture<TGenericResult> CreateTopic(const TString& cluster, Ydb::Topic::CreateTopicRequest&& request) override {
+    TFuture<TGenericResult> CreateTopic(const TString& cluster, Ydb::Topic::CreateTopicRequest&& request, bool existingOk) override {
+        if (existingOk) {
+            return MakeFuture(ResultFromError<TGenericResult>("IF NOT EXISTS statement is not supported for CREATE TOPIC in yql script"));
+        }
+
         try {
             if (!CheckCluster(cluster)) {
                 return InvalidCluster<TGenericResult>(cluster);
@@ -989,9 +993,27 @@ public:
         catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));
         }
+        Y_UNUSED(existingOk);
     }
 
-    TFuture<TGenericResult> AlterTopic(const TString& cluster, Ydb::Topic::AlterTopicRequest&& request) override {
+    TFuture<NKikimr::NGRpcProxy::V1::TAlterTopicResponse> AlterTopicPrepared(NYql::TAlterTopicSettings&& settings) override {
+        auto schemaTxPromise = NewPromise<NKikimr::NGRpcProxy::V1::TAlterTopicResponse>();
+        auto schemaTxFuture = schemaTxPromise.GetFuture();
+
+        NKikimr::NGRpcProxy::V1::TAlterTopicRequest request{
+                std::move(settings.Request), settings.WorkDir, settings.Name, Database, GetTokenCompat(),
+                settings.MissingOk
+        };
+        IActor* requestHandler = new NKikimr::NGRpcProxy::V1::TAlterTopicActorInternal(std::move(request), std::move(schemaTxPromise), settings.MissingOk);
+        RegisterActor(requestHandler);
+        return schemaTxFuture;
+    }
+
+    TFuture<TGenericResult> AlterTopic(const TString& cluster, Ydb::Topic::AlterTopicRequest&& request, bool missingOk) override {
+        if (missingOk) {
+            return MakeFuture(ResultFromError<TGenericResult>("IF EXISTS statement is not supported for ALTER TOPIC in yql script"));
+        }
+
         try {
             if (!CheckCluster(cluster)) {
                 return InvalidCluster<TGenericResult>(cluster);
@@ -1005,7 +1027,11 @@ public:
         }
     }
 
-    TFuture<TGenericResult> DropTopic(const TString& cluster, const TString& topic) override {
+    TFuture<TGenericResult> DropTopic(const TString& cluster, const TString& topic, bool missingOk) override {
+        if (missingOk) {
+            return MakeFuture(ResultFromError<TGenericResult>("IF EXISTS statement is not supported for DROP TOPIC in yql script"));
+        }
+
         try {
             if (!CheckCluster(cluster)) {
                 return InvalidCluster<TGenericResult>(cluster);
@@ -1020,6 +1046,7 @@ public:
         catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));
         }
+
     }
 
     TFuture<TGenericResult> CreateReplication(const TString&, const NYql::TCreateReplicationSettings&) override {

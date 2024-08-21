@@ -59,7 +59,8 @@ public:
         NActors::TActorId fileQueueActor,
         ui64 fileQueueBatchSizeLimit,
         ui64 fileQueueBatchObjectCountLimit,
-        ui64 fileQueueConsumersCountDelta)
+        ui64 fileQueueConsumersCountDelta,
+        bool allowLocalFiles)
         : ReadActorFactoryCfg(readActorFactoryCfg)
         , Gateway(std::move(gateway))
         , HolderFactory(holderFactory)
@@ -76,6 +77,7 @@ public:
         , FileQueueActor(fileQueueActor)
         , AddPathIndex(addPathIndex)
         , SizeLimit(sizeLimit)
+        , AllowLocalFiles(allowLocalFiles)
         , Counters(counters)
         , TaskCounters(taskCounters)
         , FileSizeLimit(fileSizeLimit)
@@ -116,7 +118,8 @@ public:
                 Credentials,
                 Pattern,
                 PatternVariant,
-                NYql::NS3Lister::ES3PatternType::Wildcard));
+                NYql::NS3Lister::ES3PatternType::Wildcard,
+                AllowLocalFiles));
         }
 
         LOG_D("TS3ReadActor", "Bootstrap" << ", InputIndex: " << InputIndex << ", FileQueue: " << FileQueueActor << (UseRuntimeListing ? " (remote)" : " (local"));
@@ -167,7 +170,7 @@ public:
         const auto& authInfo = Credentials.GetAuthInfo();
         LOG_D("TS3ReadActor", "Download: " << url << ", ID: " << id << ", request id: [" << requestId << "]");
         Gateway->Download(
-            UrlEscapeRet(url, true),
+            NS3Util::UrlEscapeRet(url),
             IHTTPGateway::MakeYcHeaders(requestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
             0U,
             std::min(object.GetSize(), SizeLimit),
@@ -467,6 +470,7 @@ private:
     const bool AddPathIndex;
     const ui64 SizeLimit;
     TDuration CpuTime;
+    const bool AllowLocalFiles;
 
     std::queue<std::tuple<IHTTPGateway::TContent, ui64>> Blocks;
 
@@ -521,7 +525,8 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateRawRead
     NActors::TActorId fileQueueActor,
     ui64 fileQueueBatchSizeLimit,
     ui64 fileQueueBatchObjectCountLimit,
-    ui64 fileQueueConsumersCountDelta
+    ui64 fileQueueConsumersCountDelta,
+    bool allowLocalFiles
 ) {
     const auto actor = new TS3ReadActor(
         inputIndex,
@@ -547,7 +552,8 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateRawRead
         fileQueueActor,
         fileQueueBatchSizeLimit,
         fileQueueBatchObjectCountLimit,
-        fileQueueConsumersCountDelta
+        fileQueueConsumersCountDelta,
+        allowLocalFiles
     );
 
     return {actor, actor};

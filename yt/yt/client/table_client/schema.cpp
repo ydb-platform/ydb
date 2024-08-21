@@ -1589,6 +1589,128 @@ bool IsEqualIgnoringRequiredness(const TTableSchema& lhs, const TTableSchema& rh
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Parses description of the following form nested_key.name or nested_value.name or nested_value.name.sum
+std::optional<TNestedColumn> TryParseNestedAggregate(TStringBuf description)
+{
+    if (!description.StartsWith("nested")) {
+        return std::nullopt;
+    }
+
+    const char* ptr = description.data();
+    const char* ptrEnd = ptr + description.size();
+
+    auto skipSpace = [&] () {
+        while (ptr != ptrEnd) {
+            if (!IsSpace(*ptr)) {
+                break;
+            }
+
+            ++ptr;
+        }
+    };
+
+    auto parseName = [&] () {
+        auto start = ptr;
+        while (ptr != ptrEnd) {
+            auto ch = *ptr;
+            if (!isalpha(ch) && !isdigit(ch) && ch != '_' && ch != '-' && ch != '%' && ch != '.') {
+                break;
+            }
+
+            ++ptr;
+        }
+
+        return TStringBuf(start, ptr);
+    };
+
+    auto parseToken = [&] (TStringBuf token) {
+        if (TStringBuf(ptr, ptrEnd).StartsWith(token)) {
+            ptr += token.size();
+            return true;
+        }
+
+        return false;
+    };
+
+    auto throwError = [&] (TStringBuf message) {
+        int location = ptr - description.data();
+
+        THROW_ERROR_EXCEPTION("Error while parsing nested aggregate description: %v", message)
+            << TErrorAttribute("position", Format("%v", location))
+            << TErrorAttribute("description", description);
+    };
+
+    auto nestedFunction = parseName();
+
+    skipSpace();
+
+    if (!parseToken("(")) {
+        throwError("expected \"(\"");
+    }
+
+    if (nestedFunction == "nested_key") {
+        skipSpace();
+        auto nestedTableName = parseName();
+        skipSpace();
+
+        if (parseToken(")")) {
+            return TNestedColumn{
+                .NestedTableName = nestedTableName,
+                .IsKey = true
+            };
+        }
+
+        throwError("expected \")\"");
+    } else if (nestedFunction == "nested_value") {
+        skipSpace();
+        auto nestedTableName = parseName();
+        skipSpace();
+
+        if (parseToken(")")) {
+            return TNestedColumn{
+                .NestedTableName = nestedTableName,
+                .IsKey = false
+            };
+        }
+
+        if (parseToken(",")) {
+            skipSpace();
+            auto aggregateFunction = parseName();
+            skipSpace();
+
+            if (parseToken(")")) {
+                return TNestedColumn{
+                    .NestedTableName = nestedTableName,
+                    .IsKey = false,
+                    .Aggregate = aggregateFunction
+                };
+            }
+
+            throwError("expected \")\"");
+        }
+
+        throwError("expected \")\" or \",\" ");
+    }
+
+    THROW_ERROR_EXCEPTION("Error while parsing nested aggregate description. Expected nested_key or nested_value");
+}
+
+EValueType GetNestedColumnElementType(const TLogicalType* logicalType)
+{
+    if (logicalType->GetMetatype() == ELogicalMetatype::Optional) {
+        logicalType = logicalType->GetElement().Get();
+    }
+
+    if (logicalType->GetMetatype() != ELogicalMetatype::List) {
+        THROW_ERROR_EXCEPTION("Invalid nested column type %Qv",
+            *logicalType);
+    }
+
+    return GetWireType(logicalType->GetElement());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void ValidateKeyColumns(const TKeyColumns& keyColumns)
 {
     ValidateKeyColumnCount(keyColumns.size());
@@ -1707,6 +1829,11 @@ void ValidateColumnSchema(
         "dict_sum",
     };
 
+    static const auto allowedNestedAggregates = THashSet<TString>{
+        "sum",
+        "max"
+    };
+
     try {
         const auto& stableName = columnSchema.StableName();
         ValidateColumnName(stableName.Underlying());
@@ -1771,9 +1898,28 @@ void ValidateColumnSchema(
             THROW_ERROR_EXCEPTION("Key column cannot be aggregated");
         }
 
-        if (columnSchema.Aggregate() && allowedAggregates.find(*columnSchema.Aggregate()) == allowedAggregates.end()) {
-            THROW_ERROR_EXCEPTION("Invalid aggregate function %Qv",
-                *columnSchema.Aggregate());
+        if (columnSchema.Aggregate()) {
+            auto aggregateName = *columnSchema.Aggregate();
+
+            if (auto nested = TryParseNestedAggregate(aggregateName)) {
+                if (nested->NestedTableName.empty()) {
+                    THROW_ERROR_EXCEPTION("Invalid nested table name for aggregate %Qv",
+                        aggregateName);
+                }
+
+                GetNestedColumnElementType(columnSchema.LogicalType().Get());
+
+                if (!nested->IsKey) {
+                    auto aggregateName = nested->Aggregate;
+                    if (!aggregateName.empty() && allowedNestedAggregates.find(aggregateName) == allowedNestedAggregates.end()) {
+                        THROW_ERROR_EXCEPTION("Invalid aggregate function %Qv",
+                            aggregateName);
+                    }
+                }
+            } else if (allowedAggregates.find(aggregateName) == allowedAggregates.end()) {
+                THROW_ERROR_EXCEPTION("Invalid aggregate function %Qv",
+                    aggregateName);
+            }
         }
 
         if (columnSchema.Expression() && columnSchema.Required()) {
@@ -2054,6 +2200,44 @@ void ValidateTableSchema(const TTableSchema& schema, bool isTableDynamic, bool a
     ValidateSchemaAttributes(schema);
     if (isTableDynamic) {
         ValidateDynamicTableConstraints(schema);
+    }
+
+    // Validate nested table names.
+    std::vector<TStringBuf> definedNestedTableNames;
+    std::vector<TStringBuf> usedNestedTableNames;
+
+    for (const auto& columnSchema : schema.Columns()) {
+        if (columnSchema.Aggregate()) {
+            const auto& aggregateName = *columnSchema.Aggregate();
+
+            if (auto nested = TryParseNestedAggregate(aggregateName)) {
+                // Already validated.
+                YT_VERIFY(!nested->NestedTableName.empty());
+
+                if (nested->IsKey) {
+                    definedNestedTableNames.push_back(nested->NestedTableName);
+                } else {
+                    usedNestedTableNames.push_back(nested->NestedTableName);
+                }
+            }
+        }
+    }
+
+    std::sort(definedNestedTableNames.begin(), definedNestedTableNames.end());
+    definedNestedTableNames.erase(
+        std::unique(definedNestedTableNames.begin(), definedNestedTableNames.end()),
+        definedNestedTableNames.end());
+
+    std::sort(usedNestedTableNames.begin(), usedNestedTableNames.end());
+    usedNestedTableNames.erase(
+        std::unique(usedNestedTableNames.begin(), usedNestedTableNames.end()),
+        usedNestedTableNames.end());
+
+    for (auto nestedName : usedNestedTableNames) {
+        if (!std::binary_search(definedNestedTableNames.begin(), definedNestedTableNames.end(), nestedName)) {
+            THROW_ERROR_EXCEPTION("No key columns for nested table %Qv",
+                nestedName);
+        }
     }
 }
 

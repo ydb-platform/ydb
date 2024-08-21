@@ -76,6 +76,11 @@ void TCommandDump::Config(TConfig& config) {
         .DefaultValue("database").StoreResult(&ConsistencyLevel);
     config.Opts->AddLongOption("ordered", "Preserve order by primary key in backup files.")
             .StoreTrue(&Ordered);
+    config.Opts->AddLongOption("preserve-acl", "Preserve ACL including owner."
+            " If this option is enabled, ACL and owner will be saved to dump."
+            " In this case, the dump may not be restored if it is restored with an older version of the CLI."
+            " By default this option is disabled.")
+        .StoreTrue(&PreserveACL);
 }
 
 void TCommandDump::Parse(TConfig& config) {
@@ -99,7 +104,7 @@ int TCommandDump::Run(TConfig& config) {
     try {
         TString relPath = NYdb::RelPathFromAbsolute(config.Database, Path);
         NYdb::NBackup::BackupFolder(CreateDriver(config), config.Database, relPath, FilePath, ExclusionPatterns,
-            IsSchemeOnly, useConsistentCopyTable, AvoidCopy, SavePartialResult, PreservePoolKinds, Ordered);
+            IsSchemeOnly, useConsistentCopyTable, AvoidCopy, SavePartialResult, PreservePoolKinds, Ordered, PreserveACL);
     } catch (const NYdb::NBackup::TYdbErrorException& e) {
         e.LogToStderr();
         return EXIT_FAILURE;

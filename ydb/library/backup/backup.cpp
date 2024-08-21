@@ -491,7 +491,13 @@ void DropTable(TDriver driver, const TString& path) {
     LOG_DEBUG("Table is dropped, path: " << path.Quote());
 }
 
-void BackupPermissions(TDriver driver, const TString& dbPrefix, const TString& path, const TFsPath& folderPath) {
+void BackupPermissions(TDriver driver, const TString& dbPrefix, const TString& path,
+        const TFsPath& folderPath, bool preserveACL)
+{
+    if (!preserveACL) {
+        return;
+    }
+
     auto entry = DescribePath(driver, JoinDatabasePath(dbPrefix, path));
     Ydb::Scheme::ModifyPermissionsRequest proto;
     entry.SerializeTo(proto);
@@ -505,7 +511,7 @@ void BackupPermissions(TDriver driver, const TString& dbPrefix, const TString& p
 }
 
 void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupPrefix, const TString& path,
-        const TFsPath& folderPath, bool schemaOnly, bool preservePoolKinds, bool ordered) {
+        const TFsPath& folderPath, bool schemaOnly, bool preservePoolKinds, bool ordered, bool preserveACL) {
     Y_ENSURE(!path.empty());
     Y_ENSURE(path.back() != '/', path.Quote() << " path contains / in the end");
 
@@ -521,7 +527,7 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
     TFile outFile(folderPath.Child(SCHEME_FILE_NAME), CreateAlways | WrOnly);
     outFile.Write(schemaStr.data(), schemaStr.size());
 
-    BackupPermissions(driver, dbPrefix, path, folderPath);
+    BackupPermissions(driver, dbPrefix, path, folderPath, preserveACL);
 
     if (!schemaOnly) {
         const TString pathToTemporal = JoinDatabasePath(backupPrefix, path);
@@ -570,8 +576,8 @@ static void MaybeCreateEmptyFile(const TFsPath& folderPath) {
 }
 
 void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& backupPrefix, TString path,
-        const TFsPath folderPath, const TVector<TRegExMatch>& exclusionPatterns,
-        bool schemaOnly, bool useConsistentCopyTable, bool avoidCopy, bool preservePoolKinds, bool ordered) {
+        const TFsPath folderPath, const TVector<TRegExMatch>& exclusionPatterns, bool schemaOnly,
+        bool useConsistentCopyTable, bool avoidCopy, bool preservePoolKinds, bool ordered, bool preserveACL) {
     LOG_DEBUG("Going to backup folder/table, dbPrefix: " << dbPrefix << " path: " << path);
     TFile(folderPath.Child(INCOMPLETE_FILE_NAME), CreateAlways);
 
@@ -594,10 +600,10 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
             if (schemaOnly) {
                 if (dbIt.IsTable()) {
                     BackupTable(driver, dbIt.GetTraverseRoot(), backupPrefix, dbIt.GetRelPath(),
-                            childFolderPath, schemaOnly, preservePoolKinds, ordered);
+                            childFolderPath, schemaOnly, preservePoolKinds, ordered, preserveACL);
                     childFolderPath.Child(INCOMPLETE_FILE_NAME).DeleteIfExists();
                 } else if (dbIt.IsDir()) {
-                    BackupPermissions(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
+                    BackupPermissions(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath, preserveACL);
                     childFolderPath.Child(INCOMPLETE_FILE_NAME).DeleteIfExists();
                 }
             } else if (!avoidCopy) {
@@ -665,12 +671,12 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
                     copiedTablesStatuses.erase(dbIt.GetFullPath());
                 }
                 BackupTable(driver, dbIt.GetTraverseRoot(), avoidCopy ? dbIt.GetTraverseRoot() : backupPrefix, dbIt.GetRelPath(),
-                        childFolderPath, schemaOnly, preservePoolKinds, ordered);
+                        childFolderPath, schemaOnly, preservePoolKinds, ordered, preserveACL);
                 if (!avoidCopy) {
                     DropTable(driver, tmpTablePath);
                 }
             } else if (dbIt.IsDir()) {
-                BackupPermissions(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
+                BackupPermissions(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath, preserveACL);
                 MaybeCreateEmptyFile(childFolderPath);
                 if (!avoidCopy) {
                     RemoveClusterDirectory(driver, tmpTablePath);
@@ -702,8 +708,8 @@ void CheckedCreateBackupFolder(const TFsPath& folderPath) {
 // relDbPath - relative path to directory/table to be backuped
 // folderPath - relative path to folder in local filesystem where backup will be stored
 void BackupFolder(TDriver driver, const TString& database, const TString& relDbPath, TFsPath folderPath,
-        const TVector<TRegExMatch>& exclusionPatterns,
-        bool schemaOnly, bool useConsistentCopyTable, bool avoidCopy, bool savePartialResult, bool preservePoolKinds, bool ordered) {
+        const TVector<TRegExMatch>& exclusionPatterns,  bool schemaOnly, bool useConsistentCopyTable,
+        bool avoidCopy, bool savePartialResult, bool preservePoolKinds, bool ordered, bool preserveACL) {
     TString temporalBackupPostfix = CreateTemporalBackupName();
     if (!folderPath) {
         folderPath = temporalBackupPostfix;
@@ -722,7 +728,7 @@ void BackupFolder(TDriver driver, const TString& database, const TString& relDbP
         TString dbPrefix = JoinDatabasePath(database, relDbPath);
         TString path;
         BackupFolderImpl(driver, dbPrefix, tmpDbFolder, path, folderPath, exclusionPatterns,
-            schemaOnly, useConsistentCopyTable, avoidCopy, preservePoolKinds, ordered);
+            schemaOnly, useConsistentCopyTable, avoidCopy, preservePoolKinds, ordered, preserveACL);
     } catch (...) {
         if (!schemaOnly && !avoidCopy) {
             RemoveClusterDirectoryRecursive(driver, tmpDbFolder);

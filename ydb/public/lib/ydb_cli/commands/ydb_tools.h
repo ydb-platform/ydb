@@ -44,6 +44,7 @@ private:
     TString ConsistencyLevel;
     bool PreservePoolKinds = false;
     bool Ordered = false;
+    bool PreserveACL = false;
 };
 
 class TCommandRestore : public TToolsCommand, public TCommandWithPath {

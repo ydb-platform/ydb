@@ -174,7 +174,8 @@ class BaseTestBackupInFiles(object):
                 "--database", "/Root",
                 "tools", "dump",
                 "--path", os.path.join('/Root', path),
-                "--output", backup_files_dir
+                "--output", backup_files_dir,
+                "--preserve-acl",
             ] +
             additional_args
         )

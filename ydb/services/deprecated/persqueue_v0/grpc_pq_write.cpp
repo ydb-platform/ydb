@@ -25,8 +25,8 @@ void TPQWriteServiceImpl::TSession::OnCreated() {            // Start waiting fo
         ReplyWithError("proxy overloaded", NPersQueue::NErrorCode::OVERLOAD);
         return;
     }
-    TMaybe<TString> localCluster = Proxy->AvailableLocalCluster();
     if (NeedDiscoverClusters) {
+        TMaybe<TString> localCluster = Proxy->AvailableLocalCluster();
         if (!localCluster.Defined()) {
             ReplyWithError("initializing", NPersQueue::NErrorCode::INITIALIZING);
             return;
@@ -122,9 +122,12 @@ bool TPQWriteServiceImpl::TSession::CreateActor(const TString &localCluster) {
 }
 
 void TPQWriteServiceImpl::TSession::SendEvent(IEventBase* ev) {
+    std::unique_ptr<IEventBase>  e;
+    e.reset(ev);
+
     TGuard<TSpinLock> lock(Lock);
     if (ActorId) {
-        Proxy->ActorSystem->Send(ActorId, ev);
+        Proxy->ActorSystem->Send(ActorId, e.release());
     }
 }
 

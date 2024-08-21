@@ -1479,6 +1479,7 @@ message THiveConfig {
     optional double NodeUsageRangeToKick = 75 [default = 0.2];
     optional bool LessSystemTabletsMoves = 77 [default = true];
     optional uint64 MaxPingsInFlight = 78 [default = 1000];
+    optional bool PerSubDomainBalancerTrigger = 80 [default = true];
 }
 
 message TBlobCacheConfig {

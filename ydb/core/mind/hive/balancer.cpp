@@ -185,7 +185,9 @@ protected:
     void BalanceNodes() {
         std::vector<TNodeInfo*> nodes;
         TNodeFilter filter(*Hive);
-        filter.AllowedDomains = {Settings.FilterSubDomain};
+        if (Settings.FilterSubDomain) {
+            filter.AllowedDomains = {Settings.FilterSubDomain};
+        }
         if (!Settings.FilterNodeIds.empty()) {
             nodes.reserve(Settings.FilterNodeIds.size());
             for (TNodeId nodeId : Settings.FilterNodeIds) {

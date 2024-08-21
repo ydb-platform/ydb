@@ -996,6 +996,7 @@ protected:
         std::vector<TNodeStat> Values;
     };
 
+    void CheckBalancerTriggers(const TSubDomainKey& domainKey, const THiveStats& stats, std::vector<TBalancerSettings>& balancersToRun) const;
     template <std::ranges::range TRange>
     THiveStats GetStats(const TRange& nodes) const;
     THiveStats GetStats() const;

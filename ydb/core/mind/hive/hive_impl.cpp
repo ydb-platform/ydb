@@ -2341,6 +2341,60 @@ void THive::HandleInit(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
     Schedule(TDuration::Seconds(1), new TEvPrivate::TEvProcessTabletBalancer());
 }
 
+void THive::CheckBalancerTriggers(const TSubDomainKey& domainKey, const THive::THiveStats& stats, std::vector<TBalancerSettings>& balancersToRun) const {
+    double minUsageToKick = GetMaxNodeUsageToKick() - GetNodeUsageRangeToKick();
+    if (stats.MaxUsage >= GetMaxNodeUsageToKick() && stats.MinUsage < minUsageToKick) {
+        std::vector<TNodeId> overloadedNodes;
+        for (const auto& nodeStat : stats.Values) {
+            const auto* nodeInfo = FindNode(nodeStat.NodeId);
+            if (nodeInfo && nodeInfo->IsAlive() && !nodeInfo->Down && nodeInfo->IsOverloaded()) {
+                overloadedNodes.emplace_back(nodeStat.NodeId);
+            }
+        }
+
+        if (!overloadedNodes.empty()) {
+            balancersToRun.push_back({
+                .Type = EBalancerType::Emergency,
+                .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnEmergencyBalancer(),
+                .RecheckOnFinish = CurrentConfig.GetContinueEmergencyBalancer(),
+                .MaxInFlight = GetEmergencyBalancerInflight(),
+                .FilterNodeIds = std::move(overloadedNodes),
+                .FilterSubDomain = domainKey,
+            });
+        }
+    }
+
+    auto scatteredResource = CheckScatter(stats.ScatterByResource);
+    if (scatteredResource) {
+        EBalancerType balancerType = EBalancerType::Scatter;
+        switch (*scatteredResource) {
+            case EResourceToBalance::Counter:
+                balancerType = EBalancerType::ScatterCounter;
+                break;
+            case EResourceToBalance::CPU:
+                balancerType = EBalancerType::ScatterCPU;
+                break;
+            case EResourceToBalance::Memory:
+                balancerType = EBalancerType::ScatterMemory;
+                break;
+            case EResourceToBalance::Network:
+                balancerType = EBalancerType::ScatterNetwork;
+                break;
+            case EResourceToBalance::ComputeResources:
+                balancerType = EBalancerType::Scatter;
+                break;
+        }
+        balancersToRun.push_back({
+            .Type = balancerType,
+            .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnAutoBalancer(),
+            .RecheckOnFinish = CurrentConfig.GetContinueAutoBalancer(),
+            .MaxInFlight = GetBalancerInflight(),
+            .ResourceToBalance = *scatteredResource,
+            .FilterSubDomain = domainKey,
+        });
+    }
+}
+
 void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
     ProcessTabletBalancerScheduled = false;
     if (!SubActors.empty()) {
@@ -2349,63 +2403,15 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
         return;
     }
 
-    double minUsageToKick = GetMaxNodeUsageToKick() - GetNodeUsageRangeToKick();
     std::vector<TBalancerSettings> balancersToRun;
-    for (const auto& [domainKey, domainInfo] : Domains) {
-        THiveStats stats = GetStats(domainInfo.Nodes);
-        if (stats.MaxUsage >= GetMaxNodeUsageToKick() && stats.MinUsage < minUsageToKick) {
-            std::vector<TNodeId> overloadedNodes;
-            for (auto nodeId : domainInfo.Nodes) {
-                const auto* nodeInfo = FindNode(nodeId);
-                if (nodeInfo && nodeInfo->IsAlive() && !nodeInfo->Down && nodeInfo->IsOverloaded()) {
-                    overloadedNodes.emplace_back(nodeId);
-                }
-            }
-
-            if (!overloadedNodes.empty()) {
-                BLOG_D("ProcessTabletBalancer(" << domainKey << "): nodes " << overloadedNodes << " with usage over limit " << GetMaxNodeUsageToKick());
-                balancersToRun.push_back({
-                    .Type = EBalancerType::Emergency,
-                    .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnEmergencyBalancer(),
-                    .RecheckOnFinish = CurrentConfig.GetContinueEmergencyBalancer(),
-                    .MaxInFlight = GetEmergencyBalancerInflight(),
-                    .FilterNodeIds = std::move(overloadedNodes),
-                    .FilterSubDomain = domainKey,
-                });
-            }
+    bool perSubDomain = CurrentConfig.GetPerSubDomainBalancerTrigger();
+    if (perSubDomain) {
+        for (const auto& [domainKey, domainInfo] : Domains) {
+            THiveStats stats = GetStats(domainInfo.Nodes);
+            CheckBalancerTriggers(domainKey, stats, balancersToRun);
         }
-
-        auto scatteredResource = CheckScatter(stats.ScatterByResource);
-        if (scatteredResource) {
-            EBalancerType balancerType = EBalancerType::Scatter;
-            switch (*scatteredResource) {
-                case EResourceToBalance::Counter:
-                    balancerType = EBalancerType::ScatterCounter;
-                    break;
-                case EResourceToBalance::CPU:
-                    balancerType = EBalancerType::ScatterCPU;
-                    break;
-                case EResourceToBalance::Memory:
-                    balancerType = EBalancerType::ScatterMemory;
-                    break;
-                case EResourceToBalance::Network:
-                    balancerType = EBalancerType::ScatterNetwork;
-                    break;
-                case EResourceToBalance::ComputeResources:
-                    balancerType = EBalancerType::Scatter;
-                    break;
-            }
-            BLOG_TRACE("ProcessTabletBalancer(" << domainKey << "): scatter " << stats.ScatterByResource << " over limit "
-                       << GetMinScatterToBalance() << " for " << EBalancerTypeName(balancerType));
-            balancersToRun.push_back({
-                .Type = balancerType,
-                .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnAutoBalancer(),
-                .RecheckOnFinish = CurrentConfig.GetContinueAutoBalancer(),
-                .MaxInFlight = GetBalancerInflight(),
-                .ResourceToBalance = *scatteredResource,
-                .FilterSubDomain = domainKey,
-            });
-        }
+    } else {
+        CheckBalancerTriggers({}, GetStats(), balancersToRun);
     }
 
     if (ObjectDistributions.GetMaxImbalance() > GetObjectImbalanceToBalance()) {
@@ -2423,7 +2429,7 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
                 .FilterNodeIds = std::move(objectToBalance.Nodes),
                 .ResourceToBalance = EResourceToBalance::Counter,
                 .FilterObjectId = objectToBalance.ObjectId,
-                .FilterSubDomain = objectToBalance.SubDomain,
+                .FilterSubDomain = perSubDomain ? objectToBalance.SubDomain : TSubDomainKey(),
             });
         } else {
             BLOG_D("Skipping SpreadNeigbours Balancer, now: " << now << ", allowed: " << BalancerStats[static_cast<std::size_t>(EBalancerType::SpreadNeighbours)].LastRunTimestamp + TDuration::Seconds(1));

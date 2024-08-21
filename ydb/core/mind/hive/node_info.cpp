@@ -120,7 +120,7 @@ bool TNodeInfo::MatchesFilter(const TNodeFilter& filter, TTabletDebugState* debu
         }
     }
 
-    if (!result) {
+    if (!effectiveAllowedDomains.empty() && !result) {
         if (debugState) {
             debugState->NodesWithoutDomain++;
         }

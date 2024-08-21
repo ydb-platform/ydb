@@ -1120,10 +1120,10 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     auto& sourceIdBatch = parameters.SourceIdBatch;
     auto sourceId = sourceIdBatch.GetSource(p.Msg.SourceId);
 
-    Y_ABORT_UNLESS(WriteInflightSize >= p.Msg.Data.size(),
-                   "PQ %" PRIu64 ", Partition {%" PRIu32 ", %" PRIu32 "}, WriteInflightSize=%" PRIu64 ", p.Msg.Data.size=%" PRISZT,
-                   TabletID, Partition.OriginalPartitionId, Partition.InternalPartitionId,
-                   WriteInflightSize, p.Msg.Data.size());
+    Y_DEBUG_ABORT_UNLESS(WriteInflightSize >= p.Msg.Data.size(),
+                         "PQ %" PRIu64 ", Partition {%" PRIu32 ", %" PRIu32 "}, WriteInflightSize=%" PRIu64 ", p.Msg.Data.size=%" PRISZT,
+                         TabletID, Partition.OriginalPartitionId, Partition.InternalPartitionId,
+                         WriteInflightSize, p.Msg.Data.size());
     WriteInflightSize -= p.Msg.Data.size();
 
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_RECEIVE_QUEUE].IncrementFor(ctx.Now().MilliSeconds() - p.Msg.ReceiveTimestamp);
@@ -1542,9 +1542,10 @@ void TPartition::FilterDeadlinedWrites(const TActorContext& ctx, TMessageQueue& 
 
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ERROR].Increment(1);
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(msg.Data.size() + msg.SourceId.size());
-            Y_ABORT_UNLESS(WriteInflightSize >= msg.Data.size(),
-                           "WriteInflightSize=%" PRIu64 ", msg.Data.size=%" PRISZT,
-                           WriteInflightSize, msg.Data.size());
+            Y_DEBUG_ABORT_UNLESS(WriteInflightSize >= msg.Data.size(),
+                                 "PQ %" PRIu64 ", Partition {%" PRIu32 ", %" PRIu32 "}, WriteInflightSize=%" PRIu64 ", msg.Data.size=%" PRISZT,
+                                 TabletID, Partition.OriginalPartitionId, Partition.InternalPartitionId,
+                                 WriteInflightSize, msg.Data.size());
             WriteInflightSize -= msg.Data.size();
         }
 

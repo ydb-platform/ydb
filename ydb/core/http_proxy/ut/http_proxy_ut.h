@@ -1844,7 +1844,6 @@ Y_UNIT_TEST_SUITE(TestHttpProxy) {
         NJson::TJsonValue attributes;
         attributes["DelaySeconds"] = "1";
         createQueueReq["Attributes"] = attributes;
-
         auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), FormAuthorizationStr("ru-central1"));
         UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
         NJson::TJsonValue json;
@@ -1871,5 +1870,40 @@ Y_UNIT_TEST_SUITE(TestHttpProxy) {
         NJson::TJsonValue resultJson;
         UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &resultJson));
         UNIT_ASSERT_VALUES_EQUAL(resultJson["Attributes"]["DelaySeconds"], "2");
+    }
+
+    Y_UNIT_TEST_F(TestSendMessageBatch, THttpProxyTestMock) {
+        auto createQueueReq = CreateSqsCreateQueueRequest();
+        auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
+        UNIT_ASSERT(resultQueueUrl.EndsWith("ExampleQueueName"));
+
+        NJson::TJsonValue message0;
+        message0["Id"] = "Id-0";
+        message0["MessageBody"] = "MessageBody-0";
+        message0["MessageDeduplicationId"] = "MessageDeduplicationId-0";
+
+        NJson::TJsonValue message1;
+        message1["Id"] = "Id-1";
+        message1["MessageBody"] = "MessageBody-1";
+        message1["MessageDeduplicationId"] = "MessageDeduplicationId-1";
+
+        NJson::TJsonArray entries = {message0, message1};
+
+        NJson::TJsonValue sendMessageBatchReq;
+        sendMessageBatchReq["QueueUrl"] = resultQueueUrl;
+        sendMessageBatchReq["Entries"] = entries;
+
+        res = SendHttpRequest("/Root", "AmazonSQS.SendMessageBatch", std::move(sendMessageBatchReq), FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        UNIT_ASSERT(json["Successful"].GetArray().size() == 2);
+        auto succesful0 = json["Successful"][0];
+        UNIT_ASSERT(succesful0["Id"] == "Id-0");
+        UNIT_ASSERT(!GetByPath<TString>(succesful0, "Md5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(succesful0, "MessageId").empty());
     }
 } // Y_UNIT_TEST_SUITE(TestHttpProxy)

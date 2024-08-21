@@ -228,15 +228,6 @@ message SendMessageResult {
     string sequence_number = 5;
 }
 
-message SendMessageBatchRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
-    repeated SendMessageRequest entries = 2;
-}
-
-message SendMessageBatchResponse {
-    Ydb.Operations.Operation operation = 1;
-}
-
 message BatchResultErrorEntry {
     string code = 1;
     string id = 2;
@@ -244,12 +235,34 @@ message BatchResultErrorEntry {
     string message = 4;
 }
 
+message SendMessageBatchRequestEntry {
+    string id = 1;
+    int32 delay_seconds = 2;
+    map<string, MessageAttribute> message_attributes = 3;
+    string message_body = 4;
+    string message_deduplication_id = 5;
+    string message_group_id = 6;
+    map<string, MessageAttribute> message_system_attributes = 7;
+    string queue_url = 8;
+}
+
 message SendMessageBatchResultEntry {
-    string md5_of_message_attributes = 1;
-    string md5_of_message_body= 2;
-    string md5_of_message_system_attributes= 3;
-    string message_id = 4;
-    string sequence_number = 5;
+    string id = 1;
+    string md5_of_message_body = 2;
+    string message_id = 3;
+    string md5_of_message_attributes = 4;
+    string md5_of_message_system_attributes = 5;
+    string sequence_number = 6;
+}
+
+message SendMessageBatchRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    repeated SendMessageBatchRequestEntry entries = 2;
+    string queue_url = 3;
+}
+
+message SendMessageBatchResponse {
+    Ydb.Operations.Operation operation = 1;
 }
 
 message SendMessageBatchResult {
@@ -268,4 +281,20 @@ message SetQueueAttributesResponse {
 }
 
 message SetQueueAttributesResult {
+}
+
+message ListDeadLetterSourceQueuesRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    int32 max_results = 2;
+    string next_token = 3;
+    string queue_url = 4;
+}
+
+message ListDeadLetterSourceQueuesResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ListDeadLetterSourceQueuesResult {
+    string next_token = 1;
+    repeated string queue_urls = 2;
 }

@@ -708,9 +708,11 @@ namespace NKikimr::NYmq::V1 {
 
         Ydb::Ymq::V1::SetQueueAttributesResult GetResult(const NKikimrClient::TSqsResponse&) override {
             Ydb::Ymq::V1::SetQueueAttributesResult result;
+
             return result;
         }
     };
+
 
     void AddAttribute(THolder<TSqsRequest>& requestHolder, const TString& name, TString value) {
         auto attribute = requestHolder->MutableSetQueueAttributes()->MutableAttributes()->Add();
@@ -732,6 +734,70 @@ namespace NKikimr::NYmq::V1 {
                 AddAttribute(requestHolder, name, value);
             }
             result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url())->second);
+            return result;
+        }
+    };
+
+    class TSendMessageBatchReplyCallback : public TReplyCallback<
+            NKikimr::NSQS::TSendMessageBatchResponse,
+            Ydb::Ymq::V1::SendMessageBatchResult> {
+    public:
+        using TReplyCallback::TReplyCallback;
+
+    private:
+        const NKikimr::NSQS::TSendMessageBatchResponse& GetResponse(const NKikimrClient::TSqsResponse& resp) override {
+            return resp.GetSendMessageBatch();
+        }
+
+        Ydb::Ymq::V1::SendMessageBatchResult GetResult(const NKikimrClient::TSqsResponse& response) override {
+            Ydb::Ymq::V1::SendMessageBatchResult result;
+            response.GetSendMessageBatch();
+            for (auto& entry : response.GetSendMessageBatch().GetEntries()) {
+                if (entry.GetError().HasErrorCode()) {
+                    auto currentFailed = result.Addfailed();
+                    currentFailed->Setcode(entry.GetError().GetErrorCode());
+                    currentFailed->Setid(entry.GetId());
+                    currentFailed->Setmessage(entry.GetError().GetMessage());
+
+                    ui32 httpStatus = NSQS::TErrorClass::GetHttpStatus(entry.GetError().GetErrorCode()).GetOrElse(400);
+                    currentFailed->Setsender_fault(400 <= httpStatus && httpStatus < 500);
+                } else {
+                    auto currentSuccessful = result.Addsuccessful();
+                    currentSuccessful->Setid(entry.GetId());
+                    currentSuccessful->Setmd5_of_message_body(entry.GetMD5OfMessageBody());
+                    currentSuccessful->Setmessage_id(entry.GetMessageId());
+                    currentSuccessful->Setsequence_number(std::to_string(entry.GetSequenceNumber()));
+                }
+            }
+            return result;
+        }
+    };
+
+    class TSendMessageBatchActor : public TRpcRequestActor<
+            TEvYmqSendMessageBatchRequest,
+            NKikimr::NSQS::TSendMessageBatchRequest,
+            TSendMessageBatchReplyCallback> {
+    public:
+        using TRpcRequestActor::TRpcRequestActor;
+
+    private:
+        NKikimr::NSQS::TSendMessageBatchRequest* GetRequest(THolder<TSqsRequest>& requestHolder) override {
+            auto result = requestHolder->MutableSendMessageBatch();
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->Getqueue_url())->second);
+            for (auto& requestEntry : GetProtoRequest()->Getentries()) {
+                auto entry = requestHolder->MutableSendMessageBatch()->AddEntries();
+                entry->SetId(requestEntry.Getid());
+                for (auto& srcAttribute: requestEntry.Getmessage_attributes()) {
+                    auto dstAttribute = entry->MutableMessageAttributes()->Add();
+                    dstAttribute->SetName(srcAttribute.first);
+                    dstAttribute->SetStringValue(srcAttribute.second.Getstring_value());
+                    dstAttribute->SetBinaryValue(srcAttribute.second.Getbinary_value());
+                    dstAttribute->SetDataType(srcAttribute.second.Getdata_type());
+                }
+                entry->SetMessageDeduplicationId(requestEntry.Getmessage_deduplication_id());
+                entry->SetMessageGroupId(requestEntry.Getmessage_group_id());
+                entry->SetMessageBody(requestEntry.Getmessage_body());
+            }
             return result;
         }
     };
@@ -759,5 +825,6 @@ DECLARE_RPC(PurgeQueue);
 DECLARE_RPC(DeleteQueue);
 DECLARE_RPC(ChangeMessageVisibility);
 DECLARE_RPC(SetQueueAttributes);
+DECLARE_RPC(SendMessageBatch);
 
 }

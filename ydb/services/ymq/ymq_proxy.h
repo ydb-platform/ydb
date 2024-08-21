@@ -24,6 +24,7 @@ using TEvYmqPurgeQueueRequest = TGrpcRequestOperationCall<Ydb::Ymq::V1::PurgeQue
 using TEvYmqDeleteQueueRequest = TGrpcRequestOperationCall<Ydb::Ymq::V1::DeleteQueueRequest, Ydb::Ymq::V1::DeleteQueueResponse>;
 using TEvYmqChangeMessageVisibilityRequest = TGrpcRequestOperationCall<Ydb::Ymq::V1::ChangeMessageVisibilityRequest, Ydb::Ymq::V1::ChangeMessageVisibilityResponse>;
 using TEvYmqSetQueueAttributesRequest = TGrpcRequestOperationCall<Ydb::Ymq::V1::SetQueueAttributesRequest, Ydb::Ymq::V1::SetQueueAttributesResponse>;
+using TEvYmqSendMessageBatchRequest = TGrpcRequestOperationCall<Ydb::Ymq::V1::SendMessageBatchRequest, Ydb::Ymq::V1::SendMessageBatchResponse>;
 
 }
 }

@@ -203,7 +203,7 @@ TInstant THive::GetAllowedBootingTime() {
     return result;
 }
 
-void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffects) {
+void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects) {
     TInstant now = TActivationContext::Now();
     if (WarmUp) {
         TInstant allowed = GetAllowedBootingTime();

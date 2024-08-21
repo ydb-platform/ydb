@@ -6,8 +6,8 @@
 #include <ydb/library/actors/util/datetime.h>
 
 namespace NActors {
-    TIOExecutorPool::TIOExecutorPool(ui32 poolId, ui32 threads, const TString& poolName, TAffinity* affinity)
-        : TExecutorPoolBase(poolId, threads, affinity, false)
+    TIOExecutorPool::TIOExecutorPool(ui32 poolId, ui32 threads, const TString& poolName, TAffinity* affinity, bool useRingQueue)
+        : TExecutorPoolBase(poolId, threads, affinity, useRingQueue)
         , Threads(new TExecutorThreadCtx[threads])
         , PoolName(poolName)
     {}
@@ -17,7 +17,8 @@ namespace NActors {
             cfg.PoolId,
             cfg.Threads,
             cfg.PoolName,
-            new TAffinity(cfg.Affinity)
+            new TAffinity(cfg.Affinity),
+            cfg.UseRingQueue
         )
     {
         Harmonizer = harmonizer;

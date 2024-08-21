@@ -524,8 +524,7 @@ class YqTenant(BaseTenant):
             's3_read_actor_factory_config': {
                 'retry_config': {
                     'max_retry_time_ms': 3000
-                },
-                'data_inflight': 10485760
+                }
             }
         }
 

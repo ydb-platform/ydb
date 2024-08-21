@@ -210,6 +210,10 @@ public:
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
             request.SetKeepSession(false);
             SetTransactionMode(request);
+            if (!request.txcontrol().has_begin_tx()) {
+                request.mutable_txcontrol()->mutable_begin_tx()->mutable_serializable_read_write();
+                request.mutable_txcontrol()->set_commit_tx(true);
+            }
         } else if (Action == "explain" || Action == "explain-ast" || Action == "explain-data") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);

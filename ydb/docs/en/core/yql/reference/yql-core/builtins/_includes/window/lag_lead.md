@@ -18,3 +18,26 @@ FROM my_table
 WINDOW w AS (ORDER BY key);
 ```
 
+```yql
+SELECT l, x, f, LAG(l, 1) OVER w as ll1 FROM (
+SELECT l, l*l as f, 1 as x FROM(
+  SELECT AsList(1,2,3,4,5) as l
+)
+FLATTEN BY l
+)
+WINDOW w As (
+    PARTITION BY x
+    ORDER BY f
+);
+
+/* Output:
+l	x	f	ll1
+-------------
+1	1	1  NULL
+2	1	4	1
+3	1	9	2
+4	1	16	3
+5	1	25	4
+*/
+
+```

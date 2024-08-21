@@ -31,7 +31,7 @@ WINDOW w As (
 /* Output:
 l	x	f	ll1
 -------------
-1	1	1  NULL
+1	1	1	NULL
 2	1	4	1
 3	1	9	2
 4	1	16	3

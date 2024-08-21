@@ -420,6 +420,7 @@ class YdbTenant(BaseTenant):
         self.config_generator.yaml_config["resource_broker_config"] = {}
         self.config_generator.yaml_config["resource_broker_config"]["queues"] = [{"limit": {"memory": 64424509440}, "weight": 30, "name": "queue_kqp_resource_manager"}]
         self.config_generator.yaml_config["resource_broker_config"]["resource_limit"] = {"memory": 64424509440}
+        self.config_generator.yaml_config["memory_controller_config"] = {"activities_limit_bytes": 64424509440, "query_execution_limit_bytes": 64424509440}
         self.enable_logs()
 
 

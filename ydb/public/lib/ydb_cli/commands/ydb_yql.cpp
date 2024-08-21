@@ -131,7 +131,7 @@ int TCommandYql::RunCommand(TConfig& config, const TString& script) {
 
 bool TCommandYql::PrintResponse(NScripting::TYqlResultPartIterator& result) {
     TStringStream statsStr;
-    TMaybe<TString> fullStats;
+    std::optional<std::string> fullStats;
     {
         ui32 currentIndex = 0;
         TResultSetPrinter printer(OutputFormat, &IsInterrupted);
@@ -173,11 +173,11 @@ bool TCommandYql::PrintResponse(NScripting::TYqlResultPartIterator& result) {
         Cout << Endl << "Full statistics:" << Endl;
 
         TQueryPlanPrinter queryPlanPrinter(OutputFormat, /* analyzeMode */ true);
-        queryPlanPrinter.Print(*fullStats);
+        queryPlanPrinter.Print(TString{*fullStats});
 
         if (FlameGraphPath) {
             try {
-                NKikimr::NVisual::GenerateFlameGraphSvg(*FlameGraphPath, *fullStats);
+                NKikimr::NVisual::GenerateFlameGraphSvg(*FlameGraphPath, TString{*fullStats});
                 Cout << "Resource usage flame graph is successfully saved to " << *FlameGraphPath << Endl;
             }
             catch (const yexception& ex) {

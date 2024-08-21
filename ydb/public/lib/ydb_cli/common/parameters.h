@@ -46,7 +46,7 @@ private:
 
     TMaybe<TString> ReadData();
 
-    std::map<TString, TType> ParamTypes;
+    std::map<std::string, TType> ParamTypes;
     TVector<TString> Header;
     TString Columns;
     THolder<TFileInput> InputFileHolder;

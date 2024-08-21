@@ -170,7 +170,7 @@ int TCommandSql::RunCommand(TConfig& config) {
 
 int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
     TMaybe<TString> stats;
-    TMaybe<TString> plan;
+    std::optional<std::string> plan;
     {
         TResultSetPrinter printer(OutputFormat, &IsInterrupted);
 
@@ -184,7 +184,7 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
                 printer.Print(streamPart.GetResultSet());
             }
 
-            if (!streamPart.GetStats().Empty()) {
+            if (streamPart.GetStats().has_value()) {
                 const auto& queryStats = *streamPart.GetStats();
                 stats = queryStats.ToString();
 
@@ -209,7 +209,7 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
             && (ExplainMode || ExplainAnalyzeMode)
             ? EDataFormat::PrettyTable : OutputFormat;
         TQueryPlanPrinter queryPlanPrinter(format, /* show actual costs */ !ExplainMode);
-        queryPlanPrinter.Print(*plan);
+        queryPlanPrinter.Print(TString{*plan});
     }
 
     if (IsInterrupted()) {

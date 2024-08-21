@@ -1,5 +1,9 @@
 LIBRARY(clicommands)
 
+ADDINCL(
+    ydb/public/sdk/cpp
+)
+
 SRCS(
     benchmark_utils.cpp
     topic_operations_scenario.cpp

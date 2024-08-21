@@ -102,11 +102,11 @@ int TCommandRemoveDirectory::Run(TConfig& config) {
 }
 
 namespace {
-    void PrintPermissions(const TVector<NScheme::TPermissions>& permissions) {
+    void PrintPermissions(const std::vector<NScheme::TPermissions>& permissions) {
         if (permissions.size()) {
             for (const NScheme::TPermissions& permission : permissions) {
                 Cout << permission.Subject << ":";
-                for (const TString& name : permission.PermissionNames) {
+                for (const std::string& name : permission.PermissionNames) {
                     if (name != *permission.PermissionNames.begin()) {
                         Cout << ",";
                     }
@@ -121,9 +121,9 @@ namespace {
 }
 
 void PrintAllPermissions(
-    const TString& owner,
-    const TVector<NScheme::TPermissions>& permissions,
-    const TVector<NScheme::TPermissions>& effectivePermissions
+    const std::string& owner,
+    const std::vector<NScheme::TPermissions>& permissions,
+    const std::vector<NScheme::TPermissions>& effectivePermissions
 ) {
     Cout << "Owner: " << owner << Endl << Endl << "Permissions: " << Endl;
     PrintPermissions(permissions);
@@ -292,11 +292,11 @@ int TCommandDescribe::DescribeEntryDefault(NScheme::TSchemeEntry entry) {
 }
 
 namespace {
-    TString FormatCodecs(const TVector<NYdb::NTopic::ECodec>& codecs) {
+    TString FormatCodecs(const std::vector<NYdb::NTopic::ECodec>& codecs) {
         return JoinSeq(", ", codecs);
     }
 
-    void PrintTopicConsumers(const TVector<NYdb::NTopic::TConsumer>& consumers) {
+    void PrintTopicConsumers(const std::vector<NYdb::NTopic::TConsumer>& consumers) {
         if (consumers.empty()) {
             return;
         }
@@ -463,10 +463,10 @@ int TCommandDescribe::DescribeColumnTable(TDriver& driver) {
 int TCommandDescribe::PrintCoordinationNodeResponsePretty(const NYdb::NCoordination::TNodeDescription& result) const {
     Cout << Endl << "AttachConsistencyMode: " << result.GetAttachConsistencyMode() << Endl;
     Cout << "ReadConsistencyMode: " << result.GetReadConsistencyMode() << Endl;
-    if (result.GetSessionGracePeriod().Defined()) {
+    if (result.GetSessionGracePeriod().has_value()) {
         Cout << "SessionGracePeriod: " << result.GetSessionGracePeriod() << Endl;
     }
-    if (result.GetSelfCheckPeriod().Defined()) {
+    if (result.GetSelfCheckPeriod().has_value()) {
         Cout << "SelfCheckPeriod: " << result.GetSelfCheckPeriod() << Endl;
     }
     Cout << "RatelimiterCountersMode: " << result.GetRateLimiterCountersMode() << Endl;
@@ -547,8 +547,8 @@ int TCommandDescribe::PrintReplicationResponsePretty(const NYdb::NReplication::T
         Cout << Endl << "OAuth token (SECRET): " << connParams.GetOAuthCredentials().TokenSecretName;
         break;
     }
-
-    if (const auto& items = desc.GetItems()) {
+    const auto& items = desc.GetItems();
+    if (!items.empty()) {
         TVector<TString> columnNames = { "#", "Source", "Destination", "Changefeed" };
         if (ShowStats) {
             columnNames.push_back("Lag");
@@ -607,7 +607,7 @@ namespace {
         Cerr << Endl;
         TPrettyTable table({ "Name", "Type", "Family", "Key" }, TPrettyTableConfig().WithoutRowDelimiters());
 
-        const TVector<TString>& keyColumns = tableDescription.GetPrimaryKeyColumns();
+        const std::vector<std::string>& keyColumns = tableDescription.GetPrimaryKeyColumns();
         for (const NTable::TTableColumn& column : tableDescription.GetTableColumns()) {
             TString key = "";
             auto itKey = std::find(keyColumns.begin(), keyColumns.end(), column.Name);
@@ -631,7 +631,7 @@ namespace {
     }
 
     void PrintIndexes(const NTable::TTableDescription& tableDescription) {
-        const TVector<NTable::TIndexDescription>& indexes = tableDescription.GetIndexDescriptions();
+        const std::vector<NTable::TIndexDescription>& indexes = tableDescription.GetIndexDescriptions();
         if (!indexes.size()) {
             return;
         }
@@ -683,37 +683,37 @@ namespace {
         const auto commitLog1 = settings.GetTabletCommitLog1();
         const auto external = settings.GetExternal();
         const auto storeExternalBlobs = settings.GetStoreExternalBlobs();
-        if (!commitLog0 && !commitLog1 && !external && !storeExternalBlobs.Defined()) {
+        if (!commitLog0 && !commitLog1 && !external && !storeExternalBlobs.has_value()) {
             return;
         }
         Cout << Endl << "Storage settings: " << Endl;
         if (commitLog0) {
-            Cout << "Internal channel 0 commit log storage pool: " << commitLog0.GetRef() << Endl;
+            Cout << "Internal channel 0 commit log storage pool: " << commitLog0.value() << Endl;
         }
         if (commitLog1) {
-            Cout << "Internal channel 1 commit log storage pool: " << commitLog1.GetRef() << Endl;
+            Cout << "Internal channel 1 commit log storage pool: " << commitLog1.value() << Endl;
         }
         if (external) {
-            Cout << "External blobs storage pool: " << external.GetRef() << Endl;
+            Cout << "External blobs storage pool: " << external.value() << Endl;
         }
         if (storeExternalBlobs) {
             Cout << "Store large values in \"external blobs\": "
-                << (storeExternalBlobs.GetRef() ? "true" : "false") << Endl;
+                << (storeExternalBlobs.value() ? "true" : "false") << Endl;
         }
     }
 
     void PrintColumnFamilies(const NTable::TTableDescription& tableDescription) {
-        if (!tableDescription.GetColumnFamilies()) {
+        if (tableDescription.GetColumnFamilies().empty()) {
             return;
         }
         TPrettyTable table({ "Name", "Data", "Compression", "Keep in memory" },
             TPrettyTableConfig().WithoutRowDelimiters());
 
         for (const NTable::TColumnFamilyDescription& family : tableDescription.GetColumnFamilies()) {
-            TMaybe<TString> data = family.GetData();
+            std::optional<std::string> data = family.GetData();
             TString compression;
             if (family.GetCompression()) {
-                switch (family.GetCompression().GetRef()) {
+                switch (family.GetCompression().value()) {
                 case NTable::EColumnFamilyCompression::None:
                     compression = "None";
                     break;
@@ -722,16 +722,16 @@ namespace {
                     break;
                 default:
                     compression = TStringBuilder() << "unknown("
-                        << static_cast<size_t>(family.GetCompression().GetRef()) << ")";
+                        << static_cast<size_t>(family.GetCompression().value()) << ")";
                 }
             }
             TStringBuilder keepInMemory;
-            if (family.GetKeepInMemory().Defined()) {
-                keepInMemory << keepInMemory << family.GetKeepInMemory().GetRef();
+            if (family.GetKeepInMemory().has_value()) {
+                keepInMemory << keepInMemory << family.GetKeepInMemory().value();
             }
             table.AddRow()
                 .Column(0, family.GetName())
-                .Column(1, data ? data.GetRef() : "")
+                .Column(1, data ? data.value() : "")
                 .Column(2, compression)
                 .Column(3, keepInMemory);
         }
@@ -795,16 +795,16 @@ namespace {
         const auto& settings = tableDescription.GetPartitioningSettings();
         const auto partBySize = settings.GetPartitioningBySize();
         const auto partByLoad = settings.GetPartitioningByLoad();
-        if (!partBySize.Defined() && !partByLoad.Defined()) {
+        if (!partBySize.has_value() && !partByLoad.has_value()) {
             return;
         }
         const auto partitionSizeMb = settings.GetPartitionSizeMb();
         const auto minPartitions = settings.GetMinPartitionsCount();
         const auto maxPartitions = settings.GetMaxPartitionsCount();
         Cout << Endl << "Auto partitioning settings: " << Endl;
-        Cout << "Partitioning by size: " << (partBySize.GetRef() ? "true" : "false") << Endl;
-        Cout << "Partitioning by load: " << (partByLoad.GetRef() ? "true" : "false") << Endl;
-        if (partBySize.Defined() && partitionSizeMb) {
+        Cout << "Partitioning by size: " << (partBySize.value() ? "true" : "false") << Endl;
+        Cout << "Partitioning by load: " << (partByLoad.value() ? "true" : "false") << Endl;
+        if (partBySize.has_value() && partitionSizeMb) {
             Cout << "Preferred partition size (Mb): " << partitionSizeMb << Endl;
         }
         if (minPartitions) {
@@ -845,8 +845,8 @@ namespace {
     }
 
     void PrintPartitionInfo(const NTable::TTableDescription& tableDescription, bool showBoundaries, bool showStats) {
-        const TVector<NTable::TKeyRange>& ranges = tableDescription.GetKeyRanges();
-        const TVector<NTable::TPartitionStats>& stats = tableDescription.GetPartitionStats();
+        const std::vector<NTable::TKeyRange>& ranges = tableDescription.GetKeyRanges();
+        const std::vector<NTable::TPartitionStats>& stats = tableDescription.GetPartitionStats();
         if (showBoundaries) {
             if (showStats) {
                 Cout << Endl << "Partitions info:" << Endl;
@@ -894,10 +894,10 @@ namespace {
             row.Column(j++, i + 1);
             if (showBoundaries) {
                 const NTable::TKeyRange& keyRange = ranges[i];
-                const TMaybe<NTable::TKeyBound>& from = keyRange.From();
-                const TMaybe<NTable::TKeyBound>& to = keyRange.To();
-                if (from.Defined()) {
-                    const NTable::TKeyBound& bound = from.GetRef();
+                const std::optional<NTable::TKeyBound>& from = keyRange.From();
+                const std::optional<NTable::TKeyBound>& to = keyRange.To();
+                if (from.has_value()) {
+                    const NTable::TKeyBound& bound = from.value();
                     if (bound.IsInclusive()) {
                         row.Column(j++, "[");
                     } else {
@@ -908,8 +908,8 @@ namespace {
                     row.Column(j++, "(");
                     row.Column(j++, "-Inf");
                 }
-                if (to.Defined()) {
-                    const NTable::TKeyBound& bound = to.GetRef();
+                if (to.has_value()) {
+                    const NTable::TKeyBound& bound = to.value();
                     row.Column(j++, FormatValueJson(bound.GetValue(), EBinaryStringEncoding::Unicode));
                     if (bound.IsInclusive()) {
                         row.Column(j++, "]");
@@ -940,9 +940,9 @@ int TCommandDescribe::PrintTableResponsePretty(const NTable::TTableDescription& 
     PrintAttributes(tableDescription);
     PrintTtlSettings(tableDescription);
     PrintPartitioningSettings(tableDescription);
-    if (tableDescription.GetKeyBloomFilter().Defined()) {
+    if (tableDescription.GetKeyBloomFilter().has_value()) {
         Cout << Endl << "Bloom filter by key: "
-            << (tableDescription.GetKeyBloomFilter().GetRef() ? "true" : "false") << Endl;
+            << (tableDescription.GetKeyBloomFilter().value() ? "true" : "false") << Endl;
     }
     PrintReadReplicasSettings(tableDescription);
     PrintPermissionsIfNeeded(tableDescription);
@@ -1117,7 +1117,7 @@ void TCommandPermissionGrant::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     ParsePath(config, 0);
     Subject = config.ParseResult->GetFreeArgs()[1];
-    if (!Subject) {
+    if (Subject.empty()) {
         throw TMisuseException() << "Missing required argument <subject>";
     }
     if (!PermissionsToGrant.size()) {
@@ -1158,7 +1158,7 @@ void TCommandPermissionRevoke::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     ParsePath(config, 0);
     Subject = config.ParseResult->GetFreeArgs()[1];
-    if (!Subject) {
+    if (Subject.empty()) {
         throw TMisuseException() << "Missing required argument <subject>";
     }
     if (!PermissionsToRevoke.size()) {
@@ -1199,7 +1199,7 @@ void TCommandPermissionSet::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     ParsePath(config, 0);
     Subject = config.ParseResult->GetFreeArgs()[1];
-    if (!Subject) {
+    if (Subject.empty()) {
         throw TMisuseException() << "Missing required argument <subject>";
     }
     if (!PermissionsToSet.size()) {

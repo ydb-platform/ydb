@@ -83,7 +83,7 @@ void InitCsvParser(TCsvParser& parser,
                    bool& removeLastDelimiter,
                    NCsvFormat::TLinesSplitter& csvSource,
                    const TImportFileSettings& settings,
-                   const std::map<TString, TType>* columnTypes,
+                   const std::map<std::string, TType>* columnTypes,
                    const NTable::TTableDescription* dbTableInfo) {
     if (settings.Header_ || settings.HeaderRow_) {
         TString headerRow;
@@ -110,7 +110,7 @@ void InitCsvParser(TCsvParser& parser,
     TVector<TString> columns;
     Y_ENSURE_BT(dbTableInfo);
     for (const auto& column : dbTableInfo->GetColumns()) {
-        columns.push_back(column.Name);
+        columns.push_back(TString{column.Name});
     }
     parser = TCsvParser(std::move(columns), settings.Delimiter_[0], settings.NullValue_, columnTypes);
     return;
@@ -823,8 +823,8 @@ TType TImportFileClient::GetTableType() {
     return typeBuilder.Build();
 }
 
-std::map<TString, TType> TImportFileClient::GetColumnTypes() {
-    std::map<TString, TType> columnTypes;
+std::map<std::string, TType> TImportFileClient::GetColumnTypes() {
+    std::map<std::string, TType> columnTypes;
     Y_ENSURE_BT(DbTableInfo);
     const auto& columns = DbTableInfo->GetTableColumns();
     for (auto it = columns.begin(); it != columns.end(); it++) {

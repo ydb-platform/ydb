@@ -13,7 +13,7 @@
 namespace NYdb::NBackup {
 
 class TQueryBuilder {
-    TVector<TColumn> Columns;
+    std::vector<TColumn> Columns;
     const TString Query;
     TValueBuilder Value;
 
@@ -25,7 +25,7 @@ class TQueryBuilder {
     static TType GetType(TTypeParser& typeParser, const TString& name);
 
 public:
-    TQueryBuilder(const TString& path, TVector<TColumn> columns)
+    TQueryBuilder(const TString& path, std::vector<TColumn> columns)
         : Columns(std::move(columns))
         , Query(BuildQuery(path))
     {}

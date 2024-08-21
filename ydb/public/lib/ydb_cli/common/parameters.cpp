@@ -578,7 +578,7 @@ void TCommandWithParameters::ApplyJsonParams(const std::map<TString, TString> &p
         if (paramSource != ParameterSources.end()) {
             throw TMisuseException() << "Parameter " << name << " value found in more than one source: stdin, " << paramSource->second << ".";
         }
-        paramBuilder.AddParam(name, JsonToYdbValue(value, paramIt->second, InputBinaryStringEncoding));
+        paramBuilder.AddParam(name, JsonToYdbValue(std::string{value}, paramIt->second, InputBinaryStringEncoding));
     }
 }
 

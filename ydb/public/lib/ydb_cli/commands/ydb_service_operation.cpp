@@ -87,21 +87,21 @@ int TCommandGetOperation::Run(TConfig& config) {
     NOperation::TOperationClient client(CreateDriver(config));
 
     switch (OperationId.GetKind()) {
-    case Ydb::TOperationId::EXPORT:
+    case TOperationId::EXPORT:
         if (OperationId.GetSubKind() == "s3") {
             return GetOperation<NExport::TExportToS3Response>(client, OperationId, OutputFormat);
         } else { // fallback to "yt"
             return GetOperation<NExport::TExportToYtResponse>(client, OperationId, OutputFormat);
         }
-    case Ydb::TOperationId::IMPORT:
+    case TOperationId::IMPORT:
         if (OperationId.GetSubKind() == "s3") {
             return GetOperation<NImport::TImportFromS3Response>(client, OperationId, OutputFormat);
         } else {
             throw TMisuseException() << "Invalid operation ID (unexpected sub-kind of operation)";
         }
-    case Ydb::TOperationId::BUILD_INDEX:
+    case TOperationId::BUILD_INDEX:
         return GetOperation<NTable::TBuildIndexOperation>(client, OperationId, OutputFormat);
-    case Ydb::TOperationId::SCRIPT_EXECUTION:
+    case TOperationId::SCRIPT_EXECUTION:
         return GetOperation<NQuery::TScriptExecutionOperation>(client, OperationId, OutputFormat);
     default:
         throw TMisuseException() << "Invalid operation ID (unexpected kind of operation)";

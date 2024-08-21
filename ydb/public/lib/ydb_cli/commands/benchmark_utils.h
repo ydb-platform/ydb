@@ -33,7 +33,7 @@ struct TTestInfo {
 class TQueryResultInfo {
 protected:
     std::vector<std::vector<NYdb::TValue>> Result;
-    TVector<NYdb::TColumn> Columns;
+    std::vector<NYdb::TColumn> Columns;
 public:
     std::map<TString, ui32> GetColumnsRemap() const {
         std::map<TString, ui32> result;
@@ -47,7 +47,7 @@ public:
     const std::vector<std::vector<NYdb::TValue>>& GetResult() const {
         return Result;
     }
-    const TVector<NYdb::TColumn>& GetColumns() const {
+    const std::vector<NYdb::TColumn>& GetColumns() const {
         return Columns;
     }
     bool IsExpected(std::string_view expected) const;

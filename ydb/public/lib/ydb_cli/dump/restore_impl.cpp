@@ -17,6 +17,8 @@
 #include <util/string/builder.h>
 #include <util/string/join.h>
 
+#include <google/protobuf/text_format.h>
+
 namespace NYdb {
 namespace NDump {
 
@@ -117,7 +119,7 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
 
     THashSet<TString> oldEntries;
     for (const auto& entry : oldDirectoryList.Entries) {
-        oldEntries.insert(entry.Name);
+        oldEntries.insert(TString{entry.Name});
     }
 
     // restore
@@ -141,7 +143,7 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
 
         switch (entry.Type) {
             case ESchemeEntryType::Directory: {
-                auto result = NConsoleClient::RemoveDirectoryRecursive(SchemeClient, TableClient, fullPath, {}, true, false);
+                auto result = NConsoleClient::RemoveDirectoryRecursive(SchemeClient, TableClient, TString{fullPath}, {}, true, false);
                 if (!result.IsSuccess()) {
                     return restoreResult;
                 }
@@ -267,7 +269,7 @@ TRestoreResult TRestoreClient::CheckSchema(const TString& dbPath, const TTableDe
         return Result<TRestoreResult>(dbPath, std::move(descResult));
     }
 
-    auto unorderedColumns = [](const TVector<TColumn>& orderedColumns) {
+    auto unorderedColumns = [](const std::vector<TColumn>& orderedColumns) {
         THashMap<TString, TColumn> result;
         for (const auto& column : orderedColumns) {
             result.emplace(column.Name, column);
@@ -275,7 +277,7 @@ TRestoreResult TRestoreClient::CheckSchema(const TString& dbPath, const TTableDe
         return result;
     };
 
-    auto unorderedIndexes = [](const TVector<TIndexDescription>& orderedIndexes) {
+    auto unorderedIndexes = [](const std::vector<TIndexDescription>& orderedIndexes) {
         THashMap<TString, TIndexDescription> result;
         for (const auto& index : orderedIndexes) {
             result.emplace(index.GetIndexName(), index);

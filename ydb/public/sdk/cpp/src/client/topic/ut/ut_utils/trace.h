@@ -61,7 +61,7 @@ bool CleanTraceEventBuf(TStringBuf& b, TStringBuf traceEventMarker);
 // To get the trace, call GetEvents method.
 class TTracingBackend : public TLogBackend {
 public:
-    TTracingBackend(const TString& traceEventMarker = TRACE_EVENT_MARKER, std::function<TTraceEvent(TString const&)> parser = TTraceEvent::FromString)
+    TTracingBackend(const TString& traceEventMarker = TString{TRACE_EVENT_MARKER}, std::function<TTraceEvent(TString const&)> parser = TTraceEvent::FromString)
         : TraceEventMarker(traceEventMarker)
         , EventParser(parser) {}
 

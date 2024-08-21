@@ -63,7 +63,7 @@ public:
             LeftJoinKeys.clear();
             RightJoinKeys.clear();
 
-            for (auto [left, right] : JoinConditions) {
+            for (const auto& [left, right] : JoinConditions) {
                 auto leftKey = left.AttributeName;
                 auto rightKey = right.AttributeName;
 
@@ -218,6 +218,27 @@ public:
         }
 
         return nullptr;
+    }
+
+    void ApplyHints(const TJoinOrderHints& hints) {
+        auto hintsHypergraph = MakeJoinHypergraph<TNodeSet>(hints.HintsTree);
+        
+        TVector<size_t> erasedComplexEdges;
+        auto hintNodes = GetNodesByRelNames(hints.HintsTree->Labels());
+        EraseIf(Edges_, [&hintNodes, &erasedComplexEdges](const TJoinHypergraph<TNodeSet>::TEdge& edge) {
+            bool isInnerEdge = 
+                IsSubset(edge.Left, hintNodes) && IsSubset(edge.Right, hintNodes);
+            if (isInnerEdge) {
+                erasedComplexEdges.push_back(edge.ReversedEdgeId);
+            }
+            return isInnerEdge;
+        });
+
+        for (size_t i = 0; i < hintNodes.size(); ++i){
+            if (hintNodes[i]) {
+                Nodes_[i].SimpleNeighborhood &= ~hintNodes;
+            }
+        }
     }
 
 private:

@@ -155,8 +155,12 @@ protected:
                 rels.emplace_back(std::make_shared<TKqpRelOptimizerNode>(TString(label), stat, node));
             },
             KqpCtx.EquiJoinsCount,
-            KqpCtx.GetCardinalityHints(),
-            KqpCtx.GetJoinAlgoHints());
+            TOptimizerHints{
+                .CardinalityHints = KqpCtx.GetCardinalityHints(),
+                .JoinAlgoHints = KqpCtx.GetJoinAlgoHints(),
+                .JoinOrderHints = NYql::TJoinOrderHints()
+            }
+        );
         DumpAppliedRule("OptimizeEquiJoinWithCosts", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

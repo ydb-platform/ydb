@@ -174,10 +174,10 @@ struct TExplicitPartitions {
     using TSelf = TExplicitPartitions;
 
     FLUENT_SETTING_VECTOR(TValue, SplitPoints);
-    
+
     template <typename TProto>
     static TExplicitPartitions FromProto(const TProto& proto);
-    
+
     void SerializeTo(Ydb::Table::ExplicitPartitions& proto) const;
 };
 
@@ -642,6 +642,7 @@ private:
     // common
     void AddSecondaryIndex(const TString& indexName, EIndexType type, const TVector<TString>& indexColumns);
     void AddSecondaryIndex(const TString& indexName, EIndexType type, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns);
+    void AddSecondaryIndex(const TIndexDescription& indexDescription);
     // sync
     void AddSyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns);
     void AddSyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns);
@@ -855,6 +856,7 @@ public:
     TTableBuilder& SetPrimaryKeyColumn(const TString& primaryKeyColumn);
 
     // common
+    TTableBuilder& AddSecondaryIndex(const TIndexDescription& indexDescription);
     TTableBuilder& AddSecondaryIndex(const TString& indexName, EIndexType type, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns);
     TTableBuilder& AddSecondaryIndex(const TString& indexName, EIndexType type, const TVector<TString>& indexColumns);
     TTableBuilder& AddSecondaryIndex(const TString& indexName, EIndexType type, const TString& indexColumn);

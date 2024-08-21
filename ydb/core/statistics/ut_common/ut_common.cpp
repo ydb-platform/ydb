@@ -262,7 +262,7 @@ void DropTable(TTestEnv& env, const TString& databaseName, const TString& tableN
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, TPathId pathId, ui64 columnTag) {
+std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, const TPathId& pathId, ui64 columnTag) {
     auto statServiceId = NStat::MakeStatServiceID(runtime.GetNodeId(1));
 
     NStat::TRequest req;
@@ -287,6 +287,14 @@ std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, TPa
     UNIT_ASSERT(stat.CountMin);
 
     return stat.CountMin;
+}
+
+void CheckCountMin(TTestActorRuntime& runtime, const TPathId& pathId, ui64 expectedProbe) {
+    auto countMin = ExtractCountMin(runtime, pathId);
+
+    ui32 value = 1;
+    auto actualProbe = countMin->Probe((const char *)&value, sizeof(value));
+    UNIT_ASSERT_VALUES_EQUAL(actualProbe, expectedProbe);
 }
 
 void ValidateCountMin(TTestActorRuntime& runtime, TPathId pathId) {

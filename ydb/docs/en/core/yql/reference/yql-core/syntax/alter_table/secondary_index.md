@@ -38,9 +38,7 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<partitioning_setting_nam
 ```
 
 * `<table_name>`: The name of the table whose index is to be modified.
-
 * `<index_name>`: The name of the index to be modified.
-
 * `<partitioning_setting_name>`: The name of the setting to be modified, which should be one of the following:
     * [AUTO_PARTITIONING_BY_SIZE]({{ concept_table }}#auto_partitioning_by_size)
     * [AUTO_PARTITIONING_BY_LOAD]({{ concept_table }}#auto_partitioning_by_load)

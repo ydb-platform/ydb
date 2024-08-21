@@ -4,6 +4,7 @@ import ydb
 import time
 import os
 import random
+import string
 
 ydb.interceptor.monkey_patch_event_handler()
 
@@ -15,13 +16,29 @@ def timestamp():
 def table_name_with_timestamp():
     return os.path.join("column_table_" + str(timestamp()))
 
+def random_string(length):
+   letters = string.ascii_lowercase
+   return bytes(''.join(random.choice(letters) for i in range(length)), encoding='utf8')
+
+def random_type():
+    return random.choice([ydb.PrimitiveType.Int64, ydb.PrimitiveType.String])
+
+def random_value(type):
+    if isinstance(type, ydb.OptionalType):
+        return random_value(type.item)
+    if type == ydb.PrimitiveType.Int64:
+        return random.randint(0, 1 << 31)
+    if type == ydb.PrimitiveType.String:
+        return random_string(random.randint(1, 32))
+
 
 class Workload(object):
-    def __init__(self, endpoint, database, duration):
+    def __init__(self, endpoint, database, duration, batch_size):
         self.database = database
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
         self.pool = ydb.SessionPool(self.driver, size=200)
         self.duration = duration
+        self.batch_size = batch_size
 
     def __enter__(self):
         return self
@@ -64,11 +81,11 @@ class Workload(object):
 
         self.run_query_ignore_errors(callee)
 
-    def add_column(self, table_name, col_name):
-        print(f"Add column {table_name}.{col_name}")
+    def add_column(self, table_name, col_name, col_type):
+        print(f"Add column {table_name}.{col_name} {str(col_type)}")
 
         def callee(session):
-            session.execute_scheme(f"ALTER TABLE {table_name} ADD COLUMN {col_name} Int64")
+            session.execute_scheme(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {str(col_type)}")
 
         self.run_query_ignore_errors(callee)
 
@@ -80,21 +97,25 @@ class Workload(object):
 
         self.run_query_ignore_errors(callee)
 
+    def generate_batch(self, schema):
+        data = []
+
+        for i in range(self.batch_size):
+            data.append({c.name: random_value(c.type) for c in schema})
+
+        return data
+
     def add_batch(self, table_name, schema):
         print(f"Add batch {table_name}")
 
-        schema = list(schema) + ["id"]
         column_types = ydb.BulkUpsertColumns()
 
         for c in schema:
-            column_types.add_column(c, ydb.PrimitiveType.Int64)
+            column_types.add_column(c.name, c.type)
 
-        data = []
+        batch = self.generate_batch(schema)
 
-        for i in range(10):
-            data.append({c: random.randint(0, 1000000) for c in schema})
-
-        self.driver.table_client.bulk_upsert(self.database + "/" + table_name, data, column_types)
+        self.driver.table_client.bulk_upsert(self.database + "/" + table_name, batch, column_types)
 
     def list_tables(self):
         db = self.driver.scheme_client.list_directory(self.database)
@@ -104,16 +125,16 @@ class Workload(object):
         path = self.database + "/" + table_name
 
         def callee(session):
-            return [c.name for c in session.describe_table(path).columns]
+            return session.describe_table(path).columns
 
         return self.pool.retry_operation_sync(callee)
 
     def rows_count(self, table_name):
         return self.driver.table_client.scan_query(f"SELECT count(*) FROM {table_name}").next().result_set.rows[0][0]
 
-    def select_10(self, table_name):
-        print(f"Select 10 {table_name}")
-        self.driver.table_client.scan_query(f"SELECT * FROM {table_name} limit 10").next()
+    def select_n(self, table_name, limit):
+        print(f"Select {limit} from {table_name}")
+        self.driver.table_client.scan_query(f"SELECT * FROM {table_name} limit {limit}").next()
 
     def drop_all_tables(self):
         for t in self.list_tables():
@@ -122,30 +143,28 @@ class Workload(object):
 
     def drop_all_columns(self, table_name):
         for c in self.list_columns(table_name):
-            if c != "id":
-                self.drop_column(table_name, c)
+            if c.name != "id":
+                self.drop_column(table_name, c.name)
 
     def queries_while_alter(self):
         table_name = "queries_while_alter"
 
         schema = self.list_columns(table_name)
 
-        self.select_10(table_name)
+        self.select_n(table_name, 1000)
         self.add_batch(table_name, schema)
-        self.select_10(table_name)
+        self.select_n(table_name, 100)
         self.add_batch(table_name, schema)
-        self.select_10(table_name)
+        self.select_n(table_name, 300)
 
-        schema = self.list_columns(table_name)
-
-        if len(schema) > 500:
+        if len(schema) > 50:
             self.drop_all_columns(table_name)
 
         if self.rows_count(table_name) > 100000:
             self.drop_table(table_name)
 
         col = "col_" + str(timestamp())
-        self.add_column(table_name, col)
+        self.add_column(table_name, col, random_type())
 
     def run(self):
         started_at = time.time()
@@ -171,6 +190,7 @@ if __name__ == '__main__':
     parser.add_argument('--endpoint', default='localhost:2135', help="An endpoint to be used")
     parser.add_argument('--database', default=None, required=True, help='A database to connect')
     parser.add_argument('--duration', default=120, type=lambda x: int(x), help='A duration of workload in seconds.')
+    parser.add_argument('--batch_size', default=1000, help='Batch size for bulk insert')
     args = parser.parse_args()
-    with Workload(args.endpoint, args.database, args.duration) as workload:
+    with Workload(args.endpoint, args.database, args.duration, args.batch_size) as workload:
         workload.run()

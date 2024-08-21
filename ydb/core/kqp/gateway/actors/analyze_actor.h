@@ -60,7 +60,6 @@ private:
     TString OperationId;
 
     // for retries
-    NSchemeCache::TSchemeCacheNavigate::TEntry Entry;
     NStat::TEvStatistics::TEvAnalyze Request;
     TDuration RetryInterval = TDuration::Seconds(2);
     size_t RetryCount = 0;

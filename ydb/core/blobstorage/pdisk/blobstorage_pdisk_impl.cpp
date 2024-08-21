@@ -2289,6 +2289,7 @@ void TPDisk::ProcessChunkReadQueue() {
                 bool isComplete = false;
                 ui8 priorityClass = read->PriorityClass;
                 NHPTimer::STime creationTime = read->CreationTime;
+                LWTRACK(PDiskChunkReadPiecesSendToDevice, read->Orbit, PDiskId);
                 if (!read->IsReplied) {
                     LOG_DEBUG_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDiskId
                         << " ReqId# " << reqId
@@ -3239,7 +3240,7 @@ void TPDisk::PushRequestToForseti(TRequestBase *request) {
                     // Schedule small job.
                     auto piece = new TChunkReadPiece(read, idx * smallJobSize,
                             smallJobSize * Format.SectorSize, false, std::move(span));
-                    LWTRACK(PDiskChunkReadPieceAddToScheduler, read->Orbit, PDiskId, idx, idx * smallJobSize,
+                    LWTRACK(PDiskChunkReadPieceAddToScheduler, read->Orbit, PDiskId, idx, idx * smallJobSize * Format.SectorSize,
                             smallJobSize * Format.SectorSize);
                     piece->EstimateCost(DriveModel);
                     piece->SelfPointer = piece;
@@ -3251,7 +3252,7 @@ void TPDisk::PushRequestToForseti(TRequestBase *request) {
                 auto piece = new TChunkReadPiece(read, smallJobCount * smallJobSize,
                         largeJobSize * Format.SectorSize, true, std::move(span));
                 LWTRACK(PDiskChunkReadPieceAddToScheduler, read->Orbit, PDiskId, smallJobCount,
-                        smallJobCount * smallJobSize, largeJobSize * Format.SectorSize);
+                        smallJobCount * smallJobSize * Format.SectorSize, largeJobSize * Format.SectorSize);
                 piece->EstimateCost(DriveModel);
                 piece->SelfPointer = piece;
                 AddJobToForseti(cbs, piece, request->JobKind);

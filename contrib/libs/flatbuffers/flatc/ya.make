@@ -12,6 +12,8 @@ INDUCED_DEPS(
     ${ARCADIA_ROOT}/contrib/libs/flatbuffers/include/flatbuffers/flatbuffers_iter.h
 )
 
+VERSION(24.3.25)
+
 PEERDIR(
     contrib/restricted/abseil-cpp/absl/base
 )

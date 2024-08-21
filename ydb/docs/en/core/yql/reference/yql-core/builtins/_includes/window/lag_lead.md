@@ -18,3 +18,28 @@ FROM my_table
 WINDOW w AS (ORDER BY key);
 ```
 
+```yql
+SELECT item, odd, LAG(item, 1) OVER w as lag1 FROM (
+    SELECT item, item % 2 as odd FROM (
+        SELECT AsList(1, 2, 3, 4, 5, 6, 7) as item
+    )
+    FLATTEN BY item
+)
+WINDOW w As (
+    PARTITION BY odd
+    ORDER BY item
+);
+
+/* Output:
+item	odd	lag1
+--------------------
+2	0	NULL
+4	0	2
+6	0	4
+1	1	NULL
+3	1	1
+5	1	3
+7	1	5
+*/
+
+```

@@ -137,7 +137,7 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
 void TAnalyzeActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev, const TActorContext& ctx) {
     Y_UNUSED(ev, ctx);
 
-    if (RetryCount >= 3) {
+    if (RetryCount >= MaxRetryCount) {
         Promise.SetValue(
                 NYql::NCommon::ResultFromError<NYql::IKikimrGateway::TGenericResult>(
                     YqlIssue(
@@ -150,7 +150,7 @@ void TAnalyzeActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev, const TAc
         return;
     }
 
-    RetryInterval *= 2;
+    RetryInterval *= RetryIntervalMultiplier;
     ++RetryCount;
     Schedule(RetryInterval, new TEvAnalyzePrivate::TEvAnalyzeRetry());
 }

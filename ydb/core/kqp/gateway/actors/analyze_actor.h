@@ -12,11 +12,11 @@ namespace NKikimr::NKqp {
 
 struct TEvAnalyzePrivate {
     enum EEv {
-        EvAnalyzeStatusCheck = EventSpaceBegin(TEvents::ES_PRIVATE),
+        EvAnalyzeRetry = EventSpaceBegin(TEvents::ES_PRIVATE),
         EvEnd
     };
 
-    struct TEvAnalyzeRetry : public TEventLocal<TEvAnalyzeRetry, EvAnalyzeStatusCheck> {};
+    struct TEvAnalyzeRetry : public TEventLocal<TEvAnalyzeRetry, EvAnalyzeRetry> {};
 };
 
 class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> { 
@@ -64,6 +64,9 @@ private:
     NStat::TEvStatistics::TEvAnalyze Request;
     TDuration RetryInterval = TDuration::Seconds(2);
     size_t RetryCount = 0;
+
+    const static size_t MaxRetryCount = 7;
+    const static size_t RetryIntervalMultiplier = 2;
 };
 
 } // end of NKikimr::NKqp

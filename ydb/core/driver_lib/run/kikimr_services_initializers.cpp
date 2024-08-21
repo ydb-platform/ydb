@@ -2047,7 +2047,7 @@ void TMemoryControllerInitializer::InitializeServices(
     NActors::TActorSystemSetup* setup,
     const NKikimr::TAppData* appData)
 {
-    NMemory::TResourceBrokerConfig resourceBrokerSelfConfig;
+    NMemory::TResourceBrokerConfig resourceBrokerSelfConfig; // for backward compatibility
     auto mergeResourceBrokerConfigs = [&](const NKikimrResourceBroker::TResourceBrokerConfig& resourceBrokerConfig) {
         if (resourceBrokerConfig.HasResourceLimit() && resourceBrokerConfig.GetResourceLimit().HasMemory()) {
             resourceBrokerSelfConfig.LimitBytes = resourceBrokerConfig.GetResourceLimit().GetMemory();

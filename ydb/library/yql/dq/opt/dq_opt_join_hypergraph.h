@@ -225,18 +225,43 @@ public:
         
         TVector<size_t> erasedComplexEdges;
         auto hintNodes = GetNodesByRelNames(hints.HintsTree->Labels());
-        EraseIf(Edges_, [&hintNodes, &erasedComplexEdges](const TJoinHypergraph<TNodeSet>::TEdge& edge) {
-            bool isInnerEdge = 
-                IsSubset(edge.Left, hintNodes) && IsSubset(edge.Right, hintNodes);
-            if (isInnerEdge) {
-                erasedComplexEdges.push_back(edge.ReversedEdgeId);
+        
+        TVector<size_t> edgesOffset(Edges_.size());
+        TVector<size_t> erasedEdges;
+        erasedEdges.reserve(Edges_.size());
+        TVector<TEdge> filteredEdges;
+        filteredEdges.reserve(Edges_.size());
+        for (size_t i = 0; i < Edges_.size(); i += 2) {
+            auto& edge = Edges_[i];
+            if (IsSubset(edge.Left, hintNodes) && IsSubset(edge.Right, hintNodes)) {
+                erasedEdges.push_back(i);
+                erasedEdges.push_back(i + 1);
+                edgesOffset[i] = 2;
+            } else {
+                filteredEdges.push_back(std::move(Edges_[i]));
+                filteredEdges.push_back(std::move(Edges_[i + 1]));
             }
-            return isInnerEdge;
-        });
+        }
+        Edges_ = std::move(filteredEdges);
 
-        for (size_t i = 0; i < hintNodes.size(); ++i){
+        for (size_t i = 0; i < edgesOffset.size(); ++i) {
+            edgesOffset[i] += (i == 0)? 0: edgesOffset[i - 1];
+        }
+
+        for (size_t i = 0; i < Nodes_.size(); ++i) {
             if (hintNodes[i]) {
                 Nodes_[i].SimpleNeighborhood &= ~hintNodes;
+            }
+
+            EraseIf(
+                Nodes_[i].ComplexEdgesId, 
+                [erasedEdges](const std::size_t edgeIdx){
+                    return std::binary_search(erasedEdges.begin(), erasedEdges.end(),edgeIdx);
+                }
+            );
+
+            for (size_t& edgeIdx: Nodes_[i].ComplexEdgesId) {
+                edgeIdx -= edgesOffset[edgeIdx];
             }
         }
     }

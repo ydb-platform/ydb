@@ -1,7 +1,6 @@
 #include "analyze_actor.h"
 
 #include <ydb/core/base/path.h>
-#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/util/ulid.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
@@ -42,19 +41,6 @@ void TAnalyzeActor::Bootstrap() {
     Become(&TAnalyzeActor::StateWork);
 }
 
-void TAnalyzeActor::SendAnalyzeStatus() {
-    Y_ABORT_UNLESS(StatisticsAggregatorId.has_value());
-
-    auto getStatus = std::make_unique<NStat::TEvStatistics::TEvAnalyzeStatus>();
-    auto& record = getStatus->Record;
-    record.SetOperationId(OperationId);
-
-    Send(
-        MakePipePerNodeCacheID(false),
-        new TEvPipeCache::TEvForward(getStatus.release(), StatisticsAggregatorId.value(), true)
-    );
-}
-
 void TAnalyzeActor::Handle(NStat::TEvStatistics::TEvAnalyzeResponse::TPtr& ev, const TActorContext& ctx) {
     Y_UNUSED(ctx);
 
@@ -67,50 +53,10 @@ void TAnalyzeActor::Handle(NStat::TEvStatistics::TEvAnalyzeResponse::TPtr& ev, c
             << " , but expected " << OperationId);
     }
 
-
-    // TODO Don't send EvAnalyzeStatus, EvAnalyzeResponse is already here
-    SendAnalyzeStatus();
-}
-
-void TAnalyzeActor::Handle(TEvAnalyzePrivate::TEvAnalyzeStatusCheck::TPtr& ev, const TActorContext& ctx) {
-    Y_UNUSED(ev);
-    Y_UNUSED(ctx);
-
-    SendAnalyzeStatus();
-}
-
-void TAnalyzeActor::Handle(NStat::TEvStatistics::TEvAnalyzeStatusResponse::TPtr& ev, const TActorContext& ctx) {
-    auto& record = ev->Get()->Record;
-    switch (record.GetStatus()) {
-        case NKikimrStat::TEvAnalyzeStatusResponse::STATUS_UNSPECIFIED: {
-            Promise.SetValue(
-                NYql::NCommon::ResultFromError<NYql::IKikimrGateway::TGenericResult>(
-                    YqlIssue(
-                        {}, NYql::TIssuesIds::UNEXPECTED, 
-                        TStringBuilder() << "Statistics Aggregator unspecified error"
-                    )
-                )
-            );
-            this->Die(ctx);
-            return;
-        }
-        case NKikimrStat::TEvAnalyzeStatusResponse::STATUS_NO_OPERATION: {
-            NYql::IKikimrGateway::TGenericResult result;
-            result.SetSuccess();
-            Promise.SetValue(std::move(result));
-            
-            this->Die(ctx);
-            return;
-        }
-        case NKikimrStat::TEvAnalyzeStatusResponse::STATUS_ENQUEUED: {
-            Schedule(TDuration::Seconds(10), new TEvAnalyzePrivate::TEvAnalyzeStatusCheck());
-            return;
-        }
-        case NKikimrStat::TEvAnalyzeStatusResponse::STATUS_IN_PROGRESS: {
-            Schedule(TDuration::Seconds(5), new TEvAnalyzePrivate::TEvAnalyzeStatusCheck());
-            return;
-        }
-    }
+    NYql::IKikimrGateway::TGenericResult result;
+    result.SetSuccess();
+    Promise.SetValue(std::move(result));
+    this->Die(ctx);
 }
 
 void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
@@ -188,13 +134,45 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
     }
 }
 
+void TAnalyzeActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev, const TActorContext& ctx) {
+    Y_UNUSED(ev, ctx);
+
+    if (RetryCount >= 3) {
+        Promise.SetValue(
+                NYql::NCommon::ResultFromError<NYql::IKikimrGateway::TGenericResult>(
+                    YqlIssue(
+                        {}, NYql::TIssuesIds::UNEXPECTED, 
+                        TStringBuilder() << "Can't establish connection with the Statistics Aggregator!"
+                    )
+                )
+            );
+        this->Die(ctx);
+        return;
+    }
+
+    RetryInterval *= 2;
+    ++RetryCount;
+    Schedule(RetryInterval, new TEvAnalyzePrivate::TEvAnalyzeRetry());
+}
+
+void TAnalyzeActor::Handle(TEvAnalyzePrivate::TEvAnalyzeRetry::TPtr& ev, const TActorContext& ctx) {
+    Y_UNUSED(ev, ctx);
+
+    auto analyzeRequest = std::make_unique<NStat::TEvStatistics::TEvAnalyze>();
+    analyzeRequest->Record = Request.Record;
+    Send(
+        MakePipePerNodeCacheID(true),
+        new TEvPipeCache::TEvForward(analyzeRequest.release(), StatisticsAggregatorId.value(), true),
+        IEventHandle::FlagTrackDelivery
+    );
+}
+
 void TAnalyzeActor::SendStatisticsAggregatorAnalyze(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TActorContext& ctx) {
     Y_ABORT_UNLESS(entry.DomainInfo->Params.HasStatisticsAggregator());
 
     StatisticsAggregatorId = entry.DomainInfo->Params.GetStatisticsAggregator();
 
-    auto analyzeRequest = std::make_unique<NStat::TEvStatistics::TEvAnalyze>();
-    auto& record = analyzeRequest->Record;
+    auto& record = Request.Record;
     record.SetOperationId(OperationId);
     auto table = record.AddTables();
     
@@ -223,9 +201,10 @@ void TAnalyzeActor::SendStatisticsAggregatorAnalyze(const NSchemeCache::TSchemeC
         *table->MutableColumnTags()->Add() = tagByColumnName[columnName];
     }
 
-    // TODO This request should be retried if StatisticsAggregator fails
+    auto analyzeRequest = std::make_unique<NStat::TEvStatistics::TEvAnalyze>();
+    analyzeRequest->Record = Request.Record;
     Send(
-        MakePipePerNodeCacheID(false),
+        MakePipePerNodeCacheID(true),
         new TEvPipeCache::TEvForward(analyzeRequest.release(), entry.DomainInfo->Params.GetStatisticsAggregator(), true),
         IEventHandle::FlagTrackDelivery
     );

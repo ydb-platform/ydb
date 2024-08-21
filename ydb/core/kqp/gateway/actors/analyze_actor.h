@@ -3,6 +3,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 
 
@@ -15,7 +16,7 @@ struct TEvAnalyzePrivate {
         EvEnd
     };
 
-    struct TEvAnalyzeStatusCheck : public TEventLocal<TEvAnalyzeStatusCheck, EvAnalyzeStatusCheck> {};
+    struct TEvAnalyzeRetry : public TEventLocal<TEvAnalyzeRetry, EvAnalyzeStatusCheck> {};
 };
 
 class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> { 
@@ -28,8 +29,8 @@ public:
         switch(ev->GetTypeRewrite()) {
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             HFunc(NStat::TEvStatistics::TEvAnalyzeResponse, Handle);
-            HFunc(NStat::TEvStatistics::TEvAnalyzeStatusResponse, Handle);
-            HFunc(TEvAnalyzePrivate::TEvAnalyzeStatusCheck, Handle);
+            HFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+            HFunc(TEvAnalyzePrivate::TEvAnalyzeRetry, Handle);
             default: 
                 HandleUnexpectedEvent(ev->GetTypeRewrite());
         }
@@ -38,17 +39,16 @@ public:
 private:
     void Handle(NStat::TEvStatistics::TEvAnalyzeResponse::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(NStat::TEvStatistics::TEvAnalyzeStatusResponse::TPtr& ev, const TActorContext& ctx);
-
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvAnalyzePrivate::TEvAnalyzeStatusCheck::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev, const TActorContext& ctx);
+
+    void Handle(TEvAnalyzePrivate::TEvAnalyzeRetry::TPtr& ev, const TActorContext& ctx);
 
     void HandleUnexpectedEvent(ui32 typeRewrite);
 
+private:
     void SendStatisticsAggregatorAnalyze(const NSchemeCache::TSchemeCacheNavigate::TEntry&, const TActorContext&);
-
-    void SendAnalyzeStatus();
 
 private:
     TString TablePath;
@@ -58,6 +58,12 @@ private:
     std::optional<ui64> StatisticsAggregatorId;
     TPathId PathId;
     TString OperationId;
+
+    // for retries
+    NSchemeCache::TSchemeCacheNavigate::TEntry Entry;
+    NStat::TEvStatistics::TEvAnalyze Request;
+    TDuration RetryInterval = TDuration::Seconds(2);
+    size_t RetryCount = 0;
 };
 
 } // end of NKikimr::NKqp

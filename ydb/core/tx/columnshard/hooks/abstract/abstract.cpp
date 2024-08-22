@@ -4,8 +4,6 @@
 
 namespace NKikimr::NYDBTest {
 
-const NKikimrConfig::TColumnShardConfig ICSController::DefaultAppDataConfig = {};
-
 TDuration ICSController::GetGuaranteeIndexationInterval() const {
     const TDuration defaultValue = NColumnShard::TSettings::GuaranteeIndexationInterval;
     return DoGetGuaranteeIndexationInterval(defaultValue);

@@ -132,13 +132,13 @@ protected:
     }
 
 private:
-    static const NKikimrConfig::TColumnShardConfig DefaultAppDataConfig;
+    inline static const NKikimrConfig::TColumnShardConfig DefaultConfig = {};
 
-    static const NKikimrConfig::TColumnShardConfig& GetAppDataConfig() {
+    static const NKikimrConfig::TColumnShardConfig& GetConfig() {
         if (HasAppData()) {
             return AppDataVerified().ColumnShardConfig;
         }
-        return DefaultAppDataConfig;
+        return DefaultConfig;
     }
 
 public:
@@ -159,7 +159,7 @@ public:
     virtual ~ICSController() = default;
 
     TDuration GetOverridenGCPeriod() const {
-        const TDuration defaultValue = TDuration::MilliSeconds(GetAppDataConfig().GetGCIntervalMs());
+        const TDuration defaultValue = TDuration::MilliSeconds(GetConfig().GetGCIntervalMs());
         return DoGetOverridenGCPeriod(defaultValue);
     }
 
@@ -167,7 +167,7 @@ public:
     }
 
     TDuration GetCompactionActualizationLag() const {
-        const TDuration defaultValue = TDuration::MilliSeconds(GetAppDataConfig().GetCompactionActualizationLagMs());
+        const TDuration defaultValue = TDuration::MilliSeconds(GetConfig().GetCompactionActualizationLagMs());
         return DoGetCompactionActualizationLag(defaultValue);
     }
 
@@ -177,7 +177,7 @@ public:
     }
 
     TDuration GetActualizationTasksLag() const {
-        const TDuration defaultValue = TDuration::MilliSeconds(GetAppDataConfig().GetActualizationTasksLagMs());
+        const TDuration defaultValue = TDuration::MilliSeconds(GetConfig().GetActualizationTasksLagMs());
         return DoGetActualizationTasksLag(defaultValue);
     }
 
@@ -193,7 +193,7 @@ public:
         return false;
     }
     ui64 GetSmallPortionSizeDetector() const {
-        const ui64 defaultValue = GetAppDataConfig().GetSmallPortionDetectSizeLimit();
+        const ui64 defaultValue = GetConfig().GetSmallPortionDetectSizeLimit();
         return DoGetSmallPortionSizeDetector(defaultValue);
     }
     virtual void OnExportFinished() {
@@ -219,7 +219,7 @@ public:
     }
 
     virtual TDuration GetLagForCompactionBeforeTierings() const {
-        const TDuration defaultValue = TDuration::MilliSeconds(GetAppDataConfig().GetLagForCompactionBeforeTieringsMs());
+        const TDuration defaultValue = TDuration::MilliSeconds(GetConfig().GetLagForCompactionBeforeTieringsMs());
         return DoGetLagForCompactionBeforeTierings(defaultValue);
     }
 
@@ -250,7 +250,7 @@ public:
     virtual void OnIndexSelectProcessed(const std::optional<bool> /*result*/) {
     }
     TDuration GetReadTimeoutClean() const {
-        const TDuration defaultValue = TDuration::MilliSeconds(GetAppDataConfig().GetMaxReadStaleness_ms());
+        const TDuration defaultValue = TDuration::MilliSeconds(GetConfig().GetMaxReadStaleness_ms());
         return DoGetReadTimeoutClean(defaultValue);
     }
     virtual EOptimizerCompactionWeightControl GetCompactionControl() const {
@@ -261,7 +261,7 @@ public:
     TDuration GetStatsReportInterval() const;
     ui64 GetGuaranteeIndexationStartBytesLimit() const;
     TDuration GetOptimizerFreshnessCheckDuration() const {
-        const TDuration defaultValue = TDuration::MilliSeconds(GetAppDataConfig().GetOptimizerFreshnessCheckDurationMs());
+        const TDuration defaultValue = TDuration::MilliSeconds(GetConfig().GetOptimizerFreshnessCheckDurationMs());
         return DoGetOptimizerFreshnessCheckDuration(defaultValue);
     }
 

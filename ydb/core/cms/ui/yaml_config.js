@@ -398,8 +398,8 @@ class YamlConfigState {
         var rawLabels = yamlCollectLabels();
         for (let label in rawLabels) {
             labels.push({
-                Label: label,
-                Value: rawLabels[label],
+                label: label,
+                value: rawLabels[label],
             });
         }
         var cmd = {

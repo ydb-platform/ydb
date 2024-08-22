@@ -32,20 +32,14 @@ public:
     virtual bool NeedForceCompactionBacketsConstruction() const override {
         return true;
     }
-    virtual TDuration GetRemovedPortionLivetime(const TDuration /*def*/) const override {
-        return TDuration::Zero();
-    }
-    virtual ui64 GetSmallPortionSizeDetector(const ui64 /*def*/) const override {
+    virtual ui64 DoGetSmallPortionSizeDetector(const ui64 /*def*/) const override {
         return 0;
     }
-    virtual TDuration GetOptimizerFreshnessCheckDuration(const TDuration /*defaultValue*/) const override {
+    virtual TDuration DoGetOptimizerFreshnessCheckDuration(const TDuration /*defaultValue*/) const override {
         return TDuration::Zero();
     }
-    virtual TDuration GetLagForCompactionBeforeTierings(const TDuration /*def*/) const override {
+    virtual TDuration DoGetLagForCompactionBeforeTierings(const TDuration /*def*/) const override {
         return TDuration::Zero();
-    }
-    virtual TDuration GetTTLDefaultWaitingDuration(const TDuration /*defaultValue*/) const override {
-        return TDuration::Seconds(1);
     }
 
 };

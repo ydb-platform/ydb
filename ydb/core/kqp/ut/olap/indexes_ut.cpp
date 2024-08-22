@@ -17,8 +17,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         TKikimrRunner kikimr(settings);
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
-        csController->SetLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
         csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         TKikimrRunner kikimr(settings);
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
 
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();

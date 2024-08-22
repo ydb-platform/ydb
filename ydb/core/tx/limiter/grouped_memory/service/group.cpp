@@ -19,13 +19,16 @@ std::vector<std::shared_ptr<TAllocationInfo>> TGrouppedAllocations::AllocatePoss
     return result;
 }
 
-bool TAllocationGroups::Allocate(TProcessMemory& process, const ui32 allocationsLimit) {
+bool TAllocationGroups::Allocate(const bool isPriorityProcess, TProcessMemoryScope& process, const ui32 allocationsLimit) {
+    AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "try_allocation")("limit", allocationsLimit)(
+        "external_process_id", process.ExternalProcessId)("forced_internal_group_id", process.GroupIds.GetMinInternalIdOptional())(
+        "external_scope_id", process.ExternalScopeId)("forced_external_group_id", process.GroupIds.GetMinExternalIdOptional());
     ui32 allocationsCount = 0;
     while (true) {
         std::vector<ui64> toRemove;
         for (auto it = Groups.begin(); it != Groups.end();) {
             const ui64 internalGroupId = it->first;
-            const bool forced = process.IsPriorityProcess() && internalGroupId == process.GroupIds.GetMinInternalIdVerified();
+            const bool forced = isPriorityProcess && internalGroupId == process.GroupIds.GetMinInternalIdVerified();
             std::vector<std::shared_ptr<TAllocationInfo>> allocated;
             if (forced) {
                 allocated = it->second.ExtractAllocationsToVector();

@@ -44,11 +44,17 @@ public:
         return Singleton<TSelf>()->DefaultStageFeatures;
     }
 
-    static std::shared_ptr<TGroupGuard> BuildGroupGuard(const ui64 processId) {
+    static std::shared_ptr<TGroupGuard> BuildGroupGuard(const ui64 processId, const ui32 scopeId) {
         static TAtomicCounter counter = 0;
         auto& context = NActors::TActorContext::AsActorContext();
         const NActors::TActorId& selfId = context.SelfID;
-        return std::make_shared<TGroupGuard>(MakeServiceId(selfId.NodeId()), processId, counter.Inc());
+        return std::make_shared<TGroupGuard>(MakeServiceId(selfId.NodeId()), processId, scopeId, counter.Inc());
+    }
+
+    static std::shared_ptr<TScopeGuard> BuildScopeGuard(const ui64 processId, const ui32 scopeId) {
+        auto& context = NActors::TActorContext::AsActorContext();
+        const NActors::TActorId& selfId = context.SelfID;
+        return std::make_shared<TScopeGuard>(MakeServiceId(selfId.NodeId()), processId, scopeId);
     }
 
     static std::shared_ptr<TProcessGuard> BuildProcessGuard(const ui64 processId, const std::vector<std::shared_ptr<TStageFeatures>>& stages) {
@@ -57,17 +63,18 @@ public:
         return std::make_shared<TProcessGuard>(MakeServiceId(selfId.NodeId()), processId, stages);
     }
 
-    static bool SendToAllocation(const ui64 processId, const ui64 groupId, const std::vector<std::shared_ptr<IAllocation>>& tasks,
+    static bool SendToAllocation(const ui64 processId, const ui64 scopeId, const ui64 groupId,
+        const std::vector<std::shared_ptr<IAllocation>>& tasks,
         const std::optional<ui32>& stageIdx) {
         auto& context = NActors::TActorContext::AsActorContext();
         const NActors::TActorId& selfId = context.SelfID;
         if (TSelf::IsEnabled()) {
-            context.Send(MakeServiceId(selfId.NodeId()), new NEvents::TEvExternal::TEvStartTask(processId, groupId, tasks, stageIdx));
+            context.Send(MakeServiceId(selfId.NodeId()), new NEvents::TEvExternal::TEvStartTask(processId, scopeId, groupId, tasks, stageIdx));
             return true;
         } else {
             for (auto&& i : tasks) {
                 if (!i->IsAllocated()) {
-                    AFL_VERIFY(i->OnAllocated(std::make_shared<TAllocationGuard>(0, 0, NActors::TActorId(), i->GetMemory()), i));
+                    AFL_VERIFY(i->OnAllocated(std::make_shared<TAllocationGuard>(0, 0, 0, NActors::TActorId(), i->GetMemory()), i));
                 }
             }
             return false;

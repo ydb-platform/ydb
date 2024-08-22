@@ -177,6 +177,8 @@ struct TAggregateDesc {
     ui32 DeserializeFuncId = 0;
     TString InitValue;
     bool FinalExtra = false;
+    ui32 NumDirectArgs = 0;
+    ui32 ExtensionIndex = 0;
 };
 
 enum class EAmType {
@@ -202,12 +204,19 @@ enum class EOpClassMethod {
     Hash
 };
 
+struct TOpFamilyDesc {
+    TString Name;
+    ui32 FamilyId = 0;
+    ui32 ExtensionIndex = 0;
+};
+
 struct TOpClassDesc {
     EOpClassMethod Method = EOpClassMethod::Btree;
     ui32 TypeId = 0;
     TString Name;
     TString Family;
     ui32 FamilyId = 0;
+    ui32 ExtensionIndex = 0;
 };
 
 struct TAmOpDesc {
@@ -217,6 +226,7 @@ struct TAmOpDesc {
     ui32 LeftType = 0;
     ui32 RightType = 0;
     ui32 OperId = 0;
+    ui32 ExtensionIndex = 0;
 };
 
 enum class EBtreeAmStrategy {
@@ -234,6 +244,7 @@ struct TAmProcDesc {
     ui32 LeftType = 0;
     ui32 RightType = 0;
     ui32 ProcId = 0;
+    ui32 ExtensionIndex = 0;
 };
 
 enum class EBtreeAmProcNum {
@@ -384,6 +395,7 @@ struct TExtensionDesc {
     TString LibraryPath;        // file path
     bool TypesOnly = false;     // Can't be loaded if true
     TString LibraryMD5;         // optional
+    TString Version;            // version of extension
 };
 
 class IExtensionSqlBuilder {
@@ -406,6 +418,10 @@ public:
     virtual void PrepareOper(ui32 extensionIndex, const TString& name, const TVector<ui32>& args) = 0;
 
     virtual void UpdateOper(const TOperDesc& desc) = 0;
+
+    virtual void CreateAggregate(const TAggregateDesc& desc) = 0;
+
+    virtual void CreateOpClass(const TOpClassDesc& opclass, const TVector<TAmOpDesc>& ops, const TVector<TAmProcDesc>& procs) = 0;
 };
 
 class IExtensionSqlParser {

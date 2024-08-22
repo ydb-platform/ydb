@@ -77,6 +77,55 @@ message TPgOper {
     optional uint32 NegateId = 10;
 }
 
+message TPgAggregation {
+    optional uint32 AggId = 1;
+    optional string Name = 2;
+    optional uint32 ExtensionIndex = 3;
+    repeated uint32 ArgType = 4;
+    optional uint32 Kind = 5;
+    optional uint32 TransTypeId = 6;
+    optional uint32 TransFuncId = 7;
+    optional uint32 FinalFuncId = 8;
+    optional uint32 CombineFuncId = 9;
+    optional uint32 SerializeFuncId = 10;
+    optional uint32 DeserializeFuncId = 11;
+    optional string InitValue = 12;
+    optional bool FinalExtra = 13;
+    optional uint32 NumDirectArgs = 14;
+}
+
+message TPgOpClassFamily {
+    optional uint32 FamilyId = 1;
+    optional string Name = 2;
+    optional uint32 ExtensionIndex = 3;
+}
+
+message TPgOpClass {
+    optional uint32 Method = 1;
+    optional uint32 TypeId = 2;
+    optional uint32 ExtensionIndex = 3;
+    optional string Name = 4;
+    optional uint32 FamilyId = 5;
+}
+
+message TPgAmOp {
+    optional uint32 FamilyId = 1;
+    optional uint32 Strategy = 2;
+    optional uint32 LeftType = 3;
+    optional uint32 RightType = 4;
+    optional uint32 OperId = 5;
+    optional uint32 ExtensionIndex = 6;
+}
+
+message TPgAmProc {
+    optional uint32 FamilyId = 1;
+    optional uint32 ProcNum = 2;
+    optional uint32 LeftType = 3;
+    optional uint32 RightType = 4;
+    optional uint32 ProcId = 5;
+    optional uint32 ExtensionIndex = 6;
+}
+
 message TPgCatalog {
     repeated TPgExtension Extension = 1;
     repeated TPgType Type = 2;
@@ -84,4 +133,9 @@ message TPgCatalog {
     repeated TPgTable Table = 4;
     repeated TPgCast Cast = 5;
     repeated TPgOper Oper = 6;
+    repeated TPgAggregation Aggregation = 7;
+    repeated TPgOpClassFamily OpClassFamily = 8;
+    repeated TPgOpClass OpClass = 9;
+    repeated TPgAmOp AmOp = 10;
+    repeated TPgAmProc AmProc = 11;
 }

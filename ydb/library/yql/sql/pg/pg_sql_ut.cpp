@@ -902,4 +902,204 @@ Y_UNIT_TEST_SUITE(PgExtensions) {
         NPg::ImportExtensions(exported, true, nullptr);
         validate();
     }
+
+    Y_UNIT_TEST(Aggregates) {
+        NPg::ClearExtensions();
+        if (NPg::AreAllFunctionsAllowed()) {
+            return;
+        }
+
+        NPg::TExtensionDesc desc;
+        TTempFileHandle h;
+        TStringBuf sql = R"(
+            CREATE TYPE foo (
+                alignment = double,
+                internallength = variable
+            );
+
+            CREATE OR REPLACE FUNCTION foo_agg_trans(internal, foo)
+                RETURNS internal
+                AS '$libdir/MyExt','foo_agg_trans'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE OR REPLACE FUNCTION foo_agg_final(internal)
+                RETURNS foo
+                AS '$libdir/MyExt','foo_agg_final'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE OR REPLACE FUNCTION foo_agg_combine(internal, internal)
+                RETURNS internal
+                AS '$libdir/MyExt','foo_agg_combine'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE OR REPLACE FUNCTION foo_agg_serial(internal)
+                RETURNS bytea
+                AS '$libdir/MyExt','foo_agg_serial'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE OR REPLACE FUNCTION foo_agg_deserial(bytea, internal)
+                RETURNS internal
+                AS '$libdir/MyExt','foo_agg_deserial'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE AGGREGATE foo_agg(foo) (
+                sfunc = foo_agg_trans,
+                stype = internal,
+                serialfunc = foo_agg_serial,
+                deserialfunc = foo_agg_deserial,
+                combinefunc = foo_agg_combine,
+                finalfunc = foo_agg_final
+            );
+        )";
+
+        h.Write(sql.Data(), sql.Size());
+        desc.Name = "MyExt";
+        desc.InstallName = "$libdir/MyExt";
+        desc.SqlPaths.push_back(h.Name());
+        NPg::RegisterExtensions({desc}, true, *NSQLTranslationPG::CreateExtensionSqlParser(), nullptr);
+        auto validate = [&]() {
+            auto typeId = NPg::LookupType("foo").TypeId;
+            auto internalTypeId = NPg::LookupType("internal").TypeId;
+            auto byteaTypeId = NPg::LookupType("bytea").TypeId;
+            const auto& desc = NPg::LookupAggregation("foo_agg", { typeId });
+            UNIT_ASSERT_VALUES_EQUAL(desc.Name, "foo_agg");
+            UNIT_ASSERT_VALUES_EQUAL(desc.ArgTypes, TVector<ui32>{typeId});
+            UNIT_ASSERT_VALUES_EQUAL(desc.TransTypeId, internalTypeId);
+            UNIT_ASSERT_VALUES_EQUAL(desc.TransFuncId, NPg::LookupProc("foo_agg_trans", {internalTypeId, typeId}).ProcId);
+            UNIT_ASSERT_VALUES_EQUAL(desc.FinalFuncId, NPg::LookupProc("foo_agg_final", {internalTypeId}).ProcId);
+            UNIT_ASSERT_VALUES_EQUAL(desc.SerializeFuncId, NPg::LookupProc("foo_agg_serial", {internalTypeId}).ProcId);
+            UNIT_ASSERT_VALUES_EQUAL(desc.DeserializeFuncId, NPg::LookupProc("foo_agg_deserial", {byteaTypeId, internalTypeId}).ProcId);
+            UNIT_ASSERT_VALUES_EQUAL(desc.CombineFuncId, NPg::LookupProc("foo_agg_combine", {internalTypeId, internalTypeId}).ProcId);
+        };
+
+        validate();
+        auto exported = NPg::ExportExtensions();
+        NPg::ClearExtensions();
+        NPg::ImportExtensions(exported, true, nullptr);
+        validate();
+    }
+
+    Y_UNIT_TEST(OpClasses) {
+        NPg::ClearExtensions();
+        if (NPg::AreAllFunctionsAllowed()) {
+            return;
+        }
+
+        NPg::TExtensionDesc desc;
+        TTempFileHandle h;
+        TStringBuf sql = R"(
+            CREATE TYPE foo (
+                alignment = double,
+                internallength = variable
+            );
+
+            CREATE OR REPLACE FUNCTION foo_lt(foo, foo)
+                RETURNS bool
+                AS '$libdir/MyExt','foo_lt'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE OR REPLACE FUNCTION foo_le(foo, foo)
+                RETURNS bool
+                AS '$libdir/MyExt','foo_le'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE OR REPLACE FUNCTION foo_gt(foo, foo)
+                RETURNS bool
+                AS '$libdir/MyExt','foo_gt'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE OR REPLACE FUNCTION foo_ge(foo, foo)
+                RETURNS bool
+                AS '$libdir/MyExt','foo_ge'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE OR REPLACE FUNCTION foo_eq(foo, foo)
+                RETURNS bool
+                AS '$libdir/MyExt','foo_eq'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE OR REPLACE FUNCTION foo_cmp(foo, foo)
+                RETURNS interger
+                AS '$libdir/MyExt','foo_cmp'
+                LANGUAGE 'c' IMMUTABLE STRICT PARALLEL SAFE;
+
+            CREATE OPERATOR < (
+                LEFTARG = foo, RIGHTARG = foo, PROCEDURE = foo_lt,
+                COMMUTATOR = '>', NEGATOR = '>='
+            );
+
+            CREATE OPERATOR <= (
+                LEFTARG = foo, RIGHTARG = foo, PROCEDURE = foo_le,
+                COMMUTATOR = '>=', NEGATOR = '>'
+            );
+
+            CREATE OPERATOR > (
+                LEFTARG = foo, RIGHTARG = foo, PROCEDURE = foo_gt,
+                COMMUTATOR = '<', NEGATOR = '<='
+            );
+
+            CREATE OPERATOR >= (
+                LEFTARG = foo, RIGHTARG = foo, PROCEDURE = foo_ge,
+                COMMUTATOR = '<=', NEGATOR = '<'
+            );
+
+            CREATE OPERATOR = (
+                LEFTARG = foo, RIGHTARG = foo, PROCEDURE = foo_eq
+            );
+
+            CREATE OPERATOR CLASS btree_foo_ops
+                DEFAULT FOR TYPE foo USING btree AS
+                OPERATOR    1   < ,
+                OPERATOR    2   <= ,
+                OPERATOR    3   = ,
+                OPERATOR    4   >= ,
+                OPERATOR    5   > ,
+                FUNCTION    1   foo_cmp (foo1 foo, foo2 foo);
+
+            CREATE OR REPLACE FUNCTION foo_hash(foo)
+                RETURNS integer
+                AS '$libdir/MyExt','foo_hash'
+                LANGUAGE 'c' STRICT IMMUTABLE PARALLEL SAFE;
+
+            CREATE OPERATOR CLASS hash_foo_ops
+                DEFAULT FOR TYPE foo USING hash AS
+                OPERATOR    1   = ,
+                FUNCTION    1   foo_hash(foo);
+        )";
+
+        h.Write(sql.Data(), sql.Size());
+        desc.Name = "MyExt";
+        desc.InstallName = "$libdir/MyExt";
+        desc.SqlPaths.push_back(h.Name());
+        NPg::RegisterExtensions({desc}, true, *NSQLTranslationPG::CreateExtensionSqlParser(), nullptr);
+        auto validate = [&]() {
+            const auto& typeDesc = NPg::LookupType("foo");
+            auto typeId = typeDesc.TypeId;
+            TVector<ui32> args { typeId, typeId };
+            UNIT_ASSERT_VALUES_EQUAL(typeDesc.CompareProcId, NPg::LookupProc("foo_cmp", args).ProcId);
+            UNIT_ASSERT_VALUES_EQUAL(typeDesc.LessProcId, NPg::LookupProc("foo_lt", args).ProcId);
+            UNIT_ASSERT_VALUES_EQUAL(typeDesc.EqualProcId, NPg::LookupProc("foo_eq", args).ProcId);
+            UNIT_ASSERT_VALUES_EQUAL(typeDesc.HashProcId, NPg::LookupProc("foo_hash", {typeId}).ProcId);
+
+            const auto& opClassBtree = *NPg::LookupDefaultOpClass(NPg::EOpClassMethod::Btree, typeId);
+            UNIT_ASSERT_VALUES_EQUAL(opClassBtree.Name, "btree_foo_ops");
+            UNIT_ASSERT_VALUES_EQUAL(opClassBtree.Family, "btree/btree_foo_ops");
+            UNIT_ASSERT_VALUES_EQUAL(NPg::LookupAmOp(opClassBtree.FamilyId, (ui32)NPg::EBtreeAmStrategy::Less, typeId, typeId).OperId,
+                NPg::LookupOper("<", args).OperId);
+            UNIT_ASSERT_VALUES_EQUAL(NPg::LookupAmProc(opClassBtree.FamilyId, (ui32)NPg::EBtreeAmProcNum::Compare, typeId, typeId).ProcId,
+                NPg::LookupProc("foo_cmp", args).ProcId);
+
+            const auto& opClassHash = *NPg::LookupDefaultOpClass(NPg::EOpClassMethod::Hash, typeId);
+            UNIT_ASSERT_VALUES_EQUAL(opClassHash.Name, "hash_foo_ops");
+            UNIT_ASSERT_VALUES_EQUAL(opClassHash.Family, "hash/hash_foo_ops");
+            UNIT_ASSERT_VALUES_EQUAL(NPg::LookupAmProc(opClassHash.FamilyId, (ui32)NPg::EHashAmProcNum::Hash, typeId, typeId).ProcId,
+                NPg::LookupProc("foo_hash", {typeId}).ProcId);
+        };
+
+        validate();
+        auto exported = NPg::ExportExtensions();
+        NPg::ClearExtensions();
+        NPg::ImportExtensions(exported, true, nullptr);
+        validate();
+    }
 }

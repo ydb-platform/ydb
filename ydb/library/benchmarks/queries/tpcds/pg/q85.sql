@@ -25,7 +25,7 @@ select  substr(r_reason_desc,1,20) reason
      and
      cd1.cd_education_status = cd2.cd_education_status
      and
-     ws_sales_price between 100.00 and 150.00
+     ws_sales_price between 100.00::numeric and 150.00::numeric
     )
    or
     (
@@ -37,7 +37,7 @@ select  substr(r_reason_desc,1,20) reason
      and
      cd1.cd_education_status = cd2.cd_education_status
      and
-     ws_sales_price between 50.00 and 100.00
+     ws_sales_price between 50.00::numeric and 100.00::numeric
     )
    or
     (
@@ -49,7 +49,7 @@ select  substr(r_reason_desc,1,20) reason
      and
      cd1.cd_education_status = cd2.cd_education_status
      and
-     ws_sales_price between 150.00 and 200.00
+     ws_sales_price between 150.00::numeric and 200.00::numeric
     )
    )
    and
@@ -58,21 +58,21 @@ select  substr(r_reason_desc,1,20) reason
      ca_country = 'United States'
      and
      ca_state in ('TX', 'VA', 'CA')
-     and ws_net_profit between 100 and 200
+     and ws_net_profit between 100::numeric and 200::numeric
     )
     or
     (
      ca_country = 'United States'
      and
      ca_state in ('AR', 'NE', 'MO')
-     and ws_net_profit between 150 and 300
+     and ws_net_profit between 150::numeric and 300::numeric
     )
     or
     (
      ca_country = 'United States'
      and
      ca_state in ('IA', 'MS', 'WA')
-     and ws_net_profit between 50 and 250
+     and ws_net_profit between 50::numeric and 250::numeric
     )
    )
 group by r_reason_desc

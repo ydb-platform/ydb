@@ -23,7 +23,7 @@ message TTableServiceConfig {
         optional uint32 ComputeActorsCount = 1 [default = 10000];
         optional uint64 ChannelBufferSize = 2 [default = 8388608];              //  8 MB
         reserved 3;
-        optional uint64 MkqlLightProgramMemoryLimit = 4 [default = 524288];   // 512 KB
+        optional uint64 MkqlLightProgramMemoryLimit = 4 [default = 1048576];   // 1 MiB
         optional uint64 MkqlHeavyProgramMemoryLimit = 5 [default = 31457280];   // 30 MB
         optional uint64 QueryMemoryLimit = 6 [default = 32212254720];           // 30 GB
         optional uint32 PublishStatisticsIntervalSec = 7 [default = 2];
@@ -43,6 +43,9 @@ message TTableServiceConfig {
         optional uint64 KqpPatternCachePatternAccessTimesBeforeTryToCompile = 20 [default = 5];
         optional uint64 KqpPatternCacheCompiledCapacityBytes = 21 [default = 104857600]; // 100 MiB
         optional double SpillingPercent = 22 [default = 80]; // 100 MiB
+
+        optional uint64 MinMemAllocSize = 23 [default = 8388608]; // 8 MiB
+        optional uint64 MinMemFreeSize = 24  [default = 33554432]; // 32 MiB
     }
 
     message TSpillingServiceConfig {

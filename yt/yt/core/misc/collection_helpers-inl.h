@@ -319,7 +319,7 @@ std::vector<std::pair<typename T::key_type, typename T::mapped_type>> SortHashMa
 template <class T>
 void EnsureVectorSize(std::vector<T>& vector, ssize_t size, const T& defaultValue)
 {
-    if (static_cast<ssize_t>(vector.size()) < size) {
+    if (std::ssize(vector) < size) {
         vector.resize(size, defaultValue);
     }
 }
@@ -347,7 +347,7 @@ void AssignVectorAt(std::vector<T>& vector, ssize_t index, T&& value, const T& d
 template <class T>
 const T& VectorAtOr(const std::vector<T>& vector, ssize_t index, const T& defaultValue)
 {
-    return index < static_cast<ssize_t>(vector.size()) ? vector[index] : defaultValue;
+    return index < std::ssize(vector) ? vector[index] : defaultValue;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

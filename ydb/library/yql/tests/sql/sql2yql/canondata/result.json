@@ -1868,6 +1868,13 @@
             "uri": "https://{canondata_backend}/1942415/e6af6d354a98ef890e03fc9f0ff5926afc11a26b/resource.tar.gz#test_sql2yql.test_aggregate-dedup_state_keys_/sql.yql"
         }
     ],
+    "test_sql2yql.test[aggregate-disable_blocks_with_spilling]": [
+        {
+            "checksum": "e1c9df055ae7de78e0d0364ec949dec4",
+            "size": 1398,
+            "uri": "https://{canondata_backend}/1936947/cdbc6e86b3a08f513dc20af9f537f10f6b930f5d/resource.tar.gz#test_sql2yql.test_aggregate-disable_blocks_with_spilling_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[aggregate-ensure_count]": [
         {
             "checksum": "680e664bf810c0f13951de38d3cf94f7",
@@ -11199,6 +11206,13 @@
             "uri": "https://{canondata_backend}/1936273/49c67b7d7a39200caa18261ed9d1bc5db8f0665a/resource.tar.gz#test_sql2yql.test_optimizers-yql-18408_filter_multiusage_pushdown_/sql.yql"
         }
     ],
+    "test_sql2yql.test[optimizers-yql-18733_no_filter_multiusage_pushdown]": [
+        {
+            "checksum": "b2f87a348272c18d0ae93bf3f421b79c",
+            "size": 2300,
+            "uri": "https://{canondata_backend}/1942671/a0a38df298ba29d07b694136c15631b91a455b2b/resource.tar.gz#test_sql2yql.test_optimizers-yql-18733_no_filter_multiusage_pushdown_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[optimizers-yql-2171_aggregate_desc_sort_and_extract]": [
         {
             "checksum": "e46724f353c724da2d05f34ac86ebc12",
@@ -15320,6 +15334,13 @@
             "checksum": "3018a4021877e20dffa3f960e4361ea2",
             "size": 1370,
             "uri": "https://{canondata_backend}/1784117/d56ae82ad9d30397a41490647be1bd2124718f98/resource.tar.gz#test_sql2yql.test_produce-discard_reduce_lambda_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[produce-fuse_reduces_with_presort]": [
+        {
+            "checksum": "e379da7ed6a051092b9b7125ec129f09",
+            "size": 11861,
+            "uri": "https://{canondata_backend}/1923547/a000f225caa0fe7476a3e0c0740662cd5bbe1d5e/resource.tar.gz#test_sql2yql.test_produce-fuse_reduces_with_presort_/sql.yql"
         }
     ],
     "test_sql2yql.test[produce-native_desc_reduce_with_presort]": [
@@ -21340,6 +21361,13 @@
             "checksum": "4b4a9b89e4b304ddd157387ad3f24ad3",
             "size": 132,
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_aggregate-dedup_state_keys_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[aggregate-disable_blocks_with_spilling]": [
+        {
+            "checksum": "ed1c0334420d2ec08b8ccc4020e4fb6b",
+            "size": 88,
+            "uri": "https://{canondata_backend}/1920236/3d99d8b2ede4d290229a75d3c17d5a932a859473/resource.tar.gz#test_sql_format.test_aggregate-disable_blocks_with_spilling_/formatted.sql"
         }
     ],
     "test_sql_format.test[aggregate-ensure_count]": [
@@ -30673,6 +30701,13 @@
             "uri": "https://{canondata_backend}/1936273/49c67b7d7a39200caa18261ed9d1bc5db8f0665a/resource.tar.gz#test_sql_format.test_optimizers-yql-18408_filter_multiusage_pushdown_/formatted.sql"
         }
     ],
+    "test_sql_format.test[optimizers-yql-18733_no_filter_multiusage_pushdown]": [
+        {
+            "checksum": "a776d7acfad71c3c81e59cbd969fd103",
+            "size": 207,
+            "uri": "https://{canondata_backend}/1942671/a0a38df298ba29d07b694136c15631b91a455b2b/resource.tar.gz#test_sql_format.test_optimizers-yql-18733_no_filter_multiusage_pushdown_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[optimizers-yql-2171_aggregate_desc_sort_and_extract]": [
         {
             "checksum": "ea7ad8b12dbf78644e2a7ac94e10159b",
@@ -31658,6 +31693,13 @@
             "checksum": "0dde63554657e02dccd32ffac47a0895",
             "size": 321,
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_produce-discard_reduce_lambda_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[produce-fuse_reduces_with_presort]": [
+        {
+            "checksum": "8f8335d2d11bff52392da6cc36645c55",
+            "size": 1636,
+            "uri": "https://{canondata_backend}/1923547/a000f225caa0fe7476a3e0c0740662cd5bbe1d5e/resource.tar.gz#test_sql_format.test_produce-fuse_reduces_with_presort_/formatted.sql"
         }
     ],
     "test_sql_format.test[produce-native_desc_reduce_with_presort]": [

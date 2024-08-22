@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(TraverseDatashard) {
         runtime.SimulateSleep(TDuration::Seconds(60));
 
         auto pathId = ResolvePathId(runtime, "/Root/Database/Table");
-        ValidateCountMin(runtime, pathId);
+        ValidateCountMinDatashard(runtime, pathId);
     }
 
     Y_UNIT_TEST(TraverseTwoTables) {
@@ -54,8 +54,8 @@ Y_UNIT_TEST_SUITE(TraverseDatashard) {
 
         auto pathId1 = ResolvePathId(runtime, "/Root/Database/Table1");
         auto pathId2 = ResolvePathId(runtime, "/Root/Database/Table2");
-        ValidateCountMin(runtime, pathId1);
-        ValidateCountMin(runtime, pathId2);
+        ValidateCountMinDatashard(runtime, pathId1);
+        ValidateCountMinDatashard(runtime, pathId2);
     }    
 
     Y_UNIT_TEST(TraverseOneTableServerless) {
@@ -85,7 +85,7 @@ Y_UNIT_TEST_SUITE(TraverseDatashard) {
         runtime.SimulateSleep(TDuration::Seconds(60));
 
         auto pathId = ResolvePathId(runtime, "/Root/Serverless/Table");
-        ValidateCountMin(runtime, pathId);
+        ValidateCountMinDatashard(runtime, pathId);
     }
 
     Y_UNIT_TEST(TraverseTwoTablesServerless) {
@@ -117,8 +117,8 @@ Y_UNIT_TEST_SUITE(TraverseDatashard) {
 
         auto pathId1 = ResolvePathId(runtime, "/Root/Serverless/Table1");
         auto pathId2 = ResolvePathId(runtime, "/Root/Serverless/Table2");
-        ValidateCountMin(runtime, pathId1);
-        ValidateCountMin(runtime, pathId2);
+        ValidateCountMinDatashard(runtime, pathId1);
+        ValidateCountMinDatashard(runtime, pathId2);
     }
 
     Y_UNIT_TEST(TraverseTwoTablesTwoServerlessDbs) {
@@ -151,8 +151,8 @@ Y_UNIT_TEST_SUITE(TraverseDatashard) {
 
         auto pathId1 = ResolvePathId(runtime, "/Root/Serverless1/Table1");
         auto pathId2 = ResolvePathId(runtime, "/Root/Serverless2/Table2");
-        ValidateCountMin(runtime, pathId1);
-        ValidateCountMin(runtime, pathId2);
+        ValidateCountMinDatashard(runtime, pathId1);
+        ValidateCountMinDatashard(runtime, pathId2);
     }
 
 }

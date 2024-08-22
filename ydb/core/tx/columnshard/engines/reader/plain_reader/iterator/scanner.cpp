@@ -38,11 +38,11 @@ void TScanHead::OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocat
         auto it = ReadyIntervals.find(intervalIdx);
         if (it == ReadyIntervals.end()) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "interval_result_absent")("interval_idx", intervalIdx)(
-                "merger", interval->HasMerger())("intervalId", interval->GetIntervalId());
+                "merger", interval->HasMerger())("interval_id", interval->GetIntervalId());
             break;
         } else {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "interval_result")("interval_idx", intervalIdx)("count",
-                it->second ? it->second->GetRecordsCount() : 0)("merger", interval->HasMerger())("intervalId", interval->GetIntervalId());
+                it->second ? it->second->GetRecordsCount() : 0)("merger", interval->HasMerger())("interval_id", interval->GetIntervalId());
         }
         auto result = it->second;
         ReadyIntervals.erase(it);

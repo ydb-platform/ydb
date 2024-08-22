@@ -22,6 +22,7 @@ TTabletInfo::TTabletInfo(ETabletRole role, THive& hive)
     , ResourceMetricsAggregates(Hive.GetDefaultResourceMetricsAggregates())
     , Weight(0)
     , BalancerPolicy(EBalancerPolicy::POLICY_BALANCE)
+    , NodeFilter(hive)
 {}
 
 const TLeaderTabletInfo& TTabletInfo::GetLeader() const {
@@ -492,11 +493,7 @@ void TTabletInfo::ActualizeCounter() {
 }
 
 const TNodeFilter& TTabletInfo::GetNodeFilter() const {
-    if (IsLeader()) {
-        return AsLeader().NodeFilter;
-    } else {
-        return AsFollower().FollowerGroup.NodeFilter;
-    }
+    return NodeFilter;
 }
 
 bool TTabletInfo::InitiateStart(TNodeInfo* node) {

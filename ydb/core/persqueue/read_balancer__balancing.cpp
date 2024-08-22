@@ -341,7 +341,7 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
     }
 
     auto [activePartitionCount, inactivePartitionCount] = ClassifyPartitions(newPartitions);
-    ChangePartitionCounters(activePartitionCount, activePartitionCount);
+    ChangePartitionCounters(activePartitionCount, inactivePartitionCount);
 
     if (IsActive()) {
         if (!Session->AllPartitionsReadable(newPartitions)) {
@@ -391,7 +391,7 @@ void TPartitionFamily::InactivatePartition(ui32 partitionId) {
     ActivePartitionCount += active;
     InactivePartitionCount += inactive;
 
-    if (IsActive()) {
+    if (IsActive() && Session) {
         Session->ActivePartitionCount += active;
         Session->InactivePartitionCount += inactive;
     }
@@ -709,13 +709,13 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
                 }
 
                 std::vector<ui32> members;
-
                 GetPartitionGraph().Travers(id, [&](auto childId) {
                     if (partitions.contains(childId)) {
-                        members.push_back(childId);
                         auto [_, i] = processedPartitions.insert(childId);
                         if (!i) {
                             familiesIntersect = true;
+                        } else {
+                            members.push_back(childId);
                         }
 
                         return true;
@@ -723,16 +723,25 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
                     return false;
                 });
 
-                auto* f = CreateFamily({id}, family->Status, ctx);
-                f->Partitions.insert(f->Partitions.end(), members.begin(), members.end());
+                bool locked = family->Session && (family->LockedPartitions.contains(id) ||
+                        std::any_of(members.begin(), members.end(), [family](auto id) { return family->LockedPartitions.contains(id); }));
+                auto* f = CreateFamily({id}, locked ? family->Status : TPartitionFamily::EStatus::Free, ctx);
                 f->TargetStatus = family->TargetStatus;
-                f->Session = family->Session;
-                f->LockedPartitions = Intercept(family->LockedPartitions, f->Partitions);
+                f->Partitions.insert(f->Partitions.end(), members.begin(), members.end());
                 f->LastPipe = family->LastPipe;
-                if (f->Session) {
+                f->UpdatePartitionMapping(f->Partitions);
+                f->ClassifyPartitions();
+                if (locked) {
+                    f->LockedPartitions = Intercept(family->LockedPartitions, f->Partitions);
+
+                    f->Session = family->Session;
                     f->Session->Families.try_emplace(f->Id, f);
+                    f->Session->ActivePartitionCount += f->ActivePartitionCount;
+                    f->Session->InactivePartitionCount += f->InactivePartitionCount;
                     if (f->IsActive()) {
                         ++f->Session->ActiveFamilyCount;
+                    } else if (f->IsRelesing()) {
+                        ++f->Session->ReleasingFamilyCount;
                     }
                 }
 
@@ -1299,7 +1308,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
                 }
             }
 
-            if (session->ActiveFamilyCount > desiredFamilyCount) {
+            if (allowPlusOne && session->ActiveFamilyCount > desiredFamilyCount) {
                 --allowPlusOne;
             }
         }

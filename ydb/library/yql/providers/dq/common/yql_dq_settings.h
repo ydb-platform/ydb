@@ -28,12 +28,6 @@ struct TDqSettings {
         File        /* "file" */,
     };
 
-    enum class EEnabledSpillingNodes : ui64 {
-        None        = 0ULL      /* None */,
-        GraceJoin   = 1ULL      /* "GraceJoin" */,
-        All         = ~0ULL     /* "All" */,
-    };
-
     struct TDefault {
         static constexpr ui32 MaxTasksPerStage = 20U;
         static constexpr ui32 MaxTasksPerOperation = 70U;

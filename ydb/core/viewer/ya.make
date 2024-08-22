@@ -4,8 +4,10 @@ RECURSE_FOR_TESTS(
 
 LIBRARY()
 
+IF(NOT OS_WINDOWS)
 IF(BUILD_TYPE == RELEASE OR BUILD_TYPE == RELWITHDEBINFO)
     CXXFLAGS(-Oz)
+ENDIF()
 ENDIF()
 
 SRCS(
@@ -62,6 +64,7 @@ SRCS(
     viewer_describe_consumer.h
     viewer_describe.h
     viewer_describe_topic.h
+    viewer_feature_flags.h
     viewer_graph.h
     viewer_healthcheck.h
     viewer_helper.h

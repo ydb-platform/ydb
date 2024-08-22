@@ -12,7 +12,7 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
     TTxFinishTraversal(TSelf* self)
         : TTxBase(self)
         , OperationId(self->ForceTraversalOperationId)
-        , PathId(self->TraversalTableId.PathId)
+        , PathId(self->TraversalPathId)
     {
         auto forceTraversal = Self->CurrentForceTraversalOperation();
         if (forceTraversal) {

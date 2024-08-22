@@ -59,9 +59,7 @@ using TAms = THashMap<ui32, TAmDesc>;
 
 using TNamespaces = THashMap<decltype(TNamespaceDesc::Oid), TNamespaceDesc>;
 
-// We parse OpFamilies' IDs for now. If we ever needed oid_symbol,
-// create TOpFamilyDesc class alike other catalogs
-using TOpFamilies = THashMap<TString, ui32>;
+using TOpFamilies = THashMap<TString, TOpFamilyDesc>;
 
 using TOpClasses = THashMap<std::pair<EOpClassMethod, ui32>, TOpClassDesc>;
 
@@ -883,6 +881,8 @@ public:
             LastAggregation.InitValue = value;
         } else if (key == "aggfinalextra") {
             LastAggregation.FinalExtra = (value == "t");;
+        } else if (key == "aggnumdirectargs") {
+            LastAggregation.NumDirectArgs = FromString<ui32>(value);
         }
     }
 
@@ -1071,10 +1071,11 @@ public:
         if (IsSupported) {
             Y_ENSURE(LastOpfId != InvalidOid);
 
-            // TODO: log or throw if dict keys aren't unique
             // opfamily references have opf_method/opf_name format in PG catalogs
-            OpFamilies[LastOpfMethod.append('/').append(
-                    LastOpfName)] = LastOpfId; // LastOpfMethod is modified here. Use with caution till its reinit
+            TOpFamilyDesc desc;
+            desc.Name = LastOpfMethod + "/" + LastOpfName;
+            desc.FamilyId = LastOpfId;
+            Y_ENSURE(OpFamilies.emplace(desc.Name, desc).second);
         }
 
         IsSupported = true;
@@ -1122,7 +1123,7 @@ public:
             auto opFamilyPtr = OpFamilies.FindPtr(value);
 
             if (opFamilyPtr) {
-                LastOpClass.FamilyId = *opFamilyPtr;
+                LastOpClass.FamilyId = opFamilyPtr->FamilyId;
             } else {
                 IsSupported = false;
             }
@@ -1179,7 +1180,7 @@ public:
             LastAmOp.Family = value;
             auto opFamilyPtr = OpFamilies.FindPtr(value);
             if (opFamilyPtr) {
-                LastAmOp.FamilyId = *opFamilyPtr;
+                LastAmOp.FamilyId = opFamilyPtr->FamilyId;
             } else {
                 IsSupported = false;
             }
@@ -1290,7 +1291,7 @@ public:
             auto opFamilyPtr = OpFamilies.FindPtr(value);
 
             if (opFamilyPtr) {
-                LastAmProc.FamilyId = *opFamilyPtr;
+                LastAmProc.FamilyId = opFamilyPtr->FamilyId;
             } else {
                 IsSupported = false;
             }
@@ -1841,10 +1842,10 @@ struct TCatalog : public IExtensionSqlBuilder {
             State->AggregationsByName[v.Name].push_back(k);
         }
 
-        TOpFamilies opFamilies = ParseOpFamilies(opFamiliesData);
-        State->OpClasses = ParseOpClasses(opClassData, State->TypeByName, opFamilies);
-        State->AmOps = ParseAmOps(amOpData, State->TypeByName, State->Types, State->OperatorsByName, State->Operators, opFamilies);
-        State->AmProcs = ParseAmProcs(amProcData, State->TypeByName, State->ProcByName, State->Procs, opFamilies);
+        State->OpFamilies = ParseOpFamilies(opFamiliesData);
+        State->OpClasses = ParseOpClasses(opClassData, State->TypeByName, State->OpFamilies);
+        State->AmOps = ParseAmOps(amOpData, State->TypeByName, State->Types, State->OperatorsByName, State->Operators, State->OpFamilies);
+        State->AmProcs = ParseAmProcs(amProcData, State->TypeByName, State->ProcByName, State->Procs, State->OpFamilies);
         State->Ams = ParseAms(amData);
         State->Namespaces = FillNamespaces();
         for (auto& [k, v] : State->Types) {
@@ -1853,30 +1854,8 @@ struct TCatalog : public IExtensionSqlBuilder {
                 if (regClasses.contains(lookupId)) {
                     lookupId = OidOid;
                 }
-                auto btreeOpClassPtr = State->OpClasses.FindPtr(std::make_pair(EOpClassMethod::Btree, lookupId));
-                if (btreeOpClassPtr) {
-                    auto lessAmOpPtr = State->AmOps.FindPtr(std::make_tuple(btreeOpClassPtr->FamilyId, ui32(EBtreeAmStrategy::Less), lookupId, lookupId));
-                    Y_ENSURE(lessAmOpPtr);
-                    auto equalAmOpPtr = State->AmOps.FindPtr(std::make_tuple(btreeOpClassPtr->FamilyId, ui32(EBtreeAmStrategy::Equal), lookupId, lookupId));
-                    Y_ENSURE(equalAmOpPtr);
-                    auto lessOperPtr = State->Operators.FindPtr(lessAmOpPtr->OperId);
-                    Y_ENSURE(lessOperPtr);
-                    auto equalOperPtr = State->Operators.FindPtr(equalAmOpPtr->OperId);
-                    Y_ENSURE(equalOperPtr);
-                    v.LessProcId = lessOperPtr->ProcId;
-                    v.EqualProcId = equalOperPtr->ProcId;
 
-                    auto compareAmProcPtr = State->AmProcs.FindPtr(std::make_tuple(btreeOpClassPtr->FamilyId, ui32(EBtreeAmProcNum::Compare), lookupId, lookupId));
-                    Y_ENSURE(compareAmProcPtr);
-                    v.CompareProcId = compareAmProcPtr->ProcId;
-                }
-
-                auto hashOpClassPtr = State->OpClasses.FindPtr(std::make_pair(EOpClassMethod::Hash, lookupId));
-                if (hashOpClassPtr) {
-                    auto hashAmProcPtr = State->AmProcs.FindPtr(std::make_tuple(hashOpClassPtr->FamilyId, ui32(EHashAmProcNum::Hash), lookupId, lookupId));
-                    Y_ENSURE(hashAmProcPtr);
-                    v.HashProcId = hashAmProcPtr->ProcId;
-                }
+                CacheAmFuncs(lookupId, v);
             }
         }
 
@@ -1951,6 +1930,33 @@ struct TCatalog : public IExtensionSqlBuilder {
         TString line = TStringBuilder() << "\"" << name << "\",\n";
         with_lock(ExportGuard) {
             ExportFile->Write(line.Data(), line.Size());
+        }
+    }
+
+    void CacheAmFuncs(ui32 typeId, TTypeDesc& v) {
+        auto btreeOpClassPtr = State->OpClasses.FindPtr(std::make_pair(EOpClassMethod::Btree, typeId));
+        if (btreeOpClassPtr) {
+            auto lessAmOpPtr = State->AmOps.FindPtr(std::make_tuple(btreeOpClassPtr->FamilyId, ui32(EBtreeAmStrategy::Less), typeId, typeId));
+            Y_ENSURE(lessAmOpPtr);
+            auto equalAmOpPtr = State->AmOps.FindPtr(std::make_tuple(btreeOpClassPtr->FamilyId, ui32(EBtreeAmStrategy::Equal), typeId, typeId));
+            Y_ENSURE(equalAmOpPtr);
+            auto lessOperPtr = State->Operators.FindPtr(lessAmOpPtr->OperId);
+            Y_ENSURE(lessOperPtr);
+            auto equalOperPtr = State->Operators.FindPtr(equalAmOpPtr->OperId);
+            Y_ENSURE(equalOperPtr);
+            v.LessProcId = lessOperPtr->ProcId;
+            v.EqualProcId = equalOperPtr->ProcId;
+
+            auto compareAmProcPtr = State->AmProcs.FindPtr(std::make_tuple(btreeOpClassPtr->FamilyId, ui32(EBtreeAmProcNum::Compare), typeId, typeId));
+            Y_ENSURE(compareAmProcPtr);
+            v.CompareProcId = compareAmProcPtr->ProcId;
+        }
+
+        auto hashOpClassPtr = State->OpClasses.FindPtr(std::make_pair(EOpClassMethod::Hash, typeId));
+        if (hashOpClassPtr) {
+            auto hashAmProcPtr = State->AmProcs.FindPtr(std::make_tuple(hashOpClassPtr->FamilyId, ui32(EHashAmProcNum::Hash), typeId, typeId));
+            Y_ENSURE(hashAmProcPtr);
+            v.HashProcId = hashAmProcPtr->ProcId;
         }
     }
 
@@ -2154,6 +2160,79 @@ struct TCatalog : public IExtensionSqlBuilder {
         State->AllowedProcs.insert(procPtr->Name);
     }
 
+    void CreateAggregate(const TAggregateDesc& desc) final {
+        Y_ENSURE(desc.ExtensionIndex);
+        auto id = 16000 + State->Aggregations.size();
+        auto newDesc = desc;
+        newDesc.Name = to_lower(newDesc.Name);
+        newDesc.AggId = id;
+        Y_ENSURE(State->Aggregations.emplace(id, newDesc).second);
+        State->AggregationsByName[newDesc.Name].push_back(id);
+        if (desc.CombineFuncId) {
+            State->AllowedProcs.insert(State->Procs.FindPtr(desc.CombineFuncId)->Name);
+        }
+
+        if (desc.DeserializeFuncId) {
+            State->AllowedProcs.insert(State->Procs.FindPtr(desc.DeserializeFuncId)->Name);
+        }
+
+        if (desc.SerializeFuncId) {
+            State->AllowedProcs.insert(State->Procs.FindPtr(desc.SerializeFuncId)->Name);
+        }
+
+        if (desc.FinalFuncId) {
+            State->AllowedProcs.insert(State->Procs.FindPtr(desc.FinalFuncId)->Name);
+        }
+
+        State->AllowedProcs.insert(State->Procs.FindPtr(desc.TransFuncId)->Name);
+    }
+
+    void CreateOpClass(const TOpClassDesc& opclass, const TVector<TAmOpDesc>& ops, const TVector<TAmProcDesc>& procs) final {
+        Y_ENSURE(opclass.ExtensionIndex);
+        auto newDesc = opclass;
+        newDesc.Family = to_lower(newDesc.Family);
+        newDesc.Name = to_lower(newDesc.Name);
+        auto newFamilyId = 16000 + State->OpFamilies.size();
+        TOpFamilyDesc opFamilyDesc;
+        opFamilyDesc.FamilyId = newFamilyId;
+        opFamilyDesc.Name = newDesc.Family;
+        opFamilyDesc.ExtensionIndex = opclass.ExtensionIndex;
+        Y_ENSURE(State->OpFamilies.emplace(newDesc.Family, opFamilyDesc).second);
+        newDesc.FamilyId = newFamilyId;
+        const auto key = std::make_pair(newDesc.Method, newDesc.TypeId);
+        Y_ENSURE(State->OpClasses.emplace(key, newDesc).second);
+        for (const auto& o : ops) {
+            Y_ENSURE(opclass.ExtensionIndex == o.ExtensionIndex);
+            Y_ENSURE(opclass.Family == o.Family);
+            auto newOpDesc = o;
+            newOpDesc.FamilyId = newFamilyId;
+            newOpDesc.Family = newDesc.Name;
+            Y_ENSURE(State->AmOps.emplace(std::make_tuple(newFamilyId, o.Strategy, o.LeftType, o.RightType), newOpDesc).second);
+            auto operPtr = State->Operators.FindPtr(o.OperId);
+            Y_ENSURE(operPtr);
+            auto procPtr = State->Procs.FindPtr(operPtr->ProcId);
+            Y_ENSURE(procPtr);
+            State->AllowedProcs.emplace(procPtr->Name);
+        }
+
+        for (const auto& p : procs) {
+            Y_ENSURE(opclass.ExtensionIndex == p.ExtensionIndex);
+            Y_ENSURE(opclass.Family == p.Family);
+            auto newProcDesc = p;
+            newProcDesc.FamilyId = newFamilyId;
+            newProcDesc.Family = newDesc.Name;
+            Y_ENSURE(State->AmProcs.emplace(std::make_tuple(newFamilyId, p.ProcNum, p.LeftType, p.RightType), newProcDesc).second);
+            auto procPtr = State->Procs.FindPtr(p.ProcId);
+            Y_ENSURE(procPtr);
+            State->AllowedProcs.emplace(procPtr->Name);
+        }
+
+        auto typePtr = State->Types.FindPtr(opclass.TypeId);
+        Y_ENSURE(typePtr);
+        Y_ENSURE(typePtr->ExtensionIndex == opclass.ExtensionIndex);
+        CacheAmFuncs(opclass.TypeId, *typePtr);
+    }
+
     static const TCatalog& Instance() {
         return *Singleton<TCatalog>();
     }
@@ -2173,6 +2252,7 @@ struct TCatalog : public IExtensionSqlBuilder {
         TAggregations Aggregations;
         TAms Ams;
         TNamespaces Namespaces;
+        TOpFamilies OpFamilies;
         TOpClasses OpClasses;
         TAmOps AmOps;
         TAmProcs AmProcs;
@@ -3778,6 +3858,120 @@ TString ExportExtensions(const TMaybe<TSet<ui32>>& filter) {
         protoOper->SetNegateId(desc.NegateId);
     }
 
+    TVector<ui32> extAggs;
+    for (const auto& a : catalog.State->Aggregations) {
+        const auto& desc = a.second;
+        if (!desc.ExtensionIndex) {
+            continue;
+        }
+
+        extAggs.push_back(a.first);
+    }
+
+    Sort(extAggs);
+    for (const auto a : extAggs) {
+        const auto& desc = *catalog.State->Aggregations.FindPtr(a);
+        auto protoAggregation = proto.AddAggregation();
+        protoAggregation->SetAggId(a);
+        protoAggregation->SetName(desc.Name);
+        protoAggregation->SetExtensionIndex(desc.ExtensionIndex);
+        for (const auto argType : desc.ArgTypes) {
+            protoAggregation->AddArgType(argType);
+        }
+
+        protoAggregation->SetKind((ui32)desc.Kind);
+        protoAggregation->SetTransTypeId(desc.TransTypeId);
+        protoAggregation->SetTransFuncId(desc.TransFuncId);
+        protoAggregation->SetFinalFuncId(desc.FinalFuncId);
+        protoAggregation->SetCombineFuncId(desc.CombineFuncId);
+        protoAggregation->SetSerializeFuncId(desc.SerializeFuncId);
+        protoAggregation->SetDeserializeFuncId(desc.DeserializeFuncId);
+        protoAggregation->SetInitValue(desc.InitValue);
+        protoAggregation->SetFinalExtra(desc.FinalExtra);
+        protoAggregation->SetNumDirectArgs(desc.NumDirectArgs);
+    }
+
+    TVector<TString> extOpFamilies;
+    for (const auto& f : catalog.State->OpFamilies) {
+        const auto& desc = f.second;
+        if (!desc.ExtensionIndex) {
+            continue;
+        }
+
+        extOpFamilies.push_back(f.first);
+    }
+
+    Sort(extOpFamilies);
+    for (const auto& f : extOpFamilies) {
+        const auto& desc = *catalog.State->OpFamilies.FindPtr(f);
+        auto protoOpClassFamily = proto.AddOpClassFamily();
+        protoOpClassFamily->SetFamilyId(desc.FamilyId);
+        protoOpClassFamily->SetName(desc.Name);
+        protoOpClassFamily->SetExtensionIndex(desc.ExtensionIndex);
+    }
+
+    TVector<std::pair<NPg::EOpClassMethod, ui32>> extOpClasses;
+    for (const auto& c : catalog.State->OpClasses) {
+        const auto& desc = c.second;
+        if (!desc.ExtensionIndex) {
+            continue;
+        }
+
+        extOpClasses.push_back(c.first);
+    }
+
+    for (const auto& c : extOpClasses) {
+        const auto& desc = *catalog.State->OpClasses.FindPtr(c);
+        auto protoOpClass = proto.AddOpClass();
+        protoOpClass->SetMethod((ui32)desc.Method);
+        protoOpClass->SetTypeId(desc.TypeId);
+        protoOpClass->SetExtensionIndex(desc.ExtensionIndex);
+        protoOpClass->SetName(desc.Name);
+        protoOpClass->SetFamilyId(desc.FamilyId);
+    }
+
+    TVector<std::tuple<ui32, ui32, ui32, ui32>> extAmOps;
+    for (const auto& o : catalog.State->AmOps) {
+        const auto& desc = o.second;
+        if (!desc.ExtensionIndex) {
+            continue;
+        }
+
+        extAmOps.push_back(o.first);
+    }
+
+    for (const auto& o : extAmOps) {
+        const auto& desc = *catalog.State->AmOps.FindPtr(o);
+        auto protoAmOp = proto.AddAmOp();
+        protoAmOp->SetFamilyId(desc.FamilyId);
+        protoAmOp->SetStrategy(desc.Strategy);
+        protoAmOp->SetLeftType(desc.LeftType);
+        protoAmOp->SetRightType(desc.RightType);
+        protoAmOp->SetOperId(desc.OperId);
+        protoAmOp->SetExtensionIndex(desc.ExtensionIndex);
+    }
+
+    TVector<std::tuple<ui32, ui32, ui32, ui32>> extAmProcs;
+    for (const auto& p : catalog.State->AmProcs) {
+        const auto& desc = p.second;
+        if (!desc.ExtensionIndex) {
+            continue;
+        }
+
+        extAmProcs.push_back(p.first);
+    }
+
+    for (const auto& p : extAmProcs) {
+        const auto& desc = *catalog.State->AmProcs.FindPtr(p);
+        auto protoAmProc = proto.AddAmProc();
+        protoAmProc->SetFamilyId(desc.FamilyId);
+        protoAmProc->SetProcNum(desc.ProcNum);
+        protoAmProc->SetLeftType(desc.LeftType);
+        protoAmProc->SetRightType(desc.RightType);
+        protoAmProc->SetProcId(desc.ProcId);
+        protoAmProc->SetExtensionIndex(desc.ExtensionIndex);
+    }
+
     return proto.SerializeAsString();
 }
 
@@ -3929,6 +4123,75 @@ void ImportExtensions(const TString& exported, bool typesOnly, IExtensionLoader*
             desc.NegateId = protoOper.GetNegateId();
             Y_ENSURE(catalog.State->Operators.emplace(desc.OperId, desc).second);
             catalog.State->OperatorsByName[desc.Name].push_back(desc.OperId);
+        }
+
+        for (const auto& protoAggregation : proto.GetAggregation()) {
+            TAggregateDesc desc;
+            desc.AggId = protoAggregation.GetAggId();
+            desc.Name = protoAggregation.GetName();
+            desc.ExtensionIndex = protoAggregation.GetExtensionIndex();
+            for (const auto argType : protoAggregation.GetArgType()) {
+                desc.ArgTypes.push_back(argType);
+            }
+
+            desc.Kind = (NPg::EAggKind)protoAggregation.GetKind();
+            desc.TransTypeId = protoAggregation.GetTransTypeId();
+            desc.TransFuncId = protoAggregation.GetTransFuncId();
+            desc.FinalFuncId = protoAggregation.GetFinalFuncId();
+            desc.CombineFuncId = protoAggregation.GetCombineFuncId();
+            desc.SerializeFuncId = protoAggregation.GetSerializeFuncId();
+            desc.DeserializeFuncId = protoAggregation.GetDeserializeFuncId();
+            desc.InitValue = protoAggregation.GetInitValue();
+            desc.FinalExtra = protoAggregation.GetFinalExtra();
+            desc.NumDirectArgs = protoAggregation.GetNumDirectArgs();
+
+            Y_ENSURE(catalog.State->Aggregations.emplace(desc.AggId, desc).second);
+            catalog.State->AggregationsByName[desc.Name].push_back(desc.AggId);
+        }
+
+        THashMap<ui32, TString> opFamiliesByOid;
+        for (const auto& protoOpClassFamily : proto.GetOpClassFamily()) {
+            TOpFamilyDesc desc;
+            desc.FamilyId = protoOpClassFamily.GetFamilyId();
+            desc.Name = protoOpClassFamily.GetName();
+            desc.ExtensionIndex = protoOpClassFamily.GetExtensionIndex();
+            Y_ENSURE(catalog.State->OpFamilies.emplace(desc.Name, desc).second);
+            Y_ENSURE(opFamiliesByOid.emplace(desc.FamilyId, desc.Name).second);
+        }
+
+        for (const auto& protoOpClass : proto.GetOpClass()) {
+            TOpClassDesc desc;
+            desc.Method = (EOpClassMethod)protoOpClass.GetMethod();
+            desc.TypeId = protoOpClass.GetTypeId();
+            desc.ExtensionIndex = protoOpClass.GetExtensionIndex();
+            desc.FamilyId = protoOpClass.GetFamilyId();
+            desc.Name = protoOpClass.GetName();
+            desc.Family = *opFamiliesByOid.FindPtr(desc.FamilyId);
+            Y_ENSURE(catalog.State->OpClasses.emplace(std::make_pair(desc.Method, desc.TypeId), desc).second);
+        }
+
+        for (const auto& protoAmOp : proto.GetAmOp()) {
+            TAmOpDesc desc;
+            desc.FamilyId = protoAmOp.GetFamilyId();
+            desc.Strategy = protoAmOp.GetStrategy();
+            desc.LeftType = protoAmOp.GetLeftType();
+            desc.RightType = protoAmOp.GetRightType();
+            desc.OperId = protoAmOp.GetOperId();
+            desc.ExtensionIndex = protoAmOp.GetExtensionIndex();
+            desc.Family = *opFamiliesByOid.FindPtr(desc.FamilyId);
+            Y_ENSURE(catalog.State->AmOps.emplace(std::make_tuple(desc.FamilyId, desc.Strategy, desc.LeftType, desc.RightType), desc).second);
+        }
+
+        for (const auto& protoAmProc : proto.GetAmProc()) {
+            TAmProcDesc desc;
+            desc.FamilyId = protoAmProc.GetFamilyId();
+            desc.ProcNum = protoAmProc.GetProcNum();
+            desc.LeftType = protoAmProc.GetLeftType();
+            desc.RightType = protoAmProc.GetRightType();
+            desc.ProcId = protoAmProc.GetProcId();
+            desc.ExtensionIndex = protoAmProc.GetExtensionIndex();
+            desc.Family = *opFamiliesByOid.FindPtr(desc.FamilyId);
+            Y_ENSURE(catalog.State->AmProcs.emplace(std::make_tuple(desc.FamilyId, desc.ProcNum, desc.LeftType, desc.RightType), desc).second);
         }
 
         if (!typesOnly && loader) {

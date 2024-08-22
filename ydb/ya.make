@@ -1,5 +1,6 @@
 RECURSE(
     apps
+    docs
     core
     library
     mvp

@@ -2,10 +2,11 @@ requirejs.config({
     baseUrl: 'js/lib',
     paths: {
         jquery: 'ext/jquery.min'
-    }
+    },
+    waitSeconds: 60 // Since editor is quite large
 });
 
-var createEditor;
+var createEditorPromise = new $.Deferred();
 
 let run = () => {
   require.config({
@@ -14,7 +15,7 @@ let run = () => {
   });
 
   require(["vs/editor/editor.main"], function () {
-    createEditor = (container, readOnly, width) => {
+    createEditorPromise.resolve((container, readOnly, width) => {
         var editor;
         container.style.border = '1px solid #eee';
         container.style.borderRadius = '8px';
@@ -48,7 +49,7 @@ let run = () => {
         editor.onDidContentSizeChange(updateHeight);
         updateHeight();
         return editor;
-    }
+    });
 
     $(document).ready(main);
   });

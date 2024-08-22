@@ -929,6 +929,10 @@ TExprBase KqpJoinToIndexLookup(const TExprBase& node, TExprContext& ctx, const T
         useCBO = false;
     }
 
+    if (kqpCtx.Config->HasDisableLookupJoin()) {
+        return node;
+    }
+
     if (!useCBO && kqpCtx.IsScanQuery() && !kqpCtx.Config->EnableKqpScanQueryStreamIdxLookupJoin) {
         return node;
     }

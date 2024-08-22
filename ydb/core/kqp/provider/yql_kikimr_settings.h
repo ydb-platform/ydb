@@ -53,6 +53,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<ui64, false> EnableSpillingNodes;
     NCommon::TConfSetting<TString, false> OverridePlanner;
     NCommon::TConfSetting<bool, false> UseGraceJoinCoreForMap;
+    NCommon::TConfSetting<bool, false> DisableLookupJoin;
 
     NCommon::TConfSetting<TString, false> OptOverrideStatistics;
     NCommon::TConfSetting<TString, false> OptCardinalityHints;
@@ -83,6 +84,7 @@ struct TKikimrSettings {
     bool SpillingEnabled() const;
     bool DisableLlvmForUdfStages() const;
 
+    bool HasDisableLookupJoin() const;
     bool HasOptDisableTopSort() const;
     bool HasOptDisableSqlInToJoin() const;
     bool HasOptEnableOlapPushdown() const;

@@ -86,6 +86,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptJoinAlgoHints);
     REGISTER_SETTING(*this, OverridePlanner);
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
+    REGISTER_SETTING(*this, DisableLookupJoin);
 
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
     REGISTER_SETTING(*this, CostBasedOptimizationLevel);
@@ -125,6 +126,10 @@ bool TKikimrSettings::DisableLlvmForUdfStages() const {
 
 bool TKikimrSettings::HasOptDisableTopSort() const {
     return GetFlagValue(OptDisableTopSort.Get());
+}
+
+bool TKikimrSettings::HasDisableLookupJoin() const {
+    return GetFlagValue(DisableLookupJoin.Get());
 }
 
 bool TKikimrSettings::HasOptDisableSqlInToJoin() const {

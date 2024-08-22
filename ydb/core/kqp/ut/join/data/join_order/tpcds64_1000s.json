@@ -3,7 +3,7 @@
   "args":
     [
       {
-        "op_name":"InnerJoin (MapJoin)",
+        "op_name":"InnerJoin (Grace)",
         "args":
           [
             {
@@ -21,27 +21,27 @@
                 ]
             },
             {
-              "op_name":"InnerJoin (MapJoin)",
+              "op_name":"InnerJoin (Grace)",
               "args":
                 [
                   {
-                    "op_name":"InnerJoin (MapJoin)",
+                    "op_name":"InnerJoin (Grace)",
                     "args":
                       [
                         {
-                          "op_name":"InnerJoin (MapJoin)",
+                          "op_name":"InnerJoin (Grace)",
                           "args":
                             [
                               {
-                                "op_name":"InnerJoin (MapJoin)",
+                                "op_name":"InnerJoin (Grace)",
                                 "args":
                                   [
                                     {
-                                      "op_name":"InnerJoin (MapJoin)",
+                                      "op_name":"InnerJoin (Grace)",
                                       "args":
                                         [
                                           {
-                                            "op_name":"InnerJoin (MapJoin)",
+                                            "op_name":"InnerJoin (Grace)",
                                             "args":
                                               [
                                                 {
@@ -49,7 +49,7 @@
                                                   "table":"test\/ds\/customer_address"
                                                 },
                                                 {
-                                                  "op_name":"InnerJoin (MapJoin)",
+                                                  "op_name":"InnerJoin (Grace)",
                                                   "args":
                                                     [
                                                       {
@@ -57,15 +57,15 @@
                                                         "table":"test\/ds\/customer_demographics"
                                                       },
                                                       {
-                                                        "op_name":"InnerJoin (MapJoin)",
+                                                        "op_name":"InnerJoin (Grace)",
                                                         "args":
                                                           [
                                                             {
-                                                              "op_name":"InnerJoin (MapJoin)",
+                                                              "op_name":"InnerJoin (Grace)",
                                                               "args":
                                                                 [
                                                                   {
-                                                                    "op_name":"InnerJoin (MapJoin)",
+                                                                    "op_name":"InnerJoin (Grace)",
                                                                     "args":
                                                                       [
                                                                         {
@@ -73,7 +73,7 @@
                                                                           "table":"test\/ds\/customer"
                                                                         },
                                                                         {
-                                                                          "op_name":"InnerJoin (MapJoin)",
+                                                                          "op_name":"InnerJoin (Grace)",
                                                                           "args":
                                                                             [
                                                                               {
@@ -81,7 +81,7 @@
                                                                                 "table":"test\/ds\/customer_demographics"
                                                                               },
                                                                               {
-                                                                                "op_name":"InnerJoin (MapJoin)",
+                                                                                "op_name":"InnerJoin (Grace)",
                                                                                 "args":
                                                                                   [
                                                                                     {
@@ -89,7 +89,7 @@
                                                                                       "table":"test\/ds\/customer_address"
                                                                                     },
                                                                                     {
-                                                                                      "op_name":"InnerJoin (MapJoin)",
+                                                                                      "op_name":"InnerJoin (Grace)",
                                                                                       "args":
                                                                                         [
                                                                                           {
@@ -153,7 +153,7 @@
                             ]
                         },
                         {
-                          "op_name":"InnerJoin (MapJoin)",
+                          "op_name":"InnerJoin (Grace)",
                           "args":
                             [
                               {
@@ -169,7 +169,7 @@
                       ]
                   },
                   {
-                    "op_name":"InnerJoin (MapJoin)",
+                    "op_name":"InnerJoin (Grace)",
                     "args":
                       [
                         {
@@ -187,7 +187,7 @@
           ]
       },
       {
-        "op_name":"InnerJoin (MapJoin)",
+        "op_name":"InnerJoin (Grace)",
         "args":
           [
             {
@@ -205,27 +205,27 @@
                 ]
             },
             {
-              "op_name":"InnerJoin (MapJoin)",
+              "op_name":"InnerJoin (Grace)",
               "args":
                 [
                   {
-                    "op_name":"InnerJoin (MapJoin)",
+                    "op_name":"InnerJoin (Grace)",
                     "args":
                       [
                         {
-                          "op_name":"InnerJoin (MapJoin)",
+                          "op_name":"InnerJoin (Grace)",
                           "args":
                             [
                               {
-                                "op_name":"InnerJoin (MapJoin)",
+                                "op_name":"InnerJoin (Grace)",
                                 "args":
                                   [
                                     {
-                                      "op_name":"InnerJoin (MapJoin)",
+                                      "op_name":"InnerJoin (Grace)",
                                       "args":
                                         [
                                           {
-                                            "op_name":"InnerJoin (MapJoin)",
+                                            "op_name":"InnerJoin (Grace)",
                                             "args":
                                               [
                                                 {
@@ -233,7 +233,7 @@
                                                   "table":"test\/ds\/customer_address"
                                                 },
                                                 {
-                                                  "op_name":"InnerJoin (MapJoin)",
+                                                  "op_name":"InnerJoin (Grace)",
                                                   "args":
                                                     [
                                                       {
@@ -241,15 +241,15 @@
                                                         "table":"test\/ds\/customer_demographics"
                                                       },
                                                       {
-                                                        "op_name":"InnerJoin (MapJoin)",
+                                                        "op_name":"InnerJoin (Grace)",
                                                         "args":
                                                           [
                                                             {
-                                                              "op_name":"InnerJoin (MapJoin)",
+                                                              "op_name":"InnerJoin (Grace)",
                                                               "args":
                                                                 [
                                                                   {
-                                                                    "op_name":"InnerJoin (MapJoin)",
+                                                                    "op_name":"InnerJoin (Grace)",
                                                                     "args":
                                                                       [
                                                                         {
@@ -257,7 +257,7 @@
                                                                           "table":"test\/ds\/customer"
                                                                         },
                                                                         {
-                                                                          "op_name":"InnerJoin (MapJoin)",
+                                                                          "op_name":"InnerJoin (Grace)",
                                                                           "args":
                                                                             [
                                                                               {
@@ -265,7 +265,7 @@
                                                                                 "table":"test\/ds\/customer_demographics"
                                                                               },
                                                                               {
-                                                                                "op_name":"InnerJoin (MapJoin)",
+                                                                                "op_name":"InnerJoin (Grace)",
                                                                                 "args":
                                                                                   [
                                                                                     {
@@ -273,7 +273,7 @@
                                                                                       "table":"test\/ds\/customer_address"
                                                                                     },
                                                                                     {
-                                                                                      "op_name":"InnerJoin (MapJoin)",
+                                                                                      "op_name":"InnerJoin (Grace)",
                                                                                       "args":
                                                                                         [
                                                                                           {
@@ -337,7 +337,7 @@
                             ]
                         },
                         {
-                          "op_name":"InnerJoin (MapJoin)",
+                          "op_name":"InnerJoin (Grace)",
                           "args":
                             [
                               {
@@ -353,7 +353,7 @@
                       ]
                   },
                   {
-                    "op_name":"InnerJoin (MapJoin)",
+                    "op_name":"InnerJoin (Grace)",
                     "args":
                       [
                         {

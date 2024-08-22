@@ -86,7 +86,7 @@ struct TEvPrivate {
 
 } // namespace
 
-class TDqPqRdReadActor : public NActors::TActor<TDqPqRdReadActor>, public IDqComputeActorAsyncInput, public NYql::NDq::TRetryEventsQueue::ICallbacks {
+class TDqPqRdReadActor : public NActors::TActor<TDqPqRdReadActor>, public IDqComputeActorAsyncInput {
 public:
     using TPartitionKey = std::pair<TString, ui64>; // Cluster, partition id.
     using TDebugOffsets = TMaybe<std::pair<ui64, ui64>>;
@@ -141,13 +141,12 @@ private:
             Started,
         };
         SessionInfo(
-            TDqPqRdReadActor* ptr,
             const TTxId& txId,
             const NActors::TActorId selfId,
             TActorId rowDispatcherActorId,
             ui64 eventQueueId)
             : RowDispatcherActorId(rowDispatcherActorId) {
-            EventsQueue.Init(txId, selfId, selfId, eventQueueId, /* KeepAlive */ true, ptr);
+            EventsQueue.Init(txId, selfId, selfId, eventQueueId, /* KeepAlive */ true);
             EventsQueue.OnNewRecipientId(rowDispatcherActorId);
         }
 
@@ -188,35 +187,28 @@ public:
     void Handle(NActors::TEvents::TEvUndelivered::TPtr &ev);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvPing::TPtr&);
+    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed::TPtr&);
     void Handle(NActors::TEvents::TEvPong::TPtr &ev);
     void Handle(const NActors::TEvents::TEvPing::TPtr&);
-    
-    void SessionClosed(ui64 eventQueueId) override;
 
-    STFUNC(StateFunc) {
-        SRC_LOG_D("New event ");
+    STRICT_STFUNC(StateFunc, {
+        hFunc(NFq::TEvRowDispatcher::TEvCoordinatorChanged, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvCoordinatorResult, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvNewDataArrived, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvMessageBatch, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvStartSessionAck, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvSessionError, Handle);
 
-        switch (const ui32 type = ev->GetTypeRewrite()) {
-            hFunc(NFq::TEvRowDispatcher::TEvCoordinatorChanged, Handle);
-            hFunc(NFq::TEvRowDispatcher::TEvCoordinatorResult, Handle);
-            hFunc(NFq::TEvRowDispatcher::TEvNewDataArrived, Handle);
-            hFunc(NFq::TEvRowDispatcher::TEvMessageBatch, Handle);
-            hFunc(NFq::TEvRowDispatcher::TEvStartSessionAck, Handle);
-            hFunc(NFq::TEvRowDispatcher::TEvSessionError, Handle);
+        hFunc(NActors::TEvents::TEvPong, Handle);
+        hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
+        hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
+        hFunc(NActors::TEvents::TEvUndelivered, Handle);
+        hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
+        hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvPing, Handle);
+        hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed, Handle);
+        hFunc(NActors::TEvents::TEvPing, Handle);
+    })
 
-            hFunc(NActors::TEvents::TEvPong, Handle);
-            hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
-            hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
-            hFunc(NActors::TEvents::TEvUndelivered, Handle);
-            hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
-            hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvPing, Handle);
-            hFunc(NActors::TEvents::TEvPing, Handle);
-        default:
-            SRC_LOG_D("unexpected message " <<  type);
-            Y_DEBUG_ABORT("unexpected event Type# %08" PRIx32, type);
-        }
-        SRC_LOG_D("New event end");
-    }
     static constexpr char ActorName[] = "DQ_PQ_READ_ACTOR";
 
     void SaveState(const NDqProto::TCheckpoint& checkpoint, TSourceState& state) override;
@@ -268,7 +260,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
     }
 
     IngressStats.Level = statsLevel;
-    SRC_LOG_D("TDqPqRdReadActor");
+    SRC_LOG_D("Start read actor, local row dispatcher " << LocalRowDispatcherActorId.ToString());
 }
 
 void TDqPqRdReadActor::ProcessState() {
@@ -286,10 +278,10 @@ void TDqPqRdReadActor::ProcessState() {
     case EState::WAIT_COORDINATOR_ID:
         if (!CoordinatorActorId)
             return;
-        // TODO: use IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession
         State = EState::WAIT_PARTITIONS_ADDRES;
         SRC_LOG_D("Send TEvCoordinatorRequest");
-        Send(*CoordinatorActorId, new NFq::TEvRowDispatcher::TEvCoordinatorRequest(SourceParams, GetPartitionsToRead()));
+        // TODO use Cookie / check in TEvCoordinatorResult
+        Send(*CoordinatorActorId, new NFq::TEvRowDispatcher::TEvCoordinatorRequest(SourceParams, GetPartitionsToRead()), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
         return;
     case EState::WAIT_PARTITIONS_ADDRES:
         if (Sessions.empty()) {
@@ -423,6 +415,8 @@ void TDqPqRdReadActor::PassAway() { // Is called from Compute Actor
     SRC_LOG_D("PassAway");
     StopSessions();
     TActor<TDqPqRdReadActor>::PassAway();
+    
+    // TODO: RetryQueue::Unsubscribe()
 }
 
 i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& /*watermark*/, bool&, i64 freeSpace) {
@@ -528,7 +522,10 @@ void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::T
     ui64 partitionId = ev->Get()->EventQueueId;
 
     auto sessionIt = Sessions.find(partitionId);
-    YQL_ENSURE(sessionIt != Sessions.end(), "Unknown partition id");
+    if (sessionIt == Sessions.end()) {
+        SRC_LOG_W("Unknown partition id " << partitionId << ", skip TEvRetry");
+        return;
+    }
     sessionIt->second.EventsQueue.Retry();
 }
 
@@ -537,7 +534,10 @@ void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvPing::TP
     ui64 partitionId = ev->Get()->EventQueueId;
 
     auto sessionIt = Sessions.find(partitionId);
-    YQL_ENSURE(sessionIt != Sessions.end(), "Unknown partition id");
+    if (sessionIt == Sessions.end()) {
+        SRC_LOG_W("Unknown partition id " << partitionId << ", skip TEvPing");
+        return;
+    }
     sessionIt->second.EventsQueue.Ping();
 }
 
@@ -563,12 +563,14 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr
 }
 
 void TDqPqRdReadActor::ReInit() {
+    SRC_LOG_I("ReInit state");
     StopSessions();
     Sessions.clear();
     State = EState::INIT;
     if (!ReadyBuffer.empty()) {
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
+    ProcessState();
 }
 
 void TDqPqRdReadActor::Stop(const TString& message) {
@@ -590,7 +592,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr 
                 Sessions.emplace(
                     std::piecewise_construct,
                     std::forward_as_tuple(partitionId),
-                    std::forward_as_tuple(this, TxId, SelfId(), rowDispatcherActorId, partitionId));
+                    std::forward_as_tuple(TxId, SelfId(), rowDispatcherActorId, partitionId));
             }
         }
     }
@@ -618,6 +620,11 @@ void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) {
     SRC_LOG_D("TEvUndelivered, ev: " << ev->Get()->ToString());
     for (auto& [partitionId, sessionInfo] : Sessions) {
         sessionInfo.EventsQueue.HandleUndelivered(ev);
+    }
+
+    if (CoordinatorActorId && *CoordinatorActorId == ev->Sender) {
+        SRC_LOG_D("TEvUndelivered to coordinator, reinit");
+        ReInit();
     }
 }
 
@@ -659,9 +666,9 @@ std::pair<NUdf::TUnboxedValuePod, i64> TDqPqRdReadActor::CreateItem(const TStrin
     return std::make_pair(item, usedSpace);
 }
 
-void TDqPqRdReadActor::SessionClosed(ui64 eventQueueId) {
-    SRC_LOG_D("Session closed, event queue id " << eventQueueId);
-    Stop("SessionClosed");
+void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed::TPtr& ev) {
+    SRC_LOG_D("Session closed, event queue id " << ev->Get()->EventQueueId);
+    ReInit();
 }
 
 void TDqPqRdReadActor::Handle(NActors::TEvents::TEvPong::TPtr &ev) {

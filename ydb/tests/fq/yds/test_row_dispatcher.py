@@ -63,7 +63,7 @@ class TestPqRowDispatcher(TestYdsBase):
     @pytest.mark.skip(reason="remove Todo")
     def test_read_raw_format_without_row_dispatcher(self, kikimr, client):
         client.create_yds_connection(YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True)
-        self.init_topics(Rf"pq_test_pq_read_write", create_output = False)
+        self.init_topics(Rf"test_read_raw_format_without_row_dispatcher", create_output = False)
         
         output_topic = "pq_test_pq_read_write_output"
 
@@ -90,7 +90,7 @@ class TestPqRowDispatcher(TestYdsBase):
     @yq_v1
     def test_simple_not_null(self, kikimr, client):
         client.create_yds_connection(YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True)
-        self.init_topics(Rf"test_simple")
+        self.init_topics(Rf"test_simple_not_null")
 
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
@@ -124,7 +124,7 @@ class TestPqRowDispatcher(TestYdsBase):
     @pytest.mark.skip(reason="Is not implemented")
     def test_simple_optional(self, kikimr, client):
         client.create_yds_connection(YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True)
-        self.init_topics(Rf"test_simple")
+        self.init_topics(Rf"test_simple_optional")
 
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
@@ -154,7 +154,7 @@ class TestPqRowDispatcher(TestYdsBase):
     @yq_v1
     def test_scheme_error(self, kikimr, client):
         client.create_yds_connection(YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True)
-        self.init_topics(Rf"test_simple")
+        self.init_topics(Rf"test_scheme_error")
 
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
@@ -186,7 +186,7 @@ class TestPqRowDispatcher(TestYdsBase):
     @yq_v1
     def test_filter(self, kikimr, client):
         client.create_yds_connection(YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True)
-        self.init_topics(Rf"test_simple")
+        self.init_topics(Rf"test_filter")
 
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
@@ -220,7 +220,7 @@ class TestPqRowDispatcher(TestYdsBase):
     @yq_v1
     def test_start_new_query(self, kikimr, client):
         client.create_yds_connection(YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True)
-        self.init_topics(Rf"pq_test_pq_read_write", create_output = False)
+        self.init_topics(Rf"test_start_new_query", create_output = False)
         
         output_topic1 = "pq_test_pq_read_write_output1"
         output_topic2 = "pq_test_pq_read_write_output2"
@@ -298,9 +298,9 @@ class TestPqRowDispatcher(TestYdsBase):
     @yq_v1
     def test_stop_start(self, kikimr, client):
         client.create_yds_connection(YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True)
-        self.init_topics(Rf"pq_test_pq_read_write", create_output = False)
+        self.init_topics(Rf"test_stop_start", create_output = False)
         
-        output_topic = "pq_test_pq_read_write_output1"
+        output_topic = "test_stop_start"
         create_stream(output_topic, partitions_count=1)
         create_read_rule(output_topic, self.consumer_name)
 
@@ -347,7 +347,7 @@ class TestPqRowDispatcher(TestYdsBase):
     @yq_v1
     def test_restart_compute_node(self, kikimr, client):
         client.create_yds_connection(YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True)
-        self.init_topics(Rf"test_simple")
+        self.init_topics(Rf"test_restart_compute_node")
 
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
@@ -371,6 +371,7 @@ class TestPqRowDispatcher(TestYdsBase):
         wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 1)
         wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 1)
 
+       # time.sleep(120)
         node_index = 2
         logging.debug("Restart compute node {}".format(node_index))
         kikimr.compute_plane.kikimr_cluster.nodes[node_index].stop()
@@ -384,7 +385,7 @@ class TestPqRowDispatcher(TestYdsBase):
         self.write_stream(data)
         expected = ['103', '104']
         assert self.read_stream(len(expected), topic_path = self.output_topic) == expected
-        # kikimr.compute_plane.wait_completed_checkpoints(query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 1)
+        kikimr.compute_plane.wait_completed_checkpoints(query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 1)
 
         # node_index = 2
         # logging.debug("Restart compute node {}".format(node_index))
@@ -409,11 +410,11 @@ class TestPqRowDispatcher(TestYdsBase):
     @yq_v1
     def test_3_session(self, kikimr, client):
         client.create_yds_connection(YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True)
-        self.init_topics(Rf"pq_test_pq_read_write", create_output = False)
+        self.init_topics(Rf"test_3_session", create_output = False)
         
-        output_topic1 = "pq_test_pq_read_write_output1"
-        output_topic2 = "pq_test_pq_read_write_output2"
-        output_topic3 = "pq_test_pq_read_write_output3"
+        output_topic1 = "test_3_session1"
+        output_topic2 = "test_3_session2"
+        output_topic3 = "test_3_session3"
         create_stream(output_topic1, partitions_count=1)
         create_read_rule(output_topic1, self.consumer_name)
 

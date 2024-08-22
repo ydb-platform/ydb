@@ -31,7 +31,7 @@ struct TEvPrivate {
 };
 
 
-class ClientActor : public TActorBootstrapped<ClientActor>, public NYql::NDq::TRetryEventsQueue::ICallbacks {
+class ClientActor : public TActorBootstrapped<ClientActor> {
 public:
     ClientActor(
         NActors::TActorId clientEdgeActorId,

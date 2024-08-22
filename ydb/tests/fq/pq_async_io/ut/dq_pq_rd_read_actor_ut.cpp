@@ -172,6 +172,21 @@ struct TFixture : public TPqIoTestFixture {
         });
     }
 
+    void MockConnected() {
+        CaSetup->Execute([&](TFakeActor& actor) {
+            auto event = new NActors::TEvInterconnect::TEvNodeConnected(CaSetup->Runtime->GetNodeId(0));
+            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, RowDispatcher1, event));
+        });
+    }
+
+    void MockUndelivered() {
+        CaSetup->Execute([&](TFakeActor& actor) {
+            auto event = new NActors::TEvents::TEvUndelivered(0, NActors::TEvents::TEvUndelivered::ReasonActorUnknown);
+            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, RowDispatcher1, event));
+        });
+    }
+
+
     void StartSession() {
         InitRdSource(BuildPqTopicSourceSettings("topicName"));
         SourceRead<TString>(UVParser);
@@ -323,24 +338,19 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTest) {
         ProcessSomeJsons(3, {Json4}, RowDispatcher2);
     }
 
-
-    Y_UNIT_TEST_F(DisconnectFromRowDispatcher, TFixture) {
+    Y_UNIT_TEST_F(RowDispatcherIsRestarted, TFixture) {
         StartSession();
         ProcessSomeJsons(0, {Json1, Json2}, RowDispatcher1);
         MockDisconnected();
+        MockConnected();
+        MockUndelivered();
 
-        TInstant deadline = Now() + TDuration::Seconds(5);
-        auto future = CaSetup->AsyncInputPromises.FatalError.GetFuture();
-        bool failured = false;
-        while (Now() < deadline) {
-            SourceRead<TString>(UVParser);
-            if (future.HasValue()) {
-                UNIT_ASSERT_STRING_CONTAINS(future.GetValue().ToOneLineString(), "Node disconnected");
-                failured = true;
-                break;
-            }
-        }
-        UNIT_ASSERT_C(failured, "Failure timeout");
+        ExpectCoordinatorRequest(Coordinator1Id);
+        MockCoordinatorResult(RowDispatcher1);
+        ExpectStartSession(2, RowDispatcher1);
+        MockAck(RowDispatcher1);
+
+        ProcessSomeJsons(2, {Json3}, RowDispatcher1);
     }
 }
 } // NYql::NDq

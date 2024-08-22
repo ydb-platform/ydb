@@ -26,12 +26,11 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> , public NYql::NDq::TRetryEventsQueue::ICallbacks {
+class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     NConfig::TRowDispatcherConfig Config;
     NConfig::TCommonConfig CommonConfig;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
     TYqSharedResources::TPtr YqSharedResources;
-    //TActorId CoordinatorActorId;
     TMaybe<TActorId> CoordinatorActorId;
     TSet<TActorId> CoordinatorChangedSubscribers;
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
@@ -40,8 +39,8 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> , public NYql::
     TString Tenant;
     NFq::NRowDispatcher::IActorFactory::TPtr ActorFactory;
 
-    using ConsumerSessionKey = std::pair<TActorId, ui32>;   // ReadActorId / PartitionId
-    using TopicSessionKey = std::tuple<TString, TString, TString, ui32>;       // Endpoint / Database / TopicPath / PartitionId
+    using ConsumerSessionKey = std::pair<TActorId, ui32>;                   // ReadActorId / PartitionId
+    using TopicSessionKey = std::tuple<TString, TString, TString, ui32>;    // Endpoint / Database / TopicPath / PartitionId
 
     struct ConsumerInfo {
         ConsumerInfo(
@@ -49,7 +48,6 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> , public NYql::
             NActors::TActorId selfId,
             ui64 eventQueueId,
             NFq::NRowDispatcherProto::TEvStartSession& proto,
-            NYql::NDq::TRetryEventsQueue::ICallbacks* cbs,
             TActorId topicSessionId)
             : ReadActorId(readActorId)
             , SourceParams(proto.GetSource())
@@ -59,7 +57,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> , public NYql::
             , EventQueueId(eventQueueId)
             , Proto(proto)
             , TopicSessionId(topicSessionId) {
-                EventsQueue.Init("txId", selfId, selfId, eventQueueId, /* KeepAlive */ true, cbs);
+                EventsQueue.Init("txId", selfId, selfId, eventQueueId, /* KeepAlive */ true);
                 EventsQueue.OnNewRecipientId(readActorId);
             }
 
@@ -82,7 +80,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> , public NYql::
     };
 
     struct TopicSessionInfo {
-        TMap<TActorId, SessionInfo> Sessions;                   // key - TopicSessionId
+        TMap<TActorId, SessionInfo> Sessions;                         // key - TopicSessionId
     };
 
     TMap<ConsumerSessionKey, TAtomicSharedPtr<ConsumerInfo>> Consumers;
@@ -119,9 +117,9 @@ public:
     void Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr &ev);
 
     void Handle(NActors::TEvents::TEvPing::TPtr &ev);
-    void SessionClosed(ui64 eventQueueId) override;
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvPing::TPtr&);
+    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed::TPtr&);
 
     void DeleteConsumer(const ConsumerSessionKey& key);
     void PrintInternalState(const TString&);
@@ -134,23 +132,18 @@ public:
         hFunc(NActors::TEvents::TEvUndelivered, Handle);
         hFunc(NActors::TEvents::TEvWakeup, Handle)
         hFunc(NActors::TEvents::TEvPong, Handle);
-
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvGetNextBatch, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvMessageBatch, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStartSession, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStopSession, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvSessionError, Handle);
-
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvPing, Handle);
-
+        hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed, Handle);
         hFunc(NActors::TEvents::TEvPing, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvNewDataArrived, Handle);
     })
-
-private:
-
 };
 
 TRowDispatcher::TRowDispatcher(
@@ -177,7 +170,7 @@ void TRowDispatcher::Bootstrap() {
 
     if (Config.GetCoordinator().GetEnabled()) {
         const auto& config = Config.GetCoordinator();
-        auto coordinatorId = Register(NewCoordinator(SelfId(), config, CredentialsProviderFactory, YqSharedResources, Tenant).release());
+        auto coordinatorId = Register(NewCoordinator(SelfId(), config, YqSharedResources, Tenant).release());
         Register(NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, YqSharedResources, Tenant).release());
     }
 }
@@ -292,7 +285,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
     LOG_ROW_DISPATCHER_DEBUG("Topic session count " << topicSessionInfo.Sessions.size());
     Y_ENSURE(topicSessionInfo.Sessions.size() <= 1);
 
-    auto consumerInfo = MakeAtomicShared<ConsumerInfo>(ev->Sender, SelfId(), NextEventQueueId++, ev->Get()->Record, this, TActorId());
+    auto consumerInfo = MakeAtomicShared<ConsumerInfo>(ev->Sender, SelfId(), NextEventQueueId++, ev->Get()->Record, TActorId());
     Consumers[key] = consumerInfo;
     ConsumersByEventQueueId[consumerInfo->EventQueueId] = consumerInfo;
     consumerInfo->EventsQueue.OnEventReceived(ev);
@@ -399,10 +392,10 @@ void TRowDispatcher::DeleteConsumer(const ConsumerSessionKey& key) {
     PrintInternalState("After DeleteConsumer");
 }
 
-void TRowDispatcher::SessionClosed(ui64 eventQueueId) {
-    LOG_ROW_DISPATCHER_WARN("Session closed, event queue id " << eventQueueId);
+void TRowDispatcher::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed::TPtr& ev) {
+    LOG_ROW_DISPATCHER_WARN("Session closed, event queue id " << ev->Get()->EventQueueId);
     for (auto& [consumerKey, consumer] : Consumers) {
-        if (consumer->EventQueueId != eventQueueId) {
+        if (consumer->EventQueueId != ev->Get()->EventQueueId) {
             continue;
         }
         DeleteConsumer(consumerKey);
@@ -438,7 +431,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr &ev) 
         LOG_ROW_DISPATCHER_WARN("Ignore MessageBatch, no such session");
         return;
     }
-    LOG_ROW_DISPATCHER_TRACE("Resend TEvNewDataArrived to " << ev->Get()->ReadActorId);
+    LOG_ROW_DISPATCHER_TRACE("Forward TEvNewDataArrived to " << ev->Get()->ReadActorId);
     it->second->EventsQueue.Send(ev.Release()->Release().Release());
 }
 
@@ -450,7 +443,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev) {
         LOG_ROW_DISPATCHER_WARN("Ignore MessageBatch, no such session");
         return;
     }
-    LOG_ROW_DISPATCHER_TRACE("Resend TEvMessageBatch to " << ev->Get()->ReadActorId);
+    LOG_ROW_DISPATCHER_TRACE("Forward TEvMessageBatch to " << ev->Get()->ReadActorId);
     it->second->EventsQueue.Send(ev.Release()->Release().Release());
 }
 
@@ -462,7 +455,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr &ev) {
         LOG_ROW_DISPATCHER_WARN("Ignore MessageBatch, no such session");
         return;
     }
-    LOG_ROW_DISPATCHER_TRACE("Resend TEvSessionError to " << ev->Get()->ReadActorId);
+    LOG_ROW_DISPATCHER_TRACE("Forward TEvSessionError to " << ev->Get()->ReadActorId);
     it->second->EventsQueue.Send(ev.Release()->Release().Release());
     DeleteConsumer(key);
 }

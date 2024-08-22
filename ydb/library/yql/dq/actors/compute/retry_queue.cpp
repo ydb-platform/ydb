@@ -11,10 +11,7 @@ void TRetryEventsQueue::Init(
     const NActors::TActorId& senderId,
     const NActors::TActorId& selfId,
     ui64 eventQueueId,
-    bool keepAlive,
-    ICallbacks* cbs) {
-    
-    Cbs = cbs;
+    bool keepAlive) {
     TxId = txId;
     SenderId = senderId;
     SelfId = selfId;
@@ -69,11 +66,10 @@ bool TRetryEventsQueue::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr
     }
 
     if (ev->Sender == RecipientId && ev->Get()->Reason == NActors::TEvents::TEvUndelivered::ReasonActorUnknown) {
-        if (Cbs) {
-            Cbs->SessionClosed(EventQueueId);
-            Cbs = nullptr;
+        if (KeepAlive) {
+            NActors::TActivationContext::Send(
+                new NActors::IEventHandle(SelfId, SelfId, new TEvRetryQueuePrivate::TEvSessionClosed(EventQueueId), 0, 0));
         }
-        // TODO
         return true;
     }
 
@@ -106,8 +102,11 @@ void TRetryEventsQueue::Ping() {
 
 void TRetryEventsQueue::Connect() {
     auto connectEvent = MakeHolder<NActors::TEvInterconnect::TEvConnectNode>();
+    auto proxyId = NActors::TActivationContext::InterconnectProxy(RecipientId.NodeId());
     NActors::TActivationContext::Send(
-        new NActors::IEventHandle(NActors::TActivationContext::InterconnectProxy(RecipientId.NodeId()), SenderId, connectEvent.Release(), 0, 0));
+        new NActors::IEventHandle(proxyId, SenderId, connectEvent.Release(), 0, 0));
+    // NActors::TActivationContext::Send(
+    //     new NActors::IEventHandle(proxyId, SenderId, new NActors::TEvents::TEvSubscribe()));
 }
 
 void TRetryEventsQueue::Unsubscribe() {
@@ -137,14 +136,15 @@ void TRetryEventsQueue::SendRetryable(const IRetryableEvent::TPtr& ev) {
 }
 
 void TRetryEventsQueue::ScheduleRetry() {
-    if (!RetryScheduled && !Events.empty()) {
-        RetryScheduled = true;
-        if (!RetryState) {
-            RetryState.ConstructInPlace();
-        }
-        auto ev = MakeHolder<TEvRetryQueuePrivate::TEvRetry>(EventQueueId);
-        NActors::TActivationContext::Schedule(RetryState->GetNextDelay(), new NActors::IEventHandle(SelfId, SelfId, ev.Release()));
+    if (RetryScheduled) {
+        return;
+    } 
+    RetryScheduled = true;
+    if (!RetryState) {
+        RetryState.ConstructInPlace();
     }
+    auto ev = MakeHolder<TEvRetryQueuePrivate::TEvRetry>(EventQueueId);
+    NActors::TActivationContext::Schedule(RetryState->GetNextDelay(), new NActors::IEventHandle(SelfId, SelfId, ev.Release()));
 }
 
 void TRetryEventsQueue::SchedulePing() {

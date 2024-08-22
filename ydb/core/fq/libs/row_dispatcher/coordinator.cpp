@@ -37,6 +37,7 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
 
     struct RowDispatcherInfo {
         bool Connected = false;
+        TSet<TPartitionKey> Locations;
     };
     TMap<NActors::TActorId, RowDispatcherInfo> RowDispatchers;
     THashMap<TPartitionKey, TActorId> PartitionLocations;
@@ -45,7 +46,6 @@ public:
     TActorCoordinator(
         NActors::TActorId localRowDispatcherId,
         const NConfig::TRowDispatcherCoordinatorConfig& config,
-        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const TYqSharedResources::TPtr& yqSharedResources,
         const TString& tenant);
 
@@ -80,11 +80,9 @@ private:
 TActorCoordinator::TActorCoordinator(
     NActors::TActorId localRowDispatcherId,
     const NConfig::TRowDispatcherCoordinatorConfig& config,
-    const NKikimr::TYdbCredentialsProviderFactory&, // credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
     const TString& tenant)
     : Config(config)
-   // , CredentialsProviderFactory(credentialsProviderFactory)
     , YqSharedResources(yqSharedResources)
     , LocalRowDispatcherId(localRowDispatcherId)
     , LogPrefix("Coordinator: ")
@@ -99,11 +97,28 @@ void TActorCoordinator::Bootstrap() {
 }
 
 void TActorCoordinator::AddRowDispatcher(NActors::TActorId actorId) {
-    if (RowDispatchers.contains(actorId)) {
+    auto it = RowDispatchers.find(actorId);
+    if (it != RowDispatchers.end()) {
+        it->second.Connected = true;
         return;
     }
-    auto& info = RowDispatchers[actorId];
-    info.Connected = true;
+
+    for (auto& [oldActorId, info] : RowDispatchers) {
+        if (oldActorId.NodeId() != actorId.NodeId()) {
+            continue;
+        }
+
+        LOG_ROW_DISPATCHER_TRACE(" Move all Locations from old actor " << oldActorId.ToString() << " to new " << actorId.ToString());
+        for (auto& key : info.Locations) {
+            PartitionLocations[key] = actorId;
+        }
+        info.Connected = true;
+        auto node = RowDispatchers.extract(oldActorId);
+        node.key() = actorId;
+        RowDispatchers.insert(std::move(node));
+        return;
+    }
+    RowDispatchers[actorId].Connected = true;
 }
 
 void TActorCoordinator::Handle(NActors::TEvents::TEvPing::TPtr& ev) {
@@ -113,13 +128,12 @@ void TActorCoordinator::Handle(NActors::TEvents::TEvPing::TPtr& ev) {
 
     PrintInternalState();
     LOG_ROW_DISPATCHER_TRACE("Send TEvPong to " << ev->Sender);
-
     Send(ev->Sender, new NActors::TEvents::TEvPong(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
 }
 
 void TActorCoordinator::PrintInternalState() {
     TStringStream str;
-    str << "RowDispatcher:\n";
+    str << "Known row dispatchers:\n";
 
     for (const auto& [actorId, info] : RowDispatchers) {
         str << "   actorId " << actorId << ", connected " << info.Connected << "\n";
@@ -187,6 +201,7 @@ NActors::TActorId TActorCoordinator::GetAndUpdateLocation(TPartitionKey key) {
             continue;
         }
         PartitionLocations[key] = it->first;
+        it->second.Locations.insert(key);
         return it->first;
     }
 }
@@ -238,11 +253,10 @@ void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPt
 std::unique_ptr<NActors::IActor> NewCoordinator(
     NActors::TActorId rowDispatcherId,
     const NConfig::TRowDispatcherCoordinatorConfig& config,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
     const TString& tenant)
 {
-    return std::unique_ptr<NActors::IActor>(new TActorCoordinator(rowDispatcherId, config, credentialsProviderFactory, yqSharedResources, tenant));
+    return std::unique_ptr<NActors::IActor>(new TActorCoordinator(rowDispatcherId, config, yqSharedResources, tenant));
 }
 
 } // namespace NFq

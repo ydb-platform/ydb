@@ -19,6 +19,7 @@ struct TEvRetryQueuePrivate {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvRetry = EvBegin,
         EvPing,
+        EvSessionClosed,        // recipientId does not exist anymore
         EvEnd
     };
 
@@ -35,6 +36,14 @@ struct TEvRetryQueuePrivate {
 
     struct TEvPing : NActors::TEventLocal<TEvPing, EvPing> {
         explicit TEvPing(ui64 eventQueueId)
+            : EventQueueId(eventQueueId)
+        { }
+        const ui64 EventQueueId;
+    };
+
+
+    struct TEvSessionClosed : NActors::TEventLocal<TEvSessionClosed, EvSessionClosed> {
+        explicit TEvSessionClosed(ui64 eventQueueId)
             : EventQueueId(eventQueueId)
         { }
         const ui64 EventQueueId;
@@ -60,11 +69,6 @@ template <class T>
 concept TProtobufEventWithTransportMeta = TProtobufEvent<T> && THasTransportMeta<T>;
 
 class TRetryEventsQueue {
-public:
-    struct ICallbacks {
-        virtual void SessionClosed(ui64 eventQueueId) = 0;       // Need to create new session.
-        virtual ~ICallbacks() = default;
-    };
 
 public:
     class IRetryableEvent : public TSimpleRefCount<IRetryableEvent> {
@@ -77,7 +81,7 @@ public:
 
     TRetryEventsQueue() {};
 
-    void Init(const TTxId& txId, const NActors::TActorId& senderId, const NActors::TActorId& selfId, ui64 eventQueueId = 0, bool keepAlive = false, ICallbacks* cbs = nullptr);
+    void Init(const TTxId& txId, const NActors::TActorId& senderId, const NActors::TActorId& selfId, ui64 eventQueueId = 0, bool keepAlive = false);
 
     template <TProtobufEventWithTransportMeta T>
     void Send(T* ev, ui64 cookie = 0) {
@@ -218,7 +222,6 @@ private:
     bool PingScheduled = false;
     TMaybe<TRetryState> RetryState;
     TTxId TxId;
-    ICallbacks* Cbs = nullptr;
     bool KeepAlive = false;
     TInstant LastReceivedDataTime = TInstant::Now();
 };

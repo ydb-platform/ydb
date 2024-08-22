@@ -486,9 +486,9 @@ namespace NKikimr::NBsController {
                 if (!overlay->second || !overlay->second->Group) { // deleted one
                     (overlay->second ? overlay->second : base->second)->DropFromVSlotReadyTimestampQ();
                     NotReadyVSlotIds.erase(overlay->first);
-                } else if (overlay->second->Status != NKikimrBlobStorage::EVDiskStatus::READY) {
+                } else if (overlay->second->GetStatus() != NKikimrBlobStorage::EVDiskStatus::READY) {
                     overlay->second->DropFromVSlotReadyTimestampQ();
-                } else if (!base || base->second->Status != NKikimrBlobStorage::EVDiskStatus::READY) {
+                } else if (!base || base->second->GetStatus() != NKikimrBlobStorage::EVDiskStatus::READY) {
                     overlay->second->PutInVSlotReadyTimestampQ(now);
                 } else {
                     Y_DEBUG_ABORT_UNLESS(overlay->second->IsReady || overlay->second->IsInVSlotReadyTimestampQ());
@@ -998,7 +998,7 @@ namespace NKikimr::NBsController {
             pb->SetAllocatedSize(vslot.Metrics.GetAllocatedSize());
             pb->MutableVDiskMetrics()->CopyFrom(vslot.Metrics);
             pb->MutableVDiskMetrics()->ClearVDiskId();
-            pb->SetStatus(NKikimrBlobStorage::EVDiskStatus_Name(vslot.Status));
+            pb->SetStatus(NKikimrBlobStorage::EVDiskStatus_Name(vslot.GetStatus()));
             for (const TVSlotId& vslotId : vslot.Donors) {
                 auto *item = pb->AddDonors();
                 Serialize(item->MutableVSlotId(), vslotId);

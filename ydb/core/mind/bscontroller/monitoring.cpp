@@ -1296,7 +1296,7 @@ void TBlobStorageController::RenderVSlotRow(IOutputStream& out, const TVSlotInfo
             }
             TABLED() {
                 TDuration time = vslot.ReplicationTime;
-                if (vslot.Status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
+                if (vslot.GetStatus() == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
                     time += TActivationContext::Now() - vslot.LastGotReplicating;
                 }
                 out << time;

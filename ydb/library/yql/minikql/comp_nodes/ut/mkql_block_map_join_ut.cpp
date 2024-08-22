@@ -13,195 +13,228 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 namespace {
-    TMap<const TString, ui64> NameToIndex(const TStructType* structType) {
-        TMap<const TString, ui64> map;
-        for (size_t i = 0; i < structType->GetMembersCount(); i++) {
-            const TString name(structType->GetMemberName(i));
-            map[name] = i;
-        }
-        return map;
+
+using TKSV = std::tuple<ui64, ui64, TStringBuf>;
+using TArrays = std::array<std::shared_ptr<arrow::ArrayData>, std::tuple_size_v<TKSV>>;
+
+TVector<TString> GenerateValues(size_t level) {
+    constexpr size_t alphaSize = 'Z' - 'A' + 1;
+    if (level == 1) {
+        TVector<TString> alphabet(alphaSize);
+        std::iota(alphabet.begin(), alphabet.end(), 'A');
+        return alphabet;
     }
-
-    TVector<TString> GeneratePayload(size_t level) {
-        constexpr size_t alphaSize = 'Z' - 'A' + 1;
-        if (level == 1) {
-            TVector<TString> alphabet(alphaSize);
-            std::iota(alphabet.begin(), alphabet.end(), 'A');
-            return alphabet;
+    const auto subValues = GenerateValues(level - 1);
+    TVector<TString> values;
+    values.reserve(alphaSize * subValues.size());
+    for (char ch = 'A'; ch <= 'Z'; ch++) {
+        for (const auto& tail : subValues) {
+            values.emplace_back(ch + tail);
         }
-        const auto subPayload = GeneratePayload(level - 1);
-        TVector<TString> payload;
-        payload.reserve(alphaSize * subPayload.size());
-        for (char ch = 'A'; ch <= 'Z'; ch++) {
-            for (const auto& tail : subPayload) {
-                payload.emplace_back(ch + tail);
-            }
-        }
-        return payload;
     }
+    return values;
+}
 
-    constexpr size_t payloadSize = 2;
-    static const TVector<TString> twoLetterPayloads = GeneratePayload(payloadSize);
-
-    template <typename T, bool isOptional = false>
-    const TRuntimeNode MakeSimpleKey(
-        TProgramBuilder& pgmBuilder,
-        T value,
-        bool isEmpty = false
-    ) {
-        if constexpr (!isOptional) {
-            return pgmBuilder.NewDataLiteral<T>(value);
-        }
-        const auto keyType = pgmBuilder.NewDataType(NUdf::TDataType<T>::Id, true);
-        if (isEmpty) {
-            return pgmBuilder.NewEmptyOptional(keyType);
-        }
-        return pgmBuilder.NewOptional(pgmBuilder.NewDataLiteral<T>(value));
+template <typename T, bool isOptional = false>
+const TRuntimeNode MakeSimpleKey(TProgramBuilder& pgmBuilder, T value, bool isEmpty = false) {
+    if constexpr (!isOptional) {
+        return pgmBuilder.NewDataLiteral<T>(value);
     }
-
-    template <typename TKey>
-    const TRuntimeNode MakeSet(
-        TProgramBuilder& pgmBuilder,
-        const TVector<TKey>& keyValues
-    ) {
-        const auto keyType = pgmBuilder.NewDataType(NUdf::TDataType<TKey>::Id);
-
-        TRuntimeNode::TList keyListItems;
-        std::transform(keyValues.cbegin(), keyValues.cend(),
-            std::back_inserter(keyListItems), [&pgmBuilder](const auto key) {
-                return pgmBuilder.NewDataLiteral<TKey>(key);
-            });
-
-        const auto keyList = pgmBuilder.NewList(keyType, keyListItems);
-        return pgmBuilder.ToHashedDict(keyList, false,
-            [&](TRuntimeNode item) {
-                return item;
-            }, [&](TRuntimeNode) {
-                return pgmBuilder.NewVoid();
-            });
+    const auto keyType = pgmBuilder.NewDataType(NUdf::TDataType<T>::Id, true);
+    if (isEmpty) {
+        return pgmBuilder.NewEmptyOptional(keyType);
     }
+    return pgmBuilder.NewOptional(pgmBuilder.NewDataLiteral<T>(value));
+}
 
-    void DoTestBlockJoinOnUint64(EJoinKind joinKind, size_t blockSize, size_t testSize) {
-        TSetup<false> setup;
-        TProgramBuilder& pb = *setup.PgmBuilder;
+template <typename TKey>
+const TRuntimeNode MakeSet(TProgramBuilder& pgmBuilder, const TSet<TKey>& keyValues) {
+    const auto keyType = pgmBuilder.NewDataType(NUdf::TDataType<TKey>::Id);
 
-        const TVector<ui64> dictKeys = {1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144};
-        const auto dict = MakeSet(pb, dictKeys);
-
-        const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
-        const auto strType = pb.NewDataType(NUdf::TDataType<char*>::Id);
-        const auto ui64BlockType = pb.NewBlockType(ui64Type, TBlockType::EShape::Many);
-        const auto strBlockType = pb.NewBlockType(strType, TBlockType::EShape::Many);
-        const auto blockLenType = pb.NewBlockType(ui64Type, TBlockType::EShape::Scalar);
-        const auto structType = pb.NewStructType({
-            {"key", ui64BlockType},
-            {"subkey", ui64BlockType},
-            {"payload", strBlockType},
-            {"_yql_block_length", blockLenType}
+    TRuntimeNode::TList keyListItems;
+    std::transform(keyValues.cbegin(), keyValues.cend(),
+        std::back_inserter(keyListItems), [&pgmBuilder](const auto key) {
+            return pgmBuilder.NewDataLiteral<TKey>(key);
         });
-        const auto fields = NameToIndex(AS_TYPE(TStructType, structType));
-        const auto listStructType = pb.NewListType(structType);
 
-        const auto leftArg = pb.Arg(listStructType);
+    const auto keyList = pgmBuilder.NewList(keyType, keyListItems);
+    return pgmBuilder.ToHashedDict(keyList, false,
+        [&](TRuntimeNode item) {
+            return item;
+        }, [&](TRuntimeNode) {
+            return pgmBuilder.NewVoid();
+        });
+}
 
-        const auto leftWideFlow = pb.ExpandMap(pb.ToFlow(leftArg),
-            [&](TRuntimeNode item) -> TRuntimeNode::TList {
-                return {
-                    pb.Member(item, "key"),
-                    pb.Member(item, "subkey"),
-                    pb.Member(item, "payload"),
-                    pb.Member(item, "_yql_block_length")
-                };
-            });
+TArrays KSVToArrays(const TVector<TKSV>& ksvVector, size_t current,
+    size_t blockSize, arrow::MemoryPool* memoryPool
+) {
+    TArrays arrays;
+    arrow::UInt64Builder keysBuilder(memoryPool);
+    arrow::UInt64Builder subkeysBuilder(memoryPool);
+    arrow::BinaryBuilder valuesBuilder(memoryPool);
+    ARROW_OK(keysBuilder.Reserve(blockSize));
+    ARROW_OK(subkeysBuilder.Reserve(blockSize));
+    ARROW_OK(valuesBuilder.Reserve(blockSize));
+    for (size_t i = 0; i < blockSize; i++) {
+        keysBuilder.UnsafeAppend(std::get<0>(ksvVector[current + i]));
+        subkeysBuilder.UnsafeAppend(std::get<1>(ksvVector[current + i]));
+        const TStringBuf string(std::get<2>(ksvVector[current + i]));
+        ARROW_OK(valuesBuilder.Append(string.data(), string.size()));
+    }
+    ARROW_OK(keysBuilder.FinishInternal(&arrays[0]));
+    ARROW_OK(subkeysBuilder.FinishInternal(&arrays[1]));
+    ARROW_OK(valuesBuilder.FinishInternal(&arrays[2]));
+    return arrays;
+}
 
-        const auto joinNode = pb.BlockMapJoinCore(leftWideFlow, dict, joinKind, {0});
+TVector<TKSV> ArraysToKSV(const TArrays& arrays, const int64_t blockSize) {
+    TVector<TKSV> ksvVector;
+    for (size_t i = 0; i < std::tuple_size_v<TKSV>; i++) {
+        Y_ENSURE(arrays[i]->length == blockSize,
+            "Array size differs from the given block size");
+        Y_ENSURE(arrays[i]->GetNullCount() == 0,
+            "Null values conversion is not supported");
+        Y_ENSURE(arrays[i]->buffers.size() == 2 + (i > 1),
+            "Array layout doesn't respect the schema");
+    }
+    const ui64* keyBuffer = arrays[0]->GetValuesSafe<ui64>(1);
+    const ui64* subkeyBuffer = arrays[1]->GetValuesSafe<ui64>(1);
+    const int32_t* offsets = arrays[2]->GetValuesSafe<int32_t>(1);
+    const char* valuesBuffer = arrays[2]->GetValuesSafe<char>(2, 0);
+    for (auto i = 0; i < blockSize; i++) {
+        const TStringBuf value(valuesBuffer + offsets[i], offsets[i + 1] - offsets[i]);
+        ksvVector.push_back(std::make_tuple(keyBuffer[i], subkeyBuffer[i], value));
+    }
+    return ksvVector;
+}
 
-        const auto rootNode = pb.Collect(pb.NarrowMap(joinNode,
-            [&](TRuntimeNode::TList items) -> TRuntimeNode {
-                return pb.NewStruct(structType, {
-                    {"key", items[0]},
-                    {"subkey", items[1]},
-                    {"payload", items[2]},
-                    {"_yql_block_length", items[3]}
-                });
-            }));
+const TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKind,
+    TVector<ui32> keyColumns, TRuntimeNode& leftArg, TType* leftTuple,
+    const TRuntimeNode& dictNode
+) {
+    const auto tupleType = AS_TYPE(TTupleType, leftTuple);
+    const auto listTupleType = pgmBuilder.NewListType(leftTuple);
+    leftArg = pgmBuilder.Arg(listTupleType);
 
-        const auto graph = setup.BuildGraph(rootNode, {leftArg.GetNode()});
-        const auto& leftBlocks = graph->GetEntryPoint(0, true);
-        const auto& holderFactory = graph->GetHolderFactory();
-        auto& ctx = graph->GetContext();
-
-        TVector<ui64> keys(testSize);
-        TVector<ui64> subkeys;
-        std::iota(keys.begin(), keys.end(), 1);
-        std::transform(keys.cbegin(), keys.cend(), std::back_inserter(subkeys),
-            [](const auto& value) { return value * 1001; });
-
-        TVector<const char*> payloads;
-        std::transform(keys.cbegin(), keys.cend(), std::back_inserter(payloads),
-            [](const auto& value) { return twoLetterPayloads[value].c_str(); });
-
-        size_t current = 0;
-        TDefaultListRepresentation leftListValues;
-        while (current < testSize) {
-            arrow::UInt64Builder keysBuilder(&ctx.ArrowMemoryPool);
-            arrow::UInt64Builder subkeysBuilder(&ctx.ArrowMemoryPool);
-            arrow::BinaryBuilder payloadsBuilder(&ctx.ArrowMemoryPool);
-            ARROW_OK(keysBuilder.Reserve(blockSize));
-            ARROW_OK(subkeysBuilder.Reserve(blockSize));
-            ARROW_OK(payloadsBuilder.Reserve(blockSize));
-            for (size_t i = 0; i < blockSize; i++, current++) {
-                keysBuilder.UnsafeAppend(keys[current]);
-                subkeysBuilder.UnsafeAppend(subkeys[current]);
-                ARROW_OK(payloadsBuilder.Append(payloads[current], payloadSize));
+    const auto leftWideFlow = pgmBuilder.ExpandMap(pgmBuilder.ToFlow(leftArg),
+        [&](TRuntimeNode tupleNode) -> TRuntimeNode::TList {
+            TRuntimeNode::TList wide;
+            wide.reserve(tupleType->GetElementsCount());
+            for (size_t i = 0; i < tupleType->GetElementsCount(); i++) {
+                wide.emplace_back(pgmBuilder.Nth(tupleNode, i));
             }
-            std::shared_ptr<arrow::ArrayData> keysData;
-            ARROW_OK(keysBuilder.FinishInternal(&keysData));
-            std::shared_ptr<arrow::ArrayData> subkeysData;
-            ARROW_OK(subkeysBuilder.FinishInternal(&subkeysData));
-            std::shared_ptr<arrow::ArrayData> payloadsData;
-            ARROW_OK(payloadsBuilder.FinishInternal(&payloadsData));
+            return wide;
+        });
 
-            NUdf::TUnboxedValue* items = nullptr;
-            const auto structObj = holderFactory.CreateDirectArrayHolder(fields.size(), items);
-            items[fields.at("key")] = holderFactory.CreateArrowBlock(keysData);
-            items[fields.at("subkey")] = holderFactory.CreateArrowBlock(subkeysData);
-            items[fields.at("payload")] = holderFactory.CreateArrowBlock(payloadsData);
-            items[fields.at("_yql_block_length")] = MakeBlockCount(holderFactory, blockSize);
-            leftListValues = leftListValues.Append(std::move(structObj));
+    const auto joinNode = pgmBuilder.BlockMapJoinCore(leftWideFlow, dictNode, joinKind, keyColumns);
+
+    const auto rootNode = pgmBuilder.Collect(pgmBuilder.NarrowMap(joinNode,
+        [&](TRuntimeNode::TList items) -> TRuntimeNode {
+            TVector<TRuntimeNode> tupleElements;
+            tupleElements.reserve(tupleType->GetElementsCount());
+            for (size_t i = 0; i < tupleType->GetElementsCount(); i++) {
+                tupleElements.emplace_back(items[i]);
+            }
+            return pgmBuilder.NewTuple(tupleElements);
+        }));
+
+    return rootNode;
+}
+
+TVector<TKSV> DoTestBlockJoinOnUint64(EJoinKind joinKind, TVector<TKSV> values,
+    TSet<ui64> set, size_t blockSize
+) {
+    TSetup<false> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto dict = MakeSet(pb, set);
+
+    const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    const auto strType = pb.NewDataType(NUdf::EDataSlot::String);
+    const auto ui64BlockType = pb.NewBlockType(ui64Type, TBlockType::EShape::Many);
+    const auto strBlockType = pb.NewBlockType(strType, TBlockType::EShape::Many);
+    const auto blockLenType = pb.NewBlockType(ui64Type, TBlockType::EShape::Scalar);
+    const auto ksvType = pb.NewTupleType({
+        ui64BlockType, ui64BlockType, strBlockType, blockLenType
+    });
+    // Mind the last block length column.
+    const auto ksvWidth = AS_TYPE(TTupleType, ksvType)->GetElementsCount() - 1;
+
+    TRuntimeNode leftArg;
+    const auto rootNode = BuildBlockJoin(pb, joinKind, {0}, leftArg, ksvType, dict);
+
+    const auto graph = setup.BuildGraph(rootNode, {leftArg.GetNode()});
+    const auto& leftBlocks = graph->GetEntryPoint(0, true);
+    const auto& holderFactory = graph->GetHolderFactory();
+    auto& ctx = graph->GetContext();
+
+    const size_t testSize = values.size();
+    size_t current = 0;
+    TDefaultListRepresentation leftListValues;
+    while (current < testSize) {
+        const auto arrays = KSVToArrays(values, current, blockSize, &ctx.ArrowMemoryPool);
+        current += blockSize;
+
+        NUdf::TUnboxedValue* items = nullptr;
+        const auto tuple = holderFactory.CreateDirectArrayHolder(ksvWidth + 1, items);
+        for (size_t i = 0; i < ksvWidth; i++) {
+            items[i] = holderFactory.CreateArrowBlock(arrays[i]);
         }
-        leftBlocks->SetValue(ctx, holderFactory.CreateDirectListHolder(std::move(leftListValues)));
-        const auto joinIterator = graph->GetValue().GetListIterator();
+        items[ksvWidth] = MakeBlockCount(holderFactory, blockSize);
+        leftListValues = leftListValues.Append(std::move(tuple));
+    }
+    leftBlocks->SetValue(ctx, holderFactory.CreateDirectListHolder(std::move(leftListValues)));
+    const auto joinIterator = graph->GetValue().GetListIterator();
 
-        NUdf::TUnboxedValue item;
-        TVector<NUdf::TUnboxedValue> joinResult;
-        while (joinIterator.Next(item)) {
-            joinResult.push_back(item);
+    TVector<TKSV> resultKSV;
+    TArrays arrays;
+    NUdf::TUnboxedValue value;
+    while (joinIterator.Next(value)) {
+        for (size_t i = 0; i < ksvWidth; i++) {
+            const auto arrayValue = value.GetElement(i);
+            const auto arrayDatum = TArrowBlock::From(arrayValue).GetDatum();
+            UNIT_ASSERT(arrayDatum.is_array());
+            arrays[i] = arrayDatum.array();
         }
-
-        UNIT_ASSERT_VALUES_EQUAL(joinResult.size(), 1);
-        const auto blocks = joinResult.front();
-        const auto blockLengthValue = blocks.GetElement(fields.at("_yql_block_length"));
+        const auto blockLengthValue = value.GetElement(ksvWidth);
         const auto blockLengthDatum = TArrowBlock::From(blockLengthValue).GetDatum();
-        UNIT_ASSERT(blockLengthDatum.is_scalar());
+        Y_ENSURE(blockLengthDatum.is_scalar());
         const auto blockLength = blockLengthDatum.scalar_as<arrow::UInt64Scalar>().value;
-        const auto dictSize = std::count_if(dictKeys.cbegin(), dictKeys.cend(),
-            [testSize](ui64 key) { return key < testSize; });
-        const auto expectedLength = joinKind == EJoinKind::LeftSemi ? dictSize
-                                  : joinKind == EJoinKind::LeftOnly ? testSize - dictSize
-                                  : -1;
-        UNIT_ASSERT_VALUES_EQUAL(expectedLength, blockLength);
+        const auto blockKSV = ArraysToKSV(arrays, blockLength);
+        resultKSV.insert(resultKSV.end(), blockKSV.cbegin(), blockKSV.cend());
     }
+    std::sort(resultKSV.begin(), resultKSV.end());
+    return resultKSV;
+}
 
-    void TestBlockJoinOnUint64(EJoinKind joinKind) {
-        const size_t testSize = 512;
-        for (size_t blockSize = 8; blockSize <= testSize; blockSize <<= 2) {
-            DoTestBlockJoinOnUint64(joinKind, blockSize, testSize);
-        }
+void TestBlockJoinOnUint64(EJoinKind joinKind) {
+    constexpr size_t testSize = 1 << 14;
+    constexpr size_t valueSize = 3;
+    static const TVector<TString> threeLetterValues = GenerateValues(valueSize);
+    static const TSet<ui64> fib = {1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144,
+        233, 377, 610, 987, 1597, 2584, 4181, 6765, 10946, 17711};
+
+    TVector<TKSV> testKSV;
+    for (size_t k = 0; k < testSize; k++) {
+        testKSV.push_back(std::make_tuple(k, k * 1001, threeLetterValues[k]));
     }
+    TVector<TKSV> expectedKSV;
+    std::copy_if(testKSV.cbegin(), testKSV.cend(), std::back_inserter(expectedKSV),
+        [&joinKind](const auto& ksv) {
+            const auto contains = fib.contains(std::get<0>(ksv));
+            return joinKind == EJoinKind::LeftSemi ? contains : !contains;
+        });
+
+    for (size_t blockSize = 8; blockSize <= testSize; blockSize <<= 1) {
+        const auto gotKSV = DoTestBlockJoinOnUint64(joinKind, testKSV, fib, blockSize);
+        UNIT_ASSERT_EQUAL(expectedKSV, gotKSV);
+    }
+}
+
 } // namespace
 
-Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinTest) {
+Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinBasicTest) {
     Y_UNIT_TEST(TestLeftSemiOnUint64) {
         TestBlockJoinOnUint64(EJoinKind::LeftSemi);
     }

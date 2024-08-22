@@ -118,18 +118,21 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         auto tableInfo = CreateDatabaseColumnTables(env, 1, 1)[0];
         auto sender = runtime.AllocateEdgeActor();
 
-        int observerCount = 0;
-        auto observer = runtime.AddObserver<TEvTxProxySchemeCache::TEvResolveKeySetResult>([&](auto& ev){
-            if (++observerCount >= 3) {
-                ev.Reset();
-            }
-        });
+        TBlockEvents<TEvTxProxySchemeCache::TEvResolveKeySetResult> block(runtime);
 
         auto analyzeRequest1 = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest1.release());
-        runtime.WaitFor("TEvResolveKeySetResult", [&]{ return observerCount >= 3; });
-        observer.Remove();
+        
+        runtime.WaitFor("1st TEvResolveKeySetResult", [&]{ return block.size() >= 1; });
+        block.Unblock(1);
+        runtime.WaitFor("2nd TEvResolveKeySetResult", [&]{ return block.size() >= 1; });
+        block.Unblock(1);
+        runtime.WaitFor("3rd TEvResolveKeySetResult", [&]{ return block.size() >= 1; });
+        
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
+        
+        block.Unblock();
+        block.Stop();
 
         auto analyzeRequest2 = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest2.release());

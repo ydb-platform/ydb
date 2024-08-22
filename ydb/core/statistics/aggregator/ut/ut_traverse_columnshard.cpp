@@ -6,6 +6,7 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
+#include <ydb/core/testlib/actors/block_events.h>
 
 namespace NKikimr {
 namespace NStat {
@@ -28,16 +29,20 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         auto tableInfo = CreateDatabaseColumnTables(env, 1, 10)[0];
         auto sender = runtime.AllocateEdgeActor();
 
-        int eventCount = 0;
-        auto observer = runtime.AddObserver<TEvTxProxySchemeCache::TEvResolveKeySetResult>([&](auto& ev) {
-            if (++eventCount >= 3) {
-                ev.Reset();
-            }
-        });
+        TBlockEvents<TEvTxProxySchemeCache::TEvResolveKeySetResult> block(runtime);
 
-        runtime.WaitFor("TEvResolveKeySetResult", [&]{ return eventCount >= 3; });
-        observer.Remove();
+        runtime.WaitFor("1st TEvResolveKeySetResult", [&]{ return block.size() >= 1; });
+        block.Unblock(1);
+        runtime.WaitFor("2nd TEvResolveKeySetResult", [&]{ return block.size() >= 1; });
+        block.Unblock(1);
+        runtime.WaitFor("3rd TEvResolveKeySetResult", [&]{ return block.size() >= 1; });
+        
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
+        
+        block.Unblock();
+        block.Stop();        
+
+        runtime.SimulateSleep(TDuration::Seconds(10));
 
         ValidateCountMinColumnshard(runtime, tableInfo.PathId, 10);
     }

@@ -244,6 +244,7 @@ private:
             TStringBuf scheme, host, uri;
             NHttp::CrackURL(ProtectedPageUrl, scheme, host, uri);
             httpRequest = NHttp::THttpOutgoingRequest::CreateHttpRequest(method, host, locationHeader);
+            httpRequest->Secure = previousRequest->Secure;
         } else {
             httpRequest = NHttp::THttpOutgoingRequest::CreateRequest(method, locationHeader);
         }
@@ -253,10 +254,8 @@ private:
             httpRequest->Set(AUTH_HEADER_NAME, authHeaderValue);
         }
         if (!previousRequest->Body.empty()) {
-
             httpRequest->SetBody(previousRequest->Body);
         }
-        httpRequest->Secure = previousRequest->Secure;
         ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
     }
 };

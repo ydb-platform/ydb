@@ -57,8 +57,12 @@ private: \
     PHOENIX_DECLARE_TYPE__PROLOGUE(type, typeTagValue); \
 public: \
     static const ::NYT::NPhoenix2::TTypeDescriptor& GetTypeDescriptor(); \
+    void SaveImpl(TSaveContext& context) const saveLoadModifier; \
+    void LoadImpl(TLoadContext& context) saveLoadModifier; \
     void Save(TSaveContext& context) const saveLoadModifier; \
     void Load(TLoadContext& context) saveLoadModifier; \
+    void Persist(const TPersistenceContext& context) saveLoadModifier; \
+    using TPhoenix2SupportTag = type; \
     \
 private: \
     static const ::NYT::NPhoenix2::NDetail::TRuntimeFieldDescriptorMap<type, TLoadContext>& GetRuntimeFieldDescriptorMap()
@@ -89,14 +93,34 @@ public: \
         return map; \
     } \
     \
-    void Save(TSaveContext& context) const saveLoadModifier \
+    void SaveImpl(TSaveContext& context) const saveLoadModifier \
     { \
         ::NYT::NPhoenix2::NDetail::SaveImpl(this, context); \
     } \
     \
-    void Load(TLoadContext& context) saveLoadModifier \
+    void LoadImpl(TLoadContext& context) saveLoadModifier \
     { \
         ::NYT::NPhoenix2::NDetail::LoadImpl(this, context); \
+    } \
+    \
+    void Save(TSaveContext& context) const saveLoadModifier \
+    { \
+        const_cast<type*>(this)->Persist(context); \
+    } \
+    \
+    void Load(TLoadContext& context) saveLoadModifier \
+    { \
+        Persist(context); \
+    } \
+    \
+    void Persist(const TPersistenceContext& context) saveLoadModifier \
+    { \
+        if (context.IsSave()) { \
+            type::SaveImpl(context.SaveContext()); \
+        } else { \
+            YT_VERIFY(context.IsLoad()); \
+            type::LoadImpl(context.LoadContext()); \
+        } \
     }
 
 #define PHOENIX_DECLARE_TEMPLATE_TYPE(type, typeTag) \

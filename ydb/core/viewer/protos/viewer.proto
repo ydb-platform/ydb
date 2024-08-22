@@ -719,3 +719,19 @@ message TPDiskInfo {
     TPDiskInfoWhiteboard Whiteboard = 1;
     TPDiskInfoBSC BSC = 2;
 }
+
+message TFeatureFlagsConfig {
+    message TFeatureFlag {
+        string Name = 1;
+        bool Enabled = 2;
+        bool IsDefault = 3;
+    }
+
+    message TDatabase {
+        string Name = 1;
+        repeated TFeatureFlag FeatureFlags = 2;
+    }
+
+    uint32 Version = 1;
+    repeated TDatabase Databases = 2;
+}

@@ -2703,6 +2703,12 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                 if ((*stat)->HasMaxMemoryUsage()) {
                     FillAggrStat(stats, (*stat)->GetMaxMemoryUsage(), "MaxMemoryUsage");
                 }
+                if ((*stat)->HasSpillingBytes()) {
+                    FillAggrStat(stats, (*stat)->GetSpillingBytes(), "SpillingBytes");
+                }
+                if ((*stat)->HasSpillingTimeUs()) {
+                    FillAggrStat(stats, (*stat)->GetSpillingTimeUs(), "SpillingTimeUs");
+                }
 
                 if (!(*stat)->GetIngress().empty()) {
                     auto& ingressStats = stats.InsertValue("Ingress", NJson::JSON_ARRAY);

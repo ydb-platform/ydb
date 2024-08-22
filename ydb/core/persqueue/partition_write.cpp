@@ -1066,16 +1066,16 @@ void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFor
         }
         if (!DataKeysBody.empty() && CompactedKeys.empty()) {
             Y_ABORT_UNLESS(DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount() <= x.NewKey.GetOffset(),
+                           "PQ: %" PRIu64 ", Partition: %s, "
                            "LAST KEY %s, HeadOffset %lu, NEWKEY %s",
+                           TabletID, Partition.ToString().c_str(),
                            DataKeysBody.back().Key.ToString().c_str(),
                            Head.Offset,
                            x.NewKey.ToString().c_str());
         }
-        LOG_DEBUG_S(
-                    ctx, NKikimrServices::PERSQUEUE,
-                    "writing blob: topic '" << TopicName() << "' partition " << Partition
-                    << " " << x.OldKey.ToString() << " size " << x.Size << " WTime " << ctx.Now().MilliSeconds()
-                   );
+        PQ_LOG_D("writing blob: topic '" << TopicName() << "' partition " << Partition <<
+                 " old key " << x.OldKey.ToString() << " new key " << x.NewKey.ToString() <<
+                 " size " << x.Size << " WTime " << ctx.Now().MilliSeconds());
 
         CompactedKeys.emplace_back(x.NewKey, x.Size);
     }

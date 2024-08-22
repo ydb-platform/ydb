@@ -82,7 +82,7 @@ TString TPartition::LogPrefix() const {
     } else {
         state = "Unknown";
     }
-    return TStringBuilder() << "[PQ: " << TabletID << ", Partition:" << Partition << ", State:" << state << "] ";
+    return TStringBuilder() << "[PQ: " << TabletID << ", Partition: " << Partition << ", State: " << state << "] ";
 }
 
 bool TPartition::IsActive() const {
@@ -2132,6 +2132,7 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event)
 
 void TPartition::CommitWriteOperations(TTransaction& t)
 {
+    PQ_LOG_D("TPartition::CommitWriteOperations TxId: " << t.GetTxId());
     Y_ABORT_UNLESS(PersistRequest);
     Y_ABORT_UNLESS(!PartitionedBlob.IsInited());
 
@@ -2149,6 +2150,9 @@ void TPartition::CommitWriteOperations(TTransaction& t)
         HaveWriteMsg = true;
     }
 
+    PQ_LOG_D("t.WriteInfo->BodyKeys.size=" << t.WriteInfo->BodyKeys.size() <<
+             ", t.WriteInfo->BlobsFromHead.size=" << t.WriteInfo->BlobsFromHead.size());
+    PQ_LOG_D("Head=" << Head << ", NewHead=" << NewHead);
     if (!t.WriteInfo->BodyKeys.empty()) {
         PartitionedBlob = TPartitionedBlob(Partition,
                                            NewHead.Offset,
@@ -2163,6 +2167,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                                            MaxBlobSize);
 
         for (auto& k : t.WriteInfo->BodyKeys) {
+            PQ_LOG_D("add key " << k.Key.ToString());
             auto write = PartitionedBlob.Add(k.Key, k.Size);
             if (write && !write->Value.empty()) {
                 AddCmdWrite(write, PersistRequest.Get(), ctx);
@@ -2173,6 +2178,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
 
     }
 
+    PQ_LOG_D("PartitionedBlob.GetFormedBlobs().size=" << PartitionedBlob.GetFormedBlobs().size());
     if (const auto& formedBlobs = PartitionedBlob.GetFormedBlobs(); !formedBlobs.empty()) {
         ui32 curWrites = RenameTmpCmdWrites(PersistRequest.Get());
         RenameFormedBlobs(formedBlobs,

@@ -510,20 +510,18 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
         return out;
     }
 
-    for (const auto& [indexKey, keyPortions] : spg->GetPortionsIndex().GetPoints()) {
-        for (auto&& [_, portionInfo] : keyPortions.GetStart()) {
-            if (!portionInfo->IsVisible(snapshot)) {
-                continue;
-            }
-            Y_ABORT_UNLESS(portionInfo->Produced());
-            const bool skipPortion = !pkRangesFilter.IsPortionInUsage(*portionInfo);
-            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", skipPortion ? "portion_skipped" : "portion_selected")
-                ("pathId", pathId)("portion", portionInfo->DebugString());
-            if (skipPortion) {
-                continue;
-            }
-            out->PortionsOrderedPK.emplace_back(portionInfo);
+    for (const auto& [_, portionInfo] : spg->GetPortions()) {
+        if (!portionInfo->IsVisible(snapshot)) {
+            continue;
         }
+        Y_ABORT_UNLESS(portionInfo->Produced());
+        const bool skipPortion = !pkRangesFilter.IsPortionInUsage(*portionInfo);
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", skipPortion ? "portion_skipped" : "portion_selected")("pathId", pathId)(
+            "portion", portionInfo->DebugString());
+        if (skipPortion) {
+            continue;
+        }
+        out->PortionsOrderedPK.emplace_back(portionInfo);
     }
 
     return out;

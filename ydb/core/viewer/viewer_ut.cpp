@@ -1709,7 +1709,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             "database": "/Root",
             "action": "execute-script",
             "syntax": "yql_v1",
-            "stats": "profile"
+            "stats": "none"
         })json";
         const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/query?timeout=600000&base64=false&schema=modern", requestBody, &responseStream, headers);
         const TString response = responseStream.ReadAll();

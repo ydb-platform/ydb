@@ -108,7 +108,7 @@ void TKqpComputeActor::DoBootstrap() {
         ScanData->TaskId = GetTask().GetId();
         ScanData->TableReader = CreateKqpTableReader(*ScanData);
 
-        auto scanActor = NSysView::CreateSystemViewScan(SelfId(), 0, ScanData->TableId, ranges, columns);
+        auto scanActor = NSysView::CreateSystemViewScan(SelfId(), 0, ScanData->TableId, ScanData->TablePath, ranges, columns);
 
         if (!scanActor) {
             InternalError(TIssuesIds::DEFAULT_ERROR, TStringBuilder()

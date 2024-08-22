@@ -94,16 +94,17 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         auto sender = runtime.AllocateEdgeActor();
 
         bool eventSeen = false;
-        auto observer = runtime.AddObserver<TEvStatistics::TEvAnalyzeTableResponse>([&](auto&) {
+        auto observer = runtime.AddObserver<TEvStatistics::TEvAnalyzeTableResponse>([&](auto& ev) {
             eventSeen = true;
+            ev.Reset();
         });
 
         auto analyzeRequest1 = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest1.release());
 
         runtime.WaitFor("TEvAnalyzeTableResponse", [&]{ return eventSeen; });
+        observer.Remove();
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
-        runtime.SimulateSleep(TDuration::Seconds(30));
 
         auto analyzeRequest2 = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest2.release());
@@ -118,16 +119,17 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         auto sender = runtime.AllocateEdgeActor();
 
         int observerCount = 0;
-        auto observer = runtime.AddObserver<TEvTxProxySchemeCache::TEvResolveKeySetResult>([&](auto&){
-            observerCount++;
+        auto observer = runtime.AddObserver<TEvTxProxySchemeCache::TEvResolveKeySetResult>([&](auto& ev){
+            if (++observerCount >= 3) {
+                ev.Reset();
+            }
         });
 
         auto analyzeRequest1 = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest1.release());
-
-        runtime.WaitFor("TEvResolveKeySetResult", [&]{ return observerCount == 3; });
+        runtime.WaitFor("TEvResolveKeySetResult", [&]{ return observerCount >= 3; });
+        observer.Remove();
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
-        runtime.SimulateSleep(TDuration::Seconds(30));
 
         auto analyzeRequest2 = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest2.release());
@@ -142,16 +144,17 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         auto sender = runtime.AllocateEdgeActor();
 
         bool eventSeen = false;
-        auto observer = runtime.AddObserver<TEvHive::TEvRequestTabletDistribution>([&](auto&) {
+        auto observer = runtime.AddObserver<TEvHive::TEvRequestTabletDistribution>([&](auto& ev) {
             eventSeen = true;
+            ev.Reset();            
         });
 
         auto analyzeRequest1 = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest1.release());
 
         runtime.WaitFor("TEvRequestTabletDistribution", [&]{ return eventSeen; });
+        observer.Remove();
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
-        runtime.SimulateSleep(TDuration::Seconds(30));
 
         auto analyzeRequest2 = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest2.release());
@@ -166,16 +169,17 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         auto sender = runtime.AllocateEdgeActor();
 
         bool eventSeen = false;
-        auto observer = runtime.AddObserver<TEvStatistics::TEvAggregateStatistics>([&](auto&){
+        auto observer = runtime.AddObserver<TEvStatistics::TEvAggregateStatistics>([&](auto& ev){
             eventSeen = true;
+            ev.Reset();
         });
 
         auto analyzeRequest1 = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest1.release());
 
         runtime.WaitFor("TEvAggregateStatistics", [&]{ return eventSeen; });
+        observer.Remove();
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
-        runtime.SimulateSleep(TDuration::Seconds(30));
 
         auto analyzeRequest2 = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest2.release());
@@ -190,16 +194,17 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         auto sender = runtime.AllocateEdgeActor();
 
         bool eventSeen = false;
-        auto observer = runtime.AddObserver<TEvStatistics::TEvAggregateStatisticsResponse>([&](auto&){
+        auto observer = runtime.AddObserver<TEvStatistics::TEvAggregateStatisticsResponse>([&](auto& ev){
             eventSeen = true;
+            ev.Reset();
         });
 
         auto analyzeRequest1 = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest1.release());
 
         runtime.WaitFor("TEvAggregateStatisticsResponse", [&]{ return eventSeen; });
+        observer.Remove();        
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
-        runtime.SimulateSleep(TDuration::Seconds(30));
 
         auto analyzeRequest2 = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest2.release());
@@ -207,7 +212,6 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
     }
 
-    //
     Y_UNIT_TEST(AnalyzeRebootSaInAggregate) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
@@ -215,16 +219,18 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         auto sender = runtime.AllocateEdgeActor();
         
         int observerCount = 0;
-        auto observer = runtime.AddObserver<TEvStatistics::TEvStatisticsRequest>([&](auto&) {
-            observerCount++;
+        auto observer = runtime.AddObserver<TEvStatistics::TEvStatisticsRequest>([&](auto& ev) {
+            if (++observerCount >= 5) {
+                ev.Reset();
+            }
         });
 
         auto analyzeRequest1 = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest1.release());
 
-        runtime.WaitFor("5th TEvStatisticsRequest", [&]{ return observerCount == 5; });
+        runtime.WaitFor("5th TEvStatisticsRequest", [&]{ return observerCount >= 5; });
+        observer.Remove();
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
-        runtime.SimulateSleep(TDuration::Seconds(30));
 
         auto analyzeRequest2 = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest2.release());

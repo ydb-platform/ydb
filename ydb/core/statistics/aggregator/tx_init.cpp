@@ -282,6 +282,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
         Self->InitializeStatisticsTable();
 
         if (Self->TraversalPathId && Self->TraversalStartKey) {
+            SA_LOG_D("[" << Self->TabletID() << "] TTxInit::Complete. Start navigate. PathId " << Self->TraversalPathId);
             Self->NavigateType = ENavigateType::Traversal;
             Self->NavigatePathId = Self->TraversalPathId;
             Self->Navigate();

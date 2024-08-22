@@ -29,13 +29,15 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         auto sender = runtime.AllocateEdgeActor();
 
         int eventCount = 0;
-        auto observer = runtime.AddObserver<TEvTxProxySchemeCache::TEvResolveKeySetResult>([&](auto&) {
-            eventCount++;
+        auto observer = runtime.AddObserver<TEvTxProxySchemeCache::TEvResolveKeySetResult>([&](auto& ev) {
+            if (++eventCount >= 3) {
+                ev.Reset();
+            }
         });
 
-        runtime.WaitFor("TEvResolveKeySetResult", [&]{ return eventCount == 3; });
+        runtime.WaitFor("TEvResolveKeySetResult", [&]{ return eventCount >= 3; });
+        observer.Remove();
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
-        runtime.SimulateSleep(TDuration::Seconds(30));
 
         ValidateCountMinColumnshard(runtime, tableInfo.PathId, 10);
     }
@@ -47,13 +49,14 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         auto sender = runtime.AllocateEdgeActor();
 
         bool eventSeen = false;
-        auto observer = runtime.AddObserver<TEvHive::TEvRequestTabletDistribution>([&](auto&){
+        auto observer = runtime.AddObserver<TEvHive::TEvRequestTabletDistribution>([&](auto& ev){
             eventSeen = true;
+            ev.Reset();
         });
 
         runtime.WaitFor("TEvRequestTabletDistribution", [&]{ return eventSeen; });
+        observer.Remove();
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
-        runtime.SimulateSleep(TDuration::Seconds(30));
 
         ValidateCountMinColumnshard(runtime, tableInfo.PathId, 10);
     }
@@ -65,13 +68,14 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         auto sender = runtime.AllocateEdgeActor();
 
         bool eventSeen = false;
-        auto observer = runtime.AddObserver<TEvStatistics::TEvAggregateStatistics>([&](auto&){
+        auto observer = runtime.AddObserver<TEvStatistics::TEvAggregateStatistics>([&](auto& ev){
             eventSeen = true;
+            ev.Reset();
         });
 
         runtime.WaitFor("TEvAggregateStatistics", [&]{ return eventSeen; });
+        observer.Remove();
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
-        runtime.SimulateSleep(TDuration::Seconds(30));
 
         ValidateCountMinColumnshard(runtime, tableInfo.PathId, 10);
     }
@@ -83,13 +87,14 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         auto sender = runtime.AllocateEdgeActor();
 
         bool eventSeen = false;
-        auto observer = runtime.AddObserver<TEvStatistics::TEvAggregateStatisticsResponse>([&](auto&){
+        auto observer = runtime.AddObserver<TEvStatistics::TEvAggregateStatisticsResponse>([&](auto& ev){
             eventSeen = true;
+            ev.Reset();
         });
 
         runtime.WaitFor("TEvAggregateStatisticsResponse", [&]{ return eventSeen; });
+        observer.Remove();
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
-        runtime.SimulateSleep(TDuration::Seconds(30));
 
         ValidateCountMinColumnshard(runtime, tableInfo.PathId, 10);
     }
@@ -101,13 +106,15 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         auto sender = runtime.AllocateEdgeActor();
 
         int observerCount = 0;
-        auto observer = runtime.AddObserver<TEvStatistics::TEvStatisticsRequest>([&](auto&){
-            observerCount++;
+        auto observer = runtime.AddObserver<TEvStatistics::TEvStatisticsRequest>([&](auto& ev){
+            if (++observerCount >= 5) {
+                ev.Reset();
+            }
         });
 
-        runtime.WaitFor("5th TEvStatisticsRequest", [&]{ return observerCount == 5; });
+        runtime.WaitFor("5th TEvStatisticsRequest", [&]{ return observerCount >= 5; });
+        observer.Remove();
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
-        runtime.SimulateSleep(TDuration::Seconds(30));
 
         ValidateCountMinColumnshard(runtime, tableInfo.PathId, 10);
     }

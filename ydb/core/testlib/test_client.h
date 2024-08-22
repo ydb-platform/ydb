@@ -145,6 +145,7 @@ namespace Tests {
         NKikimrConfig::TCompactionConfig CompactionConfig;
         TMap<ui32, TString> NodeKeys;
         ui64 DomainPlanResolution = 0;
+        ui32 DomainTimecastBuckets = 0;
         std::shared_ptr<NKikimr::NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> PersQueueGetReadSessionsInfoWorkerFactory;
         std::shared_ptr<NKikimr::NHttpProxy::IAuthFactory> DataStreamsAuthFactory;
         std::shared_ptr<NKikimr::NPQ::TPersQueueMirrorReaderFactory> PersQueueMirrorReaderFactory = std::make_shared<NKikimr::NPQ::TPersQueueMirrorReaderFactory>();
@@ -193,6 +194,7 @@ namespace Tests {
         TServerSettings& SetEnableKqpSpilling(bool value) { EnableKqpSpilling = value; return *this; }
         TServerSettings& SetEnableForceFollowers(bool value) { EnableForceFollowers = value; return *this; }
         TServerSettings& SetDomainPlanResolution(ui64 resolution) { DomainPlanResolution = resolution; return *this; }
+        TServerSettings& SetDomainTimecastBuckets(ui32 buckets) { DomainTimecastBuckets = buckets; return *this; }
         TServerSettings& SetFeatureFlags(const NKikimrConfig::TFeatureFlags& value) { FeatureFlags = value; return *this; }
         TServerSettings& SetCompactionConfig(const NKikimrConfig::TCompactionConfig& value) { CompactionConfig = value; return *this; }
         TServerSettings& SetEnableDbCounters(bool value) { FeatureFlags.SetEnableDbCounters(value); return *this; }

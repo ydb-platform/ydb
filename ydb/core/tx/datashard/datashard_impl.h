@@ -2698,7 +2698,7 @@ private:
         { }
     };
 
-    TIntrusivePtr<TMediatorTimecastEntry> MediatorTimeCastEntry;
+    TMediatorTimecastEntry::TCPtr MediatorTimeCastEntry;
     TSet<ui64> MediatorTimeCastWaitingSteps;
     TMultiMap<TRowVersion, TMediatorDelayedReply> MediatorDelayedReplies;
 

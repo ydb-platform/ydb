@@ -19,8 +19,6 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLBuckets {
 
-static const ui64 SmallPortionDetectSizeLimit = 1 << 20;
-
 TDuration GetCommonFreshnessCheckDuration();
 
 class TSimplePortionsGroupInfo {
@@ -683,7 +681,7 @@ private:
             return;
         }
         MainPortion->InitRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized, Others.IsEmpty() && currentInstant > MainPortion->RecordSnapshotMax().GetPlanInstant() +
-            NYDBTest::TControllers::GetColumnShardController()->GetLagForCompactionBeforeTierings(TDuration::Minutes(60)));
+            NYDBTest::TControllers::GetColumnShardController()->GetLagForCompactionBeforeTierings());
     }
 public:
     TTaskDescription GetTaskDescription() const {
@@ -1104,7 +1102,7 @@ public:
     }
 
     void RemovePortion(const std::shared_ptr<TPortionInfo>& portion) {
-        if (portion->GetTotalBlobBytes() < NYDBTest::TControllers::GetColumnShardController()->GetSmallPortionSizeDetector(SmallPortionDetectSizeLimit)) {
+        if (portion->GetTotalBlobBytes() < NYDBTest::TControllers::GetColumnShardController()->GetSmallPortionSizeDetector()) {
             Counters->SmallPortions->RemovePortion(portion);
         }
         if (!RemoveBucket(portion)) {
@@ -1146,7 +1144,7 @@ public:
     }
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& portion, const TInstant now) {
-        if (portion->GetTotalBlobBytes() < NYDBTest::TControllers::GetColumnShardController()->GetSmallPortionSizeDetector(SmallPortionDetectSizeLimit)) {
+        if (portion->GetTotalBlobBytes() < NYDBTest::TControllers::GetColumnShardController()->GetSmallPortionSizeDetector()) {
             Counters->SmallPortions->AddPortion(portion);
             AddOther(portion, now);
             return;

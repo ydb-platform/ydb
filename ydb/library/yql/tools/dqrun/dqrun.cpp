@@ -949,13 +949,14 @@ int RunMain(int argc, const char* argv[])
     }
 
     if (gatewaysConfig.HasS3()) {
+        gatewaysConfig.MutableS3()->SetAllowLocalFiles(true);
         for (auto& cluster: gatewaysConfig.GetS3().GetClusterMapping()) {
             clusters.emplace(to_lower(cluster.GetName()), TString{S3ProviderName});
         }
         if (!httpGateway) {
             httpGateway = IHTTPGateway::Make(gatewaysConfig.HasHttpGateway() ? &gatewaysConfig.GetHttpGateway() : nullptr);
         }
-        dataProvidersInit.push_back(GetS3DataProviderInitializer(httpGateway, nullptr, true, nullptr));
+        dataProvidersInit.push_back(GetS3DataProviderInitializer(httpGateway, nullptr));
     }
 
     if (gatewaysConfig.HasPq()) {

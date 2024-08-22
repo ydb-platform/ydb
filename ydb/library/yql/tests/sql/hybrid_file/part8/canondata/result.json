@@ -2589,6 +2589,20 @@
             "uri": "https://{canondata_backend}/1923547/94f377eaa1d93890e1345ac4940cc6fa07bddd4f/resource.tar.gz#test.test_pg_catalog-pg_timezone_abbrevs-default.txt-Plan_/plan.txt"
         }
     ],
+    "test.test[produce-fuse_reduces_with_presort--Debug]": [
+        {
+            "checksum": "a0be01e2962b39871f4097f1d598a1ca",
+            "size": 7199,
+            "uri": "https://{canondata_backend}/1942525/70eec467682e96dfaac0f3c809005b8a22cce54f/resource.tar.gz#test.test_produce-fuse_reduces_with_presort--Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[produce-fuse_reduces_with_presort--Plan]": [
+        {
+            "checksum": "b7d4ddc5c9f07fedb74a72b0789bd050",
+            "size": 7633,
+            "uri": "https://{canondata_backend}/1942525/70eec467682e96dfaac0f3c809005b8a22cce54f/resource.tar.gz#test.test_produce-fuse_reduces_with_presort--Plan_/plan.txt"
+        }
+    ],
     "test.test[produce-reduce_lambda_list_mem-default.txt-Debug]": [
         {
             "checksum": "940dd13b9a62a90b5c95a4a12a765fe7",

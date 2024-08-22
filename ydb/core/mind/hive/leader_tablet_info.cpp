@@ -144,6 +144,7 @@ TFollowerTabletInfo& TLeaderTabletInfo::AddFollower(TFollowerGroup& followerGrou
     } else {
         follower.Id = followerId;
     }
+    follower.NodeFilter = followerGroup.NodeFilter;
     Hive.UpdateCounterTabletsTotal(+1);
     Hive.UpdateDomainTabletsTotal(ObjectDomain, +1);
     return follower;

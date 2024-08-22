@@ -3120,5 +3120,19 @@
             "size": 9696,
             "uri": "https://{canondata_backend}/1900335/8eba31ae2dcfd9245ad9327a1ac3ca89667336e2/resource.tar.gz#test.test_window-win_func_over_group_by_compl--Plan_/plan.txt"
         }
+    ],
+    "test.test[window-yql-18879-default.txt-Debug]": [
+        {
+            "checksum": "107f886aa0e93d111584285ae5b82be0",
+            "size": 2277,
+            "uri": "https://{canondata_backend}/1871002/7e2607acdc67e4a5b8020e384ddfda98482a3dd6/resource.tar.gz#test.test_window-yql-18879-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[window-yql-18879-default.txt-Plan]": [
+        {
+            "checksum": "b2a2eb5d6b0a138ee924c128fc7738ef",
+            "size": 1331,
+            "uri": "https://{canondata_backend}/1871002/7e2607acdc67e4a5b8020e384ddfda98482a3dd6/resource.tar.gz#test.test_window-yql-18879-default.txt-Plan_/plan.txt"
+        }
     ]
 }

@@ -22,16 +22,6 @@ static void ThrowOnError(const TStatus& status) {
     }
 }
 
-static void ThrowOnError(const TAsyncExecuteQueryResult& result) {
-    auto status = result.GetValueSync();
-    ThrowOnError(status);
-}
-
-static void ThrowOnError(const TAsyncExecuteQueryResult& result, TMaybe<TResultSet>& resultSet) {
-    ThrowOnError(result);
-    resultSet = result.GetValueSync().GetResultSet(0);
-}
-
 static void PrintStatus(const TStatus& status) {
     Cerr << "Status: " << status.GetStatus() << Endl;
     status.GetIssues().PrintTo(Cerr);
@@ -40,7 +30,7 @@ static void PrintStatus(const TStatus& status) {
 ///////////////////////////////////////////////////////////////////////////////
 
 static void CreateTables(TQueryClient client, const TString& path) {
-    ThrowOnError(client.RetryQuery([path](TSession session) {
+    ThrowOnError(client.RetryQuerySync([path](TSession session) {
         auto query = Sprintf(R"(
             PRAGMA TablePathPrefix("%s");
             CREATE TABLE series (
@@ -51,10 +41,10 @@ static void CreateTables(TQueryClient client, const TString& path) {
                 PRIMARY KEY (series_id)
             );
         )", path.c_str());
-        return session.ExecuteQuery(query, TTxControl::NoTx());
+        return session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
     }));
 
-    ThrowOnError(client.RetryQuery([path](TSession session) {
+    ThrowOnError(client.RetryQuerySync([path](TSession session) {
         auto query = Sprintf(R"(
             PRAGMA TablePathPrefix("%s");
             CREATE TABLE seasons (
@@ -66,10 +56,10 @@ static void CreateTables(TQueryClient client, const TString& path) {
                 PRIMARY KEY (series_id, season_id)
             );
         )", path.c_str());
-        return session.ExecuteQuery(query, TTxControl::NoTx());
+        return session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
     }));
 
-    ThrowOnError(client.RetryQuery([path](TSession session) {
+    ThrowOnError(client.RetryQuerySync([path](TSession session) {
         auto query = Sprintf(R"(
             PRAGMA TablePathPrefix("%s");
             CREATE TABLE episodes (
@@ -81,42 +71,42 @@ static void CreateTables(TQueryClient client, const TString& path) {
                 PRIMARY KEY (series_id, season_id, episode_id)
             );
         )", path.c_str());
-        return session.ExecuteQuery(query, TTxControl::NoTx());
+        return session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
     }));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
 static void DropTables(TQueryClient client, const TString& path) {
-    ThrowOnError(client.RetryQuery([path](TSession session) {
+    ThrowOnError(client.RetryQuerySync([path](TSession session) {
         auto query = Sprintf(R"(
             PRAGMA TablePathPrefix("%s");
             DROP TABLE series;
         )", path.c_str());
-        return session.ExecuteQuery(query, TTxControl::NoTx());
+        return session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
     }));
 
-    ThrowOnError(client.RetryQuery([path](TSession session) {
+    ThrowOnError(client.RetryQuerySync([path](TSession session) {
         auto query = Sprintf(R"(
             PRAGMA TablePathPrefix("%s");
             DROP TABLE seasons;
         )", path.c_str());
-        return session.ExecuteQuery(query, TTxControl::NoTx());
+        return session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
     }));
     
-    ThrowOnError(client.RetryQuery([path](TSession session) {
+    ThrowOnError(client.RetryQuerySync([path](TSession session) {
         auto query = Sprintf(R"(
             PRAGMA TablePathPrefix("%s");
             DROP TABLE episodes;
         )", path.c_str());
-        return session.ExecuteQuery(query, TTxControl::NoTx());
+        return session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
     }));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
 void FillTableData(TQueryClient client, const TString& path) {
-    ThrowOnError(client.RetryQuery([path](TSession session) {
+    ThrowOnError(client.RetryQuerySync([path](TSession session) {
         return [&session, &path]() {
             auto query = Sprintf(R"(
             PRAGMA TablePathPrefix("%s");
@@ -173,15 +163,15 @@ void FillTableData(TQueryClient client, const TString& path) {
             return session.ExecuteQuery(
                 query,
                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-                params);
+                params).GetValueSync();
         }();
     }));
 }
 
 void SelectSimple(TQueryClient client, const TString& path) {
     TMaybe<TResultSet> resultSet;
-    ThrowOnError(client.RetryQuery([&path](TSession session) {
-        return [&session, &path](){
+    ThrowOnError(client.RetryQuerySync([&path, &resultSet](TSession session) {
+        return [&session, &path, &resultSet]() -> TStatus {
             auto query = Sprintf(R"(
                 PRAGMA TablePathPrefix("%s");
 
@@ -196,9 +186,14 @@ void SelectSimple(TQueryClient client, const TString& path) {
                 // Commit transaction at the end of the query
                 .CommitTx();
 
-            return session.ExecuteQuery(query, txControl);
+            auto result = session.ExecuteQuery(query, txControl).GetValueSync();
+            if (!result.IsSuccess()) {
+                return result;
+            }
+            resultSet = result.GetResultSet(0);
+            return result;
         }();
-    }), resultSet);
+    }));
 
     TResultSetParser parser(*resultSet);
     if (parser.TryNextRow()) {
@@ -211,7 +206,7 @@ void SelectSimple(TQueryClient client, const TString& path) {
 }
 
 void UpsertSimple(TQueryClient client, const TString& path) {
-    ThrowOnError(client.RetryQuery([path](TSession session) {
+    ThrowOnError(client.RetryQuerySync([path](TSession session) {
         return [&session, &path](){
             auto query = Sprintf(R"(
                 --!syntax_v1
@@ -222,15 +217,15 @@ void UpsertSimple(TQueryClient client, const TString& path) {
             )", path.c_str());
 
             return session.ExecuteQuery(query,
-                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx());
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
         }();
     }));
 }
 
 void SelectWithParams(TQueryClient client, const TString& path) {
     TMaybe<TResultSet> resultSet;
-    ThrowOnError(client.RetryQuery([path](TSession session) {
-        return [&session, &path](ui64 seriesId, ui64 seasonId){
+    ThrowOnError(client.RetryQuerySync([&path, &resultSet](TSession session) {
+        return [&session, &path, &resultSet](ui64 seriesId, ui64 seasonId){
             auto query = Sprintf(R"(
                 --!syntax_v1
                 PRAGMA TablePathPrefix("%s");
@@ -254,12 +249,19 @@ void SelectWithParams(TQueryClient client, const TString& path) {
                     .Build()
                 .Build();
 
-            return session.ExecuteQuery(
+            auto result = session.ExecuteQuery(
                 query,
                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-                params);
+                params).GetValueSync();
+            
+            if (!result.IsSuccess()) {
+                return result;
+            }
+            resultSet = result.GetResultSet(0);
+            return result;
+
         }(2, 3);
-    }), resultSet);
+    }));
 
     TResultSetParser parser(*resultSet);
     if (parser.TryNextRow()) {
@@ -272,8 +274,8 @@ void SelectWithParams(TQueryClient client, const TString& path) {
 
 void MultiStep(TQueryClient client, const TString& path) {
     TMaybe<TResultSet> resultSet;
-    ThrowOnError(client.RetryQuery([path](TSession session) {
-        return [&session, &path](ui64 seriesId, ui64 seasonId) {
+    ThrowOnError(client.RetryQuerySync([&path, &resultSet](TSession session) {
+        return [&session, &path, &resultSet](ui64 seriesId, ui64 seasonId) -> TStatus {
             auto query1 = Sprintf(R"(
                 --!syntax_v1
                 PRAGMA TablePathPrefix("%s");
@@ -305,7 +307,7 @@ void MultiStep(TQueryClient client, const TString& path) {
             auto resultValue = result.GetValueSync();
 
             if (!resultValue.IsSuccess()) {
-                return result;
+                return resultValue;
             }
 
             // Get active transaction id
@@ -351,13 +353,19 @@ void MultiStep(TQueryClient client, const TString& path) {
             // Execute second query.
             // Transaction control settings continues active transaction (tx) and
             // commits it at the end of second query execution.
-            return session.ExecuteQuery(
+            auto result2 = session.ExecuteQuery(
                 query2,
                 TTxControl::Tx(tx->GetId()).CommitTx(),
-                params2);
+                params2).GetValueSync();
+            
+            if (!result2.IsSuccess()) {
+                return result2;
+            }
+            resultSet = result2.GetResultSet(0);
+            return result2;
 
         }(2, 5);
-    }), resultSet);
+    }));
 
     TResultSetParser parser(*resultSet);
     Cout << "> MultiStep:" << Endl;

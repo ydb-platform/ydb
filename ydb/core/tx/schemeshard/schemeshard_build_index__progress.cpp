@@ -298,8 +298,7 @@ public:
     explicit TTxProgress(TSelf* self, TIndexBuildId id)
         : TTxBase(self, TXTYPE_PROGRESS_INDEX_BUILD)
         , BuildId(id)
-    {
-    }
+    {}
 
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(BuildId);
@@ -574,8 +573,7 @@ public:
         : TTxBase(self, TXTYPE_PROGRESS_INDEX_BUILD)
         , BuildIndexId(ev->Get()->BuildId)
         , ScheduledAt(ev->Get()->SendAt)
-    {
-    }
+    {}
 
     bool DoExecute(TTransactionContext& , const TActorContext& ctx) override {
         LOG_I("TTxReply : TTxBilling"
@@ -606,8 +604,7 @@ struct TSchemeShard::TIndexBuilder::TTxReply: public TSchemeShard::TIndexBuilder
 public:
     explicit TTxReply(TSelf* self)
         : TTxBase(self, TXTYPE_PROGRESS_INDEX_BUILD)
-    {
-    }
+    {}
 
     void DoComplete(const TActorContext&) override {
     }
@@ -625,8 +622,7 @@ public:
     explicit TTxReplyRetry(TSelf* self, TIndexBuildId buildId, TTabletId tabletId)
         : TTxReply(self)
         , PipeRetry({buildId, tabletId})
-    {
-    }
+    {}
 
     bool DoExecute([[maybe_unused]] TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& buildId = PipeRetry.BuildIndexId;
@@ -699,8 +695,7 @@ public:
     explicit TTxReplyProgress(TSelf* self, TEvDataShard::TEvBuildIndexProgressResponse::TPtr& shardProgress)
         : TTxReply(self)
         , ShardProgress(shardProgress)
-    {
-    }
+    {}
 
 
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
@@ -876,8 +871,7 @@ public:
     explicit TTxReplyCompleted(TSelf* self, TTxId completedTxId)
         : TTxReply(self)
         , CompletedTxId(completedTxId)
-    {
-    }
+    {}
  
     bool DoExecute(TTransactionContext& txc, [[maybe_unused]] const TActorContext& ctx) override {
         const auto txId = CompletedTxId;
@@ -971,8 +965,7 @@ public:
     explicit TTxReplyModify(TSelf* self, TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& modifyResult)
         : TTxReply(self)
         , ModifyResult(modifyResult)
-    {
-    }
+    {}
 
     void ReplyOnCreation(const TIndexBuildInfo& buildInfo,
                          const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS) {
@@ -1167,8 +1160,7 @@ public:
     explicit TTxReplyAllocate(TSelf* self, TEvTxAllocatorClient::TEvAllocateResult::TPtr& allocateResult)
         : TTxReply(self)
         , AllocateResult(allocateResult)
-    {
-    }
+    {}
 
     bool DoExecute(TTransactionContext& txc,[[maybe_unused]] const TActorContext& ctx) override {
         TIndexBuildId buildId = TIndexBuildId(AllocateResult->Cookie);

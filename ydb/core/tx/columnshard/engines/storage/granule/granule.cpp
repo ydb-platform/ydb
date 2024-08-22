@@ -47,8 +47,9 @@ bool TGranuleMeta::ErasePortion(const ui64 portion) {
 
 void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter, NStorageOptimizer::IOptimizerPlanner::TModificationGuard* modificationGuard) {
     if (portionAfter) {
-        PortionInfoGuard.OnNewPortion(portionAfter);
         PortionsIndex.AddPortion(portionAfter);
+
+        PortionInfoGuard.OnNewPortion(portionAfter);
         if (!portionAfter->HasRemoveSnapshot()) {
             if (modificationGuard) {
                 modificationGuard->AddPortion(portionAfter);

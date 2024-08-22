@@ -5,7 +5,7 @@ options {
 }
 
 // Input is a list of statements.
-sql_query: sql_stmt_list | (PRAGMA ANSI DIGITS ansi_sql_stmt_list);
+sql_query: sql_stmt_list | PRAGMA ANSI DIGITS ansi_sql_stmt_list;
 sql_stmt_list: SEMICOLON* sql_stmt (SEMICOLON+ sql_stmt)* SEMICOLON* EOF;
 ansi_sql_stmt_list: SEMICOLON* EOF;
 

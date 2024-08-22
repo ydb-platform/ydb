@@ -1634,15 +1634,15 @@ TNodePtr TSqlExpression::SubExpr(const TRule_con_subexpr& node, const TTrailingQ
             auto token = node.GetAlt_con_subexpr2().GetRule_unary_op1().GetToken1();
             Token(token);
             TPosition pos(Ctx.Pos());
-            switch (unifiedToken(token.GetId(), Context().Settings.Antlr4Parser)) {
-                case unifiedToken(SQLv1LexerTokens::TOKEN_NOT, 0):
-                case unifiedToken(SQLv1Antlr4Lexer::TOKEN_NOT, 1): opName = "Not"; break;
-                case unifiedToken(SQLv1LexerTokens::TOKEN_PLUS, 0):
-                case unifiedToken(SQLv1Antlr4Lexer::TOKEN_PLUS, 1): opName = "Plus"; break;
-                case unifiedToken(SQLv1LexerTokens::TOKEN_MINUS, 0):
-                case unifiedToken(SQLv1Antlr4Lexer::TOKEN_MINUS, 1): opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMinus" : "Minus"; break;
-                case unifiedToken(SQLv1LexerTokens::TOKEN_TILDA, 0):
-                case unifiedToken(SQLv1Antlr4Lexer::TOKEN_TILDA, 1): opName = "BitNot"; break;
+            switch (UnifiedToken(token.GetId(), Context().Settings.Antlr4Parser)) {
+                case UnifiedToken(SQLv1LexerTokens::TOKEN_NOT, 0):
+                case UnifiedToken(SQLv1Antlr4Lexer::TOKEN_NOT, 1): opName = "Not"; break;
+                case UnifiedToken(SQLv1LexerTokens::TOKEN_PLUS, 0):
+                case UnifiedToken(SQLv1Antlr4Lexer::TOKEN_PLUS, 1): opName = "Plus"; break;
+                case UnifiedToken(SQLv1LexerTokens::TOKEN_MINUS, 0):
+                case UnifiedToken(SQLv1Antlr4Lexer::TOKEN_MINUS, 1): opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMinus" : "Minus"; break;
+                case UnifiedToken(SQLv1LexerTokens::TOKEN_TILDA, 0):
+                case UnifiedToken(SQLv1Antlr4Lexer::TOKEN_TILDA, 1): opName = "BitNot"; break;
                 default:
                     Ctx.IncrementMonCounter("sql_errors", "UnsupportedUnaryOperation");
                     Error() << "Unsupported unary operation: " << token.GetValue();
@@ -2041,44 +2041,44 @@ TNodePtr TSqlExpression::BinOpList(const TNode& node, TGetNode getNode, TIter be
         TPosition pos(Ctx.Pos());
         TString opName;
         auto tokenId = begin->GetToken1().GetId();
-        switch (unifiedToken(tokenId, Ctx.Settings.Antlr4Parser)) {
-            case unifiedToken(SQLv1LexerTokens::TOKEN_LESS, 0):
-            case unifiedToken(SQLv1Antlr4Lexer::TOKEN_LESS, 1):
+        switch (UnifiedToken(tokenId, Ctx.Settings.Antlr4Parser)) {
+            case UnifiedToken(SQLv1LexerTokens::TOKEN_LESS, 0):
+            case UnifiedToken(SQLv1Antlr4Lexer::TOKEN_LESS, 1):
                 Ctx.IncrementMonCounter("sql_binary_operations", "Less");
                 opName = "<";
                 break;
-            case unifiedToken(SQLv1LexerTokens::TOKEN_LESS_OR_EQ, 0):
-            case unifiedToken(SQLv1Antlr4Lexer::TOKEN_LESS_OR_EQ, 1):
+            case UnifiedToken(SQLv1LexerTokens::TOKEN_LESS_OR_EQ, 0):
+            case UnifiedToken(SQLv1Antlr4Lexer::TOKEN_LESS_OR_EQ, 1):
                 opName = "<=";
                 Ctx.IncrementMonCounter("sql_binary_operations", "LessOrEq");
                 break;
-            case unifiedToken(SQLv1LexerTokens::TOKEN_GREATER, 0):
-            case unifiedToken(SQLv1Antlr4Lexer::TOKEN_GREATER, 1):
+            case UnifiedToken(SQLv1LexerTokens::TOKEN_GREATER, 0):
+            case UnifiedToken(SQLv1Antlr4Lexer::TOKEN_GREATER, 1):
                 opName = ">";
                 Ctx.IncrementMonCounter("sql_binary_operations", "Greater");
                 break;
-            case unifiedToken(SQLv1LexerTokens::TOKEN_GREATER_OR_EQ, 0):
-            case unifiedToken(SQLv1Antlr4Lexer::TOKEN_GREATER_OR_EQ, 1):
+            case UnifiedToken(SQLv1LexerTokens::TOKEN_GREATER_OR_EQ, 0):
+            case UnifiedToken(SQLv1Antlr4Lexer::TOKEN_GREATER_OR_EQ, 1):
                 opName = ">=";
                 Ctx.IncrementMonCounter("sql_binary_operations", "GreaterOrEq");
                 break;
-            case unifiedToken(SQLv1LexerTokens::TOKEN_PLUS, 0):
-            case unifiedToken(SQLv1Antlr4Lexer::TOKEN_PLUS, 1):
+            case UnifiedToken(SQLv1LexerTokens::TOKEN_PLUS, 0):
+            case UnifiedToken(SQLv1Antlr4Lexer::TOKEN_PLUS, 1):
                 opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedAdd" : "+MayWarn";
                 Ctx.IncrementMonCounter("sql_binary_operations", "Plus");
                 break;
-            case unifiedToken(SQLv1LexerTokens::TOKEN_MINUS, 0):
-            case unifiedToken(SQLv1Antlr4Lexer::TOKEN_MINUS, 1):
+            case UnifiedToken(SQLv1LexerTokens::TOKEN_MINUS, 0):
+            case UnifiedToken(SQLv1Antlr4Lexer::TOKEN_MINUS, 1):
                 opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedSub" : "-MayWarn";
                 Ctx.IncrementMonCounter("sql_binary_operations", "Minus");
                 break;
-            case unifiedToken(SQLv1LexerTokens::TOKEN_ASTERISK, 0):
-            case unifiedToken(SQLv1Antlr4Lexer::TOKEN_ASTERISK, 1):
+            case UnifiedToken(SQLv1LexerTokens::TOKEN_ASTERISK, 0):
+            case UnifiedToken(SQLv1Antlr4Lexer::TOKEN_ASTERISK, 1):
                 opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMul" : "*MayWarn";
                 Ctx.IncrementMonCounter("sql_binary_operations", "Multiply");
                 break;
-            case unifiedToken(SQLv1LexerTokens::TOKEN_SLASH, 0):
-            case unifiedToken(SQLv1Antlr4Lexer::TOKEN_SLASH, 1):
+            case UnifiedToken(SQLv1LexerTokens::TOKEN_SLASH, 0):
+            case UnifiedToken(SQLv1Antlr4Lexer::TOKEN_SLASH, 1):
                 opName = "/MayWarn";
                 Ctx.IncrementMonCounter("sql_binary_operations", "Divide");
                 if (!Ctx.Scoped->PragmaClassicDivision && partialResult) {
@@ -2087,8 +2087,8 @@ TNodePtr TSqlExpression::BinOpList(const TNode& node, TGetNode getNode, TIter be
                     opName = "CheckedDiv";
                 }
                 break;
-            case unifiedToken(SQLv1LexerTokens::TOKEN_PERCENT, 0):
-            case unifiedToken(SQLv1Antlr4Lexer::TOKEN_PERCENT, 1):
+            case UnifiedToken(SQLv1LexerTokens::TOKEN_PERCENT, 0):
+            case UnifiedToken(SQLv1Antlr4Lexer::TOKEN_PERCENT, 1):
                 opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMod" : "%MayWarn";
                 Ctx.IncrementMonCounter("sql_binary_operations", "Mod");
                 break;

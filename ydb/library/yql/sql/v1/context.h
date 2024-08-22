@@ -27,7 +27,7 @@ namespace NSQLTranslationV1 {
         return service == NYql::RtmrProviderName || service == NYql::PqProviderName;
     }
 
-    constexpr uint unifiedToken(uint tokenId, bool isAntlr4) {
+    constexpr uint UnifiedToken(uint tokenId, bool isAntlr4) {
         return (tokenId << 16) + isAntlr4;
     }
 

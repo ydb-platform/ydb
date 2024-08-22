@@ -1614,12 +1614,12 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
                         }
 
                         auto& token = spec.GetBlock2().GetToken1();
-                        switch (unifiedToken(token.GetId(), Context().Settings.Antlr4Parser)) {
-                            case unifiedToken(SQLv1LexerTokens::TOKEN_ASC, 0):
-                            case unifiedToken(SQLv1Antlr4Lexer::TOKEN_ASC, 1):
+                        switch (UnifiedToken(token.GetId(), Context().Settings.Antlr4Parser)) {
+                            case UnifiedToken(SQLv1LexerTokens::TOKEN_ASC, 0):
+                            case UnifiedToken(SQLv1Antlr4Lexer::TOKEN_ASC, 1):
                                 return true;
-                            case unifiedToken(SQLv1LexerTokens::TOKEN_DESC, 0):
-                            case unifiedToken(SQLv1Antlr4Lexer::TOKEN_DESC, 1):
+                            case UnifiedToken(SQLv1LexerTokens::TOKEN_DESC, 0):
+                            case UnifiedToken(SQLv1Antlr4Lexer::TOKEN_DESC, 1):
                                 desc = true;
                                 return true;
                             default:
@@ -3610,13 +3610,13 @@ bool TSqlTranslation::SortSpecification(const TRule_sort_specification& node, TV
     if (node.HasBlock2()) {
         const auto& token = node.GetBlock2().GetToken1();
         Token(token);
-        switch (unifiedToken(token.GetId(), Context().Settings.Antlr4Parser)) {
-            case unifiedToken(SQLv1LexerTokens::TOKEN_ASC, 0):
-            case unifiedToken(SQLv1Antlr4Lexer::TOKEN_ASC, 1):
+        switch (UnifiedToken(token.GetId(), Context().Settings.Antlr4Parser)) {
+            case UnifiedToken(SQLv1LexerTokens::TOKEN_ASC, 0):
+            case UnifiedToken(SQLv1Antlr4Lexer::TOKEN_ASC, 1):
                 Ctx.IncrementMonCounter("sql_features", "OrderByAsc");
                 break;
-            case unifiedToken(SQLv1LexerTokens::TOKEN_DESC, 0):
-            case unifiedToken(SQLv1Antlr4Lexer::TOKEN_DESC, 1):
+            case UnifiedToken(SQLv1LexerTokens::TOKEN_DESC, 0):
+            case UnifiedToken(SQLv1Antlr4Lexer::TOKEN_DESC, 1):
                 asc = false;
                 Ctx.IncrementMonCounter("sql_features", "OrderByDesc");
                 break;

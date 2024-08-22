@@ -122,6 +122,8 @@ namespace NSQLTranslation {
                 settings.SyntaxVersion = 1;
             } else if (value == "ansi_lexer") {
                 settings.AnsiLexer = true;
+            } else if (value == "antlr4_parser") {
+                settings.Antlr4Parser = true;
             } else if (value == "syntax_pg") {
                 settings.PgParser = true;
             } else {

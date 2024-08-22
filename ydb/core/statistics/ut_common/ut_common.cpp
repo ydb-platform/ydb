@@ -250,21 +250,23 @@ void CreateColumnStoreTable(TTestEnv& env, const TString& databaseName, const TS
     )", fullTableName.c_str())).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-    NYdb::TValueBuilder rows;
-    rows.BeginList();
-    for (size_t i = 0; i < 1000000; ++i) {
-        auto key = TValueBuilder().Uint64(i).Build();
-        auto value = TValueBuilder().OptionalUint64(i).Build();
-        rows.AddListItem();
-        rows.BeginStruct();
-        rows.AddMember("Key", key);
-        rows.AddMember("Value", value);
-        rows.EndStruct();
-    }
-    rows.EndList();
+    for (size_t bulk = 0; bulk < 5; ++bulk) {
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (size_t i = 0; i < 1000000; ++i) {
+            auto key = TValueBuilder().Uint64(i).Build();
+            auto value = TValueBuilder().OptionalUint64(i).Build();
+            rows.AddListItem();
+            rows.BeginStruct();
+            rows.AddMember("Key", key);
+            rows.AddMember("Value", value);
+            rows.EndStruct();
+        }
+        rows.EndList();
 
-    result = client.BulkUpsert(fullTableName, rows.Build()).GetValueSync();
-    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        result = client.BulkUpsert(fullTableName, rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
 }
 
 std::vector<TTableInfo> CreateDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount) {
@@ -279,7 +281,7 @@ std::vector<TTableInfo> CreateDatabaseColumnTables(TTestEnv& env, ui8 tableCount
     auto& runtime = *env.GetServer().GetRuntime();
     auto sender = runtime.AllocateEdgeActor();
 
-    runtime.SimulateSleep(TDuration::Seconds(10));
+    runtime.SimulateSleep(TDuration::Seconds(30));
     initThread.join();
 
     std::vector<TTableInfo> ret;

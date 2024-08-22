@@ -34,7 +34,6 @@ public:
         Self->Keeper.Clear();
         Self->Domains.clear();
         Self->BlockedOwners.clear();
-        Self->RegisteredDataCenterNodes.clear();
 
         Self->Domains[Self->RootDomainKey].Path = Self->RootDomainName;
         Self->Domains[Self->RootDomainKey].HiveId = rootHiveId;
@@ -615,6 +614,11 @@ public:
                     TFollowerGroup& followerGroup = tablet->GetFollowerGroup(followerGroupId);
                     TFollowerTabletInfo& follower = tablet->AddFollower(followerGroup, followerId);
                     follower.Statistics = tabletFollowerRowset.GetValueOrDefault<Schema::TabletFollowerTablet::Statistics>();
+                    if (tabletFollowerRowset.HaveValue<Schema::TabletFollowerTablet::DataCenter>()) {
+                        auto dc = tabletFollowerRowset.GetValue<Schema::TabletFollowerTablet::DataCenter>();
+                        follower.NodeFilter.AllowedDataCenters = {dc};
+                        Self->DataCenters[dc].Followers[{tabletId, followerGroup.Id}].push_back(std::prev(tablet->Followers.end()));
+                    }
                     if (nodeId == 0) {
                         follower.BecomeStopped();
                     } else {
@@ -634,6 +638,58 @@ public:
             }
             BLOG_NOTICE("THive::TTxLoadEverything loaded " << numTabletFollowers << " tablet followers ("
                     << numMissingTablets << " for missing tablets)");
+        }
+
+        // Compatability: some per-dc followers do not have their datacenter set - try to set it now
+        for (auto& [tabletId, tablet] : Self->Tablets) {
+            for (auto& group : tablet.FollowerGroups) {
+                if (!group.FollowerCountPerDataCenter) {
+                    continue;
+                }
+                std::map<TDataCenterId, i32> dataCentersToCover; // dc -> need x more followers in dc
+                for (const auto& [dc, _] : Self->DataCenters) {
+                    dataCentersToCover[dc] = group.GetFollowerCountForDataCenter(dc);
+                }
+                auto groupId = group.Id;
+                auto filterGroup = [groupId](auto&& follower) { return follower->FollowerGroup.Id == groupId;};
+                auto groupFollowersIters = std::views::iota(tablet.Followers.begin(), tablet.Followers.end()) | std::views::filter(filterGroup);
+                std::vector<TDataCenterInfo::TFollowerIter> followersWithoutDc;
+                for (auto followerIt : groupFollowersIters) {
+                    auto& allowedDc = followerIt->NodeFilter.AllowedDataCenters;
+                    if (allowedDc.size() == 1) {
+                        --dataCentersToCover[allowedDc.front()];
+                        continue;
+                    }
+                    bool ok = false;
+                    if (followerIt->Node) {
+                        auto dc = followerIt->Node->Location.GetDataCenterId();
+                        auto& cnt = dataCentersToCover[dc];
+                        if (cnt > 0) {
+                            --cnt;
+                            allowedDc = {dc};
+                            Self->DataCenters[dc].Followers[{tabletId, groupId}].push_back(followerIt);
+                            db.Table<Schema::TabletFollowerTablet>().Key(tabletId, followerIt->Id).Update<Schema::TabletFollowerTablet::DataCenter>(dc);
+                            ok = true;
+                        }
+                    }
+                    if (!ok) {
+                        followersWithoutDc.push_back(followerIt);
+                    }
+                }
+                auto dcIt = dataCentersToCover.begin();
+                for (auto follower : followersWithoutDc) {
+                    while (dcIt != dataCentersToCover.end() && dcIt->second <= 0) {
+                        ++dcIt;
+                    }
+                    if (dcIt == dataCentersToCover.end()) {
+                        break;
+                    }
+                    follower->NodeFilter.AllowedDataCenters = {dcIt->first};
+                    Self->DataCenters[dcIt->first].Followers[{tabletId, groupId}].push_back(follower);
+                    db.Table<Schema::TabletFollowerTablet>().Key(follower->GetFullTabletId()).Update<Schema::TabletFollowerTablet::DataCenter>(dcIt->first);
+                    --dcIt->second;
+                }
+            }
         }
 
         {

@@ -151,9 +151,10 @@ struct Schema : NIceDb::Schema {
         struct GroupID : Column<3, Schema::TabletFollowerGroup::GroupID::ColumnType> {};
         struct FollowerNode : Column<4, NScheme::NTypeIds::Uint32> {};
         struct Statistics : Column<5, NScheme::NTypeIds::String> { using Type = NKikimrHive::TTabletStatistics; };
+        struct DataCenter : Column<6, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<TabletID, FollowerID>;
-        using TColumns = TableColumns<TabletID, GroupID, FollowerID, FollowerNode, Statistics>;
+        using TColumns = TableColumns<TabletID, GroupID, FollowerID, FollowerNode, Statistics, DataCenter>;
     };
 
     struct TabletChannel : Table<2> {

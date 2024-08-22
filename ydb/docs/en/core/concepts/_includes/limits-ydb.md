@@ -43,7 +43,7 @@ The table below lists the limits that apply to query execution. The _Call_ colum
 
 | Parameter | Value | Call | Explanation | Status<br/>in case of<br/>a violation<br/>of the limit |
 | :--- | :--- | :--- | :--- | :---: |
-| Maximum number of rows in query results | 1,000 | ExecuteDataQuery | Complete results of some queries executed using the `ExecuteDataQuery` method may contain more rows than allowed. In this case, a query will return the maximum number of rows allowed, and the result will have the `truncated` flag set. | SUCCESS |
+| Maximum number of rows in query results | 1,000 | ExecuteDataQuery | Complete results of some queries executed using the `ExecuteDataQuery` method may contain more rows than allowed. In this case, a query will return the maximum number of rows allowed, and the result will have the `Truncated` flag set. This limitation does not apply to other query execution methods, like calls to methods of `QueryService` interface, [scan queries](../../concepts/scan_query.md), or `ReadTable` operations. | SUCCESS |
 | Maximum query result size | 50 MB | ExecuteDataQuery | Complete results of some queries may exceed the set limit. In this case, a query will fail returning no data. | PRECONDITION_FAILED |
 | Maximum number of sessions per cluster node | 1,000 | CreateSession | Using the library for working with {{ ydb-short-name }}, an application can create sessions within a connection. Sessions are linked to a node. You can create a limited number of sessions with a single node. | OVERLOADED |
 | Maximum query text length | 10 KB | ExecuteDataQuery | Limit on the length of YQL query text. | BAD_REQUEST |

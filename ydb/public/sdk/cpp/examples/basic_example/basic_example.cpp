@@ -302,7 +302,9 @@ void MultiStep(TQueryClient client, const TString& path) {
                 TTxControl::BeginTx(TTxSettings::SerializableRW()),
                 params1);
 
-            if (!result.GetValueSync().IsSuccess()) {
+            auto resultValue = result.GetValueSync();
+
+            if (!resultValue.IsSuccess()) {
                 return result;
             }
 

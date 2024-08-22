@@ -860,14 +860,17 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == NYql::NDq::TEvDqCompute::TEvState::EventType) {
+                ++totalEvState;
                 if (!firstEvState) {
                     executerId = ev->Recipient;
                     ev = new IEventHandle(ev->Recipient, ev->Sender,
                             new NKikimr::NKqp::TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::UNSPECIFIED, NYql::TIssues()));
                     firstEvState = true;
                 }
-                ++totalEvState;
+            } else if (ev->GetTypeRewrite() == NKikimr::NKqp::TEvKqpExecuter::TEvTxResponse::EventType && ev->Sender == executerId) {
+                UNIT_ASSERT_C(totalEvState == actorCount*2, "Executer sent response before waiting for CAs");
             }
+
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
@@ -912,21 +915,21 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == NYql::NDq::TEvDqCompute::TEvState::EventType) {
+                ++totalEvState;
                 if (!firstEvState) {
                     executerId = ev->Recipient;
                     ev = new IEventHandle(ev->Recipient, ev->Sender,
                             new NKikimr::NKqp::TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::UNSPECIFIED, NYql::TIssues()));
                     firstEvState = true;
-                }
-                ++totalEvState;
-
-                if (totalEvState == actorCount*2) {
+                } else {
                     return TTestActorRuntime::EEventAction::DROP;
                 }
             } else if (ev->GetTypeRewrite() == TEvents::TEvPoison::EventType && totalEvState == actorCount*2 &&
                 ev->Sender == executerId && ev->Recipient == executerId)
             {
                 timeoutPoison = true;
+            } else if (ev->GetTypeRewrite() == NKikimr::NKqp::TEvKqpExecuter::TEvTxResponse::EventType && ev->Sender == executerId) {
+                UNIT_ASSERT_C(timeoutPoison, "Executer sent response before waiting for CAs");
             }
 
             return TTestActorRuntime::EEventAction::PROCESS;

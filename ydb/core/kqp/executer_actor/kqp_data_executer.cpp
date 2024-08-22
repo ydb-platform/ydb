@@ -2601,6 +2601,7 @@ private:
     void Shutdown() override {
         if (Planner) {
             if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
+                LOG_I("Shutdown immediately - nothing to wait");
                 PassAway();
             } else {
                 this->Become(&TThis::WaitShutdownState);
@@ -2641,15 +2642,17 @@ private:
     }
 
     void HandleShutdown(TEvDqCompute::TEvState::TPtr& ev) {
-        YQL_ENSURE(Planner);
+        if (ev->Get()->Record.GetState() == NDqProto::COMPUTE_STATE_FAILURE) {
+            YQL_ENSURE(Planner);
 
-        TActorId actor = ev->Sender;
-        ui64 taskId = ev->Get()->Record.GetTaskId();
+            TActorId actor = ev->Sender;
+            ui64 taskId = ev->Get()->Record.GetTaskId();
 
-        Planner->CompletedCA(taskId, actor);
+            Planner->CompletedCA(taskId, actor);
 
-        if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
-            PassAway();
+            if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
+                PassAway();
+            }
         }
     }
 

@@ -404,10 +404,9 @@ void AnalyzeTable(TTestActorRuntime& runtime, ui64 shardTabletId, const TAnalyze
     runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeTableResponse>(sender);
 }
 
-void AnalyzeStatus(TTestActorRuntime& runtime, ui64 saTabletId, const TString operationId, const NKikimrStat::TEvAnalyzeStatusResponse::EStatus expectedStatus) {
+void AnalyzeStatus(TTestActorRuntime& runtime, TActorId sender, ui64 saTabletId, const TString operationId, const NKikimrStat::TEvAnalyzeStatusResponse::EStatus expectedStatus) {
     auto analyzeStatusRequest = std::make_unique<TEvStatistics::TEvAnalyzeStatus>();
     analyzeStatusRequest->Record.SetOperationId(operationId);
-    auto sender = runtime.AllocateEdgeActor();
     runtime.SendToPipe(saTabletId, sender, analyzeStatusRequest.release());
 
     auto analyzeStatusResponse = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeStatusResponse>(sender);

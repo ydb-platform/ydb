@@ -536,6 +536,7 @@ private:
     }
 
     bool CheckMemoryAndSwitchToSpilling() {
+        std::cerr << "MISHA spilling: " << AllowSpilling << " " << (bool)Ctx.SpillerFactory << " " << IsSwitchToSpillingModeCondition() << std::endl;
         if (AllowSpilling && Ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
             LogMemoryUsage();
 
@@ -708,6 +709,7 @@ private:
     }
 
     bool IsSwitchToSpillingModeCondition() const {
+        return true;
         return !HasMemoryForProcessing();
     }
 
@@ -1230,7 +1232,9 @@ public:
         , KeyAndStateType(keyAndStateType)
         , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Nodes.ItemNodes.size()))
         , AllowSpilling(allowSpilling)
-    {}
+    {
+        std::cerr << "MISHA allow spilling: " << allowSpilling << std::endl;
+    }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         if (!state.HasValue()) {

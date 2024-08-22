@@ -37,7 +37,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Aggregate-InnerJoin (MapJoin)-Filter",
+                                        "Node Type": "Aggregate-InnerJoin (Grace)-Filter-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -54,10 +54,10 @@
                                                         "InternalOperatorId": 2
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 5
+                                                        "InternalOperatorId": 3
                                                     }
                                                 ],
-                                                "Name": "InnerJoin (MapJoin)"
+                                                "Name": "InnerJoin (Grace)"
                                             },
                                             {
                                                 "Inputs": [
@@ -67,6 +67,15 @@
                                                 ],
                                                 "Name": "Filter",
                                                 "Predicate": "Exist(item.hundred)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 5
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.thousand)"
                                             }
                                         ],
                                         "PlanNodeId": 9,

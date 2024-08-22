@@ -72,3 +72,8 @@ DefaultSettings {
     Name: "_KqpDisableLlvmForUdfStages"
     Value: "false"
 }
+
+DefaultSettings {
+    Name: "UseGraceJoinCoreForMap"
+    Value: "true"
+}

@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-LeftJoin (MapJoin)",
+                                        "Node Type": "TopSort-LeftJoin (Grace)",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -51,7 +51,7 @@
                                                         "ExternalPlanNodeId": 5
                                                     }
                                                 ],
-                                                "Name": "LeftJoin (MapJoin)"
+                                                "Name": "LeftJoin (Grace)"
                                             }
                                         ],
                                         "PlanNodeId": 8,
@@ -71,19 +71,16 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "LeftJoin (MapJoin)",
+                                                                        "Node Type": "LeftJoin (Grace)",
                                                                         "Operators": [
                                                                             {
                                                                                 "Condition": "int8_tbl.q2 = innertab.id",
                                                                                 "Inputs": [
                                                                                     {
                                                                                         "ExternalPlanNodeId": 1
-                                                                                    },
-                                                                                    {
-                                                                                        "Other": "ConstantExpression"
                                                                                     }
                                                                                 ],
-                                                                                "Name": "LeftJoin (MapJoin)"
+                                                                                "Name": "LeftJoin (Grace)"
                                                                             }
                                                                         ],
                                                                         "PlanNodeId": 2,

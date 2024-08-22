@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-LeftJoin (MapJoin)",
+                                        "Node Type": "Limit-LeftJoin (Grace)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -47,10 +47,19 @@
                                                         "ExternalPlanNodeId": 15
                                                     },
                                                     {
+                                                        "InternalOperatorId": 2
+                                                    }
+                                                ],
+                                                "Name": "LeftJoin (Grace)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
                                                         "ExternalPlanNodeId": 13
                                                     }
                                                 ],
-                                                "Name": "LeftJoin (MapJoin)"
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.i)"
                                             }
                                         ],
                                         "PlanNodeId": 16,

@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-InnerJoin (MapJoin)-Filter",
+                                        "Node Type": "Limit-InnerJoin (Grace)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -41,16 +41,13 @@
                                                 "Name": "Limit"
                                             },
                                             {
-                                                "Condition": "onek.unique1,onek.stringu1 = v.i,v.j",
+                                                "Condition": "onek.stringu1,onek.unique1 = v.i,v.j",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 2
-                                                    },
-                                                    {
-                                                        "Other": "ConstantExpression"
                                                     }
                                                 ],
-                                                "Name": "InnerJoin (MapJoin)"
+                                                "Name": "InnerJoin (Grace)"
                                             },
                                             {
                                                 "Inputs": [

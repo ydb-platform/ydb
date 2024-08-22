@@ -2133,6 +2133,7 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event)
 void TPartition::CommitWriteOperations(TTransaction& t)
 {
     PQ_LOG_D("TPartition::CommitWriteOperations TxId: " << t.GetTxId());
+
     Y_ABORT_UNLESS(PersistRequest);
     Y_ABORT_UNLESS(!PartitionedBlob.IsInited());
 
@@ -2153,6 +2154,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
     PQ_LOG_D("t.WriteInfo->BodyKeys.size=" << t.WriteInfo->BodyKeys.size() <<
              ", t.WriteInfo->BlobsFromHead.size=" << t.WriteInfo->BlobsFromHead.size());
     PQ_LOG_D("Head=" << Head << ", NewHead=" << NewHead);
+
     if (!t.WriteInfo->BodyKeys.empty()) {
         PartitionedBlob = TPartitionedBlob(Partition,
                                            NewHead.Offset,
@@ -2176,19 +2178,17 @@ void TPartition::CommitWriteOperations(TTransaction& t)
             }
         }
 
-    }
 
-    PQ_LOG_D("PartitionedBlob.GetFormedBlobs().size=" << PartitionedBlob.GetFormedBlobs().size());
-    if (const auto& formedBlobs = PartitionedBlob.GetFormedBlobs(); !formedBlobs.empty()) {
-        ui32 curWrites = RenameTmpCmdWrites(PersistRequest.Get());
-        RenameFormedBlobs(formedBlobs,
-                          *Parameters,
-                          curWrites,
-                          PersistRequest.Get(),
-                          ctx);
-    }
+        PQ_LOG_D("PartitionedBlob.GetFormedBlobs().size=" << PartitionedBlob.GetFormedBlobs().size());
+        if (const auto& formedBlobs = PartitionedBlob.GetFormedBlobs(); !formedBlobs.empty()) {
+            ui32 curWrites = RenameTmpCmdWrites(PersistRequest.Get());
+            RenameFormedBlobs(formedBlobs,
+                              *Parameters,
+                              curWrites,
+                              PersistRequest.Get(),
+                              ctx);
+        }
 
-    if (!t.WriteInfo->BodyKeys.empty()) {
         const auto& last = t.WriteInfo->BodyKeys.back();
 
         NewHead.Offset += (last.Key.GetOffset() + last.Key.GetCount());

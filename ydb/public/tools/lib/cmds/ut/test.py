@@ -38,3 +38,31 @@ def test_merge_two_yaml_configs():
         res.write(yaml.dump(merge_two_yaml_configs(data_1, data_2), default_flow_style=False))
 
     return yatest.common.canonical_file(patched_yaml, local=True)
+
+def test_merge_two_dicts():
+    dict_1 = {'data': [{'user': 'root', 'password': '1234'}]}
+    dict_2 = {'data': [{'user': 'root', 'password': '12345678'}]}
+
+    dict_final = {'data': [{'user': 'root', 'password': '12345678'}]}
+    assert merge_two_yaml_configs(dict_1, dict_2) == dict_final
+
+
+    dict_1 = {'data': [{'user': 'root', 'password': '1234'}]}
+    dict_2 = {'second_data': {'user': 'user', 'password': '12345'}}
+
+    dict_final = {'data': [{'user': 'root', 'password': '1234'}], 'second_data': {'user': 'user', 'password': '12345'}}
+    assert merge_two_yaml_configs(dict_1, dict_2) == dict_final
+
+
+    dict_1 = {'data': None}
+    dict_2 = {'data': {'user': 'root', 'password': '12345678'}}
+
+    dict_final = {'data': {'user': 'root', 'password': '12345678'}}
+    assert merge_two_yaml_configs(dict_1, dict_2) == dict_final
+
+
+    dict_1 = {'data': [{'user': 'root', 'password': '1234'}]}
+    dict_2 = {'data': None}
+
+    dict_final = {'data': [{'user': 'root', 'password': '1234'}]}
+    assert merge_two_yaml_configs(dict_1, dict_2) == dict_final

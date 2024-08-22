@@ -63,8 +63,13 @@
 {{ RenderTargetOptions(target_name, prefix, target_options.publics, only_option, exclude_options) }}
 {%-     endif -%}
 
-{%-     if not(is_really_fake_module) and (target_options.privates is defined) -%}
-{{ RenderTargetOptions(target_name, ' PRIVATE', target_options.privates, only_option, exclude_options) }}
+{%-     if (target_options.privates is defined) -%}
+{%-         if is_really_fake_module -%}
+{%-             set prefix = ' INTERFACE' -%}
+{%-         else -%}
+{%-             set prefix = ' PRIVATE' -%}
+{%-         endif -%}
+{{ RenderTargetOptions(target_name, prefix, target_options.privates, only_option, exclude_options) }}
 {%-     endif -%}
 {%- endmacro -%}
 

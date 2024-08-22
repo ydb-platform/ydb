@@ -21,11 +21,11 @@ DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
 
 def create_tables(pool,  table_path):
-    print(f"> create table: {table_path}")
+    print(f"> create table if not exists:'{table_path}'")
 
     def callee(session):
         session.execute_scheme(f"""
-            CREATE table `{table_path}` (
+            CREATE table IF NOT EXISTS `{table_path}` (
                 `test_name` Utf8 NOT NULL,
                 `suite_folder` Utf8 NOT NULL,
                 `full_name` Utf8 NOT NULL,
@@ -53,22 +53,12 @@ def bulk_upsert(table_client, table_path, rows):
     table_client.bulk_upsert(table_path, rows, column_types)
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--days-window', default=5, type=int, help='how many days back we collecting history')
-
-    args, unknown = parser.parse_known_args()
-    history_for_n_day = args.days_window
-    
-    print(f'Getting hostory in window {history_for_n_day} days')
-    
-
+def main():    
     if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
         print(
             "Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping"
         )
-        os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]="/home/kirrysin/fork_2/.github/scripts/my-robot-key.json"
-        #return 1
+        return 1
     else:
         # Do not set up 'real' variable from gh workflows because it interfere with ydb tests
         # So, set up it locally
@@ -101,7 +91,7 @@ def main():
             FROM 
             `test_results/test_runs_column` 
         WHERE 
-            run_timestamp >= CurrentUtcDate()- Interval("P1D") 
+            run_timestamp >= CurrentUtcDate()- Interval("P10D") 
             AND branch = 'main' 
             and job_name in (
                 'Nightly-run', 'Postcommit_relwithdebinfo', 

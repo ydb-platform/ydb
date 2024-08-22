@@ -1,7 +1,7 @@
 name: Collect-analytics-run
 on:
   schedule:
-    - cron: "0 */4 * * *"  # Every 4 h
+    - cron: "0 * * * *"  # Every 1 h
   workflow_dispatch:
     inputs:
       commit_sha:
@@ -27,7 +27,16 @@ jobs:
     - name: Install dependencies
       run: |
         python3 -m pip install ydb ydb[yc] codeowners
+
+    # Every 2 runs = every 2 hours
+    - name: Collect testowners 
+      if: ${{ (github.event.schedule || '') == '' || (github.run_number % 2) == 1 }} 
+      run: python3 .github/scripts/analytics/upload_testowners.py
+    # Every 4 runs = every 4 hours
     - name: Collect test history data with window 5 days
+      if: ${{ (github.event.schedule || '') == '' || (github.run_number % 4) == 1 }} 
       run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=5
-    - name: Collect test history data with window 1 day 
+    - name: Collect test history data with window 1 day
+      if: ${{ (github.event.schedule || '') == '' || (github.run_number % 4) == 1 }} 
       run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=1
+

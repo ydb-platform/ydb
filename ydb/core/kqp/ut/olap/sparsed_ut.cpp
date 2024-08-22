@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         void Execute() {
             CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
             CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
-            CSController->SetPeriodicWakeupActivationPeriod(TDuration::MilliSeconds(100));
+            CSController->SetOverridePeriodicWakeupActivationPeriod(TDuration::MilliSeconds(100));
 
             Tests::NCommon::TLoggerInit(Kikimr).Initialize();
             TTypedLocalHelper helper("Utf8", Kikimr);

@@ -1553,6 +1553,12 @@ message TColumnShardConfig {
 
     optional uint32 MaxInFlightIntervalsOnRequest = 16;
     optional uint32 MaxReadStaleness_ms = 18 [default = 300000];
+    optional uint32 GCIntervalMs = 19 [default = 30000];
+    optional uint32 CompactionActualizationLagMs = 20 [default = 1000];
+    optional uint32 ActualizationTasksLagMs = 21 [default = 1000];
+    optional uint32 LagForCompactionBeforeTieringsMs = 22 [default = 3600000];
+    optional uint32 OptimizerFreshnessCheckDurationMs = 23 [default = 300000];
+    optional uint32 SmallPortionDetectSizeLimit = 24 [default = 1048576];  // 1 << 20
 }
 
 message TSchemeShardConfig {

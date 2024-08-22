@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 
 #include <ydb/library/accessor/accessor.h>
 
@@ -87,8 +88,7 @@ protected:
     virtual std::vector<TChunkedArraySerialized> DoSplitBySizes(
         const TColumnSaver& saver, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) override;
 
-    virtual TLocalDataAddress DoGetLocalData(
-        const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override {
+    virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override {
         ui32 currentIdx = 0;
         for (ui32 i = 0; i < Records.size(); ++i) {
             if (currentIdx <= position && position < currentIdx + Records[i].GetRecordsCount()) {
@@ -127,23 +127,19 @@ protected:
         std::vector<std::shared_ptr<arrow::Field>> fields = { std::make_shared<arrow::Field>("index", arrow::uint32()),
             std::make_shared<arrow::Field>("value", type) };
         return std::make_shared<arrow::Schema>(fields);
-    
     }
 
     static TSparsedArrayChunk MakeDefaultChunk(
         const std::shared_ptr<arrow::Scalar>& defaultValue, const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount) {
-        std::shared_ptr<arrow::RecordBatch> records = MakeEmptyBatch(BuildSchema(type), recordsCount);
+        std::shared_ptr<arrow::RecordBatch> records = NArrow::MakeEmptyBatch(BuildSchema(type), recordsCount);
         AFL_VERIFY_DEBUG(records->ValidateFull().ok());
         return TSparsedArrayChunk(0, recordsCount, records, defaultValue);
     }
 
 public:
     TSparsedArray(const IChunkedArray& defaultArray, const std::shared_ptr<arrow::Scalar>& defaultValue);
-    TSparsedArray(const std::shared_ptr<arrow::Scalar>& defaultValue,
-        const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount)
-        : TSparsedArray({ MakeDefaultChunk(defaultValue, type, recordsCount) }, defaultValue, type, recordsCount)
-    {
-        
+    TSparsedArray(const std::shared_ptr<arrow::Scalar>& defaultValue, const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount)
+        : TSparsedArray({ MakeDefaultChunk(defaultValue, type, recordsCount) }, defaultValue, type, recordsCount) {
     }
 
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const override {

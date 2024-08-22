@@ -143,7 +143,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         test.Execute();
     }
 
-    Y_UNIT_TEST(SwitchingNoStore) {
+    Y_UNIT_TEST(SwitchingStandalone) {
         TSparsedDataTest test("");
         test.Execute();
     }

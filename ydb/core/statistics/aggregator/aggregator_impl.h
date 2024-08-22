@@ -251,7 +251,6 @@ private:
     std::queue<TEvStatistics::TEvRequestStats::TPtr> PendingRequests;
     bool ProcessUrgentInFlight = false;
 
-    bool IsSchemeshardSeen = false;
     bool IsStatisticsTableCreated = false;
     bool PendingSaveStatistics = false;
     bool PendingDeleteStatistics = false;

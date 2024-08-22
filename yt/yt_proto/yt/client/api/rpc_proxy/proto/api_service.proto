@@ -14,6 +14,7 @@ import "yt_proto/yt/core/ytree/proto/request_complexity_limits.proto";
 import "yt_proto/yt/client/chunk_client/proto/data_statistics.proto";
 import "yt_proto/yt/client/chaos_client/proto/replication_card.proto";
 import "yt_proto/yt/client/hive/proto/timestamp_map.proto";
+import "yt_proto/yt/client/table_client/proto/versioned_io_options.proto";
 import "yt_proto/yt/client/tablet_client/proto/lock_mask.proto";
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -608,11 +609,6 @@ message TQueryStatistics
     repeated TQueryStatistics inner_statistics = 14;
 }
 
-message TVersionedReadOptions
-{
-    optional int32 read_mode = 1; // EVersionedIOMode
-}
-
 message TReqSelectRows
 {
     required string query = 1;
@@ -640,7 +636,7 @@ message TReqSelectRows
     optional bool merge_versioned_rows = 21;
     optional int32 syntax_version = 22 [default = 1];
     optional int32 execution_backend = 23; // EExecutionBackend
-    optional TVersionedReadOptions versioned_read_options = 25;
+    optional NYT.NTableClient.NProto.TVersionedReadOptions versioned_read_options = 25;
 
     optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 104;
 

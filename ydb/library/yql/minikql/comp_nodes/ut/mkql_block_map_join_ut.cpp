@@ -154,7 +154,7 @@ namespace {
         return rootNode;
     }
 
-    void DoTestBlockJoinOnUint64(EJoinKind joinKind, size_t blockSize, size_t testSize) {
+    void DoTestBlockJoinOnUint64(EJoinKind joinKind, TVector<TKSV> values, size_t blockSize) {
         TSetup<false> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -182,25 +182,11 @@ namespace {
         const auto& holderFactory = graph->GetHolderFactory();
         auto& ctx = graph->GetContext();
 
-        TVector<ui64> keys(testSize);
-        TVector<ui64> subkeys;
-        std::iota(keys.begin(), keys.end(), 1);
-        std::transform(keys.cbegin(), keys.cend(), std::back_inserter(subkeys),
-            [](const auto& value) { return value * 1001; });
-
-        TVector<TStringBuf> payloads;
-        std::transform(keys.cbegin(), keys.cend(), std::back_inserter(payloads),
-            [](const auto& value) { return threeLetterPayloads[value]; });
-
-        TVector<TKSV> testKSV;
-        for (size_t i = 0; i < testSize; i++) {
-            testKSV.push_back(std::make_tuple(keys[i], subkeys[i], payloads[i]));
-        }
-
+        const size_t testSize = values.size();
         size_t current = 0;
         TDefaultListRepresentation leftListValues;
         while (current < testSize) {
-            const auto arrays = KSVToArrays(testKSV, current, blockSize, &ctx.ArrowMemoryPool);
+            const auto arrays = KSVToArrays(values, current, blockSize, &ctx.ArrowMemoryPool);
             current += blockSize;
 
             NUdf::TUnboxedValue* items = nullptr;
@@ -235,9 +221,14 @@ namespace {
     }
 
     void TestBlockJoinOnUint64(EJoinKind joinKind) {
-        const size_t testSize = 1 << 14;
+        constexpr size_t testSize = 1 << 14;
+        TVector<TKSV> testKSV;
+        for (size_t k = 0; k < testSize; k++) {
+            testKSV.push_back(std::make_tuple(k, k * 1001, threeLetterPayloads[k]));
+        }
+
         for (size_t blockSize = 8; blockSize <= testSize; blockSize <<= 1) {
-            DoTestBlockJoinOnUint64(joinKind, blockSize, testSize);
+            DoTestBlockJoinOnUint64(joinKind, testKSV, blockSize);
         }
     }
 } // namespace

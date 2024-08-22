@@ -30,7 +30,7 @@ jobs:
 
       - name: Check if running tests is allowed
         id: check-ownership-membership
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           script: |
@@ -81,7 +81,7 @@ jobs:
       - name: comment-if-waiting-on-ok
         if: steps.check-ownership-membership.outputs.result == 'false' &&
             github.event.action == 'opened'
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           script: |
             let externalContributorLabel = 'external';
@@ -100,7 +100,7 @@ jobs:
             });
 
       - name: cleanup-test-label
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           script: |
             let labelsToRemove = ['ok-to-test', 'rebase-and-check'];
@@ -126,7 +126,7 @@ jobs:
       - name: check is mergeable
         id: check-is-mergeable
         if: steps.check-ownership-membership.outputs.result == 'true'
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           result-encoding: string
           script: |
@@ -210,7 +210,7 @@ jobs:
     name: Build and test ${{ matrix.build_preset }}
     steps:
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
         fetch-depth: 2

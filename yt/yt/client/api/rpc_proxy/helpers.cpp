@@ -619,22 +619,6 @@ void FromProto(
     FromProto(&statistics->InnerStatistics, protoStatistics.inner_statistics());
 }
 
-void ToProto(
-    NProto::TVersionedReadOptions* protoOptions,
-    const NTableClient::TVersionedReadOptions& options)
-{
-    protoOptions->set_read_mode(static_cast<i32>(options.ReadMode));
-}
-
-void FromProto(
-    NTableClient::TVersionedReadOptions* options,
-    const NProto::TVersionedReadOptions& protoOptions)
-{
-    if (protoOptions.has_read_mode()) {
-        options->ReadMode = CheckedEnumCast<EVersionedIOMode>(protoOptions.read_mode());
-    }
-}
-
 void ToProto(NProto::TOperation* protoOperation, const NApi::TOperation& operation)
 {
     protoOperation->Clear();

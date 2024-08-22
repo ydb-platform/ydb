@@ -7,6 +7,7 @@
 #include <yt/yt/client/table_client/column_sort_schema.h>
 #include <yt/yt/client/table_client/column_rename_descriptor.h>
 #include <yt/yt/client/table_client/schema.h>
+#include <yt/yt/client/table_client/versioned_io_options.h>
 
 #include <yt/yt/core/misc/error.h>
 
@@ -679,6 +680,11 @@ bool TRichYPath::GetCreate() const
     return GetAttribute<bool>(*this, "create", false);
 }
 
+TVersionedReadOptions TRichYPath::GetVersionedReadOptions() const
+{
+    return GetAttribute(*this, "versioned_read_options", TVersionedReadOptions());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TString ConvertToString(const TRichYPath& path, EYsonFormat ysonFormat)
@@ -779,6 +785,7 @@ const std::vector<TString>& GetWellKnownRichYPathAttributes()
         "clusters",
         "create",
         "read_via_exec_node",
+        "versioned_read_options",
     };
     return WellKnownAttributes;
 }

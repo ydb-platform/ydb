@@ -923,10 +923,11 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
                 if (totalEvState == actorCount*2) {
                     return TTestActorRuntime::EEventAction::DROP;
                 }
+            } else if (ev->GetTypeRewrite() == TEvents::TEvPoison::EventType && totalEvState == actorCount*2 &&
+                ev->Sender == executerId && ev->Recipient == executerId)
+            {
+                timeoutPoison = true;
             }
-
-            timeoutPoison = ev->GetTypeRewrite() == TEvents::TEvPoison::EventType && totalEvState == actorCount*2
-                && ev->Sender == executerId && ev->Recipient == executerId;
 
             return TTestActorRuntime::EEventAction::PROCESS;
         });

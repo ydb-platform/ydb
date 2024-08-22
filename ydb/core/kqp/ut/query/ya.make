@@ -12,7 +12,7 @@ IF (WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
+    TIMEOUT(60)
     SIZE(MEDIUM)
 ENDIF()
 

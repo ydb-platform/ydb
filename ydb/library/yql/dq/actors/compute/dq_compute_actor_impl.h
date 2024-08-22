@@ -520,6 +520,10 @@ protected:
             auto ev = MakeHolder<TEvDqCompute::TEvState>();
             auto& record = ev->Record;
 
+            if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) {
+                FillStats(record.MutableStats(), /* last */ true);
+            }
+
             record.SetState(NDqProto::COMPUTE_STATE_FINISHED);
             record.SetStatusCode(NDqProto::StatusIds::ABORTED);
             record.SetTaskId(Task.GetId());

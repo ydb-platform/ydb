@@ -152,6 +152,8 @@ protected:
 
     void TestTxWithBigBlobs(const TTestTxWithBigBlobsParams& params);
 
+    void WriteMessagesInTx(size_t big, size_t small);
+
     const TDriver& GetDriver() const;
 
     void CheckTabletKeys(const TString& topicName);
@@ -1611,20 +1613,23 @@ void TFixture::TestTxWithBigBlobs(const TTestTxWithBigBlobsParams& params)
 
     for (size_t i = 0; i < params.OldHeadCount; ++i) {
         WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(100'000, 'x'));
+        WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
         ++oldHeadMsgCount;
     }
 
     for (size_t i = 0; i < params.BigBlobsCount; ++i) {
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(7'900'000, 'x'), &tx);
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(7'000'000, 'x'), &tx);
+        WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
         ++bigBlobMsgCount;
     }
 
     for (size_t i = 0; i < params.NewHeadCount; ++i) {
         WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(100'000, 'x'), &tx);
+        WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
         ++newHeadMsgCount;
     }
 
-    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+    //WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
 
     if (params.RestartMode == ERestartBeforeCommit) {
         RestartPQTablet("topic_A", 0);
@@ -1654,7 +1659,7 @@ void TFixture::TestTxWithBigBlobs(const TTestTxWithBigBlobsParams& params)
     start += oldHeadMsgCount;
 
     for (size_t i = 0; i < bigBlobMsgCount; ++i) {
-        UNIT_ASSERT_VALUES_EQUAL(messages[start + i].size(), 7'900'000);
+        UNIT_ASSERT_VALUES_EQUAL(messages[start + i].size(), 7'000'000);
     }
     start += bigBlobMsgCount;
 
@@ -1920,6 +1925,122 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_28, TFixture)
     auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2), nullptr, 0);
     UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
 }
+
+void TFixture::WriteMessagesInTx(size_t big, size_t small)
+{
+    CreateTopic("topic_A", TEST_CONSUMER);
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    for (size_t i = 0; i < big; ++i) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(7'000'000, 'x'), &tx, 0);
+        WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+    }
+
+    for (size_t i = 0; i < small; ++i) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(16'384, 'x'), &tx, 0);
+        WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+    }
+
+    CommitTx(tx, EStatus::SUCCESS);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_29, TFixture)
+{
+    WriteMessagesInTx(1, 0);
+    WriteMessagesInTx(1, 0);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_30, TFixture)
+{
+    WriteMessagesInTx(1, 0);
+    WriteMessagesInTx(0, 1);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_31, TFixture)
+{
+    WriteMessagesInTx(1, 0);
+    WriteMessagesInTx(1, 1);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_32, TFixture)
+{
+    WriteMessagesInTx(0, 1);
+    WriteMessagesInTx(1, 0);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_33, TFixture)
+{
+    WriteMessagesInTx(0, 1);
+    WriteMessagesInTx(0, 1);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_34, TFixture)
+{
+    WriteMessagesInTx(0, 1);
+    WriteMessagesInTx(1, 1);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_35, TFixture)
+{
+    WriteMessagesInTx(1, 1);
+    WriteMessagesInTx(1, 0);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_36, TFixture)
+{
+    WriteMessagesInTx(1, 1);
+    WriteMessagesInTx(0, 1);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_37, TFixture)
+{
+    WriteMessagesInTx(1, 1);
+    WriteMessagesInTx(1, 1);
+}
+
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_38, TFixture)
+{
+    WriteMessagesInTx(2, 202);
+    WriteMessagesInTx(2, 200);
+    WriteMessagesInTx(0, 1);
+    WriteMessagesInTx(4, 0);
+    WriteMessagesInTx(0, 1);
+}
+
+//Y_UNIT_TEST_F(WriteToTopic_Demo_29, TFixture)
+//{
+//    CreateTopic("topic_A", TEST_CONSUMER);
+//
+//    auto writeMessages = [&](NTable::TSession& tableSession, size_t big, size_t small) {
+//        NTable::TTransaction tx = BeginTx(tableSession);
+//
+//        for (size_t i = 0; i < big; ++i) {
+//            WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(7'000'000, 'x'), &tx, 0);
+//            WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+//        }
+//
+//        for (size_t i = 0; i < small; ++i) {
+//            WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(16'384, 'x'), &tx, 0);
+//            WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+//        }
+//
+//        CommitTx(tx, EStatus::SUCCESS);
+//    };
+//
+//    NTable::TSession tableSession = CreateTableSession();
+//
+//    //writeMessages(tableSession, 2, 202);
+//    //writeMessages(tableSession, 2, 200);
+//    //writeMessages(tableSession, 0, 1);
+//    writeMessages(tableSession, 1, 0);
+//    writeMessages(tableSession, 0, 1);
+//
+//    //auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2), nullptr, 0);
+//    //UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
+//}
 
 }
 

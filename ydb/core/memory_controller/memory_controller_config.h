@@ -62,7 +62,7 @@ inline ui64 GetHardLimitBytes(const NKikimrConfig::TMemoryControllerConfig& conf
         hasMemTotalHardLimit = true;
         return info.MemTotal.value();
     }
-    return 512_MB; // fallback
+    return 2_GB; // fallback
 }
 
 GET_LIMIT(SoftLimit)

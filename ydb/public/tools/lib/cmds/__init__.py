@@ -9,6 +9,7 @@ import string
 import typing  # noqa: F401
 import sys
 import yaml
+import copy
 from six.moves.urllib.parse import urlparse
 
 from ydb.library.yql.providers.common.proto.gateways_config_pb2 import TGenericConnectorConfig
@@ -330,24 +331,23 @@ def merge_two_yaml_configs(data_1, data_2):
         return new_dict
     else:
         if data_2 is None:
-            return data_1
+            return copy.deepcopy(data_1)
         else:
-            return data_2
+            return copy.deepcopy(data_2)
 
 
 def _check_types_for_merge(data_1, data_2):
     if isinstance(data_1, dict) and isinstance(data_2, dict):
-        pass
-    elif isinstance(data_1, list) and isinstance(data_2, list):
-        pass
-    elif data_1 is None and data_2 is None:
-        pass
-    elif (data_1 is None and isinstance(data_2, list)) or (data_2 is None and isinstance(data_1, list)):
-        pass
-    elif (data_1 is None and isinstance(data_2, dict)) or (data_2 is None and isinstance(data_1, dict)):
-        pass
-    else:
-        raise TypeError(f"Type mismatch - {type(data_1)} data_1 cannot be merged with {type(data_2)} data_2")
+        return
+    if isinstance(data_1, list) and isinstance(data_2, list):
+        return
+    if data_1 is None and data_2 is None:
+        return
+    if (data_1 is None and isinstance(data_2, list)) or (data_2 is None and isinstance(data_1, list)):
+        return
+    if (data_1 is None and isinstance(data_2, dict)) or (data_2 is None and isinstance(data_1, dict)):
+        return
+    raise TypeError(f"Type mismatch - {type(data_1)} data_1 cannot be merged with {type(data_2)} data_2")
         
 
 def get_additional_yaml_config(arguments, path):

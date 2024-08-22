@@ -173,7 +173,7 @@ void TTieringActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, co
 
 void TTieringActualizer::Refresh(const std::optional<TTiering>& info, const TAddExternalContext& externalContext) {
     Tiering = info;
-    if (Tiering && Tiering->HasTiers()) {
+    if (Tiering) {
         TieringColumnId = VersionedIndex.GetLastSchema()->GetColumnId(Tiering->GetEvictColumnName());
     } else {
         TieringColumnId = {};

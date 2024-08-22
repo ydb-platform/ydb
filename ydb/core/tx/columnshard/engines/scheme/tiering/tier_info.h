@@ -175,8 +175,8 @@ public:
         AFL_VERIFY(tier);
         if (!TTLColumnName) {
             TTLColumnName = tier->GetEvictColumnName();
-        } else if (TTLColumnName.value() != tier->GetEvictColumnName()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "incorrect_tiering_metadata")("column_before", TTLColumnName.value())
+        } else if (*TTLColumnName != tier->GetEvictColumnName()) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "incorrect_tiering_metadata")("column_before", *TTLColumnName)
                 ("column_new", tier->GetEvictColumnName());
             return false;
         }
@@ -197,7 +197,7 @@ public:
 
     const TString& GetEvictColumnName() const {
         AFL_VERIFY(TTLColumnName);
-        return TTLColumnName.value();
+        return *TTLColumnName;
     }
 
     TString GetDebugString() const {

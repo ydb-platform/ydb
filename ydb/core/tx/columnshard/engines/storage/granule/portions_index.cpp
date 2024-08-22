@@ -55,11 +55,11 @@ void TPortionsIndex::RemovePortion(const std::shared_ptr<TPortionInfo>& p) {
     auto itTo = Points.find(p->IndexKeyEnd());
     AFL_VERIFY(itTo != Points.end());
     {
-        const TPortionInfoStat stat(p->GetMinMemoryForReadColumns({}), p->GetTotalBlobBytes());
+        const TPortionInfoStat stat(p);
         auto it = itFrom;
         while (true) {
             RemoveFromMemoryUsageControl(it->second.GetIntervalStats());
-            it->second.RemoveContained(*p, stat);
+            it->second.RemoveContained(stat);
             RawMemoryUsage.Add(it->second.GetIntervalStats().GetMinRawBytes());
             BlobMemoryUsage.Add(it->second.GetIntervalStats().GetBlobBytes());
             if (it == itTo) {
@@ -98,10 +98,10 @@ void TPortionsIndex::AddPortion(const std::shared_ptr<TPortionInfo>& p) {
     itTo->second.AddFinish(p);
 
     auto it = itFrom;
-    const TPortionInfoStat stat(p->GetMinMemoryForReadColumns({}), p->GetTotalBlobBytes());
+    const TPortionInfoStat stat(p);
     while (true) {
         RemoveFromMemoryUsageControl(it->second.GetIntervalStats());
-        it->second.AddContained(*p, stat);
+        it->second.AddContained(stat);
         RawMemoryUsage.Add(it->second.GetIntervalStats().GetMinRawBytes());
         BlobMemoryUsage.Add(it->second.GetIntervalStats().GetBlobBytes());
         if (it == itTo) {

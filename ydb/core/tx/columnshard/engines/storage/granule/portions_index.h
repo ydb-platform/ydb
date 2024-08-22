@@ -10,29 +10,41 @@ namespace NKikimr::NOlap::NGranule::NPortionsIndex {
 
 class TPortionInfoStat {
 private:
+    std::shared_ptr<TPortionInfo> PortionInfo;
     YDB_READONLY(ui64, MinRawBytes, 0);
     YDB_READONLY(ui64, BlobBytes, 0);
 
 public:
-    TPortionInfoStat() = default;
-
-    TPortionInfoStat(const ui64 rawBytes, const ui64 blobBytes)
-        : MinRawBytes(rawBytes)
-        , BlobBytes(blobBytes)
+    TPortionInfoStat(const std::shared_ptr<TPortionInfo>& portionInfo)
+        : PortionInfo(portionInfo)
+        , MinRawBytes(PortionInfo->GetMinMemoryForReadColumns({}))
+        , BlobBytes(PortionInfo->GetTotalBlobBytes())
     {
 
     }
 
+    const TPortionInfo& GetPortionInfoVerified() const {
+        AFL_VERIFY(PortionInfo);
+        return *PortionInfo;
+    }
+};
+
+class TIntervalInfoStat {
+private:
+    YDB_READONLY(ui64, MinRawBytes, 0);
+    YDB_READONLY(ui64, BlobBytes, 0);
+
+public:
     void Add(const TPortionInfoStat& source) {
-        MinRawBytes += source.MinRawBytes;
-        BlobBytes += source.BlobBytes;
+        MinRawBytes += source.GetMinRawBytes();
+        BlobBytes += source.GetBlobBytes();
     }
 
     void Sub(const TPortionInfoStat& source) {
-        AFL_VERIFY(MinRawBytes >= source.MinRawBytes);
-        MinRawBytes -= source.MinRawBytes;
-        AFL_VERIFY(BlobBytes >= source.BlobBytes);
-        BlobBytes -= source.BlobBytes;
+        AFL_VERIFY(MinRawBytes >= source.GetMinRawBytes());
+        MinRawBytes -= source.GetMinRawBytes();
+        AFL_VERIFY(BlobBytes >= source.GetBlobBytes());
+        BlobBytes -= source.GetBlobBytes();
         AFL_VERIFY(!!BlobBytes == !!MinRawBytes);
     }
 
@@ -46,7 +58,7 @@ private:
     THashMap<ui64, std::shared_ptr<TPortionInfo>> Start;
     THashMap<ui64, std::shared_ptr<TPortionInfo>> Finish;
     THashMap<ui64, TPortionInfoStat> PortionIds;
-    YDB_READONLY_DEF(TPortionInfoStat, IntervalStats);
+    YDB_READONLY_DEF(TIntervalInfoStat, IntervalStats);
 
 public:
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetStart() const {
@@ -54,12 +66,12 @@ public:
     }
 
     void ProvidePortions(const TPortionsPKPoint& source) {
-        IntervalStats = TPortionInfoStat();
+        IntervalStats = TIntervalInfoStat();
         for (auto&& [i, stat] : source.PortionIds) {
             if (source.Finish.contains(i)) {
                 continue;
             }
-            AddContained(i, stat);
+            AddContained(stat);
         }
     }
 
@@ -71,21 +83,19 @@ public:
         return Start.empty() && Finish.empty();
     }
 
-    void AddContained(const TPortionInfo& portion, const TPortionInfoStat& stat) {
-        if (!portion.HasRemoveSnapshot()) {
+    void AddContained(const TPortionInfoStat& stat) {
+        if (!stat.GetPortionInfoVerified().HasRemoveSnapshot()) {
             IntervalStats.Add(stat);
         }
-        AFL_VERIFY(PortionIds.emplace(portion.GetPortionId(), stat).second);
+        AFL_VERIFY(PortionIds.emplace(stat.GetPortionInfoVerified().GetPortionId(), stat).second);
     }
 
-    void RemoveContained(const TPortionInfo& portion, const TPortionInfoStat& stat) {
-        if (!portion.HasRemoveSnapshot()) {
+    void RemoveContained(const TPortionInfoStat& stat) {
+        if (!stat.GetPortionInfoVerified().HasRemoveSnapshot()) {
             IntervalStats.Sub(stat);
         }
-        AFL_VERIFY(PortionIds.erase(portion.GetPortionId()));
-        if (PortionIds.empty()) {
-            AFL_VERIFY(!IntervalStats);
-        }
+        AFL_VERIFY(PortionIds.erase(stat.GetPortionInfoVerified().GetPortionId()));
+        AFL_VERIFY(PortionIds.size() || !IntervalStats);
     }
 
     void RemoveStart(const std::shared_ptr<TPortionInfo>& p) {
@@ -166,7 +176,7 @@ private:
         return it;
     }
 
-    void RemoveFromMemoryUsageControl(const TPortionInfoStat& stat) {
+    void RemoveFromMemoryUsageControl(const TIntervalInfoStat& stat) {
         RawMemoryUsage.Remove(stat.GetMinRawBytes());
         BlobMemoryUsage.Remove(stat.GetBlobBytes());
     }

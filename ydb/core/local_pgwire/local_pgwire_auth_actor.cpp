@@ -58,6 +58,9 @@ public:
 
     void Bootstrap() {
         if (PgWireAuthData.UserName == "__ydb_apikey") {
+            if (PgWireAuthData.Password.empty()) {
+                SendResponseAndDie("Invalid password");
+            }
             SendDescribeRequest();
         } else {
             SendLoginRequest();

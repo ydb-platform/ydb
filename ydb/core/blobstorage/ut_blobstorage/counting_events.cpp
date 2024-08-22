@@ -4,7 +4,7 @@
 
 #include <util/stream/null.h>
 
-#define Ctest Cnull
+#define Ctest Cerr
 
 Y_UNIT_TEST_SUITE(CountingEvents) {
 
@@ -97,8 +97,10 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
         
         env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
             if (printEvents) {
-                Ctest << "Counter# " << eventCtr++ << " Type# " << ev->GetTypeRewrite()
-                        << " Name# " << ev->GetTypeName() << Endl;
+                Ctest << "Counter# " << eventCtr++
+                        << " Type# " << ev->GetTypeRewrite()
+                        << " Name# " << ev->GetTypeName()
+                        << " ToString()# " << ev->ToString() << Endl;
             }
             return true;
         };

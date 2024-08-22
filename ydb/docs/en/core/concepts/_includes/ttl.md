@@ -4,7 +4,7 @@ This section describes how the TTL mechanism works and what its limits are. It a
 
 ## How it works {#how-it-works}
 
-{{ ydb-short-name }} lets you specify a table column (TTL column), whose values set the lifetime of items. TTL automatically deletes the item from your table once the specified number of seconds passes after the time set in the TTL column.
+{{ ydb-short-name }} lets you specify a [row](../../datamodel/table.md#row-oriented-tables) and [column](../../datamodel/table.md#column-oriented-tables) oriented table column (TTL column), whose values set the lifetime of items. TTL automatically deletes the item from your table once the specified number of seconds passes after the time set in the TTL column.
 
 {% note warning %}
 

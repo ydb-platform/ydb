@@ -9,3 +9,4 @@
 * In systems with unpredictable or seasonally fluctuating load (you can add/reduce computing resources on request and/or in serverless mode).
 * In high-load systems that shard load across relational DB instances.
 * When developing a new product with no reliable load forecast or with an expected high load beyond the capabilities of conventional relational databases.
+* In projects where simultaneous handling of transactional and analytical workloads is required.

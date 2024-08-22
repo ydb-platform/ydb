@@ -9,7 +9,7 @@ This method of executing queries has the following unique features:
 * The output of a query is a data stream ([grpc stream](https://grpc.io/docs/what-is-grpc/core-concepts/)). This means scan queries have no limit on the number of rows in the result.
 * Due to the high overhead, it is only suitable for ad hoc queries.
 
-{% node info %}
+{% note info %}
 
 From the *Scan Queries* interface, you can query [system tables](../../dev/system-views.md).
 
@@ -24,6 +24,7 @@ Scan queries cannot currently be considered an effective solution for running OL
 * There is no optimization for point reads or reading small ranges of data.
 * The SDK doesn't support automatic retry.
 
+For handling OLAP workloads in {{ ydb-short-name }}, there is a specialized type of table — [column](../datamodel/table.md#column-oriented-tables) tables. They store the data of each column separately from other columns. As a result, only those columns that are directly involved in the query are read when executing a query.
 {% note info %}
 
 Despite the fact that *Scan Queries* obviously don't interfere with the execution of OLTP transactions, they still use common DB resources: CPU, memory, disk, and network. Therefore, running complex queries **may lead to resource hunger**, which will affect the performance of the entire DB.

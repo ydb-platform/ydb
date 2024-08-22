@@ -282,7 +282,7 @@ You will see that the cluster was initialized successfully when the cluster init
 
 ## Create a database {#create-db}
 
-To work with tables, you need to create at least one database and run a process (or processes) to serve this database (dynamic nodes):
+To work with [row](../../concepts/datamodel/table.md#row-oriented-tables) and [column](../../concepts/datamodel/table.md#column-oriented-tables) oriented tables, you need to create at least one database and run a process (or processes) to serve this database (dynamic nodes):
 
 To execute the administrative command for database creation, you will need the `ca.crt` certificate file issued by the Certificate Authority (see the above description of cluster initialization).
 
@@ -440,14 +440,25 @@ When running the account creation and group assignment commands, the {{ ydb-shor
 
 1. Install the {{ ydb-short-name }} CLI as described in the [documentation](../../reference/ydb-cli/install.md).
 
-1. Create a `test_table`:
+1. Create a testing row (`test_row_table`) or column (`test_column_table`) oriented table:
 
+{% list tabs %}
+
+- Creating a row oriented table
    ```bash
    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
-       yql -s 'CREATE TABLE `testdir/test_table` (id Uint64, title Utf8, PRIMARY KEY (id));'
+      yql -s 'CREATE TABLE `testdir/test_row_table` (id Uint64, title Utf8, PRIMARY KEY (id));'
    ```
 
-   Here, `<node.ydb.tech>` is the FQDN of the server running the dynamic node that serves the `/Root/testdb` database.
+- Creating a column oriented table
+   ```bash
+   ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
+      yql -s 'CREATE TABLE `testdir/test_column_table` (id Uint64, title Utf8, PRIMARY KEY (id)) WITH (STORE = COLUMN);'
+   ```
+
+{% endlist %}
+
+Here, `<node.ydb.tech>` is the FQDN of the server running the dynamic node that serves the `/Root/testdb` database.
 
 ## Checking access to the built-in web interface
 

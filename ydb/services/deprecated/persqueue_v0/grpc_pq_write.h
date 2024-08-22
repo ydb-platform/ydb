@@ -38,7 +38,7 @@ class TPQWriteServiceImpl : public IPQClustersUpdaterCallback, public std::enabl
         bool IsShuttingDown() const override;
 
     private:
-        void CreateActor(const TString& localCluster);
+        [[nodiscard]] bool CreateActor(const TString& localCluster);
         void SendEvent(NActors::IEventBase* ev);
 
     private:
@@ -52,6 +52,7 @@ class TPQWriteServiceImpl : public IPQClustersUpdaterCallback, public std::enabl
         TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
 
         bool NeedDiscoverClusters;
+        bool IsDone = false;
     };
     using TSessionRef = TIntrusivePtr<TSession>;
 

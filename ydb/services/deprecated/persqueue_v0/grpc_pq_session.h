@@ -306,10 +306,10 @@ protected:
 protected:
     grpc::ServerCompletionQueue* const CQ;
     grpc::ServerContext Context;
-    grpc::ServerAsyncReaderWriter<TResponse, TRequest>
-            Stream;
-private:
+    grpc::ServerAsyncReaderWriter<TResponse, TRequest> Stream;
+
     TSpinLock Lock;
+private:
     bool HaveWriteInflight;
     bool NeedFinish;
     std::atomic<bool> ClientIsDone;

@@ -503,8 +503,12 @@ namespace Tests {
         if (!planResolution) {
             planResolution = Settings->UseRealThreads ? 7 : 500;
         }
+        ui32 timecastBuckets = Settings->DomainTimecastBuckets;
+        if (!timecastBuckets) {
+            timecastBuckets = TDomainsInfo::TDomain::DefaultTimecastBucketsPerMediator;
+        }
         auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(Settings->DomainName, domainId, ChangeStateStorage(SchemeRoot, domainId),
-                                                                                  planResolution,
+                                                                                  planResolution, timecastBuckets,
                                                                                   TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(1)},
                                                                                   TVector<ui64>{TDomainsInfo::MakeTxMediatorIDFixed(1)},
                                                                                   TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(1)},

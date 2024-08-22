@@ -302,11 +302,8 @@ class TTable {
     // Serialized values for interface-based columns
     std::vector<std::vector<char>> IColumnsVals;
 
-    // Current iterator index for NextTuple iterator
+    // Current iterator index for NextJoinedData iterator
     ui64 CurrIterIndex = 0;
-
-    // Index for NextJoinedData iterator
-    ui64 CurrJoinIdsIterIndex = 0;
 
     // Current bucket for iterators
     ui64 CurrIterBucket = 0;
@@ -324,9 +321,6 @@ class TTable {
     // Returns tuple data in td from bucket with id bucketNum.  Tuple id inside bucket is tupleId.
     inline void GetTupleData(ui32 bucketNum, ui32 tupleId, TupleData& td);
 
-    // True if current iterator of tuple in joinedTable has corresponding joined tuple in second table. Id of joined tuple in second table returns in tupleId2.
-    inline bool HasJoinedTupleId(TTable* joinedTable, ui32& tupleId2);
-
     // Adds keys to KeysHashTable, return true if added, false if equal key already added
     inline bool AddKeysToHashTable(KeysHashTable& t, ui64* keys, NYql::NUdf::TUnboxedValue * iColumns);
 
@@ -341,8 +335,6 @@ class TTable {
 
     bool IsAny_ = false;  // True if key duplicates need to be removed from table (any join)
 
-    bool Table2Initialized_ = false;    // True when iterator counters for second table already initialized
-
     ui64 TuplesFound_ = 0; // Total number of matching keys found during join
 
 public:
@@ -350,9 +342,6 @@ public:
 
     // Resets iterators. In case of join results table it also resets iterators for joined tables
     void ResetIterator();
-
-    // Returns value of next tuple. Returs true if there are more tuples
-    bool NextTuple(TupleData& td);
 
     // Joins two tables and stores join result in table data. Tuples of joined table could be received by
     // joined table iterator.  Life time of t1, t2 should be greater than lifetime of joined table

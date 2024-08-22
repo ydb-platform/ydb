@@ -52,6 +52,10 @@ public:
         EventsQueue.Ping();
     }
 
+    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed::TPtr& ) {
+        Send(ClientEdgeActorId, new TEvPrivate::TEvDisconnect());
+    }    
+
     void Handle(const TEvPrivate::TEvSend::TPtr& ) {
         EventsQueue.Send(new NFq::TEvRowDispatcher::TEvGetNextBatch());
     }
@@ -68,13 +72,10 @@ public:
         EventsQueue.HandleUndelivered(ev);
     }
 
-    void SessionClosed(ui64 /*eventQueueId*/) override {
-        Send(ClientEdgeActorId, new TEvPrivate::TEvDisconnect());
-    }
-
     STRICT_STFUNC(StateFunc,
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvPing, Handle);
+        hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed, Handle);
         hFunc(TEvPrivate::TEvSend, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
         hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
@@ -82,7 +83,7 @@ public:
     )
 
     void Init() {
-        EventsQueue.Init("TxId", SelfId(), SelfId(), EventQueueId, true /*KeepAlive*/, this);
+        EventsQueue.Init("TxId", SelfId(), SelfId(), EventQueueId, true /*KeepAlive*/);
         EventsQueue.OnNewRecipientId(ServerActorId);
     }
 
@@ -164,7 +165,6 @@ public:
     NActors::TActorId ClientEdgeActorId;
     NActors::TActorId ServerEdgeActorId;
 };
-
 
 Y_UNIT_TEST_SUITE(TRetryEventsQueueTest) {
     Y_UNIT_TEST(SendDisconnectAfterPoisonPill) { 

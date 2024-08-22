@@ -110,9 +110,6 @@ class TTiering {
     TTiersMap TierByName;
     TSet<TTierRef> OrderedTiers;
     std::optional<TString> TTLColumnName;
-
-    friend class TTieringBuilder;
-
 public:
 
     class TTieringContext {

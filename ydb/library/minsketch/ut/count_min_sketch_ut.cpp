@@ -1,5 +1,4 @@
-#include <ydb/library/minsketch/count_min_sketch.h>
-#include <ydb/library/minsketch/stack_count_min_sketch.h>
+#include "count_min_sketch.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 

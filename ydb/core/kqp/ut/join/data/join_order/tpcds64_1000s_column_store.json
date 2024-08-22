@@ -89,7 +89,7 @@
                                                                                       "table":"test\/ds\/customer_address"
                                                                                     },
                                                                                     {
-                                                                                      "op_name":"InnerJoin (MapJoin)",
+                                                                                      "op_name":"InnerJoin (Grace)",
                                                                                       "args":
                                                                                         [
                                                                                           {
@@ -273,7 +273,7 @@
                                                                                       "table":"test\/ds\/customer_address"
                                                                                     },
                                                                                     {
-                                                                                      "op_name":"InnerJoin (MapJoin)",
+                                                                                      "op_name":"InnerJoin (Grace)",
                                                                                       "args":
                                                                                         [
                                                                                           {

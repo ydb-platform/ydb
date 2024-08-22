@@ -962,7 +962,7 @@ bool TTable::TryToReduceMemoryAndWait() {
     if (largestBucketSize < SpillingSizeLimit/NumberOfBuckets) return false;
     if (TableBucketsStats[largestBucketIndex].HashtableMatches) {
         auto &tb = TableBuckets[largestBucketIndex];
-        auto &tbs = TableBucketsStats[CurrIterBucket];
+        auto &tbs = TableBucketsStats[largestBucketIndex];
         /*YQL_LOG(INFO) << "Finalize table";*/
         if (tb.JoinSlots.size()) {
             /*YQL_LOG(INFO) << "from Hashtable ";*/

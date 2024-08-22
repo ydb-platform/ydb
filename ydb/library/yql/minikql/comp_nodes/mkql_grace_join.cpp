@@ -590,7 +590,6 @@ public:
     {
         YQL_LOG(GRACEJOIN_DEBUG) << (const void *)&*JoinedTablePtr << "# AnyJoinSettings=" << (int)anyJoinSettings << " JoinKind=" << (int)joinKind;
         if (IsSelfJoin_) {
-            Y_ENSURE(false); // TODO TEMPORARILY BROKEN [unverified]
             LeftPacker->BatchSize = std::numeric_limits<ui64>::max();
             RightPacker->BatchSize = std::numeric_limits<ui64>::max();
         }
@@ -607,7 +606,6 @@ public:
                     break;
                 }
                 case EOperatingMode::Spilling: {
-                    Y_ENSURE(false); // TODO TEMPORARILY BROKEN [definitely]
                     auto r = DoCalculateWithSpilling(ctx, output);
                     if (r == EFetchResult::One)
                         return r;

@@ -921,6 +921,34 @@ bool TTable::TryToReduceMemoryAndWait() {
     }
 
     if (largestBucketSize < SpillingSizeLimit/NumberOfBuckets) return false;
+    if (TableBucketsStats[largestBucketIndex].HashtableMatches) {
+        auto &tb = TableBuckets[largestBucketIndex];
+        auto &tbs = TableBucketsStats[CurrIterBucket];
+        /*YQL_LOG(INFO) << "Finalize table";*/
+        if (tb.JoinSlots.size()) {
+            /*YQL_LOG(INFO) << "from Hashtable ";*/
+            auto slotSize = tbs.SlotSize;
+            Y_DEBUG_ABORT_UNLESS(slotSize);
+            auto it = tb.JoinSlots.cbegin();
+            auto end = tb.JoinSlots.cend();
+            for (; it != end; it += slotSize) {
+                if (*it == 0)
+                    continue;
+                if ((*(it + HashSize) & 1)) {
+                    ui64 keyIntsOffset;
+                    auto tupleId = *(it + slotSize - 1);
+                    Y_DEBUG_ABORT_UNLESS(tupleId < tbs.TuplesNum);
+                    if(NumberOfKeyStringColumns != 0 || NumberOfKeyIColumns !=0 ) {
+                        ui64 stringsOffsetsIdx = tupleId * (NumberOfStringColumns + NumberOfIColumns + 2);
+                        keyIntsOffset = tb.StringsOffsets[stringsOffsetsIdx];
+                    } else {
+                        keyIntsOffset = HeaderSize * tupleId;
+                    }
+                    tb.KeyInts[keyIntsOffset + HashSize] |= 1;
+                }
+            }
+        }
+    }
     TableBucketsSpillers[largestBucketIndex].SpillBucket(std::move(TableBuckets[largestBucketIndex]));
     TableBuckets[largestBucketIndex] = TTableBucket{};
 

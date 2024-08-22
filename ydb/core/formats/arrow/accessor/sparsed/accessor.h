@@ -137,16 +137,16 @@ public:
         return chunk.GetScalar(index - chunk.GetStartPosition());
     }
 
-    TSparsedArrayChunk GetSparsedChunk(const ui64 position) const {
-        ui32 currentIdx = 0;
-        for (ui32 i = 0; i < Records.size(); ++i) {
-            if (currentIdx <= position && position < currentIdx + Records[i].GetRecordsCount()) {
-                return Records[i];
-            }
-            currentIdx += Records[i].GetRecordsCount();
-        }
-        AFL_VERIFY(false);
-        return Records.back();
+    const TSparsedArrayChunk& GetSparsedChunk(const ui64 position) const {
+        const auto pred = [](const ui64 position, const TSparsedArrayChunk& item) {
+            return position < item.GetStartPosition();
+        };
+        auto it = std::upper_bound(Records.begin(), Records.end(), position, pred);
+        AFL_VERIFY(it != Records.begin());
+        --it;
+        AFL_VERIFY(position < it->GetStartPosition() + it->GetRecordsCount());
+        AFL_VERIFY(it->GetStartPosition() <= position);
+        return *it;
     }
 
     class TBuilder {

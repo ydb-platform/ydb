@@ -41,15 +41,76 @@ private:
         TColumnPortionResult Flush();
     };
 
+    class TPlainChunkCursor {
+    private:
+        std::shared_ptr<NArrow::NAccessor::IChunkedArray> CurrentChunkedArray;
+        std::optional<NArrow::NAccessor::IChunkedArray::TFullDataAddress> ChunkAddress;
+        const NArrow::NAccessor::IChunkedArray::TFullChunkedArrayAddress* CurrentOwnedArray;
+        ui32 ChunkStartPosition = 0;
+        ui32 ChunkFinishPosition = 0;
+
+        void InitArrays(const ui32 position) {
+            AFL_VERIFY(!ChunkAddress || ChunkFinishPosition <= position);
+            ChunkAddress = CurrentChunkedArray->GetChunk(ChunkAddress, position);
+            AFL_VERIFY(ChunkAddress);
+            ChunkStartPosition = CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + ChunkAddress->GetAddress().GetGlobalStartPosition();
+            ChunkFinishPosition = CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + ChunkAddress->GetAddress().GetGlobalFinishPosition();
+        }
+
+    public:
+        TPlainChunkCursor(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& chunked,
+            const NArrow::NAccessor::IChunkedArray::TFullChunkedArrayAddress* currentOwnedArray)
+            : CurrentChunkedArray(chunked)
+            , CurrentOwnedArray(currentOwnedArray)
+        {
+            AFL_VERIFY(CurrentChunkedArray);
+            AFL_VERIFY(CurrentOwnedArray);
+            InitArrays(CurrentOwnedArray->GetAddress().GetGlobalStartPosition());
+        }
+        bool AddIndexTo(const ui32 index, TWriter& writer, const TColumnMergeContext& context);
+    };
+
+    class TSparsedChunkCursor {
+    private:
+        std::shared_ptr<NArrow::NAccessor::TSparsedArray> CurrentSparsedArray;
+        const NArrow::NAccessor::TSparsedArrayChunk* Chunk = nullptr;
+        const NArrow::NAccessor::IChunkedArray::TFullChunkedArrayAddress* CurrentOwnedArray;
+        ui32 ChunkStartGlobalPosition = 0;
+        ui32 NextGlobalPosition = 0;
+        ui32 NextLocalPosition = 0;
+        ui32 FinishGlobalPosition = 0;
+        void InitArrays(const ui32 position) {
+            AFL_VERIFY(!Chunk || CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetFinishPosition() <= position);
+            Chunk = &CurrentSparsedArray->GetSparsedChunk(CurrentOwnedArray->GetAddress().GetLocalIndex(position));
+            AFL_VERIFY(Chunk->GetRecordsCount());
+            AFL_VERIFY(CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetStartPosition() <= position && 
+                    position < CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetFinishPosition())
+            ("pos", position)("start", Chunk->GetStartPosition())("finish", Chunk->GetFinishPosition())(
+                "shift", CurrentOwnedArray->GetAddress().GetGlobalStartPosition());
+            ChunkStartGlobalPosition = CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetStartPosition();
+            NextGlobalPosition = CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetFirstIndexNotDefault();
+            NextLocalPosition = 0;
+            FinishGlobalPosition = CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetFinishPosition();
+        }
+    public:
+        bool AddIndexTo(const ui32 index, TWriter& writer, const TColumnMergeContext& context);
+        TSparsedChunkCursor(const std::shared_ptr<NArrow::NAccessor::TSparsedArray>& sparsed,
+            const NArrow::NAccessor::IChunkedArray::TFullChunkedArrayAddress* currentOwnedArray)
+            : CurrentSparsedArray(sparsed)
+            , CurrentOwnedArray(currentOwnedArray) {
+            AFL_VERIFY(sparsed);
+            AFL_VERIFY(currentOwnedArray);
+            InitArrays(CurrentOwnedArray->GetAddress().GetGlobalStartPosition());
+        }
+    };
+
     class TCursor {
     private:
         std::shared_ptr<NArrow::NAccessor::IChunkedArray> Array;
         std::optional<NArrow::NAccessor::IChunkedArray::TFullChunkedArrayAddress> CurrentOwnedArray;
-        std::shared_ptr<NArrow::NAccessor::TSparsedArray> CurrentSparsedArray;
-        ui32 NextGlobalPosition = 0;
-        ui32 NextLocalPosition = 0;
-        ui32 CommonShift = 0;
-        std::optional<NArrow::NAccessor::TSparsedArrayChunk> Chunk;
+        std::shared_ptr<TSparsedChunkCursor> SparsedCursor;
+        std::shared_ptr<TPlainChunkCursor> PlainCursor;
+        ui32 FinishGlobalPosition = 0;
         const TColumnMergeContext& Context;
         void InitArrays(const ui32 position);
 

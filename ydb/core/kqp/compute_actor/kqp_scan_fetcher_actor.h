@@ -170,6 +170,9 @@ private:
     std::deque<TShardState> PendingShards;
     std::deque<TShardState> PendingResolveShards;
 
+    static inline TAtomicCounter ScanIdCounter = 0;
+    const ui64 ScanId = ScanIdCounter.Inc();
+
     TInFlightShards InFlightShards;
     TInFlightComputes InFlightComputes;
     ui32 TotalRetries = 0;

@@ -46,8 +46,7 @@ class AddInflightExtension(ExtensionPoint):
 
     def apply_to_kikimr(self, request, kikimr):
         kikimr.inflight = request.param["inflight"]
-        kikimr.compute_plane.fq_config['read_actors_factory_config']['s3_read_actor_factory_config'][
-            'max_inflight'] = kikimr.inflight
+        kikimr.compute_plane.fq_config['gateways']['s3']['max_inflight'] = kikimr.inflight
         del request.param["inflight"]
 
 
@@ -59,8 +58,7 @@ class AddDataInflightExtension(ExtensionPoint):
 
     def apply_to_kikimr(self, request, kikimr):
         kikimr.data_inflight = request.param["data_inflight"]
-        kikimr.compute_plane.fq_config['read_actors_factory_config']['s3_read_actor_factory_config'][
-            'data_inflight'] = kikimr.data_inflight
+        kikimr.compute_plane.fq_config['gateways']['s3']['data_inflight'] = kikimr.data_inflight
         del request.param["data_inflight"]
 
 

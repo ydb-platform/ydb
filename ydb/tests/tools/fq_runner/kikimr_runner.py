@@ -519,14 +519,6 @@ class YqTenant(BaseTenant):
         fq_config['quotas_manager'] = {'enabled': True}
         self.fill_rate_limiter_config(fq_config['rate_limiter'], "RateLimiter_" + self.uuid)
 
-        fq_config['read_actors_factory_config'] = {
-            's3_read_actor_factory_config': {
-                'retry_config': {
-                    'max_retry_time_ms': 3000
-                }
-            }
-        }
-
 
 class TenantType(Enum):
     YQ = 1

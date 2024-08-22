@@ -204,7 +204,7 @@ private:
     TString GetProfilePaths(const TString& timestamp) const
     {
         return Format(
-            "%v/oom_profile_paths_%v.pb.gz",
+            "%v/oom_profile_paths_%v.yson",
             Options_.HeapDumpDirectory,
             timestamp);
     }

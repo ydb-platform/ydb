@@ -944,7 +944,7 @@ bool TTable::TryToReduceMemoryAndWait() {
                     } else {
                         keyIntsOffset = HeaderSize * tupleId;
                     }
-                    tb.KeyInts[keyIntsOffset + HashSize] |= 1;
+                    tb.KeyIntVals[keyIntsOffset + HashSize] |= 1;
                 }
             }
         }

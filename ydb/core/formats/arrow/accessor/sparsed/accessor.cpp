@@ -60,7 +60,7 @@ TSparsedArray::TSparsedArray(const IChunkedArray& defaultArray, const std::share
             AFL_VERIFY(pos <= GetRecordsCount());
         }
 
-        records = MakeRecords(builderIndex, builderValue, GetDataType(), sparsedRecordsCount);
+        records = MakeRecords(GetDataType(), sparsedRecordsCount);
         AFL_VERIFY_DEBUG(records->ValidateFull().ok());
         return true;
     }));

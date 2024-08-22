@@ -15,6 +15,7 @@ namespace NMiniKQL {
 namespace {
 
 using TKSV = std::tuple<ui64, ui64, TStringBuf>;
+using TKSVSet = TSet<std::tuple_element_t<0, TKSV>>;
 using TArrays = std::array<std::shared_ptr<arrow::ArrayData>, std::tuple_size_v<TKSV>>;
 
 TVector<TString> GenerateValues(size_t level) {
@@ -64,6 +65,15 @@ const TRuntimeNode MakeSet(TProgramBuilder& pgmBuilder, const TSet<TKey>& keyVal
         }, [&](TRuntimeNode) {
             return pgmBuilder.NewVoid();
         });
+}
+
+template <typename TRightPayload>
+const TRuntimeNode MakeRightNode(TProgramBuilder& pgmBuilder, const TRightPayload& values) {
+    if constexpr (std::is_same_v<TRightPayload, TKSVSet>) {
+        return MakeSet(pgmBuilder, values);
+    } else {
+        Y_ABORT("Not supported payload type");
+    }
 }
 
 TArrays KSVToArrays(const TVector<TKSV>& ksvVector, size_t current,
@@ -142,13 +152,13 @@ const TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKin
     return rootNode;
 }
 
-TVector<TKSV> DoTestBlockJoinOnUint64(EJoinKind joinKind, TVector<TKSV> values,
-    TSet<ui64> set, size_t blockSize
+TVector<TKSV> DoTestBlockJoinOnUint64(EJoinKind joinKind,
+    TVector<TKSV> leftValues, TKSVSet rightValues, size_t blockSize
 ) {
     TSetup<false> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dict = MakeSet(pb, set);
+    const auto dict = MakeRightNode(pb, rightValues);
 
     const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
     const auto strType = pb.NewDataType(NUdf::EDataSlot::String);
@@ -169,11 +179,11 @@ TVector<TKSV> DoTestBlockJoinOnUint64(EJoinKind joinKind, TVector<TKSV> values,
     const auto& holderFactory = graph->GetHolderFactory();
     auto& ctx = graph->GetContext();
 
-    const size_t testSize = values.size();
+    const size_t testSize = leftValues.size();
     size_t current = 0;
     TDefaultListRepresentation leftListValues;
     while (current < testSize) {
-        const auto arrays = KSVToArrays(values, current, blockSize, &ctx.ArrowMemoryPool);
+        const auto arrays = KSVToArrays(leftValues, current, blockSize, &ctx.ArrowMemoryPool);
         current += blockSize;
 
         NUdf::TUnboxedValue* items = nullptr;

@@ -18,6 +18,8 @@
 
 #include <concepts>
 
+namespace NYT::NPhoenix2::NDetail {
+
 ////////////////////////////////////////////////////////////////////////////////
 
 #undef PHOENIX_DEFINE_TYPE
@@ -26,22 +28,10 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#define PHOENIX_DEFINE_TYPE__STATIC_INIT(type, parenthesizedTypeArgs) \
-    template <class T> \
-    struct TPhoenixTypeInitializer__; \
-    \
-    template <> \
-    struct TPhoenixTypeInitializer__<type PP_DEPAREN(parenthesizedTypeArgs)> \
-    { \
-        [[maybe_unused]] static inline const void* Dummy = &type PP_DEPAREN(parenthesizedTypeArgs)::GetTypeDescriptor(); \
-    }
-
 #define PHOENIX_DEFINE_TYPE(type) \
-    PHOENIX_DEFINE_TYPE__STATIC_INIT(type, ()); \
-    \
     const ::NYT::NPhoenix2::TTypeDescriptor& type::GetTypeDescriptor() \
     { \
-        static const auto& descriptor = ::NYT::NPhoenix2::NDetail::RegisterTypeDescriptorImpl<type, /*Template*/ false>(); \
+        static const auto& descriptor = ::NYT::NPhoenix2::NDetail::GetTypeDescriptorByTagUnchecked(TypeTag); \
         return descriptor; \
     } \
     \
@@ -79,23 +69,46 @@
             YT_VERIFY(context.IsLoad()); \
             type::LoadImpl(context.LoadContext()); \
         } \
+    } \
+    \
+    template <class T> \
+    struct TPhoenixTypeInitializer__; \
+    \
+    template <> \
+    struct TPhoenixTypeInitializer__<type> \
+    { \
+        [[maybe_unused]] static inline const void* Dummy = &::NYT::NPhoenix2::NDetail::RegisterTypeDescriptorImpl<type, false>(); \
     }
 
 #define PHOENIX_DEFINE_TEMPLATE_TYPE(type, parenthesizedTypeArgs) \
-    PHOENIX_DEFINE_TYPE__STATIC_INIT(type, parenthesizedTypeArgs)
+    template <class T> \
+    struct TPhoenixTypeInitializer__; \
+    \
+    template <> \
+    struct TPhoenixTypeInitializer__<type PP_DEPAREN(parenthesizedTypeArgs)> \
+    { \
+        [[maybe_unused]] static inline const void* Dummy = &::NYT::NPhoenix2::NDetail::RegisterTypeDescriptorImpl<type PP_DEPAREN(parenthesizedTypeArgs), true>(); \
+    }
 
 #define PHOENIX_DEFINE_OPAQUE_TYPE(type) \
-    PHOENIX_DEFINE_TYPE__STATIC_INIT(type, ()); \
-    \
     const ::NYT::NPhoenix2::TTypeDescriptor& type::GetTypeDescriptor() \
     { \
-        static const auto& descriptor = ::NYT::NPhoenix2::NDetail::RegisterOpaqueTypeDescriptorImpl<type>(); \
+        static const auto& descriptor = ::NYT::NPhoenix2::NDetail::GetTypeDescriptorByTagUnchecked(TypeTag); \
         return descriptor; \
+    } \
+    \
+    template <class T> \
+    struct TPhoenixTypeInitializer__; \
+    \
+    template <> \
+    struct TPhoenixTypeInitializer__<type> \
+    { \
+        [[maybe_unused]] static inline const void* Dummy = &::NYT::NPhoenix2::NDetail::RegisterOpaqueTypeDescriptorImpl<type>(); \
     }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace NYT::NPhoenix2::NDetail {
+const TTypeDescriptor& GetTypeDescriptorByTagUnchecked(TTypeTag tag);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -178,6 +178,45 @@ void TTable::ResetIterator() {
     TotalUnpacked = 0;
 }
 
+// Checks if there are more tuples and sets bucketId and tupleId to next valid.
+inline bool HasMoreTuples(std::vector<TTableBucketStats> & tableBucketsStats, ui64 & bucketId, ui64 & tupleId, ui64 bucketLimit ) {
+
+    if (bucketId >= bucketLimit) return false;
+
+    if ( tupleId >= tableBucketsStats[bucketId].TuplesNum ) {
+        tupleId = 0;
+        bucketId ++;
+
+        if (bucketId == bucketLimit) {
+            return false;
+        }
+
+        while( tableBucketsStats[bucketId].TuplesNum == 0 ) {
+           bucketId ++;
+            if (bucketId == bucketLimit) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+
+}
+
+
+// Returns value of next tuple. Returs true if there are more tuples
+bool TTable::NextTuple(TupleData & td){
+    if (HasMoreTuples(TableBucketsStats, CurrIterBucket, CurrIterIndex, TableBucketsStats.size())) {
+        GetTupleData(CurrIterBucket, CurrIterIndex, td);
+        CurrIterIndex++;
+        return true;
+    } else {
+        td.AllNulls = true;
+        return false;
+    }
+}
+
+
 inline bool CompareIColumns(    const ui32* stringSizes1, const char * vals1,
                                 const ui32* stringSizes2, const char * vals2,
                                 TColTypeInterface * colInterfaces, ui64 nStringColumns, ui64 nIColumns) {

@@ -343,6 +343,9 @@ public:
     // Resets iterators. In case of join results table it also resets iterators for joined tables
     void ResetIterator();
 
+    // Returns value of next tuple. Returs true if there are more tuples
+    bool NextTuple(TupleData& td);
+
     // Joins two tables and stores join result in table data. Tuples of joined table could be received by
     // joined table iterator.  Life time of t1, t2 should be greater than lifetime of joined table
     // hasMoreLeftTuples, hasMoreRightTuples is true if join is partial and more rows are coming.  For final batch hasMoreLeftTuples = false, hasMoreRightTuples = false

@@ -121,7 +121,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         test.Execute();
     }
 
-    Y_UNIT_TEST(SwitchingSparsedTs) {
+    Y_UNIT_TEST(NormalizeAbsentColumn) {
         TSparsedDataTest test;
         test.Execute(true);
     }

@@ -20,7 +20,7 @@ PEERDIR(
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/tx/columnshard/counters
-    ydb/library/yql/sql/pg_dummy
+    #ydb/library/yql/sql/pg_dummy
     ydb/library/yql/core/arrow_kernels/request
     ydb/core/testlib/default
     ydb/core/tx/columnshard/test_helper

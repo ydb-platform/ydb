@@ -20,7 +20,11 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_driver
     ydb/public/sdk/cpp/client/ydb_topic
     ydb/public/sdk/cpp/client/ydb_types/credentials
-    ydb/core/fq/libs/row_dispatcher
+    #ydb/core/fq/libs/row_dispatcher
+    ydb/library/yql/providers/dq/api/protos
+    ydb/core/fq/libs/graph_params/proto
+    ydb/core/fq/libs/protos
+    ydb/core/fq/libs/row_dispatcher/protos
 )
 
 YQL_LAST_ABI_VERSION()

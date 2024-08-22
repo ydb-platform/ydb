@@ -24,7 +24,7 @@ PEERDIR(
     ydb/library/yql/providers/solomon/gateway
     ydb/library/yql/providers/solomon/provider
     ydb/library/yql/public/udf/service/exception_policy
-    ydb/library/yql/sql/pg_dummy
+    #ydb/library/yql/sql/pg_dummy
     ydb/public/sdk/cpp/client/ydb_params
     ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
 )

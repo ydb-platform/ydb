@@ -2010,38 +2010,6 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_38, TFixture)
     WriteMessagesInTx(0, 1);
 }
 
-//Y_UNIT_TEST_F(WriteToTopic_Demo_29, TFixture)
-//{
-//    CreateTopic("topic_A", TEST_CONSUMER);
-//
-//    auto writeMessages = [&](NTable::TSession& tableSession, size_t big, size_t small) {
-//        NTable::TTransaction tx = BeginTx(tableSession);
-//
-//        for (size_t i = 0; i < big; ++i) {
-//            WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(7'000'000, 'x'), &tx, 0);
-//            WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
-//        }
-//
-//        for (size_t i = 0; i < small; ++i) {
-//            WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(16'384, 'x'), &tx, 0);
-//            WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
-//        }
-//
-//        CommitTx(tx, EStatus::SUCCESS);
-//    };
-//
-//    NTable::TSession tableSession = CreateTableSession();
-//
-//    //writeMessages(tableSession, 2, 202);
-//    //writeMessages(tableSession, 2, 200);
-//    //writeMessages(tableSession, 0, 1);
-//    writeMessages(tableSession, 1, 0);
-//    writeMessages(tableSession, 0, 1);
-//
-//    //auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2), nullptr, 0);
-//    //UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
-//}
-
 }
 
 }

@@ -172,8 +172,8 @@ public:
 
     i64 UseAndFill(ui64 tokens) {
         TGuard<Lock> g(BucketMutex);
-        FillBucket();
         UseNoLock(tokens);
+        FillBucket();
         return Bucket;
     }
 

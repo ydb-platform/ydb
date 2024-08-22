@@ -66,4 +66,6 @@ message TTableStats {
     repeated TChannelStats Channels = 30;
 
     optional TStoragePoolsStats StoragePools = 31;
+
+    optional uint64 ByKeyFilterSize = 32;
 }

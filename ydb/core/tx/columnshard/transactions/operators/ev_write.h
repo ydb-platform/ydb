@@ -4,7 +4,7 @@
 
 namespace NKikimr::NColumnShard {
 
-    class TEvWriteTransactionOperator : public TTxController::ITransactionOperator {
+    class TEvWriteTransactionOperator: public TTxController::ITransactionOperator, public TMonitoringObjectsCounter<TEvWriteTransactionOperator> {
         using TBase = TTxController::ITransactionOperator;
         using TProposeResult = TTxController::TProposeResult;
         static inline auto Registrator = TFactory::TRegistrator<TEvWriteTransactionOperator>(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE);
@@ -19,6 +19,9 @@ namespace NKikimr::NColumnShard {
         virtual void DoFinishProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) override {
         }
         virtual void DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
+        }
+        virtual TString DoGetOpType() const override {
+            return "EvWrite";
         }
         virtual bool DoIsAsync() const override {
             return false;

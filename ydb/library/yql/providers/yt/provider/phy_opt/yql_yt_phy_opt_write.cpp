@@ -43,7 +43,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::DqWrite(TExprBase node,
     }
 
     TSyncMap syncList;
-    if (!IsYtCompleteIsolatedLambda(write.Content().Ref(), syncList, true, true)) {
+    if (!IsYtCompleteIsolatedLambda(write.Content().Ref(), syncList, true)) {
         return node;
     }
 
@@ -554,7 +554,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ReplaceStatWriteTable(T
 
         TString cluster;
         TSyncMap syncList;
-        if (!IsYtCompleteIsolatedLambda(input.Ref(), syncList, cluster, true, false)) {
+        if (!IsYtCompleteIsolatedLambda(input.Ref(), syncList, cluster, false)) {
             return node;
         }
 
@@ -710,7 +710,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Fill(TExprBase node, TE
 
     auto cluster = TString{write.DataSink().Cluster().Value()};
     TSyncMap syncList;
-    if (!IsYtCompleteIsolatedLambda(write.Content().Ref(), syncList, cluster, true, false)) {
+    if (!IsYtCompleteIsolatedLambda(write.Content().Ref(), syncList, cluster, false)) {
         return node;
     }
 

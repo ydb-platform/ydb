@@ -166,7 +166,9 @@ public:
         }
 
         const auto& balancingExt = request->Header().GetExtension(NProto::TBalancingExt::balancing_ext);
-        auto hash = request->GetHash();
+        auto hash = balancingExt.has_balancing_hint()
+            ? balancingExt.balancing_hint()
+            : request->GetHash();
         auto randomNumber = balancingExt.enable_client_stickiness() ? ClientStickinessRandomNumber_ : RandomNumber<size_t>();
         int stickyGroupSize = balancingExt.sticky_group_size();
         auto randomIndex = randomNumber % stickyGroupSize;

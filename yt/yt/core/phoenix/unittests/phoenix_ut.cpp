@@ -91,8 +91,8 @@ private:
 
 void TPoint::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X_>("x");
-    registrar.template Field<2, &TThis::Y_>("y");
+    registrar.template Field<1, &TThis::X_>("x")();
+    registrar.template Field<2, &TThis::Y_>("y")();
 }
 
 PHOENIX_DEFINE_TYPE(TPoint);
@@ -112,7 +112,7 @@ struct TBaseStruct
 
 void TBaseStruct::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::A>("a");
+    registrar.template Field<1, &TThis::A>("a")();
 }
 
 PHOENIX_DEFINE_TYPE(TBaseStruct);
@@ -134,7 +134,7 @@ struct TDerivedStruct
 void TDerivedStruct::RegisterMetadata(auto&& registrar)
 {
     registrar.template BaseType<TBaseStruct>();
-    registrar.template Field<1, &TThis::B>("b");
+    registrar.template Field<1, &TThis::B>("b")();
 }
 
 PHOENIX_DEFINE_TYPE(TDerivedStruct);
@@ -157,8 +157,8 @@ struct TPair
 template <class T1, class T2>
 void TPair<T1, T2>::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::First>("first");
-    registrar.template Field<2, &TThis::Second>("second");
+    registrar.template Field<1, &TThis::First>("first")();
+    registrar.template Field<2, &TThis::Second>("second")();
 }
 
 PHOENIX_DEFINE_TEMPLATE_TYPE(TPair, (<int, int>));
@@ -208,6 +208,22 @@ PHOENIX_DEFINE_TYPE(TConcreteStruct);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TRefCountedAbstractStruct
+    : public TRefCounted
+    , public NPhoenix2::IPersistent
+{
+    virtual void Foo() = 0;
+
+    PHOENIX_DECLARE_POLYMORPHIC_TYPE(TRefCountedAbstractStruct, 0x7e16f830);
+};
+
+void TRefCountedAbstractStruct::RegisterMetadata(auto&& /*registrar*/)
+{ }
+
+PHOENIX_DEFINE_TYPE(TRefCountedAbstractStruct);
+
+////////////////////////////////////////////////////////////////////////////////
+
 TEST(TPhoenixTest, Point)
 {
     TPoint p1(123, 456);
@@ -247,14 +263,14 @@ struct S
 
 void S::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::A>("a");
+    registrar.template Field<1, &TThis::A>("a")();
     registrar.template Field<2, &TThis::B>("b")
-        .SinceVersion(100);
+        .SinceVersion(100)();
     registrar.template Field<3, &TThis::C>("c")
         .SinceVersion(200)
         .WhenMissing([] (TThis* this_, auto& /*context*/) {
             this_->C = 777;
-        });
+        })();
 }
 
 PHOENIX_DEFINE_TYPE(S);
@@ -310,18 +326,18 @@ struct S
 
 void S::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::A>("a");
+    registrar.template Field<1, &TThis::A>("a")();
     registrar.template Field<2, &TThis::B>("b")
         .InVersions([] (int version) {
             return version >= 150 && version <= 250;
-        });
+        })();
     registrar.template Field<3, &TThis::C>("c")
         .InVersions([] (int version) {
             return version >= 100 && version <= 200;
         })
         .WhenMissing([] (TThis* this_, auto& /*context*/) {
             this_->C = 777;
-        });
+        })();
 }
 
 PHOENIX_DEFINE_TYPE(S);
@@ -483,8 +499,8 @@ struct S
 void S::RegisterMetadata(auto&& registrar)
 {
     registrar.template Field<1, &TThis::A>("a")
-        .template Serializer<TSerializer>();
-    registrar.template Field<2, &TThis::B>("b");
+        .template Serializer<TSerializer>()();
+    registrar.template Field<2, &TThis::B>("b")();
 }
 
 PHOENIX_DEFINE_TYPE(S);
@@ -672,7 +688,7 @@ TEST(TPhoenixTest, NativeLoadDerivedStructNoSchema)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace NDeprecatedField {
+namespace NLoadOnlyVirtualField {
 
 struct S
 {
@@ -683,41 +699,61 @@ struct S
 
 void S::RegisterMetadata(auto&& registrar)
 {
-    registrar.template DeprecatedField<1>("a", [] (TThis* this_, auto& context) {
+    registrar.template VirtualField<1>("a", [] (TThis* this_, auto& context) {
         this_->A = Load<int>(context);
-    });
+    })();
 }
 
 PHOENIX_DEFINE_TYPE(S);
 
-} // namespace NDeprecatedField
+} // namespace NLoadOnlyVirtualField
 
-TEST(TPhoenixTest, DeprecatedField)
+TEST(TPhoenixTest, LoadOnlyVirtualField)
 {
-    using namespace NDeprecatedField;
+    using namespace NLoadOnlyVirtualField;
 
     auto buffer = MakeBuffer([] (auto& context) {
         Save<int>(context, 123);
     });
 
-    auto loadSchema = ConvertTo<TUniverseSchemaPtr>(TYsonString(TString(R"""(
-        {
-            types = [
-                {
-                    name = S;
-                    tag = 1652735129u;
-                    fields = [
-                        {name = a; tag = 1u};
-                    ];
-                }
-            ];
-        }
-    )""")));
-    TLoadSessionGuard guard(loadSchema);
-    EXPECT_TRUE(NDetail::UniverseLoadState->Schedule);
-
     auto s = Deserialize<S>(buffer);
     EXPECT_EQ(s.A, 123);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NSaveLoadVirtualField {
+
+struct S
+{
+    int A = 0;
+
+    bool operator==(const S&) const = default;
+
+    PHOENIX_DECLARE_TYPE(S, 0x67bdf7f9);
+};
+
+void S::RegisterMetadata(auto&& registrar)
+{
+    registrar.template VirtualField<1>("a", [] (TThis* this_, auto& context) {
+        this_->A = Load<int>(context);
+    }, [] (const TThis* this_, auto& context) {
+        NYT::Save(context, this_->A);
+    })();
+}
+
+PHOENIX_DEFINE_TYPE(S);
+
+} // namespace NSaveLoadVirtualField
+
+TEST(TPhoenixTest, SaveLoadVirtualField)
+{
+    using namespace NSaveLoadVirtualField;
+
+    S s1;
+    s1.A = 123;
+    auto s2 = Deserialize<S>(Serialize(s1));
+    EXPECT_EQ(s1, s2);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -774,14 +810,14 @@ TEST(TPhoenixTest, TypeDescriptorByTypeInfo)
 TEST(TPhoenixTest, InstantiateSimple)
 {
     const auto& descriptor = ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTagOrThrow(TPoint::TypeTag);
-    auto* p = static_cast<TPoint*>(descriptor.ConstructOrThrow());
+    auto* p = descriptor.ConstructOrThrow<TPoint>();
     delete p;
 }
 
 TEST(TPhoenixTest, InstantiateRefCounted)
 {
     const auto& descriptor = ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTagOrThrow(TRefCountedStruct::TypeTag);
-    auto* s = static_cast<TRefCountedStruct*>(descriptor.ConstructOrThrow());
+    auto* s = descriptor.ConstructOrThrow<TRefCountedStruct>();
     EXPECT_EQ(s->GetRefCount(), 1);
     s->Unref();
 }
@@ -789,11 +825,57 @@ TEST(TPhoenixTest, InstantiateRefCounted)
 TEST(TPhoenixTest, InstantiateNonconstructable)
 {
     const auto& descriptor = ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTagOrThrow(TAbstractStruct::TypeTag);
-    EXPECT_EQ(descriptor.TryConstruct(), nullptr);
+    EXPECT_EQ(descriptor.TryConstruct<TAbstractStruct>(), nullptr);
     EXPECT_THROW_MESSAGE_HAS_SUBSTR(
-        descriptor.ConstructOrThrow(),
+        descriptor.ConstructOrThrow<TAbstractStruct>(),
         std::exception,
         "Cannot instantiate");
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NInstantiatePolymorphic {
+
+struct TBase
+    : public TPolymorphicBase
+{
+    int A;
+
+    PHOENIX_DECLARE_TYPE(TBase, 0xbfad62ab);
+};
+
+void TBase::RegisterMetadata(auto&& registrar)
+{
+    registrar.template Field<1, &TThis::A>("a")();
+}
+
+PHOENIX_DEFINE_TYPE(TBase);
+
+struct TDerived
+    : public virtual TBase
+{
+    PHOENIX_DECLARE_TYPE(TDerived, 0x623bdf71);
+};
+
+void TDerived::RegisterMetadata(auto&& registrar)
+{
+    registrar.template BaseType<TBase>();
+}
+
+PHOENIX_DEFINE_TYPE(TDerived);
+
+} // namespace NInstantiatePolymorphic
+
+TEST(TPhoenixTest, InstantiatePolymorphic)
+{
+    using namespace NInstantiatePolymorphic;
+
+    const auto& descriptor = ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTagOrThrow(TDerived::TypeTag);
+    auto* b = descriptor.ConstructOrThrow<TBase>();
+    auto* d = dynamic_cast<TDerived*>(b);
+    d->A = 123;
+    EXPECT_EQ(d->A, 123);
+    delete b;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -814,8 +896,8 @@ struct A
 
 void A::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X>("a");
-    registrar.template Field<2, &TThis::Y>("b");
+    registrar.template Field<1, &TThis::X>("a")();
+    registrar.template Field<2, &TThis::Y>("b")();
 }
 
 PHOENIX_DEFINE_TYPE(A);
@@ -830,7 +912,7 @@ struct B
 
 void B::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::V>("v");
+    registrar.template Field<1, &TThis::V>("v")();
 }
 
 PHOENIX_DEFINE_TYPE(B);
@@ -869,7 +951,7 @@ struct A
 
 void A::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X>("x");
+    registrar.template Field<1, &TThis::X>("x")();
 }
 
 PHOENIX_DEFINE_TYPE(A);
@@ -917,7 +999,7 @@ struct A
 
 void A::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X>("x");
+    registrar.template Field<1, &TThis::X>("x")();
 }
 
 PHOENIX_DEFINE_TYPE(A);
@@ -966,8 +1048,8 @@ struct A
 
 void A::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X>("x");
-    registrar.template Field<2, &TThis::Y>("y");
+    registrar.template Field<1, &TThis::X>("x")();
+    registrar.template Field<2, &TThis::Y>("y")();
 }
 
 PHOENIX_DEFINE_TYPE(A);
@@ -982,7 +1064,7 @@ struct B
 
 void B::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &B::V>("v");
+    registrar.template Field<1, &B::V>("v")();
 }
 
 PHOENIX_DEFINE_TYPE(B);
@@ -1032,7 +1114,7 @@ struct TDerived1
 void TDerived1::RegisterMetadata(auto&& registrar)
 {
     registrar.template BaseType<TBase>();
-    registrar.template Field<1, &TThis::V>("v");
+    registrar.template Field<1, &TThis::V>("v")();
 }
 
 PHOENIX_DEFINE_TYPE(TDerived1);
@@ -1048,7 +1130,7 @@ struct TDerived2
 void TDerived2::RegisterMetadata(auto&& registrar)
 {
     registrar.template BaseType<TBase>();
-    registrar.template Field<1, &TThis::V>("v");
+    registrar.template Field<1, &TThis::V>("v")();
 }
 
 PHOENIX_DEFINE_TYPE(TDerived2);
@@ -1088,7 +1170,7 @@ struct S
 
 void S::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X>("x");
+    registrar.template Field<1, &TThis::X>("x")();
 }
 
 PHOENIX_DEFINE_TYPE(S);
@@ -1124,8 +1206,8 @@ struct A
 
 void A::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X>("x");
-    registrar.template Field<2, &TThis::T>("t");
+    registrar.template Field<1, &TThis::X>("x")();
+    registrar.template Field<2, &TThis::T>("t")();
 }
 
 PHOENIX_DEFINE_TYPE(A);
@@ -1140,8 +1222,8 @@ struct B
 
 void B::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::Y>("y");
-    registrar.template Field<2, &TThis::Z>("z");
+    registrar.template Field<1, &TThis::Y>("y")();
+    registrar.template Field<2, &TThis::Z>("z")();
 }
 
 PHOENIX_DEFINE_TYPE(B);
@@ -1187,7 +1269,7 @@ struct TBase
 
 void TBase::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X>("x");
+    registrar.template Field<1, &TThis::X>("x")();
 }
 
 PHOENIX_DEFINE_TYPE(TBase);
@@ -1211,8 +1293,8 @@ struct TDervied
 void TDervied::RegisterMetadata(auto&& registrar)
 {
     registrar.template BaseType<TBase>();
-    registrar.template Field<1, &TThis::Y>("y");
-    registrar.template Field<2, &TThis::Z>("z");
+    registrar.template Field<1, &TThis::Y>("y")();
+    registrar.template Field<2, &TThis::Z>("z")();
 }
 
 PHOENIX_DEFINE_TYPE(TDervied);
@@ -1241,36 +1323,54 @@ TEST(TPhoenixTest, PolymorphicRawPtr)
 
 namespace NPolymorphicIntrusivePtr {
 
-struct TBase
-    : public TRefCounted
-    , public IPersistent
+struct TBase1
+    : public virtual TRefCounted
+    , public virtual IPersistent
 {
-    int X = 0;
+    int X1 = 0;
 
-    PHOENIX_DECLARE_POLYMORPHIC_TYPE(TBase, 0x149f8345);
+    PHOENIX_DECLARE_POLYMORPHIC_TYPE(TBase1, 0x149f8345);
 };
 
-void TBase::RegisterMetadata(auto&& registrar)
+void TBase1::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X>("x");
+    registrar.template Field<1, &TThis::X1>("x1")();
 }
 
-PHOENIX_DEFINE_TYPE(TBase);
+PHOENIX_DEFINE_TYPE(TBase1);
+
+struct TBase2
+    : public virtual TRefCounted
+    , public virtual IPersistent
+{
+    int X2 = 0;
+
+    PHOENIX_DECLARE_POLYMORPHIC_TYPE(TBase2, 0x185ec0d);
+};
+
+void TBase2::RegisterMetadata(auto&& registrar)
+{
+    registrar.template Field<1, &TThis::X2>("x2")();
+}
+
+PHOENIX_DEFINE_TYPE(TBase2);
 
 struct TDerived
-    : public TBase
+    : public TBase1
+    , public TBase2
 {
-    int Y = 0;
-    TIntrusivePtr<TBase> Z;
+    int Y;
+    TIntrusivePtr<TBase2> Z;
 
     PHOENIX_DECLARE_POLYMORPHIC_TYPE(TDerived, 0x57818795);
 };
 
 void TDerived::RegisterMetadata(auto&& registrar)
 {
-    registrar.template BaseType<TBase>();
-    registrar.template Field<1, &TThis::Y>("y");
-    registrar.template Field<2, &TThis::Z>("z");
+    registrar.template BaseType<TBase1>();
+    registrar.template BaseType<TBase2>();
+    registrar.template Field<1, &TThis::Y>("y")();
+    registrar.template Field<2, &TThis::Z>("z")();
 }
 
 PHOENIX_DEFINE_TYPE(TDerived);
@@ -1282,19 +1382,43 @@ TEST(TPhoenixTest, PolymorphicIntrusivePtr)
     using namespace NPolymorphicIntrusivePtr;
 
     auto obj1 = New<TDerived>();
-    obj1->X = 123;
+    obj1->X1= 123;
     obj1->Y = 456;
     obj1->Z = obj1.Get();
 
     auto obj2 = New<TDerived>();
-    InplaceDeserialize(obj2, Serialize(TIntrusivePtr<TBase>(obj1)));
-    EXPECT_EQ(obj2->X, 123);
+    InplaceDeserialize(obj2, Serialize(TIntrusivePtr<TBase1>(obj1)));
+    EXPECT_EQ(obj2->X1, 123);
     EXPECT_EQ(obj2->Y, 456);
     EXPECT_EQ(obj2->Z, obj2);
 
     // Kill cycles to avoid leaking memory.
     obj1->Z.Reset();
     obj2->Z.Reset();
+}
+
+TEST(TPhoenixTest, PolymorphicMultipleInheritance)
+{
+    using namespace NPolymorphicIntrusivePtr;
+
+    auto obj1 = New<TDerived>();
+    obj1->X1 = 11;
+    obj1->X2 = 12;
+    obj1->Y = 13;
+
+    auto obj2 = New<TDerived>();
+    obj2->X1 = 21;
+    obj2->X2 = 22;
+    obj2->Y = 23;
+    obj2->Z = obj1;
+
+    auto obj3 = New<TDerived>();
+    auto x = Serialize(TIntrusivePtr<TBase1>(obj2));
+    InplaceDeserialize(obj3, x);
+    EXPECT_EQ(obj3->X1, 21);
+    EXPECT_EQ(obj3->X2, 22);
+    EXPECT_EQ(obj3->Y, 23);
+    EXPECT_EQ(obj3->Z->X2, 12);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1342,7 +1466,7 @@ struct S
 
 void S::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::A>("a");
+    registrar.template Field<1, &TThis::A>("a")();
 }
 
 PHOENIX_DEFINE_TYPE(S);
@@ -1365,6 +1489,49 @@ TEST(TPhoenixTest, Opaque)
     EXPECT_NE(obj2, nullptr);
     EXPECT_EQ(obj2->X, 123);
     EXPECT_EQ(obj2->Y, 456);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NPrivateInner {
+
+class TOuter
+{
+public:
+    static void Test()
+    {
+        TInner inner1;
+        inner1.A = 123;
+
+        auto inner2 = Deserialize<TInner>(Serialize(inner1));
+        EXPECT_EQ(inner1, inner2);
+    }
+
+private:
+    PHOENIX_DECLARE_FRIEND();
+
+    struct TInner
+    {
+        int A;
+
+        bool operator==(const TInner&) const = default;
+
+        PHOENIX_DECLARE_TYPE(TInner, 0xbca5a722);
+    };
+};
+
+PHOENIX_DEFINE_TYPE(TOuter::TInner);
+
+void TOuter::TInner::RegisterMetadata(auto&& registrar)
+{
+    registrar.template Field<1, &TThis::A>("a")();
+}
+
+} // namespace NPrivateInner
+
+TEST(TPhoenixTest, PrivateInner)
+{
+    NPrivateInner::TOuter::Test();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

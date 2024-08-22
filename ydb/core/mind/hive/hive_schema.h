@@ -178,9 +178,10 @@ struct Schema : NIceDb::Schema {
         struct Group : Column<3, NScheme::NTypeIds::Uint64> {};
         struct Version : Column<4, NScheme::NTypeIds::Uint64> {};
         struct Timestamp : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct DeletedAtGeneration : Column<6, NScheme::NTypeIds::Uint64> { static constexpr uint64_t Default = 0; };
 
         using TKey = TableKey<Tablet, Channel, Generation>;
-        using TColumns = TableColumns<Tablet, Channel, Generation, Group, Version, Timestamp>;
+        using TColumns = TableColumns<Tablet, Channel, Generation, Group, Version, Timestamp, DeletedAtGeneration>;
     };
 
     struct Node : Table<4> {

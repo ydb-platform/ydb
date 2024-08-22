@@ -61,6 +61,7 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
     EnqueueBackgroundActivities();
     BackgroundSessionsManager->Start();
     ctx.Send(SelfId(), new TEvPrivate::TEvPeriodicWakeup());
+    ctx.Send(SelfId(), new TEvPrivate::TEvPingSnapshotsUsage());
     NYDBTest::TControllers::GetColumnShardController()->OnSwitchToWork(TabletID());
     AFL_VERIFY(!!StartInstant);
     Counters.GetCSCounters().Initialization.OnSwitchToWork(TMonotonic::Now() - *StartInstant, TMonotonic::Now() - CreateInstant);
@@ -161,7 +162,9 @@ void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorCon
     if (HasIndex()) {
         index = &GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex();
     }
-    InFlightReadsTracker.RemoveInFlightRequest(ev->Get()->RequestCookie, index);
+
+    InFlightReadsTracker.RemoveInFlightRequest(
+        ev->Get()->RequestCookie, index, TInstant::Now());
 
     ui64 txId = ev->Get()->TxId;
     if (ScanTxInFlight.contains(txId)) {
@@ -173,6 +176,14 @@ void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorCon
     }
 }
 
+void TColumnShard::Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& /*ev*/, const TActorContext& ctx) {
+    if (auto writeTx = InFlightReadsTracker.Ping(
+            this, NYDBTest::TControllers::GetColumnShardController()->GetPingCheckPeriod(0.6 * GetMaxReadStaleness()), TInstant::Now())) {
+        Execute(writeTx.release(), ctx);
+    }
+    ctx.Schedule(0.3 * GetMaxReadStaleness(), new TEvPrivate::TEvPingSnapshotsUsage());
+}
+
 void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx) {
     if (ev->Get()->Manual) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TEvPrivate::TEvPeriodicWakeup::MANUAL")("tablet_id", TabletID());
@@ -182,6 +193,7 @@ void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorC
         SendWaitPlanStep(GetOutdatedStep());
 
         SendPeriodicStats();
+        EnqueueBackgroundActivities();
         ctx.Schedule(PeriodicWakeupActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
     }
 }
@@ -327,14 +339,9 @@ void TColumnShard::FillOlapStats(
         resourceMetrics->Fill(*ev->Record.MutableTabletMetrics());
     }
 
-    TTableStatsBuilder statsBuilder(*ev->Record.MutableTableStats());
-    statsBuilder.FillColumnTableStats(*Counters.GetColumnTablesCounters());
-    statsBuilder.FillTabletStats(*Counters.GetTabletCounters());
-    statsBuilder.FillBackgroundControllerStats(*Counters.GetBackgroundControllerCounters());
-    statsBuilder.FillScanCountersStats(Counters.GetScanCounters());
-    statsBuilder.FillExecutorStats(*Executor());
     if (TablesManager.HasPrimaryIndex()) {
-        statsBuilder.FillColumnEngineStats(TablesManager.MutablePrimaryIndex().GetTotalStats());
+        TTableStatsBuilder statsBuilder(Counters, Executor(), TablesManager.MutablePrimaryIndex());
+        statsBuilder.FillTotalTableStats(*ev->Record.MutableTableStats());
     }
 }
 
@@ -343,6 +350,9 @@ void TColumnShard::FillColumnTableStats(
     std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev
 ) {
     auto tables = TablesManager.GetTables();
+    std::optional<TTableStatsBuilder> tableStatsBuilder =
+        TablesManager.HasPrimaryIndex() ? std::make_optional<TTableStatsBuilder>(Counters, Executor(), TablesManager.MutablePrimaryIndex())
+                                        : std::nullopt;
 
     LOG_S_DEBUG("There are stats for " << tables.size() << " tables");
     for (const auto& [pathId, _] : tables) {
@@ -360,17 +370,8 @@ void TColumnShard::FillColumnTableStats(
             resourceMetrics->Fill(*periodicTableStats->MutableTabletMetrics());
         }
 
-        TTableStatsBuilder statsBuilder(*periodicTableStats->MutableTableStats());
-        statsBuilder.FillColumnTableStats(*Counters.GetColumnTablesCounters()->GetPathIdCounter(pathId));
-        statsBuilder.FillTabletStats(*Counters.GetTabletCounters());
-        statsBuilder.FillBackgroundControllerStats(*Counters.GetBackgroundControllerCounters(), pathId);
-        statsBuilder.FillScanCountersStats(Counters.GetScanCounters());
-        statsBuilder.FillExecutorStats(*Executor());
-        if (TablesManager.HasPrimaryIndex()) {
-            auto columnEngineStats = TablesManager.GetPrimaryIndexSafe().GetStats().FindPtr(pathId);
-            if (columnEngineStats && *columnEngineStats) {
-                statsBuilder.FillColumnEngineStats(**columnEngineStats);
-            }
+        if (tableStatsBuilder) {
+            tableStatsBuilder->FillTableStats(pathId, *(periodicTableStats->MutableTableStats()));
         }
 
         LOG_S_TRACE("Add stats for table, tableLocalID=" << pathId);

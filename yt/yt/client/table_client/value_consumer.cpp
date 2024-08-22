@@ -373,7 +373,7 @@ void TWritingValueConsumer::OnMyValue(const TUnversionedValue& value)
 
 void TWritingValueConsumer::OnEndRow()
 {
-    auto row = RowBuffer_->CaptureRow(MakeRange(Values_), false);
+    auto row = RowBuffer_->CaptureRow(TRange(Values_), false);
     Values_.clear();
     Rows_.push_back(row);
 

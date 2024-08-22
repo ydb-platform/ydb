@@ -501,7 +501,7 @@ public:
                     } else {
                         sb << "Possible arguments are: prefix, pattern, suffix, view." << Endl;
                     }
-                    sb << "Pass [] to arguments you want to skip.";
+                    sb << "Pass empty string in arguments if you want to skip.";
 
                     ctx.Error(Pos) << sb;
                     return nullptr;
@@ -1630,7 +1630,8 @@ public:
         }
 
         auto opts = Y();
-        opts = L(opts, Q(Y(Q("mode"), Q("create"))));
+        TString mode = Params.ExistingOk ? "create_if_not_exists" : "create";
+        opts = L(opts, Q(Y(Q("mode"), Q(mode))));
 
         for (const auto& consumer : Params.Consumers) {
             const auto& desc = CreateConsumerDesc(consumer, *this, false);
@@ -1649,13 +1650,17 @@ public:
         }                                                                                               \
     }
 
-            INSERT_TOPIC_SETTING(PartitionsLimit)
+            INSERT_TOPIC_SETTING(MaxPartitions)
             INSERT_TOPIC_SETTING(MinPartitions)
             INSERT_TOPIC_SETTING(RetentionPeriod)
             INSERT_TOPIC_SETTING(SupportedCodecs)
             INSERT_TOPIC_SETTING(PartitionWriteSpeed)
             INSERT_TOPIC_SETTING(PartitionWriteBurstSpeed)
             INSERT_TOPIC_SETTING(MeteringMode)
+            INSERT_TOPIC_SETTING(AutoPartitioningStabilizationWindow)
+            INSERT_TOPIC_SETTING(AutoPartitioningUpUtilizationPercent)
+            INSERT_TOPIC_SETTING(AutoPartitioningDownUtilizationPercent)
+            INSERT_TOPIC_SETTING(AutoPartitioningStrategy)
 
 #undef INSERT_TOPIC_SETTING
 
@@ -1737,7 +1742,8 @@ public:
         }
 
         auto opts = Y();
-        opts = L(opts, Q(Y(Q("mode"), Q("alter"))));
+        TString mode = Params.MissingOk ? "alter_if_exists" : "alter";
+        opts = L(opts, Q(Y(Q("mode"), Q(mode))));
 
         for (const auto& consumer : Params.AddConsumers) {
             const auto& desc = CreateConsumerDesc(consumer, *this, false);
@@ -1766,13 +1772,17 @@ public:
         }                                                                                               \
     }
 
-            INSERT_TOPIC_SETTING(PartitionsLimit)
+            INSERT_TOPIC_SETTING(MaxPartitions)
             INSERT_TOPIC_SETTING(MinPartitions)
             INSERT_TOPIC_SETTING(RetentionPeriod)
             INSERT_TOPIC_SETTING(SupportedCodecs)
             INSERT_TOPIC_SETTING(PartitionWriteSpeed)
             INSERT_TOPIC_SETTING(PartitionWriteBurstSpeed)
             INSERT_TOPIC_SETTING(MeteringMode)
+            INSERT_TOPIC_SETTING(AutoPartitioningStabilizationWindow)
+            INSERT_TOPIC_SETTING(AutoPartitioningUpUtilizationPercent)
+            INSERT_TOPIC_SETTING(AutoPartitioningDownUtilizationPercent)
+            INSERT_TOPIC_SETTING(AutoPartitioningStrategy)
 
 #undef INSERT_TOPIC_SETTING
 
@@ -1807,9 +1817,10 @@ TNodePtr BuildAlterTopic(
 
 class TDropTopicNode final: public TAstListNode {
 public:
-    TDropTopicNode(TPosition pos, const TTopicRef& tr, TScopedStatePtr scoped)
+    TDropTopicNode(TPosition pos, const TTopicRef& tr, const TDropTopicParameters& params, TScopedStatePtr scoped)
         : TAstListNode(pos)
         , Topic(tr)
+        , Params(params)
         , Scoped(scoped)
     {
         scoped->UseCluster(TString(KikimrProviderName), Topic.Cluster);
@@ -1824,7 +1835,8 @@ public:
 
         auto opts = Y();
 
-        opts = L(opts, Q(Y(Q("mode"), Q("drop"))));
+        TString mode = Params.MissingOk ? "drop_if_exists" : "drop";
+        opts = L(opts, Q(Y(Q("mode"), Q(mode))));
 
 
         Add("block", Q(Y(
@@ -1842,12 +1854,13 @@ public:
     }
 private:
     TTopicRef Topic;
+    TDropTopicParameters Params;
     TScopedStatePtr Scoped;
     TSourcePtr FakeSource;
 };
 
-TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& tr, TScopedStatePtr scoped) {
-    return new TDropTopicNode(pos, tr, scoped);
+TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& tr, const TDropTopicParameters& params, TScopedStatePtr scoped) {
+    return new TDropTopicNode(pos, tr, params, scoped);
 }
 
 class TCreateRole final: public TAstListNode {
@@ -3187,4 +3200,59 @@ private:
 TNodePtr BuildWorldForNode(TPosition pos, TNodePtr list, TNodePtr bodyNode, TNodePtr elseNode, bool isEvaluate, bool isParallel) {
     return new TWorldFor(pos, list, bodyNode, elseNode, isEvaluate, isParallel);
 }
+
+class TAnalyzeNode final: public TAstListNode {
+public:
+    TAnalyzeNode(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TAnalyzeParams& params, TScopedStatePtr scoped)
+        : TAstListNode(pos)
+        , Service(service)
+        , Cluster(cluster)
+        , Params(params)
+        , Scoped(scoped)
+    {
+        FakeSource = BuildFakeSource(pos);
+        scoped->UseCluster(Service, Cluster);
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        Y_UNUSED(src);
+        auto keys = Params.Table->Keys->GetTableKeys()->BuildKeys(ctx, ITableKeys::EBuildKeysMode::DROP);
+        if (!keys || !keys->Init(ctx, FakeSource.Get())) {
+            return false;
+        }
+
+        auto opts = Y();
+
+        auto columns = Y();
+        for (const auto& column: Params.Columns) {
+            columns->Add(Q(column));
+        }
+        opts->Add(Q(Y(Q("columns"), Q(columns))));
+
+        opts->Add(Q(Y(Q("mode"), Q("analyze"))));
+        Add("block", Q(Y(
+            Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Service), Scoped->WrapCluster(Cluster, ctx))),
+            Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(opts))),
+            Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
+        )));
+
+        return TAstListNode::DoInit(ctx, FakeSource.Get());
+    }
+
+    TPtr DoClone() const final {
+        return {};
+    }
+private:
+    TString Service;
+    TDeferredAtom Cluster;
+    TAnalyzeParams Params;
+
+    TScopedStatePtr Scoped;
+    TSourcePtr FakeSource;
+};
+
+TNodePtr BuildAnalyze(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TAnalyzeParams& params, TScopedStatePtr scoped) {
+    return new TAnalyzeNode(pos, service, cluster, params, scoped);
+}
+
 } // namespace NSQLTranslationV1

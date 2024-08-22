@@ -2,10 +2,11 @@
 import argparse
 import dataclasses
 import datetime
+import json
 import os
 import re
-import json
 import sys
+import traceback
 from github import Github, Auth as GithubAuth
 from github.PullRequest import PullRequest
 from enum import Enum
@@ -246,29 +247,38 @@ def render_testlist_html(rows, fn, build_preset):
     # remove status group without tests
     status_order = [s for s in status_order if s in status_test]
 
-    # get failed tests
-    failed_tests_array = []
-    history={}
-    for test in status_test.get(TestStatus.FAIL, []):
-        failed_tests_array.append(test.full_name)
+    # statuses for history
+    status_for_history = [TestStatus.FAIL, TestStatus.MUTE]
+    status_for_history = [s for s in status_for_history if s in status_test]
+    
+    tests_names_for_history = []
+    history= {}
+    tests_in_statuses = [test for status in status_for_history for test in status_test.get(status)]
+    
+    # get tests for history
+    for test in tests_in_statuses:
+        tests_names_for_history.append(test.full_name)
 
-    if failed_tests_array:
-        try:
-            history = get_test_history(failed_tests_array, last_n_runs, build_preset)
-        except Exception as e:
-            print(f'Error:{e}')
-        
-    # sorting, at first show tests with passed resuts in history
-
-    if TestStatus.FAIL in status_test:
-        for test in status_test.get(TestStatus.FAIL, []):
-            if test.full_name in history:
-                test.count_of_passed = history[test.full_name][
-                    next(iter(history[test.full_name]))
-                ]["count_of_passed"]
-            else:
-                test.count_of_passed = 0
-        status_test[TestStatus.FAIL].sort(key=lambda val: (val.count_of_passed, val.full_name), reverse=True)
+    try:
+        history = get_test_history(tests_names_for_history, last_n_runs, build_preset)
+    except Exception:
+        print(traceback.format_exc())
+   
+    #geting count of passed tests in history for sorting
+    for test in tests_in_statuses:
+        if test.full_name in history:
+            test.count_of_passed = len(
+                [
+                    history[test.full_name][x]
+                    for x in history[test.full_name]
+                    if history[test.full_name][x]["status"] == "passed"
+                ]
+            )
+    # sorting, 
+    # at first - show tests with passed resuts in history
+    # at second - sorted by test name
+    for current_status in status_for_history:
+        status_test.get(current_status,[]).sort(key=lambda val: (-val.count_of_passed, val.full_name))
 
     content = env.get_template("summary.html").render(
         status_order=status_order,

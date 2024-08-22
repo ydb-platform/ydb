@@ -69,7 +69,7 @@
                                                 "TopSortBy": "row.x1"
                                             },
                                             {
-                                                "Condition": "x_1.x1 = x1",
+                                                "Condition": "x_1.x1 = xx.x1",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 22
@@ -92,7 +92,7 @@
                                                         "Node Type": "LeftJoin (MapJoin)",
                                                         "Operators": [
                                                             {
-                                                                "Condition": "x1 = y1",
+                                                                "Condition": "x_1.x1 = y.y1",
                                                                 "Inputs": [
                                                                     {
                                                                         "ExternalPlanNodeId": 20
@@ -112,7 +112,7 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "Collect",
+                                                                        "Node Type": "Stage",
                                                                         "PlanNodeId": 17,
                                                                         "Plans": [
                                                                             {
@@ -174,8 +174,8 @@
                                                                         "Operators": [
                                                                             {
                                                                                 "Inputs": [],
-                                                                                "Iterator": "precompute_0_1",
-                                                                                "Name": "Iterator"
+                                                                                "Name": "ToFlow",
+                                                                                "ToFlow": "precompute_0_1"
                                                                             }
                                                                         ],
                                                                         "PlanNodeId": 19
@@ -197,8 +197,8 @@
                                                         "Operators": [
                                                             {
                                                                 "Inputs": [],
-                                                                "Iterator": "precompute_0_0",
-                                                                "Name": "Iterator"
+                                                                "Name": "ToFlow",
+                                                                "ToFlow": "precompute_0_0"
                                                             }
                                                         ],
                                                         "PlanNodeId": 13
@@ -312,7 +312,10 @@
                 ],
                 "Subplan Name": "CTE precompute_0_0"
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

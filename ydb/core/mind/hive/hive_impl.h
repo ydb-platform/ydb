@@ -446,6 +446,7 @@ protected:
 
     NKikimrConfig::THiveConfig ClusterConfig;
     NKikimrConfig::THiveConfig DatabaseConfig;
+    TDuration NodeBrokerEpoch;
     std::unordered_map<TTabletTypes::EType, NKikimrConfig::THiveTabletLimit> TabletLimit; // built from CurrentConfig
     std::unordered_map<TTabletTypes::EType, NKikimrHive::TDataCentersPreference> DefaultDataCentersPreference;
     std::unordered_map<TDataCenterId, TDataCenterInfo> DataCenters;
@@ -453,6 +454,8 @@ protected:
 
     // normalized to be sorted list of unique values
     std::vector<TTabletTypes::EType> BalancerIgnoreTabletTypes; // built from CurrentConfig
+    std::vector<TTabletTypes::EType> CutHistoryDenyList; // built from CurrentConfig
+    std::vector<TTabletTypes::EType> CutHistoryAllowList; // built from CurrentConfig
 
     struct TTabletMoveInfo {
         TInstant Timestamp;
@@ -740,7 +743,11 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     }
 
     TDuration GetNodeDeletePeriod() const {
-        return TDuration::Seconds(CurrentConfig.GetNodeDeletePeriod());
+        if (CurrentConfig.HasNodeDeletePeriod()) {
+            return TDuration::Seconds(CurrentConfig.GetNodeDeletePeriod());
+        } else {
+            return NodeBrokerEpoch;
+        }
     }
 
     ui64 GetDrainInflight() const {
@@ -895,6 +902,21 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
         const auto& ignoreList = BalancerIgnoreTabletTypes;
         auto found = std::find(ignoreList.begin(), ignoreList.end(), type);
         return (found != ignoreList.end());
+    }
+
+    bool IsCutHistoryAllowed(TTabletTypes::EType type) const {
+        bool allowed = true;
+        const auto& denyList = CutHistoryDenyList;
+        if (!denyList.empty()) {
+            bool found = std::find(denyList.begin(), denyList.end(), type) != denyList.end();
+            allowed &= !found;
+        }
+        const auto& allowList = CutHistoryAllowList;
+        if (!allowList.empty()) {
+            bool found = std::find(allowList.begin(), allowList.end(), type) != allowList.end();
+            allowed &= found;
+        }
+        return allowed;
     }
 
     double GetSpaceUsagePenaltyThreshold() {

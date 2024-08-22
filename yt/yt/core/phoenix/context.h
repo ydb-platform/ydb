@@ -74,7 +74,7 @@ private:
 
 template <class TSaveContext, class TLoadContext>
 struct ICustomPersistent
-    : public TPolymorphicBase
+    : public virtual TPolymorphicBase
 {
     virtual void Save(TSaveContext& context) const = 0;
     virtual void Load(TLoadContext& context) = 0;

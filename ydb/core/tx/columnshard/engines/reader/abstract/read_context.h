@@ -1,10 +1,12 @@
 #pragma once
 #include "read_metadata.h"
+
 #include <ydb/core/protos/tx_datashard.pb.h>
-#include <ydb/core/tx/columnshard/counters/scan.h>
-#include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
+#include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/result.h>
+#include <ydb/core/tx/columnshard/resource_subscriber/task.h>
+
 #include <ydb/library/accessor/accessor.h>
 
 namespace NKikimr::NOlap::NReader {
@@ -13,6 +15,7 @@ class TComputeShardingPolicy {
 private:
     YDB_READONLY(ui32, ShardsCount, 0);
     YDB_READONLY_DEF(std::vector<std::string>, ColumnNames);
+
 public:
     TString DebugString() const {
         return TStringBuilder() << "shards_count:" << ShardsCount << ";columns=" << JoinSeq(",", ColumnNames) << ";";
@@ -42,10 +45,12 @@ private:
     const NColumnShard::TConcreteScanCounters Counters;
     TReadMetadataBase::TConstPtr ReadMetadata;
     NResourceBroker::NSubscribe::TTaskContext ResourcesTaskContext;
+    const ui64 ScanId;
     const TActorId ScanActorId;
     const TActorId ResourceSubscribeActorId;
     const TActorId ReadCoordinatorActorId;
     const TComputeShardingPolicy ComputeShardingPolicy;
+
 public:
     template <class T>
     std::shared_ptr<const T> GetReadMetadataPtrVerifiedAs() const {
@@ -74,6 +79,10 @@ public:
         return ScanActorId;
     }
 
+    ui64 GetScanId() const {
+        return ScanId;
+    }
+
     const TReadMetadataBase::TConstPtr& GetReadMetadata() const {
         return ReadMetadata;
     }
@@ -86,17 +95,18 @@ public:
         return ResourcesTaskContext;
     }
 
-    TReadContext(const std::shared_ptr<IStoragesManager>& storagesManager, const NColumnShard::TConcreteScanCounters& counters, const TReadMetadataBase::TConstPtr& readMetadata,
-        const TActorId& scanActorId, const TActorId& resourceSubscribeActorId, const TActorId& readCoordinatorActorId, const TComputeShardingPolicy& computeShardingPolicy)
+    TReadContext(const std::shared_ptr<IStoragesManager>& storagesManager, const NColumnShard::TConcreteScanCounters& counters,
+        const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId, const TActorId& resourceSubscribeActorId,
+        const TActorId& readCoordinatorActorId, const TComputeShardingPolicy& computeShardingPolicy, const ui64 scanId)
         : StoragesManager(storagesManager)
         , Counters(counters)
         , ReadMetadata(readMetadata)
         , ResourcesTaskContext("CS::SCAN_READ", counters.ResourcesSubscriberCounters)
+        , ScanId(scanId)
         , ScanActorId(scanActorId)
         , ResourceSubscribeActorId(resourceSubscribeActorId)
         , ReadCoordinatorActorId(readCoordinatorActorId)
-        , ComputeShardingPolicy(computeShardingPolicy)
-    {
+        , ComputeShardingPolicy(computeShardingPolicy) {
         Y_ABORT_UNLESS(ReadMetadata);
     }
 };
@@ -109,8 +119,9 @@ protected:
     virtual TString DoDebugString(const bool verbose) const = 0;
     virtual void DoAbort() = 0;
     virtual bool DoIsFinished() const = 0;
-    virtual std::vector<TPartialReadResult> DoExtractReadyResults(const int64_t maxRowsInBatch) = 0;
+    virtual std::vector<std::shared_ptr<TPartialReadResult>> DoExtractReadyResults(const int64_t maxRowsInBatch) = 0;
     virtual TConclusion<bool> DoReadNextInterval() = 0;
+
 public:
     IDataReader(const std::shared_ptr<TReadContext>& context);
     virtual ~IDataReader() = default;
@@ -153,7 +164,7 @@ public:
         return *result;
     }
 
-    std::vector<TPartialReadResult> ExtractReadyResults(const int64_t maxRowsInBatch) {
+    std::vector<std::shared_ptr<TPartialReadResult>> ExtractReadyResults(const int64_t maxRowsInBatch) {
         return DoExtractReadyResults(maxRowsInBatch);
     }
 
@@ -171,4 +182,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap::NReader

@@ -3,6 +3,7 @@
 LIBRARY()
 
 LICENSE(
+    APSL-2.0 AND
     BSD-3-Clause AND
     ISC AND
     MIT AND
@@ -11,9 +12,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.28.1)
+VERSION(1.33.0)
 
-ORIGINAL_SOURCE(https://github.com/c-ares/c-ares/archive/cares-1_28_1.tar.gz)
+ORIGINAL_SOURCE(https://github.com/c-ares/c-ares/archive/v1.33.0.tar.gz)
 
 PEERDIR(
     contrib/libs/libc_compat
@@ -49,41 +50,16 @@ ENDIF()
 SRCS(
     src/lib/ares__addrinfo2hostent.c
     src/lib/ares__addrinfo_localhost.c
-    src/lib/ares__buf.c
     src/lib/ares__close_sockets.c
     src/lib/ares__hosts_file.c
-    src/lib/ares__htable.c
-    src/lib/ares__htable_asvp.c
-    src/lib/ares__htable_strvp.c
-    src/lib/ares__htable_szvp.c
-    src/lib/ares__iface_ips.c
-    src/lib/ares__llist.c
     src/lib/ares__parse_into_addrinfo.c
-    src/lib/ares__slist.c
     src/lib/ares__socket.c
     src/lib/ares__sortaddrinfo.c
-    src/lib/ares__threads.c
-    src/lib/ares__timeval.c
     src/lib/ares_android.c
     src/lib/ares_cancel.c
-    src/lib/ares_create_query.c
+    src/lib/ares_cookie.c
     src/lib/ares_data.c
     src/lib/ares_destroy.c
-    src/lib/ares_dns_mapping.c
-    src/lib/ares_dns_name.c
-    src/lib/ares_dns_parse.c
-    src/lib/ares_dns_record.c
-    src/lib/ares_dns_write.c
-    src/lib/ares_event_epoll.c
-    src/lib/ares_event_kqueue.c
-    src/lib/ares_event_poll.c
-    src/lib/ares_event_select.c
-    src/lib/ares_event_thread.c
-    src/lib/ares_event_wake_pipe.c
-    src/lib/ares_event_win32.c
-    src/lib/ares_expand_name.c
-    src/lib/ares_expand_string.c
-    src/lib/ares_fds.c
     src/lib/ares_free_hostent.c
     src/lib/ares_free_string.c
     src/lib/ares_freeaddrinfo.c
@@ -92,41 +68,74 @@ SRCS(
     src/lib/ares_gethostbyaddr.c
     src/lib/ares_gethostbyname.c
     src/lib/ares_getnameinfo.c
-    src/lib/ares_getsock.c
     src/lib/ares_init.c
     src/lib/ares_library_init.c
-    src/lib/ares_math.c
+    src/lib/ares_metrics.c
     src/lib/ares_options.c
-    src/lib/ares_parse_a_reply.c
-    src/lib/ares_parse_aaaa_reply.c
-    src/lib/ares_parse_caa_reply.c
-    src/lib/ares_parse_mx_reply.c
-    src/lib/ares_parse_naptr_reply.c
-    src/lib/ares_parse_ns_reply.c
-    src/lib/ares_parse_ptr_reply.c
-    src/lib/ares_parse_soa_reply.c
-    src/lib/ares_parse_srv_reply.c
-    src/lib/ares_parse_txt_reply.c
-    src/lib/ares_parse_uri_reply.c
     src/lib/ares_platform.c
     src/lib/ares_process.c
     src/lib/ares_qcache.c
     src/lib/ares_query.c
-    src/lib/ares_rand.c
     src/lib/ares_search.c
     src/lib/ares_send.c
-    src/lib/ares_str.c
-    src/lib/ares_strcasecmp.c
     src/lib/ares_strerror.c
-    src/lib/ares_strsplit.c
     src/lib/ares_sysconfig.c
     src/lib/ares_sysconfig_files.c
+    src/lib/ares_sysconfig_mac.c
+    src/lib/ares_sysconfig_win.c
     src/lib/ares_timeout.c
     src/lib/ares_update_servers.c
     src/lib/ares_version.c
     src/lib/atomic.cpp
+    src/lib/dsa/ares__array.c
+    src/lib/dsa/ares__htable.c
+    src/lib/dsa/ares__htable_asvp.c
+    src/lib/dsa/ares__htable_strvp.c
+    src/lib/dsa/ares__htable_szvp.c
+    src/lib/dsa/ares__htable_vpvp.c
+    src/lib/dsa/ares__llist.c
+    src/lib/dsa/ares__slist.c
+    src/lib/event/ares_event_configchg.c
+    src/lib/event/ares_event_epoll.c
+    src/lib/event/ares_event_kqueue.c
+    src/lib/event/ares_event_poll.c
+    src/lib/event/ares_event_select.c
+    src/lib/event/ares_event_thread.c
+    src/lib/event/ares_event_wake_pipe.c
+    src/lib/event/ares_event_win32.c
     src/lib/inet_net_pton.c
     src/lib/inet_ntop.c
+    src/lib/legacy/ares_create_query.c
+    src/lib/legacy/ares_expand_name.c
+    src/lib/legacy/ares_expand_string.c
+    src/lib/legacy/ares_fds.c
+    src/lib/legacy/ares_getsock.c
+    src/lib/legacy/ares_parse_a_reply.c
+    src/lib/legacy/ares_parse_aaaa_reply.c
+    src/lib/legacy/ares_parse_caa_reply.c
+    src/lib/legacy/ares_parse_mx_reply.c
+    src/lib/legacy/ares_parse_naptr_reply.c
+    src/lib/legacy/ares_parse_ns_reply.c
+    src/lib/legacy/ares_parse_ptr_reply.c
+    src/lib/legacy/ares_parse_soa_reply.c
+    src/lib/legacy/ares_parse_srv_reply.c
+    src/lib/legacy/ares_parse_txt_reply.c
+    src/lib/legacy/ares_parse_uri_reply.c
+    src/lib/record/ares_dns_mapping.c
+    src/lib/record/ares_dns_multistring.c
+    src/lib/record/ares_dns_name.c
+    src/lib/record/ares_dns_parse.c
+    src/lib/record/ares_dns_record.c
+    src/lib/record/ares_dns_write.c
+    src/lib/str/ares__buf.c
+    src/lib/str/ares_str.c
+    src/lib/str/ares_strcasecmp.c
+    src/lib/str/ares_strsplit.c
+    src/lib/util/ares__iface_ips.c
+    src/lib/util/ares__threads.c
+    src/lib/util/ares__timeval.c
+    src/lib/util/ares_math.c
+    src/lib/util/ares_rand.c
     src/lib/windows_port.c
 )
 

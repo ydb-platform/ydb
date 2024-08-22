@@ -55,7 +55,7 @@ namespace NActors {
         : TMailboxUsageImpl<ActorLibCollectUsageStats>
     {
         struct TMailboxActorPack {
-            enum EType {
+            enum EType : ui8 {
                 Simple = 0,
                 Array = 1,
                 Map = 2,

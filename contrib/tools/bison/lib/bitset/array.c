@@ -1,6 +1,6 @@
 /* Array bitsets.
 
-   Copyright (C) 2002-2003, 2006, 2009-2015, 2018-2019 Free Software
+   Copyright (C) 2002-2003, 2006, 2009-2015, 2018-2020 Free Software
    Foundation, Inc.
 
    Contributed by Michael Hayes (m.hayes@elec.canterbury.ac.nz).
@@ -16,7 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #include <config.h>
 
@@ -99,7 +99,7 @@ abitset_small_list (bitset src, bitset_bindex *list,
 
 /* Set bit BITNO in bitset DST.  */
 static void
-abitset_set (bitset dst ATTRIBUTE_UNUSED, bitset_bindex bitno ATTRIBUTE_UNUSED)
+abitset_set (bitset dst MAYBE_UNUSED, bitset_bindex bitno MAYBE_UNUSED)
 {
   /* This should never occur for abitsets since we should always hit
      the cache.  It is likely someone is trying to access outside the
@@ -110,8 +110,8 @@ abitset_set (bitset dst ATTRIBUTE_UNUSED, bitset_bindex bitno ATTRIBUTE_UNUSED)
 
 /* Reset bit BITNO in bitset DST.  */
 static void
-abitset_reset (bitset dst ATTRIBUTE_UNUSED,
-               bitset_bindex bitno ATTRIBUTE_UNUSED)
+abitset_reset (bitset dst MAYBE_UNUSED,
+               bitset_bindex bitno MAYBE_UNUSED)
 {
   /* This should never occur for abitsets since we should always hit
      the cache.  It is likely someone is trying to access outside the
@@ -121,8 +121,8 @@ abitset_reset (bitset dst ATTRIBUTE_UNUSED,
 
 /* Test bit BITNO in bitset SRC.  */
 static bool
-abitset_test (bitset src ATTRIBUTE_UNUSED,
-              bitset_bindex bitno ATTRIBUTE_UNUSED)
+abitset_test (bitset src MAYBE_UNUSED,
+              bitset_bindex bitno MAYBE_UNUSED)
 {
   /* This should never occur for abitsets since we should always
      hit the cache.  */

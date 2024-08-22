@@ -25,6 +25,7 @@ static void FillTableStats(NKikimrTableStats::TTableStats* stats, const TPartiti
     stats->SetRowCount(tableStats.RowCount);
     stats->SetDataSize(tableStats.DataSize);
     stats->SetIndexSize(tableStats.IndexSize);
+    stats->SetByKeyFilterSize(tableStats.ByKeyFilterSize);
     stats->SetLastAccessTime(tableStats.LastAccessTime.MilliSeconds());
     stats->SetLastUpdateTime(tableStats.LastUpdateTime.MilliSeconds());
     stats->SetImmediateTxCompleted(tableStats.ImmediateTxCompleted);
@@ -70,6 +71,79 @@ static void FillAggregatedStats(NKikimrSchemeOp::TPathDescription& pathDescripti
 static void FillTableStats(NKikimrSchemeOp::TPathDescription& pathDescription, const TPartitionStats& stats) {
     FillTableStats(pathDescription.MutableTableStats(), stats);
     FillTableMetrics(pathDescription.MutableTabletMetrics(), stats);
+}
+
+static void FillColumns(
+    const TTableInfo& tableInfo,
+    google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription>& out
+) {
+    bool familyNamesBuilt = false;
+    THashMap<ui32, TString> familyNames;
+
+    out.Reserve(tableInfo.Columns.size());
+    for (const auto& col : tableInfo.Columns) {
+        const auto& cinfo = col.second;
+        if (cinfo.IsDropped())
+            continue;
+
+        auto* colDescr = out.Add();
+        colDescr->SetName(cinfo.Name);
+        colDescr->SetType(NScheme::TypeName(cinfo.PType, cinfo.PTypeMod));
+        auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(cinfo.PType, cinfo.PTypeMod);
+        colDescr->SetTypeId(columnType.TypeId);
+        if (columnType.TypeInfo) {
+            *colDescr->MutableTypeInfo() = *columnType.TypeInfo;
+        }
+        colDescr->SetId(cinfo.Id);
+        colDescr->SetNotNull(cinfo.NotNull);
+
+        if (cinfo.Family != 0) {
+            colDescr->SetFamily(cinfo.Family);
+
+            if (!familyNamesBuilt) {
+                for (const auto& family : tableInfo.PartitionConfig().GetColumnFamilies()) {
+                    if (family.HasName() && family.HasId()) {
+                        familyNames[family.GetId()] = family.GetName();
+                    }
+                }
+                familyNamesBuilt = true;
+            }
+
+            auto it = familyNames.find(cinfo.Family);
+            if (it != familyNames.end() && !it->second.empty()) {
+                colDescr->SetFamilyName(it->second);
+            }
+        }
+
+        colDescr->SetIsBuildInProgress(cinfo.IsBuildInProgress);
+
+        switch (cinfo.DefaultKind) {
+            case ETableColumnDefaultKind::None:
+                break;
+            case ETableColumnDefaultKind::FromSequence:
+                colDescr->SetDefaultFromSequence(cinfo.DefaultValue);
+                break;
+            case ETableColumnDefaultKind::FromLiteral:
+                Y_ABORT_UNLESS(colDescr->MutableDefaultFromLiteral()->ParseFromString(
+                    cinfo.DefaultValue));
+                break;
+        }
+    }
+}
+
+static void FillKeyColumns(
+    const TTableInfo& tableInfo,
+    google::protobuf::RepeatedPtrField<TProtoStringType>& names,
+    google::protobuf::RepeatedField<ui32>& ids
+) {
+    Y_ABORT_UNLESS(!tableInfo.KeyColumnIds.empty());
+    names.Reserve(tableInfo.KeyColumnIds.size());
+    ids.Reserve(tableInfo.KeyColumnIds.size());
+    for (ui32 keyColId : tableInfo.KeyColumnIds) {
+        *names.Add() = tableInfo.Columns.at(keyColId).Name;
+        *ids.Add() = keyColId;
+    }
+
 }
 
 void TPathDescriber::FillPathDescr(NKikimrSchemeOp::TDirEntry* descr, TPathElement::TPtr pathEl, TPathElement::EPathSubType subType) {
@@ -302,6 +376,7 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
     bool returnBoundaries = false;
     bool returnRangeKey = true;
     bool returnSetVal = Params.GetOptions().GetReturnSetVal();
+    bool returnIndexTableBoundaries = Params.GetOptions().GetReturnIndexTableBoundaries();
     if (Params.HasOptions()) {
         returnConfig = Params.GetOptions().GetReturnPartitionConfig();
         returnPartitioning = Params.GetOptions().GetReturnPartitioningInfo();
@@ -426,7 +501,9 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
 
         switch (childPath->PathType) {
         case NKikimrSchemeOp::EPathTypeTableIndex:
-            Self->DescribeTableIndex(childPathId, childName, returnConfig, false, *entry->AddTableIndexes());
+            Self->DescribeTableIndex(
+                childPathId, childName, returnConfig, returnIndexTableBoundaries, *entry->AddTableIndexes()
+            );
             break;
         case NKikimrSchemeOp::EPathTypeCdcStream:
             Self->DescribeCdcStream(childPathId, childName, *entry->AddCdcStreams());
@@ -1188,67 +1265,10 @@ void TSchemeShard::DescribeTable(
     ) const
 {
     Y_UNUSED(typeRegistry);
-    THashMap<ui32, TString> familyNames;
-    bool familyNamesBuilt = false;
 
     entry->SetTableSchemaVersion(tableInfo.AlterVersion);
-    entry->MutableColumns()->Reserve(tableInfo.Columns.size());
-    for (auto col : tableInfo.Columns) {
-        const auto& cinfo = col.second;
-        if (cinfo.IsDropped())
-            continue;
-
-        auto colDescr = entry->AddColumns();
-        colDescr->SetName(cinfo.Name);
-        colDescr->SetType(NScheme::TypeName(cinfo.PType, cinfo.PTypeMod));
-        auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(cinfo.PType, cinfo.PTypeMod);
-        colDescr->SetTypeId(columnType.TypeId);
-        if (columnType.TypeInfo) {
-            *colDescr->MutableTypeInfo() = *columnType.TypeInfo;
-        }
-        colDescr->SetId(cinfo.Id);
-        colDescr->SetNotNull(cinfo.NotNull);
-
-        if (cinfo.Family != 0) {
-            colDescr->SetFamily(cinfo.Family);
-
-            if (!familyNamesBuilt) {
-                for (const auto& family : tableInfo.PartitionConfig().GetColumnFamilies()) {
-                    if (family.HasName() && family.HasId()) {
-                        familyNames[family.GetId()] = family.GetName();
-                    }
-                }
-                familyNamesBuilt = true;
-            }
-
-            auto it = familyNames.find(cinfo.Family);
-            if (it != familyNames.end() && !it->second.empty()) {
-                colDescr->SetFamilyName(it->second);
-            }
-        }
-
-        colDescr->SetIsBuildInProgress(cinfo.IsBuildInProgress);
-
-        switch (cinfo.DefaultKind) {
-            case ETableColumnDefaultKind::None:
-                break;
-            case ETableColumnDefaultKind::FromSequence:
-                colDescr->SetDefaultFromSequence(cinfo.DefaultValue);
-                break;
-            case ETableColumnDefaultKind::FromLiteral:
-                Y_ABORT_UNLESS(colDescr->MutableDefaultFromLiteral()->ParseFromString(
-                    cinfo.DefaultValue));
-                break;
-        }
-    }
-    Y_ABORT_UNLESS(!tableInfo.KeyColumnIds.empty());
-
-    entry->MutableKeyColumnNames()->Reserve(tableInfo.KeyColumnIds.size());
-    entry->MutableKeyColumnIds()->Reserve(tableInfo.KeyColumnIds.size());
-    for (ui32 keyColId : tableInfo.KeyColumnIds) {
-        entry->AddKeyColumnNames(tableInfo.Columns.at(keyColId).Name);
-        entry->AddKeyColumnIds(keyColId);
-    }
+    FillColumns(tableInfo, *entry->MutableColumns());
+    FillKeyColumns(tableInfo, *entry->MutableKeyColumnNames(), *entry->MutableKeyColumnIds());
 
     if (fillConfig) {
         FillPartitionConfig(tableInfo.PartitionConfig(), *entry->MutablePartitionConfig());
@@ -1260,6 +1280,10 @@ void TSchemeShard::DescribeTable(
 
     if (tableInfo.HasReplicationConfig()) {
         entry->MutableReplicationConfig()->CopyFrom(tableInfo.ReplicationConfig());
+    }
+
+    if (tableInfo.HasIncrementalBackupConfig()) {
+        entry->MutableIncrementalBackupConfig()->CopyFrom(tableInfo.IncrementalBackupConfig());
     }
 
     entry->SetIsBackup(tableInfo.IsBackup);
@@ -1323,6 +1347,9 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
             FillPartitionConfig(tableInfo.PartitionConfig(), *tableDescription->MutablePartitionConfig());
         }
         if (fillBoundaries) {
+            // column info is necessary for split boundary type conversion
+            FillColumns(tableInfo, *tableDescription->MutableColumns());
+            FillKeyColumns(tableInfo, *tableDescription->MutableKeyColumnNames(), *tableDescription->MutableKeyColumnIds());
             FillTableBoundaries(tableDescription->MutableSplitBoundary(), tableInfo);
         }
     }

@@ -38,7 +38,7 @@ protected:
     bool Metrics = true;
     bool WithRetry = true;
     ui32 Requests = 0;
-    static constexpr ui32 MaxRequestsInFlight = 50;
+    ui32 MaxRequestsInFlight = 50;
     NWilson::TSpan Span;
     IViewer* Viewer = nullptr;
     NMon::TEvHttpInfo::TPtr Event;
@@ -184,10 +184,14 @@ protected:
         return MakeBSControllerID();
     }
 
+    static TPathId GetPathId(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
+    static TString GetPath(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
+    TRequestResponse<TEvHive::TEvResponseHiveDomainStats> MakeRequestHiveDomainStats(TTabletId hiveId);
     TRequestResponse<TEvHive::TEvResponseHiveStorageStats> MakeRequestHiveStorageStats(TTabletId hiveId);
     void RequestConsoleListTenants();
     TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse> MakeRequestConsoleListTenants();
     void RequestConsoleGetTenantStatus(const TString& path);
+    TRequestResponse<NConsole::TEvConsole::TEvGetTenantStatusResponse> MakeRequestConsoleGetTenantStatus(const TString& path);
     void RequestBSControllerConfig();
     void RequestBSControllerConfigWithStoragePools();
     TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> MakeRequestBSControllerConfigWithStoragePools();
@@ -207,6 +211,7 @@ protected:
     void RequestSchemeCacheNavigate(const TPathId& pathId);
     TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(const TString& path, ui64 cookie = 0);
     TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(TPathId pathId, ui64 cookie = 0);
+    TRequestResponse<TEvViewer::TEvViewerResponse> MakeRequestViewer(TNodeId nodeId, TEvViewer::TEvViewerRequest* request, ui32 flags = 0);
     void RequestTxProxyDescribe(const TString& path);
     void RequestStateStorageEndpointsLookup(const TString& path);
     void RequestStateStorageMetadataCacheEndpointsLookup(const TString& path);
@@ -218,6 +223,10 @@ protected:
 
     bool IsLastRequest() const {
         return Requests == 1;
+    }
+
+    bool NoMoreRequests(ui32 requestsDone = 0) const {
+        return Requests == requestsDone;
     }
 
     TRequestState GetRequest() const;

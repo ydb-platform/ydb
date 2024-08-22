@@ -629,6 +629,10 @@ protected:
         }
     }
 
+    void SendError(const TString& error) {
+        this->Send(this->SelfId(), TEvDq::TEvAbortExecution::InternalError(error));
+    }
+
 protected: //TDqComputeActorChannels::ICallbacks
     //i64 GetInputChannelFreeSpace(ui64 channelId) is pure and must be overridded in derived class
 
@@ -1609,7 +1613,7 @@ public:
             ReportEventElapsedTime();
         }
 
-        dst->SetCpuTimeUs(CpuTime.MicroSeconds());
+        dst->SetCpuTimeUs(CpuTime.MicroSeconds() + SourceCpuTime.MicroSeconds());
         dst->SetMaxMemoryUsage(MemoryLimits.MemoryQuotaManager->GetMaxMemorySize());
 
         if (auto memProfileStats = GetMemoryProfileStats(); memProfileStats) {
@@ -1642,10 +1646,13 @@ public:
             }
             FillTaskRunnerStats(Task.GetId(), Task.GetStageId(), *taskStats, protoTask, RuntimeSettings.GetCollectStatsLevel());
 
-            // More accurate cpu time counter:
+            auto cpuTimeUs = taskStats->ComputeCpuTime.MicroSeconds() + taskStats->BuildCpuTime.MicroSeconds();
             if (TDerived::HasAsyncTaskRunner) {
-                protoTask->SetCpuTimeUs(CpuTime.MicroSeconds() + taskStats->ComputeCpuTime.MicroSeconds() + taskStats->BuildCpuTime.MicroSeconds());
+                // Async TR is another actor, summarize CPU usage
+                cpuTimeUs += CpuTime.MicroSeconds();
             }
+            // CpuTimeUs does include SourceCpuTime
+            protoTask->SetCpuTimeUs(cpuTimeUs + SourceCpuTime.MicroSeconds());
             protoTask->SetSourceCpuTimeUs(SourceCpuTime.MicroSeconds());
 
             ui64 ingressBytes = 0;

@@ -3,6 +3,8 @@
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/feature_flags.h>
 
+#include <util/string/vector.h>
+
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxInit : public TTxBase {
@@ -22,13 +24,15 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
             auto baseStatisticsRowset = db.Table<Schema::BaseStatistics>().Range().Select();
             auto statisticsRowset = db.Table<Schema::ColumnStatistics>().Range().Select();
             auto scheduleTraversalRowset = db.Table<Schema::ScheduleTraversals>().Range().Select();
-            auto forceTraversalRowset = db.Table<Schema::ForceTraversals>().Range().Select();
+            auto forceTraversalOperationsRowset = db.Table<Schema::ForceTraversalOperations>().Range().Select();
+            auto forceTraversalTablesRowset = db.Table<Schema::ForceTraversalTables>().Range().Select();
 
             if (!sysParamsRowset.IsReady() ||
                 !baseStatisticsRowset.IsReady() ||
                 !statisticsRowset.IsReady() ||
                 !scheduleTraversalRowset.IsReady() ||
-                !forceTraversalRowset.IsReady())
+                !forceTraversalOperationsRowset.IsReady() ||
+                !forceTraversalTablesRowset.IsReady())
             {
                 return false;
             }
@@ -55,24 +59,19 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                         SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal start key");
                         break;
                     case Schema::SysParam_TraversalTableOwnerId:
-                        Self->TraversalTableId.PathId.OwnerId = FromString<ui64>(value);
+                        Self->TraversalPathId.OwnerId = FromString<ui64>(value);
                         SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal table owner id: "
-                            << Self->TraversalTableId.PathId.OwnerId);
+                            << Self->TraversalPathId.OwnerId);
                         break;
                     case Schema::SysParam_TraversalTableLocalPathId:
-                        Self->TraversalTableId.PathId.LocalPathId = FromString<ui64>(value);
+                        Self->TraversalPathId.LocalPathId = FromString<ui64>(value);
                         SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal table local path id: "
-                            << Self->TraversalTableId.PathId.LocalPathId);
+                            << Self->TraversalPathId.LocalPathId);
                         break;
                     case Schema::SysParam_TraversalStartTime: {
                         auto us = FromString<ui64>(value);
                         Self->TraversalStartTime = TInstant::MicroSeconds(us);
                         SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal start time: " << us);
-                        break;
-                    }
-                    case Schema::SysParam_LastForceTraversalOperationId: {
-                        Self->LastForceTraversalOperationId = FromString<ui64>(value);
-                        SA_LOG_D("[" << Self->TabletID() << "] Loaded last traversal operation id: " << value);
                         break;
                     }
                     case Schema::SysParam_TraversalIsColumnTable: {
@@ -183,35 +182,79 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 << "table count# " << Self->ScheduleTraversals.size());
         }
 
-        // ForceTraversals
+        // ForceTraversalOperations
         {
-            Self->ForceTraversals.Clear();
-            Self->ForceTraversalsByPathId.clear();
+            Self->ForceTraversals.clear();
 
-            auto rowset = db.Table<Schema::ForceTraversals>().Range().Select();
+            auto rowset = db.Table<Schema::ForceTraversalOperations>().Range().Select();
             if (!rowset.IsReady()) {
                 return false;
             }
 
             while (!rowset.EndOfSet()) {
-                ui64 operationId = rowset.GetValue<Schema::ForceTraversals::OperationId>();
-                ui64 ownerId = rowset.GetValue<Schema::ForceTraversals::OwnerId>();
-                ui64 localPathId = rowset.GetValue<Schema::ForceTraversals::LocalPathId>();
+                TString operationId = rowset.GetValue<Schema::ForceTraversalOperations::OperationId>();
+                TString types = rowset.GetValue<Schema::ForceTraversalOperations::Types>();
 
-                auto pathId = TPathId(ownerId, localPathId);
-
-                TForceTraversal& operation = Self->ForceTraversalsByPathId[pathId];
-                operation.PathId = pathId;
-                operation.OperationId = operationId;
-                Self->ForceTraversals.PushBack(&operation);
+                TForceTraversalOperation operation {
+                    .OperationId = operationId,
+                    .Tables = {},
+                    .Types = types,
+                    .ReplyToActorId = {}
+                };
+                Self->ForceTraversals.emplace_back(operation);
 
                 if (!rowset.Next()) {
                     return false;
                 }
             }
 
-            SA_LOG_D("[" << Self->TabletID() << "] Loaded ForceTraversals: "
-                << "table count# " << Self->ForceTraversalsByPathId.size());
+            SA_LOG_D("[" << Self->TabletID() << "] Loaded ForceTraversalOperations: "
+                << "table count# " << Self->ForceTraversals.size());
+        }
+
+        // ForceTraversalTables
+        {
+            auto rowset = db.Table<Schema::ForceTraversalTables>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            size_t size = 0;
+            while (!rowset.EndOfSet()) {
+                ++size;
+
+                TString operationId = rowset.GetValue<Schema::ForceTraversalTables::OperationId>();
+                ui64 ownerId = rowset.GetValue<Schema::ForceTraversalTables::OwnerId>();
+                ui64 localPathId = rowset.GetValue<Schema::ForceTraversalTables::LocalPathId>();
+                TString columnTags = rowset.GetValue<Schema::ForceTraversalTables::ColumnTags>();
+                TForceTraversalTable::EStatus status = (TForceTraversalTable::EStatus)rowset.GetValue<Schema::ForceTraversalTables::Status>();
+
+                if (status == TForceTraversalTable::EStatus::AnalyzeStarted) {
+                    // Resent TEvAnalyzeTable to shards
+                    status = TForceTraversalTable::EStatus::None;
+                }
+
+                auto pathId = TPathId(ownerId, localPathId);
+
+                TForceTraversalTable operationTable {
+                    .PathId = pathId,
+                    .ColumnTags = columnTags,
+                    .Status = status,
+                };
+                auto forceTraversalOperation = Self->ForceTraversalOperation(operationId);
+                if (!forceTraversalOperation) {
+                    SA_LOG_E("[" << Self->TabletID() << "] ForceTraversalTables contains unknown operationId: " << operationId);
+                    continue;
+                }
+                forceTraversalOperation->Tables.emplace_back(operationTable);
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+
+            SA_LOG_D("[" << Self->TabletID() << "] Loaded ForceTraversalTables: "
+                << "table count# " << size);
         }
 
         return true;
@@ -228,10 +271,13 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
 
         Self->Schedule(Self->PropagateInterval, new TEvPrivate::TEvPropagate());
         Self->Schedule(Self->TraversalPeriod, new TEvPrivate::TEvScheduleTraversal());
+        Self->Schedule(Self->SendAnalyzePeriod, new TEvPrivate::TEvSendAnalyze());
 
         Self->InitializeStatisticsTable();
 
-        if (Self->TraversalTableId.PathId) {
+        if (Self->TraversalPathId && Self->TraversalStartKey) {
+            Self->NavigateType = ENavigateType::Traversal;
+            Self->NavigatePathId = Self->TraversalPathId;
             Self->Navigate();
         }
 

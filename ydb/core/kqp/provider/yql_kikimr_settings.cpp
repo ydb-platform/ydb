@@ -34,7 +34,7 @@ ui64 ParseEnableSpillingNodes(const TString &v) {
         if (s.empty()) {
             throw yexception() << "Empty value item";
         }
-        auto value = FromString<NYql::TDqSettings::EEnabledSpillingNodes>(s);
+        auto value = FromString<NDq::EEnabledSpillingNodes>(s);
         res |= ui64(value);
     }
     return res;
@@ -81,9 +81,11 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptEnablePredicateExtract);
     REGISTER_SETTING(*this, OptEnableOlapPushdown);
     REGISTER_SETTING(*this, OptEnableOlapProvideComputeSharding);
-    REGISTER_SETTING(*this, OverrideStatistics);
+    REGISTER_SETTING(*this, OptOverrideStatistics);
+    REGISTER_SETTING(*this, OptCardinalityHints);
+    REGISTER_SETTING(*this, OptJoinAlgoHints);
     REGISTER_SETTING(*this, OverridePlanner);
-
+    REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
 
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
     REGISTER_SETTING(*this, CostBasedOptimizationLevel);
@@ -142,7 +144,7 @@ bool TKikimrSettings::HasOptEnableOlapProvideComputeSharding() const {
 }
 
 bool TKikimrSettings::HasOptUseFinalizeByKey() const {
-    return GetOptionalFlagValue(OptUseFinalizeByKey.Get()) != EOptionalFlag::Disabled;
+    return GetFlagValue(OptUseFinalizeByKey.Get().GetOrElse(true)) != EOptionalFlag::Disabled;
 }
 
 EOptionalFlag TKikimrSettings::GetOptPredicateExtract() const {

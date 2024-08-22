@@ -285,7 +285,7 @@ protected:
                 if (attempt == Config_->BindRetryCount) {
                     CloseServerSocket();
 
-                    THROW_ERROR_EXCEPTION(NRpc::EErrorCode::TransportError, errorMessage)
+                    THROW_ERROR_EXCEPTION(NRpc::EErrorCode::TransportError, TRuntimeFormat(errorMessage))
                         << ex;
                 } else {
                     YT_LOG_WARNING(ex, "Error binding socket, starting %v retry", attempt + 1);

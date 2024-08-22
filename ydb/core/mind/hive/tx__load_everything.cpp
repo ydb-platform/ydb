@@ -337,9 +337,9 @@ public:
                     // it's safe to call here, because there is no any tablets in the node yet
                     node.BecomeDisconnected();
                 }
-                if (node.CanBeDeleted()) {
+                if (Self->TryToDeleteNode(&node)) {
+                    // node is deleted from hashmap
                     db.Table<Schema::Node>().Key(nodeId).Delete();
-                    Self->Nodes.erase(nodeId);
                 } else if (node.IsUnknown() && node.LocationAcquired) {
                     Self->AddRegisteredDataCentersNode(node.Location.GetDataCenterId(), node.Id);
                 }
@@ -532,8 +532,14 @@ public:
                         tablet->TabletStorageInfo->Channels.emplace_back();
                         tablet->TabletStorageInfo->Channels.back().Channel = tablet->TabletStorageInfo->Channels.size() - 1;
                     }
-                    TTabletChannelInfo& channel = tablet->TabletStorageInfo->Channels[channelId];
-                    channel.History.emplace_back(generationId, groupId, timestamp);
+                    TTabletChannelInfo::THistoryEntry entry(generationId, groupId, timestamp);
+                    auto deletedAtGeneration = tabletChannelGenRowset.GetValueOrDefault<Schema::TabletChannelGen::DeletedAtGeneration>();
+                    if (deletedAtGeneration) {
+                        tablet->DeletedHistory.emplace(channelId, entry, deletedAtGeneration);
+                    } else {
+                        TTabletChannelInfo& channel = tablet->TabletStorageInfo->Channels[channelId];
+                        channel.History.push_back(entry);
+                    }
                 } else {
                     ++numMissingTablets;
                 }

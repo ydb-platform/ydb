@@ -547,6 +547,9 @@ public:
                             if (auto* tasksNode = stageOverride.GetValueByPath("tasks")) {
                                 stage.SetTaskCount(tasksNode->GetIntegerSafe());
                             }
+                            if (auto* sleepNode = stageOverride.GetValueByPath("sleep")) {
+                                stage.SetSleepMs(sleepNode->GetIntegerSafe());
+                            }
                         }
                     }
                 }

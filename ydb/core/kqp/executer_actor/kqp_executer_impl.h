@@ -1076,6 +1076,9 @@ protected:
                 task.Meta.NodeId = resourceSnapshot[(selfNodeIdx + i) % resourceSnapshot.size()].GetNodeId();
                 task.Meta.Type = TTaskMeta::TTaskType::Scan;
             }
+            if (stage.GetSleepMs()) {
+                task.Meta.TaskParams["SleepMsOnStart"] = ToString(stage.GetSleepMs());
+            }
 
             tasksIds.push_back(task.Id);
         }
@@ -1470,6 +1473,9 @@ protected:
             auto& task = TasksGraph.AddTask(stageInfo);
             task.Meta.Type = TTaskMeta::TTaskType::Compute;
             task.Meta.ExecuterId = SelfId();
+            if (stage.GetSleepMs()) {
+                task.Meta.TaskParams["SleepMsOnStart"] = ToString(stage.GetSleepMs());
+            }
             FillSecureParamsFromStage(task.Meta.SecureParams, stage);
             BuildSinks(stage, stageInfo, task);
             LOG_D("Stage " << stageInfo.Id << " create compute task: " << task.Id);

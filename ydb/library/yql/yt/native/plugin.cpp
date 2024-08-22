@@ -146,7 +146,12 @@ class TSkiffConverter
     : public ISkiffConverter
 {
 public:
-    TString ConvertNodeToSkiff(const TDqStatePtr state, const IDataProvider::TFillSettings& fillSettings, const NYT::TNode& rowSpec, const NYT::TNode& item) override
+    TString ConvertNodeToSkiff(
+        const TDqStatePtr state,
+        const IDataProvider::TFillSettings& fillSettings,
+        const NYT::TNode& rowSpec,
+        const NYT::TNode& item,
+        const TVector<TString>& columns) override
     {
         TMemoryUsageInfo memInfo("DqResOrPull");
         TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), state->FunctionRegistry->SupportsSizedAllocators());
@@ -154,7 +159,7 @@ public:
         TTypeEnvironment env(alloc);
         NYql::NCommon::TCodecContext codecCtx(env, *state->FunctionRegistry, &holderFactory);
 
-        auto skiffBuilder = MakeHolder<TSkiffExecuteResOrPull>(fillSettings.RowsLimitPerWrite, fillSettings.AllResultsBytesLimit, codecCtx, holderFactory, rowSpec, state->TypeCtx->OptLLVM.GetOrElse("OFF"));
+        auto skiffBuilder = MakeHolder<TSkiffExecuteResOrPull>(fillSettings.RowsLimitPerWrite, fillSettings.AllResultsBytesLimit, codecCtx, holderFactory, rowSpec, state->TypeCtx->OptLLVM.GetOrElse("OFF"), columns);
         if (item.IsList()) {
             skiffBuilder->SetListResult();
             for (auto& node : item.AsList()) {

@@ -55,6 +55,7 @@ ui64 GetNativeYtTypeFlagsImpl(const TTypeAnnotationNode* itemType) {
             case EDataSlot::Decimal:
                 return NTCF_DECIMAL;
             case EDataSlot::Uuid:
+                return NTCF_UUID;
             case EDataSlot::TzDate:
             case EDataSlot::TzDatetime:
             case EDataSlot::TzTimestamp:

@@ -24,6 +24,9 @@ static TString ConvertYtDataType(const TString& ytType, ui64& nativeYtTypeFlags)
     if (ytType == "string") {
         yqlType = "String";
     }
+    else if (ytType == "uuid") {
+        yqlType = "Uuid";
+    }
     else if (ytType == "utf8") {
         yqlType = "Utf8";
     }
@@ -122,6 +125,10 @@ static NYT::TNode ConvertNativeYtType(const NYT::TNode& raw, bool root, bool& ha
         if (raw.AsString() == "void") {
             nativeYtTypeFlags |= NTCF_VOID;
             return NYT::TNode().Add("VoidType");
+        }
+
+        if (raw.AsString() == "uuid") {
+            nativeYtTypeFlags |= NTCF_UUID;
         }
 
         hasYson = hasYson || "yson" == raw.AsString();
@@ -276,7 +283,7 @@ static std::pair<TString, NYT::TNode> ExtractYtType(const NYT::TNode& entry, boo
     }
 
     NYT::TNode typeNode;
-    if (fieldType && fieldType != "null" && fieldType != "void" && fieldType != "decimal") {
+    if (fieldType && fieldType != "null" && fieldType != "void" && fieldType != "decimal" && fieldType != "uuid") {
         TString yqlType = ConvertYtDataType(*fieldType, nativeYtTypeFlags);
         auto dataTypeNode = NYT::TNode()
             .Add("DataType")
@@ -740,8 +747,10 @@ NYT::TNode RowSpecYqlTypeToYtNativeType(const NYT::TNode& rowSpecType, ui64 nati
     if ((*type)[0] == TStringBuf("DataType")) {
         const auto& yqlType = (*type)[1].AsString();
         TString ytType;
-        if (yqlType == TStringBuf("String") || yqlType == TStringBuf("Longint") || yqlType == TStringBuf("Uuid") || yqlType == TStringBuf("JsonDocument") || yqlType == TStringBuf("DyNumber")) {
+        if (yqlType == TStringBuf("String") || yqlType == TStringBuf("Longint") || yqlType == TStringBuf("JsonDocument") || yqlType == TStringBuf("DyNumber")) {
             ytType = "string";
+        } else if (yqlType == TStringBuf("Uuid")) {
+            ytType = "uuid";
         } else if (yqlType == TStringBuf("Json")) {
             ytType = (nativeYtTypeFlags & NTCF_JSON) ? "json" : "string";
         } else if (yqlType == TStringBuf("Utf8")) {
@@ -977,7 +986,7 @@ NYT::TTableSchema RowSpecToYTSchema(const NYT::TNode& rowSpec, ui64 nativeTypeCo
         }
     }
     nativeYtTypeFlags &= nativeTypeCompatibility;
-    bool useNativeTypes = nativeYtTypeFlags & (NTCF_COMPLEX | NTCF_DECIMAL);
+    bool useNativeTypes = nativeYtTypeFlags & (NTCF_COMPLEX | NTCF_DECIMAL | NTCF_UUID);
 
     THashMap<TString, std::pair<NYT::EValueType, bool>> fieldTypes;
     THashMap<TString, NYT::TNode> fieldNativeTypes;

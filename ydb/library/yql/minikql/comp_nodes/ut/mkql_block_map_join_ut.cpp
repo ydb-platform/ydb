@@ -17,22 +17,22 @@ namespace {
     using TKSV = std::tuple<ui64, ui64, TStringBuf>;
     using TArrayPtr = std::shared_ptr<arrow::ArrayData>;
 
-    TVector<TString> GeneratePayload(size_t level) {
+    TVector<TString> GenerateValues(size_t level) {
         constexpr size_t alphaSize = 'Z' - 'A' + 1;
         if (level == 1) {
             TVector<TString> alphabet(alphaSize);
             std::iota(alphabet.begin(), alphabet.end(), 'A');
             return alphabet;
         }
-        const auto subPayload = GeneratePayload(level - 1);
-        TVector<TString> payload;
-        payload.reserve(alphaSize * subPayload.size());
+        const auto subValues = GenerateValues(level - 1);
+        TVector<TString> values;
+        values.reserve(alphaSize * subValues.size());
         for (char ch = 'A'; ch <= 'Z'; ch++) {
-            for (const auto& tail : subPayload) {
-                payload.emplace_back(ch + tail);
+            for (const auto& tail : subValues) {
+                values.emplace_back(ch + tail);
             }
         }
-        return payload;
+        return values;
     }
 
     template <typename T, bool isOptional = false>
@@ -190,7 +190,7 @@ namespace {
     void TestBlockJoinOnUint64(EJoinKind joinKind) {
         constexpr size_t testSize = 1 << 14;
         constexpr size_t valueSize = 3;
-        static const TVector<TString> threeLetterValues = GeneratePayload(valueSize);
+        static const TVector<TString> threeLetterValues = GenerateValues(valueSize);
         static const TSet<ui64> fib = {1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144,
             233, 377, 610, 987, 1597, 2584, 4181, 6765, 10946, 17711};
 

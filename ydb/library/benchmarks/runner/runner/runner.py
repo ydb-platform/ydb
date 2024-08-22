@@ -65,11 +65,10 @@ def run(argv, out, err, timeout=30*60, hard_timeout=5):
 
 
 def main():
-
     parser = argparse.ArgumentParser()
     parser.add_argument('--query-dir', type=str, default='q/scalar')
     parser.add_argument('--bindings', type=str, default='bindings.json')
-    parser.add_argument('--result-dir', type=str, default="result-{:%Y%m%dT%H%M%S}".format(datetime.datetime.now()))
+    parser.add_argument('--result-dir', type=Path, default="result-{:%Y%m%dT%H%M%S}".format(datetime.datetime.now()))
     parser.add_argument('--timeout', type=int, default=30*60)
     parser.add_argument('--perf', action='store_true')
     parser.add_argument('--arc-path', type=str, default='{}/arcadia'.format(os.environ['HOME']))
@@ -81,9 +80,8 @@ def main():
     outdir = args.result_dir
     assert len(argv)
     querydir = Path(qdir)
-    os.makedirs(outdir + '/' + qdir, exist_ok=True)
-    with open(outdir + '/' + qdir + "/summary.tsv", "w") as outf, \
-         open(outdir + '/' + qdir + "/summary.json", "w") as outj:
+    with open(outdir / "summary.tsv", "w") as outf, \
+         open(outdir / "summary.json", "w") as outj:
         print(' '.join(argv + ['-p', qdir, '--bindings-file', bindings]), file=outf)
         print(json.dumps({
             'cmdline': argv,
@@ -92,8 +90,9 @@ def main():
             'version': 100
         }), file=outj)
         for query in sorted(querydir.glob('**/*.sql'), key=lambda x: tuple(map(lambda y: int(y) if re.match(RE_DIGITS, y) else y, re.split(RE_DIGITS, str(x))))):
-            q = str(query)
-            name = outdir + '/' + q
+            q = str(query.stem)
+            print(f"{q}", end="", flush=True)
+            name = str(outdir / q)
             if len(args.include_q):
                 include = False
                 for r in args.include_q:
@@ -112,6 +111,7 @@ def main():
                     continue
             print(q, end='\t', file=outf)
             outname = name + '-result.yson'
+            print(".", end="", flush=True)
             exitcode, rusage, elapsed, iostat = run(
                 argv + [
                     '--result-file', outname,
@@ -120,7 +120,7 @@ def main():
                     '--err-file', name + '-err.txt',
                     '--expr-file', name + '-expr.txt',
                     '--stat', name + '-stat.yson',
-                    '-p', q
+                    '-p', str(query)
                 ],
                 name + '-stdout.txt',
                 name + '-stderr.txt',
@@ -164,25 +164,27 @@ def main():
                 }
             }), file=outj)
             outj.flush()
+            print(".", end="", flush=True)
             if args.perf:
                 exitcode, rusage, elapsed, iostat = run(
-                    ['{}/ya'.format(args.arc_path), 'tool', 'perf', 'record', '-F250', '-g', '--call-graph', 'dwarf', '-o', '{}/perf.data'.format(outdir), '--'] +
+                    ['/usr/bin/perf', 'record', '-F250', '-g', '--call-graph', 'dwarf', '-o', '{}/perf.data'.format(outdir), '--'] +
                     argv + [
                         '--result-file', '/dev/null',
                         '--bindings-file', bindings,
                         '--plan-file', '/dev/null',
                         '--err-file', '/dev/null',
                         '--expr-file', '/dev/null',
-                        '-p', q
+                        '-p', str(query)
                     ],
                     name + '-stdout-perf.txt',
                     name + '-stderr-perf.txt',
                     timeout=args.timeout)
                 os.system('''
-                {0}/ya tool perf script -i {2}/perf.data --header |
+                /usr/bin/perf script -i {2}/perf.data --header |
                 {0}/contrib/tools/flame-graph/stackcollapse-perf.pl |
                 {0}/contrib/tools/flame-graph/flamegraph.pl > {1}.svg
                 '''.format(args.arc_path, name, outdir))
+            print(".", flush=True)
 
 
 if __name__ == "__main__":

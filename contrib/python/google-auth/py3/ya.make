@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(2.32.0)
+VERSION(2.33.0)
 
 LICENSE(Apache-2.0)
 
@@ -28,6 +28,7 @@ PY_SRCS(
     google/auth/__init__.py
     google/auth/_cloud_sdk.py
     google/auth/_credentials_async.py
+    google/auth/_credentials_base.py
     google/auth/_default.py
     google/auth/_default_async.py
     google/auth/_exponential_backoff.py
@@ -36,6 +37,8 @@ PY_SRCS(
     google/auth/_oauth2client.py
     google/auth/_refresh_worker.py
     google/auth/_service_account_info.py
+    google/auth/aio/__init__.py
+    google/auth/aio/credentials.py
     google/auth/api_key.py
     google/auth/app_engine.py
     google/auth/aws.py
@@ -66,6 +69,7 @@ PY_SRCS(
     google/auth/transport/_custom_tls_signer.py
     google/auth/transport/_http_client.py
     google/auth/transport/_mtls_helper.py
+    google/auth/transport/_requests_base.py
     google/auth/transport/grpc.py
     google/auth/transport/mtls.py
     google/auth/transport/requests.py

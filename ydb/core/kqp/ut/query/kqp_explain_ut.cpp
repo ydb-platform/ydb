@@ -79,13 +79,13 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         UNIT_ASSERT(res.PlanJson);
 
-        Cerr << *res.PlanJson;
+        Cerr << *res.PlanJson << Endl;
 
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
-        auto join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter-TableFullScan");
+        auto join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (Grace)-Filter-TableFullScan-Filter");
         UNIT_ASSERT(join.IsDefined());
         auto left = FindPlanNodeByKv(join, "Table", "EightShard");
         UNIT_ASSERT(left.IsDefined());
@@ -106,13 +106,14 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         auto res = CollectStreamResult(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         UNIT_ASSERT(res.PlanJson);
-        Cerr << *res.PlanJson;
+
+        Cerr << *res.PlanJson << Endl;
 
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
-        auto join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter-TableFullScan");
+        auto join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (Grace)-Filter-TableFullScan-Filter");
         UNIT_ASSERT(join.IsDefined());
         auto left = FindPlanNodeByKv(join, "Table", "EightShard");
         UNIT_ASSERT(left.IsDefined());
@@ -193,7 +194,8 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         auto res = CollectStreamResult(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         UNIT_ASSERT(res.PlanJson);
-        Cerr << *res.PlanJson;
+
+        Cerr << *res.PlanJson << Endl;
 
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
@@ -202,7 +204,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         auto join = FindPlanNodeByKv(
             plan,
             "Node Type",
-            "Aggregate-InnerJoin (MapJoin)-Filter-TableFullScan"
+            "Aggregate-InnerJoin (Grace)-Filter-TableFullScan-Filter"
         );
 
         UNIT_ASSERT(join.IsDefined());
@@ -365,9 +367,9 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
-        auto join1 = FindPlanNodeByKv(plan, "Node Type", "Sort-InnerJoin (MapJoin)-Filter");
+        auto join1 = FindPlanNodeByKv(plan, "Node Type", "Sort-InnerJoin (Grace)-Filter-Filter");
         UNIT_ASSERT(join1.IsDefined());
-        auto join2 = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter");
+        auto join2 = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (Grace)-Filter-Filter");
         UNIT_ASSERT(join2.IsDefined());
     }
 
@@ -905,6 +907,8 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
                 inner join `/Root/EightShard` as es on kv.Key == es.Key;
         )").ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        Cerr << result.GetPlan() << Endl;
 
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(result.GetPlan(), &plan, true);

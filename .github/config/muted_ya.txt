@@ -26,11 +26,10 @@ ydb/core/kqp/ut/olap KqpOlapBlobsSharing.TableReshardingConsistency64
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.TableReshardingModuloN
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.UpsertWhileSplitTest
 ydb/core/kqp/ut/olap KqpOlapStatistics.StatsUsageWithTTL
-ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart
-ydb/core/kqp/ut/olap [*/*] chunk chunk
-ydb/core/kqp/ut/query KqpLimits.ComputeActorMemoryAllocationFailureQueryService
-ydb/core/kqp/ut/query KqpLimits.QueryExecTimeoutCancel
-ydb/core/kqp/ut/query KqpStats.SysViewClientLost
+ydb/core/kqp/ut/pg KqpPg.CreateIndex
+ydb/core/kqp/ut/query KqpExplain.MultiJoinCteLinks
+ydb/core/kqp/ut/query KqpLimits.QueryReplySize
+ydb/core/kqp/ut/query KqpQuery.QueryTimeout
 ydb/core/kqp/ut/scan KqpRequestContext.TraceIdInErrorMessage
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/scheme KqpScheme.AlterAsyncReplication

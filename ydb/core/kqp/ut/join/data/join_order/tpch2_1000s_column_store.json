@@ -7,6 +7,10 @@
         "args":
           [
             {
+              "op_name":"TableFullScan",
+              "table":"partsupp"
+            },
+            {
               "op_name":"InnerJoin (Grace)",
               "args":
                 [
@@ -15,7 +19,7 @@
                     "table":"partsupp"
                   },
                   {
-                    "op_name":"InnerJoin (MapJoin)",
+                    "op_name":"InnerJoin (Grace)",
                     "args":
                       [
                         {
@@ -39,7 +43,13 @@
                       ]
                   }
                 ]
-            },
+            }
+          ]
+      },
+      {
+        "op_name":"InnerJoin (Grace)",
+        "args":
+          [
             {
               "op_name":"InnerJoin (Grace)",
               "args":
@@ -49,7 +59,7 @@
                     "table":"partsupp"
                   },
                   {
-                    "op_name":"InnerJoin (MapJoin)",
+                    "op_name":"InnerJoin (Grace)",
                     "args":
                       [
                         {
@@ -57,7 +67,7 @@
                           "table":"supplier"
                         },
                         {
-                          "op_name":"InnerJoin (MapJoin)",
+                          "op_name":"InnerJoin (Grace)",
                           "args":
                             [
                               {

@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-LeftJoin (MapJoin)",
+                                        "Node Type": "TopSort-LeftJoin (Grace)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -48,10 +48,19 @@
                                                         "ExternalPlanNodeId": 8
                                                     },
                                                     {
+                                                        "InternalOperatorId": 2
+                                                    }
+                                                ],
+                                                "Name": "LeftJoin (Grace)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
                                                         "ExternalPlanNodeId": 5
                                                     }
                                                 ],
-                                                "Name": "LeftJoin (MapJoin)"
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.i2_1.q2)"
                                             }
                                         ],
                                         "PlanNodeId": 9,
@@ -71,19 +80,16 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "InnerJoin (MapJoin)-Filter",
+                                                                        "Node Type": "InnerJoin (Grace)-Filter",
                                                                         "Operators": [
                                                                             {
                                                                                 "Condition": "i2_1.q1 = ss.x",
                                                                                 "Inputs": [
                                                                                     {
                                                                                         "InternalOperatorId": 1
-                                                                                    },
-                                                                                    {
-                                                                                        "Other": "ConstantExpression"
                                                                                     }
                                                                                 ],
-                                                                                "Name": "InnerJoin (MapJoin)"
+                                                                                "Name": "InnerJoin (Grace)"
                                                                             },
                                                                             {
                                                                                 "Inputs": [

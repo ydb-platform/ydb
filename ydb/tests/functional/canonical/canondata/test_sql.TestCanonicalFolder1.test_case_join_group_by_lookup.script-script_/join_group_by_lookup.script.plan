@@ -35,7 +35,7 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "TopSort-TopSort",
+                                                "Node Type": "TopSort-LeftJoin (Grace)-Filter",
                                                 "Operators": [
                                                     {
                                                         "Inputs": [
@@ -53,12 +53,22 @@
                                                     {
                                                         "Inputs": [
                                                             {
-                                                                "ExternalPlanNodeId": 7
+                                                                "ExternalPlanNodeId": 17
+                                                            },
+                                                            {
+                                                                "InternalOperatorId": 2
                                                             }
                                                         ],
-                                                        "Limit": "1001",
-                                                        "Name": "TopSort",
-                                                        "TopSortBy": ""
+                                                        "Name": "LeftJoin (Grace)"
+                                                    },
+                                                    {
+                                                        "Inputs": [
+                                                            {
+                                                                "ExternalPlanNodeId": 15
+                                                            }
+                                                        ],
+                                                        "Name": "Filter",
+                                                        "Predicate": "Exist(item.Group)"
                                                     }
                                                 ],
                                                 "PlanNodeId": 8,

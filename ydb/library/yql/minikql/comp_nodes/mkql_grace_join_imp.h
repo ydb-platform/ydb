@@ -11,7 +11,7 @@ namespace NMiniKQL {
 namespace GraceJoin {
 
 class TTableBucketSpiller;
-#define GRACEJOIN_DEBUG INFO //DEBUG
+#define GRACEJOIN_DEBUG DEBUG
 #define GRACEJOIN_TRACE TRACE
         
 const ui64 BitsForNumberOfBuckets = 5; // 2^5 = 32

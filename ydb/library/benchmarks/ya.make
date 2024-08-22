@@ -4,5 +4,4 @@ RECURSE(
     template
     runner
     report
-    run_queries
 )

@@ -234,7 +234,7 @@ void TestBlockJoinOnUint64(EJoinKind joinKind) {
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinTest) {
+Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinBasicTest) {
     Y_UNIT_TEST(TestLeftSemiOnUint64) {
         TestBlockJoinOnUint64(EJoinKind::LeftSemi);
     }

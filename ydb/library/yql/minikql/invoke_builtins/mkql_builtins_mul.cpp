@@ -40,6 +40,9 @@ struct TNumMulInterval {
         const auto lv = static_cast<typename TOutput::TLayout>(left.template Get<typename TLeft::TLayout>());
         const auto rv = static_cast<typename TOutput::TLayout>(right.template Get<typename TRight::TLayout>());
         const auto ret = lv * rv;
+        if (rv == 0) {
+            return NUdf::TUnboxedValuePod(ret);
+        }
         if constexpr (std::is_same_v<ui64, typename TLeft::TLayout>) {
             if (left.Get<ui64>() > static_cast<ui64>(std::numeric_limits<i64>::max())) {
                 return NUdf::TUnboxedValuePod();
@@ -62,13 +65,24 @@ struct TNumMulInterval {
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen.GetContext();
+        const auto bbMain = BasicBlock::Create(context, "bbMain", ctx.Func);
+        const auto bbDone = BasicBlock::Create(context, "bbDone", ctx.Func);
+        const auto resultType = Type::getInt128Ty(context);
+        const auto result = PHINode::Create(resultType, 2, "result", bbDone);
+
         const auto lv = GetterFor<typename TLeft::TLayout>(left, context, block);
         const auto lhs = StaticCast<typename TLeft::TLayout, i64>(lv, context, block);
         const auto rv = GetterFor<typename TRight::TLayout>(right, context, block);
         const auto rhs = StaticCast<typename TRight::TLayout, i64>(rv, context, block);
         const auto mul = BinaryOperator::CreateMul(lhs, rhs, "mul", block);
         const auto zero = ConstantInt::get(Type::getInt64Ty(context), 0);
+        const auto rhsZero = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, rhs, zero, "rhsZero", block);
         const auto res = SetterFor<typename TOutput::TLayout>(mul, context, block);
+
+        BranchInst::Create(bbDone, bbMain, rhsZero, block);
+        result->addIncoming(res, block);
+
+        block = bbMain;
 
         const auto lhsAbs = SelectInst::Create(
                 CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGE, lhs, zero, "lhsPos", block),
@@ -91,9 +105,13 @@ struct TNumMulInterval {
                 BinaryOperator::CreateOr(i64Overflow, mulOverflow, "overflow", block),
                 GenIsBadInterval<TOutput>(mul, context, block),
                 "bad", block);
-        const auto null = ConstantInt::get(Type::getInt128Ty(context), 0);
+        const auto null = ConstantInt::get(resultType, 0);
         const auto sel = SelectInst::Create(bad, null, res, "sel", block);
-        return sel;
+
+        result->addIncoming(sel, block);
+        BranchInst::Create(bbDone, block);
+        block = bbDone;
+        return result;
     }
 #endif
 };

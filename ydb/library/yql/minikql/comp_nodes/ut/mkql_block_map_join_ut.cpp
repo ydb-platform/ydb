@@ -37,7 +37,7 @@ namespace {
 
     constexpr size_t payloadSize = 3;
     static const TVector<TString> threeLetterPayloads = GeneratePayload(payloadSize);
-    static const TVector<ui64> fib = {
+    static const TSet<ui64> fib = {
         1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377,
         610, 987, 1597, 2584, 4181, 6765, 10946, 17711
     };
@@ -61,7 +61,7 @@ namespace {
     template <typename TKey>
     const TRuntimeNode MakeSet(
         TProgramBuilder& pgmBuilder,
-        const TVector<TKey>& keyValues
+        const TSet<TKey>& keyValues
     ) {
         const auto keyType = pgmBuilder.NewDataType(NUdf::TDataType<TKey>::Id);
 
@@ -135,11 +135,13 @@ namespace {
         return rootNode;
     }
 
-    void DoTestBlockJoinOnUint64(EJoinKind joinKind, TVector<TKSV> values, size_t blockSize) {
+    void DoTestBlockJoinOnUint64(EJoinKind joinKind, TVector<TKSV> values,
+        TSet<ui64> set, size_t blockSize
+    ) {
         TSetup<false> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        const auto dict = MakeSet(pb, fib);
+        const auto dict = MakeSet(pb, set);
 
         const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
         const auto strType = pb.NewDataType(NUdf::EDataSlot::String);
@@ -190,7 +192,7 @@ namespace {
         const auto blockLengthDatum = TArrowBlock::From(blockLengthValue).GetDatum();
         UNIT_ASSERT(blockLengthDatum.is_scalar());
         const auto blockLength = blockLengthDatum.scalar_as<arrow::UInt64Scalar>().value;
-        const auto dictSize = std::count_if(fib.cbegin(), fib.cend(),
+        const auto dictSize = std::count_if(set.cbegin(), set.cend(),
             [testSize](ui64 key) { return key < testSize; });
         const auto expectedLength = joinKind == EJoinKind::LeftSemi ? dictSize
                                   : joinKind == EJoinKind::LeftOnly ? testSize - dictSize
@@ -206,7 +208,7 @@ namespace {
         }
 
         for (size_t blockSize = 8; blockSize <= testSize; blockSize <<= 1) {
-            DoTestBlockJoinOnUint64(joinKind, testKSV, blockSize);
+            DoTestBlockJoinOnUint64(joinKind, testKSV, fib, blockSize);
         }
     }
 } // namespace

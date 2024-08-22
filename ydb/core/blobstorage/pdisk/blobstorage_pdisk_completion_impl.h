@@ -110,7 +110,7 @@ public:
         if (Mon) {
             Mon->IncrementResponseTime(PriorityClass, responseTimeMs, SizeBytes);
         }
-        LWTRACK(PDiskChunkWriteResponseTime, Orbit, PDiskId, ReqId.Id, PriorityClass, responseTimeMs, SizeBytes);
+        LWTRACK(PDiskChunkResponseTime, Orbit, PDiskId, ReqId.Id, PriorityClass, responseTimeMs, SizeBytes);
         Event->Orbit = std::move(Orbit);
         actorSystem->Send(Recipient, Event.Release());
         if (Mon) {

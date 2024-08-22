@@ -848,9 +848,6 @@ bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pi
 
     guard.Release();
 
-    LWTRACK(PDiskChunkWritePieceSendToDevice, evChunkWrite->Orbit, PDiskId, evChunkWrite->Owner, chunkIdx,
-            pieceShift, pieceSize);
-
     ui32 bytesAvailable = pieceSize;
     Y_ABORT_UNLESS(evChunkWrite->BytesWritten == pieceShift);
     const ui32 count = evChunkWrite->PartsPtr->Size();
@@ -909,6 +906,9 @@ bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pi
         LOG_INFO(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32 " chunkIdx# %" PRIu32
             " was zero-padded after writing", (ui32)PDiskId, (ui32)chunkIdx);
     }
+    LWTRACK(PDiskChunkWriteLastPieceSendToDevice, evChunkWrite->Orbit, PDiskId, evChunkWrite->Owner, chunkIdx,
+        pieceShift, pieceSize);
+
     auto traceId = evChunkWrite->SpanStack.GetTraceId();
     evChunkWrite->Completion->Orbit = std::move(evChunkWrite->Orbit);
     writer.Flush(evChunkWrite->ReqId, &traceId, evChunkWrite->Completion.Release());
@@ -951,7 +951,7 @@ void TPDisk::SendChunkReadError(const TIntrusivePtr<TChunkRead>& read, TStringSt
 }
 
 TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &read, ui64 pieceCurrentSector,
-        ui64 pieceSizeLimit, ui64 *reallyReadDiskBytes, NWilson::TTraceId traceId) {
+        ui64 pieceSizeLimit, ui64 *reallyReadDiskBytes, NWilson::TTraceId traceId, NLWTrace::TOrbit&& orbit) {
     if (read->IsReplied) {
         return ReadPieceResultOk;
     }
@@ -1020,6 +1020,8 @@ TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &
     THolder<TCompletionChunkReadPart> completion(new TCompletionChunkReadPart(this, read, bytesToRead,
                 payloadBytesToRead, payloadOffset, read->FinalCompletion, isTheLastPart, std::move(span)));
     completion->CostNs = DriveModel.TimeForSizeNs(bytesToRead, read->ChunkIdx, TDriveModel::OP_TYPE_READ);
+    LWTRACK(PDiskChunkReadPiecesSendToDevice, orbit, PDiskId);
+    completion->Orbit = std::move(orbit);
     Y_ABORT_UNLESS(bytesToRead <= completion->GetBuffer()->Size());
     ui8 *data = completion->GetBuffer()->Data();
     BlockDevice->PreadAsync(data, bytesToRead, readOffset, completion.Release(),
@@ -2289,7 +2291,6 @@ void TPDisk::ProcessChunkReadQueue() {
                 bool isComplete = false;
                 ui8 priorityClass = read->PriorityClass;
                 NHPTimer::STime creationTime = read->CreationTime;
-                LWTRACK(PDiskChunkReadPiecesSendToDevice, read->Orbit, PDiskId);
                 if (!read->IsReplied) {
                     LOG_DEBUG_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDiskId
                         << " ReqId# " << reqId
@@ -2301,7 +2302,7 @@ void TPDisk::ProcessChunkReadQueue() {
                         ui64 currentLimit = Min(bufferSize, piece->PieceSizeLimit - size);
                         ui64 reallyReadDiskBytes;
                         EChunkReadPieceResult result = ChunkReadPiece(read, piece->PieceCurrentSector + size / Format.SectorSize,
-                                currentLimit, &reallyReadDiskBytes, piece->SpanStack.GetTraceId());
+                                currentLimit, &reallyReadDiskBytes, piece->SpanStack.GetTraceId(), std::move(piece->Orbit));
                         isComplete = (result != ReadPieceResultInProgress);
                         // Read pieces is sliced previously and it is expected that ChunkReadPiece will read exactly
                         // currentLimit bytes
@@ -3239,7 +3240,8 @@ void TPDisk::PushRequestToForseti(TRequestBase *request) {
                     // Schedule small job.
                     auto piece = new TChunkReadPiece(read, idx * smallJobSize,
                             smallJobSize * Format.SectorSize, false, std::move(span));
-                    LWTRACK(PDiskChunkReadPieceAddToScheduler, read->Orbit, PDiskId, idx, idx * smallJobSize * Format.SectorSize,
+                    read->Orbit.Fork(piece->Orbit);
+                    LWTRACK(PDiskChunkReadPieceAddToScheduler, piece->Orbit, PDiskId, idx, idx * smallJobSize * Format.SectorSize,
                             smallJobSize * Format.SectorSize);
                     piece->EstimateCost(DriveModel);
                     piece->SelfPointer = piece;
@@ -3250,7 +3252,8 @@ void TPDisk::PushRequestToForseti(TRequestBase *request) {
                 span.Attribute("is_last_piece", true);
                 auto piece = new TChunkReadPiece(read, smallJobCount * smallJobSize,
                         largeJobSize * Format.SectorSize, true, std::move(span));
-                LWTRACK(PDiskChunkReadPieceAddToScheduler, read->Orbit, PDiskId, smallJobCount,
+                read->Orbit.Fork(piece->Orbit);
+                LWTRACK(PDiskChunkReadPieceAddToScheduler, piece->Orbit, PDiskId, smallJobCount,
                         smallJobCount * smallJobSize * Format.SectorSize, largeJobSize * Format.SectorSize);
                 piece->EstimateCost(DriveModel);
                 piece->SelfPointer = piece;

@@ -1999,9 +1999,9 @@ public:
 
         switch (vDiskInfo.GetVDiskState()) {
             case NKikimrWhiteboard::EVDiskState::OK:
+            case NKikimrWhiteboard::EVDiskState::Initial:
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                 break;
-            case NKikimrWhiteboard::EVDiskState::Initial:
             case NKikimrWhiteboard::EVDiskState::SyncGuidRecovery:
                 context.IssueRecords.clear();
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW,

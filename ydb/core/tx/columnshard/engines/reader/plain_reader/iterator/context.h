@@ -15,6 +15,7 @@ class TSpecialReadContext {
 private:
     YDB_READONLY_DEF(std::shared_ptr<TReadContext>, CommonContext);
     YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TProcessGuard>, ProcessMemoryGuard);
+    YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TScopeGuard>, ProcessScopeGuard);
 
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, SpecColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, MergeColumns);

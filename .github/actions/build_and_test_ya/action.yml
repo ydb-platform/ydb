@@ -42,9 +42,6 @@ inputs:
   additional_ya_make_args:
     type: string
     default: ""
-  test_retry_count:
-    default: ""
-    description: "how many times to retry failed tests"
   secs:
     type: string
     default: ""
@@ -127,7 +124,6 @@ runs:
         bazel_remote_username: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_USERNAME || '' }}
         bazel_remote_password: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_PASSWORD || '' }}
         put_build_results_to_cache: ${{ inputs.put_build_results_to_cache }}
-        test_retry_count: ${{ inputs.test_retry_count }}
         
     - name: build_stats
       shell: bash

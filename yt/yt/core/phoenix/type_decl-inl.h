@@ -83,7 +83,7 @@ private: \
 public: \
     static const ::NYT::NPhoenix2::TTypeDescriptor& GetTypeDescriptor() \
     { \
-        static const auto& descriptor = ::NYT::NPhoenix2::NDetail::RegisterTypeDescriptorImpl<type, /*Template*/ true>(); \
+        static const auto& descriptor = ::NYT::NPhoenix2::NDetail::GetTypeDescriptorByTagUnchecked(TypeTag); \
         return descriptor; \
     } \
     \
@@ -133,6 +133,10 @@ public: \
 public: \
     [[maybe_unused]] static constexpr auto TypeTag = ::NYT::NPhoenix2::TTypeTag(typeTagValue); \
     static const ::NYT::NPhoenix2::TTypeDescriptor& GetTypeDescriptor()
+
+////////////////////////////////////////////////////////////////////////////////
+
+const TTypeDescriptor& GetTypeDescriptorByTagUnchecked(TTypeTag tag);
 
 ////////////////////////////////////////////////////////////////////////////////
 

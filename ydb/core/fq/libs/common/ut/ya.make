@@ -14,7 +14,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/sql/pg_dummy
+    #ydb/library/yql/sql/pg_dummy
     ydb/core/testlib
 )
 

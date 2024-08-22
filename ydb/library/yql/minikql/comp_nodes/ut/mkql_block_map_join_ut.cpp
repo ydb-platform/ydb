@@ -95,6 +95,29 @@ namespace {
         return arrays;
     }
 
+    TVector<TKSV> ArraysToKSV(const std::array<TArrayPtr, std::tuple_size_v<TKSV>>& arrays,
+        const int64_t blockSize
+    ) {
+        TVector<TKSV> ksvVector;
+        for (size_t i = 0; i < std::tuple_size_v<TKSV>; i++) {
+            Y_ENSURE(arrays[i]->length == blockSize,
+                "Array size differs from the given block size");
+            Y_ENSURE(arrays[i]->GetNullCount() == 0,
+                "Null values conversion is not supported");
+            Y_ENSURE(arrays[i]->buffers.size() == 2 + (i > 1),
+                "Array layout doesn't respect the schema");
+        }
+        const ui64* keyBuffer = arrays[0]->GetValuesSafe<ui64>(1);
+        const ui64* subkeyBuffer = arrays[1]->GetValuesSafe<ui64>(1);
+        const int32_t* offsets = arrays[2]->GetValuesSafe<int32_t>(1);
+        const char* valuesBuffer = arrays[2]->GetValuesSafe<char>(2, 0);
+        for (auto i = 0; i < blockSize; i++) {
+            const TStringBuf value(valuesBuffer + offsets[i], offsets[i + 1] - offsets[i]);
+            ksvVector.push_back(std::make_tuple(keyBuffer[i], subkeyBuffer[i], value));
+        }
+        return ksvVector;
+    }
+
     const TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder,
         EJoinKind joinKind, TVector<ui32> keyColumns,
         TRuntimeNode& leftArg, TType* leftTuple, const TRuntimeNode& dictNode
@@ -128,7 +151,7 @@ namespace {
         return rootNode;
     }
 
-    size_t DoTestBlockJoinOnUint64(EJoinKind joinKind, TVector<TKSV> values,
+    TVector<TKSV> DoTestBlockJoinOnUint64(EJoinKind joinKind, TVector<TKSV> values,
         TSet<ui64> set, size_t blockSize
     ) {
         TSetup<false> setup;
@@ -173,18 +196,25 @@ namespace {
         leftBlocks->SetValue(ctx, holderFactory.CreateDirectListHolder(std::move(leftListValues)));
         const auto joinIterator = graph->GetValue().GetListIterator();
 
-        NUdf::TUnboxedValue item;
-        TVector<NUdf::TUnboxedValue> joinResult;
-        while (joinIterator.Next(item)) {
-            joinResult.push_back(item);
+        TVector<TKSV> resultKSV;
+        std::array<TArrayPtr, std::tuple_size_v<TKSV>> arrays;
+        NUdf::TUnboxedValue value;
+        while (joinIterator.Next(value)) {
+            for (size_t i = 0; i < ksvWidth; i++) {
+                const auto arrayValue = value.GetElement(i);
+                const auto arrayDatum = TArrowBlock::From(arrayValue).GetDatum();
+                UNIT_ASSERT(arrayDatum.is_array());
+                arrays[i] = arrayDatum.array();
+            }
+            const auto blockLengthValue = value.GetElement(ksvWidth);
+            const auto blockLengthDatum = TArrowBlock::From(blockLengthValue).GetDatum();
+            Y_ENSURE(blockLengthDatum.is_scalar());
+            const auto blockLength = blockLengthDatum.scalar_as<arrow::UInt64Scalar>().value;
+            const auto blockKSV = ArraysToKSV(arrays, blockLength);
+            resultKSV.insert(resultKSV.end(), blockKSV.cbegin(), blockKSV.cend());
         }
-
-        UNIT_ASSERT_VALUES_EQUAL(joinResult.size(), 1);
-        const auto blocks = joinResult.front();
-        const auto blockLengthValue = blocks.GetElement(ksvWidth);
-        const auto blockLengthDatum = TArrowBlock::From(blockLengthValue).GetDatum();
-        UNIT_ASSERT(blockLengthDatum.is_scalar());
-        return blockLengthDatum.scalar_as<arrow::UInt64Scalar>().value;
+        std::sort(resultKSV.begin(), resultKSV.end());
+        return resultKSV;
     }
 
     void TestBlockJoinOnUint64(EJoinKind joinKind) {
@@ -198,15 +228,16 @@ namespace {
         for (size_t k = 0; k < testSize; k++) {
             testKSV.push_back(std::make_tuple(k, k * 1001, threeLetterValues[k]));
         }
+        TVector<TKSV> expectedKSV;
+        std::copy_if(testKSV.cbegin(), testKSV.cend(), std::back_inserter(expectedKSV),
+            [&joinKind](const auto& ksv) {
+                const auto contains = fib.contains(std::get<0>(ksv));
+                return joinKind == EJoinKind::LeftSemi ? contains : !contains;
+            });
 
         for (size_t blockSize = 8; blockSize <= testSize; blockSize <<= 1) {
-            const auto blockLength = DoTestBlockJoinOnUint64(joinKind, testKSV, fib, blockSize);
-            const auto dictSize = std::count_if(fib.cbegin(), fib.cend(),
-                [](ui64 key) { return key < testSize; });
-            const auto expectedLength = joinKind == EJoinKind::LeftSemi ? dictSize
-                                      : joinKind == EJoinKind::LeftOnly ? testSize - dictSize
-                                      : -1;
-            UNIT_ASSERT_VALUES_EQUAL(expectedLength, blockLength);
+            const auto gotKSV = DoTestBlockJoinOnUint64(joinKind, testKSV, fib, blockSize);
+            UNIT_ASSERT_EQUAL(expectedKSV, gotKSV);
         }
     }
 } // namespace

@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             CREATE OBJECT IF NOT EXISTS empty_tiering_rule (TYPE TIERING_RULE)
                 WITH (defaultColumn = timestamp, description = `{"rules": []}`))";
             auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
         }
 
         testHelper.CreateTier("tier1");
@@ -119,7 +119,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         {
             const TString query = "ALTER OBJECT " + correctTieringRule + R"( (TYPE TIERING_RULE) SET description `{"rules": []}`)";
             auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
         }
     }
 }

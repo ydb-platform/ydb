@@ -271,10 +271,11 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
 
         Self->Schedule(Self->PropagateInterval, new TEvPrivate::TEvPropagate());
 
-        if (!Self->EnableColumnStatistics) {
-            SA_LOG_W("[" << Self->TabletID() << "] TTxInit::Complete. EnableColumnStatistics=false");
+        if (Self->EnableColumnStatistics) {
             Self->Schedule(Self->TraversalPeriod, new TEvPrivate::TEvScheduleTraversal());
             Self->Schedule(Self->SendAnalyzePeriod, new TEvPrivate::TEvSendAnalyze());
+        } else {
+            SA_LOG_W("[" << Self->TabletID() << "] TTxInit::Complete. EnableColumnStatistics=false");
         }
 
         Self->InitializeStatisticsTable();

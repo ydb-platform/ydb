@@ -38,6 +38,22 @@ def _propogate_size(tree):
         tree["size"] += _propogate_size(child)
     return tree["size"]
 
+def _remove_less_then_threshold(tree, threshold, fix_size_threshold):
+    new_children = []
+    new_size = 0
+    self_size = tree["size"]
+    for child in tree.get("children", []):
+        self_size -= child["size"]
+        _remove_less_then_threshold(child, threshold, fix_size_threshold)
+        if child["size"] >= threshold:
+            new_children.append(child)
+            new_size += child["size"]
+
+    tree["children"] = new_children
+    if fix_size_threshold:
+        print(new_size + self_size)
+        tree["size"] = new_size + self_size
+
 def _intify_size(tree):
     for child in tree.get("children", []):
         _intify_size(child)
@@ -49,22 +65,23 @@ def _enrich_names_with_units(tree, unit_name, factor):
 
     tree["name"] = tree["name"] + ", {:_} {}".format(int(tree["size"]*factor), unit_name)
 
-def _build_tree_map(paths_to_add, unit_name, factor):
+def _build_tree_map(paths_to_add, unit_name, factor, threshold, fix_size_threshold):
     tree = {}
     for path in paths_to_add:
         _add_to_tree(tree, path)
     _children_to_list(tree)
     _propogate_size(tree)
+    _remove_less_then_threshold(tree, threshold, fix_size_threshold)
     _intify_size(tree)
     _enrich_names_with_units(tree, unit_name, factor)
     return tree
 
 
-def generate_tree_map_html(output_dir: str, tree_paths: list[tuple[str, str, int]], unit_name: str, factor: float, types: list[tuple[str, str, str]]):
+def generate_tree_map_html(output_dir: str, tree_paths: list[tuple[str, str, int]], unit_name: str, factor: float, types: list[tuple[str, str, str]], threshold=0, fix_size_threshold=False):
     current_script_dir = os.path.dirname(os.path.realpath(__file__))
     html_dir = os.path.join(current_script_dir, "html")
 
-    tree = _build_tree_map(tree_paths, unit_name, factor)
+    tree = _build_tree_map(tree_paths, unit_name, factor, threshold, fix_size_threshold)
 
     env = Environment(loader=FileSystemLoader(html_dir), undefined=StrictUndefined)
     file_names = os.listdir(html_dir)

@@ -187,16 +187,23 @@ using ArrowField = std::shared_ptr<arrow::Field>;
 using ArrowFields = std::vector<ArrowField>;
 
 std::variant<ArrowFields, TString> InferCsvTypes(std::shared_ptr<arrow::io::RandomAccessFile> file, const CsvConfig& config) {
+    int64_t fileSize;
+    if (auto sizeStatus = file->GetSize().Value(&fileSize); !sizeStatus.ok()) {
+        return TStringBuilder{} << "coudn't get file size: " << sizeStatus.ToString();
+    }
+
     std::shared_ptr<arrow::csv::TableReader> reader;
-    auto fileSize = static_cast<int32_t>(file->GetSize().ValueOr(1 << 20));
-    fileSize = std::min(fileSize, 1 << 20);
     auto readerStatus = arrow::csv::TableReader::Make(
-        arrow::io::default_io_context(), std::move(file), arrow::csv::ReadOptions{.use_threads = false, .block_size = fileSize}, config.ParseOpts, config.ConvOpts
+        arrow::io::default_io_context(),
+        std::move(file),
+        arrow::csv::ReadOptions{.use_threads = false, .block_size = static_cast<int32_t>(fileSize)},
+        config.ParseOpts,
+        config.ConvOpts
     )
     .Value(&reader);
 
     if (!readerStatus.ok()) {
-        return TString{TStringBuilder{} << "couldn't parse csv/tsv file, check format and compression params: " << readerStatus.ToString()};
+        return TString{TStringBuilder{} << "couldn't open csv/tsv file, check format and compression params: " << readerStatus.ToString()};
     }
 
     std::shared_ptr<arrow::Table> table;
@@ -214,13 +221,13 @@ std::variant<ArrowFields, TString> InferParquetTypes(std::shared_ptr<arrow::io::
     builder.properties(parquet::ArrowReaderProperties(false));
     auto openStatus = builder.Open(std::move(file));
     if (!openStatus.ok()) {
-        return TStringBuilder{} << "couldn't parse parquet file, check format params: " << openStatus.ToString();
+        return TStringBuilder{} << "couldn't open parquet file, check format params: " << openStatus.ToString();
     }
 
     std::unique_ptr<parquet::arrow::FileReader> reader;
     auto readerStatus = builder.Build(&reader);
     if (!readerStatus.ok()) {
-        return TStringBuilder{} << "couldn't parse parquet file, check format params: " << readerStatus.ToString();
+        return TStringBuilder{} << "couldn't read parquet file, check format params: " << readerStatus.ToString();
     }
 
     std::shared_ptr<arrow::Schema> schema;
@@ -233,15 +240,21 @@ std::variant<ArrowFields, TString> InferParquetTypes(std::shared_ptr<arrow::io::
 }
 
 std::variant<ArrowFields, TString> InferJsonTypes(std::shared_ptr<arrow::io::RandomAccessFile> file, const JsonConfig& config) {
+    int64_t fileSize;
+    if (auto sizeStatus = file->GetSize().Value(&fileSize); !sizeStatus.ok()) {
+        return TStringBuilder{} << "coudn't get file size: " << sizeStatus.ToString();
+    }
+
     std::shared_ptr<arrow::json::TableReader> reader;
-    auto fileSize = static_cast<int32_t>(file->GetSize().ValueOr(1 << 20));
-    fileSize = std::min(fileSize, 1 << 20);
     auto readerStatus = arrow::json::TableReader::Make(
-        arrow::default_memory_pool(), std::move(file), arrow::json::ReadOptions{.use_threads = false, .block_size = fileSize}, config.ParseOpts
+        arrow::default_memory_pool(),
+        std::move(file),
+        arrow::json::ReadOptions{.use_threads = false, .block_size = static_cast<int32_t>(fileSize)},
+        config.ParseOpts
     ).Value(&reader);
 
     if (!readerStatus.ok()) {
-        return TString{TStringBuilder{} << "couldn't parse json file, check format and compression params: " << readerStatus.ToString()};
+        return TString{TStringBuilder{} << "couldn't open json file, check format and compression params: " << readerStatus.ToString()};
     }
 
     std::shared_ptr<arrow::Table> table;

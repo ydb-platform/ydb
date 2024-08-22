@@ -383,9 +383,8 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
                 success);
         A_LOG_LOG_S(true, success ? NLog::PRI_INFO : NLog::PRI_NOTICE, "BPG68", "Result# " << evResult->Print(false));
 
-        bool allowToReport = AllowToReport(GetImpl.GetHandleClass());
         if (TActivationContext::Now() - StartTime >= LongRequestThreshold) {
-            if (allowToReport) {
+            if (AllowToReport(GetImpl.GetHandleClass())) {
                 R_LOG_WARN_S("BPG71", "TEvGet Request was being processed for more than " << LongRequestThreshold
                         << ", serialized RootCause# " << RootCauseTrack.ToString());
             }

@@ -2,5 +2,5 @@ USE plato;
 
 pragma yt.ColumnGroupMode="perusage";
 
-insert into Input with column_groups="{a=#}"
+insert into Output with column_groups="{a=#}"
 select * from Input where a != "";

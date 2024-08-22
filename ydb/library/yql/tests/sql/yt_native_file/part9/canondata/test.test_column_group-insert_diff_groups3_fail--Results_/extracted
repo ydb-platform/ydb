@@ -1,8 +1,8 @@
 <tmp_path>/program.sql:<main>: Error: Type annotation
 
-    <tmp_path>/program.sql:<main>:6:38: Error: At function: YtWriteTable!
-    	insert into Input with column_groups="{a=#}"
-	                                     ^
-        <tmp_path>/program.sql:<main>:6:38: Error: Insert with "column_groups" to existing table is not allowed
-        	insert into Input with column_groups="{a=#}"
-	                                     ^
+    <tmp_path>/program.sql:<main>:6:39: Error: At function: YtWriteTable!
+    	insert into Output with column_groups="{a=#}"
+	                                      ^
+        <tmp_path>/program.sql:<main>:6:39: Error: Insert with "column_groups" to existing table is not allowed
+        	insert into Output with column_groups="{a=#}"
+	                                      ^

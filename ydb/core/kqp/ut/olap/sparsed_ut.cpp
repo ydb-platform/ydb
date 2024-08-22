@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
             CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
         }
 
-        void Execute() {
+        void Execute(bool sparsedTs = false) {
             CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
             CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
             CSController->SetPeriodicWakeupActivationPeriod(TDuration::MilliSeconds(100));
@@ -101,6 +101,9 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
             TTypedLocalHelper helper("Utf8", Kikimr);
             helper.CreateTestOlapTable();
 
+            if (sparsedTs) {
+                helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=ts, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`);");
+            }
             FillCircle(0, 10000);
             helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`, `DEFAULT_VALUE`=`abcde`);");
             FillCircle(0.1, 11000);
@@ -116,6 +119,11 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
     Y_UNIT_TEST(Switching) {
         TSparsedDataTest test;
         test.Execute();
+    }
+
+    Y_UNIT_TEST(SwitchingSparsedTs) {
+        TSparsedDataTest test;
+        test.Execute(true);
     }
 }
 

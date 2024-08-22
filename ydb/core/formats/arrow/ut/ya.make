@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/core/formats/arrow)
 
-SIZE(SMALL)
+SIZE(MEDIUM)
 
 PEERDIR(
     contrib/libs/apache/arrow
@@ -29,6 +29,7 @@ SRCS(
     ut_size_calcer.cpp
     ut_column_filter.cpp
     ut_hash.cpp
+    ut_row_size_calculator.cpp
 )
 
 END()

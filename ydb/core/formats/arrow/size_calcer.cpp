@@ -1,12 +1,33 @@
+#include "arrow_helpers.h"
 #include "size_calcer.h"
 #include "switch_type.h"
-#include "arrow_helpers.h"
+
 #include "dictionary/conversion.h"
+
+#include <arrow/ipc/util.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
-#include <util/system/yassert.h>
 #include <util/string/builder.h>
+#include <util/system/yassert.h>
 
 namespace NKikimr::NArrow {
+
+ui32 GetCountRowsForSlice(const TRowSizeCalculator& rowCalculator, ui32 left, ui32 right, ui32 limit) {
+    ui32 l = left;
+    ui32 r = right;
+    while (l <= r) {
+        ui32 mid = (r + l) / 2;
+        ui32 currentSize = rowCalculator.GetSliceSize(left, mid - left);
+        if (currentSize == limit) {
+            return mid - left;
+        }
+        if (currentSize < limit) {
+            l = mid + 1;
+        } else {
+            r = mid - 1;
+        }
+    }
+    return l - left - 1;
+}
 
 TConclusion<std::vector<TSerializedBatch>> SplitByBlobSize(const std::shared_ptr<arrow::RecordBatch>& batch, const TBatchSplitttingContext& context) {
     if (GetBatchDataSize(batch) <= context.GetSizeLimit()) {
@@ -16,36 +37,23 @@ TConclusion<std::vector<TSerializedBatch>> SplitByBlobSize(const std::shared_ptr
     if (!rowCalculator.InitBatch(batch)) {
         return TConclusionStatus::Fail("unexpected column type on batch initialization for row size calculator");
     }
-    ui32 currentSize = 0;
-    ui32 startIdx = 0;
+
     std::vector<TSerializedBatch> result;
-    for (ui32 i = 0; i < batch->num_rows(); ++i) {
-        const ui32 rowSize = rowCalculator.GetRowBytesSize(i);
-        if (rowSize > context.GetSizeLimit()) {
-            return TConclusionStatus::Fail("there is row with size more then limit (" + ::ToString(context.GetSizeLimit()) + ")");
+    ui32 startIdx = 0;
+    ui32 numRows = batch->num_rows();
+    while (startIdx < numRows) {
+        ui32 countRows = GetCountRowsForSlice(rowCalculator, startIdx, numRows, context.GetSizeLimit());
+        if (countRows == 0) {
+            return TConclusionStatus::Fail("there is row with size + metadata more then limit (" + ::ToString(context.GetSizeLimit()) + ")");
         }
-        if (rowCalculator.GetApproxSerializeSize(currentSize + rowSize) > context.GetSizeLimit()) {
-            if (!currentSize) {
-                return TConclusionStatus::Fail("there is row with size + metadata more then limit (" + ::ToString(context.GetSizeLimit()) + ")");
-            }
-            auto localResult = TSerializedBatch::BuildWithLimit(batch->Slice(startIdx, i - startIdx), context);
-            if (localResult.IsFail()) {
-                return TConclusionStatus::Fail("cannot build blobs for batch slice (" + ::ToString(i - startIdx) + " rows): " + localResult.GetErrorMessage());
-            } else {
-                result.insert(result.end(), localResult.GetResult().begin(), localResult.GetResult().end());
-            }
-            currentSize = 0;
-            startIdx = i;
-        }
-        currentSize += rowSize;
-    }
-    if (currentSize) {
-        auto localResult = TSerializedBatch::BuildWithLimit(batch->Slice(startIdx, batch->num_rows() - startIdx), context);
+        auto localResult = TSerializedBatch::BuildWithLimit(batch->Slice(startIdx, countRows), context);
         if (localResult.IsFail()) {
-            return TConclusionStatus::Fail("cannot build blobs for last batch slice (" + ::ToString(batch->num_rows() - startIdx) + " rows): " + localResult.GetErrorMessage());
+            return TConclusionStatus::Fail(
+                "cannot build blobs for batch slice (" + ::ToString(countRows) + " rows): " + localResult.GetErrorMessage());
         } else {
             result.insert(result.end(), localResult.GetResult().begin(), localResult.GetResult().end());
         }
+        startIdx += countRows;
     }
     return result;
 }
@@ -56,9 +64,6 @@ ui32 TRowSizeCalculator::GetRowBitWidth(const ui32 row) const {
     for (auto&& c : BinaryColumns) {
         result += GetBitWidthAligned(c->GetView(row).size() * 8);
     }
-    for (auto&& c : StringColumns) {
-        result += GetBitWidthAligned(c->GetView(row).size() * 8);
-    }
     return result;
 }
 
@@ -66,25 +71,43 @@ bool TRowSizeCalculator::InitBatch(const std::shared_ptr<arrow::RecordBatch>& ba
     Batch = batch;
     CommonSize = 0;
     BinaryColumns.clear();
-    StringColumns.clear();
+
+    CountColomnsWithNull = 0;
+    LegacyIpcFormat = 8;  // write_legacy_ipc_format in IpcWriteOptions. If value true, then need change on 4, by default false
+    MetadataSize = 72;  // initial state
+    MetadataSize += 16;  // two numbers for size of metadata and number of rows in the batch
+    for (ui32 i = 0; i < 9; i++) {
+        FixedBitWidthColumns[i] = 0;
+    }
+
     Prepared = false;
     for (ui32 i = 0; i < (ui32)Batch->num_columns(); ++i) {
-        auto fSize = std::dynamic_pointer_cast<arrow::FixedWidthType>(Batch->column(i)->type());
+        auto currentColumn = Batch->column(i);
+        // FieldMetadata (24 bytes) + BufferMetadata (16 bytes) + NullBitmap (8 bytes)
+        MetadataSize += 48;
+        auto fSize = std::dynamic_pointer_cast<arrow::FixedWidthType>(currentColumn->type());
         if (fSize) {
+            for (ui32 j = 0; j < 9; j++) {
+                if ((1 << j) == fSize->bit_width()) {
+                    FixedBitWidthColumns[j]++;
+                    break;
+                }
+            }
             CommonSize += GetBitWidthAligned(fSize->bit_width());
         } else {
-            auto c = Batch->column(i);
-            if (c->type()->id() == arrow::Type::BINARY) {
-                const arrow::BinaryArray& viewArray = static_cast<const arrow::BinaryArray&>(*c);
+            MetadataSize += 16;
+            if (currentColumn->type()->id() == arrow::Type::BINARY || currentColumn->type()->id() == arrow::Type::STRING) {
+                const arrow::BinaryArray& viewArray = static_cast<const arrow::BinaryArray&>(*currentColumn);
                 BinaryColumns.emplace_back(&viewArray);
-            } else if (c->type()->id() == arrow::Type::STRING) {
-                const arrow::StringArray& viewArray = static_cast<const arrow::StringArray&>(*c);
-                StringColumns.emplace_back(&viewArray);
             } else {
                 return false;
             }
         }
+        if (currentColumn->null_count() != 0) {
+            CountColomnsWithNull++;
+        }
     }
+    CommonSize = GetBitWidthAligned(CommonSize);
     Prepared = true;
     return true;
 }
@@ -96,6 +119,42 @@ ui32 TRowSizeCalculator::GetRowBytesSize(const ui32 row) const {
         ++result;
     }
     return result;
+}
+
+ui32 TRowSizeCalculator::GetNullBitmapBytesSize(ui32 countRows) const {
+    ui32 result = countRows / 64;
+    if (countRows % 64 != 0) {
+        result++;
+    }
+    return CountColomnsWithNull * result * 8;
+}
+
+int64_t RoundUp(int64_t value, int64_t factor) {
+    if (factor == 8) {
+        return arrow::BitUtil::RoundUpToMultipleOf8(value);
+    } else if (factor == 64) {
+        return arrow::BitUtil::RoundUpToMultipleOf64(value);
+    }
+    return arrow::BitUtil::RoundUp(value, factor);
+}
+
+ui32 TRowSizeCalculator::GetSliceSize(ui32 startIndex, ui32 length) const {
+    Y_ABORT_UNLESS(Prepared);
+    ui32 bodySize = 0;
+
+    for (ui32 i = 0; i < 9; i++) {
+        bodySize += FixedBitWidthColumns[i] * RoundUp((1 << i) * length, 64) / 8;
+    }
+
+    for (const auto& viewArray : BinaryColumns) {
+        int64_t total_data_bytes = viewArray->value_offset(length + startIndex) - viewArray->value_offset(startIndex);
+        const int64_t slice_length =
+            std::min(arrow::ipc::PaddedLength(total_data_bytes), viewArray->value_data()->size() - viewArray->value_offset(startIndex));
+        bodySize += RoundUp(slice_length, 8) + RoundUp((length + 1) * sizeof(arrow::StringArray::offset_type), 8);
+    }
+
+    bodySize += GetNullBitmapBytesSize(length);
+    return bodySize + MetadataSize + LegacyIpcFormat;
 }
 
 ui64 GetArrayMemorySize(const std::shared_ptr<arrow::ArrayData>& data) {

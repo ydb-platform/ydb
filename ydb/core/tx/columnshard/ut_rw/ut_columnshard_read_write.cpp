@@ -21,8 +21,6 @@
 #include <ydb/core/formats/arrow/simple_builder/batch.h>
 #include <util/string/join.h>
 
-#include <ydb/library/minsketch/stack_count_min_sketch.h>
-
 namespace NKikimr {
 
 using namespace NColumnShard;

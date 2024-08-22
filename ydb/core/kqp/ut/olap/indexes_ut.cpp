@@ -5,7 +5,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
-#include <ydb/library/minsketch/stack_count_min_sketch.h>
 
 #include <ydb/core/statistics/events.h>
 

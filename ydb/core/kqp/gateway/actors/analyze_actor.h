@@ -50,6 +50,8 @@ private:
 private:
     void SendStatisticsAggregatorAnalyze(const NSchemeCache::TSchemeCacheNavigate::TEntry&, const TActorContext&);
 
+    TDuration CalcBackoffTime();
+
 private:
     TString TablePath;
     TVector<TString> Columns;
@@ -61,11 +63,12 @@ private:
 
     // for retries
     NStat::TEvStatistics::TEvAnalyze Request;
-    TDuration RetryInterval = TDuration::Seconds(2);
+    TDuration RetryInterval = TDuration::MilliSeconds(5);
     size_t RetryCount = 0;
 
-    const static size_t MaxRetryCount = 7;
-    const static size_t RetryIntervalMultiplier = 2;
+    constexpr static size_t MaxRetryCount = 10;
+    constexpr static double UncertainRatio = 0.5;
+    constexpr static double MaxBackoffDurationMs = TDuration::Seconds(15).MilliSeconds();
 };
 
 } // end of NKikimr::NKqp

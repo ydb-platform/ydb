@@ -134,6 +134,18 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
     }
 }
 
+TDuration TAnalyzeActor::CalcBackoffTime() {
+    ui32 backoffSlots = 1 << RetryCount;
+    TDuration maxDuration = RetryInterval * backoffSlots;
+
+    double uncertaintyRatio = std::max(std::min(UncertainRatio, 1.0), 0.0);
+    double uncertaintyMultiplier = RandomNumber<double>() * uncertaintyRatio - uncertaintyRatio + 1.0;
+
+    double durationMs = round(maxDuration.MilliSeconds() * uncertaintyMultiplier);
+    durationMs = std::max(std::min(durationMs, MaxBackoffDurationMs), 0.0);
+    return TDuration::MilliSeconds(durationMs);
+}
+
 void TAnalyzeActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev, const TActorContext& ctx) {
     Y_UNUSED(ev, ctx);
 
@@ -150,9 +162,8 @@ void TAnalyzeActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev, const TAc
         return;
     }
 
-    RetryInterval *= RetryIntervalMultiplier;
     ++RetryCount;
-    Schedule(RetryInterval, new TEvAnalyzePrivate::TEvAnalyzeRetry());
+    Schedule(CalcBackoffTime(), new TEvAnalyzePrivate::TEvAnalyzeRetry());
 }
 
 void TAnalyzeActor::Handle(TEvAnalyzePrivate::TEvAnalyzeRetry::TPtr& ev, const TActorContext& ctx) {

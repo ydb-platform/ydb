@@ -315,20 +315,24 @@ std::shared_ptr<IBaseOptimizerNode> MakeJoinTreeFromJson(const NJson::TJsonValue
             MakeJoinTreeFromJson(children[0]),
             MakeJoinTreeFromJson(children[1]),
             {},
-            EJoinKind::Cross,
+            EJoinKind::Cross, // just a stub
             EJoinAlgoType::Undefined,
             true
         );
         return std::make_shared<TJoinOptimizerNode>(std::move(joinNode));
     }
 
-    Y_ENSURE(jsonTree.IsString(), "A relation must be a string for JoinOrder hints!");
+    Y_ENSURE(
+        jsonTree.IsString(),
+        Sprintf("A relation must be a string for JoinOrder hints! Got %s, expected a string.", jsonTree.GetStringRobust().c_str())
+    );
     return std::make_shared<TRelOptimizerNode>(jsonTree.GetStringSafe(), nullptr);
 }
 
 TJoinOrderHints::TJoinOrderHints(const TString& json) {
-    NJson::TJsonValue jsonTree; 
-    NJson::ReadJsonTree(json, &jsonTree);
+    Cout << json << Endl;
+    NJson::TJsonValue jsonTree;
+    NJson::ReadJsonTree(json, &jsonTree, true);
     HintsTree = MakeJoinTreeFromJson(jsonTree);
 }
 

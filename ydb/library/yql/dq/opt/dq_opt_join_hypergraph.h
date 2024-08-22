@@ -92,6 +92,11 @@ public:
     TString String() {
         TString res;
 
+        res.append("Nodes: ").append("\n");
+        for (const auto& [name, idx]: NodeIdByRelationName_) {
+            res.append(Sprintf("%ld: %s\n", idx, name.c_str()));
+        }
+
         res.append("Edges: ").append("\n");
         for (const auto& edge: Edges_) {
             res.append("{");
@@ -222,12 +227,12 @@ public:
         
         for (size_t i = 0; i < Edges_.size(); ++i) {
             TNodeSet newLeft = Edges_[i].Left;
-            if (Overlaps(Edges_[i].Left, nodes) && !IsSubset(Edges_[i].Left, nodes)) {
+            if (Overlaps(Edges_[i].Left, nodes) && !IsSubset(Edges_[i].Right, nodes)) {
                 newLeft |= nodes;
             }
 
             TNodeSet newRight = Edges_[i].Right;
-            if (Overlaps(Edges_[i].Right, nodes) && !IsSubset(Edges_[i].Right, nodes)) {
+            if (Overlaps(Edges_[i].Right, nodes) && !IsSubset(Edges_[i].Left, nodes)) {
                 newRight |= nodes;
             }
 
@@ -249,6 +254,9 @@ public:
             size_t edgeIdx = revEdge.ReversedEdgeId;
             auto& edge = Edges_[edgeIdx];
 
+            edge.IsReversed = false;
+            revEdge.IsReversed = true;
+
             edge.IsCommutative = false;
             revEdge.IsCommutative = false;
 
@@ -267,18 +275,6 @@ public:
         return node->Labels();
     }
 
-    void UpdateEdgeSides(size_t idx, TNodeSet newLeft, TNodeSet newRight) {
-        auto& edge = Edges_[idx];
-        if (edge.IsSimple() && !(HasSingleBit(newLeft) && HasSingleBit(newRight))) {
-            size_t lhsNodeIdx = GetLowestSetBit(edge.Left);
-            size_t rhsNodeIdx = GetLowestSetBit(edge.Right);
-            Nodes_[lhsNodeIdx].SimpleNeighborhood &= ~rhsNodeIdx;
-            Nodes_[lhsNodeIdx].ComplexEdgesId.push_back(idx);
-        }
-        edge.Left = newLeft;
-        edge.Right = newRight;
-    }
-
 private:
     /* Attach edges to nodes */
     void AddEdgeImpl(TEdge edge) {
@@ -293,6 +289,17 @@ private:
         while (setBitsIt.HasNext()) {
             Nodes_[setBitsIt.Next()].ComplexEdgesId.push_back(Edges_.size() - 1);
         }
+    }
+
+    void UpdateEdgeSides(size_t idx, TNodeSet newLeft, TNodeSet newRight) {
+        auto& edge = Edges_[idx];
+        if (edge.IsSimple() && !(HasSingleBit(newLeft) && HasSingleBit(newRight))) {
+            size_t lhsNodeIdx = GetLowestSetBit(edge.Left);
+            Nodes_[lhsNodeIdx].SimpleNeighborhood &= ~edge.Right;
+            Nodes_[lhsNodeIdx].ComplexEdgesId.push_back(idx);
+        }
+        edge.Left = newLeft;
+        edge.Right = newRight;
     }
 
 private:

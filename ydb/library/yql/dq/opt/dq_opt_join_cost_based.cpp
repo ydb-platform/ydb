@@ -243,15 +243,12 @@ private:
         const std::shared_ptr<TJoinOptimizerNode>& joinTree, 
         const TOptimizerHints& hints = {}
     ) {
-        TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree);
-        if (hints.JoinOrderHints.HintsTree != nullptr) {
-            hypergraph.ApplyHints(hints.JoinOrderHints);
-        }
+        TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree, hints.JoinOrderHints);
         TDPHypSolver<TNodeSet> solver(hypergraph, this->Pctx, hints.CardinalityHints, hints.JoinAlgoHints);
 
         if (solver.CountCC(MaxDPhypTableSize_) >= MaxDPhypTableSize_) {
             YQL_CLOG(TRACE, CoreDq) << "Maximum DPhyp threshold exceeded\n";
-            ComputeStatistics(git joinTree, this->Pctx);
+            ComputeStatistics(joinTree, this->Pctx);
             return joinTree;
         }
 

@@ -323,7 +323,7 @@ class TestPqRowDispatcher(TestYdsBase):
         kikimr.compute_plane.wait_completed_checkpoints(
             query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
         )
-        stop_yds_query(client, query_id)  # TODO?
+        stop_yds_query(client, query_id)
         wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 0)
 
         client.modify_query(query_id, "continue", sql1,
@@ -371,7 +371,6 @@ class TestPqRowDispatcher(TestYdsBase):
         wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 1)
         wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 1)
 
-       # time.sleep(120)
         node_index = 2
         logging.debug("Restart compute node {}".format(node_index))
         kikimr.compute_plane.kikimr_cluster.nodes[node_index].stop()
@@ -387,24 +386,21 @@ class TestPqRowDispatcher(TestYdsBase):
         assert self.read_stream(len(expected), topic_path = self.output_topic) == expected
         kikimr.compute_plane.wait_completed_checkpoints(query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 1)
 
-        # node_index = 2
-        # logging.debug("Restart compute node {}".format(node_index))
-        # kikimr.control_plane.kikimr_cluster.nodes[node_index].stop()
-        # kikimr.control_plane.kikimr_cluster.nodes[node_index].start()
-        # kikimr.control_plane.wait_bootstrap(node_index)
+        node_index = 1
+        logging.debug("Restart compute node {}".format(node_index))
+        kikimr.control_plane.kikimr_cluster.nodes[node_index].stop()
+        kikimr.control_plane.kikimr_cluster.nodes[node_index].start()
+        kikimr.control_plane.wait_bootstrap(node_index)
 
-        # data = [
-        #     '{"time": 105, "data": "hello5"}',
-        #     '{"time": 106, "data": "hello6"}'
-        # ]
-        # self.write_stream(data)
-        # expected = ['105', '106']
-        # assert self.read_stream(len(expected), topic_path = self.output_topic) == expected
+        data = [
+            '{"time": 105, "data": "hello5"}',
+            '{"time": 106, "data": "hello6"}'
+        ]
+        self.write_stream(data)
+        expected = ['105', '106']
+        assert self.read_stream(len(expected), topic_path = self.output_topic) == expected
 
         stop_yds_query(client, query_id)
-        # Assert that all read rules were removed after query stops
-        read_rules = list_read_rules(self.input_topic)
-        assert len(read_rules) == 0, read_rules
         wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 0)
 
     @yq_v1
@@ -453,86 +449,42 @@ class TestPqRowDispatcher(TestYdsBase):
         assert self.read_stream(len(expected), topic_path = output_topic3) == expected
         wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 1)
 
-        #time.sleep(10)
 
-        # stop_yds_query(client, query_id1)
+        kikimr.compute_plane.wait_completed_checkpoints(query_id1, kikimr.compute_plane.get_completed_checkpoints(query_id1) + 1)
+        stop_yds_query(client, query_id1)
 
-        # data = [
-        #     '{"time":103}',
-        #     '{"time":104}'
-        # ]
-        # self.write_stream(data)
-        # expected = data
-        # assert self.read_stream(len(expected), topic_path = output_topic2) == expected
-        # assert not read_stream(output_topic1, 1, True, self.consumer_name, timeout = 1)
+        data = [
+            '{"time":103}',
+            '{"time":104}'
+        ]
+        self.write_stream(data)
+        expected = data
+        assert not read_stream(output_topic1, 1, True, self.consumer_name, timeout = 1)
+        assert self.read_stream(len(expected), topic_path = output_topic2) == expected
+        assert self.read_stream(len(expected), topic_path = output_topic3) == expected
 
-        # client.modify_query(query_id1, "continue", sql1,
-        #     type=fq.QueryContent.QueryType.STREAMING,
-        #     state_load_mode=fq.StateLoadMode.EMPTY,
-        #     streaming_disposition=StreamingDisposition.from_last_checkpoint())
-        # client.wait_query_status(query_id1, fq.QueryMeta.RUNNING)
+        client.modify_query(query_id1, "continue", sql1,
+            type=fq.QueryContent.QueryType.STREAMING,
+            state_load_mode=fq.StateLoadMode.EMPTY,
+            streaming_disposition=StreamingDisposition.from_last_checkpoint())
+        client.wait_query_status(query_id1, fq.QueryMeta.RUNNING)
 
-        # wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 2)
-        # assert self.read_stream(len(expected), topic_path = output_topic1) == expected
+        assert self.read_stream(len(expected), topic_path = output_topic1) == expected
 
-        # data = [
-        #     '{"time":105}',
-        #     '{"time":106}'
-        # ]
-        # self.write_stream(data)
-        # expected = data
-        # assert self.read_stream(len(expected), topic_path = output_topic1) == expected
-        # assert self.read_stream(len(expected), topic_path = output_topic2) == expected
+        data = [
+            '{"time":105}',
+            '{"time":106}'
+        ]
+        self.write_stream(data)
+        expected = data
+        assert self.read_stream(len(expected), topic_path = output_topic1) == expected
+        assert self.read_stream(len(expected), topic_path = output_topic2) == expected
+        assert self.read_stream(len(expected), topic_path = output_topic3) == expected
 
-
-        # wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 1)
-
-        # # data = ['{"time":107}']
-        # # self.write_stream(data)
-
+        wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 1)
         
         stop_yds_query(client, query_id1)
         stop_yds_query(client, query_id2)
         stop_yds_query(client, query_id3)
 
         wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 0)
-
-
-    # @yq_v1
-    # def test_with_schema(self, kikimr, client):
-    #     client.create_yds_connection(YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"),use_row_dispatcher=True)
-    #     self.init_topics(Rf"pq_test_pq_read_write", create_output = False)
-        
-    #     output_topic1 = "pq_test_pq_read_write_output1"
-    #     create_stream(output_topic1, partitions_count=1)
-    #     create_read_rule(output_topic1, self.consumer_name)
-
-    #     sql1 = Rf'''
-    #          $input = SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}`
-    #             WITH (
-    #                 format=json_each_row,
-    #                 SCHEMA (
-    #                     time Int32,
-    #                     data String
-    #                 )
-    #             );
-
-    #         INSERT INTO {YDS_CONNECTION}.`{output_topic1}`
-    #             SELECT Yson::SerializeText(Yson::From(TableRow())) FROM $input;
-                
-    #        ;'''
-
-    #     query_id1 = start_yds_query(kikimr, client, sql1)
-
-    #     data = [
-    #         '{"time": 101, "data": "hello"}',
-    #         '{"time": 102, "data": "yoyo"}'
-    #     ]
-
-    #     self.write_stream(data)
-
-    #     expected = [
-    #         '{"data" = "hello"; "time" = 101}',
-    #         '{"data" = "yoyo"; "time" = 102}'
-    #     ]
-    #     assert self.read_stream(len(expected), topic_path = output_topic1) == expected

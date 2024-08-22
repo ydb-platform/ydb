@@ -1,5 +1,6 @@
 {% include 'header.sql.jinja' %}
 
+-- TODO this commit should be reverted upon proper fix for https://github.com/ydb-platform/ydb/issues/7565
 -- NB: Subquerys
 $cs_ui =
  (select catalog_sales.cs_item_sk cs_item_sk
@@ -31,17 +32,17 @@ $cross_sales =
      ,sum(ss_list_price) s2
      ,sum(ss_coupon_amt) s3
   FROM   {{store_sales}} as store_sales
+        cross join {{customer_demographics}} cd1
+        cross join {{household_demographics}} hd1
         cross join {{store_returns}} as store_returns
         cross join $cs_ui cs_ui
         cross join {{date_dim}} d1
-        cross join {{date_dim}} d2
-        cross join {{date_dim}} d3
         cross join {{store}} as store
         cross join {{customer}} as customer
-        cross join {{customer_demographics}} cd1
+        cross join {{date_dim}} d2
+        cross join {{date_dim}} d3
         cross join {{customer_demographics}} cd2
         cross join {{promotion}} as promotion
-        cross join {{household_demographics}} hd1
         cross join {{household_demographics}} hd2
         cross join {{customer_address}} ad1
         cross join {{customer_address}} ad2

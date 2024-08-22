@@ -1,5 +1,6 @@
 {% include 'header.sql.jinja' %}
 
+-- TODO this commit should be reverted upon proper fix for https://github.com/ydb-platform/ydb/issues/7565
 -- NB: Subquerys
 -- start query 1 in stream 0 using template query18.tpl and seed 1978355063
 select  item.i_item_id,
@@ -15,10 +16,10 @@ select  item.i_item_id,
         avg( cast(cd1.cd_dep_count as float)) agg7
  from {{catalog_sales}} as catalog_sales
  cross join {{customer_demographics}} cd1
- cross join {{customer_demographics}} cd2
- cross join {{customer}} as customer
- cross join {{customer_address}} as customer_address
  cross join {{date_dim}} as date_dim
+ cross join {{customer}} as customer
+ cross join {{customer_demographics}} cd2
+ cross join {{customer_address}} as customer_address
  cross join {{item}} as item
  where cs_sold_date_sk = d_date_sk and
        cs_item_sk = i_item_sk and

@@ -2641,23 +2641,15 @@ private:
     }
 
     void HandleShutdown(TEvDqCompute::TEvState::TPtr& ev) {
-        if (ev->Get()->Record.GetState() == NDqProto::COMPUTE_STATE_FINISHED) {
-            YQL_ENSURE(Planner);
+        YQL_ENSURE(Planner);
 
-            if (ev->Get()->Record.GetStatusCode() != NDqProto::StatusIds::ABORTED) {
-                return;
-            }
+        TActorId actor = ev->Sender;
+        ui64 taskId = ev->Get()->Record.GetTaskId();
 
-            TActorId actor = ev->Sender;
-            ui64 taskId = ev->Get()->Record.GetTaskId();
+        Planner->CompletedCA(taskId, actor);
 
-            Planner->CompletedCA(taskId, actor);
-
-            if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
-                PassAway();
-            }
-        } else {
-            // TODO: handle other states.
+        if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
+            PassAway();
         }
     }
 

@@ -59,7 +59,7 @@ void TPortionsIndex::RemovePortion(const std::shared_ptr<TPortionInfo>& p) {
         auto it = itFrom;
         while (true) {
             RemoveFromMemoryUsageControl(it->second.GetIntervalStats());
-            it->second.RemoveContained(p->GetPortionId(), stat);
+            it->second.RemoveContained(*p, stat);
             RawMemoryUsage.Add(it->second.GetIntervalStats().GetMinRawBytes());
             BlobMemoryUsage.Add(it->second.GetIntervalStats().GetBlobBytes());
             if (it == itTo) {
@@ -101,7 +101,7 @@ void TPortionsIndex::AddPortion(const std::shared_ptr<TPortionInfo>& p) {
     const TPortionInfoStat stat(p->GetMinMemoryForReadColumns({}), p->GetTotalBlobBytes());
     while (true) {
         RemoveFromMemoryUsageControl(it->second.GetIntervalStats());
-        it->second.AddContained(p->GetPortionId(), stat);
+        it->second.AddContained(*p, stat);
         RawMemoryUsage.Add(it->second.GetIntervalStats().GetMinRawBytes());
         BlobMemoryUsage.Add(it->second.GetIntervalStats().GetBlobBytes());
         if (it == itTo) {

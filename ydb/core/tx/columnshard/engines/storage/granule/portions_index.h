@@ -71,14 +71,18 @@ public:
         return Start.empty() && Finish.empty();
     }
 
-    void AddContained(const ui32 portionId, const TPortionInfoStat& stat) {
-        IntervalStats.Add(stat);
-        AFL_VERIFY(PortionIds.emplace(portionId, stat).second);
+    void AddContained(const TPortionInfo& portion, const TPortionInfoStat& stat) {
+        if (!portion.HasRemoveSnapshot()) {
+            IntervalStats.Add(stat);
+        }
+        AFL_VERIFY(PortionIds.emplace(portion.GetPortionId(), stat).second);
     }
 
-    void RemoveContained(const ui32 portionId, const TPortionInfoStat& stat) {
-        IntervalStats.Sub(stat);
-        AFL_VERIFY(PortionIds.erase(portionId));
+    void RemoveContained(const TPortionInfo& portion, const TPortionInfoStat& stat) {
+        if (!portion.HasRemoveSnapshot()) {
+            IntervalStats.Sub(stat);
+        }
+        AFL_VERIFY(PortionIds.erase(portion.GetPortionId()));
         if (PortionIds.empty()) {
             AFL_VERIFY(!IntervalStats);
         }

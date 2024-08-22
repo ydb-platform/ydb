@@ -15,7 +15,7 @@ namespace NMiniKQL {
 namespace {
 
     using TKSV = std::tuple<ui64, ui64, TStringBuf>;
-    using TArrayPtr = std::shared_ptr<arrow::ArrayData>;
+    using TArrays = std::array<std::shared_ptr<arrow::ArrayData>, std::tuple_size_v<TKSV>>;
 
     TVector<TString> GenerateValues(size_t level) {
         constexpr size_t alphaSize = 'Z' - 'A' + 1;
@@ -73,10 +73,10 @@ namespace {
             });
     }
 
-    std::array<TArrayPtr, std::tuple_size_v<TKSV>> KSVToArrays(const TVector<TKSV>& ksvVector,
-        size_t current, size_t blockSize, arrow::MemoryPool* memoryPool
+    TArrays KSVToArrays(const TVector<TKSV>& ksvVector, size_t current,
+        size_t blockSize, arrow::MemoryPool* memoryPool
     ) {
-        std::array<TArrayPtr, std::tuple_size_v<TKSV>> arrays;
+        TArrays arrays;
         arrow::UInt64Builder keysBuilder(memoryPool);
         arrow::UInt64Builder subkeysBuilder(memoryPool);
         arrow::BinaryBuilder valuesBuilder(memoryPool);
@@ -95,9 +95,7 @@ namespace {
         return arrays;
     }
 
-    TVector<TKSV> ArraysToKSV(const std::array<TArrayPtr, std::tuple_size_v<TKSV>>& arrays,
-        const int64_t blockSize
-    ) {
+    TVector<TKSV> ArraysToKSV(const TArrays& arrays, const int64_t blockSize) {
         TVector<TKSV> ksvVector;
         for (size_t i = 0; i < std::tuple_size_v<TKSV>; i++) {
             Y_ENSURE(arrays[i]->length == blockSize,
@@ -197,7 +195,7 @@ namespace {
         const auto joinIterator = graph->GetValue().GetListIterator();
 
         TVector<TKSV> resultKSV;
-        std::array<TArrayPtr, std::tuple_size_v<TKSV>> arrays;
+        TArrays arrays;
         NUdf::TUnboxedValue value;
         while (joinIterator.Next(value)) {
             for (size_t i = 0; i < ksvWidth; i++) {

@@ -156,6 +156,7 @@ public:
                 return Reply(Ydb::StatusIds::BAD_REQUEST, explain);
             }
         } else if (settings.has_column_build_operation()) {
+            buildInfo->TargetName = settings.source_path();
             // put some validation here for the build operation
             buildInfo->BuildKind = TIndexBuildInfo::EBuildKind::BuildColumns;
             buildInfo->BuildColumns.reserve(settings.column_build_operation().column_size());

@@ -30,6 +30,10 @@ bool TTieringRule::DeserializeDescriptionFromJson(const NJson::TJsonValue& jsonI
     if (!jsonInfo["rules"].GetArrayPointer(&rules)) {
         return false;
     }
+    if (rules->empty()) {
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "tiering_rule_deserialization_failed")("reason", "empty_rules");
+        return false;
+    }
     for (auto&& i : *rules) {
         TTieringInterval interval;
         if (!interval.DeserializeFromJson(i)) {

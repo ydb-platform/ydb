@@ -109,7 +109,10 @@ class TTiering {
     using TTiersMap = THashMap<TString, std::shared_ptr<TTierInfo>>;
     TTiersMap TierByName;
     TSet<TTierRef> OrderedTiers;
-    TString TTLColumnName;
+    std::optional<TString> TTLColumnName;
+
+    friend class TTieringBuilder;
+
 public:
 
     class TTieringContext {
@@ -175,8 +178,9 @@ public:
         AFL_VERIFY(tier);
         if (!TTLColumnName) {
             TTLColumnName = tier->GetEvictColumnName();
-        } else if (TTLColumnName != tier->GetEvictColumnName()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "incorrect_tiering_metadata")("column_before", TTLColumnName)("column_new", tier->GetEvictColumnName());
+        } else if (TTLColumnName.value() != tier->GetEvictColumnName()) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "incorrect_tiering_metadata")("column_before", TTLColumnName.value())
+                ("column_new", tier->GetEvictColumnName());
             return false;
         }
 
@@ -194,13 +198,9 @@ public:
         return {};
     }
 
-    const TString& GetTtlColumn() const {
-        AFL_VERIFY(TTLColumnName);
-        return TTLColumnName;
-    }
-
     const TString& GetEvictColumnName() const {
-        return TTLColumnName;
+        AFL_VERIFY(TTLColumnName);
+        return TTLColumnName.value();
     }
 
     TString GetDebugString() const {

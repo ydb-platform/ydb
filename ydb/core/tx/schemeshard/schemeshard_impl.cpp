@@ -7321,10 +7321,8 @@ void TSchemeShard::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& 
 }
 
 void TSchemeShard::Handle(TEvPrivate::TEvSendBaseStatsToSA::TPtr&, const TActorContext& ctx) {
-    SendBaseStatsToSA();
-    auto seconds = SendStatsIntervalMaxSeconds - SendStatsIntervalMinSeconds;
-    ctx.Schedule(TDuration::Seconds(SendStatsIntervalMinSeconds + RandomNumber<ui64>(seconds)),
-        new TEvPrivate::TEvSendBaseStatsToSA());
+    TDuration delta = SendBaseStatsToSA();
+    ctx.Schedule(delta, new TEvPrivate::TEvSendBaseStatsToSA());
 }
 
 void TSchemeShard::InitializeStatistics(const TActorContext& ctx) {
@@ -7371,15 +7369,15 @@ void TSchemeShard::ConnectToSA() {
         << ", at schemeshard: " << TabletID());
 }
 
-void TSchemeShard::SendBaseStatsToSA() {
+TDuration TSchemeShard::SendBaseStatsToSA() {
     if (!EnableStatistics) {
-        return;
+        return TDuration::Max();
     }
 
     if (!SAPipeClientId) {
         ResolveSA();
         if (!StatisticsAggregatorId) {
-            return;
+            return TDuration::Seconds(30);
         }
     }
 
@@ -7411,6 +7409,13 @@ void TSchemeShard::SendBaseStatsToSA() {
         ++count;
     }
 
+    if (!count) {
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "SendBaseStatsToSA() No tables to send"
+            << ", at schemeshard: " << TabletID());
+        return TDuration::Seconds(30);
+    }
+
     TString stats;
     stats.clear();
     Y_PROTOBUF_SUPPRESS_NODISCARD record.SerializeToString(&stats);
@@ -7425,6 +7430,9 @@ void TSchemeShard::SendBaseStatsToSA() {
         "SendBaseStatsToSA()"
         << ", path count: " << count
         << ", at schemeshard: " << TabletID());
+
+    return TDuration::Seconds(SendStatsIntervalMinSeconds 
+        + RandomNumber<ui64>(SendStatsIntervalMaxSeconds - SendStatsIntervalMinSeconds));   
 }
 
 } // namespace NSchemeShard

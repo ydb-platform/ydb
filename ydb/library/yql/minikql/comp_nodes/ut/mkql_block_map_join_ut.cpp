@@ -17,16 +17,6 @@ namespace {
     using TKSV = std::tuple<ui64, ui64, TStringBuf>;
     using TArrayPtr = std::shared_ptr<arrow::ArrayData>;
 
-    const TStringBuf BlockLengthName = "_yql_block_length";
-
-    TMap<const TStringBuf, ui64> NameToIndex(const TStructType* structType) {
-        TMap<const TStringBuf, ui64> map;
-        for (size_t i = 0; i < structType->GetMembersCount(); i++) {
-            map[structType->GetMemberName(i)] = i;
-        }
-        return map;
-    }
-
     TVector<TString> GeneratePayload(size_t level) {
         constexpr size_t alphaSize = 'Z' - 'A' + 1;
         if (level == 1) {
@@ -114,23 +104,19 @@ namespace {
 
     const TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder,
         EJoinKind joinKind, TVector<ui32> keyColumns,
-        TRuntimeNode& leftArg, TType* leftStruct, const TVector<TStringBuf>& leftItems,
-        const TRuntimeNode& dictNode, const TVector<TStringBuf>& dictItems = {}
+        TRuntimeNode& leftArg, TType* leftTuple, const TRuntimeNode& dictNode
     ) {
-        const auto structType = AS_TYPE(TStructType, leftStruct);
-        const auto listStructType = pgmBuilder.NewListType(leftStruct);
-        leftArg = pgmBuilder.Arg(listStructType);
+        const auto tupleType = AS_TYPE(TTupleType, leftTuple);
+        const auto listTupleType = pgmBuilder.NewListType(leftTuple);
+        leftArg = pgmBuilder.Arg(listTupleType);
 
         const auto leftWideFlow = pgmBuilder.ExpandMap(pgmBuilder.ToFlow(leftArg),
-            [&](TRuntimeNode structNode) -> TRuntimeNode::TList {
+            [&](TRuntimeNode tupleNode) -> TRuntimeNode::TList {
                 TRuntimeNode::TList wide;
-                wide.reserve(leftItems.size() + 1);
-                for (const auto& member : leftItems) {
-                    Y_DEBUG_ABORT_UNLESS(structType->FindMemberIndex(member));
-                    wide.emplace_back(pgmBuilder.Member(structNode, member));
+                wide.reserve(tupleType->GetElementsCount());
+                for (size_t i = 0; i < tupleType->GetElementsCount(); i++) {
+                    wide.emplace_back(pgmBuilder.Nth(tupleNode, i));
                 }
-                Y_DEBUG_ABORT_UNLESS(structType->FindMemberIndex(BlockLengthName));
-                wide.emplace_back(pgmBuilder.Member(structNode, BlockLengthName));
                 return wide;
             });
 
@@ -138,17 +124,12 @@ namespace {
 
         const auto rootNode = pgmBuilder.Collect(pgmBuilder.NarrowMap(joinNode,
             [&](TRuntimeNode::TList items) -> TRuntimeNode {
-                TVector<std::pair<std::string_view, TRuntimeNode>> structMembers;
-                structMembers.reserve(leftItems.size() + dictItems.size() + 1);
-                size_t itemsIndex = 0;
-                for (size_t i = 0; i < leftItems.size(); i++, itemsIndex++) {
-                    structMembers.emplace_back(leftItems[i], items[itemsIndex]);
+                TVector<TRuntimeNode> tupleElements;
+                tupleElements.reserve(tupleType->GetElementsCount());
+                for (size_t i = 0; i < tupleType->GetElementsCount(); i++) {
+                    tupleElements.emplace_back(items[i]);
                 }
-                for (size_t i = 0; i < dictItems.size(); i++, itemsIndex++) {
-                    structMembers.emplace_back(dictItems[i], items[itemsIndex]);
-                }
-                structMembers.emplace_back(BlockLengthName, items[itemsIndex]);
-                return pgmBuilder.NewStruct(structMembers);
+                return pgmBuilder.NewTuple(tupleElements);
             }));
 
         return rootNode;
@@ -165,17 +146,14 @@ namespace {
         const auto ui64BlockType = pb.NewBlockType(ui64Type, TBlockType::EShape::Many);
         const auto strBlockType = pb.NewBlockType(strType, TBlockType::EShape::Many);
         const auto blockLenType = pb.NewBlockType(ui64Type, TBlockType::EShape::Scalar);
-        const auto structType = pb.NewStructType({
-            {"key", ui64BlockType},
-            {"subkey", ui64BlockType},
-            {"payload", strBlockType},
-            {BlockLengthName, blockLenType}
+        const auto ksvType = pb.NewTupleType({
+            ui64BlockType, ui64BlockType, strBlockType, blockLenType
         });
-        const auto fields = NameToIndex(AS_TYPE(TStructType, structType));
+        // Mind the last block length column.
+        const auto ksvWidth = AS_TYPE(TTupleType, ksvType)->GetElementsCount() - 1;
 
         TRuntimeNode leftArg;
-        const auto rootNode = BuildBlockJoin(pb, joinKind, {0}, leftArg,
-            structType, {"key", "subkey", "payload"}, dict);
+        const auto rootNode = BuildBlockJoin(pb, joinKind, {0}, leftArg, ksvType, dict);
 
         const auto graph = setup.BuildGraph(rootNode, {leftArg.GetNode()});
         const auto& leftBlocks = graph->GetEntryPoint(0, true);
@@ -190,12 +168,12 @@ namespace {
             current += blockSize;
 
             NUdf::TUnboxedValue* items = nullptr;
-            const auto structObj = holderFactory.CreateDirectArrayHolder(fields.size(), items);
-            items[fields.at("key")] = holderFactory.CreateArrowBlock(arrays[0]);
-            items[fields.at("subkey")] = holderFactory.CreateArrowBlock(arrays[1]);
-            items[fields.at("payload")] = holderFactory.CreateArrowBlock(arrays[2]);
-            items[fields.at(BlockLengthName)] = MakeBlockCount(holderFactory, blockSize);
-            leftListValues = leftListValues.Append(std::move(structObj));
+            const auto tuple = holderFactory.CreateDirectArrayHolder(ksvWidth + 1, items);
+            for (size_t i = 0; i < ksvWidth; i++) {
+                items[i] = holderFactory.CreateArrowBlock(arrays[i]);
+            }
+            items[ksvWidth] = MakeBlockCount(holderFactory, blockSize);
+            leftListValues = leftListValues.Append(std::move(tuple));
         }
         leftBlocks->SetValue(ctx, holderFactory.CreateDirectListHolder(std::move(leftListValues)));
         const auto joinIterator = graph->GetValue().GetListIterator();
@@ -208,7 +186,7 @@ namespace {
 
         UNIT_ASSERT_VALUES_EQUAL(joinResult.size(), 1);
         const auto blocks = joinResult.front();
-        const auto blockLengthValue = blocks.GetElement(fields.at(BlockLengthName));
+        const auto blockLengthValue = blocks.GetElement(ksvWidth);
         const auto blockLengthDatum = TArrowBlock::From(blockLengthValue).GetDatum();
         UNIT_ASSERT(blockLengthDatum.is_scalar());
         const auto blockLength = blockLengthDatum.scalar_as<arrow::UInt64Scalar>().value;

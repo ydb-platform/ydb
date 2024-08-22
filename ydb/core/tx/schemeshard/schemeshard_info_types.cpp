@@ -2148,7 +2148,7 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
     }
 }
 
-void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {
+void TIndexBuildInfo::SerializeToProto([[maybe_unused]] TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {
     Y_ABORT_UNLESS(IsBuildColumns());
     Y_ASSERT(!TargetName.empty());
     result->SetTable(TargetName);

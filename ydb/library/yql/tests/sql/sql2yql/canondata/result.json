@@ -4493,11 +4493,39 @@
             "uri": "https://{canondata_backend}/1937027/bbc35c51807ca32a384973d8a730422ad871c54c/resource.tar.gz#test_sql2yql.test_column_group-hint_unk_col_fail_/sql.yql"
         }
     ],
+    "test_sql2yql.test[column_group-insert_diff_groups1_fail]": [
+        {
+            "checksum": "e459868feddecebca5c257aa53366627",
+            "size": 3547,
+            "uri": "https://{canondata_backend}/1871002/424fbf9b3e2a5083fa1289e0777dbe9463d049d9/resource.tar.gz#test_sql2yql.test_column_group-insert_diff_groups1_fail_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[column_group-insert_diff_groups2_fail]": [
+        {
+            "checksum": "4e2ed6f8374058c2c6c2734314af8f35",
+            "size": 3583,
+            "uri": "https://{canondata_backend}/1871002/424fbf9b3e2a5083fa1289e0777dbe9463d049d9/resource.tar.gz#test_sql2yql.test_column_group-insert_diff_groups2_fail_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[column_group-insert_diff_groups3_fail]": [
+        {
+            "checksum": "a4d280247cff4dc66d25c835e9926499",
+            "size": 1347,
+            "uri": "https://{canondata_backend}/1871002/424fbf9b3e2a5083fa1289e0777dbe9463d049d9/resource.tar.gz#test_sql2yql.test_column_group-insert_diff_groups3_fail_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[column_group-length]": [
         {
             "checksum": "3bca7ac5997a4e00558b1bda7abf5e06",
             "size": 4317,
             "uri": "https://{canondata_backend}/1889210/67cf90fc754bd2827f5984f7117f49bafa86ef30/resource.tar.gz#test_sql2yql.test_column_group-length_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[column_group-many_inserts]": [
+        {
+            "checksum": "c135d985e67cd616c6dfdcbc8046732a",
+            "size": 8009,
+            "uri": "https://{canondata_backend}/1871002/424fbf9b3e2a5083fa1289e0777dbe9463d049d9/resource.tar.gz#test_sql2yql.test_column_group-many_inserts_/sql.yql"
         }
     ],
     "test_sql2yql.test[column_group-min_group]": [
@@ -23988,11 +24016,39 @@
             "uri": "https://{canondata_backend}/1937027/bbc35c51807ca32a384973d8a730422ad871c54c/resource.tar.gz#test_sql_format.test_column_group-hint_unk_col_fail_/formatted.sql"
         }
     ],
+    "test_sql_format.test[column_group-insert_diff_groups1_fail]": [
+        {
+            "checksum": "f354a922ac63e9db47f95ce2f5b17187",
+            "size": 295,
+            "uri": "https://{canondata_backend}/1871002/424fbf9b3e2a5083fa1289e0777dbe9463d049d9/resource.tar.gz#test_sql_format.test_column_group-insert_diff_groups1_fail_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[column_group-insert_diff_groups2_fail]": [
+        {
+            "checksum": "995593fbae18a399f478e76bd83b364a",
+            "size": 303,
+            "uri": "https://{canondata_backend}/1871002/424fbf9b3e2a5083fa1289e0777dbe9463d049d9/resource.tar.gz#test_sql_format.test_column_group-insert_diff_groups2_fail_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[column_group-insert_diff_groups3_fail]": [
+        {
+            "checksum": "2d71697b7e9cc4bba3476e1f20d3033c",
+            "size": 142,
+            "uri": "https://{canondata_backend}/1871002/424fbf9b3e2a5083fa1289e0777dbe9463d049d9/resource.tar.gz#test_sql_format.test_column_group-insert_diff_groups3_fail_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[column_group-length]": [
         {
             "checksum": "cb4ec24b2d30f9c92951f9a66c928ccb",
             "size": 190,
             "uri": "https://{canondata_backend}/1889210/67cf90fc754bd2827f5984f7117f49bafa86ef30/resource.tar.gz#test_sql_format.test_column_group-length_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[column_group-many_inserts]": [
+        {
+            "checksum": "8746bbe05d09032f66ca0d3aef4ed60b",
+            "size": 675,
+            "uri": "https://{canondata_backend}/1871002/424fbf9b3e2a5083fa1289e0777dbe9463d049d9/resource.tar.gz#test_sql_format.test_column_group-many_inserts_/formatted.sql"
         }
     ],
     "test_sql_format.test[column_group-min_group]": [

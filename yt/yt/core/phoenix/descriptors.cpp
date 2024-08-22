@@ -136,15 +136,29 @@ const TTypeDescriptor& TUniverseDescriptor::GetTypeDescriptorByTagOrThrow(TTypeT
     return *descriptor;
 }
 
+const TTypeDescriptor& TUniverseDescriptor::GetTypeDescriptorByTag(TTypeTag tag) const
+{
+    const auto* descriptor = FindTypeDescriptorByTag(tag);
+    YT_VERIFY(descriptor);
+    return *descriptor;
+}
+
 const TTypeDescriptor* TUniverseDescriptor::FindTypeDescriptorByTypeIndex(std::type_index typeIndex) const
 {
     auto it = TypeIndexToDescriptor_.find(typeIndex);
     return it == TypeIndexToDescriptor_.end() ? nullptr : it->second;
 }
 
+const TTypeDescriptor& TUniverseDescriptor::GetTypeDescriptorByTypeIndex(std::type_index typeIndex) const
+{
+    const auto* descriptor = FindTypeDescriptorByTypeIndex(typeIndex);
+    YT_VERIFY(descriptor);
+    return *descriptor;
+}
+
 const TTypeDescriptor& TUniverseDescriptor::GetTypeDescriptorByTypeIndexOrThrow(std::type_index typeIndex) const
 {
-    const auto& descriptor = FindTypeDescriptorByTypeIndex(typeIndex);
+    const auto* descriptor = FindTypeDescriptorByTypeIndex(typeIndex);
     if (!descriptor) {
         THROW_ERROR_EXCEPTION("Type %v is not registered",
             CppDemangle(typeIndex.name()));

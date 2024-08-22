@@ -1578,5 +1578,38 @@ TEST(TPhoenixTest, PrivateInner)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NSeveralSpecializationsOfOneTemplate {
+
+struct TDerivedFromTemplate
+    : public TPair<double, double>
+{
+    bool operator==(const TDerivedFromTemplate&) const = default;
+
+    PHOENIX_DECLARE_TYPE(TDerivedFromTemplate, 0xf09c298f);
+};
+
+void TDerivedFromTemplate::RegisterMetadata(auto&& registrar)
+{
+    registrar.template BaseType<TPair<double, double>>();
+}
+
+PHOENIX_DEFINE_TYPE(TDerivedFromTemplate);
+
+} // namespace NSeveralSpecializationsOfOneTemplate
+
+TEST(TPhoenixTest, SeveralSpecializationsOfOneTemplate)
+{
+    using namespace NSeveralSpecializationsOfOneTemplate;
+
+    TDerivedFromTemplate tp1;
+    tp1.First = 1.1;
+    tp1.Second = 2.2;
+
+    auto tp2 = Deserialize<TDerivedFromTemplate>(Serialize(tp1));
+    EXPECT_EQ(tp1, tp2);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace
 } // namespace NYT::NPhoenix2

@@ -158,7 +158,7 @@ protected:
             TOptimizerHints{
                 .CardinalityHints = KqpCtx.GetCardinalityHints(),
                 .JoinAlgoHints = KqpCtx.GetJoinAlgoHints(),
-                .JoinOrderHints = NYql::TJoinOrderHints()
+                .JoinOrderHints = KqpCtx.GetJoinOrderHints()
             }
         );
         DumpAppliedRule("OptimizeEquiJoinWithCosts", node.Ptr(), output.Ptr(), ctx);

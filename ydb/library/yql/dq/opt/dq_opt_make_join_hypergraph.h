@@ -88,7 +88,7 @@ void MakeJoinHypergraphRec(
 
 template <typename TNodeSet>
 TJoinHypergraph<TNodeSet> MakeJoinHypergraph(
-    const std::shared_ptr<IBaseOptimizerNode>& joinTree,
+    const std::shared_ptr<IBaseOptimizerNode>& joinTree
 ) {
     TJoinHypergraph<TNodeSet> graph{};
     std::unordered_map<std::shared_ptr<IBaseOptimizerNode>, TNodeSet> subtreeNodes{};

@@ -35,13 +35,6 @@ namespace {
         return payload;
     }
 
-    constexpr size_t payloadSize = 3;
-    static const TVector<TString> threeLetterPayloads = GeneratePayload(payloadSize);
-    static const TSet<ui64> fib = {
-        1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377,
-        610, 987, 1597, 2584, 4181, 6765, 10946, 17711
-    };
-
     template <typename T, bool isOptional = false>
     const TRuntimeNode MakeSimpleKey(
         TProgramBuilder& pgmBuilder,
@@ -135,7 +128,7 @@ namespace {
         return rootNode;
     }
 
-    void DoTestBlockJoinOnUint64(EJoinKind joinKind, TVector<TKSV> values,
+    size_t DoTestBlockJoinOnUint64(EJoinKind joinKind, TVector<TKSV> values,
         TSet<ui64> set, size_t blockSize
     ) {
         TSetup<false> setup;
@@ -191,24 +184,29 @@ namespace {
         const auto blockLengthValue = blocks.GetElement(ksvWidth);
         const auto blockLengthDatum = TArrowBlock::From(blockLengthValue).GetDatum();
         UNIT_ASSERT(blockLengthDatum.is_scalar());
-        const auto blockLength = blockLengthDatum.scalar_as<arrow::UInt64Scalar>().value;
-        const auto dictSize = std::count_if(set.cbegin(), set.cend(),
-            [testSize](ui64 key) { return key < testSize; });
-        const auto expectedLength = joinKind == EJoinKind::LeftSemi ? dictSize
-                                  : joinKind == EJoinKind::LeftOnly ? testSize - dictSize
-                                  : -1;
-        UNIT_ASSERT_VALUES_EQUAL(expectedLength, blockLength);
+        return blockLengthDatum.scalar_as<arrow::UInt64Scalar>().value;
     }
 
     void TestBlockJoinOnUint64(EJoinKind joinKind) {
         constexpr size_t testSize = 1 << 14;
+        constexpr size_t valueSize = 3;
+        static const TVector<TString> threeLetterValues = GeneratePayload(valueSize);
+        static const TSet<ui64> fib = {1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144,
+            233, 377, 610, 987, 1597, 2584, 4181, 6765, 10946, 17711};
+
         TVector<TKSV> testKSV;
         for (size_t k = 0; k < testSize; k++) {
-            testKSV.push_back(std::make_tuple(k, k * 1001, threeLetterPayloads[k]));
+            testKSV.push_back(std::make_tuple(k, k * 1001, threeLetterValues[k]));
         }
 
         for (size_t blockSize = 8; blockSize <= testSize; blockSize <<= 1) {
-            DoTestBlockJoinOnUint64(joinKind, testKSV, fib, blockSize);
+            const auto blockLength = DoTestBlockJoinOnUint64(joinKind, testKSV, fib, blockSize);
+            const auto dictSize = std::count_if(fib.cbegin(), fib.cend(),
+                [](ui64 key) { return key < testSize; });
+            const auto expectedLength = joinKind == EJoinKind::LeftSemi ? dictSize
+                                      : joinKind == EJoinKind::LeftOnly ? testSize - dictSize
+                                      : -1;
+            UNIT_ASSERT_VALUES_EQUAL(expectedLength, blockLength);
         }
     }
 } // namespace

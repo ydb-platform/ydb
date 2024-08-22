@@ -153,7 +153,7 @@ void TActorCoordinator::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr 
 }
 
 void TActorCoordinator::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvNodeDisconnected " << ev->Get()->NodeId);
+    LOG_ROW_DISPATCHER_DEBUG("TEvNodeDisconnected, node id " << ev->Get()->NodeId);
    
     for (auto& [actorId, info] : RowDispatchers) {
         if (ev->Get()->NodeId != actorId.NodeId()) {
@@ -241,7 +241,7 @@ void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPt
     }
     
     LOG_ROW_DISPATCHER_DEBUG("Send  TEvCoordinatorResult to " << ev->Sender);
-    Send(ev->Sender, response.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+    Send(ev->Sender, response.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, ev->Cookie);
     PrintInternalState();
 }
 

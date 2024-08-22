@@ -60,9 +60,10 @@ struct TFixture : public TPqIoTestFixture {
         UNIT_ASSERT(eventHolder.Get() != nullptr);
     }
 
-    void ExpectCoordinatorRequest(NActors::TActorId coordinatorId) {
+    auto ExpectCoordinatorRequest(NActors::TActorId coordinatorId) {
         auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvCoordinatorRequest>(coordinatorId, TDuration::Seconds(5));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
+        return eventHolder.Get();
     }
 
     void ExpectStartSession(ui64 expectedOffset, NActors::TActorId rowDispatcherId) {
@@ -88,13 +89,13 @@ struct TFixture : public TPqIoTestFixture {
         });
     }
 
-    void MockCoordinatorResult(NActors::TActorId rowDispatcherId) {
+    void MockCoordinatorResult(NActors::TActorId rowDispatcherId, ui64 cookie = 0) {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NFq::TEvRowDispatcher::TEvCoordinatorResult();
             auto* partitions = event->Record.AddPartitions();
             partitions->AddPartitionId(0);
             ActorIdToProto(rowDispatcherId, partitions->MutableActorId());
-            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, Coordinator1Id, event));
+            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, Coordinator1Id, event, 0, cookie));
         });
     }
 
@@ -193,9 +194,9 @@ struct TFixture : public TPqIoTestFixture {
         ExpectCoordinatorChangesSubscribe();
     
         MockCoordinatorChanged(Coordinator1Id);
-        ExpectCoordinatorRequest(Coordinator1Id);
+        auto req =ExpectCoordinatorRequest(Coordinator1Id);
 
-        MockCoordinatorResult(RowDispatcher1);
+        MockCoordinatorResult(RowDispatcher1, req->Cookie);
         ExpectStartSession(0, RowDispatcher1);
         MockAck(RowDispatcher1);
     }
@@ -287,9 +288,9 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTest) {
             f.ExpectCoordinatorChangesSubscribe();
     
             f.MockCoordinatorChanged(f.Coordinator1Id);
-            f.ExpectCoordinatorRequest(f.Coordinator1Id);
+            auto req = f.ExpectCoordinatorRequest(f.Coordinator1Id);
 
-            f.MockCoordinatorResult(f.RowDispatcher1);
+            f.MockCoordinatorResult(f.RowDispatcher1, req->Cookie);
             f.ExpectStartSession(2, f.RowDispatcher1);
             f.MockAck(f.RowDispatcher1);
 
@@ -307,9 +308,9 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTest) {
             f.ExpectCoordinatorChangesSubscribe();
     
             f.MockCoordinatorChanged(f.Coordinator1Id);
-            f.ExpectCoordinatorRequest(f.Coordinator1Id);
+            auto req = f.ExpectCoordinatorRequest(f.Coordinator1Id);
 
-            f.MockCoordinatorResult(f.RowDispatcher1);
+            f.MockCoordinatorResult(f.RowDispatcher1, req->Cookie);
             f.ExpectStartSession(3, f.RowDispatcher1);
             f.MockAck(f.RowDispatcher1);
 
@@ -329,8 +330,8 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTest) {
         auto result = SourceReadDataUntil<TString>(UVParser, 1);
         AssertDataWithWatermarks(result, {Json3}, {});
 
-        ExpectCoordinatorRequest(Coordinator2Id);
-        MockCoordinatorResult(RowDispatcher2);
+        auto req = ExpectCoordinatorRequest(Coordinator2Id);
+        MockCoordinatorResult(RowDispatcher2, req->Cookie);
 
         ExpectStartSession(3, RowDispatcher2);
         MockAck(RowDispatcher2);
@@ -345,8 +346,8 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTest) {
         MockConnected();
         MockUndelivered();
 
-        ExpectCoordinatorRequest(Coordinator1Id);
-        MockCoordinatorResult(RowDispatcher1);
+        auto req = ExpectCoordinatorRequest(Coordinator1Id);
+        MockCoordinatorResult(RowDispatcher1, req->Cookie);
         ExpectStartSession(2, RowDispatcher1);
         MockAck(RowDispatcher1);
 

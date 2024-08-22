@@ -134,6 +134,7 @@ private:
     NActors::TActorId LocalRowDispatcherActorId;
     std::queue<TReadyBatch> ReadyBuffer;
     EState State = EState::INIT;
+    ui64 CoordinatorRequestCookie = 0;
 
     struct SessionInfo {
         enum class ESessionStatus {
@@ -279,9 +280,12 @@ void TDqPqRdReadActor::ProcessState() {
         if (!CoordinatorActorId)
             return;
         State = EState::WAIT_PARTITIONS_ADDRES;
-        SRC_LOG_D("Send TEvCoordinatorRequest");
-        // TODO use Cookie / check in TEvCoordinatorResult
-        Send(*CoordinatorActorId, new NFq::TEvRowDispatcher::TEvCoordinatorRequest(SourceParams, GetPartitionsToRead()), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+        SRC_LOG_D("Send TEvCoordinatorRequest to " << CoordinatorActorId->ToString());
+        Send(
+            *CoordinatorActorId,
+            new NFq::TEvRowDispatcher::TEvCoordinatorRequest(SourceParams, GetPartitionsToRead()),
+            IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
+            ++CoordinatorRequestCookie);
         return;
     case EState::WAIT_PARTITIONS_ADDRES:
         if (Sessions.empty()) {
@@ -547,18 +551,22 @@ void TDqPqRdReadActor::Handle(const NActors::TEvents::TEvPing::TPtr& ev) {
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr &ev) {
-    SRC_LOG_D("TEvCoordinatorChanged = " << ev->Get()->CoordinatorActorId);
+    SRC_LOG_D("TEvCoordinatorChanged, new coordinator " << ev->Get()->CoordinatorActorId);
 
     if (CoordinatorActorId
         && CoordinatorActorId == ev->Get()->CoordinatorActorId) {
         return;
     }
 
-    if (CoordinatorActorId) {
-        SRC_LOG_I("Coordinator is changed, reinit all sessions");
-        ReInit();
+    if (!CoordinatorActorId) {
+        CoordinatorActorId = ev->Get()->CoordinatorActorId;
+        ProcessState();
+        return;
     }
+
     CoordinatorActorId = ev->Get()->CoordinatorActorId;
+    SRC_LOG_I("Coordinator is changed, reinit all sessions");
+    ReInit();
     ProcessState();
 }
 
@@ -581,7 +589,11 @@ void TDqPqRdReadActor::Stop(const TString& message) {
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr &ev) {
-    SRC_LOG_D("TEvCoordinatorResult:");
+    SRC_LOG_D("TEvCoordinatorResult from " << ev->Sender.ToString() << ", cookie " << ev->Cookie);
+    if (ev->Cookie != CoordinatorRequestCookie) {
+        SRC_LOG_W("Ignore TEvCoordinatorResult. wrong cookie");
+        return;
+    }
     for (auto& p : ev->Get()->Record.GetPartitions()) {
         TActorId rowDispatcherActorId = ActorIdFromProto(p.GetActorId());
         SRC_LOG_D("   rowDispatcherActorId:" << rowDispatcherActorId);
@@ -607,7 +619,7 @@ void TDqPqRdReadActor::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &
 }
 
 void TDqPqRdReadActor::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
-    SRC_LOG_D("TEvNodeDisconnected " << ev->Get()->NodeId);
+    SRC_LOG_D("TEvNodeDisconnected, node id " << ev->Get()->NodeId);
     for (auto& [partitionId, sessionInfo] : Sessions) {
         sessionInfo.EventsQueue.HandleNodeDisconnected(ev->Get()->NodeId);
     }
@@ -617,7 +629,7 @@ void TDqPqRdReadActor::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::
 }
 
 void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) {
-    SRC_LOG_D("TEvUndelivered, ev: " << ev->Get()->ToString());
+    SRC_LOG_D("TEvUndelivered,  " << ev->Get()->ToString() << " from " << ev->Sender.ToString());
     for (auto& [partitionId, sessionInfo] : Sessions) {
         sessionInfo.EventsQueue.HandleUndelivered(ev);
     }

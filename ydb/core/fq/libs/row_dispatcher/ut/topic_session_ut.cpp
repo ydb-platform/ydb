@@ -31,8 +31,6 @@ public:
         Runtime.SetLogPriority(NKikimrServices::YQ_ROW_DISPATCHER, NLog::PRI_TRACE);
         Runtime.SetDispatchTimeout(TDuration::Seconds(5));
 
-        NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
-
         ReadActorId1 = Runtime.AllocateEdgeActor();
         ReadActorId2 = Runtime.AllocateEdgeActor();
         RowDispatcherActorId = Runtime.AllocateEdgeActor();

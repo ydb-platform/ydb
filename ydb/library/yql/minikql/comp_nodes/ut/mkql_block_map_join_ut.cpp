@@ -161,7 +161,7 @@ namespace {
         const auto dict = MakeSet(pb, fib);
 
         const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
-        const auto strType = pb.NewDataType(NUdf::TDataType<char*>::Id);
+        const auto strType = pb.NewDataType(NUdf::EDataSlot::String);
         const auto ui64BlockType = pb.NewBlockType(ui64Type, TBlockType::EShape::Many);
         const auto strBlockType = pb.NewBlockType(strType, TBlockType::EShape::Many);
         const auto blockLenType = pb.NewBlockType(ui64Type, TBlockType::EShape::Scalar);

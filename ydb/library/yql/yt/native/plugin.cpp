@@ -356,7 +356,9 @@ public:
             ProgramFactory_->SetFileStorage(FileStorage_);
             ProgramFactory_->SetUrlPreprocessing(MakeIntrusive<NYql::TUrlPreprocessing>(GatewaysConfig_));
         } catch (const std::exception& ex) {
-            YQL_LOG(FATAL) << "Unexpected exception while initializing YQL plugin: " << ex.what();
+            // NB: YQL_LOG may be not initialized yet (for example, during singletons config parse),
+            // so we use std::cerr instead of it.
+            std::cerr << "Unexpected exception while initializing YQL plugin: " << ex.what() << std::endl;
             exit(1);
         }
         YQL_LOG(INFO) << "YQL plugin initialized";

@@ -330,7 +330,7 @@ NSsa::TAggregateAssign TProgramBuilder::MakeAggregate(const NSsa::TColumnInfo& n
         }
     } else if (func.ArgumentsSize() == 0 && func.GetId() == TId::AGG_COUNT) {
         // COUNT(*) case
-        return TAggregateAssign(name, EAggregate::Count);
+        return TAggregateAssign(name, EAggregate::NumRows);
     }
     return TAggregateAssign(name); // !ok()
 }
@@ -483,7 +483,7 @@ bool TProgramContainer::Init(const IColumnResolver& columnResolver, const NKikim
     if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD)) {
         TString out;
         ::google::protobuf::TextFormat::PrintToString(programProto, &out);
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("program", out);
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "parse_program")("program", out);
     }
 
     if (programProto.HasKernels()) {
@@ -496,6 +496,7 @@ bool TProgramContainer::Init(const IColumnResolver& columnResolver, const NKikim
         }
         return false;
     }
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "program_parsed")("result", DebugString());
 
     return true;
 }

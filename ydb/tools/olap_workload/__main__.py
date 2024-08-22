@@ -16,12 +16,15 @@ def timestamp():
 def table_name_with_timestamp():
     return os.path.join("column_table_" + str(timestamp()))
 
+
 def random_string(length):
-   letters = string.ascii_lowercase
-   return bytes(''.join(random.choice(letters) for i in range(length)), encoding='utf8')
+    letters = string.ascii_lowercase
+    return bytes(''.join(random.choice(letters) for i in range(length)), encoding='utf8')
+
 
 def random_type():
     return random.choice([ydb.PrimitiveType.Int64, ydb.PrimitiveType.String])
+
 
 def random_value(type):
     if isinstance(type, ydb.OptionalType):

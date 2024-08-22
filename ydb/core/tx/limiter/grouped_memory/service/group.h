@@ -3,7 +3,7 @@
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
-class TProcessMemory;
+class TProcessMemoryScope;
 
 class TGrouppedAllocations {
 private:
@@ -48,7 +48,7 @@ public:
         return Groups.empty();
     }
 
-    [[nodiscard]] bool Allocate(TProcessMemory& process, const ui32 allocationsLimit);
+    [[nodiscard]] bool Allocate(const bool isPriorityProcess, TProcessMemoryScope& process, const ui32 allocationsLimit);
 
     [[nodiscard]] std::vector<std::shared_ptr<TAllocationInfo>> ExtractGroup(const ui64 id) {
         auto it = Groups.find(id);

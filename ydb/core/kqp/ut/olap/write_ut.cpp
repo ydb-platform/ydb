@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
     Y_UNIT_TEST(TierDraftsGC) {
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TController>();
         csController->SetIndexWriteControllerEnabled(false);
-        csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->ResetWriteCounters();
 
         auto settings = TKikimrSettings()
@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
     Y_UNIT_TEST(TierDraftsGCWithRestart) {
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TController>();
         csController->SetIndexWriteControllerEnabled(false);
-        csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1000));
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1000));
         csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::GC);
         Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->ResetWriteCounters();
 
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
 
     Y_UNIT_TEST(WriteDeleteCleanGC) {
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TController>();
-        csController->SetPeriodicWakeupActivationPeriod(TDuration::MilliSeconds(100));
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::MilliSeconds(100));
         csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::GC);
         Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->ResetWriteCounters();
 
@@ -176,7 +176,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         }
-        csController->SetReadTimeoutClean(TDuration::Zero());
+        csController->SetOverrideReadTimeoutClean(TDuration::Zero());
         csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::GC);
         {
             const TInstant start = TInstant::Now();

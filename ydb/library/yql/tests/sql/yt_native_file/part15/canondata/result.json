@@ -739,6 +739,13 @@
             "uri": "https://{canondata_backend}/1899731/7897b30eef0bb27e4ec2a81827074c48697423a5/resource.tar.gz#test.test_column_group-groups-lookup-Results_/results.txt"
         }
     ],
+    "test.test[column_group-insert_diff_groups1_fail--Debug]": [],
+    "test.test[column_group-insert_diff_groups1_fail--Plan]": [],
+    "test.test[column_group-insert_diff_groups1_fail--Results]": [
+        {
+            "uri": "file://test.test_column_group-insert_diff_groups1_fail--Results_/extracted"
+        }
+    ],
     "test.test[column_order-insert_with_desc_sort_and_native_types-default.txt-Debug]": [
         {
             "checksum": "8d9d1101d61c96254d2d67b4736ed680",

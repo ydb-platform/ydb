@@ -11,9 +11,10 @@ import "ydb/public/api/protos/ydb_bsconfig.proto";
 service BSConfigService {
 
     // Initialize Blobstorage host configs and box
-    rpc Define(BSConfig.DefineRequest) returns (BSConfig.DefineResponse);
+    rpc ReplaceStorageConfig(BSConfig.ReplaceStorageConfigRequest) returns (BSConfig.ReplaceStorageConfigResponse);
 
-    rpc Fetch(BSConfig.FetchRequest) returns (BSConfig.FetchResponse);
+    // Fetch Blobstorage host configs and box
+    rpc FetchStorageConfig(BSConfig.FetchStorageConfigRequest) returns (BSConfig.FetchStorageConfigResponse);
 
     rpc Evict(BSConfig.EvictRequest) returns (BSConfig.EvictResponse);
 }

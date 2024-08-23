@@ -150,11 +150,11 @@ public:
     }
 };
 
-class TDefine : public TClientCommand {
+class TReplace : public TClientCommand {
     TString YamlFile;
 public:
-    TDefine()
-        : TClientCommand("define", {}, "Define storage config using yaml description")
+    TReplace()
+        : TClientCommand("replace", {}, "Replace storage config using yaml description")
     {}
 
     void Config(TConfig& config) override {
@@ -180,17 +180,23 @@ public:
 
         channel = grpc::CreateChannel("localhost:2135", grpc::InsecureChannelCredentials());
         stub = Ydb::BSConfig::V1::BSConfigService::NewStub(channel);
-        Ydb::BSConfig::DefineRequest defineRequest = NKikimr::NYaml::BuildDefineDistributedStorageCommand(data);
-
-        grpc::ClientContext defineCtx;
-        defineCtx.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, "root@builtin");
-        Ydb::BSConfig::DefineResponse defineResponse;
-        stub->Define(&defineCtx, defineRequest, &defineResponse);
-        if (defineResponse.operation().status() == Ydb::StatusIds::SUCCESS) {
-            Ydb::BSConfig::DefineResult defineResult;
-            defineResponse.operation().result().UnpackTo(&defineResult);
+        Ydb::BSConfig::ReplaceStorageConfigRequest replaceRequest = NKikimr::NYaml::BuildReplaceDistributedStorageCommand(data);
+        grpc::ClientContext replaceCtx;
+        replaceCtx.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, "root@builtin");
+        Ydb::BSConfig::ReplaceStorageConfigResponse replaceResponse;
+        stub->ReplaceStorageConfig(&replaceCtx, replaceRequest, &replaceResponse);
+        Ydb::BSConfig::ReplaceStorageConfigResult replaceResultFirst;
+        replaceResponse.operation().result().UnpackTo(&replaceResultFirst);
+        auto protoCopy = NYaml::BuildReplaceProtoConfig(replaceRequest.yaml_config());
+        TString dataFirst;
+        google::protobuf::TextFormat::PrintToString(protoCopy, &dataFirst);
+        Cout << dataFirst << Endl;
+        Cout << replaceResponse << Endl;
+        if (replaceResponse.operation().status() == Ydb::StatusIds::SUCCESS) {
+            Ydb::BSConfig::ReplaceStorageConfigResult replaceResult;
+            replaceResponse.operation().result().UnpackTo(&replaceResult);
             TString data;
-            if (google::protobuf::TextFormat::PrintToString(defineResult, &data)) {
+            if (google::protobuf::TextFormat::PrintToString(replaceResult, &data)) {
                 Cout << data;
             } else {
                 Cerr << "failed to print protobuf" << Endl;
@@ -219,14 +225,14 @@ public:
 
         channel = grpc::CreateChannel("localhost:2135", grpc::InsecureChannelCredentials());
         stub = Ydb::BSConfig::V1::BSConfigService::NewStub(channel);
-        Ydb::BSConfig::FetchRequest fetchRequest;
+        Ydb::BSConfig::FetchStorageConfigRequest fetchRequest;
 
         grpc::ClientContext fetchCtx;
         fetchCtx.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, "root@builtin");
-        Ydb::BSConfig::FetchResponse fetchResponse;
-        stub->Fetch(&fetchCtx, fetchRequest, &fetchResponse);
+        Ydb::BSConfig::FetchStorageConfigResponse fetchResponse;
+        stub->FetchStorageConfig(&fetchCtx, fetchRequest, &fetchResponse);
         if (fetchResponse.operation().status() == Ydb::StatusIds::SUCCESS) {
-            Ydb::BSConfig::FetchResult fetchResult;
+            Ydb::BSConfig::FetchStorageConfigResult fetchResult;
             fetchResponse.operation().result().UnpackTo(&fetchResult);
             TString data;
             if (google::protobuf::TextFormat::PrintToString(fetchResult, &data)) {
@@ -347,7 +353,8 @@ public:
         AddCommand(std::make_unique<TPropose>());
         AddCommand(std::make_unique<TInvoke>());
         AddCommand(std::make_unique<TInit>());
-        AddCommand(std::make_unique<TDefine>());
+        AddCommand(std::make_unique<TReplace>());
+        AddCommand(std::make_unique<TFetch>());
     }
 };
 

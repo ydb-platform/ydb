@@ -86,10 +86,10 @@ private:
 };
 
 
-bool CopyToConfigRequest(const Ydb::BSConfig::DefineRequest &from, NKikimrBlobStorage::TConfigRequest *to);
-bool CopyToConfigRequest(const Ydb::BSConfig::FetchRequest &from, NKikimrBlobStorage::TConfigRequest *to);
-void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &/*from*/, Ydb::BSConfig::DefineResult */*to*/);
-void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &from, Ydb::BSConfig::FetchResult *to);
+bool CopyToConfigRequest(const Ydb::BSConfig::ReplaceStorageConfigRequest &from, NKikimrBlobStorage::TConfigRequest *to);
+bool CopyToConfigRequest(const Ydb::BSConfig::FetchStorageConfigRequest &from, NKikimrBlobStorage::TConfigRequest *to);
+void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &/*from*/, Ydb::BSConfig::ReplaceStorageConfigResult */*to*/);
+void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &from, Ydb::BSConfig::FetchStorageConfigResult *to);
 
 template <typename TDerived>
 class TBaseBSConfigRequest {

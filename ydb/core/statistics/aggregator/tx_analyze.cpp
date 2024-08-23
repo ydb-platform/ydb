@@ -18,7 +18,7 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
 
     TTxType GetTxType() const override { return TXTYPE_ANALYZE_TABLE; }
 
-    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. ReplyToActorId " << ReplyToActorId << " , Record " << Record);
 
         if (!Self->EnableColumnStatistics) {
@@ -48,7 +48,7 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
         const TString types = JoinVectorIntoString(TVector<ui32>(Record.GetTypes().begin(), Record.GetTypes().end()), ",");
 
         // create new force trasersal
-        ui64 createdAt = GetCycleCountFast();
+        ui64 createdAt = ctx.Now().MicroSeconds();
         TForceTraversalOperation operation {
             .OperationId = operationId,
             .Tables = {},

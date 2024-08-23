@@ -909,6 +909,11 @@ private:
         }
 
         NTabletPipe::SendData(SelfId(), clientId, request.release(), AggregationStatistics.Round);
+
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "TEvStatisticsRequest send"
+            << ", client id = " << clientId
+            << ", path = " << *path);
     }
 
     void OnTabletError(ui64 tabletId) {

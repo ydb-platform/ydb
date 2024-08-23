@@ -323,10 +323,10 @@ def merge_two_yaml_configs(data_1, data_2):
                 d2_keys.remove(d1k)
                 new_dict[d1k] = merge_two_yaml_configs(data_1.get(d1k), data_2.get(d1k))
             else:
-                new_dict[d1k] = data_1.get(d1k)
+                new_dict[d1k] = copy.deepcopy(data_1.get(d1k))
                         
         for d2k in d2_keys:
-            new_dict[d2k] = data_2.get(d2k)
+            new_dict[d2k] = copy.deepcopy(data_2.get(d2k))
 
         return new_dict
     else:

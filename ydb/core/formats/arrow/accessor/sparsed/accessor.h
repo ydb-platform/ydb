@@ -131,7 +131,7 @@ protected:
 
     static TSparsedArrayChunk MakeDefaultChunk(
         const std::shared_ptr<arrow::Scalar>& defaultValue, const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount) {
-        std::shared_ptr<arrow::RecordBatch> records = NArrow::MakeEmptyBatch(BuildSchema(type), recordsCount);
+        std::shared_ptr<arrow::RecordBatch> records = NArrow::MakeEmptyBatch(BuildSchema(type));
         AFL_VERIFY_DEBUG(records->ValidateFull().ok());
         return TSparsedArrayChunk(0, recordsCount, records, defaultValue);
     }

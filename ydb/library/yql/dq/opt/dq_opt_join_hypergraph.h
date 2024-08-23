@@ -221,58 +221,15 @@ public:
         return nullptr;
     }
 
-    void ApplyHints(const TJoinOrderHints& hints) {
-        auto labels = ApplyHintsToSubgraph(hints.HintsTree);
-        auto nodes = GetNodesByRelNames(labels);
-        
-        for (size_t i = 0; i < Edges_.size(); ++i) {
-            TNodeSet newLeft = Edges_[i].Left;
-            if (Overlaps(Edges_[i].Left, nodes) && !IsSubset(Edges_[i].Right, nodes)) {
-                newLeft |= nodes;
-            }
-
-            TNodeSet newRight = Edges_[i].Right;
-            if (Overlaps(Edges_[i].Right, nodes) && !IsSubset(Edges_[i].Left, nodes)) {
-                newRight |= nodes;
-            }
-
-            UpdateEdgeSides(i, newLeft, newRight);
+    void UpdateEdgeSides(size_t idx, TNodeSet newLeft, TNodeSet newRight) {
+        auto& edge = Edges_[idx];
+        if (edge.IsSimple() && !(HasSingleBit(newLeft) && HasSingleBit(newRight))) {
+            size_t lhsNodeIdx = GetLowestSetBit(edge.Left);
+            Nodes_[lhsNodeIdx].SimpleNeighborhood &= ~edge.Right;
+            Nodes_[lhsNodeIdx].ComplexEdgesId.push_back(idx);
         }
-    }
-
-    TVector<TString> ApplyHintsToSubgraph(const std::shared_ptr<IBaseOptimizerNode>& node) {
-        if (node->Kind == EOptimizerNodeKind::JoinNodeType) {
-            auto join = std::static_pointer_cast<TJoinOptimizerNode>(node);
-            TVector<TString> lhsLabels = ApplyHintsToSubgraph(join->LeftArg);
-            TVector<TString> rhsLabels = ApplyHintsToSubgraph(join->RightArg);
-
-            auto lhs = GetNodesByRelNames(lhsLabels);
-            auto rhs = GetNodesByRelNames(rhsLabels);
-            
-            size_t revEdgeIdx = FindEdgeBetween(lhs, rhs)->ReversedEdgeId;
-            auto& revEdge = Edges_[revEdgeIdx];
-            size_t edgeIdx = revEdge.ReversedEdgeId;
-            auto& edge = Edges_[edgeIdx];
-
-            edge.IsReversed = false;
-            revEdge.IsReversed = true;
-
-            edge.IsCommutative = false;
-            revEdge.IsCommutative = false;
-
-            UpdateEdgeSides(edgeIdx, lhs, rhs);
-            UpdateEdgeSides(revEdgeIdx, rhs, lhs);
-
-            TVector<TString> joinLabels = std::move(lhsLabels);
-            joinLabels.insert(
-                joinLabels.end(), 
-                std::make_move_iterator(rhsLabels.begin()), 
-                std::make_move_iterator(rhsLabels.end())
-            );
-            return joinLabels;
-        }
-
-        return node->Labels();
+        edge.Left = newLeft;
+        edge.Right = newRight;
     }
 
 private:
@@ -291,22 +248,82 @@ private:
         }
     }
 
-    void UpdateEdgeSides(size_t idx, TNodeSet newLeft, TNodeSet newRight) {
-        auto& edge = Edges_[idx];
-        if (edge.IsSimple() && !(HasSingleBit(newLeft) && HasSingleBit(newRight))) {
-            size_t lhsNodeIdx = GetLowestSetBit(edge.Left);
-            Nodes_[lhsNodeIdx].SimpleNeighborhood &= ~edge.Right;
-            Nodes_[lhsNodeIdx].ComplexEdgesId.push_back(idx);
-        }
-        edge.Left = newLeft;
-        edge.Right = newRight;
-    }
-
 private:
     THashMap<TString, size_t> NodeIdByRelationName_;
 
     TVector<TNode> Nodes_;
     TVector<TEdge> Edges_;
+};
+
+/* 
+ * This class applies join order hints to a hypergraph.
+ * It traverses a hints tree and modifies the edges to restrict the join order in the subgraph, which has all the nodes from the hints tree.
+ * Then, it restricts the join order of the edges, which connect the subgraph with the all graph.  
+ */
+template <typename TNodeSet>
+class TJoinOrderHintsApplier {
+public:
+    TJoinOrderHintsApplier(TJoinHypergraph<TNodeSet>& graph)
+        : Graph_(graph)
+    {}
+
+    void Apply(const TJoinOrderHints& hints) {
+        auto labels = ApplyHintsToSubgraph(hints.HintsTree);
+        auto nodes = Graph_.GetNodesByRelNames(labels);
+        
+        for (size_t i = 0; i < Graph_.GetEdges().size(); ++i) {
+            TNodeSet newLeft = Graph_.GetEdge(i).Left;
+            if (Overlaps(Graph_.GetEdge(i).Left, nodes) && !IsSubset(Graph_.GetEdge(i).Right, nodes)) {
+                newLeft |= nodes;
+            }
+
+            TNodeSet newRight = Graph_.GetEdge(i).Right;
+            if (Overlaps(Graph_.GetEdge(i).Right, nodes) && !IsSubset(Graph_.GetEdge(i).Left, nodes)) {
+                newRight |= nodes;
+            }
+
+            Graph_.UpdateEdgeSides(i, newLeft, newRight);
+        }
+    }
+
+private:
+    TVector<TString> ApplyHintsToSubgraph(const std::shared_ptr<IBaseOptimizerNode>& node) {
+        if (node->Kind == EOptimizerNodeKind::JoinNodeType) {
+            auto join = std::static_pointer_cast<TJoinOptimizerNode>(node);
+            TVector<TString> lhsLabels = ApplyHintsToSubgraph(join->LeftArg);
+            TVector<TString> rhsLabels = ApplyHintsToSubgraph(join->RightArg);
+
+            auto lhs = Graph_.GetNodesByRelNames(lhsLabels);
+            auto rhs = Graph_.GetNodesByRelNames(rhsLabels);
+            
+            size_t revEdgeIdx = Graph_.FindEdgeBetween(lhs, rhs)->ReversedEdgeId;
+            auto& revEdge = Graph_.GetEdge(revEdgeIdx);
+            size_t edgeIdx = revEdge.ReversedEdgeId;
+            auto& edge = Graph_.GetEdge(edgeIdx);
+
+            edge.IsReversed = false;
+            revEdge.IsReversed = true;
+
+            edge.IsCommutative = false;
+            revEdge.IsCommutative = false;
+
+            Graph_.UpdateEdgeSides(edgeIdx, lhs, rhs);
+            Graph_.UpdateEdgeSides(revEdgeIdx, rhs, lhs);
+
+            TVector<TString> joinLabels = std::move(lhsLabels);
+            joinLabels.insert(
+                joinLabels.end(), 
+                std::make_move_iterator(rhsLabels.begin()), 
+                std::make_move_iterator(rhsLabels.end())
+            );
+            return joinLabels;
+        }
+
+        return node->Labels();
+    }
+
+private:
+    TJoinHypergraph<TNodeSet>& Graph_;
 };
 
 /* 

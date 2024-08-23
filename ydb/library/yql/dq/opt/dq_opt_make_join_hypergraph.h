@@ -89,7 +89,7 @@ void MakeJoinHypergraphRec(
 template <typename TNodeSet>
 TJoinHypergraph<TNodeSet> MakeJoinHypergraph(
     const std::shared_ptr<IBaseOptimizerNode>& joinTree,
-    const TJoinOrderHints& hints
+    const TJoinOrderHints& hints = {}
 ) {
     TJoinHypergraph<TNodeSet> graph{};
     std::unordered_map<std::shared_ptr<IBaseOptimizerNode>, TNodeSet> subtreeNodes{};
@@ -101,7 +101,8 @@ TJoinHypergraph<TNodeSet> MakeJoinHypergraph(
     }
 
     if (hints.HintsTree != nullptr) {
-        graph.ApplyHints(hints);
+        TJoinOrderHintsApplier joinHints(graph);
+        joinHints.Apply(hints);
         if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
             YQL_CLOG(TRACE, CoreDq) << "Hypergraph after hints: ";
             YQL_CLOG(TRACE, CoreDq) << graph.String();
@@ -109,7 +110,7 @@ TJoinHypergraph<TNodeSet> MakeJoinHypergraph(
     }
 
     TTransitiveClosureConstructor transitveClosure(graph);
-    // transitveClosure.Construct();
+    transitveClosure.Construct();
 
     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
         YQL_CLOG(TRACE, CoreDq) << "Hypergraph after transitive closure: ";

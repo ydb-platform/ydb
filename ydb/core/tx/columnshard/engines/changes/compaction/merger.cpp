@@ -31,8 +31,6 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
 
         ui32 idx = 0;
         for (auto&& batch : Batches) {
-//            AFL_VERIFY(batch->GetColumnsCount() == resultFiltered->GetColumnsCount())("data", batch->GetColumnsCount())(
-//                                                       "schema", resultFiltered->GetColumnsCount());
             {
                 NArrow::NConstruction::IArrayBuilder::TPtr column =
                     std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntConstFiller<arrow::UInt16Type>>>(

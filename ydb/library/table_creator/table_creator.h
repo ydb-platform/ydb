@@ -71,10 +71,6 @@ THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(cons
 
 } // namespace NTableCreator
 
-struct TPartitionSettings {
-    ui64 SizeToSplit;
-};
-
 NActors::IActor* CreateTableCreator(
     TVector<TString> pathComponents,
     TVector<NKikimrSchemeOp::TColumnDescription> columns,
@@ -82,6 +78,6 @@ NActors::IActor* CreateTableCreator(
     NKikimrServices::EServiceKikimr logService,
     TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing(),
     bool isSystemUser = false,
-    TMaybe<TPartitionSettings> partitionSettings = Nothing());
+    TMaybe<NKikimrSchemeOp::TPartitioningPolicy> partitioningPolicy = Nothing());
 
 } // namespace NKikimr

@@ -1679,7 +1679,7 @@ message TIndexBuildConfig {
 message TIndexBuildControl {
     optional string TablePath = 1;
     optional string IndexName = 2;
-    optional uint64 SnaphotTxId = 3;
+    optional uint64 SnapshotTxId = 3;
     optional uint64 BuildIndexId = 4;
 }
 

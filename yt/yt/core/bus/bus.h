@@ -78,7 +78,7 @@ struct IBus
 
     //! Returns the bus' endpoint address as it was provided by the configuration (e.g.: non-resolved FQDN).
     //! Empty if it is not supported by the implementation (e.g.: Unix sockets).
-    virtual const TString& GetEndpointAddress() const = 0;
+    virtual const std::string& GetEndpointAddress() const = 0;
 
     //! Returns the bus' endpoint network address (e.g. a resolved IP address).
     //! Null if it is not supported by the implementation (e.g. for a client-side bus).

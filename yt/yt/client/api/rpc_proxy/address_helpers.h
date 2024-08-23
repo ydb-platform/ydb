@@ -9,22 +9,22 @@ namespace NYT::NApi::NRpcProxy {
 ////////////////////////////////////////////////////////////////////////////////
 
 // Network -> host:port.
-using TAddressMap = THashMap<TString, TString>;
+using TAddressMap = THashMap<std::string, std::string>;
 
 // Address type (e.g. RPC, HTTP) -> network -> host:port.
 using TProxyAddressMap = THashMap<EAddressType, TAddressMap>;
 
 extern const EAddressType DefaultAddressType;
-extern const TString DefaultNetworkName;
+extern const std::string DefaultNetworkName;
 
 // Network -> [host:port].
-using TNetworkAddressesMap = THashMap<TString, std::vector<TString>>;
+using TNetworkAddressesMap = THashMap<std::string, std::vector<std::string>>;
 
 // Address type (e.g. RPC, HTTP) -> network -> [host:port].
 using TAddressTypeAddressesMap = THashMap<EAddressType, TNetworkAddressesMap>;
 
 // Role -> address type -> network -> host:port.
-using TBalancersMap = THashMap<TString, TAddressTypeAddressesMap>;
+using TBalancersMap = THashMap<std::string, TAddressTypeAddressesMap>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -34,18 +34,18 @@ TAddressMap GetLocalAddresses(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::optional<TString> GetAddressOrNull(
+std::optional<std::string> GetAddressOrNull(
     const TProxyAddressMap& addresses,
     EAddressType addressType,
-    const TString& network);
+    const std::string& network);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::optional<std::vector<TString>> GetBalancersOrNull(
+std::optional<std::vector<std::string>> GetBalancersOrNull(
     const TBalancersMap& balancers,
-    const TString& role,
+    const std::string& role,
     EAddressType addressType,
-    const TString& network);
+    const std::string& network);
 
 ////////////////////////////////////////////////////////////////////////////////
 

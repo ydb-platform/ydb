@@ -226,8 +226,8 @@ using TMaintenanceCounts = TEnumIndexedArray<EMaintenanceType, int>;
 // "host" target which represents all nodes on a given host.
 constexpr int TypicalMaintenanceTargetCount = 1;
 
-using TMaintenanceIdPerTarget = TCompactFlatMap<TString, TMaintenanceId, TypicalMaintenanceTargetCount>;
-using TMaintenanceCountsPerTarget = TCompactFlatMap<TString, TMaintenanceCounts, TypicalMaintenanceTargetCount>;
+using TMaintenanceIdPerTarget = TCompactFlatMap<std::string, TMaintenanceId, TypicalMaintenanceTargetCount>;
+using TMaintenanceCountsPerTarget = TCompactFlatMap<std::string, TMaintenanceCounts, TypicalMaintenanceTargetCount>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

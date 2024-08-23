@@ -11,13 +11,13 @@ using NYT::FromProto;
 ////////////////////////////////////////////////////////////////////////////////
 
 TTestChannelFactory::TTestChannelFactory(
-    THashMap<TString, TRealmIdServiceMap> addressToServices,
+    THashMap<std::string, TRealmIdServiceMap> addressToServices,
     TRealmIdServiceMap defaultServices)
     : AddressToServices_(std::move(addressToServices))
     , DefaultServices_(std::move(defaultServices))
 { }
 
-IChannelPtr TTestChannelFactory::CreateChannel(const TString& address)
+IChannelPtr TTestChannelFactory::CreateChannel(const std::string& address)
 {
     return New<TTestChannel>(GetOrDefault(AddressToServices_, address, {}), DefaultServices_, address);
 }
@@ -27,10 +27,10 @@ IChannelPtr TTestChannelFactory::CreateChannel(const TString& address)
 TTestChannel::TTestChannel(
     TRealmIdServiceMap services,
     TRealmIdServiceMap defaultServices,
-    TString address)
+    const std::string& address)
     : Services_(std::move(services))
     , DefaultServices_(std::move(defaultServices))
-    , Address_(std::move(address))
+    , Address_(address)
     , Attributes_(ConvertToAttributes(BuildYsonStringFluently()
         .BeginMap()
             .Item("address").Value(Address_)
@@ -85,7 +85,7 @@ const IServicePtr& TTestChannel::GetServiceOrThrow(const TServiceId& serviceId) 
 }
 
 void TTestChannel::HandleRequestResult(
-    TString address,
+    const std::string& address,
     TGuid requestId,
     IClientResponseHandlerPtr response,
     const TError& error)
@@ -174,8 +174,9 @@ const IMemoryUsageTrackerPtr& TTestChannel::GetChannelMemoryTracker()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TTestBus::TTestBus(TString address)
-    : Address_(std::move(address))
+TTestBus::TTestBus(const std::string& address)
+    : Address_(address)
+    , EndpointDescription_(address)
     , Attributes_(ConvertToAttributes(BuildYsonStringFluently()
         .BeginMap()
             .Item("address").Value(Address_)
@@ -185,7 +186,7 @@ TTestBus::TTestBus(TString address)
 
 const TString& TTestBus::GetEndpointDescription() const
 {
-    return Address_;
+    return EndpointDescription_;
 }
 
 const NYTree::IAttributeDictionary& TTestBus::GetEndpointAttributes() const
@@ -193,7 +194,7 @@ const NYTree::IAttributeDictionary& TTestBus::GetEndpointAttributes() const
     return *Attributes_;
 }
 
-const TString& TTestBus::GetEndpointAddress() const
+const std::string& TTestBus::GetEndpointAddress() const
 {
     return Address_;
 }

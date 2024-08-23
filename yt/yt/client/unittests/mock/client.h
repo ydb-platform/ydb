@@ -272,7 +272,7 @@ public:
 
     MOCK_METHOD(TFuture<void>, SwitchLeader, (
         NHydra::TCellId cellId,
-        const TString& newLeaderAddress,
+        const std::string& newLeaderAddress,
         const TSwitchLeaderOptions& options),
         (override));
 
@@ -286,17 +286,17 @@ public:
         (override));
 
     MOCK_METHOD(TFuture<void>, KillProcess, (
-        const TString& address,
+        const std::string& address,
         const TKillProcessOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TString>, WriteCoreDump, (
-        const TString& address,
+        const std::string& address,
         const TWriteCoreDumpOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TGuid>, WriteLogBarrier, (
-        const TString& address,
+        const std::string& address,
         const TWriteLogBarrierOptions& options),
         (override));
 
@@ -306,7 +306,7 @@ public:
         (override));
 
     MOCK_METHOD(TFuture<void>, HealExecNode, (
-        const TString& address,
+        const std::string& address,
         const THealExecNodeOptions& options),
         (override));
 
@@ -347,7 +347,7 @@ public:
 
     MOCK_METHOD(TFuture<TMaintenanceIdPerTarget>, AddMaintenance, (
         EMaintenanceComponent component,
-        const TString& address,
+        const std::string& address,
         EMaintenanceType type,
         const TString& comment,
         const TAddMaintenanceOptions& options),
@@ -355,7 +355,7 @@ public:
 
     MOCK_METHOD(TFuture<TMaintenanceCountsPerTarget>, RemoveMaintenance, (
         EMaintenanceComponent component,
-        const TString& address,
+        const std::string& address,
         const TMaintenanceFilter& filter,
         const TRemoveMaintenanceOptions& options),
         (override));
@@ -679,26 +679,26 @@ public:
         (override));
 
     MOCK_METHOD(TFuture<TDisableChunkLocationsResult>, DisableChunkLocations, (
-        const TString& nodeAddress,
+        const std::string& nodeAddress,
         const std::vector<TGuid>& locationUuids,
         const TDisableChunkLocationsOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TDestroyChunkLocationsResult>, DestroyChunkLocations, (
-        const TString& nodeAddress,
+        const std::string& nodeAddress,
         bool recoverUnlinkedDisks,
         const std::vector<TGuid>& locationUuids,
         const TDestroyChunkLocationsOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TResurrectChunkLocationsResult>, ResurrectChunkLocations, (
-        const TString& nodeAddress,
+        const std::string& nodeAddress,
         const std::vector<TGuid>& locationUuids,
         const TResurrectChunkLocationsOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TRequestRestartResult>, RequestRestart, (
-        const TString& nodeAddress,
+        const std::string& nodeAddress,
         const TRequestRestartOptions& options),
         (override));
 

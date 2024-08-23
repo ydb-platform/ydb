@@ -397,7 +397,7 @@ void TAddMaintenanceCommand::DoExecute(ICommandContextPtr context)
     ProduceOutput(context, [&] (NYson::IYsonConsumer* consumer) {
         BuildYsonFluently(consumer)
             .BeginMap()
-                .DoFor(response, [] (auto fluent, const std::pair<TString, TMaintenanceId>& targetAndId) {
+                .DoFor(response, [] (auto fluent, const std::pair<std::string, TMaintenanceId>& targetAndId) {
                     fluent.Item(targetAndId.first).Value(targetAndId.second);
                 })
             .EndMap();
@@ -510,7 +510,7 @@ void TRemoveMaintenanceCommand::DoExecute(ICommandContextPtr context)
             .BeginMap()
                 .DoFor(
                     response,
-                    [&] (auto fluent, const std::pair<TString, TMaintenanceCounts>& targetWithCounts) {
+                    [&] (auto fluent, const std::pair<std::string, TMaintenanceCounts>& targetWithCounts) {
                         produceCounts(fluent.Item(targetWithCounts.first), targetWithCounts.second);
                     })
             .EndMap();

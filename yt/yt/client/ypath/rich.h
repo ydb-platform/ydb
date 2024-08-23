@@ -157,8 +157,8 @@ public:
     std::optional<NTableClient::TSortColumns> GetChunkSortColumns() const;
 
     // "cluster"
-    std::optional<TString> GetCluster() const;
-    void SetCluster(const TString& value);
+    std::optional<std::string> GetCluster() const;
+    void SetCluster(const std::string& value);
 
     // "clusters"
     std::optional<std::vector<TString>> GetClusters() const;

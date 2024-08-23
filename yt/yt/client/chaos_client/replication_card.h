@@ -41,7 +41,7 @@ struct TReplicaHistoryItem
 
 struct TReplicaInfo
 {
-    TString ClusterName;
+    std::string ClusterName;
     NYPath::TYPath ReplicaPath;
     NTabletClient::ETableReplicaContentType ContentType;
     NTabletClient::ETableReplicaMode Mode;
@@ -68,7 +68,7 @@ struct TReplicationCard
     TReplicationEra Era = InvalidReplicationEra;
     NTableClient::TTableId TableId;
     NYPath::TYPath TablePath;
-    TString TableClusterName;
+    std::string TableClusterName;
     NTransactionClient::TTimestamp CurrentTimestamp = NTransactionClient::NullTimestamp;
     NTabletClient::TReplicatedTableOptionsPtr ReplicatedTableOptions;
     TReplicationCardCollocationId ReplicationCardCollocationId;
@@ -180,7 +180,7 @@ std::vector<TReplicationProgress> ScatterReplicationProgress(
 bool IsReplicaLocationValid(
     const TReplicaInfo* replica,
     const NYPath::TYPath& tablePath,
-    const TString& clusterName);
+    const std::string& clusterName);
 
 TReplicationProgress BuildMaxProgress(const TReplicationProgress& progress1, const TReplicationProgress& progress2);
 

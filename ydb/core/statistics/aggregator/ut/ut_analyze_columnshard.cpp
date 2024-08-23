@@ -258,6 +258,22 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
 
         runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
     }
+
+    Y_UNIT_TEST(AnalyzeDeadline) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        auto tableInfo = CreateDatabaseColumnTables(env, 1, 1)[0];
+        auto sender = runtime.AllocateEdgeActor();
+
+        TBlockEvents<TEvStatistics::TEvAnalyzeTableResponse> block(runtime);
+
+        auto analyzeRequest = MakeAnalyzeRequest({tableInfo.PathId});
+        runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest.release());
+
+        runtime.SimulateSleep(TDuration::Hours(25));
+
+        runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
+    }    
 }
 
 } // NStat

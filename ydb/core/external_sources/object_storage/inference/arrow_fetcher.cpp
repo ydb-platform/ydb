@@ -5,6 +5,8 @@
 #include <arrow/buffer_builder.h>
 #include <arrow/csv/chunker.h>
 #include <arrow/csv/options.h>
+#include <arrow/json/chunker.h>
+#include <arrow/json/options.h>
 #include <arrow/io/memory.h>
 #include <arrow/util/endian.h>
 
@@ -58,7 +60,9 @@ public:
 
         switch (Format_) {
             case EFileFormat::CsvWithNames:
-            case EFileFormat::TsvWithNames: {
+            case EFileFormat::TsvWithNames:
+            case EFileFormat::JsonEachRow:
+            case EFileFormat::JsonList: {
                 RequestPartialFile(std::move(localRequest), ctx, 0, 10_MB);
                 break;
             }
@@ -111,6 +115,12 @@ public:
                     return;
                 }
                 file = BuildParquetFileFromMetadata(data, request, ctx);
+                ctx.Send(request.Requester, new TEvArrowFile(std::move(file), request.Path));
+                break;
+            }
+            case EFileFormat::JsonEachRow:
+            case EFileFormat::JsonList: {
+                file = CleanupJsonFile(data, request, arrow::json::ParseOptions::Defaults(), ctx);
                 ctx.Send(request.Requester, new TEvArrowFile(std::move(file), request.Path));
                 break;
             }
@@ -220,23 +230,7 @@ private:
     std::shared_ptr<arrow::io::RandomAccessFile> CleanupCsvFile(const TString& data, const TRequest& request, const arrow::csv::ParseOptions& options, const NActors::TActorContext& ctx) {
         auto chunker = arrow::csv::MakeChunker(options);
         std::shared_ptr<arrow::Buffer> whole, partial;
-        auto arrowData = std::make_shared<arrow::Buffer>(nullptr, 0);
-        {
-            arrow::BufferBuilder builder;
-            auto buildRes = builder.Append(data.data(), data.size());
-            if (buildRes.ok()) {
-                buildRes = builder.Finish(&arrowData);
-            }
-            if (!buildRes.ok()) {
-                auto error = MakeError(
-                    request.Path,
-                    NFq::TIssuesIds::INTERNAL_ERROR,
-                    TStringBuilder{} << "couldn't consume buffer from S3Fetcher: " << buildRes.ToString()
-                );
-                SendError(ctx, error);
-                return nullptr;
-            }
-        }
+        auto arrowData = BuildBufferFromData(data, request, ctx);
         auto status = chunker->Process(arrowData, &whole, &partial);
 
         if (!status.ok()) {
@@ -277,7 +271,50 @@ private:
     }
 
     std::shared_ptr<arrow::io::RandomAccessFile> BuildParquetFileFromMetadata(const TString& data, const TRequest& request, const NActors::TActorContext& ctx) {
-        auto arrowData = std::make_shared<arrow::Buffer>(nullptr, 0);
+        auto arrowData = BuildBufferFromData(data, request, ctx);
+        return std::make_shared<arrow::io::BufferReader>(std::move(arrowData));
+    }
+
+    std::shared_ptr<arrow::io::RandomAccessFile> CleanupJsonFile(const TString& data, const TRequest& request, const arrow::json::ParseOptions& options, const NActors::TActorContext& ctx) {
+        auto chunker = arrow::json::MakeChunker(options);
+        std::shared_ptr<arrow::Buffer> whole, partial;
+        auto arrowData = BuildBufferFromData(data, request, ctx);
+
+        if (Format_ == EFileFormat::JsonList) {
+            auto empty = std::make_shared<arrow::Buffer>(nullptr, 0);
+            int64_t count = 1;
+            auto status = chunker->ProcessSkip(empty, arrowData, false, &count, &whole);
+            
+            if (!status.ok()) {
+                auto error = MakeError(
+                    request.Path,
+                    NFq::TIssuesIds::INTERNAL_ERROR,
+                    TStringBuilder{} << "couldn't run arrow json chunker for " << request.Path << ": " << status.ToString()
+                );
+                SendError(ctx, error);
+                return nullptr;
+            }
+
+            arrowData = std::move(whole);
+        }
+
+        auto status = chunker->Process(arrowData, &whole, &partial);
+
+        if (!status.ok()) {
+            auto error = MakeError(
+                request.Path,
+                NFq::TIssuesIds::INTERNAL_ERROR,
+                TStringBuilder{} << "couldn't run arrow json chunker for " << request.Path << ": " << status.ToString()
+            );
+            SendError(ctx, error);
+            return nullptr;
+        }
+
+        return std::make_shared<arrow::io::BufferReader>(std::move(whole));
+    }
+
+    std::shared_ptr<arrow::Buffer> BuildBufferFromData(const TString& data, const TRequest& request, const NActors::TActorContext& ctx) {
+        auto dataBuffer = std::make_shared<arrow::Buffer>(nullptr, 0);
         arrow::BufferBuilder builder;
         auto buildRes = builder.Append(data.data(), data.size());
         if (!buildRes.ok()) {
@@ -290,7 +327,7 @@ private:
             return nullptr;
         }
 
-        buildRes = builder.Finish(&arrowData);
+        buildRes = builder.Finish(&dataBuffer);
         if (!buildRes.ok()) {
             auto error = MakeError(
                 request.Path,
@@ -301,7 +338,7 @@ private:
             return nullptr;
         }
 
-        return std::make_shared<arrow::io::BufferReader>(std::move(arrowData));
+        return dataBuffer;
     }
 
     // Utility

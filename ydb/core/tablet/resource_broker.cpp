@@ -1257,8 +1257,11 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev,
 
 void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigRequest::TPtr& ev, const TActorContext&)
 {
-    auto [it, _] = QueueSubscribers.emplace(ev->Get()->Queue, THashSet<TActorId>());
-    it->second.emplace(ev->Sender);
+    if (ev->Get()->Subscribe) {
+        auto [it, _] = QueueSubscribers.emplace(ev->Get()->Queue, THashSet<TActorId>());
+        it->second.emplace(ev->Sender);
+    }
+
     auto config = ResourceBroker->GetConfig();
     auto resp = MakeHolder<TEvResourceBroker::TEvConfigResponse>();
     for (auto& queue : config.GetQueues()) {

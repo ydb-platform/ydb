@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import datetime
 import os
 import json
 import argparse
@@ -7,21 +8,43 @@ from github.PullRequest import PullRequest
 from gh_status import update_pr_comment_text
 
 
+def update_pr_comment_text(pr: PullRequest, build_preset: str, run_number: int, color: str, text: str, rewrite: bool):
+    header = f"<!-- status pr={pr.number}, preset={build_preset}, run={run_number} -->"
+
+    body = comment = None
+    for c in pr.get_issue_comments():
+        if c.body.startswith(header):
+            print(f"found comment id={c.id}")
+            comment = c
+            if not rewrite:
+                body = [c.body]
+            break
+
+    if body is None:
+        body = [header]
+
+    indicator = f":{color}_circle:"
+    timestamp_str = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    body.append(f"{indicator} `{timestamp_str}` {text}")
+
+    body = "\n".join(body)
+
+    if comment is None:
+        print(f"post new comment")
+        pr.create_issue_comment(body)
+    else:
+        print(f"edit comment")
+        comment.edit(body)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--rewrite", dest="rewrite", action="store_true")
     parser.add_argument("--color", dest="color", default="white")
-    parser.add_argument("--fail", dest="fail", action="store_true")
-    parser.add_argument("--ok", dest="ok", action="store_true")
     parser.add_argument("text", type=argparse.FileType("r"), nargs="?", default="-")
 
     args = parser.parse_args()
     color = args.color
-
-    if args.ok:
-        color = 'green'
-    elif args.fail:
-        color = 'red'
 
     run_number = int(os.environ.get("GITHUB_RUN_NUMBER"))
     build_preset = os.environ["BUILD_PRESET"]

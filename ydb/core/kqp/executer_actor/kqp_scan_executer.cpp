@@ -273,6 +273,9 @@ private:
 public:
 
     void Finalize() {
+        YQL_ENSURE(!AlreadyReplied);
+        AlreadyReplied = true;
+
         FillResponseStats(Ydb::StatusIds::SUCCESS);
 
         LWTRACK(KqpScanExecuterFinalize, ResponseEv->Orbit, TxId, LastTaskId, LastComputeActorId, ResponseEv->ResultsSize());
@@ -281,8 +284,6 @@ public:
             ExecuterSpan.EndOk();
         }
 
-        LOG_D("Sending response to: " << Target);
-        Send(Target, ResponseEv.release());
         PassAway();
     }
 

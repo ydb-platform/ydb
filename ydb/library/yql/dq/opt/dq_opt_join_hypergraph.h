@@ -92,7 +92,6 @@ public:
     TString String() {
         TString res;
 
-
         TVector<TString> relNameByNodeId(Nodes_.size());
         res.append("Nodes: ").append("\n");
         for (const auto& [name, idx]: NodeIdByRelationName_) {
@@ -101,7 +100,6 @@ public:
         }
 
         res.append("Edges: ").append("\n");
-
 
         auto edgeSideToString = 
             [&relNameByNodeId](const TNodeSet& edgeSide) {

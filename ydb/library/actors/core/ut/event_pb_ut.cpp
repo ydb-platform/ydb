@@ -51,6 +51,7 @@ Y_UNIT_TEST_SUITE(TEventSerialization) {
         TString bmSerialized;
         Y_PROTOBUF_SUPPRESS_NODISCARD bm.SerializeToString(&bmSerialized);
         UNIT_ASSERT_UNEQUAL(bmSerialized.size(), 0);
+        UNIT_ASSERT_UNEQUAL(0, 0);
 
         NActors::TCoroutineChunkSerializer chunker;
         for (int i = 0; i < 4; ++i) {

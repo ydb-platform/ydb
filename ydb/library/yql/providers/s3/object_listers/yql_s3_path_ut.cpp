@@ -30,25 +30,24 @@ Y_UNIT_TEST_SUITE(TPathTests) {
     }
 
     void TestRegexFromWildcardsSuccess(const TString& wildcards, const TString& expectedRegex) {
-        TString errorString;
-        UNIT_ASSERT_C(ValidateWildcards(wildcards, errorString), errorString);
+        TString errorString = ValidateWildcards(wildcards);
+        UNIT_ASSERT_C(errorString.empty(), errorString);
         UNIT_ASSERT_VALUES_EQUAL(RegexFromWildcards(wildcards), expectedRegex);
     }
 
     void TestRegexFromWildcardsFail(const TString& wildcards, const TString& expectedException, const TString& expectedError) {
-        TString errorString;
-        UNIT_ASSERT(!ValidateWildcards(wildcards, errorString));
-        UNIT_ASSERT_STRING_CONTAINS(errorString, expectedError);
+        UNIT_ASSERT_STRING_CONTAINS(ValidateWildcards(wildcards), expectedError);
         UNIT_ASSERT_EXCEPTION_CONTAINS(RegexFromWildcards(wildcards), yexception, expectedException);
     }
 
     Y_UNIT_TEST(TestRegexFromWildcards) {
         TestRegexFromWildcardsSuccess("first,test\\_{alt1,alt2}_text", "first\\,test\\\\_(?:alt1|alt2)_text");
         TestRegexFromWildcardsSuccess("hello.*world?str", "hello\\..*world.str");
-        TestRegexFromWildcardsSuccess("many_{{alt1,alt2},{alt3,{alt4}},alt5,{}}_alts", "many_(?:(?:alt1|alt2)|(?:alt3|(?:alt4))|alt5|(?:))_alts");
+        TestRegexFromWildcardsSuccess("many_{},{alt1,al?t2,al*t3},{alt4}_alts", "many_(?:)\\,(?:alt1|al.t2|al.*t3)\\,(?:alt4)_alts");
 
         TestRegexFromWildcardsFail("hello{}}world", "Unexpected group end", "found unexpected group end at position 7");
-        TestRegexFromWildcardsFail("hello{{{}world", "Found 2 unterminated groups", "found 2 unterminated groups");
+        TestRegexFromWildcardsFail("hello{{{}world", "Found unterminated group", "found unterminated group start at position 5");
+        TestRegexFromWildcardsFail("hello{},{{}}world", "Found unterminated group", "found unterminated group start at position 8");
     }
 }
 

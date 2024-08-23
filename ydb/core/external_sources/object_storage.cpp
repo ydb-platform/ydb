@@ -138,7 +138,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
     template<typename TScheme, typename TObjectStorage>
     static NYql::TIssues Validate(const TScheme& schema, const TObjectStorage& objectStorage, size_t pathsLimit, const TString& location) {
         NYql::TIssues issues;
-        if (TString errorString; !NYql::NS3::ValidateWildcards(location, errorString)) {
+        if (TString errorString = NYql::NS3::ValidateWildcards(location)) {
             issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Location '" << location << "' contains invalid wildcard: " << errorString));
         }
         const bool hasPartitioning = objectStorage.projection_size() || objectStorage.partitioned_by_size();
@@ -172,7 +172,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
         issues.AddIssues(ValidateDateFormatSetting(formatSetting));
         for (const auto& [key, value]: formatSetting) {
             if (key == "file_pattern"sv) {
-                if (TString errorString; !NYql::NS3::ValidateWildcards(value, errorString)) {
+                if (TString errorString = NYql::NS3::ValidateWildcards(value)) {
                     issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "File pattern '" << value << "' contains invalid wildcard: " << errorString));
                 }
                 if (value && !hasPartitioning && !location.EndsWith("/")) {

@@ -732,7 +732,7 @@ private:
         if (!FindFilePattern(settings, ctx, filePattern)) {
             return false;
         }
-        if (TString errorString; !NS3::ValidateWildcards(filePattern, errorString)) {
+        if (TString errorString = NS3::ValidateWildcards(filePattern)) {
             ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "File pattern '" << filePattern << "' contains invalid wildcard: " << errorString));
             return false;
         }
@@ -767,7 +767,7 @@ private:
         }
 
         for (const auto& path : paths) {
-            if (TString errorString; !NS3::ValidateWildcards(path, errorString)) {
+            if (TString errorString = NS3::ValidateWildcards(path)) {
                 ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "Path '" << path << "' contains invalid wildcard: " << errorString));
                 return false;
             }

@@ -47,23 +47,24 @@ TString RegexFromWildcards(const std::string_view& pattern) {
     const auto& escaped = EscapeRegex(pattern);
     TStringBuilder result;
     bool slash = false;
-    size_t groupCount = 0;
+    bool group = false;
 
     for (const char& c : escaped) {
         switch (c) {
             case '{':
+                Y_ENSURE(!group, "Found unterminated group");
                 result << "(?:";
-                groupCount++;
+                group = true;
                 slash = false;
                 break;
             case '}':
-                Y_ENSURE(groupCount, "Unexpected group end");
+                Y_ENSURE(group, "Unexpected group end");
                 result << ')';
-                groupCount--;
+                group = false;
                 slash = false;
                 break;
             case ',':
-                if (groupCount)
+                if (group)
                     result << '|';
                 else
                     result << "\\,";
@@ -90,29 +91,30 @@ TString RegexFromWildcards(const std::string_view& pattern) {
                 break;
         }
     }
-    Y_ENSURE(!groupCount, "Found " << groupCount << " unterminated groups");
+    Y_ENSURE(!group, "Found unterminated group");
     Y_ENSURE(!slash, "Expected symbol after slash");
     return result;
 }
 
-bool ValidateWildcards(const std::string_view& pattern, TString& errorString) {
-    size_t groupCount = 0;
+TString ValidateWildcards(const std::string_view& pattern) {
+    std::optional<size_t> groupStart = std::nullopt;
     for (size_t i = 0; i < pattern.size(); ++i) {
         if (pattern[i] == '{') {
-            groupCount++;
-        } else if (pattern[i] == '}') {
-            if (!groupCount) {
-                errorString = TStringBuilder() << "found unexpected group end at position " << i;
-                return false;
+            if (groupStart) {
+                return TStringBuilder() << "found unterminated group start at position " << *groupStart;
             }
-            groupCount--;
+            groupStart = i;
+        } else if (pattern[i] == '}') {
+            if (!groupStart) {
+                return TStringBuilder() << "found unexpected group end at position " << i;
+            }
+            groupStart = std::nullopt;
         }
     }
-    if (groupCount) {
-        errorString = TStringBuilder() << "found " << groupCount << " unterminated groups";
-        return false;
+    if (groupStart) {
+        return TStringBuilder() << "found unterminated group start at position " << *groupStart;
     }
-    return true;
+    return {};
 }
 
 }

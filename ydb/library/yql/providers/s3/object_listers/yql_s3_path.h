@@ -19,6 +19,6 @@ TString EscapeRegex(const TString& str);
 TString EscapeRegex(const std::string_view& str);
 
 TString RegexFromWildcards(const std::string_view& pattern);
-bool ValidateWildcards(const std::string_view& pattern, TString& errorString);
+TString ValidateWildcards(const std::string_view& pattern);
 
 }

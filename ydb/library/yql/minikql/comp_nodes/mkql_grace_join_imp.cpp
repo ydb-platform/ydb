@@ -385,15 +385,15 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         auto &leftIds = bucket1->LeftIds;
         leftIds.clear();
 
-        const bool needLeftIds = ((swapTables ? (JoinKind == EJoinKind::Right || JoinKind == EJoinKind::RightOnly) : (JoinKind == EJoinKind::Left || JoinKind == EJoinKind::LeftOnly)) || JoinKind == EJoinKind::Full || JoinKind == EJoinKind::Exclusion) && JoinTable1 != JoinTable2 ;
+        const bool selfJoinSameKeys = (JoinTable1 == JoinTable2);
+        const bool needLeftIds = ((swapTables ? (JoinKind == EJoinKind::Right || JoinKind == EJoinKind::RightOnly) : (JoinKind == EJoinKind::Left || JoinKind == EJoinKind::LeftOnly)) || JoinKind == EJoinKind::Full || JoinKind == EJoinKind::Exclusion) && !selfJoinSameKeys;
         const bool isLeftSemi = swapTables ? JoinKind == EJoinKind::RightSemi : JoinKind == EJoinKind::LeftSemi;
         //const bool isRightSemi = swapTables ? JoinKind == EJoinKind::LeftSemi : JoinKind == EJoinKind::RightSemi;
-        bucketStats2->HashtableMatches = ((swapTables ? (JoinKind == EJoinKind::Left || JoinKind == EJoinKind::LeftOnly || JoinKind == EJoinKind::LeftSemi) : (JoinKind == EJoinKind::Right || JoinKind == EJoinKind::RightOnly || JoinKind == EJoinKind::RightSemi)) || JoinKind == EJoinKind::Full || JoinKind == EJoinKind::Exclusion) && JoinTable1 != JoinTable2;
-        // Note: (JoinTable1 == JoinTable2) === SelfJoinSameKeys
+        bucketStats2->HashtableMatches = ((swapTables ? (JoinKind == EJoinKind::Left || JoinKind == EJoinKind::LeftOnly || JoinKind == EJoinKind::LeftSemi) : (JoinKind == EJoinKind::Right || JoinKind == EJoinKind::RightOnly || JoinKind == EJoinKind::RightSemi)) || JoinKind == EJoinKind::Full || JoinKind == EJoinKind::Exclusion) && !selfJoinSameKeys;
+        // In this case, all keys except for NULLs have matched key on other side, and NULLs are handled by AddTuple
 
         if (tuplesNum2 == 0) {
             if (needLeftIds) {
-                //YQL_LOG(INFO) << (const void *)this << '#' << bucket << " " << tuplesNum1;
                 for (ui32 leftId = 0; leftId != tuplesNum1; ++leftId)
                     leftIds.push_back(leftId);
             }
@@ -402,7 +402,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         if (tuplesNum1 == 0 && (hasMoreRightTuples || hasMoreLeftTuples || !bucketStats2->HashtableMatches))
             continue;
 
-        ui64 slotSize = headerSize2 + 1;
+        ui64 slotSize = headerSize2 + 1; // Header [Short Strings] SlotIdx
 
         ui64 avgStringsSize = ( 3 * (bucket2->KeyIntVals.size() - tuplesNum2 * headerSize2) ) / ( 2 * tuplesNum2 + 1)  + 1;
 
@@ -580,15 +580,15 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
 
         if (!hasMoreLeftTuples && !hasMoreRightTuples) {
             if (bucketStats2->HashtableMatches) {
-                auto it = joinSlots.cbegin();
+                auto slotIt = joinSlots.cbegin();
                 auto end = joinSlots.cend();
                 auto isSemi = JoinKind == EJoinKind::LeftSemi || JoinKind == EJoinKind::RightSemi;
                 auto &leftIds2 = bucket2->LeftIds;
-                for (; it != end; it += slotSize) {
-                    if (*it == 0)
+                for (; slotIt != end; slotIt += slotSize) {
+                    if (*slotIt == 0)
                         continue;
-                    if ((*(it + HashSize) & 1) == isSemi) {
-                        auto id2 = *(it + slotSize - 1);
+                    if ((*(slotIt + HashSize) & 1) == isSemi) {
+                        auto id2 = *(slotIt + slotSize - 1);
                         Y_DEBUG_ABORT_UNLESS(id2 < bucketStats2->TuplesNum);
                         leftIds2.push_back(id2);
                     }
@@ -811,21 +811,21 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2, ui64 bucketLimit)
             JoinTable2->GetTupleData(CurrIterBucket, ids.id2, td2);
             return true;
         }
-        auto longSide = [this](auto joinTable, auto &tdL, auto &tdR) {
-            auto &bucket = joinTable->TableBuckets[CurrIterBucket];
-            auto &currIterIndex = joinTable->CurrIterIndex;
+        auto leftSide = [this](auto sideTable, auto &tdL, auto &tdR) {
+            auto &bucket = sideTable->TableBuckets[CurrIterBucket];
+            auto &currIterIndex = sideTable->CurrIterIndex;
             auto &leftIds = bucket.LeftIds;
             if (currIterIndex != leftIds.size()) {
                 auto id = leftIds[currIterIndex++];
-                joinTable->GetTupleData(CurrIterBucket, id, tdL);
+                sideTable->GetTupleData(CurrIterBucket, id, tdL);
                 tdR.AllNulls = true;
                 return true;
             }
             return false;
         };
-        if (longSide(JoinTable1, td1, td2))
+        if (leftSide(JoinTable1, td1, td2))
             return true;
-        if (longSide(JoinTable2, td2, td1))
+        if (leftSide(JoinTable2, td2, td1))
             return true;
         ++CurrIterBucket;
         CurrIterIndex = 0;
@@ -906,9 +906,7 @@ bool TTable::TryToReduceMemoryAndWait() {
     if (TableBucketsStats[largestBucketIndex].HashtableMatches) {
         auto &tb = TableBuckets[largestBucketIndex];
         auto &tbs = TableBucketsStats[largestBucketIndex];
-        /*YQL_LOG(INFO) << "Finalize table";*/
         if (tb.JoinSlots.size()) {
-            /*YQL_LOG(INFO) << "from Hashtable ";*/
             auto slotSize = tbs.SlotSize;
             Y_DEBUG_ABORT_UNLESS(slotSize);
             auto it = tb.JoinSlots.cbegin();
@@ -929,6 +927,8 @@ bool TTable::TryToReduceMemoryAndWait() {
                     tb.KeyIntVals[keyIntsOffset + HashSize] |= 1;
                 }
             }
+            tb.JoinSlots.clear();
+            tb.JoinSlots.shrink_to_fit();
         }
     }
     TableBucketsSpillers[largestBucketIndex].SpillBucket(std::move(TableBuckets[largestBucketIndex]));

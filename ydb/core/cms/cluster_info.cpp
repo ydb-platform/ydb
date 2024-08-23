@@ -735,6 +735,20 @@ TSet<TLockableItem *> TClusterInfo::FindLockedItems(const NKikimrCms::TAction &a
         }
         break;
 
+    case TAction::DECOMISSION_DISK:
+        for (const auto &device : action.GetDevices()) {
+            TLockableItem *item = nullptr;
+
+            if (HasPDisk(device))
+                item = &PDiskRef(device);
+
+            if (item)
+                res.insert(item);
+            else if (ctx)
+                LOG_ERROR(*ctx, NKikimrServices::CMS, "FindLockedItems: unknown device %s", device.data());
+        }
+        break;
+
     default:
         if (ctx) {
             LOG_ERROR(*ctx, NKikimrServices::CMS, "FindLockedItems: action %s is not supported",

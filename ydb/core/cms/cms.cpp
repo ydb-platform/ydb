@@ -318,11 +318,23 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         TStatus::UNKNOWN,
     });
     bool allowPartial = request.GetPartialPermissionAllowed();
-    bool schedule = (request.GetSchedule() || request.GetEvictVDisks()) && !request.GetDryRun();
+    bool schedule = (request.GetSchedule() || request.GetEvictVDisks() || request.GetDecomissionPDisk()) && !request.GetDryRun();
+
+    if (request.GetEvictVDisks() && request.GetDecomissionPDisk()) {
+        response.MutableStatus()->SetCode(TStatus::WRONG_REQUEST);
+        response.MutableStatus()->SetReason("Cannot evict vdisks and decomission pdisk at the same time");
+        return false;
+    }
 
     if (request.GetEvictVDisks() && request.ActionsSize() > 1) {
         response.MutableStatus()->SetCode(TStatus::WRONG_REQUEST);
         response.MutableStatus()->SetReason("Cannot perform several actions and evict vdisks");
+        return false;
+    }
+
+    if (request.GetDecomissionPDisk() && request.ActionsSize() > 1) {
+        response.MutableStatus()->SetCode(TStatus::WRONG_REQUEST);
+        response.MutableStatus()->SetReason("Cannot perform several actions and decomission pdisk");
         return false;
     }
 
@@ -332,6 +344,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         scheduled.SetPartialPermissionAllowed(allowPartial);
         scheduled.SetSchedule(request.GetSchedule());
         scheduled.SetEvictVDisks(request.GetEvictVDisks());
+        scheduled.SetDecomissionPDisk(request.GetDecomissionPDisk());
         scheduled.SetReason(request.GetReason());
         if (request.HasDuration())
             scheduled.SetDuration(request.GetDuration());
@@ -377,12 +390,15 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
 
         LOG_DEBUG(ctx, NKikimrServices::CMS, "Checking action: %s", action.ShortDebugString().data());
 
-        bool prepared = !request.GetEvictVDisks();
-        if (!prepared) {
-            prepared = CheckEvictVDisks(action, error);
+        bool ready = true;
+
+        if (request.GetEvictVDisks()) {
+            ready = CheckEvictVDisks(action, error);
+        } else if (request.GetDecomissionPDisk()) {
+            ready = CheckDecomissionPDisk(action, error);
         }
 
-        if (prepared && CheckAction(action, opts, error, ctx)) {
+        if (ready && CheckAction(action, opts, error, ctx)) {
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Result: ALLOW");
 
             auto *permission = response.AddPermissions();
@@ -592,6 +608,54 @@ bool TCms::CheckEvictVDisks(const TAction &action, TErrorInfo &error) const {
     return true;
 }
 
+bool TCms::CheckDecomissionPDisk(const TAction &action, TErrorInfo &error) const {
+    if (!State->Sentinel) {
+        error.Code = TStatus::ERROR;
+        error.Reason = "Unable to decomission pdisk while Sentinel (self heal) is disabled";
+        return false;
+    }
+
+    switch (action.GetType()) {
+        case TAction::DECOMISSION_DISK:
+            break;
+        default:
+            error.Code = TStatus::WRONG_REQUEST;
+            error.Reason = TStringBuilder() << "Unable to decomission pdisk to perform action: " << action.GetType();
+            return false;
+    }
+
+    for (auto& device : action.GetDevices()) {
+        if (!TPDiskInfo::IsDeviceName(device)) {
+            error.Code = TStatus::NO_SUCH_DEVICE;
+            error.Reason = TStringBuilder() << "Malformed device name: " << device;
+            return false;
+        }
+
+        TPDiskID pdiskId = TPDiskInfo::NameToId(device);
+
+        if (!ClusterInfo->HasPDisk(pdiskId)) {
+            error.Code = TStatus::NO_SUCH_DEVICE;
+            error.Reason = TStringBuilder() << "Unknown device: " << device;
+            return false;
+        }
+
+        auto& vdisks = ClusterInfo->PDisk(pdiskId).VDisks;
+
+        if (!vdisks.empty()) {
+            for (auto& vdisk : vdisks) {
+                if (!TClusterInfo::IsStaticGroupVDisk(vdisk)) {
+                    // If non-dynamic group vdisks are present on the pdisk, we can't decomission it
+                    error.Code = TStatus::DISALLOW_TEMP;
+                    error.Reason = TStringBuilder() << "PDisk decomission from host " << action.GetHost() << " has not yet been completed";
+                    return false;
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
 bool TCms::CheckAction(const TAction &action, const TActionOptions &opts, TErrorInfo &error, const TActorContext &ctx) const {
     if (!IsActionHostValid(action, error))
         return false;
@@ -604,6 +668,8 @@ bool TCms::CheckAction(const TAction &action, const TActionOptions &opts, TError
             return CheckActionShutdownHost(action, opts, error, ctx);
         case TAction::REPLACE_DEVICES:
             return CheckActionReplaceDevices(action, opts.PermissionDuration, error);
+        case TAction::DECOMISSION_DISK:
+            return CheckActionDecomissionDisk(action, opts.PermissionDuration, error);
         case TAction::START_SERVICES:
         case TAction::STOP_SERVICES:
         case TAction::ADD_HOST:
@@ -996,6 +1062,47 @@ bool TCms::CheckActionReplaceDevices(const TAction &action,
             const auto &vdisk = ClusterInfo->VDisk(device);
             if (TryToLockVDisk(opts, vdisk, duration, error))
                 ClusterInfo->AddVDiskTempLock(vdisk.VDiskId, action);
+            else {
+                res = false;
+                break;
+            }
+        } else {
+            error.Code = TStatus::NO_SUCH_DEVICE;
+            error.Reason = Sprintf("Unknown device %s (use cluster state command"
+                                   " to get list of known devices)", device.data());
+            res = false;
+        }
+    }
+    ClusterInfo->RollbackLocks(point);
+
+    if (res)
+        error.Deadline = TActivationContext::Now() + opts.PermissionDuration;
+
+    return res;
+}
+
+bool TCms::CheckActionDecomissionDisk(const TAction &action,
+                                      const TActionOptions &opts,
+                                      TErrorInfo &error) const
+{
+    auto point = ClusterInfo->PushRollbackPoint();
+    bool res = true;
+    TDuration duration = TDuration::MicroSeconds(action.GetDuration());
+    duration += opts.PermissionDuration;
+
+    for (const auto &device : action.GetDevices()) {
+        if (ClusterInfo->HasPDisk(device)) {
+            const auto &pdisk = ClusterInfo->PDisk(device);
+            if (TryToLockPDisk(action, opts, pdisk, error))
+                ClusterInfo->AddPDiskTempLock(pdisk.PDiskId, action);
+            else {
+                res = false;
+                break;
+            }
+        } else if (ClusterInfo->HasPDisk(action.GetHost(), device)) {
+            const auto &pdisk = ClusterInfo->PDisk(action.GetHost(), device);
+            if (TryToLockPDisk(action, opts, pdisk, error))
+                ClusterInfo->AddPDiskTempLock(pdisk.PDiskId, action);
             else {
                 res = false;
                 break;
@@ -1427,6 +1534,12 @@ void TCms::RemoveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActor
             resp->Record.MutableStatus()->SetReason(
                 Sprintf("Request %s used to evict vdisks and cannot be deleted while permission is valid", id.data()));
         }
+
+        if (request.Request.GetDecomissionPDisk() && request.Request.ActionsSize() < 1) {
+            resp->Record.MutableStatus()->SetCode(TStatus::WRONG_REQUEST);
+            resp->Record.MutableStatus()->SetReason(
+                Sprintf("Request %s used to decomission pdisk and cannot be deleted while permission is valid", id.data()));
+        }
     }
 
     LOG_DEBUG(ctx, NKikimrServices::CMS, "Resulting status: %s %s",
@@ -1676,9 +1789,59 @@ TVector<TCms::THostMarkers> TCms::ResetHostMarkers(const TString &host, TTransac
     return updateMarkers;
 }
 
-void TCms::SentinelUpdateHostMarkers(TVector<TCms::THostMarkers> &&updateMarkers, const TActorContext &ctx) {
-    if (updateMarkers) {
-        ctx.Send(State->Sentinel, new TEvSentinel::TEvUpdateHostMarkers(std::move(updateMarkers)));
+
+TVector<TCms::TPDiskMarkers> TCms::SetPDiskMarker(TPDiskID pdiskId, NKikimrCms::EMarker marker, TTransactionContext &txc, const TActorContext &ctx) {
+    if (State->PDiskMarkers.contains(pdiskId)) {
+        return {};
+    }
+
+    AuditLog(ctx, TStringBuilder() << "Add pdisk marker"
+        << ": pdiskId# " << pdiskId
+        << ", marker# " << marker);
+
+    State->PDiskMarkers[pdiskId] = {marker};
+    NIceDb::TNiceDb db(txc.DB);
+    db.Table<Schema::PDiskMarkers>().Key(pdiskId.NodeId, pdiskId.DiskId).Update(
+        NIceDb::TUpdate<Schema::PDiskMarkers::Markers>(TVector<NKikimrCms::EMarker>{marker})
+    );
+
+    TVector<TCms::TPDiskMarkers> updateMarkers;
+    if (ClusterInfo && ClusterInfo->HasPDisk(pdiskId)) {
+        updateMarkers.push_back({
+            .PDiskId = pdiskId,
+            .Markers = {marker},
+        });
+    }
+
+    return updateMarkers;
+}
+
+TVector<TCms::TPDiskMarkers> TCms::ResetPDiskMarkers(TPDiskID pdiskId, TTransactionContext &txc, const TActorContext &ctx) {
+    if (!State->PDiskMarkers.contains(pdiskId)) {
+        return {};
+    }
+
+    AuditLog(ctx, TStringBuilder() << "Reset pdisk markers"
+        << ": pdiskId# " << pdiskId);
+
+    State->PDiskMarkers.erase(pdiskId);
+    NIceDb::TNiceDb db(txc.DB);
+    db.Table<Schema::PDiskMarkers>().Key(pdiskId.NodeId, pdiskId.DiskId).Delete();
+
+    TVector<TCms::TPDiskMarkers> updateMarkers;
+    if (ClusterInfo && ClusterInfo->HasPDisk(pdiskId)) {
+        updateMarkers.push_back({
+            .PDiskId = pdiskId,
+            .Markers = {},
+        });
+    }
+
+    return updateMarkers;
+}
+
+void TCms::SentinelUpdateMarkers(TVector<TCms::THostMarkers> &&hostMarkers, TVector<TCms::TPDiskMarkers> &&pdiskMarkers, const TActorContext &ctx) {
+    if (hostMarkers || pdiskMarkers) {
+        ctx.Send(State->Sentinel, new TEvSentinel::TEvUpdateMarkers(std::move(hostMarkers), std::move(pdiskMarkers)));
     }
 }
 
@@ -1954,6 +2117,19 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
         }
     }
 
+    if (rec.GetDecomissionPDisk()) {
+        for (const auto &action : rec.GetActions()) {
+            for (auto& device : action.GetDevices()) {
+                TPDiskID pdiskId = TPDiskInfo::NameToId(device);
+
+                if (State->PDiskMarkers.contains(pdiskId)) {
+                    return ReplyWithError<TEvCms::TEvPermissionResponse>(
+                        ev, TStatus::WRONG_REQUEST, TStringBuilder() << "PDisk '" << device << "' is being decomissioned", ctx);
+                }
+            }
+        }
+    }
+
     ClusterInfo->LogManager.PushRollbackPoint();
     const i32 priority = rec.GetPriority();
     for (const auto &[_, scheduledRequest] : State->ScheduledRequests) {
@@ -1977,7 +2153,7 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
         resp->Record.SetRequestId(reqId);
 
         TAutoPtr<TRequestInfo> copy;
-        if (scheduled.Request.ActionsSize() || scheduled.Request.GetEvictVDisks()) {
+        if (scheduled.Request.ActionsSize() || scheduled.Request.GetEvictVDisks() || scheduled.Request.GetDecomissionPDisk()) {
             scheduled.Owner = user;
             scheduled.Order = State->NextRequestId - 1;
             scheduled.Priority = priority;
@@ -2057,7 +2233,7 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
 
         ClusterInfo->UnscheduleActions(request.RequestId);
         State->ScheduledRequests.erase(it);
-        if (scheduled.Request.ActionsSize() || scheduled.Request.GetEvictVDisks()) {
+        if (scheduled.Request.ActionsSize() || scheduled.Request.GetEvictVDisks() || scheduled.Request.GetDecomissionPDisk()) {
             scheduled.Owner = user;
             scheduled.Order = order;
             scheduled.Priority = priority;
@@ -2144,6 +2320,25 @@ bool TCms::CheckNotificationReplaceDevices(const TAction &action, TInstant time,
     return true;
 }
 
+bool TCms::CheckNotificationDecomissionDisk(const TAction &action, TInstant time,
+                                           TErrorInfo &error, const TActorContext &ctx) const
+{
+    for (const auto &device : action.GetDevices()) {
+        if (!ClusterInfo->HasPDisk(device)
+                && !ClusterInfo->HasPDisk(action.GetHost(), device)) {
+            error.Code = TStatus::NO_SUCH_DEVICE;
+            error.Reason = Sprintf("Unknown device %s (use cluster state command"
+                                   " to get list of known devices)", device.data());
+            return false;
+        }
+    }
+
+    if (!CheckNotificationDeadline(action, time, error, ctx))
+        return false;
+
+    return true;
+}
+
 bool TCms::IsValidNotificationAction(const TAction &action, TInstant time,
                                      TErrorInfo &error, const TActorContext &ctx) const
 {
@@ -2158,6 +2353,8 @@ bool TCms::IsValidNotificationAction(const TAction &action, TInstant time,
             return CheckNotificationShutdownHost(action, time, error, ctx);
         case TAction::REPLACE_DEVICES:
             return CheckNotificationReplaceDevices(action, time, error, ctx);
+        case TAction::DECOMISSION_DISK:
+            return CheckNotificationDecomissionDisk(action, time, error, ctx);
         case TAction::START_SERVICES:
         case TAction::STOP_SERVICES:
         case TAction::ADD_HOST:

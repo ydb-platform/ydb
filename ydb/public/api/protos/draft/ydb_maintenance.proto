@@ -96,9 +96,14 @@ message MaintenanceTaskOptions {
 
 // Used to describe the scope of a single action.
 message ActionScope {
+    message PDisk {
+        uint32 node_id = 1;
+        uint32 pdisk_id = 2;
+    }
     oneof scope {
         uint32 node_id = 1;
         string host = 2 [(length).le = 255];
+        PDisk pdisk_id = 3;
     }
 }
 

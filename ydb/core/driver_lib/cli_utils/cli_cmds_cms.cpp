@@ -480,6 +480,8 @@ public:
             rec.SetPartialPermissionAllowed(AllowPartial);
         if (EvictVDisks)
             rec.SetEvictVDisks(EvictVDisks);
+        if (Type == NKikimrCms::TAction::DECOMISSION_DISK)
+            rec.SetDecomissionPDisk(true);
         if (TenantPolicy) {
             if (TenantPolicy == "none")
                 rec.SetTenantPolicy(NKikimrCms::NONE);
@@ -578,6 +580,10 @@ public:
         //                                           false));
         AddCommand(std::make_unique<TClientCommandSingleRequest>("replace", "", "Ask for permission to replace device",
                                                    NKikimrCms::TAction::REPLACE_DEVICES,
+                                                   TClientCommandWithAction::FF_DEVICE,
+                                                   true));
+        AddCommand(std::make_unique<TClientCommandSingleRequest>("decomission", "", "Ask for permission to decomission device",
+                                                   NKikimrCms::TAction::DECOMISSION_DISK,
                                                    TClientCommandWithAction::FF_DEVICE,
                                                    true));
         //AddCommand(std::make_unique<TClientCommandSingleRequest>("remove", "", "Ask for permission to remove device",

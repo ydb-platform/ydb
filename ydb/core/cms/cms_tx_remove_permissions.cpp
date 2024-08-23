@@ -34,10 +34,6 @@ public:
 
             const auto &permission = Self->State->Permissions.find(id)->second;
             const TString requestId = permission.RequestId;
-            const TString host = permission.Action.GetHost();
-
-            Self->State->Permissions.erase(id);
-            db.Table<Schema::Permission>().Key(id).Delete();
 
             auto it = Self->State->ScheduledRequests.find(requestId);
             if (it != Self->State->ScheduledRequests.end()) {
@@ -46,16 +42,35 @@ public:
                         << ": id# " << requestId
                         << ", reason# " << "permission " << id << " has expired");
                 }
+
+                auto& request = it->second.Request;
                 
-                if (it->second.Request.GetEvictVDisks()) {
+                if (request.GetEvictVDisks()) {
+                    const TString host = permission.Action.GetHost();
                     auto ret = Self->ResetHostMarkers(host, txc, ctx);
-                    std::move(ret.begin(), ret.end(), std::back_inserter(UpdateMarkers));
+                    std::move(ret.begin(), ret.end(), std::back_inserter(HostUpdateMarkers));
 
                     RemoveRequest(db, requestId, ctx, TStringBuilder() << "Remove request"
                         << ": id# " << requestId
                         << ", reason# " << "permission " << id << " was removed");
                 }
+
+                if (request.GetDecomissionPDisk()) {
+                    for (auto& device : permission.Action.GetDevices()) {
+                        TPDiskID pdiskId = TPDiskInfo::NameToId(device);
+
+                        auto ret = Self->ResetPDiskMarkers(pdiskId, txc, ctx);
+                        std::move(ret.begin(), ret.end(), std::back_inserter(PDiskUpdateMarkers));
+
+                        RemoveRequest(db, requestId, ctx, TStringBuilder() << "Remove request"
+                            << ": id# " << requestId
+                            << ", reason# " << "permission " << id << " was removed");
+                    }
+                }
             }
+            
+            Self->State->Permissions.erase(id);
+            db.Table<Schema::Permission>().Key(id).Delete();
 
             if (Self->State->WalleRequests.contains(requestId)) {
                 auto taskId = Self->State->WalleRequests.find(requestId)->second;
@@ -84,7 +99,7 @@ public:
         }
 
         Self->RemoveEmptyTasks(ctx);
-        Self->SentinelUpdateHostMarkers(std::move(UpdateMarkers), ctx);
+        Self->SentinelUpdateMarkers(std::move(HostUpdateMarkers), std::move(PDiskUpdateMarkers), ctx);
     }
 
 private:
@@ -92,7 +107,8 @@ private:
     TAutoPtr<IEventHandle> Response;
     TVector<TString> Ids;
     bool Expired;
-    TVector<TEvSentinel::TEvUpdateHostMarkers::THostMarkers> UpdateMarkers;
+    TVector<TEvSentinel::TEvUpdateMarkers::THostMarkers> HostUpdateMarkers;
+    TVector<TEvSentinel::TEvUpdateMarkers::TPDiskMarkers> PDiskUpdateMarkers;
 };
 
 ITransaction *TCms::CreateTxRemovePermissions(TVector<TString> ids, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp,

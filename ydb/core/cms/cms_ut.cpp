@@ -459,6 +459,35 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                               "vdisk-3-1-0-1-0", "vdisk-3-1-0-5-0"));
     }
 
+    Y_UNIT_TEST(RequestDecomissionDevices)
+    {
+        auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        env.CheckPermissionRequest("user", false, false, false, true, TStatus::NO_SUCH_DEVICE,
+                                   MakeAction(TAction::DECOMISSION_DISK, "::1", 60000000, "/dev/bad/device/path"));
+
+        auto request1 = env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user", false, false, false).WithDecomissionPDisk(),
+                    MakeAction(TAction::DECOMISSION_DISK, 1, 60000000, env.PDiskName(0, 1))
+                ),
+            TStatus::DISALLOW_TEMP
+        );
+
+        // "move" vdisks
+        auto& node = TFakeNodeWhiteboardService::Info[env.GetNodeId(0)];
+        node.VDisksMoved = true;
+        node.VDiskStateInfo.clear();
+        env.RegenerateBSConfig(TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig(), opts);
+
+        env.SimulateSleep(TDuration::Minutes(5));
+
+        // prepared
+        auto permission1 = env.CheckRequest("user", request1.GetRequestId(), false, TStatus::ALLOW, 1);
+        env.CheckRejectRequest("user", request1.GetRequestId(), false, TStatus::WRONG_REQUEST);
+        env.CheckDonePermission("user", permission1.GetPermissions(0).GetId());
+    }
+
     Y_UNIT_TEST(RequestReplaceManyDevicesOnOneNode)
     {
         TCmsTestEnv env(16, 3);

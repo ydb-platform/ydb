@@ -36,14 +36,14 @@ Y_UNIT_TEST_SUITE(ObjectStorageTest) {
 
         {  // location
             NKikimrExternalSources::TGeneral general;
-            general.set_location("}");
-            UNIT_ASSERT_EXCEPTION_CONTAINS(source->Pack(schema, general), NExternalSource::TExternalSourceException, "Location '}' contains invalid wildcard:");
+            general.set_location("{");
+            UNIT_ASSERT_EXCEPTION_CONTAINS(source->Pack(schema, general), NExternalSource::TExternalSourceException, "Location '{' contains invalid wildcard:");
         }
 
         {  // file pattern
             NKikimrExternalSources::TGeneral general;
-            general.mutable_attributes()->insert({"file_pattern", "}"});
-            UNIT_ASSERT_EXCEPTION_CONTAINS(source->Pack(schema, general), NExternalSource::TExternalSourceException, "File pattern '}' contains invalid wildcard:");
+            general.mutable_attributes()->insert({"file_pattern", "{"});
+            UNIT_ASSERT_EXCEPTION_CONTAINS(source->Pack(schema, general), NExternalSource::TExternalSourceException, "File pattern '{' contains invalid wildcard:");
             general.set_location("/test_file");
             UNIT_ASSERT_EXCEPTION_CONTAINS(source->Pack(schema, general), NExternalSource::TExternalSourceException, "Path pattern cannot be used with file_pattern");
         }

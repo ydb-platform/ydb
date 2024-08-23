@@ -2206,7 +2206,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
         {  // path validation
             const TString sql = R"(
-                    SELECT * FROM `/Root/external_data_source`.`/}` WITH (
+                    SELECT * FROM `/Root/external_data_source`.`/{` WITH (
                         SCHEMA = (data String),
                         FORMAT = "csv_with_names"
                     ))";
@@ -2216,7 +2216,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
             NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
             UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Failed, readyOp.Status().GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Path '/}' contains invalid wildcard:");
+            UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Path '/{' contains invalid wildcard:");
         }
 
         {  // file pattern validation
@@ -2224,7 +2224,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
                     SELECT * FROM `/Root/external_data_source`.`/` WITH (
                         SCHEMA = (data String),
                         FORMAT = "csv_with_names",
-                        FILE_PATTERN = "}"
+                        FILE_PATTERN = "{"
                     ))";
 
             auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
@@ -2232,7 +2232,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
             NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
             UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Failed, readyOp.Status().GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "File pattern '}' contains invalid wildcard:");
+            UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "File pattern '{' contains invalid wildcard:");
         }
     }
 }

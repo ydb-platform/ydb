@@ -231,11 +231,11 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
                 Value String
             ) WITH (
                 DATA_SOURCE="/Root/ExternalDataSource",
-                LOCATION="}"
+                LOCATION="{"
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Location '}' contains invalid wildcard:");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Location '{' contains invalid wildcard:");
     }
 }
 

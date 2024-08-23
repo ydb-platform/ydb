@@ -44,10 +44,10 @@ Y_UNIT_TEST_SUITE(TPathTests) {
         TestRegexFromWildcardsSuccess("first,test\\_{alt1,alt2}_text", "first\\,test\\\\_(?:alt1|alt2)_text");
         TestRegexFromWildcardsSuccess("hello.*world?str", "hello\\..*world.str");
         TestRegexFromWildcardsSuccess("many_{},{alt1,al?t2,al*t3},{alt4}_alts", "many_(?:)\\,(?:alt1|al.t2|al.*t3)\\,(?:alt4)_alts");
+        TestRegexFromWildcardsSuccess("hello}{}}world", "hello\\}(?:)\\}world");
+        TestRegexFromWildcardsSuccess("hello{{{}world", "hello(?:\\{\\{)world");
 
-        TestRegexFromWildcardsFail("hello{}}world", "Unexpected group end", "found unexpected group end at position 7");
-        TestRegexFromWildcardsFail("hello{{{}world", "Found unterminated group", "found unterminated group start at position 5");
-        TestRegexFromWildcardsFail("hello{},{{}}world", "Found unterminated group", "found unterminated group start at position 8");
+        TestRegexFromWildcardsFail("hello{}}{world", "Found unterminated group", "found unterminated group start at position 8");
     }
 }
 

@@ -37,7 +37,7 @@ public:
                 TStringBuilder() << "Index build process with id <" << indexBuildId << "> not found"
             );
         }
-        const auto& indexBuildInfo = **indexBuildInfoPtr;
+        const auto& indexBuildInfo = *indexBuildInfoPtr->Get();
         if (indexBuildInfo.DomainPathId != domainPathId) {
             return Reply(
                 Ydb::StatusIds::BAD_REQUEST,

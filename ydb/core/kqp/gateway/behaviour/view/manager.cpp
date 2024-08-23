@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/gateway/actors/scheme.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/library/yql/sql/settings/protos/translation_settings.pb.h>
 
 namespace NKikimr::NKqp {
 
@@ -57,6 +58,12 @@ void FillCreateViewProposal(NKikimrSchemeOp::TModifyScheme& modifyScheme,
     auto& viewDesc = *modifyScheme.MutableCreateView();
     viewDesc.SetName(pathPair.second);
     viewDesc.SetQueryText(GetByKeyOrDefault(settings, "query_text"));
+
+    NYql::NProto::TTranslationSettings capturedContext;
+    if (!capturedContext.ParseFromString(GetByKeyOrDefault(settings, "captured_context"))) {
+        ythrow TBadArgumentException() << "Parser context captured in the view is invalid";
+    }
+    *viewDesc.MutableCapturedContext() = std::move(capturedContext);
 
     if (!settings.GetFeaturesExtractor().IsFinished()) {
         ythrow TBadArgumentException() << "Unknown property: " << settings.GetFeaturesExtractor().GetRemainedParamsString();

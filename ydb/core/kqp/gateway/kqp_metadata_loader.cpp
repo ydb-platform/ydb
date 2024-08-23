@@ -302,7 +302,7 @@ TTableMetadataResult GetViewMetadataResult(
   metadata->SchemaVersion = description.GetVersion();
   metadata->Kind = NYql::EKikimrTableKind::View;
   metadata->Attributes = schemeEntry.Attributes;
-  metadata->ViewPersistedData = {description.GetQueryText()};
+  metadata->ViewPersistedData = {description.GetQueryText(), description.GetCapturedContext()};
 
   return builtResult;
 }

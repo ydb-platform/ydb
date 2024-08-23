@@ -772,6 +772,8 @@ public:
                     .Repeat(TExprStep::RewriteIO);
 
                 const auto& query = tableDesc.Metadata->ViewPersistedData.QueryText;
+                const auto& capturedContext = tableDesc.Metadata->ViewPersistedData.CapturedContext;
+
                 NKqp::TKqpTranslationSettingsBuilder settingsBuilder(
                     SessionCtx->Query().Type,
                     SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(),
@@ -780,7 +782,7 @@ public:
                     SessionCtx->Config().BindingsMode,
                     GUCSettings
                 );
-                return RewriteReadFromView(node, ctx, query, settingsBuilder, Types.Modules);
+                return RewriteReadFromView(node, ctx, query, settingsBuilder, Types.Modules, capturedContext);
             }
         }
 

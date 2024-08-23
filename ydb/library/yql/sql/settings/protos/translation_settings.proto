@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package NYql.NProto;
+
+option java_package = "com.yandex.yql.proto";
+
+message TTranslationSettings {
+    optional string PathPrefix = 1;
+    optional uint32 SyntaxVersion = 2;
+    optional bool AnsiLexer = 3;
+    optional bool Antlr4Parser = 4;
+    optional bool PgParser = 5;
+    repeated string Pragmas = 6;
+}

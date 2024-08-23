@@ -67,6 +67,37 @@ namespace NSQLTranslation {
         , AssumeYdbOnClusterWithSlash(false)
     {}
 
+    NYql::NProto::TTranslationSettings TTranslationSettings::Serialize() const {
+        NYql::NProto::TTranslationSettings serializedSettings;
+
+        serializedSettings.SetPathPrefix(PathPrefix);
+        serializedSettings.SetSyntaxVersion(SyntaxVersion);
+        serializedSettings.SetAnsiLexer(AnsiLexer);
+        serializedSettings.SetAntlr4Parser(Antlr4Parser);
+        serializedSettings.SetPgParser(PgParser);
+
+        auto* pragmas = serializedSettings.MutablePragmas();
+        pragmas->Add(Flags.begin(), Flags.end());
+
+        return serializedSettings;
+    }
+
+    void TTranslationSettings::UpdateWith(const NYql::NProto::TTranslationSettings& serializedSettings) {
+        #define DeserializeSetting(settingName) \
+            if (serializedSettings.Has##settingName()) { \
+                settingName = serializedSettings.Get##settingName(); \
+            }
+
+        DeserializeSetting(PathPrefix);
+        DeserializeSetting(SyntaxVersion);
+        DeserializeSetting(AnsiLexer);
+        DeserializeSetting(Antlr4Parser);
+        DeserializeSetting(PgParser);
+
+        #undef DeserializeSetting
+
+        Flags.insert(serializedSettings.GetPragmas().begin(), serializedSettings.GetPragmas().end());
+    }
 
     bool ParseTranslationSettings(const TString& query, TTranslationSettings& settings, NYql::TIssues& issues) {
         if (!NYql::IsUtf8(query)) {

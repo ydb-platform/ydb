@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/host/kqp_translate.h>
 #include <ydb/library/yql/ast/yql_expr.h>
+#include <ydb/library/yql/sql/settings/protos/translation_settings.pb.h>
 
 namespace NYql {
 
@@ -12,7 +13,8 @@ TExprNode::TPtr RewriteReadFromView(
     TExprContext& ctx,
     const TString& query,
     NKikimr::NKqp::TKqpTranslationSettingsBuilder& settingsBuilder,
-    IModuleResolver::TPtr moduleResolver
+    IModuleResolver::TPtr moduleResolver,
+    const NYql::NProto::TTranslationSettings& capturedContext
 );
 
 }

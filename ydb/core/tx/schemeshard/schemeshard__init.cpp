@@ -1915,6 +1915,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto& view = Self->Views[pathId] = new TViewInfo();
                 view->AlterVersion = rowset.GetValue<Schema::View::AlterVersion>();
                 view->QueryText = rowset.GetValue<Schema::View::QueryText>();
+                Y_PROTOBUF_SUPPRESS_NODISCARD view->CapturedContext.ParseFromString(
+                    rowset.GetValue<Schema::View::CapturedContext>()
+                );
                 Self->IncrementPathDbRefCount(pathId);
 
                 if (!rowset.Next()) {

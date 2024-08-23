@@ -408,6 +408,46 @@ Y_UNIT_TEST_SUITE(TSelectFromViewTest) {
         CompareResults(etalonResults, selectFromViewResults);
     }
 
+    Y_UNIT_TEST(OneTableUsingRelativeName) {
+        TKikimrRunner kikimr;
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
+
+        EnableViewsFeatureFlag(kikimr);
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        constexpr const char* viewName = "TheView";
+        constexpr const char* testTable = "Test";
+        const auto innerQuery = std::format(R"(
+                SELECT * FROM {}
+            )",
+            testTable
+        );
+
+        const TString creationQuery = std::format(R"(
+                CREATE VIEW {} WITH (security_invoker = true) AS {};
+            )",
+            viewName,
+            innerQuery
+        );
+        ExecuteDataDefinitionQuery(session, creationQuery);
+
+        const auto etalonResults = ExecuteDataModificationQuery(session, std::format(R"(
+                    SELECT * FROM ({});
+                )",
+                innerQuery
+            )
+        );
+        const auto selectFromViewResults = ExecuteDataModificationQuery(session, std::format(R"(
+                    SELECT * FROM {};
+                )",
+                viewName
+            )
+        );
+        CompareResults(etalonResults, selectFromViewResults);
+    }
+
     Y_UNIT_TEST(DisabledFeatureFlag) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();

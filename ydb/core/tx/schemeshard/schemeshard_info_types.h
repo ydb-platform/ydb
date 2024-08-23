@@ -29,6 +29,7 @@
 #include <ydb/core/util/pb.h>
 
 #include <ydb/library/login/protos/login.pb.h>
+#include <ydb/library/yql/sql/settings/protos/translation_settings.pb.h>
 
 #include <ydb/public/api/protos/ydb_import.pb.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
@@ -3363,6 +3364,7 @@ struct TViewInfo : TSimpleRefCount<TViewInfo> {
 
     ui64 AlterVersion = 0;
     TString QueryText;
+    NYql::NProto::TTranslationSettings CapturedContext;
 };
 
 struct TResourcePoolInfo : TSimpleRefCount<TResourcePoolInfo> {

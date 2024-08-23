@@ -11,6 +11,7 @@ PEERDIR(
     ydb/library/yql/core/issue
     ydb/library/yql/core/pg_settings
     ydb/library/yql/core/issue/protos
+    ydb/library/yql/sql/settings/protos
     ydb/library/yql/utils
 )
 

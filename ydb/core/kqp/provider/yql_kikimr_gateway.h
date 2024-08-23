@@ -11,6 +11,7 @@
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/utils/resetable_setting.h>
+#include <ydb/library/yql/sql/settings/protos/translation_settings.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/metadata/manager/abstract.h>
@@ -446,6 +447,7 @@ enum EMetaSerializationType : ui64 {
 
 struct TViewPersistedData {
     TString QueryText;
+    NYql::NProto::TTranslationSettings CapturedContext;
 };
 
 struct TKikimrTableMetadata : public TThrRefBase {

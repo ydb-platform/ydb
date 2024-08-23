@@ -23,7 +23,7 @@ struct TStatisticsAggregator::TTxScheduleTrasersal : public TTxBase {
             return true;
         }
 
-        if (!Self->IsSchemeshardSeen) {
+        if (Self->ScheduleTraversals.empty()) {
             SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleTrasersal. No info from schemeshard");
             return true;
         }

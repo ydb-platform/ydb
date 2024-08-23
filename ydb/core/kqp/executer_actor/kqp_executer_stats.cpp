@@ -1013,10 +1013,10 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
         ExportAggStats(p.second.WaitInputTimeUs, *stageStats.MutableWaitInputTimeUs());
         ExportAggStats(p.second.WaitOutputTimeUs, *stageStats.MutableWaitOutputTimeUs());
 
-        p.second.SpillingComputeBytes.ExportAggStats(BaseTimeMs, *stageStats.MutableComputeSpillingBytes());
-        p.second.SpillingChannelBytes.ExportAggStats(BaseTimeMs, *stageStats.MutableChannelSpillingBytes());
-        p.second.SpillingComputeTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableComputeSpillingTimeUs());
-        p.second.SpillingChannelTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableChannelSpillingTimeUs());
+        p.second.SpillingComputeBytes.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingComputeBytes());
+        p.second.SpillingChannelBytes.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingChannelBytes());
+        p.second.SpillingComputeTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingComputeTimeUs());
+        p.second.SpillingChannelTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingChannelTimeUs());
 
         FillStageDurationUs(stageStats);
 

@@ -1,5 +1,7 @@
 LIBRARY()
 
+VERSION(1.4.17)
+
 LICENSE(
     BSD-3-Clause AND
     GPL-3.0-or-later AND

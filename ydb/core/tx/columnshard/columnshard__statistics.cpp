@@ -27,13 +27,28 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvAnalyzeTable::TPtr& ev, const
 }
 
 void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext&) {
+    const auto& record = ev->Get()->Record;
+
+    auto response = std::make_unique<NStat::TEvStatistics::TEvStatisticsResponse>();
+    auto& respRecord = response->Record;
+    respRecord.SetShardTabletId(TabletID());
+
+    if (record.TypesSize() > 0 && (record.TypesSize() > 1 || record.GetTypes(0) != NKikimrStat::TYPE_COUNT_MIN_SKETCH)) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "Unsupported statistic type in statistics request");
+
+        respRecord.SetStatus(NKikimrStat::TEvStatisticsResponse::STATUS_ERROR);
+
+        Send(ev->Sender, response.release(), 0, ev->Cookie);
+        return;
+    }
+
     AFL_VERIFY(HasIndex());
     auto index = GetIndexAs<NOlap::TColumnEngineForLogs>();
-    auto spg = index.GetGranuleOptional(ev->Get()->Record.GetTable().GetPathId().GetLocalId());
+    auto spg = index.GetGranuleOptional(record.GetTable().GetPathId().GetLocalId());
     AFL_VERIFY(spg);
 
     std::set<ui32> columnTagsRequested;
-    for (ui32 tag : ev->Get()->Record.GetTable().GetColumnTags()) {
+    for (ui32 tag : record.GetTable().GetColumnTags()) {
         columnTagsRequested.insert(tag);
     }
     if (columnTagsRequested.empty()) {
@@ -47,11 +62,11 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
         sketchesByColumns.emplace(id, TCountMinSketch::Create());
     }
 
-    for (const auto& [indexKey, keyPortions] : spg->GetPortionsIndex().GetPoints()) {
-        for (auto&& [_, portionInfo] : keyPortions.GetStart()) {
+    for (const auto& [_, portionInfo] : spg->GetPortions()) {
+        if (portionInfo->IsVisible(GetMaxReadVersion())) {
             std::shared_ptr<NOlap::ISnapshotSchema> portionSchema = portionInfo->GetSchema(index.GetVersionedIndex());
             for (ui32 columnId : columnTagsRequested) {
-                auto indexMeta = portionSchema->GetIndexInfo().GetIndexCountMinSketch({columnId});
+                auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaCountMinSketch({columnId});
 
                 if (!indexMeta) {
                     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "Missing countMinSketch index for columnId " + ToString(columnId));
@@ -69,14 +84,10 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
         }
     }
 
-    auto response = std::make_unique<NStat::TEvStatistics::TEvStatisticsResponse>();
-    auto& record = response->Record;
-    record.SetShardTabletId(TabletID());
-
-    record.SetStatus(NKikimrStat::TEvStatisticsResponse::STATUS_SUCCESS);
+    respRecord.SetStatus(NKikimrStat::TEvStatisticsResponse::STATUS_SUCCESS);
 
     for (ui32 columnTag : columnTagsRequested) {
-        auto* column = record.AddColumns();
+        auto* column = respRecord.AddColumns();
         column->SetTag(columnTag);
 
         auto* statistic = column->AddStatistics();

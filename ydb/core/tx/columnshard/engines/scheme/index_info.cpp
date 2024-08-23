@@ -396,7 +396,7 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
     return TConclusionStatus::Success();
 }
 
-std::shared_ptr<NIndexes::NMax::TIndexMeta> TIndexInfo::GetIndexMax(const ui32 columnId) const {
+std::shared_ptr<NIndexes::NMax::TIndexMeta> TIndexInfo::GetIndexMetaMax(const ui32 columnId) const {
     for (auto&& i : Indexes) {
         if (i.second->GetClassName() != NIndexes::NMax::TIndexMeta::GetClassNameStatic()) {
             continue;
@@ -409,7 +409,7 @@ std::shared_ptr<NIndexes::NMax::TIndexMeta> TIndexInfo::GetIndexMax(const ui32 c
     return nullptr;
 }
 
-std::shared_ptr<NIndexes::NCountMinSketch::TIndexMeta> TIndexInfo::GetIndexCountMinSketch(const std::set<ui32>& columnIds) const {
+std::shared_ptr<NIndexes::NCountMinSketch::TIndexMeta> TIndexInfo::GetIndexMetaCountMinSketch(const std::set<ui32>& columnIds) const {
     for (auto&& i : Indexes) {
         if (i.second->GetClassName() != NIndexes::NCountMinSketch::TIndexMeta::GetClassNameStatic()) {
             continue;

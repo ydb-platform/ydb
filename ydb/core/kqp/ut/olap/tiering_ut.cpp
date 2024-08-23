@@ -93,7 +93,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         }
     }
 
-    Y_UNIT_TEST(EmptyTieringRule) {
+    Y_UNIT_TEST(TieringRuleValidation) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
 
         TKikimrSettings runnerSettings;
@@ -105,6 +105,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
 
         localHelper.CreateTestOlapTable();
+        testHelper.CreateTier("tier1");
 
         {
             const TString query = R"(
@@ -114,10 +115,43 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
         }
 
-        testHelper.CreateTier("tier1");
+        {
+            const TString query = R"(
+            CREATE OBJECT IF NOT EXISTS empty_default_column (TYPE TIERING_RULE)
+                WITH (defaultColumn = ``, description = `{"rules": [{ "tierName" : "tier1", "durationForEvict" : "10d" }]}`))";
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+        }
+
+        {
+            const TString query = R"(
+            CREATE OBJECT IF NOT EXISTS no_default_column (TYPE TIERING_RULE)
+                WITH (description = `{"rules": [{ "tierName" : "tier1", "durationForEvict" : "10d" }]}`))";
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+        }
+
         const TString correctTieringRule = testHelper.CreateTieringRule("tier1", "timestamp");
         {
             const TString query = "ALTER OBJECT " + correctTieringRule + R"( (TYPE TIERING_RULE) SET description `{"rules": []}`)";
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+        }
+
+        {
+            const TString query = "ALTER OBJECT " + correctTieringRule + R"( (TYPE TIERING_RULE) SET description `{"rules": []}`)";
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+        }
+
+        {
+            const TString query = "ALTER OBJECT " + correctTieringRule + R"( (TYPE TIERING_RULE) SET defaultColumn ``)";
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+        }
+
+        {
+            const TString query = "ALTER OBJECT " + correctTieringRule + R"( (TYPE TIERING_RULE) RESET defaultColumn)";
             auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
         }

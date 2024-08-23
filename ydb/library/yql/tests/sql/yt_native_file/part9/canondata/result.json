@@ -623,6 +623,13 @@
             "uri": "file://test.test_column_group-hint_short_grp_fail--Results_/extracted"
         }
     ],
+    "test.test[column_group-insert_diff_groups3_fail--Debug]": [],
+    "test.test[column_group-insert_diff_groups3_fail--Plan]": [],
+    "test.test[column_group-insert_diff_groups3_fail--Results]": [
+        {
+            "uri": "file://test.test_column_group-insert_diff_groups3_fail--Results_/extracted"
+        }
+    ],
     "test.test[column_order-ordered_plus_native--Debug]": [
         {
             "checksum": "8ce624d459aee467421b612822e10b6a",

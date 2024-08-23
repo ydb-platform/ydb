@@ -32,7 +32,7 @@ def main():
         event = json.load(fp)
 
     pr = gh.create_from_raw_data(PullRequest, event["pull_request"])
-    update_pr_comment_text(pr, build_preset, run_number, color, args.text.read().rstrip(), args.rewrite)
+    update_pr_comment_text(pr, build_preset, run_number, color, args.text.read(), args.rewrite)
 
 
 if __name__ == "__main__":

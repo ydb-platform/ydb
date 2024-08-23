@@ -6,26 +6,21 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/metering/metering.h>
 
-template <>
-inline void Out<Ydb::Table::IndexBuildState_State>(IOutputStream& o, Ydb::Table::IndexBuildState_State info) {
-    o << IndexBuildState_State_Name(info);
-}
-
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
-Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
-    Y_UNIT_TEST(BaseCase) {
+Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
+    Y_UNIT_TEST (BaseCase) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
+        TestCreateExtSubDomain(runtime, ++txId, "/MyRoot",
                                "Name: \"ResourceDB\"");
         env.TestWaitNotification(runtime, txId);
 
-        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+        TestAlterExtSubDomain(runtime, ++txId, "/MyRoot",
                               "StoragePools { "
                               "  Name: \"pool-1\" "
                               "  Kind: \"pool-kind-1\" "
@@ -45,7 +40,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         const auto attrs = AlterUserAttrs({
             {"cloud_id", "CLOUD_ID_VAL"},
             {"folder_id", "FOLDER_ID_VAL"},
-            {"database_id", "DATABASE_ID_VAL"}
+            {"database_id", "DATABASE_ID_VAL"},
         });
 
         TestCreateExtSubDomain(runtime, ++txId, "/MyRoot", Sprintf(R"(
@@ -58,18 +53,18 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         env.TestWaitNotification(runtime, txId);
 
         TString alterData = TStringBuilder()
-            << "PlanResolution: 50 "
-            << "Coordinators: 1 "
-            << "Mediators: 1 "
-            << "TimeCastBucketsPerMediator: 2 "
-            << "ExternalSchemeShard: true "
-            << "ExternalHive: false "
-            << "Name: \"ServerLessDB\" "
-            << "StoragePools { "
-            << "  Name: \"pool-1\" "
-            << "  Kind: \"pool-kind-1\" "
-            << "} ";
-        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", alterData);
+                            << "PlanResolution: 50 "
+                            << "Coordinators: 1 "
+                            << "Mediators: 1 "
+                            << "TimeCastBucketsPerMediator: 2 "
+                            << "ExternalSchemeShard: true "
+                            << "ExternalHive: false "
+                            << "Name: \"ServerLessDB\" "
+                            << "StoragePools { "
+                            << "  Name: \"pool-1\" "
+                            << "  Kind: \"pool-kind-1\" "
+                            << "} ";
+        TestAlterExtSubDomain(runtime, ++txId, "/MyRoot", alterData);
         env.TestWaitNotification(runtime, txId);
 
         ui64 tenantSchemeShard = 0;
@@ -87,7 +82,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         )");
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
-        auto fnWriteRow = [&] (ui64 tabletId, ui32 key, TString embedding, const char* table) {
+        auto fnWriteRow = [&](ui64 tabletId, ui32 key, TString embedding, const char* table) {
             TString writeQuery = Sprintf(R"(
                 (
                     (let key   '( '('key       (Uint32 '%u ) ) ) )
@@ -99,7 +94,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             TString err;
             NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
             UNIT_ASSERT_VALUES_EQUAL(err, "");
-            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
+            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
         };
         for (ui32 key = 0; key < 200; ++key) {
             fnWriteRow(TTestTxConfig::FakeHiveTablets + 6, key, std::to_string(key), "Table");
@@ -114,17 +109,10 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                             NLs::PathVersionEqual(3)});
 
         TStringBuilder meteringMessages;
-        auto grabMeteringMessage = [&meteringMessages](TAutoPtr<IEventHandle>& ev) -> auto {
-            if (ev->Type == NMetering::TEvMetering::TEvWriteMeteringJson::EventType) {
-                auto *msg = ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>();
-                Cerr << "grabMeteringMessage has happened" << Endl;
-                meteringMessages << msg->MeteringJson;
-            }
-
-            return TTestActorRuntime::EEventAction::PROCESS;
-        };
-
-        runtime.SetObserverFunc(grabMeteringMessage);
+        auto observerHolder = runtime.AddObserver<NMetering::TEvMetering::TEvWriteMeteringJson>([&](NMetering::TEvMetering::TEvWriteMeteringJson::TPtr& event) {
+            Cerr << "grabMeteringMessage has happened" << Endl;
+            meteringMessages << event->Get()->MeteringJson;
+        });
 
         TestBuildVectorIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", "embedding");
         ui64 buildIndexId = txId;
@@ -185,11 +173,11 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
         // CommonDB
-        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
+        TestCreateExtSubDomain(runtime, ++txId, "/MyRoot",
                                "Name: \"CommonDB\"");
         env.TestWaitNotification(runtime, txId);
 
-        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+        TestAlterExtSubDomain(runtime, ++txId, "/MyRoot",
                               "StoragePools { "
                               "  Name: \"pool-3\" "
                               "  Kind: \"pool-kind-3\" "

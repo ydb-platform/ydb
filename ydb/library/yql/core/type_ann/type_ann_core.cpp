@@ -9098,6 +9098,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         if (extractKeyLambda->IsAtom()) {
             TExprNode::TPtr applied;
             if (udf->IsLambda()) {
+                if (udf->Head().ChildrenSize() != 1) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(pos), TStringBuilder() << "Expected lambda with one argument, but got: " << udf->Head().ChildrenSize()));
+                    return IGraphTransformer::TStatus::Error;
+                }
+
                 applied = ctx.Expr.Builder(pos)
                     .Apply(udf)
                         .With(0, udfInput)

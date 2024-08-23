@@ -1571,6 +1571,15 @@ public:
         return false;
     }
 
+    bool IsIncrementalRestore() const {
+        for (const auto& [_, info] : TableInfos) {
+            if (info->IsIncrementalRestore()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     ui32 Generation() const { return Executor()->Generation(); }
     bool IsFollower() const { return Executor()->GetStats().IsFollower; }
     bool SyncSchemeOnFollower(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx,
@@ -2689,7 +2698,7 @@ private:
         { }
     };
 
-    TIntrusivePtr<TMediatorTimecastEntry> MediatorTimeCastEntry;
+    TMediatorTimecastEntry::TCPtr MediatorTimeCastEntry;
     TSet<ui64> MediatorTimeCastWaitingSteps;
     TMultiMap<TRowVersion, TMediatorDelayedReply> MediatorDelayedReplies;
 

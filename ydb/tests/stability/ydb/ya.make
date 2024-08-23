@@ -7,10 +7,10 @@ TEST_SRCS(
 
 TIMEOUT(18000)
 SIZE(LARGE)
-TAG(ya:not_autocheck ya:fat ya:manual)
+TAG(ya:not_autocheck ya:fat)
 
 DATA(
-    arcadia/kikimr/ci/stability/resources
+    arcadia/ydb/tests/stability/resources
 )
 
 DEPENDS(

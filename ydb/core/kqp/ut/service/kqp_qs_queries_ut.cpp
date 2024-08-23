@@ -3265,8 +3265,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto session = Kikimr->GetTableClient().CreateSession().GetValueSync().GetSession();
 
             auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-            csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
-            csController->SetLagForCompactionBeforeTierings(TDuration::Seconds(1));
+            csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+            csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
             csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
 
             const TString query = Sprintf(R"(

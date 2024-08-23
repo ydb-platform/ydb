@@ -120,7 +120,7 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
 
     void ResolvePath() {
         auto request = MakeHolder<TNavigate>();
-        request->DatabaseName = NKikimr::CanonizePath(DatabaseName);
+        request->DatabaseName = NKikimr::CanonizePath(GetDatabaseName());
 
         auto& entry = request->ResultSet.emplace_back();
         entry.Operation = TNavigate::OpTable;
@@ -179,7 +179,7 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
 
     void ResolveKeys() {
         auto request = MakeHolder<TResolve>();
-        request->DatabaseName = NKikimr::CanonizePath(DatabaseName);
+        request->DatabaseName = NKikimr::CanonizePath(GetDatabaseName());
 
         request->ResultSet.emplace_back(std::move(KeyDesc));
         request->ResultSet.back().Access = NACLib::UpdateRow;

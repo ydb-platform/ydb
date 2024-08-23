@@ -1911,6 +1911,92 @@ NQueryTrackerClient::EQueryState ConvertQueryStateFromProto(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void FillRequest(
+    TReqStartDistributedWriteSession* req,
+    const NYPath::TRichYPath& path,
+    const TDistributedWriteSessionStartOptions& options)
+{
+    Y_UNUSED(req, path, options);
+}
+
+void FromProto(
+    TDistributedWriteSessionStartOptions* mutableOptions,
+    const TReqStartDistributedWriteSession& req)
+{
+    Y_UNUSED(req, mutableOptions);
+}
+
+void FromProto(
+    TDistributedWriteSession* mutableSession,
+    TRspStartDistributedWriteSession&& rsp)
+{
+    Y_UNUSED(mutableSession, rsp);
+}
+
+void ToProto(
+    TRspStartDistributedWriteSession* rsp,
+    const TDistributedWriteSessionPtr& session)
+{
+    Y_UNUSED(rsp, session);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqFinishDistributedWriteSession* req,
+    TDistributedWriteSessionPtr session,
+    const TDistributedWriteSessionFinishOptions& options)
+{
+    Y_UNUSED(req, session, options);
+}
+
+void FromProto(
+    TDistributedWriteSessionFinishOptions* mutableOptions,
+    const TReqFinishDistributedWriteSession& req)
+{
+    Y_UNUSED(req, mutableOptions);
+}
+
+void FromProto(
+    TDistributedWriteSession* mutableSession,
+    const TReqFinishDistributedWriteSession& req)
+{
+    Y_UNUSED(mutableSession, req);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqParticipantWriteTable* req,
+    const TDistributedWriteCookiePtr& cookie,
+    const TParticipantTableWriterOptions& options)
+{
+    Y_UNUSED(req, cookie, options);
+}
+
+void FromProto(
+    TParticipantTableWriterOptions* mutableOptions,
+    const TReqParticipantWriteTable& req)
+{
+    Y_UNUSED(req, mutableOptions);
+}
+
+void FromProto(
+    TDistributedWriteCookie* cookie,
+    const TReqParticipantWriteTable& req)
+{
+    Y_UNUSED(cookie, req);
+}
+
+void ToProto(
+    TRspParticipantWriteTable* rsp,
+    const TDistributedWriteCookiePtr& cookie)
+{
+    Y_UNUSED(rsp, cookie);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NProto
 
 ////////////////////////////////////////////////////////////////////////////////

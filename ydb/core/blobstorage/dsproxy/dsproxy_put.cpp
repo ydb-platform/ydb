@@ -478,8 +478,6 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
 
         if (TActivationContext::Monotonic() - StartTime >= LongRequestThreshold) {
             bool allowToReport = AllowToReport(HandleClass);
-            R_LOG_WARN_S("DEBUG", TActivationContext::Monotonic() - StartTime << " " << LongRequestThreshold << " " << allowToReport << " "
-                    << NKikimrBlobStorage::EPutHandleClass_Name(PutImpl.GetPutHandleClass()));
             if (allowToReport) {
                 R_LOG_WARN_S("BPP71", "TEvPut Request was being processed for more than " << LongRequestThreshold
                         << ", serialized RootCause# " << RootCauseTrack.ToString());

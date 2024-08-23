@@ -1302,7 +1302,7 @@ void TBlobStorageController::RenderVSlotRow(IOutputStream& out, const TVSlotInfo
                 out << time;
             }
             TABLED() {
-                if (vslot.Mood == TMood::Donor) {
+                if (TMood::IsDonor(vslot.Mood)) {
                     const auto *x = FindAcceptor(vslot);
                     out << "<strong>donor for <a href='#" << x->GetVDiskId() << "'>" << x->VSlotId << "</a></strong>";
                 } else {

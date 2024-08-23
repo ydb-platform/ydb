@@ -35,13 +35,15 @@ public:
         TVector<TString> keyColumns,
         NKikimrServices::EServiceKikimr logService,
         TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing(),
-        bool isSystemUser = false)
+        bool isSystemUser = false,
+        TMaybe<TPartitionSettings> partitionSettings = {})
         : PathComponents(std::move(pathComponents))
         , Columns(std::move(columns))
         , KeyColumns(std::move(keyColumns))
         , LogService(logService)
         , TtlSettings(std::move(ttlSettings))
         , IsSystemUser(isSystemUser)
+        , PartitionSettings(partitionSettings)
         , LogPrefix("Table " + TableName() + " updater. ")
     {
         Y_ABORT_UNLESS(!PathComponents.empty());
@@ -113,6 +115,11 @@ public:
         if (IsSystemUser) {
             request->Record.SetUserToken(NACLib::TSystemUsers::Metadata().SerializeAsString());
         }
+        if (PartitionSettings && PartitionSettings->SizeToSplit != 0) {
+            auto* partitioningPolicy = tableDesc->MutablePartitionConfig()->MutablePartitioningPolicy();
+            partitioningPolicy->SetSizeToSplit(PartitionSettings->SizeToSplit);
+        }
+
         Send(MakeTxProxyID(), std::move(request));
     }
 
@@ -382,6 +389,7 @@ private:
     NKikimrServices::EServiceKikimr LogService;
     const TMaybe<NKikimrSchemeOp::TTTLSettings> TtlSettings;
     bool IsSystemUser = false;
+    const TMaybe<TPartitionSettings> PartitionSettings;
     NKikimrSchemeOp::EOperationType OperationType = NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable;
     NActors::TActorId Owner;
     NActors::TActorId SchemePipeActorId;
@@ -480,10 +488,12 @@ NActors::IActor* CreateTableCreator(
     TVector<TString> keyColumns,
     NKikimrServices::EServiceKikimr logService,
     TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings,
-    bool isSystemUser)
+    bool isSystemUser,
+    TMaybe<TPartitionSettings> partitionSettings)
 {
     return new TTableCreator(std::move(pathComponents), std::move(columns),
-        std::move(keyColumns), logService, std::move(ttlSettings), isSystemUser);
+        std::move(keyColumns), logService, std::move(ttlSettings), isSystemUser,
+        partitionSettings);
 }
 
 } // namespace NKikimr

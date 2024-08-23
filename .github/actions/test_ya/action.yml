@@ -163,12 +163,12 @@ runs:
           params+=(${{ inputs.additional_ya_make_args }})
         fi
 
-        if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
+        if [ "false" = "true" }}" ]; then
           params+=(--bazel-remote-store)
           params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
         fi
 
-        if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
+        if [ "false" = "true" ]; then
           params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
           params+=(--bazel-remote-password "${{ inputs.bazel_remote_password }}")
           params+=(--bazel-remote-put --dist-cache-max-file-size=209715200)

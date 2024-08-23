@@ -15,7 +15,7 @@ from .._grpc.grpcwrapper import common_utils
 from .._grpc.grpcwrapper import ydb_query as _ydb_query
 from .._grpc.grpcwrapper import ydb_query_public_types as _ydb_query_public
 
-from .transaction import BaseQueryTxContext
+from .transaction import QueryTxContextSync
 
 
 logger = logging.getLogger(__name__)
@@ -126,12 +126,12 @@ def wrapper_delete_session(
     return session
 
 
-class BaseQuerySession(base.IQuerySession):
-    _driver: base.SupportedDriverType
+class BaseQuerySession:
+    _driver: common_utils.SupportedDriverType
     _settings: base.QueryClientSettings
     _state: QuerySessionState
 
-    def __init__(self, driver: base.SupportedDriverType, settings: Optional[base.QueryClientSettings] = None):
+    def __init__(self, driver: common_utils.SupportedDriverType, settings: Optional[base.QueryClientSettings] = None):
         self._driver = driver
         self._settings = settings if settings is not None else base.QueryClientSettings()
         self._state = QuerySessionState(settings)
@@ -224,7 +224,9 @@ class QuerySessionSync(BaseQuerySession):
                     self._state.reset()
                     self._state._change_state(QuerySessionStateEnum.CLOSED)
         except Exception:
-            pass
+            if not self._state._already_in(QuerySessionStateEnum.CLOSED):
+                self._state.reset()
+                self._state._change_state(QuerySessionStateEnum.CLOSED)
 
     def delete(self) -> None:
         """WARNING: This API is experimental and could be changed.
@@ -256,7 +258,7 @@ class QuerySessionSync(BaseQuerySession):
 
         return self
 
-    def transaction(self, tx_mode: Optional[base.BaseQueryTxMode] = None) -> base.IQueryTxContext:
+    def transaction(self, tx_mode: Optional[base.BaseQueryTxMode] = None) -> QueryTxContextSync:
         """WARNING: This API is experimental and could be changed.
 
         Creates a transaction context manager with specified transaction mode.
@@ -273,7 +275,7 @@ class QuerySessionSync(BaseQuerySession):
 
         tx_mode = tx_mode if tx_mode else _ydb_query_public.QuerySerializableReadWrite()
 
-        return BaseQueryTxContext(
+        return QueryTxContextSync(
             self._driver,
             self._state,
             self,
@@ -283,9 +285,9 @@ class QuerySessionSync(BaseQuerySession):
     def execute(
         self,
         query: str,
+        parameters: dict = None,
         syntax: base.QuerySyntax = None,
         exec_mode: base.QueryExecMode = None,
-        parameters: dict = None,
         concurrent_result_sets: bool = False,
     ) -> base.SyncResponseContextIterator:
         """WARNING: This API is experimental and could be changed.
@@ -313,5 +315,9 @@ class QuerySessionSync(BaseQuerySession):
 
         return base.SyncResponseContextIterator(
             stream_it,
-            lambda resp: base.wrap_execute_query_response(rpc_state=None, response_pb=resp),
+            lambda resp: base.wrap_execute_query_response(
+                rpc_state=None,
+                response_pb=resp,
+                settings=self._settings,
+            ),
         )

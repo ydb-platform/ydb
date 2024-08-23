@@ -1,17 +1,23 @@
+#ifndef EMA_COUNTER_INL_H_
+#error "Direct inclusion of this file is not allowed, include transaction.h"
+// For the sake of sane code completion.
 #include "ema_counter.h"
-
-#include <cmath>
+#endif
 
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEmaCounter::TEmaCounter(TWindowDurations windowDurations)
+template <typename T, int WindowCount>
+    requires std::is_arithmetic_v<T>
+TEmaCounter<T, WindowCount>::TEmaCounter(TEmaCounterWindowDurations<WindowCount> windowDurations)
     : WindowDurations(std::move(windowDurations))
     , WindowRates(WindowDurations.size())
 { }
 
-void TEmaCounter::Update(i64 newCount, TInstant newTimestamp)
+template <typename T, int WindowCount>
+    requires std::is_arithmetic_v<T>
+void TEmaCounter<T, WindowCount>::Update(T newCount, TInstant newTimestamp)
 {
     if (!LastTimestamp) {
         // Just set current value, we do not know enough information to deal with rates.
@@ -27,7 +33,7 @@ void TEmaCounter::Update(i64 newCount, TInstant newTimestamp)
     }
 
     auto timeDelta = (newTimestamp - *LastTimestamp).SecondsFloat();
-    i64 countDelta = std::max(Count, newCount) - Count;
+    auto countDelta = std::max(Count, newCount) - Count;
     auto newRate = countDelta / timeDelta;
 
     Count = newCount;
@@ -41,7 +47,9 @@ void TEmaCounter::Update(i64 newCount, TInstant newTimestamp)
     }
 }
 
-std::optional<double> TEmaCounter::GetRate(int windowIndex, TInstant currentTimestamp) const
+template <typename T, int WindowCount>
+    requires std::is_arithmetic_v<T>
+std::optional<double> TEmaCounter<T, WindowCount>::GetRate(int windowIndex, TInstant currentTimestamp) const
 {
     if (!StartTimestamp) {
         return {};
@@ -54,14 +62,18 @@ std::optional<double> TEmaCounter::GetRate(int windowIndex, TInstant currentTime
     return WindowRates[windowIndex];
 }
 
-TEmaCounter operator+(const TEmaCounter& lhs, const TEmaCounter& rhs)
+template <typename T, int WindowCount>
+    requires std::is_arithmetic_v<T>
+TEmaCounter<T, WindowCount> operator+(const TEmaCounter<T, WindowCount>& lhs, const TEmaCounter<T, WindowCount>& rhs)
 {
-    TEmaCounter result = lhs;
+    auto result = lhs;
     result += rhs;
     return result;
 }
 
-TEmaCounter& operator+=(TEmaCounter& lhs, const TEmaCounter& rhs)
+template <typename T, int WindowCount>
+    requires std::is_arithmetic_v<T>
+TEmaCounter<T, WindowCount>& operator+=(TEmaCounter<T, WindowCount>& lhs, const TEmaCounter<T, WindowCount>& rhs)
 {
     YT_VERIFY(lhs.WindowDurations == rhs.WindowDurations);
     lhs.LastTimestamp = std::max(lhs.LastTimestamp, rhs.LastTimestamp);
@@ -74,7 +86,9 @@ TEmaCounter& operator+=(TEmaCounter& lhs, const TEmaCounter& rhs)
     return lhs;
 }
 
-TEmaCounter& operator*=(TEmaCounter& lhs, double coefficient)
+template <typename T, int WindowCount>
+    requires std::is_arithmetic_v<T>
+TEmaCounter<T, WindowCount>& operator*=(TEmaCounter<T, WindowCount>& lhs, double coefficient)
 {
     lhs.Count *= coefficient;
     lhs.ImmediateRate *= coefficient;
@@ -84,9 +98,11 @@ TEmaCounter& operator*=(TEmaCounter& lhs, double coefficient)
     return lhs;
 }
 
-TEmaCounter operator*(const TEmaCounter& lhs, double coefficient)
+template <typename T, int WindowCount>
+    requires std::is_arithmetic_v<T>
+TEmaCounter<T, WindowCount> operator*(const TEmaCounter<T, WindowCount>& lhs, double coefficient)
 {
-    TEmaCounter result = lhs;
+    auto result = lhs;
     result *= coefficient;
     return result;
 }

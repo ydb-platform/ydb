@@ -12,6 +12,7 @@
 #include "table_writer.h"
 #include "transaction.h"
 
+#include <yt/yt/client/api/distributed_table_sessions.h>
 #include <yt/yt/client/api/file_reader.h>
 #include <yt/yt/client/api/file_writer.h>
 #include <yt/yt/client/api/journal_reader.h>
@@ -671,7 +672,7 @@ IFileWriterPtr TClientBase::CreateFileWriter(
     return NRpcProxy::CreateFileWriter(std::move(req));
 }
 
-/////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 IJournalReaderPtr TClientBase::CreateJournalReader(
     const TYPath& path,
@@ -784,6 +785,38 @@ TFuture<ITableWriterPtr> TClientBase::CreateTableWriter(
         .Apply(BIND([=] (IAsyncZeroCopyOutputStreamPtr outputStream) {
             return NRpcProxy::CreateTableWriter(std::move(outputStream), std::move(schema));
         })).As<ITableWriterPtr>();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TFuture<TDistributedWriteSessionPtr> TClientBase::StartDistributedWriteSession(
+    const NYPath::TRichYPath& path,
+    const TDistributedWriteSessionStartOptions& options)
+{
+    using TRsp = TIntrusivePtr<NRpc::TTypedClientResponse<NProto::TRspStartDistributedWriteSession>>;
+
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.StartDistributedWriteSession();
+    FillRequest(req.Get(), path, options);
+
+    return req->Invoke()
+        .ApplyUnique(BIND([] (TRsp&& result) -> TDistributedWriteSessionPtr {
+            return ConvertTo<TDistributedWriteSessionPtr>(TYsonString(result->session()));
+        }));
+}
+
+TFuture<void> TClientBase::FinishDistributedWriteSession(
+    TDistributedWriteSessionPtr session,
+    const TDistributedWriteSessionFinishOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.FinishDistributedWriteSession();
+
+    FillRequest(req.Get(), std::move(session), options);
+
+    return req->Invoke().AsVoid();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

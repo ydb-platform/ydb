@@ -120,7 +120,11 @@ try:
 except AttributeError:  # pragma: no cover
     pass  # Is missing for `python<3.10`
 try:
-    TypeGuardTypes += (typing_extensions.TypeGuard,)
+    TypeGuardTypes += (typing.TypeIs,)  # type: ignore
+except AttributeError:  # pragma: no cover
+    pass  # Is missing for `python<3.13`
+try:
+    TypeGuardTypes += (typing_extensions.TypeGuard, typing_extensions.TypeIs)
 except AttributeError:  # pragma: no cover
     pass  # `typing_extensions` might not be installed
 
@@ -147,6 +151,49 @@ except AttributeError:  # pragma: no cover
     pass  # `typing_extensions` might not be installed
 
 
+ReadOnlyTypes: tuple = ()
+try:
+    ReadOnlyTypes += (typing.ReadOnly,)  # type: ignore
+except AttributeError:  # pragma: no cover
+    pass  # Is missing for `python<3.13`
+try:
+    ReadOnlyTypes += (typing_extensions.ReadOnly,)
+except AttributeError:  # pragma: no cover
+    pass  # `typing_extensions` might not be installed
+
+
+AnnotatedTypes: tuple = ()
+try:
+    AnnotatedTypes += (typing.Annotated,)
+except AttributeError:  # pragma: no cover
+    pass  # Is missing for `python<3.9`
+try:
+    AnnotatedTypes += (typing_extensions.Annotated,)
+except AttributeError:  # pragma: no cover
+    pass  # `typing_extensions` might not be installed
+
+
+LiteralStringTypes: tuple = ()
+try:
+    LiteralStringTypes += (typing.LiteralString,)  # type: ignore
+except AttributeError:  # pragma: no cover
+    pass  # Is missing for `python<3.11`
+try:
+    LiteralStringTypes += (typing_extensions.LiteralString,)
+except AttributeError:  # pragma: no cover
+    pass  # `typing_extensions` might not be installed
+
+
+# We need this function to use `get_origin` on 3.8 for types added later:
+# in typing-extensions, so we prefer this function over regular `get_origin`
+# when unwrapping `TypedDict`'s annotations.
+try:
+    extended_get_origin = typing_extensions.get_origin
+except AttributeError:  # pragma: no cover
+    # `typing_extensions` might not be installed, in this case - fallback:
+    extended_get_origin = get_origin  # type: ignore
+
+
 # We use this variable to be sure that we are working with a type from `typing`:
 typing_root_type = (typing._Final, typing._GenericAlias)  # type: ignore
 
@@ -169,10 +216,10 @@ for name in (
     "Self",
     "Required",
     "NotRequired",
+    "ReadOnly",
     "Never",
     "TypeVarTuple",
     "Unpack",
-    "LiteralString",
 ):
     try:
         NON_RUNTIME_TYPES += (getattr(typing, name),)
@@ -1024,7 +1071,7 @@ def resolve_Callable(thing):
     if get_origin(return_type) in TypeGuardTypes:
         raise InvalidArgument(
             "Hypothesis cannot yet construct a strategy for callables which "
-            f"are PEP-647 TypeGuards (got {return_type!r}).  "
+            f"are PEP-647 TypeGuards or PEP-742 TypeIs (got {return_type!r}).  "
             "Consider using an explicit strategy, or opening an issue."
         )
 

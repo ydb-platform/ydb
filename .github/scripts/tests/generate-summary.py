@@ -400,6 +400,7 @@ def main():
 
     with open(args.comment_text_file, "w") as f:
         f.write('\n'.join(text))
+        f.write('\n')
 
     with open(args.status_report_file, "w") as f:
         f.write(overall_status)

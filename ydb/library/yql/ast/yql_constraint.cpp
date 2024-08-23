@@ -1053,7 +1053,7 @@ TUniqueConstraintNodeBase<Distinct>::TUniqueConstraintNodeBase(TExprContext& ctx
 }
 
 template<bool Distinct>
-TUniqueConstraintNodeBase<Distinct>::TContentType TUniqueConstraintNodeBase<Distinct>::NodeToContent(TExprContext& ctx, const NYT::TNode& serialized) {
+typename TUniqueConstraintNodeBase<Distinct>::TContentType TUniqueConstraintNodeBase<Distinct>::NodeToContent(TExprContext& ctx, const NYT::TNode& serialized) {
     TUniqueConstraintNode::TContentType content;
     try {
         for (const auto& item : serialized.AsList()) {

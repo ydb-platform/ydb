@@ -270,7 +270,8 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         auto analyzeRequest = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest.release());
 
-        runtime.SimulateSleep(TDuration::Hours(25));
+        runtime.WaitFor("TEvAnalyzeTableResponse", [&]{ return block.size(); });
+        runtime.AdvanceCurrentTime(TDuration::Days(2));
 
         runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
     }    

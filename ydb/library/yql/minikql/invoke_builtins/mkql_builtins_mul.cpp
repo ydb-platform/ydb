@@ -40,7 +40,7 @@ struct TNumMulInterval {
         const auto lv = static_cast<typename TOutput::TLayout>(left.template Get<typename TLeft::TLayout>());
         const auto rv = static_cast<typename TOutput::TLayout>(right.template Get<typename TRight::TLayout>());
         const auto ret = lv * rv;
-        if (rv == 0) {
+        if (rv == 0 || lv == 0) {
             return NUdf::TUnboxedValuePod(ret);
         }
         if constexpr (std::is_same_v<ui64, typename TLeft::TLayout>) {
@@ -76,10 +76,11 @@ struct TNumMulInterval {
         const auto rhs = StaticCast<typename TRight::TLayout, i64>(rv, context, block);
         const auto mul = BinaryOperator::CreateMul(lhs, rhs, "mul", block);
         const auto zero = ConstantInt::get(Type::getInt64Ty(context), 0);
+        const auto lhsZero = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, lhs, zero, "lhsZero", block);
         const auto rhsZero = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, rhs, zero, "rhsZero", block);
         const auto res = SetterFor<typename TOutput::TLayout>(mul, context, block);
 
-        BranchInst::Create(bbDone, bbMain, rhsZero, block);
+        BranchInst::Create(bbDone, bbMain, BinaryOperator::CreateOr(lhsZero, rhsZero, "mulZero", block), block);
         result->addIncoming(res, block);
 
         block = bbMain;

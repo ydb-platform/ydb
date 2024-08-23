@@ -133,6 +133,20 @@ ui32 TSparsedArray::GetLastIndex(const std::shared_ptr<arrow::RecordBatch>& batc
     return ui32Column->Value(ui32Column->length() - 1);
 }
 
+namespace {
+static thread_local THashMap<TString, std::shared_ptr<arrow::RecordBatch>> SimpleBatchesCache;
+}
+
+NKikimr::NArrow::NAccessor::TSparsedArrayChunk TSparsedArray::MakeDefaultChunk(
+    const std::shared_ptr<arrow::Scalar>& defaultValue, const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount) {
+    auto it = SimpleBatchesCache.find(type->ToString());
+    if (it == SimpleBatchesCache.end()) {
+        it = SimpleBatchesCache.emplace(type->ToString(), NArrow::MakeEmptyBatch(BuildSchema(type))).first;
+        AFL_VERIFY(it->second->ValidateFull().ok());
+    }
+    return TSparsedArrayChunk(0, recordsCount, it->second, defaultValue);
+}
+
 IChunkedArray::TLocalDataAddress TSparsedArrayChunk::GetChunk(
     const std::optional<IChunkedArray::TCommonChunkAddress>& /*chunkCurrent*/, const ui64 position, const ui32 chunkIdx) const {
     auto it = RemapExternalToInternal.upper_bound(position);

@@ -6,8 +6,10 @@ namespace NKikimr::NOlap::NCompaction {
 bool TPortionColumnCursor::Fetch(TMergedColumn& column) {
     Y_ABORT_UNLESS(RecordIndexStart);
     if (!BlobChunks) {
-        column.AppendSlice(NArrow::TThreadSimpleArraysCache::Get(DataType, DefaultValue, RecordIndexFinish - *RecordIndexStart), 0,
-            RecordIndexFinish - *RecordIndexStart);
+        if (!DefaultArray || DefaultArray->length() < RecordIndexFinish - *RecordIndexStart) {
+            DefaultArray = NArrow::TThreadSimpleArraysCache::Get(DataType, DefaultValue, RecordIndexFinish - *RecordIndexStart);
+        }
+        column.AppendSlice(DefaultArray, 0, RecordIndexFinish - *RecordIndexStart);
     } else {
         if (CurrentChunk && CurrentChunk->GetAddress().Contains(*RecordIndexStart)) {
         } else {

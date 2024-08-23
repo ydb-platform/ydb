@@ -10,7 +10,7 @@
 
 namespace NKikimr::NArrow::NAccessor {
 
-class TSparsedArrayChunk {
+class TSparsedArrayChunk: public TMoveOnly {
 private:
     YDB_READONLY(ui32, RecordsCount, 0);
     YDB_READONLY(ui32, StartPosition, 0);
@@ -139,7 +139,7 @@ public:
     }
 
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const override {
-        auto chunk = GetSparsedChunk(index);
+        auto& chunk = GetSparsedChunk(index);
         return chunk.GetScalar(index - chunk.GetStartPosition());
     }
 

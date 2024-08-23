@@ -66,7 +66,7 @@ TSparsedArray::TSparsedArray(const IChunkedArray& defaultArray, const std::share
         return true;
     }));
     AFL_VERIFY(records);
-    Records.emplace_back(TSparsedArrayChunk(0, GetRecordsCount(), records, DefaultValue));
+    Records.emplace_back(0, GetRecordsCount(), records, DefaultValue);
 }
 
 std::vector<NKikimr::NArrow::NAccessor::TChunkedArraySerialized> TSparsedArray::DoSplitBySizes(
@@ -267,7 +267,7 @@ void TSparsedArray::TBuilder::AddChunk(const ui32 recordsCount, const std::share
         auto* arr = static_cast<const arrow::UInt32Array*>(data->column(0).get());
         AFL_VERIFY(arr->Value(arr->length() - 1) < recordsCount)("val", arr->Value(arr->length() - 1))("count", recordsCount);
     }
-    Chunks.emplace_back(TSparsedArrayChunk(RecordsCount, recordsCount, data, DefaultValue));
+    Chunks.emplace_back(RecordsCount, recordsCount, data, DefaultValue);
     RecordsCount += recordsCount;
 }
 

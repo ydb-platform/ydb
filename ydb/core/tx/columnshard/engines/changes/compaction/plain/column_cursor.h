@@ -1,8 +1,10 @@
 #pragma once
 #include "merged_column.h"
-#include <ydb/core/tx/columnshard/splitter/chunks.h>
+
 #include <ydb/core/tx/columnshard/engines/portions/column_record.h>
 #include <ydb/core/tx/columnshard/engines/scheme/column_features.h>
+#include <ydb/core/tx/columnshard/splitter/chunks.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
 namespace NKikimr::NOlap::NCompaction {
@@ -11,6 +13,7 @@ class TPortionColumnCursor {
 private:
     std::optional<NArrow::NAccessor::IChunkedArray::TFullDataAddress> CurrentChunk;
     std::shared_ptr<NArrow::NAccessor::IChunkedArray> BlobChunks;
+    std::shared_ptr<arrow::Array> DefaultArray;
     std::optional<ui32> RecordIndexStart;
     std::shared_ptr<arrow::DataType> DataType;
     std::shared_ptr<arrow::Scalar> DefaultValue;
@@ -37,4 +40,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap::NCompaction

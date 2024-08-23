@@ -92,42 +92,44 @@ public:
     TString String() {
         TString res;
 
+
+        TVector<TString> relNameByNodeId(Nodes_.size());
         res.append("Nodes: ").append("\n");
         for (const auto& [name, idx]: NodeIdByRelationName_) {
             res.append(Sprintf("%ld: %s\n", idx, name.c_str()));
+            relNameByNodeId[idx] = name;
         }
 
         res.append("Edges: ").append("\n");
+
+
+        auto edgeSideToString = 
+            [&relNameByNodeId](const TNodeSet& edgeSide) {
+                TString res;
+                res.append("{");
+
+                for (size_t i = 0; i < edgeSide.size(); ++i) {
+                    if (edgeSide[i]) {    
+                        res.append(relNameByNodeId[i]).append(", ");
+                    }
+                }
+
+                if (res != "{") {
+                    res.pop_back();
+                    res.pop_back();
+                }
+
+                res.append("}");
+
+                return res;
+            };
+
         for (const auto& edge: Edges_) {
-            res.append("{");
-
-            auto left = TSetBitsIt(edge.Left);
-            while (left.HasNext()) {
-                res.append(ToString(left.Next())).append(", ");
-            }
-            res.pop_back();
-            res.pop_back();
-
-            res.append("} -> {");
-
-            auto right = TSetBitsIt(edge.Right);
-            while (right.HasNext()) {
-                res.append(ToString(right.Next())).append(", ");
-            }
-            res.pop_back();
-            res.pop_back();
-
-            res.append("}, ");
-
-            for (auto l : edge.LeftJoinKeys) {
-                res.append(l).append(",");
-            }
-            res.append("=");
-            for (auto r : edge.RightJoinKeys) {
-                res.append(r).append(",");
-            }
-
-            res.append("\n");
+            res 
+                .append(edgeSideToString(edge.Left))
+                .append(" -> ")
+                .append(edgeSideToString(edge.Right))
+                .append("\n");
         }
         
         return res;
@@ -223,6 +225,9 @@ public:
 
     void UpdateEdgeSides(size_t idx, TNodeSet newLeft, TNodeSet newRight) {
         auto& edge = Edges_[idx];
+
+        Y_ENSURE(IsSubset(edge.Left, newLeft) && IsSubset(edge.Right, newRight), "Hint violates the join order restriction!");
+
         if (edge.IsSimple() && !(HasSingleBit(newLeft) && HasSingleBit(newRight))) {
             size_t lhsNodeIdx = GetLowestSetBit(edge.Left);
             Nodes_[lhsNodeIdx].SimpleNeighborhood &= ~edge.Right;

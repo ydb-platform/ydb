@@ -77,10 +77,6 @@ public:
                 SendSecureHttpRequest(response, ctx);
                 return;
             }
-            if (NeedRedirect(response->Status)) {
-                DoRedirect(response, ctx);
-                return;
-            }
             NHttp::THeadersBuilder headers = GetResponseHeaders(response);
             TStringBuf contentType = headers.Get("Content-Type").NextTok(';');
             if (contentType == "text/html") {
@@ -196,12 +192,12 @@ protected:
         request->Set("Accept-Encoding", "deflate");
     }
 
-    static NHttp::THeadersBuilder GetResponseHeaders(const NHttp::THttpIncomingResponsePtr& response) {
+private:
+    NHttp::THeadersBuilder GetResponseHeaders(const NHttp::THttpIncomingResponsePtr& response) {
         static const TVector<TStringBuf> HEADERS_WHITE_LIST = {
             "Content-Type",
             "Connection",
             "X-Worker-Name",
-            "Location",
             "Set-Cookie",
             "Access-Control-Allow-Origin",
             "Access-Control-Allow-Credentials",
@@ -215,10 +211,13 @@ protected:
                 resultHeaders.Set(header, headers.Get(header));
             }
         }
+        static const TString LOCATION_HEADER_NAME = "Location";
+        if (headers.Has(LOCATION_HEADER_NAME)) {
+            resultHeaders.Set(LOCATION_HEADER_NAME, GetFixedLocationHeader(headers.Get(LOCATION_HEADER_NAME)));
+        }
         return resultHeaders;
     }
 
-private:
     void SendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response, const NActors::TActorContext& ctx) {
         NHttp::THttpOutgoingRequestPtr request = response->GetRequest();
         LOG_DEBUG_S(ctx, EService::MVP, "Try to send request to HTTPS port");
@@ -226,37 +225,10 @@ private:
         ForwardUserRequest(headers.Get(AUTH_HEADER_NAME), ctx, true);
     }
 
-    bool NeedRedirect(TStringBuf status) const {
-        static const std::unordered_set<TString> REDIRECT_STATUS_WHITE_LIST {
-            "301", "302", "303", "307", "308"
-        };
-        return REDIRECT_STATUS_WHITE_LIST.contains(TString(status));
-    }
-
-    void DoRedirect(const NHttp::THttpIncomingResponsePtr& response, const NActors::TActorContext& ctx) const {
-        LOG_DEBUG_S(ctx, EService::MVP, "Do redirect");
-        NHttp::THttpOutgoingRequestPtr previousRequest = response->GetRequest();
-        TStringBuf method = (response->Status == "303" ? "GET" : previousRequest->Method);
-        NHttp::THeadersBuilder responseHeaders(response->Headers);
-        TString locationHeader = TString(responseHeaders.Get("Location"));
-        NHttp::THttpOutgoingRequestPtr httpRequest = nullptr;
-        if (locationHeader.StartsWith('/')) {
-            TStringBuf scheme, host, uri;
-            NHttp::CrackURL(ProtectedPageUrl, scheme, host, uri);
-            httpRequest = NHttp::THttpOutgoingRequest::CreateHttpRequest(method, host, locationHeader);
-            httpRequest->Secure = previousRequest->Secure;
-        } else {
-            httpRequest = NHttp::THttpOutgoingRequest::CreateRequest(method, locationHeader);
-        }
-        ForwardRequestHeaders(httpRequest);
-        NHttp::THeadersBuilder previousRequestHeaders(previousRequest->Headers);
-        if (TString authHeaderValue = TString(previousRequestHeaders.Get(AUTH_HEADER_NAME)); !authHeaderValue.empty()) {
-            httpRequest->Set(AUTH_HEADER_NAME, authHeaderValue);
-        }
-        if (!previousRequest->Body.empty()) {
-            httpRequest->SetBody(previousRequest->Body);
-        }
-        ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
+    TString GetFixedLocationHeader(TStringBuf location) {
+        TStringBuf scheme, host, uri;
+        NHttp::CrackURL(ProtectedPageUrl, scheme, host, uri);
+        return TStringBuilder() << '/' << host << location;
     }
 };
 

@@ -3,12 +3,14 @@
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
-TAllocationInfo::TAllocationInfo(const ui64 processId, const ui64 allocationInternalGroupId, const std::shared_ptr<IAllocation>& allocation,
+TAllocationInfo::TAllocationInfo(const ui64 processId, const ui64 scopeId, const ui64 allocationInternalGroupId,
+    const std::shared_ptr<IAllocation>& allocation,
     const std::shared_ptr<TStageFeatures>& stage)
     : Allocation(allocation)
     , AllocationInternalGroupId(allocationInternalGroupId)
     , Identifier(TValidator::CheckNotNull(Allocation)->GetIdentifier())
     , ProcessId(processId)
+    , ScopeId(scopeId)
     , Stage(stage) {
     AFL_VERIFY(Stage);
     AFL_VERIFY(Allocation);

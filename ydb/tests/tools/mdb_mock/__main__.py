@@ -7,7 +7,7 @@ from aiohttp import web
 
 import yatest.common as yat
 from library.python.testing.recipe import declare_recipe, set_env
-from library.recipes.common import find_free_ports, start_daemon
+from library.recipes.common import find_free_ports
 
 logger = logging.getLogger('mdb_mock.recipe')
 
@@ -18,17 +18,15 @@ async def clickhouse_handler(request):
     cluster_id = request.match_info['cluster_id']
 
     if cluster_id == 'clickhouse_cluster_id':
-        return web.Response(body=json.dumps(
-            {
-                'hosts': [
-                    {
-                        'name': 'clickhouse',
-                        'cluster_id': cluster_id,
-                        'health': 'ALIVE',
-                        'type': 'CLICKHOUSE'
-                    },
-                ]
-            }))
+        return web.Response(
+            body=json.dumps(
+                {
+                    'hosts': [
+                        {'name': 'clickhouse', 'cluster_id': cluster_id, 'health': 'ALIVE', 'type': 'CLICKHOUSE'},
+                    ]
+                }
+            )
+        )
 
     return web.Response(body=json.dumps({}))
 
@@ -37,19 +35,22 @@ async def postgresql_handler(request):
     cluster_id = request.match_info['cluster_id']
 
     if cluster_id == 'postgresql_cluster_id':
-        return web.Response(body=json.dumps(
-            {
-                'hosts': [
-                    {
-                        'name': 'postgresql',
-                        'services': [
-                            {
-                                'health': 'ALIVE',
-                            },
-                        ],
-                    }
-                ]
-            }))
+        return web.Response(
+            body=json.dumps(
+                {
+                    'hosts': [
+                        {
+                            'name': 'postgresql',
+                            'services': [
+                                {
+                                    'health': 'ALIVE',
+                                },
+                            ],
+                        }
+                    ]
+                }
+            )
+        )
     return web.Response(body=json.dumps({}))
 
 

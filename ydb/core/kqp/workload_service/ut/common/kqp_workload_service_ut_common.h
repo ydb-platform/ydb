@@ -14,7 +14,7 @@
 
 namespace NKikimr::NKqp::NWorkload {
 
-inline constexpr TDuration FUTURE_WAIT_TIMEOUT = TDuration::Seconds(30);
+inline constexpr TDuration FUTURE_WAIT_TIMEOUT = TDuration::Seconds(60);
 
 
 // Query runner

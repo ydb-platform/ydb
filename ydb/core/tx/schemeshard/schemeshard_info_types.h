@@ -231,6 +231,7 @@ struct TPartitionStats {
     ui64 RowCount = 0;
     ui64 DataSize = 0;
     ui64 IndexSize = 0;
+    ui64 ByKeyFilterSize = 0;
 
     struct TStoragePoolStats {
         ui64 DataSize = 0;
@@ -453,8 +454,20 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
 
     bool IsAsyncReplica() const {
         switch (TableDescription.GetReplicationConfig().GetMode()) {
-            case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE: [[fallthrough]];
-            case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_RESTORE_INCREMENTAL_BACKUP:
+            case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE:
+                return false;
+            default:
+                return true;
+        }
+    }
+
+    bool HasIncrementalBackupConfig() const { return TableDescription.HasIncrementalBackupConfig(); }
+    const NKikimrSchemeOp::TTableIncrementalBackupConfig& IncrementalBackupConfig() const { return TableDescription.GetIncrementalBackupConfig(); }
+    NKikimrSchemeOp::TTableIncrementalBackupConfig& MutableIncrementalBackupConfig() { return *TableDescription.MutableIncrementalBackupConfig(); }
+
+    bool IsRestoreTable() const {
+        switch (TableDescription.GetIncrementalBackupConfig().GetMode()) {
+            case NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_NONE:
                 return false;
             default:
                 return true;

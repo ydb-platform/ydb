@@ -1,0 +1,19 @@
+services:
+  fq-connector-go:
+    container_name: fq-tests-oracle-fq-connector-go
+    image: ghcr.io/ydb-platform/fq-connector-go:v0.5.5-rc.2@sha256:eac7a3107f4357d515573dd0907c76227726ffe54e612e580d52c33488b06ef5
+    ports:
+    - 2130
+    volumes:
+    - ../../fq-connector-go/:/opt/ydb/cfg/
+  oracle:
+    container_name: fq-tests-oracle-oracle
+    environment:
+      ORACLE_PWD: password
+      TEST_USER_NAME: C##ADMIN
+    image: container-registry.oracle.com/database/free:latest@sha256:83edd0756fda0e5faecc0fdf047814f0177d4224d7bf037e4900123ee3e08718
+    ports:
+    - 1521
+    volumes:
+    - ./init/startup:/opt/oracle/scripts/startup
+version: "3.4"

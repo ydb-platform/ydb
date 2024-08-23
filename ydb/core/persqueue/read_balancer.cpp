@@ -187,7 +187,6 @@ bool TPersQueueReadBalancer::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr e
 
 TString TPersQueueReadBalancer::GenerateStat() {
     auto& metrics = AggregatedStats.Metrics;
-    auto balancerStatistcs = Balancer->GetStatistics();
 
     TStringStream str;
     HTML(str) {
@@ -214,9 +213,9 @@ TString TPersQueueReadBalancer::GenerateStat() {
             LI() {
                 str << "<a href=\"#partitions\" data-toggle=\"tab\">Partitions</a>";
             }
-            for (auto& consumer : balancerStatistcs.Consumers) {
+            for (auto& [consumerName, _] : Balancer->GetConsumers()) {
                 LI() {
-                    str << "<a href=\"#c_" << EncodeAnchor(consumer.ConsumerName) << "\" data-toggle=\"tab\">" << NPersQueue::ConvertOldConsumerName(consumer.ConsumerName) << "</a>";
+                    str << "<a href=\"#c_" << EncodeAnchor(consumerName) << "\" data-toggle=\"tab\">" << NPersQueue::ConvertOldConsumerName(consumerName) << "</a>";
                 }
             }
         }
@@ -245,7 +244,7 @@ TString TPersQueueReadBalancer::GenerateStat() {
                                     TABLE_CLASS("properties") {
                                         CAPTION() { str << "Statistics"; }
                                         TABLEBODY() {
-                                            property("Active pipes", balancerStatistcs.Sessions.size());
+                                            property("Active pipes", Balancer->GetSessions().size());
                                             property("Active partitions", NumActiveParts);
                                             property("Total data size", AggregatedStats.TotalDataSize);
                                             property("Reserve size", PartitionReserveSize());
@@ -264,22 +263,59 @@ TString TPersQueueReadBalancer::GenerateStat() {
             }
 
             DIV_CLASS_ID("tab-pane fade", "partitions") {
+                auto partitionAnchor = [&](const ui32 partitionId) {
+                    return TStringBuilder() << "P" << partitionId;
+                };
+
                 TABLE_CLASS("table") {
                     TABLEHEAD() {
                         TABLER() {
-                            TABLEH() {str << "partition";}
-                            TABLEH() { str << "tabletId";}
-                            TABLEH() { str << "Size";}
+                            TABLEH() { str << "Partition"; }
+                            TABLEH() { str << "Status"; }
+                            TABLEH() { str << "TabletId"; }
+                            TABLEH() { str << "Parents"; }
+                            TABLEH() { str << "Children"; }
+                            TABLEH() { str << "Size"; }
                         }
                     }
                     TABLEBODY() {
                         for (auto& [partitionId, partitionInfo] : PartitionsInfo) {
                             const auto& stats = AggregatedStats.Stats[partitionId];
+                            const auto* node = PartitionGraph.GetPartition(partitionId);
+                            TString style = node && node->Children.empty() ? "text-success" : "text-muted";
 
                             TABLER() {
-                                TABLED() { str << partitionId;}
+                                TABLED() {
+                                     DIV_CLASS_ID(style, partitionAnchor(partitionId)) {
+                                         str << partitionId;
+                                    }
+                                }
+                                TABLED() {
+                                    if (node) {
+                                        str << (node->Children.empty() ? "Active" : "Inactive");
+                                        if (node->IsRoot()) {
+                                            str << " (root)";
+                                        }
+                                    }
+                                }
                                 TABLED() { HREF(TStringBuilder() << "?TabletID=" << partitionInfo.TabletId) { str << partitionInfo.TabletId; } }
-                                TABLED() { str << stats.DataSize;}
+                                TABLED() {
+                                    if (node) {
+                                        for (auto* parent : node->Parents) {
+                                            HREF("#" + partitionAnchor(parent->Id)) { str << parent->Id; }
+                                            str << ", ";
+                                        }
+                                    }
+                                }
+                                TABLED() {
+                                    if (node) {
+                                        for (auto* child : node->Children) {
+                                            HREF("#" + partitionAnchor(child->Id)) { str << child->Id; }
+                                            str << ", ";
+                                        }
+                                    }
+                                }
+                                TABLED() { str << stats.DataSize; }
                             }
                         }
                     }

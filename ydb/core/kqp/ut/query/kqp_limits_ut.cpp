@@ -14,7 +14,7 @@ using namespace NYdb::NTable;
 
 using namespace NResourceBroker;
 
-NKikimrResourceBroker::TResourceBrokerConfig MakeResourceBrokerTestConfig() {
+NKikimrResourceBroker::TResourceBrokerConfig MakeResourceBrokerTestConfig(ui32 multiplier = 1) {
     NKikimrResourceBroker::TResourceBrokerConfig config;
 
     auto queue = config.AddQueues();
@@ -26,7 +26,7 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeResourceBrokerTestConfig() {
     queue->SetName("queue_kqp_resource_manager");
     queue->SetWeight(20);
     queue->MutableLimit()->AddResource(4);
-    queue->MutableLimit()->AddResource(50'000);
+    queue->MutableLimit()->AddResource(33554453 * multiplier);
 
     auto task = config.AddTasks();
     task->SetName("unknown");
@@ -181,7 +181,40 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
 
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::OVERLOADED);
+        UNIT_ASSERT_C(result.GetIssues().ToString().Contains("Mkql memory limit exceeded"), result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(ComputeActorMemoryAllocationFailureQueryService) {
+        auto app = NKikimrConfig::TAppConfig();
+        app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(10);
+        app.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(2000);
+
+        app.MutableResourceBrokerConfig()->CopyFrom(MakeResourceBrokerTestConfig(4));
+
+        app.MutableFeatureFlags()->SetEnableResourcePools(true);
+
+        TKikimrRunner kikimr(app);
+        CreateLargeTable(kikimr, 0, 0, 0);
+
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_SLOW_LOG, NActors::NLog::PRI_ERROR);
+
+        auto db = kikimr.GetQueryClient();
+        NYdb::NQuery::TExecuteQuerySettings querySettings;
+        querySettings.StatsMode(NYdb::NQuery::EStatsMode::Full);
+
+        auto result = db.ExecuteQuery(Q1_(R"(
+            SELECT * FROM `/Root/LargeTable`;
+        )"), NQuery::TTxControl::BeginTx().CommitTx(), querySettings).ExtractValueSync();
+        result.GetIssues().PrintTo(Cerr);
+
+        auto stats = result.GetStats();
+
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::OVERLOADED);
+        UNIT_ASSERT_C(result.GetIssues().ToString().Contains("Mkql memory limit exceeded"), result.GetIssues().ToString());
+        UNIT_ASSERT(stats.Defined());
+
+        Cerr << stats->ToString(true) << Endl;
     }
 
     Y_UNIT_TEST(DatashardProgramSize) {
@@ -1038,6 +1071,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT(result.GetStats());
+        Cerr << result.GetStats()->ToString(true) << Endl;
         UNIT_ASSERT(result.GetStats()->GetPlan());
 
         NJson::TJsonValue plan;

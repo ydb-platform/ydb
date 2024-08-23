@@ -15,6 +15,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/process_stats.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/minikql/aligned_page_pool.h>
 
 namespace NKikimr::NMemory {
 
@@ -31,20 +32,6 @@ namespace {
 using namespace NActors;
 using namespace NResourceBroker;
 using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
-
-struct TResourceBrokerLimits {
-    ui64 LimitBytes;
-    ui64 QueryExecutionLimitBytes;
-
-    auto operator<=>(const TResourceBrokerLimits&) const = default;
-
-    TString ToString() const noexcept {
-        TStringBuilder result;
-        result << "LimitBytes: " << LimitBytes;
-        result << " QueryExecutionLimitBytes: " << QueryExecutionLimitBytes;
-        return result;
-    }
-};
 
 class TMemoryConsumer : public IMemoryConsumer {
 public:
@@ -108,12 +95,14 @@ public:
             TDuration interval,
             TIntrusiveConstPtr<IProcessMemoryInfoProvider> processMemoryInfoProvider,
             const NKikimrConfig::TMemoryControllerConfig& config,
+            const TResourceBrokerConfig& resourceBrokerConfig,
             TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
         : Interval(interval)
         , MemTables(std::make_shared<TMemTableMemoryConsumersCollection>(counters, 
             Consumers.emplace(EMemoryConsumerKind::MemTable, MakeIntrusive<TMemoryConsumer>(EMemoryConsumerKind::MemTable, TActorId{})).first->second))
         , ProcessMemoryInfoProvider(std::move(processMemoryInfoProvider))
         , Config(config)
+        , ResourceBrokerSelfConfig(resourceBrokerConfig)
         , Counters(counters)
     {}
 
@@ -126,7 +115,7 @@ public:
 
         HandleWakeup(ctx);
 
-        LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Bootstrapped");
+        LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Bootstrapped with config " << Config.ShortDebugString());
     }
 
 private:
@@ -147,7 +136,7 @@ private:
 
     void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev, const TActorContext& ctx) {
         Config.Swap(ev->Get()->Record.MutableConfig()->MutableMemoryControllerConfig());
-        LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Config updated " << Config.DebugString());
+        LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Config updated " << Config.ShortDebugString());
     }
 
     void HandleWakeup(const TActorContext& ctx) noexcept {
@@ -157,7 +146,9 @@ private:
         ui64 hardLimitBytes = GetHardLimitBytes(Config, processMemoryInfo, hasMemTotalHardLimit);
         ui64 softLimitBytes = GetSoftLimitBytes(Config, hardLimitBytes);
         ui64 targetUtilizationBytes = GetTargetUtilizationBytes(Config, hardLimitBytes);
-        ui64 activitiesLimitBytes = GetActivitiesLimitBytes(Config, hardLimitBytes);
+        ui64 activitiesLimitBytes = ResourceBrokerSelfConfig.LimitBytes 
+            ? ResourceBrokerSelfConfig.LimitBytes // for backward compatibility
+            : GetActivitiesLimitBytes(Config, hardLimitBytes);
 
         TVector<TConsumerState> consumers(::Reserve(Consumers.size()));
         ui64 consumersConsumption = 0;
@@ -262,8 +253,22 @@ private:
         Counters->GetCounter("Stats/ConsumersLimit")->Set(consumersLimitBytes);
         memoryStats.SetConsumersLimit(consumersLimitBytes);
 
+        ui64 queryExecutionConsumption = TAlignedPagePool::GetGlobalPagePoolSize();
+        ui64 queryExecutionLimitBytes = ResourceBrokerSelfConfig.QueryExecutionLimitBytes 
+            ? ResourceBrokerSelfConfig.QueryExecutionLimitBytes // for backward compatibility
+            : GetQueryExecutionLimitBytes(Config, hardLimitBytes);
+        LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Consumer QueryExecution state:"
+            << " Consumption: " << queryExecutionConsumption << " Limit: " << queryExecutionLimitBytes);
+        Counters->GetCounter("Consumer/QueryExecution/Consumption")->Set(queryExecutionConsumption);
+        Counters->GetCounter("Consumer/QueryExecution/Limit")->Set(queryExecutionLimitBytes);
+        memoryStats.SetQueryExecutionConsumption(queryExecutionConsumption);
+        memoryStats.SetQueryExecutionLimit(queryExecutionLimitBytes);
+
         // Note: for now ResourceBroker and its queues aren't MemoryController consumers and don't share limits with other caches
-        ApplyResourceBrokerLimits(hardLimitBytes, activitiesLimitBytes);
+        ApplyResourceBrokerConfig({
+            activitiesLimitBytes,
+            queryExecutionLimitBytes
+        });
 
         Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), memoryStatsUpdate);
 
@@ -350,34 +355,22 @@ private:
         }
     }
 
-    void ApplyResourceBrokerLimits(ui64 hardLimitBytes, ui64 activitiesLimitBytes) {
-        ui64 queryExecutionLimitBytes = GetQueryExecutionLimitBytes(Config, hardLimitBytes);
-
-        TResourceBrokerLimits newLimits{
-            activitiesLimitBytes,
-            queryExecutionLimitBytes
-        };
-        
-        if (newLimits == CurrentResourceBrokerLimits) {
+    void ApplyResourceBrokerConfig(TResourceBrokerConfig config) {
+        if (config == CurrentResourceBrokerConfig) {
             return;
         }
 
-        CurrentResourceBrokerLimits = newLimits;
-
-        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::MEMORY_CONTROLLER, "Consumer QueryExecution state:"
-            << " Limit: " << newLimits.QueryExecutionLimitBytes);
-
-        Counters->GetCounter("Consumer/QueryExecution/Limit")->Set(newLimits.QueryExecutionLimitBytes);
-
         TAutoPtr<TEvResourceBroker::TEvConfigure> configure = new TEvResourceBroker::TEvConfigure();
         configure->Merge = true;
-        configure->Record.MutableResourceLimit()->SetMemory(activitiesLimitBytes);
+        configure->Record.MutableResourceLimit()->SetMemory(config.LimitBytes);
 
         auto queue = configure->Record.AddQueues();
         queue->SetName(NLocalDb::KqpResourceManagerQueue);
-        queue->MutableLimit()->SetMemory(queryExecutionLimitBytes);
+        queue->MutableLimit()->SetMemory(config.QueryExecutionLimitBytes);
 
         Send(MakeResourceBrokerID(), configure.Release());
+
+        CurrentResourceBrokerConfig.emplace(std::move(config));
     }
 
     TConsumerCounters& GetConsumerCounters(EMemoryConsumerKind consumer) {
@@ -444,9 +437,10 @@ private:
     std::shared_ptr<TMemTableMemoryConsumersCollection> MemTables;
     const TIntrusiveConstPtr<IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
     NKikimrConfig::TMemoryControllerConfig Config;
+    TResourceBrokerConfig ResourceBrokerSelfConfig;
     const TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     TMap<EMemoryConsumerKind, TConsumerCounters> ConsumerCounters;
-    std::optional<TResourceBrokerLimits> CurrentResourceBrokerLimits;
+    std::optional<TResourceBrokerConfig> CurrentResourceBrokerConfig;
 };
 
 }
@@ -455,11 +449,13 @@ IActor* CreateMemoryController(
         TDuration interval,
         TIntrusiveConstPtr<IProcessMemoryInfoProvider> processMemoryInfoProvider,
         const NKikimrConfig::TMemoryControllerConfig& config, 
+        const TResourceBrokerConfig& resourceBrokerSelfConfig,
         const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) {
     return new TMemoryController(
         interval,
         std::move(processMemoryInfoProvider),
         config,
+        resourceBrokerSelfConfig,
         GetServiceCounters(counters, "utils")->GetSubgroup("component", "memory_controller"));
 }
 

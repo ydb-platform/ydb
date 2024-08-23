@@ -31,10 +31,15 @@ protected:
         TTopicWriteSessionPtr Session;
         TMaybe<NTopic::TContinuationToken> ContinuationToken;
         size_t WriteCount = 0;
-        size_t AckCount = 0;
+        size_t WrittenAckCount = 0;
+        size_t WrittenInTxAckCount = 0;
 
         void WaitForContinuationToken();
         void Write(const TString& message, NTable::TTransaction* tx = nullptr);
+
+        size_t AckCount() const { return WrittenAckCount + WrittenInTxAckCount; }
+
+        void WaitForEvent();
     };
 
     void SetUp(NUnitTest::TTestContext&) override;
@@ -88,7 +93,8 @@ protected:
                                    NTable::TTransaction* tx = nullptr,
                                    TMaybe<ui32> partitionId = Nothing());
     void WaitForAcks(const TString& topicPath,
-                     const TString& messageGroupId);
+                     const TString& messageGroupId,
+                     size_t writtenInTxCount = Max<size_t>());
     void WaitForSessionClose(const TString& topicPath,
                              const TString& messageGroupId,
                              NYdb::EStatus status);
@@ -591,19 +597,31 @@ auto TFixture::GetTopicReadSession(const TString& topicPath,
 void TFixture::TTopicWriteSessionContext::WaitForContinuationToken()
 {
     while (!ContinuationToken.Defined()) {
-        Session->WaitEvent().Wait();
-        for (auto& event : Session->GetEvents()) {
-            if (auto* e = std::get_if<NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
-                ContinuationToken = std::move(e->ContinuationToken);
-            } else if (auto* e = std::get_if<NTopic::TWriteSessionEvent::TAcksEvent>(&event)) {
-                for (auto& ack : e->Acks) {
-                    if (ack.State == NTopic::TWriteSessionEvent::TWriteAck::EES_WRITTEN) {
-                        ++AckCount;
-                    }
+        WaitForEvent();
+    }
+}
+
+void TFixture::TTopicWriteSessionContext::WaitForEvent()
+{
+    Session->WaitEvent().Wait();
+    for (auto& event : Session->GetEvents()) {
+        if (auto* e = std::get_if<NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
+            ContinuationToken = std::move(e->ContinuationToken);
+        } else if (auto* e = std::get_if<NTopic::TWriteSessionEvent::TAcksEvent>(&event)) {
+            for (auto& ack : e->Acks) {
+                switch (ack.State) {
+                case NTopic::TWriteSessionEvent::TWriteAck::EES_WRITTEN:
+                    ++WrittenAckCount;
+                    break;
+                case NTopic::TWriteSessionEvent::TWriteAck::EES_WRITTEN_IN_TX:
+                    ++WrittenInTxAckCount;
+                    break;
+                default:
+                    break;
                 }
-            } else if (auto* e = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
-                UNIT_FAIL("");
             }
+        } else if (auto* e = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
+            UNIT_FAIL("");
         }
     }
 }
@@ -691,7 +709,7 @@ TVector<TString> TFixture::ReadFromTopic(const TString& topicPath,
     return messages;
 }
 
-void TFixture::WaitForAcks(const TString& topicPath, const TString& messageGroupId)
+void TFixture::WaitForAcks(const TString& topicPath, const TString& messageGroupId, size_t writtenInTxCount)
 {
     std::pair<TString, TString> key(topicPath, messageGroupId);
     auto i = TopicWriteSessions.find(key);
@@ -699,26 +717,17 @@ void TFixture::WaitForAcks(const TString& topicPath, const TString& messageGroup
 
     auto& context = i->second;
 
-    UNIT_ASSERT(context.AckCount <= context.WriteCount);
+    UNIT_ASSERT(context.AckCount() <= context.WriteCount);
 
-    while (context.AckCount < context.WriteCount) {
-        context.Session->WaitEvent().Wait();
-        for (auto& event : context.Session->GetEvents()) {
-            if (auto* e = std::get_if<NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
-                context.ContinuationToken = std::move(e->ContinuationToken);
-            } else if (auto* e = std::get_if<NTopic::TWriteSessionEvent::TAcksEvent>(&event)) {
-                for (auto& ack : e->Acks) {
-                    if (ack.State == NTopic::TWriteSessionEvent::TWriteAck::EES_WRITTEN) {
-                        ++context.AckCount;
-                    }
-                }
-            } else if (auto* e = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
-                UNIT_FAIL("");
-            }
-        }
+    while (context.AckCount() < context.WriteCount) {
+        context.WaitForEvent();
     }
 
-    UNIT_ASSERT(context.AckCount == context.WriteCount);
+    UNIT_ASSERT((context.WrittenAckCount + context.WrittenInTxAckCount) == context.WriteCount);
+
+    if (writtenInTxCount != Max<size_t>()) {
+        UNIT_ASSERT_VALUES_EQUAL(context.WrittenInTxAckCount, writtenInTxCount);
+    }
 }
 
 void TFixture::WaitForSessionClose(const TString& topicPath,
@@ -731,7 +740,7 @@ void TFixture::WaitForSessionClose(const TString& topicPath,
 
     auto& context = i->second;
 
-    UNIT_ASSERT(context.AckCount <= context.WriteCount);
+    UNIT_ASSERT(context.AckCount() <= context.WriteCount);
 
     for(bool stop = false; !stop; ) {
         context.Session->WaitEvent().Wait();
@@ -740,8 +749,15 @@ void TFixture::WaitForSessionClose(const TString& topicPath,
                 context.ContinuationToken = std::move(e->ContinuationToken);
             } else if (auto* e = std::get_if<NTopic::TWriteSessionEvent::TAcksEvent>(&event)) {
                 for (auto& ack : e->Acks) {
-                    if (ack.State == NTopic::TWriteSessionEvent::TWriteAck::EES_WRITTEN) {
-                        ++context.AckCount;
+                    switch (ack.State) {
+                    case NTopic::TWriteSessionEvent::TWriteAck::EES_WRITTEN:
+                        ++context.WrittenAckCount;
+                        break;
+                    case NTopic::TWriteSessionEvent::TWriteAck::EES_WRITTEN_IN_TX:
+                        ++context.WrittenInTxAckCount;
+                        break;
+                    default:
+                        break;
                     }
                 }
             } else if (auto* e = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
@@ -752,7 +768,7 @@ void TFixture::WaitForSessionClose(const TString& topicPath,
         }
     }
 
-    UNIT_ASSERT(context.AckCount <= context.WriteCount);
+    UNIT_ASSERT(context.AckCount() <= context.WriteCount);
 }
 
 ui64 TFixture::GetTopicTabletId(const TActorId& actorId, const TString& topicPath, ui32 partition)
@@ -1852,7 +1868,7 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_27, TFixture)
     CreateTopic("topic_B", TEST_CONSUMER);
     CreateTopic("topic_C", TEST_CONSUMER);
 
-    for (size_t i = 0; i < 2; ++i) {
+    for (size_t i = 0, writtenInTx = 0; i < 2; ++i) {
         WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", nullptr, 0);
         WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #2", nullptr, 0);
 
@@ -1862,12 +1878,14 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_27, TFixture)
         auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2), &tx, 0);
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
         WriteToTopic("topic_C", TEST_MESSAGE_GROUP_ID, messages[0], &tx, 0);
-        WaitForAcks("topic_C", TEST_MESSAGE_GROUP_ID);
+        ++writtenInTx;
+        WaitForAcks("topic_C", TEST_MESSAGE_GROUP_ID, writtenInTx);
 
         messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2), &tx, 0);
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
         WriteToTopic("topic_C", TEST_MESSAGE_GROUP_ID, messages[0], &tx, 0);
-        WaitForAcks("topic_C", TEST_MESSAGE_GROUP_ID);
+        ++writtenInTx;
+        WaitForAcks("topic_C", TEST_MESSAGE_GROUP_ID, writtenInTx);
 
         CommitTx(tx, EStatus::SUCCESS);
 
@@ -1878,6 +1896,29 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_27, TFixture)
         DumpPQTabletKeys("topic_B");
         DumpPQTabletKeys("topic_C");
     }
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_28, TFixture)
+{
+    // The test verifies that the `WriteInflightSize` is correctly considered for the main partition.
+    // Writing to the service partition does not change the `WriteInflightSize` of the main one.
+    CreateTopic("topic_A", TEST_CONSUMER);
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    TString message(16'000, 'a');
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, TString(16'000, 'a'), &tx, 0);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_1);
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, TString(20'000, 'b'), nullptr, 0);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_2);
+
+    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2), nullptr, 0);
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
 }
 
 }

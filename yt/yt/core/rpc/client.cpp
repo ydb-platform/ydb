@@ -619,7 +619,7 @@ void TClientResponse::Deserialize(TSharedRefArray responseMessage)
         THROW_ERROR_EXCEPTION(NRpc::EErrorCode::ProtocolError, "Error deserializing response body");
     }
 
-    auto compressedAttachments = MakeRange(ResponseMessage_.Begin() + 2, ResponseMessage_.End());
+    auto compressedAttachments = TRange(ResponseMessage_.Begin() + 2, ResponseMessage_.End());
     auto memoryUsageTracker = ClientContext_->GetMemoryUsageTracker();
 
     if (attachmentCodecId == NCompression::ECodec::None) {

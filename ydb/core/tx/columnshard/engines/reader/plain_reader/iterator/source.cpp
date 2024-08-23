@@ -85,11 +85,11 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
 }
 
 bool TPortionDataSource::DoStartFetchingColumns(
-    const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TColumnsSet>& columns) {
+    const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step.GetName());
-    AFL_VERIFY(columns->GetColumnsCount());
+    AFL_VERIFY(columns.GetColumnsCount());
     AFL_VERIFY(!StageData->GetAppliedFilter() || !StageData->GetAppliedFilter()->IsTotalDenyFilter());
-    auto& columnIds = columns->GetColumnIds();
+    auto& columnIds = columns.GetColumnIds();
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step.GetName())("fetching_info", step.DebugString());
 
     TBlobsAction action(GetContext()->GetCommonContext()->GetStoragesManager(), NBlobOperations::EConsumer::SCAN);
@@ -194,7 +194,7 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
 }
 
 bool TCommittedDataSource::DoStartFetchingColumns(
-    const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TColumnsSet>& /*columns*/) {
+    const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& /*columns*/) {
     if (ReadStarted) {
         return false;
     }

@@ -19,6 +19,8 @@ protected:
 
 public:
     using TBase::TBase;
+
+    std::optional<TResourcePoolClassifierConfig> GetClassifierConfig(const TString& database, const TString& name) const;
 };
 
 }  // namespace NKikimr::NKqp

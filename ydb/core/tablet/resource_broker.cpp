@@ -284,7 +284,7 @@ void TTaskQueue::UpdateRealResourceUsage(TInstant now)
 
     // Find dominant resource consumption and update usage
     auto dom = GetDominantResourceComponentNormalized(QueueLimit.Used);
-    auto usage = RealResourceUsage + dom * duration.MilliSeconds() / Max(1u, Weight);
+    auto usage = RealResourceUsage + dom * duration.MilliSeconds() / Max<ui32>(1, Weight);
     RealResourceUsage = usage;
 
     UsageTimestamp = now;
@@ -305,11 +305,11 @@ void TTaskQueue::UpdatePlannedResourceUsage(TTaskPtr task,
 
     auto dom = GetDominantResourceComponentNormalized(task->RequiredResources);
     if (decrease) {
-        PlannedResourceUsage -= dom * duration.MilliSeconds() / Max(1u, Weight);
+        PlannedResourceUsage -= dom * duration.MilliSeconds() / Max<ui32>(1, Weight);
         PlannedResourceUsage = Max(PlannedResourceUsage, RealResourceUsage);
     } else {
         PlannedResourceUsage = Max(PlannedResourceUsage, RealResourceUsage);
-        PlannedResourceUsage += dom * duration.MilliSeconds() / Max(1u, Weight);
+        PlannedResourceUsage += dom * duration.MilliSeconds() / Max<ui32>(1, Weight);
     }
 }
 
@@ -317,9 +317,9 @@ double TTaskQueue::GetDominantResourceComponentNormalized(const TResourceValues 
 {
     std::array<double, RESOURCE_COUNT> norm;
     for (size_t i = 0; i < norm.size(); ++i)
-        norm[i] = (double)QueueLimit.Used[i] / (double)Max(1lu, TotalLimit->Limit[i]);
+        norm[i] = (double)QueueLimit.Used[i] / Max<double>(1, TotalLimit->Limit[i]);
     size_t i = MaxElement(norm.begin(), norm.end()) - norm.begin();
-    return (double)values[i] / (double)Max(1lu, TotalLimit->Limit[i]);
+    return (double)values[i] / Max<double>(1, TotalLimit->Limit[i]);
 }
 
 void TTaskQueue::OutputState(IOutputStream &os, const TString &prefix) const

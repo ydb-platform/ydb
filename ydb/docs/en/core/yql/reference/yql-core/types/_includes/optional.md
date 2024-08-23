@@ -13,12 +13,14 @@ The following operations are most often performed on optional data types:
 
 `Optional` (nullable) isn't a property of a data type or column, but a container type where [containers](../containers.md) can be arbitrarily nested into each other. For example, a column with the type `Optional<Optional<Boolean>>` can accept 4 values: `NULL` of the whole container, `NULL` of the inner container, `TRUE`, and `FALSE`. The above-declared type differs from `List<List<Boolean>>`, because it uses `NULL` as an empty list, and you can't put more than one non-null element in it. In addition, `Optional<Optional<T>>` type values are returned as results when searching by the key in the `Dict(k,v)` dictionary with `Optional<T>` type values. Using this type of result data, you can distinguish between a `NULL` value in the dictionary and a situation when the key is missing.
 
+{% if backend_name == "YDB" %}
 {% note info %}
 
 Container types (including `Optional<T>` containers and more complex types derived from them) can't currently be used as column data types when creating {{ ydb-short-name }} tables.
 YQL queries can return values of container types and accept them as input parameters.
 
 {% endnote %}
+{% endif %}
 
 **Example**
 

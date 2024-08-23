@@ -940,16 +940,23 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std:
     for (auto&& i : t->columns()) {
         ui32 currentPosition = 0;
         auto it = i->chunks().begin();
-        ui32 length = (*it)->length();
+        ui32 length = 0;
+        const auto initializeIt = [&length, &it, &i]() {
+            for (; it != i->chunks().end() && !(*it)->length(); ++it) {
+            }
+            if (it != i->chunks().end()) {
+                length = (*it)->length();
+            }
+        };
+        initializeIt();
         for (ui32 idx = 0; idx + 1 < positions.size(); ++idx) {
+            AFL_VERIFY(it != i->chunks().end());
+            AFL_VERIFY(positions[idx + 1] - currentPosition <= length)("length", length)("idx+1", positions[idx + 1])("pos", currentPosition);
             auto chunk = (*it)->Slice(positions[idx] - currentPosition, positions[idx + 1] - positions[idx]);
-            AFL_VERIFY_DEBUG(chunk->length() == positions[idx + 1] - positions[idx])("length", chunk->length())(
-                                              "delta", positions[idx + 1] - positions[idx]);
-            AFL_VERIFY_DEBUG(chunk->length())("delta", positions[idx + 1] - positions[idx]);
+            AFL_VERIFY_DEBUG(chunk->length() == positions[idx + 1] - positions[idx])("length", chunk->length())("expect", positions[idx + 1] - positions[idx]);
             if (positions[idx + 1] - currentPosition == length) {
-                if (++it != i->chunks().end()) {
-                    length = (*it)->length();
-                }
+                ++it;
+                initializeIt();
                 currentPosition = positions[idx + 1];
             }
             slicedData[idx].emplace_back(chunk);
@@ -958,8 +965,8 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std:
     std::vector<std::shared_ptr<arrow::RecordBatch>> result;
     ui32 count = 0;
     for (auto&& i : slicedData) {
-        AFL_VERIFY_DEBUG(i.size());
-        AFL_VERIFY_DEBUG(i.front()->length());
+        AFL_VERIFY(i.size());
+        AFL_VERIFY(i.front()->length());
         result.emplace_back(arrow::RecordBatch::Make(t->schema(), i.front()->length(), i));
         count += result.back()->num_rows();
     }

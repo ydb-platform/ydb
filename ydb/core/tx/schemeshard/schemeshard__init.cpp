@@ -307,7 +307,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString, bool, TString> TTableRec;
+    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString, bool, TString, TString> TTableRec;
     typedef TDeque<TTableRec> TTableRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -323,7 +323,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::IsBackup>(false),
             rowSet.template GetValueOrDefault<typename SchemaTable::ReplicationConfig>(),
             rowSet.template GetValueOrDefault<typename SchemaTable::IsTemporary>(false),
-            rowSet.template GetValueOrDefault<typename SchemaTable::OwnerActorId>("")
+            rowSet.template GetValueOrDefault<typename SchemaTable::OwnerActorId>(""),
+            rowSet.template GetValueOrDefault<typename SchemaTable::IncrementalBackupConfig>()
         );
     }
 
@@ -1829,6 +1830,15 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
                 }
 
+                if (const auto incrementalBackupConfig = std::get<12>(rec)) {
+                    bool parseOk = ParseFromStringNoSizeLimit(tableInfo->MutableIncrementalBackupConfig(), incrementalBackupConfig);
+                    Y_ABORT_UNLESS(parseOk);
+
+                    if (tableInfo->IsRestoreTable()) {
+                        Self->PathsById.at(pathId)->SetRestoreTable();
+                    }
+                }
+
                 tableInfo->IsBackup = std::get<8>(rec);
 
                 Self->Tables[pathId] = tableInfo;
@@ -2285,6 +2295,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 stats.RowCount = rowSet.GetValue<Schema::TablePartitionStats::RowCount>();
                 stats.DataSize = rowSet.GetValue<Schema::TablePartitionStats::DataSize>();
                 stats.IndexSize = rowSet.GetValue<Schema::TablePartitionStats::IndexSize>();
+                stats.ByKeyFilterSize = rowSet.GetValue<Schema::TablePartitionStats::ByKeyFilterSize>();
                 if (rowSet.HaveValue<Schema::TablePartitionStats::StoragePoolsStats>()) {
                     NKikimrTableStats::TStoragePoolsStats protobufRepresentation;
                     Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(

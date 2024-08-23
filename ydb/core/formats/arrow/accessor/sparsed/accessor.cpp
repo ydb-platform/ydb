@@ -150,7 +150,7 @@ NKikimr::NArrow::NAccessor::TSparsedArrayChunk TSparsedArray::MakeDefaultChunk(
 IChunkedArray::TLocalDataAddress TSparsedArrayChunk::GetChunk(
     const std::optional<IChunkedArray::TCommonChunkAddress>& /*chunkCurrent*/, const ui64 position, const ui32 chunkIdx) const {
     const auto predCompare = [](const ui32 position, const TInternalChunkInfo& item) {
-        return item.GetStartExt() < position;
+        return position < item.GetStartExt();
     };
     auto it = std::upper_bound(RemapExternalToInternal.begin(), RemapExternalToInternal.end(), position, predCompare);
     AFL_VERIFY(it != RemapExternalToInternal.begin());

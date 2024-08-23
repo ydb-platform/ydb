@@ -201,7 +201,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                     .Tables = {},
                     .Types = types,
                     .ReplyToActorId = {},
-                    .CreatedAt = createdAt
+                    .CreatedAt = TInstant::FromValue(createdAt)
                 };
                 Self->ForceTraversals.emplace_back(operation);
 

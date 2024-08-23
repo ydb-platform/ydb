@@ -48,7 +48,7 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
         const TString types = JoinVectorIntoString(TVector<ui32>(Record.GetTypes().begin(), Record.GetTypes().end()), ",");
 
         // create new force trasersal
-        ui64 createdAt = ctx.Now().MicroSeconds();
+        auto createdAt = ctx.Now();
         TForceTraversalOperation operation {
             .OperationId = operationId,
             .Tables = {},
@@ -86,7 +86,7 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
         db.Table<Schema::ForceTraversalOperations>().Key(operationId).Update(
             NIceDb::TUpdate<Schema::ForceTraversalOperations::OperationId>(operationId),
             NIceDb::TUpdate<Schema::ForceTraversalOperations::Types>(types),
-            NIceDb::TUpdate<Schema::ForceTraversalOperations::CreatedAt>(createdAt)
+            NIceDb::TUpdate<Schema::ForceTraversalOperations::CreatedAt>(createdAt.GetValue())
         );
 
         return true;

@@ -670,8 +670,6 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
         auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
         response->Record.SetBuildIndexId(record.GetBuildIndexId());
         response->Record.SetTabletId(TabletID());
-        response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ACCEPTED);
-
         response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
         response->Record.SetRequestSeqNoRound(seqNo.Round);
         response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);

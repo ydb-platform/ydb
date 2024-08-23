@@ -54,8 +54,9 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
     std::vector<std::map<ui32, std::vector<TColumnPortionResult>>> chunkGroups;
     chunkGroups.resize(batchResults.size());
     for (auto&& columnId : resultFiltered->GetColumnIds()) {
+        const TString& columnName = resultFiltered->GetIndexInfo().GetColumnName(columnId);
         NActors::TLogContextGuard logGuard(
-            NActors::TLogContextBuilder::Build()("field_name", resultFiltered->GetIndexInfo().GetColumnName(columnId)));
+            NActors::TLogContextBuilder::Build()("field_name", columnName));
         auto columnInfo = stats->GetColumnInfo(columnId);
 
         TColumnMergeContext commonContext(
@@ -72,15 +73,21 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
         AFL_VERIFY(!!merger)("problem", "cannot create merger")(
             "class_name", commonContext.GetLoader()->GetAccessorConstructor().GetClassName());
 
+        bool foundColumn = false;
         {
             std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> parts;
             for (auto&& p : Batches) {
-                parts.emplace_back(p->GetColumnVerified(resultFiltered->GetFieldIndex(columnId)));
+                parts.emplace_back(p->GetAccessorByNameOptional(columnName));
+                if (parts.back()) {
+                    foundColumn = true;
+                }
             }
 
             merger->Start(parts);
         }
-
+        if (!foundColumn) {
+            continue;
+        }
         std::map<std::string, std::vector<NCompaction::TColumnPortionResult>> columnChunks;
         ui32 batchIdx = 0;
         for (auto&& batchResult : batchResults) {

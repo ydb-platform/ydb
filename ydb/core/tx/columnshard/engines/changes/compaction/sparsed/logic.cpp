@@ -1,4 +1,5 @@
 #include "logic.h"
+
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 
@@ -111,13 +112,15 @@ bool TSparsedMerger::TSparsedChunkCursor::AddIndexTo(const ui32 index, TWriter& 
 }
 
 bool TSparsedMerger::TCursor::AddIndexTo(const ui32 index, TWriter& writer) {
-    if (FinishGlobalPosition <= index) {
+    if (Array && FinishGlobalPosition <= index) {
         InitArrays(index);
     }
     if (SparsedCursor) {
         return SparsedCursor->AddIndexTo(index, writer, Context);
-    } else {
+    } else if (PlainCursor) {
         return PlainCursor->AddIndexTo(index, writer, Context);
+    } else {
+        return false;
     }
 }
 

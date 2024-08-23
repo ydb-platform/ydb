@@ -118,8 +118,10 @@ private:
         TCursor(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& array, const TColumnMergeContext& context)
             : Array(array)
             , Context(context) {
-            AFL_VERIFY(Array->GetRecordsCount());
-            InitArrays(0);
+            if (array) {
+                AFL_VERIFY(Array->GetRecordsCount());
+                InitArrays(0);
+            }
         }
 
         bool AddIndexTo(const ui32 index, TWriter& writer);

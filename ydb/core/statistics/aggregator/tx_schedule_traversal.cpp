@@ -12,7 +12,6 @@ struct TStatisticsAggregator::TTxScheduleTrasersal : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_SCHEDULE_TRAVERSAL; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleTrasersal::Execute");
 
         if (!Self->EnableColumnStatistics) {
             return true;
@@ -27,6 +26,8 @@ struct TStatisticsAggregator::TTxScheduleTrasersal : public TTxBase {
             SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleTrasersal. No info from schemeshard");
             return true;
         }
+
+        SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleTrasersal::Execute");
 
         NIceDb::TNiceDb db(txc.DB);
 

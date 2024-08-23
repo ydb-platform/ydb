@@ -117,7 +117,7 @@ IChannelPtr TClient::CreateSequoiaAwareRetryingChannel(NRpc::IChannelPtr channel
         }));
 }
 
-IChannelPtr TClient::CreateNonRetryingChannelByAddress(const TString& address) const
+IChannelPtr TClient::CreateNonRetryingChannelByAddress(const std::string& address) const
 {
     return CreateCredentialsInjectingChannel(
         Connection_->CreateChannelByAddress(address),
@@ -1757,7 +1757,7 @@ TFuture<void> TClient::DiscombobulateNonvotingPeers(
 
 TFuture<void> TClient::SwitchLeader(
     NHydra::TCellId /*cellId*/,
-    const TString& /*newLeaderAddress*/,
+    const std::string& /*newLeaderAddress*/,
     const TSwitchLeaderOptions& /*options*/)
 {
     ThrowUnimplemented("SwitchLeader");
@@ -1783,21 +1783,21 @@ TFuture<void> TClient::GCCollect(const TGCCollectOptions& options)
 }
 
 TFuture<void> TClient::KillProcess(
-    const TString& /*address*/,
+    const std::string& /*address*/,
     const TKillProcessOptions& /*options*/)
 {
     ThrowUnimplemented("KillProcess");
 }
 
 TFuture<TString> TClient::WriteCoreDump(
-    const TString& /*address*/,
+    const std::string& /*address*/,
     const TWriteCoreDumpOptions& /*options*/)
 {
     ThrowUnimplemented("WriteCoreDump");
 }
 
 TFuture<TGuid> TClient::WriteLogBarrier(
-    const TString& /*address*/,
+    const std::string& /*address*/,
     const TWriteLogBarrierOptions& /*options*/)
 {
     ThrowUnimplemented("WriteLogBarrier");
@@ -1811,7 +1811,7 @@ TFuture<TString> TClient::WriteOperationControllerCoreDump(
 }
 
 TFuture<void> TClient::HealExecNode(
-    const TString& /*address*/,
+    const std::string& /*address*/,
     const THealExecNodeOptions& /*options*/)
 {
     ThrowUnimplemented("HealExecNode");
@@ -1905,7 +1905,7 @@ NProto::EMaintenanceType ConvertMaintenanceTypeToProto(EMaintenanceType type)
 
 TFuture<TMaintenanceIdPerTarget> TClient::AddMaintenance(
     EMaintenanceComponent component,
-    const TString& address,
+    const std::string& address,
     EMaintenanceType type,
     const TString& comment,
     const TAddMaintenanceOptions& options)
@@ -1918,7 +1918,7 @@ TFuture<TMaintenanceIdPerTarget> TClient::AddMaintenance(
     SetTimeoutOptions(*req, options);
 
     req->set_component(ConvertMaintenanceComponentToProto(component));
-    req->set_address(address);
+    req->set_address(ToProto<TProtobufString>(address));
     req->set_type(ConvertMaintenanceTypeToProto(type));
     req->set_comment(comment);
     req->set_supports_per_target_response(true);
@@ -1944,7 +1944,7 @@ TFuture<TMaintenanceIdPerTarget> TClient::AddMaintenance(
 
 TFuture<TMaintenanceCountsPerTarget> TClient::RemoveMaintenance(
     EMaintenanceComponent component,
-    const TString& address,
+    const std::string& address,
     const TMaintenanceFilter& filter,
     const TRemoveMaintenanceOptions& options)
 {
@@ -1954,7 +1954,7 @@ TFuture<TMaintenanceCountsPerTarget> TClient::RemoveMaintenance(
     SetTimeoutOptions(*req, options);
 
     req->set_component(ConvertMaintenanceComponentToProto(component));
-    req->set_address(address);
+    req->set_address(ToProto<TProtobufString>(address));
 
     ToProto(req->mutable_ids(), filter.Ids);
 
@@ -2057,7 +2057,7 @@ TFuture<void> TClient::ResumeTabletCells(
 }
 
 TFuture<TDisableChunkLocationsResult> TClient::DisableChunkLocations(
-    const TString& nodeAddress,
+    const std::string& nodeAddress,
     const std::vector<TGuid>& locationUuids,
     const TDisableChunkLocationsOptions& /*options*/)
 {
@@ -2076,7 +2076,7 @@ TFuture<TDisableChunkLocationsResult> TClient::DisableChunkLocations(
 }
 
 TFuture<TDestroyChunkLocationsResult> TClient::DestroyChunkLocations(
-    const TString& nodeAddress,
+    const std::string& nodeAddress,
     bool recoverUnlinkedDisks,
     const std::vector<TGuid>& locationUuids,
     const TDestroyChunkLocationsOptions& /*options*/)
@@ -2097,7 +2097,7 @@ TFuture<TDestroyChunkLocationsResult> TClient::DestroyChunkLocations(
 }
 
 TFuture<TResurrectChunkLocationsResult> TClient::ResurrectChunkLocations(
-    const TString& nodeAddress,
+    const std::string& nodeAddress,
     const std::vector<TGuid>& locationUuids,
     const TResurrectChunkLocationsOptions& /*options*/)
 {
@@ -2116,7 +2116,7 @@ TFuture<TResurrectChunkLocationsResult> TClient::ResurrectChunkLocations(
 }
 
 TFuture<TRequestRestartResult> TClient::RequestRestart(
-    const TString& nodeAddress,
+    const std::string& nodeAddress,
     const TRequestRestartOptions& /*options*/)
 {
     auto proxy = CreateApiServiceProxy();

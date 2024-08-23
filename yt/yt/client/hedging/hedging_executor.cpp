@@ -65,9 +65,9 @@ THedgingExecutor::TEntry::TEntry(
     NApi::IClientPtr client,
     NProfiling::TCpuDuration initialPenalty,
     TCounterPtr counter,
-    TString clusterName)
+    const std::string& clusterName)
     : Client(std::move(client))
-    , ClusterName(std::move(clusterName))
+    , ClusterName(clusterName)
     , AdaptivePenalty(0)
     , InitialPenalty(initialPenalty)
     , ExternalPenalty(0)

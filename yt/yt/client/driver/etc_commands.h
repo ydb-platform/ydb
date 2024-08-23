@@ -231,9 +231,9 @@ public:
 
 private:
     NApi::EProxyType Type;
-    TString Role;
+    std::string Role;
     NApi::NRpcProxy::EAddressType AddressType;
-    TString NetworkName;
+    std::string NetworkName;
     bool IgnoreBalancers;
 
     void DoExecute(ICommandContextPtr context) override;

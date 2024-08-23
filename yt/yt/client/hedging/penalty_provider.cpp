@@ -29,9 +29,12 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TDummyLagProvider: public IPenaltyProvider {
+class TDummyLagProvider
+    : public IPenaltyProvider
+{
 public:
-    NProfiling::TCpuDuration Get(const TString&) override {
+    NProfiling::TCpuDuration Get(const std::string& /*cluster*/) override
+    {
         return 0;
     }
 };
@@ -87,7 +90,7 @@ public:
         auto replicasNode = NYTree::ConvertToNode(NConcurrency::WaitFor(Client_->GetNode(TablePath_ + "/@replicas", GetNodeOptions_)).ValueOrThrow())->AsMap();
 
         for (const auto& row : replicasNode->GetChildren()) {
-            TString cluster = row.second->AsMap()->GetChildOrThrow("cluster_name")->AsString()->GetValue();
+            auto cluster = row.second->AsMap()->GetChildOrThrow("cluster_name")->AsString()->GetValue();
             if (auto* info = ReplicaClusters_.FindPtr(cluster)) {
                 info->ReplicaId = NTabletClient::TTableReplicaId::FromString(row.first);
                 YT_LOG_INFO("Found ReplicaId %v for table %v in cluster %v", info->ReplicaId, TablePath_, cluster);
@@ -174,9 +177,9 @@ public:
         }
     }
 
-    NProfiling::TCpuDuration Get(const TString& cluster) override
+    NProfiling::TCpuDuration Get(const std::string& cluster) override
     {
-        if (const TReplicaInfo* info = ReplicaClusters_.FindPtr(cluster)) {
+        if (const auto* info = ReplicaClusters_.FindPtr(cluster)) {
             return info->CurrentLagPenalty.load(std::memory_order::relaxed);
         }
         return 0;
@@ -190,12 +193,13 @@ public:
 private:
     struct TReplicaInfo
     {
-        NTabletClient::TTableReplicaId ReplicaId = {};
+        NTabletClient::TTableReplicaId ReplicaId;
         std::atomic<NProfiling::TCpuDuration> CurrentLagPenalty = 0;
     };
 
     const TString TablePath_;
-    THashMap<TString, TReplicaInfo> ReplicaClusters_;
+
+    THashMap<std::string, TReplicaInfo> ReplicaClusters_;
     const TDuration MaxTabletLag_;
     const NProfiling::TCpuDuration LagPenalty_;
     const float MaxTabletsWithLagFraction_;
@@ -218,10 +222,10 @@ IPenaltyProviderPtr CreateDummyPenaltyProvider()
 }
 
 IPenaltyProviderPtr CreateReplicationLagPenaltyProvider(
-        const TReplicationLagPenaltyProviderConfig& config,
-        NApi::IClientPtr client)
+    TReplicationLagPenaltyProviderConfig config,
+    NApi::IClientPtr client)
 {
-    return New<TLagPenaltyProvider>(config, client);
+    return New<TLagPenaltyProvider>(std::move(config), std::move(client));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -840,6 +840,22 @@ public:
         const TGetFlowViewOptions& options),
         (pipelinePath, viewPath, options))
 
+    // Distributed client
+    DELEGATE_METHOD(TFuture<TDistributedWriteSessionPtr>, StartDistributedWriteSession, (
+        const NYPath::TRichYPath& path,
+        const TDistributedWriteSessionStartOptions& options),
+        (path, options))
+
+    DELEGATE_METHOD(TFuture<void>, FinishDistributedWriteSession, (
+        TDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionFinishOptions& options),
+        (std::move(session), options))
+
+    DELEGATE_METHOD(TFuture<ITableWriterPtr>, CreateParticipantTableWriter, (
+        const TDistributedWriteCookiePtr& cookie,
+        const TParticipantTableWriterOptions& options),
+        (cookie, options))
+
     #undef DELEGATE_METHOD
 
 protected:

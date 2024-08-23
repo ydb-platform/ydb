@@ -3364,3 +3364,47 @@ message TRspGetQueryTrackerInfo
     required bytes supported_features = 2; // YSON
     repeated string access_control_objects = 3;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// NB(arkady-e1ppa): Under construction.
+// Distributed table client
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqStartDistributedWriteSession
+{
+    optional string path = 1;
+    
+    // TDistributedWriteSessionStartOptions contents...
+}
+
+message TRspStartDistributedWriteSession
+{
+    required bytes session = 1; // YSON-serialized TDistributedWriteSession
+}
+
+message TReqFinishDistributedWriteSession
+{
+    required bytes session = 2; // YSON-serialized TDistributedWriteSession
+
+    // TDistributedWriteSessionFinishOptions contents...
+}
+
+message TRspFinishDistributedWriteSession
+{
+}
+
+message TReqParticipantWriteTable
+{
+    optional bytes config = 1; // YSON-serialized TTableWriterConfig
+
+    optional bytes format = 2; // YSON-serialized TFormat
+
+    required bytes cookie = 3; // YSON-serialized TDistributedWriteCookie
+
+    // TParticipantTableWriterOptions contents...
+}
+
+message TRspParticipantWriteTable
+{
+    required bytes cookie = 1; // YSON-serialized TDistributedWriteCookie
+}

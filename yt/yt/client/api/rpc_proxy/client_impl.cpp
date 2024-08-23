@@ -4,6 +4,7 @@
 #include "helpers.h"
 #include "private.h"
 #include "table_mount_cache.h"
+#include "table_writer.h"
 #include "timestamp_provider.h"
 #include "transaction.h"
 
@@ -51,6 +52,7 @@ using NYT::FromProto;
 using namespace NAuth;
 using namespace NChaosClient;
 using namespace NChunkClient;
+using namespace NConcurrency;
 using namespace NObjectClient;
 using namespace NRpc;
 using namespace NScheduler;
@@ -737,6 +739,32 @@ TFuture<void> TClient::AlterReplicationCard(
     }
 
     return req->Invoke().As<void>();
+}
+
+TFuture<ITableWriterPtr> TClient::CreateParticipantTableWriter(
+    const TDistributedWriteCookiePtr& cookie,
+    const TParticipantTableWriterOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+    auto req = proxy.ParticipantWriteTable();
+    InitStreamingRequest(*req);
+
+    FillRequest(req.Get(), cookie, options);
+
+    auto schema = New<TTableSchema>();
+    return NRpc::CreateRpcClientOutputStream(
+        std::move(req),
+        BIND ([=] (const TSharedRef& metaRef) {
+            NApi::NRpcProxy::NProto::TWriteTableMeta meta;
+            if (!TryDeserializeProto(&meta, metaRef)) {
+                THROW_ERROR_EXCEPTION("Failed to deserialize schema for participant table writer");
+            }
+
+            FromProto(schema.Get(), meta.schema());
+        }))
+        .Apply(BIND([=] (IAsyncZeroCopyOutputStreamPtr outputStream) {
+            return NRpcProxy::CreateTableWriter(std::move(outputStream), std::move(schema));
+        })).As<ITableWriterPtr>();
 }
 
 TFuture<IQueueRowsetPtr> TClient::PullQueue(

@@ -115,9 +115,10 @@ protected:
         return bytes;
     }
 
-    TSparsedArray(std::vector<TSparsedArrayChunk>&& data, const std::shared_ptr<arrow::Scalar>& /*defaultValue*/,
+    TSparsedArray(std::vector<TSparsedArrayChunk>&& data, const std::shared_ptr<arrow::Scalar>& defaultValue,
         const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount)
         : TBase(recordsCount, EType::SparsedArray, type)
+        , DefaultValue(defaultValue)
         , Records(std::move(data)) {
     }
 
@@ -134,8 +135,11 @@ protected:
 
 public:
     TSparsedArray(const IChunkedArray& defaultArray, const std::shared_ptr<arrow::Scalar>& defaultValue);
+
     TSparsedArray(const std::shared_ptr<arrow::Scalar>& defaultValue, const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount)
-        : TSparsedArray({ MakeDefaultChunk(defaultValue, type, recordsCount) }, defaultValue, type, recordsCount) {
+        : TBase(recordsCount, EType::SparsedArray, type)
+        , DefaultValue(defaultValue) {
+        Records.emplace_back(MakeDefaultChunk(defaultValue, type, recordsCount));
     }
 
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const override {

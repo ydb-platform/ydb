@@ -655,14 +655,15 @@ std::optional<TSortColumns> TRichYPath::GetChunkSortColumns() const
     return FindAttribute<TSortColumns>(*this, "chunk_sort_columns");
 }
 
-std::optional<TString> TRichYPath::GetCluster() const
+std::optional<std::string> TRichYPath::GetCluster() const
 {
-    return FindAttribute<TString>(*this, "cluster");
+    return FindAttribute<std::string>(*this, "cluster");
 }
 
-void TRichYPath::SetCluster(const TString& value)
+void TRichYPath::SetCluster(const std::string& value)
 {
-    Attributes().Set("cluster", value);
+    // TODO(babenko): switch to std::string
+    Attributes().Set("cluster", TString(value));
 }
 
 std::optional<std::vector<TString>> TRichYPath::GetClusters() const

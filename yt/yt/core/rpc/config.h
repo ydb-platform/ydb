@@ -327,7 +327,7 @@ class TBalancingChannelConfig
 {
 public:
     //! First option: static list of addresses.
-    std::optional<std::vector<TString>> Addresses;
+    std::optional<std::vector<std::string>> Addresses;
 
     //! Disables discovery and balancing when just one address is given.
     //! This is vital for jobs since node's redirector is incapable of handling

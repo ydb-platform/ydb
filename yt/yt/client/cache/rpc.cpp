@@ -53,7 +53,7 @@ NApi::NRpcProxy::TConnectionConfigPtr GetConnectionConfig(const TConfig& config)
         connectionConfig->EnableProxyDiscovery = config.GetEnableProxyDiscovery();
     }
     if (!config.GetProxyAddresses().empty()) {
-        connectionConfig->ProxyAddresses = std::vector<TString>(config.GetProxyAddresses().begin(), config.GetProxyAddresses().end());
+        connectionConfig->ProxyAddresses = FromProto<std::vector<std::string>>(config.GetProxyAddresses());
     }
 
 #define SET_TIMEOUT_OPTION(name) \

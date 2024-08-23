@@ -83,8 +83,8 @@ public:
         const TString& endpointDescription,
         const NYTree::IAttributeDictionary& endpointAttributes,
         const NNet::TNetworkAddress& endpointNetworkAddress,
-        const std::optional<TString>& endpointAddress,
-        const std::optional<TString>& unixDomainSocketPath,
+        const std::optional<std::string>& endpointAddress,
+        const std::optional<std::string>& unixDomainSocketPath,
         IMessageHandlerPtr handler,
         NConcurrency::IPollerPtr poller,
         IPacketTranscoderFactory* packetTranscoderFactory,
@@ -106,7 +106,7 @@ public:
     // IBus implementation.
     const TString& GetEndpointDescription() const override;
     const NYTree::IAttributeDictionary& GetEndpointAttributes() const override;
-    const TString& GetEndpointAddress() const override;
+    const std::string& GetEndpointAddress() const override;
     const NNet::TNetworkAddress& GetEndpointNetworkAddress() const override;
     bool IsEndpointLocal() const override;
     bool IsEncrypted() const override;

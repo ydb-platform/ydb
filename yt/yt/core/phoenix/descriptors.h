@@ -91,9 +91,11 @@ public:
     const NYson::TYsonString& GetSchemaYson() const;
 
     const TTypeDescriptor* FindTypeDescriptorByTag(TTypeTag tag) const ;
+    const TTypeDescriptor& GetTypeDescriptorByTag(TTypeTag tag) const;
     const TTypeDescriptor& GetTypeDescriptorByTagOrThrow(TTypeTag tag) const;
 
     const TTypeDescriptor* FindTypeDescriptorByTypeIndex(std::type_index typeIndex) const ;
+    const TTypeDescriptor& GetTypeDescriptorByTypeIndex(std::type_index typeIndex) const;
     const TTypeDescriptor& GetTypeDescriptorByTypeIndexOrThrow(std::type_index typeIndex) const;
 
 private:

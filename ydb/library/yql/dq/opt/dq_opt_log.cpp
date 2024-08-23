@@ -349,7 +349,7 @@ NNodes::TExprBase DqReplicateFieldSubset(NNodes::TExprBase node, TExprContext& c
     return node;
 }
 
-IGraphTransformer::TStatus DqWrapRead(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, TTypeAnnotationContext& typesCtx, const TDqSettings& config) {
+IGraphTransformer::TStatus DqWrapIO(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, TTypeAnnotationContext& typesCtx, const TDqSettings& config) {
     TOptimizeExprSettings settings{&typesCtx};
     auto status = OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) {
         if (auto maybeRead = TMaybeNode<TCoRight>(node).Input()) {
@@ -363,6 +363,16 @@ IGraphTransformer::TStatus DqWrapRead(const TExprNode::TPtr& input, TExprNode::T
                         return newRead;
                     }
                 }
+            }
+        } else if (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::World
+            && !TCoCommit::Match(node.Get())
+            && node->ChildrenSize() > 1
+            && TCoDataSink::Match(node->Child(1))) {
+            auto dataSinkName = node->Child(1)->Child(0)->Content();
+            auto dataSink = typesCtx.DataSinkMap.FindPtr(dataSinkName);
+            YQL_ENSURE(dataSink);
+            if (auto dqIntegration = (*dataSink)->GetDqIntegration()) {
+                return dqIntegration->WrapWrite(node, ctx);
             }
         }
 

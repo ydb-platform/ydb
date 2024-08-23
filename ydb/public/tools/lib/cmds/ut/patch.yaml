@@ -5,3 +5,9 @@ table_service_config:
 
 feature_flags:
   enable_views: true
+
+domains_config:
+  security_config:
+    default_users:
+    - name: user
+      password: 'P@ssw0rd'

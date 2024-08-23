@@ -513,8 +513,8 @@ private:
                 << ", self: " << ctx.SelfID
                 << ", duration: " << duration);
         } else {
-            if (kqpResult.PreparingQuery) {
-                FillCompileResult(std::move(kqpResult.PreparingQuery), queryType, kqpResult.AllowCache);
+            if (kqpResult.PreparingQuery && QueryAst) {
+                KqpCompileResult->Ast = QueryAst->Ast;
             }
 
             LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Compilation failed"

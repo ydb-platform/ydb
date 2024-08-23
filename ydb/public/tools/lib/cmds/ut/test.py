@@ -1,4 +1,7 @@
 import os
+import pytest
+import yaml
+import yatest.common
 
 from ydb.public.tools.lib.cmds import generic_connector_config, merge_two_yaml_configs
 from ydb.library.yql.providers.common.proto.gateways_config_pb2 import TGenericConnectorConfig
@@ -25,6 +28,7 @@ def test_kikimr_config_generator_generic_connector_config():
     actual = generic_connector_config()
     assert actual == expected
 
+
 def test_merge_two_yaml_configs():
     patched_yaml = yatest.common.output_path("patched.yaml")
 
@@ -39,30 +43,12 @@ def test_merge_two_yaml_configs():
 
     return yatest.common.canonical_file(patched_yaml, local=True)
 
-def test_merge_two_dicts():
-    dict_1 = {'data': [{'user': 'root', 'password': '1234'}]}
-    dict_2 = {'data': [{'user': 'root', 'password': '12345678'}]}
 
-    dict_final = {'data': [{'user': 'root', 'password': '12345678'}]}
-    assert merge_two_yaml_configs(dict_1, dict_2) == dict_final
-
-
-    dict_1 = {'data': [{'user': 'root', 'password': '1234'}]}
-    dict_2 = {'second_data': {'user': 'user', 'password': '12345'}}
-
-    dict_final = {'data': [{'user': 'root', 'password': '1234'}], 'second_data': {'user': 'user', 'password': '12345'}}
-    assert merge_two_yaml_configs(dict_1, dict_2) == dict_final
-
-
-    dict_1 = {'data': None}
-    dict_2 = {'data': {'user': 'root', 'password': '12345678'}}
-
-    dict_final = {'data': {'user': 'root', 'password': '12345678'}}
-    assert merge_two_yaml_configs(dict_1, dict_2) == dict_final
-
-
-    dict_1 = {'data': [{'user': 'root', 'password': '1234'}]}
-    dict_2 = {'data': None}
-
-    dict_final = {'data': [{'user': 'root', 'password': '1234'}]}
+@pytest.mark.parametrize("dict_1, dict_2, dict_final", [
+    ({'data': [{'user': 'root', 'password': '1234'}]}, {'data': [{'user': 'root', 'password': '12345678'}]}, {'data': [{'user': 'root', 'password': '12345678'}]}),
+    ({'data': [{'user': 'root', 'password': '1234'}]}, {'second_data': {'user': 'user', 'password': '12345'}},{'data': [{'user': 'root', 'password': '1234'}], 'second_data': {'user': 'user', 'password': '12345'}}),
+    ({'data': None}, {'data': {'user': 'root', 'password': '12345678'}}, {'data': {'user': 'root', 'password': '12345678'}}),
+    ({'data': [{'user': 'root', 'password': '1234'}]}, {'data': None}, {'data': [{'user': 'root', 'password': '1234'}]})
+    ])
+def test_merge_two_dicts(dict_1, dict_2, dict_final):
     assert merge_two_yaml_configs(dict_1, dict_2) == dict_final

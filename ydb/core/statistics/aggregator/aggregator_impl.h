@@ -379,7 +379,7 @@ private: // stored in local db
         std::vector<TForceTraversalTable> Tables;
         TString Types;
         TActorId ReplyToActorId;
-        ui64 CreatedAt;
+        TInstant CreatedAt;
     };
     std::list<TForceTraversalOperation> ForceTraversals;
     std::set<ui64> ForceTraversalsCreationTime;

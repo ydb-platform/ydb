@@ -785,6 +785,8 @@ void TStatisticsAggregator::DeleteForceTraversalOperation(const TString& operati
         db.Table<Schema::ForceTraversalTables>().Key(operationId, table.PathId.OwnerId, table.PathId.LocalPathId).Delete();
     }
 
+    ForceTraversalsCreationTime.erase(operation->CreatedAt.GetValue());
+
     ForceTraversals.remove_if([operationId](const TForceTraversalOperation& elem) { return elem.OperationId == operationId;});
     TabletCounters->Simple()[COUNTER_FORCE_TRAVERSALS_QUEUE_SIZE].Set(ForceTraversals.size());
 }

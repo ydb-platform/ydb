@@ -11,12 +11,19 @@ struct TStatisticsAggregator::TTxScheduleTrasersal : public TTxBase {
 
     TTxType GetTxType() const override { return TXTYPE_SCHEDULE_TRAVERSAL; }
 
-    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleTrasersal::Execute");
 
         if (!Self->EnableColumnStatistics) {
             return true;
         }
+
+        ui64 time = 0;
+        if (!Self->ForceTraversalsCreationTime.empty()) {
+            const auto oldest = *Self->ForceTraversalsCreationTime.begin();
+            time = ctx.Now().MicroSeconds() - oldest;
+        }
+        Self->TabletCounters->Simple()[COUNTER_IN_FLY_ANALYZE_MAXIMUM_WAITING_TIME].Set(time);
 
         if (Self->TraversalPathId) {
             SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleTrasersal::Execute. Traverse is in progress. PathId " << Self->TraversalPathId);

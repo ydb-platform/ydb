@@ -897,7 +897,7 @@ private:
     void SendStatisticsRequest(const TActorId& clientId) {
         auto request = std::make_unique<TEvStatistics::TEvStatisticsRequest>();
         auto& record = request->Record;
-        record.MutableTypes()->Add(NKikimr::NStat::COUNT_MIN_SKETCH);
+        record.MutableTypes()->Add(NKikimrStat::TYPE_COUNT_MIN_SKETCH);
 
         auto* path = record.MutableTable()->MutablePathId();
         path->SetOwnerId(AggregationStatistics.PathId.OwnerId);

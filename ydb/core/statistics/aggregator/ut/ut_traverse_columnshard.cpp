@@ -43,6 +43,21 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         UNIT_ASSERT(CheckCountMinSketch(countMin, ColumnTableRowsNumber));
     }
 
+    Y_UNIT_TEST(TraverseColumnTableRebootColumnshard) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        auto tableInfo = CreateDatabaseColumnTables(env, 1, 10)[0];
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SimulateSleep(TDuration::Seconds(30));
+
+        RebootTablet(runtime, tableInfo.ShardIds[0], sender);
+
+        auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
+
+        UNIT_ASSERT(CheckCountMinSketch(countMin, 1000000));
+    }    
+
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletBeforeResolve) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();

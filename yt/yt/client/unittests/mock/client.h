@@ -2,6 +2,7 @@
 
 #include <yt/yt/client/api/connection.h>
 #include <yt/yt/client/api/client.h>
+#include <yt/yt/client/api/distributed_table_sessions.h>
 #include <yt/yt/client/api/file_writer.h>
 #include <yt/yt/client/api/journal_reader.h>
 #include <yt/yt/client/api/journal_writer.h>
@@ -823,6 +824,21 @@ public:
         const NYPath::TYPath& pipelinePath,
         const NYPath::TYPath& viewPath,
         const TGetFlowViewOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<TDistributedWriteSessionPtr>, StartDistributedWriteSession, (
+        const NYPath::TRichYPath& path,
+        const TDistributedWriteSessionStartOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<void>, FinishDistributedWriteSession, (
+        TDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionFinishOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<ITableWriterPtr>, CreateParticipantTableWriter, (
+        const TDistributedWriteCookiePtr& cookie,
+        const TParticipantTableWriterOptions& options),
         (override));
 
 private:

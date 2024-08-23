@@ -129,6 +129,11 @@ public:
         NChaosClient::TReplicationCardId replicationCardId,
         const TAlterReplicationCardOptions& options = {}) override;
 
+    // Distributed table client
+    TFuture<ITableWriterPtr> CreateParticipantTableWriter(
+        const TDistributedWriteCookiePtr& cookie,
+        const TParticipantTableWriterOptions& options) override;
+
     // Queues.
     TFuture<NQueueClient::IQueueRowsetPtr> PullQueue(
         const NYPath::TRichYPath& queuePath,

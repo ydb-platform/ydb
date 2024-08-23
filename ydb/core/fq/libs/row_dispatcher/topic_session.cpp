@@ -324,7 +324,7 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvDataAfterFilteration::TPtr& ev) {
 }
 
 void TTopicSession::Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvGetNextBatch");
+    LOG_ROW_DISPATCHER_DEBUG("TEvGetNextBatch from " << ev->Sender.ToString());
     auto it = Clients.find(ev->Sender);
     if (it == Clients.end()) {
         LOG_ROW_DISPATCHER_DEBUG("Wrong ClientSettings"); // TODO

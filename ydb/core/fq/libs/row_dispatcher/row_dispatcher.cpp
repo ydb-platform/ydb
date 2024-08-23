@@ -326,7 +326,10 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr &ev) {
         return;
     }
     if (!it->second->EventsQueue.OnEventReceived(ev)) {
-        LOG_ROW_DISPATCHER_DEBUG("Wrong seq num, ignore message");
+        const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
+        const ui64 seqNo = meta.GetSeqNo();
+
+        LOG_ROW_DISPATCHER_DEBUG("TEvGetNextBatch: wrong seq num (" << seqNo << ", ignore message");
         return;
     }
     Forward(ev, it->second->TopicSessionId);
@@ -348,7 +351,10 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev) {
         return;
     }
     if (!it->second->EventsQueue.OnEventReceived(ev)) {
-        LOG_ROW_DISPATCHER_DEBUG("Wrong seq num, ignore message");
+        const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
+        const ui64 seqNo = meta.GetSeqNo();
+
+        LOG_ROW_DISPATCHER_DEBUG("TEvStopSession: wrong seq num (" << seqNo << ", ignore message");
         return;
     }
     DeleteConsumer(key);

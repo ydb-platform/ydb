@@ -93,6 +93,64 @@ bool TPartOfConstraintBase::HasDuplicates(const TSetOfSetsType& sets) {
     return false;
 }
 
+NYT::TNode TPartOfConstraintBase::PathToNode(const TPartOfConstraintBase::TPathType& path) {
+    if (1U == path.size())
+        return TStringBuf(path.front());
+
+    return std::accumulate(path.cbegin(), path.cend(),
+        NYT::TNode::CreateList(),
+        [](NYT::TNode node, std::string_view p) -> NYT::TNode { return std::move(node).Add(TStringBuf(p)); }
+    );
+};
+
+NYT::TNode TPartOfConstraintBase::SetToNode(const TPartOfConstraintBase::TSetType& set, bool withShortcut) {
+    if (withShortcut && 1U == set.size() && 1U == set.front().size())
+        return TStringBuf(set.front().front());
+
+    return std::accumulate(set.cbegin(), set.cend(),
+        NYT::TNode::CreateList(),
+        [](NYT::TNode node, const TPathType& path) -> NYT::TNode { return std::move(node).Add(PathToNode(path)); }
+    );
+};
+
+NYT::TNode TPartOfConstraintBase::SetOfSetsToNode(const TPartOfConstraintBase::TSetOfSetsType& sets) {
+    return std::accumulate(sets.cbegin(), sets.cend(),
+        NYT::TNode::CreateList(),
+        [](NYT::TNode node, const TSetType& s) {
+            return std::move(node).Add(TPartOfConstraintBase::SetToNode(s, true));
+        });
+}
+
+TPartOfConstraintBase::TPathType TPartOfConstraintBase::NodeToPath(TExprContext& ctx, const NYT::TNode& node) {
+    if (node.IsString())
+        return TPartOfConstraintBase::TPathType{ctx.AppendString(node.AsString())};
+
+    TPartOfConstraintBase::TPathType path;
+    for (const auto& col : node.AsList()) {
+        path.emplace_back(ctx.AppendString(col.AsString()));
+    }
+    return path;
+};
+
+TPartOfConstraintBase::TSetType TPartOfConstraintBase::NodeToSet(TExprContext& ctx, const NYT::TNode& node) {
+    if (node.IsString())
+        return TPartOfConstraintBase::TSetType{TPartOfConstraintBase::TPathType(1U, ctx.AppendString(node.AsString()))};
+
+    TPartOfConstraintBase::TSetType set;
+    for (const auto& col : node.AsList()) {
+        set.insert_unique(NodeToPath(ctx, col));
+    }
+    return set;
+};
+
+TPartOfConstraintBase::TSetOfSetsType TPartOfConstraintBase::NodeToSetOfSets(TExprContext& ctx, const NYT::TNode& node) {
+    TSetOfSetsType sets;
+    for (const auto& s : node.AsList()) {
+        sets.insert_unique(NodeToSet(ctx, s));
+    }
+    return sets;
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 const TConstraintNode* TConstraintSet::GetConstraint(std::string_view name) const {
@@ -144,6 +202,16 @@ void TConstraintSet::ToJson(NJson::TJsonWriter& writer) const {
         node->ToJson(writer);
     }
     writer.CloseMap();
+}
+
+NYT::TNode TConstraintSet::ToYson() const {
+    auto res = NYT::TNode::CreateMap();
+    for (const auto& node : Constraints_) {
+        auto serialized = node->ToYson();
+        YQL_ENSURE(!serialized.IsUndefined(), "Cannot serialize " << node->GetName() << " constraint");
+        res[node->GetName()] = std::move(serialized);
+    }
+    return res;
 }
 
 bool TConstraintSet::FilterConstraints(const TPredicate& predicate) {
@@ -216,7 +284,8 @@ TPartOfConstraintBase::TSetOfSetsType MakeFullSet(const TPartOfConstraintBase::T
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 TSortedConstraintNode::TSortedConstraintNode(TExprContext& ctx, TContainerType&& content)
-    : TConstraintWithFieldsT(ctx, Name()), Content_(std::move(content))
+    : TConstraintWithFieldsT(ctx, Name())
+    , Content_(std::move(content))
 {
     YQL_ENSURE(!Content_.empty());
     for (const auto& c : Content_) {
@@ -224,6 +293,24 @@ TSortedConstraintNode::TSortedConstraintNode(TExprContext& ctx, TContainerType&&
         for (const auto& path : c.first)
             Hash_ = std::accumulate(path.cbegin(), path.cend(), c.second ? Hash_ : ~Hash_, [](ui64 hash, const std::string_view& field) { return MurmurHash<ui64>(field.data(), field.size(), hash); });
     }
+}
+
+TSortedConstraintNode::TSortedConstraintNode(TExprContext& ctx, const NYT::TNode& serialized)
+    : TSortedConstraintNode(ctx, NodeToContainer(ctx, serialized))
+{
+}
+
+TSortedConstraintNode::TContainerType TSortedConstraintNode::NodeToContainer(TExprContext& ctx, const NYT::TNode& serialized) {
+    TSortedConstraintNode::TContainerType sorted;
+    try {
+        for (const auto& pair : serialized.AsList()) {
+            TPartOfConstraintBase::TSetType set = TPartOfConstraintBase::NodeToSet(ctx, pair.AsList().front());
+            sorted.emplace_back(std::move(set), pair.AsList().back().AsBool());
+        }
+    } catch (...) {
+        YQL_ENSURE(false, "Cannot deserialize " << Name() << " constraint: " << CurrentExceptionMessage());
+    }
+    return sorted;
 }
 
 TSortedConstraintNode::TSortedConstraintNode(TSortedConstraintNode&&) = default;
@@ -286,6 +373,14 @@ void TSortedConstraintNode::ToJson(NJson::TJsonWriter& out) const {
         out.CloseArray();
     }
     out.CloseArray();
+}
+
+NYT::TNode TSortedConstraintNode::ToYson() const {
+    return std::accumulate(Content_.cbegin(), Content_.cend(),
+        NYT::TNode::CreateList(),
+        [](NYT::TNode node, const std::pair<TSetType, bool>& pair) {
+            return std::move(node).Add(NYT::TNode::CreateList().Add(TPartOfConstraintBase::SetToNode(pair.first, false)).Add(pair.second));
+        });
 }
 
 bool TSortedConstraintNode::IsPrefixOf(const TSortedConstraintNode& node) const {
@@ -560,7 +655,8 @@ TSortedConstraintNode::DoGetSimplifiedForType(const TTypeAnnotationNode& type, T
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 TChoppedConstraintNode::TChoppedConstraintNode(TExprContext& ctx, TSetOfSetsType&& sets)
-    : TConstraintWithFieldsT(ctx, Name()), Sets_(std::move(sets))
+    : TConstraintWithFieldsT(ctx, Name())
+    , Sets_(std::move(sets))
 {
     YQL_ENSURE(!Sets_.empty());
     YQL_ENSURE(!HasDuplicates(Sets_));
@@ -576,6 +672,20 @@ TChoppedConstraintNode::TChoppedConstraintNode(TExprContext& ctx, TSetOfSetsType
 TChoppedConstraintNode::TChoppedConstraintNode(TExprContext& ctx, const TSetType& keys)
     : TChoppedConstraintNode(ctx, MakeFullSet(keys))
 {}
+
+TChoppedConstraintNode::TChoppedConstraintNode(TExprContext& ctx, const NYT::TNode& serialized)
+    : TChoppedConstraintNode(ctx, NodeToSets(ctx, serialized))
+{
+}
+
+TChoppedConstraintNode::TSetOfSetsType TChoppedConstraintNode::NodeToSets(TExprContext& ctx, const NYT::TNode& serialized) {
+    try {
+        return TPartOfConstraintBase::NodeToSetOfSets(ctx, serialized);
+    } catch (...) {
+        YQL_ENSURE(false, "Cannot deserialize " << Name() << " constraint: " << CurrentExceptionMessage());
+    }
+    Y_UNREACHABLE();
+}
 
 TChoppedConstraintNode::TChoppedConstraintNode(TChoppedConstraintNode&& constr) = default;
 
@@ -639,6 +749,10 @@ void TChoppedConstraintNode::ToJson(NJson::TJsonWriter& out) const {
         out.CloseArray();
     }
     out.CloseArray();
+}
+
+NYT::TNode TChoppedConstraintNode::ToYson() const {
+    return TPartOfConstraintBase::SetOfSetsToNode(Sets_);
 }
 
 bool TChoppedConstraintNode::Equals(const TSetType& prefix) const {
@@ -910,7 +1024,8 @@ TUniqueConstraintNodeBase<Distinct>::MakeCommonContent(const TContentType& one, 
 
 template<bool Distinct>
 TUniqueConstraintNodeBase<Distinct>::TUniqueConstraintNodeBase(TExprContext& ctx, TContentType&& sets)
-    : TBase(ctx, Name()), Content_(DedupSets(std::move(sets)))
+    : TBase(ctx, Name())
+    , Content_(DedupSets(std::move(sets)))
 {
     YQL_ENSURE(!Content_.empty());
     const auto size = Content_.size();
@@ -930,6 +1045,25 @@ template<bool Distinct>
 TUniqueConstraintNodeBase<Distinct>::TUniqueConstraintNodeBase(TExprContext& ctx, const std::vector<std::string_view>& columns)
     : TUniqueConstraintNodeBase(ctx, TContentType{TPartOfConstraintBase::TSetOfSetsType{ColumnsListToSets(columns)}})
 {}
+
+template<bool Distinct>
+TUniqueConstraintNodeBase<Distinct>::TUniqueConstraintNodeBase(TExprContext& ctx, const NYT::TNode& serialized)
+    : TUniqueConstraintNodeBase(ctx, NodeToContent(ctx, serialized))
+{
+}
+
+template<bool Distinct>
+TUniqueConstraintNodeBase<Distinct>::TContentType TUniqueConstraintNodeBase<Distinct>::NodeToContent(TExprContext& ctx, const NYT::TNode& serialized) {
+    TUniqueConstraintNode::TContentType content;
+    try {
+        for (const auto& item : serialized.AsList()) {
+            content.insert_unique(TPartOfConstraintBase::NodeToSetOfSets(ctx, item));
+        }
+    } catch (...) {
+        YQL_ENSURE(false, "Cannot deserialize " << Name() << " constraint: " << CurrentExceptionMessage());
+    }
+    return content;
+}
 
 template<bool Distinct>
 TUniqueConstraintNodeBase<Distinct>::TUniqueConstraintNodeBase(TUniqueConstraintNodeBase&& constr) = default;
@@ -1015,6 +1149,15 @@ void TUniqueConstraintNodeBase<Distinct>::ToJson(NJson::TJsonWriter& out) const 
         out.CloseArray();
     }
     out.CloseArray();
+}
+
+template<bool Distinct>
+NYT::TNode TUniqueConstraintNodeBase<Distinct>::ToYson() const {
+    return std::accumulate(Content_.cbegin(), Content_.cend(),
+        NYT::TNode::CreateList(),
+        [](NYT::TNode node, const TConstraintWithFieldsNode::TSetOfSetsType& sets) {
+            return std::move(node).Add(TConstraintWithFieldsNode::SetOfSetsToNode(sets));
+        });
 }
 
 template<bool Distinct>
@@ -1284,7 +1427,8 @@ template class TUniqueConstraintNodeBase<true>;
 
 template<class TOriginalConstraintNode>
 TPartOfConstraintNode<TOriginalConstraintNode>::TPartOfConstraintNode(TExprContext& ctx, TMapType&& mapping)
-    : TBase(ctx, Name()), Mapping_(std::move(mapping))
+    : TBase(ctx, Name())
+    , Mapping_(std::move(mapping))
 {
     YQL_ENSURE(!Mapping_.empty());
     for (const auto& part : Mapping_) {
@@ -1296,6 +1440,13 @@ TPartOfConstraintNode<TOriginalConstraintNode>::TPartOfConstraintNode(TExprConte
             TBase::Hash_ = std::accumulate(item.second.cbegin(), item.second.cend(), TBase::Hash_, [](ui64 hash, const std::string_view& field) { return MurmurHash<ui64>(field.data(), field.size(), hash); });
         }
     }
+}
+
+template<class TOriginalConstraintNode>
+TPartOfConstraintNode<TOriginalConstraintNode>::TPartOfConstraintNode(TExprContext& ctx, const NYT::TNode&)
+    : TBase(ctx, Name())
+{
+    YQL_ENSURE(false, "TPartOfConstraintNode cannot be deserialized");
 }
 
 template<class TOriginalConstraintNode>
@@ -1365,6 +1516,11 @@ void TPartOfConstraintNode<TOriginalConstraintNode>::ToJson(NJson::TJsonWriter& 
         }
     }
     out.CloseMap();
+}
+
+template<class TOriginalConstraintNode>
+NYT::TNode TPartOfConstraintNode<TOriginalConstraintNode>::ToYson() const {
+    return {}; // cannot be serialized
 }
 
 template<class TOriginalConstraintNode>
@@ -1682,6 +1838,12 @@ TEmptyConstraintNode::TEmptyConstraintNode(TEmptyConstraintNode&& constr)
 {
 }
 
+TEmptyConstraintNode::TEmptyConstraintNode(TExprContext& ctx, const NYT::TNode& serialized)
+    : TConstraintNode(ctx, Name())
+{
+    YQL_ENSURE(serialized.IsEntity(), "Unexpected serialized content of " << Name() << " constraint");
+}
+
 bool TEmptyConstraintNode::Equals(const TConstraintNode& node) const {
     if (this == &node) {
         return true;
@@ -1694,6 +1856,10 @@ bool TEmptyConstraintNode::Equals(const TConstraintNode& node) const {
 
 void TEmptyConstraintNode::ToJson(NJson::TJsonWriter& out) const {
     out.Write(true);
+}
+
+NYT::TNode TEmptyConstraintNode::ToYson() const {
+    return NYT::TNode::CreateEntity();
 }
 
 const TEmptyConstraintNode* TEmptyConstraintNode::MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& /*ctx*/) {
@@ -1734,10 +1900,27 @@ TVarIndexConstraintNode::TVarIndexConstraintNode(TExprContext& ctx, size_t mapIt
     YQL_ENSURE(!Mapping_.empty());
 }
 
+TVarIndexConstraintNode::TVarIndexConstraintNode(TExprContext& ctx, const NYT::TNode& serialized)
+    : TVarIndexConstraintNode(ctx, NodeToMapping(serialized))
+{
+}
+
 TVarIndexConstraintNode::TVarIndexConstraintNode(TVarIndexConstraintNode&& constr)
     : TConstraintNode(std::move(static_cast<TConstraintNode&>(constr)))
     , Mapping_(std::move(constr.Mapping_))
 {
+}
+
+TVarIndexConstraintNode::TMapType TVarIndexConstraintNode::NodeToMapping(const NYT::TNode& serialized) {
+    TMapType mapping;
+    try {
+        for (const auto& pair: serialized.AsList()) {
+            mapping.insert(std::make_pair<ui32, ui32>(pair.AsList().front().AsUint64(), pair.AsList().back().AsUint64()));
+        }
+    } catch (...) {
+        YQL_ENSURE(false, "Cannot deserialize " << Name() << " constraint: " << CurrentExceptionMessage());
+    }
+    return mapping;
 }
 
 TVarIndexConstraintNode::TMapType TVarIndexConstraintNode::GetReverseMapping() const {
@@ -1814,6 +1997,14 @@ void TVarIndexConstraintNode::ToJson(NJson::TJsonWriter& out) const {
     out.CloseArray();
 }
 
+NYT::TNode TVarIndexConstraintNode::ToYson() const {
+    return std::accumulate(Mapping_.cbegin(), Mapping_.cend(),
+        NYT::TNode::CreateList(),
+        [](NYT::TNode node, const TMapType::value_type& p) {
+            return std::move(node).Add(NYT::TNode::CreateList().Add(p.first).Add(p.second));
+        });
+}
+
 const TVarIndexConstraintNode* TVarIndexConstraintNode::MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx) {
     if (constraints.empty()) {
         return nullptr;
@@ -1838,18 +2029,18 @@ const TVarIndexConstraintNode* TVarIndexConstraintNode::MakeCommon(const std::ve
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-TMultiConstraintNode::TMultiConstraintNode(TExprContext& ctx, const TMapType& items)
+TMultiConstraintNode::TMultiConstraintNode(TExprContext& ctx, TMapType&& items)
     : TConstraintNode(ctx, Name())
+    , Items_(std::move(items))
 {
-    YQL_ENSURE(items.size());
-    for (auto& item: items) {
+    YQL_ENSURE(Items_.size());
+    for (auto& item: Items_) {
         Hash_ = MurmurHash<ui64>(&item.first, sizeof(item.first), Hash_);
         for (auto c: item.second.GetAllConstraints()) {
             const auto itemHash = c->GetHash();
             Hash_ = MurmurHash<ui64>(&itemHash, sizeof(itemHash), Hash_);
         }
     }
-    Items_ = items;
 }
 
 TMultiConstraintNode::TMultiConstraintNode(TExprContext& ctx, ui32 index, const TConstraintSet& constraints)
@@ -1857,10 +2048,27 @@ TMultiConstraintNode::TMultiConstraintNode(TExprContext& ctx, ui32 index, const 
 {
 }
 
+TMultiConstraintNode::TMultiConstraintNode(TExprContext& ctx, const NYT::TNode& serialized)
+    : TMultiConstraintNode(ctx, NodeToMapping(ctx, serialized))
+{
+}
+
 TMultiConstraintNode::TMultiConstraintNode(TMultiConstraintNode&& constr)
     : TConstraintNode(std::move(static_cast<TConstraintNode&>(constr)))
     , Items_(std::move(constr.Items_))
 {
+}
+
+TMultiConstraintNode::TMapType TMultiConstraintNode::NodeToMapping(TExprContext& ctx, const NYT::TNode& serialized) {
+    TMapType mapping;
+    try {
+        for (const auto& pair: serialized.AsList()) {
+            mapping.insert(std::make_pair((ui32)pair.AsList().front().AsUint64(), ctx.MakeConstraintSet(pair.AsList().back())));
+        }
+    } catch (...) {
+        YQL_ENSURE(false, "Cannot deserialize " << Name() << " constraint: " << CurrentExceptionMessage());
+    }
+    return mapping;
 }
 
 bool TMultiConstraintNode::Equals(const TConstraintNode& node) const {
@@ -1977,6 +2185,14 @@ void TMultiConstraintNode::ToJson(NJson::TJsonWriter& out) const {
         constraintSet.ToJson(out);
     }
     out.CloseMap();
+}
+
+NYT::TNode TMultiConstraintNode::ToYson() const {
+    return std::accumulate(Items_.cbegin(), Items_.cend(),
+        NYT::TNode::CreateList(),
+        [](NYT::TNode node, const TMapType::value_type& p) {
+            return std::move(node).Add(NYT::TNode::CreateList().Add(p.first).Add(p.second.ToYson()));
+        });
 }
 
 const TMultiConstraintNode* TMultiConstraintNode::MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx) {

@@ -1,5 +1,4 @@
 #include "yql_pq_dq_integration.h"
-#include "yql_pq_dq_predicate.h"
 #include "yql_pq_helpers.h"
 #include "yql_pq_mkql_compiler.h"
 

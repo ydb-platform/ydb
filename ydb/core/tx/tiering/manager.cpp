@@ -199,11 +199,10 @@ THashMap<ui64, NKikimr::NOlap::TTiering> TTiersManager::GetTiering() const {
     Y_ABORT_UNLESS(snapshotPtr);
     auto& tierConfigs = snapshotPtr->GetTierConfigs();
     for (auto&& i : PathIdTiering) {
-        auto* tiering_rule = snapshotPtr->GetTieringById(i.second);
-        if (tiering_rule) {
+        auto* tieringRule = snapshotPtr->GetTieringById(i.second);
+        if (tieringRule) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("path_id", i.first)("tiering_name", i.second)("event", "activation");
-            NOlap::TTiering tiering = tiering_rule->BuildOlapTiers();
-            AFL_VERIFY(tiering.HasTiers());
+            NOlap::TTiering tiering = tieringRule->BuildOlapTiers();
             for (auto& [name, tier] : tiering.GetTierByName()) {
                 AFL_VERIFY(name != NOlap::NTiering::NCommon::DeleteTierName);
                 auto it = tierConfigs.find(name);

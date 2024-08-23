@@ -120,7 +120,7 @@ message TFeatureFlags {
     optional bool EnableIcNodeCache = 101 [default = true];
     optional bool EnableTempTables = 102 [default = false];
     optional bool SuppressCompatibilityCheck = 103 [default = false];
-    optional bool EnableUniqConstraint = 104 [default = false];
+    optional bool EnableUniqConstraint = 104 [default = true];
     optional bool EnableChangefeedDebeziumJsonFormat = 105 [default = false];
     optional bool EnableStatistics = 106 [default = true];
     optional bool EnableUuidAsPrimaryKey = 107 [default = true];

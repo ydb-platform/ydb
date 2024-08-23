@@ -1293,7 +1293,8 @@ public:
         ui64 fileQueueConsumersCountDelta,
         bool asyncDecoding,
         bool asyncDecompressing,
-        bool allowLocalFiles
+        bool allowLocalFiles,
+        ui32 sleepMs
     )   : ReadActorFactoryCfg(readActorFactoryCfg)
         , Gateway(std::move(gateway))
         , HolderFactory(holderFactory)
@@ -1345,6 +1346,9 @@ public:
             RawInflightSize = TaskCounters->GetCounter("RawInflightSize");
         }
         IngressStats.Level = statsLevel;
+        if (sleepMs) {
+            SleepUntil = TInstant::Now() + TDuration::MilliSeconds(sleepMs);
+        }
     }
 
     void Bootstrap() {
@@ -1413,6 +1417,16 @@ public:
     }
 
     bool TryRegisterCoro() {
+
+        if (SleepUntil) {
+            if (SleepUntil <= TInstant::Now()) {
+                SleepUntil = TInstant::Zero();
+            } else {
+                Schedule(TInstant::Now() - SleepUntil, new NActors::TEvents::TEvWakeup());
+                return false;
+            }
+        }
+
         TrySendPathBatchRequest();
         if (PathBatchQueue.empty()) {
             // no path is pending
@@ -1668,11 +1682,16 @@ private:
         hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
         hFunc(NActors::TEvents::TEvUndelivered, Handle);
         hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, Handle);
+        hFunc(NActors::TEvents::TEvWakeup, Handle);
         , catch (const std::exception& e) {
             TIssues issues{TIssue{TStringBuilder() << "An unknown exception has occurred: '" << e.what() << "'"}};
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::INTERNAL_ERROR));
         }
     )
+
+    void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
+        TryRegisterCoro();
+    }
 
     void HandleObjectPathBatch(TEvS3Provider::TEvObjectPathBatch::TPtr& objectPathBatch) {
         if (!FileQueueEvents.OnEventReceived(objectPathBatch)) {
@@ -1914,6 +1933,7 @@ private:
     bool IsConfirmedFileQueueFinish = false;
     TRetryEventsQueue FileQueueEvents;
     TDeque<TVector<NS3::FileQueue::TObjectPath>> PathBatchQueue;
+    TInstant SleepUntil;
 };
 
 using namespace NKikimr::NMiniKQL;
@@ -2078,6 +2098,8 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
 
     TPathList paths;
     ReadPathsList(taskParams, readRanges, paths);
+
+    auto sleepMs = FromStringWithDefault<ui32>(taskParams.Value("SleepMsOnStart", "0"), 0);
 
     const auto token = secureParams.Value(params.GetToken(), TString{});
     const TS3Credentials credentials(credentialsFactory, token);
@@ -2262,7 +2284,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
                                                   std::move(paths), addPathIndex, readSpec, computeActorId, retryPolicy,
                                                   cfg, counters, taskCounters, fileSizeLimit, sizeLimit, rowsLimitHint, memoryQuotaManager,
                                                   params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta,
-                                                  params.GetAsyncDecoding(), params.GetAsyncDecompressing(), allowLocalFiles);
+                                                  params.GetAsyncDecoding(), params.GetAsyncDecompressing(), allowLocalFiles, sleepMs);
 
         return {actor, actor};
     } else {

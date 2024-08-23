@@ -53,6 +53,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<ui64, false> EnableSpillingNodes;
     NCommon::TConfSetting<TString, false> OverridePlanner;
     NCommon::TConfSetting<bool, false> UseGraceJoinCoreForMap;
+    NCommon::TConfSetting<bool, false> UseHashShuffleForMap;
 
     NCommon::TConfSetting<TString, false> OptOverrideStatistics;
     NCommon::TConfSetting<TString, false> OptCardinalityHints;

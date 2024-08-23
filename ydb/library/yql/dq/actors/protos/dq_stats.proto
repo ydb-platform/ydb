@@ -335,6 +335,9 @@ message TDqStageStats {
     TDqStatsAggr EgressBytes = 30;
     TDqStatsAggr EgressRows = 31;
 
+    TDqStatsAggr SpillingBytes = 39;
+    TDqStatsAggr SpillingTimeUs = 40;
+
     reserved 13; // FirstRowTimeMs
     reserved 14; // FinishTimeMs
     reserved 21; // StartTimeMs

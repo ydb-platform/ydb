@@ -91,7 +91,7 @@ struct TStageExecutionStats {
     std::map<ui32, ui32> Task2Index;
 
     TTimeSeriesStats CpuTimeUs;
-    TTimeSeriesStats SourceCpuTimeUs;
+    std::vector<ui64> SourceCpuTimeUs;
 
     std::vector<ui64> InputRows;
     std::vector<ui64> InputBytes;
@@ -110,6 +110,9 @@ struct TStageExecutionStats {
     std::vector<ui64> DurationUs;
     std::vector<ui64> WaitInputTimeUs;
     std::vector<ui64> WaitOutputTimeUs;
+
+    TTimeSeriesStats SpillingBytes;
+    TTimeSeriesStats SpillingTimeUs;
 
     std::map<TString, TTableStats> Tables;
     std::map<TString, TAsyncBufferStats> Ingress;

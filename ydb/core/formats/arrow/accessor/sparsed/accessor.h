@@ -3,6 +3,9 @@
 
 #include <ydb/library/accessor/accessor.h>
 
+#include <ydb/core/formats/arrow/validation/validation.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_fwd.h>
@@ -123,13 +126,21 @@ protected:
 
     static ui32 GetLastIndex(const std::shared_ptr<arrow::RecordBatch>& batch);
 
+    static TSparsedArrayChunk MakeDefaultChunk(const std::shared_ptr<arrow::Scalar>& defaultValue, const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount) {
+        std::vector<std::shared_ptr<arrow::Field>> fields = { std::make_shared<arrow::Field>("index", arrow::uint32()),
+            std::make_shared<arrow::Field>("value", type) };
+        auto schema = std::make_shared<arrow::Schema>(fields);
+        std::shared_ptr<arrow::RecordBatch> records = MakeEmptyBatch(schema, recordsCount);
+        AFL_VERIFY_DEBUG(records->ValidateFull().ok());
+        return TSparsedArrayChunk(0, recordsCount, records, defaultValue);
+    }
+
 public:
     TSparsedArray(const IChunkedArray& defaultArray, const std::shared_ptr<arrow::Scalar>& defaultValue);
     TSparsedArray(const std::shared_ptr<arrow::Scalar>& defaultValue,
         const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount)
-        : TSparsedArray({}, defaultValue, type, recordsCount)
+        : TSparsedArray({MakeDefaultChunk(defaultValue, type, recordsCount)}, defaultValue, type, recordsCount)
     {
-        
     }
 
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const override {

@@ -758,8 +758,6 @@ TStatisticsAggregator::TForceTraversalOperation* TStatisticsAggregator::ForceTra
 }
 
 std::optional<bool> TStatisticsAggregator::IsColumnTable(const TPathId& pathId) const {
-    Y_ABORT_UNLESS(IsSchemeshardSeen);
-
     auto itPath = ScheduleTraversals.find(pathId);
     if (itPath != ScheduleTraversals.end()) {
         bool ret = itPath->second.IsColumnTable;

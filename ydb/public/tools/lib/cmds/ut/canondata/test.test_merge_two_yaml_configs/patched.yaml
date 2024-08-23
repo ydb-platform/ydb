@@ -145,7 +145,8 @@ domains_config:
         vdisk_kind: Default
   security_config:
     default_users:
-    - password: '1234567890'
+    - name: user
+      password: P@ssw0rd
   state_storage:
   - ring:
       nto_select: 1

@@ -25,20 +25,26 @@ private:
 
     class TInternalChunkInfo {
     private:
-        YDB_READONLY(ui32, Start, 0);
+        YDB_READONLY(ui32, StartExt, 0);
+        YDB_READONLY(ui32, StartInt, 0);
         YDB_READONLY(ui32, Size, 0);
         YDB_READONLY(bool, IsDefault, false);
 
     public:
-        TInternalChunkInfo(const ui32 start, const ui32 size, const bool defaultFlag)
-            : Start(start)
+        TInternalChunkInfo(const ui32 startExt, const ui32 startInt, const ui32 size, const bool defaultFlag)
+            : StartExt(startExt)
+            , StartInt(startInt)
             , Size(size)
             , IsDefault(defaultFlag) {
             AFL_VERIFY(Size);
         }
+
+        bool operator<(const TInternalChunkInfo& item) const {
+            return StartExt < item.StartExt;
+        }
     };
 
-    std::map<ui32, TInternalChunkInfo> RemapExternalToInternal;
+    std::vector<TInternalChunkInfo> RemapExternalToInternal;
 
 public:
     ui32 GetFinishPosition() const {

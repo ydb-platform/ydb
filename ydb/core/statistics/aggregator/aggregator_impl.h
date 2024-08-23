@@ -14,6 +14,7 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
 
+#include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -218,6 +219,11 @@ private:
 
     std::mt19937_64 RandomGenerator;
 
+    TTabletCountersBase* TabletCounters;
+    TAutoPtr<TTabletCountersBase> TabletCountersPtr;
+
+    TInstant AggregationRequestBeginTime;
+
     bool EnableStatistics = false;
     bool EnableColumnStatistics = false;
 
@@ -373,8 +379,10 @@ private: // stored in local db
         std::vector<TForceTraversalTable> Tables;
         TString Types;
         TActorId ReplyToActorId;
+        ui64 CreatedAt;
     };
     std::list<TForceTraversalOperation> ForceTraversals;
+    std::set<ui64> ForceTraversalsCreationTime;
 
 private:
     TForceTraversalOperation* CurrentForceTraversalOperation();

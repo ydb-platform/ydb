@@ -108,6 +108,8 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
         outRecord.SetRound(Self->GlobalTraversalRound);
         Action = EAction::SendAggregate;
 
+        Self->TabletCounters->Simple()[COUNTER_AGGREGATION_WAITING_TIME].Set(0);
+
         return true;
     }
 
@@ -122,6 +124,7 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
         case EAction::SendAggregate:
             ctx.Send(MakeStatServiceID(Self->SelfId().NodeId()), Request.release());
             ctx.Schedule(KeepAliveTimeout, new TEvPrivate::TEvAckTimeout(++Self->KeepAliveSeqNo));
+            Self->AggregationRequestBeginTime = AppData(ctx)->TimeProvider->Now();
             break;
 
         default:

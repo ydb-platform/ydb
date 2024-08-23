@@ -23,3 +23,22 @@ enum ETxTypes {
     TXTYPE_ANALYZE_TABLE_REQUEST = 13 [(TxTypeOpts) = {Name: "TxAnalyzeTableRequest"}];
     TXTYPE_ANALYZE_TABLE_RESPONSE = 14 [(TxTypeOpts) = {Name: "TxAnalyzeTableResponse"}];
 }
+
+enum ESimpleCounters {
+    COUNTER_FORCE_TRAVERSALS_QUEUE_SIZE = 0                                          [(CounterOpts) = {Name: "ForceTraversalsQueueSize"}];
+    COUNTER_AGGREGATION_WAITING_TIME = 1                                         [(CounterOpts) = {Name: "AggregationWaitingTime"}];
+    COUNTER_IN_FLY_ANALYZE_MAXIMUM_WAITING_TIME = 2                                    [(CounterOpts) = {Name: "InFlyAnalyzeMaximumWaitingTime"}];
+}
+
+enum ECumulativeCounters {
+    COUNTER_CUMULATIVE_IGNORE = 0;
+}
+
+enum EPercentileCounters {
+    option (GlobalCounterOpts) = {
+        Ranges { Value: 0 Name: "0 ms" }
+        Ranges { Value: 1 Name: "1 ms" }
+    };
+
+    COUNTER_PERCENTILE_IGNORE = 0;
+}

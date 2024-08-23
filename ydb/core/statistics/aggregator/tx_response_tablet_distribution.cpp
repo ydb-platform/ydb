@@ -101,6 +101,7 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
         case EAction::SendAggregate:
             ctx.Send(MakeStatServiceID(Self->SelfId().NodeId()), AggregateStatisticsRequest.release());
             ctx.Schedule(KeepAliveTimeout, new TEvPrivate::TEvAckTimeout(++Self->KeepAliveSeqNo));
+            Self->AggregationRequestBeginTime = AppData(ctx)->TimeProvider->Now();
             break;
 
         default:

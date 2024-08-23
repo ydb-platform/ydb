@@ -208,6 +208,8 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 }
             }
 
+            Self->TabletCounters->Simple()[COUNTER_FORCE_TRAVERSALS_QUEUE_SIZE].Set(Self->ForceTraversals.size());
+
             SA_LOG_D("[" << Self->TabletID() << "] Loaded ForceTraversalOperations: "
                 << "table count# " << Self->ForceTraversals.size());
         }

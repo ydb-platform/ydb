@@ -253,7 +253,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
 
-    Y_UNIT_TEST(OpenIdConnectReceiveRedirectCode) {
+    Y_UNIT_TEST(OpenIdConnectFixLocationHeader) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;

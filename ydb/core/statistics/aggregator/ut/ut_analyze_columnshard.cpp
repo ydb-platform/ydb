@@ -4,7 +4,7 @@
 
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
-#include <thread>
+#include <ydb/core/testlib/actors/block_events.h>
 
 namespace NKikimr {
 namespace NStat {
@@ -226,6 +226,23 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
     }    
 
+    Y_UNIT_TEST(AnalyzeRebootColumnShard) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        auto tableInfo = CreateDatabaseColumnTables(env, 1, 1)[0];
+        auto sender = runtime.AllocateEdgeActor();
+
+        TBlockEvents<TEvStatistics::TEvAnalyzeTableResponse> block(runtime);
+
+        auto analyzeRequest = MakeAnalyzeRequest({tableInfo.PathId});
+        runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest.release());
+
+        runtime.WaitFor("TEvAnalyzeTableResponse", [&]{ return block.size(); });
+        block.Stop();
+        RebootTablet(runtime, tableInfo.ShardIds[0], sender);
+
+        runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
+    }
 }
 
 } // NStat

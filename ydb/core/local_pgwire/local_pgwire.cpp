@@ -150,17 +150,13 @@ public:
 
     void Handle(TEvEvents::TEvAuthResponse::TPtr& ev) {
         auto& securityState = SecurityState[ev->Get()->Sender];
-        if (!ev->Get()->ErrorMessage.empty()) {
-            auto authResponse = std::make_unique<NPG::TEvPGEvents::TEvAuthResponse>();
-            authResponse->Error = ev->Get()->ErrorMessage;
-            Send(ev->Get()->Sender, authResponse.release());
-            return;
-        }
-        
-        securityState.SerializedToken = ev->Get()->SerializedToken;
-        securityState.Ticket = ev->Get()->Ticket;
-
         auto authResponse = std::make_unique<NPG::TEvPGEvents::TEvAuthResponse>();
+        if (!ev->Get()->ErrorMessage.empty()) {
+            authResponse->Error = ev->Get()->ErrorMessage;
+        } else {
+            securityState.SerializedToken = ev->Get()->SerializedToken;
+            securityState.Ticket = ev->Get()->Ticket;
+        }
         Send(ev->Get()->Sender, authResponse.release());
     }
 

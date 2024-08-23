@@ -163,7 +163,7 @@ runs:
           params+=(${{ inputs.additional_ya_make_args }})
         fi
 
-        if [ "false" = "true" }}" ]; then
+        if [ "false" = "true" ]; then
           params+=(--bazel-remote-store)
           params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
         fi

@@ -15,6 +15,7 @@ PEERDIR(
     ydb/library/actors/http
     library/cpp/monlib/service/pages
     library/cpp/openssl/io
+    ydb/core/audit
     ydb/core/base
     ydb/core/protos
     ydb/library/ycloud/api

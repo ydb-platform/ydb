@@ -21,6 +21,10 @@ public:
 
     void Bootstrap() {
         Become(&TStatisticsTableCreator::StateFunc);
+
+        NKikimrSchemeOp::TPartitioningPolicy partitioningPolicy;
+        partitioningPolicy.SetSizeToSplit(2 << 30);
+
         Register(
             CreateTableCreator(
                 { ".metadata", "_statistics" },
@@ -34,7 +38,8 @@ public:
                 { "owner_id", "local_path_id", "stat_type", "column_tag"},
                 NKikimrServices::STATISTICS,
                 Nothing(),
-                true
+                true,
+                std::move(partitioningPolicy)
             )
         );
     }

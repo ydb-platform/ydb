@@ -103,6 +103,7 @@ runs:
           --stat
           --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}"
           -DUSE_EAT_MY_DATA
+          -DDEBUGINFO_LINES_ONLY
         )
 
         TEST_RETRY_COUNT=${{ inputs.test_retry_count }}
@@ -126,7 +127,6 @@ runs:
           release-asan)
             params+=(
               --build "release" --sanitize="address"
-              -DDEBUGINFO_LINES_ONLY
             )
             if [ $TEST_RETRY_COUNT -z ]; then
               TEST_RETRY_COUNT=1
@@ -135,7 +135,6 @@ runs:
           release-tsan)
             params+=(
               --build "release" --sanitize="thread"
-              -DDEBUGINFO_LINES_ONLY
             )
             if [ $TEST_RETRY_COUNT -z ]; then
               TEST_RETRY_COUNT=1
@@ -144,7 +143,6 @@ runs:
           release-msan)
             params+=(
               --build "release" --sanitize="memory"
-              -DDEBUGINFO_LINES_ONLY
             )
             if [ $TEST_RETRY_COUNT -z ]; then
               TEST_RETRY_COUNT=1

@@ -1,6 +1,6 @@
 #pragma once
 
-// sample change 1
+// sample change 2
 
 #include "defs.h"
 #include "actorid.h"

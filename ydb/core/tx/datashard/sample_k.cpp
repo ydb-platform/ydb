@@ -130,7 +130,7 @@ public:
         if (abort == EAbort::None) {
             FillResponse();
         } else {
-            Response->Record.SetStatus(NKikimrTxDataShard::TEvSampleKResponse::ABORTED);
+            Response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
         }
         LOG_T("Finish " << Debug());
         TActivationContext::AsActorContext().MakeFor(SelfId()).Send(ResponseActorId, Response.Release());
@@ -181,7 +181,7 @@ private:
             Response->Record.AddProbabilities(p);
             Response->Record.AddRows(std::move(DataRows[i]));
         }
-        Response->Record.SetStatus(NKikimrTxDataShard::TEvSampleKResponse::DONE);
+        Response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);
     }
 };
 
@@ -231,7 +231,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
     response->Record.SetRequestSeqNoRound(seqNo.Round);
 
     auto badRequest = [&](const TString& error) {
-        response->Record.SetStatus(NKikimrTxDataShard::TEvSampleKResponse::BAD_REQUEST);
+        response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
         auto issue = response->Record.AddIssues();
         issue->set_severity(NYql::TSeverityIds::S_ERROR);
         issue->set_message(error);

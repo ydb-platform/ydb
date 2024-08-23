@@ -7,6 +7,8 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
+
 #include <library/cpp/json/writer/json_value.h>
 
 namespace NKikimr::NKqp {
@@ -83,11 +85,38 @@ public:
         TBase::SendDataViaActorSystem(TablePath, batch);
     }
 
+    void FillMultiColumnTable(ui32 repCount, const double pkKff = 0, const ui32 numRows = 800000) const {
+        const double frq = 0.9;
+        NArrow::NConstruction::TIntPoolFiller<arrow::Int64Type> int64Pool(1000, 0, frq);
+        NArrow::NConstruction::TIntPoolFiller<arrow::UInt8Type> uint8Pool(1000, 0, frq);
+        NArrow::NConstruction::TIntPoolFiller<arrow::FloatType> floatPool(1000, 0, frq);
+        NArrow::NConstruction::TIntPoolFiller<arrow::DoubleType> doublePool(1000, 0, frq);
+        NArrow::NConstruction::TStringPoolFiller utfPool(1000, 52, "abcde", frq);
+ 
+        std::vector<NArrow::NConstruction::IArrayBuilder::TPtr> builders;
+        builders.emplace_back(NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::Int64Type>>::BuildNotNullable("pk_int", numRows * pkKff));
+        for (ui32 i = 0; i < repCount; i++) {
+            TString repStr = ToString(i);
+            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TStringPoolFiller>>("field_utf" + repStr, utfPool));
+            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntPoolFiller<arrow::Int64Type>>>("field_int" + repStr, int64Pool));
+            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntPoolFiller<arrow::UInt8Type>>>("field_uint" + repStr, uint8Pool));
+            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntPoolFiller<arrow::FloatType>>>("field_float" + repStr, floatPool));
+            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntPoolFiller<arrow::DoubleType>>>("field_double" + repStr, doublePool));
+        }
+        NArrow::NConstruction::TRecordBatchConstructor batchBuilder(builders);
+        std::shared_ptr<arrow::RecordBatch> batch = batchBuilder.BuildBatch(numRows);
+        TBase::SendDataViaActorSystem(TablePath, batch);
+    }
+
+
     void FillPKOnly(const double pkKff = 0, const ui32 numRows = 800000) const;
 
     void CreateTestOlapTable(ui32 storeShardsCount = 4, ui32 tableShardsCount = 3) {
         CreateOlapTableWithStore(TableName, StoreName, storeShardsCount, tableShardsCount);
     }
+
+    TString GetMultiColumnTestTableSchema(ui32 reps) const;
+    void CreateMultiColumnOlapTableWithStore(ui32 reps, ui32 storeShardsCount = 4, ui32 tableShardsCount = 3);
 };
 
 }

@@ -4,6 +4,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/string_view.h>
 #include <util/generic/string.h>
 #include <util/system/types.h>
+#include <util/random/random.h>
 
 namespace NKikimr::NArrow::NConstruction {
 
@@ -22,6 +23,40 @@ public:
     }
     TIntSeqFiller(const CType delta = 0)
         : Delta(delta) {
+    }
+};
+
+template <class TArrowType>
+class TIntPoolFiller {
+private:
+    using CType = typename TArrowType::c_type;
+
+private:
+    std::vector<CType> Data;
+
+public:
+    using TValue = TArrowType;
+
+    static CType GetRandomNumberNotEqDef(CType defaultValue) {
+        CType result;
+        do {
+            result = RandomNumber<double>() * std::numeric_limits<CType>::max();
+        } while (result == defaultValue);
+        return result;
+    }
+
+    TIntPoolFiller(const ui32 poolSize, const CType defaultValue, const double defaultValueFrq) {
+        for (ui32 i = 0; i < poolSize; ++i) {
+            if (RandomNumber<double>() < defaultValueFrq) {
+                Data.emplace_back(defaultValue);
+            } else {
+                Data.emplace_back(GetRandomNumberNotEqDef(defaultValue));
+            }
+        }
+    }
+
+    CType GetValue(const ui32 idx) const {
+        return Data[(2 + 7 * idx) % Data.size()];
     }
 };
 

@@ -18,6 +18,54 @@ TString TTypedLocalHelper::GetTestTableSchema() const {
     return result;
 }
 
+TString TTypedLocalHelper::GetMultiColumnTestTableSchema(ui32 reps) const {
+    TString result;
+    result += R"(
+            Columns { Name: "pk_int" Type: "Int64" NotNull: true }
+            Columns { Name: "ts" Type: "Timestamp" }
+        )";
+    for (ui32 i = 0; i < reps; i++) {
+        TString strNum = ToString(i);
+        result += "Columns {Name: \"field_utf" + strNum + "\" Type: \"Utf8\"}\n";
+        result += "Columns {Name: \"field_int" + strNum + "\" Type: \"Int64\"}\n";
+        result += "Columns {Name: \"field_uint" + strNum + "\" Type: \"Uint8\"}\n";
+        result += "Columns {Name: \"field_float" + strNum + "\" Type: \"Float\"}\n";
+        result += "Columns {Name: \"field_double" + strNum + "\" Type: \"Double\"}\n";
+    }
+    result += R"(
+            KeyColumnNames: "pk_int"
+            Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
+    )";
+    return result;
+}
+
+void TTypedLocalHelper::CreateMultiColumnOlapTableWithStore(ui32 reps,  ui32 storeShardsCount, ui32 tableShardsCount) {
+    TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
+    CreateTestOlapStore(sender, Sprintf(R"(
+            Name: "%s"
+            ColumnShardCount: %d
+            SchemaPresets {
+                Name: "default"
+                Schema {
+                    %s
+                }
+            }
+        )", StoreName.c_str(), storeShardsCount, GetMultiColumnTestTableSchema(reps).data()));
+
+    const TString shardingColumns = "[\"" + JoinSeq("\",\"", GetShardingColumns()) + "\"]";
+
+    TBase::CreateTestOlapTable(sender, StoreName, Sprintf(R"(
+        Name: "%s"
+        ColumnShardCount: %d
+        Sharding {
+            HashSharding {
+                Function: %s
+                Columns: %s
+            }
+        })", TableName.c_str(), tableShardsCount, ShardingMethod.data(), shardingColumns.c_str()));
+
+}
+
 void TTypedLocalHelper::ExecuteSchemeQuery(const TString& alterQuery, const NYdb::EStatus expectedStatus /*= EStatus::SUCCESS*/) const {
     auto session = KikimrRunner.GetTableClient().CreateSession().GetValueSync().GetSession();
     auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();

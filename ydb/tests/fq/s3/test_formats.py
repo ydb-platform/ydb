@@ -80,6 +80,7 @@ class TestS3Formats:
         assert result_set.rows[2].items[2].text_value == "33"
 
     @yq_all
+<<<<<<< HEAD
     @yq_stats_full
     @pytest.mark.parametrize("filename, type_format", [
         ("test.csv", "csv_with_names"),
@@ -89,6 +90,20 @@ class TestS3Formats:
         ("test.parquet", "parquet"),
     ])
     def test_format(self, kikimr, s3, client, filename, type_format, yq_version):
+=======
+    @pytest.mark.parametrize("kikimr_settings", [{"stats_mode": YQ_STATS_FULL}], indirect=True)
+    @pytest.mark.parametrize(
+        "filename, type_format",
+        [
+            ("test.csv", "csv_with_names"),
+            ("test.tsv", "tsv_with_names"),
+            ("test_each_row.json", "json_each_row"),
+            ("test_list.json", "json_list"),
+            ("test.parquet", "parquet"),
+        ],
+    )
+    def test_format(self, kikimr, s3, client, filename, type_format, yq_version, unique_prefix):
+>>>>>>> e128490590... inference json support (#8102)
         self.create_bucket_and_upload_file(filename, s3, kikimr)
         client.create_storage_connection("fruitbucket", "fbucket")
 
@@ -126,6 +141,8 @@ class TestS3Formats:
         [
             ("test.csv", "csv_with_names"),
             ("test.tsv", "tsv_with_names"),
+            ("test_each_row.json", "json_each_row"),
+            ("test_list.json", "json_list"),
             ("test.parquet", "parquet"),
         ],
     )

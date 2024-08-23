@@ -145,7 +145,8 @@ domains_config:
         vdisk_kind: Default
   security_config:
     default_users:
-    - password: '1234567890'
+    - name: root
+      password: '1234'
   state_storage:
   - ring:
       nto_select: 1
@@ -317,3 +318,4 @@ system_tablets:
   tx_mediator:
   - node:
     - 1
+table_service_config: {}

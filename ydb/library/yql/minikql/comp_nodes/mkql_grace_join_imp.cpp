@@ -399,7 +399,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
             }
             continue;
         }
-        if (tuplesNum1 == 0)
+        if (tuplesNum1 == 0 && (hasMoreRightTuples || hasMoreLeftTuples || !bucketStats2->HashtableMatches))
             continue;
 
         ui64 slotSize = headerSize2 + 1;
@@ -579,10 +579,26 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         }
 
         if (!hasMoreLeftTuples && !hasMoreRightTuples) {
-            //joinSlots.clear();
-            //joinSlots.shrink_to_fit();
-            //nSlots = 0;
-            //bloomFilter.Shrink();
+            if (bucketStats2->HashtableMatches) {
+                auto it = joinSlots.cbegin();
+                auto end = joinSlots.cend();
+                auto isSemi = JoinKind == EJoinKind::LeftSemi || JoinKind == EJoinKind::RightSemi;
+                auto &leftIds2 = bucket2->LeftIds;
+                for (; it != end; it += slotSize) {
+                    if (*it == 0)
+                        continue;
+                    if ((*(it + HashSize) & 1) == isSemi) {
+                        auto id2 = *(it + slotSize - 1);
+                        Y_DEBUG_ABORT_UNLESS(id2 < bucketStats2->TuplesNum);
+                        leftIds2.push_back(id2);
+                    }
+                }
+                std::sort(leftIds2.begin(), leftIds2.end());
+            }
+            joinSlots.clear();
+            joinSlots.shrink_to_fit();
+            nSlots = 0;
+            bloomFilter.Shrink();
         }
 
         if (bloomHits < bloomLookups/8) {
@@ -787,108 +803,34 @@ inline bool TTable::AddKeysToHashTable(KeysHashTable& t, ui64* keys, NYql::NUdf:
 }
 
 bool TTable::NextJoinedData( TupleData & td1, TupleData & td2, ui64 bucketLimit) {
-    for (; CurrIterBucket < bucketLimit; ++CurrIterBucket, CurrIterIndex = 0) {
-        if (auto &joinIds = TableBuckets[CurrIterBucket].JoinIds; !joinIds.empty()) {
+    while (CurrIterBucket < bucketLimit) {
+        if (auto &joinIds = TableBuckets[CurrIterBucket].JoinIds; CurrIterIndex != joinIds.size()) {
             Y_DEBUG_ABORT_UNLESS(JoinKind == EJoinKind::Inner || JoinKind == EJoinKind::Left || JoinKind == EJoinKind::Right || JoinKind == EJoinKind::Full);
-            auto ids = joinIds.back();
-            joinIds.pop_back();
+            auto ids = joinIds[CurrIterIndex++];
             JoinTable1->GetTupleData(CurrIterBucket, ids.id1, td1);
             JoinTable2->GetTupleData(CurrIterBucket, ids.id2, td2);
             return true;
         }
-        Y_DEBUG_ABORT_UNLESS(JoinTable1->TableBuckets[CurrIterBucket].LeftIds.empty() ||
-                JoinTable2->TableBuckets[CurrIterBucket].LeftIds.empty());
-        Y_DEBUG_ABORT_UNLESS(JoinTable1->TableBuckets[CurrIterBucket].LeftIds.empty() ||
-                (JoinKind == EJoinKind::Left || JoinKind == EJoinKind::LeftOnly || 
-                    JoinKind == EJoinKind::LeftSemi ||
-                    JoinKind == EJoinKind::Full || JoinKind == EJoinKind::Exclusion)); 
-        Y_DEBUG_ABORT_UNLESS(JoinTable2->TableBuckets[CurrIterBucket].LeftIds.empty() ||
-                (JoinKind == EJoinKind::Right || JoinKind == EJoinKind::RightOnly || 
-                    JoinKind == EJoinKind::RightSemi ||
-                    JoinKind == EJoinKind::Full || JoinKind == EJoinKind::Exclusion)); 
-        auto longSide = [this](auto joinTableL, auto &tdL, auto &tdR) {
-            auto &bucketL = joinTableL->TableBuckets[CurrIterBucket];
-            auto &bucketStatsL = joinTableL->TableBucketsStats[CurrIterBucket];
-            if (auto &leftIds = bucketL.LeftIds; !leftIds.empty()) {
-                auto idL = leftIds.back();
-                leftIds.pop_back();
-                Y_DEBUG_ABORT_UNLESS(idL < bucketStatsL.TuplesNum);
-                joinTableL->GetTupleData(CurrIterBucket, idL, tdL);
+        auto longSide = [this](auto joinTable, auto &tdL, auto &tdR) {
+            auto &bucket = joinTable->TableBuckets[CurrIterBucket];
+            auto &currIterIndex = joinTable->CurrIterIndex;
+            auto &leftIds = bucket.LeftIds;
+            if (currIterIndex != leftIds.size()) {
+                auto id = leftIds[currIterIndex++];
+                joinTable->GetTupleData(CurrIterBucket, id, tdL);
                 tdR.AllNulls = true;
-                //YQL_LOG(INFO) << (const void *) this << '#' << CurrIterBucket << " longSide " << idL;
                 return true;
             }
             return false;
         };
-        //YQL_LOG(INFO) << (const void *) this << '#' << CurrIterBucket <<"L";
         if (longSide(JoinTable1, td1, td2))
             return true;
-        //YQL_LOG(INFO) << (const void *) this << '#' << CurrIterBucket <<"R";
         if (longSide(JoinTable2, td2, td1))
             return true;
-        if (!HasMoreRightTuples_ && !HasMoreLeftTuples_) {
-            Y_DEBUG_ABORT_UNLESS(!(JoinTable1->TableBucketsStats[CurrIterBucket].HashtableMatches && JoinTable2->TableBucketsStats[CurrIterBucket].HashtableMatches));
-            //Y_DEBUG_ABORT_UNLESS(!(JoinTable1->TableBucketsStats[CurrIterBucket].HashtableMatches && (JoinKind == EJoinKind::Left || JoinKind == EJoinKind::LeftOnly)));
-            auto shortSide = [this](auto joinTableR, auto &tdR, auto &tdL) {
-                auto isSemi = JoinKind == EJoinKind::LeftSemi || JoinKind == EJoinKind::RightSemi;
-                auto &bucketR = joinTableR->TableBuckets[CurrIterBucket];
-                auto &bucketStatsR = joinTableR->TableBucketsStats[CurrIterBucket];
-                if (bucketStatsR.HashtableMatches) {
-                    /*YQL_LOG(INFO) << "Finalize table";*/
-                    if (bucketR.JoinSlots.size()) {
-                        /*YQL_LOG(INFO) << "from Hashtable ";*/
-                        auto slotSize = bucketStatsR.SlotSize;
-                        Y_DEBUG_ABORT_UNLESS(slotSize);
-                        Y_DEBUG_ABORT_UNLESS(joinTableR->CurrIterIndex <= bucketR.JoinSlots.size());
-                        auto it = bucketR.JoinSlots.cbegin() + joinTableR->CurrIterIndex;
-                        auto end = bucketR.JoinSlots.cend();
-                        for (; it != end; it += slotSize) {
-                            Y_DEBUG_ABORT_UNLESS(joinTableR->CurrIterIndex < bucketR.JoinSlots.size());
-                            joinTableR->CurrIterIndex += slotSize;
-                            if (*it == 0)
-                                continue;
-                            if ((*(it + HashSize) & 1) == isSemi) {
-                                auto id2 = *(it + slotSize - 1);
-                                Y_DEBUG_ABORT_UNLESS(id2 < bucketStatsR.TuplesNum);
-                                joinTableR->GetTupleData(CurrIterBucket, id2, tdR);
-                                tdL.AllNulls = true;
-                                return true;
-                            }
-                        }
-                    } else {
-                        /*YQL_LOG(INFO) << "from raw";*/
-                        ui64 headerSize2 = joinTableR->HeaderSize;
-                        bool table2HasKeyStringColumns = (joinTableR->NumberOfKeyStringColumns != 0);
-                        bool table2HasKeyIColumns = (joinTableR->NumberOfKeyIColumns != 0);
-                        Y_DEBUG_ABORT_UNLESS(joinTableR->CurrIterIndex <= bucketR.KeyIntVals.size());
-                        auto it2 = bucketR.KeyIntVals.cbegin() + joinTableR->CurrIterIndex;
-                        auto end = bucketR.KeyIntVals.cend();
-                        for (ui64 keysValSize = headerSize2; it2 != end; it2 += keysValSize, ++CurrIterIndex) {
-                            Y_DEBUG_ABORT_UNLESS(CurrIterIndex < bucketStatsR.TuplesNum);
-                            if ( table2HasKeyStringColumns || table2HasKeyIColumns ) {
-                                keysValSize = headerSize2 + *(it2 + headerSize2 - 1) ;
-                            }
-                            joinTableR->CurrIterIndex += keysValSize;
-                            if ((*(it2 + HashSize) & 1) == isSemi) {
-                                joinTableR->GetTupleData(CurrIterBucket, CurrIterIndex, tdR);
-                                CurrIterIndex++;
-                                tdL.AllNulls = true;
-                                return true;
-                            }
-                        }
-                    }
-                    joinTableR->CurrIterIndex = 0;
-                    joinTableR->ClearBucket(CurrIterBucket);
-                    joinTableR->ShrinkBucket(CurrIterBucket);
-                    bucketStatsR.HashtableMatches = false;
-                }
-                return false;
-            };
-            if (shortSide(JoinTable1, td1, td2))
-                return true;
-            if (shortSide(JoinTable2, td2, td1))
-                return true;
-        }
+        ++CurrIterBucket;
+        CurrIterIndex = 0;
+        JoinTable1->CurrIterIndex = 0;
+        JoinTable2->CurrIterIndex = 0;
     }
     return false;
  }

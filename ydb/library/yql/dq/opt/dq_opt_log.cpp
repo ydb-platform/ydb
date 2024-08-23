@@ -372,7 +372,7 @@ IGraphTransformer::TStatus DqWrapIO(const TExprNode::TPtr& input, TExprNode::TPt
             auto dataSink = typesCtx.DataSinkMap.FindPtr(dataSinkName);
             YQL_ENSURE(dataSink);
             if (auto dqIntegration = (*dataSink)->GetDqIntegration()) {
-                return dqIntegration->WrapWrite(node, ctx);
+                return dqIntegration->RecaptureWrite(node, ctx);
             }
         }
 

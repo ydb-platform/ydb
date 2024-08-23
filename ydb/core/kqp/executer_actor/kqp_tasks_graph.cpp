@@ -365,7 +365,7 @@ void BuildSequencerChannels(TKqpTasksGraph& graph, const TStageInfo& stageInfo, 
     }
 }
 
-void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInfo, ui32 inputIndex,
+void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInfo, ui32 inputIndex, // TODO
     const TStageInfo& inputStageInfo, ui32 outputIndex,
     const NKqpProto::TKqpPhyCnStreamLookup& streamLookup, bool enableSpilling, const TChannelLogFunc& logFunc)
 {
@@ -536,7 +536,8 @@ bool IsCrossShardChannel(const TKqpTasksGraph& tasksGraph, const TChannel& chann
         return false;
     }
 
-    return targetShard != tasksGraph.GetTask(channel.SrcTask).Meta.ShardId;
+    ui64 srcShard = tasksGraph.GetTask(channel.SrcTask).Meta.ShardId;
+    return srcShard && targetShard != srcShard;
 }
 
 void TShardKeyRanges::AddPoint(TSerializedCellVec&& point) {

@@ -500,10 +500,10 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             , TracingThrottler(tracingThrottler)
         {
             *Counters->GetCounter("tabletId") = tabletId;
-            const auto& percCounters = Counters->GetSubgroup("sensor", "microseconds");
-            MaxInFlightLatency = percCounters->GetCounter("MaxInFlightLatency");
-            ResponseQT->Initialize(percCounters->GetSubgroup("metric", "writeResponse"), Percentiles);
-            ReadResponseQT->Initialize(percCounters->GetSubgroup("metric", "readResponse"), Percentiles);
+            const auto& percCounters = Counters->GetSubgroup("subsystem", "latency");
+            MaxInFlightLatency = percCounters->GetCounter("MaxInFlightLatencyUs");
+            ResponseQT->Initialize(percCounters->GetSubgroup("sensor", "writeResponseUs"), Percentiles);
+            ReadResponseQT->Initialize(percCounters->GetSubgroup("sensor", "readResponseUs"), Percentiles);
         }
 
         TString PrintMe() {

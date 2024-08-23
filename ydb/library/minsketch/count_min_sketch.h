@@ -9,6 +9,7 @@ namespace NKikimr {
 
 class TCountMinSketch {
 private:
+    ui64 Version = 1;
     ui64 Width;
     ui64 Depth;
     ui64 ElementCount;

@@ -2,14 +2,15 @@
 
 namespace NKikimr {
 
-static std::array<std::atomic<bool>, 7> ReportPermissions;
+static std::array<std::atomic<bool>, NKikimrBlobStorage::EPutHandleClass_MAX> ReportPutPermissions;
+static std::array<std::atomic<bool>, NKikimrBlobStorage::EGetHandleClass_MAX> ReportGetPermissions;
 
 bool AllowToReport(NKikimrBlobStorage::EPutHandleClass handleClass) {
-    return ReportPermissions[(ui32)handleClass - 1].exchange(false);
+    return ReportPutPermissions[(ui32)handleClass - 1].exchange(false);
 }
 
 bool AllowToReport(NKikimrBlobStorage::EGetHandleClass handleClass) {
-    return ReportPermissions[(ui32)handleClass - 1 + 3].exchange(false);
+    return ReportGetPermissions[(ui32)handleClass - 1].exchange(false);
 }
 
 class TRequestReportingThrottler : public TActorBootstrapped<TRequestReportingThrottler> {
@@ -29,7 +30,10 @@ public:
 
 private:
     void HandleWakeup() {
-        for (std::atomic<bool>& permission : ReportPermissions) {
+        for (std::atomic<bool>& permission : ReportPutPermissions) {
+            permission.store(true);
+        }
+        for (std::atomic<bool>& permission : ReportGetPermissions) {
             permission.store(true);
         }
         Schedule(UpdatePermissionsDelay, new TEvents::TEvWakeup);

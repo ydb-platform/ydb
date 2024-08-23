@@ -48,11 +48,13 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
         const TString types = JoinVectorIntoString(TVector<ui32>(Record.GetTypes().begin(), Record.GetTypes().end()), ",");
 
         // create new force trasersal
+        ui64 createdAt = GetCycleCountFast();
         TForceTraversalOperation operation {
             .OperationId = operationId,
             .Tables = {},
             .Types = types,
-            .ReplyToActorId = ReplyToActorId
+            .ReplyToActorId = ReplyToActorId,
+            .CreatedAt = createdAt
         };
 
         for (const auto& table : Record.GetTables()) {
@@ -79,11 +81,12 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
             );
         }
 
-        Self->ForceTraversals.emplace_back(operation);        
+        Self->ForceTraversals.emplace_back(operation);
 
         db.Table<Schema::ForceTraversalOperations>().Key(operationId).Update(
             NIceDb::TUpdate<Schema::ForceTraversalOperations::OperationId>(operationId),
-            NIceDb::TUpdate<Schema::ForceTraversalOperations::Types>(types)
+            NIceDb::TUpdate<Schema::ForceTraversalOperations::Types>(types),
+            NIceDb::TUpdate<Schema::ForceTraversalOperations::CreatedAt>(createdAt)
         );
 
         return true;

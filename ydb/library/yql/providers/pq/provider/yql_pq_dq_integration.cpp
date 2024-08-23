@@ -8,12 +8,13 @@
 #include <ydb/library/yql/providers/common/dq/yql_dq_integration_impl.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
-#include <ydb/library/yql/providers/pq/provider/yql_pq_dq_predicate.h>
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <util/string/builder.h>
@@ -292,19 +293,16 @@ public:
                     srcDesc.AddColumnTypes(columnTypes.StringValue());
                 }
             
-                NPq::NProto::TPredicate predicateProto;
-                if (auto predicate = topicSource.FilterPredicate(); !NYql::NDqPredicate::IsEmptyFilterPredicate(predicate)) {
+                NYql::NConnector::NApi::TPredicate predicateProto;
+                if (auto predicate = topicSource.FilterPredicate(); !NYql::IsEmptyFilterPredicate(predicate)) {
                     TStringBuilder err;
-                    if (!NYql::NDqPredicate::SerializeFilterPredicate(predicate, &predicateProto, err)) {
+                    if (!NYql::SerializeFilterPredicate(predicate, &predicateProto, err)) {
                         ythrow yexception() << "Failed to serialize filter predicate for source: " << err;
                     }
                 }
 
-                TString predicateSql = NYql::NDqPredicate::FormatWhere(predicateProto);
+                TString predicateSql = NYql::FormatWhere(predicateProto);
                 srcDesc.SetPredicate(predicateSql);
-
-                YQL_CLOG(INFO, Core) << "UseRowDispatcher " << useRowDispatcher;
-                YQL_CLOG(INFO, Core) << "UseRowDispatcher format" << format;
 
                 useRowDispatcher = true; // TODO
                 protoSettings.PackFrom(srcDesc);

@@ -1138,17 +1138,15 @@ void SpecificTest(ui32 badA, ui32 badB, ui32 blobSize, TMap<i64, i64> sizeForOff
     }
 }
 
-bool SpecificTestCorrupted(ui32 bad, ui32 blobSize) {
+bool SpecificTestCorrupted(TErasureType::EErasureSpecies erasureSpecies, ui32 badDomainIdx, ui32 blobSize) {
     TActorSystemStub actorSystemStub;
-    TErasureType::EErasureSpecies erasureSpecies = TErasureType::Erasure4Plus2Block;
 
     const ui32 groupId = 0;
     TBlobStorageGroupType groupType(erasureSpecies);
     const ui32 domainCount = groupType.BlobSubgroupSize();
-    
     TGetSimulator simulator(groupId, erasureSpecies, domainCount, 1);
     simulator.GenerateBlobSet(0, 1, blobSize);
-    simulator.SetCorrupted(bad);
+    simulator.SetCorrupted(badDomainIdx);
 
     const auto& blobId = simulator.BlobSet.Get(0).Id;
     const ui32 shift = 0;
@@ -1195,11 +1193,21 @@ Y_UNIT_TEST(TestBlock42GetSpecific3) {
 Y_UNIT_TEST(TestBlock42GetSpecificCorrupted) {
     ui32 testPassed = 0;
     for (ui32 domainIdx = 0; domainIdx < 8; ++domainIdx) {
-        if (SpecificTestCorrupted(domainIdx, 8000000)) {
+        if (SpecificTestCorrupted(TErasureType::Erasure4Plus2Block, domainIdx, 8000000)) {
             ++testPassed;
         }
     }
     UNIT_ASSERT_VALUES_EQUAL(testPassed, 6);
+}
+
+Y_UNIT_TEST(TestMirror3dcGetSpecificCorrupted) {
+    ui32 testPassed = 0;
+    for (ui32 domainIdx = 0; domainIdx < 9; ++domainIdx) {
+        if (SpecificTestCorrupted(TErasureType::ErasureMirror3dc, domainIdx, 8000000)) {
+            ++testPassed;
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL(testPassed, 3);
 }
 
 }

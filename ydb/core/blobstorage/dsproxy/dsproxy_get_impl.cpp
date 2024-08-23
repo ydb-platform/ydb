@@ -5,6 +5,7 @@
 #include "dsproxy_blackboard.h"
 
 #include "dsproxy_strategy_get_m3dc_basic.h"
+#include "dsproxy_strategy_get_m3dc_check.h"
 #include "dsproxy_strategy_get_m3dc_restore.h"
 #include "dsproxy_strategy_get_m3of4.h"
 #include "dsproxy_strategy_restore.h"
@@ -139,20 +140,9 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
                 ui32 size = query.Size ? Min(query.Size, query.Id.BlobSize() - shift) : query.Id.BlobSize() - shift;
                 TRope data = blobState.Whole.Data.Read(shift, size);
 
-                if (IntegrityCheck) {
-                    TStackVec<TRope, TypicalPartsInBlob> partData(Info->Type.TotalPartCount());
-                    ErasureSplit((TErasureType::ECrcMode)blobState.Id.CrcMode(), Info->Type, data, partData);
-                    
-                    for (const auto &item : blobState.PartMap) {
-                        if (item.Data.IsEmpty()) {
-                            continue;
-                        }
-                        if (item.Data != partData[item.PartIdRequested - 1]) {
-                            outResponse.Status = NKikimrProto::ERROR;
-                            outResponse.IntegrityCheckFailed = true;
-                            break;
-                        }
-                    }
+                if (IntegrityCheck && !IsDataConsistent(blobState, data)) {
+                    outResponse.Status = NKikimrProto::ERROR;
+                    outResponse.IntegrityCheckFailed = true;
                 }
                 
                 DecryptInplace(data, 0, shift, size, query.Id, *Info);
@@ -319,7 +309,7 @@ void TGetImpl::PrepareRequests(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBl
             ++RequestIndex;
         }
     }
-
+    
     Blackboard.GroupDiskRequests.GetsPending.clear();
 }
 
@@ -349,6 +339,9 @@ EStrategyOutcome TGetImpl::RunBoldStrategy(TLogContext &logCtx) {
 }
 
 EStrategyOutcome TGetImpl::RunMirror3dcStrategy(TLogContext &logCtx) {
+    if (IntegrityCheck) {
+        return Blackboard.RunStrategy(logCtx, TMirror3dcCheckGetStrategy(), AccelerationParams);
+    }
     return MustRestoreFirst
         ? Blackboard.RunStrategy(logCtx, TMirror3dcGetWithRestoreStrategy(), AccelerationParams)
         : Blackboard.RunStrategy(logCtx, TMirror3dcBasicGetStrategy(NodeLayout, PhantomCheck), AccelerationParams);
@@ -379,10 +372,10 @@ EStrategyOutcome TGetImpl::RunStrategies(TLogContext &logCtx) {
         return RunBoldStrategy(logCtx);
     }
     if (erasureFamily == TErasureType::ErasureParityBlock) {
-        return Blackboard.RunStrategy(logCtx, TMinIopsBlockStrategy());
+        return Blackboard.RunStrategy(logCtx, TMinIopsBlockStrategy(), AccelerationParams);
     }
     if (erasureFamily == TErasureType::ErasureMirror) {
-        return Blackboard.RunStrategy(logCtx, TMinIopsMirrorStrategy());
+        return Blackboard.RunStrategy(logCtx, TMinIopsMirrorStrategy(), AccelerationParams);
     }
     return RunBoldStrategy(logCtx);
 }
@@ -413,6 +406,23 @@ void TGetImpl::OnVPutResult(TLogContext &logCtx, TEvBlobStorage::TEvVPutResult &
         Y_ABORT("Unexpected status# %s", NKikimrProto::EReplyStatus_Name(status).data());
     }
     Step(logCtx, outVGets, outVPuts, outGetResult);
+}
+
+bool TGetImpl::IsDataConsistent(const TBlobState &blobState, const TRope &data) {
+    TStackVec<TRope, TypicalPartsInBlob> partData(Info->Type.TotalPartCount());
+    const bool isBlock42 = (Info->Type.GetErasure() == TBlobStorageGroupType::Erasure4Plus2Block);
+    if (isBlock42) {
+        ErasureSplit((TErasureType::ECrcMode)blobState.Id.CrcMode(), Info->Type, data, partData);
+    }
+    for (const auto &item : blobState.PartMap) {
+        if (!item.Data.IsEmpty()) {
+            const TRope &partToCheck = isBlock42 ? partData[item.PartIdRequested - 1] : data;
+            if (item.Data != partToCheck) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 }//NKikimr

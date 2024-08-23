@@ -320,6 +320,8 @@ protected:
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> &outVPuts);
 
     ui64 GetTimeToAccelerateNs(TLogContext &logCtx, NKikimrBlobStorage::EVDiskQueueId queueId);
+    
+    bool IsDataConsistent(const TBlobState &blobState, const TRope &data);
 }; //TGetImpl
 
 }//NKikimr

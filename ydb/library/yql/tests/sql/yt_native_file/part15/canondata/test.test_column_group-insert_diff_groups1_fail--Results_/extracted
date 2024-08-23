@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:14:35: Error: At function: YtWriteTable!
+    	insert into @a with column_groups="{a=#}"
+	                                  ^
+        <tmp_path>/program.sql:<main>:14:35: Error: Insert with different "column_groups" to existing table is not allowed
+        	insert into @a with column_groups="{a=#}"
+	                                  ^

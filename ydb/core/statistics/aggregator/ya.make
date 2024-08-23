@@ -10,6 +10,7 @@ SRCS(
     tx_ack_timeout.cpp
     tx_aggr_stat_response.cpp
     tx_analyze.cpp
+    tx_analyze_table_delivery_problem.cpp
     tx_analyze_table_request.cpp
     tx_analyze_table_response.cpp
     tx_configure.cpp

@@ -404,11 +404,24 @@ void TStatisticsAggregator::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
     auto tabletId = ev->Get()->TabletId;
     if (TraversalIsColumnTable) {
         if (tabletId == HiveId) {
+            SA_LOG_E("[" << TabletID() << "] TEvDeliveryProblem with HiveId=" << tabletId);
             Schedule(HiveRetryInterval, new TEvPrivate::TEvRequestDistribution);
         } else {
+            for (TForceTraversalOperation& operation : ForceTraversals) {
+                for (TForceTraversalTable& operationTable : operation.Tables) {
+                    for (TAnalyzedShard& shard : operationTable.AnalyzedShards) {
+                        if (shard.ShardTabletId == tabletId) {
+                            SA_LOG_E("[" << TabletID() << "] TEvDeliveryProblem with ColumnShard=" << tabletId);
+                            shard.Status = TAnalyzedShard::EStatus::DeliveryProblem;
+                            return;
+                        }
+                    }
+                }
+            }
             SA_LOG_CRIT("[" << TabletID() << "] TEvDeliveryProblem with unexpected tablet " << tabletId);
         }
     } else {
+        SA_LOG_E("[" << TabletID() << "] TEvDeliveryProblem with DataShard=" << tabletId);
         if (DatashardRanges.empty()) {
             return;
         }

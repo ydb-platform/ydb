@@ -1605,7 +1605,12 @@ public:
             auto stats = QueryState->QueryStats.ToProto();
             if (QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
                 response->SetQueryPlan(SerializeAnalyzePlan(stats, QueryState->UserRequestContext->PoolId));
-                response->SetQueryAst(QueryState->CompileResult->PreparedQuery->GetPhysicalQuery().GetQueryAst());
+                if (QueryState->CompileResult) {
+                    auto preparedQuery = QueryState->CompileResult->PreparedQuery;
+                    if (preparedQuery) {
+                        response->SetQueryAst(preparedQuery->GetPhysicalQuery().GetQueryAst());
+                    }
+                }
             }
             response->MutableQueryStats()->Swap(&stats);
         }
@@ -2216,11 +2221,6 @@ public:
         Y_ENSURE(QueryState);
         if (QueryState->CompileResult) {
             AddQueryIssues(*response, QueryState->CompileResult->Issues);
-
-            auto preparedQuery = QueryState->CompileResult->PreparedQuery;
-            if (preparedQuery && QueryState->ReportStats() && QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
-                response->SetQueryAst(preparedQuery->GetPhysicalQuery().GetQueryAst());
-            }
         }
 
         FillStats(&QueryResponse->Record.GetRef());

@@ -6,6 +6,9 @@ void IColumnMerger::Start(const std::vector<std::shared_ptr<NArrow::NAccessor::I
     AFL_VERIFY(!Started);
     Started = true;
     for (auto&& i : input) {
+        if (!i) {
+            continue;
+        }
         AFL_VERIFY(i->GetDataType()->id() == Context.GetResultField()->type()->id())("input", i->GetDataType()->ToString())(
                                                  "result", Context.GetResultField()->ToString());
     }

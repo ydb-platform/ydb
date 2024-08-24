@@ -23,6 +23,7 @@ struct TEvTxProcessing {
         EvStreamQuotaResponse,
         EvStreamClearancePending,
         EvStreamDataAck,
+        EvReadSetAsk,
 
         EvEnd
     };
@@ -105,7 +106,26 @@ struct TEvTxProcessing {
         }
     };
 
-    struct TEvReadSet : public TEventPB<TEvReadSet, NKikimrTx::TEvReadSet, EvReadSet> {
+    struct TEvReadSetAsk: public TEventPB<TEvReadSetAsk, NKikimrTx::TEvReadSetAsk, EvReadSetAsk> {
+        TEvReadSetAsk() {
+        }
+
+        TEvReadSetAsk(const ui64 txId, const ui64 tabletDest) {
+            Record.SetTxId(txId);
+            Record.SetTabletDest(tabletDest);
+        }
+
+        TString ToString() const {
+            TStringStream str;
+            str << "{TEvReadSetAsk ";
+            str << " txid# " << Record.GetTxId();
+            str << " TabletDest# " << Record.GetTabletDest();
+            str << "}";
+            return str.Str();
+        }
+    };
+
+    struct TEvReadSet: public TEventPB<TEvReadSet, NKikimrTx::TEvReadSet, EvReadSet> {
         TEvReadSet()
         {}
 

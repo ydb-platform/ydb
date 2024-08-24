@@ -27,6 +27,9 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
     }
     ctx.Send(ResourceSubscribeActor, new TEvents::TEvPoisonPill);
     ctx.Send(BufferizationWriteActorId, new TEvents::TEvPoisonPill);
+    for (auto&& i : ActorsToStop) {
+        ctx.Send(i, new TEvents::TEvPoisonPill);
+    }
 
     StoragesManager->Stop();
     DataLocksManager->Stop();

@@ -17,6 +17,7 @@
 #include "resource_subscriber/counters.h"
 #include "resource_subscriber/task.h"
 #include "normalizer/abstract/abstract.h"
+#include "operations/manager.h"
 
 #include "export/events/events.h"
 
@@ -203,6 +204,8 @@ class TColumnShard
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvTxProcessing::TEvReadSetAsk::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvCheckPlannedTransaction::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
@@ -218,7 +221,7 @@ class TColumnShard
     void Handle(TEvPrivate::TEvReadFinished::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& ev, const TActorContext& ctx);
-    
+
     void Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorContext& ctx);
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev);
     void Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx);
@@ -281,6 +284,7 @@ class TColumnShard
 
     void ActivateTiering(const ui64 pathId, const TString& useTiering);
     void OnTieringModified(const std::optional<ui64> pathId = {});
+
 public:
     enum class EOverloadStatus {
         ShardTxInFly /* "shard_tx" */,
@@ -343,6 +347,9 @@ protected:
         TRACE_EVENT(NKikimrServices::TX_COLUMNSHARD);
         switch (ev->GetTypeRewrite()) {
             hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
+
+            HFunc(TEvTxProcessing::TEvReadSet, Handle);
+            HFunc(TEvTxProcessing::TEvReadSetAsk, Handle);
 
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
@@ -447,6 +454,7 @@ private:
     TActorId ResourceSubscribeActor;
     TActorId BufferizationWriteActorId;
     TActorId StatsReportPipe;
+    std::vector<TActorId> ActorsToStop;
 
     TInFlightReadsTracker InFlightReadsTracker;
     TTablesManager TablesManager;
@@ -555,6 +563,11 @@ public:
     TTxController& GetProgressTxController() const {
         AFL_VERIFY(ProgressTxController);
         return *ProgressTxController;
+    }
+
+    TOperationsManager& GetOperationsManager() const {
+        AFL_VERIFY(OperationsManager);
+        return *OperationsManager;
     }
 
     bool HasIndex() const {

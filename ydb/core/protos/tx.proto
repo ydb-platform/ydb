@@ -340,6 +340,11 @@ message TReadSetData {
 }
 
 // tablet to tablet
+message TEvReadSetAsk {
+    optional uint64 TxId = 1;
+    optional uint64 TabletDest = 2;
+}
+
 message TEvReadSet {
     enum EFlags {
         // The sender is not expecting an ack. This is used for temporary

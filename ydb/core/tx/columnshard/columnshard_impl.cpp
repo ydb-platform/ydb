@@ -28,6 +28,7 @@
 #include "engines/changes/ttl.h"
 
 #include "resource_subscriber/counters.h"
+#include "transactions/operators/ev_write.h"
 
 #include "bg_tasks/adapter/adapter.h"
 #include "bg_tasks/manager/manager.h"
@@ -873,6 +874,16 @@ void TColumnShard::Die(const TActorContext& ctx) {
 void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TActorContext&) {
     ui32 eventType = ev->Get()->SourceType;
     switch (eventType) {
+        case TEvTxProcessing::TEvReadSet::EventType: {
+            auto op = GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteTransactionOperator>(ev->Cookie);
+            op->Send(*this);
+            break;
+        }
+        case TEvTxProcessing::TEvReadSetAsk::EventType: {
+            auto op = GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteTransactionOperator>(ev->Cookie);
+            op->Ask(*this);
+            break;
+        }
         case NOlap::NDataSharing::NEvents::TEvSendDataFromSource::EventType:
         case NOlap::NDataSharing::NEvents::TEvAckDataToSource::EventType:
         case NOlap::NDataSharing::NEvents::TEvApplyLinksModification::EventType:
@@ -882,6 +893,18 @@ void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TAct
             SharingSessionsManager->InitializeEventsExchange(*this, ev->Cookie);
             break;
     }
+}
+
+void TColumnShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& /*ctx*/) {
+    auto op = GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteTransactionOperator>(ev->Get()->Record.GetTxId());
+    NKikimrTx::TReadSetData data;
+    AFL_VERIFY(data.ParseFromArray(ev->Get()->Record.GetReadSet().data(), ev->Get()->Record.GetReadSet().size()));
+    op->Receive(*this, ev->Get()->Record.GetTabletSource(), data.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT);
+}
+
+void TColumnShard::Handle(TEvTxProcessing::TEvReadSetAsk::TPtr& ev, const TActorContext& /*ctx*/) {
+    auto op = GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteTransactionOperator>(ev->Get()->Record.GetTxId());
+    op->Send(*this, ev->Get()->Record.GetTabletDest());
 }
 
 void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvProposeFromInitiator::TPtr& ev, const TActorContext& ctx) {

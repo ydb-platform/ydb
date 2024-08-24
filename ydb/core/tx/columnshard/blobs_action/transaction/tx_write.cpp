@@ -87,8 +87,7 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
     for (auto&& aggr : buffer.GetAggregations()) {
         const auto& writeMeta = aggr->GetWriteMeta();
         if (!writeMeta.HasLongTxId()) {
-            auto operation = Self->OperationsManager->GetOperation((TWriteId)writeMeta.GetWriteId());
-            Y_ABORT_UNLESS(operation);
+            auto operation = Self->OperationsManager->GetOperationVerified((TWriteId)writeMeta.GetWriteId());
             Y_ABORT_UNLESS(operation->GetStatus() == EOperationStatus::Started);
             operation->OnWriteFinish(txc, aggr->GetWriteIds());
             if (operation->GetBehaviour() == EOperationBehaviour::InTxWrite) {
@@ -97,16 +96,18 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
                 TString txBody;
                 Y_ABORT_UNLESS(proto.SerializeToString(&txBody));
                 auto op = Self->GetProgressTxController().StartProposeOnExecute(
-                    TTxController::TTxInfo(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, operation->GetLockId(), writeMeta.GetSource(), operation->GetCookie(), {}), txBody,
-                    txc);
+                    TTxController::TTxInfo(
+                        NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, operation->GetLockId(), writeMeta.GetSource(), operation->GetCookie(), {}),
+                    txBody, txc);
                 AFL_VERIFY(!op->IsFail());
                 ResultOperators.emplace_back(op);
             } else {
+                auto& info = Self->OperationsManager->GetLockVerified(operation->GetLockId());
                 NKikimrDataEvents::TLock lock;
                 lock.SetLockId(operation->GetLockId());
                 lock.SetDataShard(Self->TabletID());
-                lock.SetGeneration(1);
-                lock.SetCounter(1);
+                lock.SetGeneration(info.GetGeneration());
+                lock.SetCounter(info.GetInternalGenerationCounter());
                 auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), operation->GetLockId(), lock);
                 Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());
             }

@@ -9,8 +9,7 @@ namespace NKikimr::NColumnShard {
 
 TTxController::TTxController(TColumnShard& owner)
     : Owner(owner)
-    , Counters(owner.Counters.GetCSCounters().TxProgress)
-    , InteractionsManager(std::make_shared<NOlap::NTxInteractions::TManager>()) {
+    , Counters(owner.Counters.GetCSCounters().TxProgress) {
 }
 
 bool TTxController::HaveOutdatedTxs() const {
@@ -43,10 +42,6 @@ TTxController::TPlanQueueItem TTxController::GetFrontTx() const {
 
 bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
-
-    if (!InteractionsManager->LoadFromDatabase(txc)) {
-        return false;
-    }
 
     auto rowset = db.Table<Schema::TxInfo>().GreaterOrEqual(0).Select();
     if (!rowset.IsReady()) {

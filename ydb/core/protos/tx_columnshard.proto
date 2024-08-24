@@ -204,6 +204,9 @@ message TBackupTxBody {
 
 message TCommitWriteTxBody {
     optional uint64 LockId = 1;
+    repeated uint64 SendingShards = 2;
+    repeated uint64 ReceivingShards = 3;
+    optional bool Broken = 4 [default = false];
 }
 
 message TSchemaPresetVersionInfo {

@@ -15,15 +15,15 @@ private:
 
 protected:
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& /*ctx*/) override {
-        ConflictedTxIds = Writer->CheckInteraction(TxId, Self->GetProgressTxController().MutableInteractionsManager().MutableInteractionContext());
+        ConflictedTxIds = Writer->CheckInteraction(TxId, Self->GetOperationsManager().MutableInteractionsManager().MutableInteractionContext());
         TxEventContainer = TTxEventContainer(TxId, Self->Generation(), Writer->BuildEvent());
-        Self->GetProgressTxController().MutableInteractionsManager().AddConflictsOnExecute(txc, ConflictedTxIds);
-        Self->GetProgressTxController().MutableInteractionsManager().AddEventOnExecute(txc, *TxEventContainer);
+        Self->GetOperationsManager().MutableInteractionsManager().AddConflictsOnExecute(txc, ConflictedTxIds);
+        Self->GetOperationsManager().MutableInteractionsManager().AddEventOnExecute(txc, *TxEventContainer);
         return true;
     }
     virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
-        Self->GetProgressTxController().MutableInteractionsManager().AddConflictsOnComplete(ConflictedTxIds);
-        Self->GetProgressTxController().MutableInteractionsManager().AddEventOnComplete(std::move(*TxEventContainer));
+        Self->GetOperationsManager().MutableInteractionsManager().AddConflictsOnComplete(ConflictedTxIds);
+        Self->GetOperationsManager().MutableInteractionsManager().AddEventOnComplete(std::move(*TxEventContainer));
     }
 
 public:
@@ -65,11 +65,11 @@ private:
 
 protected:
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& /*ctx*/) override {
-        Self->GetProgressTxController().MutableInteractionsManager().CommitTxOnExecute(txc, TxId);
+        Self->GetOperationsManager().MutableInteractionsManager().CommitTxOnExecute(txc, TxId);
         return true;
     }
     virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
-        Self->GetProgressTxController().MutableInteractionsManager().CommitTxOnComplete(TxId);
+        Self->GetOperationsManager().MutableInteractionsManager().CommitTxOnComplete(TxId);
     }
 
 public:
@@ -93,11 +93,11 @@ private:
 
 protected:
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& /*ctx*/) override {
-        Self->GetProgressTxController().MutableInteractionsManager().RollbackTxOnExecute(txc, TxId);
+        Self->GetOperationsManager().MutableInteractionsManager().RollbackTxOnExecute(txc, TxId);
         return true;
     }
     virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
-        Self->GetProgressTxController().MutableInteractionsManager().RollbackTxOnComplete(TxId);
+        Self->GetOperationsManager().MutableInteractionsManager().RollbackTxOnComplete(TxId);
     }
 
 public:
@@ -125,7 +125,6 @@ bool TManager::LoadFromDatabase(NTabletFlatExecutor::TTransactionContext& txc) {
     using namespace NColumnShard;
     NIceDb::TNiceDb db(txc.DB);
 
-    THashMap<ui64, TTxState> transactions;
     {
         auto rowset = db.Table<Schema::TxStates>().Select();
         if (!rowset.IsReady()) {
@@ -134,7 +133,7 @@ bool TManager::LoadFromDatabase(NTabletFlatExecutor::TTransactionContext& txc) {
 
         while (!rowset.EndOfSet()) {
             const ui64 txId = rowset.GetValue<Schema::TxStates::TxId>();
-            transactions.emplace(txId, TTxState(txId, rowset.GetValue<Schema::TxStates::Broken>()));
+            Transactions.emplace(txId, TTxState(txId, rowset.GetValue<Schema::TxStates::Broken>()));
             if (!rowset.Next()) {
                 return false;
             }
@@ -149,7 +148,7 @@ bool TManager::LoadFromDatabase(NTabletFlatExecutor::TTransactionContext& txc) {
 
         while (!rowset.EndOfSet()) {
             const ui64 txId = rowset.GetValue<Schema::TxEvents::TxId>();
-            auto it = transactions.emplace(txId, TTxState(txId, false)).first;
+            auto it = Transactions.emplace(txId, TTxState(txId, false)).first;
             TTxEventContainer container(
                 txId, rowset.GetValue<Schema::TxEvents::GenerationId>(), rowset.GetValue<Schema::TxEvents::GenerationInternalId>());
             container.DeserializeFromString(rowset.GetValue<Schema::TxEvents::Data>()).Validate();
@@ -164,8 +163,6 @@ bool TManager::LoadFromDatabase(NTabletFlatExecutor::TTransactionContext& txc) {
     if (!TxConflicts.LoadFromDatabase(db)) {
         return false;
     }
-
-    std::swap(transactions, Transactions);
 
     for (auto&& i : Transactions) {
         i.second.AddToInteraction(InteractionsContext);

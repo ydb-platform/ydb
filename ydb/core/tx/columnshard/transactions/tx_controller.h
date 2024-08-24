@@ -371,8 +371,6 @@ private:
     TTxProgressCounters Counters;
 
     THashMap<ui64, ITransactionOperator::TPtr> Operators;
-    std::shared_ptr<NOlap::NTxInteractions::TManager> InteractionsManager;
-
 private:
     ui64 GetAllowedStep() const;
     bool AbortTx(const TPlanQueueItem planQueueItem, NTabletFlatExecutor::TTransactionContext& txc);
@@ -388,11 +386,19 @@ public:
 
     ITransactionOperator::TPtr GetTxOperator(const ui64 txId) const;
     ITransactionOperator::TPtr GetVerifiedTxOperator(const ui64 txId) const;
-    NOlap::NTxInteractions::TManager& MutableInteractionsManager() {
-        return *InteractionsManager;
+    ITransactionOperator::TPtr GetTxOperatorOptional(const ui64 txId) const {
+        return GetTxOperator(txId);
     }
-    const NOlap::NTxInteractions::TManager& GetInteractionsManager() const {
-        return *InteractionsManager;
+    ITransactionOperator::TPtr GetTxOperatorVerified(const ui64 txId) const {
+        return TValidator::CheckNotNull(GetTxOperatorOptional(txId));
+    }
+    template <class TExpectedTransactionOperator>
+    std::shared_ptr<TExpectedTransactionOperator> GetTxOperatorVerifiedAs(const ui64 txId) const {
+        auto result = GetTxOperatorOptional(txId);
+        AFL_VERIFY(result);
+        auto resultClass = dynamic_pointer_cast<TExpectedTransactionOperator>(result);
+        AFL_VERIFY(resultClass);
+        return resultClass;
     }
 
     ui64 GetMemoryUsage() const;

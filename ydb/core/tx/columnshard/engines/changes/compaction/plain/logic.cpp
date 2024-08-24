@@ -4,7 +4,13 @@ namespace NKikimr::NOlap::NCompaction {
 
 void TPlainMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input) {
     for (auto&& p : input) {
-        Cursors.emplace_back(NCompaction::TPortionColumnCursor(p));
+        if (p) {
+            Cursors.emplace_back(NCompaction::TPortionColumnCursor(p));
+        } else {
+            Cursors.emplace_back(
+                NCompaction::TPortionColumnCursor(Context.GetLoader()->GetResultField()->type(), Context.GetLoader()->GetDefaultValue()));
+        }
+        
     }
 }
 

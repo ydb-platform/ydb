@@ -60,6 +60,7 @@ YT_DEFINE_ERROR_ENUM(
     ((WatcherHandlerFailed)                   (217))
     ((MasterDisconnected)                     (218))
     ((NoSuchJobShell)                         (219))
+    ((JobResourceLimitsRestrictionsViolated)  (220))
 );
 
 DEFINE_ENUM(EUnavailableChunkAction,

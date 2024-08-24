@@ -5,7 +5,6 @@ import json
 import argparse
 from github import Github, Auth as GithubAuth
 from github.PullRequest import PullRequest
-from gh_status import update_pr_comment_text
 
 
 def update_pr_comment_text(pr: PullRequest, build_preset: str, run_number: int, color: str, text: str, rewrite: bool):

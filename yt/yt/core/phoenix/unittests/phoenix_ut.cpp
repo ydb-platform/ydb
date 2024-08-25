@@ -115,7 +115,6 @@ void TBaseStruct::RegisterMetadata(auto&& registrar)
     registrar.template Field<1, &TThis::A>("a")();
 }
 
-PHOENIX_DEFINE_TYPE(TBaseStruct);
 PHOENIX_DEFINE_YSON_DUMPABLE_TYPE_MIXIN(TBaseStruct);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -137,8 +136,10 @@ void TDerivedStruct::RegisterMetadata(auto&& registrar)
     registrar.template Field<1, &TThis::B>("b")();
 }
 
-PHOENIX_DEFINE_TYPE(TDerivedStruct);
+PHOENIX_DEFINE_TYPE(TDerivedStruct); // <- TRegisterTypeDescriptor() for BaseStruct is not called yet
 PHOENIX_DEFINE_YSON_DUMPABLE_TYPE_MIXIN(TDerivedStruct);
+
+PHOENIX_DEFINE_TYPE(TBaseStruct);
 
 ////////////////////////////////////////////////////////////////////////////////
 

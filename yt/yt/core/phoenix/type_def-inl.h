@@ -31,7 +31,7 @@ namespace NYT::NPhoenix2::NDetail {
 #define PHOENIX_DEFINE_TYPE(type) \
     const ::NYT::NPhoenix2::TTypeDescriptor& type::GetTypeDescriptor() \
     { \
-        static const auto& descriptor = ::NYT::NPhoenix2::NDetail::GetTypeDescriptorByTagUnchecked(TypeTag); \
+        static const auto& descriptor = ::NYT::NPhoenix2::ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTag(TypeTag); \
         return descriptor; \
     } \
     \
@@ -93,7 +93,7 @@ namespace NYT::NPhoenix2::NDetail {
 #define PHOENIX_DEFINE_OPAQUE_TYPE(type) \
     const ::NYT::NPhoenix2::TTypeDescriptor& type::GetTypeDescriptor() \
     { \
-        static const auto& descriptor = ::NYT::NPhoenix2::NDetail::GetTypeDescriptorByTagUnchecked(TypeTag); \
+        static const auto& descriptor = ::NYT::NPhoenix2::ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTag(TypeTag); \
         return descriptor; \
     } \
     \
@@ -105,10 +105,6 @@ namespace NYT::NPhoenix2::NDetail {
     { \
         [[maybe_unused]] static inline const void* Dummy = &::NYT::NPhoenix2::NDetail::RegisterOpaqueTypeDescriptorImpl<type>(); \
     }
-
-////////////////////////////////////////////////////////////////////////////////
-
-const TTypeDescriptor& GetTypeDescriptorByTagUnchecked(TTypeTag tag);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -244,7 +240,7 @@ public:
     template <class TBase>
     void BaseType()
     {
-        TypeDescriptor_->BaseTypes_.push_back(&TBase::GetTypeDescriptor());
+        TypeDescriptor_->BaseTypeTags_.push_back(TBase::TypeTag);
     }
 
     const TTypeDescriptor& operator()() &&;

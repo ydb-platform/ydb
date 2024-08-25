@@ -887,7 +887,16 @@ void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TAct
 
 void TColumnShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx) {
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "read_set")("proto", ev->Get()->Record.DebugString());
-    auto op = GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSyncTransactionOperator>(ev->Get()->Record.GetTxId());
+    const ui64 txId = ev->Get()->Record.GetTxId();
+    if (!GetProgressTxController().HasOperator(txId)) {
+        Send(MakePipePerNodeCacheID(false),
+            new TEvPipeCache::TEvForward(
+                new TEvTxProcessing::TEvReadSetAck(0, txId, TabletID(), ev->Get()->Record.GetTabletProducer(), TabletID(), 0),
+                ev->Get()->Record.GetTabletProducer(), true),
+            IEventHandle::FlagTrackDelivery, txId);
+        return;
+    }
+    auto op = GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSyncTransactionOperator>(txId);
     NKikimrTx::TReadSetData data;
     AFL_VERIFY(data.ParseFromArray(ev->Get()->Record.GetReadSet().data(), ev->Get()->Record.GetReadSet().size()));
     auto tx = op->CreateReceiveBrokenFlagTx(

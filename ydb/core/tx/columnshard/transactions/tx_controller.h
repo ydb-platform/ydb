@@ -411,6 +411,9 @@ public:
     ITransactionOperator::TPtr GetTxOperatorVerified(const ui64 txId) const {
         return TValidator::CheckNotNull(GetTxOperatorOptional(txId));
     }
+    bool HasOperatorByTxId(const ui64 txId) const {
+        return Operators.contains(txId);
+    }
     template <class TExpectedTransactionOperator>
     std::shared_ptr<TExpectedTransactionOperator> GetTxOperatorVerifiedAs(const ui64 txId) const {
         auto result = GetTxOperatorOptional(txId);

@@ -439,16 +439,12 @@ TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage, TString* time
     writer.OnBeginMap();
     NJson::TJsonReaderConfig jsonConfig;
     NJson::TJsonValue stat;
-    TPlanVisualizer planViz;
     if (NJson::ReadJsonTree(plan, &jsonConfig, &stat)) {
         if (auto* topNode = stat.GetValueByPath("Plan")) {
             if (auto* subNode = topNode->GetValueByPath("Plans")) {
                 for (auto plan : subNode->GetArray()) {
                     if (auto* typeNode = plan.GetValueByPath("Node Type")) {
                         auto nodeType = typeNode->GetStringSafe();
-                        if (timeline) {
-                            planViz.LoadPlan(nodeType, plan);
-                        }
                         TTotalStatistics totals;
                         ui32 stageViewIndex = 0;
                         writer.OnKeyedItem(nodeType);
@@ -479,7 +475,8 @@ TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage, TString* time
         }
     }
     if (timeline) {
-        planViz.PostProcessPlans();
+        TPlanVisualizer planViz;
+        planViz.LoadPlans(plan);
         *timeline = planViz.PrintSvgSafe();
         // remove json "timeline" field after migration
         writer.OnKeyedItem("timeline");

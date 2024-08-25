@@ -1,3 +1,5 @@
+#include "helper.h"
+
 #include <yt/yt/client/hedging/cache.h>
 #include <yt/yt/client/hedging/counter.h>
 #include <yt/yt/client/hedging/hedging.h>
@@ -41,19 +43,17 @@ public:
 NApi::IClientPtr CreateTestHedgingClient(
     TDuration banPenalty,
     TDuration banDuration,
-    std::initializer_list<NApi::IClientPtr> clients,
-    std::initializer_list<TDuration> initialPenalties = {TDuration::Zero(), SleepQuantum},
+    std::vector<NApi::IClientPtr> clients,
+    std::vector<TDuration> initialPenalties = {TDuration::Zero(), SleepQuantum},
     const IPenaltyProviderPtr& penaltyProvider = CreateDummyPenaltyProvider())
 {
-    THedgingClientOptions options;
-    options.BanPenalty = banPenalty;
-    options.BanDuration = banDuration;
-    size_t clientId = 0;
-    for (auto [client, initialPenalty] : Zip(clients, initialPenalties)) {
-        auto currCliendId = "seneca-" + ToString(++clientId);
-        options.Clients.emplace_back(client, currCliendId, initialPenalty, New<TCounter>(currCliendId));
+    std::vector<TCounterPtr> counters;
+    counters.reserve(clients.size());
+    for (int i = 0; i != std::ssize(clients); ++i) {
+        counters.push_back(New<TCounter>(ToString(i)));
     }
-    return CreateHedgingClient(options, penaltyProvider);
+    return NTest::CreateTestHedgingClient(
+        clients, counters, initialPenalties, penaltyProvider, banPenalty, banDuration);
 }
 
 IPenaltyProviderPtr CreateReplicationLagPenaltyProvider(
@@ -86,7 +86,7 @@ TEST(THedgingClientTest, GetResultFromClientWithMinEffectivePenalty)
 {
     NYPath::TYPath path = "/test/1234";
 
-    NYson::TYsonString clientResult1(TStringBuf("FirstClientData"));
+    NYson::TYsonString clientResult1("FirstClientData"_sb);
 
     auto mockClient1 = New<TStrictMockClient>();
     auto mockClient2 = New<TStrictMockClient>();
@@ -102,7 +102,7 @@ TEST(THedgingClientTest, GetResultFromClientWithMinEffectivePenalty)
 
     auto queryResult = NConcurrency::WaitFor(hedgingClient->ListNode(path));
     // Check that query result is from first client, because it's effective initial penalty is minimal.
-    EXPECT_TRUE(queryResult.IsOK());
+    ASSERT_TRUE(queryResult.IsOK());
     EXPECT_EQ(queryResult.Value().AsStringBuf(), clientResult1.AsStringBuf());
 }
 
@@ -110,8 +110,8 @@ TEST(THedgingClientTest, GetclientResult2WhenFirstClientHasFailed)
 {
     NYPath::TYPath path = "/test/1234";
 
-    NYson::TYsonString clientResult1(TStringBuf("FirstClientData"));
-    NYson::TYsonString clientResult2(TStringBuf("SecondClientData"));
+    NYson::TYsonString clientResult1("FirstClientData"_sb);
+    NYson::TYsonString clientResult2("SecondClientData"_sb);
 
     auto mockClient1 = New<TStrictMockClient>();
     auto mockClient2 = New<TStrictMockClient>();
@@ -128,7 +128,7 @@ TEST(THedgingClientTest, GetclientResult2WhenFirstClientHasFailed)
 
     auto queryResult = NConcurrency::WaitFor(client->ListNode(path));
     // Check that query result is from second client, because first client returned failure and got banned.
-    EXPECT_TRUE(queryResult.IsOK());
+    ASSERT_TRUE(queryResult.IsOK());
     EXPECT_EQ(queryResult.Value().AsStringBuf(), clientResult2.AsStringBuf());
 }
 
@@ -136,8 +136,8 @@ TEST(THedgingClientTest, GetclientResult1AfterBanTimeHasElapsed)
 {
     NYPath::TYPath path = "/test/1234";
 
-    NYson::TYsonString clientResult1(TStringBuf("FirstClientData"));
-    NYson::TYsonString clientResult2(TStringBuf("SecondClientData"));
+    NYson::TYsonString clientResult1("FirstClientData"_sb);
+    NYson::TYsonString clientResult2("SecondClientData"_sb);
 
     auto mockClient1 = New<TStrictMockClient>();
     auto mockClient2 = New<TStrictMockClient>();
@@ -156,14 +156,14 @@ TEST(THedgingClientTest, GetclientResult1AfterBanTimeHasElapsed)
 
     auto queryResult1 = NConcurrency::WaitFor(hedgingClient->ListNode(path));
     // Check that first query result is from second client, because first client returned failure and got banned.
-    EXPECT_TRUE(queryResult1.IsOK());
+    ASSERT_TRUE(queryResult1.IsOK());
     EXPECT_EQ(queryResult1.Value().AsStringBuf(), clientResult2.AsStringBuf());
 
     NConcurrency::TDelayedExecutor::WaitForDuration(banDuration);
 
     auto queryResult2 = NConcurrency::WaitFor(hedgingClient->ListNode(path));
     // Check that second query result is from first client, because ban time has elapsed and it's effective initial penalty is minimal again.
-    EXPECT_TRUE(queryResult2.IsOK());
+    ASSERT_TRUE(queryResult2.IsOK());
     EXPECT_EQ(queryResult2.Value().AsStringBuf(), clientResult1.AsStringBuf());
 }
 
@@ -171,8 +171,8 @@ TEST(THedgingClientTest, GetclientResult2WhenFirstClientIsBanned)
 {
     NYPath::TYPath path = "/test/1234";
 
-    NYson::TYsonString clientResult1(TStringBuf("FirstClientData"));
-    NYson::TYsonString clientResult2(TStringBuf("SecondClientData"));
+    NYson::TYsonString clientResult1("FirstClientData"_sb);
+    NYson::TYsonString clientResult2("SecondClientData"_sb);
 
     auto mockClient1 = New<TStrictMockClient>();
     auto mockClient2 = New<TStrictMockClient>();
@@ -189,12 +189,12 @@ TEST(THedgingClientTest, GetclientResult2WhenFirstClientIsBanned)
 
     auto queryResult1 = NConcurrency::WaitFor(hedgingClient->ListNode(path));
     // Check that first query result is from second client, because first client returned failure and got banned.
-    EXPECT_TRUE(queryResult1.IsOK());
+    ASSERT_TRUE(queryResult1.IsOK());
     EXPECT_EQ(queryResult1.Value().AsStringBuf(), clientResult2.AsStringBuf());
 
     auto queryResult2 = NConcurrency::WaitFor(hedgingClient->ListNode(path));
     // Check that second query result is from second client, because first client is still banned.
-    EXPECT_TRUE(queryResult2.IsOK());
+    ASSERT_TRUE(queryResult2.IsOK());
     EXPECT_EQ(queryResult2.Value().AsStringBuf(), clientResult2.AsStringBuf());
 }
 
@@ -202,8 +202,8 @@ TEST(THedgingClientTest, GetclientResult2WhenFirstClientIsSleeping)
 {
     NYPath::TYPath path = "/test/1234";
 
-    NYson::TYsonString clientResult1(TStringBuf("FirstClientData"));
-    NYson::TYsonString clientResult2(TStringBuf("SecondClientData"));
+    NYson::TYsonString clientResult1("FirstClientData"_sb);
+    NYson::TYsonString clientResult2("SecondClientData"_sb);
 
     auto mockClient1 = New<TStrictMockClient>();
     auto mockClient2 = New<TStrictMockClient>();
@@ -220,7 +220,7 @@ TEST(THedgingClientTest, GetclientResult2WhenFirstClientIsSleeping)
 
     auto queryResult = NConcurrency::WaitFor(hedgingClient->ListNode(path));
     // Check that query result is from second client, because first client is sleeping.
-    EXPECT_TRUE(queryResult.IsOK());
+    ASSERT_TRUE(queryResult.IsOK());
     EXPECT_EQ(queryResult.Value().AsStringBuf(), clientResult2.AsStringBuf());
 }
 
@@ -228,8 +228,8 @@ TEST(THedgingClientTest, FirstClientIsBannedBecauseResponseWasCancelled)
 {
     NYPath::TYPath path = "/test/1234";
 
-    NYson::TYsonString clientResult1(TStringBuf("FirstClientData"));
-    NYson::TYsonString clientResult2(TStringBuf("SecondClientData"));
+    NYson::TYsonString clientResult1("FirstClientData"_sb);
+    NYson::TYsonString clientResult2("SecondClientData"_sb);
 
     auto mockClient1 = New<TStrictMockClient>();
     auto mockClient2 = New<TStrictMockClient>();
@@ -247,7 +247,7 @@ TEST(THedgingClientTest, FirstClientIsBannedBecauseResponseWasCancelled)
 
     auto queryResult1 = NConcurrency::WaitFor(client->ListNode(path));
     // Check that query result is from second client, because first client is sleeping.
-    EXPECT_TRUE(queryResult1.IsOK());
+    ASSERT_TRUE(queryResult1.IsOK());
     EXPECT_EQ(queryResult1.Value().AsStringBuf(), clientResult2.AsStringBuf());
 
     // Wait for finish of all requests
@@ -255,7 +255,7 @@ TEST(THedgingClientTest, FirstClientIsBannedBecauseResponseWasCancelled)
 
     auto queryResult2 = NConcurrency::WaitFor(client->ListNode(path));
     // Check that second query result is from second client, because first client was cancelled and got banned.
-    EXPECT_TRUE(queryResult2.IsOK());
+    ASSERT_TRUE(queryResult2.IsOK());
     EXPECT_EQ(queryResult2.Value().AsStringBuf(), clientResult2.AsStringBuf());
 }
 
@@ -263,9 +263,9 @@ TEST(THedgingClientTest, AmnestyBanPenaltyIfClientSucceeded)
 {
     NYPath::TYPath path = "/test/1234";
 
-    NYson::TYsonString clientResult1(TStringBuf("FirstClientData"));
-    NYson::TYsonString clientResult2(TStringBuf("SecondClientData"));
-    NYson::TYsonString thirdClientResult(TStringBuf("ThirdClientData"));
+    NYson::TYsonString clientResult1("FirstClientData"_sb);
+    NYson::TYsonString clientResult2("SecondClientData"_sb);
+    NYson::TYsonString thirdClientResult("ThirdClientData"_sb);
 
     auto mockClient1 = New<TStrictMockClient>();
     auto mockClient2 = New<TStrictMockClient>();
@@ -289,7 +289,7 @@ TEST(THedgingClientTest, AmnestyBanPenaltyIfClientSucceeded)
 
     auto queryResult1 = NConcurrency::WaitFor(client->ListNode(path));
     // Check that query result is from second client, because first client finished with an error.
-    EXPECT_TRUE(queryResult1.IsOK());
+    ASSERT_TRUE(queryResult1.IsOK());
     EXPECT_EQ(queryResult1.Value().AsStringBuf(), clientResult2.AsStringBuf());
 
     // Wait for finish of all requests
@@ -297,7 +297,7 @@ TEST(THedgingClientTest, AmnestyBanPenaltyIfClientSucceeded)
 
     auto queryResult2 = NConcurrency::WaitFor(client->ListNode(path));
     // Check that second query result is from first client, because other clients were sleeping.
-    EXPECT_TRUE(queryResult2.IsOK());
+    ASSERT_TRUE(queryResult2.IsOK());
     EXPECT_EQ(queryResult2.Value().AsStringBuf(), clientResult1.AsStringBuf());
 
     // Wait for finish of all requests
@@ -305,7 +305,7 @@ TEST(THedgingClientTest, AmnestyBanPenaltyIfClientSucceeded)
 
     auto queryResult3 = NConcurrency::WaitFor(client->ListNode(path));
     // Check that third query result is from first client again, because it's penalty was amnestied.
-    EXPECT_TRUE(queryResult3.IsOK());
+    ASSERT_TRUE(queryResult3.IsOK());
     EXPECT_EQ(queryResult3.Value().AsStringBuf(), clientResult1.AsStringBuf());
 }
 
@@ -315,8 +315,8 @@ TEST(THedgingClientTest, MultiThread)
 
     auto mockClient1 = New<TStrictMockClient>();
     auto mockClient2 = New<TStrictMockClient>();
-    NYson::TYsonString clientResult1(TStringBuf("FirstClientData"));
-    NYson::TYsonString clientResult2(TStringBuf("SecondClientData"));
+    NYson::TYsonString clientResult1("FirstClientData"_sb);
+    NYson::TYsonString clientResult2("SecondClientData"_sb);
 
     EXPECT_CALL(*mockClient1, ListNode(path, _)).WillRepeatedly([=] (const NYPath::TYPath&, const NApi::TListNodeOptions& options) {
         if (options.Timeout) {
@@ -365,8 +365,8 @@ TEST(THedgingClientTest, ResponseFromSecondClientWhenFirstHasReplicationLag)
 
     auto mockClient1 = New<TStrictMockClient>();
     auto mockClient2 = New<TStrictMockClient>();
-    NYson::TYsonString clientResult1(TStringBuf("FirstClientData"));
-    NYson::TYsonString clientResult2(TStringBuf("SecondClientData"));
+    NYson::TYsonString clientResult1("FirstClientData"_sb);
+    NYson::TYsonString clientResult2("SecondClientData"_sb);
 
     EXPECT_CALL(*mockClient1, ListNode(path, _))
         .WillRepeatedly(Return(MakeFuture(clientResult1)));
@@ -380,15 +380,14 @@ TEST(THedgingClientTest, ResponseFromSecondClientWhenFirstHasReplicationLag)
 
     auto queryResult = NConcurrency::WaitFor(hedgingClient->ListNode(path));
     // Check that query result is from first client, because it's effective initial penalty is minimal.
-    EXPECT_TRUE(queryResult.IsOK());
+    ASSERT_TRUE(queryResult.IsOK());
     EXPECT_EQ(queryResult.Value().AsStringBuf(), clientResult1.AsStringBuf());
 
-    TString cluster = "seneca-1";
     auto maxTabletLag = TDuration::Seconds(10);
     auto lagPenalty = 2 * SleepQuantum;
 
-    NYson::TYsonString replicasResult(TStringBuf("{\"575f-131-40502c5-201b420f\" = {\"cluster_name\" = \"seneca-1\"}}"));
-    NYson::TYsonString tabletCountResult(TStringBuf("1"));
+    NYson::TYsonString replicasResult("{\"575f-131-40502c5-201b420f\" = {\"cluster_name\" = \"cluster-0\"}}"_sb);
+    NYson::TYsonString tabletCountResult("1"_sb);
 
     auto mockClient3 = New<TStrictMockClient>();
 
@@ -410,7 +409,7 @@ TEST(THedgingClientTest, ResponseFromSecondClientWhenFirstHasReplicationLag)
 
     auto penaltyProvier = CreateReplicationLagPenaltyProvider(
         path,
-        cluster,
+        "cluster-0",
         maxTabletLag,
         lagPenalty,
         mockClient3);
@@ -426,7 +425,7 @@ TEST(THedgingClientTest, ResponseFromSecondClientWhenFirstHasReplicationLag)
     auto queryResultWithReplicationLagPolicy = NConcurrency::WaitFor(hedgingClientWithPenaltyProvider->ListNode(path));
 
     // Check that query result is from second client, because first client received penalty updater because of replication lag.
-    EXPECT_TRUE(queryResultWithReplicationLagPolicy.IsOK());
+    ASSERT_TRUE(queryResultWithReplicationLagPolicy.IsOK());
     EXPECT_EQ(queryResultWithReplicationLagPolicy.Value().AsStringBuf(), clientResult2.AsStringBuf());
 }
 
@@ -434,7 +433,7 @@ TEST(THedgingClientTest, CreatingHedgingClientWithPreinitializedClients)
 {
     const TString clusterName = "test_cluster";
     NYPath::TYPath path = "/test/1234";
-    NYson::TYsonString clientResult(TStringBuf("ClientData"));
+    NYson::TYsonString clientResult("ClientData"_sb);
 
     auto mockClient = New<TStrictMockClient>();
     EXPECT_CALL(*mockClient, ListNode(path, _))
@@ -454,7 +453,7 @@ TEST(THedgingClientTest, CreatingHedgingClientWithPreinitializedClients)
 
     auto queryResult = NConcurrency::WaitFor(hedgingClient->ListNode(path));
     // Check that query result is from preinitialized client.
-    EXPECT_TRUE(queryResult.IsOK());
+    ASSERT_TRUE(queryResult.IsOK());
     EXPECT_EQ(queryResult.Value().AsStringBuf(), clientResult.AsStringBuf());
 }
 
@@ -464,20 +463,19 @@ TEST(THedgingClientTest, ResponseFromFirstClientWhenReplicationLagUpdaterFails)
 
     auto mockClient1 = New<TStrictMockClient>();
     auto mockClient2 = New<TStrictMockClient>();
-    NYson::TYsonString clientResult1(TStringBuf("FirstClientData"));
-    NYson::TYsonString clientResult2(TStringBuf("SecondClientData"));
+    NYson::TYsonString clientResult1("FirstClientData"_sb);
+    NYson::TYsonString clientResult2("SecondClientData"_sb);
 
     EXPECT_CALL(*mockClient1, ListNode(path, _))
         .WillRepeatedly(Return(MakeFuture(clientResult1)));
     EXPECT_CALL(*mockClient2, ListNode(path, _))
         .WillRepeatedly(Return(MakeFuture(clientResult2)));
 
-    TString cluster = "seneca-1";
     auto maxTabletLag = TDuration::Seconds(10);
     auto lagPenalty = 2 * SleepQuantum;
 
-    NYson::TYsonString replicasResult(TStringBuf("{\"575f-131-40502c5-201b420f\" = {\"cluster_name\" = \"seneca-1\"}}"));
-    NYson::TYsonString tabletCountResult(TStringBuf("1"));
+    NYson::TYsonString replicasResult("{\"575f-131-40502c5-201b420f\" = {\"cluster_name\" = \"cluster-0\"}}"_sb);
+    NYson::TYsonString tabletCountResult("1"_sb);
 
     auto mockClient3 = New<TStrictMockClient>();
 
@@ -499,7 +497,7 @@ TEST(THedgingClientTest, ResponseFromFirstClientWhenReplicationLagUpdaterFails)
 
     auto penaltyProvider = CreateReplicationLagPenaltyProvider(
         path,
-        cluster,
+        "cluster-0",
         maxTabletLag,
         lagPenalty,
         mockClient3,
@@ -516,14 +514,14 @@ TEST(THedgingClientTest, ResponseFromFirstClientWhenReplicationLagUpdaterFails)
 
     auto queryResultWithReplicationLagPolicy = NConcurrency::WaitFor(hedgingClientWithPenaltyProvider->ListNode(path));
     // Check that query result is from second client, because first client received penalty because of replication lag.
-    EXPECT_TRUE(queryResultWithReplicationLagPolicy.IsOK());
+    ASSERT_TRUE(queryResultWithReplicationLagPolicy.IsOK());
     EXPECT_EQ(queryResultWithReplicationLagPolicy.Value().AsStringBuf(), clientResult2.AsStringBuf());
 
     Sleep(2 * CheckPeriod);
 
     auto queryResultWithCleanedPenalty = NConcurrency::WaitFor(hedgingClientWithPenaltyProvider->ListNode(path));
     // Check that query result is from first client, because replication lag was cleaned.
-    EXPECT_TRUE(queryResultWithCleanedPenalty.IsOK());
+    ASSERT_TRUE(queryResultWithCleanedPenalty.IsOK());
     EXPECT_EQ(queryResultWithCleanedPenalty.Value().AsStringBuf(), clientResult1.AsStringBuf());
 }
 

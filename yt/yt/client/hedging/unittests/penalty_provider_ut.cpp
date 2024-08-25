@@ -75,7 +75,7 @@ TEST(TLagPenaltyProviderTest, UpdateExternalPenaltyWhenReplicaHasLag)
     auto PenaltyProviderPtr = CreateReplicationLagPenaltyProvider(config, client);
     Sleep(2 * CheckPeriod);
 
-    EXPECT_EQ(PenaltyProviderPtr->Get(cluster), NProfiling::DurationToCpuDuration(TDuration::MilliSeconds(config.GetLagPenalty())));
+    EXPECT_EQ(PenaltyProviderPtr->Get(cluster), TDuration::MilliSeconds(config.GetLagPenalty()));
 }
 
 TEST(TLagPenaltyProviderTest, DoNotUpdatePenaltyWhenReplicaHasNoLag)
@@ -108,7 +108,7 @@ TEST(TLagPenaltyProviderTest, DoNotUpdatePenaltyWhenReplicaHasNoLag)
     auto PenaltyProviderPtr = CreateReplicationLagPenaltyProvider(config, client);
     Sleep(2 * CheckPeriod);
 
-    EXPECT_EQ(PenaltyProviderPtr->Get(cluster), 0);
+    EXPECT_EQ(PenaltyProviderPtr->Get(cluster), TDuration::Zero());
 }
 
 TEST(TLagPenaltyProviderTest, DoNotUpdatePenaltyWhenGetReplicaIdFailed)
@@ -126,7 +126,7 @@ TEST(TLagPenaltyProviderTest, DoNotUpdatePenaltyWhenGetReplicaIdFailed)
     auto PenaltyProviderPtr = CreateReplicationLagPenaltyProvider(config, client);
     Sleep(2 * CheckPeriod);
 
-    EXPECT_EQ(PenaltyProviderPtr->Get(cluster), 0);
+    EXPECT_EQ(PenaltyProviderPtr->Get(cluster), TDuration::Zero());
 }
 
 TEST(TLagPenaltyProviderTest, DoNotUpdatePenaltyWhenGetTabletsCountFailed)
@@ -149,7 +149,7 @@ TEST(TLagPenaltyProviderTest, DoNotUpdatePenaltyWhenGetTabletsCountFailed)
     auto PenaltyProviderPtr = CreateReplicationLagPenaltyProvider(config, client);
     Sleep(2 * CheckPeriod);
 
-    EXPECT_EQ(PenaltyProviderPtr->Get(cluster), 0);
+    EXPECT_EQ(PenaltyProviderPtr->Get(cluster), TDuration::Zero());
 }
 
 TEST(TLagPenaltyProviderTest, DoNotUpdatePenaltyWhenGetTabletsInfoFailed)
@@ -177,7 +177,7 @@ TEST(TLagPenaltyProviderTest, DoNotUpdatePenaltyWhenGetTabletsInfoFailed)
     auto PenaltyProviderPtr = CreateReplicationLagPenaltyProvider(config, client);
     Sleep(2 * CheckPeriod);
 
-    EXPECT_EQ(PenaltyProviderPtr->Get(cluster), 0);
+    EXPECT_EQ(PenaltyProviderPtr->Get(cluster), TDuration::Zero());
 }
 
 TEST(TLagPenaltyProviderTest, ClearPenaltiesAfterError)
@@ -213,10 +213,10 @@ TEST(TLagPenaltyProviderTest, ClearPenaltiesAfterError)
     auto PenaltyProviderPtr = CreateReplicationLagPenaltyProvider(config, client);
     Sleep(CheckPeriod);
 
-    EXPECT_EQ(PenaltyProviderPtr->Get(cluster), NProfiling::DurationToCpuDuration(TDuration::MilliSeconds(config.GetLagPenalty())));
+    EXPECT_EQ(PenaltyProviderPtr->Get(cluster), TDuration::MilliSeconds(config.GetLagPenalty()));
 
     Sleep(2 * CheckPeriod);
-    EXPECT_EQ(PenaltyProviderPtr->Get(cluster), 0);
+    EXPECT_EQ(PenaltyProviderPtr->Get(cluster), TDuration::Zero());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

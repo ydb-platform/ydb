@@ -1,4 +1,4 @@
-#include "logger.h"
+#include "private.h"
 
 namespace NYT::NClient::NHedging::NRpc {
 

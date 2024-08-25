@@ -15,7 +15,7 @@ namespace NYT::NClient::NHedging::NRpc {
 struct IPenaltyProvider
     : public TRefCounted
 {
-    virtual NProfiling::TCpuDuration Get(const std::string& cluster) = 0;
+    virtual TDuration Get(const std::string& cluster) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IPenaltyProvider)

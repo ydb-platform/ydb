@@ -1,9 +1,10 @@
 #include "hedging.h"
 
 #include "cache.h"
+#include "config.h"
 #include "counter.h"
-#include "logger.h"
 #include "rpc.h"
+#include "private.h"
 
 #include <yt/yt/client/api/client.h>
 #include <yt/yt/client/api/queue_transaction.h>
@@ -22,9 +23,6 @@
 
 #include <yt/yt_proto/yt/client/hedging/proto/config.pb.h>
 
-#include <library/cpp/iterator/enumerate.h>
-#include <library/cpp/iterator/zip.h>
-
 #include <util/datetime/base.h>
 
 #include <util/generic/va_args.h>
@@ -40,11 +38,11 @@ namespace {
 using namespace NYT;
 using namespace NApi;
 using namespace NYPath;
-using namespace NProfiling;
+using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using TClientBuilder = std::function<NApi::IClientPtr(const TConfig&)>;
+using TClientFactory = std::function<NApi::IClientPtr(const NApi::NRpcProxy::TConnectionConfigPtr&)>;
 
 #define RETRYABLE_METHOD(ReturnType, MethodName, Args)                                      \
     ReturnType MethodName(Y_METHOD_USED_ARGS_DECLARATION(Args)) override {                  \
@@ -59,15 +57,15 @@ class THedgingClient
     : public IClient
 {
 public:
-    THedgingClient(const THedgingClientOptions& options, const IPenaltyProviderPtr& penaltyProvider)
-        : Executor_(New<THedgingExecutor>(options, penaltyProvider))
+    THedgingClient(THedgingExecutorPtr hedgingExecutor)
+        : Executor_(std::move(hedgingExecutor))
     { }
 
     // IClientBase methods.
     // Supported methods.
     IConnectionPtr GetConnection() override
     {
-        return Executor_->GetConnection();
+        return Executor_->GetClient(0)->GetConnection();
     }
 
     std::optional<TStringBuf> GetClusterName(bool fetchIfNull = true) override
@@ -98,7 +96,7 @@ public:
     UNSUPPORTED_METHOD(TFuture<ITransactionPtr>, StartTransaction, (NTransactionClient::ETransactionType, const TTransactionStartOptions&));
     UNSUPPORTED_METHOD(TFuture<ITableWriterPtr>, CreateTableWriter, (const TRichYPath&, const TTableWriterOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, SetNode, (const TYPath&, const NYson::TYsonString&, const TSetNodeOptions&));
-    UNSUPPORTED_METHOD(TFuture<void>, MultisetAttributesNode, (const TYPath&, const NYTree::IMapNodePtr&, const TMultisetAttributesNodeOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, MultisetAttributesNode, (const TYPath&, const IMapNodePtr&, const TMultisetAttributesNodeOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, RemoveNode, (const TYPath&, const TRemoveNodeOptions&));
     UNSUPPORTED_METHOD(TFuture<NCypressClient::TNodeId>, CreateNode, (const TYPath&, NObjectClient::EObjectType, const TCreateNodeOptions&));
     UNSUPPORTED_METHOD(TFuture<TLockNodeResult>, LockNode, (const TYPath&, NCypressClient::ELockMode, const TLockNodeOptions&));
@@ -152,10 +150,10 @@ public:
     UNSUPPORTED_METHOD(TFuture<TPutFileToCacheResult>, PutFileToCache, (const TYPath&, const TString&, const TPutFileToCacheOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, AddMember, (const TString&, const TString&, const TAddMemberOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, RemoveMember, (const TString&, const TString&, const TRemoveMemberOptions&));
-    UNSUPPORTED_METHOD(TFuture<TCheckPermissionResponse>, CheckPermission, (const TString&, const TYPath&, NYTree::EPermission, const TCheckPermissionOptions&));
-    UNSUPPORTED_METHOD(TFuture<TCheckPermissionByAclResult>, CheckPermissionByAcl, (const std::optional<TString>&, NYTree::EPermission, NYTree::INodePtr, const TCheckPermissionByAclOptions&));
-    UNSUPPORTED_METHOD(TFuture<void>, TransferAccountResources, (const TString&, const TString&, NYTree::INodePtr, const TTransferAccountResourcesOptions&));
-    UNSUPPORTED_METHOD(TFuture<void>, TransferPoolResources, (const TString&, const TString&, const TString&, NYTree::INodePtr, const TTransferPoolResourcesOptions&));
+    UNSUPPORTED_METHOD(TFuture<TCheckPermissionResponse>, CheckPermission, (const TString&, const TYPath&, EPermission, const TCheckPermissionOptions&));
+    UNSUPPORTED_METHOD(TFuture<TCheckPermissionByAclResult>, CheckPermissionByAcl, (const std::optional<TString>&, EPermission, INodePtr, const TCheckPermissionByAclOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, TransferAccountResources, (const TString&, const TString&, INodePtr, const TTransferAccountResourcesOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, TransferPoolResources, (const TString&, const TString&, const TString&, INodePtr, const TTransferPoolResourcesOptions&));
     UNSUPPORTED_METHOD(TFuture<NScheduler::TOperationId>, StartOperation, (NScheduler::EOperationType, const NYson::TYsonString&, const TStartOperationOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, AbortOperation, (const NScheduler::TOperationIdOrAlias&, const TAbortOperationOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, SuspendOperation, (const NScheduler::TOperationIdOrAlias&, const TSuspendOperationOptions&));
@@ -236,30 +234,110 @@ private:
     const THedgingExecutorPtr Executor_;
 };
 
+NApi::IClientPtr DoCreateHedgingClient(
+    const THedgingClientOptionsPtr& config,
+    const IPenaltyProviderPtr& penaltyProvider,
+    TClientFactory clientFactory)
+{
+    NProfiling::TTagSet counterTagSet;
+    for (const auto& [tagName, tagValue] : config->Tags) {
+        counterTagSet.AddTag(NProfiling::TTag(tagName, tagValue));
+    }
+
+    std::vector<THedgingExecutor::TNode> executorNodes;
+    executorNodes.reserve(config->Connections.size());
+    for (auto& connectionConfig : config->Connections) {
+        YT_VERIFY(connectionConfig->ClusterUrl);
+        const auto& clusterName = connectionConfig->ClusterName.value_or(*connectionConfig->ClusterUrl);
+        executorNodes.push_back({
+            .Client = clientFactory(connectionConfig),
+            .Counter = New<TCounter>(counterTagSet.WithTag(NProfiling::TTag("yt_cluster", clusterName))),
+            .ClusterName = clusterName,
+            .InitialPenalty = connectionConfig->InitialPenalty,
+        });
+    }
+
+    return New<THedgingClient>(
+        New<THedgingExecutor>(executorNodes, config->BanPenalty, config->BanDuration, penaltyProvider));
+}
+
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
-NApi::IClientPtr CreateHedgingClient(const THedgingClientOptions& options)
+NApi::IClientPtr CreateHedgingClient(const THedgingExecutorPtr& hedgingExecutor)
 {
-    return New<THedgingClient>(options, CreateDummyPenaltyProvider());
+    return New<THedgingClient>(hedgingExecutor);
 }
 
 NApi::IClientPtr CreateHedgingClient(
-    const THedgingClientOptions& options,
+    const THedgingClientOptionsPtr& config,
     const IPenaltyProviderPtr& penaltyProvider)
 {
-    return New<THedgingClient>(options, penaltyProvider);
+    return DoCreateHedgingClient(
+        config,
+        penaltyProvider,
+        [] (const NApi::NRpcProxy::TConnectionConfigPtr& connectionConfig) {
+            return CreateClient(connectionConfig);
+        });
+}
+
+NApi::IClientPtr CreateHedgingClient(const THedgingClientOptionsPtr& config)
+{
+    return CreateHedgingClient(config, CreateDummyPenaltyProvider());
+}
+
+NApi::IClientPtr CreateHedgingClient(
+    const THedgingClientOptionsPtr& config,
+    const IClientsCachePtr& clientsCache,
+    const IPenaltyProviderPtr& penaltyProvider)
+{
+    return DoCreateHedgingClient(
+        config,
+        penaltyProvider,
+        [&] (const NApi::NRpcProxy::TConnectionConfigPtr& connectionConfig) {
+            YT_VERIFY(connectionConfig->ClusterUrl);
+            return clientsCache->GetClient(*connectionConfig->ClusterUrl);
+        });
+}
+
+NApi::IClientPtr CreateHedgingClient(const THedgingClientOptionsPtr& config, const IClientsCachePtr& clientsCache)
+{
+    return CreateHedgingClient(config, clientsCache, CreateDummyPenaltyProvider());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+THedgingClientOptionsPtr GetHedgingClientConfig(const THedgingClientConfig& protoConfig)
+{
+    auto config = New<THedgingClientOptions>();
+    config->BanPenalty = TDuration::MilliSeconds(protoConfig.GetBanPenalty());
+    config->BanDuration = TDuration::MilliSeconds(protoConfig.GetBanDuration());
+
+    NProfiling::TTagSet counterTagSet;
+
+    for (const auto& [tagName, tagValue] : protoConfig.GetTags()) {
+        config->Tags.emplace(tagName, tagValue);
+    }
+
+    config->Connections.reserve(protoConfig.GetClients().size());
+    for (const auto& client : protoConfig.GetClients()) {
+        auto connectionConfig = ConvertTo<NYT::TIntrusivePtr<TConnectionWithPenaltyConfig>>(
+            GetConnectionConfig(client.GetClientConfig()));
+        connectionConfig->InitialPenalty = TDuration::MilliSeconds(client.GetInitialPenalty());
+        config->Connections.push_back(std::move(connectionConfig));
+    }
+    return config;
 }
 
 NApi::IClientPtr CreateHedgingClient(const THedgingClientConfig& config)
 {
-    return CreateHedgingClient(GetHedgingClientOptions(config));
+    return CreateHedgingClient(GetHedgingClientConfig(config));
 }
 
 NApi::IClientPtr CreateHedgingClient(const THedgingClientConfig& config, const IClientsCachePtr& clientsCache)
 {
-    return CreateHedgingClient(GetHedgingClientOptions(config, clientsCache));
+    return CreateHedgingClient(GetHedgingClientConfig(config), clientsCache);
 }
 
 NApi::IClientPtr CreateHedgingClient(
@@ -267,44 +345,7 @@ NApi::IClientPtr CreateHedgingClient(
     const IClientsCachePtr& clientsCache,
     const IPenaltyProviderPtr& penaltyProvider)
 {
-    return CreateHedgingClient(GetHedgingClientOptions(config, clientsCache), penaltyProvider);
-}
-
-THedgingClientOptions GetHedgingClientOptions(const THedgingClientConfig& config, TClientBuilder clientBuilder)
-{
-    THedgingClientOptions options;
-    options.BanPenalty = TDuration::MilliSeconds(config.GetBanPenalty());
-    options.BanDuration = TDuration::MilliSeconds(config.GetBanDuration());
-
-    NProfiling::TTagSet counterTagSet;
-
-    for (const auto& [tagName, tagValue] : config.GetTags()) {
-        counterTagSet.AddTag(NProfiling::TTag(tagName, tagValue));
-    }
-
-    options.Clients.reserve(config.GetClients().size());
-    for (const auto& client : config.GetClients()) {
-        options.Clients.emplace_back(
-            clientBuilder(client.GetClientConfig()),
-            client.GetClientConfig().GetClusterName(),
-            TDuration::MilliSeconds(client.GetInitialPenalty()),
-            New<TCounter>(counterTagSet.WithTag(NProfiling::TTag("yt_cluster", client.GetClientConfig().GetClusterName()))));
-    }
-    return options;
-}
-
-THedgingClientOptions GetHedgingClientOptions(const THedgingClientConfig& config)
-{
-    return GetHedgingClientOptions(config, [] (const auto& clientConfig) {
-        return CreateClient(clientConfig);
-    });
-}
-
-THedgingClientOptions GetHedgingClientOptions(const THedgingClientConfig& config, const IClientsCachePtr& clientsCache)
-{
-    return GetHedgingClientOptions(config, [clientsCache] (const auto& clientConfig) {
-        return clientsCache->GetClient(clientConfig.GetClusterName());
-    });
+    return CreateHedgingClient(GetHedgingClientConfig(config), clientsCache, penaltyProvider);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

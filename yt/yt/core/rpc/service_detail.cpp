@@ -1004,7 +1004,7 @@ private:
             }
 
             Service_->RegisterQueuedReply(RequestId_, replySent);
-            replySent.Subscribe(BIND([weakService=MakeWeak(Service_), requestId=RequestId_] (const TError& /*error*/) {
+            replySent.Subscribe(BIND([weakService = MakeWeak(Service_), requestId = RequestId_] (const TError& /*error*/) {
                 if (auto service = weakService.Lock()) {
                     service->UnregisterQueuedReply(requestId);
                 }

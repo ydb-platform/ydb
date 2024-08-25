@@ -508,6 +508,8 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
         FatalError("Adding new client failed: CompileError: sql: " + e.GetYql() + ", error: " + e.GetIssues());
     } catch (const yexception &ex) {
         FatalError(TString{"Adding new client failed: "} + ex.what());
+    } catch (...) {
+        FatalError("Adding new client failed");
     }
 
     PrintInternalState();

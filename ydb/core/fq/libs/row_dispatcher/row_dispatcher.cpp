@@ -288,7 +288,11 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
     auto consumerInfo = MakeAtomicShared<ConsumerInfo>(ev->Sender, SelfId(), NextEventQueueId++, ev->Get()->Record, TActorId());
     Consumers[key] = consumerInfo;
     ConsumersByEventQueueId[consumerInfo->EventQueueId] = consumerInfo;
-    consumerInfo->EventsQueue.OnEventReceived(ev);
+    if (!consumerInfo->EventsQueue.OnEventReceived(ev)) {
+        const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
+        const ui64 seqNo = meta.GetSeqNo();
+        LOG_ROW_DISPATCHER_ERROR("TEvStartSession: wrong seq num from" << ev->Sender.ToString() << ", seqNo" << seqNo << ", ignore message");
+    }
 
     if (topicSessionInfo.Sessions.empty()) {
         LOG_ROW_DISPATCHER_DEBUG("Create new session " << readOffset);
@@ -329,14 +333,14 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr &ev) {
         const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
         const ui64 seqNo = meta.GetSeqNo();
 
-        LOG_ROW_DISPATCHER_DEBUG("TEvGetNextBatch: wrong seq num (" << seqNo << ", ignore message");
+        LOG_ROW_DISPATCHER_ERROR("TEvGetNextBatch: wrong seq num from" << ev->Sender.ToString() << ", seqNo" << seqNo << ", ignore message");
         return;
     }
     Forward(ev, it->second->TopicSessionId);
 }
 
 void TRowDispatcher::Handle(NActors::TEvents::TEvPing::TPtr& ev) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvPing from " << ev->Sender);
+    LOG_ROW_DISPATCHER_TRACE("TEvPing from " << ev->Sender);
     Send(ev->Sender, new NActors::TEvents::TEvPong());
 }
 
@@ -354,7 +358,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev) {
         const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
         const ui64 seqNo = meta.GetSeqNo();
 
-        LOG_ROW_DISPATCHER_DEBUG("TEvStopSession: wrong seq num (" << seqNo << ", ignore message");
+        LOG_ROW_DISPATCHER_ERROR("TEvStopSession: wrong seq num from " << ev->Sender.ToString() << ", seqNo " << seqNo << ", ignore message");
         return;
     }
     DeleteConsumer(key);

@@ -403,10 +403,12 @@ private:
 public:
     TTxController(TColumnShard& owner);
 
-    ITransactionOperator::TPtr GetTxOperator(const ui64 txId) const;
-    ITransactionOperator::TPtr GetVerifiedTxOperator(const ui64 txId) const;
     ITransactionOperator::TPtr GetTxOperatorOptional(const ui64 txId) const {
-        return GetTxOperator(txId);
+        auto it = Operators.find(txId);
+        if (it == Operators.end()) {
+            return nullptr;
+        }
+        return it->second;
     }
     ITransactionOperator::TPtr GetTxOperatorVerified(const ui64 txId) const {
         return TValidator::CheckNotNull(GetTxOperatorOptional(txId));

@@ -92,23 +92,9 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
     return true;
 }
 
-TTxController::ITransactionOperator::TPtr TTxController::GetTxOperator(const ui64 txId) const {
-    auto it = Operators.find(txId);
-    if (it == Operators.end()) {
-        return nullptr;
-    }
-    return it->second;
-}
-
-TTxController::ITransactionOperator::TPtr TTxController::GetVerifiedTxOperator(const ui64 txId) const {
-    auto it = Operators.find(txId);
-    AFL_VERIFY(it != Operators.end())("tx_id", txId);
-    return it->second;
-}
-
 std::shared_ptr<TTxController::ITransactionOperator> TTxController::UpdateTxSourceInfo(
     const TFullTxInfo& tx, NTabletFlatExecutor::TTransactionContext& txc) {
-    auto op = GetVerifiedTxOperator(tx.GetTxId());
+    auto op = GetTxOperatorVerified(tx.GetTxId());
     op->ResetStatusOnUpdate();
     auto& txInfo = op->MutableTxInfo();
     txInfo.Source = tx.Source;
@@ -361,31 +347,29 @@ std::shared_ptr<TTxController::ITransactionOperator> TTxController::StartPropose
 
 void TTxController::StartProposeOnComplete(const ui64 txId, const TActorContext& ctx) {
     NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("method", "TTxController::StartProposeOnComplete")("tx_id", txId);
-    auto txOperator = GetTxOperator(txId);
-    if (!txOperator) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "cannot found txOperator in propose transaction base")("tx_id", txId);
-    } else {
+    if (auto txOperator = GetTxOperatorOptional(txId)) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start");
         txOperator->StartProposeOnComplete(Owner, ctx);
         Counters.OnStartProposeOnComplete(txOperator->GetOpType());
+    } else {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "cannot found txOperator in propose transaction base")("tx_id", txId);
     }
 }
 
 void TTxController::FinishProposeOnExecute(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
     NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("method", "TTxController::FinishProposeOnExecute")("tx_id", txId);
-    auto txOperator = GetTxOperator(txId);
-    if (!txOperator) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "cannot found txOperator in propose transaction base")("tx_id", txId);
-    } else {
+    if (auto txOperator = GetTxOperatorOptional(txId)) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start");
         txOperator->FinishProposeOnExecute(Owner, txc);
         Counters.OnFinishProposeOnExecute(txOperator->GetOpType());
+    } else {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "cannot found txOperator in propose transaction base")("tx_id", txId);
     }
 }
 
 void TTxController::FinishProposeOnComplete(const ui64 txId, const TActorContext& ctx) {
     NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("method", "TTxController::FinishProposeOnComplete")("tx_id", txId);
-    auto txOperator = GetTxOperator(txId);
+    auto txOperator = GetTxOperatorOptional(txId);
     if (!txOperator) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "cannot found txOperator in propose transaction finish")("tx_id", txId);
         return;

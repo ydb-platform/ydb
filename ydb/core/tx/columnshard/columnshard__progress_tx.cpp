@@ -45,7 +45,7 @@ public:
             PlannedQueueItem.emplace(plannedItem->PlanStep, plannedItem->TxId);
             ui64 step = plannedItem->PlanStep;
             ui64 txId = plannedItem->TxId;
-            TxOperator = Self->ProgressTxController->GetVerifiedTxOperator(txId);
+            TxOperator = Self->ProgressTxController->GetTxOperatorVerified(txId);
             if (auto txPrepare = TxOperator->BuildTxPrepareForProgress(Self)) {
                 AbortedThroughRemoveExpired = true;
                 Self->ProgressTxInFlight = false;

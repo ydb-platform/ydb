@@ -80,14 +80,14 @@ namespace NYT::NPhoenix2::NDetail {
         [[maybe_unused]] static inline const void* Dummy = &::NYT::NPhoenix2::NDetail::RegisterTypeDescriptorImpl<type, false>(); \
     }
 
-#define PHOENIX_DEFINE_TEMPLATE_TYPE(type, parenthesizedTypeArgs) \
+#define PHOENIX_DEFINE_TEMPLATE_TYPE(type, typeArgs) \
     template <class T> \
     struct TPhoenixTypeInitializer__; \
     \
     template <> \
-    struct TPhoenixTypeInitializer__<type PP_DEPAREN(parenthesizedTypeArgs)> \
+    struct TPhoenixTypeInitializer__<type<PP_DEPAREN(typeArgs)>> \
     { \
-        [[maybe_unused]] static inline const void* Dummy = &::NYT::NPhoenix2::NDetail::RegisterTypeDescriptorImpl<type PP_DEPAREN(parenthesizedTypeArgs), true>(); \
+        [[maybe_unused]] static inline const void* Dummy = &::NYT::NPhoenix2::NDetail::RegisterTypeDescriptorImpl<type<PP_DEPAREN(typeArgs)>, true>(); \
     }
 
 #define PHOENIX_DEFINE_OPAQUE_TYPE(type) \

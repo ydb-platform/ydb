@@ -161,7 +161,7 @@ void TPair<T1, T2>::RegisterMetadata(auto&& registrar)
     registrar.template Field<2, &TThis::Second>("second")();
 }
 
-PHOENIX_DEFINE_TEMPLATE_TYPE(TPair, (<int, int>));
+PHOENIX_DEFINE_TEMPLATE_TYPE(TPair, (_, _));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1284,7 +1284,7 @@ void TDerived<T>::RegisterMetadata(auto&& registrar)
     registrar.template BaseType<TBase>();
 }
 
-PHOENIX_DEFINE_TEMPLATE_TYPE(TDerived, <int>);
+PHOENIX_DEFINE_TEMPLATE_TYPE(TDerived, (_));
 
 } // namespace NPolymorphicTemplate
 

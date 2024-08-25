@@ -1726,6 +1726,16 @@ void THive::UpdateCounterPingQueueSize() {
     }
 }
 
+void THive::UpdateCounterTabletChannelHistorySize() {
+    auto& histogram = TabletCounters->Percentile()[NHive::COUNTER_TABLET_CHANNEL_HISTORY_SIZE];
+    histogram.Clear();
+    for (const auto& [_, tablet] : Tablets) {
+        for (const auto& channel : tablet.TabletStorageInfo->Channels) {
+            histogram.IncrementFor(channel.History.size());
+        }
+    }
+}
+
 void THive::RecordTabletMove(const TTabletMoveInfo& moveInfo) {
     TabletMoveHistory.PushBack(moveInfo);
     TabletCounters->Cumulative()[NHive::COUNTER_TABLETS_MOVED].Increment(1);

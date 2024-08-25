@@ -2136,10 +2136,10 @@ void TServiceBase::OnRequestTimeout(TRequestId requestId, ERequestProcessingStag
     context->HandleTimeout(stage);
 }
 
-void TServiceBase::OnReplyBusTerminated(const NYT::TWeakPtr<NYT::NBus::IBus>& busWeak, const TError& error)
+void TServiceBase::OnReplyBusTerminated(const TWeakPtr<IBus>& weakBus, const TError& error)
 {
     std::vector<TServiceContextPtr> contexts;
-    if (auto bus = busWeak.Lock()) {
+    if (auto bus = weakBus.Lock()) {
         auto* bucket = GetReplyBusBucket(bus);
         auto guard = Guard(bucket->Lock);
         auto it = bucket->ReplyBusToContexts.find(bus);

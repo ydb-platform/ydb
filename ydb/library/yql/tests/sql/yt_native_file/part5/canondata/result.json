@@ -1207,9 +1207,9 @@
     ],
     "test.test[expr-tzdate_result-default.txt-Debug]": [
         {
-            "checksum": "225de29f181fa144505f5c8ae7bed50f",
-            "size": 1651,
-            "uri": "https://{canondata_backend}/1777230/aa69030105efbc37a346bda8a8c2142863924621/resource.tar.gz#test.test_expr-tzdate_result-default.txt-Debug_/opt.yql"
+            "checksum": "6f3ec6acc51baa9b9964fef737c959a0",
+            "size": 1664,
+            "uri": "https://{canondata_backend}/937458/c7353f31b81e9e7c4e048b04018f540b037f6df6/resource.tar.gz#test.test_expr-tzdate_result-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[expr-tzdate_result-default.txt-Plan]": [

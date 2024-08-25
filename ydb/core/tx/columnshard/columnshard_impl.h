@@ -468,7 +468,7 @@ private:
     NOlap::NResourceBroker::NSubscribe::TTaskContext CompactTaskSubscription;
     NOlap::NResourceBroker::NSubscribe::TTaskContext TTLTaskSubscription;
 
-    std::optional<ui64> ProgressTxInFlight;
+    bool ProgressTxInFlight = false;
     THashMap<ui64, TInstant> ScanTxInFlight;
     THashMap<TWriteId, TLongTxWriteInfo> LongTxWrites;
     using TPartsForLTXShard = THashMap<ui32, TLongTxWriteInfo*>;

@@ -55,6 +55,7 @@ class IScalarBuilder {
 public:
     virtual ~IScalarBuilder() = default;
     virtual arrow::Datum Build(TBlockItem value) const = 0;
+    virtual arrow::Datum Build(NUdf::TUnboxedValuePod value) const = 0;
 };
 
 inline std::shared_ptr<arrow::DataType> GetArrowType(const ITypeInfoHelper& typeInfoHelper, const TType* type) {

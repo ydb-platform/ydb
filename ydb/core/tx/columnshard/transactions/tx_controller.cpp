@@ -198,7 +198,14 @@ bool TTxController::ExecuteOnCancel(const ui64 txId, NTabletFlatExecutor::TTrans
     return true;
 }
 
-std::optional<TTxController::TTxInfo> TTxController::StartPlannedTx() {
+std::optional<TTxController::TTxInfo> TTxController::GetFirstPlannedTx() const {
+    if (!PlanQueue.empty()) {
+        return GetTxInfoVerified(PlanQueue.begin()->TxId);
+    }
+    return std::nullopt;
+}
+
+std::optional<TTxController::TTxInfo> TTxController::PopFirstPlannedTx() {
     if (!PlanQueue.empty()) {
         auto node = PlanQueue.extract(PlanQueue.begin());
         auto& item = node.value();

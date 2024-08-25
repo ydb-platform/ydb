@@ -714,8 +714,8 @@ struct Schema : NIceDb::Schema {
     static void SaveTxInfo(NIceDb::TNiceDb& db, const TFullTxInfo& txInfo,
                            const TString& txBody);
 
+    static void UpdateTxInfoBody(NIceDb::TNiceDb& db, const ui64 txId, const TString& txBody);
     static void UpdateTxInfoSource(NIceDb::TNiceDb& db, const TFullTxInfo& txInfo);
-
     static void UpdateTxInfoSource(NIceDb::TNiceDb& db, ui64 txId, const TActorId& source, ui64 cookie) {
         db.Table<TxInfo>().Key(txId).Update(
             NIceDb::TUpdate<TxInfo::Source>(source),

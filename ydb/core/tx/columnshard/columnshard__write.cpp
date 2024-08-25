@@ -7,8 +7,11 @@
 #include "engines/column_engine_logs.h"
 #include "operations/batch_builder/builder.h"
 #include "operations/manager.h"
-#include "transactions/locks/manager.h"
 #include "operations/write_data.h"
+#include "transactions/locks/manager.h"
+#include "transactions/operators/ev_write/primary.h"
+#include "transactions/operators/ev_write/secondary.h"
+#include "transactions/operators/ev_write/sync.h"
 
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/data_events/events.h>
@@ -268,6 +271,9 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
 }
 
 class TCommitOperation {
+private:
+    const ui64 TabletId;
+
 public:
     using TPtr = std::shared_ptr<TCommitOperation>;
 
@@ -275,7 +281,16 @@ public:
         return SendingShards.size() && ReceivingShards.size();
     }
 
-    TConclusionStatus Parse(const NEvents::TDataEvents::TEvWrite& evWrite, const ui64 tabletId) {
+    bool IsPrimary() const {
+        AFL_VERIFY(NeedSyncLocks());
+        return TabletId == *ReceivingShards.begin();
+    }
+
+    TCommitOperation(const ui64 tabletId)
+        : TabletId(tabletId) {
+    }
+
+    TConclusionStatus Parse(const NEvents::TDataEvents::TEvWrite& evWrite) {
         if (evWrite.Record.GetLocks().GetLocks().size() != 1) {
             return TConclusionStatus::Fail("too many locks for commit (more than one)");
         }
@@ -303,32 +318,30 @@ public:
             return TConclusionStatus::Fail("incorrect message type");
         }
         if (!ReceivingShards.size() || !SendingShards.size()) {
-//            if (ReceivingShards.size()) {
-//                SendingShards = ReceivingShards;
-//            } else {
-//                ReceivingShards = SendingShards;
-//            }
-            ReceivingShards.clear();
-            SendingShards.clear();
+            if (ReceivingShards.size()) {
+                SendingShards = ReceivingShards;
+            } else {
+                ReceivingShards = SendingShards;
+            }
+            //ReceivingShards.clear();
+            //SendingShards.clear();
         } else {
-            if (!ReceivingShards.contains(tabletId) && !SendingShards.contains(tabletId)) {
+            if (!ReceivingShards.contains(TabletId) && !SendingShards.contains(TabletId)) {
                 return TConclusionStatus::Fail("shard is incorrect for sending/receiving lists");
             }
         }
         return TConclusionStatus::Success();
     }
 
-    NKikimrTxColumnShard::TCommitWriteTxBody SerializeToCommitWriteProto() const {
-        NKikimrTxColumnShard::TCommitWriteTxBody result;
-        result.SetLockId(LockId);
-        for (auto&& i : SendingShards) {
-            result.AddSendingShards(i);
+    std::unique_ptr<NColumnShard::TEvWriteCommitSyncTransactionOperator> CreateTxOperator() const {
+        AFL_VERIFY(ReceivingShards.size());
+        if (IsPrimary()) {
+            return std::make_unique<NColumnShard::TEvWriteCommitPrimaryTransactionOperator>(
+                TFullTxInfo::BuildFake(), LockId, ReceivingShards, SendingShards);
+        } else {
+            return std::make_unique<NColumnShard::TEvWriteCommitSecondaryTransactionOperator>(
+                TFullTxInfo::BuildFake(), LockId, *ReceivingShards.begin(), ReceivingShards.contains(TabletId));
         }
-        for (auto&& i : ReceivingShards) {
-            result.AddReceivingShards(i);
-        }
-        result.SetBroken(Broken);
-        return result;
     }
 
 private:
@@ -338,7 +351,6 @@ private:
     YDB_READONLY(ui64, TxId, 0);
     YDB_READONLY_DEF(std::set<ui64>, SendingShards);
     YDB_READONLY_DEF(std::set<ui64>, ReceivingShards);
-    YDB_ACCESSOR(bool, Broken, false);
 };
 
 class TProposeWriteTransaction: public NTabletFlatExecutor::TTransactionBase<TColumnShard> {
@@ -354,19 +366,26 @@ public:
     }
 
     virtual bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        const NKikimrTxColumnShard::TCommitWriteTxBody proto = WriteCommit->SerializeToCommitWriteProto();
+        NKikimrTxColumnShard::TCommitWriteTxBody proto;
+        NKikimrTxColumnShard::ETransactionKind kind;
+        if (WriteCommit->NeedSyncLocks()) {
+            if (WriteCommit->IsPrimary()) {
+                kind = NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE_PRIMARY;
+            } else {
+                kind = NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE_SECONDARY;
+            }
+            proto = WriteCommit->CreateTxOperator()->SerializeToProto();
+        } else {
+            kind = NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE;
+        }
+        proto.SetLockId(WriteCommit->GetLockId());
         TxOperator = Self->GetProgressTxController().StartProposeOnExecute(
-            TTxController::TTxInfo(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, WriteCommit->GetTxId(), Source, Cookie, {}),
-            proto.SerializeAsString(), txc);
+            TTxController::TTxInfo(kind, WriteCommit->GetTxId(), Source, Cookie, {}), proto.SerializeAsString(), txc);
         return true;
     }
 
     virtual void Complete(const TActorContext& ctx) override {
-        if (TxOperator->IsAsync()) {
-            Self->GetProgressTxController().StartProposeOnComplete(WriteCommit->GetTxId(), ctx);
-        } else {
-            Self->GetProgressTxController().FinishProposeOnComplete(WriteCommit->GetTxId(), ctx);
-        }
+        Self->GetProgressTxController().FinishProposeOnComplete(WriteCommit->GetTxId(), ctx);
     }
     TTxType GetTxType() const override {
         return TXTYPE_PROPOSE;
@@ -387,7 +406,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     const auto source = ev->Sender;
     const auto cookie = ev->Cookie;
     const auto behaviour = TOperationsManager::GetBehaviour(*ev->Get());
-//    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("ev_write", record.DebugString());
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("ev_write", record.DebugString());
     if (behaviour == EOperationBehaviour::Undefined) {
         Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
         auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
@@ -397,28 +416,29 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     }
 
     if (behaviour == EOperationBehaviour::CommitWriteLock) {
-        auto commitOperation = std::make_shared<TCommitOperation>();
+        auto commitOperation = std::make_shared<TCommitOperation>(TabletID());
         const auto sendError = [&](const TString& message) {
             Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
             auto result =
                 NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, message);
             ctx.Send(source, result.release(), 0, cookie);
         };
-        auto conclusionParse = commitOperation->Parse(*ev->Get(), TabletID());
+        auto conclusionParse = commitOperation->Parse(*ev->Get());
         if (conclusionParse.IsFail()) {
             sendError(conclusionParse.GetErrorMessage());
         } else {
-            commitOperation->SetBroken(!OperationsManager->GetInteractionsManager().CheckToCommit(commitOperation->GetLockId()));
             if (commitOperation->NeedSyncLocks()) {
                 auto* lockInfo = OperationsManager->GetLockOptional(commitOperation->GetLockId());
                 if (!lockInfo) {
-                    sendError("haven't lock for commit");
-                } else if (lockInfo->GetGeneration() != commitOperation->GetGeneration()) {
-                    sendError("tablet lock have another generation");
-                } else if (lockInfo->GetInternalGenerationCounter() != commitOperation->GetInternalGenerationCounter()) {
-                    sendError("tablet lock have another internal generation counter");
+                    sendError("haven't lock for commit: " + ::ToString(commitOperation->GetLockId()));
                 } else {
-                    Execute(new TProposeWriteTransaction(this, commitOperation, source, cookie), ctx);
+                    if (lockInfo->GetGeneration() != commitOperation->GetGeneration()) {
+                        sendError("tablet lock have another generation");
+                    } else if (lockInfo->GetInternalGenerationCounter() != commitOperation->GetInternalGenerationCounter()) {
+                        sendError("tablet lock have another internal generation counter");
+                    } else {
+                        Execute(new TProposeWriteTransaction(this, commitOperation, source, cookie), ctx);
+                    }
                 }
             } else {
                 Execute(new TProposeWriteTransaction(this, commitOperation, source, cookie), ctx);

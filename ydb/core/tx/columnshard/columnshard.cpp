@@ -63,6 +63,7 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
     Counters.GetCSCounters().OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
     EnqueueBackgroundActivities();
     BackgroundSessionsManager->Start();
+    ctx.Send(SelfId(), new NActors::TEvents::TEvWakeup());
     ctx.Send(SelfId(), new TEvPrivate::TEvPeriodicWakeup());
     ctx.Send(SelfId(), new TEvPrivate::TEvPingSnapshotsUsage());
     NYDBTest::TControllers::GetColumnShardController()->OnSwitchToWork(TabletID());
@@ -198,6 +199,15 @@ void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorC
         SendPeriodicStats();
         EnqueueBackgroundActivities();
         ctx.Schedule(PeriodicWakeupActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
+    }
+}
+
+void TColumnShard::Handle(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
+    if (ev->Get()->Tag == 0) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TEvPrivate::TEvPeriodicWakeup::MANUAL")("tablet_id", TabletID());
+        const TMonotonic now = TMonotonic::Now();
+        GetProgressTxController().PingTimeouts(now);
+        ctx.Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup(0));
     }
 }
 

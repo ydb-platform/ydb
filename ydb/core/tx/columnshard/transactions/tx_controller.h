@@ -48,6 +48,10 @@ public:
     std::optional<TMessageSeqNo> SeqNo;
 
 public:
+    static TFullTxInfo BuildFake() {
+        return TFullTxInfo(NKikimrTxColumnShard::TX_KIND_NONE, 0, NActors::TActorId(), 0, {});
+    }
+
     bool operator==(const TFullTxInfo& item) const = default;
 
     TString DebugString() const {
@@ -206,6 +210,13 @@ public:
         virtual bool DoCheckTxInfoForReply(const TFullTxInfo& /*originalTxInfo*/) const {
             return true;
         }
+        virtual bool DoPingTimeout(TColumnShard& /*owner*/, const TMonotonic /*now*/) {
+            return false;
+        }
+
+        virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> DoBuildTxPrepareForProgress(TColumnShard* /*owner*/) const {
+            return nullptr;
+        }
 
         void SwitchStateVerified(const EStatus from, const EStatus to);
         TTxInfo& MutableTxInfo() {
@@ -228,6 +239,10 @@ public:
         using TFactory = NObjectFactory::TParametrizedObjectFactory<ITransactionOperator, NKikimrTxColumnShard::ETransactionKind, TTxInfo>;
         using OpType = TString;
 
+        bool PingTimeout(TColumnShard& owner, const TMonotonic now) {
+            return DoPingTimeout(owner, now);
+        }
+
         bool CheckTxInfoForReply(const TFullTxInfo& originalTxInfo) const {
             return DoCheckTxInfoForReply(originalTxInfo);
         }
@@ -238,6 +253,10 @@ public:
 
         bool CheckAllowUpdate(const TFullTxInfo& currentTxInfo) const {
             return DoCheckAllowUpdate(currentTxInfo);
+        }
+
+        std::unique_ptr<NTabletFlatExecutor::ITransaction> BuildTxPrepareForProgress(TColumnShard* owner) const {
+            return DoBuildTxPrepareForProgress(owner);
         }
 
         bool IsFail() const {
@@ -401,6 +420,14 @@ public:
         return resultClass;
     }
 
+    void PingTimeouts(const TMonotonic now) {
+        auto txInfo = GetFirstPlannedTx();
+        if (!txInfo) {
+            return;
+        }
+        GetTxOperatorVerified(txInfo->GetTxId())->PingTimeout(Owner, now);
+    }
+
     ui64 GetMemoryUsage() const;
     bool HaveOutdatedTxs() const;
 
@@ -417,10 +444,15 @@ public:
 
     void FinishProposeOnComplete(const ui64 txId, const TActorContext& ctx);
 
+    void WriteTxOperatorInfo(NTabletFlatExecutor::TTransactionContext& txc, const ui64 txId, const TString& data) {
+        NIceDb::TNiceDb db(txc.DB);
+        NColumnShard::Schema::UpdateTxInfoBody(db, txId, data);
+    }
     bool ExecuteOnCancel(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
     bool CompleteOnCancel(const ui64 txId, const TActorContext& ctx);
 
-    std::optional<TTxInfo> StartPlannedTx();
+    std::optional<TTxInfo> GetFirstPlannedTx() const;
+    std::optional<TTxInfo> PopFirstPlannedTx();
     void FinishPlannedTx(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
     void CompleteRunningTx(const TPlanQueueItem& tx);
 

@@ -57,6 +57,9 @@ public:
     bool AbortTransaction(TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
     void LinkTransaction(const ui64 lockId, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
     std::optional<ui64> GetLockForTx(const ui64 txId) const;
+    ui64 GetLockForTxVerified(const ui64 txId) const {
+        return *TValidator::CheckNotNull(GetLockForTx(txId));
+    }
 
     TWriteOperation::TPtr RegisterOperation(
         const ui64 lockId, const ui64 cookie, const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType);

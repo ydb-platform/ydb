@@ -28,7 +28,7 @@
 #include "engines/changes/ttl.h"
 
 #include "resource_subscriber/counters.h"
-#include "transactions/operators/ev_write.h"
+#include "transactions/operators/ev_write/sync.h"
 
 #include "bg_tasks/adapter/adapter.h"
 #include "bg_tasks/manager/manager.h"
@@ -874,16 +874,6 @@ void TColumnShard::Die(const TActorContext& ctx) {
 void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TActorContext&) {
     ui32 eventType = ev->Get()->SourceType;
     switch (eventType) {
-        case TEvTxProcessing::TEvReadSet::EventType: {
-            auto op = GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteTransactionOperator>(ev->Cookie);
-            op->Send(*this);
-            break;
-        }
-        case TEvTxProcessing::TEvReadSetAsk::EventType: {
-            auto op = GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteTransactionOperator>(ev->Cookie);
-            op->Ask(*this);
-            break;
-        }
         case NOlap::NDataSharing::NEvents::TEvSendDataFromSource::EventType:
         case NOlap::NDataSharing::NEvents::TEvAckDataToSource::EventType:
         case NOlap::NDataSharing::NEvents::TEvApplyLinksModification::EventType:
@@ -895,16 +885,21 @@ void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TAct
     }
 }
 
-void TColumnShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& /*ctx*/) {
-    auto op = GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteTransactionOperator>(ev->Get()->Record.GetTxId());
+void TColumnShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx) {
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "read_set")("proto", ev->Get()->Record.DebugString());
+    auto op = GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSyncTransactionOperator>(ev->Get()->Record.GetTxId());
     NKikimrTx::TReadSetData data;
     AFL_VERIFY(data.ParseFromArray(ev->Get()->Record.GetReadSet().data(), ev->Get()->Record.GetReadSet().size()));
-    op->Receive(*this, ev->Get()->Record.GetTabletSource(), data.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT);
+    auto tx = op->CreateReceiveBrokenFlagTx(
+        *this, ev->Get()->Record.GetTabletProducer(), data.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT);
+    Execute(tx.release(), ctx);
 }
 
-void TColumnShard::Handle(TEvTxProcessing::TEvReadSetAsk::TPtr& ev, const TActorContext& /*ctx*/) {
-    auto op = GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteTransactionOperator>(ev->Get()->Record.GetTxId());
-    op->Send(*this, ev->Get()->Record.GetTabletDest());
+void TColumnShard::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx) {
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "read_set_ack")("proto", ev->Get()->Record.DebugString());
+    auto op = GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSyncTransactionOperator>(ev->Get()->Record.GetTxId());
+    auto tx = op->CreateReceiveResultAckTx(*this, ev->Get()->Record.GetTabletConsumer());
+    Execute(tx.release(), ctx);
 }
 
 void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvProposeFromInitiator::TPtr& ev, const TActorContext& ctx) {

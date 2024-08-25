@@ -205,7 +205,7 @@ class TColumnShard
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvTxProcessing::TEvReadSetAsk::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvCheckPlannedTransaction::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
@@ -220,6 +220,7 @@ class TColumnShard
     void Handle(TEvPrivate::TEvScanStats::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvReadFinished::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx);
+    void Handle(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorContext& ctx);
@@ -349,7 +350,7 @@ protected:
             hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
 
             HFunc(TEvTxProcessing::TEvReadSet, Handle);
-            HFunc(TEvTxProcessing::TEvReadSetAsk, Handle);
+            HFunc(TEvTxProcessing::TEvReadSetAck, Handle);
 
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
@@ -370,6 +371,7 @@ protected:
             HFunc(TEvPrivate::TEvScanStats, Handle);
             HFunc(TEvPrivate::TEvReadFinished, Handle);
             HFunc(TEvPrivate::TEvPeriodicWakeup, Handle);
+            HFunc(NActors::TEvents::TEvWakeup, Handle);
             HFunc(TEvPrivate::TEvPingSnapshotsUsage, Handle);
             
             HFunc(NEvents::TDataEvents::TEvWrite, Handle);
@@ -466,7 +468,7 @@ private:
     NOlap::NResourceBroker::NSubscribe::TTaskContext CompactTaskSubscription;
     NOlap::NResourceBroker::NSubscribe::TTaskContext TTLTaskSubscription;
 
-    bool ProgressTxInFlight = false;
+    std::optional<ui64> ProgressTxInFlight;
     THashMap<ui64, TInstant> ScanTxInFlight;
     THashMap<TWriteId, TLongTxWriteInfo> LongTxWrites;
     using TPartsForLTXShard = THashMap<ui32, TLongTxWriteInfo*>;
@@ -503,7 +505,6 @@ private:
     TWriteId BuildNextWriteId(NTabletFlatExecutor::TTransactionContext& txc);
     TWriteId BuildNextWriteId(NIceDb::TNiceDb& db);
 
-    void EnqueueProgressTx(const TActorContext& ctx);
     void EnqueueBackgroundActivities(const bool periodic = false);
     virtual void Enqueue(STFUNC_SIG) override;
 
@@ -538,6 +539,7 @@ private:
 public:
     ui64 TabletTxCounter = 0;
 
+    void EnqueueProgressTx(const TActorContext& ctx);
     NOlap::TSnapshot GetLastTxSnapshot() const {
         return NOlap::TSnapshot(LastPlannedStep, LastPlannedTxId);
     }

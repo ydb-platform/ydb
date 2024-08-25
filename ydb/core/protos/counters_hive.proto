@@ -94,6 +94,18 @@ enum EPercentileCounters {
         Ranges: { Value: 30000                   }
         Ranges: { Value: 60000                   }
     }];
+
+    COUNTER_TABLET_CHANNEL_HISTORY_SIZE = 3 [(CounterOpts) = {
+        Name: "TabletChannelHistorySize",
+        Ranges: { Value: 1                       }
+        Ranges: { Value: 5                       }
+        Ranges: { Value: 10                      }
+        Ranges: { Value: 25                      }
+        Ranges: { Value: 50                      }
+        Ranges: { Value: 100                     }
+        Ranges: { Value: 150                     }
+        Ranges: { Value: 200                     }
+    }];
 }
 
 enum ETxTypes {

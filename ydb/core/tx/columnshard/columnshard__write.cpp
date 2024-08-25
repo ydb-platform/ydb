@@ -318,13 +318,13 @@ public:
             return TConclusionStatus::Fail("incorrect message type");
         }
         if (!ReceivingShards.size() || !SendingShards.size()) {
-            if (ReceivingShards.size()) {
-                SendingShards = ReceivingShards;
-            } else {
-                ReceivingShards = SendingShards;
-            }
-            //ReceivingShards.clear();
-            //SendingShards.clear();
+            //if (ReceivingShards.size()) {
+            //    SendingShards = ReceivingShards;
+            //} else {
+            //    ReceivingShards = SendingShards;
+            //}
+            ReceivingShards.clear();
+            SendingShards.clear();
         } else {
             if (!ReceivingShards.contains(TabletId) && !SendingShards.contains(TabletId)) {
                 return TConclusionStatus::Fail("shard is incorrect for sending/receiving lists");

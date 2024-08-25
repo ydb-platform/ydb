@@ -172,8 +172,6 @@ private:
     }
 
     void StartSplitting(const TActorContext &ctx) {
-        YQL_ENSURE(PerStatementResult);
-
         const auto prepareSettings = PrepareCompilationSettings(ctx);
         auto result = KqpHost->SplitQuery(QueryRef, prepareSettings);
 
@@ -280,7 +278,6 @@ private:
         IKqpHost::TPrepareSettings prepareSettings;
         prepareSettings.DocumentApiRestricted = QueryId.Settings.DocumentApiRestricted;
         prepareSettings.IsInternalCall = QueryId.Settings.IsInternalCall;
-        prepareSettings.PerStatementResult = PerStatementResult;
 
         switch (QueryId.Settings.Syntax) {
             case Ydb::Query::Syntax::SYNTAX_YQL_V1:

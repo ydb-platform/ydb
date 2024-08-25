@@ -563,7 +563,10 @@ void TTopicSession::InitParser(const NYql::NPq::NProto::TDqPqTopicSource& source
 void TTopicSession::FatalError(const TString& message, const std::unique_ptr<TJsonFilter>* filter) {
 
     TStringStream str;
-    str << message << ", parser sql: " << Parser->GetSql();
+    str << message;
+    if (Parser) {
+        str << ", parser sql: " << Parser->GetSql();
+    }
     if (filter) {
         str << ", filter sql:" << (*filter)->GetSql();
     }

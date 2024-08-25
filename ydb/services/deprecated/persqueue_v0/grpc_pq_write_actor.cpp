@@ -536,7 +536,7 @@ void TWriteSessionActor::CloseSession(const TString& errorReason, const NPersQue
                    "session error cookie: " << Cookie << " reason: \"" << errorReason << "\" code: "
                                             << EErrorCode_Name(errorCode) << " sessionId: " << OwnerCookie);
 
-        Handler->Reply(result);
+        Handler->Reply(std::move(result));
     } else {
         LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session closed cookie: " << Cookie << " sessionId: " << OwnerCookie);
     }
@@ -573,7 +573,7 @@ void TWriteSessionActor::Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev
     LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session inited cookie: " << Cookie << " partition: " << Partition
                             << " MaxSeqNo: " << maxSeqNo << " sessionId: " << OwnerCookie);
 
-    Handler->Reply(response);
+    Handler->Reply(std::move(response));
 
     State = ES_INITED;
 
@@ -682,7 +682,7 @@ void TWriteSessionActor::Handle(NPQ::TEvPartitionWriter::TEvWriteResponse::TPtr&
             addAck(resp.GetCmdWriteResult(cmdWriteResultIndex), ack, ack->MutableStat());
             ++cmdWriteResultIndex;
         }
-        Handler->Reply(result);
+        Handler->Reply(std::move(result));
     }
 
     ui64 diff = writeRequest->ByteSize;

@@ -888,7 +888,7 @@ void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TAct
 void TColumnShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx) {
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "read_set")("proto", ev->Get()->Record.DebugString());
     const ui64 txId = ev->Get()->Record.GetTxId();
-    if (!GetProgressTxController().HasOperator(txId)) {
+    if (!GetProgressTxController().HasOperatorByTxId(txId)) {
         Send(MakePipePerNodeCacheID(false),
             new TEvPipeCache::TEvForward(
                 new TEvTxProcessing::TEvReadSetAck(0, txId, TabletID(), ev->Get()->Record.GetTabletProducer(), TabletID(), 0),

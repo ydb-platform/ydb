@@ -160,6 +160,7 @@ void TWriteSessionActor::CheckFinish(const TActorContext& ctx) {
 }
 
 void TWriteSessionActor::Handle(TEvPQProxy::TEvDone::TPtr&, const TActorContext& ctx) {
+    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session cookie: " << Cookie << " sessionId: " << OwnerCookie << " got TEvDone");
     WritesDone = true;
     CheckFinish(ctx);
 }
@@ -339,7 +340,7 @@ void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActo
             errorReason = Sprintf("topic '%s' describe error, Status# %s, Marker# PQ1", path.back().c_str(),
                                   ToString(entry.Status).c_str());
             CloseSession(errorReason, NPersQueue::NErrorCode::ERROR, ctx);
-            break;
+            return;
         }
     }
     if (!entry.PQGroupInfo) {

@@ -421,6 +421,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
     IDqAsyncIoFactory::TInputTransformArguments&& args //TODO expand me
 )
 {
+    Y_ENSURE(false);
     const auto narrowInputRowType = DeserializeStructType(settings.GetNarrowInputRowType(), args.TypeEnv);
     const auto narrowOutputRowType = DeserializeStructType(settings.GetNarrowOutputRowType(), args.TypeEnv);
 

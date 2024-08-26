@@ -295,7 +295,7 @@ TCpuConsumption TPoolInfo::PullStats(ui64 ts) {
     }
     TVector<TExecutorThreadStats> sharedStats;
     if (Shared) {
-        Shared->GetSharedStatsForHarmonizer(Pool->PoolId, sharedStats);
+        Shared->GetSharedStats(Pool->PoolId, sharedStats);
     }
 
     for (ui32 sharedIdx = 0; sharedIdx < SharedInfo.size(); ++sharedIdx) {

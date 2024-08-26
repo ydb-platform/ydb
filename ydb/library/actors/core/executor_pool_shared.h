@@ -37,7 +37,6 @@ namespace NActors {
 
         TSharedExecutorThreadCtx *GetSharedThread(i16 poolId);
         void GetSharedStats(i16 pool, std::vector<TExecutorThreadStats>& statsCopy);
-        void GetSharedStatsForHarmonizer(i16 pool, std::vector<TExecutorThreadStats>& statsCopy);
         TCpuConsumption GetThreadCpuConsumption(i16 poolId, i16 threadIdx);
         std::vector<TCpuConsumption> GetThreadsCpuConsumption(i16 poolId);
 

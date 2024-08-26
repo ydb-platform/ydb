@@ -149,19 +149,12 @@ void TSharedExecutorPool::GetSharedStats(i16 poolId, std::vector<TExecutorThread
     }
 }
 
-void TSharedExecutorPool::GetSharedStatsForHarmonizer(i16 poolId, std::vector<TExecutorThreadStats>& statsCopy) {
-    statsCopy.resize(SharedThreadCount + 1);
-    for (i16 i = 0; i < SharedThreadCount; ++i) {
-        Threads[i].Thread->GetSharedStatsForHarmonizer(poolId, statsCopy[i + 1]);
-    }
-}
-
 TCpuConsumption TSharedExecutorPool::GetThreadCpuConsumption(i16 poolId, i16 threadIdx) {
     if (threadIdx >= SharedThreadCount) {
         return {0.0, 0.0};
     }
     TExecutorThreadStats stats;
-    Threads[threadIdx].Thread->GetSharedStatsForHarmonizer(poolId, stats);
+    Threads[threadIdx].Thread->GetSharedStats(poolId, stats);
     return {Ts2Us(stats.SafeElapsedTicks), static_cast<double>(stats.CpuUs), stats.NotEnoughCpuExecutions};
 }
 

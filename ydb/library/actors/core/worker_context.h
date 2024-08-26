@@ -137,7 +137,7 @@ namespace NActors {
         }
 
         i64 AddEventProcessingStats(i64 deliveredTs, i64 processedTs, ui32 activityType, ui64 scheduled) {
-            i64 elapsed = Max<i64>(0, processedTs - deliveredTs);
+            i64 elapsed = processedTs - deliveredTs;
             ui64 usecElapsed = NHPTimer::GetSeconds(elapsed) * 1000000;
             activityType = (activityType >= Stats->MaxActivityType()) ? 0 : activityType;
             Stats->EventProcessingCountHistogram.Add(usecElapsed);

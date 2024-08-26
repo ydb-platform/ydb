@@ -659,6 +659,11 @@ private:
             return;
         }
 
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "Handle TEvStatistics::TEvGetStatistics, request id = " << requestId 
+            << ", ReplyToActorId = " << request.ReplyToActorId
+            << ", StatRequests.size() = " << request.StatRequests.size());
+
         if (request.StatType == EStatType::COUNT_MIN_SKETCH) {
             request.StatResponses.reserve(request.StatRequests.size());
             ui32 reqIndex = 0;
@@ -693,6 +698,9 @@ private:
         std::unique_ptr<TNavigate> navigate(ev->Get()->Request.Release());
 
         auto cookie = navigate->Cookie;
+
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult, request id = " << cookie);           
 
         if (cookie == ResolveSACookie) {
             Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
@@ -1113,7 +1121,9 @@ private:
         auto& request = itRequest->second;
 
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "ReplySuccess(), request id = " << requestId);
+            "ReplySuccess(), request id = " << requestId 
+            << ", ReplyToActorId = " << request.ReplyToActorId
+            << ", StatRequests.size() = " << request.StatRequests.size());
 
         auto itStatistics = Statistics.find(request.SchemeShardId);
         if (itStatistics == Statistics.end()) {

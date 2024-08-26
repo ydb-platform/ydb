@@ -61,19 +61,38 @@ App code snippet for driver initialization:
 
 {% endlist %}
 
+App code snippet for session pool initialization:
+
+- Synchronous
+
+   ```python
+   with ydb.QuerySessionPool(driver) as pool:
+       pass  # operations with pool here
+   ```
+
+- Asynchronous
+
+   ```python
+   async with ydb.aio.QuerySessionPoolAsync(driver) as pool:
+       pass  # operations with pool here
+   ```
+
+{% endlist %}
+
 ## Executing queries
 
-The {{ ydb-short-name }} Python SDK provides two primary methods for executing queries, each with different properties and use cases:
+{{ ydb-short-name }} Python SDK supports queries described by YQL syntax.
+There are two primary methods for executing queries, each with different properties and use cases:
 
 * `pool.execute_with_retries`:
   * Buffers the entire result set in client memory.
   * Automatically retries execution in case of retriable issues.
   * Does not allow specifying a transaction execution mode.
   * Recommended for one-off queries that are expected to produce small result sets.
-  
+
 * `tx.execute`:
   * Returns an iterator over the query results, allowing processing of results that may not fit into client memory.
-  * Retries must be handled manually.
+  * Retries must be handled manually via `pool.retry_operation_sync`.
   * Allows specifying a transaction execution mode.
   * Recommended for scenarios where `pool.execute_with_retries` is insufficient.
 
@@ -177,7 +196,6 @@ To execute `CREATE TABLE` queries, use the `pool.execute_with_retries()` method:
 
 {% endlist %}
 
-
 {% include [steps/03_write_queries.md](../_includes/steps/03_write_queries.md) %}
 
 Code snippet for data insert/update:
@@ -274,7 +292,7 @@ To execute YQL queries, the `pool.execute_with_retries()` method is often suffic
 
 {% endlist %}
 
-As the result of executing the query, a `result_set` is returned, iterating on which the text is output to the console:
+As the result of executing the query, a list of `result_set` is returned, iterating on which the text is output to the console:
 
 ```bash
 > SelectSimple:
@@ -285,9 +303,9 @@ series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 
 For parameterized query execution, `pool.execute_with_retries()` and `tx.execute()` behave similarly. To execute parameterized queries, you need to pass a dictionary with parameters to one of these functions, where each key is the parameter name, and the value can be one of the following:
 
-1. A value of a basic Python type  
-2. A tuple containing the value and its type  
-3. A special type, `ydb.TypedValue(value=value, value_type=value_type)`  
+1. A value of a basic Python type
+2. A tuple containing the value and its type
+3. A special type, `ydb.TypedValue(value=value, value_type=value_type)`
 
 If you specify a value without an explicit type, the conversion takes place according to the following rules:
 
@@ -303,7 +321,7 @@ If you specify a value without an explicit type, the conversion takes place acco
 
 {% note warning %}
 
-Automatic conversion of lists and dictionaries is possible only if the structures are homogeneous. The type of nested values will be determined recursively according to the rules explained above.
+Automatic conversion of lists and dictionaries is possible only if the structures are homogeneous. The type of nested values will be determined recursively according to the rules explained above. In case of using heterogeneous structures, requests will raise `TypeError`.
 
 {% endnote %}
 
@@ -394,7 +412,7 @@ Available transaction modes:
 
 For more information about transaction modes, see [{#T}](../../../concepts/transactions.md#modes).
 
-The result of executing `tx.execute()` is an iterator. This iterator allows you to read result rows without loading the entire result set into memory. However, the iterator must be read to the end after each request to correctly maintain the transaction state on the {{ ydb-short-name }} server side. For convenience, the result of the `tx.execute()` function can be used as a context manager that automatically iterates to the end upon exit.
+The result of executing `tx.execute()` is an iterator. This iterator allows you to read result rows without loading the entire result set into memory. However, the iterator must be read to the end after each request to correctly maintain the transaction state on the {{ ydb-short-name }} server side. If this is not done, write queries could not be applied on the {{ ydb-short-name }} server side. For convenience, the result of the `tx.execute()` function can be used as a context manager that automatically iterates to the end upon exit.
 
 {% list tabs %}
 
@@ -414,7 +432,7 @@ The result of executing `tx.execute()` is an iterator. This iterator allows you 
 
 {% endlist %}
 
-The code snippet below demonstrates the explicit use of `transaction().begin()` and `tx.commit()` with the transaction mode set to `ydb.QuerySerializableReadWrite()`:
+The code snippet below demonstrates the explicit use of `transaction().begin()` and `tx.commit()`:
 
 {% list tabs %}
 
@@ -434,7 +452,7 @@ The code snippet below demonstrates the explicit use of `transaction().begin()` 
            """
 
            # Get newly created transaction id
-           tx = session.transaction(ydb.QuerySerializableReadWrite()).begin()
+           tx = session.transaction().begin()
 
            # Execute data query.
            # Transaction control settings continues active transaction (tx)
@@ -474,7 +492,7 @@ The code snippet below demonstrates the explicit use of `transaction().begin()` 
            """
 
            # Get newly created transaction id
-           tx = await session.transaction(ydb.QuerySerializableReadWrite()).begin()
+           tx = await session.transaction().begin()
 
            # Execute data query.
            # Transaction control settings continues active transaction (tx)
@@ -515,7 +533,7 @@ Example of a `SELECT` with unlimited data and implicit transaction control:
        def callee(session: ydb.QuerySessionSync):
            query = """SELECT * from episodes;"""
 
-           with session.transaction().execute(
+           with session.transaction(ydb.QuerySnapshotReadOnly()).execute(
                query,
                commit_tx=True,
            ) as result_sets:
@@ -534,7 +552,7 @@ Example of a `SELECT` with unlimited data and implicit transaction control:
        async def callee(session: ydb.aio.QuerySessionAsync):
            query = """SELECT * from episodes;"""
 
-           async with await session.transaction().execute(
+           async with await session.transaction(ydb.QuerySnapshotReadOnly()).execute(
                query,
                commit_tx=True,
            ) as result_sets:

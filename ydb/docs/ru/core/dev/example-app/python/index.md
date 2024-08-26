@@ -59,11 +59,44 @@ python3 -m pip install iso8601
                exit(1)
    ```
 
+Фрагмент кода приложения для создания пуля сессий:
+
+- Синхронный
+
+   ```python
+   with ydb.QuerySessionPool(driver) as pool:
+       pass  # operations with pool here
+   ```
+
+- Асинхронный
+
+   ```python
+   async with ydb.aio.QuerySessionPoolAsync(driver) as pool:
+       pass  # operations with pool here
+   ```
+
 {% endlist %}
+
+## Выполнение запросов
+
+{{ ydb-short-name }} Python SDK поддерживает выполнение запросов с использованием синтаксиса YQL.
+Существует два основных метода для выполнения запросов, которые имеют различные свойства и области применения:
+
+* `pool.execute_with_retries`:
+  * Буферизует весь результат в памяти клиента.
+  * Автоматически перезапускает выполнение в случае ошибок, которые можно устранить перезапуском.
+  * Не позволяет указать режим выполнения транзакции.
+  * Рекомендуется для разовых запросов, которые возвращают небольшой по размеру результат.
+
+* `tx.execute`:
+  * Возвращает итератор над результатом запроса, что позволяет обработать результат, который может не поместиться в памяти клиента.
+  * Перезапуски в случае ошибок должны обрабатываться вручную с помощью `pool.retry_operation_sync`.
+  * Позволяет указать режим выполнения транзакции.
+  * Рекомендуется для сценариев, где `pool.execute_with_retries` неэффективен.
 
 {% include [create_table.md](../_includes/steps/02_create_table.md) %}
 
-Для выполнения YQL запросов используется метод `pool.execute_with_retries()`. Например, можно создать строковые таблицы:
+Для выполнения запросов `CREATE TABLE` стоит использовать метод `pool.execute_with_retries()`:
 
 {% list tabs %}
 
@@ -120,7 +153,7 @@ python3 -m pip install iso8601
        print("\nCreating table series...")
        await pool.execute_with_retries(
            """
-           CREATE table `series` (
+           CREATE TABLE `series` (
                `series_id` Int64,
                `title` Utf8,
                `series_info` Utf8,
@@ -133,7 +166,7 @@ python3 -m pip install iso8601
        print("\nCreating table seasons...")
        await pool.execute_with_retries(
            """
-           CREATE table `seasons` (
+           CREATE TABLE `seasons` (
                `series_id` Int64,
                `season_id` Int64,
                `title` Utf8,
@@ -147,7 +180,7 @@ python3 -m pip install iso8601
        print("\nCreating table episodes...")
        await pool.execute_with_retries(
            """
-           CREATE table `episodes` (
+           CREATE TABLE `episodes` (
                `series_id` Int64,
                `season_id` Int64,
                `episode_id` Int64,
@@ -160,8 +193,6 @@ python3 -m pip install iso8601
    ```
 
 {% endlist %}
-
-Функция `pool.execute_with_retries(query)`, в отличие от `tx.execute()`, загружает в память результат запроса перед его возвращением клиенту. Благодаря этому отпадает необходимость использования специальных конструкций для контроля над итератором, однако необходимо с осторожностью применять этот метод для больших запросов `SELECT`. Подробнее о стримах будет сказано ниже.
 
 {% include [steps/03_write_queries.md](../_includes/steps/03_write_queries.md) %}
 
@@ -197,7 +228,7 @@ python3 -m pip install iso8601
 
 {% include [steps/04_query_processing.md](../_includes/steps/04_query_processing.md) %}
 
-Для выполнения YQL-запросов чаще всего достаточно использования уже знакомого метода `pool.execute_with_retries()`.
+Для выполнения YQL-запросов метод часто эффективен метод `pool.execute_with_retries()`.
 
 {% list tabs %}
 
@@ -259,7 +290,7 @@ python3 -m pip install iso8601
 
 {% endlist %}
 
-В качестве результата выполнения запроса возвращается `result_set`, итерирование по которому выводит на консоль текст:
+В качестве результата выполнения запроса возвращается список из `result_set`, итерирование по которым выводит на консоль текст:
 
 ```bash
 > SelectSimple:
@@ -268,21 +299,27 @@ series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 
 ## Параметризованные запросы {#param-queries}
 
-Для выполнения параметризованных запросов в метод `pool.execute_with_retries()` (или `tx.execute()`, работа с которым будет показана в следующей секции) необходимо передать словарь с параметрами специального вида, где ключом служит имя параметра, а значение может быть одним из следующих:
-1. Обычное значение;
-2. Кортеж со значением и типом;
-3. Специальный тип `ydb.TypedValue(value=value, value_type=value_type)`.
+Для выполнения параметризованных запросов методы `pool.execute_with_retries()` и `tx.execute()` работают схожим образом - необходимо передать словарь с параметрами специального вида, где ключом служит имя параметра, а значение может быть одним из следующих:
+
+1. Обычное значение
+2. Кортеж со значением и типом
+3. Специальный тип `ydb.TypedValue(value=value, value_type=value_type)`
 
 В случае указания значения без типа, конвертация происходит по следующим правилам:
-* `int` -> `ydb.PrimitiveType.Int64`
-* `float` -> `ydb.PrimitiveType.Double`
-* `str` -> `ydb.PrimitiveType.Utf8`
-* `bytes` -> `ydb.PrimitiveType.String`
-* `bool` -> `ydb.PrimitiveType.Bool`
-* `list` -> `ydb.ListType`
-* `dict` -> `ydb.DictType`
 
-Автоматическая конвертация списков и словарей возможна только в случае однородных структур, тип вложенного значения будет вычисляться рекурсивно по вышеупомянутым правилам.
+| Python type | {{ ydb-short-name }} type                     |
+|------------|------------------------------|
+| `int`      | `ydb.PrimitiveType.Int64`    |
+| `float`    | `ydb.PrimitiveType.Double`   |
+| `str`      | `ydb.PrimitiveType.Utf8`     |
+| `bytes`    | `ydb.PrimitiveType.String`   |
+| `bool`     | `ydb.PrimitiveType.Bool`     |
+| `list`     | `ydb.ListType`               |
+| `dict`     | `ydb.DictType`               |
+
+{% note warning %}
+
+Автоматическая конвертация списков и словарей возможна только в случае однородных структур. Тип вложенного значения будет вычисляться рекурсивно по вышеупомянутым правилам. В случае использования неоднородной структуры запросы будут падать с ошибкой типа `TypeError`.
 
 Фрагмент кода, демонстрирующий возможность использования параметризованных запросов:
 
@@ -306,8 +343,8 @@ series, Id: 1, title: IT Crowd, Release date: 2006-02-03
            """,
            {
                "$seriesId": series_id,  # data type could be defined implicitly
-               "$seasonId": (season_id, ydb.PrimitiveType.Int64),  # could be defined via tuple
-               "$episodeId": ydb.TypedValue(episode_id, ydb.PrimitiveType.Int64),  # could be defined via special class
+               "$seasonId": (season_id, ydb.PrimitiveType.Int64),  # could be defined via a tuple
+               "$episodeId": ydb.TypedValue(episode_id, ydb.PrimitiveType.Int64),  # could be defined via a special class
            },
        )
 
@@ -336,9 +373,9 @@ series, Id: 1, title: IT Crowd, Release date: 2006-02-03
            WHERE series_id = $seriesId AND season_id = $seasonId AND episode_id = $episodeId;
            """,
            {
-               "$seriesId": series_id,  # could be defined implicit
-               "$seasonId": (season_id, ydb.PrimitiveType.Int64),  # could be defined via tuple
-               "$episodeId": ydb.TypedValue(episode_id, ydb.PrimitiveType.Int64),  # could be defined via special class
+               "$seriesId": series_id,  # could be defined implicitly
+               "$seasonId": (season_id, ydb.PrimitiveType.Int64),  # could be defined via a tuple
+               "$episodeId": ydb.TypedValue(episode_id, ydb.PrimitiveType.Int64),  # could be defined via a special class
            },
        )
 
@@ -352,7 +389,7 @@ series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 
 {% endlist %}
 
-Приведенный фрагмент кода при запуске выводит на консоль текст:
+Фрагмент кода выше при запуске выводит на консоль текст:
 
 ```bash
 > select_prepared_transaction:
@@ -362,8 +399,7 @@ series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 
 {% include [transaction_control.md](../_includes/steps/10_transaction_control.md) %}
 
-Для выполнения YQL-запросов также может использоваться метод `session.transaction().execute()`.
-Данный способ, в отличие от `pool.execute_with_retries` позволяет в явном виде контролировать выполнение транзакций и настраивать необходимый режим выполнения транзакций с помощью класса `TxControl`.
+Метод `session.transaction().execute()` так же может быть использован для выполнения YQL запросов. В отличие от `pool.execute_with_retries`, данный метод позволяет в явном виде контролировать выполнение транзакций и настраивать необходимый режим выполнения транзакций с помощью класса `TxControl`.
 
 Доступные режимы транзакции:
 * `ydb.QuerySerializableReadWrite()` (по умолчанию);
@@ -371,11 +407,9 @@ series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 * `ydb.QuerySnapshotReadOnly()`;
 * `ydb.QueryStaleReadOnly()`.
 
-Подробнее про режимы транзакций описано в [документации YDB](https://ydb.tech/docs/ru/concepts/transactions#modes).
+Подробнее про режимы транзакций описано в [{#T}](../../../concepts/transactions.md#modes).
 
-Результатом выполнения `tx.execute()` является итератор. Итератор позволяет считать неограниченное количество строк и объем данных, не загружая в память весь результат.
-Однако, для корректного сохранения состояния транзакции на стороне `ydb` итератор необходимо прочитывать до конца после каждого запроса.
-Для удобства результат функции `tx.execute()` представлен в виде контекстного менеджера, который долистывает итератор до конца после выхода.
+Результатом выполнения `tx.execute()` является итератор. Итератор позволяет считать неограниченное количество строк и объем данных, не загружая в память весь результат. Однако, для корректного сохранения состояния транзакции на стороне {{ ydb-short-name }} итератор необходимо прочитывать до конца после каждого запроса. Если этого не сделать, пишущие запросы могут не выполниться на стороне {{ ydb-short-name }}. Для удобства результат функции `tx.execute()` представлен в виде контекстного менеджера, который долистывает итератор до конца после выхода.
 
 {% list tabs %}
 
@@ -394,9 +428,6 @@ series, Id: 1, title: IT Crowd, Release date: 2006-02-03
    ```
 
 {% endlist %}
-
-В фрагменте кода, приведенном ниже, транзакция выполняется с помощью метода `transaction().execute()`. Устанавливается режим выполнения транзакции `ydb.QuerySerializableReadWrite()`.
-Тело запроса описано с помощью синтаксиса YQL и как параметр передается методу `execute`.
 
 Фрагмент кода, демонстрирующий явное использование вызовов `transaction().begin()` и `tx.commit()`:
 
@@ -418,7 +449,7 @@ series, Id: 1, title: IT Crowd, Release date: 2006-02-03
            """
 
            # Get newly created transaction id
-           tx = session.transaction(ydb.QuerySerializableReadWrite()).begin()
+           tx = session.transaction().begin()
 
            # Execute data query.
            # Transaction control settings continues active transaction (tx)
@@ -458,7 +489,7 @@ series, Id: 1, title: IT Crowd, Release date: 2006-02-03
            """
 
            # Get newly created transaction id
-           tx = await session.transaction(ydb.QuerySerializableReadWrite()).begin()
+           tx = await session.transaction().begin()
 
            # Execute data query.
            # Transaction control settings continues active transaction (tx)
@@ -485,9 +516,9 @@ series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 Однако стоит помнить, что транзакция может быть открыта неявно при первом запросе. Завершиться же она может автоматически с явным указанием флага `commit_tx=True`.
 Неявное управление транзакцией предпочтительно, так как требует меньше обращений к серверу. Пример неявного управления будет продемонстрирован в следующем блоке.
 
-## Чтение неограниченной выборки {#huge-selects}
+## Итерирование по результатам запроса {#iterating}
 
-Для выполнения операций `SELECT` с неограниченным количеством найденных строк нужно также использовать метод `transaction().execute(query)`. Как было сказано выше, результатом работы является итератор - он, в отличие от `pool.execute_with_retries(query)`, позволяет пройтись по выборке не загружая ее предварительно в память.
+Если ожидается, что результат `SELECT` запроса будет иметь потенциально большое количество найденных строк, рекомендуется использовать метод `tx.execute` вместо `pool.execute_with_retries` для избежания чрезмерного потребления памяти на стороне клиента.
 
 Пример `SELECT` с неограниченным количеством данных и неявным контролем транзакции:
 
@@ -500,7 +531,7 @@ series, Id: 1, title: IT Crowd, Release date: 2006-02-03
        def callee(session: ydb.QuerySessionSync):
            query = """SELECT * from episodes;"""
 
-           with session.transaction().execute(
+           with session.transaction(ydb.QuerySnapshotReadOnly()).execute(
                query,
                commit_tx=True,
            ) as result_sets:
@@ -519,7 +550,7 @@ series, Id: 1, title: IT Crowd, Release date: 2006-02-03
        async def callee(session: ydb.aio.QuerySessionAsync):
            query = """SELECT * from episodes;"""
 
-           async with await session.transaction().execute(
+           async with await session.transaction(ydb.QuerySnapshotReadOnly()).execute(
                query,
                commit_tx=True,
            ) as result_sets:

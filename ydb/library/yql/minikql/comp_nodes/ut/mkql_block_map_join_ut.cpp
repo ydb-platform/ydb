@@ -129,14 +129,14 @@ TArrays<TKSV> KSVToArrays(const TVector<TKSV>& ksvVector, size_t current,
 
 template <typename TupleType>
 TVector<TupleType> ArraysToTuples(const TArrays<TupleType>& arrays,
-    const int64_t blockSize
+    const int64_t blockSize, bool maybeNull = false
 ) {
     TVector<TupleType> tuplesVector;
     for (size_t i = 0; i < std::tuple_size_v<TupleType>; i++) {
         Y_ENSURE(arrays[i]->length == blockSize,
             "Array size differs from the given block size");
-        Y_ENSURE(arrays[i]->GetNullCount() == 0,
-            "Null values conversion is not supported");
+        Y_ENSURE(maybeNull || arrays[i]->GetNullCount() == 0,
+            "Null values allowed only for Left join kind.");
         Y_ENSURE(arrays[i]->buffers.size() == 2 + (i > 1),
             "Array layout doesn't respect the schema");
     }
@@ -144,19 +144,29 @@ TVector<TupleType> ArraysToTuples(const TArrays<TupleType>& arrays,
     const ui64* subkeyBuffer = arrays[1]->template GetValuesSafe<ui64>(1);
     const int32_t* leftOffsets = arrays[2]->template GetValuesSafe<int32_t>(1);
     const char* leftValuesBuffer = arrays[2]->template GetValuesSafe<char>(2, 0);
+    TVector<ui8> rightNulls;
     const int32_t* rightOffsets = nullptr;
     const char* rightValuesBuffer = nullptr;
     if constexpr (std::is_same_v<TupleType, TKSW>) {
+        if (maybeNull) {
+            rightNulls.resize(blockSize);
+            DecompressToSparseBitmap(rightNulls.data(), arrays[3]->buffers[0]->data(),
+                                     arrays[3]->offset, arrays[3]->length);
+        }
         rightOffsets = arrays[3]->template GetValuesSafe<int32_t>(1);
         rightValuesBuffer = arrays[3]->template GetValuesSafe<char>(2, 0);
     }
     for (auto i = 0; i < blockSize; i++) {
         const TStringBuf leftValue(leftValuesBuffer + leftOffsets[i], leftOffsets[i + 1] - leftOffsets[i]);
-        if constexpr (std::is_same_v<TupleType, TKSV>) {
-            tuplesVector.push_back(std::make_tuple(keyBuffer[i], subkeyBuffer[i], leftValue));
-        } else {
+        if constexpr (std::is_same_v<TupleType, TKSW>) {
+            if (!rightNulls.empty() && rightNulls[i] == 0) {
+                tuplesVector.push_back(std::make_tuple(keyBuffer[i], subkeyBuffer[i], leftValue, std::nullopt));
+                continue;
+            }
             const TStringBuf rightValue(rightValuesBuffer + rightOffsets[i], rightOffsets[i + 1] - rightOffsets[i]);
             tuplesVector.push_back(std::make_tuple(keyBuffer[i], subkeyBuffer[i], leftValue, rightValue));
+        } else {
+            tuplesVector.push_back(std::make_tuple(keyBuffer[i], subkeyBuffer[i], leftValue));
         }
     }
     return tuplesVector;

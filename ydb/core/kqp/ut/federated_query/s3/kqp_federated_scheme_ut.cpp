@@ -216,6 +216,28 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
         };
         TestInvalidDropForExternalTableWithAuth(queryClientExecutor, "generic_query");
     }
+
+    Y_UNIT_TEST(ExternalTableDdlLocationValidation) {
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto db = kikimr->GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto query = TStringBuilder() << R"(
+            CREATE EXTERNAL DATA SOURCE `/Root/ExternalDataSource` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="my-bucket",
+                AUTH_METHOD="NONE"
+            );
+            CREATE EXTERNAL TABLE `/Root/ExternalTable` (
+                Key Uint64,
+                Value String
+            ) WITH (
+                DATA_SOURCE="/Root/ExternalDataSource",
+                LOCATION="{"
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Location '{' contains invalid wildcard:");
+    }
 }
 
 } // namespace NKikimr::NKqp

@@ -5000,7 +5000,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 month Int64 NOT NULL
             ) WITH (
                 DATA_SOURCE=")" << externalDataSourceName << R"(",
-                LOCATION="/folder1/*",
+                LOCATION="/folder1/",
                 FORMAT="json_as_string",
                 `projection.enabled`="true",
                 `projection.year.type`="integer",
@@ -5025,7 +5025,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT(externalTable.ExternalTableInfo);
         UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.ColumnsSize(), 4);
         UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.GetDataSourcePath(), externalDataSourceName);
-        UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.GetLocation(), "/folder1/*");
+        UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.GetLocation(), "/folder1/");
     }
 
     Y_UNIT_TEST(CreateExternalTableWithUpperCaseSettings) {
@@ -5048,7 +5048,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 Month Int64 NOT NULL
             ) WITH (
                 DATA_SOURCE=")" << externalDataSourceName << R"(",
-                LOCATION="/folder1/*",
+                LOCATION="/folder1/",
                 FORMAT="json_as_string",
                 `projection.enabled`="true",
                 `projection.Year.type`="integer",
@@ -5073,7 +5073,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT(externalTable.ExternalTableInfo);
         UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.ColumnsSize(), 4);
         UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.GetDataSourcePath(), externalDataSourceName);
-        UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.GetLocation(), "/folder1/*");
+        UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.GetLocation(), "/folder1/");
     }
 
     Y_UNIT_TEST(DoubleCreateExternalTable) {

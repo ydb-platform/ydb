@@ -152,7 +152,6 @@ public:
         }
 
         auto rowSchema = topic.RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
-        YQL_CLOG(DEBUG, ProviderGeneric) << "struct column order " << rowSchema->ToString();
 
         const TStatus filterAnnotationStatus = NYql::NPushdown::AnnotateFilterPredicate(input.Ptr(), TDqPqTopicSource::idx_FilterPredicate, rowSchema, ctx);
         if (filterAnnotationStatus != TStatus::Ok) {

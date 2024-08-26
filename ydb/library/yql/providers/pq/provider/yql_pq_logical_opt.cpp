@@ -136,7 +136,7 @@ public:
       //  AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembers));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqWrap));
         AddHandler(0, &TCoFlatMap::Match, HNDL(PushFilterToPqTopicSource));
-        AddHandler(0, &TCoFlatMap::Match, HNDL(PushFilterToPqTopicSource2));
+        //AddHandler(0, &TCoFlatMap::Match, HNDL(PushFilterToPqTopicSource2));
 
         #undef HNDL
     }
@@ -225,7 +225,6 @@ public:
     }
 
     TMaybeNode<TExprBase> PushFilterToPqTopicSource(TExprBase node, TExprContext& ctx) const {
-        YQL_CLOG(INFO, ProviderPq) << "PushFilterToReadTable0 ";
         auto flatmap = node.Cast<TCoFlatMap>();
         auto maybeExtractMembers = flatmap.Input().Maybe<TCoExtractMembers>();
         if (!maybeExtractMembers) {
@@ -242,8 +241,6 @@ public:
             return node;
         }
         TDqPqTopicSource dqPqTopicSource = maybeDqPqTopicSource.Cast();
-        YQL_CLOG(INFO, ProviderPq) << "PushFilterToReadTable0 found!";
-
         if (!IsEmptyFilterPredicate(dqPqTopicSource.FilterPredicate())) {
             YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
             return node;
@@ -256,7 +253,7 @@ public:
         }
 
         return Build<TCoFlatMap>(ctx, flatmap.Pos())
-            .InitFrom(flatmap) // Leave existing filter in flatmap for the case of not applying predicate in connector
+            .InitFrom(flatmap)
             .Input<TCoExtractMembers>()
                 .InitFrom(maybeExtractMembers.Cast())
                 .Input<TDqSourceWrap>()
@@ -270,45 +267,45 @@ public:
             .Done();
     }
 
-    TMaybeNode<TExprBase> PushFilterToPqTopicSource2(TExprBase node, TExprContext& ctx) const {
-        YQL_CLOG(INFO, ProviderPq) << "PushFilterToReadTable2 ";
-        auto flatmap = node.Cast<TCoFlatMap>();
+    // TMaybeNode<TExprBase> PushFilterToPqTopicSource2(TExprBase node, TExprContext& ctx) const {
+    //     YQL_CLOG(INFO, ProviderPq) << "PushFilterToReadTable2 ";
+    //     auto flatmap = node.Cast<TCoFlatMap>();
 
-        auto maybeDqSourceWrap = flatmap.Input().Maybe<TDqSourceWrap>();
-        if (!maybeDqSourceWrap) {
-            return node;
-        }
-        TDqSourceWrap dqSourceWrap = maybeDqSourceWrap.Cast();
-        auto maybeDqPqTopicSource = dqSourceWrap.Input().Maybe<TDqPqTopicSource>();
-        if (!maybeDqPqTopicSource) {
-            return node;
-        }
-        TDqPqTopicSource dqPqTopicSource = maybeDqPqTopicSource.Cast();
-        YQL_CLOG(INFO, ProviderPq) << "PushFilterToReadTable0 found!";
+    //     auto maybeDqSourceWrap = flatmap.Input().Maybe<TDqSourceWrap>();
+    //     if (!maybeDqSourceWrap) {
+    //         return node;
+    //     }
+    //     TDqSourceWrap dqSourceWrap = maybeDqSourceWrap.Cast();
+    //     auto maybeDqPqTopicSource = dqSourceWrap.Input().Maybe<TDqPqTopicSource>();
+    //     if (!maybeDqPqTopicSource) {
+    //         return node;
+    //     }
+    //     TDqPqTopicSource dqPqTopicSource = maybeDqPqTopicSource.Cast();
+    //     YQL_CLOG(INFO, ProviderPq) << "PushFilterToReadTable0 found!";
 
-        if (!IsEmptyFilterPredicate(dqPqTopicSource.FilterPredicate())) {
-            YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
-            return node;
-        }
+    //     if (!IsEmptyFilterPredicate(dqPqTopicSource.FilterPredicate())) {
+    //         YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
+    //         return node;
+    //     }
         
-        auto newFilterLambda = NPushdown::MakePushdownPredicate(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
-        if (!newFilterLambda) {
-            YQL_CLOG(TRACE, ProviderPq) << "MakePushdownPredicate failed";
-            ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "No predicate to pushdown"));
-            return node;
-        }
+    //     auto newFilterLambda = NPushdown::MakePushdownPredicate(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
+    //     if (!newFilterLambda) {
+    //         YQL_CLOG(TRACE, ProviderPq) << "MakePushdownPredicate failed";
+    //         ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "No predicate to pushdown"));
+    //         return node;
+    //     }
 
-        return Build<TCoFlatMap>(ctx, flatmap.Pos())
-            .InitFrom(flatmap) // Leave existing filter in flatmap for the case of not applying predicate in connector
-            .Input<TDqSourceWrap>()
-                .InitFrom(dqSourceWrap)
-                .Input<TDqPqTopicSource>()
-                    .InitFrom(dqPqTopicSource)
-                    .FilterPredicate(newFilterLambda.Cast())
-                    .Build()
-                .Build()
-            .Done();
-    }
+    //     return Build<TCoFlatMap>(ctx, flatmap.Pos())
+    //         .InitFrom(flatmap) // Leave existing filter in flatmap for the case of not applying predicate in connector
+    //         .Input<TDqSourceWrap>()
+    //             .InitFrom(dqSourceWrap)
+    //             .Input<TDqPqTopicSource>()
+    //                 .InitFrom(dqPqTopicSource)
+    //                 .FilterPredicate(newFilterLambda.Cast())
+    //                 .Build()
+    //             .Build()
+    //         .Done();
+    // }
 
 private:
     TPqState::TPtr State_;

@@ -123,27 +123,6 @@ public:
                 .Done());
 
             const auto token = "cluster:default_" + clusterName;
-            // auto columns = pqReadTopic.Columns().Ptr();
-            // if (!columns->IsList()) {
-            //     const auto pos = columns->Pos();
-            //     const auto& items = rowType->GetItems();
-            //     TExprNode::TListType cols;
-            //     cols.reserve(items.size());
-            //     std::transform(items.cbegin(), items.cend(), std::back_inserter(cols),
-            //         [&](const TItemExprType* item) {
-            //             const TTypeAnnotationNode* type =  item->GetItemType();
-            //             YQL_CLOG(DEBUG, ProviderPq) << "type type " << FormatType(type);
-            //             return ctx.NewAtom(pos, item->GetName());
-            //         });
-            //     columns = ctx.NewList(pos, std::move(cols));
-            // }
-
-            // const auto& typeItems = rowType->GetItems();
-            // YQL_CLOG(DEBUG, ProviderPq) << "size " << items.size();
-            // for (const auto item : items) {
-            //     const TTypeAnnotationNode* type =  item->GetItemType();
-            //     YQL_CLOG(DEBUG, ProviderPq) << item->GetName() << ": " << "type type2 " << FormatType(type);
-            // }
 
             auto rowSchema = pqReadTopic.Topic().RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
             TExprNode::TListType colTypes;

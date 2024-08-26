@@ -246,6 +246,7 @@ NRpc::IChannelPtr CreateUserTicketInjectingChannel(
         std::move(underlyingChannel),
         options);
 }
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TServiceTicketInjectingChannelFactory

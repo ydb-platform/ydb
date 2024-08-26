@@ -792,7 +792,10 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
     if (snapshotRepeatable) {
         // Repeatable snapshot writes are uncommitted, not externally visible, and don't conflict with anything
         isGlobalWriter = false;
-        haveWrites = false;
+        if (haveWrites) {
+            Parent.ClearTmpWrite();
+            haveWrites = false;
+        }
     }
 
     auto onImmediateConflict = [&](TOperation& conflict) {

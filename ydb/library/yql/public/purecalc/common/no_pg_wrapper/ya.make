@@ -5,6 +5,6 @@ INCLUDE(../ya.make.inc)
 END()
 
 RECURSE(
-    no_llvm
+    ../no_llvm
 )
 

@@ -124,7 +124,11 @@ struct TNodeRegistrationSettings {
 class INodeRegistrationResult {
 public:
     virtual ~INodeRegistrationResult() {}
-    virtual void Apply(NKikimrConfig::TAppConfig& appConfig, ui32& nodeId, TKikimrScopeId& scopeId) const = 0;
+    virtual void Apply(
+        NKikimrConfig::TAppConfig& appConfig,
+        ui32& nodeId,
+        TKikimrScopeId& scopeId,
+        TString& nodeName) const = 0;
 };
 
 class INodeBrokerClient {

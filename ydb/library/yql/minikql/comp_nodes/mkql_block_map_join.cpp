@@ -51,10 +51,12 @@ public:
                     if (key && dict.Contains(key) == RightRequired) {
                         s.CopyRow();
                     }
-                } else if (key) {
-                    if (const auto lookup = dict.Lookup(key)) {
+                } else if constexpr (RightRequired) {
+                    if (NUdf::TUnboxedValue lookup; key && (lookup = dict.Lookup(key))) {
                         s.MakeRow(lookup);
                     }
+                } else {
+                    s.MakeRow(dict.Lookup(key));
                 }
             }
             if (!s.IsFinished()) {
@@ -211,8 +213,14 @@ private:
                 AddItem(GetItem(i), i);
             }
             // Convert and append items from the "right" dict.
-            for (size_t i = InputWidth_; i < OutputWidth_; i++) {
-                AddValue(value.GetElement(i - InputWidth_), i);
+            if (value) {
+                for (size_t i = InputWidth_, j = 0; i < OutputWidth_; i++, j++) {
+                    AddValue(value.GetElement(j), i);
+                }
+            } else {
+                for (size_t i = InputWidth_; i < OutputWidth_; i++) {
+                    AddValue(value, i);
+                }
             }
             OutputRows_++;
         }
@@ -342,8 +350,7 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
     const auto joinKindNode = callable.GetInput(2);
     const auto rawKind = AS_VALUE(TDataLiteral, joinKindNode)->AsValue().Get<ui32>();
     const auto joinKind = GetJoinKind(rawKind);
-    // TODO: Handle other join types.
-    Y_ENSURE(joinKind == EJoinKind::Inner ||
+    Y_ENSURE(joinKind == EJoinKind::Inner || joinKind == EJoinKind::Left ||
              joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly);
 
     const auto tupleLiteral = AS_VALUE(TTupleLiteral, callable.GetInput(3));
@@ -362,6 +369,10 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
     switch (joinKind) {
     case EJoinKind::Inner:
         return new TBlockWideMapJoinWrapper<false, true>(ctx.Mutables,
+            std::move(joinItems), std::move(leftFlowItems), std::move(leftKeyColumns),
+            static_cast<IComputationWideFlowNode*>(flow), dict);
+    case EJoinKind::Left:
+        return new TBlockWideMapJoinWrapper<false, false>(ctx.Mutables,
             std::move(joinItems), std::move(leftFlowItems), std::move(leftKeyColumns),
             static_cast<IComputationWideFlowNode*>(flow), dict);
     case EJoinKind::LeftSemi:

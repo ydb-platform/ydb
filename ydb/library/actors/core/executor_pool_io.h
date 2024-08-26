@@ -3,7 +3,6 @@
 #include "actorsystem.h"
 #include "executor_thread.h"
 #include "executor_thread_ctx.h"
-#include "harmonizer.h"
 #include "scheduler_queue.h"
 #include "executor_pool_base.h"
 #include <ydb/library/actors/actor_type/indexes.h>
@@ -21,13 +20,12 @@ namespace NActors {
 
         THolder<NSchedulerQueue::TQueueType> ScheduleQueue;
         TTicketLock ScheduleLock;
-        IHarmonizer *Harmonizer = nullptr;
 
         const TString PoolName;
         const ui32 ActorSystemIndex = NActors::TActorTypeOperator::GetActorSystemIndex();
     public:
         TIOExecutorPool(ui32 poolId, ui32 threads, const TString& poolName = "", TAffinity* affinity = nullptr);
-        explicit TIOExecutorPool(const TIOExecutorPoolConfig& cfg, IHarmonizer *harmonizer = nullptr);
+        explicit TIOExecutorPool(const TIOExecutorPoolConfig& cfg);
         ~TIOExecutorPool();
 
         ui32 GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) override;
@@ -44,7 +42,6 @@ namespace NActors {
         void Shutdown() override;
 
         void GetCurrentStats(TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const override;
-        void GetExecutorPoolState(TExecutorPoolState &poolState) const override;
         TString GetName() const override;
     };
 }

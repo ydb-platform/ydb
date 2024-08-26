@@ -54,7 +54,6 @@ public:
         }
         TNodeInfo* node = Self->FindNode(nodeId);
         if (node != nullptr) {
-            node->UpdateResourceMaximum(record.GetResourceMaximum());
             node->UpdateResourceTotalUsage(record);
             node->Statistics.SetLastAliveTimestamp(now.MilliSeconds());
             node->ActualizeNodeStatistics(now);

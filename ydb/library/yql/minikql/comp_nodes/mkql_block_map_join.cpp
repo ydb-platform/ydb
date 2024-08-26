@@ -21,10 +21,10 @@ size_t CalcMaxBlockLength(const TVector<TType*>& items) {
         }));
 }
 
-template <bool RightRequired>
-class TBlockWideMapJoinWrapper : public TStatefulWideFlowComputationNode<TBlockWideMapJoinWrapper<RightRequired>>
+template <bool WithoutRight, bool RightRequired>
+class TBlockWideMapJoinWrapper : public TStatefulWideFlowComputationNode<TBlockWideMapJoinWrapper<WithoutRight, RightRequired>>
 {
-using TBaseComputation = TStatefulWideFlowComputationNode<TBlockWideMapJoinWrapper<RightRequired>>;
+using TBaseComputation = TStatefulWideFlowComputationNode<TBlockWideMapJoinWrapper<WithoutRight, RightRequired>>;
 public:
     TBlockWideMapJoinWrapper(TComputationMutables& mutables,
         const TVector<TType*>&& resultJoinItems, const TVector<TType*>&& leftFlowItems,
@@ -47,8 +47,10 @@ public:
         do {
             while (s.IsNotFull() && s.NextRow()) {
                 const auto key = MakeKeysTuple(ctx, s, LeftKeyColumns_);
-                if (key && dict.Contains(key) == RightRequired) {
-                    s.CopyRow();
+                if constexpr (WithoutRight) {
+                    if (key && dict.Contains(key) == RightRequired) {
+                        s.CopyRow();
+                    }
                 }
             }
             if (!s.IsFinished()) {
@@ -342,12 +344,12 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
 
     switch (joinKind) {
     case EJoinKind::LeftSemi:
-        return new TBlockWideMapJoinWrapper<true>(ctx.Mutables, std::move(joinItems),
-            std::move(leftFlowItems), std::move(leftKeyColumns),
+        return new TBlockWideMapJoinWrapper<true, true>(ctx.Mutables,
+            std::move(joinItems), std::move(leftFlowItems), std::move(leftKeyColumns),
             static_cast<IComputationWideFlowNode*>(flow), dict);
     case EJoinKind::LeftOnly:
-        return new TBlockWideMapJoinWrapper<false>(ctx.Mutables, std::move(joinItems),
-            std::move(leftFlowItems), std::move(leftKeyColumns),
+        return new TBlockWideMapJoinWrapper<true, false>(ctx.Mutables,
+            std::move(joinItems), std::move(leftFlowItems), std::move(leftKeyColumns),
             static_cast<IComputationWideFlowNode*>(flow), dict);
     default:
         Y_ABORT();

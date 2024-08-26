@@ -313,6 +313,14 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
     MKQL_ENSURE(leftFlowComponents.size() > 0, "Expected at least one column");
     const TVector<TType*> leftFlowItems(leftFlowComponents.cbegin(), leftFlowComponents.cend());
 
+    const auto rightDictNode = callable.GetInput(1);
+    MKQL_ENSURE(rightDictNode.GetStaticType()->IsDict(),
+                "Expected Dict as a right join part");
+    const auto rightDictType = AS_TYPE(TDictType, rightDictNode);
+    MKQL_ENSURE(rightDictType->GetPayloadType()->IsVoid() ||
+                rightDictType->GetPayloadType()->IsTuple(),
+                "Expected Void or Tuple as a right dict item type");
+
     const auto joinKindNode = callable.GetInput(2);
     const auto rawKind = AS_VALUE(TDataLiteral, joinKindNode)->AsValue().Get<ui32>();
     const auto joinKind = GetJoinKind(rawKind);

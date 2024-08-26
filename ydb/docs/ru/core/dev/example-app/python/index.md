@@ -74,7 +74,7 @@ python3 -m pip install iso8601
        print("\nCreating table series...")
        pool.execute_with_retries(
            """
-           CREATE table `series` (
+           CREATE TABLE `series` (
                `series_id` Int64,
                `title` Utf8,
                `series_info` Utf8,
@@ -87,7 +87,7 @@ python3 -m pip install iso8601
        print("\nCreating table seasons...")
        pool.execute_with_retries(
            """
-           CREATE table `seasons` (
+           CREATE TABLE `seasons` (
                `series_id` Int64,
                `season_id` Int64,
                `title` Utf8,
@@ -101,7 +101,7 @@ python3 -m pip install iso8601
        print("\nCreating table episodes...")
        pool.execute_with_retries(
            """
-           CREATE table `episodes` (
+           CREATE TABLE `episodes` (
                `series_id` Int64,
                `season_id` Int64,
                `episode_id` Int64,

@@ -61,9 +61,25 @@ App code snippet for driver initialization:
 
 {% endlist %}
 
+## Executing queries
+
+The {{ ydb-short-name }} Python SDK provides two primary methods for executing queries, each with different properties and use cases:
+
+* `pool.execute_with_retries`:
+  * Buffers the entire result set in client memory.
+  * Automatically retries execution in case of retriable issues.
+  * Does not allow specifying a transaction execution mode.
+  * Recommended for one-off queries that are expected to produce small result sets.
+  
+* `tx.execute`:
+  * Returns an iterator over the query results, allowing processing of results that may not fit into client memory.
+  * Retries must be handled manually.
+  * Allows specifying a transaction execution mode.
+  * Recommended for scenarios where `pool.execute_with_retries` is insufficient.
+
 {% include [create_table.md](../_includes/steps/02_create_table.md) %}
 
-To execute YQL queries, use the `pool.execute_with_retries()` method. For example, it is possible to create table:
+To execute `CREATE TABLE` queries, use the `pool.execute_with_retries()` method:
 
 {% list tabs %}
 
@@ -74,7 +90,7 @@ To execute YQL queries, use the `pool.execute_with_retries()` method. For exampl
        print("\nCreating table series...")
        pool.execute_with_retries(
            """
-           CREATE table `series` (
+           CREATE TABLE `series` (
                `series_id` Int64,
                `title` Utf8,
                `series_info` Utf8,
@@ -87,7 +103,7 @@ To execute YQL queries, use the `pool.execute_with_retries()` method. For exampl
        print("\nCreating table seasons...")
        pool.execute_with_retries(
            """
-           CREATE table `seasons` (
+           CREATE TABLE `seasons` (
                `series_id` Int64,
                `season_id` Int64,
                `title` Utf8,
@@ -101,7 +117,7 @@ To execute YQL queries, use the `pool.execute_with_retries()` method. For exampl
        print("\nCreating table episodes...")
        pool.execute_with_retries(
            """
-           CREATE table `episodes` (
+           CREATE TABLE `episodes` (
                `series_id` Int64,
                `season_id` Int64,
                `episode_id` Int64,
@@ -120,7 +136,7 @@ To execute YQL queries, use the `pool.execute_with_retries()` method. For exampl
        print("\nCreating table series...")
        await pool.execute_with_retries(
            """
-           CREATE table `series` (
+           CREATE TABLE `series` (
                `series_id` Int64,
                `title` Utf8,
                `series_info` Utf8,
@@ -133,7 +149,7 @@ To execute YQL queries, use the `pool.execute_with_retries()` method. For exampl
        print("\nCreating table seasons...")
        await pool.execute_with_retries(
            """
-           CREATE table `seasons` (
+           CREATE TABLE `seasons` (
                `series_id` Int64,
                `season_id` Int64,
                `title` Utf8,
@@ -147,7 +163,7 @@ To execute YQL queries, use the `pool.execute_with_retries()` method. For exampl
        print("\nCreating table episodes...")
        await pool.execute_with_retries(
            """
-           CREATE table `episodes` (
+           CREATE TABLE `episodes` (
                `series_id` Int64,
                `season_id` Int64,
                `episode_id` Int64,
@@ -161,7 +177,6 @@ To execute YQL queries, use the `pool.execute_with_retries()` method. For exampl
 
 {% endlist %}
 
-The function `pool.execute_with_retries(query)`, unlike `tx.execute()`, loads the result of the query into memory before returning it to the client. This eliminates the need to use special constructs to control the iterator, but it is necessary to use this method with caution for large `SELECT` queries. More information about streams will be discussed below.
 
 {% include [steps/03_write_queries.md](../_includes/steps/03_write_queries.md) %}
 
@@ -197,7 +212,7 @@ Code snippet for data insert/update:
 
 {% include [steps/04_query_processing.md](../_includes/steps/04_query_processing.md) %}
 
-To execute YQL queries, it is often enough to use the already familiar `pool.execute_with_retries()` method.
+To execute YQL queries, the `pool.execute_with_retries()` method is often sufficient.
 
 {% list tabs %}
 
@@ -268,23 +283,31 @@ series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 
 ## Parameterized queries {#param-queries}
 
-To execute parameterized queries in the `pool.execute_with_retries()` method (or `tx.execute()`, which will be shown in the next section) it is necessary to pass a dictionary with parameters of a special type, where the key is the parameter name, and the value can be one of the following:
-1. The usual value;
-2. Tuple with value and type;
-3. A special type `ydb.TypedValue(value=value, value_type=value_type)`.
+For parameterized query execution, `pool.execute_with_retries()` and `tx.execute()` behave similarly. To execute parameterized queries, you need to pass a dictionary with parameters to one of these functions, where each key is the parameter name, and the value can be one of the following:
 
-If you specify a value without a type, the conversion takes place according to the following rules:
-* `int` -> `ydb.PrimitiveType.Int64`
-* `float` -> `ydb.PrimitiveType.Double`
-* `str` -> `ydb.PrimitiveType.Utf8`
-* `bytes` -> `ydb.PrimitiveType.String`
-* `bool` -> `ydb.PrimitiveType.Bool`
-* `list` -> `ydb.ListType`
-* `dict` -> `ydb.DictType`
+1. A value of a basic Python type  
+2. A tuple containing the value and its type  
+3. A special type, `ydb.TypedValue(value=value, value_type=value_type)`  
 
-Automatic conversion of lists and dictionaries is possible only in the case of homogeneous structures, the type of nested value will be calculated recursively according to the above rules.
+If you specify a value without an explicit type, the conversion takes place according to the following rules:
 
-A code snippet demonstrating the possibility of using parameterized queries:
+| Python type | {{ ydb-short-name }} type                     |
+|------------|------------------------------|
+| `int`      | `ydb.PrimitiveType.Int64`    |
+| `float`    | `ydb.PrimitiveType.Double`   |
+| `str`      | `ydb.PrimitiveType.Utf8`     |
+| `bytes`    | `ydb.PrimitiveType.String`   |
+| `bool`     | `ydb.PrimitiveType.Bool`     |
+| `list`     | `ydb.ListType`               |
+| `dict`     | `ydb.DictType`               |
+
+{% note warning %}
+
+Automatic conversion of lists and dictionaries is possible only if the structures are homogeneous. The type of nested values will be determined recursively according to the rules explained above.
+
+{% endnote %}
+
+A code snippet demonstrating the parameterized query execution:
 
 {% list tabs %}
 
@@ -306,8 +329,8 @@ A code snippet demonstrating the possibility of using parameterized queries:
            """,
            {
                "$seriesId": series_id,  # data type could be defined implicitly
-               "$seasonId": (season_id, ydb.PrimitiveType.Int64),  # could be defined via tuple
-               "$episodeId": ydb.TypedValue(episode_id, ydb.PrimitiveType.Int64),  # could be defined via special class
+               "$seasonId": (season_id, ydb.PrimitiveType.Int64),  # could be defined via a tuple
+               "$episodeId": ydb.TypedValue(episode_id, ydb.PrimitiveType.Int64),  # could be defined via a special class
            },
        )
 
@@ -336,9 +359,9 @@ A code snippet demonstrating the possibility of using parameterized queries:
            WHERE series_id = $seriesId AND season_id = $seasonId AND episode_id = $episodeId;
            """,
            {
-               "$seriesId": series_id,  # could be defined implicit
-               "$seasonId": (season_id, ydb.PrimitiveType.Int64),  # could be defined via tuple
-               "$episodeId": ydb.TypedValue(episode_id, ydb.PrimitiveType.Int64),  # could be defined via special class
+               "$seriesId": series_id,  # could be defined implicitly
+               "$seasonId": (season_id, ydb.PrimitiveType.Int64),  # could be defined via a tuple
+               "$episodeId": ydb.TypedValue(episode_id, ydb.PrimitiveType.Int64),  # could be defined via a special class
            },
        )
 
@@ -352,7 +375,7 @@ A code snippet demonstrating the possibility of using parameterized queries:
 
 {% endlist %}
 
-The above code snippet outputs text to the console:
+The code snippet above outputs the following text to the console:
 
 ```bash
 > select_prepared_transaction:
@@ -361,8 +384,7 @@ The above code snippet outputs text to the console:
 
 {% include [transaction_control.md](../_includes/steps/10_transaction_control.md) %}
 
-The `session.transaction().execute()` method can also be used to execute YQL queries.
-This method, unlike `pool.execute_with_retries`, allows you to explicitly control the execution of transactions and configure the needed transaction mode using the `TxControl` class.
+The `session.transaction().execute()` method can also be used to execute YQL queries. Unlike `pool.execute_with_retries`, this method allows explicit control of transaction execution by configuring the desired transaction mode using the `TxControl` class.
 
 Available transaction modes:
 * `ydb.QuerySerializableReadWrite()` (default);
@@ -370,11 +392,9 @@ Available transaction modes:
 * `ydb.QuerySnapshotReadOnly()`;
 * `ydb.QueryStaleReadOnly()`.
 
-For more information about transaction modes, see [YDB docs](https://ydb.tech/docs/en/concepts/transactions#modes)
+For more information about transaction modes, see [{#T}](../../../concepts/transactions.md#modes).
 
-The result of executing `tx.execute()` is an iterator. The iterator allows you to read an unlimited number of rows and a volume of data without loading the entire result into memory.
-However, in order to correctly save the state of the transaction on the `ydb` side, the iterator must be read to the end after each request.
-For convenience, the result of the `tx.execute()` function is presented as a context manager that scrolls through the iterator to the end after exiting.
+The result of executing `tx.execute()` is an iterator. This iterator allows you to read result rows without loading the entire result set into memory. However, the iterator must be read to the end after each request to correctly maintain the transaction state on the {{ ydb-short-name }} server side. For convenience, the result of the `tx.execute()` function can be used as a context manager that automatically iterates to the end upon exit.
 
 {% list tabs %}
 
@@ -394,10 +414,7 @@ For convenience, the result of the `tx.execute()` function is presented as a con
 
 {% endlist %}
 
-In the code snippet below, the transaction is executed using the `transaction().execute()` method. The transaction mode is set to `ydb.QuerySerializableReadWrite()`.
-The request body is described using YQL syntax and is passed to the `execute` method as the parameter.
-
-A code snippet demonstrating the explicit use of `transaction().begin()` and `tx.commit()`:
+The code snippet below demonstrates the explicit use of `transaction().begin()` and `tx.commit()` with the transaction mode set to `ydb.QuerySerializableReadWrite()`:
 
 {% list tabs %}
 
@@ -481,12 +498,11 @@ A code snippet demonstrating the explicit use of `transaction().begin()` and `tx
 
 {% endlist %}
 
-However, it is worth remembering that a transaction can be opened implicitly at the first request. It could be commited automatically with the explicit indication of the `commit_tx=True` flag.
-Implicit transaction management is preferable because it requires fewer server calls. An example of implicit control will be demonstrated in the next block.
+However, a transaction can be opened implicitly with the first request and can be committed automatically by setting the `commit_tx=True` flag in arguments. Implicit transaction management is preferable because it requires fewer server calls.
 
-## Huge Selects {#huge-selects}
+## Iterating over query results {#iterating}
 
-To perform `SELECT` operations with an unlimited number of found rows, you must also use the `transaction().execute(query)` method. As mentioned above, the result of the work is an iterator - unlike `pool.execute_with_retries(query)`, it allows you to go through the selection without first loading it into memory.
+If a `SELECT` query is expected to return a potentially large number of rows, it is recommended to use the `tx.execute` method instead of `pool.execute_with_retries` to avoid excessive memory consumption on the client side. Instead of buffering the entire result set into memory, `tx.execute` returns an iterator for each top-level `SELECT` statement in the query.
 
 Example of a `SELECT` with unlimited data and implicit transaction control:
 

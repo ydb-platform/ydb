@@ -1,6 +1,7 @@
 #pragma once
 
-#include <vector>
+
+#include <numeric>
 #include <util/string/printf.h>
 #include "bitset.h"
 
@@ -299,7 +300,19 @@ private:
             auto lhs = Graph_.GetNodesByRelNames(lhsLabels);
             auto rhs = Graph_.GetNodesByRelNames(rhsLabels);
             
-            size_t revEdgeIdx = Graph_.FindEdgeBetween(lhs, rhs)->ReversedEdgeId;
+            auto* maybeEdge = Graph_.FindEdgeBetween(lhs, rhs);
+            if (maybeEdge == nullptr) {
+                auto str = [](const TVector<TString>& v) -> TString {
+                    TString s;
+                    for (auto& el : v) { s += (el + ", "); }
+                    return s.empty()? s: s.substr(0, s.length() - 2);
+                };
+
+                const char* errStr = "There is no edge between {%s}, {%s}. The graf: %s";
+                Y_ENSURE(false, Sprintf(errStr, str(lhsLabels).c_str(), str(rhsLabels).c_str(), Graph_.String().c_str()));            
+            }
+
+            size_t revEdgeIdx = maybeEdge->ReversedEdgeId;
             auto& revEdge = Graph_.GetEdge(revEdgeIdx);
             size_t edgeIdx = revEdge.ReversedEdgeId;
             auto& edge = Graph_.GetEdge(edgeIdx);

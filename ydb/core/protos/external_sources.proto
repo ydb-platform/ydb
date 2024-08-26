@@ -11,6 +11,7 @@ message TSchema {
 
 message TGeneral {
     map<string, string> attributes = 1 [(Ydb.size).le = 100];
+    optional string location = 2;
 }
 
 message TObjectStorage {

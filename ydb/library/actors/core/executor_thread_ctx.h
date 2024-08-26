@@ -21,7 +21,7 @@ namespace NActors {
     };
 
     struct TGenericExecutorThreadCtx {
-        std::unique_ptr<TGenericExecutorThread> Thread;
+        TAutoPtr<TGenericExecutorThread> Thread;
 
     protected:
         friend class TIOExecutorPool;
@@ -31,8 +31,6 @@ namespace NActors {
         std::atomic<ui64> WaitingFlag = static_cast<ui64>(EThreadState::None);
 
     public:
-        ~TGenericExecutorThreadCtx(); // in executor_thread.cpp
-
         ui64 StartWakingTs = 0;
 
         ui64 GetStateInt() {

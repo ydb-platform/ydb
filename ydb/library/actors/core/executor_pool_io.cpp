@@ -106,7 +106,7 @@ namespace NActors {
         ScheduleQueue.Reset(new NSchedulerQueue::TQueueType());
 
         for (i16 i = 0; i != PoolThreads; ++i) {
-            Threads[i].Thread.reset(new TExecutorThread(i, 0, actorSystem, this, MailboxTable.Get(), PoolName));
+            Threads[i].Thread.Reset(new TExecutorThread(i, 0, actorSystem, this, MailboxTable.Get(), PoolName));
         }
 
         *scheduleReaders = &ScheduleQueue->Reader;

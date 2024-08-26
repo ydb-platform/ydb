@@ -48,7 +48,7 @@ void TSharedExecutorPool::Prepare(TActorSystem* actorSystem, NSchedulerQueue::TR
         for (i16 i = 0; i != SharedThreadCount; ++i) {
             // !TODO
             Threads[i].ExecutorPools[0].store(dynamic_cast<TBasicExecutorPool*>(poolByThread[i]), std::memory_order_release);
-            Threads[i].Thread.reset(
+            Threads[i].Thread.Reset(
                 new TSharedExecutorThread(
                     -1,
                     actorSystem,

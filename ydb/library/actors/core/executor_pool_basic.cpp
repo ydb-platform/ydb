@@ -433,7 +433,7 @@ namespace NActors {
 
 
         for (i16 i = 0; i != MaxFullThreadCount; ++i) {
-            Threads[i].Thread.reset(
+            Threads[i].Thread.Reset(
                 new TExecutorThread(
                     i,
                     0, // CpuId is not used in BASIC pool

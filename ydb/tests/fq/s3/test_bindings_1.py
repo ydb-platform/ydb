@@ -277,3 +277,51 @@ Pear,15'''
         assert "Only one column in schema supported in raw format" in str(binding_response.issues), str(
             binding_response.issues
         )
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_binding_with_backslash_in_location(self, s3, client, unique_prefix):
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("backslash_bucket")
+        bucket.create(ACL='public-read')
+
+        s3_client = boto3.client(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        data = R'''data
+test'''
+        s3_client.put_object(Body=data, Bucket='backslash_bucket', Key='\\', ContentType='text/plain')
+
+        connection_response = client.create_storage_connection(unique_prefix + "backslash_bucket", "backslash_bucket")
+
+        data_type = ydb.Column(name="data", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8))
+        storage_binding_name = unique_prefix + "binding_name"
+        client.create_object_storage_binding(
+            name=storage_binding_name,
+            path="\\",
+            format="csv_with_names",
+            connection_id=connection_response.result.connection_id,
+            columns=[data_type],
+        )
+
+        sql = fR'''
+            SELECT *
+            FROM bindings.{storage_binding_name};
+            '''
+
+        query_id = client.create_query(
+            "simple", sql, type=fq.QueryContent.QueryType.ANALYTICS, pg_syntax=True
+        ).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        logging.debug(str(result_set))
+        assert len(result_set.columns) == 1
+        assert result_set.columns[0].name == "data"
+        assert len(result_set.rows) == 1
+        assert result_set.rows[0].items[0].text_value == "test"

@@ -15,6 +15,12 @@ TViewerPipeClient::~TViewerPipeClient() = default;
 
 TViewerPipeClient::TViewerPipeClient() = default;
 
+TViewerPipeClient::TViewerPipeClient(NWilson::TTraceId traceId) {
+    if (traceId) {
+        Span = {TComponentTracingLevels::THttp::TopLevel, std::move(traceId), "viewer", NWilson::EFlags::AUTO_END};
+    }
+}
+
 TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
     : Viewer(viewer)
     , Event(ev)
@@ -133,6 +139,49 @@ void TViewerPipeClient::RequestHiveStorageStats(NNodeWhiteboard::TTabletId hiveI
     SendRequestToPipe(pipeClient, request.Release(), hiveId);
 }
 
+TViewerPipeClient::TRequestResponse<TEvViewer::TEvViewerResponse> TViewerPipeClient::MakeViewerRequest(TNodeId nodeId, TEvViewer::TEvViewerRequest* ev, ui32 flags) {
+    TActorId viewerServiceId = MakeViewerID(nodeId);
+    TRequestResponse<TEvViewer::TEvViewerResponse> response(Span.CreateChild(TComponentTracingLevels::THttp::Detailed, TypeName(*ev)));
+    if (response.Span) {
+        response.Span.Attribute("target_node_id", nodeId);
+        TStringBuilder askFor;
+        askFor << ev->Record.GetLocation().NodeIdSize() << " nodes (";
+        for (size_t i = 0; i < std::min<size_t>(ev->Record.GetLocation().NodeIdSize(), 16); ++i) {
+            if (i) {
+                askFor << ", ";
+            }
+            askFor << ev->Record.GetLocation().GetNodeId(i);
+        }
+        if (ev->Record.GetLocation().NodeIdSize() > 16) {
+            askFor << ", ...";
+        }
+        askFor << ")";
+        response.Span.Attribute("ask_for", askFor);
+        switch (ev->Record.Request_case()) {
+            case NKikimrViewer::TEvViewerRequest::kTabletRequest:
+                response.Span.Attribute("request_type", "TabletRequest");
+                break;
+            case NKikimrViewer::TEvViewerRequest::kSystemRequest:
+                response.Span.Attribute("request_type", "SystemRequest");
+                break;
+            case NKikimrViewer::TEvViewerRequest::kQueryRequest:
+                response.Span.Attribute("request_type", "QueryRequest");
+                break;
+            case NKikimrViewer::TEvViewerRequest::kRenderRequest:
+                response.Span.Attribute("request_type", "RenderRequest");
+                break;
+            case NKikimrViewer::TEvViewerRequest::kAutocompleteRequest:
+                response.Span.Attribute("request_type", "AutocompleteRequest");
+                break;
+            default:
+                response.Span.Attribute("request_type", ::ToString(static_cast<int>(ev->Record.Request_case())));
+                break;
+        }
+    }
+    SendRequest(viewerServiceId, ev, flags, nodeId, response.Span.GetTraceId());
+    return response;
+}
+
 TViewerPipeClient::TRequestResponse<TEvHive::TEvResponseHiveDomainStats> TViewerPipeClient::MakeRequestHiveDomainStats(NNodeWhiteboard::TTabletId hiveId) {
     TActorId pipeClient = ConnectTabletPipe(hiveId);
     THolder<TEvHive::TEvRequestHiveDomainStats> request = MakeHolder<TEvHive::TEvRequestHiveDomainStats>();
@@ -150,6 +199,16 @@ TViewerPipeClient::TRequestResponse<TEvHive::TEvResponseHiveStorageStats> TViewe
     TActorId pipeClient = ConnectTabletPipe(hiveId);
     THolder<TEvHive::TEvRequestHiveStorageStats> request = MakeHolder<TEvHive::TEvRequestHiveStorageStats>();
     auto response = MakeRequestToPipe<TEvHive::TEvResponseHiveStorageStats>(pipeClient, request.Release(), hiveId);
+    if (response.Span) {
+        auto hive_id = "#" + ::ToString(hiveId);
+        response.Span.Attribute("hive_id", hive_id);
+    }
+    return response;
+}
+
+TViewerPipeClient::TRequestResponse<TEvHive::TEvResponseHiveNodeStats> TViewerPipeClient::MakeRequestHiveNodeStats(TTabletId hiveId, TEvHive::TEvRequestHiveNodeStats* request) {
+    TActorId pipeClient = ConnectTabletPipe(hiveId);
+    auto response = MakeRequestToPipe<TEvHive::TEvResponseHiveNodeStats>(pipeClient, request, hiveId);
     if (response.Span) {
         auto hive_id = "#" + ::ToString(hiveId);
         response.Span.Attribute("hive_id", hive_id);
@@ -415,6 +474,18 @@ void TViewerPipeClient::RequestStateStorageEndpointsLookup(const TString& path) 
     ++Requests;
 }
 
+TViewerPipeClient::TRequestResponse<TEvStateStorage::TEvBoardInfo> TViewerPipeClient::MakeRequestStateStorageEndpointsLookup(const TString& path, ui64 cookie) {
+    TRequestResponse<TEvStateStorage::TEvBoardInfo> response(Span.CreateChild(TComponentTracingLevels::THttp::Detailed, "BoardLookupActor"));
+    RegisterWithSameMailbox(CreateBoardLookupActor(MakeEndpointsBoardPath(path),
+                                                   SelfId(),
+                                                   EBoardLookupMode::Second, {}, cookie));
+    if (response.Span) {
+        response.Span.Attribute("path", path);
+    }
+    ++Requests;
+    return response;
+}
+
 void TViewerPipeClient::RequestStateStorageMetadataCacheEndpointsLookup(const TString& path) {
     if (!AppData()->DomainsInfo->Domain) {
         return;
@@ -519,6 +590,9 @@ TString TViewerPipeClient::MakeForward(const std::vector<ui32>& nodes) {
 }
 
 void TViewerPipeClient::RequestDone(ui32 requests) {
+    if (requests == 0) {
+        return;
+    }
     Requests -= requests;
     if (!DelayedRequests.empty()) {
         SendDelayedRequests();
@@ -535,13 +609,56 @@ void TViewerPipeClient::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
     }
 }
 
+void TViewerPipeClient::HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+    if (ev->Get()->Request->ResultSet.size() == 1 && ev->Get()->Request->ResultSet.begin()->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+        TSchemeCacheNavigate::TEntry& entry(ev->Get()->Request->ResultSet.front());
+        if (entry.DomainInfo) {
+            if (entry.DomainInfo->ResourcesDomainKey && entry.DomainInfo->DomainKey != entry.DomainInfo->ResourcesDomainKey) {
+                RequestSchemeCacheNavigate(TPathId(entry.DomainInfo->ResourcesDomainKey));
+            } else {
+                RequestStateStorageEndpointsLookup(CanonizePath(entry.Path));
+            }
+        }
+    } else {
+        ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database"));
+    }
+}
+
+void TViewerPipeClient::HandleResolveDatabase(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
+    ReplyAndPassAway(MakeForward(GetNodesFromBoardReply(ev)));
+}
+
 void TViewerPipeClient::HandleTimeout() {
     ReplyAndPassAway(GetHTTPGATEWAYTIMEOUT());
 }
 
+STATEFN(TViewerPipeClient::StateResolveDatabase) {
+    switch (ev->GetTypeRewrite()) {
+        hFunc(TEvStateStorage::TEvBoardInfo, HandleResolveDatabase);
+        hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleResolveDatabase);
+        cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
+    }
+}
+
+void TViewerPipeClient::RedirectToDatabase(const TString& database) {
+    RequestSchemeCacheNavigate(database);
+    Become(&TViewerPipeClient::StateResolveDatabase, TDuration::MilliSeconds(1000), new TEvents::TEvWakeup());
+}
+
 void TViewerPipeClient::PassAway() {
+    std::sort(SubscriptionNodeIds.begin(), SubscriptionNodeIds.end());
+    SubscriptionNodeIds.erase(std::unique(SubscriptionNodeIds.begin(), SubscriptionNodeIds.end()), SubscriptionNodeIds.end());
+    for (TNodeId nodeId : SubscriptionNodeIds) {
+        Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe());
+    }
     ClosePipes();
     TBase::PassAway();
+}
+
+void TViewerPipeClient::AddEvent(const TString& name) {
+    if (Span) {
+        Span.Event(name);
+    }
 }
 
 }

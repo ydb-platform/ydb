@@ -27,7 +27,8 @@ public:
     }
 
     TViewerWhiteboardRequest(TEvViewer::TEvViewerRequest::TPtr& ev)
-        : Event(ev)
+        : TBase(std::move(ev->TraceId))
+        , Event(ev)
     {
     }
 
@@ -53,11 +54,12 @@ public:
     void ReplyAndPassAway() override {
         auto response = MakeHolder<TEvViewer::TEvViewerResponse>();
         auto& locationResponded = (*response->Record.MutableLocationResponded());
-        for (const auto& [nodeId, nodeResponse] : TBase::PerNodeStateInfo) {
+        auto perNodeStateInfo = TBase::GetPerNodeStateInfo();
+        for (const auto& [nodeId, nodeResponse] : perNodeStateInfo) {
             locationResponded.AddNodeId(nodeId);
         }
 
-        MergeWhiteboardResponses(response.Get(), TBase::PerNodeStateInfo, TBase::RequestSettings.MergeFields); // PerNodeStateInfo will be invalidated
+        MergeWhiteboardResponses(response.Get(), perNodeStateInfo, TBase::RequestSettings.MergeFields);
 
         TBase::Send(Event->Sender, response.Release(), 0, Event->Cookie);
         TBase::PassAway();

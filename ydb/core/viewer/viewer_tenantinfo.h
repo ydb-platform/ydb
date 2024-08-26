@@ -113,10 +113,10 @@ public:
         Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
         OffloadMerge = FromStringWithDefault<bool>(params.Get("offload_merge"), OffloadMerge);
         MetadataCache = FromStringWithDefault<bool>(params.Get("metadata_cache"), MetadataCache);
+        Direct |= !TBase::Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
         Direct |= (Database == AppData()->TenantName); // we're already on the right node
         if (Database && !Direct) {
-            RequestStateStorageEndpointsLookup(Database); // to find some dynamic node and redirect query there
-            Become(&TThis::StateResolvingDatabase, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+            return RedirectToDatabase(Database); // to find some dynamic node and redirect query there
         } else {
             TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
             auto* domain = domains->GetDomain();
@@ -158,17 +158,6 @@ public:
             }
         }
         TBase::PassAway();
-    }
-
-    void HandleResolvingDatabase(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
-        TBase::ReplyAndPassAway(MakeForward(GetNodesFromBoardReply(ev)));
-    }
-
-    STATEFN(StateResolvingDatabase) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvStateStorage::TEvBoardInfo, HandleResolvingDatabase);
-            cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
-        }
     }
 
     STATEFN(StateCollectingInfo) {

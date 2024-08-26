@@ -68,9 +68,10 @@ public:
                 }
             }
             //StringSplitter(Params.Get("target")).Split(',').SkipEmpty().Collect(&Metrics);
-
+            Direct |= !TBase::Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
+            Direct |= (Database == AppData()->TenantName); // we're already on the right node
             if (Database && !Direct) {
-                RequestStateStorageEndpointsLookup(Database); // to find some dynamic node and redirect there
+                return RedirectToDatabase(Database); // to find some dynamic node and redirect query there
             }
             if (Requests == 0) {
                 SendGraphRequest();
@@ -93,7 +94,6 @@ public:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvStateStorage::TEvBoardInfo, Handle);
             hFunc(TEvents::TEvUndelivered, Undelivered);
             hFunc(TEvInterconnect::TEvNodeConnected, Connected);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
@@ -136,20 +136,6 @@ public:
 
         ViewerWhiteboardCookie cookie(NKikimrViewer::TEvViewerRequest::kRenderRequest, nodeId);
         SendRequest(viewerServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, cookie.ToUi64());
-    }
-
-    void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
-        BLOG_TRACE("Received TEvBoardInfo");
-        if (ev->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
-            for (const auto& [actorId, infoEntry] : ev->Get()->InfoEntries) {
-                TenantDynamicNodes.emplace_back(actorId.NodeId());
-            }
-        }
-        if (TenantDynamicNodes.empty()) {
-            SendGraphRequest();
-        } else {
-            SendDynamicNodeRenderRequest();
-        }
     }
 
     void SendGraphRequest() {

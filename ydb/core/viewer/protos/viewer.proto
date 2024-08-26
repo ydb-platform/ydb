@@ -495,22 +495,36 @@ message TStorageUsageStats {
     repeated uint32 Buckets = 2;
 }
 
+message TNodeGroup {
+    string GroupName = 1;
+    uint64 NodeCount = 2;
+}
+
 message TNodeInfo {
     uint32 NodeId = 1;
-    NKikimrWhiteboard.TSystemStateInfo SystemState = 2;
-    repeated NKikimrWhiteboard.TPDiskStateInfo PDisks = 3;
-    repeated NKikimrWhiteboard.TVDiskStateInfo VDisks = 4;
-    repeated TTabletStateInfo Tablets = 5;
+    NKikimrWhiteboard.TSystemStateInfo SystemState = 10;
+    repeated NKikimrWhiteboard.TPDiskStateInfo PDisks = 20;
+    repeated NKikimrWhiteboard.TVDiskStateInfo VDisks = 30;
+    repeated TTabletStateInfo Tablets = 40;
 }
 
 message TNodesInfo {
-    EFlag Overall = 1;
-    repeated TNodeInfo Nodes = 2;
-    optional uint64 TotalNodes = 3;
-    optional uint64 FoundNodes = 4;
-    optional uint64 MaximumDisksPerNode = 5;
-    optional bool NoDC = 6;
-    optional bool NoRack = 7;
+    uint32 Version = 1;
+    optional uint64 TotalNodes = 2;
+    optional uint64 FoundNodes = 3;
+    optional string FieldsAvailable = 4;
+    optional string FieldsRequired = 5;
+    optional bool NeedFilter = 6;
+    optional bool NeedGroup = 7;
+    optional bool NeedSort = 8;
+    optional bool NeedLimit = 9;
+    repeated string Problems = 10;
+    repeated TNodeInfo Nodes = 20;
+    repeated TNodeGroup NodeGroups = 30;
+    optional uint64 MaximumDisksPerNode = 50;
+    optional uint64 MaximumSlotsPerDisk = 51;
+    optional bool NoDC = 60;
+    optional bool NoRack = 61;
 }
 
 enum ENodeType {

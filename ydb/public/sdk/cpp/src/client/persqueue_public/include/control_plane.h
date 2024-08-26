@@ -117,6 +117,12 @@ struct TDescribeTopicResult : public TStatus {
         }
         GETTER(std::optional<TRemoteMirrorRule>, RemoteMirrorRule);
 
+        GETTER(std::optional<uint64_t>, MaxPartitionsCount);
+        GETTER(std::optional<TDuration>, StabilizationWindow);
+        GETTER(std::optional<uint64_t>, UpUtilizationPercent);
+        GETTER(std::optional<uint64_t>, DownUtilizationPercent);
+        GETTER(std::optional<Ydb::PersQueue::V1::AutoPartitioningStrategy>, AutoPartitioningStrategy);
+
 
 #undef GETTER
 
@@ -138,6 +144,12 @@ struct TDescribeTopicResult : public TStatus {
         std::optional<ui32> AbcId_;
         std::optional<std::string> AbcSlug_;
         std::string FederationAccount_;
+
+        std::optional<uint64_t> MaxPartitionsCount_;
+        std::optional<TDuration> StabilizationWindow_;
+        std::optional<uint64_t> UpUtilizationPercent_;
+        std::optional<uint64_t> DownUtilizationPercent_;
+        std::optional<Ydb::PersQueue::V1::AutoPartitioningStrategy> AutoPartitioningStrategy_;
     };
 
     TDescribeTopicResult(TStatus status, const Ydb::PersQueue::V1::DescribeTopicResult& result);
@@ -191,6 +203,7 @@ struct TReadRuleSettings {
 // Settings for topic.
 template <class TDerived>
 struct TTopicSettings : public TOperationRequestSettings<TDerived> {
+    friend class TPersQueueClient;
 
     struct TRemoteMirrorRuleSettings {
         TRemoteMirrorRuleSettings() {}
@@ -266,9 +279,22 @@ struct TTopicSettings : public TOperationRequestSettings<TDerived> {
         if (settings.RemoteMirrorRule()) {
             RemoteMirrorRule_ = TRemoteMirrorRuleSettings().SetSettings(settings.RemoteMirrorRule().value());
         }
+
+        MaxPartitionsCount_ = settings.MaxPartitionsCount();
+        StabilizationWindow_ = settings.StabilizationWindow();
+        UpUtilizationPercent_ = settings.UpUtilizationPercent();
+        DownUtilizationPercent_ = settings.DownUtilizationPercent();
+        AutoPartitioningStrategy_ = settings.AutoPartitioningStrategy();
+
         return static_cast<TDerived&>(*this);
     }
 
+private:
+    std::optional<uint64_t> MaxPartitionsCount_;
+    std::optional<TDuration> StabilizationWindow_;
+    std::optional<uint64_t> UpUtilizationPercent_;
+    std::optional<uint64_t> DownUtilizationPercent_;
+    std::optional<Ydb::PersQueue::V1::AutoPartitioningStrategy> AutoPartitioningStrategy_;
 };
 
 

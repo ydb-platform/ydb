@@ -212,6 +212,7 @@ TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> StreamExecuteQueryIm
     auto request = MakeRequest<Ydb::Query::ExecuteQueryRequest>();
     request.set_exec_mode(::Ydb::Query::ExecMode(settings.ExecMode_));
     request.set_stats_mode(::Ydb::Query::StatsMode(settings.StatsMode_));
+    request.set_pool_id(settings.PoolId_);
     request.mutable_query_content()->set_text(TStringType{query});
     request.mutable_query_content()->set_syntax(::Ydb::Query::Syntax(settings.Syntax_));
     if (session.has_value()) {

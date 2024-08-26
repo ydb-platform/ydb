@@ -2,7 +2,7 @@
 
 #include <ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb-cpp-sdk/client/table/table.h>
-#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
+#include <src/client/persqueue_public/persqueue.h>
 
 namespace NKikimr::NPersQueueTests {
 

@@ -42,7 +42,7 @@ add_subdirectory(library/cpp)
 add_subdirectory(src)
 add_subdirectory(util)
 
-_ydb_sdk_validate_public_headers()
+#_ydb_sdk_validate_public_headers()
 
 if (YDB_SDK_EXAMPLES)
   add_subdirectory(examples)

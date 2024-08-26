@@ -1,6 +1,6 @@
 add_ydb_test(NAME yql-utils_ut
   SOURCES
-    utf8_ut.cpp
+    utils/utf8_ut.cpp
   LINK_LIBRARIES
     yutil
     cpp-testing-unittest_main
@@ -11,7 +11,7 @@ add_ydb_test(NAME yql-utils_ut
 
 add_ydb_test(NAME yql-public-issue_ut
   SOURCES
-    yql_issue_ut.cpp
+    issue/yql_issue_ut.cpp
   LINK_LIBRARIES
     yutil
     cpp-testing-unittest_main
@@ -23,7 +23,7 @@ add_ydb_test(NAME yql-public-issue_ut
 
 add_ydb_test(NAME yql-public-decimal_ut
   SOURCES
-    yql_decimal_ut.cpp
+    decimal/yql_decimal_ut.cpp
   LINK_LIBRARIES
     yutil
     cpp-testing-unittest_main
@@ -34,7 +34,7 @@ add_ydb_test(NAME yql-public-decimal_ut
 
 add_ydb_test(NAME yql-public-wide_int_ut
   SOURCES
-    yql_wide_int_ut.cpp
+    decimal/yql_wide_int_ut.cpp
   LINK_LIBRARIES
     yutil
     cpp-testing-unittest_main

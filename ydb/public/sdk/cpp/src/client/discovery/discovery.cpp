@@ -120,7 +120,7 @@ uint64_t TNodeRegistrationResult::GetScopePathId() const {
 }
 
 bool TNodeRegistrationResult::HasScopePathId() const {
-    return ScopePathId_.value();
+    return ScopePathId_.has_value();
 }
 
 bool TNodeRegistrationResult::HasNodeName() const {

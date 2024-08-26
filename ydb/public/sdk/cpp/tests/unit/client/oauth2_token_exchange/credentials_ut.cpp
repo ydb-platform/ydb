@@ -2,7 +2,7 @@
 #include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
 #include "jwt_check_helper.h"
 
-#include <library/cpp/string_utils/base64/base64.h>
+#include <src/library/string_utils/base64/base64.h>
 
 #include <library/cpp/cgiparam/cgiparam.h>
 #include <library/cpp/http/misc/parsed_request.h>

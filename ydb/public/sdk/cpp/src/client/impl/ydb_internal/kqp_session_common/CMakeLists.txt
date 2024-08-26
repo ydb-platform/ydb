@@ -3,7 +3,7 @@ _ydb_sdk_add_library(impl-ydb_internal-kqp_session_common)
 target_link_libraries(impl-ydb_internal-kqp_session_common PUBLIC
   yutil
   threading-future
-  lib-operation_id-protos
+  library-operation_id
   client-impl-ydb_endpoints
 )
 

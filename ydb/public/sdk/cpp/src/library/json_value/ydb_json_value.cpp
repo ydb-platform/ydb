@@ -1,6 +1,6 @@
 #include <ydb-cpp-sdk/library/json_value/ydb_json_value.h>
 
-#include <library/cpp/string_utils/base64/base64.h>
+#include <src/library/string_utils/base64/base64.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <util/string/builder.h>

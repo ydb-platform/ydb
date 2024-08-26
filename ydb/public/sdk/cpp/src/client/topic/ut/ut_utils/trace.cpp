@@ -1,5 +1,5 @@
 #include <mutex>
-#include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/trace.h>
+#include <src/client/topic/ut/ut_utils/trace.h>
 
 #include "library/cpp/testing/unittest/registar.h"
 

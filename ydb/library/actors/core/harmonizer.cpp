@@ -4,7 +4,6 @@
 #include "executor_thread.h"
 #include "probes.h"
 
-#include "activity_guard.h"
 #include "actorsystem.h"
 #include "executor_pool_basic.h"
 #include "executor_pool_basic_feature_flags.h"
@@ -759,16 +758,12 @@ void THarmonizer::Harmonize(ui64 ts) {
     ui64 previousNextHarmonizeTs = NextHarmonizeTs.exchange(ts + Us2Ts(1'000'000ull));
     LWPROBE(TryToHarmonizeSuccess, ts, NextHarmonizeTs, previousNextHarmonizeTs);
 
-    {
-        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_HARMONIZER> activityGuard;
-
-        if (PriorityOrder.empty()) {
-            CalculatePriorityOrder();
-        }
-
-        PullStats(ts);
-        HarmonizeImpl(ts);
+    if (PriorityOrder.empty()) {
+        CalculatePriorityOrder();
     }
+
+    PullStats(ts);
+    HarmonizeImpl(ts);
 
     Lock.Release();
 }

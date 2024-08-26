@@ -200,9 +200,6 @@ namespace NActors {
     }
 
     ui32 TBasicExecutorPool::GetReadyActivationCommon(TWorkerContext& wctx, ui64 revolvingCounter) {
-        NHPTimer::STime hpnow = GetCycleCountFast();
-        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION> activityGuard(hpnow);
-
         TWorkerId workerId = wctx.WorkerId;
         Y_DEBUG_ABORT_UNLESS(workerId < MaxFullThreadCount);
 
@@ -212,9 +209,10 @@ namespace NActors {
             Y_ABORT_UNLESS(wctx.SharedThread);
             wctx.SharedThread->UnsetWork();
         }
+
         if (Harmonizer) {
             LWPROBE(TryToHarmonize, PoolId, PoolName);
-            Harmonizer->Harmonize(hpnow);
+            Harmonizer->Harmonize(TlsThreadContext->StartOfProcessingEventTS.load(std::memory_order_relaxed));
         }
 
         TAtomic x = AtomicGet(Semaphore);
@@ -234,7 +232,6 @@ namespace NActors {
                     }
                 }
             } else {
-                TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE> activityGuard;
                 if (const ui32 activation = Activations.Pop(++revolvingCounter)) {
                     if (workerId >= 0) {
                         Threads[workerId].SetWork();
@@ -714,7 +711,6 @@ namespace NActors {
     }
 
     bool TExecutorThreadCtx::WakeUp() {
-        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_WAKE_UP> activityGuard;
         for (ui32 i = 0; i < 2; ++i) {
             EThreadState state = GetState<EThreadState>();
             switch (state) {
@@ -743,7 +739,6 @@ namespace NActors {
     }
 
     bool TSharedExecutorThreadCtx::WakeUp() {
-        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE> activityGuard;
         i64 requestsForWakeUp = RequestsForWakeUp.fetch_add(1, std::memory_order_acq_rel);
         if (requestsForWakeUp >= 0) {
             return false;

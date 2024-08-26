@@ -1,7 +1,6 @@
 #pragma once
 
 #include "defs.h"
-#include "activity_guard.h"
 #include "executor_thread.h"
 #include "thread_context.h"
 
@@ -61,13 +60,11 @@ namespace NActors {
 
         template <typename TDerived, typename TWaitState>
         void Spin(ui64 spinThresholdCycles, std::atomic<bool> *stopFlag) {
+            ui64 start = GetCycleCountFast();
             bool doSpin = true;
-            NHPTimer::STime start = GetCycleCountFast();
-            TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_SPIN> activityGuard(start);
             while (true) {
                 for (ui32 j = 0; doSpin && j < 12; ++j) {
-                    NHPTimer::STime hpnow = GetCycleCountFast();
-                    if (hpnow >= i64(start + spinThresholdCycles)) {
+                    if (GetCycleCountFast() >= (start + spinThresholdCycles)) {
                         doSpin = false;
                         break;
                     }
@@ -103,8 +100,8 @@ namespace NActors {
 
             NHPTimer::STime hpnow = GetCycleCountFast();
             NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
-            ui32 prevActivity = TlsThreadContext->ElapsingActorActivity.exchange(Max<ui64>(), std::memory_order_acq_rel);
-            TlsThreadContext->WorkerCtx->AddElapsedCycles(prevActivity, hpnow - hpprev);
+            TlsThreadContext->ElapsingActorActivity.store(Max<ui64>(), std::memory_order_release);
+            TlsThreadContext->WorkerCtx->AddElapsedCycles(TlsThreadContext->ActorSystemIndex, hpnow - hpprev);
             do {
                 if (WaitingPad.Park()) // interrupted
                     return true;

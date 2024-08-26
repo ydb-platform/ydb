@@ -595,7 +595,7 @@ namespace NKikimr {
 
         auto done = [&](NKikimrProto::EReplyStatus status, const TString& message) {
             ErrorReason = message;
-            A_LOG_LOG_S(true, PriorityForStatusResult(status), "DSP10", "Query failed " << message);
+            A_LOG_LOG_S(PriorityForStatusResult(status), "DSP10", "Query failed " << message);
             ReplyAndDie(status);
             return true;
         };

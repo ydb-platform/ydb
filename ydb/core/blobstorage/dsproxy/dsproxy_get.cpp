@@ -274,7 +274,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         TVDiskIdShort shortId(vDiskId);
         const NKikimrProto::EReplyStatus status = record.GetStatus();
         NActors::NLog::EPriority priority = PriorityForStatusInbound(status);
-        A_LOG_LOG_S(priority != NActors::NLog::PRI_DEBUG, priority, "BPG30", "Handle VPuEventResult"
+        A_LOG_LOG_S(priority, "BPG30", "Handle VPuEventResult"
             << " status# " << NKikimrProto::EReplyStatus_Name(status).data()
             << " node# " << GetVDiskActorId(shortId).NodeId());
 
@@ -379,7 +379,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         LWPROBE(DSProxyRequestDuration, TEvBlobStorage::EvGet, requestSize, duration.SecondsFloat() * 1000.0, tabletId,
                 evResult->GroupId, channel, NKikimrBlobStorage::EGetHandleClass_Name(GetImpl.GetHandleClass()),
                 success);
-        A_LOG_LOG_S(true, success ? NLog::PRI_INFO : NLog::PRI_NOTICE, "BPG68", "Result# " << evResult->Print(false));
+        A_LOG_LOG_S(success ? NLog::PRI_INFO : NLog::PRI_NOTICE, "BPG68", "Result# " << evResult->Print(false));
         return SendResponseAndDie(std::unique_ptr<TEvBlobStorage::TEvGetResult>(evResult.Release()));
     }
 

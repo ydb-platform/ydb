@@ -218,7 +218,7 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
                 SetPendingResultResponseStatus(response.Id, response.Status);
             }
         }
-        A_LOG_LOG_S(true, PriorityForStatusInbound(status), "DSPI08", "Result# " << getResult.Print(false)
+        A_LOG_LOG_S(PriorityForStatusInbound(status), "DSPI08", "Result# " << getResult.Print(false)
             << " RestoreQueriesStarted# " << RestoreQueriesStarted
             << " RestoreQueriesFinished# " << RestoreQueriesFinished);
 

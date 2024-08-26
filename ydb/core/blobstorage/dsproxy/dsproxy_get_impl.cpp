@@ -149,7 +149,7 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
         }
     }
     NActors::NLog::EPriority priority = PriorityForStatusOutbound(status);
-    A_LOG_LOG_SX(logCtx, priority != NActors::NLog::PRI_DEBUG, priority, "BPG29", "Response# " << outGetResult->Print(false));
+    A_LOG_LOG_SX(logCtx, priority, "BPG29", "Response# " << outGetResult->Print(false));
     if (CollectDebugInfo || (IsVerboseNoDataEnabled && IsNoData)) {
         TStringStream str;
         logCtx.LogAcc.Output(str);

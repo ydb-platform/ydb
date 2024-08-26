@@ -251,7 +251,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
     }
 
     void Handle(TEvBlobStorage::TEvVPutResult::TPtr &ev) {
-        A_LOG_LOG_S(false, ev->Get()->Record.GetStatus() == NKikimrProto::OK ? NLog::PRI_DEBUG : NLog::PRI_INFO,
+        A_LOG_LOG_S(ev->Get()->Record.GetStatus() == NKikimrProto::OK ? NLog::PRI_DEBUG : NLog::PRI_INFO,
             "BPP01", "received " << ev->Get()->ToString() << " from# " << VDiskIDFromVDiskID(ev->Get()->Record.GetVDiskID()));
 
         ProcessReplyFromQueue(ev->Get());
@@ -352,7 +352,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
                 }
             }
         }
-        A_LOG_LOG_S(false, prio, "BPP02", "received " << ev->Get()->ToString() << " from# " << vdiskId);
+        A_LOG_LOG_S(prio, "BPP02", "received " << ev->Get()->ToString() << " from# " << vdiskId);
 
         Y_ABORT_UNLESS(vdisk < WaitingVDiskResponseCount.size(), " vdisk# %" PRIu32, vdisk);
         if (WaitingVDiskResponseCount[vdisk] == 1) {
@@ -455,7 +455,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
 
     void SendReply(std::unique_ptr<TEvBlobStorage::TEvPutResult> putResult, size_t blobIdx) {
         NKikimrProto::EReplyStatus status = putResult->Status;
-        A_LOG_LOG_S(false, status == NKikimrProto::OK ? NLog::PRI_INFO : NLog::PRI_NOTICE, "BPP21",
+        A_LOG_LOG_S(status == NKikimrProto::OK ? NLog::PRI_INFO : NLog::PRI_NOTICE, "BPP21",
             "SendReply putResult# " << putResult->ToString() << " ResponsesSent# " << ResponsesSent
             << " PutImpl.Blobs.size# " << PutImpl.Blobs.size()
             << " Last# " << (ResponsesSent + 1 == PutImpl.Blobs.size() ? "true" : "false"));

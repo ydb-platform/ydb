@@ -301,7 +301,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
         if (To < From) {
             std::reverse(result->Responses.begin(), result->Responses.end());
         }
-        A_LOG_LOG_S(true, NLog::PRI_INFO, "DSR05", "Result# " << result->Print(false));
+        A_LOG_LOG_S(NLog::PRI_INFO, "DSR05", "Result# " << result->Print(false));
         SendReply(result);
     }
 
@@ -309,7 +309,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
         std::unique_ptr<TEvBlobStorage::TEvRangeResult> result(new TEvBlobStorage::TEvRangeResult(
                     status, From, To, Info->GroupID));
         result->ErrorReason = ErrorReason;
-        A_LOG_LOG_S(true, NLog::PRI_NOTICE, "DSR06", "Result# " << result->Print(false));
+        A_LOG_LOG_S(NLog::PRI_NOTICE, "DSR06", "Result# " << result->Print(false));
         SendReply(result);
     }
 

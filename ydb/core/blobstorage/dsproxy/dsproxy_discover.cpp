@@ -307,7 +307,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor {
         std::unique_ptr<TEvBlobStorage::TEvDiscoverResult> result(new TEvBlobStorage::TEvDiscoverResult(status, MinGeneration,
                     BlockedGen));
         result->ErrorReason = ErrorReason;
-        A_LOG_LOG_S(true, PriorityForStatusOutbound(status), "BSD01", "Result# " << result->Print(false));
+        A_LOG_LOG_S(PriorityForStatusOutbound(status), "BSD01", "Result# " << result->Print(false));
         SendResult(result);
     }
 
@@ -325,7 +325,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor {
         Y_ABORT_UNLESS(status == NKikimrProto::OK || status == NKikimrProto::NODATA || status == NKikimrProto::ERROR
             || status == NKikimrProto::VDISK_ERROR_STATE, "status# %" PRIu32, ui32(status));
 
-        A_LOG_LOG_S(false, PriorityForStatusInbound(status), "BSD03",
+        A_LOG_LOG_S(PriorityForStatusInbound(status), "BSD03",
             "Status# " << NKikimrProto::EReplyStatus_Name(status)
             << " vdisk# " << vdisk.ToString()
             << " NodeId# " << Info->GetActorId(vdisk).NodeId());
@@ -346,7 +346,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor {
         if (!IsGetBlockDone && GetBlockReplies == Info->Type.TotalPartCount()) {
             IsGetBlockDone = true;
             if (IsIterativeDone && (IsGetDataDone || !ReadBody)) {
-                A_LOG_LOG_S(true, PriorityForStatusOutbound(PendingResult->Status), "BSD05",
+                A_LOG_LOG_S(PriorityForStatusOutbound(PendingResult->Status), "BSD05",
                     "Die. Result# "<< PendingResult->Print(false));
                 SendResult(PendingResult);
             }
@@ -392,7 +392,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor {
 
         TVDiskInfo &vDiskData = VDiskInfo.at(TVDiskIdShort(vdisk).GetRaw());
 
-        A_LOG_LOG_S(false, PriorityForStatusInbound(status), "BSD07", "Handle TEvVGetResult"
+        A_LOG_LOG_S(PriorityForStatusInbound(status), "BSD07", "Handle TEvVGetResult"
             << " Status# " << NKikimrProto::EReplyStatus_Name(status)
             << " vdisk# " << vdisk.ToString()
             << " NodeId# " << Info->GetActorId(vdisk).NodeId()
@@ -606,7 +606,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor {
                     } else if (IsGetBlockDone) {
                         std::unique_ptr<TEvBlobStorage::TEvDiscoverResult> result(
                             new TEvBlobStorage::TEvDiscoverResult(logoBlobId, MinGeneration, TString(), BlockedGen));
-                        A_LOG_LOG_S(true, PriorityForStatusOutbound(result->Status), "BSD11", "Die. Result# "
+                        A_LOG_LOG_S(PriorityForStatusOutbound(result->Status), "BSD11", "Die. Result# "
                                 << result->Print(false));
                         SendResult(result);
                         return false;

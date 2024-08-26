@@ -83,7 +83,8 @@ public:
               State_->Configuration->MaxInflightListsPerQuery,
               State_->Configuration->ListingCallbackThreadCount,
               State_->Configuration->ListingCallbackPerThreadQueueSize,
-              State_->Configuration->RegexpCacheSize))
+              State_->Configuration->RegexpCacheSize,
+              State_->ActorSystem))
         , ListingStrategy_(MakeS3ListingStrategy(
               State_->Gateway,
               State_->GatewayRetryPolicy,

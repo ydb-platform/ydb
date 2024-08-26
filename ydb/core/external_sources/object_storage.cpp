@@ -292,7 +292,6 @@ struct TObjectStorageExternalSource : public IExternalSource {
     };
 
     virtual NThreading::TFuture<std::shared_ptr<TMetadata>> LoadDynamicMetadata(std::shared_ptr<TMetadata> meta) override {
-        Y_UNUSED(ActorSystem);
         auto format = meta->Attributes.FindPtr("format");
         if (!format || !meta->Attributes.contains("withinfer")) {
             return NThreading::MakeFuture(std::move(meta));
@@ -335,7 +334,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
             .Url = meta->DataSourceLocation,
             .Credentials = credentials,
             .Pattern = effectiveFilePattern,
-        }, Nothing(), AllowLocalFiles);
+        }, Nothing(), AllowLocalFiles, ActorSystem);
         auto afterListing = s3Lister->Next().Apply([path = effectiveFilePattern](const NThreading::TFuture<NYql::NS3Lister::TListResult>& listResFut) {
             auto& listRes = listResFut.GetValue();
             if (std::holds_alternative<NYql::NS3Lister::TListError>(listRes)) {

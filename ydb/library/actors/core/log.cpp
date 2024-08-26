@@ -85,7 +85,7 @@ namespace NActors {
             TString formatted;
             vsprintf(formatted, c, params);
 
-            auto ok = OutputRecord(time, NLog::EPrio(priority), component, formatted);
+            auto ok = OutputRecord(time, NLog::EPrio(priority), component, formatted, false);
             Y_UNUSED(ok);
             va_end(params);
         }
@@ -115,7 +115,7 @@ namespace NActors {
         if (ignoredCount > 0) {
             NLog::EPrio prio = LogBuffer.GetIgnoredHighestPrio();
             TString message = Sprintf("Logger overflow! Ignored %" PRIu64 "  log records with priority [%s] or lower!", ignoredCount, PriorityToString(prio));
-            if (!OutputRecord(ctx.Now(), NActors::NLog::EPrio::Error, Settings->LoggerComponent, message)) {
+            if (!OutputRecord(ctx.Now(), NActors::NLog::EPrio::Error, Settings->LoggerComponent, message, false)) {
                 BecomeDefunct();
             }
             LogBuffer.ClearIgnoredCount();
@@ -447,11 +447,11 @@ namespace NActors {
     constexpr size_t TimeBufSize = 512;
 
     bool TLoggerActor::OutputRecord(NLog::TEvLog *evLog) noexcept {
-        return OutputRecord(evLog->Stamp, evLog->Level.ToPrio(), evLog->Component, evLog->Line);
+        return OutputRecord(evLog->Stamp, evLog->Level.ToPrio(), evLog->Component, evLog->Line, evLog->Json);
     }
 
     bool TLoggerActor::OutputRecord(TInstant time, NLog::EPrio priority, NLog::EComponent component,
-                                    const TString& formatted) noexcept try {
+                                    const TString& formatted, bool json) noexcept try {
         const auto logPrio = ::ELogPriority(ui16(priority));
 
         char buf[TimeBufSize];
@@ -482,8 +482,8 @@ namespace NActors {
             } break;
 
             case NActors::NLog::TSettings::JSON_FORMAT: {
-                NJsonWriter::TBuf json;
-                json.BeginObject()
+                NJsonWriter::TBuf j;
+                j.BeginObject()
                     .WriteKey("@timestamp")
                     .WriteString(Settings->UseLocalTimestamps ? FormatLocalTimestamp(time, buf) : time.ToString().data())
                     .WriteKey("microseconds")
@@ -501,11 +501,18 @@ namespace NActors {
                     .WriteKey("tag")
                     .WriteString("KIKIMR")
                     .WriteKey("revision")
-                    .WriteInt(GetProgramSvnRevision())
-                    .WriteKey("message")
-                    .WriteString(formatted)
-                    .EndObject();
-                auto logRecord = json.Str();
+                    .WriteInt(GetProgramSvnRevision());
+                if (json) {
+                    if (formatted && formatted.front() == '{' && formatted.back() == '}') {
+                        j.UnsafeWritePair(TStringBuf(formatted.data() + 1, formatted.size() - 2));
+                    } else {
+                        j.UnsafeWritePair(formatted);
+                    }
+                } else {
+                    j.WriteKey("message").WriteString(formatted);
+                }
+                j.EndObject();
+                auto logRecord = j.Str();
                 LogBackend->WriteData(
                     TLogRecord(logPrio, logRecord.data(), logRecord.size()));
             } break;

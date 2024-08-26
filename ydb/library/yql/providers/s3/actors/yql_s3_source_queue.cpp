@@ -502,7 +502,8 @@ private:
                     PatternType,
                     object.GetPath()},
                 Nothing(),
-                AllowLocalFiles);
+                AllowLocalFiles,
+                NActors::TActivationContext::ActorSystem());
             Fetch();
             return true;
         }

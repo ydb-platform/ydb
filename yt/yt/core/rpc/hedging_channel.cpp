@@ -44,7 +44,7 @@ public:
 
     // IClientResponseHandler implementation.
     void HandleAcknowledgement() override;
-    void HandleResponse(TSharedRefArray message, TString address) override;
+    void HandleResponse(TSharedRefArray message, const std::string& address) override;
     void HandleError(TError error) override;
     void HandleStreamingPayload(const TStreamingPayload& /*payload*/) override;
     void HandleStreamingFeedback(const TStreamingFeedback& /*feedback*/) override;
@@ -114,7 +114,7 @@ public:
         responseHandler->HandleAcknowledgement();
     }
 
-    void HandleResponse(TSharedRefArray message, TString address, bool backup)
+    void HandleResponse(TSharedRefArray message, const std::string& address, bool backup)
     {
         IClientResponseHandlerPtr responseHandler;
         {
@@ -146,7 +146,7 @@ public:
             message = SetResponseHeader(std::move(message), header);
         }
 
-        responseHandler->HandleResponse(std::move(message), std::move(address));
+        responseHandler->HandleResponse(std::move(message), address);
     }
 
     void HandleError(TError error, bool backup)
@@ -307,9 +307,9 @@ void THedgingResponseHandler::HandleError(TError error)
     Session_->HandleError(std::move(error), Backup_);
 }
 
-void THedgingResponseHandler::HandleResponse(TSharedRefArray message, TString address)
+void THedgingResponseHandler::HandleResponse(TSharedRefArray message, const std::string& address)
 {
-    Session_->HandleResponse(std::move(message), std::move(address), Backup_);
+    Session_->HandleResponse(std::move(message), address, Backup_);
 }
 
 void THedgingResponseHandler::HandleStreamingPayload(const TStreamingPayload& /*payload*/)

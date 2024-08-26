@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 
 #include <ydb/library/accessor/accessor.h>
 
@@ -9,7 +10,7 @@
 
 namespace NKikimr::NArrow::NAccessor {
 
-class TSparsedArrayChunk {
+class TSparsedArrayChunk: public TMoveOnly {
 private:
     YDB_READONLY(ui32, RecordsCount, 0);
     YDB_READONLY(ui32, StartPosition, 0);
@@ -24,20 +25,26 @@ private:
 
     class TInternalChunkInfo {
     private:
-        YDB_READONLY(ui32, Start, 0);
+        YDB_READONLY(ui32, StartExt, 0);
+        YDB_READONLY(ui32, StartInt, 0);
         YDB_READONLY(ui32, Size, 0);
         YDB_READONLY(bool, IsDefault, false);
 
     public:
-        TInternalChunkInfo(const ui32 start, const ui32 size, const bool defaultFlag)
-            : Start(start)
+        TInternalChunkInfo(const ui32 startExt, const ui32 startInt, const ui32 size, const bool defaultFlag)
+            : StartExt(startExt)
+            , StartInt(startInt)
             , Size(size)
             , IsDefault(defaultFlag) {
             AFL_VERIFY(Size);
         }
+
+        bool operator<(const TInternalChunkInfo& item) const {
+            return StartExt < item.StartExt;
+        }
     };
 
-    std::map<ui32, TInternalChunkInfo> RemapExternalToInternal;
+    std::vector<TInternalChunkInfo> RemapExternalToInternal;
 
 public:
     ui32 GetFinishPosition() const {
@@ -87,8 +94,7 @@ protected:
     virtual std::vector<TChunkedArraySerialized> DoSplitBySizes(
         const TColumnSaver& saver, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) override;
 
-    virtual TLocalDataAddress DoGetLocalData(
-        const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override {
+    virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override {
         ui32 currentIdx = 0;
         for (ui32 i = 0; i < Records.size(); ++i) {
             if (currentIdx <= position && position < currentIdx + Records[i].GetRecordsCount()) {
@@ -115,38 +121,48 @@ protected:
         return bytes;
     }
 
-    TSparsedArray(std::vector<TSparsedArrayChunk>&& data, const std::shared_ptr<arrow::Scalar>& /*defaultValue*/,
+    TSparsedArray(std::vector<TSparsedArrayChunk>&& data, const std::shared_ptr<arrow::Scalar>& defaultValue,
         const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount)
         : TBase(recordsCount, EType::SparsedArray, type)
+        , DefaultValue(defaultValue)
         , Records(std::move(data)) {
     }
 
     static ui32 GetLastIndex(const std::shared_ptr<arrow::RecordBatch>& batch);
 
+    static std::shared_ptr<arrow::Schema> BuildSchema(const std::shared_ptr<arrow::DataType>& type) {
+        std::vector<std::shared_ptr<arrow::Field>> fields = { std::make_shared<arrow::Field>("index", arrow::uint32()),
+            std::make_shared<arrow::Field>("value", type) };
+        return std::make_shared<arrow::Schema>(fields);
+    }
+
+    static TSparsedArrayChunk MakeDefaultChunk(
+        const std::shared_ptr<arrow::Scalar>& defaultValue, const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount);
+
 public:
     TSparsedArray(const IChunkedArray& defaultArray, const std::shared_ptr<arrow::Scalar>& defaultValue);
-    TSparsedArray(const std::shared_ptr<arrow::Scalar>& defaultValue,
-        const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount)
-        : TSparsedArray({}, defaultValue, type, recordsCount)
-    {
-        
+
+    TSparsedArray(const std::shared_ptr<arrow::Scalar>& defaultValue, const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount)
+        : TBase(recordsCount, EType::SparsedArray, type)
+        , DefaultValue(defaultValue) {
+        Records.emplace_back(MakeDefaultChunk(defaultValue, type, recordsCount));
     }
 
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const override {
-        auto chunk = GetSparsedChunk(index);
+        auto& chunk = GetSparsedChunk(index);
         return chunk.GetScalar(index - chunk.GetStartPosition());
     }
 
-    TSparsedArrayChunk GetSparsedChunk(const ui64 position) const {
-        ui32 currentIdx = 0;
-        for (ui32 i = 0; i < Records.size(); ++i) {
-            if (currentIdx <= position && position < currentIdx + Records[i].GetRecordsCount()) {
-                return Records[i];
-            }
-            currentIdx += Records[i].GetRecordsCount();
-        }
-        AFL_VERIFY(false);
-        return Records.back();
+    const TSparsedArrayChunk& GetSparsedChunk(const ui64 position) const {
+        const auto pred = [](const ui64 position, const TSparsedArrayChunk& item) {
+            return position < item.GetStartPosition();
+        };
+        auto it = std::upper_bound(Records.begin(), Records.end(), position, pred);
+        AFL_VERIFY(it != Records.begin());
+        --it;
+        AFL_VERIFY(position < it->GetStartPosition() + it->GetRecordsCount());
+        AFL_VERIFY(it->GetStartPosition() <= position);
+        return *it;
     }
 
     class TBuilder {

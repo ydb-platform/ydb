@@ -1321,7 +1321,6 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         if (request.has_set_retention_period()) {
-            CHECK_CDC;
             partConfig->SetLifetimeSeconds(request.set_retention_period().seconds());
         }
 

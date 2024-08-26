@@ -128,7 +128,7 @@ public:
         , Timeout_(timeout)
     { }
 
-    IChannelPtr CreateChannel(const TString& address) override
+    IChannelPtr CreateChannel(const std::string& address) override
     {
         auto underlyingChannel = UnderlyingFactory_->CreateChannel(address);
         return CreateDefaultTimeoutChannel(underlyingChannel, Timeout_);
@@ -201,7 +201,7 @@ public:
         , AuthenticationIdentity_(identity)
     { }
 
-    IChannelPtr CreateChannel(const TString& address) override
+    IChannelPtr CreateChannel(const std::string& address) override
     {
         auto underlyingChannel = UnderlyingFactory_->CreateChannel(address);
         return CreateAuthenticatedChannel(underlyingChannel, AuthenticationIdentity_);
@@ -272,7 +272,7 @@ public:
         , RealmId_(realmId)
     { }
 
-    IChannelPtr CreateChannel(const TString& address) override
+    IChannelPtr CreateChannel(const std::string& address) override
     {
         auto underlyingChannel = UnderlyingFactory_->CreateChannel(address);
         return CreateRealmChannel(underlyingChannel, RealmId_);
@@ -369,9 +369,9 @@ private:
             UnderlyingHandler_->HandleAcknowledgement();
         }
 
-        void HandleResponse(TSharedRefArray message, TString address) override
+        void HandleResponse(TSharedRefArray message, const std::string& address) override
         {
-            UnderlyingHandler_->HandleResponse(std::move(message), std::move(address));
+            UnderlyingHandler_->HandleResponse(std::move(message), address);
         }
 
         void HandleError(TError error) override
@@ -517,9 +517,9 @@ void SetCurrentAuthenticationIdentity(const IClientRequestPtr& request)
     SetAuthenticationIdentity(request, GetCurrentAuthenticationIdentity());
 }
 
-std::vector<TString> AddressesFromEndpointSet(const NServiceDiscovery::TEndpointSet& endpointSet)
+std::vector<std::string> AddressesFromEndpointSet(const NServiceDiscovery::TEndpointSet& endpointSet)
 {
-    std::vector<TString> addresses;
+    std::vector<std::string> addresses;
     addresses.reserve(endpointSet.Endpoints.size());
     for (const auto& endpoint : endpointSet.Endpoints) {
         addresses.push_back(NNet::BuildServiceAddress(endpoint.Fqdn, endpoint.Port));

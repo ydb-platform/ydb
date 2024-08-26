@@ -29,8 +29,6 @@ public:
         Tpch.Reset(new NTpch::TTpchRunner(*Driver, Database));
 
         if (!InitDone) {
-            ConfigureTableService(endpoint);
-
             Tpch->UploadBundledData(2, false);
 
             InitDone = true;
@@ -40,58 +38,6 @@ public:
     void TearDown() override {
         Tpch.Destroy();
         Driver->Stop(true);
-    }
-
-    void ConfigureTableService(const TString& endpoint) {
-        NYdbGrpc::TGRpcClientLow grpcClient;
-        auto grpcContext = grpcClient.CreateContext();
-
-        NYdbGrpc::TGRpcClientConfig grpcConfig{endpoint};
-        auto grpc = grpcClient.CreateGRpcServiceConnection<NKikimrClient::TGRpcServer>(grpcConfig);
-
-        NKikimrClient::TConsoleRequest request;
-        auto* action = request.MutableConfigureRequest()->MutableActions()->Add();
-        auto* configItem = action->MutableAddConfigItem()->MutableConfigItem();
-        configItem->SetKind(NKikimrConsole::TConfigItem::TableServiceConfigItem);
-        auto* rm = configItem->MutableConfig()->MutableTableServiceConfig()->MutableResourceManager();
-        rm->SetChannelBufferSize(10ul << 20);
-        rm->SetMkqlLightProgramMemoryLimit(100ul << 20);
-        rm->SetMkqlHeavyProgramMemoryLimit(100ul << 20);
-        rm->SetQueryMemoryLimit(20ul << 30);
-        rm->SetPublishStatisticsIntervalSec(0);
-
-        TAtomic done = 0;
-        grpc->DoRequest<NKikimrClient::TConsoleRequest, NKikimrClient::TConsoleResponse>(
-            request,
-            [&done](NYdbGrpc::TGrpcStatus&& status, NKikimrClient::TConsoleResponse&& response) {
-                if (status.Ok()) {
-                    if (response.GetStatus().code() != Ydb::StatusIds::SUCCESS) {
-                        AtomicSet(done, 3);
-                        return;
-                    }
-                    if (response.GetConfigureResponse().GetStatus().code() != Ydb::StatusIds::SUCCESS) {
-                        AtomicSet(done, 4);
-                        return;
-                    }
-                    AtomicSet(done, 1);
-                } else {
-                    Cerr << "status: {" << status.Msg << ", " << status.InternalError << ", "
-                         << status.GRpcStatusCode << "}" << Endl;
-                    Cerr << response.Utf8DebugString() << Endl;
-                    AtomicSet(done, 2);
-                }
-            },
-            &NKikimrClient::TGRpcServer::Stub::AsyncConsoleRequest,
-            {},
-            grpcContext.get());
-
-        while (AtomicGet(done) == 0) {
-            ::Sleep(TDuration::Seconds(1));
-        }
-        grpcContext.reset();
-        grpcClient.Stop(true);
-
-        UNIT_ASSERT_EQUAL(done, 1);
     }
 
     UNIT_TEST_SUITE(KqpTpch);

@@ -23,7 +23,7 @@ public:
             std::move(memoryUsageTracker));
     }
 
-    IChannelPtr CreateChannel(const TString& address)
+    IChannelPtr CreateChannel(const std::string& address)
     {
         return TImpl::CreateChannel(address, address, {});
     }
@@ -47,7 +47,7 @@ TYPED_TEST(THandleChannelFailureTest, HandleChannelFailureTest)
         CreateTestService(
             workerPool->GetInvoker(),
             false,
-            BIND([&] (const TString& address) {
+            BIND([&] (const std::string& address) {
                 return this->CreateChannel(address);
             }),
             outerMemoryUsageTracker),
@@ -58,7 +58,7 @@ TYPED_TEST(THandleChannelFailureTest, HandleChannelFailureTest)
         CreateTestService(
             workerPool->GetInvoker(),
             false,
-            BIND([&] (const TString& address) {
+            BIND([&] (const std::string& address) {
                 return this->CreateChannel(address);
             }),
             innerMemoryUsageTracker),

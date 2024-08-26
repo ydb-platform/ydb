@@ -20,6 +20,7 @@
 #include <ydb/core/protos/key.pb.h>
 #include <ydb/core/protos/memory_controller_config.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/protos/netclassifier.pb.h>
 #include <ydb/core/protos/datashard_config.pb.h>
@@ -63,6 +64,7 @@ struct TAppData::TImpl {
     NKikimrSharedCache::TSharedCacheConfig SharedCacheConfig;
     NKikimrConfig::TMetadataCacheConfig MetadataCacheConfig;
     NKikimrConfig::TMemoryControllerConfig MemoryControllerConfig;
+    NKikimrReplication::TReplicationDefaults ReplicationConfig;
 };
 
 TAppData::TAppData(
@@ -116,6 +118,7 @@ TAppData::TAppData(
     , SharedCacheConfig(Impl->SharedCacheConfig)
     , MetadataCacheConfig(Impl->MetadataCacheConfig)
     , MemoryControllerConfig(Impl->MemoryControllerConfig)
+    , ReplicationConfig(Impl->ReplicationConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
 {}
 

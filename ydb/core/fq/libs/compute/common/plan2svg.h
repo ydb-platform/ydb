@@ -56,6 +56,7 @@ struct TMetricHistory {
     ui64 MaxTime = 0;
 
     void Load(const NJson::TJsonValue& node, ui64 explicitMinTime, ui64 explicitMaxTime);
+    void Load(std::vector<ui64>& times, std::vector<ui64>& values, ui64 explicitMinTime, ui64 explicitMaxTime);
 };
 
 class TSingleMetric {
@@ -68,7 +69,7 @@ public:
 
     std::shared_ptr<TSummaryMetric> Summary;
     TAggregation Details;
-    
+
     TMetricHistory History;
     TMetricHistory WaitTime;
     ui64 MinTime = 0;
@@ -120,10 +121,13 @@ public:
     ui32 IndentY = 0;
     ui32 OffsetY = 0;
     ui32 Height = 0;
+    ui32 CteHeight = 0;
     std::shared_ptr<TSingleMetric> CpuTime;
     std::shared_ptr<TSingleMetric> MaxMemoryUsage;
     std::shared_ptr<TSingleMetric> OutputBytes;
     std::shared_ptr<TSingleMetric> OutputRows;
+    std::shared_ptr<TSingleMetric> SpillingComputeTime;
+    std::shared_ptr<TSingleMetric> SpillingComputeBytes;
     std::vector<std::string> Info;
     ui64 BaseTime = 0;
     ui32 PlanNodeId = 0;
@@ -156,6 +160,12 @@ struct TColorPalette {
     TString ConnectionText;
     TString MinMaxLine;
     TString TextLight;
+    TString SpillingBytesDark;
+    TString SpillingBytesMedium;
+    TString SpillingBytesLight;
+    TString SpillingTimeDark;
+    TString SpillingTimeMedium;
+    TString SpillingTimeLight;
 };
 
 struct TPlanViewConfig {
@@ -169,7 +179,8 @@ struct TPlanViewConfig {
 class TPlan {
 
 public:
-    TPlan(const TString& nodeType, TPlanViewConfig& config) : NodeType(nodeType), Config(config) {
+    TPlan(const TString& nodeType, TPlanViewConfig& config, std::map<std::string, std::shared_ptr<TStage>>& cteStages)
+        : NodeType(nodeType), Config(config), CteStages(cteStages) {
         CpuTime = std::make_shared<TSummaryMetric>();
         MaxMemoryUsage = std::make_shared<TSummaryMetric>();
         OutputBytes = std::make_shared<TSummaryMetric>();
@@ -178,6 +189,8 @@ public:
         InputRows = std::make_shared<TSummaryMetric>();
         IngressBytes = std::make_shared<TSummaryMetric>();
         IngressRows = std::make_shared<TSummaryMetric>();
+        SpillingComputeTime = std::make_shared<TSummaryMetric>();
+        SpillingComputeBytes = std::make_shared<TSummaryMetric>();
     }
 
     void Load(const NJson::TJsonValue& node);
@@ -185,9 +198,10 @@ public:
     void LoadSource(std::shared_ptr<TSource> source, const NJson::TJsonValue& node);
     void MarkStageIndent(ui32 indentX, ui32& offsetY, std::shared_ptr<TStage> stage);
     void MarkLayout();
+    void ResolveCteRefs();
     void PrintTimeline(TStringBuilder& background, TStringBuilder& canvas, const TString& title, TAggregation& firstMessage, TAggregation& lastMessage, ui32 x, ui32 y, ui32 w, ui32 h, const TString& color);
     void PrintWaitTime(TStringBuilder& canvas, std::shared_ptr<TSingleMetric> metric, ui32 x, ui32 y, ui32 w, ui32 h, const TString& fillColor);
-    void PrintDeriv(TStringBuilder& canvas, std::shared_ptr<TSingleMetric> metric, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor = "");
+    void PrintDeriv(TStringBuilder& canvas, TMetricHistory& history, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor = "");
     void PrintValues(TStringBuilder& canvas, std::shared_ptr<TSingleMetric> metric, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor = "");
     void PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TStringBuilder& canvas);
     TString NodeType;
@@ -200,14 +214,19 @@ public:
     std::shared_ptr<TSummaryMetric> InputRows;
     std::shared_ptr<TSummaryMetric> IngressBytes;
     std::shared_ptr<TSummaryMetric> IngressRows;
+    std::shared_ptr<TSummaryMetric> SpillingComputeTime;
+    std::shared_ptr<TSummaryMetric> SpillingComputeBytes;
+    std::vector<ui64> TotalCpuTimes;
+    std::vector<ui64> TotalCpuValues;
+    TMetricHistory TotalCpuTime;
     ui64 MaxTime = 1000;
     ui64 BaseTime = 0;
     ui64 TimeOffset = 0;
     ui32 OffsetY = 0;
     ui32 Tasks = 0;
     std::vector<std::pair<std::string, std::shared_ptr<TConnection>>> CteRefs;
-    std::map<std::string, std::shared_ptr<TStage>> CteStages;
     TPlanViewConfig& Config;
+    std::map<std::string, std::shared_ptr<TStage>>& CteStages;
 };
 
 class TPlanVisualizer {
@@ -216,7 +235,7 @@ public:
 
     void LoadPlans(const TString& plans);
     void LoadPlan(const TString& planNodeType, const NJson::TJsonValue& root);
-    void SetTimeOffsets();
+    void PostProcessPlans();
     TString PrintSvg();
     TString PrintSvgSafe();
 
@@ -224,4 +243,5 @@ public:
     ui64 MaxTime = 1000;
     ui64 BaseTime = 0;
     TPlanViewConfig Config;
+    std::map<std::string, std::shared_ptr<TStage>> CteStages;
 };

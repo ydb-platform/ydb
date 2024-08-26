@@ -150,6 +150,15 @@ struct TSimpleArithmeticUnary : public TArithmeticConstraintsSame<TInput, TOutpu
 #endif
 };
 
+template <class TImpl>
+struct TDecimalUnary {
+    static void DoPtr(
+        const NYql::NDecimal::TInt128* arg,
+        NYql::NDecimal::TInt128* res) {
+        *res = TImpl::Execute(NUdf::TUnboxedValuePod(*arg)).GetInt128();
+    }
+};
+
 template <typename TLeft, typename TRight, typename TOutput, class TImpl, bool CustomCast = false>
 struct TSimpleArithmeticBinary : public TArithmeticConstraintsBinary<TLeft, TRight, TOutput> {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
@@ -1021,6 +1030,11 @@ arrow::Status ExecDecimalBinaryOptImpl(arrow::compute::KernelContext* kernelCtx,
     TUntypedBinaryArrayOptFuncPtr arrayScalarFunc,
     TUntypedBinaryArrayOptFuncPtr arrayArrayFunc);
 
+arrow::Status ExecDecimalUnaryImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TPrimitiveDataTypeGetter typeGetter, 
+    TUntypedUnaryScalarFuncPtr scalarFunc, TUntypedUnaryArrayFuncPtr arrayFunc);
+
 template<typename TInput1, bool Tz1, typename TInput2, bool Tz2, typename TOutput, EPropagateTz PropagateTz,
          typename TFuncInstance, TKernel::ENullMode NullMode>
 struct TBinaryKernelExecs;
@@ -1259,7 +1273,7 @@ private:
 template<typename TInput, bool Tz, typename TOutput, bool PropagateTz, class TFuncInstance>
 struct TUnaryKernelExecs
 {
-   using TTypedUnaryScalarFuncPtr = void(*)(
+    using TTypedUnaryScalarFuncPtr = void(*)(
         const typename TPrimitiveDataType<TInput>::TLayout*,
         typename TPrimitiveDataType<TOutput>::TLayout*
     );
@@ -1296,6 +1310,23 @@ struct TUnaryKernelExecs
     }
 };
 
+
+template<class TFuncInstance>
+struct TUnaryDecimalKernelExecs
+{
+    using TInput = NYql::NDecimal::TInt128;
+    using TOutput = NYql::NDecimal::TInt128;
+
+    static arrow::Status Exec(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        auto func = &TFuncInstance::DoPtr;
+        auto arrayFunc = &TUnaryKernelExecs<TInput, false, TOutput, false, TFuncInstance>::ArrayCore;
+        return ExecDecimalUnaryImpl(kernelCtx, batch, res,
+            &GetPrimitiveDataType<TOutput>,
+            (TUntypedUnaryScalarFuncPtr)func,
+            (TUntypedUnaryArrayFuncPtr)arrayFunc);
+    }
+};
+
 using TStatelessArrayKernelExec = arrow::Status(*)(arrow::compute::KernelContext*, const arrow::compute::ExecBatch&, arrow::Datum*);
 
 void AddUnaryKernelImpl(TKernelFamilyBase& owner, NUdf::EDataSlot arg1, NUdf::EDataSlot res,
@@ -1314,6 +1345,13 @@ void AddUnaryKernel(TKernelFamilyBase& owner) {
     using TExecs = TUnaryKernelExecs<TInputLayout, tz, TOutputLayout, propagateTz, TFuncInstance>;
 
     AddUnaryKernelImpl(owner, TInput::Slot, TOutput::Slot, &TExecs::Exec, TFuncInstance::NullMode);
+}
+
+template<class TFunc>
+void AddUnaryDecimalKernels(TKernelFamilyBase& owner) {
+    using TExecs = TUnaryDecimalKernelExecs<TFunc>;
+
+    AddUnaryKernelImpl(owner, NUdf::EDataSlot::Decimal, NUdf::EDataSlot::Decimal, &TExecs::Exec, TKernel::ENullMode::Default);
 }
 
 void AddBinaryKernelImpl(TKernelFamilyBase& owner, NUdf::EDataSlot arg1, NUdf::EDataSlot arg2, NUdf::EDataSlot res,

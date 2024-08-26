@@ -24,7 +24,7 @@ public:
     void* ThreadProc() override {
         while (!StopFlag.load(std::memory_order_acquire)) {
             CheckSemaphore();
-            NanoSleep(1000000);
+            NanoSleep(1000);
         }
         return nullptr;
     }

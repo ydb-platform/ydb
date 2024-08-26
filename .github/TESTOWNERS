@@ -13,6 +13,7 @@
 /ydb/core/tx/datashard @ydb-platform/datashard
 /ydb/core/mon_alloc @ydb-platform/datashard
 /ydb/core/tx/coordinator @ydb-platform/datashard
+/ydb/core/statistics @ydb-platform/datashard
 
 #Column Tables Development Team @zverevgeny TEAM:@ydb-platform/cs
 /ydb/core/tx/columnshard @ydb-platform/cs

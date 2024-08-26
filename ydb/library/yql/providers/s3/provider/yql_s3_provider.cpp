@@ -4,8 +4,8 @@
 
 namespace NYql {
 
-TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, bool allowLocalFiles) {
-    return [gateway, credentialsFactory, allowLocalFiles] (
+TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, bool allowLocalFiles, NActors::TActorSystem* actorSystem) {
+    return [gateway, credentialsFactory, allowLocalFiles, actorSystem] (
         const TString& userName,
         const TString& sessionId,
         const TGatewaysConfig* gatewaysConfig,
@@ -28,6 +28,7 @@ TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway
         state->Types = typeCtx.Get();
         state->FunctionRegistry = functionRegistry;
         state->CredentialsFactory = credentialsFactory;
+        state->ActorSystem = actorSystem;
         if (gatewaysConfig) {
             state->Configuration->Init(gatewaysConfig->GetS3(), typeCtx);
         }

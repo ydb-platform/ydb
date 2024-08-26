@@ -277,6 +277,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
             Self->Schedule(Self->TraversalPeriod, new TEvPrivate::TEvScheduleTraversal());
             Self->Schedule(Self->SendAnalyzePeriod, new TEvPrivate::TEvSendAnalyze());
             Self->Schedule(Self->AnalyzeDeliveryProblemPeriod, new TEvPrivate::TEvAnalyzeDeliveryProblem());
+            Self->Schedule(Self->AnalyzeDeadlinePeriod, new TEvPrivate::TEvAnalyzeDeadline());
         } else {
             SA_LOG_W("[" << Self->TabletID() << "] TTxInit::Complete. EnableColumnStatistics=false");
         }

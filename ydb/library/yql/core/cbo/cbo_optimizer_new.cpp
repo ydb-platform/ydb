@@ -330,7 +330,6 @@ std::shared_ptr<IBaseOptimizerNode> MakeJoinTreeFromJson(const NJson::TJsonValue
 }
 
 TJoinOrderHints::TJoinOrderHints(const TString& json) {
-    Cout << json << Endl;
     NJson::TJsonValue jsonTree;
     NJson::ReadJsonTree(json, &jsonTree, true);
     HintsTree = MakeJoinTreeFromJson(jsonTree);

@@ -16,8 +16,7 @@ using namespace NActors;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TEvMsg : public NActors::TEventBase<TEvMsg, 10347> {
-    DEFINE_SIMPLE_LOCAL_EVENT(TEvMsg, "ExecutorPoolTest: Msg");
+struct TEvMsg : public NActors::TEventLocal<TEvMsg, 10347> {
 };
 
 ////////////////////////////////////////////////////////////////////////////////

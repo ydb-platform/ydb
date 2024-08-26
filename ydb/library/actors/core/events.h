@@ -1,6 +1,6 @@
 #pragma once
 
-#include "event.h"
+#include "event_local.h"
 #include "event_pb.h"
 
 #include <util/system/unaligned_mem.h>
@@ -48,12 +48,10 @@ namespace NActors {
             static_assert(End < EventSpaceEnd(ES_HELLOWORLD), "expect End < EventSpaceEnd(ES_HELLOWORLD)");
         };
 
-        struct TEvPing: public TEventBase<TEvPing, THelloWorld::Ping> {
-            DEFINE_SIMPLE_NONLOCAL_EVENT(TEvPing, "HelloWorld: Ping");
+        struct TEvPing: public TEventLocal<TEvPing, THelloWorld::Ping> {
         };
 
-        struct TEvPong: public TEventBase<TEvPong, THelloWorld::Pong> {
-            DEFINE_SIMPLE_NONLOCAL_EVENT(TEvPong, "HelloWorld: Pong");
+        struct TEvPong: public TEventLocal<TEvPong, THelloWorld::Pong> {
         };
 
         struct TEvBlob: public TEventBase<TEvBlob, THelloWorld::Blob> {
@@ -113,28 +111,22 @@ namespace NActors {
             static_assert(End < EventSpaceEnd(ES_SYSTEM), "expect End < EventSpaceEnd(ES_SYSTEM)");
         };
 
-        struct TEvBootstrap: public TEventBase<TEvBootstrap, TSystem::Bootstrap> {
-            DEFINE_SIMPLE_LOCAL_EVENT(TEvBootstrap, "System: TEvBootstrap")
+        struct TEvBootstrap: public TEventLocal<TEvBootstrap, TSystem::Bootstrap> {
         };
 
-        struct TEvPoison : public TEventBase<TEvPoison, TSystem::Poison> {
-            DEFINE_SIMPLE_NONLOCAL_EVENT(TEvPoison, "System: TEvPoison")
+        struct TEvPoison : public TEventLocal<TEvPoison, TSystem::Poison> {
         };
 
-        struct TEvWakeup: public TEventBase<TEvWakeup, TSystem::Wakeup> {
-            DEFINE_SIMPLE_LOCAL_EVENT(TEvWakeup, "System: TEvWakeup")
-
+        struct TEvWakeup: public TEventLocal<TEvWakeup, TSystem::Wakeup> {
             TEvWakeup(ui64 tag = 0) : Tag(tag) { }
 
             const ui64 Tag = 0;
         };
 
-        struct TEvSubscribe: public TEventBase<TEvSubscribe, TSystem::Subscribe> {
-            DEFINE_SIMPLE_LOCAL_EVENT(TEvSubscribe, "System: TEvSubscribe")
+        struct TEvSubscribe: public TEventLocal<TEvSubscribe, TSystem::Subscribe> {
         };
 
-        struct TEvUnsubscribe: public TEventBase<TEvUnsubscribe, TSystem::Unsubscribe> {
-            DEFINE_SIMPLE_LOCAL_EVENT(TEvUnsubscribe, "System: TEvUnsubscribe")
+        struct TEvUnsubscribe: public TEventLocal<TEvUnsubscribe, TSystem::Unsubscribe> {
         };
 
         struct TEvUndelivered: public TEventBase<TEvUndelivered, TSystem::Undelivered> {
@@ -174,7 +166,7 @@ namespace NActors {
             }
         };
 
-        struct TEvCompleted: public TEventBase<TEvCompleted, TSystem::Completed> {
+        struct TEvCompleted: public TEventLocal<TEvCompleted, TSystem::Completed> {
             const ui32 Id;
             const ui32 Status;
             TEvCompleted(ui32 id = 0, ui32 status = 0)
@@ -182,37 +174,28 @@ namespace NActors {
                 , Status(status)
             {
             }
-
-            DEFINE_SIMPLE_LOCAL_EVENT(TEvCompleted, "System: TEvCompleted")
         };
 
-        struct TEvPoisonTaken: public TEventBase<TEvPoisonTaken, TSystem::PoisonTaken> {
-            DEFINE_SIMPLE_LOCAL_EVENT(TEvPoisonTaken, "System: TEvPoisonTaken")
+        struct TEvPoisonTaken: public TEventLocal<TEvPoisonTaken, TSystem::PoisonTaken> {
         };
 
-        struct TEvFlushLog: public TEventBase<TEvFlushLog, TSystem::FlushLog> {
-            DEFINE_SIMPLE_LOCAL_EVENT(TEvFlushLog, "System: TEvFlushLog")
+        struct TEvFlushLog: public TEventLocal<TEvFlushLog, TSystem::FlushLog> {
         };
 
-        struct TEvCallbackException : TEventBase<TEvCallbackException, TSystem::CallbackException> {
-            DEFINE_SIMPLE_LOCAL_EVENT(TEvCallbackException, "System: TEvCallbackException")
-
+        struct TEvCallbackException : TEventLocal<TEvCallbackException, TSystem::CallbackException> {
             const TActorId Id;
             TString Msg;
 
             TEvCallbackException(const TActorId& id, const TString& msg) : Id(id), Msg(msg) {}
         };
 
-        struct TEvCallbackCompletion : TEventBase<TEvCallbackCompletion, TSystem::CallbackCompletion> {
-            DEFINE_SIMPLE_LOCAL_EVENT(TEvCallbackException, "System: TEvCallbackCompletion")
-
+        struct TEvCallbackCompletion : TEventLocal<TEvCallbackCompletion, TSystem::CallbackCompletion> {
             const TActorId Id;
 
             TEvCallbackCompletion(const TActorId& id) : Id(id) {}
         };
 
-        struct TEvGone: public TEventBase<TEvGone, TSystem::Gone> {
-            DEFINE_SIMPLE_LOCAL_EVENT(TEvGone, "System: TEvGone")
+        struct TEvGone: public TEventLocal<TEvGone, TSystem::Gone> {
         };
 
         struct TEvInvokeResult;

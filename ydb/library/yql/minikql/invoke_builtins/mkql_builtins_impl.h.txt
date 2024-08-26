@@ -1709,5 +1709,40 @@ void AddBinaryDecimalKernels(TKernelFamilyBase& owner) {
     owner.Adopt(argTypes, returnType, std::move(kernel));
 }
 
+template<class TFuncInstance>
+struct TDecimalComparisonKernelExecs
+{
+    using TInput1 = NYql::NDecimal::TInt128;
+    using TInput2 = NYql::NDecimal::TInt128;
+    using TOutput = bool;
+
+    static arrow::Status Exec(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        auto scalarScalarFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ScalarScalarCoreOpt;
+        auto scalarArrayFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ScalarArrayCoreOpt;
+        auto arrayScalarFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ArrayScalarCoreOpt;
+        auto arrayArrayFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ArrayArrayCoreOpt;
+
+        return ExecDecimalBinaryOptImpl(kernelCtx, batch, res,
+            &GetPrimitiveDataType<TOutput>,
+            sizeof(TOutput),
+            (TUntypedBinaryScalarOptFuncPtr)scalarScalarFunc,
+            (TUntypedBinaryArrayOptFuncPtr)scalarArrayFunc,
+            (TUntypedBinaryArrayOptFuncPtr)arrayScalarFunc,
+            (TUntypedBinaryArrayOptFuncPtr)arrayArrayFunc);
+    }
+};
+
+template<class TFunc>
+void AddDecimalComparisonKernels(TKernelFamilyBase& owner) {
+    auto type1 = NUdf::GetDataTypeInfo(NUdf::EDataSlot::Decimal).TypeId;
+    auto type2 = type1;
+    auto returnType = NUdf::GetDataTypeInfo(NUdf::EDataSlot::Bool).TypeId;
+    std::vector<NUdf::TDataTypeId> argTypes({ type1, type2 });
+
+    using Execs = TDecimalComparisonKernelExecs<TFunc>;
+    auto kernel = std::make_unique<TDecimalKernel>(owner, argTypes, returnType, &Execs::Exec, TKernel::ENullMode::Default);
+    owner.Adopt(argTypes, returnType, std::move(kernel));
+}
+
 }
 }

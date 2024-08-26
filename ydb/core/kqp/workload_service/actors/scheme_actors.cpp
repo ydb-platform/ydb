@@ -483,12 +483,12 @@ public:
                 }
                 return;
             case EStatus::Ok:
+                if (!IsSubDomainPath(result)) {
+                    Reply(Ydb::StatusIds::UNSUPPORTED, TStringBuilder() << "Invalid database path " << Database << ", expected domain or subdomain path");
+                    return;
+                }
                 if (result.DomainInfo) {
                     Serverless = result.DomainInfo->IsServerless();
-                    if (result.Self->Info.GetPathId() != result.DomainInfo->DomainKey.LocalPathId) {
-                        Reply(Ydb::StatusIds::UNSUPPORTED, TStringBuilder() << "Invalid database " << Database << ", domain path id is different");
-                        return;
-                    }
                 }
                 Reply(Ydb::StatusIds::SUCCESS);
                 return;
@@ -539,6 +539,18 @@ private:
         Issues.AddIssues(std::move(issues));
         Send(ReplyActorId, new TEvPrivate::TEvFetchDatabaseResponse(status, Database, Serverless, std::move(Issues)));
         PassAway();
+    }
+
+    static bool IsSubDomainPath(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry) {
+        switch (entry.Kind) {
+            case NSchemeCache::TSchemeCacheNavigate::EKind::KindSubdomain:
+            case NSchemeCache::TSchemeCacheNavigate::EKind::KindExtSubdomain:
+                return true;
+            case NSchemeCache::TSchemeCacheNavigate::EKind::KindPath:
+                return entry.Self->Info.GetPathId() == NSchemeShard::RootPathId;
+            default:
+                return false;
+        }
     }
 
 private:

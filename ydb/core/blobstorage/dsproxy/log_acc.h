@@ -86,8 +86,8 @@ namespace NKikimr {
 #define ENABLE_ALTERNATIVE_LOG_ACCUMULATION 1
 
 #if ENABLE_LOG_ACCUMULATION
+    #error "this version is deprecated, isRelease is removed"
     #define A_LOG_LOG_S_IMPL(accumulator, priority, component, stream) \
-        #error "deprecated, isRelease is removed"
         do { \
             ::NActors::NLog::TSettings *mSettings = \
                 (::NActors::NLog::TSettings*)(TActivationContext::LoggerSettings()); \

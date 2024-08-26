@@ -19,22 +19,46 @@ namespace NYdb {
 
         namespace {
 
+            bool IsKeyword(const antlr4::Token* token) {
+                const auto type = token->getType();
+                return YQLLexer::ABORT <= type && type <= YQLLexer::XOR;
+            }
+
+            bool IsOperation(const antlr4::Token* token) {
+                const auto type = token->getType();
+                return YQLLexer::EQUALS <= type && type <= YQLLexer::LBRACE_SQUARE;
+            }
+
+            bool IsIdentifier(const antlr4::Token* token) {
+                const auto type = token->getType();
+                return YQLLexer::ID_PLAIN <= type && type <= YQLLexer::ID_QUOTED;
+            }
+
+            bool IsString(const antlr4::Token* token) {
+                const auto type = token->getType();
+                return type == YQLLexer::STRING_VALUE;
+            }
+
+            bool IsNumber(const antlr4::Token* token) {
+                const auto type = token->getType();
+                return YQLLexer::DIGITS <= type && type <= YQLLexer::BLOB;
+            }
+
             YQLHighlight::Color ColorOf(const YQLHighlight::ColorSchema& schema,
                                         const antlr4::Token* token) {
-                const auto type = token->getType();
-                if (type == YQLLexer::STRING_VALUE) {
+                if (IsString(token)) {
                     return schema.string;
                 }
-                if (YQLLexer::ID_PLAIN <= type && type <= YQLLexer::ID_QUOTED) {
+                if (IsIdentifier(token)) {
                     return schema.identifier;
                 }
-                if (YQLLexer::DIGITS <= type && type <= YQLLexer::BLOB) {
+                if (IsNumber(token)) {
                     return schema.number;
                 }
-                if (YQLLexer::EQUALS <= type && type <= YQLLexer::LBRACE_SQUARE) {
+                if (IsOperation(token)) {
                     return schema.operation;
                 }
-                if (YQLLexer::ABORT <= type && type <= YQLLexer::XOR) {
+                if (IsKeyword(token)) {
                     return schema.keyword;
                 }
                 return schema.unknown;

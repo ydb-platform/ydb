@@ -322,6 +322,8 @@ protected:
     ui64 GetTimeToAccelerateNs(TLogContext &logCtx, NKikimrBlobStorage::EVDiskQueueId queueId);
     
     bool IsDataConsistent(const TBlobState &blobState, const TRope &data);
+    bool FindCorruptedPart42(const TBlobState &blobState, const TRope &data, ui32 &outPartIndex);
+    bool FindCorruptedPartMirror(const TBlobState &blobState, ui32 &outPartIndex);
 }; //TGetImpl
 
 }//NKikimr

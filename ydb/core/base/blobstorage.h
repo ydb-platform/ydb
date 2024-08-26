@@ -1249,6 +1249,8 @@ struct TEvBlobStorage {
             bool DoNotKeep = false;
             std::optional<bool> LooksLikePhantom; // filled only when PhantomCheck is true
             bool IntegrityCheckFailed = false;
+            bool CorruptedPartFound = false;
+            ui32 CorruptedPartIndex = 0;
 
             TResponse()
                 : Status(NKikimrProto::UNKNOWN)

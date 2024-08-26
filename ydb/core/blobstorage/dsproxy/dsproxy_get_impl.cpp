@@ -143,6 +143,21 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
                 if (IntegrityCheck && !IsDataConsistent(blobState, data)) {
                     outResponse.Status = NKikimrProto::ERROR;
                     outResponse.IntegrityCheckFailed = true;
+                    ui32 corruptedPartIdx = 0;
+
+                    switch (Info->Type.GetErasure()) {
+                        case TBlobStorageGroupType::ErasureMirror3dc:
+                        case TBlobStorageGroupType::ErasureMirror3of4:
+                            outResponse.CorruptedPartFound = FindCorruptedPartMirror(blobState, corruptedPartIdx);
+                            outResponse.CorruptedPartIndex = corruptedPartIdx;
+                            break;
+
+                        default: {
+                            outResponse.CorruptedPartFound = FindCorruptedPart42(blobState, data, corruptedPartIdx);
+                            outResponse.CorruptedPartIndex = corruptedPartIdx;
+                            break;
+                        }
+                    }
                 }
                 
                 DecryptInplace(data, 0, shift, size, query.Id, *Info);
@@ -415,14 +430,98 @@ bool TGetImpl::IsDataConsistent(const TBlobState &blobState, const TRope &data) 
         ErasureSplit((TErasureType::ECrcMode)blobState.Id.CrcMode(), Info->Type, data, partData);
     }
     for (const auto &item : blobState.PartMap) {
-        if (!item.Data.IsEmpty()) {
-            const TRope &partToCheck = isBlock42 ? partData[item.PartIdRequested - 1] : data;
-            if (item.Data != partToCheck) {
-                return false;
-            }
+        if (item.Data.IsEmpty()) {
+            continue;
+        }
+        const TRope &partToCheck = isBlock42 ? partData[item.PartIdRequested - 1] : data;
+        if (item.Data != partToCheck) {
+            return false;
         }
     }
     return true;
 }
 
+bool TGetImpl::FindCorruptedPart42(const TBlobState &blobState, const TRope &data, ui32 &outPartIndex) {
+    const auto &parts = blobState.PartMap;
+    auto crcMode = static_cast<TErasureType::ECrcMode>(blobState.Id.CrcMode());
+    ui32 totalParts = Info->Type.TotalPartCount();
+
+    for (ui32 excludedPart = 0; excludedPart < parts.size(); ++excludedPart) {
+        if (parts[excludedPart].Data.IsEmpty()) {
+            continue;
+        }
+        TStackVec<TRope, TypicalPartsInBlob> selectedParts(totalParts);
+        ui32 restoreMask = 0;
+        ui32 selectedCount = 0;
+        for (ui32 i = 0; i < parts.size(); ++i) {
+            if (i == excludedPart || parts[i].Data.IsEmpty()) {
+                continue;
+            }
+            ui32 partId = parts[i].PartIdRequested - 1;
+            if (selectedParts[partId].IsEmpty()) {
+                selectedParts[partId] = parts[i].Data;
+                restoreMask |= (1 << partId);
+                ++selectedCount;
+            }
+            if (selectedCount == 4) {
+                break;
+            }
+        }
+
+        if (selectedCount != 4) {
+            continue;
+        }
+
+        TRope restoredBlob;
+        ErasureRestore(crcMode, Info->Type, data.size(), &restoredBlob, selectedParts, restoreMask);
+        TStackVec<TRope, TypicalPartsInBlob> restoredParts(totalParts);
+        ErasureSplit(crcMode, Info->Type, restoredBlob, restoredParts);
+
+        ui32 mismatch = 0;
+        for (ui32 i = 0; i < parts.size(); ++i) {
+            if (i == excludedPart || parts[i].Data.IsEmpty()) {
+                continue;
+            }
+            ui32 partId = parts[i].PartIdRequested - 1;
+            if (parts[i].Data != restoredParts[partId]) {
+                ++mismatch;
+            }
+        }
+        
+        if (mismatch == 0) {
+            outPartIndex = excludedPart;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool TGetImpl::FindCorruptedPartMirror(const TBlobState &blobState, ui32 &outPartIndex) {
+    const auto &parts = blobState.PartMap;
+    ui32 corruptedParts = 0;
+
+    for (ui32 checkedPart = 0; checkedPart < parts.size(); ++checkedPart) {
+        if (parts[checkedPart].Data.IsEmpty()) {
+            continue;
+        }
+    
+        ui32 mismatch = 0;
+        for (ui32 i = 0; i < parts.size(); ++i) {
+            if (i == checkedPart || parts[i].Data.IsEmpty()) {
+                continue;
+            }
+            if (parts[checkedPart].Data != parts[i].Data) {
+                ++mismatch;
+            }
+        }
+    
+        if (mismatch > 1) {
+            outPartIndex = checkedPart;
+            ++corruptedParts;
+        }
+    }
+    return corruptedParts == 1;
+}
+
 }//NKikimr
+

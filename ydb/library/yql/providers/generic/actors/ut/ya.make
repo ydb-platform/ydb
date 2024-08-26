@@ -1,7 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/providers/generic/actors)
 
 PEERDIR(
-    #ydb/library/yql/sql/pg_dummy
+    ydb/library/yql/sql/pg_dummy
     ydb/library/yql/providers/generic/connector/libcpp/ut_helpers
     ydb/library/actors/testlib
     library/cpp/testing/unittest

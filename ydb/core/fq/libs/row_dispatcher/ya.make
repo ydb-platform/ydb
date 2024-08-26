@@ -27,7 +27,7 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_scheme
     ydb/public/sdk/cpp/client/ydb_table
     ydb/library/yql/providers/pq/provider
-    ydb/library/yql/public/purecalc
+    ydb/library/yql/public/purecalc/common/no_pg_wrapper
 )
 
 YQL_LAST_ABI_VERSION()

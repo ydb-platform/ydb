@@ -26,7 +26,8 @@ public:
                                std::shared_ptr<TGRpcConnectionsImpl> connections,
                                const TFederatedTopicClientSettings& clientSetttings,
                                std::shared_ptr<TFederatedDbObserver> observer,
-                               std::shared_ptr<std::unordered_map<NTopic::ECodec, std::unique_ptr<NTopic::ICodec>>> codecs);
+                               std::shared_ptr<std::unordered_map<NTopic::ECodec, std::unique_ptr<NTopic::ICodec>>> codecs,
+                               NTopic::IExecutor::TPtr subsessionHandlersExecutor);
 
     ~TFederatedWriteSessionImpl() = default;
 
@@ -61,39 +62,22 @@ private:
         }
     };
 
-    struct TDeferredWrite {
-        explicit TDeferredWrite(std::shared_ptr<NTopic::IWriteSession> writer)
-            : Writer(std::move(writer)) {
-        }
-
-        void DoWrite() {
-            if (!Token.has_value() && !Message.has_value()) {
-                return;
-            }
-            Y_ABORT_UNLESS(Token.has_value() && Message.has_value());
-            return Writer->Write(std::move(*Token), std::move(*Message));
-        }
-
-        std::shared_ptr<NTopic::IWriteSession> Writer;
-        std::optional<NTopic::TContinuationToken> Token;
-        std::optional<NTopic::TWriteMessage> Message;
-    };
-
 private:
     void Start();
-    void OpenSubsessionImpl(std::shared_ptr<TDbInfo> db);
 
-    void OnFederationStateUpdateImpl();
+    std::shared_ptr<NTopic::IWriteSession> OpenSubsessionImpl(std::shared_ptr<TDbInfo> db);
+    std::shared_ptr<NTopic::IWriteSession> UpdateFederationStateImpl();
+    std::shared_ptr<NTopic::IWriteSession> OnFederationStateUpdateImpl();
+
     void ScheduleFederationStateUpdateImpl(TDuration delay);
 
     void WriteInternal(NTopic::TContinuationToken&&, TWrappedWriteMessage&& message);
-    bool PrepareDeferredWriteImpl(TDeferredWrite& deferred);
+    bool MaybeWriteImpl();
 
     void CloseImpl(EStatus statusCode, NYql::TIssues&& issues);
     void CloseImpl(NTopic::TSessionClosedEvent const& ev);
 
     bool MessageQueuesAreEmptyImpl() const;
-    void UpdateFederationStateImpl();
 
     void IssueTokenIfAllowed();
 
@@ -105,6 +89,7 @@ private:
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
     const NTopic::TTopicClientSettings SubclientSettings;
     std::shared_ptr<std::unordered_map<NTopic::ECodec, std::unique_ptr<NTopic::ICodec>>> ProvidedCodecs;
+    NTopic::IExecutor::TPtr SubsessionHandlersExecutor;
 
     NTopic::IRetryPolicy::IRetryState::TPtr RetryState;
     std::shared_ptr<TFederatedDbObserver> Observer;
@@ -121,6 +106,7 @@ private:
 
     TAdaptiveLock Lock;
 
+    size_t SubsessionGeneration = 0;
     std::shared_ptr<NTopic::IWriteSession> Subsession;
 
     std::shared_ptr<NTopic::TWriteSessionEventsQueue> ClientEventsQueue;
@@ -152,8 +138,9 @@ public:
                            std::shared_ptr<TGRpcConnectionsImpl> connections,
                            const TFederatedTopicClientSettings& clientSettings,
                            std::shared_ptr<TFederatedDbObserver> observer,
-                           std::shared_ptr<std::unordered_map<NTopic::ECodec, std::unique_ptr<NTopic::ICodec>>> codecs)
-        : TContextOwner(settings, std::move(connections), clientSettings, std::move(observer), codecs) {}
+                           std::shared_ptr<std::unordered_map<NTopic::ECodec, std::unique_ptr<NTopic::ICodec>>> codecs,
+                           NTopic::IExecutor::TPtr subsessionHandlersExecutor)
+        : TContextOwner(settings, std::move(connections), clientSettings, std::move(observer), codecs, subsessionHandlersExecutor) {}
 
     NThreading::TFuture<void> WaitEvent() override {
         return TryGetImpl()->WaitEvent();

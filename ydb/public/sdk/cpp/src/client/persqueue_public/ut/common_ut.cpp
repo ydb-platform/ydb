@@ -1,4 +1,4 @@
-#include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
+#include <src/client/topic/impl/common.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

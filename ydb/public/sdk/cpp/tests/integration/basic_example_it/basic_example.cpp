@@ -415,7 +415,7 @@ static TStatus ExplicitTclTransaction(TSession session, const std::string& path,
 }
 
 static TStatus ScanQuerySelect(TTableClient client, const std::string& path, std::vector <TResultSet>& vectorResultSet) {    
-    std::vector<std::string> result;
+    vectorResultSet.clear();
     auto query = std::format(R"(
         --!syntax_v1
         PRAGMA TablePathPrefix("{}");

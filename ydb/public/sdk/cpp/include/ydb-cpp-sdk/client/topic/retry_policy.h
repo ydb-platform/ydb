@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb-cpp-sdk/client/types/status_codes.h>
-#include <library/cpp/retry/retry_policy.h>
+#include <ydb-cpp-sdk/library/retry/retry_policy.h>
 #include <util/generic/ptr.h>
 
 namespace NYdb::NTopic {

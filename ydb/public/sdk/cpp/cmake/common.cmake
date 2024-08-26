@@ -198,6 +198,9 @@ function(_ydb_sdk_add_library Tgt)
     $<BUILD_INTERFACE:${YDB_SDK_BINARY_DIR}>
     $<BUILD_INTERFACE:${YDB_SDK_SOURCE_DIR}/include>
   )
+  target_compile_definitions(${Tgt} ${includeMode}
+    YDB_SDK_USE_STD_STRING
+  )
 endfunction()
 
 function(_ydb_sdk_validate_public_headers)

@@ -101,13 +101,158 @@ namespace NYdb::NDataStreams::V1 {
         std::string ExplicitHashDecimal;
     };
 
+    enum class EAutoPartitioningStrategy: uint32_t {
+        Unspecified = 0,
+        Disabled = 1,
+        ScaleUp = 2,
+        ScaleUpAndDown = 3,
+        Paused = 4,
+    };
+
+    struct TCreateStreamSettings;
+    struct TUpdateStreamSettings;
+
+
+    template<typename TSettings>
+    struct TPartitioningSettingsBuilder;
+    template<typename TSettings>
+    struct TAutoPartitioningSettingsBuilder;
+
+    struct TAutoPartitioningSettings {
+    friend struct TAutoPartitioningSettingsBuilder<TCreateStreamSettings>;
+    friend struct TAutoPartitioningSettingsBuilder<TUpdateStreamSettings>;
+    public:
+        TAutoPartitioningSettings()
+            : Strategy_(EAutoPartitioningStrategy::Disabled)
+            , StabilizationWindow_(TDuration::Seconds(0))
+            , DownUtilizationPercent_(0)
+            , UpUtilizationPercent_(0) {
+        }
+        TAutoPartitioningSettings(const Ydb::DataStreams::V1::AutoPartitioningSettings& settings);
+        TAutoPartitioningSettings(EAutoPartitioningStrategy strategy, TDuration stabilizationWindow, uint64_t downUtilizationPercent, uint64_t upUtilizationPercent)
+            : Strategy_(strategy)
+            , StabilizationWindow_(stabilizationWindow)
+            , DownUtilizationPercent_(downUtilizationPercent)
+            , UpUtilizationPercent_(upUtilizationPercent) {}
+
+        EAutoPartitioningStrategy GetStrategy() const { return Strategy_; };
+        TDuration GetStabilizationWindow() const { return StabilizationWindow_; };
+        uint32_t GetDownUtilizationPercent() const { return DownUtilizationPercent_; };
+        uint32_t GetUpUtilizationPercent() const { return UpUtilizationPercent_; };
+    private:
+        EAutoPartitioningStrategy Strategy_;
+        TDuration StabilizationWindow_;
+        uint32_t DownUtilizationPercent_;
+        uint32_t UpUtilizationPercent_;
+    };
+
+
+    class TPartitioningSettings {
+        using TSelf = TPartitioningSettings;
+        friend struct TPartitioningSettingsBuilder<TCreateStreamSettings>;
+        friend struct TPartitioningSettingsBuilder<TUpdateStreamSettings>;
+    public:
+        TPartitioningSettings() : MinActivePartitions_(0), MaxActivePartitions_(0), AutoPartitioningSettings_(){}
+        TPartitioningSettings(const Ydb::DataStreams::V1::PartitioningSettings& settings);
+        TPartitioningSettings(uint64_t minActivePartitions, uint64_t maxActivePartitions, TAutoPartitioningSettings autoscalingSettings = {})
+            : MinActivePartitions_(minActivePartitions)
+            , MaxActivePartitions_(maxActivePartitions)
+            , AutoPartitioningSettings_(autoscalingSettings) {
+        }
+
+        uint64_t GetMinActivePartitions() const { return MinActivePartitions_; };
+        uint64_t GetMaxActivePartitions() const { return MaxActivePartitions_; };
+        TAutoPartitioningSettings GetAutoPartitioningSettings() const { return AutoPartitioningSettings_; };
+    private:
+        uint64_t MinActivePartitions_;
+        uint64_t MaxActivePartitions_;
+        TAutoPartitioningSettings AutoPartitioningSettings_;
+    };
+
     struct TCreateStreamSettings : public NYdb::TOperationRequestSettings<TCreateStreamSettings> {
         FLUENT_SETTING(uint32_t, ShardCount);
         FLUENT_SETTING_OPTIONAL(uint32_t, RetentionPeriodHours);
         FLUENT_SETTING_OPTIONAL(uint32_t, RetentionStorageMegabytes);
         FLUENT_SETTING(uint64_t, WriteQuotaKbPerSec);
         FLUENT_SETTING_OPTIONAL(EStreamMode, StreamMode);
+
+
+        FLUENT_SETTING_OPTIONAL(TPartitioningSettings, PartitioningSettings);
+        TPartitioningSettingsBuilder<TCreateStreamSettings> BeginConfigurePartitioningSettings();
     };
+
+    template<typename TSettings>
+    struct TAutoPartitioningSettingsBuilder {
+        using TSelf = TAutoPartitioningSettingsBuilder<TSettings>;
+    public:
+        TAutoPartitioningSettingsBuilder(TPartitioningSettingsBuilder<TSettings>& parent, TAutoPartitioningSettings& settings): Parent_(parent), Settings_(settings) {}
+
+        TSelf Strategy(EAutoPartitioningStrategy value) {
+            Settings_.Strategy_ = value;
+            return *this;
+        }
+
+        TSelf StabilizationWindow(TDuration value) {
+            Settings_.StabilizationWindow_ = value;
+            return *this;
+        }
+
+        TSelf DownUtilizationPercent(uint32_t value) {
+            Settings_.DownUtilizationPercent_ = value;
+            return *this;
+        }
+
+        TSelf UpUtilizationPercent(uint32_t value) {
+            Settings_.UpUtilizationPercent_ = value;
+            return *this;
+        }
+
+        TPartitioningSettingsBuilder<TSettings>& EndConfigureAutoPartitioningSettings() {
+            return Parent_;
+        }
+
+    private:
+        TPartitioningSettingsBuilder<TSettings>& Parent_;
+        TAutoPartitioningSettings& Settings_;
+    };
+
+    template<typename TSettings>
+    struct TPartitioningSettingsBuilder {
+        using TSelf = TPartitioningSettingsBuilder;
+    public:
+        TPartitioningSettingsBuilder(TSettings& parent): Parent_(parent) {}
+
+        TSelf MinActivePartitions(uint64_t value) {
+            if (!Parent_.PartitioningSettings_.has_value()) {
+                Parent_.PartitioningSettings_.emplace();
+            }
+            (*Parent_.PartitioningSettings_).MinActivePartitions_ = value;
+            return *this;
+        }
+
+        TSelf MaxActivePartitions(uint64_t value) {
+            if (!Parent_.PartitioningSettings_.has_value()) {
+                Parent_.PartitioningSettings_.emplace();
+            }
+            (*Parent_.PartitioningSettings_).MaxActivePartitions_ = value;
+            return *this;
+        }
+
+        TAutoPartitioningSettingsBuilder<TSettings> BeginConfigureAutoPartitioningSettings() {
+            if (!Parent_.PartitioningSettings_.has_value()) {
+                Parent_.PartitioningSettings_.emplace();
+            }
+            return {*this, (*Parent_.PartitioningSettings_).AutoPartitioningSettings_};
+        }
+
+        TSettings& EndConfigurePartitioningSettings() {
+            return Parent_;
+        }
+
+    private:
+        TSettings& Parent_;
+    };
+
     struct TListStreamsSettings : public NYdb::TOperationRequestSettings<TListStreamsSettings> {
         FLUENT_SETTING(uint32_t, Limit);
         FLUENT_SETTING(std::string, ExclusiveStartStreamName);
@@ -155,6 +300,8 @@ namespace NYdb::NDataStreams::V1 {
         FLUENT_SETTING(uint64_t, WriteQuotaKbPerSec);
         FLUENT_SETTING_OPTIONAL(EStreamMode, StreamMode);
 
+        FLUENT_SETTING_OPTIONAL(TPartitioningSettings, PartitioningSettings);
+        TPartitioningSettingsBuilder<TUpdateStreamSettings> BeginConfigurePartitioningSettings();
     };
     struct TPutRecordSettings : public NYdb::TOperationRequestSettings<TPutRecordSettings> {};
     struct TPutRecordsSettings : public NYdb::TOperationRequestSettings<TPutRecordsSettings> {};

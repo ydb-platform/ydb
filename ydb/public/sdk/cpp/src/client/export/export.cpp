@@ -24,12 +24,6 @@ using namespace Ydb::Export;
 /// Common
 namespace {
 
-TInstant ProtoTimestampToInstant(const google::protobuf::Timestamp& timestamp) {
-    ui64 us = timestamp.seconds() * 1000000;
-    us += timestamp.nanos() / 1000;
-    return TInstant::MicroSeconds(us);
-}
-
 std::vector<TExportItemProgress> ItemsProgressFromProto(const google::protobuf::RepeatedPtrField<ExportItemProgress>& proto) {
     std::vector<TExportItemProgress> result(proto.size());
 

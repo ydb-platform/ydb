@@ -395,12 +395,21 @@ TPartitionInfo::TPartitionInfo(const Ydb::Topic::DescribeTopicResult::PartitionI
     for (const auto& partId : partitionInfo.parent_partition_ids()) {
         ParentPartitionIds_.push_back(partId);
     }
+
     if (partitionInfo.has_partition_stats()) {
         PartitionStats_ = TPartitionStats{partitionInfo.partition_stats()};
     }
 
     if (partitionInfo.has_partition_location()) {
         PartitionLocation_ = TPartitionLocation{partitionInfo.partition_location()};
+    }
+
+    if (partitionInfo.has_key_range() && partitionInfo.key_range().has_from_bound()) {
+        FromBound_ = std::string{partitionInfo.key_range().from_bound()};
+    }
+
+    if (partitionInfo.has_key_range() && partitionInfo.key_range().has_to_bound()) {
+        ToBound_ = std::string{partitionInfo.key_range().to_bound()};
     }
 }
 
@@ -437,12 +446,28 @@ const std::optional<TPartitionLocation>& TPartitionInfo::GetPartitionLocation() 
     return PartitionLocation_;
 }
 
+const std::vector<uint64_t> TPartitionInfo::GetChildPartitionIds() const {
+    return ChildPartitionIds_;
+}
+
+const std::vector<uint64_t> TPartitionInfo::GetParentPartitionIds() const {
+    return ParentPartitionIds_;
+}
+
 bool TPartitionInfo::GetActive() const {
     return Active_;
 }
 
 uint64_t TPartitionInfo::GetPartitionId() const {
     return PartitionId_;
+}
+
+const std::optional<std::string>& TPartitionInfo::GetFromBound() const {
+    return FromBound_;
+}
+
+const std::optional<std::string>& TPartitionInfo::GetToBound() const {
+    return ToBound_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

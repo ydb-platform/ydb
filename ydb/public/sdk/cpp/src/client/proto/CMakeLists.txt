@@ -5,7 +5,7 @@ target_link_libraries(client-ydb_proto PUBLIC
   api-grpc
   api-grpc-draft
   api-protos
-  lib-operation_id-protos
+  library-operation_id
   client-ydb_params
   client-ydb_value
   yql-public-issue-protos

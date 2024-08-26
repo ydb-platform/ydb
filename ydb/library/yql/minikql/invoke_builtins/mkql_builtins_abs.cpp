@@ -60,6 +60,12 @@ struct TDecimalAbs {
         return a < 0 ? NUdf::TUnboxedValuePod(-a) : arg;
     }
 
+    static void DoPtr(
+        const NYql::NDecimal::TInt128* arg,
+        NYql::NDecimal::TInt128* res) {
+        *res = Execute(NUdf::TUnboxedValuePod(*arg)).GetInt128();
+    }
+
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* arg, const TCodegenContext&, BasicBlock*& block)
     {
@@ -83,7 +89,9 @@ void RegisterAbs(IBuiltinFunctionRegistry& registry) {
 }
 
 void RegisterAbs(TKernelFamilyMap& kernelFamilyMap) {
-    kernelFamilyMap["Abs"] = std::make_unique<TUnaryNumericKernelFamily<TAbs>>();
+    auto family = std::make_unique<TUnaryNumericKernelFamily<TAbs>>();
+    AddUnaryDecimalKernels<TDecimalAbs>(*family);
+    kernelFamilyMap["Abs"] = std::move(family);
 }
 
 } // namespace NMiniKQL

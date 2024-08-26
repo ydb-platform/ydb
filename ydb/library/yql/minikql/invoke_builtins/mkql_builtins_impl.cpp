@@ -760,5 +760,48 @@ arrow::Status ExecDecimalBinaryOptImpl(arrow::compute::KernelContext* kernelCtx,
     }
 }
 
+arrow::Status ExecDecimalScalarImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TPrimitiveDataTypeGetter typeGetter, TUntypedUnaryScalarFuncPtr func) {
+    if (const auto& arg = batch.values.front(); !arg.scalar()->is_valid) {
+        *res = arrow::MakeNullScalar(typeGetter());
+    } else {
+        const auto valPtr = GetPrimitiveScalarValuePtr(*arg.scalar());
+        std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(16, kernelCtx->memory_pool())));
+        auto resDatum = arrow::Datum(std::make_shared<TPrimitiveDataType<NYql::NDecimal::TInt128>::TScalarResult>(buffer));
+        const auto resPtr = GetPrimitiveScalarValueMutablePtr(*resDatum.scalar());
+        func(valPtr, resPtr);
+        *res = resDatum.scalar();
+    }
+
+    return arrow::Status::OK();
+}
+
+arrow::Status ExecDecimalArrayImpl(const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TUntypedUnaryArrayFuncPtr func) {
+    const auto& arg = batch.values.front();
+    auto& resArr = *res->array();
+
+    const auto& arr = *arg.array();
+    auto length = arr.length;
+    const auto valPtr = arr.buffers[1]->data();
+    auto resPtr = resArr.buffers[1]->mutable_data();
+    func(valPtr, resPtr, length, arr.offset);
+    return arrow::Status::OK();
+}
+
+arrow::Status ExecDecimalUnaryImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TPrimitiveDataTypeGetter typeGetter,
+    TUntypedUnaryScalarFuncPtr scalarFunc, TUntypedUnaryArrayFuncPtr arrayFunc) {
+    MKQL_ENSURE(batch.values.size() == 1, "Expected single argument");
+    const auto& arg = batch.values[0];
+    if (arg.is_scalar()) {
+        return ExecDecimalScalarImpl(kernelCtx, batch, res, typeGetter, scalarFunc);
+    } else {
+        return ExecDecimalArrayImpl(batch, res, arrayFunc);
+    }
+}
+
 } // namespace NMiniKQL
 } // namespace NKikimr

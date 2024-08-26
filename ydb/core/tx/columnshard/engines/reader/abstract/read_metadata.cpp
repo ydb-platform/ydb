@@ -1,13 +1,13 @@
 #include "read_metadata.h"
+
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 
 namespace NKikimr::NOlap::NReader {
 
-TDataStorageAccessor::TDataStorageAccessor(const std::unique_ptr<TInsertTable>& insertTable,
-                                const std::unique_ptr<IColumnEngine>& index)
+TDataStorageAccessor::TDataStorageAccessor(const std::unique_ptr<TInsertTable>& insertTable, const std::unique_ptr<IColumnEngine>& index)
     : InsertTable(insertTable)
-    , Index(index)
-{}
+    , Index(index) {
+}
 
 std::shared_ptr<TSelectInfo> TDataStorageAccessor::Select(const TReadDescription& readDescription) const {
     if (readDescription.ReadNothing) {
@@ -23,8 +23,9 @@ ISnapshotSchema::TPtr TReadMetadataBase::GetLoadSchemaVerified(const TPortionInf
     return schema;
 }
 
-std::vector<TCommittedBlob> TDataStorageAccessor::GetCommitedBlobs(const TReadDescription& readDescription, const std::shared_ptr<arrow::Schema>& pkSchema) const {
-    return std::move(InsertTable->Read(readDescription.PathId, readDescription.GetSnapshot(), pkSchema));
+std::vector<TCommittedBlob> TDataStorageAccessor::GetCommitedBlobs(
+    const TReadDescription& readDescription, const std::shared_ptr<arrow::Schema>& pkSchema, const bool needInsertedToCheck) const {
+    return std::move(InsertTable->Read(readDescription.PathId, needInsertedToCheck, pkSchema));
 }
 
-}
+}   // namespace NKikimr::NOlap::NReader

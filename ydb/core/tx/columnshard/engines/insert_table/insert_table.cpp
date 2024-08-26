@@ -1,7 +1,8 @@
 #include "insert_table.h"
+
 #include <ydb/core/protos/tx_columnshard.pb.h>
-#include <ydb/core/tx/columnshard/engines/db_wrapper.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
+#include <ydb/core/tx/columnshard/engines/db_wrapper.h>
 
 namespace NKikimr::NOlap {
 
@@ -15,8 +16,8 @@ bool TInsertTable::Insert(IDbWrapper& dbTable, TInsertedData&& data) {
     }
 }
 
-TInsertionSummary::TCounters TInsertTable::Commit(IDbWrapper& dbTable, ui64 planStep, ui64 txId,
-                                             const THashSet<TWriteId>& writeIds, std::function<bool(ui64)> pathExists) {
+TInsertionSummary::TCounters TInsertTable::Commit(
+    IDbWrapper& dbTable, ui64 planStep, ui64 txId, const THashSet<TWriteId>& writeIds, std::function<bool(ui64)> pathExists) {
     Y_ABORT_UNLESS(!writeIds.empty());
 
     TInsertionSummary::TCounters counters;
@@ -82,7 +83,8 @@ THashSet<TWriteId> TInsertTable::DropPath(IDbWrapper& dbTable, ui64 pathId) {
     return Summary.GetInsertedByPathId(pathId);
 }
 
-void TInsertTable::EraseCommittedOnExecute(IDbWrapper& dbTable, const TInsertedData& data, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction) {
+void TInsertTable::EraseCommittedOnExecute(
+    IDbWrapper& dbTable, const TInsertedData& data, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction) {
     if (Summary.HasCommitted(data)) {
         dbTable.EraseCommitted(data);
         RemoveBlobLinkOnExecute(data.GetBlobRange().BlobId, blobsAction);
@@ -95,7 +97,8 @@ void TInsertTable::EraseCommittedOnComplete(const TInsertedData& data) {
     }
 }
 
-void TInsertTable::EraseAbortedOnExecute(IDbWrapper& dbTable, const TInsertedData& data, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction) {
+void TInsertTable::EraseAbortedOnExecute(
+    IDbWrapper& dbTable, const TInsertedData& data, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction) {
     if (Summary.HasAborted((TWriteId)data.WriteTxId)) {
         dbTable.EraseAborted(data);
         RemoveBlobLinkOnExecute(data.GetBlobRange().BlobId, blobsAction);
@@ -114,37 +117,32 @@ bool TInsertTable::Load(IDbWrapper& dbTable, const TInstant loadTime) {
     return dbTable.Load(*this, loadTime);
 }
 
-std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, const TSnapshot& snapshot, const std::shared_ptr<arrow::Schema>& pkSchema) const {
+std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, const bool needInsertedToCheck, const std::shared_ptr<arrow::Schema>& pkSchema) const {
     const TPathInfo* pInfo = Summary.GetPathInfoOptional(pathId);
     if (!pInfo) {
         return {};
     }
 
-    std::vector<const TInsertedData*> ret;
-    ret.reserve(pInfo->GetCommitted().size());
+    std::vector<TCommittedBlob> result;
+    result.reserve(pInfo->GetCommitted().size() + pInfo->GetInserted().size());
 
     for (const auto& data : pInfo->GetCommitted()) {
-        if (std::less_equal<TSnapshot>()(data.GetSnapshot(), snapshot)) {
-            ret.emplace_back(&data);
+        result.emplace_back(TCommittedBlob(data.GetBlobRange(), data.GetSnapshot(), data.GetSchemaVersion(), data.GetMeta().GetNumRows(),
+            data.GetMeta().GetFirstPK(pkSchema), data.GetMeta().GetLastPK(pkSchema),
+            data.GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete, data.GetMeta().GetSchemaSubset()));
+    }
+    if (needInsertedToCheck) {
+        for (const auto& [writeId, data] : pInfo->GetInserted()) {
+            result.emplace_back(TCommittedBlob(data.GetBlobRange(), TWriteId(writeId), data.GetSchemaVersion(), data.GetMeta().GetNumRows(),
+                data.GetMeta().GetFirstPK(pkSchema), data.GetMeta().GetLastPK(pkSchema),
+                data.GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete, data.GetMeta().GetSchemaSubset()));
         }
     }
-    const auto pred = [pkSchema](const TInsertedData* l, const TInsertedData* r) {
-        return l->GetMeta().GetFirstPK(pkSchema) < r->GetMeta().GetFirstPK(pkSchema);
-    };
-    std::sort(ret.begin(), ret.end(), pred);
-
-    std::vector<TCommittedBlob> result;
-    result.reserve(ret.size());
-    for (auto&& i : ret) {
-        result.emplace_back(TCommittedBlob(
-            i->GetBlobRange(), i->GetSnapshot(), i->GetSchemaVersion(), i->GetMeta().GetNumRows(), i->GetMeta().GetFirstPK(pkSchema), i->GetMeta().GetLastPK(pkSchema)
-        , i->GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete, i->GetMeta().GetSchemaSubset()));
-    }
-
     return result;
 }
 
-bool TInsertTableAccessor::RemoveBlobLinkOnExecute(const TUnifiedBlobId& blobId, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction) {
+bool TInsertTableAccessor::RemoveBlobLinkOnExecute(
+    const TUnifiedBlobId& blobId, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction) {
     AFL_VERIFY(blobsAction);
     auto itBlob = BlobLinks.find(blobId);
     AFL_VERIFY(itBlob != BlobLinks.end());
@@ -170,4 +168,4 @@ bool TInsertTableAccessor::RemoveBlobLinkOnComplete(const TUnifiedBlobId& blobId
     }
 }
 
-}
+}   // namespace NKikimr::NOlap

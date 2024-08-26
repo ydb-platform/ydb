@@ -96,9 +96,9 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
         UNIT_ASSERT(!ok);
 
         // read nothing
-        auto blobs = insertTable.Read(tableId, TSnapshot::Zero(), nullptr);
+        auto blobs = insertTable.Read(tableId, false, nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
-        blobs = insertTable.Read(tableId + 1, TSnapshot::Zero(), nullptr);
+        blobs = insertTable.Read(tableId + 1, false, nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
 
         // commit
@@ -113,15 +113,15 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
         UNIT_ASSERT_EQUAL((*insertTable.GetPathPriorities().begin()->second.begin())->GetCommitted().size(), 1);
 
         // read old snapshot
-        blobs = insertTable.Read(tableId, TSnapshot::Zero(), nullptr);
-        UNIT_ASSERT_EQUAL(blobs.size(), 0);
-        blobs = insertTable.Read(tableId + 1, TSnapshot::Zero(), nullptr);
+        blobs = insertTable.Read(tableId, false, nullptr);
+        UNIT_ASSERT_EQUAL(blobs.size(), 1);
+        blobs = insertTable.Read(tableId + 1, false, nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
 
         // read new snapshot
-        blobs = insertTable.Read(tableId, TSnapshot(planStep, txId), nullptr);
+        blobs = insertTable.Read(tableId, false, nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 1);
-        blobs = insertTable.Read(tableId + 1, TSnapshot::Zero(), nullptr);
+        blobs = insertTable.Read(tableId + 1, false, nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
     }
 }

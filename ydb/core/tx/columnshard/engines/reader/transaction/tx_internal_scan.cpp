@@ -41,6 +41,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
     {
         TReadDescription read(snapshot, request.GetReverse());
         read.PathId = request.GetPathId();
+        read.LockId = LockId;
         read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);
         std::unique_ptr<IScannerConstructor> scannerConstructor(
             new NPlain::TIndexScannerConstructor(snapshot, request.GetItemsLimit(), request.GetReverse()));
@@ -76,12 +77,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
     if (Self->HasIndex()) {
         index = &Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex();
     }
-    if (Self->GetOperationsManager().GetLockOptional(LockId)) {
-        auto evWriter = std::make_shared<NOlap::NTxInteractions::TEvReadStartWriter>(request.GetPathId(),
-            readMetadataRange->GetResultSchema()->GetIndexInfo().GetPrimaryKey(), readMetadataRange->GetPKRangesFilterPtr(),
-            THashSet<ui64>());
-        Self->GetOperationsManager().AddEventForLock(*Self, LockId, evWriter);
-    }
+    readMetadataRange->OnBeforeStartReading(*Self);
 
     const ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(readMetadataRange, index);
     auto scanActor = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(), TComputeShardingPolicy(),

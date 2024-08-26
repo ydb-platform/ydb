@@ -1,6 +1,10 @@
 #include "read_metadata.h"
+
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/iterator/iterator.h>
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/iterator/plain_read_data.h>
+#include <ydb/core/tx/columnshard/transactions/locks/read_finished.h>
+#include <ydb/core/tx/columnshard/transactions/locks/read_start.h>
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
@@ -8,17 +12,27 @@ std::unique_ptr<TScanIteratorBase> TReadMetadata::StartScan(const std::shared_pt
     return std::make_unique<TColumnShardScanIterator>(readContext, readContext->GetReadMetadataPtrVerifiedAs<TReadMetadata>());
 }
 
-TConclusionStatus TReadMetadata::Init(const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor) {
+TConclusionStatus TReadMetadata::Init(
+    const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor) {
     SetPKRangesFilter(readDescription.PKRangesFilter);
     InitShardingInfo(readDescription.PathId);
     TxId = readDescription.TxId;
+    LockId = readDescription.LockId;
 
     /// @note We could have column name changes between schema versions:
     /// Add '1:foo', Drop '1:foo', Add '2:foo'. Drop should hide '1:foo' from reads.
     /// It's expected that we have only one version on 'foo' in blob and could split them by schema {planStep:txId}.
     /// So '1:foo' would be omitted in blob records for the column in new snapshots. And '2:foo' - in old ones.
     /// It's not possible for blobs with several columns. There should be a special logic for them.
-    CommittedBlobs = dataAccessor.GetCommitedBlobs(readDescription, ResultIndexSchema->GetIndexInfo().GetReplaceKey());
+    CommittedBlobs = dataAccessor.GetCommitedBlobs(readDescription, ResultIndexSchema->GetIndexInfo().GetReplaceKey(), !!LockId);
+    if (!!LockId) {
+        for (auto&& i : CommittedBlobs) {
+            if (auto writeId = i.GetWriteIdOptional()) {
+                auto op = owner->GetOperationsManager().GetOperationVerified(*writeId);
+                AddWriteIdToCheck(*writeId, op->GetLockId());
+            }
+        }
+    }
 
     SelectInfo = dataAccessor.Select(readDescription);
     StatsMode = readDescription.StatsMode;
@@ -52,8 +66,35 @@ std::shared_ptr<IDataReader> TReadMetadata::BuildReader(const std::shared_ptr<TR
 }
 
 NArrow::NMerger::TSortableBatchPosition TReadMetadata::BuildSortedPosition(const NArrow::TReplaceKey& key) const {
-    return NArrow::NMerger::TSortableBatchPosition(key.ToBatch(GetReplaceKey()), 0,
-        GetReplaceKey()->field_names(), {}, IsDescSorted());
+    return NArrow::NMerger::TSortableBatchPosition(key.ToBatch(GetReplaceKey()), 0, GetReplaceKey()->field_names(), {}, IsDescSorted());
 }
 
+void TReadMetadata::DoOnReadFinished(NColumnShard::TColumnShard& owner) const {
+    if (!GetLockId()) {
+        return;
+    }
+    const ui64 lock = *GetLockId();
+    if (GetBrokenWithCommitted()) {
+        owner.GetOperationsManager().GetLockVerified(lock).SetBroken(true);
+    } else {
+        NOlap::NTxInteractions::TTxConflicts conflicts;
+        for (auto&& i : GetConflictableLockIds()) {
+            conflicts.Add(i, lock);
+        }
+        auto writer = std::make_shared<NOlap::NTxInteractions::TEvReadFinishedWriter>(PathId, conflicts);
+        owner.GetOperationsManager().AddEventForLock(owner, lock, writer);
+    }
 }
+
+void TReadMetadata::DoOnBeforeStartReading(NColumnShard::TColumnShard& owner) const {
+    if (!LockId) {
+        return;
+    }
+    if (owner.GetOperationsManager().GetLockOptional(*LockId)) {
+        auto evWriter = std::make_shared<NOlap::NTxInteractions::TEvReadStartWriter>(
+            PathId, GetResultSchema()->GetIndexInfo().GetPrimaryKey(), GetPKRangesFilterPtr(), GetConflictableLockIds());
+        owner.GetOperationsManager().AddEventForLock(owner, *LockId, evWriter);
+    }
+}
+
+}   // namespace NKikimr::NOlap::NReader::NPlain

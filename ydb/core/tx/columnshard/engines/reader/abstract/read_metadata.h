@@ -21,7 +21,7 @@ public:
     TDataStorageAccessor(const std::unique_ptr<TInsertTable>& insertTable,
                                  const std::unique_ptr<IColumnEngine>& index);
     std::shared_ptr<NOlap::TSelectInfo> Select(const TReadDescription& readDescription) const;
-    std::vector<NOlap::TCommittedBlob> GetCommitedBlobs(const TReadDescription& readDescription, const std::shared_ptr<arrow::Schema>& pkSchema) const;
+    std::vector<NOlap::TCommittedBlob> GetCommitedBlobs(const TReadDescription& readDescription, const std::shared_ptr<arrow::Schema>& pkSchema, const bool needInsertedToCheck) const;
 };
 
 // Holds all metadata that is needed to perform read/scan
@@ -39,16 +39,33 @@ private:
     std::shared_ptr<TVersionedIndex> IndexVersionsPointer;
     TSnapshot RequestSnapshot;
     std::optional<TGranuleShardingInfo> RequestShardingInfo;
+    virtual void DoOnReadFinished(NColumnShard::TColumnShard& /*owner*/) const {
+    }
+    virtual void DoOnBeforeStartReading(NColumnShard::TColumnShard& /*owner*/) const {
+    }
 
 protected:
     std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
     ui64 TxId = 0;
+    std::optional<ui64> LockId;
 
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadataBase>;
 
     ui64 GetTxId() const {
         return TxId;
+    }
+
+    std::optional<ui64> GetLockId() const {
+        return LockId;
+    }
+
+    void OnReadFinished(NColumnShard::TColumnShard& owner) const {
+        DoOnReadFinished(owner);
+    }
+
+    void OnBeforeStartReading(NColumnShard::TColumnShard& owner) const {
+        DoOnBeforeStartReading(owner);
     }
 
     const TVersionedIndex& GetIndexVersions() const {

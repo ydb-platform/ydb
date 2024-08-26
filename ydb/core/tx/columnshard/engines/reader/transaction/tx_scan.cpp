@@ -53,6 +53,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
 
         TReadDescription read(snapshot, request.GetReverse());
         read.TxId = txId;
+        read.LockId = Self->GetOperationsManager().GetLockForTxOptional(txId);
         read.PathId = request.GetLocalPathId();
         read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);
         read.TableName = table;
@@ -100,12 +101,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
         }
     }
     AFL_VERIFY(readMetadataRange);
-    if (Self->GetOperationsManager().GetLockFeaturesForTxOptional(txId)) {
-        auto evWriter = std::make_shared<NOlap::NTxInteractions::TEvReadStartWriter>(request.GetLocalPathId(),
-            readMetadataRange->GetResultSchema()->GetIndexInfo().GetPrimaryKey(), readMetadataRange->GetPKRangesFilterPtr(),
-            THashSet<ui64>());
-        Self->GetOperationsManager().AddEventForTx(*Self, txId, evWriter);
-    }
+    readMetadataRange->OnBeforeStartReading(*Self);
 
     TStringBuilder detailedInfo;
     if (IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_TRACE, NKikimrServices::TX_COLUMNSHARD)) {

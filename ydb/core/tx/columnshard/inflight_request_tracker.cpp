@@ -9,12 +9,13 @@
 
 namespace NKikimr::NColumnShard {
 
-void TInFlightReadsTracker::RemoveInFlightRequest(ui64 cookie, const NOlap::TVersionedIndex* /*index*/, const TInstant now) {
+NOlap::NReader::TReadMetadataBase::TConstPtr TInFlightReadsTracker::ExtractInFlightRequest(
+    ui64 cookie, const NOlap::TVersionedIndex* /*index*/, const TInstant now) {
     auto it = RequestsMeta.find(cookie);
     AFL_VERIFY(it != RequestsMeta.end())("cookie", cookie);
-    const auto& readMetaList = it->second;
+    const NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase = it->second;
 
-    for (const auto& readMetaBase : readMetaList) {
+    {
         {
             auto it = SnapshotsLive.find(readMetaBase->GetRequestSnapshot());
             AFL_VERIFY(it != SnapshotsLive.end());
@@ -35,11 +36,12 @@ void TInFlightReadsTracker::RemoveInFlightRequest(ui64 cookie, const NOlap::TVer
     Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetSnapshotToClean());
 
     RequestsMeta.erase(cookie);
+    return readMetaBase;
 }
 
 void TInFlightReadsTracker::AddToInFlightRequest(
     const ui64 cookie, NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase, const NOlap::TVersionedIndex* /*index*/) {
-    RequestsMeta[cookie].push_back(readMetaBase);
+    AFL_VERIFY(RequestsMeta.emplace(cookie, readMetaBase).second);
 
     auto readMeta = std::dynamic_pointer_cast<const NOlap::NReader::NPlain::TReadMetadata>(readMetaBase);
 

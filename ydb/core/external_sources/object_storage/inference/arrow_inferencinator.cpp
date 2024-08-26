@@ -1,4 +1,5 @@
 #include "arrow_inferencinator.h"
+#include "infer_config.h"
 
 #include <arrow/table.h>
 #include <arrow/csv/options.h>
@@ -175,27 +176,12 @@ TEvInferredFileSchema* MakeErrorSchema(TString path, NFq::TIssuesIds::EIssueCode
 
 }
 
-struct FormatConfig {
-    virtual ~FormatConfig() noexcept = default;
-};
-
-struct CsvConfig : public FormatConfig {
-    arrow::csv::ParseOptions ParseOpts = arrow::csv::ParseOptions::Defaults();
-    arrow::csv::ConvertOptions ConvOpts = arrow::csv::ConvertOptions::Defaults();
-};
-
-struct JsonConfig : public FormatConfig {
-    arrow::json::ParseOptions ParseOpts = arrow::json::ParseOptions::Defaults();
-};
-
-using TsvConfig = CsvConfig;
-
 namespace {
 
 using ArrowField = std::shared_ptr<arrow::Field>;
 using ArrowFields = std::vector<ArrowField>;
 
-std::variant<ArrowFields, TString> InferCsvTypes(std::shared_ptr<arrow::io::RandomAccessFile> file, const CsvConfig& config) {
+std::variant<ArrowFields, TString> InferCsvTypes(std::shared_ptr<arrow::io::RandomAccessFile> file, std::shared_ptr<CsvConfig> config) {
     int64_t fileSize;
     if (auto sizeStatus = file->GetSize().Value(&fileSize); !sizeStatus.ok()) {
         return TStringBuilder{} << "coudn't get file size: " << sizeStatus.ToString();
@@ -206,8 +192,8 @@ std::variant<ArrowFields, TString> InferCsvTypes(std::shared_ptr<arrow::io::Rand
         arrow::io::default_io_context(),
         std::move(file),
         arrow::csv::ReadOptions{.use_threads = false, .block_size = static_cast<int32_t>(fileSize)},
-        config.ParseOpts,
-        config.ConvOpts
+        config->ParseOpts,
+        config->ConvOpts
     )
     .Value(&reader);
 
@@ -248,7 +234,7 @@ std::variant<ArrowFields, TString> InferParquetTypes(std::shared_ptr<arrow::io::
     return schema->fields();
 }
 
-std::variant<ArrowFields, TString> InferJsonTypes(std::shared_ptr<arrow::io::RandomAccessFile> file, const JsonConfig& config) {
+std::variant<ArrowFields, TString> InferJsonTypes(std::shared_ptr<arrow::io::RandomAccessFile> file, std::shared_ptr<JsonConfig> config) {
     int64_t fileSize;
     if (auto sizeStatus = file->GetSize().Value(&fileSize); !sizeStatus.ok()) {
         return TStringBuilder{} << "coudn't get file size: " << sizeStatus.ToString();
@@ -259,7 +245,7 @@ std::variant<ArrowFields, TString> InferJsonTypes(std::shared_ptr<arrow::io::Ran
         arrow::default_memory_pool(),
         std::move(file),
         arrow::json::ReadOptions{.use_threads = false, .block_size = static_cast<int32_t>(fileSize)},
-        config.ParseOpts
+        config->ParseOpts
     ).Value(&reader);
 
     if (!readerStatus.ok()) {
@@ -276,49 +262,20 @@ std::variant<ArrowFields, TString> InferJsonTypes(std::shared_ptr<arrow::io::Ran
     return table->fields();
 }
 
-std::variant<ArrowFields, TString> InferType(EFileFormat format, std::shared_ptr<arrow::io::RandomAccessFile> file, const FormatConfig& config) {
+std::variant<ArrowFields, TString> InferType(EFileFormat format, std::shared_ptr<arrow::io::RandomAccessFile> file, FormatConfigPtr config) {
     switch (format) {
     case EFileFormat::CsvWithNames:
-        return InferCsvTypes(std::move(file), static_cast<const CsvConfig&>(config));
+        return InferCsvTypes(std::move(file), std::dynamic_pointer_cast<CsvConfig>(config));
     case EFileFormat::TsvWithNames:
-        return InferCsvTypes(std::move(file), static_cast<const TsvConfig&>(config));
+        return InferCsvTypes(std::move(file), std::dynamic_pointer_cast<TsvConfig>(config));
     case EFileFormat::Parquet:
         return InferParquetTypes(std::move(file));
     case EFileFormat::JsonEachRow:
     case EFileFormat::JsonList:
-        return InferJsonTypes(std::move(file), static_cast<const JsonConfig&>(config));
+        return InferJsonTypes(std::move(file), std::dynamic_pointer_cast<JsonConfig>(config));
     case EFileFormat::Undefined:
     default:
         return std::variant<ArrowFields, TString>{std::in_place_type_t<TString>{}, TStringBuilder{} << "unexpected format: " << ConvertFileFormat(format)};
-    }
-}
-
-std::unique_ptr<CsvConfig> MakeCsvConfig(const THashMap<TString, TString>&) { // TODO: extract params
-    return std::make_unique<CsvConfig>();
-}
-
-std::unique_ptr<TsvConfig> MakeTsvConfig(const THashMap<TString, TString>& params) {
-    auto config = MakeCsvConfig(params);
-    config->ParseOpts.delimiter = '\t';
-    return config;
-}
-
-std::unique_ptr<JsonConfig> MakeJsonConfig(const THashMap<TString, TString>&) {
-    return std::make_unique<JsonConfig>();
-}
-
-std::unique_ptr<FormatConfig> MakeFormatConfig(EFileFormat format, const THashMap<TString, TString>& params) {
-    switch (format) {
-    case EFileFormat::CsvWithNames:
-        return MakeCsvConfig(params);
-    case EFileFormat::TsvWithNames:
-        return MakeTsvConfig(params);
-    case EFileFormat::JsonEachRow:
-    case EFileFormat::JsonList:
-        return MakeJsonConfig(params);
-    case EFileFormat::Undefined:
-    default:
-        return nullptr;
     }
 }
 
@@ -343,6 +300,7 @@ public:
 
     STRICT_STFUNC(WorkingState,
         HFunc(TEvInferFileSchema, HandleInferRequest);
+        HFunc(TEvInferPartitions, HandlePartitionsRequest);
         HFunc(TEvFileError, HandleFileError);
         HFunc(TEvArrowFile, HandleFileInference);
     )
@@ -352,25 +310,37 @@ public:
         ctx.Send(ArrowFetcherId_, ev->Release());
     }
 
-    void HandleFileInference(TEvArrowFile::TPtr& ev, const NActors::TActorContext& ctx) {
-        auto& file = *ev->Get();
-        auto mbArrowFields = InferType(Format_, file.File, *Config_);
-        if (std::holds_alternative<TString>(mbArrowFields)) {
-            ctx.Send(RequesterId_, MakeErrorSchema(file.Path, NFq::TIssuesIds::INTERNAL_ERROR, std::get<TString>(mbArrowFields)));
+    void HandlePartitionsRequest(TEvInferPartitions::TPtr& ev, const NActors::TActorContext& ctx) {
+        RequesterId_ = ev->Sender;
+        auto config = MakeFormatConfig(EFileFormat::CsvWithNames);
+        if (std::holds_alternative<TString>(config)) {
+            ctx.Send(RequesterId_, MakeErrorSchema("", NFq::TIssuesIds::INTERNAL_ERROR, "couldn't infer partition columns"));
             return;
         }
-        auto& arrowFields = std::get<ArrowFields>(mbArrowFields);
-        std::vector<Ydb::Column> ydbFields;
-        for (const auto& field : arrowFields) {
-            ydbFields.emplace_back();
-            auto& ydbField = ydbFields.back();
-            if (!ArrowToYdbType(*ydbField.mutable_type(), *field->type())) {
-                ctx.Send(RequesterId_, MakeErrorSchema(file.Path, NFq::TIssuesIds::UNSUPPORTED, TStringBuilder{} << "couldn't convert arrow type to ydb: " << field->ToString()));
-                return;
-            }
-            ydbField.mutable_name()->assign(field->name());
+
+        InferFileSchema(
+            ev->Get()->File,
+            "",
+            EFileFormat::CsvWithNames,
+            std::get<FormatConfigPtr>(config),
+            ctx
+        );
+    }
+
+    void HandleFileInference(TEvArrowFile::TPtr& ev, const NActors::TActorContext& ctx) {
+        auto& file = *ev->Get();
+        if (std::holds_alternative<TString>(Config_)) {
+            ctx.Send(RequesterId_, MakeErrorSchema(file.Path, NFq::TIssuesIds::INTERNAL_ERROR, std::get<TString>(Config_)));
+            return;
         }
-        ctx.Send(RequesterId_, new TEvInferredFileSchema(file.Path, std::move(ydbFields)));
+        
+        InferFileSchema(
+            file.File,
+            file.Path,
+            Format_,
+            std::get<FormatConfigPtr>(Config_),
+            ctx
+        );
     }
 
     void HandleFileError(TEvFileError::TPtr& ev, const NActors::TActorContext& ctx) {
@@ -379,8 +349,34 @@ public:
     }
 
 private:
+    void InferFileSchema(
+        std::shared_ptr<arrow::io::RandomAccessFile> file,
+        const TString& path,
+        const EFileFormat& format,
+        const FormatConfigPtr& config,
+        const NActors::TActorContext& ctx) {
+        
+        auto mbArrowFields = InferType(format, file, config);
+        if (std::holds_alternative<TString>(mbArrowFields)) {
+            ctx.Send(RequesterId_, MakeErrorSchema(path, NFq::TIssuesIds::INTERNAL_ERROR, std::get<TString>(mbArrowFields)));
+            return;
+        }
+        auto& arrowFields = std::get<ArrowFields>(mbArrowFields);
+        std::vector<Ydb::Column> ydbFields;
+        for (const auto& field : arrowFields) {
+            ydbFields.emplace_back();
+            auto& ydbField = ydbFields.back();
+            if (!ArrowToYdbType(*ydbField.mutable_type(), *field->type())) {
+                ctx.Send(RequesterId_, MakeErrorSchema(path, NFq::TIssuesIds::UNSUPPORTED, TStringBuilder{} << "couldn't convert arrow type to ydb: " << field->ToString()));
+                return;
+            }
+            ydbField.mutable_name()->assign(field->name());
+        }
+        ctx.Send(RequesterId_, new TEvInferredFileSchema(path, std::move(ydbFields)));
+    }
+
     EFileFormat Format_;
-    std::unique_ptr<FormatConfig> Config_;
+    std::variant<FormatConfigPtr, TString> Config_;
     NActors::TActorId ArrowFetcherId_;
     NActors::TActorId RequesterId_;
 };

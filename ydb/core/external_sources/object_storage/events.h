@@ -26,6 +26,7 @@ enum EEventTypes : ui32 {
 
     // Move somewhere separate?
     EvInferFileSchema,
+    EvInferPartitions,
     EvInferredFileSchema,
 
     EvArrowFile,
@@ -126,6 +127,14 @@ struct TEvInferFileSchema : public NActors::TEventLocal<TEvInferFileSchema, EvIn
 
     TString Path;
     ui64 Size = 0;
+};
+
+struct TEvInferPartitions : public NActors::TEventLocal<TEvInferPartitions, EvInferPartitions> {
+    explicit TEvInferPartitions(std::shared_ptr<arrow::io::RandomAccessFile> file)
+        : File{std::move(file)}
+    {}
+
+    std::shared_ptr<arrow::io::RandomAccessFile> File;
 };
 
 struct TEvInferredFileSchema : public NActors::TEventLocal<TEvInferredFileSchema, EvInferredFileSchema> {

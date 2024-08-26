@@ -1,3 +1,15 @@
-{ "Fruit": "Banana", "Price": 3, "Weight": 100 }
-{ "Fruit": "Apple", "Price": 2, "Weight": 22 }
-{ "Fruit": "Pear", "Price": 15, "Weight": 33 }
+{
+    "Fruit": "Banana",
+    "Price": 3,
+    "Weight": 100
+}
+{
+    "Fruit": "Apple",
+    "Price": 2,
+    "Weight": 22
+}
+{
+    "Fruit": "Pear",
+    "Price": 15,
+    "Weight": 33
+}

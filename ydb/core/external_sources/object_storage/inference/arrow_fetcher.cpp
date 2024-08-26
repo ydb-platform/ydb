@@ -1,5 +1,6 @@
 #include "arrow_fetcher.h"
 #include "arrow_inferencinator.h"
+#include "infer_config.h"
 
 #include <arrow/buffer.h>
 #include <arrow/buffer_builder.h>
@@ -30,6 +31,7 @@ public:
     TArrowFileFetcher(NActors::TActorId s3FetcherId, EFileFormat format, const THashMap<TString, TString>& params)
         : S3FetcherId_{s3FetcherId}
         , Format_{format}
+        , Config_{MakeFormatConfig(format, params)}
     {
         Y_ABORT_UNLESS(IsArrowInferredFormat(Format_));
         
@@ -51,6 +53,15 @@ public:
 
     void HandleFileRequest(TEvInferFileSchema::TPtr& ev, const NActors::TActorContext& ctx) {
         const auto& request = *ev->Get();
+        if (std::holds_alternative<TString>(Config_)) {
+            ctx.Send(ev->Sender, MakeError(
+                request.Path,
+                NFq::TIssuesIds::UNSUPPORTED,
+                TStringBuilder{} << "invalid parameters for format " << ConvertFileFormat(Format_) << ":  " << std::get<TString>(Config_))
+            );
+            return;
+        }
+
         TRequest localRequest{
             .Path = request.Path,
             .RequestId = TGUID::Create(),
@@ -72,7 +83,11 @@ public:
                 break;
             }
             default: {
-                ctx.Send(localRequest.Requester, MakeError(localRequest.Path, NFq::TIssuesIds::UNSUPPORTED, TStringBuilder{} << "unsupported format for inference: " << ConvertFileFormat(Format_)));
+                ctx.Send(localRequest.Requester, MakeError(
+                    localRequest.Path,
+                    NFq::TIssuesIds::UNSUPPORTED,
+                    TStringBuilder{} << "unsupported format for inference: " << ConvertFileFormat(Format_))
+                );
                 return;
             }
             case EFileFormat::Undefined:
@@ -96,16 +111,13 @@ public:
             data = std::move(*decompressedData);
         }
 
+        auto& config = std::get<FormatConfigPtr>(Config_);
+
         std::shared_ptr<arrow::io::RandomAccessFile> file;
         switch (Format_) {
             case EFileFormat::CsvWithNames:
             case EFileFormat::TsvWithNames: {
-                // TODO: obtain from request
-                arrow::csv::ParseOptions options;
-                if (Format_ == EFileFormat::TsvWithNames) {
-                    options.delimiter = '\t';
-                }
-                file = CleanupCsvFile(data, request, options, ctx);
+                file = CleanupCsvFile(data, request, std::dynamic_pointer_cast<CsvConfig>(config)->ParseOpts, ctx);
                 ctx.Send(request.Requester, new TEvArrowFile(std::move(file), request.Path));
                 break;
             }
@@ -120,7 +132,7 @@ public:
             }
             case EFileFormat::JsonEachRow:
             case EFileFormat::JsonList: {
-                file = CleanupJsonFile(data, request, arrow::json::ParseOptions::Defaults(), ctx);
+                file = CleanupJsonFile(data, request, std::dynamic_pointer_cast<JsonConfig>(config)->ParseOpts, ctx);
                 ctx.Send(request.Requester, new TEvArrowFile(std::move(file), request.Path));
                 break;
             }
@@ -354,6 +366,7 @@ private:
     // Fields
     NActors::TActorId S3FetcherId_;
     EFileFormat Format_;
+    std::variant<FormatConfigPtr, TString> Config_;
     TMaybe<TString> DecompressionFormat_;
     std::unordered_map<TString, TRequest> InflightRequests_; // Path -> Request
 };

@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <library/cpp/json/writer/json.h>
 
 namespace NYql {
 
@@ -20,15 +21,54 @@ class TGatheringAttributesVisitor : public IAstAttributesVisitor {
 
     void VisitAttribute(TString key, TString value) override {
         Y_ABORT_UNLESS(CurrentSource, "cannot write %s: %s", key.c_str(), value.c_str());
+        if (key.equal("partitionedby")) {
+            CurrentSource->second.try_emplace(key, PackToJsonArray({ value }));
+            return;
+        }
         CurrentSource->second.try_emplace(key, value);
     };
 
-    void VisitNonAttribute(TExprNode::TPtr) override {}
+    void VisitNonAttribute(TExprNode::TPtr node) override {
+        if (!CurrentSource) {
+            return;
+        }
+        
+        auto nodeChildren = node->Children();
+        if (nodeChildren.size() > 2 && nodeChildren[0]->IsAtom()) {
+            TCoAtom attrName{nodeChildren[0]};
+            if (attrName.StringValue().equal("partitionedby")) {
+                TVector<TString> values;
+                for (size_t i = 1; i < nodeChildren.size(); ++i) {
+                    if (!nodeChildren[i]->IsAtom()) {
+                        return;
+                    }
+                    TCoAtom attrValue{nodeChildren[i]};
+                    values.push_back(attrValue.StringValue());
+                }
+
+                CurrentSource->second.try_emplace(attrName.StringValue(), PackToJsonArray(std::move(values)));
+            }
+        }
+    }
 
 public:
     THashMap<std::pair<TString, TString>, THashMap<TString, TString>> Result;
 
 private:
+    TString PackToJsonArray(TVector<TString>&& values) {
+        NJson::TJsonValue jsonArray;
+        jsonArray.SetType(NJson::EJsonValueType::JSON_ARRAY);
+
+        for (const auto& value : values) {
+            jsonArray.AppendValue(value);
+        }
+
+        NJsonWriter::TBuf serializedSinks;
+        serializedSinks.WriteJsonValue(&jsonArray);
+
+        return serializedSinks.Str();
+    }
+
     decltype(Result)::pointer CurrentSource = nullptr;
 };
 

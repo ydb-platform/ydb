@@ -54,16 +54,10 @@ struct TAbs : public TSimpleArithmeticUnary<TInput, TOutput, TAbs<TInput, TOutpu
 #endif
 };
 
-struct TDecimalAbs {
+struct TDecimalAbs : public TDecimalUnary<TDecimalAbs> {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
         const auto a = arg.GetInt128();
         return a < 0 ? NUdf::TUnboxedValuePod(-a) : arg;
-    }
-
-    static void DoPtr(
-        const NYql::NDecimal::TInt128* arg,
-        NYql::NDecimal::TInt128* res) {
-        *res = Execute(NUdf::TUnboxedValuePod(*arg)).GetInt128();
     }
 
 #ifndef MKQL_DISABLE_CODEGEN

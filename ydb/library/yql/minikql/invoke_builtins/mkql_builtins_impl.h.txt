@@ -150,6 +150,15 @@ struct TSimpleArithmeticUnary : public TArithmeticConstraintsSame<TInput, TOutpu
 #endif
 };
 
+template <class TImpl>
+struct TDecimalUnary {
+    static void DoPtr(
+        const NYql::NDecimal::TInt128* arg,
+        NYql::NDecimal::TInt128* res) {
+        *res = TImpl::Execute(NUdf::TUnboxedValuePod(*arg)).GetInt128();
+    }
+};
+
 template <typename TLeft, typename TRight, typename TOutput, class TImpl, bool CustomCast = false>
 struct TSimpleArithmeticBinary : public TArithmeticConstraintsBinary<TLeft, TRight, TOutput> {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {

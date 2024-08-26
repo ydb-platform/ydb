@@ -170,12 +170,14 @@ const TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKin
         });
 
     const auto joinNode = pgmBuilder.BlockMapJoinCore(leftWideFlow, dictNode, joinKind, keyColumns);
+    const auto joinItems = GetWideComponents(AS_TYPE(TFlowType, joinNode.GetStaticType()));
+    const auto resultType = AS_TYPE(TTupleType, pgmBuilder.NewTupleType(joinItems));
 
     const auto rootNode = pgmBuilder.Collect(pgmBuilder.NarrowMap(joinNode,
         [&](TRuntimeNode::TList items) -> TRuntimeNode {
             TVector<TRuntimeNode> tupleElements;
-            tupleElements.reserve(tupleType->GetElementsCount());
-            for (size_t i = 0; i < tupleType->GetElementsCount(); i++) {
+            tupleElements.reserve(resultType->GetElementsCount());
+            for (size_t i = 0; i < resultType->GetElementsCount(); i++) {
                 tupleElements.emplace_back(items[i]);
             }
             return pgmBuilder.NewTuple(tupleElements);

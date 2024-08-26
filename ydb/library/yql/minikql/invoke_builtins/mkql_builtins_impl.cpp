@@ -292,7 +292,7 @@ std::shared_ptr<arrow::compute::ScalarKernel> TDecimalKernel::MakeArrowKernel(co
     bool isOptional = false;
     auto dataType1 = UnpackOptionalData(static_cast<TBlockType*>(argTypes[0])->GetItemType(), isOptional);
     auto dataType2 = UnpackOptionalData(static_cast<TBlockType*>(argTypes[1])->GetItemType(), isOptional);
-    auto resultDataType = UnpackOptionalData(static_cast<TBlockType*>(resultType)->GetItemType(), isOptional);
+    auto dataResultType = UnpackOptionalData(static_cast<TBlockType*>(resultType)->GetItemType(), isOptional);
 
     MKQL_ENSURE(*dataType1->GetDataSlot() == NUdf::EDataSlot::Decimal, "Require decimal");
     MKQL_ENSURE(*dataType2->GetDataSlot() == NUdf::EDataSlot::Decimal, "Require decimal");
@@ -307,7 +307,7 @@ std::shared_ptr<arrow::compute::ScalarKernel> TDecimalKernel::MakeArrowKernel(co
 
     auto k = std::make_shared<arrow::compute::ScalarKernel>(std::vector<arrow::compute::InputType>{
         GetPrimitiveInputArrowType(NUdf::EDataSlot::Decimal), GetPrimitiveInputArrowType(NUdf::EDataSlot::Decimal)
-    }, GetPrimitiveOutputArrowType(*resultDataType->GetDataSlot()), Exec);
+    }, GetPrimitiveOutputArrowType(*dataResultType->GetDataSlot()), Exec);
     k->null_handling = arrow::compute::NullHandling::INTERSECTION;
     k->init = [precision](arrow::compute::KernelContext*, const arrow::compute::KernelInitArgs&) {
         auto state = std::make_unique<TDecimalKernel::TKernelState>();

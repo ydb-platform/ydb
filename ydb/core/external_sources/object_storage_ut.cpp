@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(ObjectStorageTest) {
     }
 
     Y_UNIT_TEST(WildcardsValidation) {
-        auto source = NExternalSource::CreateObjectStorageExternalSource({}, nullptr, 1000, nullptr, false);
+        auto source = NExternalSource::CreateObjectStorageExternalSource({}, nullptr, 1000, nullptr, false, false);
         NKikimrExternalSources::TSchema schema;
 
         {  // location

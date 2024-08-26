@@ -90,7 +90,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
                 if (filterConclusion.IsFail()) {
                     return SendError("cannot build ranges filter", filterConclusion.GetErrorMessage(), ctx);
                 }
-                read.PKRangesFilter = filterConclusion.DetachResult();
+                read.PKRangesFilter = std::make_shared<NOlap::TPKRangesFilter>(filterConclusion.DetachResult());
             }
             auto newRange = scannerConstructor->BuildReadMetadata(Self, read);
             if (!newRange) {
@@ -102,9 +102,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     AFL_VERIFY(readMetadataRange);
     if (Self->GetOperationsManager().GetLockFeaturesForTxOptional(txId)) {
         auto evWriter = std::make_shared<NOlap::NTxInteractions::TEvReadStartWriter>(request.GetLocalPathId(),
-            readMetadataRange->GetResultSchema()->GetIndexInfo().GetPrimaryKey(),
-            std::make_shared<TPKRangesFilter>(
-                readMetadataRange->GetPKRangesFilterOptional() ? *readMetadataRange->GetPKRangesFilterOptional() : TPKRangesFilter(false)),
+            readMetadataRange->GetResultSchema()->GetIndexInfo().GetPrimaryKey(), readMetadataRange->GetPKRangesFilterPtr(),
             THashSet<ui64>());
         Self->GetOperationsManager().AddEventForTx(*Self, txId, evWriter);
     }

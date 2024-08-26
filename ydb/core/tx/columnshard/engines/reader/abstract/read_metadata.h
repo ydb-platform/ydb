@@ -34,7 +34,7 @@ public:
     };
 private:
     const ESorting Sorting = ESorting::ASC; // Sorting inside returned batches
-    std::optional<TPKRangesFilter> PKRangesFilter;
+    std::shared_ptr<TPKRangesFilter> PKRangesFilter;
     TProgramContainer Program;
     std::shared_ptr<TVersionedIndex> IndexVersionsPointer;
     TSnapshot RequestSnapshot;
@@ -60,8 +60,9 @@ public:
         return RequestShardingInfo;
     }
 
-    void SetPKRangesFilter(const TPKRangesFilter& value) {
-        Y_ABORT_UNLESS(IsSorted() && value.IsReverse() == IsDescSorted());
+    void SetPKRangesFilter(const std::shared_ptr<TPKRangesFilter>& value) {
+        AFL_VERIFY(value);
+        Y_ABORT_UNLESS(IsSorted() && value->IsReverse() == IsDescSorted());
         Y_ABORT_UNLESS(!PKRangesFilter);
         PKRangesFilter = value;
     }
@@ -71,7 +72,8 @@ public:
         return *PKRangesFilter;
     }
 
-    const std::optional<TPKRangesFilter>& GetPKRangesFilterOptional() const {
+    const std::shared_ptr<TPKRangesFilter>& GetPKRangesFilterPtr() const {
+        Y_ABORT_UNLESS(!!PKRangesFilter);
         return PKRangesFilter;
     }
 

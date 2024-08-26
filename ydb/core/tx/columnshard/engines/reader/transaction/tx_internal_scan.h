@@ -9,7 +9,6 @@ private:
     using TBase = NTabletFlatExecutor::TTransactionBase<NColumnShard::TColumnShard>;
     TEvColumnShard::TEvInternalScan::TPtr InternalScanEvent;
     const ui32 ScanGen = 1;
-    const ui32 TxId = 1;
     const ui32 ScanId = 1;
     const ui64 LockId;
     void SendError(const TString& problem, const TString& details, const TActorContext& ctx) const;

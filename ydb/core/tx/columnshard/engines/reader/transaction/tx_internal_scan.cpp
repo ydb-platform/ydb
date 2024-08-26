@@ -47,7 +47,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
         read.ColumnIds = request.GetColumnIds();
         read.ColumnNames = request.GetColumnNames();
         if (request.RangesFilter) {
-            read.PKRangesFilter = std::move(*request.RangesFilter);
+            read.PKRangesFilter = request.RangesFilter;
         }
 
         const TVersionedIndex* vIndex = Self->GetIndexOptional() ? &Self->GetIndexOptional()->GetVersionedIndex() : nullptr;
@@ -78,16 +78,14 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
     }
     if (Self->GetOperationsManager().GetLockOptional(LockId)) {
         auto evWriter = std::make_shared<NOlap::NTxInteractions::TEvReadStartWriter>(request.GetPathId(),
-            readMetadataRange->GetResultSchema()->GetIndexInfo().GetPrimaryKey(),
-            std::make_shared<TPKRangesFilter>(
-                readMetadataRange->GetPKRangesFilterOptional() ? *readMetadataRange->GetPKRangesFilterOptional() : TPKRangesFilter(false)),
+            readMetadataRange->GetResultSchema()->GetIndexInfo().GetPrimaryKey(), readMetadataRange->GetPKRangesFilterPtr(),
             THashSet<ui64>());
         Self->GetOperationsManager().AddEventForLock(*Self, LockId, evWriter);
     }
 
     const ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(readMetadataRange, index);
     auto scanActor = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(), TComputeShardingPolicy(),
-        ScanId, TxId, ScanGen, requestCookie, Self->TabletID(), TDuration::Max(), readMetadataRange, NKikimrDataEvents::FORMAT_ARROW,
+        ScanId, LockId, ScanGen, requestCookie, Self->TabletID(), TDuration::Max(), readMetadataRange, NKikimrDataEvents::FORMAT_ARROW,
         Self->Counters.GetScanCounters()));
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxInternalScan started")("actor_id", scanActor)("trace_detailed", detailedInfo);

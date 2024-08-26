@@ -413,7 +413,9 @@ private:
                     ctx.ListingRequest,
                     ctx.Delimiter,
                     parsedResponse.ContinuationToken,
-                    parsedResponse.MaxKeys};
+                    parsedResponse.MaxKeys,
+                    ctx.CurrentLogContextPath,
+                    ctx.ActorSystem};
 
                 ctx.NextRequestPromise.SetValue(TMaybe<TListingContext>(newCtx));
             } else {

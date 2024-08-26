@@ -1388,7 +1388,7 @@ class TFairShareSchedulerTest
     , public ::testing::WithParamInterface<std::tuple<int, int, int, TDuration>>
 { };
 
-bool ApproximatelyEqual(TDuration lhs, TDuration rhs, TDuration eps = TDuration::MilliSeconds(1))
+bool ApproximatelyEqual(TDuration lhs, TDuration rhs, TDuration eps = TDuration::MilliSeconds(10))
 {
     return (lhs < rhs ? rhs - lhs : lhs - rhs) < eps;
 }

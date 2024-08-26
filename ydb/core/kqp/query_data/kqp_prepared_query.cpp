@@ -154,7 +154,7 @@ const NKikimr::NKqp::TStagePredictor& TKqpPhyTxHolder::GetCalculationPredictor(c
 }
 
 TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
-    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry)
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, bool noFillTables)
     : Proto(proto)
     , Alloc(nullptr)
     , TableConstInfoById(MakeIntrusive<TTableConstInfoMap>())
@@ -162,6 +162,11 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
 
     if (functionRegistry) {
         Alloc = std::make_shared<TPreparedQueryAllocHolder>(functionRegistry);
+    }
+
+    // In case of some compilation failures filling tables may produce new problems which may replace original error messages.
+    if (noFillTables) {
+        return;
     }
 
     THashSet<TString> tablesSet;

@@ -3,7 +3,7 @@
 #include <ydb-cpp-sdk/library/retry/retry_policy.h>
 #include "utils.h"
 
-#include <src/library/retry/protos/retry_options.pb.h>
+#include <library/cpp/retry/protos/retry_options.pb.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/typetraits.h>

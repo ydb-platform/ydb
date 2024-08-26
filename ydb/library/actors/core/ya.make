@@ -109,7 +109,6 @@ PEERDIR(
     ydb/library/actors/prof
     ydb/library/actors/protos
     ydb/library/actors/util
-    ydb/library/actors/queues
     ydb/library/services
     library/cpp/execprofile
     library/cpp/json/writer

@@ -13,7 +13,6 @@ namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
 
-
     class TSparsedDataTest {
     private:
         const TKikimrSettings Settings = TKikimrSettings().SetWithSampleTables(false);

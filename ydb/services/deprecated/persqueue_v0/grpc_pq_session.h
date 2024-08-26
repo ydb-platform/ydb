@@ -25,7 +25,7 @@ public:
     virtual void Finish() = 0;
 
     /// Send reply to client.
-    virtual void Reply(const TResponse& resp) = 0;
+    virtual void Reply(TResponse&& resp) = 0;
 
     virtual void ReadyForNextRead() = 0;
 
@@ -120,7 +120,7 @@ protected:
                     Session->Stream.Finish(Status::OK, new TFinishDone(Session));
                 }
             } else {
-                auto resp = Session->Responses.front();
+                auto resp = std::move(Session->Responses.front());
                 Session->Responses.pop();
                 lock.Release();
                 ui64 sz = resp.ByteSize();
@@ -253,7 +253,7 @@ protected:
         TResponse response;
         response.MutableError()->SetDescription(description);
         response.MutableError()->SetCode(code);
-        Reply(response);
+        Reply(std::move(response));
         Finish();
     }
 
@@ -274,13 +274,13 @@ protected:
     }
 
     /// Send reply to client.
-    void Reply(const TResponse& resp) override {
+    void Reply(TResponse&& resp) override {
         {
             TGuard<TSpinLock> lock(Lock);
             if (NeedFinish) //ignore responses after finish
                 return;
             if (HaveWriteInflight || !Responses.empty()) {
-                Responses.push(resp);
+                Responses.push(std::move(resp));
                 return;
             } else {
                 HaveWriteInflight = true;

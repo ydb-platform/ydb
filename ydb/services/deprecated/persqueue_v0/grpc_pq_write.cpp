@@ -134,10 +134,10 @@ void TPQWriteServiceImpl::TSession::SendEvent(IEventBase* ev) {
 ///////////////////////////////////////////////////////////////////////////////
 
 
-TPQWriteServiceImpl::TPQWriteServiceImpl(grpc::ServerCompletionQueue* cq,
+TPQWriteServiceImpl::TPQWriteServiceImpl(const std::vector<grpc::ServerCompletionQueue*>& cqs,
                              NActors::TActorSystem* as, const TActorId& schemeCache,
                              TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions)
-    : CQ(cq)
+    : CQS(cqs)
     , ActorSystem(as)
     , SchemeCache(schemeCache)
     , Counters(counters)
@@ -182,7 +182,7 @@ void TPQWriteServiceImpl::WaitWriteSession() {
 
     ActorSystem->Send(MakeGRpcProxyStatusID(ActorSystem->NodeId), new TEvGRpcProxyStatus::TEvUpdateStatus(0,0,1,0));
 
-    TSessionRef session(new TSession(shared_from_this(), CQ, cookie, SchemeCache, Counters, NeedDiscoverClusters));
+    TSessionRef session(new TSession(shared_from_this(), CQS[cookie % CQS.size()], cookie, SchemeCache, Counters, NeedDiscoverClusters));
     {
         with_lock (Lock) {
             Sessions[cookie] = session;

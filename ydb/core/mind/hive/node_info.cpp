@@ -286,6 +286,17 @@ bool TNodeInfo::IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* 
         return false;
     }
 
+    TResourceRawValues maximumResources = GetResourceMaximumValues() * Hive.GetResourceOvercommitment();
+    TResourceRawValues allocatedResources = GetResourceCurrentValues() + tablet.GetResourceCurrentValues();
+    auto cmp = piecewise_compare(allocatedResources, maximumResources);
+    // only check memory because it's the only resource we can actually run out of
+    if (std::get<NMetrics::EResource::Memory>(cmp) != std::partial_ordering::less) {
+        if (debugState) {
+            debugState->NodesWithoutResources++;
+        }
+        return false;
+    }
+
     return true;
 }
 

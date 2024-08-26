@@ -1,4 +1,5 @@
 #include "defs.h"
+#include "activity_guard.h"
 #include "actorsystem.h"
 #include "callstack.h"
 #include "cpu_manager.h"
@@ -96,6 +97,7 @@ namespace NActors {
         if (Y_UNLIKELY(!ev))
             return false;
 
+        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_SEND, false> activityGuard;
 #ifdef USE_ACTOR_CALLSTACK
         ev->Callstack.TraceIfEmpty();
 #endif
@@ -336,4 +338,13 @@ namespace NActors {
         CpuManager->Cleanup();
         Scheduler.Destroy();
     }
+
+    void TActorSystem::GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const {
+        CpuManager->GetExecutorPoolState(poolId, state);
+    }
+
+    void TActorSystem::GetExecutorPoolStates(std::vector<TExecutorPoolState> &states) const {
+        CpuManager->GetExecutorPoolStates(states);
+    }
+
 }

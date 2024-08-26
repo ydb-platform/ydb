@@ -811,4 +811,19 @@ namespace NActors {
         statsCopy.Aggregate(SharedStats[poolId]);
     }
 
+    void TGenericExecutorThread::GetCurrentStatsForHarmonizer(TExecutorThreadStats& statsCopy) {
+        statsCopy.SafeElapsedTicks = RelaxedLoad(&Ctx.Stats->SafeElapsedTicks);
+        statsCopy.CpuUs = RelaxedLoad(&Ctx.Stats->CpuUs);
+        statsCopy.NotEnoughCpuExecutions = RelaxedLoad(&Ctx.Stats->NotEnoughCpuExecutions);
+    }
+
+    void TGenericExecutorThread::GetSharedStatsForHarmonizer(i16 poolId, TExecutorThreadStats &stats) {
+        stats.SafeElapsedTicks = RelaxedLoad(&SharedStats[poolId].SafeElapsedTicks);
+        stats.CpuUs = RelaxedLoad(&SharedStats[poolId].CpuUs);
+        stats.NotEnoughCpuExecutions = RelaxedLoad(&SharedStats[poolId].NotEnoughCpuExecutions);
+    }
+
+
+    TGenericExecutorThreadCtx::~TGenericExecutorThreadCtx()
+    {}
 }

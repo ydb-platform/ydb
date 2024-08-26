@@ -151,14 +151,13 @@ namespace NActors {
         const TString PoolName;
         const TDuration TimePerMailbox;
         const ui32 EventsPerMailbox;
-        EASProfile ActorSystemProfile;
 
         const int RealtimePriority;
 
-        TAtomic ThreadUtilization;
-        TAtomic MaxUtilizationCounter;
-        TAtomic MaxUtilizationAccumulator;
-        TAtomic WrongWakenedThreadCount;
+        TAtomic ThreadUtilization = 0;
+        TAtomic MaxUtilizationCounter = 0;
+        TAtomic MaxUtilizationAccumulator = 0;
+        TAtomic WrongWakenedThreadCount = 0;
         std::atomic<ui64> SpinningTimeUs;
 
         TAtomic ThreadCount;
@@ -208,6 +207,7 @@ namespace NActors {
             }
         };
 
+        const EASProfile ActorSystemProfile;
         static constexpr TDuration DEFAULT_TIME_PER_MAILBOX = TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX;
         static constexpr ui32 DEFAULT_EVENTS_PER_MAILBOX = TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
 
@@ -251,6 +251,7 @@ namespace NActors {
         void Shutdown() override;
 
         void GetCurrentStats(TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const override;
+        void GetExecutorPoolState(TExecutorPoolState &poolState) const override;
         TString GetName() const override {
             return PoolName;
         }

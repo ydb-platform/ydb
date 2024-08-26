@@ -13,9 +13,6 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/reader.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/writer.h>
 
-// Character dividing arrow schema and compressed data in serialized string.
-const SCHEMA_TO_DATA_DIVIDER = '\n';
-
 namespace NKikimr::NArrow::NSerialization {
     TString TGorillaSerializer::DoSerializeFull(const std::shared_ptr<arrow::RecordBatch>& batch) const {
         // TODO: ???

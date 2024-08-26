@@ -315,28 +315,28 @@ private:
 // 3.) Unable to decompress 0xFFFFFFFFFFFFFFFF as value as currently it's reserved as a flag of series end.
 class PairsCompressor : public CompressorBase<std::pair<uint64_t, uint64_t>> {
 public:
-explicit PairsCompressor(const std::shared_ptr<BitWriter> &bw) : CompressorBase(bw), compressor_ts_(bw),
-                                                                 compressor_value_(bw) {}
+    explicit PairsCompressor(const std::shared_ptr<BitWriter> &bw) : CompressorBase(bw), compressor_ts_(bw),
+                                                                     compressor_value_(bw) {}
 
-void compressFirstInner(std::pair<uint64_t, uint64_t> entity) override {
-auto [t, v] = entity;
-compressor_ts_.compressFirst(t);
-compressor_value_.compressFirst(v);
-}
+    void compressFirstInner(std::pair<uint64_t, uint64_t> entity) override {
+        auto [t, v] = entity;
+        compressor_ts_.compressFirst(t);
+        compressor_value_.compressFirst(v);
+    }
 
-void compressNonFirst(std::pair<uint64_t, uint64_t> entity) override {
-auto [t, v] = entity;
-compressor_ts_.compressNonFirst(t);
-compressor_value_.compressNonFirst(v);
-}
+    void compressNonFirst(std::pair<uint64_t, uint64_t> entity) override {
+        auto [t, v] = entity;
+        compressor_ts_.compressNonFirst(t);
+        compressor_value_.compressNonFirst(v);
+    }
 
-void finish() override {
-compressor_ts_.finish();
-}
+    void finish() override {
+        compressor_ts_.finish();
+    }
 
 private:
-TimestampsCompressor compressor_ts_;
-ValuesCompressor compressor_value_;
+    TimestampsCompressor compressor_ts_;
+    ValuesCompressor compressor_value_;
 };
 // ---------- COMPRESSION ------------------
 
@@ -587,41 +587,41 @@ private:
 
 class PairsDecompressor : public DecompressorBase<std::pair<uint64_t, uint64_t>> {
 public:
-explicit PairsDecompressor(const std::shared_ptr<BitReader> &br) : DecompressorBase(br), decompressor_ts_(br),
-                                                                   decompressor_value_(br) {}
+    explicit PairsDecompressor(const std::shared_ptr<BitReader> &br) : DecompressorBase(br), decompressor_ts_(br),
+                                                                       decompressor_value_(br) {}
 
-[[nodiscard]] uint64_t getHeader() const {
-    return decompressor_ts_.getHeader();
-}
+    [[nodiscard]] uint64_t getHeader() const {
+        return decompressor_ts_.getHeader();
+    }
 
 private:
-[[nodiscard]] std::optional<std::pair<uint64_t, uint64_t>> decompressFirstInner() override {
-auto t = decompressor_ts_.decompressFirst();
-if (!t) {
-return std::nullopt;
-}
-auto v = decompressor_value_.decompressFirst();
-if (!v) {
-return std::nullopt;
-}
+    [[nodiscard]] std::optional<std::pair<uint64_t, uint64_t>> decompressFirstInner() override {
+        auto t = decompressor_ts_.decompressFirst();
+        if (!t) {
+            return std::nullopt;
+        }
+        auto v = decompressor_value_.decompressFirst();
+        if (!v) {
+            return std::nullopt;
+        }
 
-return {std::make_pair(*t, *v)};
-}
+        return {std::make_pair(*t, *v)};
+    }
 
-std::optional<std::pair<uint64_t, uint64_t>> decompressNonFirst() override {
-std::optional<uint64_t> t = decompressor_ts_.decompressNonFirst();
-if (!t) {
-return std::nullopt;
-}
-std::optional<uint64_t> v = decompressor_value_.decompressNonFirst();
-if (!v) {
-return std::nullopt;
-}
-return {std::make_pair(*t, *v)};
-}
+    std::optional<std::pair<uint64_t, uint64_t>> decompressNonFirst() override {
+        std::optional<uint64_t> t = decompressor_ts_.decompressNonFirst();
+        if (!t) {
+            return std::nullopt;
+        }
+        std::optional<uint64_t> v = decompressor_value_.decompressNonFirst();
+        if (!v) {
+            return std::nullopt;
+        }
+        return {std::make_pair(*t, *v)};
+    }
 
-TimestampsDecompressor decompressor_ts_;
-ValuesDecompressor decompressor_value_;
+    TimestampsDecompressor decompressor_ts_;
+    ValuesDecompressor decompressor_value_;
 };
 // ---------- DECOMPRESSION ----------------
 
@@ -792,11 +792,14 @@ std::vector<T> deserializeEntities(
     return entities;
 }
 
+// Character dividing arrow schema and compressed data in serialized string.
+const char SCHEMA_TO_DATA_DIVIDER = '\n';
+
 arrow::Result<std::shared_ptr<arrow::RecordBatch>> deserializeSingleColumnBatch(
         const std::string &data
 ) {
     // Deserialize batch schema.
-    size_t div_pos = data.find_first_of('\n');
+    size_t div_pos = data.find_first_of(SCHEMA_TO_DATA_DIVIDER);
     if (div_pos == std::string::npos) {
         Y_ABORT("RecordBatch schema to compressed data divider not found.");
     }
@@ -843,7 +846,7 @@ arrow::Result<std::shared_ptr<arrow::RecordBatch>> deserializePairsBatch(
         const std::string &data
 ) {
     // Deserialize batch schema.
-    size_t div_pos = data.find_first_of('\n');
+    size_t div_pos = data.find_first_of(SCHEMA_TO_DATA_DIVIDER);
     if (div_pos == std::string::npos) {
         Y_ABORT("Newline divider not found in serialized file.");
     }

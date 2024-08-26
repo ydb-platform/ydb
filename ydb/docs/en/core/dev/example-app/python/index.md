@@ -63,6 +63,8 @@ App code snippet for driver initialization:
 
 App code snippet for session pool initialization:
 
+{% list tabs %}
+
 - Synchronous
 
    ```python

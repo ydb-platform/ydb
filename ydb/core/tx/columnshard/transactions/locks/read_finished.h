@@ -8,8 +8,10 @@ private:
     YDB_READONLY(ui64, PathId, 0);
     TTxConflicts Conflicts;
 
-    virtual TTxConflicts DoCheckInteraction(const ui64 /*selfTxId*/, TInteractionsContext& /*context*/) const override {
-        return Conflicts;
+    virtual bool DoCheckInteraction(
+        const ui64 /*selfTxId*/, TInteractionsContext& /*context*/, TTxConflicts& conflicts, TTxConflicts& /*notifications*/) const override {
+        conflicts = Conflicts;
+        return true;
     }
 
     virtual std::shared_ptr<ITxEvent> DoBuildEvent() override {

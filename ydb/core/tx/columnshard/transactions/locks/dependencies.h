@@ -10,6 +10,14 @@ private:
     THashMap<ui64, THashSet<ui64>> TxIdsFromCommitToBroken;
 
 public:
+    THashMap<ui64, THashSet<ui64>>::const_iterator begin() const {
+        return TxIdsFromCommitToBroken.begin();
+    }
+
+    THashMap<ui64, THashSet<ui64>>::const_iterator end() const {
+        return TxIdsFromCommitToBroken.end();
+    }
+
     bool Add(const ui64 commitTxId, const ui64 brokenTxId) {
         return TxIdsFromCommitToBroken[commitTxId].emplace(brokenTxId).second;
     }

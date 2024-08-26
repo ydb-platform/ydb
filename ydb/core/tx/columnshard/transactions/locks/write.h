@@ -8,13 +8,15 @@ private:
     YDB_READONLY(ui64, PathId, 0);
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, RecordBatch);
 
-    virtual TTxConflicts DoCheckInteraction(const ui64 selfTxId, TInteractionsContext& context) const override {
+    virtual bool DoCheckInteraction(
+        const ui64 selfTxId, TInteractionsContext& context, TTxConflicts& conflicts, TTxConflicts& /*notifications*/) const override {
         THashSet<ui64> txIds = context.GetAffectedTxIds(PathId, RecordBatch);
         TTxConflicts result;
         for (auto&& i : txIds) {
             result.Add(selfTxId, i);
         }
-        return result;
+        std::swap(result, conflicts);
+        return true;
     }
 
     virtual std::shared_ptr<ITxEvent> DoBuildEvent() override {

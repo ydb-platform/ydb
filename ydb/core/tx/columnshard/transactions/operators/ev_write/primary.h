@@ -4,7 +4,6 @@
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/data_sharing/common/transactions/tx_extension.h>
-#include <ydb/core/tx/columnshard/transactions/locks/manager.h>
 
 #include <util/string/join.h>
 
@@ -201,20 +200,21 @@ private:
     private:
         using TBase = NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard>;
         const ui64 TxId;
-        const ui64 LockId;
 
         virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& /*ctx*/) override {
+            auto& lock = Self->GetOperationsManager().GetLockVerified(Self->GetOperationsManager().GetLockForTxVerified(TxId));
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId);
             auto copy = *op;
-            copy.TxBroken = !Self->GetOperationsManager().GetInteractionsManager().CheckToCommit(LockId);
+            copy.TxBroken = lock.GetBroken();
             AFL_VERIFY(copy.WaitShardsResultAck.erase(Self->TabletID()));
             AFL_VERIFY(copy.WaitShardsBrokenFlags.erase(Self->TabletID()));
             Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, copy.SerializeToProto().SerializeAsString());
             return true;
         }
         virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
+            auto& lock = Self->GetOperationsManager().GetLockVerified(Self->GetOperationsManager().GetLockForTxVerified(TxId));
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId);
-            op->TxBroken = !Self->GetOperationsManager().GetInteractionsManager().CheckToCommit(LockId);
+            op->TxBroken = lock.GetBroken();
             AFL_VERIFY(op->WaitShardsResultAck.erase(Self->TabletID()));
             AFL_VERIFY(op->WaitShardsBrokenFlags.erase(Self->TabletID()));
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "remove_tablet_id")("wait", JoinSeq(",", op->WaitShardsBrokenFlags))(
@@ -223,10 +223,9 @@ private:
         }
 
     public:
-        TTxStartPreparation(TColumnShard* owner, const ui64 txId, const ui64 lockId)
+        TTxStartPreparation(TColumnShard* owner, const ui64 txId)
             : TBase(owner)
-            , TxId(txId)
-            , LockId(lockId) {
+            , TxId(txId) {
         }
     };
 
@@ -239,7 +238,7 @@ private:
             return nullptr;
         }
         AFL_VERIFY(ControlCounter.Inc() <= 1);
-        return std::make_unique<TTxStartPreparation>(owner, GetTxId(), owner->GetOperationsManager().GetLockForTxVerified(GetTxId()));
+        return std::make_unique<TTxStartPreparation>(owner, GetTxId());
     }
 
 public:

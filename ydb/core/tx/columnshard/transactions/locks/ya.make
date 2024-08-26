@@ -1,7 +1,6 @@
 LIBRARY()
 
 SRCS(
-    manager.cpp
     dependencies.cpp
     interaction.cpp
     abstract.cpp

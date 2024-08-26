@@ -4,7 +4,6 @@
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/data_sharing/common/transactions/tx_extension.h>
-#include <ydb/core/tx/columnshard/transactions/locks/manager.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -164,26 +163,26 @@ private:
     private:
         using TBase = NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard>;
         const ui64 TxId;
-        const ui64 LockId;
 
         virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& /*ctx*/) override {
+            auto& lock = Self->GetOperationsManager().GetLockVerified(Self->GetOperationsManager().GetLockForTxVerified(TxId));
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSecondaryTransactionOperator>(TxId);
             auto copy = *op;
-            copy.SelfBroken = !Self->GetOperationsManager().GetInteractionsManager().CheckToCommit(LockId);
+            copy.SelfBroken = lock.GetBroken();
             Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, copy.SerializeToProto().SerializeAsString());
             return true;
         }
         virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
+            auto& lock = Self->GetOperationsManager().GetLockVerified(Self->GetOperationsManager().GetLockForTxVerified(TxId));
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSecondaryTransactionOperator>(TxId);
-            op->SelfBroken = !Self->GetOperationsManager().GetInteractionsManager().CheckToCommit(LockId);
+            op->SelfBroken = lock.GetBroken();
             op->SendResult(*Self);
         }
 
     public:
-        TTxStartPreparation(TColumnShard* owner, const ui64 txId, const ui64 lockId)
+        TTxStartPreparation(TColumnShard* owner, const ui64 txId)
             : TBase(owner)
-            , TxId(txId)
-            , LockId(lockId) {
+            , TxId(txId) {
         }
     };
 
@@ -192,7 +191,7 @@ private:
             return nullptr;
         }
         AFL_VERIFY(ControlCounter.Inc() <= 1);
-        return std::make_unique<TTxStartPreparation>(owner, GetTxId(), owner->GetOperationsManager().GetLockForTxVerified(GetTxId()));
+        return std::make_unique<TTxStartPreparation>(owner, GetTxId());
     }
 
     virtual void OnTimeout(TColumnShard& owner) override {

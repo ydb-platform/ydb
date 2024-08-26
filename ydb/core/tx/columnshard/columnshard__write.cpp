@@ -8,7 +8,6 @@
 #include "operations/batch_builder/builder.h"
 #include "operations/manager.h"
 #include "operations/write_data.h"
-#include "transactions/locks/manager.h"
 #include "transactions/operators/ev_write/primary.h"
 #include "transactions/operators/ev_write/secondary.h"
 #include "transactions/operators/ev_write/sync.h"

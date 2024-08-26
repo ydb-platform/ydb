@@ -9,18 +9,26 @@ private:
     YDB_READONLY(ui64, PathId, 0);
     YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, Schema);
     YDB_READONLY_DEF(std::shared_ptr<TPKRangesFilter>, Filter);
+    YDB_READONLY_DEF(THashSet<ui64>, LockIdsForCheck);
 
-    virtual TTxConflicts DoCheckInteraction(const ui64 /*selfTxId*/, TInteractionsContext& /*context*/) const override {
-        return TTxConflicts();
+    virtual bool DoCheckInteraction(
+        const ui64 selfTxId, TInteractionsContext& /*context*/, TTxConflicts& /*conflicts*/, TTxConflicts& notifications) const override {
+        for (auto&& i : LockIdsForCheck) {
+            notifications.Add(i, selfTxId);
+        }
+        return true;
     }
 
     virtual std::shared_ptr<ITxEvent> DoBuildEvent() override;
 
 public:
-    TEvReadStartWriter(const ui64 pathId, const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<TPKRangesFilter>& filter)
+    TEvReadStartWriter(const ui64 pathId, const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<TPKRangesFilter>& filter,
+        const THashSet<ui64>& lockIdsForCheck)
         : PathId(pathId)
         , Schema(schema)
-        , Filter(filter) {
+        , Filter(filter)
+        , LockIdsForCheck(lockIdsForCheck)
+    {
         AFL_VERIFY(PathId);
         AFL_VERIFY(Schema);
         AFL_VERIFY(Filter);

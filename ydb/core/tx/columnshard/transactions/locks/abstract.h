@@ -2,14 +2,16 @@
 #include "dependencies.h"
 #include "interaction.h"
 
-#include <ydb/core/tx/columnshard/transactions/protos/tx_event.pb.h>
-
 #include <ydb/services/bg_tasks/abstract/interface.h>
 
 #include <library/cpp/object_factory/object_factory.h>
 
 namespace NKikimr::NColumnShard {
 class TColumnShard;
+}
+
+namespace NKikimrColumnShardTxProto {
+class TEvent;
 }
 
 namespace NKikimr::NOlap::NTxInteractions {
@@ -52,9 +54,6 @@ class TTxEventContainer: public NBackgroundTasks::TInterfaceProtoContainer<ITxEv
 private:
     using TBase = NBackgroundTasks::TInterfaceProtoContainer<ITxEvent>;
     YDB_READONLY(ui64, TxId, 0);
-    YDB_READONLY(ui64, Generation, 0);
-    static inline TAtomicCounter IdsCounter = 0;
-    ui64 GenerationInternalId = 0;
 
 public:
     void AddToInteraction(TInteractionsContext& context) const {
@@ -65,45 +64,36 @@ public:
         return GetObjectVerified().RemoveFromInteraction(TxId, context);
     }
 
-    ui64 GetGenerationInternalId() const {
-        return GenerationInternalId;
-    }
-
-    TTxEventContainer(const ui64 txId, const ui64 generation, const std::shared_ptr<ITxEvent>& txEvent)
+    TTxEventContainer(const ui64 txId, const std::shared_ptr<ITxEvent>& txEvent)
         : TBase(txEvent)
-        , TxId(txId)
-        , Generation(generation)
-        , GenerationInternalId(IdsCounter.Inc()) {
+        , TxId(txId) {
     }
 
-    TTxEventContainer(const ui64 txId, const ui64 generation, const ui64 id, const std::shared_ptr<ITxEvent>& txEvent)
-        : TBase(txEvent)
-        , TxId(txId)
-        , Generation(generation)
-        , GenerationInternalId(id) {
-    }
-
-    TTxEventContainer(const ui64 txId, const ui64 generation, const ui64 id)
-        : TxId(txId)
-        , Generation(generation)
-        , GenerationInternalId(id) {
+    TTxEventContainer(const ui64 txId)
+        : TxId(txId) {
     }
 
     bool operator<(const TTxEventContainer& item) const {
-        return std::tie(Generation, GenerationInternalId) < std::tie(item.Generation, item.GenerationInternalId);
+        return TxId < item.TxId;
     }
 };
 
 class ITxEventWriter {
 protected:
-    virtual TTxConflicts DoCheckInteraction(const ui64 selfTxId, TInteractionsContext& context) const = 0;
+    virtual bool DoCheckInteraction(
+        const ui64 selfTxId, TInteractionsContext& context, TTxConflicts& conflicts, TTxConflicts& notifications) const = 0;
     virtual std::shared_ptr<ITxEvent> DoBuildEvent() = 0;
 
 public:
     ITxEventWriter() = default;
 
-    TTxConflicts CheckInteraction(const ui64 selfTxId, TInteractionsContext& context) const {
-        return DoCheckInteraction(selfTxId, context);
+    bool CheckInteraction(const ui64 selfTxId, TInteractionsContext& context, TTxConflicts& conflicts, TTxConflicts& notifications) const {
+        TTxConflicts conflictsResult;
+        TTxConflicts notificationsResult;
+        const bool result = DoCheckInteraction(selfTxId, context, conflictsResult, notificationsResult);
+        std::swap(conflictsResult, conflicts);
+        std::swap(notificationsResult, notifications);
+        return result;
     }
 
     std::shared_ptr<ITxEvent> BuildEvent() {

@@ -1,15 +1,11 @@
 #include "manager.h"
 
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
-#include <ydb/core/tx/columnshard/transactions/locks/manager.h>
 
 namespace NKikimr::NColumnShard {
 
 bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
-    if (!TxInteractionsManager->LoadFromDatabase(txc)) {
-        return false;
-    }
     {
         auto rowset = db.Table<Schema::LockFeatures>().Select();
         if (!rowset.IsReady()) {
@@ -98,6 +94,21 @@ bool TOperationsManager::CommitTransaction(
     auto tIt = LockFeatures.find(*lockId);
     AFL_VERIFY(tIt != LockFeatures.end())("tx_id", txId)("lock_id", *lockId);
 
+    for (auto&& i : tIt->second.GetBrokeOnCommit()) {
+        if (auto lock = GetLockOptional(i)) {
+            for (auto&& brokenLockId : lock->GetBrokeOnCommit()) {
+                if (auto lockBroken = GetLockOptional(brokenLockId)) {
+                    lockBroken->SetBroken(true);
+                }
+            }
+            for (auto&& brokenLockId : lock->GetNotifyOnCommit()) {
+                if (auto lockBroken = GetLockOptional(brokenLockId)) {
+                    lockBroken->AddNotifyCommit(lock->GetLockId());
+                }
+            }
+        }
+    }
+
     TVector<TWriteOperation::TPtr> commited;
     for (auto&& opPtr : tIt->second.GetWriteOperations()) {
         opPtr->Commit(owner, txc, snapshot);
@@ -138,15 +149,17 @@ TWriteOperation::TPtr TOperationsManager::GetOperation(const TWriteId writeId) c
 
 void TOperationsManager::OnTransactionFinish(
     const TVector<TWriteOperation::TPtr>& operations, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
-    auto lockId = GetLockForTx(txId);
-    AFL_VERIFY(!!lockId)("tx_id", txId);
-    LockFeatures.erase(*lockId);
+    const ui64 lockId = GetLockForTxVerified(txId);
+    auto itLock = LockFeatures.find(lockId);
+    AFL_VERIFY(itLock != LockFeatures.end());
+    itLock->second.RemoveInteractions(InteractionsContext);
+    LockFeatures.erase(lockId);
     Tx2Lock.erase(txId);
     for (auto&& op : operations) {
         RemoveOperation(op, txc);
     }
     NIceDb::TNiceDb db(txc.DB);
-    db.Table<Schema::OperationTxIds>().Key(txId, *lockId).Delete();
+    db.Table<Schema::OperationTxIds>().Key(txId, lockId).Delete();
 }
 
 void TOperationsManager::RemoveOperation(const TWriteOperation::TPtr& op, NTabletFlatExecutor::TTransactionContext& txc) {
@@ -202,8 +215,29 @@ EOperationBehaviour TOperationsManager::GetBehaviour(const NEvents::TDataEvents:
     return EOperationBehaviour::Undefined;
 }
 
-TOperationsManager::TOperationsManager()
-    : TxInteractionsManager(std::make_shared<NOlap::NTxInteractions::TManager>()) {
+TOperationsManager::TOperationsManager() {
+}
+
+void TOperationsManager::AddEventForTx(TColumnShard& /*owner*/, const ui64 txId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer) {
+    AFL_VERIFY(writer);
+    NOlap::NTxInteractions::TTxConflicts txNotifications;
+    NOlap::NTxInteractions::TTxConflicts txConflicts;
+    auto& txLock = GetLockVerified(GetLockForTxVerified(txId));
+    writer->CheckInteraction(txId, InteractionsContext, txConflicts, txNotifications);
+    for (auto&& i : txConflicts) {
+        if (auto lock = GetLockOptional(i.first)) {
+            GetLockVerified(i.first).AddBrokeOnCommit(i.second);
+        } else if (txLock.IsCommitted(i.first)) {
+            txLock.SetBroken(true);
+        }
+        
+    }
+    for (auto&& i : txNotifications) {
+        GetLockVerified(i.first).AddNotificationsOnCommit(i.second);
+    }
+    NOlap::NTxInteractions::TTxEventContainer container(txId, writer->BuildEvent());
+    container.AddToInteraction(InteractionsContext);
+    GetLockVerified(GetLockForTxVerified(txId)).MutableEvents().emplace_back(std::move(container));
 }
 
 }   // namespace NKikimr::NColumnShard

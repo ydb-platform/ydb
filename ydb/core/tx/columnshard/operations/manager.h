@@ -1,8 +1,12 @@
 #pragma once
 #include "write.h"
+#include <ydb/core/tx/columnshard/transactions/locks/abstract.h>
 
 namespace NKikimr::NOlap::NTxInteractions {
 class TManager;
+class TTxEventContainer;
+class TInteractionsContext;
+class ITxEventWriter;
 }
 
 namespace NKikimr::NColumnShard {
@@ -12,11 +16,40 @@ class TColumnShard;
 class TLockFeatures: TMoveOnly {
 private:
     YDB_ACCESSOR_DEF(std::vector<TWriteOperation::TPtr>, WriteOperations);
+    YDB_ACCESSOR_DEF(std::vector<NOlap::NTxInteractions::TTxEventContainer>, Events);
     YDB_ACCESSOR(ui64, LockId, 0);
     YDB_ACCESSOR(ui64, Generation, 0);
     YDB_ACCESSOR(ui64, InternalGenerationCounter, 0);
 
+    YDB_ACCESSOR_DEF(THashSet<ui64>, BrokeOnCommit);
+    YDB_ACCESSOR_DEF(THashSet<ui64>, NotifyOnCommit);
+    YDB_ACCESSOR_DEF(THashSet<ui64>, Committed);
+    YDB_ACCESSOR(bool, Broken, false);
+
 public:
+    bool IsCommitted(const ui64 lockId) const {
+        return Committed.contains(lockId);
+    }
+
+    void AddNotifyCommit(const ui64 lockId) {
+        AFL_VERIFY(NotifyOnCommit.erase(lockId));
+        Committed.emplace(lockId);
+    }
+
+    void AddBrokeOnCommit(const THashSet<ui64>& lockIds) {
+        BrokeOnCommit.insert(lockIds.begin(), lockIds.end());
+    }
+
+    void AddNotificationsOnCommit(const THashSet<ui64>& lockIds) {
+        NotifyOnCommit.insert(lockIds.begin(), lockIds.end());
+    }
+
+    void RemoveInteractions(NOlap::NTxInteractions::TInteractionsContext& context) const {
+        for (auto&& i : Events) {
+            i.RemoveFromInteraction(context);
+        }
+    }
+
     TLockFeatures(const ui64 lockId)
         : LockId(lockId) {
     }
@@ -28,22 +61,16 @@ public:
 };
 
 class TOperationsManager {
+    NOlap::NTxInteractions::TInteractionsContext InteractionsContext;
+
     THashMap<ui64, ui64> Tx2Lock;
     THashMap<ui64, TLockFeatures> LockFeatures;
     THashMap<TWriteId, TWriteOperation::TPtr> Operations;
     TWriteId LastWriteId = TWriteId(0);
-    std::shared_ptr<NOlap::NTxInteractions::TManager> TxInteractionsManager;
 
 public:
     bool Load(NTabletFlatExecutor::TTransactionContext& txc);
-
-    const NOlap::NTxInteractions::TManager& GetInteractionsManager() const {
-        return *TxInteractionsManager;
-    }
-
-    NOlap::NTxInteractions::TManager& MutableInteractionsManager() {
-        return *TxInteractionsManager;
-    }
+    void AddEventForTx(TColumnShard& owner, const ui64 txId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer);
 
     TWriteOperation::TPtr GetOperation(const TWriteId writeId) const;
     TWriteOperation::TPtr GetOperationVerified(const TWriteId writeId) const {

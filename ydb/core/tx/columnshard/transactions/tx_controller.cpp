@@ -1,6 +1,5 @@
 #include "tx_controller.h"
 
-#include "locks/manager.h"
 #include "transactions/tx_finish_async.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>

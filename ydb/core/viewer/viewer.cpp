@@ -268,9 +268,9 @@ public:
 
     TString MakeForward(const TRequestState& request, const std::vector<ui32>& nodes) override {
         if (nodes.empty()) {
-            return GetHTTPINTERNALERROR(request, "text/plain", "Couldn't resolve database nodes");
+            return GetHTTPBADREQUEST(request, "text/plain", "Couldn't resolve database nodes");
         }
-        if (request->Request.GetUri().StartsWith("/node/")) {
+        if (!request.Request->Request.GetHeader("X-Forwarded-From-Node").empty()) {
             return GetHTTPBADREQUEST(request, "text/plain", "Can't do double forward");
         }
         // we expect that nodes order is the same for all requests

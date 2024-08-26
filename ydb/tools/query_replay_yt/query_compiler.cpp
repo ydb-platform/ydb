@@ -587,7 +587,7 @@ private:
             }
         }
 
-        QueryId = ReplayDetails["query_id"]
+        QueryId = ReplayDetails["query_id"];
 
         TKqpQuerySettings settings(queryType);
         Query = std::make_unique<NKikimr::NKqp::TKqpQueryId>(

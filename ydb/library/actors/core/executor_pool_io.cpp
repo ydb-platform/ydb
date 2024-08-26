@@ -12,16 +12,14 @@ namespace NActors {
         , PoolName(poolName)
     {}
 
-    TIOExecutorPool::TIOExecutorPool(const TIOExecutorPoolConfig& cfg, IHarmonizer *harmonizer)
+    TIOExecutorPool::TIOExecutorPool(const TIOExecutorPoolConfig& cfg)
         : TIOExecutorPool(
             cfg.PoolId,
             cfg.Threads,
             cfg.PoolName,
             new TAffinity(cfg.Affinity)
         )
-    {
-        Harmonizer = harmonizer;
-    }
+    {}
 
     TIOExecutorPool::~TIOExecutorPool() {
         Threads.Destroy();
@@ -108,7 +106,7 @@ namespace NActors {
         ScheduleQueue.Reset(new NSchedulerQueue::TQueueType());
 
         for (i16 i = 0; i != PoolThreads; ++i) {
-            Threads[i].Thread.reset(new TExecutorThread(i, 0, actorSystem, this, MailboxTable.Get(), PoolName));
+            Threads[i].Thread.Reset(new TExecutorThread(i, 0, actorSystem, this, MailboxTable.Get(), PoolName));
         }
 
         *scheduleReaders = &ScheduleQueue->Reader;
@@ -148,17 +146,6 @@ namespace NActors {
         for (i16 i = 0; i < PoolThreads; ++i) {
             Threads[i].Thread->GetCurrentStats(statsCopy[i + 1]);
         }
-    }
-
-    void TIOExecutorPool::GetExecutorPoolState(TExecutorPoolState &poolState) const {
-        if (Harmonizer) {
-            TPoolHarmonizerStats stats = Harmonizer->GetPoolStats(PoolId);
-            poolState.UsedCpu = stats.AvgConsumedCpu;
-        }
-        poolState.CurrentLimit = PoolThreads;
-        poolState.MaxLimit = PoolThreads;
-        poolState.MinLimit = PoolThreads;
-        poolState.PossibleMaxLimit = PoolThreads;
     }
 
     TString TIOExecutorPool::GetName() const {

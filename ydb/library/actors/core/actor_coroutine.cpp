@@ -170,10 +170,6 @@ namespace NActors {
         }
     }
 
-    TActorSystem *TActorCoroImpl::GetActorSystem() const {
-        return GetActorContext().ExecutorThread.ActorSystem;
-    }
-
     TActorCoro::~TActorCoro() {
         Impl->Destroy();
     }

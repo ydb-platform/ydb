@@ -48,7 +48,7 @@ void TSharedExecutorPool::Prepare(TActorSystem* actorSystem, NSchedulerQueue::TR
         for (i16 i = 0; i != SharedThreadCount; ++i) {
             // !TODO
             Threads[i].ExecutorPools[0].store(dynamic_cast<TBasicExecutorPool*>(poolByThread[i]), std::memory_order_release);
-            Threads[i].Thread.reset(
+            Threads[i].Thread.Reset(
                 new TSharedExecutorThread(
                     -1,
                     actorSystem,
@@ -149,19 +149,12 @@ void TSharedExecutorPool::GetSharedStats(i16 poolId, std::vector<TExecutorThread
     }
 }
 
-void TSharedExecutorPool::GetSharedStatsForHarmonizer(i16 poolId, std::vector<TExecutorThreadStats>& statsCopy) {
-    statsCopy.resize(SharedThreadCount + 1);
-    for (i16 i = 0; i < SharedThreadCount; ++i) {
-        Threads[i].Thread->GetSharedStatsForHarmonizer(poolId, statsCopy[i + 1]);
-    }
-}
-
 TCpuConsumption TSharedExecutorPool::GetThreadCpuConsumption(i16 poolId, i16 threadIdx) {
     if (threadIdx >= SharedThreadCount) {
         return {0.0, 0.0};
     }
     TExecutorThreadStats stats;
-    Threads[threadIdx].Thread->GetSharedStatsForHarmonizer(poolId, stats);
+    Threads[threadIdx].Thread->GetSharedStats(poolId, stats);
     return {Ts2Us(stats.SafeElapsedTicks), static_cast<double>(stats.CpuUs), stats.NotEnoughCpuExecutions};
 }
 

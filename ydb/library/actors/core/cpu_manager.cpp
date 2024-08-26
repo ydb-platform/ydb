@@ -1,6 +1,5 @@
 #include "cpu_manager.h"
 #include "executor_pool_jail.h"
-#include "mon_stats.h"
 #include "probes.h"
 
 #include "executor_pool_basic.h"
@@ -170,19 +169,6 @@ namespace NActors {
         }
         if (Shared) {
             Shared->GetSharedStats(poolId, sharedStatsCopy);
-        }
-    }
-
-    void TCpuManager::GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const {
-        if (static_cast<ui32>(poolId) < ExecutorPoolCount) {
-            Executors[poolId]->GetExecutorPoolState(state);
-        }
-    }
-
-    void TCpuManager::GetExecutorPoolStates(std::vector<TExecutorPoolState> &states) const {
-        states.resize(ExecutorPoolCount);
-        for (i16 poolId = 0; poolId < static_cast<ui16>(ExecutorPoolCount); ++poolId) {
-            GetExecutorPoolState(poolId, states[poolId]);
         }
     }
 

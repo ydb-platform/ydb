@@ -277,7 +277,6 @@ message TSystemStateInfo {
         optional string Name = 1;
         optional double Usage = 2 [(InsignificantChangePercent) = 30];
         optional uint32 Threads = 3;
-        optional uint32 Limit = 4;
     }
 
     message TEndpoint {

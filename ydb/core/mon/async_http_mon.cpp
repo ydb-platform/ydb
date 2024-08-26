@@ -245,9 +245,9 @@ public:
         response << "HTTP/1.1 204 No Content\r\n"
                     "Access-Control-Allow-Origin: " << origin << "\r\n"
                     "Access-Control-Allow-Credentials: true\r\n"
-                    "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n"
+                    "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace\r\n"
                     "Access-Control-Allow-Methods: OPTIONS, GET, POST, PUT, DELETE\r\n"
-                    "Content-Type: " + type + "\r\n"
+                    "Content-Type: " << type << "\r\n"
                     "Connection: keep-alive\r\n\r\n";
         ReplyWith(request->CreateResponseString(response));
         PassAway();

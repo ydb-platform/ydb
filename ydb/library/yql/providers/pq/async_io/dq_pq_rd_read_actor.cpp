@@ -1,5 +1,4 @@
 #include "dq_pq_rd_read_actor.h"
-#include "dq_pq_rd_session.h"
 #include "probes.h"
 
 #include <ydb/library/yql/dq/common/dq_common.h>

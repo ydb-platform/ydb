@@ -18,7 +18,7 @@ PEERDIR(
     ydb/library/persqueue/tests
     ydb/library/testlib/service_mocks
     ydb/library/yql/public/udf/service/exception_policy
-    #ydb/library/yql/sql/pg_dummy
+    ydb/library/yql/sql/pg_dummy
     ydb/public/sdk/cpp/client/ydb_discovery
     ydb/public/sdk/cpp/client/ydb_types
     ydb/services/datastreams

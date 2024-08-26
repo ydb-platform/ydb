@@ -307,7 +307,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor {
         std::unique_ptr<TEvBlobStorage::TEvDiscoverResult> result(new TEvBlobStorage::TEvDiscoverResult(status, MinGeneration,
                     BlockedGen));
         result->ErrorReason = ErrorReason;
-        A_LOG_LOG_S(PriorityForStatusOutbound(status), "BSD01", "Result# " << result->Print(false));
+        DSP_LOG_LOG_S(PriorityForStatusOutbound(status), "BSD01", "Result# " << result->Print(false));
         SendResult(result);
     }
 
@@ -325,7 +325,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor {
         Y_ABORT_UNLESS(status == NKikimrProto::OK || status == NKikimrProto::NODATA || status == NKikimrProto::ERROR
             || status == NKikimrProto::VDISK_ERROR_STATE, "status# %" PRIu32, ui32(status));
 
-        A_LOG_LOG_S(PriorityForStatusInbound(status), "BSD03",
+        DSP_LOG_LOG_S(PriorityForStatusInbound(status), "BSD03",
             "Status# " << NKikimrProto::EReplyStatus_Name(status)
             << " vdisk# " << vdisk.ToString()
             << " NodeId# " << Info->GetActorId(vdisk).NodeId());
@@ -346,7 +346,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor {
         if (!IsGetBlockDone && GetBlockReplies == Info->Type.TotalPartCount()) {
             IsGetBlockDone = true;
             if (IsIterativeDone && (IsGetDataDone || !ReadBody)) {
-                A_LOG_LOG_S(PriorityForStatusOutbound(PendingResult->Status), "BSD05",
+                DSP_LOG_LOG_S(PriorityForStatusOutbound(PendingResult->Status), "BSD05",
                     "Die. Result# "<< PendingResult->Print(false));
                 SendResult(PendingResult);
             }
@@ -392,7 +392,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor {
 
         TVDiskInfo &vDiskData = VDiskInfo.at(TVDiskIdShort(vdisk).GetRaw());
 
-        A_LOG_LOG_S(PriorityForStatusInbound(status), "BSD07", "Handle TEvVGetResult"
+        DSP_LOG_LOG_S(PriorityForStatusInbound(status), "BSD07", "Handle TEvVGetResult"
             << " Status# " << NKikimrProto::EReplyStatus_Name(status)
             << " vdisk# " << vdisk.ToString()
             << " NodeId# " << Info->GetActorId(vdisk).NodeId()
@@ -403,7 +403,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor {
         NKikimrProto::EReplyStatus replyStatus = status;
         if (status == NKikimrProto::OK) {
             if (record.GetIsRangeOverflow() && !record.ResultSize()) {
-                A_LOG_CRIT_S("BSD40", "Handle TEvVGetResult inconsistent IsRangeOverflow set with ResultSize# 0");
+                R_LOG_CRIT_S("BSD40", "Handle TEvVGetResult inconsistent IsRangeOverflow set with ResultSize# 0");
                 replyStatus = NKikimrProto::ERROR;
                 vDiskData.IsError = true;
             }
@@ -545,7 +545,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor {
         ui32 unknownCount = GroupResponseTracker.DomainRequestsSent - GroupResponseTracker.DomainSuccess;
         ui32 minimalRestorableParts = Info->Type.MinimalRestorablePartCount();
 
-        A_LOG_DEBUG_S("BSD09", "StepDiscovery"
+        R_LOG_DEBUG_S("BSD09", "StepDiscovery"
             << " DomainRequestsSent# " << (ui32)GroupResponseTracker.DomainRequestsSent
             << " DomainReplies# " << (ui32)GroupResponseTracker.DomainReplies
             << " DomainSuccess# " << (ui32)GroupResponseTracker.DomainSuccess
@@ -565,7 +565,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor {
                 const TLogoBlobID &logoBlobId = it->first;
                 ui32 seenPartCount = TSubgroupPartLayout::CountEffectiveReplicas(entryInfo.Seen, Info->Type);
                 ui32 partCount = TSubgroupPartLayout::CountEffectiveReplicas(entryInfo.Present, Info->Type);
-                A_LOG_DEBUG_S("BSD27", "logoBlobId# " << logoBlobId.ToString()
+                R_LOG_DEBUG_S("BSD27", "logoBlobId# " << logoBlobId.ToString()
                         << " partCount# " << partCount
                         << " seenPartCount# " << seenPartCount);
 
@@ -599,21 +599,21 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor {
                         SendToProxy(std::move(getRequest), 0, Span.GetTraceId());
                         TotalSent++;
 
-                        A_LOG_DEBUG_S("BSD10", "Sent EvGet logoBlobId# " << logoBlobId.ToString());
+                        R_LOG_DEBUG_S("BSD10", "Sent EvGet logoBlobId# " << logoBlobId.ToString());
 
                         Become(&TBlobStorageGroupDiscoverRequest::StateWait);
                         return true;
                     } else if (IsGetBlockDone) {
                         std::unique_ptr<TEvBlobStorage::TEvDiscoverResult> result(
                             new TEvBlobStorage::TEvDiscoverResult(logoBlobId, MinGeneration, TString(), BlockedGen));
-                        A_LOG_LOG_S(PriorityForStatusOutbound(result->Status), "BSD11", "Die. Result# "
+                        DSP_LOG_LOG_S(PriorityForStatusOutbound(result->Status), "BSD11", "Die. Result# "
                                 << result->Print(false));
                         SendResult(result);
                         return false;
                     } else {
                         PendingResult.reset(new TEvBlobStorage::TEvDiscoverResult(
                                     logoBlobId, MinGeneration, TString(), BlockedGen));
-                        A_LOG_DEBUG_S("BSD12", "Pending result is set, Result# " << PendingResult->ToString());
+                        R_LOG_DEBUG_S("BSD12", "Pending result is set, Result# " << PendingResult->ToString());
                         Become(&TBlobStorageGroupDiscoverRequest::StateWait);
                         return false;
                     }
@@ -673,7 +673,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor {
                 IsIterativeDone = true;
                 PendingResult.reset(new TEvBlobStorage::TEvDiscoverResult(NKikimrProto::NODATA, MinGeneration,
                             BlockedGen));
-                A_LOG_DEBUG_S("BSD14", "isAllRead, setting pending result, response# " << PendingResult->ToString());
+                R_LOG_DEBUG_S("BSD14", "isAllRead, setting pending result, response# " << PendingResult->ToString());
                 return true;
             }
             // Nothing found so far. Clear the buffer and continue.
@@ -701,7 +701,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor {
                             TEvBlobStorage::TEvVGet::TForceBlockTabletData(TabletId, ForceBlockedGeneration));
                     msg->Record.SetSuppressBarrierCheck(true);
                     const ui64 cookie = TVDiskIdShort(vDiskId).GetRaw();
-                    A_LOG_DEBUG_S("BSD15", "Request more data sending TEvVGet Tablet# " << TabletId
+                    R_LOG_DEBUG_S("BSD15", "Request more data sending TEvVGet Tablet# " << TabletId
                         << " vDiskId# " << vDiskId.ToString()
                         << " node# " << vdisk.NodeId()
                         << " msg# " << msg->ToString()
@@ -715,7 +715,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor {
                     // Subtract disk's answer from answer counters/reset ready flags
                     GroupResponseTracker.AnotherRequest(vDiskId);
                 } else {
-                    A_LOG_DEBUG_S("BSD26", "do not ask more data from vDiskId# " << vDiskId.ToString()
+                    R_LOG_DEBUG_S("BSD26", "do not ask more data from vDiskId# " << vDiskId.ToString()
                         << " IsError# " << curVDisk.IsError
                         << " IsAllRead# " << curVDisk.IsAllRead
                         << " IsMoreRequested# " << curVDisk.IsMoreRequested
@@ -743,14 +743,14 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor {
                         std::unique_ptr<TEvBlobStorage::TEvDiscoverResult> result(
                             new TEvBlobStorage::TEvDiscoverResult(
                                 response.Id, MinGeneration, response.Buffer.ConvertToString(), BlockedGen));
-                        A_LOG_DEBUG_S("BSD16", "Handle TEvGetResult status# OK Die. TEvDiscoverResult# "
+                        R_LOG_DEBUG_S("BSD16", "Handle TEvGetResult status# OK Die. TEvDiscoverResult# "
                             << result->Print(false));
                         SendResult(result);
                         return;
                     }
                     PendingResult.reset(new TEvBlobStorage::TEvDiscoverResult(response.Id, MinGeneration,
                                 response.Buffer.ConvertToString(), BlockedGen));
-                    A_LOG_DEBUG_S("BSD17", "Handle TEvGetResult status# OK"
+                    R_LOG_DEBUG_S("BSD17", "Handle TEvGetResult status# OK"
                         << " Setting pending result# " << PendingResult->ToString());
                     Y_ABORT_UNLESS(TotalRecieved < TotalSent);
                     return;
@@ -771,7 +771,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor {
                             << " There might be another instance of the tablet trying to block the channel right now."
                             << " Can't read the blob id# " << response.Id.ToString();
                         ErrorReason = str.Str();
-                        A_LOG_DEBUG_S("BSD32", "Handle " << ErrorReason << " Reply with ERROR");
+                        R_LOG_DEBUG_S("BSD32", "Handle " << ErrorReason << " Reply with ERROR");
                         ReplyAndDie(NKikimrProto::ERROR);
                         return;
                     }
@@ -884,7 +884,7 @@ public:
     {}
 
     void Bootstrap() override {
-        A_LOG_INFO_S("BSD31", "bootstrap"
+        R_LOG_INFO_S("BSD31", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
             << " TabletId# " << TabletId
@@ -904,7 +904,7 @@ public:
             if (!IsGetBlockDone) {
                 const ui64 cookie = TVDiskIdShort(vd).GetRaw();
                 auto getBlock = std::make_unique<TEvBlobStorage::TEvVGetBlock>(TabletId, vd, Deadline);
-                A_LOG_DEBUG_S("BSD24", "Sending TEvVGetBlock Tablet# " << TabletId
+                R_LOG_DEBUG_S("BSD24", "Sending TEvVGetBlock Tablet# " << TabletId
                     << " vDiskId# " << vd
                     << " cookie# " << cookie
                     << " node# " << Info->GetActorId(vd).NodeId());
@@ -918,7 +918,7 @@ public:
             msg->Record.SetTabletId(TabletId);
             msg->Record.SetAcquireBlockedGeneration(true);
             const ui64 cookie = TVDiskIdShort(vd).GetRaw();
-            A_LOG_DEBUG_S("BSD25", "Sending TEvVGet Tablet# " << TabletId
+            R_LOG_DEBUG_S("BSD25", "Sending TEvVGet Tablet# " << TabletId
                 << " vDiskId# " << vd
                 << " node# " << Info->GetActorId(vd).NodeId()
                 << " msg# " << msg->ToString()

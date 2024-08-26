@@ -35,7 +35,7 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
     THashMap<TLogoBlobID, std::pair<bool, bool>> KeepFlags;
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status) override {
-        A_LOG_INFO_S("DSPI14", "ReplyAndDie"
+        R_LOG_INFO_S("DSPI14", "ReplyAndDie"
             << " Reply with status# " << NKikimrProto::EReplyStatus_Name(status)
             << " PendingResult# " << (PendingResult ? PendingResult->ToString().data() : "nullptr"));
         if (status != NKikimrProto::OK) {
@@ -88,7 +88,7 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
         Y_ABORT_UNLESS(VGetsInFlight > 0);
         --VGetsInFlight;
 
-        A_LOG_DEBUG_S("DSPI10", "Handle TEvVGetResult"
+        R_LOG_DEBUG_S("DSPI10", "Handle TEvVGetResult"
             << " status# " << NKikimrProto::EReplyStatus_Name(status).data()
             << " VDiskId# " << vdisk
             << " ev# " << ev->Get()->ToString());
@@ -142,7 +142,7 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
             Y_ABORT_UNLESS(it != KeepFlags.end());
             std::tie(a.Keep, a.DoNotKeep) = it->second;
 
-            A_LOG_DEBUG_S("DSPI11", "OnEnoughVGetResults Id# " << q.Id << " BlobStatus# " << DumpBlobStatus(idx));
+            R_LOG_DEBUG_S("DSPI11", "OnEnoughVGetResults Id# " << q.Id << " BlobStatus# " << DumpBlobStatus(idx));
 
             if (blobState == TBlobStorageGroupInfo::EBS_DISINTEGRATED) {
                 R_LOG_ERROR_S("DSPI04", "OnEnoughVGetResults"
@@ -172,7 +172,7 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
                     Queries[idx].Id, 0, 0, Deadline,
                     GetHandleClass, true));
                 get->Decommission = Decommission;
-                A_LOG_DEBUG_S("DSPI12", "OnEnoughVGetResults"
+                R_LOG_DEBUG_S("DSPI12", "OnEnoughVGetResults"
                         << " recoverable blob, id# " << Queries[idx].Id.ToString()
                         << " BlobStatus# " << DumpBlobStatus(idx)
                         << " sending EvGet");
@@ -190,7 +190,7 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
 
         Become(&TBlobStorageGroupIndexRestoreGetRequest::StateRestore);
 
-        A_LOG_DEBUG_S("DSPI13", "OnEnoughVGetResults"
+        R_LOG_DEBUG_S("DSPI13", "OnEnoughVGetResults"
             << " Become StateRestore RestoreQueriesStarted# " << RestoreQueriesStarted);
 
         return;
@@ -218,7 +218,7 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
                 SetPendingResultResponseStatus(response.Id, response.Status);
             }
         }
-        A_LOG_LOG_S(PriorityForStatusInbound(status), "DSPI08", "Result# " << getResult.Print(false)
+        DSP_LOG_LOG_S(PriorityForStatusInbound(status), "DSPI08", "Result# " << getResult.Print(false)
             << " RestoreQueriesStarted# " << RestoreQueriesStarted
             << " RestoreQueriesFinished# " << RestoreQueriesFinished);
 
@@ -298,7 +298,7 @@ public:
             str << "}";
             return str.Str();
         };
-        A_LOG_INFO_S("DSPI09", "bootstrap"
+        R_LOG_INFO_S("DSPI09", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
             << " QuerySize# " << QuerySize

@@ -156,7 +156,7 @@ public:
             str << "}";
             return str.Str();
         };
-        A_LOG_INFO_S("BPMG3", "bootstrap"
+        R_LOG_INFO_S("BPMG3", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
             << " Query# " << dumpQuery()

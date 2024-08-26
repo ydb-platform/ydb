@@ -69,14 +69,14 @@ void TPutImpl::PrepareOneReply(NKikimrProto::EReplyStatus status, size_t blobIdx
             Info->GroupID, ApproximateFreeSpaceShare);
         ev->ErrorReason = std::move(errorReason);
         const NLog::EPriority priority = GetPriorityForReply(Info->PutErrorMuteChecker, status);
-        A_LOG_LOG_SX(logCtx, priority, "BPP12", "Result# " << ev->Print(false));
+        DSP_LOG_LOG_SX(logCtx, priority, "BPP12", "Result# " << ev->Print(false));
         outPutResults.emplace_back(blobIdx, std::move(ev));
     }
 }
 
 void TPutImpl::PrepareReply(NKikimrProto::EReplyStatus status, TLogContext &logCtx, TString errorReason,
         TPutResultVec &outPutResults) {
-    A_LOG_DEBUG_SX(logCtx, "BPP34", "PrepareReply status# " << status << " errorReason# " << errorReason);
+    R_LOG_DEBUG_SX(logCtx, "BPP34", "PrepareReply status# " << status << " errorReason# " << errorReason);
     for (size_t blobIdx = 0; blobIdx < Blobs.size(); ++blobIdx) {
         PrepareOneReply(status, blobIdx, logCtx, errorReason, outPutResults);
     }

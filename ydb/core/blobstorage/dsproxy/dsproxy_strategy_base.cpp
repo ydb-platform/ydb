@@ -296,7 +296,7 @@ void TStrategyBase::PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState 
         // send record.PartIdx to record.VDiskIdx if needed
         TBlobState::TDisk &disk = state.Disks[record.VDiskIdx];
         TBlobState::ESituation partSituation = disk.DiskParts[record.PartIdx].Situation;
-        A_LOG_DEBUG_SX(logCtx, "BPG33 ", "partPlacement record partSituation# " << TBlobState::SituationToString(partSituation)
+        R_LOG_DEBUG_SX(logCtx, "BPG33 ", "partPlacement record partSituation# " << TBlobState::SituationToString(partSituation)
                 << " to# " << (ui32)record.VDiskIdx
                 << " blob Id# " << TLogoBlobID(state.Id, record.PartIdx + 1).ToString());
         bool isNeeded = false;
@@ -317,7 +317,7 @@ void TStrategyBase::PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState 
 
         if (isNeeded) {
             TLogoBlobID partId(state.Id, record.PartIdx + 1);
-            A_LOG_DEBUG_SX(logCtx, "BPG32", "Sending missing VPut part# " << (ui32)record.PartIdx
+            R_LOG_DEBUG_SX(logCtx, "BPG32", "Sending missing VPut part# " << (ui32)record.PartIdx
                     << " to# " << (ui32)record.VDiskIdx
                     << " blob Id# " << partId.ToString());
             Y_ABORT_UNLESS(state.Parts[record.PartIdx].Data.IsMonolith());

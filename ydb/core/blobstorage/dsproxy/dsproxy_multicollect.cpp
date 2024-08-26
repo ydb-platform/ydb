@@ -40,7 +40,7 @@ class TBlobStorageGroupMultiCollectRequest : public TBlobStorageGroupRequestActo
 
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
         const TEvBlobStorage::TEvCollectGarbageResult &res = *ev->Get();
-        A_LOG_LOG_S(PriorityForStatusResult(res.Status), "BPMC1", "Handle TEvCollectGarbageResult"
+        DSP_LOG_LOG_S(PriorityForStatusResult(res.Status), "BPMC1", "Handle TEvCollectGarbageResult"
             << " status# " << NKikimrProto::EReplyStatus_Name(res.Status)
             << " FlagRequestsInFlight# " << FlagRequestsInFlight
             << " CollectRequestsInFlight " << CollectRequestsInFlight);
@@ -170,7 +170,7 @@ public:
     }
 
     void Bootstrap() override {
-        A_LOG_INFO_S("BPMC4", "bootstrap"
+        R_LOG_INFO_S("BPMC4", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
             << " TabletId# " << TabletId
@@ -184,11 +184,11 @@ public:
             << " Hard# " << (Hard ? "true" : "false"));
 
         for (const auto& item : Keep ? *Keep : TVector<TLogoBlobID>()) {
-            A_LOG_INFO_S("BPMC5", "Keep# " << item);
+            R_LOG_INFO_S("BPMC5", "Keep# " << item);
         }
 
         for (const auto& item : DoNotKeep ? *DoNotKeep : TVector<TLogoBlobID>()) {
-            A_LOG_INFO_S("BPMC6", "DoNotKeep# " << item);
+            R_LOG_INFO_S("BPMC6", "DoNotKeep# " << item);
         }
 
         for (ui64 idx = 0; idx < Iterations - (Collect ? 1 : 0); ++idx) {

@@ -54,7 +54,7 @@ public:
     }
 
     void Bootstrap() override {
-        A_LOG_INFO_S("DSPDX01", "bootstrap"
+        R_LOG_INFO_S("DSPDX01", "bootstrap"
             << " TabletId# " << TabletId
             << " MinGeneration# " << MinGeneration
             << " Deadline# " << Deadline

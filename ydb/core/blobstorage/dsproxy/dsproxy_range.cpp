@@ -78,7 +78,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
         Y_ABORT_UNLESS(record.HasVDiskID());
         const TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
 
-        A_LOG_DEBUG_S("DSR01", "received"
+        R_LOG_DEBUG_S("DSR01", "received"
             << " VDiskId# " << vdisk
             << " TEvVGetResult# " << ev->Get()->ToString());
 
@@ -99,7 +99,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
             case NKikimrProto::OK:
                 if (record.ResultSize() == 0 && record.GetIsRangeOverflow()) {
                     isOk = false;
-                    A_LOG_CRIT_S("DSR09", "Don't know how to interpret an empty range with IsRangeOverflow set." <<
+                    R_LOG_CRIT_S("DSR09", "Don't know how to interpret an empty range with IsRangeOverflow set." <<
                             " TEvVGetResult# " << ev->Get()->ToString());
                     FailedDisks |= TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), vdisk);
                     if (!Info->GetQuorumChecker().CheckFailModelForGroup(FailedDisks)) {
@@ -247,7 +247,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
         get->IsInternal = true;
         get->Decommission = Decommission;
 
-        A_LOG_DEBUG_S("DSR08", "sending TEvGet# " << get->ToString());
+        R_LOG_DEBUG_S("DSR08", "sending TEvGet# " << get->ToString());
 
         SendToProxy(std::move(get), 0, Span.GetTraceId());
 
@@ -301,7 +301,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
         if (To < From) {
             std::reverse(result->Responses.begin(), result->Responses.end());
         }
-        A_LOG_LOG_S(NLog::PRI_INFO, "DSR05", "Result# " << result->Print(false));
+        DSP_LOG_LOG_S(NLog::PRI_INFO, "DSR05", "Result# " << result->Print(false));
         SendReply(result);
     }
 
@@ -309,7 +309,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
         std::unique_ptr<TEvBlobStorage::TEvRangeResult> result(new TEvBlobStorage::TEvRangeResult(
                     status, From, To, Info->GroupID));
         result->ErrorReason = ErrorReason;
-        A_LOG_LOG_S(NLog::PRI_NOTICE, "DSR06", "Result# " << result->Print(false));
+        DSP_LOG_LOG_S(NLog::PRI_NOTICE, "DSR06", "Result# " << result->Print(false));
         SendReply(result);
     }
 
@@ -346,7 +346,7 @@ public:
     {}
 
     void Bootstrap() override {
-        A_LOG_INFO_S("DSR07", "bootstrap"
+        R_LOG_INFO_S("DSR07", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
             << " From# " << From.ToString()

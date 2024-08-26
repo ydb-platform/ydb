@@ -170,7 +170,7 @@ public:
         ui32 orderNumber = Info->GetOrderNumber(shortId);
         {
             NActors::NLog::EPriority priority = PriorityForStatusInbound(record.GetStatus());
-            A_LOG_LOG_SX(logCtx, priority, "BPG12", "Handle TEvVGetResult"
+            DSP_LOG_LOG_SX(logCtx, priority, "BPG12", "Handle TEvVGetResult"
                 << " status# " << NKikimrProto::EReplyStatus_Name(record.GetStatus()).data()
                 << " From# " << vdisk.ToString()
                 << " orderNumber# " << orderNumber

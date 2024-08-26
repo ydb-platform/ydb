@@ -56,7 +56,6 @@ public:
             "Tenant"
             ).release());
 
-
         LeaderElection3 = Runtime.Register(NewLeaderElection(
             RowDispatcher,
             Coordinator3,
@@ -73,14 +72,13 @@ public:
         TDispatchOptions options;
         options.FinalEvents.emplace_back(NActors::TEvents::TSystem::Bootstrap, 3);
         Runtime.DispatchEvents(options);
-        
     }
 
     void TearDown(NUnitTest::TTestContext& /* context */) override {
     }
 
     NActors::TActorId ExpectCoordinatorChanged() {
-        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvCoordinatorChanged>(RowDispatcher/*, TDuration::Seconds(20)*/);
+        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvCoordinatorChanged>(RowDispatcher);
         UNIT_ASSERT(eventHolder.Get() != nullptr);
         return eventHolder.Get()->Get()->CoordinatorActorId;
     }

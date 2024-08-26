@@ -76,7 +76,7 @@ bool TRetryEventsQueue::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr
     return false;
 }
 
-void TRetryEventsQueue::Retry() {    
+void TRetryEventsQueue::Retry() {
     RetryScheduled = false;
     if (!Connected) {
         Connect();
@@ -105,8 +105,6 @@ void TRetryEventsQueue::Connect() {
     auto proxyId = NActors::TActivationContext::InterconnectProxy(RecipientId.NodeId());
     NActors::TActivationContext::Send(
         new NActors::IEventHandle(proxyId, SenderId, connectEvent.Release(), 0, 0));
-    // NActors::TActivationContext::Send(
-    //     new NActors::IEventHandle(proxyId, SenderId, new NActors::TEvents::TEvSubscribe()));
 }
 
 void TRetryEventsQueue::Unsubscribe() {

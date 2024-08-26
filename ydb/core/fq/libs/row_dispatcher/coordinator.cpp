@@ -1,6 +1,5 @@
 #include "coordinator.h"
 
-//#include <ydb/core/fq/libs/row_dispatcher/events/events.h>
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/ydb/schema.h>

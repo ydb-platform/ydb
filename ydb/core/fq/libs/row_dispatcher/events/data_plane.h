@@ -22,15 +22,9 @@ struct TEvRowDispatcher {
         EvMessageBatch,
         EvStopSession,
         EvSessionError,
-
         EvCoordinatorChangesSubscribe,
-        EvRowDispatcherResult,
         EvCoordinatorRequest,
         EvCoordinatorResult,
-
-        EvSessionAddConsumer,
-        EvSessionDeleteConsumer,
-        EvSessionConsumerDeleted,
         EvEnd,
     };
 
@@ -41,11 +35,7 @@ struct TEvRowDispatcher {
         NActors::TActorId CoordinatorActorId;
     };
 
-    // Read actor <-> local row_dispatcher: get coordinator actor id.
-
     struct TEvCoordinatorChangesSubscribe : public NActors::TEventLocal<TEvCoordinatorChangesSubscribe, EEv::EvCoordinatorChangesSubscribe> {};
-
-    // Read actor <-> coordinator : get row_dispatcher actorId (which is responsible for processing) by topic/partition.
 
     struct TEvCoordinatorRequest : public NActors::TEventPB<TEvCoordinatorRequest,
         NFq::NRowDispatcherProto::TEvGetAddressRequest, EEv::EvCoordinatorRequest> {
@@ -64,8 +54,6 @@ struct TEvRowDispatcher {
         NFq::NRowDispatcherProto::TEvGetAddressResponse, EEv::EvCoordinatorResult> {
         TEvCoordinatorResult() = default;
     };
-
-    //  Read actor <-> row_dispatcher : 
 
     struct TEvStartSession : public NActors::TEventPB<TEvStartSession,
         NFq::NRowDispatcherProto::TEvStartSession, EEv::EvStartSession> {

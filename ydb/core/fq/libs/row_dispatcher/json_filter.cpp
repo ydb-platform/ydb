@@ -1,19 +1,13 @@
-#include <library/cpp/yson/node/node.h>
-#include <library/cpp/yson/node/node_io.h>
-
 #include <ydb/library/yql/public/udf/udf_version.h>
 #include <ydb/library/yql/public/purecalc/purecalc.h>
 #include <ydb/library/yql/public/purecalc/io_specs/mkql/spec.h>
-#include <library/cpp/yt/yson_string/string.h>
-#include <library/cpp/yt/yson_string/convert.h>
-#include <util/stream/file.h>
-#include <yt/yt/core/ytree/serialize.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/mkql_terminator.h>
 
-#include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/row_dispatcher/json_filter.h>
+#include <ydb/core/fq/libs/actors/logging/log.h>
+
 
 namespace NFq {
 
@@ -176,7 +170,6 @@ public:
     TFilterPushRelayImpl(const TFilterOutputSpec& /*outputSpec*/, NYql::NPureCalc::IPushStreamWorker* worker, THolder<NYql::NPureCalc::IConsumer<std::pair<ui64, TString>>> underlying)
         : Underlying(std::move(underlying))
         , Worker(worker)
-       // , FieldsMapping(outputSpec.GetSchema())
     {}
 public:
     void OnObject(const NYql::NUdf::TUnboxedValue* value) override {

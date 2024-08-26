@@ -5,7 +5,7 @@
 #include <ydb/library/yql/dq/actors/compute/retry_queue.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
-#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
+//#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <chrono>
 #include <thread>

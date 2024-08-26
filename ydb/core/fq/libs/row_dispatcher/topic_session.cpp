@@ -62,19 +62,8 @@ struct TEvPrivate {
 
 class TTopicSession : public TActorBootstrapped<TTopicSession> {
 
-
 private:
-    NActors::TActorId RowDispatcherActorId;
-    ui32 PartitionId;
-    NYdb::TDriver Driver;
-    std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
-    std::unique_ptr<NYdb::NTopic::TTopicClient> TopicClient;
-    std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
-    const i64 BufferSize;
-    TString LogPrefix;
-    NYql::NDq::TDqAsyncStats IngressStats;
-    ui64 LastMessageOffset = 0;
-    bool IsWaitingEvents = false;
+    using TParserInputType = std::pair< TVector<TString>, TVector<TString>>; // TODO: remove after YQ-3594
 
     struct ClientsInfo {
         ClientsInfo(const NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev, TActorId /*selfId*/)
@@ -94,10 +83,23 @@ private:
         bool DataArrivedSent = false;
         TMaybe<ui64> NextMessageOffset;
     };
+
+    NActors::TActorId RowDispatcherActorId;
+    ui32 PartitionId;
+    NYdb::TDriver Driver;
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
+    std::unique_ptr<NYdb::NTopic::TTopicClient> TopicClient;
+    std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
+    const i64 BufferSize;
+    TString LogPrefix;
+    NYql::NDq::TDqAsyncStats IngressStats;
+    ui64 LastMessageOffset = 0;
+    bool IsWaitingEvents = false;
     TMap<NActors::TActorId, ClientsInfo> Clients;
     std::unique_ptr<TJsonParser> Parser;
     NConfig::TRowDispatcherConfig Config;
     ui64 UsedSize = 0;
+    TMaybe<TParserInputType> CurrentParserTypes;
 
 public:
     explicit TTopicSession(
@@ -108,26 +110,26 @@ public:
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory);
 
     void Bootstrap();
+    void PassAway() override;
+
+    static constexpr char ActorName[] = "YQ_ROW_DISPATCHER_SESSION";
+
+private:
     static TVector<TString> GetVector(const google::protobuf::RepeatedPtrField<TString>& value);
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams) const;
     NYdb::NTopic::TTopicClient& GetTopicClient(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams);
     NYdb::NTopic::TReadSessionSettings GetReadSessionSettings(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams) const;
-
     void CreateTopicSession();
     void CloseTopicSession();
     void SubscribeOnNextEvent();
-
     void SendToParsing(ui64 offset, const TString& message);
     void SendData(ClientsInfo& info);
     void InitParser(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams);
     void FatalError(const TString& message, const std::unique_ptr<TJsonFilter>* filter = nullptr);
     void SendDataArrived();
     void StopReadSession();
-
     TString GetSessionId() const;
     void HandleNewEvents();
-    void PassAway() override;
-
     TInstant GetMinStartingMessageTimestamp() const;
     void AddDataToClient(ClientsInfo& client, ui64 offset, const TString& json);
 
@@ -147,8 +149,7 @@ public:
     void HandleException(const std::exception& err);
 
     void PrintInternalState();
-
-    static constexpr char ActorName[] = "YQ_ROW_DISPATCHER_SESSION";
+    void SendSessionError(NActors::TActorId readActorId, const TString& message);
 
 private:
 
@@ -478,6 +479,12 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
 
     LOG_ROW_DISPATCHER_INFO("New client, read actor id " << ev->Sender.ToString());
 
+    auto parserType = std::make_pair(GetVector(ev->Get()->Record.GetSource().GetColumns()), GetVector(ev->Get()->Record.GetSource().GetColumnTypes()));
+    if (CurrentParserTypes && *CurrentParserTypes != parserType) {
+        SendSessionError(ev->Sender, "Different columns/types, use same in all queries");
+        return;
+    }
+
     try {
         auto& clientInfo = (Clients.emplace(
             std::piecewise_construct,
@@ -574,15 +581,19 @@ void TTopicSession::FatalError(const TString& message, const std::unique_ptr<TJs
 
     for (auto& [readActorId, info] : Clients) {
         LOG_ROW_DISPATCHER_DEBUG("Send TEvSessionError to " << readActorId);
-        auto event = std::make_unique<TEvRowDispatcher::TEvSessionError>();
-        event->Record.SetMessage(str.Str());
-        event->Record.SetPartitionId(PartitionId);
-        event->ReadActorId = readActorId;
-        Send(RowDispatcherActorId, event.release());
+        SendSessionError(readActorId, str.Str());
     }
     StopReadSession();
     Become(&TTopicSession::ErrorState);
     PassAway();
+}
+
+void TTopicSession::SendSessionError(NActors::TActorId readActorId, const TString& message) {
+    auto event = std::make_unique<TEvRowDispatcher::TEvSessionError>();
+    event->Record.SetMessage(message);
+    event->Record.SetPartitionId(PartitionId);
+    event->ReadActorId = readActorId;
+    Send(RowDispatcherActorId, event.release());
 }
 
 void TTopicSession::StopReadSession() {

@@ -159,7 +159,6 @@ void Init(
 
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
 
-
     if (protoConfig.GetTokenAccessor().GetEnabled()) {
         const auto& tokenAccessorConfig = protoConfig.GetTokenAccessor();
 

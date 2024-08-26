@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString externalTableName = "/Root/test_binding_resolve";
         const TString bucket = "test_bucket1";
-        const TString object = TStringBuilder() << "test_" << GetSymbolsString(' ', '~', "{}") << "_object";
+        const TString object = TStringBuilder() << "test_" << GetSymbolsString(' ', '~', "*?{}") << "_object";
 
         CreateBucketWithObject(bucket, object, TEST_CONTENT);
 
@@ -1794,7 +1794,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
     Y_UNIT_TEST(TestReadEmptyFileWithCsvFormat) {
         const TString externalDataSourceName = "/Root/external_data_source";
-        const TString bucket = "test_bucket1";
+        const TString bucket = "test_bucket12";
 
         CreateBucketWithObject(bucket, "test_object", "");
 
@@ -1831,6 +1831,60 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
         NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
         UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(TestWildcardValidation) {
+        const TString bucket = "test_bucket13";
+
+        CreateBucket(bucket);
+
+        auto kikimr = MakeKikimrRunner(NYql::IHTTPGateway::Make());
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        const TString query = fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `/Root/external_data_source` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{location}",
+                AUTH_METHOD="NONE"
+            );)",
+            "location"_a = GetBucketLocation(bucket)
+        );
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto db = kikimr->GetQueryClient();
+
+        {  // path validation
+            const TString sql = R"(
+                    SELECT * FROM `/Root/external_data_source`.`/{` WITH (
+                        SCHEMA = (data String),
+                        FORMAT = "csv_with_names"
+                    ))";
+
+            auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+
+            NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
+            UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Failed, readyOp.Status().GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Path '/{' contains invalid wildcard:");
+        }
+
+        {  // file pattern validation
+            const TString sql = R"(
+                    SELECT * FROM `/Root/external_data_source`.`/` WITH (
+                        SCHEMA = (data String),
+                        FORMAT = "csv_with_names",
+                        FILE_PATTERN = "{"
+                    ))";
+
+            auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+
+            NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
+            UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Failed, readyOp.Status().GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "File pattern '{' contains invalid wildcard:");
+        }
     }
 }
 

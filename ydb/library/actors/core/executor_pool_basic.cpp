@@ -24,8 +24,6 @@ namespace NActors {
     constexpr bool DebugMode = false;
 #endif
 
-
-
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
 
@@ -51,63 +49,41 @@ namespace NActors {
         TDuration timePerMailbox,
         ui32 eventsPerMailbox,
         int realtimePriority,
-        ui32 /*maxActivityType*/,
+        ui32 maxActivityType,
         i16 minThreadCount,
         i16 maxThreadCount,
         i16 defaultThreadCount,
         i16 priority,
         bool hasOwnSharedThread,
-        TExecutorPoolJail *jail
-    )
-        : TBasicExecutorPool(TBasicExecutorPoolConfig{
-            .PoolId = poolId,
-            .PoolName = poolName,
-            .Threads = threads,
-            .SpinThreshold = spinThreshold,
-            .Affinity = (affinity ? static_cast<TCpuMask>(*affinity) : TCpuMask{}),
-            .TimePerMailbox = timePerMailbox,
-            .EventsPerMailbox = eventsPerMailbox,
-            .RealtimePriority = realtimePriority,
-            .MinThreadCount = minThreadCount,
-            .MaxThreadCount = maxThreadCount,
-            .DefaultThreadCount = defaultThreadCount,
-            .Priority = priority,
-            .HasSharedThread = hasOwnSharedThread,
-        }, harmonizer, jail)
-    {
-        if (affinity != nullptr) {
-            delete affinity;
-        }
-    }
-
-    TBasicExecutorPool::TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg, IHarmonizer *harmonizer, TExecutorPoolJail *jail)
-        : TExecutorPoolBase(cfg.PoolId, cfg.Threads, new TAffinity(cfg.Affinity))
-        , DefaultSpinThresholdCycles(cfg.SpinThreshold * NHPTimer::GetCyclesPerSecond() * 0.000001) // convert microseconds to cycles
+        TExecutorPoolJail *jail)
+        : TExecutorPoolBase(poolId, threads, affinity)
+        , DefaultSpinThresholdCycles(spinThreshold * NHPTimer::GetCyclesPerSecond() * 0.000001) // convert microseconds to cycles
         , SpinThresholdCycles(DefaultSpinThresholdCycles)
-        , SpinThresholdCyclesPerThread(new NThreading::TPadded<std::atomic<ui64>>[cfg.Threads])
-        , Threads(new NThreading::TPadded<TExecutorThreadCtx>[cfg.Threads])
-        , WaitingStats(new TWaitingStats<ui64>[cfg.Threads])
-        , PoolName(cfg.PoolName)
-        , TimePerMailbox(cfg.TimePerMailbox)
-        , EventsPerMailbox(cfg.EventsPerMailbox)
-        , RealtimePriority(cfg.RealtimePriority)
-        , ThreadCount(cfg.Threads)
-        , MinFullThreadCount(cfg.MinThreadCount)
-        , MaxFullThreadCount(cfg.MaxThreadCount)
-        , DefaultFullThreadCount(cfg.DefaultThreadCount)
+        , SpinThresholdCyclesPerThread(new NThreading::TPadded<std::atomic<ui64>>[threads])
+        , Threads(new NThreading::TPadded<TExecutorThreadCtx>[threads])
+        , WaitingStats(new TWaitingStats<ui64>[threads])
+        , PoolName(poolName)
+        , TimePerMailbox(timePerMailbox)
+        , EventsPerMailbox(eventsPerMailbox)
+        , RealtimePriority(realtimePriority)
+        , ThreadUtilization(0)
+        , MaxUtilizationCounter(0)
+        , MaxUtilizationAccumulator(0)
+        , WrongWakenedThreadCount(0)
+        , ThreadCount(threads)
+        , MinFullThreadCount(minThreadCount)
+        , MaxFullThreadCount(maxThreadCount)
+        , DefaultFullThreadCount(defaultThreadCount)
         , Harmonizer(harmonizer)
-        , SoftProcessingDurationTs(cfg.SoftProcessingDurationTs)
-        , HasOwnSharedThread(cfg.HasSharedThread)
-        , Priority(cfg.Priority)
+        , HasOwnSharedThread(hasOwnSharedThread)
+        , Priority(priority)
         , Jail(jail)
-        , ActorSystemProfile(cfg.ActorSystemProfile)
     {
-        Y_UNUSED(Jail, SoftProcessingDurationTs);
+        Y_UNUSED(Jail);
         for (ui32 idx = 0; idx < MaxSharedThreadsForPool; ++idx) {
             SharedThreads[idx].store(nullptr, std::memory_order_release);
         }
 
-        ui32 threads = ThreadCount;
         if (HasOwnSharedThread && threads) {
             threads = threads - 1;
         }
@@ -129,6 +105,7 @@ namespace NActors {
             MovingWaitingStats.Reset(new TWaitingStats<double>[threads]);
         }
 
+        Y_UNUSED(maxActivityType);
         i16 limit = Min(threads, (ui32)Max<i16>());
         if (DefaultFullThreadCount) {
             DefaultFullThreadCount = Min<i16>(DefaultFullThreadCount - HasOwnSharedThread, limit);
@@ -156,6 +133,30 @@ namespace NActors {
         if constexpr (DebugMode) {
             Sanitizer.reset(new TBasicExecutorPoolSanitizer(this));
         }
+    }
+
+    TBasicExecutorPool::TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg, IHarmonizer *harmonizer, TExecutorPoolJail *jail)
+        : TBasicExecutorPool(
+            cfg.PoolId,
+            cfg.Threads,
+            cfg.SpinThreshold,
+            cfg.PoolName,
+            harmonizer,
+            new TAffinity(cfg.Affinity),
+            cfg.TimePerMailbox,
+            cfg.EventsPerMailbox,
+            cfg.RealtimePriority,
+            0,
+            cfg.MinThreadCount,
+            cfg.MaxThreadCount,
+            cfg.DefaultThreadCount,
+            cfg.Priority,
+            cfg.HasSharedThread,
+            jail
+        )
+    {
+        SoftProcessingDurationTs = cfg.SoftProcessingDurationTs;
+        ActorSystemProfile = cfg.ActorSystemProfile;
     }
 
     TBasicExecutorPool::~TBasicExecutorPool() {
@@ -200,7 +201,7 @@ namespace NActors {
 
     ui32 TBasicExecutorPool::GetReadyActivationCommon(TWorkerContext& wctx, ui64 revolvingCounter) {
         NHPTimer::STime hpnow = GetCycleCountFast();
-        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION, false> activityGuard(hpnow);
+        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION> activityGuard(hpnow);
 
         TWorkerId workerId = wctx.WorkerId;
         Y_DEBUG_ABORT_UNLESS(workerId < MaxFullThreadCount);
@@ -233,7 +234,7 @@ namespace NActors {
                     }
                 }
             } else {
-                TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
+                TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE> activityGuard;
                 if (const ui32 activation = Activations.Pop(++revolvingCounter)) {
                     if (workerId >= 0) {
                         Threads[workerId].SetWork();
@@ -669,9 +670,6 @@ namespace NActors {
     }
 
     void TBasicExecutorPool::CalcSpinPerThread(ui64 wakingUpConsumption) {
-        if (ActorSystemProfile == EASProfile::Default) {
-            return;
-        }
         for (i16 threadIdx = 0; threadIdx < MaxFullThreadCount; ++threadIdx) {
             ui64 newSpinThreshold = 0;
             if constexpr (NFeatures::TSpinFeatureFlags::UsePseudoMovingWindow) {
@@ -680,15 +678,7 @@ namespace NActors {
             } else {
                 newSpinThreshold = WaitingStats[threadIdx].CalculateGoodSpinThresholdCycles(wakingUpConsumption);
             }
-
-            if (ActorSystemProfile == EASProfile::LowCpuConsumption) {
-                SpinThresholdCyclesPerThread[threadIdx].store(newSpinThreshold, std::memory_order_release);
-            } else {
-                auto oldSpinThreshold = SpinThresholdCyclesPerThread[threadIdx].load(std::memory_order_acquire);
-                if (oldSpinThreshold < newSpinThreshold) {
-                    SpinThresholdCyclesPerThread[threadIdx].store(newSpinThreshold, std::memory_order_release);
-                }
-            }
+            SpinThresholdCyclesPerThread[threadIdx].store(newSpinThreshold);
 
             double resolutionUs = TWaitingStatsConstants::HistogramResolutionUs;
             ui32 bucketIdx = newSpinThreshold / TWaitingStatsConstants::HistogramResolution;
@@ -724,7 +714,7 @@ namespace NActors {
     }
 
     bool TExecutorThreadCtx::WakeUp() {
-        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_WAKE_UP, false> activityGuard;
+        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_WAKE_UP> activityGuard;
         for (ui32 i = 0; i < 2; ++i) {
             EThreadState state = GetState<EThreadState>();
             switch (state) {
@@ -753,7 +743,7 @@ namespace NActors {
     }
 
     bool TSharedExecutorThreadCtx::WakeUp() {
-        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
+        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE> activityGuard;
         i64 requestsForWakeUp = RequestsForWakeUp.fetch_add(1, std::memory_order_acq_rel);
         if (requestsForWakeUp >= 0) {
             return false;

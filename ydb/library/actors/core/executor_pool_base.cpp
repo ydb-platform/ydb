@@ -149,7 +149,7 @@ namespace NActors {
 
     TActorId TExecutorPoolBaseMailboxed::Register(IActor* actor, TMailboxType::EType mailboxType, ui64 revolvingWriteCounter, const TActorId& parentId) {
         NHPTimer::STime hpstart = GetCycleCountFast();
-        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_REGISTER, false> activityGuard(hpstart);
+        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_REGISTER> activityGuard(hpstart);
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
         ui32 at = actor->GetActivityType();
         Y_DEBUG_ABORT_UNLESS(at < Stats.ActorsAliveByActivity.size());
@@ -237,7 +237,7 @@ namespace NActors {
 
     TActorId TExecutorPoolBaseMailboxed::Register(IActor* actor, TMailboxHeader* mailbox, ui32 hint, const TActorId& parentId) {
         NHPTimer::STime hpstart = GetCycleCountFast();
-        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_REGISTER, false> activityGuard(hpstart);
+        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_REGISTER> activityGuard(hpstart);
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
         ui32 at = actor->GetActivityType();
         if (at >= Stats.MaxActivityType())

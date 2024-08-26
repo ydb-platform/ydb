@@ -10,11 +10,11 @@
 namespace NActors {
 
 
-template <EInternalActorSystemActivity ActivityType, bool IsMainActivity=true>
+template <EInternalActorSystemActivity type>
 class TInternalActorTypeGuard {
 public:
     TInternalActorTypeGuard() {
-        if (Allowed && TlsThreadContext) {
+        if (Enabled && TlsThreadContext) {
             NHPTimer::STime hpnow = GetCycleCountFast();
             NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
             NextIndex = TlsThreadContext->ElapsingActorActivity.exchange(Index, std::memory_order_acq_rel);
@@ -25,7 +25,7 @@ public:
     TInternalActorTypeGuard(ui32 nextIndex)
         : NextIndex(nextIndex)
     {
-        if (Allowed && TlsThreadContext) {
+        if (Enabled && TlsThreadContext) {
             NHPTimer::STime hpnow = GetCycleCountFast();
             NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
             ui32 prevIndex = TlsThreadContext->ElapsingActorActivity.exchange(Index, std::memory_order_acq_rel);
@@ -34,7 +34,7 @@ public:
     }
 
     TInternalActorTypeGuard(NHPTimer::STime hpnow) {
-        if (Allowed && TlsThreadContext) {
+        if (Enabled && TlsThreadContext) {
             NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
             NextIndex = TlsThreadContext->ElapsingActorActivity.exchange(Index, std::memory_order_acq_rel);
             TlsThreadContext->WorkerCtx->AddElapsedCycles(NextIndex, hpnow - hpprev);
@@ -44,7 +44,7 @@ public:
     TInternalActorTypeGuard(NHPTimer::STime hpnow, ui32 nextIndex)
         : NextIndex(nextIndex)
     {
-        if (Allowed && TlsThreadContext) {
+        if (Enabled && TlsThreadContext) {
             NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
             ui32 prevIndex = TlsThreadContext->ElapsingActorActivity.exchange(Index, std::memory_order_acq_rel);
             TlsThreadContext->WorkerCtx->AddElapsedCycles(prevIndex, hpnow - hpprev);
@@ -52,7 +52,7 @@ public:
     }
 
     ~TInternalActorTypeGuard() {
-        if (Allowed && TlsThreadContext) {
+        if (Enabled && TlsThreadContext) {
             NHPTimer::STime hpnow = GetCycleCountFast();
             NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
             TlsThreadContext->ElapsingActorActivity.store(NextIndex, std::memory_order_release);
@@ -62,13 +62,12 @@ public:
 
 
 private:
-    static constexpr bool ExtraActivitiesIsAllowed = false;
-    static constexpr bool Allowed = ExtraActivitiesIsAllowed || IsMainActivity;
+    static constexpr bool Enabled = false;
     static ui32 Index;
     ui32 NextIndex = 0;
 };
 
-template <EInternalActorSystemActivity ActivityType, bool IsMainActivity>
-ui32 TInternalActorTypeGuard<ActivityType, IsMainActivity>::Index = TEnumProcessKey<TActorActivityTag, EInternalActorSystemActivity>::GetIndex(ActivityType);
+template <EInternalActorSystemActivity type>
+ui32 TInternalActorTypeGuard<type>::Index = TEnumProcessKey<TActorActivityTag, EInternalActorSystemActivity>::GetIndex(type);
 
 }

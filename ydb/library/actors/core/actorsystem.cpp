@@ -97,7 +97,7 @@ namespace NActors {
         if (Y_UNLIKELY(!ev))
             return false;
 
-        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_SEND, false> activityGuard;
+        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_SEND> activityGuard;
 #ifdef USE_ACTOR_CALLSTACK
         ev->Callstack.TraceIfEmpty();
 #endif

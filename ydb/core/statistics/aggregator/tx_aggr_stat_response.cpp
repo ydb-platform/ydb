@@ -28,6 +28,9 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
 
         ++Self->KeepAliveSeqNo; // cancel timeout events
 
+        Self->TabletCounters->Simple()[COUNTER_AGGREGATION_WAITING_TIME].Set(0);
+        Self->AggregationRequestBeginTime = TInstant::Zero();
+
         NIceDb::TNiceDb db(txc.DB);
 
         for (auto& column : Record.GetColumns()) {
@@ -107,8 +110,6 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
         Self->PersistGlobalTraversalRound(db);
         outRecord.SetRound(Self->GlobalTraversalRound);
         Action = EAction::SendAggregate;
-
-        Self->TabletCounters->Simple()[COUNTER_AGGREGATION_WAITING_TIME].Set(0);
 
         return true;
     }

@@ -63,7 +63,7 @@ public:
         return Connection_->GetEndpointAttributes();
     }
 
-    const TString& GetEndpointAddress() const override
+    const std::string& GetEndpointAddress() const override
     {
         VERIFY_THREAD_AFFINITY_ANY();
         return Connection_->GetEndpointAddress();

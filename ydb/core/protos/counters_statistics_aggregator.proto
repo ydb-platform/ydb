@@ -22,6 +22,7 @@ enum ETxTypes {
     TXTYPE_ACK_TIMEOUT = 12        [(TxTypeOpts) = {Name: "TxAckTimeout"}];
     TXTYPE_ANALYZE_TABLE_REQUEST = 13 [(TxTypeOpts) = {Name: "TxAnalyzeTableRequest"}];
     TXTYPE_ANALYZE_TABLE_RESPONSE = 14 [(TxTypeOpts) = {Name: "TxAnalyzeTableResponse"}];
+    TXTYPE_ANALYZE_TABLE_DELIVERY_PROBLEM = 15 [(TxTypeOpts) = {Name: "TTxAnalyzeTableDeliveryProblem"}];
 }
 
 enum ESimpleCounters {

@@ -29,7 +29,7 @@ public:
         : TBase(kikimrRunner.GetTestServer())
         , TypeName(typeName)
         , KikimrRunner(kikimrRunner)
-        , TablePath("/Root/" + storeName + "/" + tableName)
+        , TablePath(storeName.empty() ? "/Root/" + tableName : "/Root/" + storeName + "/" + tableName)
         , TableName(tableName)
         , StoreName(storeName) {
         SetShardingMethod("HASH_FUNCTION_CONSISTENCY_64");

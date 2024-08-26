@@ -52,21 +52,21 @@ using namespace NServiceDiscovery;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const TStringBuf ProxyUrlCanonicalHttpPrefix = "http://";
-static const TStringBuf ProxyUrlCanonicalHttpsPrefix = "https://";
-static const TStringBuf ProxyUrlCanonicalSuffix = ".yt.yandex.net";
+static const std::string ProxyUrlCanonicalHttpPrefix = "http://";
+static const std::string ProxyUrlCanonicalHttpsPrefix = "https://";
+static const std::string ProxyUrlCanonicalSuffix = ".yt.yandex.net";
 
 ////////////////////////////////////////////////////////////////////////////////
 
-THashMap<TString, TString> ParseProxyUrlAliasingRules(TString envConfig)
+THashMap<std::string, std::string> ParseProxyUrlAliasingRules(const TString& envConfig)
 {
     if (envConfig.empty()) {
         return {};
     }
-    return ConvertTo<THashMap<TString, TString>>(TYsonString(envConfig));
+    return ConvertTo<THashMap<std::string, std::string>>(TYsonString(envConfig));
 }
 
-void ApplyProxyUrlAliasingRules(TString& url, const std::optional<THashMap<TString, TString>>& proxyUrlAliasingRules)
+void ApplyProxyUrlAliasingRules(std::string& url, const std::optional<THashMap<std::string, std::string>>& proxyUrlAliasingRules)
 {
     static const auto rulesFromEnv = ParseProxyUrlAliasingRules(GetEnv("YT_PROXY_URL_ALIASING_CONFIG"));
 
@@ -77,7 +77,7 @@ void ApplyProxyUrlAliasingRules(TString& url, const std::optional<THashMap<TStri
     }
 }
 
-TString NormalizeHttpProxyUrl(TString url, const std::optional<THashMap<TString, TString>>& proxyUrlAliasingRules)
+std::string NormalizeHttpProxyUrl(std::string url, const std::optional<THashMap<std::string, std::string>>& proxyUrlAliasingRules)
 {
     ApplyProxyUrlAliasingRules(url, proxyUrlAliasingRules);
 
@@ -88,8 +88,8 @@ TString NormalizeHttpProxyUrl(TString url, const std::optional<THashMap<TString,
         url.append(ProxyUrlCanonicalSuffix);
     }
 
-    if (!url.StartsWith(ProxyUrlCanonicalHttpPrefix) && !url.StartsWith(ProxyUrlCanonicalHttpsPrefix)) {
-        url.prepend(ProxyUrlCanonicalHttpPrefix);
+    if (!url.starts_with(ProxyUrlCanonicalHttpPrefix) && !url.starts_with(ProxyUrlCanonicalHttpsPrefix)) {
+        url = ProxyUrlCanonicalHttpPrefix + url;
     }
 
     return url;
@@ -97,9 +97,9 @@ TString NormalizeHttpProxyUrl(TString url, const std::optional<THashMap<TString,
 
 namespace {
 
-bool IsProxyUrlSecure(const TString& url)
+bool IsProxyUrlSecure(const std::string& url)
 {
-    return url.StartsWith(ProxyUrlCanonicalHttpsPrefix);
+    return url.starts_with(ProxyUrlCanonicalHttpsPrefix);
 }
 
 TString MakeConnectionLoggingTag(const TConnectionConfigPtr& config, TGuid connectionId)
@@ -290,7 +290,7 @@ IChannelPtr TConnection::CreateChannel(bool sticky)
     return CreateRoamingChannel(std::move(provider));
 }
 
-IChannelPtr TConnection::CreateChannelByAddress(const TString& address)
+IChannelPtr TConnection::CreateChannelByAddress(const std::string& address)
 {
     return CachingChannelFactory_->CreateChannel(address);
 }
@@ -312,7 +312,7 @@ const TString& TConnection::GetClusterId() const
     return ClusterId_;
 }
 
-const std::optional<TString>& TConnection::GetClusterName() const
+const std::optional<std::string>& TConnection::GetClusterName() const
 {
     return Config_->ClusterName;
 }
@@ -366,7 +366,7 @@ const TConnectionConfigPtr& TConnection::GetConfig()
     return Config_;
 }
 
-std::vector<TString> TConnection::DiscoverProxiesViaHttp()
+std::vector<std::string> TConnection::DiscoverProxiesViaHttp()
 {
     auto correlationId = TGuid::Create();
 
@@ -399,7 +399,8 @@ std::vector<TString> TConnection::DiscoverProxiesViaHttp()
         auto client = IsProxyUrlSecure(*Config_->ClusterUrl)
             ? NHttps::CreateClient(Config_->HttpsClient, std::move(poller))
             : NHttp::CreateClient(Config_->HttpClient, std::move(poller));
-        auto rsp = WaitFor(client->Get(url, headers))
+        // TODO(babenko): switch to std::string
+        auto rsp = WaitFor(client->Get(TString(url), headers))
             .ValueOrThrow();
 
         if (rsp->GetStatusCode() != EStatusCode::OK) {
@@ -414,7 +415,7 @@ std::vector<TString> TConnection::DiscoverProxiesViaHttp()
 
         auto node = ConvertTo<INodePtr>(TYsonString(ToString(body)));
         node = node->AsMap()->FindChild("proxies");
-        return ConvertTo<std::vector<TString>>(node);
+        return ConvertTo<std::vector<std::string>>(node);
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error discovering RPC proxies via HTTP")
             << TErrorAttribute("correlation_id", correlationId)
@@ -422,7 +423,7 @@ std::vector<TString> TConnection::DiscoverProxiesViaHttp()
     }
 }
 
-std::vector<TString> TConnection::DiscoverProxiesViaServiceDiscovery()
+std::vector<std::string> TConnection::DiscoverProxiesViaServiceDiscovery()
 {
     YT_LOG_DEBUG("Updating proxy list via Service Discovery");
 
@@ -442,7 +443,7 @@ std::vector<TString> TConnection::DiscoverProxiesViaServiceDiscovery()
     auto endpointSets = WaitFor(AllSet(asyncEndpointSets))
         .ValueOrThrow();
 
-    std::vector<TString> allAddresses;
+    std::vector<std::string> allAddresses;
     std::vector<TError> errors;
     for (int i = 0; i < std::ssize(endpointSets); ++i) {
         if (!endpointSets[i].IsOK()) {
@@ -482,7 +483,7 @@ void TConnection::OnProxyListUpdate()
     auto backoff = Config_->ProxyListRetryPeriod;
     for (int attempt = 0;; ++attempt) {
         try {
-            std::vector<TString> proxies;
+            std::vector<std::string> proxies;
             if (Config_->ProxyEndpoints) {
                 proxies = DiscoverProxiesViaServiceDiscovery();
             } else if (Config_->ClusterUrl) {

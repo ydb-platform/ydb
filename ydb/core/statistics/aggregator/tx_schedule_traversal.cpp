@@ -12,7 +12,6 @@ struct TStatisticsAggregator::TTxScheduleTrasersal : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_SCHEDULE_TRAVERSAL; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleTrasersal::Execute");
 
         if (!Self->EnableColumnStatistics) {
             return true;
@@ -21,7 +20,7 @@ struct TStatisticsAggregator::TTxScheduleTrasersal : public TTxBase {
         ui64 time = 0;
         if (!Self->ForceTraversalsCreationTime.empty()) {
             const auto oldest = *Self->ForceTraversalsCreationTime.begin();
-            time = ctx.Now().MicroSeconds() - oldest;
+            time = ctx.Now().GetValue() - oldest;
         }
         Self->TabletCounters->Simple()[COUNTER_IN_FLY_ANALYZE_MAXIMUM_WAITING_TIME].Set(time);
 
@@ -30,10 +29,12 @@ struct TStatisticsAggregator::TTxScheduleTrasersal : public TTxBase {
             return true;
         }
 
-        if (!Self->IsSchemeshardSeen) {
+        if (Self->ScheduleTraversals.empty()) {
             SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleTrasersal. No info from schemeshard");
             return true;
         }
+
+        SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleTrasersal::Execute");
 
         NIceDb::TNiceDb db(txc.DB);
 

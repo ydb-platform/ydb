@@ -194,14 +194,17 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
             while (!rowset.EndOfSet()) {
                 TString operationId = rowset.GetValue<Schema::ForceTraversalOperations::OperationId>();
                 TString types = rowset.GetValue<Schema::ForceTraversalOperations::Types>();
+                ui64 createdAt = rowset.GetValue<Schema::ForceTraversalOperations::CreatedAt>();
 
                 TForceTraversalOperation operation {
                     .OperationId = operationId,
                     .Tables = {},
                     .Types = types,
-                    .ReplyToActorId = {}
+                    .ReplyToActorId = {},
+                    .CreatedAt = TInstant::FromValue(createdAt)
                 };
                 Self->ForceTraversals.emplace_back(operation);
+                Self->ForceTraversalsCreationTime.emplace(createdAt);
 
                 if (!rowset.Next()) {
                     return false;
@@ -276,6 +279,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
         if (Self->EnableColumnStatistics) {
             Self->Schedule(Self->TraversalPeriod, new TEvPrivate::TEvScheduleTraversal());
             Self->Schedule(Self->SendAnalyzePeriod, new TEvPrivate::TEvSendAnalyze());
+            Self->Schedule(Self->AnalyzeDeliveryProblemPeriod, new TEvPrivate::TEvAnalyzeDeliveryProblem());
         } else {
             SA_LOG_W("[" << Self->TabletID() << "] TTxInit::Complete. EnableColumnStatistics=false");
         }
@@ -283,6 +287,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
         Self->InitializeStatisticsTable();
 
         if (Self->TraversalPathId && Self->TraversalStartKey) {
+            SA_LOG_D("[" << Self->TabletID() << "] TTxInit::Complete. Start navigate. PathId " << Self->TraversalPathId);
             Self->NavigateType = ENavigateType::Traversal;
             Self->NavigatePathId = Self->TraversalPathId;
             Self->Navigate();

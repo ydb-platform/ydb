@@ -921,6 +921,26 @@ IJournalWriterPtr TTransaction::CreateJournalWriter(
         PatchTransactionId(options));
 }
 
+TFuture<TDistributedWriteSessionPtr> TTransaction::StartDistributedWriteSession(
+    const NYPath::TRichYPath& path,
+    const TDistributedWriteSessionStartOptions& options)
+{
+    ValidateActive();
+    return Client_->StartDistributedWriteSession(
+        path,
+        PatchTransactionId(options));
+}
+
+TFuture<void> TTransaction::FinishDistributedWriteSession(
+    TDistributedWriteSessionPtr session,
+    const TDistributedWriteSessionFinishOptions& options)
+{
+    ValidateActive();
+    return Client_->FinishDistributedWriteSession(
+        std::move(session),
+        PatchTransactionId(options));
+}
+
 TFuture<void> TTransaction::DoAbort(
     TGuard<NThreading::TSpinLock>* guard,
     const TTransactionAbortOptions& /*options*/)

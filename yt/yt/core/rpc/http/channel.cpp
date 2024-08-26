@@ -27,8 +27,8 @@ class THttpChannel
     : public IChannel
 {
 public:
-    explicit THttpChannel(
-        const TString& address,
+    THttpChannel(
+        const std::string& address,
         const NConcurrency::IPollerPtr& poller,
         bool isHttps,
         NHttps::TClientCredentialsConfigPtr credentials)
@@ -111,7 +111,7 @@ public:
     }
 
     // Custom methods.
-    const TString& GetEndpointAddress() const
+    const std::string& GetEndpointAddress() const
     {
         return EndpointAddress_;
     }
@@ -344,7 +344,7 @@ DEFINE_REFCOUNTED_TYPE(THttpChannel)
 } // namespace
 
 IChannelPtr CreateHttpChannel(
-    const TString& address,
+    const std::string& address,
     const NConcurrency::IPollerPtr& poller,
     bool isHttps,
     NHttps::TClientCredentialsConfigPtr credentials)

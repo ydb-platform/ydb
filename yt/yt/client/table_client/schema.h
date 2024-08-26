@@ -477,6 +477,19 @@ std::vector<TColumnStableName> MapNamesToStableNames(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TNestedColumn
+{
+    TStringBuf NestedTableName;
+    bool IsKey;
+    TStringBuf Aggregate;
+};
+
+std::optional<TNestedColumn> TryParseNestedAggregate(TStringBuf description);
+
+EValueType GetNestedColumnElementType(const TLogicalType* logicalType);
+
+////////////////////////////////////////////////////////////////////////////////
+
 void ValidateKeyColumns(const TKeyColumns& keyColumns);
 
 void ValidateDynamicTableKeyColumnCount(int count);
@@ -487,12 +500,14 @@ void ValidateColumnSchema(
     const TColumnSchema& columnSchema,
     bool isTableSorted = false,
     bool isTableDynamic = false,
-    bool allowUnversionedUpdateColumns = false);
+    bool allowUnversionedUpdateColumns = false,
+    bool allowTimestampColumns = false);
 
 void ValidateTableSchema(
     const TTableSchema& schema,
     bool isTableDynamic = false,
-    bool allowUnversionedUpdateColumns = false);
+    bool allowUnversionedUpdateColumns = false,
+    bool allowTimestampColumns = false);
 
 void ValidateNoDescendingSortOrder(const TTableSchema& schema);
 

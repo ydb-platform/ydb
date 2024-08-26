@@ -4,10 +4,12 @@
 #include "type_def.h"
 #endif
 
+#include "concepts.h"
 #include "factory.h"
 #include "polymorphic.h"
 #include "context.h"
 #include "descriptors.h"
+#include "type_decl.h"
 #include "type_registry.h"
 
 #include <yt/yt/core/concurrency/fls.h>
@@ -15,6 +17,8 @@
 #include <library/cpp/yt/misc/preprocessor.h>
 
 #include <concepts>
+
+namespace NYT::NPhoenix2::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -24,22 +28,10 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#define PHOENIX_DEFINE_TYPE__STATIC_INIT(type, parenthesizedTypeArgs) \
-    template <class T> \
-    struct TPhoenixTypeInitializer__; \
-    \
-    template <> \
-    struct TPhoenixTypeInitializer__<type PP_DEPAREN(parenthesizedTypeArgs)> \
-    { \
-        [[maybe_unused]] static inline const void* Dummy = &type PP_DEPAREN(parenthesizedTypeArgs)::GetTypeDescriptor(); \
-    }
-
 #define PHOENIX_DEFINE_TYPE(type) \
-    PHOENIX_DEFINE_TYPE__STATIC_INIT(type, ()); \
-    \
     const ::NYT::NPhoenix2::TTypeDescriptor& type::GetTypeDescriptor() \
     { \
-        static const auto& descriptor = ::NYT::NPhoenix2::NDetail::RegisterTypeDescriptorImpl<type, /*Template*/ false>(); \
+        static const auto& descriptor = ::NYT::NPhoenix2::NDetail::GetTypeDescriptorByTagUnchecked(TypeTag); \
         return descriptor; \
     } \
     \
@@ -49,31 +41,74 @@
         return map; \
     } \
     \
-    void type::Save(TSaveContext& context) const \
+    void type::SaveImpl(TSaveContext& context) const \
     { \
         ::NYT::NPhoenix2::NDetail::SaveImpl(this, context); \
     } \
     \
-    void type::Load(TLoadContext& context) \
+    void type::LoadImpl(TLoadContext& context) \
     { \
         ::NYT::NPhoenix2::NDetail::LoadImpl(this, context); \
+    } \
+    \
+    void type::Save(TSaveContext& context) const \
+    { \
+        const_cast<type*>(this)->Persist(context); \
+    } \
+    \
+    void type::Load(TLoadContext& context) \
+    { \
+        Persist(context); \
+    } \
+    \
+    void type::Persist(const TPersistenceContext& context) \
+    { \
+        if (context.IsSave()) { \
+            type::SaveImpl(context.SaveContext()); \
+        } else { \
+            YT_VERIFY(context.IsLoad()); \
+            type::LoadImpl(context.LoadContext()); \
+        } \
+    } \
+    \
+    template <class T> \
+    struct TPhoenixTypeInitializer__; \
+    \
+    template <> \
+    struct TPhoenixTypeInitializer__<type> \
+    { \
+        [[maybe_unused]] static inline const void* Dummy = &::NYT::NPhoenix2::NDetail::RegisterTypeDescriptorImpl<type, false>(); \
     }
 
 #define PHOENIX_DEFINE_TEMPLATE_TYPE(type, parenthesizedTypeArgs) \
-    PHOENIX_DEFINE_TYPE__STATIC_INIT(type, parenthesizedTypeArgs)
+    template <class T> \
+    struct TPhoenixTypeInitializer__; \
+    \
+    template <> \
+    struct TPhoenixTypeInitializer__<type PP_DEPAREN(parenthesizedTypeArgs)> \
+    { \
+        [[maybe_unused]] static inline const void* Dummy = &::NYT::NPhoenix2::NDetail::RegisterTypeDescriptorImpl<type PP_DEPAREN(parenthesizedTypeArgs), true>(); \
+    }
 
 #define PHOENIX_DEFINE_OPAQUE_TYPE(type) \
-    PHOENIX_DEFINE_TYPE__STATIC_INIT(type, ()); \
-    \
     const ::NYT::NPhoenix2::TTypeDescriptor& type::GetTypeDescriptor() \
     { \
-        static const auto& descriptor = ::NYT::NPhoenix2::NDetail::RegisterOpaqueTypeDescriptorImpl<type>(); \
+        static const auto& descriptor = ::NYT::NPhoenix2::NDetail::GetTypeDescriptorByTagUnchecked(TypeTag); \
         return descriptor; \
+    } \
+    \
+    template <class T> \
+    struct TPhoenixTypeInitializer__; \
+    \
+    template <> \
+    struct TPhoenixTypeInitializer__<type> \
+    { \
+        [[maybe_unused]] static inline const void* Dummy = &::NYT::NPhoenix2::NDetail::RegisterOpaqueTypeDescriptorImpl<type>(); \
     }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace NYT::NPhoenix2::NDetail {
+const TTypeDescriptor& GetTypeDescriptorByTagUnchecked(TTypeTag tag);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -277,9 +312,24 @@ public:
     { }
 
     template <class TBase>
+        requires SupportsPhoenix2<TBase>
+    void BaseType()
+    {
+        This_->TBase::SaveImpl(Context_);
+    }
+
+    template <class TBase>
+        requires (!SupportsPhoenix2<TBase> && !SupportsPersist<TBase, TContext>)
     void BaseType()
     {
         This_->TBase::Save(Context_);
+    }
+
+    template <class TBase>
+        requires (!SupportsPhoenix2<TBase> && SupportsPersist<TBase, TContext>)
+    void BaseType()
+    {
+        const_cast<TThis*>(This_)->TBase::Persist(Context_);
     }
 
 private:
@@ -444,9 +494,24 @@ public:
     { }
 
     template <class TBase>
+        requires SupportsPhoenix2<TBase>
+    void BaseType()
+    {
+        This_->TBase::LoadImpl(Context_);
+    }
+
+    template <class TBase>
+        requires (!SupportsPhoenix2<TBase> && !SupportsPersist<TBase, TContext>)
     void BaseType()
     {
         This_->TBase::Load(Context_);
+    }
+
+    template <class TBase>
+        requires (!SupportsPhoenix2<TBase> && SupportsPersist<TBase, TContext>)
+    void BaseType()
+    {
+        This_->TBase::Persist(Context_);
     }
 
 private:
@@ -695,9 +760,6 @@ struct TRuntimeFieldDescriptor
     TFieldLoadHandler<TThis, TContext> LoadHandler = nullptr;
     TFieldMissingHandler<TThis, TContext> MissingHandler = nullptr;
 };
-
-template <class TThis, class TContext>
-using TRuntimeFieldDescriptorMap = THashMap<TFieldTag, TRuntimeFieldDescriptor<TThis, TContext>>;
 
 template <auto Member, class TThis, class TContext, class TFieldSerializer>
 class PHOENIX_REGISTRAR_NODISCARD TRuntimeFieldDescriptorBuilderRegistar

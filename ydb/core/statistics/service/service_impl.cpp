@@ -897,7 +897,7 @@ private:
     void SendStatisticsRequest(const TActorId& clientId) {
         auto request = std::make_unique<TEvStatistics::TEvStatisticsRequest>();
         auto& record = request->Record;
-        record.MutableTypes()->Add(NKikimr::NStat::COUNT_MIN_SKETCH);
+        record.MutableTypes()->Add(NKikimrStat::TYPE_COUNT_MIN_SKETCH);
 
         auto* path = record.MutableTable()->MutablePathId();
         path->SetOwnerId(AggregationStatistics.PathId.OwnerId);
@@ -909,6 +909,11 @@ private:
         }
 
         NTabletPipe::SendData(SelfId(), clientId, request.release(), AggregationStatistics.Round);
+
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "TEvStatisticsRequest send"
+            << ", client id = " << clientId
+            << ", path = " << *path);
     }
 
     void OnTabletError(ui64 tabletId) {

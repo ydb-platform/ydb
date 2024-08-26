@@ -12,7 +12,7 @@ namespace NYT::NRpc::NHttp {
 
 //! Creates a channel implemented via HTTP/HTTPs.
 NRpc::IChannelPtr CreateHttpChannel(
-    const TString& address,
+    const std::string& address,
     const NConcurrency::IPollerPtr& poller,
     bool isHttps = true,
     NHttps::TClientCredentialsConfigPtr credentials = nullptr

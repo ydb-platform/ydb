@@ -415,11 +415,24 @@ void TStatisticsAggregator::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
     auto tabletId = ev->Get()->TabletId;
     if (TraversalIsColumnTable) {
         if (tabletId == HiveId) {
+            SA_LOG_E("[" << TabletID() << "] TEvDeliveryProblem with HiveId=" << tabletId);
             Schedule(HiveRetryInterval, new TEvPrivate::TEvRequestDistribution);
         } else {
+            for (TForceTraversalOperation& operation : ForceTraversals) {
+                for (TForceTraversalTable& operationTable : operation.Tables) {
+                    for (TAnalyzedShard& shard : operationTable.AnalyzedShards) {
+                        if (shard.ShardTabletId == tabletId) {
+                            SA_LOG_E("[" << TabletID() << "] TEvDeliveryProblem with ColumnShard=" << tabletId);
+                            shard.Status = TAnalyzedShard::EStatus::DeliveryProblem;
+                            return;
+                        }
+                    }
+                }
+            }
             SA_LOG_CRIT("[" << TabletID() << "] TEvDeliveryProblem with unexpected tablet " << tabletId);
         }
     } else {
+        SA_LOG_E("[" << TabletID() << "] TEvDeliveryProblem with DataShard=" << tabletId);
         if (DatashardRanges.empty()) {
             return;
         }
@@ -482,7 +495,7 @@ void TStatisticsAggregator::Handle(TEvPrivate::TEvRequestDistribution::TPtr&) {
 
 void TStatisticsAggregator::Handle(TEvStatistics::TEvAggregateKeepAlive::TPtr& ev) {
     const auto round = ev->Get()->Record.GetRound();
-    if (round == GlobalTraversalRound) {
+    if (round == GlobalTraversalRound && AggregationRequestBeginTime) {
         TInstant now = AppData(TlsActivationContext->AsActorContext())->TimeProvider->Now();
         TDuration time = now - AggregationRequestBeginTime;
         TabletCounters->Simple()[COUNTER_AGGREGATION_WAITING_TIME].Set(time.MicroSeconds());
@@ -763,8 +776,6 @@ TStatisticsAggregator::TForceTraversalOperation* TStatisticsAggregator::ForceTra
 }
 
 std::optional<bool> TStatisticsAggregator::IsColumnTable(const TPathId& pathId) const {
-    Y_ABORT_UNLESS(IsSchemeshardSeen);
-
     auto itPath = ScheduleTraversals.find(pathId);
     if (itPath != ScheduleTraversals.end()) {
         bool ret = itPath->second.IsColumnTable;

@@ -28,6 +28,7 @@ void TWriteOperation::Start(TColumnShard& owner, const ui64 tableId, const NEvWr
     Y_ABORT_UNLESS(Status == EOperationStatus::Draft);
 
     NEvWrite::TWriteMeta writeMeta((ui64)WriteId, tableId, source, GranuleShardingVersionId);
+    writeMeta.SetLockId(LockId);
     writeMeta.SetModificationType(ModificationType);
     std::shared_ptr<NConveyor::ITask> task =
         std::make_shared<NOlap::TBuildBatchesTask>(owner.TabletID(), ctx.SelfID, owner.BufferizationWriteActorId,

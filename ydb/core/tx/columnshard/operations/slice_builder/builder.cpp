@@ -70,7 +70,7 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
     if (batches) {
         auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
         writeDataPtr->SetSchemaSubset(std::move(subset));
-        auto result = std::make_unique<NColumnShard::NWriting::TEvAddInsertedDataToBuffer>(writeDataPtr, std::move(*batches));
+        auto result = std::make_unique<NColumnShard::NWriting::TEvAddInsertedDataToBuffer>(writeDataPtr, std::move(*batches), OriginalBatch);
         TActorContext::AsActorContext().Send(BufferActorId, result.release());
     } else {
         ReplyError("Cannot slice input to batches");

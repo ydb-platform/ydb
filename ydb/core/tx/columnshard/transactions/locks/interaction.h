@@ -132,10 +132,10 @@ public:
 
     std::map<TIntervalPoint, TPointInfo>::iterator InsertPoint(const TIntervalPoint& intervalPoint) {
         auto it = IntervalsInfo.lower_bound(intervalPoint);
-        if (it->first == intervalPoint) {
-            return it;
-        } else if (it == IntervalsInfo.begin()) {
+        if (it == IntervalsInfo.end() || it == IntervalsInfo.begin()) {
             return IntervalsInfo.emplace(intervalPoint, TPointInfo()).first;
+        } else if (it->first == intervalPoint) {
+            return it;
         } else {
             auto result = IntervalsInfo.emplace(intervalPoint, TPointInfo()).first;
             --it;
@@ -193,9 +193,7 @@ public:
     }
 
     void AddInterval(const ui64 txId, const ui64 pathId, const TIntervalPoint& from, const TIntervalPoint& to) {
-        auto itIntervals = ReadIntervalsByPathId.find(pathId);
-        AFL_VERIFY(itIntervals != ReadIntervalsByPathId.end())("path_id", pathId);
-        auto& intervals = itIntervals->second;
+        auto& intervals = ReadIntervalsByPathId[pathId];
         auto it = intervals.InsertPoint(from);
         auto toIt = intervals.InsertPoint(to);
         it->second.AddStart(txId, from.IsIncluded());

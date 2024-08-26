@@ -71,6 +71,7 @@ class TOperationsManager {
 public:
     bool Load(NTabletFlatExecutor::TTransactionContext& txc);
     void AddEventForTx(TColumnShard& owner, const ui64 txId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer);
+    void AddEventForLock(TColumnShard& owner, const ui64 lockId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer);
 
     TWriteOperation::TPtr GetOperation(const TWriteId writeId) const;
     TWriteOperation::TPtr GetOperationVerified(const TWriteId writeId) const {
@@ -84,8 +85,20 @@ public:
     bool AbortTransaction(TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
     void LinkTransaction(const ui64 lockId, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
     std::optional<ui64> GetLockForTx(const ui64 txId) const;
+    std::optional<ui64> GetLockForTxOptional(const ui64 txId) const {
+        return GetLockForTx(txId);
+    }
+    TLockFeatures* GetLockFeaturesForTxOptional(const ui64 txId) {
+        auto lockId = GetLockForTxOptional(txId);
+        if (!lockId) {
+            return nullptr;
+        }
+        return &GetLockVerified(*lockId);
+    }
     ui64 GetLockForTxVerified(const ui64 txId) const {
-        return *TValidator::CheckNotNull(GetLockForTx(txId));
+        auto result = GetLockForTxOptional(txId);
+        AFL_VERIFY(result)("tx_id", txId);
+        return *result;
     }
 
     TWriteOperation::TPtr RegisterOperation(

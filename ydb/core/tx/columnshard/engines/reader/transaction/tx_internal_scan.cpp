@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/abstract/policy.h>
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/constructor/constructor.h>
+#include <ydb/core/tx/columnshard/transactions/locks/read_start.h>
 
 namespace NKikimr::NOlap::NReader {
 
@@ -75,6 +76,15 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
     if (Self->HasIndex()) {
         index = &Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex();
     }
+    if (Self->GetOperationsManager().GetLockOptional(LockId)) {
+        auto evWriter = std::make_shared<NOlap::NTxInteractions::TEvReadStartWriter>(request.GetPathId(),
+            readMetadataRange->GetResultSchema()->GetIndexInfo().GetPrimaryKey(),
+            std::make_shared<TPKRangesFilter>(
+                readMetadataRange->GetPKRangesFilterOptional() ? *readMetadataRange->GetPKRangesFilterOptional() : TPKRangesFilter(false)),
+            THashSet<ui64>());
+        Self->GetOperationsManager().AddEventForLock(*Self, LockId, evWriter);
+    }
+
     const ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(readMetadataRange, index);
     auto scanActor = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(), TComputeShardingPolicy(),
         ScanId, TxId, ScanGen, requestCookie, Self->TabletID(), TDuration::Max(), readMetadataRange, NKikimrDataEvents::FORMAT_ARROW,

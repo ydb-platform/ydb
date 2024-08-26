@@ -1,4 +1,5 @@
 #include "tx_write.h"
+#include <ydb/core/tx/columnshard/transactions/locks/write.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -141,6 +142,14 @@ void TTxWrite::Complete(const TActorContext& ctx) {
     }
     for (ui32 i = 0; i < buffer.GetAggregations().size(); ++i) {
         const auto& writeMeta = buffer.GetAggregations()[i]->GetWriteMeta();
+        if (!writeMeta.HasLongTxId()) {
+            auto op = Self->GetOperationsManager().GetOperationVerified(NOlap::TWriteId(writeMeta.GetWriteId()));
+            if (op->GetBehaviour() == EOperationBehaviour::WriteWithLock) {
+                auto evWrite = std::make_shared<NOlap::NTxInteractions::TEvWriteWriter>(
+                    writeMeta.GetTableId(), buffer.GetAggregations()[i]->GetRecordBatch());
+                Self->GetOperationsManager().AddEventForLock(*Self, op->GetLockId(), evWrite);
+            }
+        }
         Self->Counters.GetCSCounters().OnWriteTxComplete(now - writeMeta.GetWriteStartInstant());
         Self->Counters.GetCSCounters().OnSuccessWriteResponse();
     }

@@ -71,6 +71,10 @@ public:
         return *PKRangesFilter;
     }
 
+    const std::optional<TPKRangesFilter>& GetPKRangesFilterOptional() const {
+        return PKRangesFilter;
+    }
+
     ISnapshotSchema::TPtr GetResultSchema() const {
         return ResultIndexSchema;
     }

@@ -6,7 +6,7 @@
 namespace NKikimr::NOlap {
 
 std::unique_ptr<NKikimr::TEvColumnShard::TEvInternalScan> TModificationRestoreTask::DoBuildRequestInitiator() const {
-    auto request = std::make_unique<TEvColumnShard::TEvInternalScan>(LocalPathId);
+    auto request = std::make_unique<TEvColumnShard::TEvInternalScan>(LocalPathId, WriteData.GetWriteMeta().GetLockIdVerified());
     request->ReadToSnapshot = Snapshot;
     auto pkData = NArrow::TColumnOperator().VerifyIfAbsent().Extract(IncomingData, ActualSchema->GetPKColumnNames());
     request->RangesFilter = TPKRangesFilter::BuildFromRecordBatchLines(pkData, false);

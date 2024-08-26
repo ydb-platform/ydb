@@ -218,26 +218,32 @@ EOperationBehaviour TOperationsManager::GetBehaviour(const NEvents::TDataEvents:
 TOperationsManager::TOperationsManager() {
 }
 
-void TOperationsManager::AddEventForTx(TColumnShard& /*owner*/, const ui64 txId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer) {
+void TOperationsManager::AddEventForTx(TColumnShard& owner, const ui64 txId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer) {
+    return AddEventForLock(owner, GetLockForTxVerified(txId), writer);
+}
+
+void TOperationsManager::AddEventForLock(
+    TColumnShard& /*owner*/, const ui64 lockId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer) {
     AFL_VERIFY(writer);
     NOlap::NTxInteractions::TTxConflicts txNotifications;
     NOlap::NTxInteractions::TTxConflicts txConflicts;
-    auto& txLock = GetLockVerified(GetLockForTxVerified(txId));
-    writer->CheckInteraction(txId, InteractionsContext, txConflicts, txNotifications);
+    auto& txLock = GetLockVerified(lockId);
+    writer->CheckInteraction(lockId, InteractionsContext, txConflicts, txNotifications);
     for (auto&& i : txConflicts) {
         if (auto lock = GetLockOptional(i.first)) {
             GetLockVerified(i.first).AddBrokeOnCommit(i.second);
         } else if (txLock.IsCommitted(i.first)) {
             txLock.SetBroken(true);
         }
-        
     }
     for (auto&& i : txNotifications) {
         GetLockVerified(i.first).AddNotificationsOnCommit(i.second);
     }
-    NOlap::NTxInteractions::TTxEventContainer container(txId, writer->BuildEvent());
-    container.AddToInteraction(InteractionsContext);
-    GetLockVerified(GetLockForTxVerified(txId)).MutableEvents().emplace_back(std::move(container));
+    if (auto txEvent = writer->BuildEvent()) {
+        NOlap::NTxInteractions::TTxEventContainer container(lockId, txEvent);
+        container.AddToInteraction(InteractionsContext);
+        txLock.MutableEvents().emplace_back(std::move(container));
+    }
 }
 
 }   // namespace NKikimr::NColumnShard

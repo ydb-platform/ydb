@@ -86,6 +86,7 @@ protected:
 
 public:
     ITxEventWriter() = default;
+    virtual ~ITxEventWriter() = default;
 
     bool CheckInteraction(const ui64 selfTxId, TInteractionsContext& context, TTxConflicts& conflicts, TTxConflicts& notifications) const {
         TTxConflicts conflictsResult;

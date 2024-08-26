@@ -18,7 +18,7 @@
 
 namespace NActors {
 
-#ifndef NDEBUG
+#ifdef NDEBUG
     constexpr bool DebugMode = true;
 #else
     constexpr bool DebugMode = false;

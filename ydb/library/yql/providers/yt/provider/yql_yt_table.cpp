@@ -295,7 +295,18 @@ bool TYtTableStatInfo::Validate(const TExprNode& node, TExprContext& ctx) {
             VALIDATE_FIELD(ModifyTime)
         else
             VALIDATE_FIELD(Revision)
-        else {
+        else if (name->Content() == "SecurityTags") {
+            if (!value->IsList()) {
+                ctx.AddError(TIssue(ctx.GetPosition(value->Pos()),
+                    TStringBuilder() << "Expected list"));
+                return false;
+            }
+            for (const auto& tagAtom : value->Children()) {
+                if (!EnsureAtom(*tagAtom, ctx)) {
+                    return false;
+                }
+            }
+        } else {
             ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "Unsupported table stat option: " << name->Content()));
             return false;
         }
@@ -328,7 +339,12 @@ void TYtTableStatInfo::Parse(TExprBase node) {
             HANDLE_FIELD(ModifyTime)
         else
             HANDLE_FIELD(Revision)
-        else {
+        else if (setting.Name().Value() == "SecurityTags") {
+            SecurityTags = {};
+            for (const auto& tagAtom : setting.Value().Cast<TListBase<TCoAtom>>()) {
+                SecurityTags.emplace_back(tagAtom.Value());
+            }
+        } else {
             YQL_ENSURE(false, "Unexpected option " << setting.Name().Value());
         }
 #undef HANDLE_FIELD
@@ -348,6 +364,16 @@ TExprBase TYtTableStatInfo::ToExprNode(TExprContext& ctx, const TPositionHandle&
         .Build()                        \
     .Build()
 
+    auto secTagsBuilder = Build<TCoAtomList>(ctx, pos);
+    for (const auto& tag : SecurityTags) {
+        secTagsBuilder
+            .Add<TCoAtom>()
+                .Value(tag)
+            .Build();
+    }
+
+    auto secTagsListExpr = secTagsBuilder.Done();
+
     statBuilder
         ADD_FIELD(Id)
         ADD_FIELD(RecordsCount)
@@ -355,6 +381,12 @@ TExprBase TYtTableStatInfo::ToExprNode(TExprContext& ctx, const TPositionHandle&
         ADD_FIELD(ChunkCount)
         ADD_FIELD(ModifyTime)
         ADD_FIELD(Revision)
+        .Add()
+            .Name()
+                .Value("SecurityTags")
+            .Build()
+            .Value(secTagsListExpr)
+        .Build()
         ;
 
 #undef ADD_FIELD

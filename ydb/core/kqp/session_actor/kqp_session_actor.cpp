@@ -1290,7 +1290,9 @@ public:
 
         const bool useEvWrite = ((HasOlapTable && Settings.TableService.GetEnableOlapSink()) || (!HasOlapTable && Settings.TableService.GetEnableOltpSink()))
             && (request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_QUERY
-                || request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY);
+                || request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY
+                || request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_DML
+                || request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_PREPARED_DML);
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             RequestCounters, Settings.TableService,

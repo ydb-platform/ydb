@@ -28,7 +28,7 @@ ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 
 {% note info %}
 
-В настоящее время задание настроек партиционирования вторичных индексов при создании индекса не поддерживается ни в операторе [`ALTER TABLE ADD INDEX`](#add-index), ни в операторе [`CREATE TABLE INDEX`](../create_table.md#secondary_index).
+В настоящее время задание настроек партиционирования вторичных индексов при создании индекса не поддерживается ни в операторе [`ALTER TABLE ADD INDEX`](#add-index), ни в операторе [`CREATE TABLE INDEX`](../create_table/secondary_index.md).
 
 {% endnote %}
 

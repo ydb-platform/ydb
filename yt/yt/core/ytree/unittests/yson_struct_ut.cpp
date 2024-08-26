@@ -4,6 +4,7 @@
 
 #include <yt/yt/core/ytree/ephemeral_node_factory.h>
 #include <yt/yt/core/ytree/fluent.h>
+#include <yt/yt/core/ytree/polymorphic_yson_struct.h>
 #include <yt/yt/core/ytree/tree_builder.h>
 #include <yt/yt/core/ytree/tree_visitor.h>
 #include <yt/yt/core/ytree/ypath_client.h>
@@ -2571,6 +2572,266 @@ TEST(TYsonStructTest, OuterYsonStructWithValidation)
 
     EXPECT_TRUE(deserialized->Inner);
     EXPECT_EQ(deserialized->Inner->MyInt, 42);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TPolyBase
+    : public TYsonStruct
+{
+    int BaseField;
+
+    REGISTER_YSON_STRUCT(TPolyBase);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("base_field", &TThis::BaseField)
+            .Default(42);
+    }
+};
+
+struct TPolyDerived1
+    : public TPolyBase
+{
+    int Field1;
+
+    REGISTER_YSON_STRUCT(TPolyDerived1);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("field1", &TThis::Field1)
+            .Default(33);
+    }
+};
+
+struct TPolyDerived2
+    : public TPolyBase
+{
+    int Field2;
+
+    REGISTER_YSON_STRUCT(TPolyDerived2);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("field2", &TThis::Field2)
+            .Default(11);
+
+        registrar.UnrecognizedStrategy(EUnrecognizedStrategy::Throw);
+    }
+};
+
+TEST(TYsonStructTest, TestSlicing1)
+{
+    TIntrusivePtr<TPolyBase> sliced = New<TPolyDerived1>();
+
+    auto node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("base_field").Value(11)
+            .Item("field1").Value(123)
+        .EndMap();
+
+    Deserialize(sliced, node->AsMap());
+
+    auto concrete = DynamicPointerCast<TPolyDerived1>(sliced);
+
+    EXPECT_TRUE(concrete.operator bool());
+    EXPECT_EQ(concrete->BaseField, 11);
+    EXPECT_EQ(concrete->Field1, 123);
+}
+
+TEST(TYsonStructTest, TestSlicing2)
+{
+    TIntrusivePtr<TPolyBase> sliced = New<TPolyBase>();
+
+    auto node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("base_field").Value(11)
+            .Item("field1").Value(123)
+        .EndMap();
+
+    Deserialize(sliced, node->AsMap());
+
+    auto concrete = DynamicPointerCast<TPolyDerived1>(sliced);
+
+    EXPECT_FALSE(concrete.operator bool());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+DEFINE_POLYMORPHIC_YSON_STRUCT(MyPoly,
+    ((Base) (TPolyBase))
+    ((Drv1) (TPolyDerived1))
+    ((Drv2) (TPolyDerived2))
+);
+
+TEST(TYsonStructTest, TestPolymorphicYsonStruct)
+{
+    TMyPoly poly;
+
+    auto node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("type").Value("base")
+            .Item("base_field").Value(11)
+            .Item("field1").Value(123)
+        .EndMap();
+
+    Deserialize(poly, node->AsMap());
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyType::Base);
+
+    auto basePtr = poly.TryGetConcrete<TPolyBase>();
+    EXPECT_TRUE(basePtr.operator bool());
+    EXPECT_EQ(basePtr->BaseField, 11);
+
+    node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("type").Value("drv1")
+            .Item("base_field").Value(14)
+            .Item("field1").Value(111)
+            .Item("field2").Value(1337) // Unrecognized but will be dropped.
+        .EndMap();
+
+    Deserialize(poly, node->AsMap());
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyType::Drv1);
+
+    auto drv1Ptr = poly.TryGetConcrete<TPolyDerived1>();
+    EXPECT_TRUE(drv1Ptr.operator bool());
+    EXPECT_EQ(drv1Ptr->BaseField, 14);
+    EXPECT_EQ(drv1Ptr->Field1, 111);
+
+    node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("type").Value("drv2")
+            .Item("base_field").Value(7)
+            .Item("field1").Value(188)
+        .EndMap();
+
+    // Now field1 is unrecognized.
+    EXPECT_THROW(Deserialize(poly, node->AsMap()), std::exception);
+
+    node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("type").Value("drv2")
+            .Item("base_field").Value(17)
+            .Item("field2").Value(144)
+        .EndMap();
+
+    Deserialize(poly, node->AsMap());
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyType::Drv2);
+
+    auto drv2Ptr = poly.TryGetConcrete<TPolyDerived2>();
+    EXPECT_TRUE(drv2Ptr.operator bool());
+    EXPECT_EQ(drv2Ptr->BaseField, 17);
+    EXPECT_EQ(drv2Ptr->Field2, 144);
+}
+
+TEST(TYsonStructTest, TestPolymorphicYsonStructSaveLoad)
+{
+    auto drv = New<TPolyDerived2>();
+    drv->Field2 = 5;
+    drv->BaseField = 0;
+
+    auto poly = TMyPoly{EMyPolyType::Drv2, std::move(drv)};
+
+    auto serialized = ConvertToYsonString(poly);
+    auto deserialized = ConvertTo<TMyPoly>(serialized);
+
+    EXPECT_EQ(deserialized.GetCurrentType(), EMyPolyType::Drv2);
+
+    drv = poly.TryGetConcrete<TPolyDerived2>();
+
+    EXPECT_TRUE(drv.operator bool());
+    EXPECT_EQ(drv->BaseField, 0);
+    EXPECT_EQ(drv->Field2, 5);
+}
+
+TEST(TYsonStructTest, TestPolymorphicYsonStructMergeIfPossible)
+{
+    TMyPoly poly;
+
+    auto node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("type").Value("drv1")
+            .Item("base_field").Value(14)
+            // Field1 is missing -- default is 33
+        .EndMap();
+
+    Deserialize(poly, node->AsMap());
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyType::Drv1);
+
+    auto drv1Ptr = poly.TryGetConcrete<TPolyDerived1>();
+    EXPECT_TRUE(drv1Ptr.operator bool());
+    EXPECT_EQ(drv1Ptr->BaseField, 14);
+    EXPECT_EQ(drv1Ptr->Field1, 33);
+
+    node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("type").Value("drv1")
+            .Item("field1").Value(18)
+            // BaseField is missing -- default is 42
+        .EndMap();
+
+    poly.Load(node->AsMap(), /*postprocess*/false, /*setDefaults*/false);
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyType::Drv1);
+
+    drv1Ptr = poly.TryGetConcrete<TPolyDerived1>();
+    EXPECT_TRUE(drv1Ptr.operator bool());
+    EXPECT_EQ(drv1Ptr->BaseField, 14); // <- Field must remain the same.
+    EXPECT_EQ(drv1Ptr->Field1, 18);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TPolyHolder
+    : public TYsonStructLite
+{
+    TMyPoly PolyField;
+
+    REGISTER_YSON_STRUCT_LITE(TPolyHolder);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("poly_field", &TThis::PolyField)
+            .Default();
+
+        registrar.UnrecognizedStrategy(EUnrecognizedStrategy::ThrowRecursive);
+    }
+};
+
+TEST(TYsonStructTest, TestPolymorphicYsonStructAsField)
+{
+    TPolyHolder holder;
+
+    auto node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("poly_field").BeginMap()
+                .Item("type").Value("drv2")
+                .Item("base_field").Value(17)
+                .Item("field2").Value(144)
+            .EndMap()
+        .EndMap();
+
+    Deserialize(holder, node->AsMap());
+
+    EXPECT_EQ(holder.PolyField.GetCurrentType(), EMyPolyType::Drv2);
+    auto drv = holder.PolyField.TryGetConcrete<TPolyDerived2>();
+
+    EXPECT_TRUE(drv);
+    EXPECT_EQ(drv->BaseField, 17);
+    EXPECT_EQ(drv->Field2, 144);
+
+    node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("poly_field").BeginMap()
+                .Item("type").Value("drv1")
+                .Item("base_field").Value(17)
+                .Item("field2").Value(144)
+            .EndMap()
+        .EndMap();
+
+    // field2 is unrecognized for drv1. Its unrecognized strategy is
+    // Drop by default but holder has recursive throw so it must
+    // throw.
+    EXPECT_THROW(Deserialize(holder, node->AsMap()), std::exception);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -182,7 +182,7 @@ struct TYsonSourceTraits<NYson::TYsonPullParserCursor*>
 // e.g. std::optional<std::vector<T>>.
 
 // std::optional
-template <class T, CYsonStructSource TSource>
+template <CYsonStructSource TSource, class T>
 void LoadFromSource(
     std::optional<T>& parameter,
     TSource source,
@@ -190,7 +190,7 @@ void LoadFromSource(
     std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy);
 
 // std::vector
-template <CStdVector TVector, CYsonStructSource TSource>
+template <CYsonStructSource TSource, CStdVector TVector>
 void LoadFromSource(
     TVector& parameter,
     TSource source,
@@ -198,7 +198,7 @@ void LoadFromSource(
     std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy);
 
 // any map.
-template <CAnyMap TMap, CYsonStructSource TSource>
+template <CYsonStructSource TSource, CAnyMap TMap>
 void LoadFromSource(
     TMap& parameter,
     TSource source,
@@ -208,7 +208,7 @@ void LoadFromSource(
 ////////////////////////////////////////////////////////////////////////////////
 
 // Primitive type
-template <class T, CYsonStructSource TSource>
+template <CYsonStructSource TSource, class T>
 void LoadFromSource(
     T& parameter,
     TSource source,
@@ -249,7 +249,7 @@ void LoadFromSource(
 }
 
 // TYsonStruct
-template <CYsonStructDerived T, CYsonStructSource TSource>
+template <CYsonStructSource TSource, CYsonStructDerived T>
 void LoadFromSource(
     TIntrusivePtr<T>& parameter,
     TSource source,
@@ -268,7 +268,7 @@ void LoadFromSource(
 }
 
 // YsonStructLite
-template <std::derived_from<TYsonStructLite> T, CYsonStructSource TSource>
+template <CYsonStructSource TSource, std::derived_from<TYsonStructLite> T>
 void LoadFromSource(
     T& parameter,
     TSource source,
@@ -284,7 +284,7 @@ void LoadFromSource(
 }
 
 // ExternalizedYsonStruct
-template <CExternallySerializable T, CYsonStructSource TSource>
+template <CYsonStructSource TSource, CExternallySerializable T>
 void LoadFromSource(
     T& parameter,
     TSource source,
@@ -299,8 +299,29 @@ void LoadFromSource(
     }
 }
 
+// CYsonStructExtension
+template <CYsonStructSource TSource, CYsonStructFieldFor<TSource> TExtension>
+void LoadFromSource(
+    TExtension& parameter,
+    TSource source,
+    const NYPath::TYPath& path,
+    std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy)
+{
+    try {
+        parameter.Load(
+            std::move(source),
+            /*postprocess*/ false,
+            /*setDefaults*/ false,
+            path,
+            recursiveUnrecognizedStrategy);
+    } catch (const std::exception& ex) {
+        THROW_ERROR_EXCEPTION("Error loading parameter %v", path)
+            << ex;
+    }
+}
+
 // std::optional
-template <class T, CYsonStructSource TSource>
+template <CYsonStructSource TSource, class T>
 void LoadFromSource(
     std::optional<T>& parameter,
     TSource source,
@@ -332,7 +353,7 @@ void LoadFromSource(
 }
 
 // std::vector
-template <CStdVector TVector, CYsonStructSource TSource>
+template <CYsonStructSource TSource, CStdVector TVector>
 void LoadFromSource(
     TVector& parameter,
     TSource source,
@@ -360,7 +381,7 @@ void LoadFromSource(
 }
 
 // any map.
-template <CAnyMap TMap, CYsonStructSource TSource>
+template <CYsonStructSource TSource, CAnyMap TMap>
 void LoadFromSource(
     TMap& parameter,
     TSource source,

@@ -942,6 +942,7 @@ inline std::shared_ptr<arrow::ArrayData> CopyTz(const std::shared_ptr<arrow::Arr
 
 using TPrimitiveDataTypeGetter = std::shared_ptr<arrow::DataType>(*)();
 using TPrimitiveDataScalarGetter= arrow::Datum(*)();
+using TPrimitiveDataScalarGetterWithMemPool = arrow::Datum(*)(void** result, arrow::MemoryPool*);
 using TUntypedBinaryScalarFuncPtr = void(*)(const void*, const void*, void*);
 using TUntypedBinaryArrayFuncPtr = void(*)(const void*, const void*, void*, int64_t length, int64_t offset1, int64_t offset2);
 using TUntypedBinaryScalarOptFuncPtr = bool(*)(const void*, const void*, void*);
@@ -1023,7 +1024,7 @@ arrow::Status ExecBinaryOptImpl(arrow::compute::KernelContext* kernelCtx,
 
 arrow::Status ExecDecimalBinaryOptImpl(arrow::compute::KernelContext* kernelCtx,
     const arrow::compute::ExecBatch& batch, arrow::Datum* res,
-    TPrimitiveDataTypeGetter typeGetter,
+    TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetterWithMemPool scalarGetter,
     size_t outputSizeOf,
     TUntypedBinaryScalarOptFuncPtr scalarScalarFunc,
     TUntypedBinaryArrayOptFuncPtr scalarArrayFunc,
@@ -1032,7 +1033,7 @@ arrow::Status ExecDecimalBinaryOptImpl(arrow::compute::KernelContext* kernelCtx,
 
 arrow::Status ExecDecimalUnaryImpl(arrow::compute::KernelContext* kernelCtx,
     const arrow::compute::ExecBatch& batch, arrow::Datum* res,
-    TPrimitiveDataTypeGetter typeGetter, 
+    TPrimitiveDataTypeGetter typeGetter,
     TUntypedUnaryScalarFuncPtr scalarFunc, TUntypedUnaryArrayFuncPtr arrayFunc);
 
 template<typename TInput1, bool Tz1, typename TInput2, bool Tz2, typename TOutput, EPropagateTz PropagateTz,
@@ -1664,6 +1665,12 @@ struct TDecimalKernelExecs
     using TInput2 = NYql::NDecimal::TInt128;
     using TOutput = NYql::NDecimal::TInt128;
 
+    static arrow::Datum ScalarGetter(void** result, arrow::MemoryPool* memory_pool) {
+        std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(16, memory_pool)));
+        *result = buffer->mutable_data();
+        return arrow::Datum(std::make_shared<TPrimitiveDataType<NYql::NDecimal::TInt128>::TScalarResult>(buffer));
+    }
+
     template<ui8 precision>
     static arrow::Status ExecImpl(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         auto scalarScalarFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance<precision>>::ScalarScalarCoreOpt;
@@ -1672,7 +1679,7 @@ struct TDecimalKernelExecs
         auto arrayArrayFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance<precision>>::ArrayArrayCoreOpt;
 
         return ExecDecimalBinaryOptImpl(kernelCtx, batch, res,
-            &GetPrimitiveDataType<TOutput>,
+            &GetPrimitiveDataType<TOutput>, &ScalarGetter,
             sizeof(TOutput),
             (TUntypedBinaryScalarOptFuncPtr)scalarScalarFunc,
             (TUntypedBinaryArrayOptFuncPtr)scalarArrayFunc,
@@ -1716,6 +1723,12 @@ struct TDecimalComparisonKernelExecs
     using TInput2 = NYql::NDecimal::TInt128;
     using TOutput = bool;
 
+    static arrow::Datum ScalarGetter(void** resMem, arrow::MemoryPool*) {
+        auto result = MakeDefaultScalarDatum<TOutput>();
+        *resMem = GetPrimitiveScalarValueMutablePtr(*result.scalar());
+        return result;
+    }
+
     static arrow::Status Exec(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         auto scalarScalarFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ScalarScalarCoreOpt;
         auto scalarArrayFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ScalarArrayCoreOpt;
@@ -1723,7 +1736,7 @@ struct TDecimalComparisonKernelExecs
         auto arrayArrayFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ArrayArrayCoreOpt;
 
         return ExecDecimalBinaryOptImpl(kernelCtx, batch, res,
-            &GetPrimitiveDataType<TOutput>,
+            &GetPrimitiveDataType<TOutput>, &ScalarGetter,
             sizeof(TOutput),
             (TUntypedBinaryScalarOptFuncPtr)scalarScalarFunc,
             (TUntypedBinaryArrayOptFuncPtr)scalarArrayFunc,

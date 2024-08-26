@@ -292,25 +292,22 @@ std::shared_ptr<arrow::compute::ScalarKernel> TDecimalKernel::MakeArrowKernel(co
     bool isOptional = false;
     auto dataType1 = UnpackOptionalData(static_cast<TBlockType*>(argTypes[0])->GetItemType(), isOptional);
     auto dataType2 = UnpackOptionalData(static_cast<TBlockType*>(argTypes[1])->GetItemType(), isOptional);
-    auto dataResultType = UnpackOptionalData(static_cast<TBlockType*>(resultType)->GetItemType(), isOptional);
+    auto resultDataType = UnpackOptionalData(static_cast<TBlockType*>(resultType)->GetItemType(), isOptional);
 
     MKQL_ENSURE(*dataType1->GetDataSlot() == NUdf::EDataSlot::Decimal, "Require decimal");
     MKQL_ENSURE(*dataType2->GetDataSlot() == NUdf::EDataSlot::Decimal, "Require decimal");
-    MKQL_ENSURE(*dataResultType->GetDataSlot() == NUdf::EDataSlot::Decimal, "Require decimal");
     
     auto decimalType1 = static_cast<TDataDecimalType*>(dataType1);
     auto decimalType2 = static_cast<TDataDecimalType*>(dataType2);
-    auto decimalResultType = static_cast<TDataDecimalType*>(dataResultType);
 
     MKQL_ENSURE(decimalType1->GetParams() == decimalType2->GetParams(), "Require same precision/scale");
-    MKQL_ENSURE(decimalType1->GetParams() == decimalResultType->GetParams(), "Require same precision/scale");
 
     ui8 precision = decimalType1->GetParams().first;
     MKQL_ENSURE(precision >= 1&& precision <= 35, TStringBuilder() << "Wrong precision: " << (int)precision);
 
     auto k = std::make_shared<arrow::compute::ScalarKernel>(std::vector<arrow::compute::InputType>{
         GetPrimitiveInputArrowType(NUdf::EDataSlot::Decimal), GetPrimitiveInputArrowType(NUdf::EDataSlot::Decimal)
-    }, GetPrimitiveOutputArrowType(NUdf::EDataSlot::Decimal), Exec);
+    }, GetPrimitiveOutputArrowType(*resultDataType->GetDataSlot()), Exec);
     k->null_handling = arrow::compute::NullHandling::INTERSECTION;
     k->init = [precision](arrow::compute::KernelContext*, const arrow::compute::KernelInitArgs&) {
         auto state = std::make_unique<TDecimalKernel::TKernelState>();
@@ -713,7 +710,8 @@ arrow::Status ExecDecimalScalarArrayOptImpl(const arrow::compute::ExecBatch& bat
 
 arrow::Status ExecDecimalScalarScalarOptImpl(arrow::compute::KernelContext* kernelCtx,
     const arrow::compute::ExecBatch& batch, arrow::Datum* res,
-    TPrimitiveDataTypeGetter typeGetter, TUntypedBinaryScalarOptFuncPtr func) {
+    TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetterWithMemPool scalarGetter,
+    TUntypedBinaryScalarOptFuncPtr func) {
     MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
     const auto& arg1 = batch.values[0];
     const auto& arg2 = batch.values[1];
@@ -722,9 +720,9 @@ arrow::Status ExecDecimalScalarScalarOptImpl(arrow::compute::KernelContext* kern
     } else {
         const auto val1Ptr = GetStringScalarValue(*arg1.scalar());
         const auto val2Ptr = GetStringScalarValue(*arg2.scalar());
-        std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(16, kernelCtx->memory_pool())));
-        auto resDatum = arrow::Datum(std::make_shared<TPrimitiveDataType<NYql::NDecimal::TInt128>::TScalarResult>(buffer));
-        if (!func(val1Ptr.data(), val2Ptr.data(), buffer->mutable_data())) {
+        void* resMem;
+        auto resDatum = scalarGetter(&resMem, kernelCtx->memory_pool());
+        if (!func(val1Ptr.data(), val2Ptr.data(), resMem)) {
             *res = arrow::MakeNullScalar(typeGetter());
         } else {
             *res = resDatum.scalar();
@@ -736,7 +734,7 @@ arrow::Status ExecDecimalScalarScalarOptImpl(arrow::compute::KernelContext* kern
 
 arrow::Status ExecDecimalBinaryOptImpl(arrow::compute::KernelContext* kernelCtx,
     const arrow::compute::ExecBatch& batch, arrow::Datum* res,
-    TPrimitiveDataTypeGetter typeGetter,
+    TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetterWithMemPool scalarGetter,
     size_t outputSizeOf,
     TUntypedBinaryScalarOptFuncPtr scalarScalarFunc,
     TUntypedBinaryArrayOptFuncPtr scalarArrayFunc,
@@ -747,7 +745,7 @@ arrow::Status ExecDecimalBinaryOptImpl(arrow::compute::KernelContext* kernelCtx,
     const auto& arg2 = batch.values[1];
     if (arg1.is_scalar()) {
         if (arg2.is_scalar()) {
-            return ExecDecimalScalarScalarOptImpl(kernelCtx, batch, res, typeGetter, scalarScalarFunc);
+            return ExecDecimalScalarScalarOptImpl(kernelCtx, batch, res, typeGetter, scalarGetter, scalarScalarFunc);
         } else {
             return ExecDecimalScalarArrayOptImpl(batch, res, scalarArrayFunc);
         }
@@ -769,8 +767,7 @@ arrow::Status ExecDecimalScalarImpl(arrow::compute::KernelContext* kernelCtx,
         const auto valPtr = GetPrimitiveScalarValuePtr(*arg.scalar());
         std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(16, kernelCtx->memory_pool())));
         auto resDatum = arrow::Datum(std::make_shared<TPrimitiveDataType<NYql::NDecimal::TInt128>::TScalarResult>(buffer));
-        const auto resPtr = GetPrimitiveScalarValueMutablePtr(*resDatum.scalar());
-        func(valPtr, resPtr);
+        func(valPtr, buffer->mutable_data());
         *res = resDatum.scalar();
     }
 

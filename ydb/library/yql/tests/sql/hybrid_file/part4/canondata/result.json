@@ -489,6 +489,20 @@
             "uri": "https://{canondata_backend}/1920236/24fc177ad15ffb34261b5dbf2e1c5c96c4ad7faf/resource.tar.gz#test.test_blocks-date_sub_interval_scalar--Plan_/plan.txt"
         }
     ],
+    "test.test[blocks-decimal_comparison--Debug]": [
+        {
+            "checksum": "d9a0988969c48defdd31a7b6259e79f0",
+            "size": 3807,
+            "uri": "https://{canondata_backend}/1784826/2b2e157f3cee0db3cfdb7f3fc538c5f30f0b593e/resource.tar.gz#test.test_blocks-decimal_comparison--Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[blocks-decimal_comparison--Plan]": [
+        {
+            "checksum": "e65c86ba6e55033fe5f47711b65bba6d",
+            "size": 4093,
+            "uri": "https://{canondata_backend}/1784826/2b2e157f3cee0db3cfdb7f3fc538c5f30f0b593e/resource.tar.gz#test.test_blocks-decimal_comparison--Plan_/plan.txt"
+        }
+    ],
     "test.test[blocks-distinct_pure_all--Debug]": [
         {
             "checksum": "a368ba0efe31dc0503d90694682eb845",

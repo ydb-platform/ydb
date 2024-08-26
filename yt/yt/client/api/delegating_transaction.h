@@ -256,6 +256,15 @@ public:
         const std::vector<TSharedRef>& serializedRows,
         const TPushQueueProducerOptions& options) override;
 
+    // Distributed table client
+    TFuture<TDistributedWriteSessionPtr> StartDistributedWriteSession(
+        const NYPath::TRichYPath& path,
+        const TDistributedWriteSessionStartOptions& options = {}) override;
+
+    TFuture<void> FinishDistributedWriteSession(
+        TDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionFinishOptions& options = {}) override;
+
 protected:
     const ITransactionPtr Underlying_;
 };

@@ -6,6 +6,11 @@
 
 #include <yt/yt/core/actions/callback.h>
 
+#include <yt/yt/core/phoenix/context.h>
+#include <yt/yt/core/phoenix/polymorphic.h>
+#include <yt/yt/core/phoenix/type_decl.h>
+#include <yt/yt/core/phoenix/type_def.h>
+
 #include <typeinfo>
 
 namespace NYT::NPhoenix {
@@ -17,20 +22,16 @@ constexpr ui32 NullObjectId       = 0x00000000;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TDynamicTag
-{
-    virtual ~TDynamicTag() = default;
-};
+using NPhoenix2::NDetail::TSerializer;
+using NPhoenix2::TLoadContext;
+using NPhoenix2::TSaveContext;
 
-template <class TFactory>
-struct TFactoryTag
-{ };
+using TDynamicTag = NPhoenix2::TPolymorphicBase;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TSerializer;
-
-class TContextBase
+template <class TFactory>
+struct TFactoryTag
 { };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -202,14 +203,16 @@ struct TDynamicInitializer<TType, tag, TRefCountedFactory>
 
 #define DECLARE_DYNAMIC_PHOENIX_TYPE(...)                             \
     static ::NYT::NPhoenix::TDynamicInitializer<__VA_ARGS__>          \
-        DynamicPhoenixInitializer
+        DynamicPhoenixInitializer;                                    \
+    PHOENIX_DECLARE_OPAQUE_TYPE(__VA_ARGS__)
 
 // __VA_ARGS__ are used because sometimes we want a template type
 // to be an argument but the single macro argument may not contain
 // commas. Dat preprocessor :/
 #define DEFINE_DYNAMIC_PHOENIX_TYPE(...)                              \
     decltype(__VA_ARGS__::DynamicPhoenixInitializer)                  \
-        __VA_ARGS__::DynamicPhoenixInitializer
+        __VA_ARGS__::DynamicPhoenixInitializer;                       \
+    PHOENIX_DEFINE_OPAQUE_TYPE(__VA_ARGS__)
 
 #define INHERIT_DYNAMIC_PHOENIX_TYPE(baseType, type, tag)             \
 class type                                                            \
@@ -232,61 +235,6 @@ public:                                                                  \
 private:                                                                 \
     DECLARE_DYNAMIC_PHOENIX_TYPE(type, tag);                             \
 }
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TSaveContext
-    : public TContextBase
-    , public TStreamSaveContext
-{
-public:
-    explicit TSaveContext(
-        IZeroCopyOutput* output,
-        int version = 0);
-
-    ui32 FindId(void* basePtr, const std::type_info* typeInfo) const;
-    ui32 GenerateId(void* basePtr, const std::type_info* typeInfo);
-
-private:
-    mutable TIdGenerator IdGenerator_;
-
-    struct TEntry
-    {
-        ui32 Id;
-        const std::type_info* TypeInfo;
-    };
-
-    mutable THashMap<void*, TEntry> PtrToEntry_;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-template <class T, class = void>
-struct TInstantiatedRegistrar;
-
-class TLoadContext
-    : public TContextBase
-    , public TStreamLoadContext
-{
-public:
-    using TStreamLoadContext::TStreamLoadContext;
-    ~TLoadContext();
-
-    void RegisterObject(ui32 id, void* basePtr);
-    void* GetObject(ui32 id) const;
-
-    template <class T>
-    void RegisterInstantiatedObject(T* rawPtr);
-
-private:
-    THashMap<ui32, void*> IdToPtr_;
-
-    template <class T, class>
-    friend struct TInstantiatedRegistrar;
-
-    std::vector<std::function<void()>> Deletors_;
-
-};
 
 ////////////////////////////////////////////////////////////////////////////////
 

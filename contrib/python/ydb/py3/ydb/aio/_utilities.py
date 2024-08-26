@@ -7,6 +7,9 @@ class AsyncResponseIterator(object):
         self.it.cancel()
         return self
 
+    def __iter__(self):
+        return self
+
     def __aiter__(self):
         return self
 

@@ -53,12 +53,15 @@ inline ui64 GetHardLimitBytes(const NKikimrConfig::TMemoryControllerConfig& conf
         if (info.CGroupLimit.has_value()) {
             hardLimitBytes = Min(hardLimitBytes, info.CGroupLimit.value());
         }
+        if (info.MemTotal.has_value()) {
+            hardLimitBytes = Min(hardLimitBytes, info.MemTotal.value());
+        }
         return hardLimitBytes;
     }
     if (info.CGroupLimit.has_value()) {
         return info.CGroupLimit.value();
     }
-    if (info.MemTotal) {
+    if (info.MemTotal.has_value()) {
         hasMemTotalHardLimit = true;
         return info.MemTotal.value();
     }

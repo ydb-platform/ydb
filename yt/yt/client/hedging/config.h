@@ -37,7 +37,7 @@ struct THedgingClientOptions
     {
         TClientOptions(
             NApi::IClientPtr client,
-            TString clusterName,
+            const std::string& clusterName,
             TDuration initialPenalty,
             TCounterPtr counter = {});
 
@@ -47,7 +47,7 @@ struct THedgingClientOptions
             TCounterPtr counter = {});
 
         NApi::IClientPtr Client;
-        TString ClusterName;
+        std::string ClusterName;
         TDuration InitialPenalty;
         TCounterPtr Counter;
     };

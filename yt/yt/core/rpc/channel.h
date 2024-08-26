@@ -135,7 +135,7 @@ DEFINE_REFCOUNTED_TYPE(IChannel)
 struct IChannelFactory
     : public virtual TRefCounted
 {
-    virtual IChannelPtr CreateChannel(const TString& address) = 0;
+    virtual IChannelPtr CreateChannel(const std::string& address) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IChannelFactory)

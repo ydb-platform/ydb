@@ -46,6 +46,7 @@ class THunkChunkRef;
 class TColumnMetaExt;
 class TVersionedRowDigestExt;
 class TCompressionDictionaryExt;
+class TVersionedReadOptions;
 
 } // namespace NProto
 
@@ -117,6 +118,9 @@ constexpr int MaxColumnId = 32 * 1024;
 constexpr int MaxSchemaTotalTypeComplexity = MaxColumnId;
 constexpr int MaxSchemaDepth = 32;
 
+
+extern const TString PrimaryLockName;
+
 extern const TString SystemColumnNamePrefix;
 extern const TString TableIndexColumnName;
 extern const TString RowIndexColumnName;
@@ -127,7 +131,6 @@ extern const TString TtlColumnName;
 extern const TString TimestampColumnPrefix;
 extern const TString CumulativeDataWeightColumnName;
 extern const TString EmptyValueColumnName;
-extern const TString PrimaryLockName;
 extern const TString SequenceNumberColumnName;
 
 constexpr int TypicalHunkColumnCount = 8;

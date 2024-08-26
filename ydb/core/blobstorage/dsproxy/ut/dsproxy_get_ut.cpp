@@ -1167,6 +1167,9 @@ bool SpecificTestCorrupted(TErasureType::EErasureSpecies erasureSpecies, ui32 ba
 
     UNIT_ASSERT(getResult);
     UNIT_ASSERT_VALUES_EQUAL(getResult->ResponseSz, 1);
+    if (getResult->Responses[0].IntegrityCheckFailed) {
+        UNIT_ASSERT(getResult->Responses[0].CorruptedPartFound);
+    }
     return getResult->Responses[0].Status == NKikimrProto::ERROR && getResult->Responses[0].IntegrityCheckFailed;
 }
 

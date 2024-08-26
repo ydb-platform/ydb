@@ -16,7 +16,8 @@ namespace {
 
 using TKSV = std::tuple<ui64, ui64, TStringBuf>;
 using TKSVSet = TSet<std::tuple_element_t<0, TKSV>>;
-using TArrays = std::array<std::shared_ptr<arrow::ArrayData>, std::tuple_size_v<TKSV>>;
+template <typename TupleType>
+using TArrays = std::array<std::shared_ptr<arrow::ArrayData>, std::tuple_size_v<TupleType>>;
 
 TVector<TString> GenerateValues(size_t level) {
     constexpr size_t alphaSize = 'Z' - 'A' + 1;
@@ -76,10 +77,10 @@ const TRuntimeNode MakeRightNode(TProgramBuilder& pgmBuilder, const TRightPayloa
     }
 }
 
-TArrays KSVToArrays(const TVector<TKSV>& ksvVector, size_t current,
+TArrays<TKSV> KSVToArrays(const TVector<TKSV>& ksvVector, size_t current,
     size_t blockSize, arrow::MemoryPool* memoryPool
 ) {
-    TArrays arrays;
+    TArrays<TKSV> arrays;
     arrow::UInt64Builder keysBuilder(memoryPool);
     arrow::UInt64Builder subkeysBuilder(memoryPool);
     arrow::BinaryBuilder valuesBuilder(memoryPool);
@@ -98,9 +99,12 @@ TArrays KSVToArrays(const TVector<TKSV>& ksvVector, size_t current,
     return arrays;
 }
 
-TVector<TKSV> ArraysToKSV(const TArrays& arrays, const int64_t blockSize) {
-    TVector<TKSV> ksvVector;
-    for (size_t i = 0; i < std::tuple_size_v<TKSV>; i++) {
+template <typename TupleType>
+TVector<TupleType> ArraysToTuples(const TArrays<TupleType>& arrays,
+    const int64_t blockSize
+) {
+    TVector<TupleType> tuplesVector;
+    for (size_t i = 0; i < std::tuple_size_v<TupleType>; i++) {
         Y_ENSURE(arrays[i]->length == blockSize,
             "Array size differs from the given block size");
         Y_ENSURE(arrays[i]->GetNullCount() == 0,
@@ -108,15 +112,15 @@ TVector<TKSV> ArraysToKSV(const TArrays& arrays, const int64_t blockSize) {
         Y_ENSURE(arrays[i]->buffers.size() == 2 + (i > 1),
             "Array layout doesn't respect the schema");
     }
-    const ui64* keyBuffer = arrays[0]->GetValuesSafe<ui64>(1);
-    const ui64* subkeyBuffer = arrays[1]->GetValuesSafe<ui64>(1);
-    const int32_t* offsets = arrays[2]->GetValuesSafe<int32_t>(1);
-    const char* valuesBuffer = arrays[2]->GetValuesSafe<char>(2, 0);
+    const ui64* keyBuffer = arrays[0]->template GetValuesSafe<ui64>(1);
+    const ui64* subkeyBuffer = arrays[1]->template GetValuesSafe<ui64>(1);
+    const int32_t* offsets = arrays[2]->template GetValuesSafe<int32_t>(1);
+    const char* valuesBuffer = arrays[2]->template GetValuesSafe<char>(2, 0);
     for (auto i = 0; i < blockSize; i++) {
         const TStringBuf value(valuesBuffer + offsets[i], offsets[i + 1] - offsets[i]);
-        ksvVector.push_back(std::make_tuple(keyBuffer[i], subkeyBuffer[i], value));
+        tuplesVector.push_back(std::make_tuple(keyBuffer[i], subkeyBuffer[i], value));
     }
-    return ksvVector;
+    return tuplesVector;
 }
 
 const TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKind,
@@ -152,8 +156,10 @@ const TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKin
     return rootNode;
 }
 
-TVector<TKSV> DoTestBlockJoinOnUint64(EJoinKind joinKind,
-    TVector<TKSV> leftValues, TKSVSet rightValues, size_t blockSize
+template <typename TOutputTuple, typename TDictPayloadType
+    = std::conditional<std::is_same_v<TOutputTuple, TKSV>, TKSVSet, void>>
+TVector<TOutputTuple> DoTestBlockJoinOnUint64(EJoinKind joinKind,
+    TVector<TKSV> leftValues, TDictPayloadType rightValues, size_t blockSize
 ) {
     TSetup<false> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
@@ -170,6 +176,7 @@ TVector<TKSV> DoTestBlockJoinOnUint64(EJoinKind joinKind,
     });
     // Mind the last block length column.
     const auto ksvWidth = AS_TYPE(TTupleType, ksvType)->GetElementsCount() - 1;
+    constexpr size_t outWidth = std::tuple_size_v<TOutputTuple>;
 
     TRuntimeNode leftArg;
     const auto rootNode = BuildBlockJoin(pb, joinKind, {0}, leftArg, ksvType, dict);
@@ -197,25 +204,25 @@ TVector<TKSV> DoTestBlockJoinOnUint64(EJoinKind joinKind,
     leftBlocks->SetValue(ctx, holderFactory.CreateDirectListHolder(std::move(leftListValues)));
     const auto joinIterator = graph->GetValue().GetListIterator();
 
-    TVector<TKSV> resultKSV;
-    TArrays arrays;
+    TVector<TOutputTuple> resultTuples;
+    TArrays<TOutputTuple> arrays;
     NUdf::TUnboxedValue value;
     while (joinIterator.Next(value)) {
-        for (size_t i = 0; i < ksvWidth; i++) {
+        for (size_t i = 0; i < outWidth; i++) {
             const auto arrayValue = value.GetElement(i);
             const auto arrayDatum = TArrowBlock::From(arrayValue).GetDatum();
             UNIT_ASSERT(arrayDatum.is_array());
             arrays[i] = arrayDatum.array();
         }
-        const auto blockLengthValue = value.GetElement(ksvWidth);
+        const auto blockLengthValue = value.GetElement(outWidth);
         const auto blockLengthDatum = TArrowBlock::From(blockLengthValue).GetDatum();
         Y_ENSURE(blockLengthDatum.is_scalar());
         const auto blockLength = blockLengthDatum.scalar_as<arrow::UInt64Scalar>().value;
-        const auto blockKSV = ArraysToKSV(arrays, blockLength);
-        resultKSV.insert(resultKSV.end(), blockKSV.cbegin(), blockKSV.cend());
+        const auto blockTuples = ArraysToTuples<TOutputTuple>(arrays, blockLength);
+        resultTuples.insert(resultTuples.end(), blockTuples.cbegin(), blockTuples.cend());
     }
-    std::sort(resultKSV.begin(), resultKSV.end());
-    return resultKSV;
+    std::sort(resultTuples.begin(), resultTuples.end());
+    return resultTuples;
 }
 
 void TestBlockJoinOnUint64(EJoinKind joinKind) {
@@ -237,7 +244,7 @@ void TestBlockJoinOnUint64(EJoinKind joinKind) {
         });
 
     for (size_t blockSize = 8; blockSize <= testSize; blockSize <<= 1) {
-        const auto gotKSV = DoTestBlockJoinOnUint64(joinKind, testKSV, fib, blockSize);
+        const auto gotKSV = DoTestBlockJoinOnUint64<TKSV>(joinKind, testKSV, fib, blockSize);
         UNIT_ASSERT_EQUAL(expectedKSV, gotKSV);
     }
 }

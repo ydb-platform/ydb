@@ -4,7 +4,7 @@
 
 {% include [OLAP_not_allow_text](../../_includes/not_allow_for_olap_text.md) %}
 
-Вместо `DELETE FROM` для удаления данных из колоночных таблиц можно воспользоваться механизмом удаления строк по времени — [TTL](../../concepts/ttl.md). TTL можно задать при [создании](../../yql/reference/syntax/create_table.md) строковой или колоночной таблицы (`CREATE TABLE`) или при их [изменении](../../yql/reference/syntax/alter_table.md) (`ALTER TABLE`).
+Вместо `DELETE FROM` для удаления данных из колоночных таблиц можно воспользоваться механизмом удаления строк по времени — [TTL](../../concepts/ttl.md). TTL можно задать при [создании](../../yql/reference/syntax/create_table.md) строковой или колоночной таблицы (`CREATE TABLE`) или при их [изменении](../../yql/reference/syntax/alter_table/index.md) (`ALTER TABLE`).
 
 {% endnote %}
 

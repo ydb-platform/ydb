@@ -484,7 +484,7 @@ public:
                 return;
             case EStatus::Ok:
                 if (!IsSubDomainPath(result)) {
-                    Reply(Ydb::StatusIds::UNSUPPORTED, TStringBuilder() << "Invalid database path " << Database << ", expected domain or subdomain path");
+                    Reply(Ydb::StatusIds::UNSUPPORTED, TStringBuilder() << "Invalid database path " << Database << ", please check path correctness");
                     return;
                 }
                 if (result.DomainInfo) {

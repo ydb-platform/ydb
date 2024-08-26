@@ -218,7 +218,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
     }
 
     Y_UNIT_TEST(ExternalTableDdlLocationValidation) {
-        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto kikimr = MakeKikimrRunner(NYql::IHTTPGateway::Make());
         auto db = kikimr->GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto query = TStringBuilder() << R"(

@@ -106,7 +106,7 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor {
     void SendBlockRequest(const TVDiskID& vdiskId) {
         const ui64 cookie = TVDiskIdShort(vdiskId).GetRaw();
 
-        R_LOG_DEBUG_S("DSPB03", "Sending TEvVBlock Tablet# " << TabletId
+        DSP_LOG_DEBUG_S("DSPB03", "Sending TEvVBlock Tablet# " << TabletId
             << " Generation# " << Generation
             << " vdiskId# " << vdiskId
             << " node# " << Info->GetActorId(vdiskId).NodeId());
@@ -143,7 +143,7 @@ public:
     {}
 
     void Bootstrap() override {
-        R_LOG_DEBUG_S("DSPB05", "bootstrap"
+        DSP_LOG_DEBUG_S("DSPB05", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
             << " TabletId# " << TabletId

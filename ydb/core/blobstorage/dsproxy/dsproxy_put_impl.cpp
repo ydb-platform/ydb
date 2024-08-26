@@ -76,7 +76,7 @@ void TPutImpl::PrepareOneReply(NKikimrProto::EReplyStatus status, size_t blobIdx
 
 void TPutImpl::PrepareReply(NKikimrProto::EReplyStatus status, TLogContext &logCtx, TString errorReason,
         TPutResultVec &outPutResults) {
-    R_LOG_DEBUG_SX(logCtx, "BPP34", "PrepareReply status# " << status << " errorReason# " << errorReason);
+    DSP_LOG_DEBUG_SX(logCtx, "BPP34", "PrepareReply status# " << status << " errorReason# " << errorReason);
     for (size_t blobIdx = 0; blobIdx < Blobs.size(); ++blobIdx) {
         PrepareOneReply(status, blobIdx, logCtx, errorReason, outPutResults);
     }

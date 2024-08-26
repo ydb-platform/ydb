@@ -159,7 +159,7 @@ public:
     {}
 
     void Bootstrap() override {
-        R_LOG_INFO_S("DSPC03", "bootstrap"
+        DSP_LOG_INFO_S("DSPC03", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
             << " TabletId# " << TabletId
@@ -174,11 +174,11 @@ public:
             << " RestartCounter# " << RestartCounter);
 
         for (const auto& item : Keep ? *Keep : TVector<TLogoBlobID>()) {
-            R_LOG_INFO_S("DSPC04", "Keep# " << item);
+            DSP_LOG_INFO_S("DSPC04", "Keep# " << item);
         }
 
         for (const auto& item : DoNotKeep ? *DoNotKeep : TVector<TLogoBlobID>()) {
-            R_LOG_INFO_S("DSPC05", "DoNotKeep# " << item);
+            DSP_LOG_INFO_S("DSPC05", "DoNotKeep# " << item);
         }
 
         for (const auto& vdisk : Info->GetVDisks()) {

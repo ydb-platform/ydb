@@ -81,7 +81,7 @@ namespace NKikimr {
                         TLogoBlobID id(state.Id, partIdx + 1);
                         groupDiskRequests.AddGet(disk.OrderNumber, id, needed);
                         diskPart.Requested = needed;
-                        R_LOG_DEBUG_SX(logCtx, "3DCGR10", "sending Get"
+                        DSP_LOG_DEBUG_SX(logCtx, "3DCGR10", "sending Get"
                                 << " diskIdx# " << diskIdx
                                 << " OrderNumber# " << disk.OrderNumber
                                 << " Requested# " << diskPart.Requested.ToString()
@@ -159,7 +159,7 @@ namespace NKikimr {
                 }
             }
 
-            R_LOG_DEBUG_SX(logCtx, "3DCGR02", "CheckForFailureErrorNoData"
+            DSP_LOG_DEBUG_SX(logCtx, "3DCGR02", "CheckForFailureErrorNoData"
                 << " state# " << state.ToString());
 
             // check if we do not excess the fail model

@@ -46,7 +46,7 @@ class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor {
 
         const TEvBlobStorage::TEvGetResult &res = *ev->Get();
         if (res.Status != NKikimrProto::OK) {
-            R_LOG_ERROR_S("BPMG1", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(res.Status));
+            DSP_LOG_ERROR_S("BPMG1", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(res.Status));
             ReplyAndDie(res.Status);
             return;
         }
@@ -156,7 +156,7 @@ public:
             str << "}";
             return str.Str();
         };
-        R_LOG_INFO_S("BPMG3", "bootstrap"
+        DSP_LOG_INFO_S("BPMG3", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
             << " Query# " << dumpQuery()

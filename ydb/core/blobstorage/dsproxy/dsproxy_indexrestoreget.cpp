@@ -35,7 +35,7 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
     THashMap<TLogoBlobID, std::pair<bool, bool>> KeepFlags;
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status) override {
-        R_LOG_INFO_S("DSPI14", "ReplyAndDie"
+        DSP_LOG_INFO_S("DSPI14", "ReplyAndDie"
             << " Reply with status# " << NKikimrProto::EReplyStatus_Name(status)
             << " PendingResult# " << (PendingResult ? PendingResult->ToString().data() : "nullptr"));
         if (status != NKikimrProto::OK) {
@@ -88,7 +88,7 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
         Y_ABORT_UNLESS(VGetsInFlight > 0);
         --VGetsInFlight;
 
-        R_LOG_DEBUG_S("DSPI10", "Handle TEvVGetResult"
+        DSP_LOG_DEBUG_S("DSPI10", "Handle TEvVGetResult"
             << " status# " << NKikimrProto::EReplyStatus_Name(status).data()
             << " VDiskId# " << vdisk
             << " ev# " << ev->Get()->ToString());
@@ -142,10 +142,10 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
             Y_ABORT_UNLESS(it != KeepFlags.end());
             std::tie(a.Keep, a.DoNotKeep) = it->second;
 
-            R_LOG_DEBUG_S("DSPI11", "OnEnoughVGetResults Id# " << q.Id << " BlobStatus# " << DumpBlobStatus(idx));
+            DSP_LOG_DEBUG_S("DSPI11", "OnEnoughVGetResults Id# " << q.Id << " BlobStatus# " << DumpBlobStatus(idx));
 
             if (blobState == TBlobStorageGroupInfo::EBS_DISINTEGRATED) {
-                R_LOG_ERROR_S("DSPI04", "OnEnoughVGetResults"
+                DSP_LOG_ERROR_S("DSPI04", "OnEnoughVGetResults"
                     << " disintegrated, id# " << Queries[idx].Id.ToString()
                     << " BlobStatus# " << DumpBlobStatus(idx));
                 ReplyAndDie(NKikimrProto::ERROR);
@@ -156,7 +156,7 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
                 // Proove it using part bits from VDisks
                 if (lostByIngress) {
                     // The blob might actually be written! Report the error!
-                    R_LOG_ERROR_S("DSPI05", "OnEnoughVGetResults for tablet# " << TabletId
+                    DSP_LOG_ERROR_S("DSPI05", "OnEnoughVGetResults for tablet# " << TabletId
                         << " unrecoverable blob, id# " << Queries[idx].Id.ToString()
                         << " BlobStatus# " << DumpBlobStatus(idx));
                     if (IngressAsAReasonForErrorEnabled) {
@@ -172,7 +172,7 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
                     Queries[idx].Id, 0, 0, Deadline,
                     GetHandleClass, true));
                 get->Decommission = Decommission;
-                R_LOG_DEBUG_S("DSPI12", "OnEnoughVGetResults"
+                DSP_LOG_DEBUG_S("DSPI12", "OnEnoughVGetResults"
                         << " recoverable blob, id# " << Queries[idx].Id.ToString()
                         << " BlobStatus# " << DumpBlobStatus(idx)
                         << " sending EvGet");
@@ -190,7 +190,7 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
 
         Become(&TBlobStorageGroupIndexRestoreGetRequest::StateRestore);
 
-        R_LOG_DEBUG_S("DSPI13", "OnEnoughVGetResults"
+        DSP_LOG_DEBUG_S("DSPI13", "OnEnoughVGetResults"
             << " Become StateRestore RestoreQueriesStarted# " << RestoreQueriesStarted);
 
         return;
@@ -200,7 +200,7 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
         TEvBlobStorage::TEvGetResult &getResult = *ev->Get();
         NKikimrProto::EReplyStatus status = getResult.Status;
         if (status != NKikimrProto::OK) {
-            R_LOG_ERROR_S("DSPI06", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(status).data()
+            DSP_LOG_ERROR_S("DSPI06", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(status).data()
                 << " for tablet# " << TabletId
                 << " BlobStatus# " << DumpBlobStatus());
             ReplyAndDie(status);
@@ -211,7 +211,7 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
         for (ui32 i = 0; i < getResult.ResponseSz; ++i) {
             TEvBlobStorage::TEvGetResult::TResponse &response = getResult.Responses[i];
             if (response.Status != NKikimrProto::OK) {
-                R_LOG_ERROR_S("DSPI07", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(status)
+                DSP_LOG_ERROR_S("DSPI07", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(status)
                     << " Response[" << i << "]# " << NKikimrProto::EReplyStatus_Name(response.Status)
                     << " for tablet# " << TabletId
                     << " BlobStatus# " << DumpBlobStatus());
@@ -298,7 +298,7 @@ public:
             str << "}";
             return str.Str();
         };
-        R_LOG_INFO_S("DSPI09", "bootstrap"
+        DSP_LOG_INFO_S("DSPI09", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
             << " QuerySize# " << QuerySize

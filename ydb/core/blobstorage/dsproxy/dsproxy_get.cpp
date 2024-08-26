@@ -247,7 +247,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
             << " sent over MaxSaneRequests# " << MaxSaneRequests
             << " requests, internal state# " << GetImpl.DumpFullState();
         ErrorReason = err.Str();
-        R_LOG_CRIT_S("BPG70", ErrorReason);
+        DSP_LOG_CRIT_S("BPG70", ErrorReason);
         ReplyAndDie(NKikimrProto::ERROR);
     }
 
@@ -427,7 +427,7 @@ public:
     }
 
     void Bootstrap() override {
-        R_LOG_INFO_S("BPG01", "bootstrap"
+        DSP_LOG_INFO_S("BPG01", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
             << " Query# " << GetImpl.DumpQuery()

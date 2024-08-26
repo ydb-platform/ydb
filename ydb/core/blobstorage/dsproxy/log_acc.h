@@ -87,6 +87,7 @@ namespace NKikimr {
 
 #if ENABLE_LOG_ACCUMULATION
     #define A_LOG_LOG_S_IMPL(accumulator, priority, component, stream) \
+        #error "deprecated, isRelease is removed"
         do { \
             ::NActors::NLog::TSettings *mSettings = \
                 (::NActors::NLog::TSettings*)(TActivationContext::LoggerSettings()); \
@@ -152,38 +153,38 @@ namespace NKikimr {
 #define DSP_LOG_LOG_S(priority, marker, stream) \
     DSP_LOG_LOG_SX(LogCtx, priority, marker, stream)
 
-#define R_LOG_EMERG_S(marker, stream)  \
+#define DSP_LOG_EMERG_S(marker, stream)  \
     DSP_LOG_LOG_S(NActors::NLog::PRI_EMERG, marker, stream)
-#define R_LOG_ALERT_S(marker, stream)  \
+#define DSP_LOG_ALERT_S(marker, stream)  \
     DSP_LOG_LOG_S(NActors::NLog::PRI_ALERT, marker, stream)
-#define R_LOG_CRIT_S(marker, stream)   \
+#define DSP_LOG_CRIT_S(marker, stream)   \
     DSP_LOG_LOG_S(NActors::NLog::PRI_CRIT, marker, stream)
-#define R_LOG_ERROR_S(marker, stream)  \
+#define DSP_LOG_ERROR_S(marker, stream)  \
     DSP_LOG_LOG_S(NActors::NLog::PRI_ERROR, marker, stream)
-#define R_LOG_WARN_S(marker, stream)   \
+#define DSP_LOG_WARN_S(marker, stream)   \
     DSP_LOG_LOG_S(NActors::NLog::PRI_WARN, marker, stream)
-#define R_LOG_NOTICE_S(marker, stream) \
+#define DSP_LOG_NOTICE_S(marker, stream) \
     DSP_LOG_LOG_S(NActors::NLog::PRI_NOTICE, marker, stream)
-#define R_LOG_INFO_S(marker, stream)   \
+#define DSP_LOG_INFO_S(marker, stream)   \
     DSP_LOG_LOG_S(NActors::NLog::PRI_INFO, marker, stream)
-#define R_LOG_DEBUG_S(marker, stream)  \
+#define DSP_LOG_DEBUG_S(marker, stream)  \
     DSP_LOG_LOG_S(NActors::NLog::PRI_DEBUG, marker, stream)
 
-#define R_LOG_EMERG_SX(logCtx, marker, stream)  \
+#define DSP_LOG_EMERG_SX(logCtx, marker, stream)  \
     DSP_LOG_LOG_SX(logCtx, NActors::NLog::PRI_EMERG, marker, stream)
-#define R_LOG_ALERT_SX(logCtx, marker, stream)  \
+#define DSP_LOG_ALERT_SX(logCtx, marker, stream)  \
     DSP_LOG_LOG_SX(logCtx, NActors::NLog::PRI_ALERT, marker, stream)
-#define R_LOG_CRIT_SX(logCtx, marker, stream)   \
+#define DSP_LOG_CRIT_SX(logCtx, marker, stream)   \
     DSP_LOG_LOG_SX(logCtx, NActors::NLog::PRI_CRIT, marker, stream)
-#define R_LOG_ERROR_SX(logCtx, marker, stream)  \
+#define DSP_LOG_ERROR_SX(logCtx, marker, stream)  \
     DSP_LOG_LOG_SX(logCtx, NActors::NLog::PRI_ERROR, marker, stream)
-#define R_LOG_WARN_SX(logCtx, marker, stream)   \
+#define DSP_LOG_WARN_SX(logCtx, marker, stream)   \
     DSP_LOG_LOG_SX(logCtx, NActors::NLog::PRI_WARN, marker, stream)
-#define R_LOG_NOTICE_SX(logCtx, marker, stream) \
+#define DSP_LOG_NOTICE_SX(logCtx, marker, stream) \
     DSP_LOG_LOG_SX(logCtx, NActors::NLog::PRI_NOTICE, marker, stream)
-#define R_LOG_INFO_SX(logCtx, marker, stream)   \
+#define DSP_LOG_INFO_SX(logCtx, marker, stream)   \
     DSP_LOG_LOG_SX(logCtx, NActors::NLog::PRI_INFO, marker, stream)
-#define R_LOG_DEBUG_SX(logCtx, marker, stream)  \
+#define DSP_LOG_DEBUG_SX(logCtx, marker, stream)  \
     DSP_LOG_LOG_SX(logCtx, NActors::NLog::PRI_DEBUG, marker, stream)
 
 } // NKikimr

@@ -94,7 +94,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
             << " sent over MaxSaneRequests# " << MaxSaneRequests
             << " requests, internal state# " << PutImpl.DumpFullState();
         ErrorReason = err.Str();
-        R_LOG_CRIT_S("BPG21", ErrorReason);
+        DSP_LOG_CRIT_S("BPG21", ErrorReason);
         ReplyAndDie(NKikimrProto::ERROR);
     }
 
@@ -215,7 +215,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
             }
 
             const TVDiskID vdiskId = Info->GetVDiskId(i);
-            R_LOG_INFO_S("BPP15", "sending TEvVStatus VDiskId# " << vdiskId);
+            DSP_LOG_INFO_S("BPP15", "sending TEvVStatus VDiskId# " << vdiskId);
             SendToQueue(std::make_unique<TEvBlobStorage::TEvVStatus>(vdiskId), i);
             ++StatusMsgsSent;
             record.StatusIssueTimestamp = now;
@@ -225,7 +225,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
     }
 
     void Handle(TEvBlobStorage::TEvVStatusResult::TPtr& ev) {
-        R_LOG_INFO_S("BPP16", "received TEvVStatusResult " << ev->Get()->ToString());
+        DSP_LOG_INFO_S("BPP16", "received TEvVStatusResult " << ev->Get()->ToString());
 
         ProcessReplyFromQueue(ev->Get());
         ++StatusResultMsgsReceived;
@@ -608,7 +608,7 @@ public:
     }
 
     void Bootstrap() override {
-        R_LOG_INFO_S("BPP13", "bootstrap"
+        DSP_LOG_INFO_S("BPP13", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
             << " BlobCount# " << PutImpl.Blobs.size()
@@ -684,7 +684,7 @@ public:
     }
 
     void HandleWakeup() {
-        R_LOG_WARN_S("BPP14", "Wakeup "
+        DSP_LOG_WARN_S("BPP14", "Wakeup "
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
             << " BlobIDs# " << BlobIdSequenceToString()

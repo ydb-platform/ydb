@@ -623,7 +623,7 @@ namespace NKikimr {
                 << vdiskId.ToString());
         }
 
-        R_LOG_INFO_S("DSP99", "Handing RACE response from " << vdiskId << " GroupGeneration# " << Info->GroupGeneration
+        DSP_LOG_INFO_S("DSP99", "Handing RACE response from " << vdiskId << " GroupGeneration# " << Info->GroupGeneration
             << " Response# " << SingleLineProto(record));
 
         // process the RACE status

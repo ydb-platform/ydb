@@ -63,7 +63,7 @@ class TBlobStorageGroupStatusRequest : public TBlobStorageGroupRequestActor {
             result->ApproximateFreeSpaceShare = *ApproximateFreeSpaceShare;
         }
         result->ErrorReason = ErrorReason;
-        R_LOG_DEBUG_S("DSPS03", "ReplyAndDie Result# " << result->Print(false));
+        DSP_LOG_DEBUG_S("DSPS03", "ReplyAndDie Result# " << result->Print(false));
         SendResponseAndDie(std::move(result));
     }
 
@@ -92,7 +92,7 @@ public:
     {}
 
     void Bootstrap() override {
-        R_LOG_INFO_S("DSPS05", "bootstrap"
+        DSP_LOG_INFO_S("DSPS05", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
             << " Deadline# " << Deadline
@@ -102,7 +102,7 @@ public:
             const ui64 cookie = TVDiskIdShort(Info->GetVDiskId(vdisk.OrderNumber)).GetRaw();
 
             auto vd = Info->GetVDiskId(vdisk.OrderNumber);
-            R_LOG_DEBUG_S("DSPS04", "Sending TEvVStatus"
+            DSP_LOG_DEBUG_S("DSPS04", "Sending TEvVStatus"
                 << " vDiskId# " << vd
                 << " node# " << Info->GetActorId(vd).NodeId());
 

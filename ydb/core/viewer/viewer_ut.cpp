@@ -1590,6 +1590,91 @@ Y_UNIT_TEST_SUITE(Viewer) {
         size_t AuthorizeTicketFails = 0;
     };
 
+    TString PostQuery(TKeepAliveHttpClient& httpClient, TString query, TString action = "", TString transactionMode = "") {
+        TStringStream requestBody;
+        requestBody
+            << "{ \"query\": \"" << query << "\","
+            << " \"database\": \"/Root\","
+            << " \"action\": \"" << action << "\","
+            << " \"syntax\": \"yql_v1\","
+            << " \"transaction_mode\": \"" << transactionMode << "\","
+            << " \"stats\": \"none\" }";
+        TStringStream responseStream;
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Content-Type"] = "application/json";
+        headers["Authorization"] = "test_ydb_token";
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/query?timeout=600000&base64=false&schema=modern", requestBody.Str(), &responseStream, headers);
+        const TString response = responseStream.ReadAll();
+        UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
+        return response;
+    }
+
+    Y_UNIT_TEST(ExecuteQueryDoesntExecuteSchemeOperationsInsideTransation) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetMonitoringPortOffset(monPort, true);
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        client.InitRootScheme();
+
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+
+        //Scheme operations cannot be executed inside transaction
+        TString response = PostQuery(httpClient, "CREATE TABLE `/Root/Test` (Key Uint64, Value String, PRIMARY KEY (Key));", "execute-query", "serializable-read-write");
+        {
+            NJson::TJsonReaderConfig jsonCfg;
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(response, &jsonCfg, &json, /* throwOnError = */ true);
+            UNIT_ASSERT_EQUAL_C(json["status"].GetString(), "PRECONDITION_FAILED", response);
+        }
+    }
+
+    Y_UNIT_TEST(UseTransactionWhenExecuteDataActionQuery) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetMonitoringPortOffset(monPort, true);
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        client.InitRootScheme();
+
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+
+        PostQuery(httpClient, "CREATE TABLE `/Root/Test` (Key Uint64, Value String, PRIMARY KEY (Key));", "execute-query");
+        PostQuery(httpClient, "INSERT INTO `/Root/Test` (Key, Value) VALUES (1, 'testvalue');", "execute-query");
+        TString response = PostQuery(httpClient, "SELECT * FROM `/Root/Test`;", "execute-data");
+        {
+            NJson::TJsonReaderConfig jsonCfg;
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(response, &jsonCfg, &json, /* throwOnError = */ true);
+            auto resultSets = json["result"].GetArray();
+            UNIT_ASSERT_EQUAL_C(1, resultSets.size(), response);
+        }
+    }
+
     Y_UNIT_TEST(FloatPointJsonQuery) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
@@ -1620,7 +1705,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             "database": "/Root",
             "action": "execute-script",
             "syntax": "yql_v1",
-            "stats": "profile"
+            "stats": "none"
         })json";
         const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/query?timeout=600000&base64=false&schema=modern", requestBody, &responseStream, headers);
         const TString response = responseStream.ReadAll();

@@ -6,8 +6,6 @@ on:
       - 'stable-*'
       - 'stream-nb-*'
       - '*-stable-*'
-    paths-ignore:
-      - 'ydb/docs/**'
     types:
       - 'opened'
       - 'synchronize'
@@ -141,7 +139,7 @@ jobs:
             
             let i = 0;
             
-            while (pr.mergeable == null || i >= 60) {
+            while (pr.mergeable == null && i < 60) {
                 console.log("get pull-request status");
     
                 let result = await github.rest.pulls.get({
@@ -160,6 +158,11 @@ jobs:
             
             console.log("pr.mergeable=%o", pr.mergeable);
             
+            if (pr.mergeable === null) {
+                core.setFailed("Unable to check if the PR is mergeable, please re-run the check.");
+                return false;
+            }
+            
             const { data: comments } = await github.rest.issues.listComments({
                 issue_number: context.issue.number,
                 owner: context.repo.owner,
@@ -168,7 +171,7 @@ jobs:
             
             const commentToUpdate = comments.find(comment => comment.body.startsWith(header));
             
-            if (pr.mergeable === false) {
+            if (!pr.mergeable) {
                 let commentParams = {
                     ...context.repo,
                     issue_number: context.issue.number,

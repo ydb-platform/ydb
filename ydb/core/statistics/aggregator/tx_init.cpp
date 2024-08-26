@@ -194,12 +194,14 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
             while (!rowset.EndOfSet()) {
                 TString operationId = rowset.GetValue<Schema::ForceTraversalOperations::OperationId>();
                 TString types = rowset.GetValue<Schema::ForceTraversalOperations::Types>();
+                ui64 createdAt = rowset.GetValue<Schema::ForceTraversalOperations::CreatedAt>();
 
                 TForceTraversalOperation operation {
                     .OperationId = operationId,
                     .Tables = {},
                     .Types = types,
-                    .ReplyToActorId = {}
+                    .ReplyToActorId = {},
+                    .CreatedAt = TInstant::FromValue(createdAt)
                 };
                 Self->ForceTraversals.emplace_back(operation);
 
@@ -227,14 +229,19 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 ui64 ownerId = rowset.GetValue<Schema::ForceTraversalTables::OwnerId>();
                 ui64 localPathId = rowset.GetValue<Schema::ForceTraversalTables::LocalPathId>();
                 TString columnTags = rowset.GetValue<Schema::ForceTraversalTables::ColumnTags>();
-                ui64 status = rowset.GetValue<Schema::ForceTraversalTables::Status>();
+                TForceTraversalTable::EStatus status = (TForceTraversalTable::EStatus)rowset.GetValue<Schema::ForceTraversalTables::Status>();
+
+                if (status == TForceTraversalTable::EStatus::AnalyzeStarted) {
+                    // Resent TEvAnalyzeTable to shards
+                    status = TForceTraversalTable::EStatus::None;
+                }
 
                 auto pathId = TPathId(ownerId, localPathId);
 
                 TForceTraversalTable operationTable {
                     .PathId = pathId,
                     .ColumnTags = columnTags,
-                    .Status = (TForceTraversalTable::EStatus)status,
+                    .Status = status,
                 };
                 auto forceTraversalOperation = Self->ForceTraversalOperation(operationId);
                 if (!forceTraversalOperation) {
@@ -265,12 +272,19 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
         Self->SubscribeForConfigChanges(ctx);
 
         Self->Schedule(Self->PropagateInterval, new TEvPrivate::TEvPropagate());
-        Self->Schedule(Self->TraversalPeriod, new TEvPrivate::TEvScheduleTraversal());
-        Self->Schedule(Self->SendAnalyzePeriod, new TEvPrivate::TEvSendAnalyze());
+
+        if (Self->EnableColumnStatistics) {
+            Self->Schedule(Self->TraversalPeriod, new TEvPrivate::TEvScheduleTraversal());
+            Self->Schedule(Self->SendAnalyzePeriod, new TEvPrivate::TEvSendAnalyze());
+            Self->Schedule(Self->AnalyzeDeliveryProblemPeriod, new TEvPrivate::TEvAnalyzeDeliveryProblem());
+        } else {
+            SA_LOG_W("[" << Self->TabletID() << "] TTxInit::Complete. EnableColumnStatistics=false");
+        }
 
         Self->InitializeStatisticsTable();
 
-        if (Self->TraversalPathId) {
+        if (Self->TraversalPathId && Self->TraversalStartKey) {
+            SA_LOG_D("[" << Self->TabletID() << "] TTxInit::Complete. Start navigate. PathId " << Self->TraversalPathId);
             Self->NavigateType = ENavigateType::Traversal;
             Self->NavigatePathId = Self->TraversalPathId;
             Self->Navigate();

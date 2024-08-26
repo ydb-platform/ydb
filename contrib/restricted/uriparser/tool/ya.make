@@ -6,6 +6,8 @@ LICENSE(BSD-3-Clause)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
+VERSION(0.9.8)
+
 PEERDIR(
     contrib/restricted/uriparser
 )

@@ -18,10 +18,12 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         const TKikimrSettings Settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner Kikimr;
         NKikimr::NYDBTest::TControllers::TGuard<NKikimr::NYDBTest::NColumnShard::TController> CSController;
+        const TString StoreName;
     public:
-        TSparsedDataTest()
+        TSparsedDataTest(const char* storeName)
             : Kikimr(Settings)
             , CSController(NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TController>())
+            , StoreName(storeName)
         {
 
         }
@@ -30,8 +32,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
             auto selectQuery = TString(R"(
                 SELECT
                     count(*) as count,
-                FROM `/Root/olapStore/olapTable`
-            )");
+                FROM `/Root/)") + (StoreName.empty() ? "" : StoreName + "/") + "olapTable`";
 
             auto tableClient = Kikimr.GetTableClient();
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
@@ -42,9 +43,9 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
             auto selectQuery = TString(R"(
                 SELECT
                     count(*) as count,
-                FROM `/Root/olapStore/olapTable`
+                FROM `/Root/)") + (StoreName.empty() ? "" : StoreName + "/") + R"(olapTable`
                 WHERE field == 'abcde'
-            )");
+            )";
 
             auto tableClient = Kikimr.GetTableClient();
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
@@ -52,7 +53,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         }
 
         void FillCircle(const double shiftKff, const ui32 countExpectation) {
-            TTypedLocalHelper helper("Utf8", Kikimr);
+            TTypedLocalHelper helper("Utf8", Kikimr, "olapTable", StoreName);
             const double frq = 0.9;
             {
                 NArrow::NConstruction::TStringPoolFiller sPool(1000, 52, "abcde", frq);
@@ -95,26 +96,55 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         void Execute() {
             CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
             CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
-            CSController->SetPeriodicWakeupActivationPeriod(TDuration::MilliSeconds(100));
+            CSController->SetOverridePeriodicWakeupActivationPeriod(TDuration::MilliSeconds(100));
 
             Tests::NCommon::TLoggerInit(Kikimr).Initialize();
-            TTypedLocalHelper helper("Utf8", Kikimr);
-            helper.CreateTestOlapTable();
+            TTypedLocalHelper helper("Utf8", Kikimr, "olapTable", StoreName);
+            if (!StoreName.empty()) {
+                helper.CreateTestOlapTable();
+            } else {
+                auto tableClient = Kikimr.GetTableClient();
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+                auto query = TStringBuilder() << R"(
+                    --!syntax_v1
+                    CREATE TABLE `/Root/olapTable`
+                    (
+                        pk_int int64 NOT NULL,
+                        field )" << "Utf8" << R"(,
+                        ts TimeStamp,
+                        PRIMARY KEY (pk_int)
+                    )
+                    PARTITION BY HASH(pk_int)
+                    WITH (
+                        STORE = COLUMN
+                    ))";
+                auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            TString type = StoreName.empty() ? "TABLE" : "TABLESTORE";
+            TString name = StoreName.empty() ? "olapTable" : "olapStore";
 
             FillCircle(0, 10000);
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`, `DEFAULT_VALUE`=`abcde`);");
+            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/" + name + "`(TYPE " + type + ") SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`, `DEFAULT_VALUE`=`abcde`);");
             FillCircle(0.1, 11000);
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`);");
+            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/" + name + "`(TYPE " + type + ") SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`);");
             FillCircle(0.2, 12000);
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`);");
+            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/" + name + "`(TYPE " + type + ") SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`);");
             FillCircle(0.3, 13000);
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`);");
+            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/" + name + "`(TYPE " + type + ") SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`);");
             FillCircle(0.4, 14000);
         }
     };
 
     Y_UNIT_TEST(Switching) {
-        TSparsedDataTest test;
+        TSparsedDataTest test("olapStore");
+        test.Execute();
+    }
+
+    Y_UNIT_TEST(SwitchingStandalone) {
+        TSparsedDataTest test("");
         test.Execute();
     }
 }

@@ -373,14 +373,14 @@ public:
         progress->Record.SetRequestSeqNoRound(SeqNo.Round);
 
         if (abort != EAbort::None) {
-            progress->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::ABORTED);
+            progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
             UploadStatus.Issues.AddIssue(NYql::TIssue("Aborted by scan host env"));
 
             LOG_W(Debug());
         } else if (!UploadStatus.IsSuccess()) {
-            progress->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::BUILD_ERROR);
+            progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
         } else {
-            progress->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::DONE);
+            progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);
         }
 
         UploadStatusToMessage(progress->Record);
@@ -478,12 +478,13 @@ private:
             progress->Record.SetRequestSeqNoGeneration(SeqNo.Generation);
             progress->Record.SetRequestSeqNoRound(SeqNo.Round);
 
-            progress->Record.SetLastKeyAck(TSerializedCellVec::Serialize(LastUploadedKey.GetCells()));
+            // TODO(mbkkt) ReleaseBuffer isn't possible, we use LastUploadedKey for logging
+            progress->Record.SetLastKeyAck(LastUploadedKey.GetBuffer());
             progress->Record.SetRowsDelta(WriteBuf.GetRows());
             progress->Record.SetBytesDelta(WriteBuf.GetBytes());
             WriteBuf.Clear();
 
-            progress->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::INPROGRESS);
+            progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS);
             UploadStatusToMessage(progress->Record);
 
             ctx.Send(ProgressActorId, progress.Release());
@@ -666,14 +667,13 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
     auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
     response->Record.SetBuildIndexId(record.GetBuildIndexId());
     response->Record.SetTabletId(TabletID());
-    response->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::ACCEPTED);
+    response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ACCEPTED);
 
     TScanRecord::TSeqNo seqNo = {record.GetSeqNoGeneration(), record.GetSeqNoRound()};
     response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
     response->Record.SetRequestSeqNoRound(seqNo.Round);
-
     auto badRequest = [&](const TString& error) {
-        response->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::BAD_REQUEST);
+        response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
         auto issue = response->Record.AddIssues();
         issue->set_severity(NYql::TSeverityIds::S_ERROR);
         issue->set_message(error);

@@ -80,6 +80,20 @@ private:
         meta.Timeout = TDuration::Seconds(10);
         connection->DoRequest(request, std::move(responseCb), &yandex::cloud::priv::oauth::v1::SessionService::Stub::AsyncCheck, meta);
     }
+
+    bool NeedSendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response) const override {
+        if ((response->Status == "400" || response->Status.empty()) && RequestedPageScheme.empty()) {
+            NHttp::THttpOutgoingRequestPtr request = response->GetRequest();
+            if (!request->Secure) {
+                static const TStringBuf bodyContent = "The plain HTTP request was sent to HTTPS port";
+                NHttp::THeadersBuilder headers(response->Headers);
+                TStringBuf contentType = headers.Get("Content-Type").NextTok(';');
+                TStringBuf body = response->Body;
+                return contentType == "text/html" && body.find(bodyContent) != TStringBuf::npos;
+            }
+        }
+        return false;
+    }
 };
 
 }  // NMVP

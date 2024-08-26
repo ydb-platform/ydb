@@ -6,221 +6,153 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
-
-#include <thread>
+#include <ydb/core/testlib/actors/block_events.h>
 
 namespace NKikimr {
 namespace NStat {
+
+// TODO: check for arbitrary set of values of type T (including frequent duplicates)
+// numbers (1..N) were count as a sketch. Check sketch properties
+bool CheckCountMinSketch(const std::shared_ptr<TCountMinSketch>& sketch, const ui32 N) {
+    UNIT_ASSERT(sketch->GetElementCount() == N);
+    const double eps = 1. / sketch->GetWidth();
+    const double delta = 1. / (1 << sketch->GetDepth());
+    size_t failedEstimatesCount = 0;
+    for (ui32 i = 0; i < N; ++i) {
+        const ui32 trueCount = 1;  // true count of value i
+        auto probe = sketch->Probe((const char *)&i, sizeof(i));
+        if (probe > trueCount + eps * N) {
+            failedEstimatesCount++;
+        }
+    }
+    Cerr << ">>> failedEstimatesCount = " << failedEstimatesCount << Endl;
+    return failedEstimatesCount < delta * N;
+}
 
 Y_UNIT_TEST_SUITE(TraverseColumnShard) {
 
     Y_UNIT_TEST(TraverseColumnTable) {
         TTestEnv env(1, 1);
-        auto init = [&] () {
-            CreateDatabase(env, "Database");
-            CreateColumnStoreTable(env, "Database", "Table", 10);
-        };
-        std::thread initThread(init);
-
         auto& runtime = *env.GetServer().GetRuntime();
-        runtime.SimulateSleep(TDuration::Seconds(30));
-        initThread.join();
-
-        auto pathId = ResolvePathId(runtime, "/Root/Database/Table");
+        auto tableInfo = CreateDatabaseColumnTables(env, 1, 10)[0];
 
         runtime.SimulateSleep(TDuration::Seconds(30));
 
-        auto countMin = ExtractCountMin(runtime, pathId);
+        auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
 
-        ui32 value = 1;
-        auto probe = countMin->Probe((const char *)&value, sizeof(value));
-        UNIT_ASSERT_VALUES_EQUAL(probe, 10);
+        UNIT_ASSERT(CheckCountMinSketch(countMin, 1000000));
     }
 
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletBeforeResolve) {
         TTestEnv env(1, 1);
-        auto init = [&] () {
-            CreateDatabase(env, "Database");
-            CreateColumnStoreTable(env, "Database", "Table", 10);
-        };
-        std::thread initThread(init);
-
         auto& runtime = *env.GetServer().GetRuntime();
-        runtime.SimulateSleep(TDuration::Seconds(5));
-        initThread.join();
-
-        ui64 saTabletId = 0;
-        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
-
+        auto tableInfo = CreateDatabaseColumnTables(env, 1, 10)[0];
         auto sender = runtime.AllocateEdgeActor();
-        int observerCount = 0;
-        auto observer = runtime.AddObserver<TEvTxProxySchemeCache::TEvResolveKeySetResult>(
-            [&](TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& /*ev*/)
-        {
-            if (observerCount++ == 2) {
-                RebootTablet(runtime, saTabletId, sender);
-            }
-        });
 
-        runtime.SimulateSleep(TDuration::Seconds(30));
+        TBlockEvents<TEvTxProxySchemeCache::TEvResolveKeySetResult> block(runtime);
 
-        auto countMin = ExtractCountMin(runtime, pathId);
+        runtime.WaitFor("1st TEvResolveKeySetResult", [&]{ return block.size() >= 1; });
+        block.Unblock(1);
+        runtime.WaitFor("2nd TEvResolveKeySetResult", [&]{ return block.size() >= 1; });
+        block.Unblock(1);
+        runtime.WaitFor("3rd TEvResolveKeySetResult", [&]{ return block.size() >= 1; });
+        
+        RebootTablet(runtime, tableInfo.SaTabletId, sender);
+        
+        block.Unblock();
+        block.Stop();        
 
-        ui32 value = 1;
-        auto probe = countMin->Probe((const char *)&value, sizeof(value));
-        UNIT_ASSERT_VALUES_EQUAL(probe, 10);
+        runtime.SimulateSleep(TDuration::Seconds(10));
+
+        auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
+        UNIT_ASSERT(CheckCountMinSketch(countMin, 1000000));
     }
 
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletBeforeReqDistribution) {
         TTestEnv env(1, 1);
-        auto init = [&] () {
-            CreateDatabase(env, "Database");
-            CreateColumnStoreTable(env, "Database", "Table", 10);
-        };
-        std::thread initThread(init);
-
         auto& runtime = *env.GetServer().GetRuntime();
-        runtime.SimulateSleep(TDuration::Seconds(5));
-        initThread.join();
-
-        ui64 saTabletId = 0;
-        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
-
+        auto tableInfo = CreateDatabaseColumnTables(env, 1, 10)[0];
         auto sender = runtime.AllocateEdgeActor();
-        bool observerFirstExec = true;
-        auto observer = runtime.AddObserver<TEvHive::TEvRequestTabletDistribution>(
-            [&](TEvHive::TEvRequestTabletDistribution::TPtr& /*ev*/)
-        {
-            if (observerFirstExec) {
-                observerFirstExec = false;
-                RebootTablet(runtime, saTabletId, sender);
-            }
+
+        bool eventSeen = false;
+        auto observer = runtime.AddObserver<TEvHive::TEvRequestTabletDistribution>([&](auto& ev){
+            eventSeen = true;
+            ev.Reset();
         });
 
-        runtime.SimulateSleep(TDuration::Seconds(30));
+        runtime.WaitFor("TEvRequestTabletDistribution", [&]{ return eventSeen; });
+        observer.Remove();
+        RebootTablet(runtime, tableInfo.SaTabletId, sender);
 
-        auto countMin = ExtractCountMin(runtime, pathId);
-
-        ui32 value = 1;
-        auto probe = countMin->Probe((const char *)&value, sizeof(value));
-        UNIT_ASSERT_VALUES_EQUAL(probe, 10);
+        auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
+        UNIT_ASSERT(CheckCountMinSketch(countMin, 1000000));
     }
 
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletBeforeAggregate) {
         TTestEnv env(1, 1);
-        auto init = [&] () {
-            CreateDatabase(env, "Database");
-            CreateColumnStoreTable(env, "Database", "Table", 10);
-        };
-        std::thread initThread(init);
-
         auto& runtime = *env.GetServer().GetRuntime();
-        runtime.SimulateSleep(TDuration::Seconds(5));
-        initThread.join();
-
-        ui64 saTabletId = 0;
-        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
-
+        auto tableInfo = CreateDatabaseColumnTables(env, 1, 10)[0];
         auto sender = runtime.AllocateEdgeActor();
-        bool observerFirstExec = true;
-        auto observer = runtime.AddObserver<TEvStatistics::TEvAggregateStatistics>(
-            [&](TEvStatistics::TEvAggregateStatistics::TPtr& /*ev*/)
-        {
-            if (observerFirstExec) {
-                observerFirstExec = false;
-                RebootTablet(runtime, saTabletId, sender);
-            }
+
+        bool eventSeen = false;
+        auto observer = runtime.AddObserver<TEvStatistics::TEvAggregateStatistics>([&](auto& ev){
+            eventSeen = true;
+            ev.Reset();
         });
 
-        runtime.SimulateSleep(TDuration::Seconds(30));
+        runtime.WaitFor("TEvAggregateStatistics", [&]{ return eventSeen; });
+        observer.Remove();
+        RebootTablet(runtime, tableInfo.SaTabletId, sender);
 
-        auto countMin = ExtractCountMin(runtime, pathId);
-
-        ui32 value = 1;
-        auto probe = countMin->Probe((const char *)&value, sizeof(value));
-        UNIT_ASSERT_VALUES_EQUAL(probe, 10);
+        auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
+        UNIT_ASSERT(CheckCountMinSketch(countMin, 1000000));
     }
 
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletBeforeSave) {
         TTestEnv env(1, 1);
-        auto init = [&] () {
-            CreateDatabase(env, "Database");
-            CreateColumnStoreTable(env, "Database", "Table", 10);
-        };
-        std::thread initThread(init);
-
         auto& runtime = *env.GetServer().GetRuntime();
-        runtime.SimulateSleep(TDuration::Seconds(5));
-        initThread.join();
-
-        ui64 saTabletId = 0;
-        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
-
+        auto tableInfo = CreateDatabaseColumnTables(env, 1, 10)[0];
         auto sender = runtime.AllocateEdgeActor();
-        bool observerFirstExec = true;
-        auto observer = runtime.AddObserver<TEvStatistics::TEvAggregateStatisticsResponse>(
-            [&](TEvStatistics::TEvAggregateStatisticsResponse::TPtr& /*ev*/)
-        {
-            if (observerFirstExec) {
-                observerFirstExec = false;
-                RebootTablet(runtime, saTabletId, sender);
-            }
+
+        bool eventSeen = false;
+        auto observer = runtime.AddObserver<TEvStatistics::TEvAggregateStatisticsResponse>([&](auto& ev){
+            eventSeen = true;
+            ev.Reset();
         });
 
-        runtime.SimulateSleep(TDuration::Seconds(30));
+        runtime.WaitFor("TEvAggregateStatisticsResponse", [&]{ return eventSeen; });
+        observer.Remove();
+        RebootTablet(runtime, tableInfo.SaTabletId, sender);
 
-        auto countMin = ExtractCountMin(runtime, pathId);
-
-        ui32 value = 1;
-        auto probe = countMin->Probe((const char *)&value, sizeof(value));
-        UNIT_ASSERT_VALUES_EQUAL(probe, 10);
+        auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
+        UNIT_ASSERT(CheckCountMinSketch(countMin, 1000000));
     }
 
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletInAggregate) {
         TTestEnv env(1, 1);
-        auto init = [&] () {
-            CreateDatabase(env, "Database");
-            CreateColumnStoreTable(env, "Database", "Table", 10);
-        };
-        std::thread initThread(init);
-
         auto& runtime = *env.GetServer().GetRuntime();
-        runtime.SimulateSleep(TDuration::Seconds(5));
-        initThread.join();
-
-        ui64 saTabletId = 0;
-        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
-
+        auto tableInfo = CreateDatabaseColumnTables(env, 1, 10)[0];
         auto sender = runtime.AllocateEdgeActor();
+
         int observerCount = 0;
-        auto observer = runtime.AddObserver<TEvStatistics::TEvStatisticsRequest>(
-            [&](TEvStatistics::TEvStatisticsRequest::TPtr& /*ev*/)
-        {
-            if (observerCount++ == 5) {
-                RebootTablet(runtime, saTabletId, sender);
+        auto observer = runtime.AddObserver<TEvStatistics::TEvStatisticsRequest>([&](auto& ev){
+            if (++observerCount >= 5) {
+                ev.Reset();
             }
         });
 
-        runtime.SimulateSleep(TDuration::Seconds(30));
+        runtime.WaitFor("5th TEvStatisticsRequest", [&]{ return observerCount >= 5; });
+        observer.Remove();
+        RebootTablet(runtime, tableInfo.SaTabletId, sender);
 
-        auto countMin = ExtractCountMin(runtime, pathId);
-
-        ui32 value = 1;
-        auto probe = countMin->Probe((const char *)&value, sizeof(value));
-        UNIT_ASSERT_VALUES_EQUAL(probe, 10);
+        auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
+        UNIT_ASSERT(CheckCountMinSketch(countMin, 1000000));
     }
 
     Y_UNIT_TEST(TraverseColumnTableHiveDistributionZeroNodes) {
         TTestEnv env(1, 1);
-        auto init = [&] () {
-            CreateDatabase(env, "Database");
-            CreateColumnStoreTable(env, "Database", "Table", 10);
-        };
-        std::thread initThread(init);
-
         auto& runtime = *env.GetServer().GetRuntime();
-        runtime.SimulateSleep(TDuration::Seconds(5));
-        initThread.join();
+        auto tableInfo = CreateDatabaseColumnTables(env, 1, 10)[0];
 
         bool observerFirstExec = true;
         auto observer = runtime.AddObserver<TEvHive::TEvResponseTabletDistribution>(
@@ -258,25 +190,14 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
 
         runtime.SimulateSleep(TDuration::Seconds(30));
 
-        auto pathId = ResolvePathId(runtime, "/Root/Database/Table");
-        auto countMin = ExtractCountMin(runtime, pathId);
-
-        ui32 value = 1;
-        auto probe = countMin->Probe((const char *)&value, sizeof(value));
-        UNIT_ASSERT_VALUES_EQUAL(probe, 10);
+        auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
+        UNIT_ASSERT(CheckCountMinSketch(countMin, 1000000));
     }
 
     Y_UNIT_TEST(TraverseColumnTableHiveDistributionAbsentNodes) {
         TTestEnv env(1, 1);
-        auto init = [&] () {
-            CreateDatabase(env, "Database");
-            CreateColumnStoreTable(env, "Database", "Table", 10);
-        };
-        std::thread initThread(init);
-
         auto& runtime = *env.GetServer().GetRuntime();
-        runtime.SimulateSleep(TDuration::Seconds(5));
-        initThread.join();
+        auto tableInfo = CreateDatabaseColumnTables(env, 1, 10)[0];
 
         bool observerFirstExec = true;
         auto observer = runtime.AddObserver<TEvHive::TEvResponseTabletDistribution>(
@@ -306,25 +227,14 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
 
         runtime.SimulateSleep(TDuration::Seconds(30));
 
-        auto pathId = ResolvePathId(runtime, "/Root/Database/Table");
-        auto countMin = ExtractCountMin(runtime, pathId);
-
-        ui32 value = 1;
-        auto probe = countMin->Probe((const char *)&value, sizeof(value));
-        UNIT_ASSERT_VALUES_EQUAL(probe, 10);
+        auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
+        UNIT_ASSERT(CheckCountMinSketch(countMin, 1000000));
     }
 
     Y_UNIT_TEST(TraverseColumnTableAggrStatUnavailableNode) {
         TTestEnv env(1, 1);
-        auto init = [&] () {
-            CreateDatabase(env, "Database");
-            CreateColumnStoreTable(env, "Database", "Table", 10);
-        };
-        std::thread initThread(init);
-
         auto& runtime = *env.GetServer().GetRuntime();
-        runtime.SimulateSleep(TDuration::Seconds(5));
-        initThread.join();
+        auto tableInfo = CreateDatabaseColumnTables(env, 1, 10)[0];
 
         bool observerFirstExec = true;
         auto observer = runtime.AddObserver<TEvStatistics::TEvAggregateStatisticsResponse>(
@@ -349,25 +259,19 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
 
         runtime.SimulateSleep(TDuration::Seconds(30));
 
-        auto pathId = ResolvePathId(runtime, "/Root/Database/Table");
-        auto countMin = ExtractCountMin(runtime, pathId);
+        auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
 
         ui32 value = 1;
         auto probe = countMin->Probe((const char *)&value, sizeof(value));
-        UNIT_ASSERT_VALUES_EQUAL(probe, 11); // 10 for first round, 1 for second
+        Cerr << "probe = " << probe << Endl;
+        const double eps = 1. / countMin->GetWidth();
+        UNIT_ASSERT(probe <= 1 + eps * 1100000);  // 10 for first round, 1 for second
     }
 
     Y_UNIT_TEST(TraverseColumnTableAggrStatNonLocalTablet) {
         TTestEnv env(1, 1);
-        auto init = [&] () {
-            CreateDatabase(env, "Database");
-            CreateColumnStoreTable(env, "Database", "Table", 10);
-        };
-        std::thread initThread(init);
-
         auto& runtime = *env.GetServer().GetRuntime();
-        runtime.SimulateSleep(TDuration::Seconds(5));
-        initThread.join();
+        auto tableInfo = CreateDatabaseColumnTables(env, 1, 10)[0];
 
         bool observerFirstExec = true;
         auto observer = runtime.AddObserver<TEvStatistics::TEvAggregateStatisticsResponse>(
@@ -392,12 +296,13 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
 
         runtime.SimulateSleep(TDuration::Seconds(60));
 
-        auto pathId = ResolvePathId(runtime, "/Root/Database/Table");
-        auto countMin = ExtractCountMin(runtime, pathId);
+        auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
 
         ui32 value = 1;
         auto probe = countMin->Probe((const char *)&value, sizeof(value));
-        UNIT_ASSERT_VALUES_EQUAL(probe, 11); // 10 for first round, 1 for second
+        Cerr << "probe = " << probe << Endl;
+        const double eps = 1. / countMin->GetWidth();
+        UNIT_ASSERT(probe <= 1 + eps * 1100000);  // 10 for first round, 1 for second
     }
 
 }

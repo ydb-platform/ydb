@@ -51,11 +51,13 @@ struct TAggregatorSchema : NIceDb::Schema {
     struct ForceTraversalOperations : Table<6> {
         struct OperationId    : Column<1, NScheme::NTypeIds::String> {};
         struct Types          : Column<2, NScheme::NTypeIds::String> {};
+        struct CreatedAt      : Column<3, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<OperationId>;
         using TColumns = TableColumns<
             OperationId,
-            Types
+            Types,
+            CreatedAt
         >;
     };
 

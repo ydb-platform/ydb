@@ -304,7 +304,13 @@ public:
                                     NIceDb::TUpdate<Schema::TabletFollowerGroup::RequireDifferentNodes>(followerGroup->RequireDifferentNodes));
                     }
 
-                    Self->UpdateTabletFollowersNumber(*tablet, db, SideEffects);
+                    auto followerGroupsEnd = itFollowerGroup;
+                    for (; itFollowerGroup != tablet->FollowerGroups.end(); ++itFollowerGroup) {
+                        db.Table<Schema::TabletFollowerGroup>().Key(TabletId, itFollowerGroup->Id).Delete();
+                    }
+                    tablet->FollowerGroups.erase(followerGroupsEnd, tablet->FollowerGroups.end());
+
+                    Self->CreateTabletFollowers(*tablet, db, SideEffects);
                     ProcessTablet(*tablet);
 
                     BLOG_D("THive::TTxCreateTablet::Execute Existing tablet " << tablet->ToString() << " has been successfully updated");
@@ -461,7 +467,7 @@ public:
                         NIceDb::TUpdate<Schema::TabletFollowerGroup::FollowerCountPerDataCenter>(followerGroup.FollowerCountPerDataCenter));
         }
 
-        Self->UpdateTabletFollowersNumber(tablet, db, SideEffects);
+        Self->CreateTabletFollowers(tablet, db, SideEffects);
         Self->OwnerToTablet.emplace(ownerIdx, TabletId);
         Self->ObjectToTabletMetrics[tablet.ObjectId].IncreaseCount();
         Self->TabletTypeToTabletMetrics[tablet.Type].IncreaseCount();

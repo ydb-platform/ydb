@@ -109,7 +109,7 @@ message TFeatureFlags {
     optional bool EnableSeparationComputeActorsFromRead = 90 [default = true];
     optional bool EnablePQConfigTransactionsAtSchemeShard = 91 [default = false];
     optional bool EnableScriptExecutionOperations = 92 [default = true];
-    reserved 93; // optional bool EnableImplicitQueryParameterTypes = 93 [default = true];
+    optional bool EnableImplicitQueryParameterTypes = 93 [default = true];
     optional bool EnableForceImmediateEffectsExecution = 94 [default = false];
     optional bool EnableTopicSplitMerge = 95 [default = false];
     optional bool EnableChangefeedDynamoDBStreamsFormat = 96 [default = true];
@@ -120,7 +120,7 @@ message TFeatureFlags {
     optional bool EnableIcNodeCache = 101 [default = true];
     optional bool EnableTempTables = 102 [default = false];
     optional bool SuppressCompatibilityCheck = 103 [default = false];
-    optional bool EnableUniqConstraint = 104 [default = false];
+    optional bool EnableUniqConstraint = 104 [default = true];
     optional bool EnableChangefeedDebeziumJsonFormat = 105 [default = false];
     optional bool EnableStatistics = 106 [default = true];
     optional bool EnableUuidAsPrimaryKey = 107 [default = true];
@@ -153,4 +153,5 @@ message TFeatureFlags {
     optional bool EnableChangefeedsOnIndexTables = 134 [default = false];
     optional bool EnableResourcePoolsCounters = 135 [default = false];
     optional bool EnableOptionalColumnsInColumnShard = 136 [default = false];
+    optional bool EnableGranularTimecast = 137 [default = true];
 }

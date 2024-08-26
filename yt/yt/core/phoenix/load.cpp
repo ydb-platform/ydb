@@ -30,10 +30,6 @@ bool AreFieldSchemasEquivalent(
         if (lhsFieldDescriptor->GetTag() != rhsFieldSchema->Tag) {
             return false;
         }
-
-        if (lhsFieldDescriptor->IsDeprecated() != rhsFieldSchema->Deprecated) {
-            return false;
-        }
     }
 
     return true;

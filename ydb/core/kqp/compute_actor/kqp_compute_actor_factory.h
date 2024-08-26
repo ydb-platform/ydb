@@ -122,6 +122,7 @@ public:
         const TInstant& Deadline;
         const bool ShareMailbox;
         const TMaybe<NYql::NDqProto::TRlPath>& RlPath;
+
         TComputeStagesWithScan* ComputesByStages = nullptr;
         std::shared_ptr<IKqpNodeState> State = nullptr;
         TComputeActorSchedulingOptions SchedulingOptions = {};

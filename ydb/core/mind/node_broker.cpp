@@ -7,7 +7,9 @@
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/cms/console/config_helpers.h>
+#include <ydb/core/protos/counters_node_broker.pb.h>
 #include <ydb/core/protos/node_broker.pb.h>
+#include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
@@ -66,6 +68,7 @@ void TNodeBroker::OnActivateExecutor(const TActorContext &ctx)
 
     EnableStableNodeNames = appData->FeatureFlags.GetEnableStableNodeNames();
 
+    Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
     ClearState();
 
     ProcessTx(CreateTxInitScheme(), ctx);
@@ -296,6 +299,7 @@ void TNodeBroker::ProcessListNodesRequest(TEvNodeBroker::TEvListNodes::TPtr &ev)
     if (version != Epoch.Version)
         resp->PreSerializedData = EpochCache;
 
+    TabletCounters->Percentile()[COUNTER_LIST_NODES_BYTES].IncrementFor(resp->GetCachedByteSize());
     LOG_TRACE_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
                 "Send TEvNodesInfo for epoch " << Epoch.ToString());
 
@@ -427,6 +431,7 @@ void TNodeBroker::PrepareEpochCache()
         FillNodeInfo(entry.second, *info.AddExpiredNodes());
 
     Y_PROTOBUF_SUPPRESS_NODISCARD info.SerializeToString(&EpochCache);
+    TabletCounters->Simple()[COUNTER_EPOCH_SIZE_BYTES].Set(EpochCache.Size());
 }
 
 void TNodeBroker::AddNodeToEpochCache(const TNodeInfo &node)
@@ -441,6 +446,7 @@ void TNodeBroker::AddNodeToEpochCache(const TNodeInfo &node)
     Y_PROTOBUF_SUPPRESS_NODISCARD info.SerializeToString(&delta);
 
     EpochCache += delta;
+    TabletCounters->Simple()[COUNTER_EPOCH_SIZE_BYTES].Set(EpochCache.Size());
 }
 
 void TNodeBroker::SubscribeForConfigUpdates(const TActorContext &ctx)
@@ -822,6 +828,7 @@ void TNodeBroker::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr
 void TNodeBroker::Handle(TEvNodeBroker::TEvListNodes::TPtr &ev,
                          const TActorContext &)
 {
+    TabletCounters->Cumulative()[COUNTER_LIST_NODES_REQUESTS].Increment(1);
     auto &rec = ev->Get()->Record;
 
     ui64 epoch = rec.GetMinEpoch();
@@ -836,6 +843,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvListNodes::TPtr &ev,
 void TNodeBroker::Handle(TEvNodeBroker::TEvResolveNode::TPtr &ev,
                          const TActorContext &ctx)
 {
+    TabletCounters->Cumulative()[COUNTER_RESOLVE_NODE_REQUESTS].Increment(1);
     ui32 nodeId = ev->Get()->Record.GetNodeId();
     TAutoPtr<TEvNodeBroker::TEvResolvedNode> resp = new TEvNodeBroker::TEvResolvedNode;
 
@@ -859,6 +867,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
 {
     LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER, "Handle TEvNodeBroker::TEvRegistrationRequest"
         << ": request# " << ev->Get()->Record.ShortDebugString());
+    TabletCounters->Cumulative()[COUNTER_REGISTRATION_REQUESTS].Increment(1);
 
     class TResolveTenantActor : public TActorBootstrapped<TResolveTenantActor> {
         TEvNodeBroker::TEvRegistrationRequest::TPtr Ev;
@@ -945,6 +954,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
 void TNodeBroker::Handle(TEvNodeBroker::TEvExtendLeaseRequest::TPtr &ev,
                          const TActorContext &ctx)
 {
+    TabletCounters->Cumulative()[COUNTER_EXTEND_LEASE_REQUESTS].Increment(1);
     ui32 nodeId = ev->Get()->Record.GetNodeId();
     ProcessTx(nodeId, CreateTxExtendLease(ev), ctx);
 }
@@ -993,6 +1003,23 @@ void TNodeBroker::Handle(TEvPrivate::TEvResolvedRegistrationRequest::TPtr &ev,
                          const TActorContext &ctx)
 {
     ProcessTx(CreateTxRegisterNode(ev), ctx);
+}
+
+TNodeBroker::TNodeBroker(const TActorId &tablet, TTabletStorageInfo *info)
+        : TActor(&TThis::StateInit)
+        , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
+        , EpochDuration(TDuration::Hours(1))
+        , ConfigSubscriptionId(0)
+        , StableNodeNamePrefix("slot-")
+        , TxProcessor(new TTxProcessor(*this, "root", NKikimrServices::NODE_BROKER))
+{
+    TabletCountersPtr.Reset(new TProtobufTabletCounters<
+        ESimpleCounters_descriptor,
+        ECumulativeCounters_descriptor,
+        EPercentileCounters_descriptor,
+        ETxTypes_descriptor
+    >());
+    TabletCounters = TabletCountersPtr.Get();
 }
 
 IActor *CreateNodeBroker(const TActorId &tablet,

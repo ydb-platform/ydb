@@ -21,6 +21,10 @@ public:
 
     void Bootstrap() {
         Become(&TStatisticsTableCreator::StateFunc);
+
+        NKikimrSchemeOp::TPartitioningPolicy partitioningPolicy;
+        partitioningPolicy.SetSizeToSplit(2 << 30);
+
         Register(
             CreateTableCreator(
                 { ".metadata", "_statistics" },
@@ -32,7 +36,10 @@ public:
                     Col("data", NScheme::NTypeIds::String),
                 },
                 { "owner_id", "local_path_id", "stat_type", "column_tag"},
-                NKikimrServices::STATISTICS
+                NKikimrServices::STATISTICS,
+                Nothing(),
+                true,
+                std::move(partitioningPolicy)
             )
         );
     }
@@ -74,11 +81,10 @@ private:
     const ui64 StatType;
     const std::vector<ui32> ColumnTags;
     const std::vector<TString> Data;
-
 public:
     TSaveStatisticsQuery(const TPathId& pathId, ui64 statType,
         std::vector<ui32>&& columnTags, std::vector<TString>&& data)
-        : NKikimr::TQueryBase(NKikimrServices::STATISTICS, {})
+        : NKikimr::TQueryBase(NKikimrServices::STATISTICS, {}, {}, true)
         , PathId(pathId)
         , StatType(statType)
         , ColumnTags(std::move(columnTags))
@@ -165,7 +171,7 @@ private:
 
 public:
     TLoadStatisticsQuery(const TPathId& pathId, ui64 statType, ui32 columnTag, ui64 cookie)
-        : NKikimr::TQueryBase(NKikimrServices::STATISTICS, {})
+        : NKikimr::TQueryBase(NKikimrServices::STATISTICS, {}, {}, true)
         , PathId(pathId)
         , StatType(statType)
         , ColumnTag(columnTag)
@@ -247,7 +253,7 @@ private:
 
 public:
     TDeleteStatisticsQuery(const TPathId& pathId)
-        : NKikimr::TQueryBase(NKikimrServices::STATISTICS, {})
+        : NKikimr::TQueryBase(NKikimrServices::STATISTICS, {}, {}, true)
         , PathId(pathId)
     {
     }

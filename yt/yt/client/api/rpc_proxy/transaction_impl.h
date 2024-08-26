@@ -93,6 +93,15 @@ public:
         const NQueueClient::TQueueProducerSessionId& sessionId,
         NQueueClient::TQueueProducerEpoch epoch,
         NTableClient::TNameTablePtr nameTable,
+        const std::vector<TSharedRef>& serializedRows,
+        const TPushQueueProducerOptions& options) override;
+
+    TFuture<TPushQueueProducerResult> PushQueueProducer(
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
+        NQueueClient::TQueueProducerEpoch epoch,
+        NTableClient::TNameTablePtr nameTable,
         TSharedRange<NTableClient::TUnversionedRow> rows,
         const TPushQueueProducerOptions& options) override;
 
@@ -225,6 +234,14 @@ public:
     NApi::IJournalWriterPtr CreateJournalWriter(
         const NYPath::TYPath& path,
         const NApi::TJournalWriterOptions& options) override;
+
+    TFuture<TDistributedWriteSessionPtr> StartDistributedWriteSession(
+        const NYPath::TRichYPath& path,
+        const TDistributedWriteSessionStartOptions& options = {}) override;
+
+    TFuture<void> FinishDistributedWriteSession(
+        TDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionFinishOptions& options = {}) override;
 
     // Custom methods.
 

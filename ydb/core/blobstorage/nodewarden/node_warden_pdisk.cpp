@@ -485,7 +485,7 @@ namespace NKikimr::NStorage {
             Become(&TThis::StateFunc, TDuration::Seconds(10), new TEvents::TEvWakeup);
         }
 
-        void Handle(TEvents::TEvUndelivered::TPtr ev) {
+        void Handle(TEvents::TEvUndelivered::TPtr /*ev*/) {
             // send this event again, this may be a race with PDisk destruction
             TActivationContext::Send(OriginalEv.release());
             PassAway();

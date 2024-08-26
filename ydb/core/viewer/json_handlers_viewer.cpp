@@ -11,6 +11,7 @@
 #include "viewer_describe_consumer.h"
 #include "viewer_describe.h"
 #include "viewer_describe_topic.h"
+#include "viewer_feature_flags.h"
 #include "viewer_graph.h"
 #include "viewer_healthcheck.h"
 #include "viewer_hiveinfo.h"
@@ -218,7 +219,7 @@ void InitViewerHiveStatsJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitViewerTenantInfoJsonHandler(TJsonHandlers &handlers) {
-    handlers.AddHandler("/viewer/tenantinfo", new TJsonHandler<TJsonTenantInfo>(TJsonTenantInfo::GetSwagger()));
+    handlers.AddHandler("/viewer/tenantinfo", new TJsonHandler<TJsonTenantInfo>(TJsonTenantInfo::GetSwagger()), 2);
 }
 
 void InitViewerWhoAmIJsonHandler(TJsonHandlers& handlers) {
@@ -226,7 +227,7 @@ void InitViewerWhoAmIJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitViewerQueryJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/viewer/query", new TJsonHandler<TJsonQuery>(TJsonQuery::GetSwagger()));
+    handlers.AddHandler("/viewer/query", new TJsonHandler<TJsonQuery>(TJsonQuery::GetSwagger()), 2);
 }
 
 void InitViewerNetInfoJsonHandler(TJsonHandlers& handlers) {
@@ -263,6 +264,10 @@ void InitViewerAutocompleteJsonHandler(TJsonHandlers& jsonHandlers) {
 
 void InitViewerCheckAccessJsonHandler(TJsonHandlers& jsonHandlers) {
     jsonHandlers.AddHandler("/viewer/check_access", new TJsonHandler<TCheckAccess>(TCheckAccess::GetSwagger()));
+}
+
+void InitViewerFeatureFlagsJsonHandler(TJsonHandlers& handlers) {
+    handlers.AddHandler("/viewer/feature_flags", new TJsonHandler<TJsonFeatureFlags>(TJsonFeatureFlags::GetSwagger()));
 }
 
 void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
@@ -303,6 +308,7 @@ void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
     InitViewerRenderJsonHandler(jsonHandlers);
     InitViewerAutocompleteJsonHandler(jsonHandlers);
     InitViewerCheckAccessJsonHandler(jsonHandlers);
+    InitViewerFeatureFlagsJsonHandler(jsonHandlers);
 }
 
 }

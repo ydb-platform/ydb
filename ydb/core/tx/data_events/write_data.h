@@ -38,7 +38,7 @@ private:
     YDB_ACCESSOR_DEF(TString, DedupId);
 
     YDB_READONLY(TString, Id, TGUID::CreateTimebased().AsUuidString());
-    YDB_ACCESSOR(EModificationType, ModificationType, EModificationType::Upsert);
+    YDB_ACCESSOR(EModificationType, ModificationType, EModificationType::Replace);
     YDB_READONLY(TMonotonic, WriteStartInstant, TMonotonic::Now());
     YDB_ACCESSOR(TMonotonic, WriteMiddle1StartInstant, TMonotonic::Now());
     YDB_ACCESSOR(TMonotonic, WriteMiddle2StartInstant, TMonotonic::Now());

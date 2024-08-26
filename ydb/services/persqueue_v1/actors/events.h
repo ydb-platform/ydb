@@ -25,6 +25,16 @@ using namespace Ydb;
 //     ui64 Cookie;
 // };
 
+struct TLocalResponseBase {
+    Ydb::StatusIds::StatusCode Status;
+    NYql::TIssues Issues;
+};
+
+
+struct TAlterTopicResponse : public TLocalResponseBase {
+    NKikimrSchemeOp::TModifyScheme ModifyScheme;
+};
+
 struct TEvPQProxy {
     enum EEv {
         EvWriteInit = EventSpaceBegin(TKikimrEvents::ES_PQ_PROXY_NEW), // TODO: Replace 'NEW' with version or something
@@ -77,6 +87,7 @@ struct TEvPQProxy {
         EvDirectReadSendClientData,
         EvReadingStarted,
         EvReadingFinished,
+        EvAlterTopicResponse,
         EvEnd
     };
 
@@ -490,11 +501,6 @@ struct TEvPQProxy {
         ui64 TabletId;
     };
 
-    struct TLocalResponseBase {
-        Ydb::StatusIds::StatusCode Status;
-        NYql::TIssues Issues;
-    };
-
     struct TPartitionLocationInfo {
         ui64 PartitionId;
         ui64 Generation;
@@ -635,6 +641,11 @@ struct TEvPQProxy {
         std::vector<ui32> AdjacentPartitionIds;
         std::vector<ui32> ChildPartitionIds;
     };
+
+    struct TEvAlterTopicResponse : public TEventLocal<TEvAlterTopicResponse, EvAlterTopicResponse>
+                                 , public TLocalResponseBase {
+        TAlterTopicResponse Response;
+    };
 };
 
 struct TLocalRequestBase {
@@ -662,4 +673,23 @@ struct TGetPartitionsLocationRequest : public TLocalRequestBase {
     TVector<ui32> PartitionIds;
 
 };
+
+struct TAlterTopicRequest : public TLocalRequestBase {
+    TAlterTopicRequest(Ydb::Topic::AlterTopicRequest&& request, const TString& workDir, const TString& name,
+                       const TString& database, const TString& token, bool missingOk)
+        : TLocalRequestBase(request.path(), database, token)
+        , Request(std::move(request))
+        , WorkingDir(workDir)
+        , Name(name)
+        , MissingOk(missingOk)
+    {}
+
+    Ydb::Topic::AlterTopicRequest Request;
+    TString WorkingDir;
+    TString Name;
+    bool MissingOk;
+};
+
+
+
 }

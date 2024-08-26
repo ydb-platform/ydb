@@ -74,6 +74,7 @@ public:
 
     void SetPriorities(TDistributionRule rootRule, double cores, TMonotonic now);
     void SetMaxDeviation(TDuration);
+    void SetForgetInterval(TDuration);
     ::NMonitoring::TDynamicCounters::TCounterPtr GetGroupUsageCounter(TString group) const;
 
     TSchedulerEntityHandle Enroll(TString group, double weight, TMonotonic now);
@@ -254,9 +255,6 @@ protected:
         Y_ABORT_UNLESS(newStats.has_value());
         Y_ABORT_UNLESS(*newStats >= *OldActivationStats);
         auto toAccount = TDuration::MicroSeconds(NHPTimer::GetSeconds(*newStats - *OldActivationStats) * 1e6);
-        if (toAccount.MicroSeconds() > 100000) {
-            CA_LOG_E("very huge account " << toAccount.MicroSeconds() << " newStats=" << newStats << " oldStats=" << OldActivationStats << " trackedWork=" << TrackedWork.MicroSeconds());
-        }
         {
             auto minTime = Min(toAccount, TrackedWork);
             TrackedWork -= minTime;

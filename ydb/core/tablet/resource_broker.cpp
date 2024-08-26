@@ -138,7 +138,7 @@ void TDurationStat::Add(TDuration duration)
 
 TDuration TDurationStat::GetAverage() const
 {
-    return Total / Values.size();
+    return Total / Max<size_t>(1, Values.size());
 }
 
 bool TTaskQueue::TTaskEarlier::operator()(const TTaskPtr &l,
@@ -284,7 +284,7 @@ void TTaskQueue::UpdateRealResourceUsage(TInstant now)
 
     // Find dominant resource consumption and update usage
     auto dom = GetDominantResourceComponentNormalized(QueueLimit.Used);
-    auto usage = RealResourceUsage + dom * duration.MilliSeconds() / Weight;
+    auto usage = RealResourceUsage + dom * duration.MilliSeconds() / Max<ui32>(1, Weight);
     RealResourceUsage = usage;
 
     UsageTimestamp = now;
@@ -305,11 +305,11 @@ void TTaskQueue::UpdatePlannedResourceUsage(TTaskPtr task,
 
     auto dom = GetDominantResourceComponentNormalized(task->RequiredResources);
     if (decrease) {
-        PlannedResourceUsage -= dom * duration.MilliSeconds() / Weight;
+        PlannedResourceUsage -= dom * duration.MilliSeconds() / Max<ui32>(1, Weight);
         PlannedResourceUsage = Max(PlannedResourceUsage, RealResourceUsage);
     } else {
         PlannedResourceUsage = Max(PlannedResourceUsage, RealResourceUsage);
-        PlannedResourceUsage += dom * duration.MilliSeconds() / Weight;
+        PlannedResourceUsage += dom * duration.MilliSeconds() / Max<ui32>(1, Weight);
     }
 }
 
@@ -317,9 +317,9 @@ double TTaskQueue::GetDominantResourceComponentNormalized(const TResourceValues 
 {
     std::array<double, RESOURCE_COUNT> norm;
     for (size_t i = 0; i < norm.size(); ++i)
-        norm[i] = (double)QueueLimit.Used[i] / (double)TotalLimit->Limit[i];
+        norm[i] = (double)QueueLimit.Used[i] / Max<double>(1, TotalLimit->Limit[i]);
     size_t i = MaxElement(norm.begin(), norm.end()) - norm.begin();
-    return (double)values[i] / (double)TotalLimit->Limit[i];
+    return (double)values[i] / Max<double>(1, TotalLimit->Limit[i]);
 }
 
 void TTaskQueue::OutputState(IOutputStream &os, const TString &prefix) const
@@ -812,6 +812,13 @@ TResourceBroker::TResourceBroker(const TResourceBrokerConfig &config,
     }
 }
 
+NKikimrResourceBroker::TResourceBrokerConfig TResourceBroker::GetConfig() const
+{
+    with_lock(Lock) {
+        return Config;
+    }
+}
+
 void TResourceBroker::Configure(const TResourceBrokerConfig &config)
 {
     with_lock(Lock) {
@@ -1098,8 +1105,8 @@ void TResourceBroker::OutputState(TStringStream& str)
 
 TResourceBrokerActor::TResourceBrokerActor(const TResourceBrokerConfig &config,
                                            const ::NMonitoring::TDynamicCounterPtr &counters)
-    : Config(config)
-    , Counters(counters)
+    : BootstrapConfig(config)
+    , BootstrapCounters(counters)
 {
 }
 
@@ -1114,7 +1121,7 @@ void TResourceBrokerActor::Bootstrap(const TActorContext &ctx)
                                false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
     }
 
-    ResourceBroker = MakeIntrusive<TResourceBroker>(std::move(Config), std::move(Counters), ctx.ActorSystem());
+    ResourceBroker = MakeIntrusive<TResourceBroker>(std::move(BootstrapConfig), std::move(BootstrapCounters), ctx.ActorSystem());
     Become(&TThis::StateWork);
 }
 
@@ -1177,20 +1184,23 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvNotifyActorDied::TPtr &e
 void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev,
                                   const TActorContext &ctx)
 {
-    auto &rec = ev->Get()->Record;
-    TAutoPtr<TEvResourceBroker::TEvConfigureResult> response
-        = new TEvResourceBroker::TEvConfigureResult;
+    auto &config = ev->Get()->Record;
+    if (ev->Get()->Merge) {
+        LOG_INFO_S(ctx, NKikimrServices::RESOURCE_BROKER, "New config diff: " << config.ShortDebugString());
+        auto current = ResourceBroker->GetConfig();
+        MergeConfigUpdates(current, config);
+        config.Swap(&current);
+    }
 
-    LOG_DEBUG(ctx, NKikimrServices::RESOURCE_BROKER, "New config: %s",
-              rec.ShortDebugString().data());
+    LOG_INFO_S(ctx, NKikimrServices::RESOURCE_BROKER, "New config: " << config.ShortDebugString());
 
     TSet<TString> queues;
     TSet<TString> tasks;
     bool success = true;
     TString error;
-    for (auto &queue : rec.GetQueues())
+    for (auto &queue : config.GetQueues())
         queues.insert(queue.GetName());
-    for (auto &task : rec.GetTasks()) {
+    for (auto &task : config.GetTasks()) {
         if (!queues.contains(task.GetQueueName())) {
             error = Sprintf("task '%s' uses unknown queue '%s'", task.GetName().data(), task.GetQueueName().data());
             success = false;
@@ -1207,6 +1217,8 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev,
         success = false;
     }
 
+    TAutoPtr<TEvResourceBroker::TEvConfigureResult> response = new TEvResourceBroker::TEvConfigureResult;
+
     if (!success) {
         response->Record.SetSuccess(false);
         response->Record.SetMessage(error);
@@ -1219,19 +1231,40 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev,
     } else {
         response->Record.SetSuccess(true);
 
-        ResourceBroker->Configure(std::move(ev->Get()->Record));
+        ResourceBroker->Configure(std::move(config));
     }
 
-    LOG_DEBUG(ctx, NKikimrServices::RESOURCE_BROKER, "Configure result: %s",
-              response->Record.ShortDebugString().data());
+    LOG_LOG_S(ctx,
+        success ? NActors::NLog::PRI_INFO : NActors::NLog::PRI_ERROR,
+        NKikimrServices::RESOURCE_BROKER,
+        "Configure result: " << response->Record.ShortDebugString());
+
+    auto newConfig = ResourceBroker->GetConfig();
+    for (auto& queue : newConfig.GetQueues()) {
+        auto it = QueueSubscribers.find(queue.GetName());
+        if (it == QueueSubscribers.end())
+            continue;
+
+        for(const TActorId& subscriber: it->second) {
+            auto resp = MakeHolder<TEvResourceBroker::TEvConfigResponse>();
+            resp->QueueConfig = queue;
+            ctx.Send(subscriber, resp.Release());
+        }
+    }
 
     ctx.Send(ev->Sender, response.Release());
 }
 
 void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigRequest::TPtr& ev, const TActorContext&)
 {
+    if (ev->Get()->Subscribe) {
+        auto [it, _] = QueueSubscribers.emplace(ev->Get()->Queue, THashSet<TActorId>());
+        it->second.emplace(ev->Sender);
+    }
+
+    auto config = ResourceBroker->GetConfig();
     auto resp = MakeHolder<TEvResourceBroker::TEvConfigResponse>();
-    for (auto& queue : Config.GetQueues()) {
+    for (auto& queue : config.GetQueues()) {
         if (queue.GetName() == ev->Get()->Queue) {
             resp->QueueConfig = queue;
             break;
@@ -1250,11 +1283,13 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvResourceBrokerRequest::T
 
 void TResourceBrokerActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx)
 {
+    auto config = ResourceBroker->GetConfig();
+
     TStringStream str;
     HTML(str) {
         PRE() {
             str << "Current config:" << Endl
-                << Config.DebugString() << Endl;
+                << config.DebugString() << Endl;
             ResourceBroker->OutputState(str);
         }
     }
@@ -1266,19 +1301,18 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     NKikimrResourceBroker::TResourceBrokerConfig config;
 
     const ui64 DefaultQueueCPU = 2;
-
     const ui64 KqpRmQueueCPU = 4;
-    const ui64 KqpRmQueueMemory = 10ULL << 30;
+    const ui64 TotalCPU = 20;
+
+    // Note: these memory limits will be overwritten by MemoryController
+    const ui64 KqpRmQueueMemory = 10_GB;
+    const ui64 TotalMemory = 16_GB;
+    static_assert(KqpRmQueueMemory < TotalMemory);
 
     const ui64 CSTTLCompactionMemoryLimit = NOlap::TGlobalLimits::TTLCompactionMemoryLimit;
     const ui64 CSInsertCompactionMemoryLimit = NOlap::TGlobalLimits::InsertCompactionMemoryLimit;
     const ui64 CSGeneralCompactionMemoryLimit = NOlap::TGlobalLimits::GeneralCompactionMemoryLimit;
     const ui64 CSScanMemoryLimit = NOlap::TGlobalLimits::ScanMemoryLimit;
-
-    const ui64 TotalCPU = 20;
-    const ui64 TotalMemory = 16ULL << 30;
-
-    static_assert(KqpRmQueueMemory < TotalMemory);
 
     auto queue = config.AddQueues();
     queue->SetName(NLocalDb::DefaultQueueName);

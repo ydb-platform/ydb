@@ -6,6 +6,11 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/metering/metering.h>
 
+template <>
+inline void Out<Ydb::Table::IndexBuildState_State>(IOutputStream& o, Ydb::Table::IndexBuildState_State info) {
+    o << IndexBuildState_State_Name(info);
+}
+
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
@@ -243,6 +248,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
         auto fnWriteRow = [&] (ui64 tabletId, ui32 key, ui32 index, TString value, const char* table) {
+            // What is __user__?
             TString writeQuery = Sprintf(R"(
                 (
                     (let key   '( '('key   (Uint32 '%u ) ) ) )
@@ -257,6 +263,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
             UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
         };
         for (ui32 delta = 0; delta < 101; ++delta) {
+            // What is TTestTxConfig::FakeHiveTablets + 6?
             fnWriteRow(TTestTxConfig::FakeHiveTablets + 6, 1 + delta, 1000 + delta, "aaaa", "Table");
         }
 
@@ -285,12 +292,12 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         ui64 buildIndexId = txId;
 
         auto listing = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
-        Y_ASSERT(listing.EntriesSize() == 1);
+        UNIT_ASSERT_VALUES_EQUAL(listing.EntriesSize(), 1);
 
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
         auto descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", txId);
-        Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_DONE);
+        UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
 
         const TString meteringData = R"({"usage":{"start":0,"quantity":179,"finish":0,"unit":"request_unit","type":"delta"},"tags":{},"id":"106-72075186233409549-2-101-1818-101-1818","cloud_id":"CLOUD_ID_VAL","source_wt":0,"source_id":"sless-docapi-ydb-ss","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.requests.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})";
 
@@ -307,7 +314,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
 
         TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexId);
         listing = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
-        Y_ASSERT(listing.EntriesSize() == 0);
+        UNIT_ASSERT_VALUES_EQUAL(listing.EntriesSize(), 0);
 
         TestDropTableIndex(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
             TableName: "Table"
@@ -372,6 +379,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
         for (ui32 delta = 0; delta < 101; ++delta) {
+            // What is TTestTxConfig::FakeHiveTablets + 12?
             fnWriteRow(TTestTxConfig::FakeHiveTablets + 12, 1 + delta, 1000 + delta, "aaaa", "Table");
         }
 
@@ -398,14 +406,14 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         buildIndexId = txId;
 
         listing = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/CommonDB");
-        Y_ASSERT(listing.EntriesSize() == 1);
+        UNIT_ASSERT_VALUES_EQUAL(listing.EntriesSize(), 1);
 
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
         descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/CommonDB", txId);
-        Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_DONE);
+        UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
 
-        UNIT_ASSERT(billRecords.empty());
+        UNIT_ASSERT_VALUES_EQUAL(billRecords.size(), 0);
 
         UNIT_ASSERT_VALUES_EQUAL(shadowData.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(shadowData[0], true);
@@ -516,12 +524,12 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         ui64 buildIndexId = txId;
 
         auto listing = TestListBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-        Y_ASSERT(listing.EntriesSize() == 1);
+        UNIT_ASSERT_VALUES_EQUAL(listing.EntriesSize(), 1);
 
         env.TestWaitNotification(runtime, txId);
 
         auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", txId);
-        UNIT_ASSERT_EQUAL(descr.GetIndexBuild().GetState(),Ydb::Table::IndexBuildState::STATE_REJECTED);
+        UNIT_ASSERT_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_REJECTED);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::PathExist,
@@ -533,7 +541,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
 
         TestForgetBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
         listing = TestListBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-        Y_ASSERT(listing.EntriesSize() == 0);
+        UNIT_ASSERT_VALUES_EQUAL(listing.EntriesSize(), 0);
     }
 
     Y_UNIT_TEST(CancellationNoTable) {
@@ -545,7 +553,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         env.TestWaitNotification(runtime, txId);
 
         NKikimrIndexBuilder::TEvListResponse listing = TestListBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-        Y_ASSERT(listing.EntriesSize() == 0);
+        UNIT_ASSERT_VALUES_EQUAL(listing.EntriesSize(), 0);
     }
 
     Y_UNIT_TEST(WithFollowers) {
@@ -574,7 +582,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         ui64 buildId = txId;
 
         auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildId);
-        Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_DONE);
+        UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/WithFollowers"),
                            {NLs::PathExist,
@@ -587,7 +595,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
 
         TestForgetBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", buildId);
         auto listing = TestListBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-        Y_ASSERT(listing.EntriesSize() == 0);
+        UNIT_ASSERT_VALUES_EQUAL(listing.EntriesSize(), 0);
 
         TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(
             TableName: "WithFollowers"
@@ -732,7 +740,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
                             NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
 
         NKikimrIndexBuilder::TEvGetResponse descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
-        Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_DONE);
+        UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
 
 //        KIKIMR-9945
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
@@ -938,14 +946,14 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         ui64 buildIndexId = txId;
 
         auto listing = TestListBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-        Y_ASSERT(listing.EntriesSize() == 1);
+        UNIT_ASSERT_VALUES_EQUAL(listing.EntriesSize(), 1);
 
         TestCancelBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
 
         env.TestWaitNotification(runtime, buildIndexId);
 
         auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
-        Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_CANCELLED);
+        UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_CANCELLED);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::PathExist,
@@ -1002,7 +1010,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
 
         {
             auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
-            Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_PREPARING);
+            UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_PREPARING);
         }
 
         //
@@ -1015,7 +1023,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
 
         {
             auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
-            Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_DONE);
+            UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
         }
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),

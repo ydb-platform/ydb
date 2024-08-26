@@ -30,6 +30,10 @@ bool TTieringRule::DeserializeDescriptionFromJson(const NJson::TJsonValue& jsonI
     if (!jsonInfo["rules"].GetArrayPointer(&rules)) {
         return false;
     }
+    if (rules->empty()) {
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "tiering_rule_deserialization_failed")("reason", "empty_rules");
+        return false;
+    }
     for (auto&& i : *rules) {
         TTieringInterval interval;
         if (!interval.DeserializeFromJson(i)) {
@@ -61,6 +65,9 @@ bool TTieringRule::DeserializeFromRecord(const TDecoder& decoder, const Ydb::Val
     if (!decoder.Read(decoder.GetDefaultColumnIdx(), DefaultColumn, r)) {
         return false;
     }
+    if (DefaultColumn.Empty()) {
+        return false;
+    }
     NJson::TJsonValue jsonDescription;
     if (!decoder.ReadJson(decoder.GetDescriptionIdx(), jsonDescription, r)) {
         return false;
@@ -72,6 +79,7 @@ bool TTieringRule::DeserializeFromRecord(const TDecoder& decoder, const Ydb::Val
 }
 
 NKikimr::NOlap::TTiering TTieringRule::BuildOlapTiers() const {
+    AFL_VERIFY(!Intervals.empty());
     NOlap::TTiering result;
     for (auto&& r : Intervals) {
         AFL_VERIFY(result.Add(std::make_shared<NOlap::TTierInfo>(r.GetTierName(), r.GetDurationForEvict(), GetDefaultColumn())));

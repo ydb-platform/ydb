@@ -10,32 +10,16 @@
 
 #include <util/stream/output.h>
 
-static inline IOutputStream& operator<<(IOutputStream& o, std::set<size_t> t) {
-    o << "[" << JoinRange(", ", t.begin(), t.end()) << "]";
-    return o;
-}
-
-/*
-static inline IOutputStream& operator<<(IOutputStream& o, const std::optional<std::set<size_t>> t) {
-    if (t) {
-        o << t.value();
-    } else {
-        o << "[empty]";
-    }
-
-    return o;
-}
-*/
-
 namespace NKikimr {
 
 using namespace NYdb::NTopic;
 using namespace NYdb::NTopic::NTests;
 using namespace NSchemeShardUT_Private;
+using namespace NKikimr::NPQ::NTest;
 
 Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
-    void SimpleTest(bool autoscaleAwareSDK) {
+    void SimpleTest(SdkVersion sdk, bool autoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopicWithAutoscale();
 
@@ -44,15 +28,15 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         auto writeSession1 = CreateWriteSession(client, "producer-1");
         auto writeSession2 = CreateWriteSession(client, "producer-2");
 
-        TTestReadSession readSession("Session-0", client, 2, !autoscaleAwareSDK, {}, autoscaleAwareSDK);
-        readSession.Run();
+        auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .ExpectedMessagesCount = 2, .AutoCommit = !autoscaleAwareSDK, .AutoPartitioningSupport = autoscaleAwareSDK });
+        readSession->Run();
 
         UNIT_ASSERT(writeSession1->Write(Msg("message_1.1", 2)));
         UNIT_ASSERT(writeSession2->Write(Msg("message_2.1", 3)));
 
-        readSession.WaitAllMessages();
+        readSession->WaitAllMessages();
 
-        for(const auto& info : readSession.Impl->ReceivedMessages) {
+        for(const auto& info : readSession->GetReceivedMessages()) {
             if (info.Data == "message_1.1") {
                 UNIT_ASSERT_VALUES_EQUAL(0, info.PartitionId);
                 UNIT_ASSERT_VALUES_EQUAL(2, info.SeqNo);
@@ -66,18 +50,22 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         writeSession1->Close(TDuration::Seconds(1));
         writeSession2->Close(TDuration::Seconds(1));
-        readSession.Close();
+        readSession->Close();
     }
 
     Y_UNIT_TEST(Simple_BeforeAutoscaleAwareSDK) {
-        SimpleTest(false);
+        SimpleTest(SdkVersion::Topic, false);
     }
 
     Y_UNIT_TEST(Simple_AutoscaleAwareSDK) {
-        SimpleTest(true);
+        SimpleTest(SdkVersion::Topic, true);
     }
 
-    void ReadingAfterSplitTest(bool autoscaleAwareSDK, bool autoCommit) {
+    Y_UNIT_TEST(Simple_PQv1) {
+        SimpleTest(SdkVersion::PQv1, false);
+    }
+
+    void ReadingAfterSplitTest(SdkVersion sdk, bool autoscaleAwareSDK, bool autoCommit) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopicWithAutoscale();
 
@@ -96,11 +84,11 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         UNIT_ASSERT(writeSession->Write(Msg("message_3.1", 5)));
 
-        TTestReadSession readSession("Session-0", client, 3, autoCommit, {}, autoscaleAwareSDK);
-        readSession.Run();
-        readSession.WaitAllMessages();
+        auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .ExpectedMessagesCount = 3, .AutoCommit = autoCommit, .AutoPartitioningSupport = autoscaleAwareSDK });
+        readSession->Run();
+        readSession->WaitAllMessages();
 
-        for(const auto& info : readSession.Impl->ReceivedMessages) {
+        for(const auto& info : readSession->GetReceivedMessages()) {
             if (info.Data == "message_1.1") {
                 UNIT_ASSERT_VALUES_EQUAL(0, info.PartitionId);
                 UNIT_ASSERT_VALUES_EQUAL(2, info.SeqNo);
@@ -116,22 +104,26 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         }
 
         writeSession->Close(TDuration::Seconds(1));
-        readSession.Close();
+        readSession->Close();
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_BeforeAutoscaleAwareSDK) {
-        ReadingAfterSplitTest(false, true);
+        ReadingAfterSplitTest(SdkVersion::Topic, false, true);
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_AutoscaleAwareSDK) {
-        ReadingAfterSplitTest(true, false);
+        ReadingAfterSplitTest(SdkVersion::Topic, true, false);
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_AutoscaleAwareSDK_AutoCommit) {
-        ReadingAfterSplitTest(true, false);
+        ReadingAfterSplitTest(SdkVersion::Topic, true, false);
     }
 
-    void ReadingAfterSplitTest_PreferedPartition(bool autoscaleAwareSDK) {
+    Y_UNIT_TEST(ReadingAfterSplitTest_PQv1) {
+        ReadingAfterSplitTest(SdkVersion::PQv1, false, true);
+    }
+
+    void ReadingAfterSplitTest_PreferedPartition(SdkVersion sdk, bool autoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopicWithAutoscale();
 
@@ -150,13 +142,13 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         UNIT_ASSERT(writeSession->Write(Msg("message_3.1", 5)));
 
-        TTestReadSession readSession("Session-0", client, 1, !autoscaleAwareSDK, {2}, autoscaleAwareSDK);
-        readSession.Run();
-        readSession.WaitAllMessages();
+        auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .ExpectedMessagesCount = 1, .AutoCommit = !autoscaleAwareSDK, .Partitions= {2}, .AutoPartitioningSupport = autoscaleAwareSDK });
+        readSession->Run();
+        readSession->WaitAllMessages();
 
         Sleep(TDuration::Seconds(1));
 
-        for(const auto& info : readSession.Impl->ReceivedMessages) {
+        for(const auto& info : readSession->GetReceivedMessages()) {
             if (info.Data == "message_2.1") {
                 UNIT_ASSERT_VALUES_EQUAL(2, info.PartitionId);
                 UNIT_ASSERT_VALUES_EQUAL(3, info.SeqNo);
@@ -166,18 +158,22 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         }
 
         writeSession->Close(TDuration::Seconds(1));
-        readSession.Close();
+        readSession->Close();
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_PreferedPartition_BeforeAutoscaleAwareSDK) {
-        ReadingAfterSplitTest_PreferedPartition(false);
+        ReadingAfterSplitTest_PreferedPartition(SdkVersion::Topic, false);
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_PreferedPartition_AutoscaleAwareSDK) {
-        ReadingAfterSplitTest_PreferedPartition(true);
+        ReadingAfterSplitTest_PreferedPartition(SdkVersion::Topic, true);
     }
 
-    Y_UNIT_TEST(PartitionSplit_BeforeAutoscaleAwareSDK) {
+    Y_UNIT_TEST(ReadingAfterSplitTest_PreferedPartition_PQv1) {
+        ReadingAfterSplitTest_PreferedPartition(SdkVersion::PQv1, false);
+    }
+
+    void PartitionSplit_oldSDK(SdkVersion sdk) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
@@ -185,8 +181,8 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         auto writeSession = CreateWriteSession(client, "producer-1");
 
-        TTestReadSession readSession("Session-0", client, 2, false, {}, false);
-        readSession.Run();
+        auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .ExpectedMessagesCount = 2, .AutoCommit = false, .AutoPartitioningSupport = false });
+        readSession->Run();
 
         UNIT_ASSERT(writeSession->Write(Msg("message_1.1", 2)));
 
@@ -197,16 +193,16 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         Sleep(TDuration::Seconds(1)); // Wait read session events
 
-        readSession.WaitAndAssertPartitions({0}, "We are reading only one partition because offset is not commited");
-        readSession.Run();
-        readSession.Impl->AutoCommit = true;
-        readSession.Commit();
-        readSession.WaitAndAssertPartitions({0, 1, 2}, "We are reading all partitions because offset is commited");
-        readSession.Run();
+        readSession->WaitAndAssertPartitions({0}, "We are reading only one partition because offset is not commited");
+        readSession->Run();
+        readSession->SetAutoCommit(true);
+        readSession->Commit();
+        readSession->WaitAndAssertPartitions({0, 1, 2}, "We are reading all partitions because offset is commited");
+        readSession->Run();
 
-        readSession.WaitAllMessages();
+        readSession->WaitAllMessages();
 
-        for(const auto& info : readSession.Impl->ReceivedMessages) {
+        for(const auto& info : readSession->GetReceivedMessages()) {
             if (info.Data == "message_1.1") {
                 UNIT_ASSERT_EQUAL(0, info.PartitionId);
                 UNIT_ASSERT_EQUAL(2, info.SeqNo);
@@ -218,10 +214,16 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             }
         }
 
-        UNIT_ASSERT_C(readSession.Impl->EndedPartitionEvents.empty(), "Old SDK is not support EndPartitionEvent");
-
         writeSession->Close(TDuration::Seconds(1));
-        readSession.Close();
+        readSession->Close();
+    }
+
+    Y_UNIT_TEST(PartitionSplit_BeforeAutoscaleAwareSDK) {
+        PartitionSplit_oldSDK(SdkVersion::Topic);
+    }
+
+    Y_UNIT_TEST(PartitionSplit_PQv1) {
+        PartitionSplit_oldSDK(SdkVersion::PQv1);
     }
 
     Y_UNIT_TEST(PartitionSplit_AutoscaleAwareSDK) {
@@ -232,8 +234,8 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         auto writeSession = CreateWriteSession(client, "producer-1");
 
-        TTestReadSession readSession("Session-0", client, 2, false, {}, true);
-        readSession.Run();
+        auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = SdkVersion::Topic, .ExpectedMessagesCount = 2, .AutoCommit = false, .AutoPartitioningSupport = true });
+        readSession->Run();
 
         UNIT_ASSERT(writeSession->Write(Msg("message_1.1", 2)));
 
@@ -242,12 +244,12 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         UNIT_ASSERT(writeSession->Write(Msg("message_1.2", 3)));
 
-        readSession.WaitAndAssertPartitions({0, 1, 2}, "We are reading all partitions because new SDK is not wait commit");
-        readSession.Run();
+        readSession->WaitAndAssertPartitions({0, 1, 2}, "We are reading all partitions because new SDK is not wait commit");
+        readSession->Run();
 
-        readSession.WaitAllMessages();
+        readSession->WaitAllMessages();
 
-        for(const auto& info : readSession.Impl->ReceivedMessages) {
+        for(const auto& info : readSession->GetReceivedMessages()) {
             if (info.Data == "message_1.1") {
                 UNIT_ASSERT_VALUES_EQUAL(0, info.PartitionId);
                 UNIT_ASSERT_VALUES_EQUAL(2, info.SeqNo);
@@ -259,17 +261,17 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             }
         }
 
-        UNIT_ASSERT_VALUES_EQUAL_C(1, readSession.Impl->EndedPartitionEvents.size(), "Only one partition was ended");
-        auto& ev = readSession.Impl->EndedPartitionEvents.front();
-        UNIT_ASSERT_VALUES_EQUAL_C(std::vector<ui32>{}, ev.GetAdjacentPartitionIds(), "There isn`t adjacent partitions after split");
+        UNIT_ASSERT_VALUES_EQUAL_C(1, readSession->GetEndedPartitionEvents().size(), "Only one partition was ended");
+        auto ev = readSession->GetEndedPartitionEvents().front();
+        UNIT_ASSERT_VALUES_EQUAL_C(std::vector<ui32>{}, ev.AdjacentPartitionIds, "There isn`t adjacent partitions after split");
         std::vector<ui32> children = {1, 2};
-        UNIT_ASSERT_VALUES_EQUAL_C(children, ev.GetChildPartitionIds(), "");
+        UNIT_ASSERT_VALUES_EQUAL_C(children, ev.ChildPartitionIds, "");
 
         writeSession->Close(TDuration::Seconds(1));
-        readSession.Close();
+        readSession->Close();
     }
 
-    void PartitionSplit_PreferedPartition(bool autoscaleAwareSDK) {
+    void PartitionSplit_PreferedPartition(SdkVersion sdk, bool autoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
@@ -279,8 +281,8 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         auto writeSession2 = CreateWriteSession(client, "producer-2");
         auto writeSession3 = CreateWriteSession(client, "producer-3", 0);
 
-        TTestReadSession readSession("Session-0", client, 6, !autoscaleAwareSDK, {}, autoscaleAwareSDK);
-        readSession.Run();
+        auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .ExpectedMessagesCount = 6, .AutoCommit = !autoscaleAwareSDK, .AutoPartitioningSupport = autoscaleAwareSDK });
+        readSession->Run();
 
         UNIT_ASSERT(writeSession1->Write(Msg("message_1.1", 2)));
         UNIT_ASSERT(writeSession2->Write(Msg("message_2.1", 3)));
@@ -301,11 +303,11 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         auto writeSession4 = client.CreateSimpleBlockingWriteSession(writeSettings4);
         writeSession4->Write(TWriteMessage("message_4.1"));
 
-        readSession.WaitAllMessages();
+        readSession->WaitAllMessages();
 
         Cerr << ">>>>> All messages received" << Endl;
 
-        for(const auto& info : readSession.Impl->ReceivedMessages) {
+        for(const auto& info : readSession->GetReceivedMessages()) {
             if (info.Data == "message_1.1") {
                 UNIT_ASSERT_VALUES_EQUAL(0, info.PartitionId);
                 UNIT_ASSERT_VALUES_EQUAL(2, info.SeqNo);
@@ -329,24 +331,28 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             }
         }
 
-        writeSession1->Close(TDuration::Seconds(1));
-        writeSession2->Close(TDuration::Seconds(1));
-        writeSession3->Close(TDuration::Seconds(1));
-        writeSession4->Close(TDuration::Seconds(1));
+        writeSession1->Close(TDuration::Seconds(5));
+        writeSession2->Close(TDuration::Seconds(5));
+        writeSession3->Close(TDuration::Seconds(5));
+        writeSession4->Close(TDuration::Seconds(5));
 
-        readSession.Close();
+        readSession->Close();
     }
 
     Y_UNIT_TEST(PartitionSplit_PreferedPartition_BeforeAutoscaleAwareSDK) {
-        PartitionSplit_PreferedPartition(false);
+        PartitionSplit_PreferedPartition(SdkVersion::Topic, false);
     }
 
     Y_UNIT_TEST(PartitionSplit_PreferedPartition_AutoscaleAwareSDK) {
-        PartitionSplit_PreferedPartition(true);
+        PartitionSplit_PreferedPartition(SdkVersion::Topic, true);
+    }
+
+    Y_UNIT_TEST(PartitionSplit_PreferedPartition_PQv1) {
+        PartitionSplit_PreferedPartition(SdkVersion::PQv1, false);
     }
 
 
-    void PartitionMerge_PreferedPartition(bool autoscaleAwareSDK) {
+    void PartitionMerge_PreferedPartition(SdkVersion sdk, bool autoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 2, 100);
 
@@ -355,8 +361,8 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         auto writeSession1 = CreateWriteSession(client, "producer-1", 0);
         auto writeSession2 = CreateWriteSession(client, "producer-2", 1);
 
-        TTestReadSession readSession("Session-0", client, 3, !autoscaleAwareSDK, {}, autoscaleAwareSDK);
-        readSession.Run();
+        auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .ExpectedMessagesCount = 3, .AutoCommit = !autoscaleAwareSDK, .AutoPartitioningSupport = autoscaleAwareSDK });
+        readSession->Run();
 
         UNIT_ASSERT(writeSession1->Write(Msg("message_1.1", 2)));
         UNIT_ASSERT(writeSession2->Write(Msg("message_2.1", 3)));
@@ -372,9 +378,9 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         UNIT_ASSERT(writeSession3->Write(Msg("message_3.1", 2)));  // Will be ignored because duplicated SeqNo
         UNIT_ASSERT(writeSession3->Write(Msg("message_3.2", 11)));
 
-        readSession.WaitAllMessages();
+        readSession->WaitAllMessages();
 
-        for(const auto& info : readSession.Impl->ReceivedMessages) {
+        for(const auto& info : readSession->GetReceivedMessages()) {
             if (info.Data == TString("message_1.1")) {
                 UNIT_ASSERT_VALUES_EQUAL(0, info.PartitionId);
                 UNIT_ASSERT_VALUES_EQUAL(2, info.SeqNo);
@@ -390,80 +396,96 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         }
 
         if (autoscaleAwareSDK) {
-            UNIT_ASSERT_VALUES_EQUAL_C(2, readSession.Impl->EndedPartitionEvents.size(), "Two partition was ended which was merged");
-            for (auto& ev : readSession.Impl->EndedPartitionEvents) {
-                UNIT_ASSERT(ev.GetAdjacentPartitionIds() == std::vector<ui32>{0} || ev.GetAdjacentPartitionIds() == std::vector<ui32>{1});
-                UNIT_ASSERT_VALUES_EQUAL_C(std::vector<ui32>{2}, ev.GetChildPartitionIds(), "");
+            UNIT_ASSERT_VALUES_EQUAL_C(2, readSession->GetEndedPartitionEvents().size(), "Two partition was ended which was merged");
+            for (auto ev : readSession->GetEndedPartitionEvents()) {
+                UNIT_ASSERT(ev.AdjacentPartitionIds == std::vector<ui32>{0} || ev.AdjacentPartitionIds == std::vector<ui32>{1});
+                UNIT_ASSERT_VALUES_EQUAL_C(std::vector<ui32>{2}, ev.ChildPartitionIds, "");
             }
         } else {
-            UNIT_ASSERT_VALUES_EQUAL_C(0, readSession.Impl->EndedPartitionEvents.size(), "OLD SDK");
+            UNIT_ASSERT_VALUES_EQUAL_C(0, readSession->GetEndedPartitionEvents().size(), "OLD SDK");
         }
 
 
-        writeSession1->Close(TDuration::Seconds(1));
-        writeSession2->Close(TDuration::Seconds(1));
-        writeSession3->Close(TDuration::Seconds(1));
-        readSession.Close();
+        writeSession1->Close(TDuration::Seconds(2));
+        writeSession2->Close(TDuration::Seconds(2));
+        writeSession3->Close(TDuration::Seconds(2));
+        readSession->Close();
     }
 
     Y_UNIT_TEST(PartitionMerge_PreferedPartition_BeforeAutoscaleAwareSDK) {
-        PartitionMerge_PreferedPartition(false);
+        PartitionMerge_PreferedPartition(SdkVersion::Topic, false);
     }
 
     Y_UNIT_TEST(PartitionMerge_PreferedPartition_AutoscaleAwareSDK) {
-        PartitionMerge_PreferedPartition(true);
+        PartitionMerge_PreferedPartition(SdkVersion::Topic, true);
     }
 
-    void PartitionSplit_ReadEmptyPartitions(bool autoscaleAwareSDK) {
+    Y_UNIT_TEST(PartitionMerge_PreferedPartition_PQv1) {
+        PartitionMerge_PreferedPartition(SdkVersion::Topic, false);
+    }
+
+    void PartitionSplit_ReadEmptyPartitions(SdkVersion sdk, bool autoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
-        TTestReadSession readSession("session-0", client, Max<size_t>(), false, {}, autoscaleAwareSDK);
+        auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .AutoPartitioningSupport = autoscaleAwareSDK });
 
-        readSession.WaitAndAssertPartitions({0}, "Must read all exists partitions");
+        readSession->WaitAndAssertPartitions({0}, "Must read all exists partitions");
 
         ui64 txId = 1023;
         SplitPartition(setup, ++txId, 0, "a");
 
-        readSession.WaitAndAssertPartitions({0, 1, 2}, "After split must read all partitions because parent partition is empty");
+        readSession->WaitAndAssertPartitions({0, 1, 2}, "After split must read all partitions because parent partition is empty");
 
-        readSession.Close();
+        readSession->Close();
     }
 
     Y_UNIT_TEST(PartitionSplit_ReadEmptyPartitions_BeforeAutoscaleAwareSDK) {
-        PartitionSplit_ReadEmptyPartitions(false);
+        PartitionSplit_ReadEmptyPartitions(SdkVersion::Topic, false);
     }
 
     Y_UNIT_TEST(PartitionSplit_ReadEmptyPartitions_AutoscaleAwareSDK) {
-        PartitionSplit_ReadEmptyPartitions(true);
+        PartitionSplit_ReadEmptyPartitions(SdkVersion::Topic, true);
     }
 
-    Y_UNIT_TEST(PartitionSplit_ReadNotEmptyPartitions_BeforeAutoscaleAwareSDK) {
+    Y_UNIT_TEST(PartitionSplit_ReadEmptyPartitions_PQv1) {
+        PartitionSplit_ReadEmptyPartitions(SdkVersion::PQv1, false);
+    }
+
+    void PartitionSplit_ReadNotEmptyPartitions(SdkVersion sdk) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
-        TTestReadSession readSession("Session-0", client, Max<size_t>(), false, {}, false);
+        auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .AutoCommit = false, .AutoPartitioningSupport = false });
 
         auto writeSession = CreateWriteSession(client, "producer-1", 0);
 
-        readSession.WaitAndAssertPartitions({0}, "Must read all exists partitions");
+        readSession->WaitAndAssertPartitions({0}, "Must read all exists partitions");
 
         UNIT_ASSERT(writeSession->Write(Msg("message_1", 2)));
 
         ui64 txId = 1023;
         SplitPartition(setup, ++txId, 0, "a");
 
-        readSession.WaitAndAssertPartitions({0}, "After split must read only 0 partition because had been read not from the end of partition");
-        readSession.WaitAndAssertPartitions({}, "Partition must be released for secondary read after 1 second");
-        readSession.WaitAndAssertPartitions({0}, "Must secondary read for check read from end");
-        readSession.WaitAndAssertPartitions({}, "Partition must be released for secondary read because start not from the end of partition after 2 seconds");
+        readSession->WaitAndAssertPartitions({0}, "After split must read only 0 partition because had been read not from the end of partition");
+        readSession->WaitAndAssertPartitions({}, "Partition must be released for secondary read after 1 second");
+        readSession->WaitAndAssertPartitions({0}, "Must secondary read for check read from end");
+        readSession->WaitAndAssertPartitions({}, "Partition must be released for secondary read because start not from the end of partition after 2 seconds");
 
-        readSession.SetOffset(0, 1);
-        readSession.WaitAndAssertPartitions({0, 1, 2}, "Must read from all partitions because had been read from the end of partition");
+        readSession->SetOffset(0, 1);
+        readSession->WaitAndAssertPartitions({0, 1, 2}, "Must read from all partitions because had been read from the end of partition");
 
-        readSession.Close();
+        readSession->Close();
+    }
+
+    Y_UNIT_TEST(PartitionSplit_ReadNotEmptyPartitions_BeforeAutoscaleAwareSDK) {
+        PartitionSplit_ReadNotEmptyPartitions(SdkVersion::Topic);
+    }
+
+    Y_UNIT_TEST(PartitionSplit_ReadNotEmptyPartitions_PQv1) {
+        PartitionSplit_ReadNotEmptyPartitions(SdkVersion::PQv1);
     }
 
     Y_UNIT_TEST(PartitionSplit_ReadNotEmptyPartitions_AutoscaleAwareSDK) {
@@ -471,23 +493,23 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
-        TTestReadSession readSession("Session-0", client, Max<size_t>(), false, {}, true);
+        auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = SdkVersion::Topic, .AutoCommit = false, .AutoPartitioningSupport = true });
 
         auto writeSession = CreateWriteSession(client, "producer-1", 0);
 
-        readSession.WaitAndAssertPartitions({0}, "Must read all exists partitions");
+        readSession->WaitAndAssertPartitions({0}, "Must read all exists partitions");
 
         UNIT_ASSERT(writeSession->Write(Msg("message_1", 2)));
 
         ui64 txId = 1023;
         SplitPartition(setup, ++txId, 0, "a");
 
-        readSession.WaitAndAssertPartitions({0, 1, 2}, "Must read from all partitions because used new SDK");
+        readSession->WaitAndAssertPartitions({0, 1, 2}, "Must read from all partitions because used new SDK");
 
-        readSession.Close();
+        readSession->Close();
     }
 
-    Y_UNIT_TEST(PartitionSplit_ManySession_BeforeAutoscaleAwareSDK) {
+    void PartitionSplit_ManySession(SdkVersion sdk) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
@@ -499,24 +521,32 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         ui64 txId = 1023;
         SplitPartition(setup, ++txId, 0, "a");
 
-        TTestReadSession readSession1("Session-0", client, Max<size_t>(), false, {0, 1, 2}, false);
-        readSession1.SetOffset(0, 1);
-        readSession1.WaitAndAssertPartitions({0, 1, 2}, "Must read all exists partitions because read the partition 0 from offset 1");
-        readSession1.SetOffset(0, 0);
+        auto readSession1 = CreateTestReadSession({ .Name="Session-1", .Setup=setup, .Sdk = sdk, .AutoCommit = false, .Partitions = {0, 1, 2}, .AutoPartitioningSupport = false });
+        readSession1->SetOffset(0, 1);
+        readSession1->WaitAndAssertPartitions({0, 1, 2}, "Must read all exists partitions because read the partition 0 from offset 1");
+        readSession1->SetOffset(0, 0);
 
-        TTestReadSession readSession2("Session-1", client, Max<size_t>(), false, {0}, false);
-        readSession2.SetOffset(0, 0);
+        auto readSession2 = CreateTestReadSession({ .Name="Session-2", .Setup=setup, .Sdk = sdk, .AutoCommit = false, .Partitions = {0}, .AutoPartitioningSupport = false });
+        readSession2->SetOffset(0, 0);
 
-        readSession2.WaitAndAssertPartitions({0}, "Must read partition 0 because it defined in the readSession");
-        readSession2.Run();
+        readSession2->WaitAndAssertPartitions({0}, "Must read partition 0 because it defined in the readSession");
+        readSession2->Run();
 
-        readSession1.WaitAndAssertPartitions({}, "Must release all partitions becase readSession2 read not from EndOffset");
-        readSession1.Run();
+        readSession1->WaitAndAssertPartitions({}, "Must release all partitions becase readSession2 read not from EndOffset");
+        readSession1->Run();
 
-        readSession1.WaitAndAssertPartitions({0}, "Partition 0 must rebalance to other sessions (Session-0)");
+        readSession1->WaitAndAssertPartitions({0}, "Partition 0 must rebalance to other sessions (Session-0)");
 
-        readSession1.Close();
-        readSession2.Close();
+        readSession1->Close();
+        readSession2->Close();
+    }
+
+    Y_UNIT_TEST(PartitionSplit_ManySession_BeforeAutoscaleAwareSDK) {
+        PartitionSplit_ManySession(SdkVersion::Topic);
+    }
+
+    Y_UNIT_TEST(PartitionSplit_ManySession_PQv1) {
+        PartitionSplit_ManySession(SdkVersion::PQv1);
     }
 
     Y_UNIT_TEST(PartitionSplit_ManySession_AutoscaleAwareSDK) {
@@ -533,19 +563,19 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         Sleep(TDuration::Seconds(1));
 
-        TTestReadSession readSession1("Session-0", client, Max<size_t>(), false, {}, true);
+        auto readSession1 = CreateTestReadSession({ .Name="Session-1", .Setup=setup, .Sdk = SdkVersion::Topic, .AutoCommit = false, .AutoPartitioningSupport = true });
 
-        readSession1.WaitAndAssertPartitions({0, 1, 2}, "Must read all exists partitions because used new SDK");
-        readSession1.Commit();
-        readSession1.Run();
+        readSession1->WaitAndAssertPartitions({0, 1, 2}, "Must read all exists partitions because used new SDK");
+        readSession1->Commit();
+        readSession1->Run();
 
-        TTestReadSession readSession2("Session-1", client, Max<size_t>(), false, {}, true);
-        readSession2.Run();
+        auto readSession2 = CreateTestReadSession({ .Name="Session-2", .Setup=setup, .Sdk = SdkVersion::Topic, .AutoCommit = false, .AutoPartitioningSupport = true });
+        readSession2->Run();
 
         Sleep(TDuration::Seconds(1));
 
-        auto p1 = readSession1.GetPartitions();
-        auto p2 = readSession2.GetPartitions();
+        auto p1 = readSession1->GetPartitions();
+        auto p2 = readSession2->GetPartitions();
 
         std::set<size_t> partitions;
         partitions.insert(p1.begin(), p1.end());
@@ -555,13 +585,13 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         UNIT_ASSERT_VALUES_EQUAL(expected, partitions);
 
-        readSession1.Close();
+        readSession1->Close();
 
         Sleep(TDuration::Seconds(1));
 
-        UNIT_ASSERT_VALUES_EQUAL(expected, readSession2.GetPartitions());
+        UNIT_ASSERT_VALUES_EQUAL(expected, readSession2->GetPartitions());
 
-        readSession2.Close();
+        readSession2->Close();
     }
 
     Y_UNIT_TEST(PartitionSplit_ManySession_existed_AutoscaleAwareSDK) {
@@ -570,8 +600,8 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         TTopicClient client = setup.MakeClient();
 
-        TTestReadSession readSession1("Session-0", client, Max<size_t>(), false, {}, true);
-        TTestReadSession readSession2("Session-1", client, Max<size_t>(), false, {0}, true);
+        auto readSession1 = CreateTestReadSession({ .Name="Session-1", .Setup=setup, .Sdk = SdkVersion::Topic, .AutoCommit = false, .AutoPartitioningSupport = true });
+        auto readSession2 = CreateTestReadSession({ .Name="Session-2", .Setup=setup, .Sdk = SdkVersion::Topic, .AutoCommit = false, .Partitions = {0}, .AutoPartitioningSupport = true });
 
         auto writeSession = CreateWriteSession(client, "producer-1", 0);
         UNIT_ASSERT(writeSession->Write(Msg("message_1", 2)));
@@ -579,17 +609,17 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         ui64 txId = 1023;
         SplitPartition(setup, ++txId, 0, "a");
 
-        readSession1.WaitAndAssertPartitions({0, 1, 2}, "Must read all exists partitions because used new SDK");
-        readSession1.Commit();
-        readSession2.Run();
+        readSession1->WaitAndAssertPartitions({0, 1, 2}, "Must read all exists partitions because used new SDK");
+        readSession1->Commit();
+        readSession2->Run();
 
-        readSession2.WaitAndAssertPartitions({0}, "Must read partition 0 because it defined in the readSession");
-        readSession2.Run();
+        readSession2->WaitAndAssertPartitions({0}, "Must read partition 0 because it defined in the readSession");
+        readSession2->Run();
 
-        readSession1.WaitAndAssertPartitions({1, 2}, "Partition 0 must rebalance to other sessions (Session-0)");
+        readSession1->WaitAndAssertPartitions({1, 2}, "Partition 0 must rebalance to other sessions (Session-0)");
 
-        readSession1.Close();
-        readSession2.Close();
+        readSession1->Close();
+        readSession2->Close();
     }
 
     Y_UNIT_TEST(CommitTopPast_BeforeAutoscaleAwareSDK) {
@@ -836,7 +866,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
                 .BeginConfigureAutoPartitioningSettings()
                 .UpUtilizationPercent(2)
                 .DownUtilizationPercent(1)
-                .StabilizationWindow(TDuration::Seconds(1))
+                .StabilizationWindow(TDuration::Seconds(2))
                 .Strategy(EAutoPartitioningStrategy::ScaleUp)
                 .EndConfigureAutoPartitioningSettings()
             .EndConfigurePartitioningSettings();
@@ -844,55 +874,39 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         auto msg = TString(1_MB, 'a');
 
-        auto writeSession = CreateWriteSession(client, "producer-1", 0, TEST_TOPIC, false);
-        UNIT_ASSERT(writeSession->Write(Msg(msg, 1)));
-        UNIT_ASSERT(writeSession->Write(Msg(msg, 2)));
-        Sleep(TDuration::Seconds(5));
-        auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
-        UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
+        auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, TEST_TOPIC, false);
+        auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, TEST_TOPIC, false);
 
-        bool firstPartitionFound = false;
-        for (const auto& partition : describe.GetTopicDescription().GetPartitions()) {
-            if (partition.GetPartitionId() == 0) {
-                firstPartitionFound = true;
-                UNIT_ASSERT(!partition.GetActive());
-                UNIT_ASSERT_EQUAL(partition.GetChildPartitionIds().size(), 2);
-                auto childIds = partition.GetChildPartitionIds();
-                std::sort(childIds.begin(), childIds.end());
-                UNIT_ASSERT_EQUAL(childIds[0], 1);
-                UNIT_ASSERT_EQUAL(childIds[1], 2);
-            }
+        {
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 1)));
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 2)));
+            Sleep(TDuration::Seconds(5));
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 1);
         }
 
-        UNIT_ASSERT(firstPartitionFound);
-
-        TString secondPartitionTo = "";
-        TString thirdPartitionFrom = "";
-        for (const auto& partition : describe.GetTopicDescription().GetPartitions()) {
-            if (partition.GetPartitionId() == 1 || partition.GetPartitionId() == 2) {
-                UNIT_ASSERT(partition.GetActive());
-                if (partition.GetPartitionId() == 1) {
-                    UNIT_ASSERT(partition.GetToBound().Defined() && !partition.GetToBound()->Empty());
-                    secondPartitionTo = *partition.GetToBound();
-                }
-                if (partition.GetPartitionId() == 2) {
-                    UNIT_ASSERT(partition.GetFromBound().Defined() && !partition.GetFromBound()->Empty());
-                    thirdPartitionFrom = *partition.GetFromBound();
-                }
-                UNIT_ASSERT_EQUAL(partition.GetParentPartitionIds().size(), 1);
-                UNIT_ASSERT_EQUAL(partition.GetParentPartitionIds()[0], 0);
-            }
+        {
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 3)));
+            UNIT_ASSERT(writeSession_2->Write(Msg(msg, 4)));
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 5)));
+            UNIT_ASSERT(writeSession_2->Write(Msg(msg, 6)));
+            Sleep(TDuration::Seconds(5));
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
         }
 
-        UNIT_ASSERT(!secondPartitionTo.Empty());
-        UNIT_ASSERT(!thirdPartitionFrom.Empty());
+        auto writeSession2_1 = CreateWriteSession(client, "producer-1", 1, TEST_TOPIC, false);
+        auto writeSession2_2 = CreateWriteSession(client, "producer-2", 1, TEST_TOPIC, false);
 
-        auto writeSession2 = CreateWriteSession(client, "producer-1", 1, TEST_TOPIC, false);
-        UNIT_ASSERT(writeSession2->Write(Msg(msg, 3)));
-        UNIT_ASSERT(writeSession2->Write(Msg(msg, 4)));
-        Sleep(TDuration::Seconds(5));
-        auto describe2 = client.DescribeTopic(TEST_TOPIC).GetValueSync();
-        UNIT_ASSERT_EQUAL(describe2.GetTopicDescription().GetPartitions().size(), 5);
+        {
+            UNIT_ASSERT(writeSession2_1->Write(Msg(msg, 7)));
+            UNIT_ASSERT(writeSession2_2->Write(Msg(msg, 8)));
+            UNIT_ASSERT(writeSession2_1->Write(Msg(msg, 9)));
+            UNIT_ASSERT(writeSession2_2->Write(Msg(msg, 10)));
+            Sleep(TDuration::Seconds(5));
+            auto describe2 = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe2.GetTopicDescription().GetPartitions().size(), 5);
+        }
     }
 
     Y_UNIT_TEST(MidOfRange) {

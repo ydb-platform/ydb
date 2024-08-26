@@ -9,7 +9,7 @@ struct TStatisticsAggregator::TTxAckTimeout : public TTxBase {
 
     TTxType GetTxType() const override { return TXTYPE_ACK_TIMEOUT; }
 
-    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+    bool Execute(TTransactionContext& /*txc*/, const TActorContext&) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxAckTimeout::Execute");
         return true;
     }

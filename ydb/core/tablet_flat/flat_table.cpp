@@ -186,7 +186,7 @@ void TTable::SetScheme(const TScheme::TTableInfo &table)
     auto to = TRowScheme::Make(table.Columns, NUtil::TSecond());
 
     if (auto was = std::exchange(Scheme, to))
-        was->CheckCompatability(*Scheme);
+        was->CheckCompatibility(table.Name, *Scheme);
 
     /* This restriction is required for external blobs inverted index, for
         details read NPage::TFrames and NFwd blobs cache implementation. */

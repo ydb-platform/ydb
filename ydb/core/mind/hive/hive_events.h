@@ -34,6 +34,7 @@ struct TEvPrivate {
         EvDeleteNode,
         EvCanMoveTablets,
         EvUpdateBalanceCounters,
+        EvUpdateDataCenterFollowers,
         EvEnd
     };
 
@@ -123,6 +124,12 @@ struct TEvPrivate {
     struct TEvCanMoveTablets : TEventLocal<TEvCanMoveTablets, EvCanMoveTablets> {};
 
     struct TEvUpdateBalanceCounters : TEventLocal<TEvUpdateBalanceCounters, EvUpdateBalanceCounters> {};
+
+    struct TEvUpdateDataCenterFollowers : TEventLocal<TEvUpdateDataCenterFollowers, EvUpdateDataCenterFollowers> {
+        TDataCenterId DataCenter;
+
+        TEvUpdateDataCenterFollowers(TDataCenterId dataCenter) : DataCenter(dataCenter) {};
+    };
 };
 
 } // NHive

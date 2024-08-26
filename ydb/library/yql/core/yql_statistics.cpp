@@ -4,6 +4,8 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
+#include <sstream>
+
 using namespace NYql;
 
 static TString ConvertToStatisticsTypeString(EStatisticsType type) {
@@ -18,6 +20,12 @@ static TString ConvertToStatisticsTypeString(EStatisticsType type) {
             Y_ENSURE(false,"Unknown EStatisticsType");
     }
     return "";
+}
+
+TString TOptimizerStatistics::ToString() const {
+    std::stringstream ss;
+    ss << *this;
+    return ss.str();
 }
 
 std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) {

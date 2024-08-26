@@ -20,6 +20,7 @@ void PrepareScheme(NKikimrSchemeOp::TTableDescription* schema, const TString& na
     //inherit all from Src except PartitionConfig, PartitionConfig could be altered
     completedSchema.MutablePartitionConfig()->CopyFrom(schema->GetPartitionConfig());
     schema->Swap(&completedSchema);
+    schema->SetSystemColumnNamesAllowed(true);
 }
 
 class TConfigureParts: public TSubOperationState {
@@ -515,6 +516,9 @@ public:
 
         // replication config is not copied
         schema.ClearReplicationConfig();
+
+        // incr backup config is not copied
+        schema.ClearIncrementalBackupConfig();
 
         NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
         if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, srcTableInfo->PartitionConfig(), schema.GetPartitionConfig(), AppData(), errStr)

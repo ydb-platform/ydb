@@ -8935,10 +8935,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         TExprNode::TListType applyChildren = input->ChildrenList();
         applyChildren.pop_back(); // Remove position of list argument
 
-        if (input->Head().Type() != TExprNode::Lambda) {
-            if (!EnsureCallableType(input->Head(), ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Callable) {
             const TCallableExprType* callableType = input->Head().GetTypeAnn()->Cast<TCallableExprType>();
 
             if (applyChildren.size() < callableType->GetArgumentsSize() + 1 - callableType->GetOptionalArgumentsCount()) {
@@ -8992,11 +8989,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
         else {
             auto lambda = input->HeadPtr();
-            const auto args = lambda->Child(0);
-            if (input->ChildrenSize() - 2 != args->ChildrenSize()) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Different arguments count, lambda has "
-                    << args->ChildrenSize() << " arguments, but provided " << (input->ChildrenSize() - 2)));
-                return IGraphTransformer::TStatus::Error;
+            auto status = ConvertToLambda(lambda, ctx.Expr, input->ChildrenSize() - 2);
+            if (status == IGraphTransformer::TStatus::Error) {
+                return status;
             }
 
             output = ctx.Expr.Builder(input->Pos())
@@ -9103,6 +9098,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         if (extractKeyLambda->IsAtom()) {
             TExprNode::TPtr applied;
             if (udf->IsLambda()) {
+                if (udf->Head().ChildrenSize() != 1) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(pos), TStringBuilder() << "Expected lambda with one argument, but got: " << udf->Head().ChildrenSize()));
+                    return IGraphTransformer::TStatus::Error;
+                }
+
                 applied = ctx.Expr.Builder(pos)
                     .Apply(udf)
                         .With(0, udfInput)

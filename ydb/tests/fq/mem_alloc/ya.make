@@ -27,6 +27,4 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-REQUIREMENTS(ram:9)
-
 END()

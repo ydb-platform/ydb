@@ -16,7 +16,7 @@ const char* IB_RESTORE_CDC_STREAM_NAME = "__ib_restore_stream";
 
 namespace NKikimr::NSchemeShard {
 
-void DoCreateLock(const TOperationId opId, const TPath& workingDirPath, const TPath& tablePath, bool allowIndexImplLock,
+void DoCreateLock(const TOperationId opId, const TPath& workingDirPath, const TPath& tablePath, bool /*allowIndexImplLock*/,
     TVector<ISubOperation::TPtr>& result)
 {
     auto outTx = TransactionTemplate(workingDirPath.PathString(),
@@ -105,9 +105,9 @@ void DoCreateAlterTable(
 
     PathIdFromPathId(dstTablePath.Base()->PathId, desc.MutablePathId());
 
-    auto& replicationConfig = *desc.MutableReplicationConfig();
-    replicationConfig.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_RESTORE_INCREMENTAL_BACKUP);
-    replicationConfig.SetConsistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK);
+    auto& restoreConfig = *desc.MutableIncrementalBackupConfig();
+    restoreConfig.SetMode(NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_INCREMENTAL_BACKUP);
+    restoreConfig.SetConsistency(NKikimrSchemeOp::TTableIncrementalBackupConfig::CONSISTENCY_WEAK);
 
     result.push_back(CreateAlterTable(NextPartId(opId, result), outTx));
 }

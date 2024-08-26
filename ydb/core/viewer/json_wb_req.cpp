@@ -137,6 +137,11 @@ void InitViewerTabletInfoJsonHandler(TJsonHandlers& jsonHandlers) {
         .Description = "Returns information about tablets"
     });
     yaml.AddParameter({
+        .Name = "database",
+        .Description = "database name",
+        .Type = "string",
+    });
+    yaml.AddParameter({
         .Name = "node_id",
         .Description = "node identifier",
         .Type = "integer",

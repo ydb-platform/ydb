@@ -2,6 +2,7 @@
 
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/util/ulid.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -9,10 +10,16 @@
 namespace NKikimr {
 namespace NStat {
 
+TString MakeOperationId() {
+    TULIDGenerator ulidGen;
+    return ulidGen.Next(TActivationContext::Now()).ToBinary();
+}
+
 THttpRequest::THttpRequest(EType type, const TString& path, TActorId replyToActorId)
     : Type(type)
     , Path(path)
     , ReplyToActorId(replyToActorId)
+    , OperationId(MakeOperationId() )
 {}    
 
 void THttpRequest::Bootstrap() {
@@ -102,6 +109,14 @@ void THttpRequest::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& 
 
 void THttpRequest::Handle(TEvStatistics::TEvAnalyzeStatusResponse::TPtr& ev) {
     auto& record = ev->Get()->Record;
+
+    if (record.GetOperationId() != OperationId) {
+        ALOG_ERROR(NKikimrServices::STATISTICS, 
+            "THttpRequest, TEvAnalyzeStatusResponse has operationId=" << record.GetOperationId() 
+            << " , but expected " << OperationId);
+        HttpReply("Wrong OperationId");
+    }
+
     switch (record.GetStatus()) {
     case NKikimrStat::TEvAnalyzeStatusResponse::STATUS_UNSPECIFIED:
         HttpReply("Status is unspecified");
@@ -131,6 +146,7 @@ void THttpRequest::ResolveSuccess() {
     if (Type == ANALYZE) {
         auto analyze = std::make_unique<TEvStatistics::TEvAnalyze>();
         auto& record = analyze->Record;
+        record.SetOperationId(OperationId);
         PathIdFromPathId(PathId, record.AddTables()->MutablePathId());
 
         Send(MakePipePerNodeCacheID(false),
@@ -140,7 +156,7 @@ void THttpRequest::ResolveSuccess() {
     } else {
         auto getStatus = std::make_unique<TEvStatistics::TEvAnalyzeStatus>();
         auto& record = getStatus->Record;
-        PathIdFromPathId(PathId, record.MutablePathId());
+        record.SetOperationId(OperationId);
 
         Send(MakePipePerNodeCacheID(false),
             new TEvPipeCache::TEvForward(getStatus.release(), StatisticsAggregatorId, true));

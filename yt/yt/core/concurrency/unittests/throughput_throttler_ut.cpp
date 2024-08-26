@@ -35,6 +35,19 @@ TEST(TReconfigurableThroughputThrottlerTest, NoLimit)
     EXPECT_LE(timer.GetElapsedTime().MilliSeconds(), 100u);
 }
 
+TEST(TReconfigurableThroughputThrottlerTest, CannotBeAbusedViaReconfigure)
+{
+    auto throttler = CreateReconfigurableThroughputThrottler(
+        TThroughputThrottlerConfig::Create(0));
+
+    auto future1 = throttler->Throttle(1);
+    auto future2 = throttler->Throttle(1);
+    throttler->SetLimit(0);
+
+    EXPECT_FALSE(future1.IsSet());
+    EXPECT_FALSE(future2.IsSet());
+}
+
 TEST(TReconfigurableThroughputThrottlerTest, Limit)
 {
     auto throttler = CreateReconfigurableThroughputThrottler(

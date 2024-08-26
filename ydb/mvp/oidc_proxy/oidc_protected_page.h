@@ -59,6 +59,7 @@ public:
             return;
         }
         NHttp::THeaders headers(Request->Headers);
+        IsAjaxRequest = DetectAjaxRequest(headers);
         TStringBuf authHeader = headers.Get(AUTH_HEADER_NAME);
         if (Request->Method == "OPTIONS" || IsAuthorizedRequest(authHeader)) {
             ForwardUserRequest(TString(authHeader), ctx);
@@ -67,18 +68,14 @@ public:
         }
     }
 
-    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
+    void HandleProxy(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
         NHttp::THttpOutgoingResponsePtr httpResponse;
         if (event->Get()->Response != nullptr) {
             NHttp::THttpIncomingResponsePtr response = event->Get()->Response;
-            if (response->Status == "400" && RequestedPageScheme.empty()) {
-                NHttp::THttpOutgoingRequestPtr request = response->GetRequest();
-                if (!request->Secure) {
-                    LOG_DEBUG_S(ctx, EService::MVP, "Try to send request to HTTPS port");
-                    NHttp::THeadersBuilder headers {request->Headers};
-                    ForwardUserRequest(headers.Get(AUTH_HEADER_NAME), ctx, true);
-                    return;
-                }
+            LOG_DEBUG_S(ctx, EService::MVP, "Incoming response for protected resource: " << response->Status);
+            if (NeedSendSecureHttpRequest(response)) {
+                SendSecureHttpRequest(response, ctx);
+                return;
             }
             NHttp::THeadersBuilder headers = GetResponseHeaders(response);
             TStringBuf contentType = headers.Get("Content-Type").NextTok(';');
@@ -115,7 +112,7 @@ protected:
         return it != Settings.AllowedProxyHosts.cend();
     }
 
-    bool IsAuthorizedRequest(TStringBuf authHeader) {
+    static bool IsAuthorizedRequest(TStringBuf authHeader) {
         if (authHeader.empty()) {
             return false;
         }
@@ -140,7 +137,9 @@ protected:
         ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
     }
 
-    TString FixReferenceInHtml(TStringBuf html, TStringBuf host, TStringBuf findStr) {
+    virtual bool NeedSendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response) const = 0;
+
+    static TString FixReferenceInHtml(TStringBuf html, TStringBuf host, TStringBuf findStr) {
         TStringBuilder result;
         size_t n = html.find(findStr);
         if (n == TStringBuf::npos) {
@@ -164,14 +163,14 @@ protected:
         return result;
     }
 
-    TString FixReferenceInHtml(TStringBuf html, TStringBuf host) {
+    static TString FixReferenceInHtml(TStringBuf html, TStringBuf host) {
         TStringBuf findString = "href=";
         auto result = FixReferenceInHtml(html, host, findString);
         findString = "src=";
         return FixReferenceInHtml(result, host, findString);
     }
 
-    void ForwardRequestHeaders(NHttp::THttpOutgoingRequestPtr& request) {
+    void ForwardRequestHeaders(NHttp::THttpOutgoingRequestPtr& request) const {
         static const TVector<TStringBuf> HEADERS_WHITE_LIST = {
             "Connection",
             "Accept-Language",
@@ -193,12 +192,12 @@ protected:
         request->Set("Accept-Encoding", "deflate");
     }
 
+private:
     NHttp::THeadersBuilder GetResponseHeaders(const NHttp::THttpIncomingResponsePtr& response) {
         static const TVector<TStringBuf> HEADERS_WHITE_LIST = {
             "Content-Type",
             "Connection",
             "X-Worker-Name",
-            "Location",
             "Set-Cookie",
             "Access-Control-Allow-Origin",
             "Access-Control-Allow-Credentials",
@@ -212,7 +211,24 @@ protected:
                 resultHeaders.Set(header, headers.Get(header));
             }
         }
+        static const TString LOCATION_HEADER_NAME = "Location";
+        if (headers.Has(LOCATION_HEADER_NAME)) {
+            resultHeaders.Set(LOCATION_HEADER_NAME, GetFixedLocationHeader(headers.Get(LOCATION_HEADER_NAME)));
+        }
         return resultHeaders;
+    }
+
+    void SendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response, const NActors::TActorContext& ctx) {
+        NHttp::THttpOutgoingRequestPtr request = response->GetRequest();
+        LOG_DEBUG_S(ctx, EService::MVP, "Try to send request to HTTPS port");
+        NHttp::THeadersBuilder headers {request->Headers};
+        ForwardUserRequest(headers.Get(AUTH_HEADER_NAME), ctx, true);
+    }
+
+    TString GetFixedLocationHeader(TStringBuf location) {
+        TStringBuf scheme, host, uri;
+        NHttp::CrackURL(ProtectedPageUrl, scheme, host, uri);
+        return TStringBuilder() << '/' << host << location;
     }
 };
 

@@ -24,8 +24,7 @@ IF (OPENSOURCE_REPLACE_PROTOBUF AND EXPORT_CMAKE)
         protobuf::libprotoc
         CONAN
         protobuf/${OPENSOURCE_REPLACE_PROTOBUF}
-        "&& conan-requires"
-        protobuf/${OPENSOURCE_REPLACE_PROTOBUF}
+        CONAN_ADDITIONAL_SEMS
         "&& conan_require_tool"
         protobuf/${OPENSOURCE_REPLACE_PROTOBUF}
         "&& conan-tool_requires"
@@ -55,10 +54,6 @@ CFLAGS(
 
 IF (OS_ANDROID)
     EXTRALIBS(log)
-ENDIF()
-
-IF (FIX_UNUSED_PARAMETR_PLS)
-    GLOBAL_CFLAGS(-DFIX_UNUSED_PARAMETR_PLS=yes)
 ENDIF()
 
 SRCS(

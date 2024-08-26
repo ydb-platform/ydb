@@ -46,6 +46,7 @@ struct TEvPrivate {
         EvExportSaveCursor,
 
         EvTaskProcessedResult,
+        EvPingSnapshotsUsage,
 
         EvEnd
     };
@@ -158,7 +159,11 @@ struct TEvPrivate {
         bool Manual;
     };
 
-    class TEvWriteBlobsResult : public TEventLocal<TEvWriteBlobsResult, EvWriteBlobsResult> {
+    struct TEvPingSnapshotsUsage: public TEventLocal<TEvPingSnapshotsUsage, EvPingSnapshotsUsage> {
+        TEvPingSnapshotsUsage() = default;
+    };
+
+    class TEvWriteBlobsResult: public TEventLocal<TEvWriteBlobsResult, EvWriteBlobsResult> {
     private:
         NColumnShard::TBlobPutResult::TPtr PutResult;
         NOlap::TWritingBuffer WritesBuffer;

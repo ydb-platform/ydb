@@ -256,7 +256,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
             NKqp::CompareYson(R"([
-                [[5u];[0u];["/Root/Tenant1/Table1"]]
+                [[9u];[0u];["/Root/Tenant1/Table1"]]
             ])", NKqp::StreamResultToYson(it));
         }
         {
@@ -267,7 +267,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
             NKqp::CompareYson(R"([
-                [[6u];[0u];["/Root/Tenant2/Table2"]]
+                [[10u];[0u];["/Root/Tenant2/Table2"]]
             ])", NKqp::StreamResultToYson(it));
         }
     }
@@ -297,7 +297,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
             UNIT_ASSERT(result.IsSuccess());
             NKqp::CompareYson(R"([
-                [[5u];[0u];["/Root/Tenant1/Table1"]]
+                [[9u];[0u];["/Root/Tenant1/Table1"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
         {
@@ -307,7 +307,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
             UNIT_ASSERT(result.IsSuccess());
             NKqp::CompareYson(R"([
-                [[6u];[0u];["/Root/Tenant2/Table2"]]
+                [[10u];[0u];["/Root/Tenant2/Table2"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
@@ -997,7 +997,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.String("Default"); // Kind
         check.Uint64(env.GetServer().GetRuntime()->GetNodeId(0)); // NodeId
         check.Uint64(1u); // PDiskId
-        check.String("ERROR"); // Status
+        check.Null(); // Status
         check.Uint64(0u); // VDisk
         check.Uint64(1000u); // VSlotId
     }
@@ -1521,11 +1521,12 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 4);
-            UNIT_ASSERT_STRINGS_EQUAL(children[0].Name, "Table0");
-            UNIT_ASSERT_STRINGS_EQUAL(children[1].Name, "Tenant1");
-            UNIT_ASSERT_STRINGS_EQUAL(children[2].Name, "Tenant2");
-            UNIT_ASSERT_STRINGS_EQUAL(children[3].Name, ".sys");
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 5);
+            UNIT_ASSERT_STRINGS_EQUAL(children[0].Name, ".metadata");
+            UNIT_ASSERT_STRINGS_EQUAL(children[1].Name, "Table0");
+            UNIT_ASSERT_STRINGS_EQUAL(children[2].Name, "Tenant1");
+            UNIT_ASSERT_STRINGS_EQUAL(children[3].Name, "Tenant2");
+            UNIT_ASSERT_STRINGS_EQUAL(children[4].Name, ".sys");
         }
         {
             auto result = schemeClient.ListDirectory("/Root/Tenant1").GetValueSync();

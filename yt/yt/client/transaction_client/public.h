@@ -31,6 +31,10 @@ DEFINE_ENUM(ECommitOrdering,
     ((Strong)          (1)) // Rows are appended to tablet in order of timestamps
 );
 
+DEFINE_ENUM(ETimestampProviderFeature,
+    ((AlienClocks)     (0))
+);
+
 YT_DEFINE_ERROR_ENUM(
     ((NoSuchTransaction)                (11000))
     ((NestedExternalTransactionExists)  (11001))

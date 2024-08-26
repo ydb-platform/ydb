@@ -340,11 +340,14 @@ static bool IterateRows(NYT::ITransactionPtr tx,
     }
 
     NYT::TTableReaderOptions readerOptions;
-    if (sampling && sampling->Mode == EYtSampleMode::Bernoulli) {
+    if (sampling) {
         NYT::TNode spec = NYT::TNode::CreateMap();
         spec["sampling_rate"] = sampling->Percentage / 100.;
         if (sampling->Repeat) {
             spec["sampling_seed"] = static_cast<i64>(sampling->Repeat);
+        }
+        if (sampling->Mode == EYtSampleMode::System) {
+            spec["sampling_mode"] = "block";
         }
         readerOptions.Config(spec);
     }

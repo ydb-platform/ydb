@@ -47,13 +47,17 @@ using namespace NTracing;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static NLogging::TLogger WithCommandTag(
+namespace  {
+
+NLogging::TLogger WithCommandTag(
     const NLogging::TLogger& logger,
     const ICommandContextPtr& context)
 {
     return logger.WithTag("Command: %v",
         context->Request().CommandName);
 }
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -261,7 +265,17 @@ void TWriteTableCommand::Register(TRegistrar registrar)
         .Default(1_MB);
 }
 
-void TWriteTableCommand::DoExecute(ICommandContextPtr context)
+TFuture<ITableWriterPtr> TWriteTableCommand::CreateTableWriter(
+    const ICommandContextPtr& context) const
+{
+    PutMethodInfoInTraceContext("write_table");
+
+    return context->GetClient()->CreateTableWriter(
+        Path,
+        Options);
+}
+
+void TWriteTableCommand::DoExecuteImpl(const ICommandContextPtr& context)
 {
     auto transaction = AttachTransaction(context, false);
 
@@ -273,11 +287,7 @@ void TWriteTableCommand::DoExecute(ICommandContextPtr context)
     Options.PingAncestors = true;
     Options.Config = config;
 
-    PutMethodInfoInTraceContext("write_table");
-
-    auto apiWriter = WaitFor(context->GetClient()->CreateTableWriter(
-        Path,
-        Options))
+    auto apiWriter = WaitFor(CreateTableWriter(context))
         .ValueOrThrow();
 
     auto schemalessWriter = CreateSchemalessFromApiWriterAdapter(std::move(apiWriter));
@@ -298,7 +308,11 @@ void TWriteTableCommand::DoExecute(ICommandContextPtr context)
 
     WaitFor(schemalessWriter->Close())
         .ThrowOnError();
+}
 
+void TWriteTableCommand::DoExecute(ICommandContextPtr context)
+{
+    DoExecuteImpl(context);
     ProduceEmptyOutput(context);
 }
 
@@ -401,6 +415,15 @@ void TGetTableColumnarStatisticsCommand::DoExecute(ICommandContextPtr context)
                                     .Item("column_non_null_value_counts").DoMap([&] (TFluentMap fluent) {
                                         for (int index = 0; index < statistics.GetColumnCount(); ++index) {
                                             fluent.Item(columns[index]).Value(statistics.ColumnNonNullValueCounts[index]);
+                                        }
+                                    });
+                            })
+                            .DoIf(statistics.HasLargeStatistics(), [&](TFluentMap fluent) {
+                                fluent
+                                    .Item("column_estimated_unique_counts").DoMap([&](TFluentMap fluent) {
+                                        const auto& largeStat = statistics.LargeStatistics;
+                                        for (int index = 0; index < std::ssize(largeStat.ColumnHyperLogLogDigests); ++index) {
+                                            fluent.Item(columns[index]).Value(largeStat.ColumnHyperLogLogDigests[index].EstimateCardinality());
                                         }
                                     });
                             })
@@ -1103,6 +1126,15 @@ void TLookupRowsCommand::DoExecute(ICommandContextPtr context)
 
     auto clientBase = GetClientBase(context);
 
+    auto produceResponseParameters = [&] (const auto& result) {
+        ProduceResponseParameters(context, [&] (NYson::IYsonConsumer* consumer) {
+            if (!result.UnavailableKeyIndexes.empty()) {
+                BuildYsonMapFragmentFluently(consumer)
+                    .Item("unavailable_key_indexes").Value(result.UnavailableKeyIndexes);
+            }
+        });
+    };
+
     if (Versioned) {
         TVersionedLookupRowsOptions versionedOptions;
         versionedOptions.ColumnFilter = Options.ColumnFilter;
@@ -1113,32 +1145,37 @@ void TLookupRowsCommand::DoExecute(ICommandContextPtr context)
         versionedOptions.CachedSyncReplicasTimeout = Options.CachedSyncReplicasTimeout;
         versionedOptions.RetentionConfig = RetentionConfig;
         versionedOptions.ReplicaConsistency = Options.ReplicaConsistency;
-        auto asyncRowset = clientBase->VersionedLookupRows(
+        auto resultFuture = clientBase->VersionedLookupRows(
             Path.GetPath(),
             std::move(nameTable),
             std::move(keyRange),
             versionedOptions);
-        auto rowset = WaitFor(asyncRowset)
-            .ValueOrThrow()
-            .Rowset;
-        auto writer = CreateVersionedWriterForFormat(format, rowset->GetSchema(), output);
-        Y_UNUSED(writer->Write(rowset->GetRows()));
+        auto result = WaitFor(resultFuture)
+            .ValueOrThrow();
+        produceResponseParameters(result);
+        auto writer = CreateVersionedWriterForFormat(format, result.Rowset->GetSchema(), output);
+        Y_UNUSED(writer->Write(result.Rowset->GetRows()));
         WaitFor(writer->Close())
             .ThrowOnError();
     } else {
-        auto asyncRowset = clientBase->LookupRows(
+        auto resultFuture = clientBase->LookupRows(
             Path.GetPath(),
             std::move(nameTable),
             std::move(keyRange),
             Options);
-        auto rowset = WaitFor(asyncRowset)
-            .ValueOrThrow()
-            .Rowset;
-        auto writer = CreateSchemafulWriterForFormat(format, rowset->GetSchema(), output);
-        Y_UNUSED(writer->Write(rowset->GetRows()));
+        auto result = WaitFor(resultFuture)
+            .ValueOrThrow();
+        produceResponseParameters(result);
+        auto writer = CreateSchemafulWriterForFormat(format, result.Rowset->GetSchema(), output);
+        Y_UNUSED(writer->Write(result.Rowset->GetRows()));
         WaitFor(writer->Close())
             .ThrowOnError();
     }
+}
+
+bool TLookupRowsCommand::HasResponseParameters() const
+{
+    return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

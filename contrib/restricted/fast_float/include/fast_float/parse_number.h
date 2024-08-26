@@ -187,35 +187,20 @@ from_chars_result_t<UC> from_chars(UC const * first, UC const * last,
   return from_chars_caller<T>::call(first, last, value, parse_options_t<UC>(fmt));
 }
 
+/**
+ * This function overload takes parsed_number_string_t structure that is created and populated
+ * either by from_chars_advanced function taking chars range and parsing options
+ * or other parsing custom function implemented by user.
+ */
 template<typename T, typename UC>
 FASTFLOAT_CONSTEXPR20
-from_chars_result_t<UC> from_chars_advanced(UC const * first, UC const * last,
-                                      T &value, parse_options_t<UC> options)  noexcept  {
+from_chars_result_t<UC> from_chars_advanced(parsed_number_string_t<UC>& pns,
+                                      T &value)  noexcept  {
 
   static_assert (is_supported_float_type<T>(), "only some floating-point types are supported");
   static_assert (is_supported_char_type<UC>(), "only char, wchar_t, char16_t and char32_t are supported");
 
   from_chars_result_t<UC> answer;
-#ifdef FASTFLOAT_SKIP_WHITE_SPACE  // disabled by default
-  while ((first != last) && fast_float::is_space(uint8_t(*first))) {
-    first++;
-  }
-#endif
-  if (first == last) {
-    answer.ec = std::errc::invalid_argument;
-    answer.ptr = first;
-    return answer;
-  }
-  parsed_number_string_t<UC> pns = parse_number_string<UC>(first, last, options);
-  if (!pns.valid) {
-    if (options.format & chars_format::no_infnan) {
-      answer.ec = std::errc::invalid_argument;
-      answer.ptr = first;
-      return answer;
-    } else {
-      return detail::parse_infnan(first, last, value);
-    }
-  }
 
   answer.ec = std::errc(); // be optimistic
   answer.ptr = pns.lastmatch;
@@ -274,6 +259,40 @@ from_chars_result_t<UC> from_chars_advanced(UC const * first, UC const * last,
     answer.ec = std::errc::result_out_of_range;
   }
   return answer;
+}
+
+template<typename T, typename UC>
+FASTFLOAT_CONSTEXPR20
+from_chars_result_t<UC> from_chars_advanced(UC const * first, UC const * last,
+                                      T &value, parse_options_t<UC> options)  noexcept  {
+
+  static_assert (is_supported_float_type<T>(), "only some floating-point types are supported");
+  static_assert (is_supported_char_type<UC>(), "only char, wchar_t, char16_t and char32_t are supported");
+
+  from_chars_result_t<UC> answer;
+#ifdef FASTFLOAT_SKIP_WHITE_SPACE  // disabled by default
+  while ((first != last) && fast_float::is_space(uint8_t(*first))) {
+    first++;
+  }
+#endif
+  if (first == last) {
+    answer.ec = std::errc::invalid_argument;
+    answer.ptr = first;
+    return answer;
+  }
+  parsed_number_string_t<UC> pns = parse_number_string<UC>(first, last, options);
+  if (!pns.valid) {
+    if (options.format & chars_format::no_infnan) {
+      answer.ec = std::errc::invalid_argument;
+      answer.ptr = first;
+      return answer;
+    } else {
+      return detail::parse_infnan(first, last, value);
+    }
+  }
+
+  // call overload that takes parsed_number_string_t directly.
+  return from_chars_advanced(pns, value);
 }
 
 

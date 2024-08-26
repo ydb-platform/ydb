@@ -619,7 +619,7 @@ void TClientResponse::Deserialize(TSharedRefArray responseMessage)
         THROW_ERROR_EXCEPTION(NRpc::EErrorCode::ProtocolError, "Error deserializing response body");
     }
 
-    auto compressedAttachments = MakeRange(ResponseMessage_.Begin() + 2, ResponseMessage_.End());
+    auto compressedAttachments = TRange(ResponseMessage_.Begin() + 2, ResponseMessage_.End());
     auto memoryUsageTracker = ClientContext_->GetMemoryUsageTracker();
 
     if (attachmentCodecId == NCompression::ECodec::None) {
@@ -640,7 +640,7 @@ void TClientResponse::HandleAcknowledgement()
     State_.compare_exchange_strong(expected, EState::Ack);
 }
 
-void TClientResponse::HandleResponse(TSharedRefArray message, TString address)
+void TClientResponse::HandleResponse(TSharedRefArray message, const std::string& address)
 {
     auto prevState = State_.exchange(EState::Done);
     YT_ASSERT(prevState == EState::Sent || prevState == EState::Ack);
@@ -648,14 +648,14 @@ void TClientResponse::HandleResponse(TSharedRefArray message, TString address)
     GetInvoker()->Invoke(BIND(&TClientResponse::DoHandleResponse,
         MakeStrong(this),
         Passed(std::move(message)),
-        Passed(std::move(address))));
+        address));
 }
 
-void TClientResponse::DoHandleResponse(TSharedRefArray message, TString address)
+void TClientResponse::DoHandleResponse(TSharedRefArray message, const std::string& address)
 {
     NProfiling::TWallTimer timer;
 
-    Address_ = std::move(address);
+    Address_ = address;
 
     try {
         Deserialize(std::move(message));

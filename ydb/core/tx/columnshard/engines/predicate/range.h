@@ -28,11 +28,12 @@ public:
         return PredicateTo;
     }
 
-    static std::optional<TPKRangeFilter> Build(TPredicateContainer&& from, TPredicateContainer&& to);
+    static TConclusion<TPKRangeFilter> Build(TPredicateContainer&& from, TPredicateContainer&& to);
 
     NArrow::TColumnFilter BuildFilter(const arrow::Datum& data) const;
 
     bool IsPortionInUsage(const TPortionInfo& info) const;
+    bool CheckPoint(const NArrow::TReplaceKey& point) const;
 
     enum class EUsageClass {
         DontUsage,

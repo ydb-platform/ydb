@@ -43,13 +43,17 @@ apt-get -y purge lxd-agent-loader snapd modemanager
 apt-get -y autoremove
 
 pip3 install conan==1.59 pytest==7.1.3 pytest-timeout pytest-xdist==3.3.1 setproctitle==1.3.2 \
-  grpcio grpcio-tools PyHamcrest tornado xmltodict pyarrow boto3 moto[server] psutil pygithub==1.59.1
+  grpcio grpcio-tools PyHamcrest tornado xmltodict pyarrow boto3 moto[server] psutil pygithub==2.3.0
 
 (CCACHE_VERSION=4.8.1 OS_ARCH=$(uname -m);
   curl -s -L https://github.com/ccache/ccache/releases/download/v$CCACHE_VERSION/ccache-$CCACHE_VERSION-linux-$OS_ARCH.tar.xz \
     | tar -xJ -C /usr/local/bin/ --strip-components=1 --no-same-owner ccache-$CCACHE_VERSION-linux-$OS_ARCH/ccache
 )
 
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash
+apt-get install -y nodejs
+
+npm install -g @testmo/testmo-cli
 EOF
     destination = "/tmp/install-packages.sh"
   }

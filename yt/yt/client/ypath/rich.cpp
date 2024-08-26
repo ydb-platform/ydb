@@ -7,6 +7,7 @@
 #include <yt/yt/client/table_client/column_sort_schema.h>
 #include <yt/yt/client/table_client/column_rename_descriptor.h>
 #include <yt/yt/client/table_client/schema.h>
+#include <yt/yt/client/table_client/versioned_io_options.h>
 
 #include <yt/yt/core/misc/error.h>
 
@@ -654,14 +655,15 @@ std::optional<TSortColumns> TRichYPath::GetChunkSortColumns() const
     return FindAttribute<TSortColumns>(*this, "chunk_sort_columns");
 }
 
-std::optional<TString> TRichYPath::GetCluster() const
+std::optional<std::string> TRichYPath::GetCluster() const
 {
-    return FindAttribute<TString>(*this, "cluster");
+    return FindAttribute<std::string>(*this, "cluster");
 }
 
-void TRichYPath::SetCluster(const TString& value)
+void TRichYPath::SetCluster(const std::string& value)
 {
-    Attributes().Set("cluster", value);
+    // TODO(babenko): switch to std::string
+    Attributes().Set("cluster", TString(value));
 }
 
 std::optional<std::vector<TString>> TRichYPath::GetClusters() const
@@ -677,6 +679,11 @@ void TRichYPath::SetClusters(const std::vector<TString>& value)
 bool TRichYPath::GetCreate() const
 {
     return GetAttribute<bool>(*this, "create", false);
+}
+
+TVersionedReadOptions TRichYPath::GetVersionedReadOptions() const
+{
+    return GetAttribute(*this, "versioned_read_options", TVersionedReadOptions());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -779,6 +786,7 @@ const std::vector<TString>& GetWellKnownRichYPathAttributes()
         "clusters",
         "create",
         "read_via_exec_node",
+        "versioned_read_options",
     };
     return WellKnownAttributes;
 }

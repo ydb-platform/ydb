@@ -523,6 +523,22 @@ class ScenarioTestHelper:
         ):
             result_set = self.execute_scan_query(f'SELECT count(*) FROM `{self.get_full_path(tablename)}`')
             return result_set.result_set.rows[0][0]
+    
+    @allure.step('Describe table {path}')
+    def describe_table(self, path: str, settings: ydb.DescribeTableSettings = None) -> List[ydb.SchemeEntry]:
+        """Get table description.
+
+        Args:
+            path: Relative path to a table.
+            settings: DescribeTableSettings.
+
+        Returns:
+            TableSchemeEntry object.
+        """
+
+        return self._run_with_expected_status(
+            lambda: YdbCluster.get_ydb_driver().table_client.session().create().describe_table(self.get_full_path(path), settings), ydb.StatusCode.SUCCESS
+        )
 
     @allure.step('List path {path}')
     def list_path(self, path: str) -> List[ydb.SchemeEntry]:

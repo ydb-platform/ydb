@@ -1,6 +1,7 @@
 import argparse
 import subprocess
 import pathlib
+import os
 from sys import stderr
 
 def parse_args(passed=None):
@@ -19,11 +20,13 @@ def parse_args(passed=None):
     parser.add_argument('--ydb-root', type=lambda path: pathlib.Path(path).resolve(), default=YDB_ROOT)
     parser.add_argument('-o', '--output', default="./results")
     parser.add_argument('--clean-old', action="store_true", default=False)
+    parser.add_argument('--query-filter', action="append", default=[])
     
-    return parser.parse_known_intermixed_args(passed)
+    return parser.parse_args(passed)
 
 class Runner:
     def prepare_queries_dir(self, custom_pragmas):
+        print("Preparing queries...")
         self.queries_dir.mkdir(parents=True, exist_ok=True)
         cmd = [self.args.gen_queries]
         cmd += ["--output", f"{self.queries_dir}"]
@@ -35,8 +38,10 @@ class Runner:
         subprocess.run(cmd)
     
     def prepare_tpc_dir(self):
+        print("Preparing tpc...")
         cmd = [f"{self.args.downloaders_dir}/download_files_{self.args.variant}_{self.args.datasize}.sh"]
         subprocess.run(cmd)
+        os.symlink(f"{self.args.downloaders_dir}/tpc", f"{pathlib.Path("./tpc")}", target_is_directory=True)
     
     def __init__(self, args, enable_spilling):
         self.args = args
@@ -62,6 +67,8 @@ class Runner:
     def run(self):
         cmd = ["/usr/bin/time", f"{self.args.runner_path}"]
         cmd += ["--perf"]
+        for it in self.args.query_filter:
+            cmd += ["--query-filter", it]
         cmd += ["--query-dir", f"{self.queries_dir}/{self.args.variant}"]
         cmd += ["--bindings", f"{self.queries_dir}/{self.args.variant}/bindings.json"]
         cmd += ["--result-dir", f"{self.result_dir}"]
@@ -93,7 +100,7 @@ def main(passed=None):
     args.gateways_cfg = args.ydb_root / "library" / "benchmarks" / "runner" / "runner" / "test-gateways.conf"
     args.runner_path = args.ydb_root / "library" / "benchmarks" / "runner" / "runner" / "runner"
     
-    print(args)
+    print(args.query_filter)
     
     results = []
     print("With spilling...", file=stderr)
@@ -107,4 +114,3 @@ def main(passed=None):
 
 if __name__ == "__main__":
     main()
-    

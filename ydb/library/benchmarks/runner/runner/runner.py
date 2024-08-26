@@ -74,6 +74,8 @@ def main():
     parser.add_argument('--arc-path', type=str, default='{}/arcadia'.format(os.environ['HOME']))
     parser.add_argument('--include-q', default=[], action='append')
     parser.add_argument('--exclude-q', default=[], action='append')
+    parser.add_argument('--query-filter', action="append", default=[])
+            
     args, argv = parser.parse_known_intermixed_args()
     qdir = args.query_dir
     bindings = args.bindings
@@ -91,6 +93,10 @@ def main():
         }), file=outj)
         for query in sorted(querydir.glob('**/*.sql'), key=lambda x: tuple(map(lambda y: int(y) if re.match(RE_DIGITS, y) else y, re.split(RE_DIGITS, str(x))))):
             q = str(query.stem)
+            # q<num>.sql
+            num = q[1:-4]
+            if args.query_filter != [] and num not in args.query_filter:
+                continue
             print(f"{q}", end="", flush=True)
             name = str(outdir / q)
             if len(args.include_q):

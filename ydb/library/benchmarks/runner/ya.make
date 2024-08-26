@@ -1,10 +1,6 @@
 PY3TEST()
 
-SIZE(LARGE)
-
-TAG(
-    ya:fat
-)
+SIZE(MEDIUM)
 
 PY_SRCS(
     run_tests/run_tests.py

@@ -375,12 +375,6 @@ struct TEvWhiteboard{
 
         TEvSystemStateUpdate(const TNodeLocation& systemLocation) {
             systemLocation.Serialize(Record.MutableLocation(), false);
-            const auto& x = systemLocation.GetLegacyValue();
-            auto *pb = Record.MutableSystemLocation();
-            pb->SetDataCenter(x.DataCenter);
-            pb->SetRoom(x.Room);
-            pb->SetRack(x.Rack);
-            pb->SetBody(x.Body);
         }
 
         TEvSystemStateUpdate(const NKikimrWhiteboard::TSystemStateInfo& systemStateInfo) {
@@ -503,5 +497,38 @@ inline TActorId MakeNodeWhiteboardServiceId(ui32 node) {
 
 IActor* CreateNodeWhiteboardService();
 
-} // NTabletState
+template<typename TRequestType>
+struct WhiteboardResponse {};
+
+template<>
+struct WhiteboardResponse<TEvWhiteboard::TEvTabletStateRequest> {
+    using Type = TEvWhiteboard::TEvTabletStateResponse;
+};
+
+template<>
+struct WhiteboardResponse<TEvWhiteboard::TEvPDiskStateRequest> {
+    using Type = TEvWhiteboard::TEvPDiskStateResponse;
+};
+
+template<>
+struct WhiteboardResponse<TEvWhiteboard::TEvVDiskStateRequest> {
+    using Type = TEvWhiteboard::TEvVDiskStateResponse;
+};
+
+template<>
+struct WhiteboardResponse<TEvWhiteboard::TEvSystemStateRequest> {
+    using Type = TEvWhiteboard::TEvSystemStateResponse;
+};
+
+template<>
+struct WhiteboardResponse<TEvWhiteboard::TEvBSGroupStateRequest> {
+    using Type = TEvWhiteboard::TEvBSGroupStateResponse;
+};
+
+template<>
+struct WhiteboardResponse<TEvWhiteboard::TEvNodeStateRequest> {
+    using Type = TEvWhiteboard::TEvNodeStateResponse;
+};
+
+} // NNodeWhiteboard
 } // NKikimr

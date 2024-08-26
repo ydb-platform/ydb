@@ -30,9 +30,14 @@ public:
         } else {
             return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "field 'database' is required"));
         }
-        if (database && database != AppData()->TenantName) {
-            BLOG_TRACE("Requesting StateStorageEndpointsLookup for " << database);
-            RequestStateStorageEndpointsLookup(database); // to find some dynamic node and redirect query there
+        bool direct = false;;
+        if (params.Has("direct")) {
+            direct = FromStringWithDefault<bool>(params.Get("direct"), direct);
+        }
+        direct |= !TBase::Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
+        direct |= (database == AppData()->TenantName); // we're already on the right node or don't use database filter
+        if (database && !direct) {
+            return RedirectToDatabase(database); // to find some dynamic node and redirect query there
         } else {
             if (params.Has("permissions")) {
                 Split(params.Get("permissions"), ",", Permissions);
@@ -48,14 +53,8 @@ public:
         Become(&TThis::StateRequestedNavigate, TDuration::MilliSeconds(timeout), new TEvents::TEvWakeup());
     }
 
-    void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
-        BLOG_TRACE("Received TEvBoardInfo");
-        ReplyAndPassAway(Viewer->MakeForward(Event->Get(), GetNodesFromBoardReply(ev)));
-    }
-
     STATEFN(StateRequestedNavigate) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvStateStorage::TEvBoardInfo, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }

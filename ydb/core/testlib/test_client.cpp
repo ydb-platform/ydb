@@ -606,7 +606,12 @@ namespace Tests {
 
         NKikimrBlobStorage::TDefineHostConfig hostConfig;
         hostConfig.SetHostConfigId(nodeId);
-        TString path = TStringBuilder() << Runtime->GetTempDir() << "pdisk_1.dat";
+        TString path;
+        if (Settings->UseSectorMap) {
+            path ="SectorMap:test-client[:2000]";
+        } else {
+            path = TStringBuilder() << Runtime->GetTempDir() << "pdisk_1.dat";
+        }
         hostConfig.AddDrive()->SetPath(path);
         if (Settings->Verbose) {
             Cerr << "test_client.cpp: SetPath # " << path << Endl;

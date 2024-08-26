@@ -316,7 +316,7 @@ private:
             amount,
             request->TraceContext->GetTraceId());
 
-        promise.OnCanceled(BIND([weakRequest = MakeWeak(request), amount, this, this_ = MakeStrong(this)] (const TError& error) {
+        promise.OnCanceled(BIND([weakRequest = MakeWeak(request), amount, this, weakThis = MakeWeak(this)] (const TError& error) {
             auto request = weakRequest.Lock();
             if (request && !request->Set.test_and_set()) {
                 NTracing::TTraceContextFinishGuard guard(std::move(request->TraceContext));
@@ -325,8 +325,12 @@ private:
                     amount);
                 request->Promise.Set(TError(NYT::EErrorCode::Canceled, "Throttled request canceled")
                     << error);
-                QueueTotalAmount_ -= amount;
-                QueueSizeGauge_.Update(QueueTotalAmount_);
+
+                // NB(coteeq): Weak ref will break cycle "promise -> this -> request -> promise"
+                if (auto this_ = weakThis.Lock()) {
+                    QueueTotalAmount_ -= amount;
+                    QueueSizeGauge_.Update(QueueTotalAmount_);
+                }
             }
         }));
         request->Promise = std::move(promise);

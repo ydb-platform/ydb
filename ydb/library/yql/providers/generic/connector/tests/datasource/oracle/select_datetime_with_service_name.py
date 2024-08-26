@@ -81,7 +81,7 @@ class Factory:
                 datetime.datetime(2038, 1, 19, 3, 14, 7, 0),
                 datetime.datetime(2038, 1, 19, 3, 14, 7, 0),
             ],
-            [4, None, None]
+            [4, None, None],
         ]
 
         return TestCase(

@@ -91,7 +91,7 @@ struct TMapKeyHelper<T, true>
         consumer->OnKeyedItem(FormatEnum(value));
     }
 
-    static void Deserialize(T& value, const TString& key)
+    static void Deserialize(T& value, const std::string& key)
     {
         value = ParseEnum<T>(key);
     }
@@ -105,7 +105,7 @@ struct TMapKeyHelper<T, false>
         consumer->OnKeyedItem(ToString(value));
     }
 
-    static void Deserialize(T& value, const TString& key)
+    static void Deserialize(T& value, const std::string& key)
     {
         value = FromString<T>(key);
     }
@@ -114,12 +114,12 @@ struct TMapKeyHelper<T, false>
 template <>
 struct TMapKeyHelper<TGuid, false>
 {
-    static void Serialize(const TGuid& value, NYson::IYsonConsumer* consumer)
+    static void Serialize(TGuid value, NYson::IYsonConsumer* consumer)
     {
         consumer->OnKeyedItem(ToString(value));
     }
 
-    static void Deserialize(TGuid& value, const TString& key)
+    static void Deserialize(TGuid& value, const std::string& key)
     {
         value = TGuid::FromString(key);
     }
@@ -154,6 +154,9 @@ void DeserializeSet(T& value, INodePtr node)
     auto listNode = node->AsList();
     auto size = listNode->GetChildCount();
     value.clear();
+    if constexpr (requires {value.reserve(size);}) {
+        value.reserve(size);
+    }
     for (int i = 0; i < size; ++i) {
         typename T::value_type item;
         Deserialize(item, listNode->GetChildOrThrow(i));
@@ -166,6 +169,9 @@ void DeserializeMap(T& value, INodePtr node)
 {
     auto mapNode = node->AsMap();
     value.clear();
+    if constexpr (requires {value.reserve(mapNode->GetChildCount());}) {
+        value.reserve(mapNode->GetChildCount());
+    }
     for (const auto& [serializedKey, serializedItem] : mapNode->GetChildren()) {
         typename T::key_type key;
         TMapKeyHelper<typename T::key_type>::Deserialize(key, serializedKey);

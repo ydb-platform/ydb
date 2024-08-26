@@ -98,7 +98,7 @@ TBusServerConfigPtr TBusServerConfig::CreateTcp(int port)
     return config;
 }
 
-TBusServerConfigPtr TBusServerConfig::CreateUds(const TString& socketPath)
+TBusServerConfigPtr TBusServerConfig::CreateUds(const std::string& socketPath)
 {
     auto config = New<TBusServerConfig>();
     config->UnixDomainSocketPath = socketPath;
@@ -161,14 +161,14 @@ void TBusClientConfig::Register(TRegistrar registrar)
     });
 }
 
-TBusClientConfigPtr TBusClientConfig::CreateTcp(const TString& address)
+TBusClientConfigPtr TBusClientConfig::CreateTcp(const std::string& address)
 {
     auto config = New<TBusClientConfig>();
     config->Address = address;
     return config;
 }
 
-TBusClientConfigPtr TBusClientConfig::CreateUds(const TString& socketPath)
+TBusClientConfigPtr TBusClientConfig::CreateUds(const std::string& socketPath)
 {
     auto config = New<TBusClientConfig>();
     config->UnixDomainSocketPath = socketPath;

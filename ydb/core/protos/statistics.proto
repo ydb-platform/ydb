@@ -111,13 +111,16 @@ message TEvAnalyzeStatusResponse {
 
 // SA -> Shard
 message TEvAnalyzeTable {
-    optional TTable Table = 1;  // analyzed table
-    repeated EColumnStatisticType Types = 2; // list of statistics types requested. Empty means asking for all available.
+    optional bytes OperationId = 1; // unique identifier to match response item
+    optional TTable Table = 2;  // analyzed table
+    repeated EColumnStatisticType Types = 3; // list of statistics types requested. Empty means asking for all available.
 }
 
 // Shard -> SA
 message TEvAnalyzeTableResponse {
-    optional NKikimrProto.TPathID PathId = 1;
+    optional bytes OperationId = 1;
+    optional NKikimrProto.TPathID PathId = 2;
+    optional fixed64 ShardTabletId = 3;
 }
 
 
@@ -145,9 +148,8 @@ message TEvStatisticsResponse {
     enum EStatus {
         STATUS_UNSPECIFIED = 0;
         STATUS_SUCCESS = 1;
-        STATUS_PROCESSING = 2;
-        STATUS_ABORTED = 3;
-        STATUS_ERROR = 4;
+        STATUS_ABORTED = 2;
+        STATUS_ERROR = 3;
     }
     optional EStatus Status = 2;
     optional fixed64 ShardTabletId = 3;

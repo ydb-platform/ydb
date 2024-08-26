@@ -312,6 +312,16 @@ DELEGATE_METHOD(TFuture<TPushQueueProducerResult>, PushQueueProducer, (
     const TPushQueueProducerOptions& options),
     (producerPath, queuePath, sessionId, epoch, nameTable, serializedRows, options))
 
+DELEGATE_METHOD(TFuture<TDistributedWriteSessionPtr>, StartDistributedWriteSession, (
+    const NYPath::TRichYPath& path,
+    const TDistributedWriteSessionStartOptions& options),
+    (path, options))
+
+DELEGATE_METHOD(TFuture<void>, FinishDistributedWriteSession, (
+    TDistributedWriteSessionPtr session,
+    const TDistributedWriteSessionFinishOptions& options),
+    (std::move(session), options))
+
 #undef DELEGATE_METHOD
 
 ////////////////////////////////////////////////////////////////////////////////

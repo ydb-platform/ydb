@@ -7,6 +7,7 @@ from ydb.library.yql.providers.generic.connector.tests.utils.settings import Set
 from ydb.library.yql.providers.generic.connector.tests.utils.run.parent import Runner
 
 import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_positive_common as tc_select_positive_common
+
 # import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_database as tc_select_missing_database
 import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_table as tc_select_missing_table
 

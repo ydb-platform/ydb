@@ -24,6 +24,8 @@ class BaseTestCase:
                 # ClickHouse has two kinds of network protocols: NATIVE and HTTP,
                 # so we append protocol name to the test case name
                 return f'{self.name_}_{EProtocol.Name(self.protocol)}'
+            case EDataSourceKind.MS_SQL_SERVER:
+                return self.name_
             case EDataSourceKind.MYSQL:
                 return self.name_
             case EDataSourceKind.ORACLE:
@@ -39,11 +41,14 @@ class BaseTestCase:
     def database(self) -> Database:
         '''
         For PG/CH we create a distinct database on every test case.
-        For YDB/MySQL we use single predefined database.
+        For YDB/MySQL/Microsoft SQL Server we use single predefined database.
         '''
+        # FIXME: do not hardcode databases here
         match self.data_source_kind:
             case EDataSourceKind.CLICKHOUSE:
                 return Database(self.name, self.data_source_kind)
+            case EDataSourceKind.MS_SQL_SERVER:
+                return Database("master", self.data_source_kind)
             case EDataSourceKind.MYSQL:
                 return Database("db", self.data_source_kind)
             case EDataSourceKind.ORACLE:
@@ -62,6 +67,8 @@ class BaseTestCase:
         match self.data_source_kind:
             case EDataSourceKind.CLICKHOUSE:
                 return 't' + make_random_string(8)
+            case EDataSourceKind.MS_SQL_SERVER:
+                return self.name
             case EDataSourceKind.MYSQL:
                 return self.name
             case EDataSourceKind.ORACLE:
@@ -89,6 +96,11 @@ class BaseTestCase:
                     clickhouse_clusters=[
                         GenericSettings.ClickHouseCluster(database=self.database.name, protocol=EProtocol.NATIVE)
                     ],
+                )
+            case EDataSourceKind.MS_SQL_SERVER:
+                return GenericSettings(
+                    date_time_format=EDateTimeFormat.YQL_FORMAT,
+                    ms_sql_server_clusters=[GenericSettings.MsSQLServerCluster(database=self.database.name)],
                 )
             case EDataSourceKind.MYSQL:
                 return GenericSettings(

@@ -1184,6 +1184,10 @@ std::tuple<TVector<ui64>, TTableId> CreateShardedTable(
     UNIT_ASSERT(desc);
     desc->SetName(name);
 
+    if (opts.AllowSystemColumnNames_) {
+        desc->SetSystemColumnNamesAllowed(true);
+    }
+
     std::vector<TString> defaultFromSequences;
 
     for (const auto& column : opts.Columns_) {

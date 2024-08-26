@@ -192,7 +192,7 @@ Pear,15,'''
         assert result_set.rows[2].items[1].text_value == ""
         assert result_set.rows[2].items[2].int64_value == 15
         assert sum(kikimr.control_plane.get_metering(1)) == 10
-    
+
     @yq_v2
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_inference_optional_types(self, kikimr, s3, client, unique_prefix):
@@ -339,7 +339,7 @@ Apple,2,22,
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        assert "couldn\\'t parse csv/tsv file, check format and compression params:" in str(
+        assert "couldn\\'t open csv/tsv file, check format and compression params:" in str(
             client.describe_query(query_id).result
         )
 

@@ -41,7 +41,7 @@ from typing import (
 import attr
 
 from hypothesis.errors import Frozen, InvalidArgument, StopTest
-from hypothesis.internal.cache import LRUReusedCache
+from hypothesis.internal.cache import LRUCache
 from hypothesis.internal.compat import add_note, floor, int_from_bytes, int_to_bytes
 from hypothesis.internal.conjecture.floats import float_to_lex, lex_to_float
 from hypothesis.internal.conjecture.junkdrawer import (
@@ -155,9 +155,9 @@ class Status(IntEnum):
 
 
 @dataclass_transform()
-@attr.s(frozen=True, slots=True, auto_attribs=True)
+@attr.s(slots=True, frozen=True)
 class StructuralCoverageTag:
-    label: int
+    label: int = attr.ib()
 
 
 STRUCTURAL_COVERAGE_CACHE: Dict[int, StructuralCoverageTag] = {}
@@ -200,9 +200,11 @@ NASTY_FLOATS = sorted(
 NASTY_FLOATS = list(map(float, NASTY_FLOATS))
 NASTY_FLOATS.extend([-x for x in NASTY_FLOATS])
 
-FLOAT_INIT_LOGIC_CACHE = LRUReusedCache(4096)
-
-POOLED_KWARGS_CACHE = LRUReusedCache(4096)
+# These caches, especially the kwargs cache, can be quite hot and so we prefer
+# LRUCache over LRUReusedCache for performance. We lose scan resistance, but
+# that's probably fine here.
+FLOAT_INIT_LOGIC_CACHE = LRUCache(4096)
+POOLED_KWARGS_CACHE = LRUCache(4096)
 
 DRAW_STRING_DEFAULT_MAX_SIZE = 10**10  # "arbitrarily large"
 
@@ -676,6 +678,12 @@ class Examples:
         if i < 0:
             i += n
         return Example(self, i)
+
+    # not strictly necessary as we have len/getitem, but required for mypy.
+    # https://github.com/python/mypy/issues/9737
+    def __iter__(self) -> Iterator[Example]:
+        for i in range(len(self)):
+            yield self[i]
 
 
 @dataclass_transform()

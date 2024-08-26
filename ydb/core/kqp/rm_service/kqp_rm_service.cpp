@@ -299,10 +299,9 @@ public:
                         auto it = MemoryNamedPools.find(tx->MakePoolId());
                         if (it != MemoryNamedPools.end()) {
                             it->second->Release(resources.Memory);
-                        }
-
-                        if (it->second->GetUsed() == 0) {
-                            MemoryNamedPools.erase(it);
+                            if (it->second->GetUsed() == 0) {
+                                MemoryNamedPools.erase(it);
+                            }
                         }
                     }
                 }
@@ -578,7 +577,7 @@ public:
              IEventHandle::FlagTrackDelivery);
 
         ToBroker(new TEvResourceBroker::TEvResourceBrokerRequest);
-        ToBroker(new TEvResourceBroker::TEvConfigRequest(NLocalDb::KqpResourceManagerQueue));
+        ToBroker(new TEvResourceBroker::TEvConfigRequest(NLocalDb::KqpResourceManagerQueue, /*subscribe=*/ true));
 
         if (auto* mon = AppData()->Mon) {
             NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");

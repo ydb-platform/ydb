@@ -554,10 +554,26 @@ public:
         }
     }
 
+    TString RewriteWithForwardedFromNode(const TString& response) {
+        NHttp::THttpParser<NHttp::THttpRequest, NHttp::TSocketBuffer> parser(response);
+
+        NHttp::THeadersBuilder headers(parser.Headers);
+        headers.Set("X-Forwarded-From-Node", TStringBuilder() << Event->Sender.NodeId());
+
+        NHttp::THttpRenderer<NHttp::THttpRequest, NHttp::TSocketBuffer> renderer;
+        renderer.InitRequest(parser.Method, parser.URL, parser.Protocol, parser.Version);
+        renderer.Set(headers);
+        if (parser.HaveBody()) {
+            renderer.SetBody(parser.Body); // it shouldn't be here, 30x with a body is a bad idea
+        }
+        renderer.Finish();
+        return renderer.AsString();
+    }
+
     void Bootstrap() {
         NHttp::THttpConfig::SocketAddressType address;
         FromProto(address, Event->Get()->Record.GetAddress());
-        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(Event->Get()->Record.GetHttpRequest(), Endpoint, address);
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(RewriteWithForwardedFromNode(Event->Get()->Record.GetHttpRequest()), Endpoint, address);
         TStringBuilder prefix;
         prefix << "/node/" << TActivationContext::ActorSystem()->NodeId;
         if (request->URL.SkipPrefix(prefix)) {

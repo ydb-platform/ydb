@@ -170,7 +170,7 @@ public:
     explicit TColumnOrder(const TVector<TString>& order);
     TString AddColumn(const TString& name);
 
-    bool IsDuplicated(const TString& name) const;
+    bool IsDuplicatedIgnoreCase(const TString& name) const;
 
     void Shrink(size_t remain);
 
@@ -213,6 +213,7 @@ public:
 private:
     THashMap<TString, TString> GeneratedToOriginal_;
     THashMap<TString, uint64_t> UseCount_;
+    THashMap<TString, uint64_t> UseCountLcase_;
     // (name, generated_name)
     TVector<TOrderedItem> Order_;
 };
@@ -280,6 +281,7 @@ struct TUdfCachedInfo {
 };
 
 struct TTypeAnnotationContext: public TThrRefBase {
+    THashMap<TString, TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>> ColumnStatisticsByTableName;
     THashMap<const TExprNode*, std::shared_ptr<TOptimizerStatistics>> StatisticsMap;
     TIntrusivePtr<ITimeProvider> TimeProvider;
     TIntrusivePtr<IRandomProvider> RandomProvider;

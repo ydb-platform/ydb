@@ -150,6 +150,15 @@ struct TSimpleArithmeticUnary : public TArithmeticConstraintsSame<TInput, TOutpu
 #endif
 };
 
+template <class TImpl>
+struct TDecimalUnary {
+    static void DoPtr(
+        const NYql::NDecimal::TInt128* arg,
+        NYql::NDecimal::TInt128* res) {
+        *res = TImpl::Execute(NUdf::TUnboxedValuePod(*arg)).GetInt128();
+    }
+};
+
 template <typename TLeft, typename TRight, typename TOutput, class TImpl, bool CustomCast = false>
 struct TSimpleArithmeticBinary : public TArithmeticConstraintsBinary<TLeft, TRight, TOutput> {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
@@ -1012,6 +1021,20 @@ arrow::Status ExecBinaryOptImpl(arrow::compute::KernelContext* kernelCtx,
     TUntypedBinaryArrayOptFuncPtr arrayScalarFunc,
     TUntypedBinaryArrayOptFuncPtr arrayArrayFunc);
 
+arrow::Status ExecDecimalBinaryOptImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TPrimitiveDataTypeGetter typeGetter,
+    size_t outputSizeOf,
+    TUntypedBinaryScalarOptFuncPtr scalarScalarFunc,
+    TUntypedBinaryArrayOptFuncPtr scalarArrayFunc,
+    TUntypedBinaryArrayOptFuncPtr arrayScalarFunc,
+    TUntypedBinaryArrayOptFuncPtr arrayArrayFunc);
+
+arrow::Status ExecDecimalUnaryImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TPrimitiveDataTypeGetter typeGetter, 
+    TUntypedUnaryScalarFuncPtr scalarFunc, TUntypedUnaryArrayFuncPtr arrayFunc);
+
 template<typename TInput1, bool Tz1, typename TInput2, bool Tz2, typename TOutput, EPropagateTz PropagateTz,
          typename TFuncInstance, TKernel::ENullMode NullMode>
 struct TBinaryKernelExecs;
@@ -1097,9 +1120,8 @@ struct TBinaryKernelExecs<TInput1, Tz1, TInput2, Tz2, TOutput, PropagateTz, TFun
     }
 };
 
-template<typename TInput1, bool Tz1, typename TInput2, bool Tz2, typename TOutput, EPropagateTz PropagateTz,
-        typename TFuncInstance>
-struct TBinaryKernelExecs<TInput1, Tz1, TInput2, Tz2, TOutput, PropagateTz, TFuncInstance, TKernel::ENullMode::AlwaysNull>
+template<typename TInput1, typename TInput2, typename TOutput, typename TFuncInstance>
+struct TBinaryKernelOptExecsImpl
 {
     using TTypedBinaryScalarOptFuncPtr = bool(*)(
         const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
@@ -1212,12 +1234,17 @@ struct TBinaryKernelExecs<TInput1, Tz1, TInput2, Tz2, TOutput, PropagateTz, TFun
             arrow::BitUtil::ClearBit(resValid, i);
         }
     }
-
+};
+ 
+template<typename TInput1, bool Tz1, typename TInput2, bool Tz2, typename TOutput, EPropagateTz PropagateTz,
+        typename TFuncInstance>
+struct TBinaryKernelExecs<TInput1, Tz1, TInput2, Tz2, TOutput, PropagateTz, TFuncInstance, TKernel::ENullMode::AlwaysNull>
+{
     static arrow::Status Exec(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-        TTypedBinaryScalarOptFuncPtr scalarScalarFunc = &ScalarScalarCoreOpt;
-        TTypedBinaryArrayOptFuncPtr scalarArrayFunc = &ScalarArrayCoreOpt;
-        TTypedBinaryArrayOptFuncPtr arrayScalarFunc = &ArrayScalarCoreOpt;
-        TTypedBinaryArrayOptFuncPtr arrayArrayFunc = &ArrayArrayCoreOpt;
+        auto scalarScalarFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ScalarScalarCoreOpt;
+        auto scalarArrayFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ScalarArrayCoreOpt;
+        auto arrayScalarFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ArrayScalarCoreOpt;
+        auto arrayArrayFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ArrayArrayCoreOpt;
         return ExecBinaryOptImpl(kernelCtx, batch, res,
             &GetPrimitiveDataType<TOutput>,
             &MakeDefaultScalarDatum<TOutput>,
@@ -1236,6 +1263,8 @@ public:
         TKernel::ENullMode nullMode);
 
     const arrow::compute::ScalarKernel& GetArrowKernel() const final;
+    std::shared_ptr<arrow::compute::ScalarKernel> MakeArrowKernel(const TVector<TType*>& argTypes, TType* resultType) const final;
+    bool IsPolymorphic() const final;
 
 private:
     const std::unique_ptr<arrow::compute::ScalarKernel> ArrowKernel;
@@ -1244,7 +1273,7 @@ private:
 template<typename TInput, bool Tz, typename TOutput, bool PropagateTz, class TFuncInstance>
 struct TUnaryKernelExecs
 {
-   using TTypedUnaryScalarFuncPtr = void(*)(
+    using TTypedUnaryScalarFuncPtr = void(*)(
         const typename TPrimitiveDataType<TInput>::TLayout*,
         typename TPrimitiveDataType<TOutput>::TLayout*
     );
@@ -1281,6 +1310,23 @@ struct TUnaryKernelExecs
     }
 };
 
+
+template<class TFuncInstance>
+struct TUnaryDecimalKernelExecs
+{
+    using TInput = NYql::NDecimal::TInt128;
+    using TOutput = NYql::NDecimal::TInt128;
+
+    static arrow::Status Exec(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        auto func = &TFuncInstance::DoPtr;
+        auto arrayFunc = &TUnaryKernelExecs<TInput, false, TOutput, false, TFuncInstance>::ArrayCore;
+        return ExecDecimalUnaryImpl(kernelCtx, batch, res,
+            &GetPrimitiveDataType<TOutput>,
+            (TUntypedUnaryScalarFuncPtr)func,
+            (TUntypedUnaryArrayFuncPtr)arrayFunc);
+    }
+};
+
 using TStatelessArrayKernelExec = arrow::Status(*)(arrow::compute::KernelContext*, const arrow::compute::ExecBatch&, arrow::Datum*);
 
 void AddUnaryKernelImpl(TKernelFamilyBase& owner, NUdf::EDataSlot arg1, NUdf::EDataSlot res,
@@ -1299,6 +1345,13 @@ void AddUnaryKernel(TKernelFamilyBase& owner) {
     using TExecs = TUnaryKernelExecs<TInputLayout, tz, TOutputLayout, propagateTz, TFuncInstance>;
 
     AddUnaryKernelImpl(owner, TInput::Slot, TOutput::Slot, &TExecs::Exec, TFuncInstance::NullMode);
+}
+
+template<class TFunc>
+void AddUnaryDecimalKernels(TKernelFamilyBase& owner) {
+    using TExecs = TUnaryDecimalKernelExecs<TFunc>;
+
+    AddUnaryKernelImpl(owner, NUdf::EDataSlot::Decimal, NUdf::EDataSlot::Decimal, &TExecs::Exec, TKernel::ENullMode::Default);
 }
 
 void AddBinaryKernelImpl(TKernelFamilyBase& owner, NUdf::EDataSlot arg1, NUdf::EDataSlot arg2, NUdf::EDataSlot res,
@@ -1584,6 +1637,76 @@ void AddDateComparisonKernels(TKernelFamilyBase& owner) {
     AddBinaryPredicateKernelPoly<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval64>, TPred>(owner);
     AddBinaryPredicateKernelPoly<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval>, TPred>(owner);
     AddBinaryPredicateKernelPoly<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval64>, TPred>(owner);
+}
+
+class TDecimalKernel : public TKernel {
+public:
+    struct TKernelState : arrow::compute::KernelState {
+        ui8 Precision;
+    };
+
+    TDecimalKernel(const TKernelFamily& family, const std::vector<NUdf::TDataTypeId>& argTypes,
+        NUdf::TDataTypeId returnType, TStatelessArrayKernelExec exec,
+        TKernel::ENullMode nullMode);
+
+    const arrow::compute::ScalarKernel& GetArrowKernel() const final;
+    std::shared_ptr<arrow::compute::ScalarKernel> MakeArrowKernel(const TVector<TType*>& argTypes, TType* resultType) const final;
+    bool IsPolymorphic() const final;
+
+private:
+    TStatelessArrayKernelExec Exec;
+};
+
+template<template<ui8> class TFuncInstance>
+struct TDecimalKernelExecs
+{
+    using TInput1 = NYql::NDecimal::TInt128;
+    using TInput2 = NYql::NDecimal::TInt128;
+    using TOutput = NYql::NDecimal::TInt128;
+
+    template<ui8 precision>
+    static arrow::Status ExecImpl(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        auto scalarScalarFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance<precision>>::ScalarScalarCoreOpt;
+        auto scalarArrayFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance<precision>>::ScalarArrayCoreOpt;
+        auto arrayScalarFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance<precision>>::ArrayScalarCoreOpt;
+        auto arrayArrayFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance<precision>>::ArrayArrayCoreOpt;
+
+        return ExecDecimalBinaryOptImpl(kernelCtx, batch, res,
+            &GetPrimitiveDataType<TOutput>,
+            sizeof(TOutput),
+            (TUntypedBinaryScalarOptFuncPtr)scalarScalarFunc,
+            (TUntypedBinaryArrayOptFuncPtr)scalarArrayFunc,
+            (TUntypedBinaryArrayOptFuncPtr)arrayScalarFunc,
+            (TUntypedBinaryArrayOptFuncPtr)arrayArrayFunc);
+    }
+
+    using ExecFunc = arrow::Status(*)(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) ;
+
+    template <size_t... Is>
+    static constexpr auto GenerateTable(std::index_sequence<Is...>) {
+        return std::array<ExecFunc, sizeof...(Is)>{ExecImpl<Is+1>...};
+    }
+
+    static arrow::Status Exec(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        ui8 precision = static_cast<TDecimalKernel::TKernelState*>(kernelCtx->state())->Precision;
+        Y_DEBUG_ABORT_UNLESS(precision >= 1&& precision <= 35);
+
+        static constexpr auto jumpTable = GenerateTable(std::make_index_sequence<35>{});
+        return jumpTable[precision-1](kernelCtx, batch, res);
+    }
+};
+
+
+template<template<ui8> class TFunc>
+void AddBinaryDecimalKernels(TKernelFamilyBase& owner) {
+    auto type1 = NUdf::GetDataTypeInfo(NUdf::EDataSlot::Decimal).TypeId;
+    auto type2 = type1;
+    auto returnType = type1;
+    std::vector<NUdf::TDataTypeId> argTypes({ type1, type2 });
+
+    using Execs = TDecimalKernelExecs<TFunc>;
+    auto kernel = std::make_unique<TDecimalKernel>(owner, argTypes, returnType, &Execs::Exec, TKernel::ENullMode::Default);
+    owner.Adopt(argTypes, returnType, std::move(kernel));
 }
 
 }

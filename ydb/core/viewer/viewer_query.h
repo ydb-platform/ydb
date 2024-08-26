@@ -159,21 +159,15 @@ public:
             return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Query is empty"), "EmptyQuery");
         }
 
-        Direct |= Event->Get()->Request.GetUri().StartsWith("/node/"); // we're already forwarding
+        Direct |= !TBase::Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
         Direct |= (Database == AppData()->TenantName); // we're already on the right node
 
         if (Database && !Direct) {
-            BLOG_TRACE("Requesting StateStorageEndpointsLookup for " << Database);
-            RequestStateStorageEndpointsLookup(Database); // to find some dynamic node and redirect query there
+            return RedirectToDatabase(Database); // to find some dynamic node and redirect query there
         } else {
             SendKpqProxyRequest();
         }
         Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
-    }
-
-    void HandleReply(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
-        BLOG_TRACE("Received TEvBoardInfo");
-        TBase::ReplyAndPassAway(MakeForward(GetNodesFromBoardReply(ev)));
     }
 
     void PassAway() override {
@@ -195,7 +189,6 @@ public:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvStateStorage::TEvBoardInfo, HandleReply);
             hFunc(NKqp::TEvKqp::TEvCreateSessionResponse, HandleReply);
             hFunc(NKqp::TEvKqp::TEvQueryResponse, HandleReply);
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleReply);
@@ -305,6 +298,10 @@ public:
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
             request.SetKeepSession(false);
             SetTransactionMode(request);
+            if (!request.txcontrol().has_begin_tx()) {
+                request.mutable_txcontrol()->mutable_begin_tx()->mutable_serializable_read_write();
+                request.mutable_txcontrol()->set_commit_tx(true);
+            }
         } else if (Action == "explain" || Action == "explain-ast" || Action == "explain-data") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);

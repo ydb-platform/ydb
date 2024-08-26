@@ -542,6 +542,17 @@ public:
                 };
 
                 ApplyFillers(AllPgLanguageFillers, Y_ARRAY_SIZE(AllPgLanguageFillers), PgLanguageFillers_);
+            } else if (Table_ == "pg_extension") {
+                static const std::pair<const char*, TPgExtensionFiller> AllPgExtensionFillers[] = {
+                    {"oid", [](ui32 oid,const NPg::TExtensionDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(oid)); }},
+                    {"extname", [](ui32,const NPg::TExtensionDesc& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.Name, NAMEDATALEN)); }},
+                    {"extowner", [](ui32,const NPg::TExtensionDesc&) { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
+                    {"extnamespace", [](ui32,const NPg::TExtensionDesc&) { return ScalarDatumToPod(ObjectIdGetDatum(PG_CATALOG_NAMESPACE)); }},
+                    {"extversion", [](ui32,const NPg::TExtensionDesc& desc) { return PointerDatumToPod((Datum)MakeVar(desc.Version)); }},
+                    {"extrelocatable", [](ui32,const NPg::TExtensionDesc&) { return ScalarDatumToPod(BoolGetDatum(false)); }},
+                };
+
+                ApplyFillers(AllPgExtensionFillers, Y_ARRAY_SIZE(AllPgExtensionFillers), PgExtensionFillers_);
             }
         } else {
             if (Table_ == "tables") {
@@ -930,6 +941,19 @@ public:
                     sysFiller.Fill(items);
                     rows.emplace_back(row);
                 });
+            } else if (Table_ == "pg_extension") {
+                NPg::EnumExtensions([&](ui32 oid, const NPg::TExtensionDesc& desc) {
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgExtensionFillers_.size(), items);
+                    for (ui32 i = 0; i < PgExtensionFillers_.size(); ++i) {
+                        if (PgExtensionFillers_[i]) {
+                            items[i] = PgExtensionFillers_[i](oid, desc);
+                        }
+                    }
+
+                    sysFiller.Fill(items);
+                    rows.emplace_back(row);
+                });
             }
         } else {
             if (Table_ == "tables") {
@@ -1026,6 +1050,9 @@ private:
 
     using TPgOperFiller = NUdf::TUnboxedValuePod(*)(const NPg::TOperDesc&);
     TVector<TPgOperFiller> PgOperFillers_;
+
+    using TPgExtensionFiller = NUdf::TUnboxedValuePod(*)(ui32,const NPg::TExtensionDesc&);
+    TVector<TPgExtensionFiller> PgExtensionFillers_;
 };
 
 class TFunctionCallInfo {

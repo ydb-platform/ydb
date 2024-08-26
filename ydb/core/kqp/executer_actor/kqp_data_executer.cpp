@@ -205,6 +205,8 @@ public:
     }
 
     void Finalize() {
+        YQL_ENSURE(!AlreadyReplied);
+
         if (LocksBroken) {
             TString message = "Transaction locks invalidated.";
 
@@ -278,8 +280,7 @@ public:
         ExecuterSpan.EndOk();
 
         Request.Transactions.crop(0);
-        LOG_D("Sending response to: " << Target << ", results: " << ResponseEv->ResultsSize());
-        Send(Target, ResponseEv.release());
+        AlreadyReplied = true;
         PassAway();
     }
 
@@ -319,6 +320,8 @@ private:
             return "WaitSnapshotState";
         } else if (func == &TThis::WaitResolveState) {
             return "WaitResolveState";
+        } else if (func == &TThis::WaitShutdownState) {
+            return "WaitShutdownState";
         } else {
             return TBase::CurrentStateFuncName();
         }
@@ -2595,6 +2598,22 @@ private:
         }
     }
 
+    void Shutdown() override {
+        if (Planner) {
+            if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
+                LOG_I("Shutdown immediately - nothing to wait");
+                PassAway();
+            } else {
+                this->Become(&TThis::WaitShutdownState);
+                LOG_I("Waiting for shutdown of " << Planner->GetPendingComputeTasks().size() << " tasks and "
+                    << Planner->GetPendingComputeActors().size() << " compute actors");
+                TActivationContext::Schedule(TDuration::Seconds(10), new IEventHandle(SelfId(), SelfId(), new TEvents::TEvPoison));
+            }
+        } else {
+            PassAway();
+        }
+    }
+
     void PassAway() override {
         auto totalTime = TInstant::Now() - StartTime;
         Counters->Counters->DataTxTotalTimeHistogram->Collect(totalTime.MilliSeconds());
@@ -2610,6 +2629,61 @@ private:
         }
 
         TBase::PassAway();
+    }
+
+    STATEFN(WaitShutdownState) {
+        switch(ev->GetTypeRewrite()) {
+            hFunc(TEvDqCompute::TEvState, HandleShutdown);
+            hFunc(TEvInterconnect::TEvNodeDisconnected, HandleShutdown);
+            hFunc(TEvents::TEvPoison, HandleShutdown);
+            default:
+                LOG_E("Unexpected event: " << ev->GetTypeName()); // ignore all other events
+        }
+    }
+
+    void HandleShutdown(TEvDqCompute::TEvState::TPtr& ev) {
+        if (ev->Get()->Record.GetState() == NDqProto::COMPUTE_STATE_FAILURE) {
+            YQL_ENSURE(Planner);
+
+            TActorId actor = ev->Sender;
+            ui64 taskId = ev->Get()->Record.GetTaskId();
+
+            Planner->CompletedCA(taskId, actor);
+
+            if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
+                PassAway();
+            }
+        }
+    }
+
+    void HandleShutdown(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
+        const auto nodeId = ev->Get()->NodeId;
+        LOG_N("Node has disconnected while shutdown: " << nodeId);
+
+        YQL_ENSURE(Planner);
+
+        for (const auto& task : TasksGraph.GetTasks()) {
+            if (task.Meta.NodeId == nodeId && !task.Meta.Completed) {
+                if (task.ComputeActorId) {
+                    Planner->CompletedCA(task.Id, task.ComputeActorId);
+                } else {
+                    Planner->TaskNotStarted(task.Id);
+                }
+            }
+        }
+
+        if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
+            PassAway();
+        }
+    }
+
+    void HandleShutdown(TEvents::TEvPoison::TPtr& ev) {
+        // Self-poison means timeout - don't wait anymore.
+        LOG_I("Timed out on waiting for Compute Actors to finish - forcing shutdown");
+
+        if (ev->Sender == SelfId()) {
+            PassAway();
+        }
     }
 
 private:

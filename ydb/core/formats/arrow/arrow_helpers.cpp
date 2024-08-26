@@ -589,6 +589,38 @@ bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y) {
     return ScalarCompare(x, y) < 0;
 }
 
+bool ColumnEqualsScalar(
+    const std::shared_ptr<arrow::Array>& c, const ui32 position, const std::shared_ptr<arrow::Scalar>& s) {
+    AFL_VERIFY(c);
+    if (!s) {
+        return c->IsNull(position) ;
+    }
+    AFL_VERIFY(c->type()->Equals(s->type))("s", s->type->ToString())("c", c->type()->ToString());
+
+    return SwitchTypeImpl<bool, 0>(c->type()->id(), [&](const auto& type) {
+        using TWrap = std::decay_t<decltype(type)>;
+        using TScalar = typename arrow::TypeTraits<typename TWrap::T>::ScalarType;
+        using TArrayType = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
+        using TValue = std::decay_t<decltype(static_cast<const TScalar&>(*s).value)>;
+
+        if constexpr (arrow::has_string_view<typename TWrap::T>()) {
+            const auto& cval = static_cast<const TArrayType&>(*c).GetView(position);
+            const auto& sval = static_cast<const TScalar&>(*s).value;
+            AFL_VERIFY(sval);
+            TStringBuf cBuf(reinterpret_cast<const char*>(cval.data()), cval.size());
+            TStringBuf sBuf(reinterpret_cast<const char*>(sval->data()), sval->size());
+            return cBuf == sBuf;
+        }
+        if constexpr (std::is_arithmetic_v<TValue>) {
+            const auto cval = static_cast<const TArrayType&>(*c).GetView(position);
+            const auto sval = static_cast<const TScalar&>(*s).value;
+            return (cval == sval);
+        }
+        Y_ABORT_UNLESS(false);   // TODO: non primitive types
+        return false;
+    });
+}
+
 int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y) {
     Y_VERIFY_S(x.type->Equals(y.type), x.type->ToString() + " vs " + y.type->ToString());
 
@@ -940,16 +972,23 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std:
     for (auto&& i : t->columns()) {
         ui32 currentPosition = 0;
         auto it = i->chunks().begin();
-        ui32 length = (*it)->length();
+        ui32 length = 0;
+        const auto initializeIt = [&length, &it, &i]() {
+            for (; it != i->chunks().end() && !(*it)->length(); ++it) {
+            }
+            if (it != i->chunks().end()) {
+                length = (*it)->length();
+            }
+        };
+        initializeIt();
         for (ui32 idx = 0; idx + 1 < positions.size(); ++idx) {
+            AFL_VERIFY(it != i->chunks().end());
+            AFL_VERIFY(positions[idx + 1] - currentPosition <= length)("length", length)("idx+1", positions[idx + 1])("pos", currentPosition);
             auto chunk = (*it)->Slice(positions[idx] - currentPosition, positions[idx + 1] - positions[idx]);
-            AFL_VERIFY_DEBUG(chunk->length() == positions[idx + 1] - positions[idx])("length", chunk->length())(
-                                              "delta", positions[idx + 1] - positions[idx]);
-            AFL_VERIFY_DEBUG(chunk->length())("delta", positions[idx + 1] - positions[idx]);
+            AFL_VERIFY_DEBUG(chunk->length() == positions[idx + 1] - positions[idx])("length", chunk->length())("expect", positions[idx + 1] - positions[idx]);
             if (positions[idx + 1] - currentPosition == length) {
-                if (++it != i->chunks().end()) {
-                    length = (*it)->length();
-                }
+                ++it;
+                initializeIt();
                 currentPosition = positions[idx + 1];
             }
             slicedData[idx].emplace_back(chunk);
@@ -958,8 +997,8 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std:
     std::vector<std::shared_ptr<arrow::RecordBatch>> result;
     ui32 count = 0;
     for (auto&& i : slicedData) {
-        AFL_VERIFY_DEBUG(i.size());
-        AFL_VERIFY_DEBUG(i.front()->length());
+        AFL_VERIFY(i.size());
+        AFL_VERIFY(i.front()->length());
         result.emplace_back(arrow::RecordBatch::Make(t->schema(), i.front()->length(), i));
         count += result.back()->num_rows();
     }

@@ -69,25 +69,15 @@ struct TDqSolomonReadParams {
     NSo::NProto::TDqSolomonSource Source;
 };
 
-TString GetReadSolomonUrl(const TString& endpoint, bool useSsl, const TString& project, const ::NYql::NSo::NProto::ESolomonClusterType& type) {
+TString GetReadSolomonUrl(const TString& endpoint, bool useSsl, const TString& project) {
     TUrlBuilder builder((useSsl ? "https://" : "http://") + endpoint);
 
-    switch (type) {
-        case NSo::NProto::ESolomonClusterType::CT_SOLOMON: {
-            builder.AddPathComponent("api");
-            builder.AddPathComponent("v2");
-            builder.AddPathComponent("projects");
-            builder.AddPathComponent(project);
-            builder.AddPathComponent("sensors");
-            builder.AddPathComponent("data");
-            break;
-        }
-        case NSo::NProto::ESolomonClusterType::CT_MONITORING: {
-            [[fallthrough]];
-        }
-        default:
-            Y_ENSURE(false, "Invalid cluster type " << ToString<ui32>(type));
-    }
+    builder.AddPathComponent("api");
+    builder.AddPathComponent("v2");
+    builder.AddPathComponent("projects");
+    builder.AddPathComponent(project);
+    builder.AddPathComponent("sensors");
+    builder.AddPathComponent("data");
 
     return builder.Build();
 }
@@ -260,8 +250,7 @@ private:
     TString GetUrl() const {
         return GetReadSolomonUrl(ReadParams.Source.GetEndpoint(),
                 ReadParams.Source.GetUseSsl(),
-                ReadParams.Source.GetProject(),
-                ReadParams.Source.GetClusterType());
+                ReadParams.Source.GetProject());
     }
 
     NHttp::THttpOutgoingRequestPtr BuildSolomonRequest(TStringBuf data) {

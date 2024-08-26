@@ -47,6 +47,7 @@ std::pair<TPathFilter, TEarlyStopChecker> MakeFilterRegexp(const TString& regex,
     } else {
         re = std::make_shared<RE2>(re2::StringPiece(regex), RE2::Options());
     }
+    Y_ENSURE(re->ok());
 
     const size_t numGroups = re->NumberOfCapturingGroups();
     YQL_CLOG(DEBUG, ProviderS3)
@@ -255,7 +256,7 @@ public:
             MakeFilter(listingRequest.Pattern, listingRequest.PatternType, sharedCtx);
 
         auto request = listingRequest;
-        request.Url = UrlEscapeRet(request.Url, true);
+        request.Url = NS3Util::UrlEscapeRet(request.Url);
         auto ctx = TListingContext{
             std::move(sharedCtx),
             std::move(filter),

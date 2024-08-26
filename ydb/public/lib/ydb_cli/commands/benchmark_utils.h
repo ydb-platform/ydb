@@ -74,9 +74,11 @@ public:
         result.PlanAst = planAst;
         return result;
     }
-    static TQueryBenchmarkResult Error(const TString& error) {
+    static TQueryBenchmarkResult Error(const TString& error, const TString& queryPlan, const TString& planAst) {
         TQueryBenchmarkResult result;
         result.ErrorInfo = error;
+        result.QueryPlan = queryPlan;
+        result.PlanAst = planAst;
         return result;
     }
     operator bool() const {

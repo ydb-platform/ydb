@@ -38,7 +38,7 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
 
         Analyze(runtime, saTabletId, {{pathId}});
 
-        ValidateCountMin(runtime, pathId);
+        ValidateCountMinDatashard(runtime, pathId);
     }
 
     Y_UNIT_TEST(AnalyzeTwoTables) {
@@ -64,8 +64,8 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
 
         Analyze(runtime, saTabletId1, {pathId1, pathId2});
 
-        ValidateCountMin(runtime, pathId1);
-        ValidateCountMin(runtime, pathId2);
+        ValidateCountMinDatashard(runtime, pathId1);
+        ValidateCountMinDatashard(runtime, pathId2);
     }
 
 
@@ -94,9 +94,9 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
 
         Analyze(runtime, saTabletId, {pathId});
 
-        runtime.SimulateSleep(TDuration::Seconds(60));
+        runtime.SimulateSleep(TDuration::Seconds(10));
 
-        ValidateCountMinAbsense(runtime, pathId);
+        ValidateCountMinDatashardAbsense(runtime, pathId);
     }
 }
 

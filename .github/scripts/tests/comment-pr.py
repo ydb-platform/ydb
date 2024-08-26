@@ -32,7 +32,13 @@ def main():
         event = json.load(fp)
 
     pr = gh.create_from_raw_data(PullRequest, event["pull_request"])
-    update_pr_comment_text(pr, build_preset, run_number, color, args.text.read().rstrip(), args.rewrite)
+    text = args.text.read()
+    if text.endswith("\n"):
+        # dirty hack because echo adds a new line 
+        # and 'echo | comment-pr.py' leads to an extra newline  
+        text = text[:-1]
+
+    update_pr_comment_text(pr, build_preset, run_number, color, text, args.rewrite)
 
 
 if __name__ == "__main__":

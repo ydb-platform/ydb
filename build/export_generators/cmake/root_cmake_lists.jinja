@@ -1,4 +1,4 @@
-{% include '[generator]/disclaimer.jinja' %}
+{%- include '[generator]/disclaimer.jinja' -%}
 
 cmake_minimum_required(VERSION 3.15)
 if (POLICY CMP0132)
@@ -7,13 +7,12 @@ endif()
 
 project({{ project_name }} LANGUAGES
 {%- for project_language in project_languages -%}
-{%-     if project_language == "ASM" -%}
-{%          set has_asm = true %}
-{%-     else  %} {{ project_language }}
+{%-     if project_language != "ASM" %} {{ project_language }}
 {%-     endif  -%}
-{%-     if has_asm %} ASM
+{%-     if (loop.last) and ("ASM" in project_languages) %} ASM
 {%-     endif  -%}
-{%- endfor -%})
+{%- endfor -%}
+)
 
 set(BUILD_SHARED_LIBS Off)
 set(CMAKE_CXX_STANDARD 20)

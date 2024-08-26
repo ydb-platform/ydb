@@ -1898,6 +1898,29 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_27, TFixture)
     }
 }
 
+Y_UNIT_TEST_F(WriteToTopic_Demo_28, TFixture)
+{
+    // The test verifies that the `WriteInflightSize` is correctly considered for the main partition.
+    // Writing to the service partition does not change the `WriteInflightSize` of the main one.
+    CreateTopic("topic_A", TEST_CONSUMER);
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    TString message(16'000, 'a');
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, TString(16'000, 'a'), &tx, 0);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_1);
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, TString(20'000, 'b'), nullptr, 0);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_2);
+
+    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2), nullptr, 0);
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+}
+
 }
 
 }

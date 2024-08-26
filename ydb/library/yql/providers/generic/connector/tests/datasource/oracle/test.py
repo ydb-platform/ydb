@@ -16,6 +16,7 @@ from conftest import docker_compose_dir
 from collection import Collection
 
 import ydb.library.yql.providers.generic.connector.tests.utils.scenario.oracle as scenario
+
 # import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_database as select_missing_database
 import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_table as select_missing_table
 import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_positive_common as select_positive_common
@@ -41,7 +42,6 @@ class OneTimeWaiter:
         'column_selection_col2_col1',
         'column_selection_col2',
         'column_selection_col3',
-
         'PRIMITIVES',
         'CONSTANT',
         'COUNT_ROWS',
@@ -49,7 +49,7 @@ class OneTimeWaiter:
         'JSON',
         'DATETIMES',
         'LONGRAW',
-        'LONG_TABLE'
+        'LONG_TABLE',
     }
 
     def __init__(self):
@@ -77,9 +77,9 @@ class OneTimeWaiter:
                     return
 
         raise RuntimeError(
-            f"No expected tables in Oracle. Latest result: {actual_tables},  " +
-            f"extra tables loaded: {actual_tables - set(self.__expected_tables)}, " +
-            f"did not found tables: {set(self.__expected_tables) - actual_tables}"
+            f"No expected tables in Oracle. Latest result: {actual_tables},  "
+            + f"extra tables loaded: {actual_tables - set(self.__expected_tables)}, "
+            + f"did not found tables: {set(self.__expected_tables) - actual_tables}"
         )
 
 

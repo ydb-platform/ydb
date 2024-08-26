@@ -142,7 +142,8 @@ class TDefaultNodeBrokerClient
             const NYdb::NDiscovery::TNodeRegistrationResult& result,
             NKikimrConfig::TAppConfig& appConfig,
             ui32& nodeId,
-            TKikimrScopeId& outScopeId)
+            TKikimrScopeId& outScopeId,
+            TString& outNodeName)
         {
             nodeId = result.GetNodeId();
             NActors::TScopeId scopeId;
@@ -168,6 +169,7 @@ class TDefaultNodeBrokerClient
                     NConfig::CopyNodeLocation(nodeInfo.MutableLocation(), node.Location);
                     if (result.HasNodeName()) {
                         nodeInfo.SetName(result.GetNodeName());
+                        outNodeName = result.GetNodeName();
                     }
                 } else {
                     auto &info = *nsConfig.AddNode();
@@ -187,8 +189,13 @@ class TDefaultNodeBrokerClient
             : Result(std::move(result))
         {}
 
-        void Apply(NKikimrConfig::TAppConfig& appConfig, ui32& nodeId, TKikimrScopeId& scopeId) const override {
-            ProcessRegistrationDynamicNodeResult(Result, appConfig, nodeId, scopeId);
+        void Apply(
+            NKikimrConfig::TAppConfig& appConfig,
+            ui32& nodeId,
+            TKikimrScopeId& scopeId,
+            TString& nodeName) const override
+        {
+            ProcessRegistrationDynamicNodeResult(Result, appConfig, nodeId, scopeId, nodeName);
         }
     };
 
@@ -196,6 +203,7 @@ class TDefaultNodeBrokerClient
             const TGrpcSslSettings& grpcSettings,
             const TString addr,
             const NYdb::NDiscovery::TNodeRegistrationSettings& settings,
+            const TString& nodeRegistrationToken,
             const IEnv& env)
     {
         TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(addr);
@@ -210,7 +218,9 @@ class TDefaultNodeBrokerClient
                 config.UseClientCertificate(certificate.c_str(), privateKey.c_str());
             }
         }
-        config.SetAuthToken(BUILTIN_ACL_ROOT);
+        if (nodeRegistrationToken) {
+            config.SetAuthToken(nodeRegistrationToken);
+        }
         config.SetEndpoint(endpoint.Address);
         auto connection = NYdb::TDriver(config);
 
@@ -224,6 +234,7 @@ class TDefaultNodeBrokerClient
         const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
         const NYdb::NDiscovery::TNodeRegistrationSettings& settings,
+        const TString& nodeRegistrationToken,
         const IEnv& env,
         IInitLogger& logger)
     {
@@ -234,6 +245,7 @@ class TDefaultNodeBrokerClient
                 result = TryToRegisterDynamicNode(grpcSettings,
                                                   addr,
                                                   settings,
+                                                  nodeRegistrationToken,
                                                   env);
                 if (result.IsSuccess()) {
                     logger.Out() << "Success. Registered as " << result.GetNodeId() << Endl;
@@ -289,6 +301,7 @@ public:
        NYdb::NDiscovery::TNodeRegistrationResult result = RegisterDynamicNodeImpl(grpcSettings,
                                                                                   addrs,
                                                                                   newRegSettings,
+                                                                                  regSettings.NodeRegistrationToken,
                                                                                   env,
                                                                                   logger);
 

@@ -7,7 +7,7 @@
 #include <ydb/core/actorlib_impl/destruct_actor.h>
 #include <ydb/core/actorlib_impl/load_network.h>
 
-#include "ydb/core/audit/audit_log.h"
+#include "ydb/core/audit/audit_log_service.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/config_units.h>
@@ -397,6 +397,9 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
             break;
     }
     result.TlsAuthOnly = config.GetTlsAuthOnly();
+    if (const auto& forbidden = config.GetForbiddenSignatureAlgorithms(); !forbidden.empty()) {
+        result.ForbiddenSignatureAlgorithms = {forbidden.begin(), forbidden.end()};
+    }
 
     if (config.HasTCPSocketBufferSize())
         result.TCPSocketBufferSize = config.GetTCPSocketBufferSize();
@@ -2044,8 +2047,29 @@ void TMemoryControllerInitializer::InitializeServices(
     NActors::TActorSystemSetup* setup,
     const NKikimr::TAppData* appData)
 {
-    auto config = appData->MemoryControllerConfig;
-    auto* actor = NMemory::CreateMemoryController(TDuration::Seconds(1), ProcessMemoryInfoProvider, config, appData->Counters);
+    NMemory::TResourceBrokerConfig resourceBrokerSelfConfig; // for backward compatibility
+    auto mergeResourceBrokerConfigs = [&](const NKikimrResourceBroker::TResourceBrokerConfig& resourceBrokerConfig) {
+        if (resourceBrokerConfig.HasResourceLimit() && resourceBrokerConfig.GetResourceLimit().HasMemory()) {
+            resourceBrokerSelfConfig.LimitBytes = resourceBrokerConfig.GetResourceLimit().GetMemory();
+        }
+        for (const auto& queue : resourceBrokerConfig.GetQueues()) {
+            if (queue.GetName() == NLocalDb::KqpResourceManagerQueue) {
+                if (queue.HasLimit() && queue.GetLimit().HasMemory()) {
+                    resourceBrokerSelfConfig.QueryExecutionLimitBytes = queue.GetLimit().GetMemory();
+                }
+            }
+        }
+    };
+    if (Config.HasBootstrapConfig() && Config.GetBootstrapConfig().HasResourceBroker()) {
+        mergeResourceBrokerConfigs(Config.GetBootstrapConfig().GetResourceBroker());
+    }
+    if (Config.HasResourceBrokerConfig()) {
+        mergeResourceBrokerConfigs(Config.GetResourceBrokerConfig());
+    }
+
+    auto* actor = NMemory::CreateMemoryController(TDuration::Seconds(1), ProcessMemoryInfoProvider, 
+        Config.GetMemoryControllerConfig(), resourceBrokerSelfConfig, 
+        appData->Counters);
     setup->LocalServices.emplace_back(
         NMemory::MakeMemoryControllerId(0),
         TActorSetupCmd(actor, TMailboxType::HTSwap, appData->BatchPoolId)

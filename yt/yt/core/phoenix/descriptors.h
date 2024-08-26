@@ -29,7 +29,6 @@ class TFieldDescriptor
 public:
     const TString& GetName() const;
     TFieldTag GetTag() const;
-    bool IsDeprecated() const;
 
     const TFieldSchemaPtr& GetSchema() const;
 
@@ -39,7 +38,6 @@ private:
 
     TString Name_;
     TFieldTag Tag_;
-    bool Deprecated_ = false;
     int MinVersion_ = std::numeric_limits<int>::min();
     int MaxVersion_ = std::numeric_limits<int>::max();
 
@@ -93,9 +91,11 @@ public:
     const NYson::TYsonString& GetSchemaYson() const;
 
     const TTypeDescriptor* FindTypeDescriptorByTag(TTypeTag tag) const ;
+    const TTypeDescriptor& GetTypeDescriptorByTag(TTypeTag tag) const;
     const TTypeDescriptor& GetTypeDescriptorByTagOrThrow(TTypeTag tag) const;
 
     const TTypeDescriptor* FindTypeDescriptorByTypeIndex(std::type_index typeIndex) const ;
+    const TTypeDescriptor& GetTypeDescriptorByTypeIndex(std::type_index typeIndex) const;
     const TTypeDescriptor& GetTypeDescriptorByTypeIndexOrThrow(std::type_index typeIndex) const;
 
 private:

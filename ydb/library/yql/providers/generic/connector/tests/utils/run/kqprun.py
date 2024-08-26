@@ -29,7 +29,9 @@ CREATE OBJECT {{data_source}}_local_password (TYPE SECRET) WITH (value = "{{pass
 CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
     SOURCE_TYPE="{{kind}}",
     LOCATION="{{host}}:{{port}}",
+    {% if database %}
     DATABASE_NAME="{{database}}",
+    {% endif %}
     AUTH_METHOD="BASIC",
     LOGIN="{{login}}",
     PASSWORD_SECRET_NAME="{{data_source}}_local_password",
@@ -50,6 +52,7 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
 {%- endmacro -%}
 
 {% set CLICKHOUSE = 'ClickHouse' %}
+{% set MS_SQL_SERVER = 'MsSQLServer' %}
 {% set MYSQL = 'MySQL' %}
 {% set ORACLE = 'Oracle' %}
 {% set POSTGRESQL = 'PostgreSQL' %}
@@ -82,6 +85,20 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
 }}
 {% endfor %}
 
+{% for cluster in generic_settings.ms_sql_server_clusters %}
+{{ create_data_source(
+    MS_SQL_SERVER,
+    settings.ms_sql_server.cluster_name,
+    settings.ms_sql_server.host_internal,
+    settings.ms_sql_server.port_internal,
+    settings.ms_sql_server.username,
+    settings.ms_sql_server.password,
+    NONE,
+    cluster.database,
+    NONE)
+}}
+{% endfor %}
+
 {% for cluster in generic_settings.mysql_clusters %}
 {{ create_data_source(
     MYSQL,
@@ -106,7 +123,7 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
     settings.oracle.username,
     settings.oracle.password,
     NONE,
-    cluster.database,
+    NONE,
     NONE,
     cluster.service_name)
 }}

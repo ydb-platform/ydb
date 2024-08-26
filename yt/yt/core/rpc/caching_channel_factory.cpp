@@ -31,7 +31,7 @@ public:
     TCachedChannel(
         TCachingChannelFactory* factory,
         IChannelPtr underlyingChannel,
-        const TString& address)
+        const std::string& address)
         : TChannelWrapper(std::move(underlyingChannel))
         , Factory_(factory)
         , Address_(address)
@@ -96,14 +96,14 @@ public:
         ExpirationExecutor_->Start();
     }
 
-    IChannelPtr CreateChannel(const TString& address) override
+    IChannelPtr CreateChannel(const std::string& address) override
     {
         return DoCreateChannel(
             address,
             [&] { return UnderlyingFactory_->CreateChannel(address); });
     }
 
-    void EvictChannel(const TString& address, IChannel* evictableChannel)
+    void EvictChannel(const std::string& address, IChannel* evictableChannel)
     {
         auto guard = WriterGuard(SpinLock_);
 
@@ -130,15 +130,15 @@ private:
     TPeriodicExecutorPtr ExpirationExecutor_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
-    THashMap<TString, TCachedChannelPtr> StrongChannelMap_;
-    THashMap<TString, TWeakPtr<TCachedChannel>> WeakChannelMap_;
+    THashMap<std::string, TCachedChannelPtr> StrongChannelMap_;
+    THashMap<std::string, TWeakPtr<TCachedChannel>> WeakChannelMap_;
 
-    using TTtlItem = std::pair<TString, TWeakPtr<TCachedChannel>>;
+    using TTtlItem = std::pair<std::string, TWeakPtr<TCachedChannel>>;
     TMpscStack<TTtlItem> TtlRegisterQueue_;
     std::vector<TTtlItem> TtlCheckQueue_;
 
     template <class TFactory>
-    IChannelPtr DoCreateChannel(const TString& address, const TFactory& factory)
+    IChannelPtr DoCreateChannel(const std::string& address, const TFactory& factory)
     {
         {
             auto readerGuard = ReaderGuard(SpinLock_);
@@ -195,7 +195,7 @@ private:
         }
     }
 
-    void RegisterChannelForTtlChecks(const TString& address, const TCachedChannelPtr& channel)
+    void RegisterChannelForTtlChecks(const std::string& address, const TCachedChannelPtr& channel)
     {
         TtlRegisterQueue_.Enqueue({address, channel});
     }

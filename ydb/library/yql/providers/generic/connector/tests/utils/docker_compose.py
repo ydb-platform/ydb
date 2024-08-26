@@ -190,14 +190,7 @@ class DockerComposeHelper:
         username = params["environment"]["TEST_USER_NAME"]  # also serves as default sceheme name for user
 
         bash_command = f"sqlplus -S {username}/{password} << EOF \nSELECT table_name FROM user_tables; \nEOF"
-        cmd = [
-            self.docker_bin_path,
-            'exec',
-            params["container_name"],
-            'bash',
-            '-c',
-            bash_command
-        ]
+        cmd = [self.docker_bin_path, 'exec', params["container_name"], 'bash', '-c', bash_command]
 
         LOGGER.debug("calling command: " + " ".join(cmd))
 
@@ -209,4 +202,38 @@ class DockerComposeHelper:
             raise RuntimeError(f"docker cmd failed: {e.output} (code {e.returncode})")
         else:
             lines = out.splitlines()
-            return lines[3:len(lines) - 3]
+            return lines[3 : len(lines) - 3]
+
+    def list_ms_sql_server_tables(self) -> Sequence[str]:
+        params = self.docker_compose_yml_data["services"]["ms_sql_server"]
+        password = params["environment"]["SA_PASSWORD"]
+        db = 'master'
+        cmd = [
+            self.docker_bin_path,
+            'exec',
+            params["container_name"],
+            '/opt/mssql-tools18/bin/sqlcmd',
+            '-C',
+            '-S',
+            'localhost',
+            '-U',
+            'sa',
+            '-d',
+            db,
+            '-P',
+            password,
+            '-Q',
+            "SELECT table_name FROM information_schema.tables WHERE table_type = 'BASE TABLE'",
+        ]
+
+        LOGGER.debug("calling command: " + " ".join(cmd))
+
+        out = None
+
+        try:
+            out = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode('utf8')
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"docker cmd failed: {e.output} (code {e.returncode})")
+        else:
+            lines = [x.strip() for x in out.splitlines()]
+            return lines[3:]

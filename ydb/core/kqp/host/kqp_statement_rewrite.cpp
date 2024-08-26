@@ -292,20 +292,25 @@ namespace {
     }
 }
 
-TVector<NYql::TExprNode::TPtr> RewriteExpression(
+std::pair<TVector<NYql::TExprNode::TPtr>, NYql::TIssues> RewriteExpression(
         const NYql::TExprNode::TPtr& root,
         NYql::TExprContext& exprCtx,
         NYql::TTypeAnnotationContext& typeCtx,
         const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx,
         const TString& cluster) {
+    NYql::TIssues issues;
     // CREATE TABLE AS statement can be used only with perstatement execution.
     // Thus we assume that there is only one such statement.
+    ui64 actionsCount = 0;
     TVector<NYql::TExprNode::TPtr> result;
     VisitExpr(root, [&](const NYql::TExprNode::TPtr& node) {
         if (NYql::NNodes::TCoWrite::Match(node.Get())) {
+            ++actionsCount;
             const auto rewriteResult = RewriteCreateTableAs(node, exprCtx, typeCtx, sessionCtx, cluster);
             if (rewriteResult) {
-                YQL_ENSURE(result.empty());
+                if (!result.empty()) {
+                    issues.AddIssue("Several CTAS statement can't be used without per-statement mode.");
+                }
                 result.push_back(rewriteResult->CreateTable);
                 result.push_back(rewriteResult->ReplaceInto);
                 if (rewriteResult->MoveTable) {
@@ -316,10 +321,14 @@ TVector<NYql::TExprNode::TPtr> RewriteExpression(
         return true;
     });
 
+    if (!result.empty() && actionsCount > 1) {
+        issues.AddIssue("CTAS statement can't be used with other statements without per-statement mode.");
+    }
+
     if (result.empty()) {
         result.push_back(root);
     }
-    return result;
+    return {result, issues};
 }
 
 }

@@ -8,7 +8,9 @@
 
 namespace NActors {
     struct TLogHistogram : public NMonitoring::IHistogramSnapshot {
-        TLogHistogram();
+        TLogHistogram() {
+            memset(Buckets, 0, sizeof(Buckets));
+        }
 
         inline void Add(ui64 val, ui64 inc = 1) {
             size_t ind = 0;
@@ -27,14 +29,31 @@ namespace NActors {
             RelaxedStore(&Buckets[ind], RelaxedLoad(&Buckets[ind]) + inc);
         }
 
-        void Aggregate(const TLogHistogram& other);
+        void Aggregate(const TLogHistogram& other) {
+            const ui64 inc = RelaxedLoad(&other.TotalSamples);
+            RelaxedStore(&TotalSamples, RelaxedLoad(&TotalSamples) + inc);
+            for (size_t i = 0; i < Y_ARRAY_SIZE(Buckets); ++i) {
+                Buckets[i] += RelaxedLoad(&other.Buckets[i]);
+            }
+        }
 
         // IHistogramSnapshot
-        ui32 Count() const override;
+        ui32 Count() const override {
+            return Y_ARRAY_SIZE(Buckets);
+        }
 
-        NMonitoring::TBucketBound UpperBound(ui32 index) const override;
+        NMonitoring::TBucketBound UpperBound(ui32 index) const override {
+            Y_ASSERT(index < Y_ARRAY_SIZE(Buckets));
+            if (index == 0) {
+                return 1;
+            }
+            return NMonitoring::TBucketBound(1ull << (index - 1)) * 2.0;
+        }
 
-        NMonitoring::TBucketValue Value(ui32 index) const override;
+        NMonitoring::TBucketValue Value(ui32 index) const override {
+            Y_ASSERT(index < Y_ARRAY_SIZE(Buckets));
+            return Buckets[index];
+        }
 
         ui64 TotalSamples = 0;
         ui64 Buckets[65];
@@ -107,11 +126,85 @@ namespace NActors {
         ui64 MailboxPushedOutByEventCount = 0;
         ui64 NotEnoughCpuExecutions = 0;
 
-        TExecutorThreadStats();
+        TExecutorThreadStats() // must be not empty as 0 used as default
+            : ElapsedTicksByActivity(TLocalProcessKeyStateIndexLimiter::GetMaxKeysCount())
+            , ReceivedEventsByActivity(TLocalProcessKeyStateIndexLimiter::GetMaxKeysCount())
+            , ActorsAliveByActivity(TLocalProcessKeyStateIndexLimiter::GetMaxKeysCount())
+            , ScheduledEventsByActivity(TLocalProcessKeyStateIndexLimiter::GetMaxKeysCount())
+            , StuckActorsByActivity(TLocalProcessKeyStateIndexLimiter::GetMaxKeysCount())
+            , UsageByActivity(TLocalProcessKeyStateIndexLimiter::GetMaxKeysCount())
+        {}
 
-        void Aggregate(const TExecutorThreadStats& other);
+        template <typename T>
+        static void AggregateOne(TVector<T>& self, const TVector<T>& other) {
+            const size_t selfSize = self.size();
+            const size_t otherSize = other.size();
+            if (selfSize < otherSize)
+                self.resize(otherSize);
+            for (size_t at = 0; at < otherSize; ++at)
+                self[at] += RelaxedLoad(&other[at]);
+        }
 
-        size_t MaxActivityType() const;
+        void Aggregate(const TExecutorThreadStats& other) {
+            SentEvents += RelaxedLoad(&other.SentEvents);
+            ReceivedEvents += RelaxedLoad(&other.ReceivedEvents);
+            PreemptedEvents += RelaxedLoad(&other.PreemptedEvents);
+            NonDeliveredEvents += RelaxedLoad(&other.NonDeliveredEvents);
+            EmptyMailboxActivation += RelaxedLoad(&other.EmptyMailboxActivation);
+            CpuUs += RelaxedLoad(&other.CpuUs);
+            SafeElapsedTicks += RelaxedLoad(&other.SafeElapsedTicks);
+            RelaxedStore(
+                &WorstActivationTimeUs,
+                std::max(RelaxedLoad(&WorstActivationTimeUs), RelaxedLoad(&other.WorstActivationTimeUs)));
+            ElapsedTicks += RelaxedLoad(&other.ElapsedTicks);
+            ParkedTicks += RelaxedLoad(&other.ParkedTicks);
+            BlockedTicks += RelaxedLoad(&other.BlockedTicks);
+            MailboxPushedOutByTailSending += RelaxedLoad(&other.MailboxPushedOutByTailSending);
+            MailboxPushedOutBySoftPreemption += RelaxedLoad(&other.MailboxPushedOutBySoftPreemption);
+            MailboxPushedOutByTime += RelaxedLoad(&other.MailboxPushedOutByTime);
+            MailboxPushedOutByEventCount += RelaxedLoad(&other.MailboxPushedOutByEventCount);
+            NotEnoughCpuExecutions += RelaxedLoad(&other.NotEnoughCpuExecutions);
+
+            ActivationTimeHistogram.Aggregate(other.ActivationTimeHistogram);
+            EventDeliveryTimeHistogram.Aggregate(other.EventDeliveryTimeHistogram);
+            EventProcessingCountHistogram.Aggregate(other.EventProcessingCountHistogram);
+            EventProcessingTimeHistogram.Aggregate(other.EventProcessingTimeHistogram);
+
+            AggregateOne(ElapsedTicksByActivity, other.ElapsedTicksByActivity);
+            AggregateOne(ReceivedEventsByActivity, other.ReceivedEventsByActivity);
+            AggregateOne(ActorsAliveByActivity, other.ActorsAliveByActivity);
+            AggregateOne(ScheduledEventsByActivity, other.ScheduledEventsByActivity);
+            AggregateOne(StuckActorsByActivity, other.StuckActorsByActivity);
+            if (other.CurrentActivationTime.TimeUs) {
+                AggregatedCurrentActivationTime.push_back(other.CurrentActivationTime);
+            }
+            if (other.AggregatedCurrentActivationTime.size()) {
+                AggregatedCurrentActivationTime.insert(AggregatedCurrentActivationTime.end(), other.AggregatedCurrentActivationTime.begin(), other.AggregatedCurrentActivationTime.end());
+            }
+
+            if (UsageByActivity.size() < other.UsageByActivity.size()) {
+                UsageByActivity.resize(other.UsageByActivity.size());
+            }
+            for (size_t i = 0; i < UsageByActivity.size(); ++i) {
+                for (size_t j = 0; j < 10; ++j) {
+                    UsageByActivity[i][j] += RelaxedLoad(&other.UsageByActivity[i][j]);
+                }
+            }
+
+            RelaxedStore(
+                &PoolActorRegistrations,
+                std::max(RelaxedLoad(&PoolActorRegistrations), RelaxedLoad(&other.PoolActorRegistrations)));
+            RelaxedStore(
+                &PoolDestroyedActors,
+                std::max(RelaxedLoad(&PoolDestroyedActors), RelaxedLoad(&other.PoolDestroyedActors)));
+            RelaxedStore(
+                &PoolAllocatedMailboxes,
+                std::max(RelaxedLoad(&PoolAllocatedMailboxes), RelaxedLoad(&other.PoolAllocatedMailboxes)));
+        }
+
+        size_t MaxActivityType() const {
+            return ActorsAliveByActivity.size();
+        }
     };
 
 }

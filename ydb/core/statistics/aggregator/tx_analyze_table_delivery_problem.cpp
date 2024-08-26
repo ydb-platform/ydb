@@ -8,8 +8,6 @@
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxAnalyzeTableDeliveryProblem : public TTxBase {
-    std::vector<std::unique_ptr<IEventBase>> Events;
-    
     TTxAnalyzeTableDeliveryProblem(TSelf* self)
         : TTxBase(self)
     {}

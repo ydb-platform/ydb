@@ -270,7 +270,8 @@ TVector<TOutputTuple> DoTestBlockJoinOnUint64(EJoinKind joinKind,
         const auto blockLengthDatum = TArrowBlock::From(blockLengthValue).GetDatum();
         Y_ENSURE(blockLengthDatum.is_scalar());
         const auto blockLength = blockLengthDatum.scalar_as<arrow::UInt64Scalar>().value;
-        const auto blockTuples = ArraysToTuples<TOutputTuple>(arrays, blockLength);
+        const auto blockTuples = ArraysToTuples<TOutputTuple>(arrays, blockLength,
+                                                              joinKind == EJoinKind::Left);
         resultTuples.insert(resultTuples.end(), blockTuples.cbegin(), blockTuples.cend());
     }
     std::sort(resultTuples.begin(), resultTuples.end());
@@ -289,21 +290,27 @@ void TestBlockJoinOnUint64(EJoinKind joinKind) {
         testKSV.push_back(std::make_tuple(k, k * 1001, threeLetterValues[k]));
     }
 
-    if (joinKind == EJoinKind::Inner) {
-        static TMap<ui64, TStringBuf> fibMap;
+    if (joinKind == EJoinKind::Inner || joinKind == EJoinKind::Left) {
+        static TMap<ui64, TString> fibMap;
         for (const auto& key : fib) {
             fibMap[key] = std::to_string(key);
         }
-        TVector<TKSV> expectedKSV;
-        std::copy_if(testKSV.cbegin(), testKSV.cend(), std::back_inserter(expectedKSV),
-            [](const auto& ksw) { return fib.contains(std::get<0>(ksw)); });
-        TVector<TKSW> expectedKSW;
-        std::transform(expectedKSV.cbegin(), expectedKSV.cend(), std::back_inserter(expectedKSW),
+        TVector<TKSW> testKSW;
+        std::transform(testKSV.cbegin(), testKSV.cend(), std::back_inserter(testKSW),
             [](const auto& ksv) {
-                return std::make_tuple(std::get<0>(ksv), std::get<1>(ksv), std::get<2>(ksv),
-                                       fibMap.at(std::get<0>(ksv)));
+                const auto found = fibMap.find(std::get<0>(ksv));
+                const auto right = found == fibMap.cend() ? std::nullopt
+                                 : std::optional<TStringBuf>(found->second);
+                return std::make_tuple(std::get<0>(ksv), std::get<1>(ksv),
+                                       std::get<2>(ksv), right);
             });
-
+        TVector<TKSW> expectedKSW;
+        if (joinKind == EJoinKind::Inner) {
+            std::copy_if(testKSW.cbegin(), testKSW.cend(), std::back_inserter(expectedKSW),
+                [](const auto& ksw) { return fib.contains(std::get<0>(ksw)); });
+        } else {
+            expectedKSW = testKSW;
+        }
         for (size_t blockSize = 8; blockSize <= testSize; blockSize <<= 1) {
             const auto gotKSW = DoTestBlockJoinOnUint64<TKSW>(joinKind, testKSV, fibMap, blockSize);
             UNIT_ASSERT_EQUAL(expectedKSW, gotKSW);
@@ -327,6 +334,10 @@ void TestBlockJoinOnUint64(EJoinKind joinKind) {
 Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinBasicTest) {
     Y_UNIT_TEST(TestInnerOnUint64) {
         TestBlockJoinOnUint64(EJoinKind::Inner);
+    }
+
+    Y_UNIT_TEST(TestLeftOnUint64) {
+        TestBlockJoinOnUint64(EJoinKind::Left);
     }
 
     Y_UNIT_TEST(TestLeftSemiOnUint64) {

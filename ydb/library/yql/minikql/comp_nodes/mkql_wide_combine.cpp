@@ -399,6 +399,7 @@ public:
         BufferForUsedInputItems.reserve(usedInputItemType->GetElementsCount());
         Tongue = InMemoryProcessingState.Tongue;
         Throat = InMemoryProcessingState.Throat;
+        std::cerr << "MISHA test: AllowSpilling: " << AllowSpilling << "spillingFactory: " << (bool)ctx.SpillerFactory << "IsSwitch: " << IsSwitchToSpillingModeCondition() << std::endl;
     }
 
     EUpdateResult Update() {

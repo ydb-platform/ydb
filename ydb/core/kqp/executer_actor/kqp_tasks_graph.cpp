@@ -522,7 +522,8 @@ bool IsCrossShardChannel(const TKqpTasksGraph& tasksGraph, const TChannel& chann
         return false;
     }
 
-    return targetShard != tasksGraph.GetTask(channel.SrcTask).Meta.ShardId;
+    ui64 srcShard = tasksGraph.GetTask(channel.SrcTask).Meta.ShardId;
+    return srcShard && targetShard != srcShard;
 }
 
 void TShardKeyRanges::AddPoint(TSerializedCellVec&& point) {

@@ -412,28 +412,11 @@ struct TObjectStorageExternalSource : public IExternalSource {
                 return result;
             }
 
-            auto promise = NThreading::NewPromise<TMetadataResult>();
-            auto partitionsToMetadata = [meta = value.Metadata, partitions](NThreading::TPromise<TMetadataResult> metaPromise, NObjectStorage::TEvInferredFileSchema&& response){
-                if (!response.Status.IsSuccess()) {
-                    for (const auto& partitionName : partitions) {
-                        auto& destColumn = *meta->Schema.add_column();
-                        destColumn.mutable_name()->assign(partitionName);
-                        destColumn.mutable_type()->set_type_id(Ydb::Type::UTF8);
-                    }
-                } else {
-                    for (const auto& column : response.Fields) {
-                        auto& destColumn = *meta->Schema.add_column();
-                        destColumn.mutable_name()->assign(column.name());
-                        destColumn.mutable_type()->set_type_id(column.type().has_optional_type() ? 
-                            column.type().optional_type().item().type_id() : 
-                            column.type().type_id());
-                    }
-                }
-                TMetadataResult result;
-                result.SetSuccess();
-                result.Metadata = meta;
-                metaPromise.SetValue(std::move(result));
-            };
+            for (const auto& partitionName : partitions) {
+                auto& destColumn = *meta->Schema.add_column();
+                destColumn.mutable_name()->assign(partitionName);
+                destColumn.mutable_type()->set_type_id(Ydb::Type::UTF8);
+            }
 
             arrow::BufferBuilder builder;
             auto partitionBuffer = std::make_shared<arrow::Buffer>(nullptr, 0);
@@ -443,6 +426,28 @@ struct TObjectStorageExternalSource : public IExternalSource {
             if (!buildStatus.ok() || !finishStatus.ok()) {
                 return result;
             }
+
+            auto promise = NThreading::NewPromise<TMetadataResult>();
+            auto partitionsToMetadata = [meta = value.Metadata, partitions](NThreading::TPromise<TMetadataResult> metaPromise, NObjectStorage::TEvInferredFileSchema&& response){
+                if (response.Status.IsSuccess()) {
+                    THashMap<TString, Ydb::Type> inferredTypes;
+                    for (const auto& column : response.Fields) {
+                        inferredTypes[column.name()] = column.type();
+                    }
+                    
+                    for (auto& destColumn : *meta->Schema.mutable_column()) {
+                        if (auto type = inferredTypes.FindPtr(destColumn.name()); type) {
+                            destColumn.mutable_type()->set_type_id(type->has_optional_type() ? 
+                                type->optional_type().item().type_id() : 
+                                type->type_id());
+                        }
+                    }
+                }
+                TMetadataResult result;
+                result.SetSuccess();
+                result.Metadata = meta;
+                metaPromise.SetValue(std::move(result));
+            };
 
             auto file = std::make_shared<arrow::io::BufferReader>(std::move(partitionBuffer));
             actorSystem->Register(new NKqp::TActorRequestHandler<NObjectStorage::TEvInferPartitions, NObjectStorage::TEvInferredFileSchema, TMetadataResult>(
@@ -471,19 +476,11 @@ private:
         TVector<TString> columns;
         if (auto partitioned = meta->Attributes.FindPtr("partitionedby"); partitioned) {
             NJson::TJsonValue values;
-
-            if (!NJson::ReadJsonTree(*partitioned, &values)) {
-                return {};
-            }
-            if (values.GetType() != NJson::JSON_ARRAY) {
-                return {};
-            }
+            Y_ENSURE(NJson::ReadJsonTree(*partitioned, &values));
+            Y_ENSURE(values.GetType() == NJson::JSON_ARRAY);
 
             for (const auto& value : values.GetArray()) {
-                if (value.GetType() != NJson::JSON_STRING) {
-                    return {};
-                }
-
+                Y_ENSURE(value.GetType() == NJson::JSON_STRING);
                 columns.push_back(value.GetString());
             }
         }

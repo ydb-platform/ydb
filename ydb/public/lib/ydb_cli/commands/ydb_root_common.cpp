@@ -340,18 +340,19 @@ void TClientCommandRootCommon::Parse(TConfig& config) {
     TClientCommandRootBase::Parse(config);
     ParseDatabase(config);
     ParseCaCerts(config);
+    ParseClientCert(config);
     ParseIamEndpoint(config);
 
     config.VerbosityLevel = std::min(static_cast<TConfig::EVerbosityLevel>(VerbosityLevel), TConfig::EVerbosityLevel::DEBUG);
 }
 
 namespace {
-    inline void PrintSettingFromProfile(const TString& setting, std::shared_ptr<IProfile> profile, bool explicitOption) {
+    inline void PrintSettingFromProfile(const TString& setting, const std::shared_ptr<IProfile>& profile, bool explicitOption) {
         Cerr << "Using " << setting << " due to configuration in" << (explicitOption ? "" : " active") << " profile \""
             << profile->GetName() << "\"" << (explicitOption ? " from explicit --profile option" : "") << Endl;
     }
 
-    inline TString GetProfileSource(std::shared_ptr<IProfile> profile, bool explicitOption) {
+    inline TString GetProfileSource(const std::shared_ptr<IProfile>& profile, bool explicitOption) {
         Y_ABORT_UNLESS(profile, "No profile to get source");
         if (explicitOption) {
             return TStringBuilder() << "profile \"" << profile->GetName() << "\" from explicit --profile option";
@@ -360,10 +361,37 @@ namespace {
     }
 }
 
-bool TClientCommandRootCommon::TryGetParamFromProfile(const TString& name, std::shared_ptr<IProfile> profile, bool explicitOption,
+bool TClientCommandRootCommon::TryGetParamFromProfile(const TString& name, const std::shared_ptr<IProfile>& profile, bool explicitOption,
                                                       std::function<bool(const TString&, const TString&, bool)> callback) {
     if (profile && profile->Has(name)) {
         return callback(profile->GetValue(name).as<TString>(), GetProfileSource(profile, explicitOption), explicitOption);
+    }
+    return false;
+}
+
+bool TClientCommandRootCommon::TryGetParamsPackFromProfile(const std::shared_ptr<IProfile>& profile, bool explicitOption,
+                                                           std::function<bool(const TString& /*source*/, bool /*explicit*/, const std::vector<TString>& /*values*/)> callback,
+                                                           const std::initializer_list<TString>& names) {
+    if (!profile) {
+        return false;
+    }
+    bool hasAtLeastOne = false;
+    bool doesNotHaveAtLeastOne = false;
+    for (const TString& name : names) {
+        hasAtLeastOne |= profile->Has(name);
+        doesNotHaveAtLeastOne |= !profile->Has(name);
+    }
+    if (hasAtLeastOne && doesNotHaveAtLeastOne) {
+        throw TMisuseException()
+            << "Either all or none of the following options must be set in one profile: " << JoinSeq(", ", names);
+    }
+    if (hasAtLeastOne) {
+        std::vector<TString> values;
+        values.reserve(names.size());
+        for (const TString& name : names) {
+            values.emplace_back(profile->GetValue(name).as<TString>());
+        }
+        return callback(GetProfileSource(profile, explicitOption), explicitOption, values);
     }
     return false;
 }
@@ -395,13 +423,65 @@ void TClientCommandRootCommon::ParseCaCerts(TConfig& config) {
     }
 }
 
+void TClientCommandRootCommon::ParseClientCert(TConfig& config) {
+    auto getClientCertFiles = [this, &config] (const TString& sourceText, bool explicitOption, const std::vector<TString>& values) {
+        Y_ABORT_UNLESS(values.size() == 2);
+        const TString& clientCertFileParam = values[0];
+        const TString& clientCertPrivateKeyFileParam = values[1];
+        if (!IsClientCertFileSet && (explicitOption || !Profile)) {
+            config.ClientCertFile = clientCertFileParam;
+            config.ClientCertPrivateKeyFile = clientCertPrivateKeyFileParam;
+            IsClientCertFileSet = true;
+            GetClientCert(config);
+        }
+        if (!IsVerbose()) {
+            return true;
+        }
+        Cerr << "Using client certificate from file: " << clientCertFileParam << Endl;
+        config.ConnectionParams["client-cert-file"].push_back({clientCertFileParam, sourceText});
+        config.ConnectionParams["client-cert-key-file"].push_back({clientCertPrivateKeyFileParam, sourceText});
+        return false;
+    };
+    // Priority 1. Explicit --client-cert-file/--client-cert-key-file options
+    if (!ClientCertFile.empty() || !ClientCertPrivateKeyFile.empty()) {
+        if (ClientCertFile.empty() || ClientCertPrivateKeyFile.empty()) { // One option is set, another is not set
+            throw TMisuseException()
+                << "Both \"client-cert-file\" and \"client-cert-key-file\" options must be provided.";
+        }
+        if (ClientCertFile && getClientCertFiles("explicit --client-cert-file/--client-cert-key-file option", true, { ClientCertFile, ClientCertPrivateKeyFile })) {
+            return;
+        }
+    }
+    // Priority 2. Explicit --profile option
+    if (TryGetParamsPackFromProfile(Profile, true, getClientCertFiles, { "client-cert-file", "client-cert-key-file" })) {
+        return;
+    }
+    // Priority 3. Active profile (if --profile option is not specified)
+    if (TryGetParamsPackFromProfile(ProfileManager->GetActiveProfile(), false, getClientCertFiles, { "client-cert-file", "client-cert-key-file" })) {
+        return;
+    }
+}
+
 void TClientCommandRootCommon::GetCaCerts(TConfig& config) {
     if (!config.EnableSsl && !config.CaCertsFile.empty()) {
         throw TMisuseException()
-            << "\"ca-file\" option provided for a non-ssl connection. Use grpcs:// prefix for host to connect using SSL.";
+            << "\"ca-file\" option is provided for a non-ssl connection. Use grpcs:// prefix for host to connect using SSL.";
     }
     if (!config.CaCertsFile.empty()) {
         config.CaCerts = ReadFromFile(config.CaCertsFile, "CA certificates");
+    }
+}
+
+void TClientCommandRootCommon::GetClientCert(TConfig& config) {
+    if (!config.EnableSsl && (!config.ClientCertFile.empty() || !config.ClientCertPrivateKeyFile.empty())) {
+        throw TMisuseException()
+            << "\"client-cert-file\"/\"client-cert-key-file\" options are provided for a non-ssl connection. Use grpcs:// prefix for host to connect using SSL.";
+    }
+    if (!config.ClientCertFile.empty()) {
+        config.ClientCert = ReadFromFile(config.ClientCertFile, "Client certificate");
+    }
+    if (!config.ClientCertPrivateKeyFile.empty()) {
+        config.ClientCertPrivateKey = ReadFromFile(config.ClientCertPrivateKeyFile, "Client certificate private key");
     }
 }
 

@@ -184,6 +184,7 @@ public:
             throw TMisuseException() << message;
         }
         ParseCaCerts(config);
+        ParseClientCert(config);
         config.Address = Address;
 
         if (!hostname) {

@@ -25,6 +25,12 @@ void TClientCommandRootBase::Config(TConfig& config) {
         "Path to a file containing the PEM encoding of the server root certificates for tls connections.\n"
         "If this parameter is empty, the default roots will be used.")
         .RequiredArgument("PATH").StoreResult(&CaCertsFile);
+    opts.AddLongOption("client-cert-file",
+        "Path to a file containing the PEM encoding of the client certificate for tls connections")
+        .RequiredArgument("PATH").StoreResult(&ClientCertFile);
+    opts.AddLongOption("client-cert-key-file",
+        "Path to a file containing the PEM encoding of the client certificate private key for tls connections")
+        .RequiredArgument("PATH").StoreResult(&ClientCertPrivateKeyFile);
 
     opts.SetCustomUsage(config.ArgV[0]);
     config.SetFreeArgsMin(1);
@@ -92,6 +98,22 @@ void TClientCommandRootBase::ParseCaCerts(TConfig& config) {
             << "\"ca-file\" option provided for a non-ssl connection. Use grpcs:// prefix for host to connect using SSL.";
     }
     config.CaCerts = ReadFromFile(CaCertsFile, "CA certificates");
+}
+
+void TClientCommandRootBase::ParseClientCert(TConfig& config) {
+    if (ClientCertFile.empty() && ClientCertPrivateKeyFile.empty()) {
+        return;
+    }
+    if (ClientCertFile.empty() || ClientCertPrivateKeyFile.empty()) { // One option is set, another is not set
+        throw TMisuseException()
+            << "Both \"client-cert-file\" and \"client-cert-key-file\" options must be provided.";
+    }
+    if (!config.EnableSsl) {
+        throw TMisuseException()
+            << "\"client-cert-file\" option provided for a non-ssl connection. Use grpcs:// prefix for host to connect using SSL.";
+    }
+    config.ClientCert = ReadFromFile(ClientCertFile, "Client certificate");
+    config.ClientCertPrivateKey = ReadFromFile(ClientCertPrivateKeyFile, "Client certificate private key");
 }
 
 void TClientCommandRootBase::ParseCredentials(TConfig& config) {

@@ -112,7 +112,6 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
         UNIT_ASSERT_EQUAL(insertTable.GetPathPriorities().begin()->second.size(), 1);
         UNIT_ASSERT_EQUAL((*insertTable.GetPathPriorities().begin()->second.begin())->GetCommitted().size(), 1);
 
-        // read old snapshot
         blobs = insertTable.Read(tableId, false, nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 1);
         blobs = insertTable.Read(tableId + 1, false, nullptr);

@@ -13,6 +13,7 @@ namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
 
+
     class TSparsedDataTest {
     private:
         const TKikimrSettings Settings = TKikimrSettings().SetWithSampleTables(false);
@@ -21,6 +22,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         const TString StoreName;
         ui32 MultiColumnRepCount = 100;
         static const ui32 FIELD_COUNT = 5;
+        static const ui32 SKIP_GROUPS = 7;
+        const char* const FIELD_NAMES[FIELD_COUNT] = {"utf", "int", "uint", "float", "double"};
     public:
         TSparsedDataTest(const char* storeName)
             : Kikimr(Settings)
@@ -54,32 +57,54 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
             return GetUint64(rows[0].at("count"));
         }
 
-        void GetAllDefaultsCount(ui64* counts) {
-            TString query = "SELECT field_utf0 == 'abcde' AS def_utf0, field_uint0 == 0 AS def_uint0, field_int0 == 0 AS def_int0, field_float0 == 0 AS def_float0, field_double0 == 0 AS def_double0 FROM `/Root/olapStore/olapTable`";
+        void GetAllDefaultsCount(ui64* counts, ui32 skipCount) {
+            TString query = "SELECT";
+            ui32 groupsCount = 0;
+            for (ui32 i = 0; i < MultiColumnRepCount; i += skipCount) {
+                query += Sprintf("%s field_utf%u == 'abcde' AS def_utf%u, field_uint%u == 0 AS def_uint%u, field_int%u == 0 AS def_int%u, field_float%u == 0 AS def_float%u, field_double%u == 0 AS def_double%u", i == 0 ? "" : ",", i, i, i, i, i, i, i, i, i, i);
+                groupsCount++;
+            }
+            query += " FROM `/Root/olapStore/olapTable`";
             auto tableClient = Kikimr.GetTableClient();
-            auto rows = ExecuteScanQuery(tableClient, query);
 
-            Fill(&counts[0], &counts[FIELD_COUNT], 0);
+            auto start = TInstant::Now().Seconds();
+
+            auto printTime = [&](const char* prefix) {
+                auto finish = TInstant::Now().Seconds();
+                fprintf(stderr, "Timing: %s took %lu seconds\n", prefix, finish - start);
+                start = finish;
+            };
+
+            auto rows = ExecuteScanQuery(tableClient, query, false);
+
+            printTime("Executing query");
+
+            Fill(&counts[0], &counts[FIELD_COUNT * groupsCount], 0);
 
             for (auto& row: rows) {
-                auto incCounts = [&](ui32 i, const char* column) {
+                auto incCounts = [&](ui32 i, const TString& column) {
                     if (*NYdb::TValueParser(row.at(column)).GetOptionalBool()) {
                         counts[i]++;
                     }
                 };
-                incCounts(0, "def_utf0");
-                incCounts(1, "def_uint0");
-                incCounts(2, "def_int0");
-                incCounts(3, "def_float0");
-                incCounts(4, "def_double0");
+                ui32 ind = 0;
+                for (ui32 i = 0; i < MultiColumnRepCount; i += skipCount) {
+                    TString grStr = ToString(i);
+                    incCounts(ind++, "def_utf" + grStr);
+                    incCounts(ind++, "def_uint" + grStr);
+                    incCounts(ind++, "def_int" + grStr);
+                    incCounts(ind++, "def_float" + grStr);
+                    incCounts(ind++, "def_double" + grStr);
+                }
              }
         }
 
         void CheckAllFieldsTable(bool firstCall, ui32 countExpectation, ui32* defCountStart) {
-            ui64 defCounts[FIELD_COUNT];
+            ui32 grCount = (MultiColumnRepCount + SKIP_GROUPS - 1) / SKIP_GROUPS;
+            ui64 defCounts[FIELD_COUNT * grCount];
             const ui32 count = GetCount();
-            GetAllDefaultsCount(defCounts);
-            for (ui32 i = 0; i < FIELD_COUNT; i++) {
+            GetAllDefaultsCount(defCounts, SKIP_GROUPS);
+            for (ui32 i = 0; i < FIELD_COUNT * grCount; i++) {
                 if (firstCall) {
                     defCountStart[i] = defCounts[i];
                 } else {
@@ -152,7 +177,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         }
 
         void FillMultiColumnCircle(const double shiftKff, const ui32 countExpectation) {
-            ui32 defCountStart[FIELD_COUNT];
+            ui32 grCount = (MultiColumnRepCount + SKIP_GROUPS - 1) / SKIP_GROUPS;
+            ui32 defCountStart[FIELD_COUNT * grCount];
             FillCircleImpl([&]() {
                 TTypedLocalHelper helper("Utf8", Kikimr);
                 helper.FillMultiColumnTable(MultiColumnRepCount, shiftKff, 10000);
@@ -225,35 +251,39 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
 
             FillMultiColumnCircle(0, 10000);
             printTime("Fill");
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field_utf0, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`, `DEFAULT_VALUE`=`abcde`);");
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field_int0, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`, `DEFAULT_VALUE`=`0`);");
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field_uint0, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`, `DEFAULT_VALUE`=`0`);");
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field_float0, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`, `DEFAULT_VALUE`=`0`);");
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field_double0, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`, `DEFAULT_VALUE`=`0`);");
+            for (ui32 i = 0; i < MultiColumnRepCount; i += SKIP_GROUPS) {
+                TString grStr = ToString(i);
+                for (ui32 f = 0; f < FIELD_COUNT; f++) {
+                    helper.ExecuteSchemeQuery(TString("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field_") + FIELD_NAMES[f] + grStr + ", `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`, `DEFAULT_VALUE`=" + (f == 0 ? "`abcde`" : "`0`") + ");");
+                }
+            }
             printTime("Alter");
             FillMultiColumnCircle(0.1, 11000);
             printTime("Fill");
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field_utf0, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`);");
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field_int0, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`);");
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field_uint0, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`);");
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field_float0, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`);");
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field_double0, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`);");
+            for (ui32 i = 0; i < MultiColumnRepCount; i += SKIP_GROUPS) {
+                TString grStr = ToString(i);
+                for (ui32 f = 0; f < FIELD_COUNT; f++) {
+                    helper.ExecuteSchemeQuery(TString("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field_") + FIELD_NAMES[f] + grStr + ", `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`);");
+                }
+            }
             printTime("Alter");
             FillMultiColumnCircle(0.2, 12000);
             printTime("Fill");
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field_utf0, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`);");
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field_int0, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`);");
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field_uint0, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`);");
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field_float0, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`);");
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field_double0, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`);");
+            for (ui32 i = 0; i < MultiColumnRepCount; i += SKIP_GROUPS) {
+                TString grStr = ToString(i);
+                for (ui32 f = 0; f < FIELD_COUNT; f++) {
+                    helper.ExecuteSchemeQuery(TString("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field_") + FIELD_NAMES[f] + grStr + ", `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`);");
+                }
+            }
             printTime("Alter");
             FillMultiColumnCircle(0.3, 13000);
             printTime("Fill");
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field_utf0, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`);");
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field_int0, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`);");
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field_uint0, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`);");
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field_float0, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`);");
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field_double0, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`);");
+            for (ui32 i = 0; i < MultiColumnRepCount; i += SKIP_GROUPS) {
+                TString grStr = ToString(i);
+                for (ui32 f = 0; f < FIELD_COUNT; f++) {
+                    helper.ExecuteSchemeQuery(TString("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field_") + FIELD_NAMES[f] + grStr + ", `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`);");
+                }
+            }
             printTime("Alter");
             FillMultiColumnCircle(0.4, 14000);
             printTime("Fill");

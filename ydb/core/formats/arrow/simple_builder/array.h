@@ -59,16 +59,20 @@ private:
     {
     }
 protected:
+    virtual ui32 Shift() const {
+        return 0;
+    }
+
     virtual std::shared_ptr<arrow::Array> DoBuildArray(const ui32 recordsCount) const override {
         TBuilder fBuilder = TFillerBuilderConstructor<typename TFiller::TValue>::Construct();
         Y_ABORT_UNLESS(fBuilder.Reserve(recordsCount).ok());
         for (ui32 i = 0; i < recordsCount; ++i) {
-            Y_ABORT_UNLESS(fBuilder.Append(Filler.GetValue(i)).ok());
+            Y_ABORT_UNLESS(fBuilder.Append(Filler.GetValue(i + Shift())).ok());
         }
         return *fBuilder.Finish();
     }
 
-    
+
 public:
     TSimpleArrayConstructor(const TString& fieldName, const TFiller& filler = TFiller())
         : TBase(fieldName)
@@ -80,6 +84,24 @@ public:
         return std::shared_ptr<TSelf>(new TSelf(fieldName, false, filler));
     }
 };
+
+template <class TFiller>
+class TSimpleArrayShiftConstructor: public TSimpleArrayConstructor<TFiller> {
+private:
+    ui32 ShiftValue = 0;
+
+public:
+    TSimpleArrayShiftConstructor(const TString& fieldName, ui32 shift, const TFiller& filler = TFiller())
+        : TSimpleArrayConstructor<TFiller>(fieldName, filler)
+        , ShiftValue(shift)
+    {
+    }
+
+    ui32 Shift() const override {
+        return ShiftValue;
+    }
+};
+
 
 template <class TFiller>
 class TBinaryArrayConstructor: public IArrayBuilder {

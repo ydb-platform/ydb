@@ -97,11 +97,11 @@ public:
         builders.emplace_back(NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::Int64Type>>::BuildNotNullable("pk_int", numRows * pkKff));
         for (ui32 i = 0; i < repCount; i++) {
             TString repStr = ToString(i);
-            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TStringPoolFiller>>("field_utf" + repStr, utfPool));
-            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntPoolFiller<arrow::Int64Type>>>("field_int" + repStr, int64Pool));
-            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntPoolFiller<arrow::UInt8Type>>>("field_uint" + repStr, uint8Pool));
-            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntPoolFiller<arrow::FloatType>>>("field_float" + repStr, floatPool));
-            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntPoolFiller<arrow::DoubleType>>>("field_double" + repStr, doublePool));
+            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayShiftConstructor<NArrow::NConstruction::TStringPoolFiller>>("field_utf" + repStr, i, utfPool));
+            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayShiftConstructor<NArrow::NConstruction::TIntPoolFiller<arrow::Int64Type>>>("field_int" + repStr, i, int64Pool));
+            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayShiftConstructor<NArrow::NConstruction::TIntPoolFiller<arrow::UInt8Type>>>("field_uint" + repStr, i, uint8Pool));
+            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayShiftConstructor<NArrow::NConstruction::TIntPoolFiller<arrow::FloatType>>>("field_float" + repStr, i, floatPool));
+            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayShiftConstructor<NArrow::NConstruction::TIntPoolFiller<arrow::DoubleType>>>("field_double" + repStr, i, doublePool));
         }
         NArrow::NConstruction::TRecordBatchConstructor batchBuilder(builders);
         std::shared_ptr<arrow::RecordBatch> batch = batchBuilder.BuildBatch(numRows);

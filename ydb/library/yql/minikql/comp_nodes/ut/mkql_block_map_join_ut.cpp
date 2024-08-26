@@ -16,6 +16,8 @@ namespace {
 
 using TKSV = std::tuple<ui64, ui64, TStringBuf>;
 using TKSVSet = TSet<std::tuple_element_t<0, TKSV>>;
+using TKSW = std::tuple<ui64, ui64, TStringBuf, std::optional<TStringBuf>>;
+using TKSWMap = TMap<std::tuple_element_t<0, TKSW>, TString>;
 template <typename TupleType>
 using TArrays = std::array<std::shared_ptr<arrow::ArrayData>, std::tuple_size_v<TupleType>>;
 
@@ -68,10 +70,36 @@ const TRuntimeNode MakeSet(TProgramBuilder& pgmBuilder, const TSet<TKey>& keyVal
         });
 }
 
+template <typename TKey>
+const TRuntimeNode MakeDict(TProgramBuilder& pgmBuilder, const TMap<TKey, TString>& pairValues) {
+    const auto dictStructType = pgmBuilder.NewStructType({
+        {"Key",     pgmBuilder.NewDataType(NUdf::TDataType<TKey>::Id)},
+        {"Payload", pgmBuilder.NewDataType(NUdf::EDataSlot::String)}
+    });
+
+    TRuntimeNode::TList dictListItems;
+    for (const auto& [key, value] : pairValues) {
+        dictListItems.push_back(pgmBuilder.NewStruct({
+            {"Key",     pgmBuilder.NewDataLiteral<TKey>(key)},
+            {"Payload", pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(value)}
+        }));
+    }
+
+    const auto dictList = pgmBuilder.NewList(dictStructType, dictListItems);
+    return pgmBuilder.ToHashedDict(dictList, false,
+        [&](TRuntimeNode item) {
+            return pgmBuilder.Member(item, "Key");
+        }, [&](TRuntimeNode item) {
+            return pgmBuilder.NewTuple({pgmBuilder.Member(item, "Payload")});
+        });
+}
+
 template <typename TRightPayload>
 const TRuntimeNode MakeRightNode(TProgramBuilder& pgmBuilder, const TRightPayload& values) {
     if constexpr (std::is_same_v<TRightPayload, TKSVSet>) {
         return MakeSet(pgmBuilder, values);
+    } else if constexpr (std::is_same_v<TRightPayload, TKSWMap>) {
+        return MakeDict(pgmBuilder, values);
     } else {
         Y_ABORT("Not supported payload type");
     }

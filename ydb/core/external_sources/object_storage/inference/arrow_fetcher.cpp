@@ -111,7 +111,7 @@ public:
             data = std::move(*decompressedData);
         }
 
-        auto& config = std::get<FormatConfigPtr>(Config_);
+        auto& config = std::get<std::shared_ptr<FormatConfig>>(Config_);
 
         std::shared_ptr<arrow::io::RandomAccessFile> file;
         switch (Format_) {
@@ -366,7 +366,7 @@ private:
     // Fields
     NActors::TActorId S3FetcherId_;
     EFileFormat Format_;
-    std::variant<FormatConfigPtr, TString> Config_;
+    std::variant<std::shared_ptr<FormatConfig>, TString> Config_;
     TMaybe<TString> DecompressionFormat_;
     std::unordered_map<TString, TRequest> InflightRequests_; // Path -> Request
 };

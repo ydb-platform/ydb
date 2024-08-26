@@ -262,7 +262,7 @@ std::variant<ArrowFields, TString> InferJsonTypes(std::shared_ptr<arrow::io::Ran
     return table->fields();
 }
 
-std::variant<ArrowFields, TString> InferType(EFileFormat format, std::shared_ptr<arrow::io::RandomAccessFile> file, FormatConfigPtr config) {
+std::variant<ArrowFields, TString> InferType(EFileFormat format, std::shared_ptr<arrow::io::RandomAccessFile> file, std::shared_ptr<FormatConfig> config) {
     switch (format) {
     case EFileFormat::CsvWithNames:
         return InferCsvTypes(std::move(file), std::dynamic_pointer_cast<CsvConfig>(config));
@@ -275,7 +275,7 @@ std::variant<ArrowFields, TString> InferType(EFileFormat format, std::shared_ptr
         return InferJsonTypes(std::move(file), std::dynamic_pointer_cast<JsonConfig>(config));
     case EFileFormat::Undefined:
     default:
-        return std::variant<ArrowFields, TString>{std::in_place_type_t<TString>{}, TStringBuilder{} << "unexpected format: " << ConvertFileFormat(format)};
+        return TStringBuilder{} << "unexpected format: " << ConvertFileFormat(format);
     }
 }
 
@@ -283,10 +283,7 @@ std::variant<ArrowFields, TString> InferType(EFileFormat format, std::shared_ptr
 
 class TArrowInferencinator : public NActors::TActorBootstrapped<TArrowInferencinator> {
 public:
-    TArrowInferencinator(
-        NActors::TActorId arrowFetcher,
-        EFileFormat format,
-        const THashMap<TString, TString>& params)
+    TArrowInferencinator(NActors::TActorId arrowFetcher, EFileFormat format, const THashMap<TString, TString>& params)
         : Format_{format}
         , Config_{MakeFormatConfig(Format_, params)}
         , ArrowFetcherId_{arrowFetcher}
@@ -314,17 +311,12 @@ public:
         RequesterId_ = ev->Sender;
         auto config = MakeFormatConfig(EFileFormat::CsvWithNames);
         if (std::holds_alternative<TString>(config)) {
-            ctx.Send(RequesterId_, MakeErrorSchema("", NFq::TIssuesIds::INTERNAL_ERROR, "couldn't infer partition columns"));
+            ctx.Send(RequesterId_, MakeErrorSchema("", NFq::TIssuesIds::INTERNAL_ERROR, ""));
             return;
         }
 
-        InferFileSchema(
-            ev->Get()->File,
-            "",
-            EFileFormat::CsvWithNames,
-            std::get<FormatConfigPtr>(config),
-            ctx
-        );
+        auto csvConfig = std::get<std::shared_ptr<FormatConfig>>(config);
+        InferFileSchema(ev->Get()->File, "", EFileFormat::CsvWithNames, csvConfig, ctx);
     }
 
     void HandleFileInference(TEvArrowFile::TPtr& ev, const NActors::TActorContext& ctx) {
@@ -334,13 +326,8 @@ public:
             return;
         }
         
-        InferFileSchema(
-            file.File,
-            file.Path,
-            Format_,
-            std::get<FormatConfigPtr>(Config_),
-            ctx
-        );
+        auto config = std::get<std::shared_ptr<FormatConfig>>(Config_);
+        InferFileSchema(file.File, file.Path, Format_, config, ctx);
     }
 
     void HandleFileError(TEvFileError::TPtr& ev, const NActors::TActorContext& ctx) {
@@ -353,7 +340,7 @@ private:
         std::shared_ptr<arrow::io::RandomAccessFile> file,
         const TString& path,
         const EFileFormat& format,
-        const FormatConfigPtr& config,
+        const std::shared_ptr<FormatConfig>& config,
         const NActors::TActorContext& ctx) {
         
         auto mbArrowFields = InferType(format, file, config);
@@ -376,16 +363,12 @@ private:
     }
 
     EFileFormat Format_;
-    std::variant<FormatConfigPtr, TString> Config_;
+    std::variant<std::shared_ptr<FormatConfig>, TString> Config_;
     NActors::TActorId ArrowFetcherId_;
     NActors::TActorId RequesterId_;
 };
 
-NActors::IActor* CreateArrowInferencinator(
-    NActors::TActorId arrowFetcher,
-    EFileFormat format,
-    const THashMap<TString, TString>& params) {
-
+NActors::IActor* CreateArrowInferencinator(NActors::TActorId arrowFetcher, EFileFormat format, const THashMap<TString, TString>& params) {
     return new TArrowInferencinator{arrowFetcher, format, params};
 }
 } // namespace NKikimr::NExternalSource::NObjectStorage::NInference

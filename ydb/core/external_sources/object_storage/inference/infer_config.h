@@ -11,8 +11,6 @@ struct FormatConfig {
     virtual ~FormatConfig() noexcept = default;
 };
 
-using FormatConfigPtr = std::shared_ptr<FormatConfig>;
-
 struct CsvConfig : public FormatConfig {
     arrow::csv::ParseOptions ParseOpts = arrow::csv::ParseOptions::Defaults();
     arrow::csv::ConvertOptions ConvOpts = arrow::csv::ConvertOptions::Defaults();
@@ -25,6 +23,6 @@ struct JsonConfig : public FormatConfig {
     arrow::json::ParseOptions ParseOpts = arrow::json::ParseOptions::Defaults();
 };
 
-std::variant<FormatConfigPtr, TString> MakeFormatConfig(EFileFormat format, const THashMap<TString, TString>& params = {});
+std::variant<std::shared_ptr<FormatConfig>, TString> MakeFormatConfig(EFileFormat format, const THashMap<TString, TString>& params = {});
 
 } // namespace NKikimr::NExternalSource::NObjectStorage::NInference

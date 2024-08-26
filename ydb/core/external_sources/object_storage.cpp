@@ -405,10 +405,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
             return promise.GetFuture();
         }).Apply([arrowInferencinatorId, meta, partByData, partitions = std::move(partitionedBy), actorSystem = ActorSystem](const NThreading::TFuture<TMetadataResult>& result) {
             auto& value = result.GetValue();
-            if (!value.Success()) {
-                return result;
-            }
-            if (partitions.empty()) {
+            if (!value.Success() || partitions.empty()) {
                 return result;
             }
 
@@ -507,7 +504,6 @@ private:
                 if (filePattern) {
                     throw yexception() << "Path pattern cannot be used with file_pattern";
                 }
-
                 req.Pattern = path;
             }
 
@@ -519,28 +515,24 @@ private:
                 throw yexception() << "Path prefix: '" << path << "' contains wildcards";
             }
 
-            if (!path.empty()) {
-                req.Prefix = NYql::NS3::NormalizePath(TStringBuilder() << path << "/");
-                if (req.Prefix == "/") {
-                    req.Prefix = "";
-                }
-            }
-            TString pp = req.Prefix;
-            if (!pp.empty() && pp.back() == '/') {
-                pp.pop_back();
+            TString pathPrefix = NYql::NS3::NormalizePath(TStringBuilder{} << path << '/');
+            if (pathPrefix.EndsWith('/')) {
+                pathPrefix.pop_back();
             }
 
             TStringBuilder generated;
-            generated << NYql::NS3::EscapeRegex(pp);
+            generated << NYql::NS3::EscapeRegex(pathPrefix);
             for (auto& col : partitioned_by) {
                 if (!generated.empty()) {
                     generated << "/";
                 }
                 generated << NYql::NS3::EscapeRegex(col) << "=(.*?)";
             }
+
             generated << '/' << NYql::NS3::RegexFromWildcards(effectiveFilePattern);
             req.Pattern = generated;
             req.PatternType = NYql::NS3Lister::ES3PatternType::Regexp;
+            req.Prefix = pathPrefix ? pathPrefix + '/' : pathPrefix;
         }
     }
 

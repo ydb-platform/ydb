@@ -39,18 +39,18 @@ public:
     TDPHypSolver(
         TJoinHypergraph<TNodeSet>& graph,
         IProviderContext& ctx,
-        TCardinalityHints hints,
-        TJoinAlgoHints joinHints
+        const TCardinalityHints& hints,
+        const TJoinAlgoHints& joinHints
     ) 
         : Graph_(graph) 
         , NNodes_(graph.GetNodes().size())
         , Pctx_(ctx)
     {
-        for (auto h : hints.Hints) {
+        for (const auto& h : hints.Hints) {
             TNodeSet hintSet = Graph_.GetNodesByRelNames(h.JoinLabels);
             CardHintsTable_[hintSet] = h;
         }
-        for (auto h : joinHints.Hints) {
+        for (const auto& h : joinHints.Hints) {
             TNodeSet hintSet = Graph_.GetNodesByRelNames(h.JoinLabels);
             JoinAlgoHintsTable_[hintSet] = h;
         }
@@ -485,8 +485,8 @@ template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(const TNodeS
 
     TNodeSet joined = s1 | s2;
 
-    auto maybeCardHint = CardHintsTable_.contains(joined) ? & CardHintsTable_.at(joined) : nullptr;
-    auto maybeJoinAlgoHint = JoinAlgoHintsTable_.contains(joined) ? & JoinAlgoHintsTable_.at(joined) : nullptr;
+    auto maybeCardHint = CardHintsTable_.contains(joined) ? & CardHintsTable_[joined] : nullptr;
+    auto maybeJoinAlgoHint = JoinAlgoHintsTable_.contains(joined) ? & JoinAlgoHintsTable_[joined] : nullptr;
 
     auto bestJoin = PickBestJoin(
         leftNodes,

@@ -168,7 +168,6 @@ void ExplainJoinOrderTestDataQuery(const TString& queryPath, bool useStreamLooku
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(result.GetPlan(), &plan, true);
         Cerr << result.GetPlan() << Endl;
-        Cerr << CanonizeJoinOrder(result.GetPlan()) << Endl;
     }
 }
 
@@ -194,7 +193,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         TChainTester(65).Test();
     }
 
-    void ExecuteJoinOrderTestDataQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore) {
+    TString ExecuteJoinOrderTestDataQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore) {
         auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -208,7 +207,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             auto execRes = db.StreamExecuteScanQuery(query, TStreamExecScanQuerySettings().Explain(true)).ExtractValueSync();
             execRes.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_VALUES_EQUAL(execRes.GetStatus(), EStatus::SUCCESS);
-            Cerr << CollectStreamResult(execRes).PlanJson;
+            auto plan = CollectStreamResult(execRes).PlanJson;
+            Cerr << plan.GetRef();
+            return plan.GetRef();
         }
     }
 
@@ -256,7 +257,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
-     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(FiveWayJoinWithPreds, StreamLookupJoin, ColumnStore) {
+    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(FiveWayJoinWithPreds, StreamLookupJoin, ColumnStore) {
         ExecuteJoinOrderTestDataQueryWithStats(
             "queries/five_way_join_with_preds.sql", "stats/basic.json", StreamLookupJoin, ColumnStore
         );
@@ -362,6 +363,16 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         ExecuteJoinOrderTestDataQueryWithStats("queries/tpcds96.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);     
     }
 
+    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TestJoinOrderHintsSimple, StreamLookupJoin, ColumnStore) {
+        auto plan = ExecuteJoinOrderTestDataQueryWithStats("queries/join_order_hints_simple.sql", "stats/basic.json", StreamLookupJoin, ColumnStore); 
+        UNIT_ASSERT_VALUES_EQUAL(GetJoinOrder(plan).GetStringRobust(), R"(["T",["R","S"]])") ;
+    }
+
+    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TestJoinOrderHintsComplex, StreamLookupJoin, ColumnStore) {
+        auto plan = ExecuteJoinOrderTestDataQueryWithStats("queries/join_order_hints_complex.sql", "stats/basic.json", StreamLookupJoin, ColumnStore); 
+        UNIT_ASSERT_VALUES_EQUAL(GetJoinOrder(plan).GetStringRobust(), R"([[["R","S"],["T","U"]],"V"])") ;
+    }
+
     void JoinOrderTestWithOverridenStats(const TString& queryPath, const TString& statsPath, TString correctJoinOrderPath, bool useStreamLookupJoin, bool useColumnStore
     ) {
         auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath));
@@ -386,7 +397,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
                 correctJoinOrderPath = correctJoinOrderPath.substr(0, correctJoinOrderPath.find(".json")) + "_column_store.json";      
             }
 
-            auto currentJoinOrder = CanonizeJoinOrder(result.GetPlan());
+            auto currentJoinOrder = GetDetailedJoinOrder(result.GetPlan());
             Cerr << currentJoinOrder << Endl;
             /* to canonize the tests use --test-param CANONIZE_JOIN_ORDER_TESTS=TRUE */
             TString canonize = GetTestParam("CANONIZE_JOIN_ORDER_TESTS"); canonize.to_lower();

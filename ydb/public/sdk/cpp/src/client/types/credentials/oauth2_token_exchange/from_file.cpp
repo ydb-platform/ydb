@@ -5,7 +5,7 @@
 #include <ydb-cpp-sdk/type_switcher.h>
 
 #include <library/cpp/json/json_reader.h>
-#include <src/library/string_utils/base64/base64.h>
+#include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/stream/file.h>
 #include <util/string/builder.h>

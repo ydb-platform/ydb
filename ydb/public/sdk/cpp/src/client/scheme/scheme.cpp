@@ -18,7 +18,7 @@ using namespace NThreading;
 using namespace Ydb::Scheme;
 
 void TPermissions::SerializeTo(::Ydb::Scheme::Permissions& proto) const {
-    proto.set_subject(Subject);
+    proto.set_subject(TStringType{Subject});
     for (const auto& name : PermissionNames) {
         *proto.mutable_permission_names()->Add() = name;
     }
@@ -130,7 +130,7 @@ void TSchemeEntry::Out(IOutputStream& out) const {
 }
 
 void TSchemeEntry::SerializeTo(::Ydb::Scheme::ModifyPermissionsRequest& request) const {
-    request.mutable_actions()->Add()->set_change_owner(Owner);
+    request.mutable_actions()->Add()->set_change_owner(TStringType{Owner});
     for (const auto& permission : Permissions) {
         permission.SerializeTo(*request.mutable_actions()->Add()->mutable_set());
     }

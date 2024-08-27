@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
 
         auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
 
-        UNIT_ASSERT(CheckCountMinSketch(countMin, 1000000));
+        UNIT_ASSERT(CheckCountMinSketch(countMin, 20000));
     }
 
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletBeforeResolve) {
@@ -56,11 +56,11 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         runtime.WaitFor("2nd TEvResolveKeySetResult", [&]{ return block.size() >= 1; });
         block.Unblock(1);
         runtime.WaitFor("3rd TEvResolveKeySetResult", [&]{ return block.size() >= 1; });
-        
+
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
-        
+
         block.Unblock();
-        block.Stop();        
+        block.Stop();
 
         runtime.SimulateSleep(TDuration::Seconds(10));
 

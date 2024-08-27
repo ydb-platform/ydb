@@ -939,10 +939,16 @@ private:
     static constexpr size_t RequestBucketCount = 64;
     std::array<TRequestBucket, RequestBucketCount> RequestBuckets_;
 
+    struct TReplyBusData
+    {
+        THashSet<TServiceContext*> Contexts;
+        TCallback<void(const TError&)> BusTerminationHandler;
+    };
+
     struct TReplyBusBucket
     {
         YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock);
-        THashMap<NYT::NBus::IBusPtr, THashSet<TServiceContext*>> ReplyBusToContexts;
+        THashMap<NYT::NBus::IBusPtr, TReplyBusData> ReplyBusToData;
     };
 
     static constexpr size_t ReplyBusBucketCount = 64;

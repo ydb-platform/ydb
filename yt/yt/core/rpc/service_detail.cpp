@@ -2136,25 +2136,25 @@ void TServiceBase::OnRequestTimeout(TRequestId requestId, ERequestProcessingStag
     context->HandleTimeout(stage);
 }
 
-void TServiceBase::OnReplyBusTerminated(const TWeakPtr<IBus>& weakBus, const TError& error)
+void TServiceBase::OnReplyBusTerminated(const NYT::TWeakPtr<NYT::NBus::IBus>& busWeak, const TError& error)
 {
     std::vector<TServiceContextPtr> contexts;
-    if (auto bus = weakBus.Lock()) {
+    if (auto bus = busWeak.Lock()) {
         auto* bucket = GetReplyBusBucket(bus);
         auto guard = Guard(bucket->Lock);
-        auto it = bucket->ReplyBusToContexts.find(bus);
-        if (it == bucket->ReplyBusToContexts.end()) {
+        auto it = bucket->ReplyBusToData.find(bus);
+        if (it == bucket->ReplyBusToData.end()) {
             return;
         }
 
-        for (auto* rawContext : it->second) {
+        for (auto* rawContext : it->second.Contexts) {
             auto context = DangerousGetPtr(rawContext);
             if (context) {
                 contexts.push_back(context);
             }
         }
 
-        bucket->ReplyBusToContexts.erase(it);
+        bucket->ReplyBusToData.erase(it);
     }
 
     for (auto context : contexts) {
@@ -2190,18 +2190,19 @@ void TServiceBase::RegisterRequest(TServiceContext* context)
     }
 
     const auto& replyBus = context->GetReplyBus();
-    bool subscribe = false;
     {
         auto* bucket = GetReplyBusBucket(replyBus);
         auto guard = Guard(bucket->Lock);
-        auto [it, inserted] = bucket->ReplyBusToContexts.try_emplace(replyBus);
-        subscribe = inserted;
-        auto& contexts = it->second;
-        contexts.insert(context);
-    }
-
-    if (subscribe) {
-        replyBus->SubscribeTerminated(BIND(&TServiceBase::OnReplyBusTerminated, MakeWeak(this), MakeWeak(replyBus.Get())));
+        auto [it, inserted] = bucket->ReplyBusToData.try_emplace(replyBus);
+        auto& replyBusData = it->second;
+        replyBusData.Contexts.insert(context);
+        if (inserted) {
+            replyBusData.BusTerminationHandler = BIND_NO_PROPAGATE(
+                &TServiceBase::OnReplyBusTerminated,
+                MakeWeak(this),
+                MakeWeak(replyBus.Get()));
+            replyBus->SubscribeTerminated(replyBusData.BusTerminationHandler);
+        }
     }
 
     auto pendingPayloads = GetAndErasePendingPayloads(requestId);
@@ -2229,13 +2230,14 @@ void TServiceBase::UnregisterRequest(TServiceContext* context)
     {
         auto* bucket = GetReplyBusBucket(replyBus);
         auto guard = Guard(bucket->Lock);
-        auto it = bucket->ReplyBusToContexts.find(replyBus);
-        // Missing replyBus in ReplyBusToContexts is OK; see OnReplyBusTerminated.
-        if (it != bucket->ReplyBusToContexts.end()) {
-            auto& contexts = it->second;
-            contexts.erase(context);
-            if (contexts.empty()) {
-                bucket->ReplyBusToContexts.erase(it);
+        auto it = bucket->ReplyBusToData.find(replyBus);
+        // Missing replyBus in ReplyBusToData is OK; see OnReplyBusTerminated.
+        if (it != bucket->ReplyBusToData.end()) {
+            auto& replyBusData = it->second;
+            replyBusData.Contexts.erase(context);
+            if (replyBusData.Contexts.empty()) {
+                replyBus->UnsubscribeTerminated(replyBusData.BusTerminationHandler);
+                bucket->ReplyBusToData.erase(it);
             }
         }
     }

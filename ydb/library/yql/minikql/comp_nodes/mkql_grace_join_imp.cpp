@@ -446,6 +446,8 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
                 }
 
                 ui64 hash = *it2;
+                // Note: if hashtable is re-created after being spilled
+                // (*(it2 + HashSize) & 1) may be true (even though key does NOT contain NULL)
 
                 bloomFilter.Add(hash);
 
@@ -496,7 +498,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
 
             ui64 hash = *it1;
 
-            Y_DEBUG_ABORT_UNLESS((*(it1 + HashSize) & 1) == 0);
+            Y_DEBUG_ABORT_UNLESS((*(it1 + HashSize) & 1) == 0); // Keys with NULL never reaches Join
 
             if (initHashTable) {
                 bloomLookups++;
@@ -579,16 +581,18 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         }
 
         if (!hasMoreLeftTuples && !hasMoreRightTuples) {
+            bloomFilter.Shrink();
+
             if (bucketStats2->HashtableMatches) {
                 auto slotIt = joinSlots.cbegin();
                 auto end = joinSlots.cend();
                 auto isSemi = JoinKind == EJoinKind::LeftSemi || JoinKind == EJoinKind::RightSemi;
                 auto &leftIds2 = bucket2->LeftIds;
+
                 for (; slotIt != end; slotIt += slotSize) {
-                    if (*slotIt == 0)
-                        continue;
-                    if ((*(slotIt + HashSize) & 1) == isSemi) {
+                    if ((*(slotIt + HashSize) & 1) == isSemi && *slotIt != 0) {
                         auto id2 = *(slotIt + slotSize - 1);
+
                         Y_DEBUG_ABORT_UNLESS(id2 < bucketStats2->TuplesNum);
                         leftIds2.push_back(id2);
                     }
@@ -598,7 +602,6 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
             joinSlots.clear();
             joinSlots.shrink_to_fit();
             nSlots = 0;
-            bloomFilter.Shrink();
         }
 
         if (bloomHits < bloomLookups/8) {
@@ -807,32 +810,43 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2, ui64 bucketLimit)
         if (auto &joinIds = TableBuckets[CurrIterBucket].JoinIds; CurrIterIndex != joinIds.size()) {
             Y_DEBUG_ABORT_UNLESS(JoinKind == EJoinKind::Inner || JoinKind == EJoinKind::Left || JoinKind == EJoinKind::Right || JoinKind == EJoinKind::Full);
             auto ids = joinIds[CurrIterIndex++];
+
             JoinTable1->GetTupleData(CurrIterBucket, ids.id1, td1);
             JoinTable2->GetTupleData(CurrIterBucket, ids.id2, td2);
+
             return true;
         }
+
         auto leftSide = [this](auto sideTable, auto &tdL, auto &tdR) {
-            auto &bucket = sideTable->TableBuckets[CurrIterBucket];
+            const auto &bucket = sideTable->TableBuckets[CurrIterBucket];
             auto &currIterIndex = sideTable->CurrIterIndex;
-            auto &leftIds = bucket.LeftIds;
+            const auto &leftIds = bucket.LeftIds;
+
             if (currIterIndex != leftIds.size()) {
                 auto id = leftIds[currIterIndex++];
+
                 sideTable->GetTupleData(CurrIterBucket, id, tdL);
                 tdR.AllNulls = true;
+
                 return true;
             }
+
             return false;
         };
+
         if (leftSide(JoinTable1, td1, td2))
             return true;
         if (leftSide(JoinTable2, td2, td1))
             return true;
+
         ++CurrIterBucket;
         CurrIterIndex = 0;
         JoinTable1->CurrIterIndex = 0;
         JoinTable2->CurrIterIndex = 0;
     }
+
     return false;
+
  }
 
 void TTable::Clear() {
@@ -903,22 +917,23 @@ bool TTable::TryToReduceMemoryAndWait() {
     }
 
     if (largestBucketSize < SpillingSizeLimit/NumberOfBuckets) return false;
-    if (TableBucketsStats[largestBucketIndex].HashtableMatches) {
+    if (const auto &tbs = TableBucketsStats[largestBucketIndex]; tbs.HashtableMatches) {
         auto &tb = TableBuckets[largestBucketIndex];
-        auto &tbs = TableBucketsStats[largestBucketIndex];
+
         if (tb.JoinSlots.size()) {
-            auto slotSize = tbs.SlotSize;
+            const auto slotSize = tbs.SlotSize;
             Y_DEBUG_ABORT_UNLESS(slotSize);
             auto it = tb.JoinSlots.cbegin();
-            auto end = tb.JoinSlots.cend();
+            const auto end = tb.JoinSlots.cend();
+
             for (; it != end; it += slotSize) {
-                if (*it == 0)
-                    continue;
+                // Note: we need not check if *it is 0
                 if ((*(it + HashSize) & 1)) {
                     ui64 keyIntsOffset;
                     auto tupleId = *(it + slotSize - 1);
                     Y_DEBUG_ABORT_UNLESS(tupleId < tbs.TuplesNum);
-                    if(NumberOfKeyStringColumns != 0 || NumberOfKeyIColumns !=0 ) {
+
+                    if (NumberOfKeyStringColumns != 0 || NumberOfKeyIColumns != 0) {
                         ui64 stringsOffsetsIdx = tupleId * (NumberOfStringColumns + NumberOfIColumns + 2);
                         keyIntsOffset = tb.StringsOffsets[stringsOffsetsIdx];
                     } else {

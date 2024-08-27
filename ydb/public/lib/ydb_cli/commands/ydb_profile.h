@@ -38,12 +38,13 @@ public:
 
 protected:
     void ValidateAuth();
+    void ValidateClientCert();
     bool AnyProfileOptionInCommandLine();
     void ConfigureProfile(const TString& profileName, std::shared_ptr<IProfileManager> profileManager,
                      TConfig& config, bool interactive, bool cmdLine);
 
     TString ProfileName, Endpoint, Database, TokenFile, Oauth2KeyFile, YcTokenFile, SaKeyFile,
-            IamTokenFile, IamEndpoint, User, PasswordFile, CaCertsFile;
+            IamTokenFile, IamEndpoint, User, PasswordFile, CaCertsFile, ClientCertFile, ClientCertPrivateKeyFile;
 
     bool UseMetadataCredentials = false;
     bool AnonymousAuth = false;
@@ -141,6 +142,8 @@ private:
     bool NoAuth = false;
     bool NoIamEndpoint = false;
     bool NoCaCertsFile = false;
+    bool NoClientCertFile = false;
+    bool NoClientCertPrivateKeyFile = false;
 };
 
 class TCommandReplaceProfile : public TCommandProfileCommon {

@@ -34,12 +34,14 @@ struct TObjectStorageExternalSource : public IExternalSource {
                                           NActors::TActorSystem* actorSystem,
                                           size_t pathsLimit,
                                           std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> credentialsFactory,
-                                          bool enableInfer)
+                                          bool enableInfer,
+                                          bool allowLocalFiles)
         : HostnamePatterns(hostnamePatterns)
         , PathsLimit(pathsLimit)
         , ActorSystem(actorSystem)
         , CredentialsFactory(std::move(credentialsFactory))
         , EnableInfer(enableInfer)
+        , AllowLocalFiles(allowLocalFiles)
     {}
 
     virtual TString Pack(const NKikimrExternalSources::TSchema& schema,
@@ -290,7 +292,6 @@ struct TObjectStorageExternalSource : public IExternalSource {
     };
 
     virtual NThreading::TFuture<std::shared_ptr<TMetadata>> LoadDynamicMetadata(std::shared_ptr<TMetadata> meta) override {
-        Y_UNUSED(ActorSystem);
         auto format = meta->Attributes.FindPtr("format");
         if (!format || !meta->Attributes.contains("withinfer")) {
             return NThreading::MakeFuture(std::move(meta));
@@ -328,7 +329,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
             .Url = meta->DataSourceLocation,
             .Credentials = credentials,
             .Pattern = meta->TableLocation,
-        }, Nothing(), false);
+        }, Nothing(), AllowLocalFiles, ActorSystem);
         auto afterListing = s3Lister->Next().Apply([path = meta->TableLocation](const NThreading::TFuture<NYql::NS3Lister::TListResult>& listResFut) {
             auto& listRes = listResFut.GetValue();
             if (std::holds_alternative<NYql::NS3Lister::TListError>(listRes)) {
@@ -617,6 +618,7 @@ private:
     NActors::TActorSystem* ActorSystem = nullptr;
     std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> CredentialsFactory;
     const bool EnableInfer = false;
+    const bool AllowLocalFiles;
 };
 
 }
@@ -626,8 +628,9 @@ IExternalSource::TPtr CreateObjectStorageExternalSource(const std::vector<TRegEx
                                                         NActors::TActorSystem* actorSystem,
                                                         size_t pathsLimit,
                                                         std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> credentialsFactory,
-                                                        bool enableInfer) {
-    return MakeIntrusive<TObjectStorageExternalSource>(hostnamePatterns, actorSystem, pathsLimit, std::move(credentialsFactory), enableInfer);
+                                                        bool enableInfer,
+                                                        bool allowLocalFiles) {
+    return MakeIntrusive<TObjectStorageExternalSource>(hostnamePatterns, actorSystem, pathsLimit, std::move(credentialsFactory), enableInfer, allowLocalFiles);
 }
 
 NYql::TIssues Validate(const FederatedQuery::Schema& schema, const FederatedQuery::ObjectStorageBinding::Subset& objectStorage, size_t pathsLimit, const TString& location) {

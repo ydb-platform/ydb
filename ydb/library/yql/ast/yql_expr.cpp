@@ -2746,7 +2746,7 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, c
     return result;
 }
 
-TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, ui32 annotationFlags, bool refAtoms, IAllocator* allocator = TDefaultAllocator::Instance()) {
+TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, ui32 annotationFlags, bool refAtoms, IAllocator* allocator) {
     TConvertToAstSettings settings;
     settings.AnnotationFlags = annotationFlags;
     settings.RefAtoms = refAtoms;

@@ -1753,6 +1753,18 @@ TRuntimeNode TProgramBuilder::BlockXor(TRuntimeNode first, TRuntimeNode second) 
     return BuildBlockLogical(__func__, first, second);
 }
 
+TRuntimeNode TProgramBuilder::BlockDecimalDiv(TRuntimeNode first, TRuntimeNode second) {
+    return BuildBlockDecimalBinary(__func__, first, second);
+}
+
+TRuntimeNode TProgramBuilder::BlockDecimalMod(TRuntimeNode first, TRuntimeNode second) {
+    return BuildBlockDecimalBinary(__func__, first, second);
+}
+
+TRuntimeNode TProgramBuilder::BlockDecimalMul(TRuntimeNode first, TRuntimeNode second) {
+    return BuildBlockDecimalBinary(__func__, first, second);
+}
+
 TRuntimeNode TProgramBuilder::ListFromRange(TRuntimeNode start, TRuntimeNode end, TRuntimeNode step) {
     MKQL_ENSURE(start.GetStaticType()->IsData(), "Expected data");
     MKQL_ENSURE(end.GetStaticType()->IsSameType(*start.GetStaticType()), "Mismatch type");
@@ -2759,6 +2771,13 @@ TRuntimeNode TProgramBuilder::BuildBlockLogical(const std::string_view& callable
     callableBuilder.Add(first);
     callableBuilder.Add(second);
     return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::BuildBlockDecimalBinary(const std::string_view& callableName, TRuntimeNode first, TRuntimeNode second) {
+    Y_UNUSED(callableName);
+    Y_UNUSED(first);
+    Y_UNUSED(second);
+    return {};
 }
 
 TRuntimeNode TProgramBuilder::Min(const TArrayRef<const TRuntimeNode>& args) {

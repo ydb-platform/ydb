@@ -12600,7 +12600,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["ReplicateScalar"] = &ReplicateScalarWrapper;
         Functions["BlockPgResolvedOp"] = &BlockPgOpWrapper;
         Functions["BlockPgResolvedCall"] = &BlockPgCallWrapper;
-        Functions["BlockDecimalMul"] = &BlockDecimalMulWrapper;
+        Functions["BlockDecimalMul"] = &BlockDecimalBinaryWrapper;
+        Functions["BlockDecimalMod"] = &BlockDecimalBinaryWrapper;
+        Functions["BlockDecimalDiv"] = &BlockDecimalBinaryWrapper;
+
         ExtFunctions["BlockFunc"] = &BlockFuncWrapper;
         ExtFunctions["BlockBitCast"] = &BlockBitCastWrapper;
 

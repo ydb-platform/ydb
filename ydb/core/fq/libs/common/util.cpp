@@ -245,7 +245,7 @@ FederatedQuery::IamAuth GetAuth(const FederatedQuery::Connection& connection) {
     }
 }
 
-TString RemoveDatabaseFromStr(TString str, const TString& databasePath) {
+TString RemoveDatabaseFromStr(std::string str, const TString& databasePath) {
     TString escapedPath = RE2::QuoteMeta(databasePath);
     RE2::GlobalReplace(&str,
                        TStringBuilder {} << R"(db.\[)" << escapedPath << R"(\/([^ '"]+)\]|)" << escapedPath << R"(\/([^ '"]+))",

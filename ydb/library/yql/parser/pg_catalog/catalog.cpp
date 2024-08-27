@@ -2981,6 +2981,7 @@ std::variant<const TProcDesc*, const TTypeDesc*> LookupProcWithCasts(const TStri
         if (NPrivate::IsExactMatch(d->ArgTypes, d->VariadicType, argTypeIds)) {
             // At most one exact match is possible, so look no further
             // https://www.postgresql.org/docs/14/typeconv-func.html, step 2
+            catalog.ExportFunction(d->Name);
             return d;
         }
 
@@ -3031,6 +3032,7 @@ std::variant<const TProcDesc*, const TTypeDesc*> LookupProcWithCasts(const TStri
     switch (candidates.size()) {
         case 1:
             // https://www.postgresql.org/docs/14/typeconv-func.html, end of steps 4.a, 4.c or 4.d
+            catalog.ExportFunction(candidates[0]->Name);
             return candidates[0];
 
         case 0:
@@ -3048,6 +3050,7 @@ std::variant<const TProcDesc*, const TTypeDesc*> LookupProcWithCasts(const TStri
 
     if (1 == candidates.size()) {
         // https://www.postgresql.org/docs/14/typeconv-func.html, end of step 4.e
+        catalog.ExportFunction(candidates[0]->Name);
         return candidates[0];
     }
 
@@ -3084,6 +3087,7 @@ std::variant<const TProcDesc*, const TTypeDesc*> LookupProcWithCasts(const TStri
             }
 
             if (finalCandidate) {
+                catalog.ExportFunction(finalCandidate->Name);
                 return finalCandidate;
             }
         }

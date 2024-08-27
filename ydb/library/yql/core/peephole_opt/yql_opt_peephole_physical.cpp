@@ -2679,6 +2679,16 @@ TExprNode::TPtr ExpandVersion(const TExprNode::TPtr& node, TExprContext& ctx) {
         .Seal().Build();
 }
 
+TExprNode::TPtr ExpandRightOverCons(const TExprNode::TPtr& node, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    if (node->Head().IsCallable(ConsName)) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Expand Right! over Cons!";
+        return node->Head().TailPtr();
+    }
+
+    return node;
+}
+
 TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
     const bool isStream = node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow ||
@@ -8351,6 +8361,7 @@ struct TPeepHoleRules {
         {"JsonExists", &ExpandJsonExists},
         {"EmptyIterator", &DropDependsOnFromEmptyIterator},
         {"Version", &ExpandVersion},
+        {RightName, &ExpandRightOverCons},
     };
 
     const TExtPeepHoleOptimizerMap CommonStageExtRules = {

@@ -201,6 +201,7 @@ public:
     virtual TActorId FindRunningQuery(const TString& queryId) = 0;
 
     virtual NJson::TJsonValue GetCapabilities() = 0;
+    virtual int GetCapabilityVersion(const TString& name) = 0;
 };
 
 void SetupPQVirtualHandlers(IViewer* viewer);

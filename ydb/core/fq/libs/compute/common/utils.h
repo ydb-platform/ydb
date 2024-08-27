@@ -17,8 +17,7 @@ inline std::shared_ptr<NYdb::NTable::TTableClient> CreateNewTableClient(const TS
                                                                  const ::NFq::NConfig::TYdbStorageConfig& connection,
                                                                  const TYqSharedResources::TPtr& yqSharedResources,
                                                                  const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory) {
-    
-    ::NFq::NConfig::TYdbStorageConfig computeConnection = computeConfig.GetExecutionConnection(scope);
+    ::NFq::NConfig::TYdbStorageConfig computeConnection = computeConfig.GetSchemeConnection(scope);
     computeConnection.set_endpoint(connection.endpoint());
     computeConnection.set_database(connection.database());
     computeConnection.set_usessl(connection.usessl());

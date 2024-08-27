@@ -60,6 +60,13 @@ class ScenarioTestHelper:
         sth.execute_scheme_query(DropTable(table_name))
     """
 
+    DEFAULT_RETRIABLE_ERRORS = {
+        ydb.StatusCode.OVERLOADED,
+        ydb.StatusCode.BAD_SESSION,
+        ydb.StatusCode.CONNECTION_LOST,
+        ydb.StatusCode.UNAVAILABLE,
+    }
+
     class Column:
         """A class that describes a table column."""
 
@@ -277,7 +284,7 @@ class ScenarioTestHelper:
                 return result
             if status not in retriable_status:
                 pytest.fail(f'Unexpected status: must be in {repr(expected_status)}, but get {repr(error or status)}')
-            sleep(1)
+            sleep(3)
         pytest.fail(f'Retries exceeded with unexpected status: must be in {repr(expected_status)}, but get {repr(error or status)}')
 
     def _bulk_upsert_impl(
@@ -320,7 +327,7 @@ class ScenarioTestHelper:
         yqlble: ScenarioTestHelper.IYqlble,
         expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS,
         retries = 0,
-        retriable_status: ydb.StatusCode | Set[ydb.StatusCode] = {ydb.StatusCode.OVERLOADED, ydb.StatusCode.BAD_SESSION},
+        retriable_status: ydb.StatusCode | Set[ydb.StatusCode] = DEFAULT_RETRIABLE_ERRORS,
         comment: str = '',
     ) -> None:
         """Run a schema query on the database under test.

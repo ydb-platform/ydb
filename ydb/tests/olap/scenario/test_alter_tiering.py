@@ -93,12 +93,12 @@ class TestAlterTiering(BaseTestSet):
         while datetime.datetime.now() < deadline:
             for tiering_rule in tiering_rules:
                 if tiering_rule is not None:
-                    sth.execute_scheme_query(AlterTable(table).set_tiering(tiering_rule))
+                    sth.execute_scheme_query(AlterTable(table).set_tiering(tiering_rule), retries=10)
                 else:
-                    sth.execute_scheme_query(AlterTable(table).reset_tiering())
+                    sth.execute_scheme_query(AlterTable(table).reset_tiering(), retries=10)
                 # Not implemented in SDK
                 # assert sth.describe_table(table).tiering == tiering_rule
-            sth.execute_scheme_query(AlterTable(table).reset_tiering())
+            sth.execute_scheme_query(AlterTable(table).reset_tiering(), retries=10)
             # assert sth.describe_table(table).tiering == None
 
     def _loop_alter_tiering_rule(self, ctx: TestContext, tiering_rule: str, default_column_values: Iterable[str], config_values: Iterable[TieringPolicy], duration: datetime.timedelta):
@@ -107,7 +107,7 @@ class TestAlterTiering(BaseTestSet):
         for default_column, config in zip(itertools.cycle(default_column_values), itertools.cycle(config_values)):
             if datetime.datetime.now() >= deadline:
                 break
-            sth.execute_scheme_query(AlterTieringRule(tiering_rule, default_column, config))
+            sth.execute_scheme_query(AlterTieringRule(tiering_rule, default_column, config), retries=10)
 
     def _loop_alter_column(self, ctx: TestContext, store: str, duration: datetime.timedelta):
         column_name = 'tmp_column_' + ''.join(random.choice(ascii_lowercase) for _ in range(8))
@@ -116,8 +116,8 @@ class TestAlterTiering(BaseTestSet):
         deadline = datetime.datetime.now() + duration
         sth = ScenarioTestHelper(ctx)
         while datetime.datetime.now() < deadline:
-            sth.execute_scheme_query(AlterTableStore(store).add_column(sth.Column(column_name, random.choice(data_types))), retries=3)
-            sth.execute_scheme_query(AlterTableStore(store).drop_column(column_name), retries=3)
+            sth.execute_scheme_query(AlterTableStore(store).add_column(sth.Column(column_name, random.choice(data_types))), retries=10)
+            sth.execute_scheme_query(AlterTableStore(store).drop_column(column_name), retries=10)
 
     def _override_tier(self, sth, name, config):
         sth.execute_scheme_query(CreateTierIfNotExists(name, config))

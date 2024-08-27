@@ -46,7 +46,7 @@ def test_merge_two_yaml_configs():
 
 @pytest.mark.parametrize("dict_1, dict_2, dict_final", [
     ({'data': [{'user': 'root', 'password': '1234'}]}, {'data': [{'user': 'root', 'password': '12345678'}]}, {'data': [{'user': 'root', 'password': '12345678'}]}),
-    ({'data': [{'user': 'root', 'password': '1234'}]}, {'second_data': {'user': 'user', 'password': '12345'}}, 
+    ({'data': [{'user': 'root', 'password': '1234'}]}, {'second_data': {'user': 'user', 'password': '12345'}},
      {'data': [{'user': 'root', 'password': '1234'}], 'second_data': {'user': 'user', 'password': '12345'}}),
     ({'data': None}, {'data': {'user': 'root', 'password': '12345678'}}, {'data': {'user': 'root', 'password': '12345678'}}),
     ({'data': [{'user': 'root', 'password': '1234'}]}, {'data': None}, {'data': [{'user': 'root', 'password': '1234'}]})

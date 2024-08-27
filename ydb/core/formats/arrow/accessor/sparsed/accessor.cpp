@@ -138,9 +138,10 @@ ui32 TSparsedArray::GetLastIndex(const std::shared_ptr<arrow::RecordBatch>& batc
 
 IChunkedArray::TLocalDataAddress TSparsedArrayChunk::GetChunk(
     const std::optional<IChunkedArray::TCommonChunkAddress>& /*chunkCurrent*/, const ui64 position, const ui32 chunkIdx) const {
-    auto it = RemapExternalToInternal.upper_bound(position);
-    AFL_VERIFY(it != RemapExternalToInternal.begin());
-    --it;
+    auto* it = std::upper_bound(RemapExternalToInternalVec.begin(), RemapExternalToInternalVec.end(), position, [](ui64 pos, auto& v) {return pos < v.first;});
+    AFL_VERIFY(it != RemapExternalToInternalVec.begin());
+    it--;
+
     if (it->second.GetIsDefault()) {
         return IChunkedArray::TLocalDataAddress(
             NArrow::TThreadSimpleArraysCache::Get(ColValue->type(), DefaultValue, it->second.GetSize()), StartPosition + it->first, chunkIdx);
@@ -152,7 +153,7 @@ IChunkedArray::TLocalDataAddress TSparsedArrayChunk::GetChunk(
 
 std::vector<std::shared_ptr<arrow::Array>> TSparsedArrayChunk::GetChunkedArray() const {
     std::vector<std::shared_ptr<arrow::Array>> chunks;
-    for (auto&& i : RemapExternalToInternal) {
+    for (auto&& i : RemapExternalToInternalVec) {
         if (i.second.GetIsDefault()) {
             chunks.emplace_back(NArrow::TThreadSimpleArraysCache::Get(ColValue->type(), DefaultValue, i.second.GetSize()));
         } else {
@@ -186,28 +187,53 @@ TSparsedArrayChunk::TSparsedArrayChunk(const ui32 posStart, const ui32 recordsCo
     ui32 nextIndex = 0;
     ui32 startIndexExt = 0;
     ui32 startIndexInt = 0;
+    TMaybe<ui32> prevIndex;
+    bool ordered = true;
+    auto check = [&](ui32 index) {
+        if (prevIndex.Defined()) {
+            AFL_VERIFY(*prevIndex != index);
+            if (*prevIndex > index) {
+                ordered = false;
+            }
+        }
+        prevIndex = index;
+    };
+
     for (ui32 idx = 0; idx < UI32ColIndex->length(); ++idx) {
         if (nextIndex != UI32ColIndex->Value(idx)) {
             if (idx - startIndexInt) {
-                AFL_VERIFY(RemapExternalToInternal.emplace(startIndexExt, TInternalChunkInfo(startIndexInt, idx - startIndexInt, false)).second);
+                check(startIndexExt);
+                RemapExternalToInternalVec.emplace_back(startIndexExt, TInternalChunkInfo(startIndexInt, idx - startIndexInt, false));
             }
-            AFL_VERIFY(RemapExternalToInternal.emplace(nextIndex, TInternalChunkInfo(0, UI32ColIndex->Value(idx) - nextIndex, true)).second);
+            check(nextIndex);
+            RemapExternalToInternalVec.emplace_back(nextIndex, TInternalChunkInfo(0, UI32ColIndex->Value(idx) - nextIndex, true));
             startIndexExt = UI32ColIndex->Value(idx);
             startIndexInt = idx;
         }
         nextIndex = UI32ColIndex->Value(idx) + 1;
     }
     if (UI32ColIndex->length() > startIndexInt) {
-        AFL_VERIFY(RemapExternalToInternal.emplace(startIndexExt, TInternalChunkInfo(startIndexInt, UI32ColIndex->length() - startIndexInt, false)).second);
+        check(startIndexExt);
+        RemapExternalToInternalVec.emplace_back(startIndexExt, TInternalChunkInfo(startIndexInt, UI32ColIndex->length() - startIndexInt, false));
     }
     if (nextIndex != RecordsCount) {
-        AFL_VERIFY(RemapExternalToInternal.emplace(nextIndex, TInternalChunkInfo(0, RecordsCount - nextIndex, true)).second);
+        check(nextIndex);
+        RemapExternalToInternalVec.emplace_back(nextIndex, TInternalChunkInfo(0, RecordsCount - nextIndex, true));
     }
+
+    if (!ordered) {
+        std::sort(RemapExternalToInternalVec.begin(), RemapExternalToInternalVec.end(), [](auto& a, auto& b) {return a.first < b.first;});
+        for (ui32 i = 1; i < RemapExternalToInternalVec.size(); i++) {
+            AFL_VERIFY(RemapExternalToInternalVec[i - 1].first != RemapExternalToInternalVec[i].first);
+        }
+    }
+
     ui32 count = 0;
-    for (auto&& i : RemapExternalToInternal) {
+    for (auto&& i : RemapExternalToInternalVec) {
         count += i.second.GetSize();
     }
     AFL_VERIFY(count == RecordsCount)("count", count)("records_count", RecordsCount);
+
     AFL_VERIFY(ColValue);
 }
 

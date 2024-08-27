@@ -35,9 +35,13 @@ private:
             , IsDefault(defaultFlag) {
             AFL_VERIFY(Size);
         }
+
+        bool operator==(const TInternalChunkInfo& c) const {
+            return (Start == c.Start) && (Size == c.Size) && (IsDefault == c.IsDefault);
+        }
     };
 
-    std::map<ui32, TInternalChunkInfo> RemapExternalToInternal;
+    std::vector<std::pair<ui32, TInternalChunkInfo>>RemapExternalToInternalVec;
 
 public:
     ui32 GetFinishPosition() const {

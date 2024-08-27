@@ -8,7 +8,7 @@ This functionality is in the "Experimental" mode.
 
 ## General installation scheme{#general-scheme}
 
-{{ ydb-full-name }} can perform [federated queries](../../concepts/federated_query/index.md) to external sources, for example, object storages or relational DBMS, without the need to move the data from external sources directly into {{ ydb-short-name }}. This section describes the changes that are requred in the configuration of {{ ydb-short-name }} and the surrounding infrastructure to enable federated queries.
+{{ ydb-full-name }} can perform [federated queries](../../concepts/federated_query/index.md) to external sources, for example, object storages or relational DBMS, without the need to move the data from external sources directly into {{ ydb-short-name }}. This section describes the changes that are required in the configuration of {{ ydb-short-name }} and the surrounding infrastructure to enable federated queries.
 
 {% note info %}
 

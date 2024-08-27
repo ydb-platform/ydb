@@ -54,7 +54,7 @@ public:
     }
 
     void Bootstrap() override {
-        A_LOG_INFO_S("DSPDX01", "bootstrap"
+        DSP_LOG_INFO_S("DSPDX01", "bootstrap"
             << " TabletId# " << TabletId
             << " MinGeneration# " << MinGeneration
             << " Deadline# " << Deadline
@@ -92,7 +92,7 @@ public:
             s << "]";
             return s;
         };
-        R_LOG_ERROR_S("DSPDX02", "request failed"
+        DSP_LOG_ERROR_S("DSPDX02", "request failed"
             << " Status# " << NKikimrProto::EReplyStatus_Name(status)
             << " ErrorReason# " << (ErrorReason ? ErrorReason : "<none>")
             << " FailedGroupDisks# " << formatFailedGroupDisks());

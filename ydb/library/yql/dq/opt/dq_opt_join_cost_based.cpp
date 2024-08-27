@@ -314,6 +314,16 @@ TExprBase DqOptimizeEquiJoinWithCosts(
 
     YQL_CLOG(TRACE, CoreDq) << "All statistics for join in place";
 
+    bool allRowStorage = std::all_of(
+        rels.begin(), 
+        rels.end(), 
+        [](std::shared_ptr<TRelOptimizerNode>& r) {return r->Stats->StorageType==EStorageType::RowStorage; });
+
+    Y_UNUSED(allRowStorage);
+    //if (optLevel == 3 && allRowStorage) {
+    //    return node;
+    //}
+
     equiJoinCounter++;
 
     auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();

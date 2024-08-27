@@ -79,7 +79,8 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
         byteSize, 
         0.0, 
         keyColumns,
-        inputStats->ColumnStatistics);
+        inputStats->ColumnStatistics,
+        inputStats->StorageType);
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for read table" << stats->ToString();
 
@@ -119,6 +120,19 @@ void InferStatisticsForKqpTable(const TExprNode::TPtr& input, TTypeAnnotationCon
         }
     }
 
+    EStorageType storageType = EStorageType::NA;
+    switch (tableData.Metadata->Kind) {
+        case EKikimrTableKind::Datashard:
+            storageType = EStorageType::RowStorage;
+            break;
+        case EKikimrTableKind::Olap:
+            storageType = EStorageType::ColumnStorage;
+            break;
+        default:
+            break;
+    }
+    stats->StorageType = storageType;
+
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for table: " << path.Value() << ": " << stats->ToString();
 
     typeCtx->SetStats(input.Get(), stats);
@@ -151,7 +165,8 @@ void InferStatisticsForSteamLookup(const TExprNode::TPtr& input, TTypeAnnotation
         byteSize, 
         0, 
         inputStats->KeyColumns,
-        inputStats->ColumnStatistics);
+        inputStats->ColumnStatistics,
+        inputStats->StorageType);
 
     typeCtx->SetStats(input.Get(), res); 
 
@@ -195,7 +210,8 @@ void InferStatisticsForLookupTable(const TExprNode::TPtr& input, TTypeAnnotation
         byteSize, 
         0, 
         inputStats->KeyColumns,
-        inputStats->ColumnStatistics));
+        inputStats->ColumnStatistics,
+        inputStats->StorageType));
 }
 
 /**
@@ -250,7 +266,8 @@ void InferStatisticsForRowsSourceSettings(const TExprNode::TPtr& input, TTypeAnn
         byteSize, 
         cost, 
         keyColumns, 
-        inputStats->ColumnStatistics));
+        inputStats->ColumnStatistics,
+        inputStats->StorageType));
 }
 
 /**
@@ -282,7 +299,8 @@ void InferStatisticsForReadTableIndexRanges(const TExprNode::TPtr& input, TTypeA
         inputStats->ByteSize, 
         inputStats->Cost, 
         indexColumnsPtr,
-        inputStats->ColumnStatistics);
+        inputStats->ColumnStatistics,
+        inputStats->StorageType);
 
     typeCtx->SetStats(input.Get(), stats);
 

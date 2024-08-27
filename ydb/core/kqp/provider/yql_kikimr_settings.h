@@ -169,7 +169,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableOltpSink = false;
     NKikimrConfig::TTableServiceConfig_EBlockChannelsMode BlockChannelsMode;
     bool EnableSpillingGenericQuery = false;
-    ui32 DefaultCostBasedOptimizationLevel = 3;
+    ui32 DefaultCostBasedOptimizationLevel = 4;
     bool EnableConstantFolding = true;
     ui64 DefaultEnableSpillingNodes = 0;
 

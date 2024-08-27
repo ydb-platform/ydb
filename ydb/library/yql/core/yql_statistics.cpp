@@ -51,6 +51,7 @@ TOptimizerStatistics::TOptimizerStatistics(
     double cost,
     TIntrusivePtr<TKeyColumns> keyColumns,
     TIntrusivePtr<TColumnStatMap> columnMap,
+    EStorageType storageType,
     std::unique_ptr<IProviderStatistics> specific)
     : Type(type)
     , Nrows(nrows)
@@ -59,6 +60,7 @@ TOptimizerStatistics::TOptimizerStatistics(
     , Cost(cost)
     , KeyColumns(keyColumns)
     , ColumnStatistics(columnMap)
+    , StorageType(storageType)
     , Specific(std::move(specific))
 {
 }

@@ -1861,7 +1861,7 @@ bool SessionComparator::operator()(const TSession* lhs, const TSession* rhs) con
     if (lhs->Partitions.size() != rhs->Partitions.size()) {
         return lhs->Partitions.size() < rhs->Partitions.size();
     }
-    return Salt ^ std::hash<TString>{}(lhs->SessionName) < Salt ^ std::hash<TString>{}(rhs->SessionName);
+    return (Salt ^ std::hash<TString>{}(lhs->SessionName)) < (Salt ^ std::hash<TString>{}(rhs->SessionName));
 }
 
 }

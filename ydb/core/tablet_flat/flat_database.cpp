@@ -494,7 +494,8 @@ ui64 TDatabase::GetTableMemOpsCount(ui32 tableId) const {
 }
 
 ui64 TDatabase::GetTableIndexSize(ui32 tableId) const {
-    return Require(tableId)->Stat().Parts.IndexBytes;
+    const auto& partStats = Require(tableId)->Stat().Parts;
+    return partStats.FlatIndexBytes + partStats.BTreeIndexBytes;
 }
 
 ui64 TDatabase::GetTableSearchHeight(ui32 tableId) const {

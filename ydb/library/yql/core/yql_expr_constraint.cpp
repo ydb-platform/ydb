@@ -186,8 +186,11 @@ public:
         Functions["IfPresent"] = &TCallableConstraintTransformer::IfPresentWrap;
         Functions["Coalesce"] = &TCallableConstraintTransformer::CommonFromChildren<0, TSortedConstraintNode, TPartOfSortedConstraintNode, TChoppedConstraintNode, TPartOfChoppedConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
         Functions["CombineByKey"] = &TCallableConstraintTransformer::FromFinalLambda<TCoCombineByKey::idx_FinishHandlerLambda>;
+        Functions["CombineByKeyWithSpilling"] = &TCallableConstraintTransformer::FromFinalLambda<TCoCombineByKeyWithSpilling::idx_FinishHandlerLambda>;
         Functions["FinalizeByKey"] = &TCallableConstraintTransformer::FromFinalLambda<TCoFinalizeByKey::idx_FinishHandlerLambda>;
+        Functions["FinalizeByKeyWithSpilling"] = &TCallableConstraintTransformer::FromFinalLambda<TCoFinalizeByKeyWithSpilling::idx_FinishHandlerLambda>;
         Functions["CombineCore"] = &TCallableConstraintTransformer::FromFinalLambda<TCoCombineCore::idx_FinishHandler>;
+        Functions["CombineCoreWithSpilling"] = &TCallableConstraintTransformer::FromFinalLambda<TCoCombineCoreWithSpilling::idx_FinishHandler>;
         Functions["PartitionByKey"] = &TCallableConstraintTransformer::ShuffleByKeysWrap<true>;
         Functions["PartitionsByKeys"] = &TCallableConstraintTransformer::ShuffleByKeysWrap<true>;
         Functions["ShuffleByKeys"] = &TCallableConstraintTransformer::ShuffleByKeysWrap<false>;
@@ -217,6 +220,7 @@ public:
         Functions["Chopper"] = &TCallableConstraintTransformer::InheriteEmptyFromInput;
         Functions["WideChopper"] = &TCallableConstraintTransformer::InheriteEmptyFromInput;
         Functions["WideCombiner"] = &TCallableConstraintTransformer::InheriteEmptyFromInput;
+        Functions["WideCombinerWithSpilling"] = &TCallableConstraintTransformer::InheriteEmptyFromInput;
         Functions["WideCondense1"] = &TCallableConstraintTransformer::Condense1Wrap<true>;
         Functions["Aggregate"] = &TCallableConstraintTransformer::AggregateWrap<true>;
         Functions["AggregateMergeState"] = &TCallableConstraintTransformer::AggregateWrap<true>;

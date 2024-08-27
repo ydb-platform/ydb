@@ -522,7 +522,7 @@ IGraphTransformer::TStatus WideCombinerWithSpillingWrapper(const TExprNode::TPtr
         }
     }
 
-    argTypes.erase(argTypes.cbegin(), argTypes.cbegin() + multiType->GetSize());
+    argTypes.erase(argTypes.cbegin() + keyTypes.size(), argTypes.cbegin() + keyTypes.size() + multiType->GetSize());
 
     if (const auto status = ConvertToLambda(finishHandler, ctx.Expr, argTypes.size()); status.Level != IGraphTransformer::TStatus::Ok) {
         return status;

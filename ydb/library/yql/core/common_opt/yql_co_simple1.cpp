@@ -4413,6 +4413,56 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
+    map["CombineCoreWithSpilling"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        if (node->Head().IsCallable("FromFlow")) {
+            YQL_CLOG(DEBUG, Core) << "Swap " << node->Content() << " with " << node->Head().Content();
+            return ctx.SwapWithHead(*node);
+        }
+
+        if (const auto selector = node->Child(1); selector != selector->Tail().GetDependencyScope()->second) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " by constant key.";
+            return ctx.Builder(node->Pos())
+                .Callable("FlatMap")
+                    .Callable(0, "Condense1")
+                        .Add(0, node->HeadPtr())
+                        .Lambda(1)
+                            .Param("item")
+                            .Apply(*node->Child(2))
+                                .With(0, selector->TailPtr())
+                                .With(1, "item")
+                            .Seal()
+                        .Seal()
+                        .Lambda(2)
+                            .Param("item")
+                            .Param("state")
+                            .Callable("Bool")
+                                .Atom(0, "false", TNodeFlags::Default)
+                            .Seal()
+                        .Seal()
+                        .Lambda(3)
+                            .Param("item")
+                            .Param("state")
+                            .Apply(*node->Child(3))
+                                .With(0, selector->TailPtr())
+                                .With(1, "item")
+                                .With(2, "state")
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                    .Lambda(1)
+                        .Param("state")
+                        .Apply(*node->Child(4))
+                            .With(0, selector->TailPtr())
+                            .With(1, "state")
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Build();
+        }
+
+        return node;
+    };
+
     map["Length"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
         const auto& nodeToCheck = SkipCallables(node->Head(), SkippableCallables);
         if (nodeToCheck.IsCallable("AsList")) {
@@ -4904,6 +4954,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
     map["GroupByKey"] = std::bind(&DropReorder<false>, _1, _2);
     map["CombineByKey"] = std::bind(&DropReorder<true>, _1, _2);
+    map["CombineByKeyWithSpilling"] = std::bind(&DropReorder<true>, _1, _2);
 
     map["ToList"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
         if (node->Head().IsCallable("Nothing")) {

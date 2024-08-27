@@ -36,7 +36,6 @@ TExprNode::TPtr TAggregateExpander::ExpandAggregateWithFullOutput()
 
     HaveDistinct = AnyOf(AggregatedColumns->ChildrenList(),
         [](const auto& child) { return child->ChildrenSize() == 3; });
-    AllowSpilling = AllowSpilling && UseFinalizeByKeys && !HaveDistinct && !UseBlocks;
 
     EffectiveCompact = (HaveDistinct && CompactForDistinct && !UseBlocks) || ForceCompact || HasSetting(*settings, "compact");
     for (const auto& trait : Traits) {
@@ -64,6 +63,8 @@ TExprNode::TPtr TAggregateExpander::ExpandAggregateWithFullOutput()
     bool needPickle = IsNeedPickle(keyItemTypes);
     auto keyExtractor = GetKeyExtractor(needPickle);
     CollectColumnsSpecs();
+
+    AllowSpilling = AllowSpilling && UseFinalizeByKeys && !HaveDistinct && !UseBlocks && DistinctFields.empty();
 
     if (Suffix == "" && !HaveSessionSetting && !EffectiveCompact && UsePhases) {
         return GeneratePhases();
@@ -1505,7 +1506,7 @@ TExprNode::TPtr TAggregateExpander::BuildFinalizeByKeyLambda(const TExprNode::TP
                 .Seal()
             .Seal()
         .Build();
-    if (AllowSpilling) {
+    if (AllowSpilling && !FinalColumnNames.empty()) {
         auto saveLambda = Ctx.Builder(Node->Pos())
             .Lambda()
                 .Param("key")

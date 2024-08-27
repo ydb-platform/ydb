@@ -2030,14 +2030,9 @@
         },
         {
             "Name": "TCoWideCombinerWithSpilling",
-            "Base": "TCoInputBase",
+            "Base": "TCoWideCombiner",
             "Match": {"Type": "Callable", "Name": "WideCombinerWithSpilling"},
             "Children": [
-                {"Index": 1, "Name": "MemLimit",           "Type": "TCoAtom"},
-                {"Index": 2, "Name": "KeyExtractor",       "Type": "TCoLambda"},
-                {"Index": 3, "Name": "InitHandler",        "Type": "TCoLambda"},
-                {"Index": 4, "Name": "UpdateHandler",      "Type": "TCoLambda"},
-                {"Index": 5, "Name": "FinishHandler",      "Type": "TCoLambda"},
                 {"Index": 6, "Name": "SerializeHandler",   "Type": "TCoLambda"},
                 {"Index": 7, "Name": "DeserializeHandler", "Type": "TCoLambda"}
             ]

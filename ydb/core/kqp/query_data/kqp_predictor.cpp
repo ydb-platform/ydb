@@ -72,6 +72,14 @@ void TStagePredictor::Scan(const NYql::TExprNode::TPtr& stageNode) {
             } else {
                 HasStateCombinerFlag = true;
             }
+        } else if (node.Maybe<NYql::NNodes::TCoWideCombinerWithSpilling>()) {
+            auto wCombiner = node.Cast<NYql::NNodes::TCoWideCombinerWithSpilling>();
+            GroupByKeysCount = wCombiner.KeyExtractor().Ptr()->ChildrenSize() - 1;
+            if (wCombiner.MemLimit() != "") {
+                HasFinalCombinerFlag = true;
+            } else {
+                HasStateCombinerFlag = true;
+            }
         } else if (node.Maybe<NYql::NNodes::TCoMapJoinCore>()) {
             HasMapJoinFlag = true;
         } else if (node.Maybe<NYql::NNodes::TCoUdf>()) {

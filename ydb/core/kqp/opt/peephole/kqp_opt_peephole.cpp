@@ -191,6 +191,7 @@ public:
     {
 #define HNDL(name) "KqpPeepholeFinal-"#name, Hndl(&TKqpPeepholeFinalTransformer::name)
         AddHandler(0, &TCoWideCombiner::Match, HNDL(SetCombinerMemoryLimit));
+        AddHandler(0, &TCoWideCombinerWithSpilling::Match, HNDL(SetCombinerMemoryLimit));
 #undef HNDL
     }
 private:

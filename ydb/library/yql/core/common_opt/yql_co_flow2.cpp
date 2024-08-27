@@ -1366,6 +1366,75 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             .Ptr();
     };
 
+    map["CombineByKeyWithSpilling"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        TCoCombineByKeyWithSpilling self(node);
+        if (!AllowSubsetFieldsForNode(self.Input().Ref(), optCtx)) {
+            return node;
+        }
+
+        auto itemArg = self.PreMapLambda().Args().Arg(0);
+        auto itemType = itemArg.Ref().GetTypeAnn();
+        if (itemType->GetKind() != ETypeAnnotationKind::Struct) {
+            return node;
+        }
+
+        auto itemStructType = itemType->Cast<TStructExprType>();
+        if (itemStructType->GetSize() == 0) {
+            return node;
+        }
+
+        TSet<TStringBuf> usedFields;
+        if (!HaveFieldsSubset(self.PreMapLambda().Body().Ptr(), itemArg.Ref(), usedFields, *optCtx.ParentsMap)) {
+            return node;
+        }
+
+        TExprNode::TPtr newInput;
+        if (self.Input().Ref().IsCallable("Take") || self.Input().Ref().IsCallable("Skip") || self.Input().Maybe<TCoExtendBase>()) {
+            TExprNode::TListType filteredInputs;
+            filteredInputs.reserve(self.Input().Ref().ChildrenSize());
+            for (ui32 index = 0; index < self.Input().Ref().ChildrenSize(); ++index) {
+                auto x = self.Input().Ref().ChildPtr(index);
+                if (!self.Input().Maybe<TCoExtendBase>() && index > 0) {
+                    filteredInputs.push_back(x);
+                    continue;
+                }
+
+                filteredInputs.push_back(FilterByFields(node->Pos(), x, usedFields, ctx, false));
+            }
+
+            YQL_CLOG(DEBUG, Core) << "FieldsSubset in " << node->Content() << " over " << self.Input().Ref().Content();
+            newInput = ctx.ChangeChildren(self.Input().Ref(), std::move(filteredInputs));
+        }
+        else {
+            TExprNode::TListType fieldNodes;
+            for (auto& item : itemStructType->GetItems()) {
+                if (usedFields.contains(item->GetName())) {
+                    fieldNodes.push_back(ctx.NewAtom(self.Pos(), item->GetName()));
+                }
+            }
+
+            YQL_CLOG(DEBUG, Core) << node->Content() << "SubsetFields";
+            newInput = Build<TCoExtractMembers>(ctx, self.Input().Pos())
+                .Input(self.Input())
+                .Members()
+                    .Add(fieldNodes)
+                .Build()
+                .Done()
+                .Ptr();
+        }
+
+        return Build<TCoCombineByKeyWithSpilling>(ctx, self.Pos())
+            .Input(newInput)
+            .PreMapLambda(ctx.DeepCopyLambda(self.PreMapLambda().Ref()))
+            .KeySelectorLambda(ctx.DeepCopyLambda(self.KeySelectorLambda().Ref()))
+            .InitHandlerLambda(ctx.DeepCopyLambda(self.InitHandlerLambda().Ref()))
+            .UpdateHandlerLambda(ctx.DeepCopyLambda(self.UpdateHandlerLambda().Ref()))
+            .FinishHandlerLambda(ctx.DeepCopyLambda(self.FinishHandlerLambda().Ref()))
+            .LoadHandlerLambda(ctx.DeepCopyLambda(self.LoadHandlerLambda().Ref()))
+            .Done()
+            .Ptr();
+    };
+
     map["EquiJoin"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         ui32 inputsCount = node->ChildrenSize() - 2;
         for (ui32 i = 0; i < inputsCount; ++i) {

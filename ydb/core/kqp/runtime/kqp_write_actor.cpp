@@ -425,6 +425,20 @@ private:
             }
             return;
         }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_DISK_SPACE_EXHAUSTED: {
+            CA_LOG_E("Got DISK_SPACE_EXHAUSTED for table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`."
+                    << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                    << " Sink=" << this->SelfId() << "."
+                    << getIssues().ToOneLineString());
+            
+        RuntimeError(
+            TStringBuilder() << "Got DISK_SPACE_EXHAUSTED for table `"
+                << SchemeEntry->TableId.PathId.ToString() << "`.",
+            NYql::NDqProto::StatusIds::INTERNAL_ERROR,
+            getIssues());
+            return;
+        }        
         case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
             CA_LOG_W("Got OVERLOADED for table `"
                 << SchemeEntry->TableId.PathId.ToString() << "`."

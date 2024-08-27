@@ -517,7 +517,9 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr &ev
         return;
     }
     sessionInfo.NewDataArrived = true;
-    sessionInfo.EventsQueue.Send(new NFq::TEvRowDispatcher::TEvGetNextBatch());
+    auto event = std::make_unique<NFq::TEvRowDispatcher::TEvGetNextBatch>();
+    event->Record.SetPartitionId(partitionId);
+    sessionInfo.EventsQueue.Send(event.release());
 }
 
 void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ev) {

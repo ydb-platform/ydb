@@ -203,8 +203,8 @@ TTopicSession::TTopicSession(
 void TTopicSession::Bootstrap() {
     Become(&TTopicSession::StateFunc);
     LogPrefix = LogPrefix + " " + SelfId().ToString() + " ";
-    LOG_ROW_DISPATCHER_DEBUG("Bootstrap " << ", PartitionId " << PartitionId);
-    LOG_ROW_DISPATCHER_DEBUG("Timeout " << Config.GetTimeoutBeforeStartSessionSec() << " sec");
+    LOG_ROW_DISPATCHER_DEBUG("Bootstrap " << ", PartitionId " << PartitionId
+        << ", Timeout " << Config.GetTimeoutBeforeStartSessionSec() << " sec");
 }
 
 void TTopicSession::PassAway() {
@@ -299,7 +299,7 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvCreateSession::TPtr&) {
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvDataParsed::TPtr& ev) {
     LOG_ROW_DISPATCHER_TRACE("TEvDataParsed, offset " << ev->Get()->Offset);
-    
+
     for (auto v: ev->Get()->Value) {
         LOG_ROW_DISPATCHER_TRACE("v " << v);
     }
@@ -438,7 +438,7 @@ TString TTopicSession::GetSessionId() const {
 }
 
 void TTopicSession::SendToParsing(ui64 offset, const TString& message) {
-    LOG_ROW_DISPATCHER_DEBUG("ParseData: " );
+    LOG_ROW_DISPATCHER_TRACE("SendToParsing, message " << message);
     try {
         Parser->Push(offset, message);
     } catch (const yexception& e) {

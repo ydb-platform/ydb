@@ -9,6 +9,8 @@
 
 namespace NYql::NDq {
 
+const ui64 PartitionId = 666;
+
 struct TFixture : public TPqIoTestFixture {
 
     TFixture() {
@@ -27,7 +29,7 @@ struct TFixture : public TPqIoTestFixture {
             NPq::NProto::TDqReadTaskParams params;
             auto* partitioninigParams = params.MutablePartitioningParams();
             partitioninigParams->SetTopicPartitionsCount(1);
-            partitioninigParams->SetEachTopicPartitionGroupId(0);
+            partitioninigParams->SetEachTopicPartitionGroupId(PartitionId);
             partitioninigParams->SetDqPartitionsCount(1);
 
             TString serializedParams;
@@ -80,6 +82,7 @@ struct TFixture : public TPqIoTestFixture {
     void ExpectGetNextBatch(NActors::TActorId rowDispatcherId) {
         auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvGetNextBatch>(rowDispatcherId, TDuration::Seconds(5));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
+        UNIT_ASSERT(eventHolder->Get()->Record.GetPartitionId() == PartitionId);
     }
 
     void MockCoordinatorChanged(NActors::TActorId coordinatorId) {
@@ -93,7 +96,7 @@ struct TFixture : public TPqIoTestFixture {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NFq::TEvRowDispatcher::TEvCoordinatorResult();
             auto* partitions = event->Record.AddPartitions();
-            partitions->AddPartitionId(0);
+            partitions->AddPartitionId(PartitionId);
             ActorIdToProto(rowDispatcherId, partitions->MutableActorId());
             CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, Coordinator1Id, event, 0, cookie));
         });
@@ -102,7 +105,7 @@ struct TFixture : public TPqIoTestFixture {
     void MockAck(NActors::TActorId rowDispatcherId) {
         CaSetup->Execute([&](TFakeActor& actor) {
             NFq::NRowDispatcherProto::TEvStartSession proto;
-            proto.SetPartitionId(0);
+            proto.SetPartitionId(PartitionId);
             auto event = new NFq::TEvRowDispatcher::TEvStartSessionAck(proto);
             CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event));
         });
@@ -111,7 +114,7 @@ struct TFixture : public TPqIoTestFixture {
     void MockNewDataArrived(NActors::TActorId rowDispatcherId) {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NFq::TEvRowDispatcher::TEvNewDataArrived();
-            event->Record.SetPartitionId(0);
+            event->Record.SetPartitionId(PartitionId);
             CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event));
         });
     }
@@ -125,7 +128,7 @@ struct TFixture : public TPqIoTestFixture {
                 message.SetOffset(offset++);
                 event->Record.AddMessages()->CopyFrom(message);
             }
-            event->Record.SetPartitionId(0);
+            event->Record.SetPartitionId(PartitionId);
             CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event));
         });
     }
@@ -134,7 +137,7 @@ struct TFixture : public TPqIoTestFixture {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NFq::TEvRowDispatcher::TEvSessionError();
             event->Record.SetMessage("A problem has been detected and session has been shut down to prevent damage your life");
-            event->Record.SetPartitionId(0);
+            event->Record.SetPartitionId(PartitionId);
             CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, RowDispatcher1, event));
         });
     }

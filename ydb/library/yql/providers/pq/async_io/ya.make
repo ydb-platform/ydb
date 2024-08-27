@@ -23,7 +23,7 @@ PEERDIR(
     ydb/library/yql/providers/dq/api/protos
     ydb/core/fq/libs/graph_params/proto
     ydb/core/fq/libs/protos
-    ydb/core/fq/libs/row_dispatcher/protos
+    ydb/core/fq/libs/row_dispatcher
 )
 
 YQL_LAST_ABI_VERSION()

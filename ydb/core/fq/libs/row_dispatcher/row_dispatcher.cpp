@@ -247,9 +247,9 @@ void TRowDispatcher::PrintInternalState(const TString& prefix) {
 
     str << "\nSessions:\n";
     for (auto& [key, sessionInfo1] : TopicSessions) {
-        str << "  endpoint: " << std::get<0>(key) << ", database: " << std::get<1>(key) << ", topic: " << std::get<2>(key) << ",  partId: " << std::get<3>(key) << "\n";
+        str << "  " << std::get<0>(key) << " / " << std::get<1>(key) << " / " << std::get<2>(key) << ", id: " << std::get<3>(key) << "\n";
         for (auto& [actorId, sessionInfo2] : sessionInfo1.Sessions) {
-            str << "    session actor id: " << actorId << "\n";
+            str << "    session id: " << actorId << "\n";
             for (auto& [actorId2, consumer] : sessionInfo2.Consumers) {
                 str << "      read actor id: " << actorId2  << "\n";
             }
@@ -321,7 +321,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr &ev) {
-    LOG_ROW_DISPATCHER_TRACE("TEvGetNextBatch from " << ev->Sender);
+    LOG_ROW_DISPATCHER_TRACE("TEvGetNextBatch from " << ev->Sender << ", partId " << ev->Get()->Record.GetPartitionId());
 
     ConsumerSessionKey key{ev->Sender, ev->Get()->Record.GetPartitionId()};
     auto it = Consumers.find(key);

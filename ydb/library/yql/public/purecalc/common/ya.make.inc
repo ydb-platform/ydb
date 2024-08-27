@@ -29,7 +29,6 @@ SRCS(
 )
 
 PEERDIR(
-    #ydb/library/yql/sql/pg
     ydb/library/yql/ast
     ydb/library/yql/core/services
     ydb/library/yql/core/services/mounts
@@ -38,7 +37,6 @@ PEERDIR(
     ydb/library/yql/utils/log
     ydb/library/yql/core
     ydb/library/yql/core/type_ann
-    #ydb/library/yql/parser/pg_wrapper
     ydb/library/yql/providers/common/codec
     ydb/library/yql/providers/common/comp_nodes
     ydb/library/yql/providers/common/mkql

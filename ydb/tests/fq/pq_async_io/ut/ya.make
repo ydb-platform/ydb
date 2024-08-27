@@ -11,7 +11,7 @@ SRCS(
 )
 
 PEERDIR(
-   # ydb/core/testlib/basics/default
+    ydb/core/testlib/basics/default
     ydb/library/yql/minikql/computation/llvm14
     ydb/library/yql/public/udf/service/exception_policy
     ydb/library/yql/providers/common/comp_nodes

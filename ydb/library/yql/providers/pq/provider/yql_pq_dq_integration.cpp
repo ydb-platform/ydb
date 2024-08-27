@@ -284,7 +284,7 @@ public:
 
                 protoSettings.PackFrom(srcDesc);
                 useRowDispatcher = useRowDispatcher && (format == "json_each_row");
-                if (useRowDispatcher) {
+                if (useRowDispatcher && !predicateSql.empty()) {
                     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + predicateSql));
                 }
                 sourceType = !useRowDispatcher ? "PqSource" : "PqRdSource";

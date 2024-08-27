@@ -15,7 +15,7 @@ from ydb.tests.tools.fq_runner.kikimr_runner import TenantConfig
 
 from ydb.tests.tools.datastreams_helpers.control_plane import list_read_rules
 from ydb.tests.tools.datastreams_helpers.control_plane import create_stream, create_read_rule
-from ydb.tests.tools.datastreams_helpers.data_plane import read_stream
+from ydb.tests.tools.datastreams_helpers.data_plane import read_stream, write_stream
 from ydb.tests.tools.fq_runner.fq_client import StreamingDisposition
 
 import ydb.public.api.protos.draft.fq_pb2 as fq
@@ -492,4 +492,37 @@ class TestPqRowDispatcher(TestYdsBase):
         stop_yds_query(client, query_id2)
         stop_yds_query(client, query_id3)
 
+        wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 0)
+
+    @yq_v1
+    def test_many_partitions(self, kikimr, client):
+        client.create_yds_connection(
+            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True
+        )
+        self.init_topics("test_simple_not_null", partitions_count=4)
+
+        sql = Rf'''
+            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+            SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
+
+        query_id = start_yds_query(kikimr, client, sql)
+        wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 4)
+
+        input_messages1 = [Rf'''{{"time": {c}}}''' for c in range(100, 110)]
+        write_stream(self.input_topic, input_messages1, "partition_key1")
+
+        input_messages2 = [Rf'''{{"time": {c}}}''' for c in range(110, 120)]
+        write_stream(self.input_topic, input_messages2, "partition_key2")
+
+        input_messages3 = [Rf'''{{"time": {c}}}''' for c in range(120, 130)]
+        write_stream(self.input_topic, input_messages3, "partition_key3")
+
+        input_messages4 = [Rf'''{{"time": {c}}}''' for c in range(130, 140)]
+        write_stream(self.input_topic, input_messages4, "partition_key4")
+
+        expected = [Rf'''{c}''' for c in range(100, 140)]
+        assert sorted(self.read_stream(len(expected), topic_path=self.output_topic)) == expected
+
+        stop_yds_query(client, query_id)
         wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 0)

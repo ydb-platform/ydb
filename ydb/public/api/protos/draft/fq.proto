@@ -442,6 +442,7 @@ message DataStreams {
     string endpoint = 3 [(Ydb.length).le = 1024];
     string database = 4 [(Ydb.length).le = 1024];
     bool secure = 5;
+    bool use_row_dispatcher = 6;
 }
 
 message Monitoring {

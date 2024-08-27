@@ -5,6 +5,8 @@
 #include <ydb/library/yql/parser/proto_ast/collect_issues/collect_issues.h>
 #include <ydb/library/yql/parser/proto_ast/gen/v0/SQLLexer.h>
 
+#include <util/generic/algorithm.h>
+
 #if defined(_tsan_enabled_)
 #include <util/system/mutex.h>
 #endif

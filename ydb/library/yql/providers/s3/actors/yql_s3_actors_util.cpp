@@ -1,6 +1,7 @@
 #include "yql_s3_actors_util.h"
 
 #include <util/string/builder.h>
+#include <util/generic/hash.h>
 
 #ifdef THROW
 #undef THROW

@@ -5,8 +5,8 @@
 namespace NKikimr::NKqp {
 
 TString ScriptExecutionOperationFromExecutionId(const TString& executionId) {
-    Ydb::TOperationId operationId;
-    operationId.SetKind(Ydb::TOperationId::SCRIPT_EXECUTION);
+    NOperationId::TOperationId operationId;
+    operationId.SetKind(NOperationId::TOperationId::SCRIPT_EXECUTION);
     NOperationId::AddOptionalValue(operationId, "id", executionId);
     return NOperationId::ProtoToString(operationId);
 }
@@ -17,7 +17,7 @@ TMaybe<TString> ScriptExecutionIdFromOperation(const TString& operationId) {
 }
 
 TMaybe<TString> ScriptExecutionIdFromOperation(const NOperationId::TOperationId& operationId) {
-    if (operationId.GetKind() != Ydb::TOperationId::SCRIPT_EXECUTION) {
+    if (operationId.GetKind() != NOperationId::TOperationId::SCRIPT_EXECUTION) {
         return Nothing();
     }
 

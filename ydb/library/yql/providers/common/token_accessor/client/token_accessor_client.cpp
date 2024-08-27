@@ -160,7 +160,7 @@ public:
         Impl->Stop();
     }
 
-    TString GetAuthInfo() const override {
+    std::string GetAuthInfo() const override {
         return Impl->GetTicket();
     }
 

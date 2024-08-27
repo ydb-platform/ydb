@@ -3,6 +3,7 @@
 
 #include <ydb/library/yql/utils/yql_panic.h>
 
+#include <util/generic/maybe.h>
 #include <util/string/escape.h>
 
 namespace NSQLTranslation {

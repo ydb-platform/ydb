@@ -14,6 +14,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext
     ui64 txId = record.GetTxId();
     const auto& scanId = record.GetScanId();
     const auto& snapshot = record.GetSnapshot();
+    YQL_ENSURE(ev->Get()->Record.GetLockTxId() != 0);
 
     NOlap::TSnapshot readVersion(snapshot.GetStep(), snapshot.GetTxId());
     NOlap::TSnapshot maxReadVersion = GetMaxReadVersion();

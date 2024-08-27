@@ -11,8 +11,10 @@ namespace NKikimr::NKqp::NScanPrivate {
 class TKqpScanComputeActor: public TSchedulableComputeActorBase<TKqpScanComputeActor> {
 private:
     using TBase = TSchedulableComputeActorBase<TKqpScanComputeActor>;
+
     NMiniKQL::TKqpScanComputeContext ComputeCtx;
     NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta Meta;
+
     using TBase::TaskRunner;
     using TBase::MemoryLimits;
     using TBase::GetStatsMode;
@@ -20,17 +22,22 @@ private:
     using TBase::GetTask;
     using TBase::RuntimeSettings;
     using TBase::ContinueExecute;
+
     std::set<NActors::TActorId> Fetchers;
     NMiniKQL::TKqpScanComputeContext::TScanData* ScanData = nullptr;
+    const ui64 LockTxId;
+    const ui32 LockNodeId;
+
     ui64 CalcMkqlMemoryLimit() override {
         return TBase::CalcMkqlMemoryLimit() + ComputeCtx.GetTableScans().size() * MemoryLimits.ChannelBufferSize;
     }
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KQP_SCAN_COMPUTE_ACTOR;
     }
 
-    TKqpScanComputeActor(TComputeActorSchedulingOptions, const TActorId& executerId, ui64 txId,
+    TKqpScanComputeActor(TComputeActorSchedulingOptions, const TActorId& executerId, ui64 txId, ui64 lockTxId, ui32 lockNodeId,
         NYql::NDqProto::TDqTask* task, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NYql::NDq::TComputeRuntimeSettings& settings, const NYql::NDq::TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
         TIntrusivePtr<NActors::TProtoArenaHolder> arena);

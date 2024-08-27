@@ -487,7 +487,7 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input,
 
         if (readBytes >= nextBorder && RetrySettings.Verbose_) {
             nextBorder += VerboseModeReadSize;
-            Cerr << "Processed " << 1.0 * readBytes / (1 << 20) << "Mb and " << row << " records" << Endl;
+            Cerr << "Processed " << 1.0 * readBytes / (1 << 20) << "Mb and " << row + batchRows << " records" << Endl;
         }
 
         if (batchBytes < settings.BytesPerRequest_) {

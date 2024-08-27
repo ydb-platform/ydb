@@ -256,11 +256,11 @@ class ScenarioTestHelper:
 
     @staticmethod
     def _run_with_expected_status(
-            operation: callable,
-            expected_status: ydb.StatusCode | Set[ydb.StatusCode],
-            retriable_status: ydb.StatusCode | Set[ydb.StatusCode] = {},
-            n_retries = 0,
-        ):
+        operation: callable,
+        expected_status: ydb.StatusCode | Set[ydb.StatusCode],
+        retriable_status: ydb.StatusCode | Set[ydb.StatusCode] = {},
+        n_retries=0,
+    ):
         if isinstance(expected_status, ydb.StatusCode):
             expected_status = {expected_status}
         if isinstance(retriable_status, ydb.StatusCode):
@@ -326,7 +326,7 @@ class ScenarioTestHelper:
         self,
         yqlble: ScenarioTestHelper.IYqlble,
         expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS,
-        retries = 0,
+        retries=0,
         retriable_status: ydb.StatusCode | Set[ydb.StatusCode] = DEFAULT_RETRIABLE_ERRORS,
         comment: str = '',
     ) -> None:

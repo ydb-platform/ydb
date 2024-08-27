@@ -476,10 +476,12 @@ public:
         } else if (key == "prosrc") {
             LastProc.Src = value;
         } else if (key == "prolang") {
-            if (value != "c") {
-                IsSupported = false;
-            } else {
+            if (value == "sql") {
+                LastProc.Lang = LangSQL;
+            } else if (value == "c") {
                 LastProc.Lang = LangC;
+            } else {
+                IsSupported = false;
             }
         } else if (key == "proargtypes") {
             TVector<TString> strArgs;
@@ -2272,6 +2274,8 @@ struct TCatalog : public IExtensionSqlBuilder {
 
         bool AllowAllFunctions = false;
         THashSet<TString> AllowedProcs;
+
+        bool SystemFunctionInit = false;
     };
 
     mutable TMaybe<TFile> ExportFile;
@@ -3595,6 +3599,49 @@ void AllowFunction(const TString& name) {
     auto& catalog = TCatalog::MutableInstance();
     if (!catalog.State->AllowAllFunctions) {
         catalog.State->AllowedProcs.insert(name);
+    }
+}
+
+struct TSqlLanguageParserHolder {
+    std::unique_ptr<ISqlLanguageParser> Parser;
+};
+
+void SetSqlLanguageParser(std::unique_ptr<ISqlLanguageParser> parser) {
+    Singleton<TSqlLanguageParserHolder>()->Parser = std::move(parser);
+}
+
+ISqlLanguageParser* GetSqlLanguageParser() {
+    return Singleton<TSqlLanguageParserHolder>()->Parser.get();
+}
+
+void LoadSystemFunctions(ISystemFunctionsParser& parser) {
+    auto& catalog = TCatalog::MutableInstance();
+    with_lock (catalog.ExtensionsGuard) {
+        Y_ENSURE(!catalog.State->SystemFunctionInit);
+        TString data;
+        Y_ENSURE(NResource::FindExact("system_functions.sql", &data));
+        TVector<TProcDesc> procs;
+        parser.Parse(data, procs);
+        for (const auto& p : procs) {
+            auto procIdPtr = catalog.State->ProcByName.FindPtr(p.Name);
+            Y_ENSURE(procIdPtr);
+            TProcDesc* foundProc = nullptr;
+            for (auto procId : *procIdPtr) {
+                auto procPtr = catalog.State->Procs.FindPtr(procId);
+                Y_ENSURE(procPtr);
+                if (procPtr->ArgTypes == p.ArgTypes && procPtr->VariadicType == p.VariadicType) {
+                    foundProc = procPtr;
+                    break;
+                }
+            }
+
+            Y_ENSURE(foundProc);
+            foundProc->DefaultArgs = p.DefaultArgs;
+            foundProc->Src = p.Src;
+            foundProc->ExprNode = p.ExprNode;
+        }
+
+        catalog.State->SystemFunctionInit = true;
     }
 }
 

@@ -76,7 +76,7 @@ public:
                     NextNodes.front().IsListed = true;
 
                     const auto& children = childList.GetChildren();
-                    if (!children) {
+                    if (children.empty()) {
                         break;
                     }
                     const auto& currRelPath = GetRelPath();

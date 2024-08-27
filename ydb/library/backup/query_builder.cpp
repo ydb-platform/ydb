@@ -260,7 +260,7 @@ void TQueryBuilder::AddLine(TStringBuf line) {
         Y_ENSURE(tok, "Empty token on line");
         TTypeParser type(col.Type);
         Value.AddMember(col.Name);
-        AddMemberFromString(type, col.Name, tok);
+        AddMemberFromString(type, TString{col.Name}, tok);
     }
     Value.EndStruct();
 }

@@ -70,7 +70,7 @@ void TTopicOperationsScenario::InitDriver(const TConfig& config)
 {
     Driver =
         std::make_unique<NYdb::TDriver>(TYdbCommand::CreateDriver(config,
-                                                                  MakeLogBackend(config.VerbosityLevel)));
+                                                                  std::unique_ptr<TLogBackend>(MakeLogBackend(config.VerbosityLevel).Release())));
 }
 
 void TTopicOperationsScenario::InitStatsCollector()

@@ -134,8 +134,8 @@ void TLoginCredentialsProvider::RequestToken() {
         };
 
         Ydb::Auth::LoginRequest request;
-        request.set_user(Params_.User);
-        request.set_password(Params_.Password);
+        request.set_user(TStringType{Params_.User});
+        request.set_password(TStringType{Params_.Password});
         TRpcRequestSettings rpcSettings;
         rpcSettings.ClientTimeout = TDuration::Seconds(60);
 

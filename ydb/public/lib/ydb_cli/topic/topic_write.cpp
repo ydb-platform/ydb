@@ -87,7 +87,7 @@ namespace NYdb::NConsoleClient {
             if (initSeqNo.HasException()) {
                 // NOTE(shmel1k@): SessionClosedEvent is stored in EventsQueue, so we can try to get it.
                 auto event = WriteSession_->GetEvent(true);
-                if (event.Defined()) {
+                if (event.has_value()) {
                     return HandleEvent(*event);
                 }
                 initSeqNo.TryRethrow();
@@ -172,8 +172,8 @@ namespace NYdb::NConsoleClient {
         bool continueSending = true;
         while (continueSending) {
             while (!ContinuationToken_.Defined()) {
-                TMaybe<NTopic::TWriteSessionEvent::TEvent> event = WriteSession_->GetEvent(true);
-                if (event.Empty()) {
+                std::optional<NTopic::TWriteSessionEvent::TEvent> event = WriteSession_->GetEvent(true);
+                if (!event.has_value()) {
                     continue;
                 }
                 if (int status = HandleEvent(*event); status) {
@@ -197,7 +197,7 @@ namespace NYdb::NConsoleClient {
         if (WriteSession_->Close(closeTimeout)) {
             return true;
         }
-        TVector<NTopic::TWriteSessionEvent::TEvent> events = WriteSession_->GetEvents(true);
+        std::vector<NTopic::TWriteSessionEvent::TEvent> events = WriteSession_->GetEvents(true);
         if (events.empty()) {
             return false;
         }

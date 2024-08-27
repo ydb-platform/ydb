@@ -1,5 +1,9 @@
 LIBRARY(transfer_workload)
 
+ADDINCL(
+    ydb/public/sdk/cpp
+)
+
 SRCS(
     transfer_workload.cpp
     transfer_workload_topic_to_table.cpp

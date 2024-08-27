@@ -40,7 +40,7 @@ def test_version() -> None:
     assert prettytable.__version__[-1].isdigit()
 
 
-def helper_table(rows: int = 3) -> PrettyTable:
+def helper_table(*, rows: int = 3) -> PrettyTable:
     table = PrettyTable(["", "Field 1", "Field 2", "Field 3"])
     v = 1
     for row in range(rows):
@@ -1023,6 +1023,30 @@ class TestJSONOutput:
     }
 ]""".strip()
         )
+        options = {"fields": ["Field 1", "Field 3"]}
+        result = t.get_json_string(**options)
+        assert (
+            result.strip()
+            == """
+[
+    [
+        "Field 1",
+        "Field 3"
+    ],
+    {
+        "Field 1": "value 1",
+        "Field 3": "value3"
+    },
+    {
+        "Field 1": "value 4",
+        "Field 3": "value6"
+    },
+    {
+        "Field 1": "value 7",
+        "Field 3": "value9"
+    }
+]""".strip()
+        )
 
     def test_json_output_options(self) -> None:
         t = helper_table()
@@ -1192,6 +1216,234 @@ class TestHtmlOutput:
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value 7</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value8</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value9</td>
+        </tr>
+    </tbody>
+</table>
+""".strip()  # noqa: E501
+        )
+
+    def test_html_output_without_escaped_header(self) -> None:
+        t = helper_table(rows=0)
+        t.field_names = ["", "Field 1", "<em>Field 2</em>", "<a href='#'>Field 3</a>"]
+        result = t.get_html_string(escape_header=False)
+        assert (
+            result.strip()
+            == """
+<table>
+    <thead>
+        <tr>
+            <th></th>
+            <th>Field 1</th>
+            <th><em>Field 2</em></th>
+            <th><a href='#'>Field 3</a></th>
+        </tr>
+    </thead>
+    <tbody>
+    </tbody>
+</table>
+""".strip()
+        )
+
+    def test_html_output_without_escaped_data(self) -> None:
+        t = helper_table(rows=0)
+        t.add_row(
+            [
+                1,
+                "<b>value 1</b>",
+                "<span style='text-decoration: underline;'>value2</span>",
+                "<a href='#'>value3</a>",
+            ]
+        )
+        result = t.get_html_string(escape_data=False)
+        assert (
+            result.strip()
+            == """
+<table>
+    <thead>
+        <tr>
+            <th></th>
+            <th>Field 1</th>
+            <th>Field 2</th>
+            <th>Field 3</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>1</td>
+            <td><b>value 1</b></td>
+            <td><span style='text-decoration: underline;'>value2</span></td>
+            <td><a href='#'>value3</a></td>
+        </tr>
+    </tbody>
+</table>
+""".strip()
+        )
+
+    def test_html_output_with_escaped_header(self) -> None:
+        t = helper_table(rows=0)
+        t.field_names = ["", "Field 1", "<em>Field 2</em>", "<a href='#'>Field 3</a>"]
+        result = t.get_html_string(escape_header=True)
+        assert (
+            result.strip()
+            == """
+<table>
+    <thead>
+        <tr>
+            <th></th>
+            <th>Field 1</th>
+            <th>&lt;em&gt;Field 2&lt;/em&gt;</th>
+            <th>&lt;a href=&#x27;#&#x27;&gt;Field 3&lt;/a&gt;</th>
+        </tr>
+    </thead>
+    <tbody>
+    </tbody>
+</table>
+""".strip()
+        )
+
+    def test_html_output_with_escaped_data(self) -> None:
+        t = helper_table(rows=0)
+        t.add_row(
+            [
+                1,
+                "<b>value 1</b>",
+                "<span style='text-decoration: underline;'>value2</span>",
+                "<a href='#'>value3</a>",
+            ]
+        )
+        result = t.get_html_string(escape_data=True)
+        assert (
+            result.strip()
+            == """
+<table>
+    <thead>
+        <tr>
+            <th></th>
+            <th>Field 1</th>
+            <th>Field 2</th>
+            <th>Field 3</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>1</td>
+            <td>&lt;b&gt;value 1&lt;/b&gt;</td>
+            <td>&lt;span style=&#x27;text-decoration: underline;&#x27;&gt;value2&lt;/span&gt;</td>
+            <td>&lt;a href=&#x27;#&#x27;&gt;value3&lt;/a&gt;</td>
+        </tr>
+    </tbody>
+</table>
+""".strip()  # noqa: E501
+        )
+
+    def test_html_output_formatted_without_escaped_header(self) -> None:
+        t = helper_table(rows=0)
+        t.field_names = ["", "Field 1", "<em>Field 2</em>", "<a href='#'>Field 3</a>"]
+        result = t.get_html_string(escape_header=False, format=True)
+        assert (
+            result.strip()
+            == """
+<table frame="box" rules="cols">
+    <thead>
+        <tr>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center"></th>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 1</th>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center"><em>Field 2</em></th>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center"><a href='#'>Field 3</a></th>
+        </tr>
+    </thead>
+    <tbody>
+    </tbody>
+</table>
+""".strip()  # noqa: E501
+        )
+
+    def test_html_output_formatted_without_escaped_data(self) -> None:
+        t = helper_table(rows=0)
+        t.add_row(
+            [
+                1,
+                "<b>value 1</b>",
+                "<span style='text-decoration: underline;'>value2</span>",
+                "<a href='#'>value3</a>",
+            ]
+        )
+        result = t.get_html_string(escape_data=False, format=True)
+        assert (
+            result.strip()
+            == """
+<table frame="box" rules="cols">
+    <thead>
+        <tr>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center"></th>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 1</th>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 2</th>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 3</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">1</td>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top"><b>value 1</b></td>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top"><span style='text-decoration: underline;'>value2</span></td>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top"><a href='#'>value3</a></td>
+        </tr>
+    </tbody>
+</table>
+""".strip()  # noqa: E501
+        )
+
+    def test_html_output_formatted_with_escaped_header(self) -> None:
+        t = helper_table(rows=0)
+        t.field_names = ["", "Field 1", "<em>Field 2</em>", "<a href='#'>Field 3</a>"]
+        result = t.get_html_string(escape_header=True, format=True)
+        assert (
+            result.strip()
+            == """
+<table frame="box" rules="cols">
+    <thead>
+        <tr>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center"></th>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 1</th>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center">&lt;em&gt;Field 2&lt;/em&gt;</th>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center">&lt;a href=&#x27;#&#x27;&gt;Field 3&lt;/a&gt;</th>
+        </tr>
+    </thead>
+    <tbody>
+    </tbody>
+</table>
+""".strip()  # noqa: E501
+        )
+
+    def test_html_output_formatted_with_escaped_data(self) -> None:
+        t = helper_table(rows=0)
+        t.add_row(
+            [
+                1,
+                "<b>value 1</b>",
+                "<span style='text-decoration: underline;'>value2</span>",
+                "<a href='#'>value3</a>",
+            ]
+        )
+        result = t.get_html_string(escape_data=True, format=True)
+        assert (
+            result.strip()
+            == """
+<table frame="box" rules="cols">
+    <thead>
+        <tr>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center"></th>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 1</th>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 2</th>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 3</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">1</td>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">&lt;b&gt;value 1&lt;/b&gt;</td>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">&lt;span style=&#x27;text-decoration: underline;&#x27;&gt;value2&lt;/span&gt;</td>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">&lt;a href=&#x27;#&#x27;&gt;value3&lt;/a&gt;</td>
         </tr>
     </tbody>
 </table>
@@ -1521,6 +1773,13 @@ class TestCsvOutput:
             "1,value 1,value2,value3\r\n"
             "4,value 4,value5,value6\r\n"
             "7,value 7,value8,value9\r\n"
+        )
+        options = {"fields": ["Field 1", "Field 3"]}
+        assert t.get_csv_string(**options) == (
+            "Field 1,Field 3\r\n"
+            "value 1,value3\r\n"
+            "value 4,value6\r\n"
+            "value 7,value9\r\n"
         )
 
 
@@ -2221,7 +2480,7 @@ class TestClearing:
 
 class TestPreservingInternalBorders:
     def test_internal_border_preserved(self) -> None:
-        pt = helper_table(3)
+        pt = helper_table()
         pt.border = False
         pt.preserve_internal_border = True
 
@@ -2237,7 +2496,7 @@ class TestPreservingInternalBorders:
         )
 
     def test_internal_border_preserved_latex(self) -> None:
-        pt = helper_table(3)
+        pt = helper_table()
         pt.border = False
         pt.format = True
         pt.preserve_internal_border = True
@@ -2252,7 +2511,7 @@ class TestPreservingInternalBorders:
         )
 
     def test_internal_border_preserved_html(self) -> None:
-        pt = helper_table(3)
+        pt = helper_table()
         pt.format = True
         pt.border = False
         pt.preserve_internal_border = True

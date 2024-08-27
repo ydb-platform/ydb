@@ -1,6 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include "result_parser.h"
+#include "result_visitor_base.h"
 
 using namespace NYql;
 

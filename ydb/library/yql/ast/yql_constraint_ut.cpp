@@ -21,6 +21,7 @@ Y_UNIT_TEST_SUITE(TSerializeConstrains) {
         auto yson = c->ToYson();
         UNIT_ASSERT_VALUES_EQUAL(NYT::NodeToCanonicalYsonString(yson), R"([[[["a";"b"]];%true];[["d"];%false];[["e";["f";"g"]];%false]])");
         auto c2 = ctx.MakeConstraint<TSortedConstraintNode>(yson);
+        UNIT_ASSERT_VALUES_EQUAL(NYT::NodeToCanonicalYsonString(yson), NYT::NodeToCanonicalYsonString(c2->ToYson()));
         UNIT_ASSERT_EQUAL(c, c2);
     }
 
@@ -34,6 +35,7 @@ Y_UNIT_TEST_SUITE(TSerializeConstrains) {
         auto yson = c->ToYson();
         UNIT_ASSERT_VALUES_EQUAL(NYT::NodeToCanonicalYsonString(yson), R"(["a";[["a";"b"]];[["c";"d"];"e"]])");
         auto c2 = ctx.MakeConstraint<TChoppedConstraintNode>(yson);
+        UNIT_ASSERT_VALUES_EQUAL(NYT::NodeToCanonicalYsonString(yson), NYT::NodeToCanonicalYsonString(c2->ToYson()));
         UNIT_ASSERT_EQUAL(c, c2);
     }
 
@@ -53,6 +55,7 @@ Y_UNIT_TEST_SUITE(TSerializeConstrains) {
         auto yson = c->ToYson();
         UNIT_ASSERT_VALUES_EQUAL(NYT::NodeToCanonicalYsonString(yson), R"([["a";[["a";"b"]]];["c";["d";"e"]]])");
         auto c2 = ctx.MakeConstraint<TUniqueConstraint>(yson);
+        UNIT_ASSERT_VALUES_EQUAL(NYT::NodeToCanonicalYsonString(yson), NYT::NodeToCanonicalYsonString(c2->ToYson()));
         UNIT_ASSERT_EQUAL(c, c2);
     }
 
@@ -70,6 +73,7 @@ Y_UNIT_TEST_SUITE(TSerializeConstrains) {
         auto yson = c->ToYson();
         UNIT_ASSERT_VALUES_EQUAL(NYT::NodeToCanonicalYsonString(yson), R"(#)");
         auto c2 = ctx.MakeConstraint<TEmptyConstraintNode>(yson);
+        UNIT_ASSERT_VALUES_EQUAL(NYT::NodeToCanonicalYsonString(yson), NYT::NodeToCanonicalYsonString(c2->ToYson()));
         UNIT_ASSERT_EQUAL(c, c2);
     }
 
@@ -82,6 +86,7 @@ Y_UNIT_TEST_SUITE(TSerializeConstrains) {
         auto yson = c->ToYson();
         UNIT_ASSERT_VALUES_EQUAL(NYT::NodeToCanonicalYsonString(yson), R"([[0u;1u];[1u;3u]])");
         auto c2 = ctx.MakeConstraint<TVarIndexConstraintNode>(yson);
+        UNIT_ASSERT_VALUES_EQUAL(NYT::NodeToCanonicalYsonString(yson), NYT::NodeToCanonicalYsonString(c2->ToYson()));
         UNIT_ASSERT_EQUAL(c, c2);
     }
 
@@ -124,6 +129,7 @@ Y_UNIT_TEST_SUITE(TSerializeConstrains) {
         auto yson = c->ToYson();
         UNIT_ASSERT_VALUES_EQUAL(NYT::NodeToCanonicalYsonString(yson), R"([[0u;{"Empty"=#;"Sorted"=[[["a"];%true];[["b"];%false]]}];[1u;{"Unique"=[["a";"b"];["c";["d";"e"]]];"VarIndex"=[[0u;1u];[1u;2u]]}]])");
         auto c2 = ctx.MakeConstraint<TMultiConstraintNode>(yson);
+        UNIT_ASSERT_VALUES_EQUAL(NYT::NodeToCanonicalYsonString(yson), NYT::NodeToCanonicalYsonString(c2->ToYson()));
         UNIT_ASSERT_EQUAL(c, c2);
     }
 
@@ -174,12 +180,14 @@ Y_UNIT_TEST_SUITE(TSerializeConstrains) {
         auto yson = s.ToYson();
         UNIT_ASSERT_VALUES_EQUAL(NYT::NodeToCanonicalYsonString(yson), R"({"Empty"=#;"Multi"=[[0u;{"Empty"=#}]];"Sorted"=[[["a"];%true];[["b"];%false]];"Unique"=[["a";"b"];["c";["d";"e"]]];"VarIndex"=[[0u;1u];[1u;2u]]})");
         auto s2 = ctx.MakeConstraintSet(yson);
+        UNIT_ASSERT_VALUES_EQUAL(NYT::NodeToCanonicalYsonString(yson), NYT::NodeToCanonicalYsonString(s2.ToYson()));
         UNIT_ASSERT_EQUAL(s, s2);
 
         s.Clear();
         yson = s.ToYson();
         UNIT_ASSERT_VALUES_EQUAL(NYT::NodeToCanonicalYsonString(yson), R"({})");
         auto s3 = ctx.MakeConstraintSet(yson);
+        UNIT_ASSERT_VALUES_EQUAL(NYT::NodeToCanonicalYsonString(yson), NYT::NodeToCanonicalYsonString(s3.ToYson()));
         UNIT_ASSERT_EQUAL(s, s3);
     }
 

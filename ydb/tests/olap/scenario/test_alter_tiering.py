@@ -116,8 +116,8 @@ class TestAlterTiering(BaseTestSet):
         deadline = datetime.datetime.now() + duration
         sth = ScenarioTestHelper(ctx)
         while datetime.datetime.now() < deadline:
-            sth.execute_scheme_query(AlterTableStore(store).add_column(sth.Column(column_name, random.choice(data_types))), expected_status={StatusCode.SUCCESS, StatusCode.OVERLOADED})
-            sth.execute_scheme_query(AlterTableStore(store).drop_column(column_name), expected_status={StatusCode.SUCCESS, StatusCode.OVERLOADED})
+            sth.execute_scheme_query(AlterTableStore(store).add_column(sth.Column(column_name, random.choice(data_types))), retries=3)
+            sth.execute_scheme_query(AlterTableStore(store).drop_column(column_name), retries=3)
 
     def _override_tier(self, sth, name, config):
         sth.execute_scheme_query(CreateTierIfNotExists(name, config))

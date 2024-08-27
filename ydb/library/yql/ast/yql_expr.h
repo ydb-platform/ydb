@@ -2844,12 +2844,13 @@ struct TConvertToAstSettings {
     bool PrintArguments = false;
     bool AllowFreeArgs = false;
     bool NormalizeAtomFlags = false;
+    TMaybe<size_t> MemoryLimit = {};
 };
 
 TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& ctx, const TConvertToAstSettings& settings);
 
 // refAtoms allows omit copying of atom bodies - they will be referenced from expr graph
-TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& ctx, ui32 annotationFlags, bool refAtoms);
+TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& ctx, ui32 annotationFlags, bool refAtoms, TMaybe<size_t> memoryLimit = {});
 
 TExprNode::TListType GetLambdaBody(const TExprNode& lambda);
 

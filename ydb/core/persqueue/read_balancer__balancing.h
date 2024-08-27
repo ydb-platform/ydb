@@ -164,7 +164,9 @@ struct TPartitionFamilyComparator {
 using TOrderedPartitionFamilies = std::set<TPartitionFamily*, TPartitionFamilyComparator>;
 
 struct SessionComparator {
+    SessionComparator();
     bool operator()(const TSession* lhs, const TSession* rhs) const;
+    size_t Salt;
 };
 
 using TOrderedSessions = std::set<TSession*, SessionComparator>;

@@ -155,8 +155,7 @@ TCheckDiskFormatResult TPDisk::ReadChunk0Format(ui8* formatSectors, const NPDisk
                             << "Unable to run PDisk on disk with FormatFlagErasureEncodeUserChunks set");
                 }
                 if (Format.IsErasureEncodeUserLog()) {
-                    LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
-                            << " Read from disk Format has FormatFlagErasureEncodeUserLog set, "
+                    P_LOG(PRI_ERROR, BPD801, "Read from disk Format has FormatFlagErasureEncodeUserLog set, "
                             << " but current version of PDisk can't work with it"
                             << " Format# " << Format.ToString()
                             << " Marker# BPD801");
@@ -429,9 +428,8 @@ bool ParseSectorOffset(const TDiskFormat& format, TActorSystem *actorSystem, ui3
 
     if (outSectorIdx >= chunkSizeUsableSectors || outLastSectorIdx >= chunkSizeUsableSectors) {
         if (outSectorIdx >= chunkSizeUsableSectors) {
-            LOG_ERROR(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32 " outSectorIdx# %" PRIu32
-                " >= chunkSizeUsableSectors# %" PRIu32 " with offset# %" PRIu32 " size# %" PRIu32,
-                (ui32)pDiskId, (ui32)outSectorIdx, (ui32)chunkSizeUsableSectors, (ui32)offset, (ui32)size);
+            P_LOG(PRI_ERROR, BPD125, "outSectorIdx >= chunkSizeUsableSectors", (outSectorIdx, outSectorIdx),
+                (chunkSizeUsableSectors, chunkSizeUsableSectors), (offset, offset), (size, size));
         } else {
             LOG_ERROR(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32 " outLastSectorIdx# %" PRIu32
                 " >= chunkSizeUsableSectors# %" PRIu32 " with offset# %" PRIu32 " size# %" PRIu32,

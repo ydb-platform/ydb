@@ -20,6 +20,7 @@ namespace NKikimr {
 IActor* CreatePDisk(const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TMainKey &mainKey,
     const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
 
+struct TPDiskMon;
 namespace NPDisk {
 
 struct TCommitRecord {
@@ -1556,7 +1557,6 @@ struct TEvWriteMetadataResult : TEventLocal<TEvWriteMetadataResult, TEvBlobStora
     {}
 };
 
-struct TPDiskMon;
 
 struct TPDiskCtx {
     TActorSystem *ActorSystem = nullptr;

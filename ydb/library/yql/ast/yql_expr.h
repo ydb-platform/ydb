@@ -2719,6 +2719,8 @@ struct TExprContext : private TNonCopyable {
     template <typename T, typename... Args>
     const T* MakeConstraint(Args&&... args);
 
+    TConstraintSet MakeConstraintSet(const NYT::TNode& serializedConstraints);
+
     void AddError(const TIssue& error) {
         ENSURE_NOT_FROZEN_CTX
         IssueManager.RaiseIssue(error);

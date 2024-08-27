@@ -506,63 +506,13 @@ NYT::TNode TYqlRowSpecInfo::GetConstraintsNode() const {
     if (ConstraintsNode.HasValue())
         return ConstraintsNode;
 
-    auto map = NYT::TNode::CreateMap();
-
-    const auto pathToNode = [](const TPartOfConstraintBase::TPathType& path) -> NYT::TNode {
-        if (1U == path.size())
-            return TStringBuf(path.front());
-
-        auto list = NYT::TNode::CreateList();
-        for (const auto& col : path)
-            list.Add(TStringBuf(col));
-        return list;
-    };
-
-    const auto setToNode = [pathToNode](const TPartOfConstraintBase::TSetType& set) -> NYT::TNode {
-        if (1U == set.size() && 1U == set.front().size())
-            return TStringBuf(set.front().front());
-
-        auto list = NYT::TNode::CreateList();
-        for (const auto& path : set)
-            list.Add(pathToNode(path));
-        return list;
-    };
-
+    TConstraintSet set;
     if (HasNonTrivialSort()) {
-        auto list = NYT::TNode::CreateList();
-        for (const auto& item : Sorted->GetContent()) {
-            auto pair = NYT::TNode::CreateList();
-            auto set = NYT::TNode::CreateList();
-            for (const auto& path : item.first)
-                set.Add(pathToNode(path));
-            pair.Add(set).Add(item.second);
-            list.Add(pair);
-        }
-        map[Sorted->GetName()] = list;
+        set.AddConstraint(Sorted);
     }
-
-    if (Unique) {
-        auto list = NYT::TNode::CreateList();
-        for (const auto& sets : Unique->GetContent()) {
-            auto part = NYT::TNode::CreateList();
-            for (const auto& set : sets)
-                part.Add(setToNode(set));
-            list.Add(part);
-        }
-        map[Unique->GetName()] = list;
-    }
-
-    if (Distinct) {
-        auto list = NYT::TNode::CreateList();
-        for (const auto& sets : Distinct->GetContent()) {
-            auto part = NYT::TNode::CreateList();
-            for (const auto& set : sets)
-                part.Add(setToNode(set));
-            list.Add(part);
-        }
-        map[Distinct->GetName()] = list;
-    }
-    return map;
+    set.AddConstraint(Unique);
+    set.AddConstraint(Distinct);
+    return set.ToYson();
 }
 
 void TYqlRowSpecInfo::FillConstraints(NYT::TNode& attrs) const {
@@ -575,61 +525,7 @@ void TYqlRowSpecInfo::ParseConstraintsNode(TExprContext& ctx) {
         return;
 
     try  {
-        const auto nodeToPath = [&ctx](const NYT::TNode& node) {
-            if (node.IsString())
-                return TPartOfConstraintBase::TPathType{ctx.AppendString(node.AsString())};
-
-            TPartOfConstraintBase::TPathType path;
-            for (const auto& col : node.AsList())
-                path.emplace_back(ctx.AppendString(col.AsString()));
-            return path;
-        };
-
-        const auto nodeToSet = [&ctx, nodeToPath](const NYT::TNode& node) {
-            if (node.IsString())
-                return TPartOfConstraintBase::TSetType{TPartOfConstraintBase::TPathType(1U, ctx.AppendString(node.AsString()))};
-
-            TPartOfConstraintBase::TSetType set;
-            for (const auto& col : node.AsList())
-                set.insert_unique(nodeToPath(col));
-            return set;
-        };
-
-        const auto& constraints = ConstraintsNode.AsMap();
-
-        if (const auto it = constraints.find(TSortedConstraintNode::Name()); constraints.cend() != it) {
-            TSortedConstraintNode::TContainerType sorted;
-            for (const auto& pair : it->second.AsList()) {
-                TPartOfConstraintBase::TSetType set;
-                for (const auto& path : pair.AsList().front().AsList())
-                    set.insert_unique(nodeToPath(path));
-                sorted.emplace_back(std::move(set), pair.AsList().back().AsBool());
-            }
-            if (!sorted.empty())
-                Sorted = ctx.MakeConstraint<TSortedConstraintNode>(std::move(sorted));
-        }
-        if (const auto it = constraints.find(TUniqueConstraintNode::Name()); constraints.cend() != it) {
-            TUniqueConstraintNode::TContentType content;
-            for (const auto& item : it->second.AsList()) {
-                TPartOfConstraintBase::TSetOfSetsType sets;
-                for (const auto& part : item.AsList())
-                    sets.insert_unique(nodeToSet(part));
-                content.insert_unique(std::move(sets));
-            }
-            if (!content.empty())
-                Unique = ctx.MakeConstraint<TUniqueConstraintNode>(std::move(content));
-        }
-        if (const auto it = constraints.find(TDistinctConstraintNode::Name()); constraints.cend() != it) {
-            TDistinctConstraintNode::TContentType content;
-            for (const auto& item : it->second.AsList()) {
-                TPartOfConstraintBase::TSetOfSetsType sets;
-                for (const auto& part : item.AsList())
-                    sets.insert_unique(nodeToSet(part));
-                content.insert_unique(std::move(sets));
-            }
-            if (!content.empty())
-                Distinct = ctx.MakeConstraint<TDistinctConstraintNode>(std::move(content));
-        }
+        SetConstraints(ctx.MakeConstraintSet(ConstraintsNode));
     } catch (const yexception& error) {
         Sorted = nullptr;
         Unique = nullptr;

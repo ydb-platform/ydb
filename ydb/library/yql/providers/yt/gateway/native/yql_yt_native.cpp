@@ -5059,11 +5059,13 @@ private:
             attrs["schema"] = RowSpecToYTSchema(out.Spec[YqlRowSpecAttribute], nativeTypeCompat, out.ColumnGroups).ToNode();
         }
 
-        auto tagsAttrNode = NYT::TNode::CreateList();
-        for (const auto& tag : securityTags) {
-            tagsAttrNode.AsList().emplace_back(tag);
+        if (!securityTags.empty()) {
+            auto tagsAttrNode = NYT::TNode::CreateList();
+            for (const auto& tag : securityTags) {
+                tagsAttrNode.AsList().emplace_back(tag);
+            }
+            attrs["security_tags"] = std::move(tagsAttrNode);
         }
-        attrs["security_tags"] = std::move(tagsAttrNode);
     }
 
     template <class TExecParamsPtr>

@@ -644,12 +644,9 @@ private:
 
         TVector<TString> securityTags;
         VisitExpr(input, [&securityTags](const TExprNode::TPtr& node) -> bool {
-            if (TYtOutTable::Match(node.Get())) {
-                return false;
-            }
             if (TYtTableBase::Match(node.Get())) {
                 const TYtTableBase table(node);
-                const auto &curTags = TYtTableStatInfo(table.Stat()).SecurityTags;
+                const auto& curTags = TYtTableStatInfo(table.Stat()).SecurityTags;
                 Copy(curTags.begin(), curTags.end(), std::back_inserter(securityTags));
                 return false;
             }

@@ -364,16 +364,6 @@ TExprBase TYtTableStatInfo::ToExprNode(TExprContext& ctx, const TPositionHandle&
         .Build()                        \
     .Build()
 
-    auto secTagsBuilder = Build<TCoAtomList>(ctx, pos);
-    for (const auto& tag : SecurityTags) {
-        secTagsBuilder
-            .Add<TCoAtom>()
-                .Value(tag)
-            .Build();
-    }
-
-    auto secTagsListExpr = secTagsBuilder.Done();
-
     statBuilder
         ADD_FIELD(Id)
         ADD_FIELD(RecordsCount)
@@ -381,15 +371,29 @@ TExprBase TYtTableStatInfo::ToExprNode(TExprContext& ctx, const TPositionHandle&
         ADD_FIELD(ChunkCount)
         ADD_FIELD(ModifyTime)
         ADD_FIELD(Revision)
-        .Add()
-            .Name()
-                .Value("SecurityTags")
-            .Build()
-            .Value(secTagsListExpr)
-        .Build()
         ;
 
 #undef ADD_FIELD
+
+    if (!SecurityTags.empty()) {
+        auto secTagsBuilder = Build<TCoAtomList>(ctx, pos);
+        for (const auto& tag : SecurityTags) {
+            secTagsBuilder
+                .Add<TCoAtom>()
+                    .Value(tag)
+                .Build();
+        }
+        auto secTagsListExpr = secTagsBuilder.Done();
+
+
+        statBuilder
+            .Add()
+                .Name()
+                    .Value("SecurityTags")
+                .Build()
+                .Value(secTagsListExpr)
+            .Build();
+    }
 
     return statBuilder.Done();
 }

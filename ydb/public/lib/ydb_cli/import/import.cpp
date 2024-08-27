@@ -81,14 +81,14 @@ TStatus WaitForQueue(const size_t maxQueueSize, std::vector<TAsyncStatus>& inFli
 
 void InitCsvParser(TCsvParser& parser,
                    bool& removeLastDelimiter,
-                   TString&& defaultHeader,
+                   NCsvFormat::TLinesSplitter& csvSource,
                    const TImportFileSettings& settings,
                    const std::map<TString, TType>* columnTypes,
                    const NTable::TTableDescription* dbTableInfo) {
     if (settings.Header_ || settings.HeaderRow_) {
         TString headerRow;
         if (settings.Header_) {
-            headerRow = std::move(defaultHeader);
+            headerRow = csvSource.ConsumeLine();
         }
         if (settings.HeaderRow_) {
             headerRow = settings.HeaderRow_;
@@ -370,7 +370,7 @@ TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TStri
                     if (settings.NewlineDelimited_) {
                         return UpsertCsvByBlocks(filePath, dbPath, settings);
                     } else {
-                        return UpsertCsv(input, dbPath, settings, fileSizeHint, progressCallback);
+                        return UpsertCsv(input, dbPath, settings, filePath, fileSizeHint, progressCallback);
                     }
                 case EOutputFormat::Json:
                 case EOutputFormat::JsonUnicode:
@@ -418,8 +418,13 @@ TAsyncStatus TImportFileClient::UpsertTValueBuffer(const TString& dbPath, TValue
     return TableClient->RetryOperation(upsert, RetrySettings);
 }
 
-TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath, const TImportFileSettings& settings,
-                                     std::optional<ui64> inputSizeHint, ProgressCallbackFunc & progressCallback) {
+TStatus TImportFileClient::UpsertCsv(IInputStream& input,
+                                     const TString& dbPath,
+                                     const TImportFileSettings& settings,
+                                     const TString& filePath,
+                                     std::optional<ui64> inputSizeHint,
+                                     ProgressCallbackFunc & progressCallback) {
+
     TMaxInflightGetter inFlightGetter(settings.MaxInFlightRequests_, FilesCount);
 
     TCountingInput countInput(&input);
@@ -430,7 +435,7 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
 
     TCsvParser parser;
     bool removeLastDelimiter = false;
-    InitCsvParser(parser, removeLastDelimiter, splitter.ConsumeLine(), settings, &columnTypes, DbTableInfo.get());
+    InitCsvParser(parser, removeLastDelimiter, splitter, settings, &columnTypes, DbTableInfo.get());
 
     for (ui32 i = 0; i < settings.SkipRows_; ++i) {
         splitter.ConsumeLine();
@@ -440,7 +445,8 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
 
     THolder<IThreadPool> pool = CreateThreadPool(settings.Threads_);
 
-    ui32 row = settings.SkipRows_;
+    ui64 row = settings.SkipRows_ + settings.Header_ + 1;
+    ui64 batchRows = 0;
     ui64 nextBorder = VerboseModeReadSize;
     ui64 batchBytes = 0;
     ui64 readBytes = 0;
@@ -454,14 +460,15 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
         builder.BeginList();
         for (auto&& line : buffer) {
             builder.AddListItem();
-            parser.GetValue(row, std::move(line), builder, lineType);
+            parser.GetValue(std::move(line), builder, lineType, TCsvParser::TParseMetadata{row, filePath});
+            ++row;
         }
         builder.EndList();
         return UpsertTValueBuffer(dbPath, builder).ExtractValueSync();
     };
 
     while (TString line = splitter.ConsumeLine()) {
-        ++row;
+        ++batchRows;
         if (line.empty()) {
             continue;
         }
@@ -494,7 +501,8 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
         auto asyncUpsertCSV = [&upsertCsv, row, buffer = std::move(buffer)]() mutable {
             return upsertCsv(row, std::move(buffer));
         };
-
+        row += batchRows;
+        batchRows = 0;
         batchBytes = 0;
         buffer.clear();
 
@@ -513,7 +521,10 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
     return WaitForQueue(0, inFlightRequests);
 }
 
-TStatus TImportFileClient::UpsertCsvByBlocks(const TString& filePath, const TString& dbPath, const TImportFileSettings& settings) {
+TStatus TImportFileClient::UpsertCsvByBlocks(const TString& filePath,
+                                             const TString& dbPath,
+                                             const TImportFileSettings& settings) {
+
     TMaxInflightGetter inFlightGetter(settings.MaxInFlightRequests_, FilesCount);
     TString headerRow;
     TCsvFileReader splitter(filePath, settings, headerRow, inFlightGetter);
@@ -523,7 +534,9 @@ TStatus TImportFileClient::UpsertCsvByBlocks(const TString& filePath, const TStr
 
     TCsvParser parser;
     bool removeLastDelimiter = false;
-    InitCsvParser(parser, removeLastDelimiter, std::move(headerRow), settings, &columnTypes, DbTableInfo.get());
+    TStringInput headerInput(headerRow);
+    NCsvFormat::TLinesSplitter headerSplitter(headerInput, settings.Delimiter_[0]);
+    InitCsvParser(parser, removeLastDelimiter, headerSplitter, settings, &columnTypes, DbTableInfo.get());
 
     TType lineType = parser.GetColumnsType();
 
@@ -536,7 +549,7 @@ TStatus TImportFileClient::UpsertCsvByBlocks(const TString& filePath, const TStr
                 builder.BeginList();
                 for (auto&& line : buffer) {
                     builder.AddListItem();
-                    parser.GetValue(0, std::move(line), builder, lineType);
+                    parser.GetValue(std::move(line), builder, lineType, TCsvParser::TParseMetadata{std::nullopt, filePath});
                 }
                 builder.EndList();
                 return UpsertTValueBuffer(dbPath, builder);

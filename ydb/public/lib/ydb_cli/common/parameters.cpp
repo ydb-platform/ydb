@@ -206,7 +206,6 @@ void TCommandWithParameters::AddParams(TParamsBuilder& paramBuilder) {
 bool TCommandWithParameters::GetNextParams(THolder<TParamsBuilder>& paramBuilder) {
     paramBuilder = MakeHolder<TParamsBuilder>();
     if (IsFirstEncounter) {
-        Row = SkipRows;
         IsFirstEncounter = false;
         ParamTypes = ValidateResult->GetParameterTypes();
         if (IsStdinInteractive()) {
@@ -238,7 +237,6 @@ bool TCommandWithParameters::GetNextParams(THolder<TParamsBuilder>& paramBuilder
     if (IsStdinInteractive()) {
         return false;
     }
-    ++Row;
 
     AddParams(*paramBuilder);
     if (BatchMode == EBatchMode::Iterative) {
@@ -261,7 +259,7 @@ bool TCommandWithParameters::GetNextParams(THolder<TParamsBuilder>& paramBuilder
                 }
                 case EOutputFormat::Csv:
                 case EOutputFormat::Tsv: {
-                    CsvParser.GetParams(Row, std::move(*data), *paramBuilder);
+                    CsvParser.GetParams(std::move(*data), *paramBuilder, TCsvParser::TParseMetadata{});
                     break;
                 }
                 default:
@@ -304,7 +302,7 @@ bool TCommandWithParameters::GetNextParams(THolder<TParamsBuilder>& paramBuilder
                     case EOutputFormat::Csv:
                     case EOutputFormat::Tsv: {
                         TValueBuilder valueBuilder;
-                        CsvParser.GetValue(Row, std::move(*data), valueBuilder, type);
+                        CsvParser.GetValue(std::move(*data), valueBuilder, type, TCsvParser::TParseMetadata{});
                         paramBuilder->AddParam(fullname, valueBuilder.Build());
                         break;
                     }
@@ -383,7 +381,7 @@ bool TCommandWithParameters::GetNextParams(THolder<TParamsBuilder>& paramBuilder
                 case EOutputFormat::Csv:
                 case EOutputFormat::Tsv: {
                     valueBuilder.AddListItem();
-                    CsvParser.GetValue(Row, std::move(*data), valueBuilder, type.GetProto().list_type().item());
+                    CsvParser.GetValue(std::move(*data), valueBuilder, type.GetProto().list_type().item(), TCsvParser::TParseMetadata{});
                     break;
                 }
                 default:

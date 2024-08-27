@@ -7,8 +7,15 @@
 namespace NYdb {
 namespace NConsoleClient {
 
+class TCsvParseException : public yexception {};
+
 class TCsvParser {
 public:
+    struct TParseMetadata {
+        std::optional<uint64_t> Line;
+        std::optional<TString> Filename;
+    };
+
     TCsvParser() = default;
 
     TCsvParser(const TCsvParser&) = delete;
@@ -24,8 +31,8 @@ public:
                const std::map<TString, TType>* paramTypes = nullptr,
                const std::map<TString, TString>* paramSources = nullptr);
 
-    void GetParams(ui64 line, TString&& data, TParamsBuilder& builder) const;
-    void GetValue(ui64 line, TString&& data, TValueBuilder& builder, const TType& type) const;
+    void GetParams(TString&& data, TParamsBuilder& builder, const TParseMetadata& meta) const;
+    void GetValue(TString&& data, TValueBuilder& builder, const TType& type, const TParseMetadata& meta) const;
     TType GetColumnsType() const;
 
 private:

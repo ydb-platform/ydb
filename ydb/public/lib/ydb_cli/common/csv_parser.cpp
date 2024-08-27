@@ -8,30 +8,10 @@ namespace NYdb {
 namespace NConsoleClient {
 namespace {
 
-struct TExceptionData {
-    ui64 Line;
-    std::optional<TString> ColumnName;
-};
-
-class TCsvParseException : public TMisuseException {
-public:
-    TCsvParseException(const TExceptionData& state) {
-        *this << "Csv parsing error";
-        if (state.Line != 0) {
-            *this << " on line " << state.Line;
-        }
-        if (state.ColumnName.has_value()) {
-            *this << " in column \"" << *state.ColumnName << "\"";
-        }
-        *this << ": ";
-    }
-};
-
 class TCsvToYdbConverter {
 public:
-    explicit TCsvToYdbConverter(const TExceptionData& state, TTypeParser& parser, const std::optional<TString>& nullValue)
-        : State(state)
-        , Parser(parser)
+    explicit TCsvToYdbConverter(TTypeParser& parser, const std::optional<TString>& nullValue)
+        : Parser(parser)
         , NullValue(nullValue)
     {
     }
@@ -66,7 +46,7 @@ public:
             }
             return static_cast<T>(value);
         } catch (std::exception& e) {
-            throw TCsvParseException(State) << "Expected " << Parser.GetPrimitive() << " value, recieved: \"" << token << "\".";
+            throw TCsvParseException() << "Expected " << Parser.GetPrimitive() << " value, recieved: \"" << token << "\".";
         }
     }
 
@@ -193,7 +173,7 @@ public:
             Builder.TzTimestamp(token);
             break;
         default:
-            throw TCsvParseException(State) << "Unsupported primitive type: " << Parser.GetPrimitive();
+            throw TCsvParseException() << "Unsupported primitive type: " << Parser.GetPrimitive();
         }
     }
 
@@ -244,7 +224,7 @@ public:
             break;
         }
         default:
-            throw TCsvParseException(State) << "Unsupported type kind: " << Parser.GetKind();
+            throw TCsvParseException() << "Unsupported type kind: " << Parser.GetKind();
         }
     }
 
@@ -279,7 +259,7 @@ public:
             break;
 
         default:
-            throw TCsvParseException(State) << "Unsupported type kind: " << Parser.GetKind();
+            throw TCsvParseException() << "Unsupported type kind: " << Parser.GetKind();
         }
     }
 
@@ -296,15 +276,15 @@ public:
         if (token == "false") {
             return false;
         }
-        throw TCsvParseException(State) << "Expected bool value: \"true\" or \"false\", recieved: \"" << token << "\".";
+        throw TCsvParseException() << "Expected bool value: \"true\" or \"false\", recieved: \"" << token << "\".";
     }
 
     void EnsureNull(TStringBuf token) const {
         if (!NullValue) {
-            throw TCsvParseException(State) << "Expected null value instead of \"" << token << "\", but null value is not set.";
+            throw TCsvParseException() << "Expected null value instead of \"" << token << "\", but null value is not set.";
         }
         if (token != NullValue) {
-            throw TCsvParseException(State) << "Expected null value: \"" << NullValue << "\", recieved: \"" << token << "\".";
+            throw TCsvParseException() << "Expected null value: \"" << NullValue << "\", recieved: \"" << token << "\".";
         }
     }
 
@@ -314,23 +294,49 @@ public:
     }
 
 private:
-    const TExceptionData State;
     TTypeParser& Parser;
     const std::optional<TString> NullValue = "";
     TValueBuilder Builder;
 };
 
-TStringBuf Consume(const TExceptionData& state, NCsvFormat::CsvSplitter& splitter) {
+TCsvParseException FormatError(const std::exception& inputError,
+                               const TCsvParser::TParseMetadata& meta,
+                               std::optional<TString> columnName = {}) {
+    auto outputError = TCsvParseException() << "Error during CSV parsing";
+    if (meta.Line.has_value()) {
+        outputError << " in line " << meta.Line.value();
+    }
+    if (columnName.has_value()) {
+        outputError << " in column `" << columnName.value() << "`";
+    }
+    if (meta.Filename.has_value()) {
+        outputError << " in file `" << meta.Filename.value() << "`";
+    }
+    outputError << ":\n" << inputError.what();
+    return outputError;
+}
+
+TValue FieldToValue(TTypeParser& parser,
+                    TStringBuf token,
+                    const std::optional<TString>& nullValue,
+                    const TCsvParser::TParseMetadata& meta,
+                    TString columnName) {
     try {
-        return splitter.Consume();
+        TCsvToYdbConverter converter(parser, nullValue);
+        return converter.Convert(token);
     } catch (std::exception& e) {
-        throw TCsvParseException(state) << e.what();
+        throw FormatError(e, meta, columnName);
     }
 }
 
-TValue FieldToValue(const TExceptionData& state, TTypeParser& parser, TStringBuf token, const std::optional<TString>& nullValue) {
-    TCsvToYdbConverter converter(state, parser, nullValue);
-    return converter.Convert(token);
+TStringBuf Consume(NCsvFormat::CsvSplitter& splitter,
+                   const TCsvParser::TParseMetadata& meta,
+                   TString columnName) {
+    try {
+        return splitter.Consume();
+    } catch (std::exception& e) {
+        throw FormatError(e, meta, columnName);
+    }
 }
 
 }
@@ -359,15 +365,14 @@ TCsvParser::TCsvParser(TVector<TString>&& header, const char delimeter, const st
 {
 }
 
-void TCsvParser::GetParams(ui64 line, TString&& data, TParamsBuilder& builder) const {
+void TCsvParser::GetParams(TString&& data, TParamsBuilder& builder, const TParseMetadata& meta) const {
     NCsvFormat::CsvSplitter splitter(data, Delimeter);
-    TExceptionData state{line, std::nullopt};
     auto headerIt = Header.begin();
     do {
-        TStringBuf token = Consume(state, splitter);
         if (headerIt == Header.end()) {
-            throw TCsvParseException(state) << "Header contains less fields than data. Header: \"" << HeaderRow << "\", data: \"" << data << "\"";
+            throw FormatError(yexception() << "Header contains less fields than data. Header: \"" << HeaderRow << "\", data: \"" << data << "\"", meta);
         }
+        TStringBuf token = Consume(splitter, meta, *headerIt);
         TString fullname = "$" + *headerIt;
         auto paramIt = ParamTypes->find(fullname);
         if (paramIt == ParamTypes->end()) {
@@ -377,37 +382,34 @@ void TCsvParser::GetParams(ui64 line, TString&& data, TParamsBuilder& builder) c
         if (ParamSources) {
             auto paramSource = ParamSources->find(fullname);
             if (paramSource != ParamSources->end()) {
-                throw TCsvParseException(state) << "Parameter " << fullname << " value found in more than one source: stdin, " << paramSource->second << ".";
+                throw FormatError(yexception() << "Parameter " << fullname << " value found in more than one source: stdin, " << paramSource->second << ".", meta);
             }
         }
         TTypeParser parser(paramIt->second);
-        state.ColumnName = *headerIt;
-        builder.AddParam(fullname, FieldToValue(state, parser, token, NullValue));
-        state.ColumnName = std::nullopt;
+        builder.AddParam(fullname, FieldToValue(parser, token, NullValue, meta, *headerIt));
         ++headerIt;
     } while (splitter.Step());
 
     if (headerIt != Header.end()) {
-        throw TCsvParseException(state) << "Header contains more fields than data. Header: \"" << HeaderRow << "\", data: \"" << data << "\"";
+        throw FormatError(yexception() << "Header contains more fields than data. Header: \"" << HeaderRow << "\", data: \"" << data << "\"", meta);
     }
 }
 
-void TCsvParser::GetValue(ui64 line, TString&& data, TValueBuilder& builder, const TType& type) const {
+void TCsvParser::GetValue(TString&& data, TValueBuilder& builder, const TType& type, const TParseMetadata& meta) const {
     NCsvFormat::CsvSplitter splitter(data, Delimeter);
-    TExceptionData state{line, std::nullopt};
     auto headerIt = Header.cbegin();
     std::map<TString, TStringBuf> fields;
     do {
-        TStringBuf token = Consume(state, splitter);
         if (headerIt == Header.cend()) {
-            throw TCsvParseException(state) << "Header contains less fields than data. Header: \"" << HeaderRow << "\", data: \"" << data << "\"";
+            throw FormatError(yexception() << "Header contains less fields than data. Header: \"" << HeaderRow << "\", data: \"" << data << "\"", meta);
         }
+        TStringBuf token = Consume(splitter, meta, *headerIt);
         fields[*headerIt] = token;
         ++headerIt;
     } while (splitter.Step());
 
     if (headerIt != Header.cend()) {
-        throw TCsvParseException(state) << "Header contains more fields than data. Header: \"" << HeaderRow << "\", data: \"" << data << "\"";
+        throw FormatError(yexception() << "Header contains more fields than data. Header: \"" << HeaderRow << "\", data: \"" << data << "\"", meta);
     }
 
     builder.BeginStruct();
@@ -420,11 +422,9 @@ void TCsvParser::GetValue(ui64 line, TString&& data, TValueBuilder& builder, con
         }
         auto fieldIt = fields.find(name);
         if (fieldIt == fields.end()) {
-            throw TCsvParseException(state) << "No member \"" << name << "\" in csv string for YDB struct type";
+            throw FormatError(yexception() << "No member \"" << name << "\" in csv string for YDB struct type", meta);
         }
-        state.ColumnName = name;
-        builder.AddMember(name, FieldToValue(state, parser, fieldIt->second, NullValue));
-        state.ColumnName = std::nullopt;
+        builder.AddMember(name, FieldToValue(parser, fieldIt->second, NullValue, meta, name));
     }
 
     parser.CloseStruct();

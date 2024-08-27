@@ -96,10 +96,7 @@ class TestAlterTiering(BaseTestSet):
                     sth.execute_scheme_query(AlterTable(table).set_tiering(tiering_rule), retries=10)
                 else:
                     sth.execute_scheme_query(AlterTable(table).reset_tiering(), retries=10)
-                # Not implemented in SDK
-                # assert sth.describe_table(table).tiering == tiering_rule
             sth.execute_scheme_query(AlterTable(table).reset_tiering(), retries=10)
-            # assert sth.describe_table(table).tiering == None
 
     def _loop_alter_tiering_rule(self, ctx: TestContext, tiering_rule: str, default_column_values: Iterable[str], config_values: Iterable[TieringPolicy], duration: datetime.timedelta):
         deadline = datetime.datetime.now() + duration

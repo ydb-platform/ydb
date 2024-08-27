@@ -24,8 +24,10 @@ TConclusionStatus TReadMetadata::Init(
     /// It's expected that we have only one version on 'foo' in blob and could split them by schema {planStep:txId}.
     /// So '1:foo' would be omitted in blob records for the column in new snapshots. And '2:foo' - in old ones.
     /// It's not possible for blobs with several columns. There should be a special logic for them.
-    CommittedBlobs = dataAccessor.GetCommitedBlobs(readDescription, ResultIndexSchema->GetIndexInfo().GetReplaceKey(), !!LockId);
-    if (!!LockId) {
+    CommittedBlobs =
+        dataAccessor.GetCommitedBlobs(readDescription, ResultIndexSchema->GetIndexInfo().GetReplaceKey(), LockId, GetRequestSnapshot());
+
+    if (LockId) {
         for (auto&& i : CommittedBlobs) {
             if (auto writeId = i.GetWriteIdOptional()) {
                 auto op = owner->GetOperationsManager().GetOperationVerified(*writeId);

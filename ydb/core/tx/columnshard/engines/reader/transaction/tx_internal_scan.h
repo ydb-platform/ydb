@@ -10,7 +10,7 @@ private:
     TEvColumnShard::TEvInternalScan::TPtr InternalScanEvent;
     const ui32 ScanGen = 1;
     const ui32 ScanId = 1;
-    const ui64 LockId;
+    const std::optional<ui64> LockId;
     void SendError(const TString& problem, const TString& details, const TActorContext& ctx) const;
 
 public:

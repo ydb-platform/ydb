@@ -94,7 +94,8 @@ public:
     void EraseAbortedOnExecute(IDbWrapper& dbTable, const TInsertedData& key, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
     void EraseAbortedOnComplete(const TInsertedData& key);
 
-    std::vector<TCommittedBlob> Read(ui64 pathId, const bool needInsertedToCheck, const std::shared_ptr<arrow::Schema>& pkSchema) const;
+    std::vector<TCommittedBlob> Read(
+        ui64 pathId, const std::optional<ui64> lockId, const TSnapshot& reqSnapshot, const std::shared_ptr<arrow::Schema>& pkSchema) const;
     bool Load(IDbWrapper& dbTable, const TInstant loadTime);
 };
 

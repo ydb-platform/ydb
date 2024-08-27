@@ -53,7 +53,7 @@ public:
 class TIntervalPoint {
 private:
     int IncludeState = 0;
-    NArrow::TReplaceKey PrimaryKey;
+    std::optional<NArrow::TReplaceKey> PrimaryKey;
 
 public:
     TIntervalPoint(const NArrow::TReplaceKey& primaryKey, const int includeState)
@@ -62,8 +62,10 @@ public:
     }
 
     TIntervalPoint(const std::shared_ptr<NArrow::TReplaceKey>& primaryKey, const int includeState)
-        : IncludeState(includeState)
-        , PrimaryKey(*TValidator::CheckNotNull(primaryKey)) {
+        : IncludeState(includeState) {
+        if (primaryKey) {
+            PrimaryKey = *primaryKey;
+        }
     }
 
     bool IsIncluded() const {
@@ -71,11 +73,16 @@ public:
     }
 
     bool operator==(const TIntervalPoint& item) const {
-        return IncludeState == item.IncludeState && PrimaryKey == item.PrimaryKey;
-    }
-
-    const NArrow::TReplaceKey& GetPrimaryKey() const {
-        return PrimaryKey;
+        if (!PrimaryKey && !item.PrimaryKey) {
+            return IncludeState == item.IncludeState;
+        } else if (!PrimaryKey && item.PrimaryKey) {
+            return false;
+        } else if (PrimaryKey && !item.PrimaryKey) {
+            return false;
+        } else {
+            return IncludeState == item.IncludeState && *PrimaryKey == *item.PrimaryKey;
+        }
+        
     }
 
     bool operator<=(const TIntervalPoint& point) const {
@@ -83,30 +90,38 @@ public:
     }
 
     bool operator<(const TIntervalPoint& point) const {
-        const ui32 sizeMin = std::min<ui32>(PrimaryKey.Size(), point.PrimaryKey.Size());
-        const std::partial_ordering compareResult = PrimaryKey.ComparePartNotNull(point.PrimaryKey, sizeMin);
-        if (compareResult == std::partial_ordering::less) {
-            return true;
-        } else if (compareResult == std::partial_ordering::greater) {
-            return false;
+        if (!PrimaryKey && !point.PrimaryKey) {
+            return IncludeState < point.IncludeState;
+        } else if (!PrimaryKey && point.PrimaryKey) {
+            return IncludeState < 0;
+        } else if (PrimaryKey && !point.PrimaryKey) {
+            return 0 < point.IncludeState;
         } else {
-            AFL_VERIFY(compareResult == std::partial_ordering::equivalent);
-            if (PrimaryKey.Size() == point.PrimaryKey.Size()) {
-                return IncludeState < point.IncludeState;
-            } else if (PrimaryKey.Size() < point.PrimaryKey.Size()) {
-                if (IncludeState <= 0) {
-                    return true;
-                } else {
-                    return false;
-                }
+            const ui32 sizeMin = std::min<ui32>(PrimaryKey->Size(), point.PrimaryKey->Size());
+            const std::partial_ordering compareResult = PrimaryKey->ComparePartNotNull(*point.PrimaryKey, sizeMin);
+            if (compareResult == std::partial_ordering::less) {
+                return true;
+            } else if (compareResult == std::partial_ordering::greater) {
+                return false;
             } else {
-                if (point.IncludeState <= 0) {
-                    return false;
+                AFL_VERIFY(compareResult == std::partial_ordering::equivalent);
+                if (PrimaryKey->Size() == point.PrimaryKey->Size()) {
+                    return IncludeState < point.IncludeState;
+                } else if (PrimaryKey->Size() < point.PrimaryKey->Size()) {
+                    if (IncludeState <= 0) {
+                        return true;
+                    } else {
+                        return false;
+                    }
                 } else {
-                    return true;
+                    if (point.IncludeState <= 0) {
+                        return false;
+                    } else {
+                        return true;
+                    }
                 }
+                return false;
             }
-            return false;
         }
     }
 };

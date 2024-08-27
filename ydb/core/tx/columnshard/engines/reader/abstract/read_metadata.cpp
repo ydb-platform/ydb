@@ -23,9 +23,9 @@ ISnapshotSchema::TPtr TReadMetadataBase::GetLoadSchemaVerified(const TPortionInf
     return schema;
 }
 
-std::vector<TCommittedBlob> TDataStorageAccessor::GetCommitedBlobs(
-    const TReadDescription& readDescription, const std::shared_ptr<arrow::Schema>& pkSchema, const bool needInsertedToCheck) const {
-    return std::move(InsertTable->Read(readDescription.PathId, needInsertedToCheck, pkSchema));
+std::vector<TCommittedBlob> TDataStorageAccessor::GetCommitedBlobs(const TReadDescription& readDescription,
+    const std::shared_ptr<arrow::Schema>& pkSchema, const std::optional<ui64> lockId, const TSnapshot& reqSnapshot) const {
+    return std::move(InsertTable->Read(readDescription.PathId, lockId, reqSnapshot, pkSchema));
 }
 
 }   // namespace NKikimr::NOlap::NReader

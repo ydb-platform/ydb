@@ -19,14 +19,14 @@ A special microservice called [connector](../../concepts/federated_query/archite
 The {{ ydb-short-name }} cluster and external data sources in a production installation should be deployed on different physical or virtual servers, including clouds. If access to a specific source requires a connector, it should be deployed on the same servers as the dynamic nodes of {{ ydb-short-name }}. In other words, each `ydbd` process running in dynamic node mode should have one local connector process.
 
 The following requirements must be met:
-* The external data source must be accessible over the network to queries from {{ ydb-short-name }} or from the connector, if present.
-* The connector must be accessible over the network to queries from {{ ydb-short-name }}.
+* The external data source must be accessible over the network to queries from {{ ydb-short-name }} database nodes or from the connector, if present.
+* The connector must be accessible over the network from {{ ydb-short-name }} database nodes.
   
-  {% note tip %}
+ {% note tip %}
   
-  To make the connector accessible to the queries, run these processes on the same host.
+ The easiest way to make the connector accessible from {{ ydb-short-name }} nodes is to run them on the same set of hosts.
   
-  {% endnote %}
+ {% endnote %}
 
 ![{{ ydb-short-name }} FQ Installation](_images/ydb_fq_onprem.png "{{ ydb-short-name }} FQ Installation" =1024x)
 

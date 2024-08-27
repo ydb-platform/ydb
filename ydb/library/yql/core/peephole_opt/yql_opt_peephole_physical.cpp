@@ -5760,7 +5760,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
         std::string_view arrowFunctionName;
         const bool rewriteAsIs = node->IsCallable({"AssumeStrict", "AssumeNonStrict", "Likely"});
         if (node->IsList() || rewriteAsIs ||
-            node->IsCallable({"And", "Or", "Xor", "Not", "Coalesce", "Exists", "If", "Just", "AsStruct", "Member", "Nth", "ToPg", "FromPg", "PgResolvedCall", "PgResolvedOp"}))
+            node->IsCallable({"DecimalMul", "And", "Or", "Xor", "Not", "Coalesce", "Exists", "If", "Just", "AsStruct", "Member", "Nth", "ToPg", "FromPg", "PgResolvedCall", "PgResolvedOp"}))
         {
             if (node->IsCallable() && !IsSupportedAsBlockType(node->Pos(), *node->GetTypeAnn(), ctx, types, true)) {
                 return true;
@@ -5824,7 +5824,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
 
             const TString blockFuncName = rewriteAsIs ? ToString(node->Content()) :
                 (TString("Block") + (node->IsList() ? "AsTuple" : node->Content()));
-            if (node->IsCallable({"And", "Or", "Xor"}) && funcArgs.size() > 2) {
+            if (node->IsCallable({"DecimalMul", "And", "Or", "Xor"}) && funcArgs.size() > 2) {
                 // Split original argument list by pairs (since the order is not important balanced tree is used)
                 rewrites[node.Get()] = SplitByPairs(node->Pos(), blockFuncName, funcArgs, 0, funcArgs.size(), ctx);
             } else {

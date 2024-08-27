@@ -331,6 +331,51 @@ IGraphTransformer::TStatus BlockLogicalWrapper(const TExprNode::TPtr& input, TEx
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus BlockDecimalMulWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    const ui32 args = 2;
+    if (!EnsureArgsCount(*input, args, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    bool isOptionalResult = false;
+    bool allScalars = true;
+    TStringBuf precision, scale;
+    for (ui32 i = 0U; i < input->ChildrenSize() ; ++i) {
+        auto child = input->Child(i);
+        if (!EnsureBlockOrScalarType(*child, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        bool isScalar;
+        const TTypeAnnotationNode* blockItemType = GetBlockItemType(*child->GetTypeAnn(), isScalar);
+
+        bool isOptional;
+        const TDataExprType* dataType;
+        if (!EnsureDataOrOptionalOfData(input->Child(i)->Pos(), blockItemType, isOptional, dataType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureSpecificDataType(input->Child(i)->Pos(), *dataType, EDataSlot::Decimal, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const auto* dataParamsType = static_cast<const TDataExprParamsType*>(dataType);
+        precision = dataParamsType->GetParamOne();
+        scale = dataParamsType->GetParamTwo();
+
+        isOptionalResult = isOptionalResult || isOptional;
+        allScalars = allScalars && isScalar;
+    }
+
+    const TTypeAnnotationNode* resultType = ctx.Expr.MakeType<TDataExprParamsType>(EDataSlot::Decimal, precision, scale);
+    if (isOptionalResult) {
+        resultType = ctx.Expr.MakeType<TOptionalExprType>(resultType);
+    }
+
+    input->SetTypeAnn(MakeBlockOrScalarType(resultType, allScalars, ctx.Expr));
+    return IGraphTransformer::TStatus::Ok;
+}
+
 IGraphTransformer::TStatus BlockIfWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureArgsCount(*input, 3U, ctx.Expr)) {

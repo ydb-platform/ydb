@@ -85,7 +85,6 @@ struct TDecimalMulBlockExec {
 
     arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
         Y_UNUSED(ctx);
-        Y_UNUSED(res);
         MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
         const auto& arg1 = batch.values[0];
         const auto& arg2 = batch.values[1];

@@ -1138,7 +1138,7 @@ public:
                     statInfo->TableRevision = attrs["revision"].IntCast<ui64>();
                     statInfo->SecurityTags = {};
                     for (const auto& tagNode : attrs["security_tags"].AsList()) {
-                        statInfo->SecurityTags.emplace_back(tagNode.AsString());
+                        statInfo->SecurityTags.insert(tagNode.AsString());
                     }
                     statInfo->Revision = GetContentRevision(attrs);
                     TRunResult result;
@@ -2559,7 +2559,7 @@ private:
                     if (!securityTags.empty()) {
                         metaInfo->Attrs[SecurityTagsName] = JoinSeq(';', securityTags);
                     }
-                    statInfo->SecurityTags = securityTags;
+                    statInfo->SecurityTags = {securityTags.begin(), securityTags.end()};
                 }
 
                 NYT::TNode schemaAttrs;
@@ -5048,7 +5048,7 @@ private:
         const TExecParamsPtr& execCtx,
         const TString& cluster,
         bool createTable,
-        const TVector<TString>& securityTags = {})
+        const THashSet<TString>& securityTags = {})
     {
         PrepareCommonAttributes<TExecParamsPtr>(attrs, execCtx, cluster, createTable);
 
@@ -5074,7 +5074,7 @@ private:
         const TExecParamsPtr& execCtx,
         const TTransactionCache::TEntry::TPtr& entry,
         bool createTables,
-        const TVector<TString>& securityTags = {})
+        const THashSet<TString>& securityTags = {})
     {
         auto cluster = execCtx->Cluster_;
 

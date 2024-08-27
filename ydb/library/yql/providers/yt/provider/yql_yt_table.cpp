@@ -342,7 +342,7 @@ void TYtTableStatInfo::Parse(TExprBase node) {
         else if (setting.Name().Value() == "SecurityTags") {
             SecurityTags = {};
             for (const auto& tagAtom : setting.Value().Cast<TListBase<TCoAtom>>()) {
-                SecurityTags.emplace_back(tagAtom.Value());
+                SecurityTags.emplace(tagAtom.Value());
             }
         } else {
             YQL_ENSURE(false, "Unexpected option " << setting.Name().Value());
@@ -384,8 +384,7 @@ TExprBase TYtTableStatInfo::ToExprNode(TExprContext& ctx, const TPositionHandle&
                 .Build();
         }
         auto secTagsListExpr = secTagsBuilder.Done();
-
-
+        
         statBuilder
             .Add()
                 .Name()

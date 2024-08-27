@@ -642,12 +642,14 @@ private:
             YQL_CLOG(DEBUG, ProviderYt) << "Operation hash: " << HexEncode(operationHash).Quote() << ", cache mode: " << queryCacheMode;
         }
 
-        TVector<TString> securityTags;
+        THashSet<TString> securityTags;
         VisitExpr(input, [&securityTags](const TExprNode::TPtr& node) -> bool {
             if (TYtTableBase::Match(node.Get())) {
                 const TYtTableBase table(node);
                 const auto& curTags = TYtTableStatInfo(table.Stat()).SecurityTags;
-                Copy(curTags.begin(), curTags.end(), std::back_inserter(securityTags));
+                for (const auto& tag : curTags) {
+                    securityTags.insert(tag);
+                }
                 return false;
             }
             return true;

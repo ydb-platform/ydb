@@ -8,7 +8,7 @@ namespace NYql {
     }
 
 template<bool ThrowIfNotImplemented>
-void TResultVisitorBase<ThrowIfNotImplemented>::OnLabel(const TStringBuf&) {
+void TResultVisitorBase<ThrowIfNotImplemented>::OnLabel(TStringBuf) {
     THROW_IF_NOT_IMPL;
 }
 
@@ -89,12 +89,12 @@ void TResultVisitorBase<ThrowIfNotImplemented>::OnTupleBegin() {
 }
 
 template<bool ThrowIfNotImplemented>
-void TResultVisitorBase<ThrowIfNotImplemented>::OnElementBegin(ui64) {
+void TResultVisitorBase<ThrowIfNotImplemented>::OnElementBegin() {
     THROW_IF_NOT_IMPL;
 }
 
 template<bool ThrowIfNotImplemented>
-void TResultVisitorBase<ThrowIfNotImplemented>::OnElementBegin() {
+void TResultVisitorBase<ThrowIfNotImplemented>::OnElementEnd() {
     THROW_IF_NOT_IMPL;
 }
 
@@ -109,7 +109,7 @@ void TResultVisitorBase<ThrowIfNotImplemented>::OnStructBegin() {
 }
 
 template<bool ThrowIfNotImplemented>
-void TResultVisitorBase<ThrowIfNotImplemented>::OnMemberBegin(const TStringBuf&) {
+void TResultVisitorBase<ThrowIfNotImplemented>::OnMemberBegin(TStringBuf) {
     THROW_IF_NOT_IMPL;
 }
 
@@ -184,12 +184,12 @@ void TResultVisitorBase<ThrowIfNotImplemented>::OnDouble(double) {
 }
 
 template<bool ThrowIfNotImplemented>
-void TResultVisitorBase<ThrowIfNotImplemented>::OnBytes(const TStringBuf&) {
+void TResultVisitorBase<ThrowIfNotImplemented>::OnBytes(TStringBuf) {
     THROW_IF_NOT_IMPL;
 }
 
 template<bool ThrowIfNotImplemented>
-void TResultVisitorBase<ThrowIfNotImplemented>::OnText(const TStringBuf&) {
+void TResultVisitorBase<ThrowIfNotImplemented>::OnText(TStringBuf) {
     THROW_IF_NOT_IMPL;
 }
 

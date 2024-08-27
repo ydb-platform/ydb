@@ -13,7 +13,7 @@ struct IResultVisitor {
     virtual void OnWriteEnd() = 0;
 
     // Header items of one row's set.
-    virtual void OnLabel(const TStringBuf& label) = 0;
+    virtual void OnLabel(TStringBuf label) = 0;
     virtual void OnPosition(const TPosition& pos) = 0;
     virtual void OnType(NUdf::ITypeVisitor*& typeVisitor) = 0;
 
@@ -31,12 +31,12 @@ struct IResultVisitor {
     virtual void OnDictEnd() = 0;
 
     virtual void OnTupleBegin() = 0;
-    virtual void OnElementBegin(ui64 index) = 0;
     virtual void OnElementBegin() = 0;
+    virtual void OnElementEnd() = 0;
     virtual void OnTupleEnd() = 0;
 
     virtual void OnStructBegin() = 0;
-    virtual void OnMemberBegin(const TStringBuf& name) = 0;
+    virtual void OnMemberBegin(TStringBuf name) = 0;
     virtual void OnMemberBegin() = 0;
     virtual void OnStructEnd() = 0;
 
@@ -56,8 +56,8 @@ struct IResultVisitor {
     virtual void OnFloat(float) = 0;
     virtual void OnDouble(double) = 0;
 
-    virtual void OnBytes(const TStringBuf&) = 0;
-    virtual void OnText(const TStringBuf&) = 0;
+    virtual void OnBytes(TStringBuf) = 0;
+    virtual void OnText(TStringBuf) = 0;
 
     // TODO: Other representations
 };
@@ -66,6 +66,6 @@ struct TResultParseOptions {
     bool ParseTypesOnly = false;
 };
 
-void ParseResult(const TStringBuf& yson, IResultVisitor& visitor, const TResultParseOptions& options = {});
+void ParseResult(TStringBuf yson, IResultVisitor& visitor, const TResultParseOptions& options = {});
 
 }

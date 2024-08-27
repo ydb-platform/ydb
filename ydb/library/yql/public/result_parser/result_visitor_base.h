@@ -7,7 +7,7 @@ namespace NYql {
 template<bool ThrowIfNotImplemented = true>
 struct TResultVisitorBase : public IResultVisitor {
 
-    void OnLabel(const TStringBuf& label) override;
+    void OnLabel(TStringBuf label) override;
     void OnPosition(const TPosition& pos)  override;
 
     void OnWriteBegin()  override;
@@ -30,12 +30,12 @@ struct TResultVisitorBase : public IResultVisitor {
     void OnDictEnd() override;
 
     void OnTupleBegin() override;
-    void OnElementBegin(ui64 index) override;
     void OnElementBegin() override;
+    void OnElementEnd() override;
     void OnTupleEnd() override;
 
     void OnStructBegin() override;
-    void OnMemberBegin(const TStringBuf& name) override;
+    void OnMemberBegin(TStringBuf name) override;
     void OnMemberBegin() override;
     void OnStructEnd() override;
 
@@ -55,8 +55,8 @@ struct TResultVisitorBase : public IResultVisitor {
     void OnFloat(float) override;
     void OnDouble(double) override;
 
-    void OnBytes(const TStringBuf&) override;
-    void OnText(const TStringBuf&) override;
+    void OnBytes(TStringBuf) override;
+    void OnText(TStringBuf) override;
 
 };
 

@@ -551,7 +551,7 @@ class ScenarioTestHelper:
             return result_set.result_set.rows[0][0]
 
     @allure.step('Describe table {path}')
-    def describe_table(self, path: str, settings: ydb.DescribeTableSettings = None) -> List[ydb.SchemeEntry]:
+    def describe_table(self, path: str, settings: ydb.DescribeTableSettings = None) -> ydb.TableSchemeEntry:
         """Get table description.
 
         Args:

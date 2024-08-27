@@ -2629,6 +2629,10 @@ private:
             Send(MakePipePerNodeCacheID(true), new TEvPipeCache::TEvUnlink(0));
         }
 
+        // Actualize stats with the last stats from terminated CAs, but keep the status.
+        YQL_ENSURE(ResponseEv);
+        FillResponseStats(ResponseEv->Record.GetResponse().GetStatus());
+
         TBase::PassAway();
     }
 

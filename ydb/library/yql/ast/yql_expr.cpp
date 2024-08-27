@@ -1966,7 +1966,7 @@ namespace {
                 res = TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), TStringBuf("world"), pool);
                 break;
             case TExprNode::Argument: {
-                YQL_ENSURE(ctx.AllowFreeArgs, "Free arguments are not allowed"); 
+                YQL_ENSURE(ctx.AllowFreeArgs, "Free arguments are not allowed");
                 auto iter = ctx.FreeArgs.emplace(&node, ctx.FreeArgs.size());
                 res = TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), ctx.Expr.AppendString("_FreeArg" + ToString(iter.first->second)), pool);
                 break;
@@ -2950,6 +2950,30 @@ TExprNode::TPtr TExprContext::WrapByCallableIf(bool condition, const TStringBuf&
 
 TExprNode::TPtr TExprContext::SwapWithHead(const TExprNode& node) {
     return ChangeChild(node.Head(), 0U, ChangeChild(node, 0U, node.Head().HeadPtr()));
+}
+
+TConstraintSet TExprContext::MakeConstraintSet(const NYT::TNode& serializedConstraints) {
+    const static std::unordered_map<std::string_view, std::function<const TConstraintNode*(TExprContext&, const NYT::TNode&)>> FACTORIES = {
+        {TSortedConstraintNode::Name(),     std::mem_fn(&TExprContext::MakeConstraint<TSortedConstraintNode, const NYT::TNode&>)},
+        {TChoppedConstraintNode::Name(),    std::mem_fn(&TExprContext::MakeConstraint<TChoppedConstraintNode, const NYT::TNode&>)},
+        {TUniqueConstraintNode::Name(),     std::mem_fn(&TExprContext::MakeConstraint<TUniqueConstraintNode, const NYT::TNode&>)},
+        {TDistinctConstraintNode::Name(),   std::mem_fn(&TExprContext::MakeConstraint<TDistinctConstraintNode, const NYT::TNode&>)},
+        {TEmptyConstraintNode::Name(),      std::mem_fn(&TExprContext::MakeConstraint<TEmptyConstraintNode, const NYT::TNode&>)},
+        {TVarIndexConstraintNode::Name(),   std::mem_fn(&TExprContext::MakeConstraint<TVarIndexConstraintNode, const NYT::TNode&>)},
+        {TMultiConstraintNode::Name(),      std::mem_fn(&TExprContext::MakeConstraint<TMultiConstraintNode, const NYT::TNode&>)},
+    };
+    TConstraintSet res;
+    YQL_ENSURE(serializedConstraints.IsMap(), "Unexpected node type with serialize constraints: " << serializedConstraints.GetType());
+    for (const auto& [key, node]: serializedConstraints.AsMap()) {
+        auto it = FACTORIES.find(key);
+        YQL_ENSURE(it != FACTORIES.cend(), "Unsupported constraint construction: " << key);
+        try {
+            res.AddConstraint((it->second)(*this, node));
+        } catch (...) {
+            YQL_ENSURE(false, "Error while constructing constraint: " << CurrentExceptionMessage());
+        }
+    }
+    return res;
 }
 
 TNodeException::TNodeException()

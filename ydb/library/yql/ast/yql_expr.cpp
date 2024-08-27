@@ -2701,28 +2701,6 @@ void CheckArguments(const TExprNode& root) {
     }
 }
 
-class TLimitedDefaultAllocator : public IAllocator {
-public:
-    TLimitedDefaultAllocator(size_t limit, IAllocator* allocator = TDefaultAllocator::Instance()) : Alloc_(allocator), Limit_(limit) {};
-    TBlock Allocate(size_t len) override final {
-        if (Allocated_ + len > Limit_) {
-            throw std::runtime_error("Out of memory");
-        }
-        Allocated_ += len;
-        return Alloc_->Allocate(len);
-    }
-
-    void Release(const TBlock& block) override final {
-        Allocated_ -= block.Len;
-        Alloc_->Release(block);
-    }
-
-private:
-    IAllocator* Alloc_;
-    size_t Allocated_ = 0;
-    size_t Limit_;
-};
-
 TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, const TConvertToAstSettings& settings) {
 #ifdef _DEBUG
     CheckArguments(root);
@@ -2731,11 +2709,7 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, c
     ctx.RefAtoms = settings.RefAtoms;
     ctx.AllowFreeArgs = settings.AllowFreeArgs;
     ctx.NormalizeAtomFlags = settings.NormalizeAtomFlags;
-    std::unique_ptr<TLimitedDefaultAllocator> alloc;
-    if (settings.MemoryLimit) {
-        alloc = std::make_unique<TLimitedDefaultAllocator>(*settings.MemoryLimit);
-    }
-    ctx.Pool = std::make_unique<TMemoryPool>(4096, TMemoryPool::TExpGrow::Instance(), settings.MemoryLimit ? alloc.get() : TDefaultAllocator::Instance());
+    ctx.Pool = std::make_unique<TMemoryPool>(4096, TMemoryPool::TExpGrow::Instance(), settings.Allocator);
     ctx.Frames.push_back(TFrameContext());
     ctx.CurrentFrame = &ctx.Frames.front();
     VisitNode(root, 0ULL, ctx);
@@ -2772,11 +2746,11 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, c
     return result;
 }
 
-TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, ui32 annotationFlags, bool refAtoms, TMaybe<size_t> memoryLimit) {
+TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, ui32 annotationFlags, bool refAtoms, IAllocator* allocator = TDefaultAllocator::Instance()) {
     TConvertToAstSettings settings;
     settings.AnnotationFlags = annotationFlags;
     settings.RefAtoms = refAtoms;
-    settings.MemoryLimit = memoryLimit;
+    settings.Allocator = allocator;
     return ConvertToAst(root, exprContext, settings);
 }
 

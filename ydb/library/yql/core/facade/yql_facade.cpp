@@ -12,6 +12,7 @@
 #include <ydb/library/yql/core/services/yql_eval_params.h>
 #include <ydb/library/yql/utils/log/context.h>
 #include <ydb/library/yql/utils/log/profile.h>
+#include <ydb/library/yql/utils/limiting_allocator.h>
 #include <ydb/library/yql/core/services/yql_out_transformers.h>
 #include <ydb/library/yql/core/extract_predicate/extract_predicate_dbg.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
@@ -1397,7 +1398,11 @@ TMaybe<TString> TProgram::GetQueryAst(TMaybe<size_t> memoryLimit) {
     astStream.Reserve(DEFAULT_AST_BUF_SIZE);
 
     if (ExprRoot_) {
-        auto ast = ConvertToAst(*ExprRoot_, *ExprCtx_, TExprAnnotationFlags::None, true, memoryLimit);
+        std::unique_ptr<IAllocator> limitingAllocator;
+        if (memoryLimit) {
+            limitingAllocator = MakeLimitingAllocator(*memoryLimit);
+        }
+        auto ast = ConvertToAst(*ExprRoot_, *ExprCtx_, TExprAnnotationFlags::None, true, limitingAllocator ? limitingAllocator.get() : TDefaultAllocator::Instance());
         ast.Root->PrettyPrintTo(astStream, TAstPrintFlags::ShortQuote | TAstPrintFlags::PerLine);
         return astStream.Str();
     } else if (AstRoot_) {

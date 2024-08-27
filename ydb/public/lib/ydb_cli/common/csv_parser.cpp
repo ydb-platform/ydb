@@ -301,7 +301,7 @@ private:
 
 TCsvParseException FormatError(const std::exception& inputError,
                                const TCsvParser::TParseMetadata& meta,
-                               std::optional<TString> columnName = {}) {
+                               const std::optional<std::string>& columnName = {}) {
     auto outputError = TCsvParseException() << "Error during CSV parsing";
     if (meta.Line.has_value()) {
         outputError << " in line " << meta.Line.value();
@@ -320,7 +320,7 @@ TValue FieldToValue(TTypeParser& parser,
                     TStringBuf token,
                     const std::optional<TString>& nullValue,
                     const TCsvParser::TParseMetadata& meta,
-                    TString columnName) {
+                    const std::string& columnName) {
     try {
         TCsvToYdbConverter converter(parser, nullValue);
         return converter.Convert(token);

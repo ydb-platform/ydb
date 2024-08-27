@@ -1,6 +1,8 @@
 #include "yql_constraint.h"
 #include "yql_expr.h"
 
+#include <ydb/library/yql/utils/yql_panic.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/yson/node/node_io.h>
 
@@ -173,6 +175,28 @@ Y_UNIT_TEST_SUITE(TSerializeConstrains) {
         UNIT_ASSERT_VALUES_EQUAL(NYT::NodeToCanonicalYsonString(yson), R"({"Empty"=#;"Multi"=[[0u;{"Empty"=#}]];"Sorted"=[[["a"];%true];[["b"];%false]];"Unique"=[["a";"b"];["c";["d";"e"]]];"VarIndex"=[[0u;1u];[1u;2u]]})");
         auto s2 = ctx.MakeConstraintSet(yson);
         UNIT_ASSERT_EQUAL(s, s2);
+
+        s.Clear();
+        yson = s.ToYson();
+        UNIT_ASSERT_VALUES_EQUAL(NYT::NodeToCanonicalYsonString(yson), R"({})");
+        auto s3 = ctx.MakeConstraintSet(yson);
+        UNIT_ASSERT_EQUAL(s, s3);
+    }
+
+    Y_UNIT_TEST(DeserializeBadConstrainSet) {
+        TExprContext ctx;
+        UNIT_ASSERT_EXCEPTION(
+            ctx.MakeConstraintSet(NYT::NodeFromYsonString(R"(#)")),
+            NYql::TYqlPanic
+        );
+        UNIT_ASSERT_EXCEPTION(
+            ctx.MakeConstraintSet(NYT::NodeFromYsonString(R"({"Unknown"=[]})")),
+            NYql::TYqlPanic
+        );
+        UNIT_ASSERT_EXCEPTION(
+            ctx.MakeConstraintSet(NYT::NodeFromYsonString(R"({"Empty"=1u})")),
+            NYql::TYqlPanic
+        );
     }
 }
 

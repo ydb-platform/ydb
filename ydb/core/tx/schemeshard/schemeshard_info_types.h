@@ -2855,6 +2855,7 @@ private:
     ui64 Bytes = 0;
 };
 
+// TODO(mbkkt) separate it to 3 classes: TBuildColumnsInfo TBuildSecondaryInfo TBuildVectorInfo with single base TBuildInfo
 struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     using TPtr = TIntrusivePtr<TIndexBuildInfo>;
 
@@ -2873,6 +2874,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         GatheringStatistics = 20,
         Initiating = 30,
         Filling = 40,
+        // TODO(mbkkt) TruncateTmpTables = 45,
         Applying = 50,
         Unlocking = 60,
         Done = 200,
@@ -2919,7 +2921,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     enum class EBuildKind : ui32 {
         BuildKindUnspecified = 0,
         BuildIndex = 10,
-        BuildColumn = 20
+        BuildColumns = 20,
     };
 
     TActorId CreateSender;
@@ -2937,11 +2939,12 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     TString IndexName;
     TVector<TString> IndexColumns;
     TVector<TString> DataColumns;
+    TVector<TString> FillIndexColumns;
+    TVector<TString> FillDataColumns;
 
     TVector<TColumnBuildInfo> BuildColumns;
 
-    TString ImplTablePath;
-    NTableIndex::TTableColumns ImplTableColumns;
+    TString TargetName;
     TVector<NKikimrSchemeOp::TTableDescription> ImplTableDescriptions;
 
     std::variant<std::monostate, NKikimrSchemeOp::TVectorIndexKmeansTreeDescription> SpecializedIndexDescription;
@@ -2984,13 +2987,12 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         TString LastKeyAck;
         ui64 SeqNoRound = 0;
 
-        NKikimrTxDataShard::TEvBuildIndexProgressResponse::EStatus Status = NKikimrTxDataShard::TEvBuildIndexProgressResponse::INVALID;
+        NKikimrIndexBuilder::EBuildStatus Status = NKikimrIndexBuilder::EBuildStatus::INVALID;
 
         Ydb::StatusIds::StatusCode UploadStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
         TString DebugMessage;
 
         TBillingStats Processed;
-        TBillingStats Billed;
 
         TShardStatus(TSerializedTableRange range, TString lastKeyAck);
 
@@ -3002,13 +3004,12 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             if (shardIdx) {
                 result << " ShardIdx: " << shardIdx;
             }
-            result << " Status: " << NKikimrTxDataShard::TEvBuildIndexProgressResponse::EStatus_Name(Status);
+            result << " Status: " << NKikimrIndexBuilder::EBuildStatus_Name(Status);
             result << " UploadStatus: " << Ydb::StatusIds::StatusCode_Name(UploadStatus);
             result << " DebugMessage: " << DebugMessage;
             result << " SeqNoRound: " << SeqNoRound;
             result << " Processed: " << Processed.ToString();
-            result << " Billed: " << Billed.ToString();
-
+            
             result << " }";
 
             return result;
@@ -3018,8 +3019,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     TDeque<TShardIdx> ToUploadShards;
 
-    THashSet<TShardIdx> DoneShards;
     THashSet<TShardIdx> InProgressShards;
+
+    size_t DoneShardsSize = 0;
 
     TBillingStats Processed;
     TBillingStats Billed;
@@ -3030,7 +3032,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     {}
 
     template<class TRow>
-    void AddBuildColumnInfo(const TRow& row){
+    void AddBuildColumnInfo(const TRow& row) {
         TString columnName = row.template GetValue<Schema::BuildColumnOperationSettings::ColumnName>();
         TString defaultFromLiteral = row.template GetValue<Schema::BuildColumnOperationSettings::DefaultFromLiteral>();
         bool notNull = row.template GetValue<Schema::BuildColumnOperationSettings::NotNull>();
@@ -3144,9 +3146,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             row.template GetValueOrDefault<Schema::IndexBuild::UnlockTxDone>(
                 indexInfo->UnlockTxDone);
 
-        // note: please note that here we specify BuildIndex as operation
-        // default, because previosly this table was dedicated for build index
-        // operations only.
+        // note: please note that here we specify BuildIndex as operation default,
+        // because previosly this table was dedicated for build index operations only.
         indexInfo->BuildKind = TIndexBuildInfo::EBuildKind(
             row.template GetValueOrDefault<Schema::IndexBuild::BuildKind>(
                 ui32(TIndexBuildInfo::EBuildKind::BuildIndex)));
@@ -3213,8 +3214,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         return BuildKind == EBuildKind::BuildIndex;
     }
 
-    bool IsBuildColumn() const {
-        return BuildKind == EBuildKind::BuildColumn;
+    bool IsBuildColumns() const {
+        return BuildKind == EBuildKind::BuildColumns;
     }
 
     bool IsDone() const {
@@ -3235,9 +3236,10 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     }
 
     float CalcProgressPercent() const {
+        // TODO(mbkkt) different calculation for vector index
         if (Shards) {
             float totalShards = Shards.size();
-            return 100.0 * DoneShards.size() / totalShards;
+            return 100.0 * DoneShardsSize / totalShards;
         }
         // No shards - no progress
         return 0.0;
@@ -3362,7 +3364,7 @@ inline void Out<NKikimr::NSchemeShard::TIndexBuildInfo>
     o << ", UnlockTxDone: " << info.UnlockTxDone;
 
     o << ", ToUploadShards: " << info.ToUploadShards.size();
-    o << ", DoneShards: " << info.DoneShards.size();
+    o << ", DoneShards: " << info.DoneShardsSize;
 
     for (const auto& x: info.InProgressShards) {
         o << ", ShardsInProgress: " << x;

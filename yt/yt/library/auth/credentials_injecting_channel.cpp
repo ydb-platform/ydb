@@ -259,7 +259,7 @@ public:
         , ServiceTicketAuth_(std::move(serviceTicketAuth))
     { }
 
-    IChannelPtr CreateChannel(const TString& address) override
+    IChannelPtr CreateChannel(const std::string& address) override
     {
         auto channel = UnderlyingFactory_->CreateChannel(address);
         if (!ServiceTicketAuth_) {

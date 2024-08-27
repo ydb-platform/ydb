@@ -244,7 +244,6 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
             IIndexInfo::AddDeleteFlagsColumn(*batch, inserted.GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete);
         }
 
-        batch = resultSchema->NormalizeBatch(*blobSchema, batch, pathInfo.GetUsageColumnIds()).DetachResult();
         pathBatches.AddBatch(inserted, batch);
     }
 

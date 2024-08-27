@@ -581,10 +581,18 @@ public:
             LWTRACK(KqpSessionQueryCompiled, QueryState->Orbit, TStringBuilder() << QueryState->CompileResult->Status);
 
             if (QueryState->CompileResult->NeedToSplit) {
-                YQL_ENSURE(!QueryState->HasTxControl() && QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE);
-                auto ev = QueryState->BuildSplitRequest(CompilationCookie, GUCSettings);
-                Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
-                    QueryState->KqpSessionSpan.GetTraceId());
+                if (!QueryState->HasTxControl()) {
+                    YQL_ENSURE(QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE);
+                    auto ev = QueryState->BuildSplitRequest(CompilationCookie, GUCSettings);
+                    Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
+                        QueryState->KqpSessionSpan.GetTraceId());
+                } else {
+                    NYql::TIssues issues;
+                    ReplyQueryError(
+                        ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_BAD_REQUEST,
+                        "CTAS statement can be executed only in NoTx mode.",
+                        MessageFromIssues(issues));
+                }
             } else {
                 ReplyQueryCompileError();
             }
@@ -1282,7 +1290,9 @@ public:
 
         const bool useEvWrite = ((HasOlapTable && Settings.TableService.GetEnableOlapSink()) || (!HasOlapTable && Settings.TableService.GetEnableOltpSink()))
             && (request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_QUERY
-                || request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY);
+                || request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY
+                || request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_DML
+                || request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_PREPARED_DML);
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             RequestCounters, Settings.TableService,
@@ -1605,7 +1615,12 @@ public:
             auto stats = QueryState->QueryStats.ToProto();
             if (QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
                 response->SetQueryPlan(SerializeAnalyzePlan(stats, QueryState->UserRequestContext->PoolId));
-                response->SetQueryAst(QueryState->CompileResult->PreparedQuery->GetPhysicalQuery().GetQueryAst());
+                if (QueryState->CompileResult) {
+                    auto preparedQuery = QueryState->CompileResult->PreparedQuery;
+                    if (preparedQuery) {
+                        response->SetQueryAst(preparedQuery->GetPhysicalQuery().GetQueryAst());
+                    }
+                }
             }
             response->MutableQueryStats()->Swap(&stats);
         }
@@ -2216,11 +2231,6 @@ public:
         Y_ENSURE(QueryState);
         if (QueryState->CompileResult) {
             AddQueryIssues(*response, QueryState->CompileResult->Issues);
-
-            auto preparedQuery = QueryState->CompileResult->PreparedQuery;
-            if (preparedQuery && QueryState->ReportStats() && QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
-                response->SetQueryAst(preparedQuery->GetPhysicalQuery().GetQueryAst());
-            }
         }
 
         FillStats(&QueryResponse->Record.GetRef());

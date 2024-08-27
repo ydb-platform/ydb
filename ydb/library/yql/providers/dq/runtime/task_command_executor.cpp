@@ -21,6 +21,7 @@
 #include <ydb/library/yql/utils/yql_panic.h>
 
 #include <ydb/library/yql/parser/pg_wrapper/interface/context.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/parser.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 
 #include <util/system/thread.h>
@@ -681,6 +682,10 @@ public:
         TString workingDirectory = taskParams[NTaskRunnerProxy::WorkingDirectoryParamName];
         Y_ABORT_UNLESS(workingDirectory);
         NFs::SetCurrentWorkingDirectory(workingDirectory);
+
+        QueryStat.Measure<void>("LoadPgSystemFunctions", [&]() {
+            NPg::LoadSystemFunctions(*NSQLTranslationPG::CreateSystemFunctionsParser());
+        });
 
         QueryStat.Measure<void>("LoadPgExtensions", [&]()
         {

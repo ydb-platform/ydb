@@ -6,6 +6,8 @@ LICENSE(GPL-3.0-or-later)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
+VERSION(3.7.6)
+
 PEERDIR(
     contrib/libs/libiconv
 )

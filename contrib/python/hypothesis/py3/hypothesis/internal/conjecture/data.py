@@ -155,9 +155,9 @@ class Status(IntEnum):
 
 
 @dataclass_transform()
-@attr.s(frozen=True, slots=True, auto_attribs=True)
+@attr.s(slots=True, frozen=True)
 class StructuralCoverageTag:
-    label: int
+    label: int = attr.ib()
 
 
 STRUCTURAL_COVERAGE_CACHE: Dict[int, StructuralCoverageTag] = {}
@@ -678,6 +678,12 @@ class Examples:
         if i < 0:
             i += n
         return Example(self, i)
+
+    # not strictly necessary as we have len/getitem, but required for mypy.
+    # https://github.com/python/mypy/issues/9737
+    def __iter__(self) -> Iterator[Example]:
+        for i in range(len(self)):
+            yield self[i]
 
 
 @dataclass_transform()

@@ -192,12 +192,12 @@ protected:
         request->Set("Accept-Encoding", "deflate");
     }
 
-    static NHttp::THeadersBuilder GetResponseHeaders(const NHttp::THttpIncomingResponsePtr& response) {
+private:
+    NHttp::THeadersBuilder GetResponseHeaders(const NHttp::THttpIncomingResponsePtr& response) {
         static const TVector<TStringBuf> HEADERS_WHITE_LIST = {
             "Content-Type",
             "Connection",
             "X-Worker-Name",
-            "Location",
             "Set-Cookie",
             "Access-Control-Allow-Origin",
             "Access-Control-Allow-Credentials",
@@ -211,15 +211,24 @@ protected:
                 resultHeaders.Set(header, headers.Get(header));
             }
         }
+        static const TString LOCATION_HEADER_NAME = "Location";
+        if (headers.Has(LOCATION_HEADER_NAME)) {
+            resultHeaders.Set(LOCATION_HEADER_NAME, GetFixedLocationHeader(headers.Get(LOCATION_HEADER_NAME)));
+        }
         return resultHeaders;
     }
 
-private:
     void SendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response, const NActors::TActorContext& ctx) {
         NHttp::THttpOutgoingRequestPtr request = response->GetRequest();
         LOG_DEBUG_S(ctx, EService::MVP, "Try to send request to HTTPS port");
         NHttp::THeadersBuilder headers {request->Headers};
         ForwardUserRequest(headers.Get(AUTH_HEADER_NAME), ctx, true);
+    }
+
+    TString GetFixedLocationHeader(TStringBuf location) {
+        TStringBuf scheme, host, uri;
+        NHttp::CrackURL(ProtectedPageUrl, scheme, host, uri);
+        return TStringBuilder() << '/' << host << location;
     }
 };
 

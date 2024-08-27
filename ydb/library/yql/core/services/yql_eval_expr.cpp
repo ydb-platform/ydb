@@ -45,21 +45,51 @@ static THashSet<TStringBuf> SubqueryExpandFuncs = {
     TStringBuf("SubqueryAssumeOrderBy")
 };
 
-TString MakeCacheKey(const TExprNode& root, TExprContext& ctx) {
-    TConvertToAstSettings settings;
-    settings.NormalizeAtomFlags = true;
-    settings.AllowFreeArgs = false;
-    settings.RefAtoms = true;
-    settings.NoInlineFunc = [](const TExprNode&) { return true; };
-    auto ast = ConvertToAst(root, ctx, settings);
-    YQL_ENSURE(ast.Root);
-    auto str = ast.Root->ToString();
-    SHA256_CTX sha;
-    SHA256_Init(&sha);
-    SHA256_Update(&sha, str.Data(), str.Size());
-    unsigned char hash[SHA256_DIGEST_LENGTH];
-    SHA256_Final(hash, &sha);
-    return TString((const char*)hash, sizeof(hash));
+class TCacheKeyBuilder {
+public:
+    TString Process(const TExprNode& root) {
+        SHA256_Init(&Sha);
+        unsigned char hash[SHA256_DIGEST_LENGTH];
+        Visit(root);
+        SHA256_Final(hash, &Sha);
+        return TString((const char*)hash, sizeof(hash));
+    }
+
+private:
+    void Visit(const TExprNode& node) {
+        auto [it, inserted] = Visited.emplace(&node, Visited.size());
+        SHA256_Update(&Sha, &it->second, sizeof(it->second));
+        if (!inserted) {
+            return;
+        }
+
+        ui32 type = node.Type();
+        SHA256_Update(&Sha, &type, sizeof(type));
+        if (node.Type() == TExprNode::EType::Atom || node.Type() == TExprNode::EType::Callable) {
+            ui32 textLen = node.Content().size();
+            SHA256_Update(&Sha, &textLen, sizeof(textLen));
+            SHA256_Update(&Sha, node.Content().Data(), textLen);
+        }
+
+        if (node.Type() == TExprNode::EType::Atom || node.Type() == TExprNode::EType::Argument || node.Type() == TExprNode::EType::World) {
+            return;
+        }
+
+        ui32 len = node.ChildrenSize();
+        SHA256_Update(&Sha, &len, sizeof(len));
+        for (const auto& child : node.Children()) {
+            Visit(*child);
+        }
+    }
+
+private:
+    SHA256_CTX Sha;
+    TNodeMap<ui64> Visited;
+};
+
+TString MakeCacheKey(const TExprNode& root) {
+    TCacheKeyBuilder builder;
+    return builder.Process(root);
 }
 
 bool CheckPendingArgs(const TExprNode& root, TNodeSet& visited, TNodeMap<const TExprNode*>& activeArgs, const TNodeMap<ui32>& externalWorlds, TExprContext& ctx,
@@ -1053,7 +1083,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             TString yson;
             TString key;
             if (types.QContext) {
-                key = MakeCacheKey(*clonedArg, ctx);
+                key = MakeCacheKey(*clonedArg);
             }
 
             if (types.QContext.CanRead()) {

@@ -5860,7 +5860,8 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode d
     if constexpr (RuntimeVersion < 51U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }
-    MKQL_ENSURE(joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly,
+    MKQL_ENSURE(joinKind == EJoinKind::Inner || joinKind == EJoinKind::Left ||
+                joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly,
                 "Unsupported join kind");
     MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
 
@@ -5873,9 +5874,29 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode d
 
     auto returnJoinItems = ValidateBlockFlowType(flow.GetStaticType(), false);
     const auto payloadType = AS_TYPE(TDictType, dict.GetStaticType())->GetPayloadType();
-    // XXX: This is the contract ensured by the expression compiler and
-    // optimizers for join types that don't require the right (i.e. dict) part.
-    MKQL_ENSURE(payloadType->IsVoid(), "Dict payload has to be Void");
+    if (joinKind == EJoinKind::Inner || joinKind == EJoinKind::Left) {
+        // XXX: This is the contract ensured by the expression compiler and
+        // optimizers to ease the processing of the dict payload in wide context.
+        MKQL_ENSURE(payloadType->IsTuple(), "Dict payload has to be a Tuple");
+        const auto payloadItems = AS_TYPE(TTupleType, payloadType)->GetElements();
+        TVector<TType*> dictBlockItems;
+        dictBlockItems.reserve(payloadItems.size());
+        for (const auto& payloadItem : payloadItems) {
+            MKQL_ENSURE(!payloadItem->IsBlock(), "Dict payload item has to be non-block");
+            const auto itemType = joinKind == EJoinKind::Inner ? payloadItem
+                                : NewOptionalType(payloadItem);
+            dictBlockItems.emplace_back(NewBlockType(itemType, TBlockType::EShape::Many));
+        }
+        // Block length column has to be the last column in wide block flow item,
+        // so all contents of the dict payload should be appended to the resulting
+        // wide type before the block size column.
+        const auto blockLenPos = std::prev(returnJoinItems.end());
+        returnJoinItems.insert(blockLenPos, dictBlockItems.cbegin(), dictBlockItems.cend());
+    } else {
+        // XXX: This is the contract ensured by the expression compiler and
+        // optimizers for join types that don't require the right (i.e. dict) part.
+        MKQL_ENSURE(payloadType->IsVoid(), "Dict payload has to be Void");
+    }
     TType* returnJoinType = NewFlowType(NewMultiType(returnJoinItems));
 
     TCallableBuilder callableBuilder(Env, __func__, returnJoinType);

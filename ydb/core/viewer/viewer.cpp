@@ -318,6 +318,11 @@ public:
         return capabilities;
     }
 
+    int GetCapabilityVersion(const TString& name) override {
+        std::lock_guard guard(JsonHandlersMutex);
+        return JsonHandlers.GetCapabilityVersion(name);
+    }
+
     void RegisterVirtualHandler(
             NKikimrViewer::EObjectType parentObjectType,
             TVirtualHandlerType handler) override {

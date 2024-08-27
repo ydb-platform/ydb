@@ -434,6 +434,7 @@ private:
     void HandleReply(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
         BLOG_TRACE("Query response received");
         NJson::TJsonValue jsonResponse;
+        jsonResponse["version"] = Viewer->GetCapabilityVersion("/viewer/query");
         if (ev->Get()->Record.GetRef().GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             QueryResponse.Set(std::move(ev));
             MakeOkReply(jsonResponse, QueryResponse->Record.GetRef());

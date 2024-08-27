@@ -89,7 +89,7 @@ class Runner:
         cmd += ["--query-dir", f"{str(self.queries_dir)}/{self.args.variant}"]
         cmd += ["--bindings", f"{str(self.queries_dir)}/{self.args.variant}/bindings.json"]
         cmd += ["--result-dir", str(self.result_dir)]
-        cmd += ["--flame-graph", str(self.flame_graph)]
+        cmd += ["--flame-graph", str(self.args.flame_graph)]
         cmd += [f"{self.args.dqrun}", "-s"]
         cmd += ["--enable-spilling"] if self.enable_spilling else []
         cmd += ["--udfs-dir", ";".join(map(str, self.args.udfs_dir))]

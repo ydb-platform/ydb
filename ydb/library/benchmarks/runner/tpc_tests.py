@@ -15,7 +15,8 @@ class TestRunner:
     DATA = {
         "fs-cfg" : "ydb/library/yql/tools/dqrun/examples/fs.conf",
         "gateways-cfg" : "ydb/library/benchmarks/runner/runner/test-gateways.conf",
-        "flame-graph" : "contrib/tools/flame-graph"
+        "flame-graph" : "contrib/tools/flame-graph",
+        "donwloaders-dir" : "ydb/library/benchmarks/runner",
     }
 
     UDFS = [
@@ -28,24 +29,25 @@ class TestRunner:
     def __init__(self):
         self.deps = {name : pathlib.Path(yatest.common.binary_path(path)) for name, path in self.DEPS.items()}
         self.udfs = [pathlib.Path(yatest.common.binary_path(path)) for path in self.UDFS]
-        self.data = {name : pathlib.Path(yatest.common.source_path(path)) for name, path in self.DATA.items()}
+        self.data = {name : pathlib.Path(yatest.common.source_path(path)) for name, path in self.DATA.items() if name}
         self.output = pathlib.Path(yatest.common.output_path()).resolve()
         self.results_path = self.output / "results"
         self.results_path.mkdir()
-        
+
+        print(self.data["donwloaders-dir"], file=sys.stderr)
+
         self.cmd = []
         self.cmd += ["--dqrun", str(self.deps["dqrun"]) + "/dqrun"]
         self.cmd += ["--gen-queries", str(self.deps["gen-queries"]) + "/gen_queries"]
         self.cmd += ["--result-compare", str(self.deps["result-compare"]) + "/result_compare"]
-        self.cmd += ["--downloaders-dir", "/home/vladluk/ydbwork/ydb/ydb/library/benchmarks/runner"]
+        self.cmd += ["--downloaders-dir", str(self.data["donwloaders-dir"])]
         self.cmd += ["--runner", str(self.deps["runner"]) + "/runner"]
-        self.cmd += ["--flama-graph", str(self.data["flame-graph"])]
+        self.cmd += ["--flame-graph", str(self.data["flame-graph"])]
         self.cmd += ["--udfs-dir", ";".join(map(str, self.udfs))]
         self.cmd += ["--fs-cfg", str(self.data["fs-cfg"])]
         self.cmd += ["--gateways-cfg", str(self.data["gateways-cfg"])]
         self.cmd += ["-o", str(self.results_path)]
 
-        
     def wrapped_run(self, variant, datasize, tasks, query_filter):
         cmd = self.cmd
         cmd += ["--variant", f"{variant}"]

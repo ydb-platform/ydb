@@ -347,7 +347,7 @@ def _check_types_for_merge(data_1, data_2):
         return
     if (data_1 is None and isinstance(data_2, dict)) or (data_2 is None and isinstance(data_1, dict)):
         return
-    raise TypeError("Type mismatch - " + str(type(data_1)) + " data_1 cannot be merged with " +  str(type(data_2)) + " data_2")
+    raise TypeError("Type mismatch - " + str(type(data_1)) + " data_1 cannot be merged with " + str(type(data_2)) + " data_2")
 
 
 def get_additional_yaml_config(arguments, path):

@@ -4437,7 +4437,7 @@ namespace {
         }
         if (!node.IsMap()) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() <<
-                "Expected ysom-map as constraints value, actual " << node.GetType()));
+                "Expected yson-map as serialized constraints value, actual " << node.GetType()));
             return IGraphTransformer::TStatus::Error;
         }
 

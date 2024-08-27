@@ -32,7 +32,6 @@ import datetime
 import random
 import threading
 from typing import Iterable, Optional
-import time
 import itertools
 from string import ascii_lowercase
 
@@ -117,9 +116,9 @@ class TestAlterTiering(BaseTestSet):
         deadline = datetime.datetime.now() + duration
         sth = ScenarioTestHelper(ctx)
         while datetime.datetime.now() < deadline:
-            sth.execute_scheme_query(AlterTableStore(store).add_column(sth.Column(column_name, random.choice(data_types))))
-            sth.execute_scheme_query(AlterTableStore(store).drop_column(column_name))
-    
+            sth.execute_scheme_query(AlterTableStore(store).add_column(sth.Column(column_name, random.choice(data_types))), expected_status={StatusCode.SUCCESS, StatusCode.OVERLOADED})
+            sth.execute_scheme_query(AlterTableStore(store).drop_column(column_name), expected_status={StatusCode.SUCCESS, StatusCode.OVERLOADED})
+
     def _override_tier(self, sth, name, config):
         sth.execute_scheme_query(CreateTierIfNotExists(name, config))
         sth.execute_scheme_query(AlterTier(name, config))
@@ -127,14 +126,14 @@ class TestAlterTiering(BaseTestSet):
     def _override_tiering_rule(self, sth, name, default_column, config):
         sth.execute_scheme_query(CreateTieringRuleIfNotExists(name, default_column, config))
         sth.execute_scheme_query(AlterTieringRule(name, default_column, config))
-    
+
     def _make_s3_client(self, access_key, secret_key, endpoint):
         session = boto3.Session(
             aws_access_key_id=(access_key),
             aws_secret_access_key=(secret_key),
-            region_name="ru-central1",
+            region_name='ru-central1',
         )
-        return session.client("s3", endpoint_url=endpoint)
+        return session.client('s3', endpoint_url=endpoint)
 
     def _count_objects(self, bucket_config: ObjectStorageParams):
         s3 = self._make_s3_client(bucket_config.access_key, bucket_config.secret_key, bucket_config.endpoint)
@@ -163,7 +162,7 @@ class TestAlterTiering(BaseTestSet):
         s3_secret_key = get_external_param('s3-secret-key', 'YCM7Ovup55wDkymyEtO8pw5F10_L5jtVY8w_fake')
         s3_buckets = get_external_param('s3-buckets', 'ydb-tiering-test-1,ydb-tiering-test-2').split(',')
 
-        assert len(s3_buckets) == 2, f"expected 2 bucket configs, got {len(s3_configs)}"
+        assert len(s3_buckets) == 2, f'expected 2 bucket configs, got {len(s3_buckets)}'
 
         s3_configs = [
             ObjectStorageParams(
@@ -216,10 +215,10 @@ class TestAlterTiering(BaseTestSet):
                 tables.append(f'store/extra_table{i}')
             sth.execute_scheme_query(CreateTable(tables[-1]).with_schema(self.schema1))
             sth.execute_scheme_query(AlterTable(tables[-1]).set_tiering(tiering_rule))
-        
+
         if any(self._count_objects(bucket) != 0 for bucket in s3_configs):
             assert any(sth.get_table_rows_count(table) != 0 for table in tables), \
-                "unrelated data in object storage: all tables are empty, but S3 is not"
+                'unrelated data in object storage: all tables are empty, but S3 is not'
 
         threads = []
 

@@ -70,7 +70,7 @@ class ColumnValueGeneratorConst(IColumnValueGenerator):
 
 class ColumnValueGeneratorLambda(IColumnValueGenerator):
     """Arbitrary value generator.
-    
+
     Uses arbitrary function to generate values."""
 
     def __init__(self, func) -> None:

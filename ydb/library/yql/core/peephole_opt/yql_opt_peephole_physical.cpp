@@ -6980,7 +6980,7 @@ template <bool Asc, bool Equals>
 TExprNode::TPtr AggrComparePg(const TExprNode& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand '" << node.Content() << "' over Pg.";
     auto op = Asc ? ( Equals ? "<=" : "<") : ( Equals ? ">=" : ">");
-    auto finalPart = (Equals == Asc) ? MakeBool<true>(node.Pos(), ctx) : 
+    auto finalPart = (Equals == Asc) ? MakeBool<true>(node.Pos(), ctx) :
         ctx.NewCallable(node.Pos(), "Exists", { node.TailPtr() });
     if (!Asc) {
         finalPart = ctx.NewCallable(node.Pos(), "Not", { finalPart });
@@ -8445,6 +8445,7 @@ struct TPeepHoleRules {
         {"AssumeUnique", &DropAssume},
         {"AssumeDistinct", &DropAssume},
         {"AssumeChopped", &DropAssume},
+        {"AssumeConstraints", &DropAssume},
         {"EmptyFrom", &DropEmptyFrom},
         {"Top", &OptimizeTopOrSort<false, true>},
         {"TopSort", &OptimizeTopOrSort<true, true>},
@@ -8493,7 +8494,7 @@ struct TPeepHoleRules {
     const TExtPeepHoleOptimizerMap BlockStageExtFinalRules = {
         {"BlockExtend", &ExpandBlockExtend},
         {"BlockOrderedExtend", &ExpandBlockExtend},
-        {"ReplicateScalars", &ExpandReplicateScalars} 
+        {"ReplicateScalars", &ExpandReplicateScalars}
     };
 
     static const TPeepHoleRules& Instance() {

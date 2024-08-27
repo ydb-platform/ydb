@@ -68,6 +68,32 @@ class ColumnValueGeneratorConst(IColumnValueGenerator):
         return self._value
 
 
+class ColumnValueGeneratorLambda(IColumnValueGenerator):
+    """Arbitrary value generator.
+
+    Uses arbitrary function to generate values."""
+
+    def __init__(self, func) -> None:
+        """Constructor.
+
+         Args:
+            func: Function used to generate values.
+        Example:
+            DataGeneratorPerColumn(
+                self.schema2, 10,
+                ColumnValueGeneratorDefault(init_value=10))
+                    .with_column('not_level', ColumnValueGeneratorLambda(lambda: time.now())
+            )
+        """
+
+        super().__init__()
+        self._func = func
+
+    @override
+    def generate_value(self, column: ScenarioTestHelper.Column) -> Any:
+        return self._func()
+
+
 class ColumnValueGeneratorRandom(IColumnValueGenerator):
     """Random column value generator.
 

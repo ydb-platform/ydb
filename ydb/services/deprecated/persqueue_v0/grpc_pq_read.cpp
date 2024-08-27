@@ -154,6 +154,7 @@ void TPQReadService::TSession::SendEvent(IEventBase* ev) {
 void TPQReadService::TSession::CreateActor(std::unique_ptr<NPersQueue::TTopicsListController>&& topicsHandler) {
     auto classifier = Proxy->GetClassifier();
 
+    auto g(Guard(Lock));
     ActorId = Proxy->ActorSystem->Register(
         new TReadSessionActor(this, *topicsHandler, Cookie, SchemeCache, NewSchemeCache, Counters,
                                     classifier ? classifier->ClassifyAddress(GetPeerName())
@@ -204,10 +205,10 @@ ui64 TPQReadService::NextCookie() {
 
 void TPQReadService::ReleaseSession(ui64 cookie) {
     auto g(Guard(Lock));
-    bool erased = Sessions.erase(cookie);
-    if (erased)
+    if (Sessions.erase(cookie)) {
+        g.Release();
         ActorSystem->Send(MakeGRpcProxyStatusID(ActorSystem->NodeId), new TEvGRpcProxyStatus::TEvUpdateStatus(0,0,-1,0));
-
+    }
 }
 
 void TPQReadService::CheckClusterChange(const TString& localCluster, const bool) {

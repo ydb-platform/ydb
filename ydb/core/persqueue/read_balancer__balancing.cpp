@@ -876,6 +876,8 @@ void TConsumer::RegisterReadingSession(TSession* session, const TActorContext& c
                 CreateFamily({partitionId}, ctx);
             }
         }
+    } else {
+        OrderedSessions.reset();
     }
 }
 
@@ -894,6 +896,9 @@ std::vector<TPartitionFamily*> Snapshot(const std::unordered_map<size_t, const s
 void TConsumer::UnregisterReadingSession(TSession* session, const TActorContext& ctx) {
     auto pipe = session->Pipe;
     Sessions.erase(session->Pipe);
+    if (!session->WithGroups()) {
+        OrderedSessions.reset();
+    }
 
     for (auto* family : Snapshot(Families)) {
         auto special = family->SpecialSessions.erase(pipe);
@@ -1305,9 +1310,11 @@ void TConsumer::Balance(const TActorContext& ctx) {
                 GetPrefix() << "start rebalancing. familyCount=" << familyCount << ", sessionCount=" << commonSessions.size()
                 << ", desiredFamilyCount=" << desiredFamilyCount << ", allowPlusOne=" << allowPlusOne);
 
-        TOrderedSessions orderedSession;
-        orderedSession.insert(commonSessions.begin(), commonSessions.end());
-        for (auto it = orderedSession.begin(); it != orderedSession.end(); ++it) {
+        if (!OrderedSessions) {
+            OrderedSessions.emplace();
+            OrderedSessions->insert(commonSessions.begin(), commonSessions.end());
+        }
+        for (auto it = OrderedSessions->begin(); it != OrderedSessions->end(); ++it) {
             auto* session = *it;
             auto targerFamilyCount = desiredFamilyCount + (allowPlusOne ? 1 : 0);
             auto families = OrderFamilies(session->Families);
@@ -1871,12 +1878,6 @@ bool SessionComparator::operator()(const TSession* lhs, const TSession* rhs) con
 bool LowLoadSessionComparator::operator()(const TSession* lhs, const TSession* rhs) const {
     if (lhs->ActiveFamilyCount != rhs->ActiveFamilyCount) {
         return lhs->ActiveFamilyCount < rhs->ActiveFamilyCount;
-    }
-    if (lhs->ActivePartitionCount != rhs->ActivePartitionCount) {
-        return lhs->ActivePartitionCount < rhs->ActivePartitionCount;
-    }
-    if (lhs->InactivePartitionCount != rhs->InactivePartitionCount) {
-        return lhs->InactivePartitionCount < rhs->InactivePartitionCount;
     }
     if (lhs->Partitions.size() != rhs->Partitions.size()) {
         return lhs->Partitions.size() < rhs->Partitions.size();

@@ -185,6 +185,7 @@ struct TConsumer {
     std::unordered_map<ui32, TPartitionFamily*> PartitionMapping;
     // All reading sessions in which the family is currently being read.
     std::unordered_map<TActorId, TSession*> Sessions;
+    std::optional<TOrderedSessions> OrderedSessions;
 
     // Families is not reading now.
     std::unordered_map<size_t, TPartitionFamily*> UnreadableFamilies;

@@ -23,6 +23,6 @@ struct JsonConfig : public FormatConfig {
     arrow::json::ParseOptions ParseOpts = arrow::json::ParseOptions::Defaults();
 };
 
-std::variant<std::shared_ptr<FormatConfig>, TString> MakeFormatConfig(EFileFormat format, const THashMap<TString, TString>& params = {});
+std::shared_ptr<FormatConfig> MakeFormatConfig(EFileFormat format, const THashMap<TString, TString>& params = {});
 
 } // namespace NKikimr::NExternalSource::NObjectStorage::NInference

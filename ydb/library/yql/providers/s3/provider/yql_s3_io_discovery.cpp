@@ -777,72 +777,30 @@ private:
                     .MaxResultSet = std::max(State_->Configuration->MaxDiscoveryFilesPerQuery, State_->Configuration->MaxDirectoriesAndFilesPerQuery)
                 }};
 
-            if (partitionedBy.empty()) {
-                if (path.empty()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), "Can not read from empty path"));
+            if (partitionedBy.empty() || !config.Generator) {
+                auto error = NS3::BuildS3FilePattern(path, filePattern, config.Columns, req.S3Request);
+                if (error) {
+                    ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), *error));
                     return false;
                 }
-                if (path.EndsWith("/")) {
-                    req.S3Request.Pattern = path + effectiveFilePattern;
-                } else {
-                    // treat paths as regular wildcard patterns
-                    if (filePattern) {
-                        ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "Path pattern cannot be used with file_pattern"));
-                        return false;
-                    }
-
-                    req.S3Request.Pattern = path;
-                }
-                req.S3Request.Pattern = NS3::NormalizePath(req.S3Request.Pattern);
-                req.S3Request.PatternType = NS3Lister::ES3PatternType::Wildcard;
-                req.S3Request.Prefix = req.S3Request.Pattern.substr(
-                    0, NS3::GetFirstWildcardPos(req.S3Request.Pattern));
-                req.Options.IsPartitionedDataset = false;
+                req.Options.IsPartitionedDataset = !partitionedBy.empty();
                 reqs.push_back(req);
             } else {
                 if (NS3::HasWildcards(path)) {
                     ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "Path prefix: '" << path << "' contains wildcards"));
                     return false;
                 }
-                if (!config.Generator) {
-                    // Hive-style partitioning
-                    req.S3Request.Prefix = path;
-                    if (!path.empty()) {
-                        req.S3Request.Prefix = NS3::NormalizePath(TStringBuilder() << path << "/");
-                        if (req.S3Request.Prefix == "/") {
-                            req.S3Request.Prefix = "";
-                        }
-                    }
-                    TString pp = req.S3Request.Prefix;
-                    if (!pp.empty() && pp.back() == '/') {
-                        pp.pop_back();
-                    }
 
-                    TStringBuilder generated;
-                    generated << NS3::EscapeRegex(pp);
-                    for (auto& col : config.Columns) {
-                        if (!generated.empty()) {
-                            generated << "/";
-                        }
-                        generated << NS3::EscapeRegex(col) << "=(.*?)";
-                    }
-                    generated << '/' << NS3::RegexFromWildcards(effectiveFilePattern);
-                    req.S3Request.Pattern = generated;
-                    req.S3Request.PatternType = NS3Lister::ES3PatternType::Regexp;
+                for (auto& rule : config.Generator->GetRules()) {
+                    YQL_ENSURE(rule.ColumnValues.size() == config.Columns.size());
+                    req.ColumnValues.assign(rule.ColumnValues.begin(), rule.ColumnValues.end());
+                    // Pattern will be directory path
+                    req.S3Request.Pattern = NS3::NormalizePath(TStringBuilder() << path << "/" << rule.Path);
+                    req.S3Request.PatternType = NS3Lister::ES3PatternType::Wildcard;
+                    req.S3Request.Prefix = req.S3Request.Pattern.substr(
+                        0, NS3::GetFirstWildcardPos(req.S3Request.Pattern));
                     req.Options.IsPartitionedDataset = true;
                     reqs.push_back(req);
-                } else {
-                    for (auto& rule : config.Generator->GetRules()) {
-                        YQL_ENSURE(rule.ColumnValues.size() == config.Columns.size());
-                        req.ColumnValues.assign(rule.ColumnValues.begin(), rule.ColumnValues.end());
-                        // Pattern will be directory path
-                        req.S3Request.Pattern = NS3::NormalizePath(TStringBuilder() << path << "/" << rule.Path);
-                        req.S3Request.PatternType = NS3Lister::ES3PatternType::Wildcard;
-                        req.S3Request.Prefix = req.S3Request.Pattern.substr(
-                            0, NS3::GetFirstWildcardPos(req.S3Request.Pattern));
-                        req.Options.IsPartitionedDataset = true;
-                        reqs.push_back(req);
-                    }
                 }
             }
 

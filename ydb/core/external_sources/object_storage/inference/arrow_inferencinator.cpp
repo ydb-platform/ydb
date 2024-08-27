@@ -310,24 +310,14 @@ public:
     void HandlePartitionsRequest(TEvInferPartitions::TPtr& ev, const NActors::TActorContext& ctx) {
         RequesterId_ = ev->Sender;
         auto config = MakeFormatConfig(EFileFormat::CsvWithNames);
-        if (std::holds_alternative<TString>(config)) {
-            ctx.Send(RequesterId_, MakeErrorSchema("", NFq::TIssuesIds::INTERNAL_ERROR, ""));
-            return;
-        }
 
-        auto csvConfig = std::get<std::shared_ptr<FormatConfig>>(config);
-        InferFileSchema(ev->Get()->File, "", EFileFormat::CsvWithNames, csvConfig, ctx);
+        InferFileSchema(ev->Get()->File, "", EFileFormat::CsvWithNames, config, ctx);
     }
 
     void HandleFileInference(TEvArrowFile::TPtr& ev, const NActors::TActorContext& ctx) {
         auto& file = *ev->Get();
-        if (std::holds_alternative<TString>(Config_)) {
-            ctx.Send(RequesterId_, MakeErrorSchema(file.Path, NFq::TIssuesIds::INTERNAL_ERROR, std::get<TString>(Config_)));
-            return;
-        }
-        
-        auto config = std::get<std::shared_ptr<FormatConfig>>(Config_);
-        InferFileSchema(file.File, file.Path, Format_, config, ctx);
+
+        InferFileSchema(file.File, file.Path, Format_, Config_, ctx);
     }
 
     void HandleFileError(TEvFileError::TPtr& ev, const NActors::TActorContext& ctx) {
@@ -363,7 +353,7 @@ private:
     }
 
     EFileFormat Format_;
-    std::variant<std::shared_ptr<FormatConfig>, TString> Config_;
+    std::shared_ptr<FormatConfig> Config_;
     NActors::TActorId ArrowFetcherId_;
     NActors::TActorId RequesterId_;
 };

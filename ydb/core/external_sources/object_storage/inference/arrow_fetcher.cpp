@@ -53,15 +53,6 @@ public:
 
     void HandleFileRequest(TEvInferFileSchema::TPtr& ev, const NActors::TActorContext& ctx) {
         const auto& request = *ev->Get();
-        if (std::holds_alternative<TString>(Config_)) {
-            ctx.Send(ev->Sender, MakeError(
-                request.Path,
-                NFq::TIssuesIds::UNSUPPORTED,
-                TStringBuilder{} << "invalid parameters for format " << ConvertFileFormat(Format_) << ":  " << std::get<TString>(Config_))
-            );
-            return;
-        }
-
         TRequest localRequest{
             .Path = request.Path,
             .RequestId = TGUID::Create(),
@@ -111,13 +102,11 @@ public:
             data = std::move(*decompressedData);
         }
 
-        auto& config = std::get<std::shared_ptr<FormatConfig>>(Config_);
-
         std::shared_ptr<arrow::io::RandomAccessFile> file;
         switch (Format_) {
             case EFileFormat::CsvWithNames:
             case EFileFormat::TsvWithNames: {
-                file = CleanupCsvFile(data, request, std::dynamic_pointer_cast<CsvConfig>(config)->ParseOpts, ctx);
+                file = CleanupCsvFile(data, request, std::dynamic_pointer_cast<CsvConfig>(Config_)->ParseOpts, ctx);
                 ctx.Send(request.Requester, new TEvArrowFile(std::move(file), request.Path));
                 break;
             }
@@ -132,7 +121,7 @@ public:
             }
             case EFileFormat::JsonEachRow:
             case EFileFormat::JsonList: {
-                file = CleanupJsonFile(data, request, std::dynamic_pointer_cast<JsonConfig>(config)->ParseOpts, ctx);
+                file = CleanupJsonFile(data, request, std::dynamic_pointer_cast<JsonConfig>(Config_)->ParseOpts, ctx);
                 ctx.Send(request.Requester, new TEvArrowFile(std::move(file), request.Path));
                 break;
             }
@@ -366,7 +355,7 @@ private:
     // Fields
     NActors::TActorId S3FetcherId_;
     EFileFormat Format_;
-    std::variant<std::shared_ptr<FormatConfig>, TString> Config_;
+    std::shared_ptr<FormatConfig> Config_;
     TMaybe<TString> DecompressionFormat_;
     std::unordered_map<TString, TRequest> InflightRequests_; // Path -> Request
 };

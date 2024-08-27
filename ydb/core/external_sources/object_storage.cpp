@@ -3,6 +3,7 @@
 #include "validation_functions.h"
 #include "object_storage/s3_fetcher.h"
 
+#include <util/string/join.h>
 #include <ydb/core/external_sources/object_storage/inference/arrow_fetcher.h>
 #include <ydb/core/external_sources/object_storage/inference/arrow_inferencinator.h>
 #include <ydb/core/kqp/gateway/actors/kqp_ic_gateway_actors.h>
@@ -324,7 +325,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
             .Credentials = credentials
         };
 
-        BuildS3FilePattern(path, filePattern, partitionedBy, request);
+        NYql::NS3::BuildS3FilePattern(path, filePattern, partitionedBy, request);
 
         auto partByData = std::make_shared<TStringBuilder>();
 
@@ -343,17 +344,12 @@ struct TObjectStorageExternalSource : public IExternalSource {
                 throw yexception() << "couldn't find files at " << path;
             }
 
-            for (size_t i = 0; i < partitionedBy.size(); ++i) {
-                partByRef << (i == 0 ? "" : ",") << partitionedBy[i];
-            }
+            partByRef << JoinSeq(",", partitionedBy);
             for (const auto& entry : entries.Objects) {
                 if (entry.MatchedGlobs.size() != partitionedBy.size()) {
                     continue;
                 }
-                partByRef << '\n';
-                for (size_t i = 0; i < partitionedBy.size(); ++i) {
-                    partByRef << (i == 0 ? "" : ",") << entry.MatchedGlobs[i];
-                }
+                partByRef << Endl << JoinSeq(",", entry.MatchedGlobs);
             }
             for (const auto& entry : entries.Objects) {
                 if (entry.Size > 0) {
@@ -403,58 +399,8 @@ struct TObjectStorageExternalSource : public IExternalSource {
             ));
 
             return promise.GetFuture();
-        }).Apply([arrowInferencinatorId, meta, partByData, partitions = std::move(partitionedBy), actorSystem = ActorSystem](const NThreading::TFuture<TMetadataResult>& result) {
-            auto& value = result.GetValue();
-            if (!value.Success() || partitions.empty()) {
-                return result;
-            }
-
-            for (const auto& partitionName : partitions) {
-                auto& destColumn = *meta->Schema.add_column();
-                destColumn.mutable_name()->assign(partitionName);
-                destColumn.mutable_type()->set_type_id(Ydb::Type::UTF8);
-            }
-
-            arrow::BufferBuilder builder;
-            auto partitionBuffer = std::make_shared<arrow::Buffer>(nullptr, 0);
-            auto buildStatus = builder.Append(partByData->data(), partByData->size());
-            auto finishStatus = builder.Finish(&partitionBuffer);
-
-            if (!buildStatus.ok() || !finishStatus.ok()) {
-                return result;
-            }
-
-            auto promise = NThreading::NewPromise<TMetadataResult>();
-            auto partitionsToMetadata = [meta = value.Metadata, partitions](NThreading::TPromise<TMetadataResult> metaPromise, NObjectStorage::TEvInferredFileSchema&& response){
-                if (response.Status.IsSuccess()) {
-                    THashMap<TString, Ydb::Type> inferredTypes;
-                    for (const auto& column : response.Fields) {
-                        inferredTypes[column.name()] = column.type();
-                    }
-                    
-                    for (auto& destColumn : *meta->Schema.mutable_column()) {
-                        if (auto type = inferredTypes.FindPtr(destColumn.name()); type) {
-                            destColumn.mutable_type()->set_type_id(type->has_optional_type() ? 
-                                type->optional_type().item().type_id() : 
-                                type->type_id());
-                        }
-                    }
-                }
-                TMetadataResult result;
-                result.SetSuccess();
-                result.Metadata = meta;
-                metaPromise.SetValue(std::move(result));
-            };
-
-            auto file = std::make_shared<arrow::io::BufferReader>(std::move(partitionBuffer));
-            actorSystem->Register(new NKqp::TActorRequestHandler<NObjectStorage::TEvInferPartitions, NObjectStorage::TEvInferredFileSchema, TMetadataResult>(
-                arrowInferencinatorId,
-                new NObjectStorage::TEvInferPartitions(std::move(std::dynamic_pointer_cast<arrow::io::RandomAccessFile>(file))),
-                promise,
-                std::move(partitionsToMetadata)
-            ));
-
-            return promise.GetFuture();
+        }).Apply([arrowInferencinatorId, meta, partByData, partitionedBy, this](const NThreading::TFuture<TMetadataResult>& result) {
+            return InferPartitionedColumnsTypes(arrowInferencinatorId, partByData, partitionedBy, result);
         }).Apply([](const NThreading::TFuture<TMetadataResult>& result) {
             auto& value = result.GetValue();
             if (value.Success()) {
@@ -469,8 +415,68 @@ struct TObjectStorageExternalSource : public IExternalSource {
     }
 
 private:
+    NThreading::TFuture<TMetadataResult> InferPartitionedColumnsTypes(
+        NActors::TActorId arrowInferencinatorId,
+        std::shared_ptr<TStringBuilder> partByData,
+        const TVector<TString>& partitionedBy,
+        const NThreading::TFuture<TMetadataResult>& result) const {
+
+        auto& value = result.GetValue();
+        if (!value.Success() || partitionedBy.empty()) {
+            return result;
+        }
+
+        auto meta = value.Metadata;
+        for (const auto& partitionName : partitionedBy) {
+            auto& destColumn = *meta->Schema.add_column();
+            destColumn.mutable_name()->assign(partitionName);
+            destColumn.mutable_type()->set_type_id(Ydb::Type::UTF8);
+        }
+
+        arrow::BufferBuilder builder;
+        auto partitionBuffer = std::make_shared<arrow::Buffer>(nullptr, 0);
+        auto buildStatus = builder.Append(partByData->data(), partByData->size());
+        auto finishStatus = builder.Finish(&partitionBuffer);
+
+        if (!buildStatus.ok() || !finishStatus.ok()) {
+            return result;
+        }
+
+        auto promise = NThreading::NewPromise<TMetadataResult>();
+        auto partitionsToMetadata = [meta](NThreading::TPromise<TMetadataResult> metaPromise, NObjectStorage::TEvInferredFileSchema&& response){
+            if (response.Status.IsSuccess()) {
+                THashMap<TString, Ydb::Type> inferredTypes;
+                for (const auto& column : response.Fields) {
+                    inferredTypes[column.name()] = column.type();
+                }
+                
+                for (auto& destColumn : *meta->Schema.mutable_column()) {
+                    if (auto type = inferredTypes.FindPtr(destColumn.name()); type) {
+                        destColumn.mutable_type()->set_type_id(type->has_optional_type() ? 
+                            type->optional_type().item().type_id() : 
+                            type->type_id());
+                    }
+                }
+            }
+            TMetadataResult result;
+            result.SetSuccess();
+            result.Metadata = meta;
+            metaPromise.SetValue(std::move(result));
+        };
+
+        auto file = std::make_shared<arrow::io::BufferReader>(std::move(partitionBuffer));
+        ActorSystem->Register(new NKqp::TActorRequestHandler<NObjectStorage::TEvInferPartitions, NObjectStorage::TEvInferredFileSchema, TMetadataResult>(
+            arrowInferencinatorId,
+            new NObjectStorage::TEvInferPartitions(std::move(std::dynamic_pointer_cast<arrow::io::RandomAccessFile>(file))),
+            promise,
+            std::move(partitionsToMetadata)
+        ));
+
+        return promise.GetFuture();
+    }
+
     static TVector<TString> GetPartitionedByConfig(std::shared_ptr<TMetadata> meta) {
-        TVector<TString> columns;
+        THashSet<TString> columns;
         if (auto partitioned = meta->Attributes.FindPtr("partitionedby"); partitioned) {
             NJson::TJsonValue values;
             Y_ENSURE(NJson::ReadJsonTree(*partitioned, &values));
@@ -478,62 +484,14 @@ private:
 
             for (const auto& value : values.GetArray()) {
                 Y_ENSURE(value.GetType() == NJson::JSON_STRING);
-                columns.push_back(value.GetString());
+                if (columns.find(value.GetString()) != columns.end()) {
+                    throw yexception() << "invalid partitioned_by parameter, column " << value.GetString() << "mentioned twice";
+                }
+                columns.insert(value.GetString());
             }
         }
 
-        return columns;
-    }
-
-    static void BuildS3FilePattern(
-        const TString& path,
-        const TString& filePattern,
-        const TVector<TString>& partitioned_by,
-        NYql::NS3Lister::TListingRequest& req) {
-
-        TString effectiveFilePattern = filePattern ? filePattern : "*";
-
-        if (partitioned_by.empty()) {
-            if (path.Empty()) {
-                throw yexception() << "Can not read from empty path";
-            }
-
-            if (path.EndsWith('/')) {
-                req.Pattern = path + effectiveFilePattern;
-            } else {
-                if (filePattern) {
-                    throw yexception() << "Path pattern cannot be used with file_pattern";
-                }
-                req.Pattern = path;
-            }
-
-            req.Pattern = NYql::NS3::NormalizePath(req.Pattern);
-            req.PatternType = NYql::NS3Lister::ES3PatternType::Wildcard;
-            req.Prefix = req.Pattern.substr(0, NYql::NS3::GetFirstWildcardPos(req.Pattern));
-        } else {
-            if (NYql::NS3::HasWildcards(path)) {
-                throw yexception() << "Path prefix: '" << path << "' contains wildcards";
-            }
-
-            TString pathPrefix = NYql::NS3::NormalizePath(TStringBuilder{} << path << '/');
-            if (pathPrefix.EndsWith('/')) {
-                pathPrefix.pop_back();
-            }
-
-            TStringBuilder generated;
-            generated << NYql::NS3::EscapeRegex(pathPrefix);
-            for (auto& col : partitioned_by) {
-                if (!generated.empty()) {
-                    generated << "/";
-                }
-                generated << NYql::NS3::EscapeRegex(col) << "=(.*?)";
-            }
-
-            generated << '/' << NYql::NS3::RegexFromWildcards(effectiveFilePattern);
-            req.Pattern = generated;
-            req.PatternType = NYql::NS3Lister::ES3PatternType::Regexp;
-            req.Prefix = pathPrefix ? pathPrefix + '/' : pathPrefix;
-        }
+        return TVector<TString>{columns.begin(), columns.end()};
     }
 
     static bool IsValidIntervalUnit(const TString& unit) {

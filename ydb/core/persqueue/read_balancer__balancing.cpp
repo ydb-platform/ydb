@@ -6,22 +6,8 @@
 namespace NKikimr::NPQ::NBalancing {
 
 template<typename T>
-size_t EraseElement(std::vector<T*>& values, T* v) {
-    size_t found = 0;
-    for (size_t i = 0; i + found < values.size();) {
-        if (values[i + found] == v) {
-            ++found;
-            continue;
-        }
-
-        if (found) {
-            values[i] = values[i + found];
-        }
-        ++i;
-    }
-    values.resize(values.size() - found);
-
-    return found;
+void EraseElement(std::vector<T*>& values, T* v) {
+    values.erase(std::find(values.begin(), values.end(), v));
 }
 
 

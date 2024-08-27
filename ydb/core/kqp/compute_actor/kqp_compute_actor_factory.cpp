@@ -124,7 +124,9 @@ public:
         resourcesRequest.ExecutionUnits = 1;
         resourcesRequest.Memory =  memoryLimits.MkqlLightProgramMemoryLimit;
 
-        TIntrusivePtr<NRm::TTaskState> task = MakeIntrusive<NRm::TTaskState>(args.Task->GetId(), args.TxInfo->CreatedAt);
+        TIntrusivePtr<NRm::TTaskState> task = MakeIntrusive<NRm::TTaskState>(
+            args.Task->GetId(), args.TxInfo->CreatedAt,
+            args.Task, args.Arena);
 
         auto rmResult = ResourceManager_->AllocateResources(
             args.TxInfo, task, resourcesRequest);

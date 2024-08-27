@@ -459,8 +459,8 @@ public:
             Throat = bucket.InMemoryProcessingState->Throat;
             return bucket.InMemoryProcessingState->TasteIt()? ETasteResult::Init : ETasteResult::Update;
         }
-        
-        // Prepare space for raw data 
+
+        // Prepare space for raw data
         MKQL_ENSURE(BufferForUsedInputItems.size() == 0, "Internal logic error");
         BufferForUsedInputItems.resize(ItemNodesSize);
         BufferForUsedInputItemsBucketId = bucketId;
@@ -536,8 +536,14 @@ private:
     }
 
     bool CheckMemoryAndSwitchToSpilling() {
-        if (AllowSpilling && Ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
+        TStringBuilder builder;
+        const bool cond = IsSwitchToSpillingModeCondition();
+
+        builder << "Probably starting to spilling" << " " << AllowSpilling << " " << (Ctx.SpillerFactory ? "true" : "false") << " " << cond << Endl;
+
+        if (AllowSpilling && Ctx.SpillerFactory && cond) {
             LogMemoryUsage();
+            Cerr << TString(builder);
 
             SwitchMode(EOperatingMode::Spilling);
             return true;
@@ -659,7 +665,7 @@ private:
 
             Throat = BufferForUsedInputItems.data();
             Tongue = bucket.InMemoryProcessingState->Tongue;
-            
+
             return EUpdateResult::ExtractRawData;
         }
         bucket.BucketState = TSpilledBucket::EBucketState::InMemory;
@@ -683,8 +689,8 @@ private:
                 SpilledBuckets.resize(SpilledBucketCount);
                 auto spiller = Ctx.SpillerFactory->CreateSpiller();
                 for (auto &b: SpilledBuckets) {
-                    b.SpilledState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, KeyAndStateType, 5_MB);
-                    b.SpilledData = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, UsedInputItemType, 5_MB);
+                    b.SpilledState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, KeyAndStateType, 2_MB);
+                    b.SpilledData = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, UsedInputItemType, 2_MB);
                     b.InMemoryProcessingState = std::make_unique<TState>(MemInfo, KeyWidth, KeyAndStateType->GetElementsCount() - KeyWidth, Hasher, Equal);
                 }
                 SplitStateIntoBuckets();
@@ -1235,7 +1241,7 @@ public:
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         if (!state.HasValue()) {
             MakeState(ctx, state);
-        } 
+        }
 
         if (const auto ptr = static_cast<TSpillingSupportState*>(state.AsBoxed().Get())) {
             auto **fields = ctx.WideFields.data() + WideFieldsIndex;

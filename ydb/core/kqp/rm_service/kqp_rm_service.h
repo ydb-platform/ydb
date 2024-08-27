@@ -10,6 +10,7 @@
 
 #include <util/datetime/base.h>
 #include <util/string/builder.h>
+#include <util/generic/hash.h>
 
 #include "kqp_resource_estimation.h"
 
@@ -17,6 +18,7 @@
 #include <bitset>
 #include <functional>
 #include <utility>
+#include <util/thread/lfstack.h>
 
 
 namespace NKikimr {
@@ -61,6 +63,38 @@ public:
     std::atomic<bool> SpillingPercentReached{false};
 };
 
+class TTaskProtoDescriptor : public TAtomicRefCount<TTaskProtoDescriptor> {
+private:
+    const NYql::NDqProto::TDqTask* Task;
+    const TIntrusivePtr<NActors::TProtoArenaHolder> Arena;
+public:
+    explicit TTaskProtoDescriptor(NYql::NDqProto::TDqTask* task, TIntrusivePtr<NActors::TProtoArenaHolder> arena)
+        : Task(task)
+        , Arena(arena)
+    {
+    }
+
+    ui64 GetId() const {
+        return Task->GetId();
+    }
+
+    ui64 GetStageLevel() const {
+        return Task->GetProgram().GetSettings().GetStageLevel();
+    }
+
+    TString GetStageSettings() const {
+        return Task->GetProgram().GetSettings().ShortUtf8DebugString();
+    }
+
+    TString ToString() const {
+        TStringBuilder builder;
+        builder << "Id: " << Task->GetId() << ", StageLevel: " << Task->GetProgram().GetSettings().GetStageLevel();
+        return builder;
+    }
+};
+
+
+
 class TTaskState : public TAtomicRefCount<TTaskState> {
     friend TTxState;
 
@@ -73,6 +107,7 @@ public:
     ui32 ExecutionUnits = 0;
     TIntrusivePtr<TMemoryResourceCookie> TotalMemoryCookie;
     TIntrusivePtr<TMemoryResourceCookie> PoolMemoryCookie;
+    TIntrusivePtr<TTaskProtoDescriptor> TaskDescriptor;
 
 public:
 
@@ -101,11 +136,30 @@ public:
             .ExternalMemory=ExternalDataQueryMemory};
     }
 
-    explicit TTaskState(ui64 taskId, TInstant createdAt)
+    explicit TTaskState(ui64 taskId, TInstant createdAt, NYql::NDqProto::TDqTask* task, TIntrusivePtr<NActors::TProtoArenaHolder> arena)
         : TaskId(taskId)
         , CreatedAt(createdAt)
+        , TaskDescriptor(MakeIntrusive<TTaskProtoDescriptor>(task, arena))
     {
     }
+};
+
+class TMemoryOperationDescriptor {
+public:
+    enum class TMemoryOp : ui8 {
+        Allocated = 1,
+        Released = 2,
+    };
+
+    TMemoryOp OperationKind;
+    TKqpResourcesRequest Resources;
+    TIntrusivePtr<TTaskProtoDescriptor> RequestedBy;
+
+    TMemoryOperationDescriptor(const TMemoryOp& operationKind, const TKqpResourcesRequest& resources, const TIntrusivePtr<TTaskProtoDescriptor>& requestedBy)
+        : OperationKind(operationKind)
+        , Resources(resources)
+        , RequestedBy(requestedBy)
+    {}
 };
 
 class TTxState : public TAtomicRefCount<TTxState> {
@@ -117,6 +171,9 @@ public:
     const TString PoolId;
     const double MemoryPoolPercent;
     const TString Database;
+    TSpinLock Lock;
+    TVector<TMemoryOperationDescriptor> RecentOperations;
+    THashMap<ui64, ui64> EnabledSpillingAt;
 
 private:
     std::atomic<ui64> TxScanQueryMemory = 0;
@@ -132,13 +189,14 @@ public:
         , PoolId(poolId)
         , MemoryPoolPercent(memoryPoolPercent)
         , Database(database)
-    {}
+    {
+    }
 
     std::pair<TString, TString> MakePoolId() const {
         return std::make_pair(Database, PoolId);
     }
 
-    TString ToString() const {
+    TString ToString() {
         auto res = TStringBuilder() << "TxResourcesInfo{ "
             << "TxId: " << TxId
             << "Database: " << Database;
@@ -152,7 +210,68 @@ public:
             << ", extra allocations " << TxScanQueryMemory.load()
             << ", execution units: " << TxExecutionUnits.load()
             << ", started at: " << CreatedAt
-            << " }";
+            << ", memory dump: ";
+
+        TVector<TMemoryOperationDescriptor> operations;
+        THashMap<ui64, ui64> enabledSpillingAt;
+        with_lock(Lock) {
+            operations = RecentOperations;
+            enabledSpillingAt = EnabledSpillingAt;
+        }
+
+        THashMap<ui64, TString> tasks;
+        THashMap<ui64, ui64> memoryInfo;
+        THashMap<ui64, ui64> LargestExtra;
+        THashMap<ui64, TString> stageLevels;
+
+        for(const auto& operation: operations) {
+            tasks.emplace(operation.RequestedBy->GetId(), operation.RequestedBy->ToString());
+            stageLevels.emplace(operation.RequestedBy->GetStageLevel(), operation.RequestedBy->GetStageSettings());
+            auto [it, _] = memoryInfo.emplace(operation.RequestedBy->GetId(), 0);
+            if (operation.OperationKind == TMemoryOperationDescriptor::TMemoryOp::Allocated) {
+                it->second += operation.Resources.Memory;
+                auto [lexit, __] = LargestExtra.emplace(operation.RequestedBy->GetId(), operation.Resources.Memory);
+                lexit->second = std::max(lexit->second, operation.Resources.Memory);
+            } else if (operation.OperationKind == TMemoryOperationDescriptor::TMemoryOp::Released) {
+                it->second -= operation.Resources.Memory;
+            }
+        }
+
+        res << Endl;
+
+        for(const auto& [taskId, info] : tasks) {
+            ui64 memory = 0;
+            {
+                auto it = memoryInfo.find(taskId);
+                if (it != memoryInfo.end()) {
+                    memory = it->second;
+                }
+            }
+
+            ui64 largest = 0;
+            {
+                auto it = LargestExtra.find(taskId);
+                if (it != LargestExtra.end()) {
+                    largest = it->second;
+                }
+            }
+
+            res << "Task: " << info;
+            res << " , Allocated " << memory;
+            res << ", LargestAllocation " << largest;
+
+            auto eit = enabledSpillingAt.find(taskId);
+            if (eit != enabledSpillingAt.end()) {
+                res << ", EnabledSpillingAt " << eit->second;
+            }
+            res << Endl;
+        }
+
+        for (const auto& [stageId, stageInfo]: stageLevels) {
+            res << "StageLevel: " << stageId << ", stage settings " << stageInfo << Endl;
+        }
+
+        res << " }";
 
         return res;
     }
@@ -179,6 +298,16 @@ public:
         TxExecutionUnits.fetch_sub(resources.ExecutionUnits);
         taskState->ExecutionUnits -= resources.ExecutionUnits;
         Counters->RmComputeActors->Sub(resources.ExecutionUnits);
+
+        with_lock(Lock) {
+            if (taskState->IsReasonableToStartSpilling()) {
+                EnabledSpillingAt.emplace(taskState->TaskId, taskState->ScanQueryMemory);
+            }
+
+            RecentOperations.push_back(
+                TMemoryOperationDescriptor(TMemoryOperationDescriptor::TMemoryOp::Released, resources, taskState->TaskDescriptor)
+            );
+        }
     }
 
     void Allocated(TIntrusivePtr<TTaskState>& taskState, const TKqpResourcesRequest& resources) {
@@ -200,6 +329,13 @@ public:
         TxExecutionUnits.fetch_add(resources.ExecutionUnits);
         taskState->ExecutionUnits += resources.ExecutionUnits;
         Counters->RmComputeActors->Add(resources.ExecutionUnits);
+        with_lock(Lock) {
+            if (taskState->IsReasonableToStartSpilling()) {
+                EnabledSpillingAt.emplace(taskState->TaskId, taskState->ScanQueryMemory);
+            }
+
+            RecentOperations.push_back(TMemoryOperationDescriptor(TMemoryOperationDescriptor::TMemoryOp::Allocated, resources, taskState->TaskDescriptor));
+        }
     }
 };
 

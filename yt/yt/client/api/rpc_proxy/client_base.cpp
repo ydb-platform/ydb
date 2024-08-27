@@ -750,7 +750,7 @@ TFuture<ITableReaderPtr> TClientBase::CreateTableReader(
     ToProto(req->mutable_suppressable_access_tracking_options(), options);
 
     return NRpc::CreateRpcClientInputStream(std::move(req))
-        .Apply(BIND([=] (IAsyncZeroCopyInputStreamPtr inputStream) {
+        .ApplyUnique(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
             return NRpcProxy::CreateTableReader(std::move(inputStream));
         }));
 }
@@ -782,7 +782,7 @@ TFuture<ITableWriterPtr> TClientBase::CreateTableWriter(
 
             FromProto(schema.Get(), meta.schema());
         }))
-        .Apply(BIND([=] (IAsyncZeroCopyOutputStreamPtr outputStream) {
+        .ApplyUnique(BIND([=] (IAsyncZeroCopyOutputStreamPtr&& outputStream) {
             return NRpcProxy::CreateTableWriter(std::move(outputStream), std::move(schema));
         })).As<ITableWriterPtr>();
 }

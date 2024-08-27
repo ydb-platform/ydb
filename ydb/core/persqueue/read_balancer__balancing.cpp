@@ -855,6 +855,10 @@ void TConsumer::RegisterReadingSession(TSession* session, const TActorContext& c
             GetPrefix() << "register reading session " << session->DebugStr());
 
     Sessions[session->Pipe] = session;
+    OrderedSessions.push_back(session);
+    std::sort(OrderedSessions.begin(), OrderedSessions.end(), [](auto* lhs, auto* rhs) {
+        return lhs->Order < rhs->Order;
+    });
 
     if (session->WithGroups()) {
         for (auto& [_, family] : Families) {
@@ -887,6 +891,21 @@ std::vector<TPartitionFamily*> Snapshot(const std::unordered_map<size_t, const s
 void TConsumer::UnregisterReadingSession(TSession* session, const TActorContext& ctx) {
     auto pipe = session->Pipe;
     Sessions.erase(session->Pipe);
+
+    size_t found = 0;
+    for (size_t i = 0; i + found < OrderedSessions.size();) {
+        if (OrderedSessions[i + found] == session) {
+            ++found;
+            continue;
+        }
+
+        if (found) {
+            OrderedSessions[i] = OrderedSessions[i + found];
+        }
+        ++i;
+    }
+    OrderedSessions.resize(OrderedSessions.size() - found);
+
 
     for (auto* family : Snapshot(Families)) {
         auto special = family->SpecialSessions.erase(pipe);
@@ -1298,8 +1317,11 @@ void TConsumer::Balance(const TActorContext& ctx) {
                 GetPrefix() << "start rebalancing. familyCount=" << familyCount << ", sessionCount=" << commonSessions.size()
                 << ", desiredFamilyCount=" << desiredFamilyCount << ", allowPlusOne=" << allowPlusOne);
 
-        for (auto it = commonSessions.rbegin(); it != commonSessions.rend(); ++it) {
+        for (auto it = OrderedSessions.rbegin(); it != OrderedSessions.rend(); ++it) {
             auto* session = *it;
+            if (session->WithGroups()) {
+                continue;
+            }
             auto targerFamilyCount = desiredFamilyCount + (allowPlusOne ? 1 : 0);
             auto families = OrderFamilies(session->Families);
             for (auto it = session->Families.begin(); it != session->Families.end() && session->ActiveFamilyCount > targerFamilyCount; ++it) {
@@ -1309,7 +1331,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
                 }
             }
 
-            if (allowPlusOne && session->ActiveFamilyCount > desiredFamilyCount) {
+            if (allowPlusOne) {
                 --allowPlusOne;
             }
         }
@@ -1398,7 +1420,8 @@ TSession::TSession(const TActorId& pipe)
             , InactivePartitionCount(0)
             , ReleasingPartitionCount(0)
             , ActiveFamilyCount(0)
-            , ReleasingFamilyCount(0) {
+            , ReleasingFamilyCount(0)
+            , Order(RandomNumber<size_t>()) {
 }
 
 bool TSession::WithGroups() const { return !Partitions.empty(); }
@@ -1850,10 +1873,6 @@ bool TPartitionFamilyComparator::operator()(const TPartitionFamily* lhs, const T
     return lhs->Id < rhs->Id;
 }
 
-SessionComparator::SessionComparator() {
-    Salt = RandomNumber<size_t>();
-}
-
 bool SessionComparator::operator()(const TSession* lhs, const TSession* rhs) const {
     if (lhs->ActiveFamilyCount != rhs->ActiveFamilyCount) {
         return lhs->ActiveFamilyCount < rhs->ActiveFamilyCount;
@@ -1861,7 +1880,7 @@ bool SessionComparator::operator()(const TSession* lhs, const TSession* rhs) con
     if (lhs->Partitions.size() != rhs->Partitions.size()) {
         return lhs->Partitions.size() < rhs->Partitions.size();
     }
-    return (Salt ^ std::hash<TString>{}(lhs->SessionName)) < (Salt ^ std::hash<TString>{}(rhs->SessionName));
+    return lhs->Order < rhs->Order;
 }
 
 }

@@ -164,9 +164,7 @@ struct TPartitionFamilyComparator {
 using TOrderedPartitionFamilies = std::set<TPartitionFamily*, TPartitionFamilyComparator>;
 
 struct SessionComparator {
-    SessionComparator();
     bool operator()(const TSession* lhs, const TSession* rhs) const;
-    size_t Salt;
 };
 
 using TOrderedSessions = std::set<TSession*, SessionComparator>;
@@ -187,6 +185,7 @@ struct TConsumer {
     std::unordered_map<ui32, TPartitionFamily*> PartitionMapping;
     // All reading sessions in which the family is currently being read.
     std::unordered_map<TActorId, TSession*> Sessions;
+    std::vector<TSession*> OrderedSessions;
 
     // Families is not reading now.
     std::unordered_map<size_t, TPartitionFamily*> UnreadableFamilies;
@@ -277,6 +276,8 @@ struct TSession {
 
     // The partition families that are being read by this session.
     std::unordered_map<size_t, TPartitionFamily*> Families;
+
+    size_t Order;
 
     // true if client connected to read from concret partitions
     bool WithGroups() const;

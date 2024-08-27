@@ -376,7 +376,6 @@ void ExplicitTcl(TQueryClient client, const TString& path) {
     // Show usage of explicit Begin/Commit transaction control calls.
     // In most cases it's better to use transaction control settings in ExecuteDataQuery calls instead
     // to avoid additional hops to YDB cluster and allow more efficient execution of queries.
-    // WARNING: Do not use without RetryQuery!!!
     ThrowOnError(client.RetryQuerySync([&path](TQueryClient client) -> TStatus {
         const TInstant& airDate = TInstant::Now();
         auto session = client.GetSession().GetValueSync().GetSession();
@@ -419,6 +418,7 @@ void ExplicitTcl(TQueryClient client, const TString& path) {
 
 void StreamQuerySelect(TQueryClient client, const TString& path) {
     std::vector <TResultSet> resultSets;
+    // WARNING: Do not use without RetryQuery!!!
     ThrowOnError(client.RetryQuerySync([path, &resultSets](TQueryClient client) -> TStatus {
         resultSets.clear();
         auto query = Sprintf(R"(

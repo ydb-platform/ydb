@@ -131,9 +131,9 @@ void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
             {
                 TString data = GetGeneratedMessage();
 
-                TMaybe<TInstant> createTimestamp = Params.ByteRate == 0 ? TMaybe<TInstant>(Nothing()) : GetCreateTimestamp();
+                std::optional<TInstant> createTimestamp = Params.ByteRate == 0 ? std::optional<TInstant>{} : GetCreateTimestamp();
 
-                InflightMessages[MessageId] = createTimestamp.GetOrElse(now);
+                InflightMessages[MessageId] = createTimestamp.value_or(now);
 
                 BytesWritten += Params.MessageSize;
 
@@ -154,7 +154,7 @@ void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
                     TxSupport->AppendRow("");
                 }
 
-                WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "Written message " << MessageId << " CreateTimestamp " << createTimestamp << " delta from now " << (Params.ByteRate == 0 ? TDuration() : now - *createTimestamp.Get()));
+                WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "Written message " << MessageId << " CreateTimestamp " << (createTimestamp.has_value() ? ToString(createTimestamp.value()) : "(empty optional)") << " delta from now " << (Params.ByteRate == 0 ? TDuration() : now - createTimestamp.value()));
                 ContinuationToken.Clear();
                 MessageId++;
 

@@ -27,6 +27,8 @@
 #include <util/system/file.h>
 #include <util/system/fs.h>
 
+#include <google/protobuf/text_format.h>
+
 namespace NYdb::NBackup {
 
 
@@ -108,7 +110,7 @@ case EPrimitiveType::type:                          \
 
 #define CASE_PRINT_PRIMITIVE_STRING_TYPE(out, type) \
 case EPrimitiveType::type: {                        \
-        TString str = parser.Get##type();           \
+        auto str = TString{parser.Get##type()};           \
         CGIEscape(str);                             \
         out << '"' << str << '"';                   \
     }                                               \
@@ -360,7 +362,7 @@ void ReadTable(TDriver driver, const NTable::TTableDescription& desc, const TStr
         lastWrittenPK = TryReadTable(driver, desc, fullTablePath, folderPath, lastWrittenPK, &fileCounter, ordered);
         if (lastWrittenPK && retries) {
             LOG_DEBUG("ReadTable was not successfull, going to retry from lastWrittenPK# "
-                << FormatValueYson(*lastWrittenPK).Quote());
+                << TString{FormatValueYson(*lastWrittenPK)}.Quote());
         }
     } while (lastWrittenPK && retries--);
 
@@ -474,7 +476,7 @@ void CopyTables(TDriver driver, const TVector<NTable::TCopyItem>& tablesToCopy) 
         } else {
             needsComma = true;
         }
-        tablesStr << "{ src# " << copyItem.SourcePath() << ", dst# " << copyItem.DestinationPath().Quote() << "}";
+        tablesStr << "{ src# " << copyItem.SourcePath() << ", dst# " << TString{copyItem.DestinationPath()}.Quote() << "}";
     }
 
     VerifyStatus(status, TStringBuilder() << "CopyTables error, tables to be copied# " << tablesStr.Str());
@@ -816,7 +818,7 @@ NTable::TTableDescription TableDescriptionFromFile(const TString& filePath) {
     return TableDescriptionFromProto(proto);
 }
 
-TString SerializeColumnsToString(const TVector<TColumn>& columns, TVector<TString> primary) {
+TString SerializeColumnsToString(const std::vector<TColumn>& columns, std::vector<std::string> primary) {
     Sort(primary);
     TStringStream ss;
     for (const auto& col : columns) {
@@ -824,7 +826,7 @@ TString SerializeColumnsToString(const TVector<TColumn>& columns, TVector<TStrin
         if (BinarySearch(primary.cbegin(), primary.cend(), col.Name)) {
             ss << "primary; ";
         }
-        ss << ProcessColumnType(col.Name, col.Type, nullptr, std::nullopt) << Endl;
+        ss << ProcessColumnType(TString{col.Name}, col.Type, nullptr, std::nullopt) << Endl;
     }
     // Cerr << "Parse column to : " << ss.Str() << Endl;
     return ss.Str();

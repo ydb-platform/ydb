@@ -57,7 +57,7 @@ class TQueryFromFileIterator {
     std::conditional_t<GetValue, TValue, TParams> ReadNext();
 
 public:
-    TQueryFromFileIterator(const TString& path, const TString& dataFileName, TVector<TColumn> columns, i64 buffSize,
+    TQueryFromFileIterator(const TString& path, const TString& dataFileName, std::vector<TColumn> columns, i64 buffSize,
             i64 maxRowsPerQuery, i64 maxBytesPerQuery)
       : DataFile(dataFileName, OpenExisting | RdOnly)
       , Query(path, std::move(columns))

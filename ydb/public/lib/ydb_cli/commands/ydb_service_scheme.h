@@ -47,9 +47,9 @@ private:
 };
 
 void PrintAllPermissions(
-    const TString& owner,
-    const TVector<NScheme::TPermissions>& permissions,
-    const TVector<NScheme::TPermissions>& effectivePermissions
+    const std::string& owner,
+    const std::vector<NScheme::TPermissions>& permissions,
+    const std::vector<NScheme::TPermissions>& effectivePermissions
 );
 
 // Pretty print consumer info ('scheme describe' and 'topic consumer describe' commands)

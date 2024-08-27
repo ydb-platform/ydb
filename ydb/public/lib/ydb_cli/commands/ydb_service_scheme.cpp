@@ -464,10 +464,10 @@ int TCommandDescribe::PrintCoordinationNodeResponsePretty(const NYdb::NCoordinat
     Cout << Endl << "AttachConsistencyMode: " << result.GetAttachConsistencyMode() << Endl;
     Cout << "ReadConsistencyMode: " << result.GetReadConsistencyMode() << Endl;
     if (result.GetSessionGracePeriod().has_value()) {
-        Cout << "SessionGracePeriod: " << result.GetSessionGracePeriod() << Endl;
+        Cout << "SessionGracePeriod: " << result.GetSessionGracePeriod().value() << Endl;
     }
     if (result.GetSelfCheckPeriod().has_value()) {
-        Cout << "SelfCheckPeriod: " << result.GetSelfCheckPeriod() << Endl;
+        Cout << "SelfCheckPeriod: " << result.GetSelfCheckPeriod().value() << Endl;
     }
     Cout << "RatelimiterCountersMode: " << result.GetRateLimiterCountersMode() << Endl;
     return EXIT_SUCCESS;

@@ -1,8 +1,6 @@
 #pragma once
 
-#include "public.h"
-
-#include <yt/yt/library/profiling/sensor.h>
+#include "private.h"
 
 #include <yt/yt/library/syncmap/map.h>
 
@@ -47,15 +45,18 @@ class TSampler
     : public TRefCounted
 {
 public:
-    TSampler();
-    explicit TSampler(const TSamplerConfigPtr& config);
+    explicit TSampler(
+        TSamplerConfigPtr config = New<TSamplerConfig>(),
+        const NProfiling::TProfiler& profiler = TracingProfiler());
 
     void SampleTraceContext(const TString& user, const TTraceContextPtr& traceContext);
 
-    void UpdateConfig(const TSamplerConfigPtr& config);
+    void UpdateConfig(TSamplerConfigPtr config);
 
 private:
     TAtomicIntrusivePtr<TSamplerConfig> Config_;
+
+    NProfiling::TProfiler Profiler_;
 
     struct TUserState final
     {

@@ -7,10 +7,6 @@ using namespace NProfiling;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NProfiling::TProfiler, Profiler, "/jaeger");
-
-////////////////////////////////////////////////////////////////////////////////
-
 void TSamplerConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("global_sample_rate", &TThis::GlobalSampleRate)
@@ -47,25 +43,24 @@ bool TSampler::TUserState::TrySampleByMinCount(ui64 minCount, TCpuDuration perio
     return Sampled.fetch_add(1) < minCount;
 }
 
-TSampler::TSampler()
-    : Config_(New<TSamplerConfig>())
-    , TracesSampled_(Profiler().WithHot().Counter("/traces_sampled"))
-{ }
-
-TSampler::TSampler(const TSamplerConfigPtr& config)
-    : Config_(config)
+TSampler::TSampler(
+    TSamplerConfigPtr config,
+    const TProfiler& profiler)
+    : Config_(std::move(config))
+    , Profiler_(profiler.WithHot())
+    , TracesSampled_(Profiler_.Counter("/traces_sampled"))
 { }
 
 void TSampler::SampleTraceContext(const TString& user, const TTraceContextPtr& traceContext)
 {
     auto config = Config_.Acquire();
 
-    auto [userState, inserted] = Users_.FindOrInsert(user, [&user] {
+    auto [userState, inserted] = Users_.FindOrInsert(user, [&] {
         auto state = New<TUserState>();
 
-        auto profiler = Profiler().WithSparse().WithHot().WithTag("user", user);
-        state->TracesSampledByUser = profiler.WithSparse().Counter("/traces_sampled_by_user");
-        state->TracesSampledByProbability = profiler.WithSparse().Counter("/traces_sampled_by_probability");
+        auto profiler = Profiler_.WithSparse().WithTag("user", user);
+        state->TracesSampledByUser = profiler.Counter("/traces_sampled_by_user");
+        state->TracesSampledByProbability = profiler.Counter("/traces_sampled_by_probability");
 
         return state;
     });
@@ -115,9 +110,9 @@ void TSampler::SampleTraceContext(const TString& user, const TTraceContextPtr& t
     }
 }
 
-void TSampler::UpdateConfig(const TSamplerConfigPtr& config)
+void TSampler::UpdateConfig(TSamplerConfigPtr config)
 {
-    Config_.Store(config);
+    Config_.Store(std::move(config));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

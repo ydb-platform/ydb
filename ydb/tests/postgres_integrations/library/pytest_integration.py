@@ -31,17 +31,17 @@ class TestCase:
     log: str
 
 
-_selected_tests_name: pytest.Session = []
+_tests_for_run_in_docker: pytest.Session = []
 _filter_format_function = Callable[[List[str]], str]
 _filter_formatter: Optional[_filter_format_function] = None
 _tests_folder: Optional[str] = None
 _test_results: Optional[Dict[str, TestCase]] = None
-_all_tests: Optional[List[str]] = None
 _kikimr_factory: KiKiMR = kikimr_cluster_factory()
-
+_integration_tests: Optional[List[str]] = None
+_skip_tests: Dict[str, str] = dict() # [test name: reason]
 
 def pytest_collection_finish(session: pytest.Session):
-    global _selected_tests_name
+    global _tests_for_run_in_docker
 
     print("rekby set selected items: ", session.items)
     selected_tests = []
@@ -54,7 +54,11 @@ def pytest_collection_finish(session: pytest.Session):
             selected_tests.append(test_name)
     selected_tests.sort()
     print("rekby: result selected tests", selected_tests)
-    _selected_tests_name = selected_tests
+    _tests_for_run_in_docker = list()
+    for test in selected_tests:
+        if test not in _skip_tests:
+            _tests_for_run_in_docker.append(test)
+    print("rekby, tests for run", _tests_for_run_in_docker)
 
 
 def set_filter_formatter(f: _filter_format_function):
@@ -63,12 +67,17 @@ def set_filter_formatter(f: _filter_format_function):
 
 
 def set_tests_folder(folder: str):
-    global _tests_folder, _all_tests
+    global _tests_folder, _integration_tests, _skip_tests
+    print("rekby, set_tests_folder called")
     _tests_folder = folder
-    _all_tests = _read_tests(folder)
+    _integration_tests = _read_integration_tests(folder)
+    _skip_tests = _read_skip_tests(folder)
 
 
 def setup_module(module: pytest.Module):
+    if len(_tests_for_run_in_docker) == 0:
+        return
+
     global _test_results
     try:
         exchange_folder = path.join(yatest.common.output_path(), "exchange")
@@ -83,7 +92,7 @@ def setup_module(module: pytest.Module):
     image = _docker_build(_tests_folder)
 
     pg_port = _run_ydb()
-    env = _prepare_docker_env(pg_port, _selected_tests_name)
+    env = _prepare_docker_env(pg_port, _tests_for_run_in_docker)
     _run_tests_in_docker(image, env, exchange_folder, tests_result_folder)
 
     test_results_file = path.join(tests_result_folder, "raw", "result.xml")
@@ -180,14 +189,18 @@ def pytest_generate_tests(metafunc: pytest.Metafunc):
     """
     Return tests for run through pytest.
     """
-    metafunc.parametrize('testname', _all_tests, ids=_all_tests)
+    print("rekby, integration tests:", _integration_tests)
+    metafunc.parametrize('testname', _integration_tests, ids=_integration_tests)
 
 
 def execute_test(testname: str):
+    if testname in _skip_tests:
+        pytest.skip(_skip_tests[testname])
+
     try:
         test = _test_results[testname]
     except KeyError:
-        pytest.fail("test result not found, may be the test was not run")
+        pytest.fail("test result not found, may be the test was not runned")
 
     if test.state == TestState.PASSED:
         logging.getLogger().log(logging.INFO, test.log)
@@ -202,7 +215,7 @@ def execute_test(testname: str):
     raise Exception(f"Unexpected test state: '{test.state}'")
 
 
-def _read_tests(folder: str) -> Set[str]:
+def _read_integration_tests(folder: str) -> Set[str]:
     with open(path.join(folder, "full-test-list.txt"), "rt") as f:
         all = set(line.strip() for line in f.readlines())
 
@@ -212,6 +225,25 @@ def _read_tests(folder: str) -> Set[str]:
     test_list_for_run = list(all - unit)
     test_list_for_run.sort()
     return test_list_for_run
+
+def _read_skip_tests(folder: str) -> Dict[str, str]:
+    res = dict()
+    try:
+        fpath = path.join(folder, "skip-tests.txt")
+        with open(fpath) as f:
+            for line in f.readlines():
+                if "# " in line:
+                    line = line[:line.rindex("# ")]
+
+                line = line.strip()
+                if line == "":
+                    continue
+
+                res[line] = f"skipped by '{fpath}'"
+    except FileNotFoundError:
+        pass
+
+    return res
 
 
 def _read_tests_result(filepath: str) -> Dict[str, TestCase]:

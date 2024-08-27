@@ -62,4 +62,4 @@ Currently, we do not support deploying the connector in {{ k8s }}, but we plan t
         enable_external_data_sources: true
         enable_script_execution_operations: true
     ```
-5. Continue deploying the dynamic node {{ ydb-short-name }}. See the [instructions](./deploy-ydb-on-premises.md).
+5. Continue deploying {{ ydb-short-name }} database nodes. See the [instructions](./deploy-ydb-on-premises.md).

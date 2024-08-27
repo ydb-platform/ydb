@@ -12368,6 +12368,13 @@
             "uri": "https://{canondata_backend}/1881367/79a71c1478c556da1931a7565c12bdd14cc63567/resource.tar.gz#test_sql2yql.test_pg-join_using_tables4_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg-lang_sql]": [
+        {
+            "checksum": "74fd67be67b0abb2f68be7237122beea",
+            "size": 506,
+            "uri": "https://{canondata_backend}/1600758/9199c5afb4cd82c5d21dab53840f5f107d2a4aee/resource.tar.gz#test_sql2yql.test_pg-lang_sql_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg-long_ident]": [
         {
             "checksum": "18ec38e24eda96dbdf6d78e3898c520f",

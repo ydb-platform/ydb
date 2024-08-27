@@ -97,6 +97,7 @@ class TestAlterTiering(BaseTestSet):
                     sth.execute_scheme_query(AlterTable(table).set_tiering(tiering_rule))
                 else:
                     sth.execute_scheme_query(AlterTable(table).reset_tiering())
+                # Not implemented in SDK
                 # assert sth.describe_table(table).tiering == tiering_rule
             sth.execute_scheme_query(AlterTable(table).reset_tiering())
             # assert sth.describe_table(table).tiering == None
@@ -151,10 +152,11 @@ class TestAlterTiering(BaseTestSet):
         random.seed(42)
         n_tables = 4
 
-        test_duration = datetime.timedelta(seconds=int(get_external_param('test-duration-seconds', '400')))
+        test_duration = datetime.timedelta(seconds=int(get_external_param('test-duration-seconds', '4600')))
         n_tables = int(get_external_param('tables', '4'))
-        n_writers = int(get_external_param('writers-per-table', '1'))
+        n_writers = int(get_external_param('writers-per-table', '4'))
         allow_s3_unavailability = external_param_is_true('allow-s3-unavailability')
+        is_standalone_tables = external_param_is_true('test-standalone-tables')
 
         s3_endpoint = get_external_param('s3-endpoint', 'http://storage.yandexcloud.net')
         s3_access_key = get_external_param('s3-access-key', 'YCAJEM3Pg9fMyuX9ZUOJ_fake')
@@ -195,16 +197,23 @@ class TestAlterTiering(BaseTestSet):
             self._override_tiering_rule(sth, tiering_rules[-1], 'timestamp', config)
         tiering_rules.append(None)
 
-        sth.execute_scheme_query(CreateTableStore('store').with_schema(self.schema1))
+        if not is_standalone_tables:
+            sth.execute_scheme_query(CreateTableStore('store').with_schema(self.schema1))
 
         tables: list[str] = []
         tables_for_tiering_modification: list[str] = []
         for i in range(n_tables):
-            tables.append(f'store/table{i}')
+            if is_standalone_tables:
+                tables.append(f'table{i}')
+            else:
+                tables.append(f'store/table{i}')
             tables_for_tiering_modification.append(tables[-1])
             sth.execute_scheme_query(CreateTable(tables[-1]).with_schema(self.schema1))
         for i, tiering_rule in enumerate([tiering_rules[0], tiering_rules[1]]):
-            tables.append(f'store/extra_table{i}')
+            if is_standalone_tables:
+                tables.append(f'extra_table{i}')
+            else:
+                tables.append(f'store/extra_table{i}')
             sth.execute_scheme_query(CreateTable(tables[-1]).with_schema(self.schema1))
             sth.execute_scheme_query(AlterTable(tables[-1]).set_tiering(tiering_rule))
         
@@ -215,7 +224,7 @@ class TestAlterTiering(BaseTestSet):
         threads = []
 
         # "Alter table drop column" causes scan failures
-        # threads.append(self.TestThread(target=self._loop_alter_column, args=[ctx, 'store', test_duration]))
+        threads.append(self.TestThread(target=self._loop_alter_column, args=[ctx, 'store', test_duration]))
         for table in tables_for_tiering_modification:
             threads.append(self.TestThread(
                 target=self._loop_change_tiering_rule,
@@ -247,6 +256,7 @@ class TestAlterTiering(BaseTestSet):
 
         for table in tables:
             sth.execute_scheme_query(DropTable(table))
-        sth.execute_scheme_query(DropTableStore('store'))
+        if not is_standalone_tables:
+            sth.execute_scheme_query(DropTableStore('store'))
 
         assert all(self._count_objects(bucket) == 0 for bucket in s3_configs)

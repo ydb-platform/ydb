@@ -5,6 +5,25 @@
 
 namespace NKikimr::NPQ::NBalancing {
 
+template<typename T>
+size_t EraseElement(std::vector<T*>& values, T* v) {
+    size_t found = 0;
+    for (size_t i = 0; i + found < values.size();) {
+        if (values[i + found] == v) {
+            ++found;
+            continue;
+        }
+
+        if (found) {
+            values[i] = values[i + found];
+        }
+        ++i;
+    }
+    values.resize(values.size() - found);
+
+    return found;
+}
+
 
 //
 // TPartition
@@ -506,7 +525,7 @@ void TPartitionFamily::UpdatePartitionMapping(const std::vector<ui32>& partition
 void TPartitionFamily::UpdateSpecialSessions() {
     bool hasChanges = false;
 
-    for (auto& [_, session] : Consumer.Sessions) {
+    for (auto* session : Consumer.Sessions) {
         if (session->WithGroups() && session->AllPartitionsReadable(Partitions) && session->AllPartitionsReadable(WantedPartitions)) {
             auto [_, inserted] = SpecialSessions.try_emplace(session->Pipe, session);
             if (inserted) {
@@ -854,9 +873,8 @@ void TConsumer::RegisterReadingSession(TSession* session, const TActorContext& c
     LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
             GetPrefix() << "register reading session " << session->DebugStr());
 
-    Sessions[session->Pipe] = session;
-    OrderedSessions.push_back(session);
-    std::sort(OrderedSessions.begin(), OrderedSessions.end(), [](auto* lhs, auto* rhs) {
+    Sessions.push_back(session);
+    std::sort(Sessions.begin(), Sessions.end(), [](auto* lhs, auto* rhs) {
         return lhs->Order < rhs->Order;
     });
 
@@ -890,22 +908,8 @@ std::vector<TPartitionFamily*> Snapshot(const std::unordered_map<size_t, const s
 
 void TConsumer::UnregisterReadingSession(TSession* session, const TActorContext& ctx) {
     auto pipe = session->Pipe;
-    Sessions.erase(session->Pipe);
 
-    size_t found = 0;
-    for (size_t i = 0; i + found < OrderedSessions.size();) {
-        if (OrderedSessions[i + found] == session) {
-            ++found;
-            continue;
-        }
-
-        if (found) {
-            OrderedSessions[i] = OrderedSessions[i + found];
-        }
-        ++i;
-    }
-    OrderedSessions.resize(OrderedSessions.size() - found);
-
+    EraseElement(Sessions, session);
 
     for (auto* family : Snapshot(Families)) {
         auto special = family->SpecialSessions.erase(pipe);
@@ -1177,6 +1181,20 @@ void TConsumer::ScheduleBalance(const TActorContext& ctx) {
 }
 
 TOrderedSessions OrderSessions(
+    const std::vector<TSession*>& values,
+    std::function<bool (const TSession*)> predicate = [](const TSession*) { return true; }
+) {
+    TOrderedSessions result;
+    for (auto* v : values) {
+        if (predicate(v)) {
+            result.insert(v);
+        }
+    }
+
+    return result;
+}
+
+TOrderedSessions OrderSessions(
     const std::unordered_map<TActorId, TSession*>& values,
     std::function<bool (const TSession*)> predicate = [](const TSession*) { return true; }
 ) {
@@ -1317,7 +1335,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
                 GetPrefix() << "start rebalancing. familyCount=" << familyCount << ", sessionCount=" << commonSessions.size()
                 << ", desiredFamilyCount=" << desiredFamilyCount << ", allowPlusOne=" << allowPlusOne);
 
-        for (auto it = OrderedSessions.rbegin(); it != OrderedSessions.rend(); ++it) {
+        for (auto it = Sessions.begin(); it != Sessions.end(); ++it) {
             auto* session = *it;
             if (session->WithGroups()) {
                 continue;
@@ -1811,7 +1829,7 @@ void TBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& ev, const TAc
             }
         }
 
-        for (auto& [_, session] : consumer->Sessions) {
+        for (auto* session : consumer->Sessions) {
             auto si = response->Record.AddReadSessions();
             si->SetSession(session->SessionName);
 

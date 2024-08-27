@@ -287,7 +287,12 @@ bool IsUploadTransactionType(EObjectType type)
 
 bool IsCompositeNodeType(EObjectType type)
 {
-    return type == EObjectType::MapNode || type == EObjectType::ListNode;
+    return
+        type == EObjectType::SequoiaMapNode ||
+        type == EObjectType::MapNode ||
+        type == EObjectType::Scion ||
+        type == EObjectType::PortalExit ||
+        type == EObjectType::ListNode;
 }
 
 bool IsLinkType(EObjectType type)

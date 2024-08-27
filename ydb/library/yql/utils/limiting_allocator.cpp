@@ -21,7 +21,7 @@ public:
 private:
     IAllocator* Alloc_;
     size_t Allocated_ = 0;
-    size_t Limit_;
+    const size_t Limit_;
 };
 }
 

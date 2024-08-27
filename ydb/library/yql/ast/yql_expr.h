@@ -2850,7 +2850,7 @@ struct TConvertToAstSettings {
 TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& ctx, const TConvertToAstSettings& settings);
 
 // refAtoms allows omit copying of atom bodies - they will be referenced from expr graph
-TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& ctx, ui32 annotationFlags, bool refAtoms, IAllocator* allocator = TDefaultAllocator::Instance());
+TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& ctx, ui32 annotationFlags, bool refAtoms);
 
 TExprNode::TListType GetLambdaBody(const TExprNode& lambda);
 

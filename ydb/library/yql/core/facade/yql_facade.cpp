@@ -1399,10 +1399,16 @@ TMaybe<TString> TProgram::GetQueryAst(TMaybe<size_t> memoryLimit) {
 
     if (ExprRoot_) {
         std::unique_ptr<IAllocator> limitingAllocator;
+        TConvertToAstSettings settings;
+        settings.AnnotationFlags = TExprAnnotationFlags::None;
+        settings.RefAtoms = true;
+        settings.Allocator = TDefaultAllocator::Instance();
         if (memoryLimit) {
-            limitingAllocator = MakeLimitingAllocator(*memoryLimit);
+            limitingAllocator = MakeLimitingAllocator(*memoryLimit, TDefaultAllocator::Instance());
+            settings.Allocator = limitingAllocator.get();
         }
-        auto ast = ConvertToAst(*ExprRoot_, *ExprCtx_, TExprAnnotationFlags::None, true, limitingAllocator ? limitingAllocator.get() : TDefaultAllocator::Instance());
+
+        auto ast = ConvertToAst(*ExprRoot_, *ExprCtx_, settings);
         ast.Root->PrettyPrintTo(astStream, TAstPrintFlags::ShortQuote | TAstPrintFlags::PerLine);
         return astStream.Str();
     } else if (AstRoot_) {

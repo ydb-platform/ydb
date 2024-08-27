@@ -4,5 +4,5 @@
 #include <memory>
 
 namespace NYql {
-std::unique_ptr<IAllocator> MakeLimitingAllocator(size_t limit, IAllocator* underlying = TDefaultAllocator::Instance());
+std::unique_ptr<IAllocator> MakeLimitingAllocator(size_t limit, IAllocator* underlying);
 }

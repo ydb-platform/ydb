@@ -44,7 +44,7 @@ message TWorkloadManagerConfig {
 
 message TComputeDatabaseConfig {
     TYdbStorageConfig ControlPlaneConnection = 1;
-    TYdbStorageConfig SchemeConnection = 3;
+    TYdbStorageConfig SchemeConnection = 6;
     TYdbStorageConfig ExecutionConnection = 3;
     string Tenant = 2;
     TLoadControlConfig LoadControlConfig = 4;

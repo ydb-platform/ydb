@@ -435,7 +435,7 @@ private:
         RuntimeError(
             TStringBuilder() << "Got DISK_SPACE_EXHAUSTED for table `"
                 << SchemeEntry->TableId.PathId.ToString() << "`.",
-            NYql::NDqProto::StatusIds::INTERNAL_ERROR,
+            NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
             getIssues());
             return;
         }        

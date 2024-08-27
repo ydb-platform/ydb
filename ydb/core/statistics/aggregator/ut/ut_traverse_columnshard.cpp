@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
 
         auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
 
-        UNIT_ASSERT(CheckCountMinSketch(countMin, 1000000));
+        UNIT_ASSERT(CheckCountMinSketch(countMin, ColumnTableRowsNumber));
     }
 
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletBeforeResolve) {
@@ -56,16 +56,16 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         runtime.WaitFor("2nd TEvResolveKeySetResult", [&]{ return block.size() >= 1; });
         block.Unblock(1);
         runtime.WaitFor("3rd TEvResolveKeySetResult", [&]{ return block.size() >= 1; });
-        
+
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
-        
+
         block.Unblock();
-        block.Stop();        
+        block.Stop();
 
         runtime.SimulateSleep(TDuration::Seconds(10));
 
         auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
-        UNIT_ASSERT(CheckCountMinSketch(countMin, 1000000));
+        UNIT_ASSERT(CheckCountMinSketch(countMin, ColumnTableRowsNumber));
     }
 
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletBeforeReqDistribution) {
@@ -85,7 +85,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
 
         auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
-        UNIT_ASSERT(CheckCountMinSketch(countMin, 1000000));
+        UNIT_ASSERT(CheckCountMinSketch(countMin, ColumnTableRowsNumber));
     }
 
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletBeforeAggregate) {
@@ -105,7 +105,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
 
         auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
-        UNIT_ASSERT(CheckCountMinSketch(countMin, 1000000));
+        UNIT_ASSERT(CheckCountMinSketch(countMin, ColumnTableRowsNumber));
     }
 
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletBeforeSave) {
@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
 
         auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
-        UNIT_ASSERT(CheckCountMinSketch(countMin, 1000000));
+        UNIT_ASSERT(CheckCountMinSketch(countMin, ColumnTableRowsNumber));
     }
 
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletInAggregate) {
@@ -146,7 +146,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
 
         auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
-        UNIT_ASSERT(CheckCountMinSketch(countMin, 1000000));
+        UNIT_ASSERT(CheckCountMinSketch(countMin, ColumnTableRowsNumber));
     }
 
     Y_UNIT_TEST(TraverseColumnTableHiveDistributionZeroNodes) {
@@ -191,7 +191,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         runtime.SimulateSleep(TDuration::Seconds(30));
 
         auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
-        UNIT_ASSERT(CheckCountMinSketch(countMin, 1000000));
+        UNIT_ASSERT(CheckCountMinSketch(countMin, ColumnTableRowsNumber));
     }
 
     Y_UNIT_TEST(TraverseColumnTableHiveDistributionAbsentNodes) {
@@ -228,7 +228,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         runtime.SimulateSleep(TDuration::Seconds(30));
 
         auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
-        UNIT_ASSERT(CheckCountMinSketch(countMin, 1000000));
+        UNIT_ASSERT(CheckCountMinSketch(countMin, ColumnTableRowsNumber));
     }
 
     Y_UNIT_TEST(TraverseColumnTableAggrStatUnavailableNode) {
@@ -265,7 +265,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         auto probe = countMin->Probe((const char *)&value, sizeof(value));
         Cerr << "probe = " << probe << Endl;
         const double eps = 1. / countMin->GetWidth();
-        UNIT_ASSERT(probe <= 1 + eps * 1100000);  // 10 for first round, 1 for second
+        UNIT_ASSERT(probe <= 1 + eps * ColumnTableRowsNumber * 1.1);  // 10 for first round, 1 for second
     }
 
     Y_UNIT_TEST(TraverseColumnTableAggrStatNonLocalTablet) {
@@ -302,7 +302,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         auto probe = countMin->Probe((const char *)&value, sizeof(value));
         Cerr << "probe = " << probe << Endl;
         const double eps = 1. / countMin->GetWidth();
-        UNIT_ASSERT(probe <= 1 + eps * 1100000);  // 10 for first round, 1 for second
+        UNIT_ASSERT(probe <= 1 + eps * ColumnTableRowsNumber * 1.1);  // 10 for first round, 1 for second
     }
 
 }

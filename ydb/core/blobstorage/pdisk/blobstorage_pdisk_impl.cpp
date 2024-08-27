@@ -52,6 +52,9 @@ TPDisk::TPDisk(const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<::NMon
     , ExpectedSlotCount(cfg->ExpectedSlotCount)
     , UseHugePages(cfg->UseSpdkNvmeDriver)
 {
+    PDiskCtx.PDiskId = cfg->PDiskId;
+    PDiskCtx.Mon = &Mon;
+
     SlowdownAddLatencyNs = TControlWrapper(0, 0, 100'000'000'000ll);
     EnableForsetiBinLog = TControlWrapper(0, 0, 1);
     ForsetiMinLogCostNsControl = TControlWrapper(ForsetiMinLogCostNs, 0, 100'000'000ull);
@@ -144,8 +147,7 @@ TCheckDiskFormatResult TPDisk::ReadChunk0Format(ui8* formatSectors, const NPDisk
             if (!isBad[i]) {
                 Format.UpgradeFrom(diskFormat);
                 if (Format.IsErasureEncodeUserChunks()) {
-                    LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
-                            << " Read from disk Format has FormatFlagErasureEncodeUserChunks set, "
+                    P_LOG(PRI_ERROR, BPD80, "Read from disk Format has FormatFlagErasureEncodeUserChunks set, "
                             << " but current version of PDisk can't work with it"
                             << " Format# " << Format.ToString()
                             << " Marker# BPD80");
@@ -2603,11 +2605,7 @@ void TPDisk::OnDriveStartup() {
     *Mon.DeviceWriteCacheIsValid = (DriveData.IsWriteCacheValid ? 1 : 0);
     *Mon.DeviceWriteCacheIsEnabled = (DriveData.IsWriteCacheEnabled ? 1 : 0);
 
-    str << " Path# \"" << Cfg->Path << "\"";
-    if (ActorSystem) {
-        LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDiskId << str.Str()
-                << " Marker# BPD38");
-    }
+    P_LOG(PRI_NOTICE, BPD38, str.Str(), (Path, Cfg->Path.Quote()));
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2647,6 +2645,7 @@ bool TPDisk::Initialize(TActorSystem *actorSystem, const TActorId &pDiskActor) {
         Y_ABORT_UNLESS(BlockDevice);
         BlockDevice->Initialize(actorSystem, PDiskActor);
         ActorSystem = actorSystem;
+        PDiskCtx.ActorSystem = actorSystem;
         ReqCreator.SetActorSystem(actorSystem);
         IsStarted = true;
 

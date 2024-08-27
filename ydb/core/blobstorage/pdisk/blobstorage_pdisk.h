@@ -10,6 +10,7 @@
 #include <ydb/core/blobstorage/base/bufferwithgaps.h>
 #include <ydb/core/blobstorage/base/transparent.h>
 #include <ydb/core/blobstorage/base/batched_vec.h>
+#include <ydb/core/util/stlog.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/generic/map.h>
 
@@ -1554,6 +1555,25 @@ struct TEvWriteMetadataResult : TEventLocal<TEvWriteMetadataResult, TEvBlobStora
         , PDiskGuid(pdiskGuid)
     {}
 };
+
+struct TPDiskMon;
+
+struct TPDiskCtx {
+    TActorSystem *ActorSystem = nullptr;
+    ui32 PDiskId = 0;
+    TPDiskMon *Mon = nullptr; // now is unused
+};
+
+extern thread_local TPDiskCtx PDiskCtx;
+
+#define P_LOG(LEVEL, MARKER, ...) \
+    do { \
+        if (PDiskCtx.ActorSystem) { \
+            STLOGX(*PDiskCtx.ActorSystem, LEVEL, BS_PDISK, MARKER, __VA_ARGS__, (PDiskId, PDiskCtx.PDiskId)); \
+        } \
+    } while (false)
+
+
 
 } // NPDisk
 } // NKikimr

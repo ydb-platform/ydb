@@ -7,6 +7,8 @@
 #include <ydb/core/scheme/scheme_pathid.h>
 
 #include <util/generic/vector.h>
+#include <util/string/builder.h>
+#include <util/string/join.h>
 
 namespace NKikimr {
 
@@ -22,12 +24,27 @@ namespace NBackup::NImpl {
     class TChangeRecord;
 }
 
-struct TBaseChangeRecordContainer {
-    virtual ~TBaseChangeRecordContainer() = default;
-    virtual TString Out() = 0;
+struct IChangeRecordContainer {
+    virtual ~IChangeRecordContainer() = default;
+    virtual TString Out() const = 0;
 };
 
-template <class T>
+template <typename T>
+struct TBaseChangeRecordContainer: public IChangeRecordContainer {
+    TVector<typename T::TPtr> Records;
+
+    TBaseChangeRecordContainer() = default;
+
+    explicit TBaseChangeRecordContainer(TVector<typename T::TPtr>&& records)
+        : Records(std::move(records))
+    {}
+
+    TString Out() const override {
+        return TStringBuilder() << "[" << JoinSeq(",", Records) << "]";
+    }
+};
+
+template <typename T>
 struct TChangeRecordContainer {};
 
 }

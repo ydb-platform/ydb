@@ -192,19 +192,9 @@ namespace NKikimr {
 
 template <>
 struct TChangeRecordContainer<NBackup::NImpl::TChangeRecord>
-    : public TBaseChangeRecordContainer
+    : public TBaseChangeRecordContainer<NBackup::NImpl::TChangeRecord>
 {
-    TChangeRecordContainer() = default;
-
-    explicit TChangeRecordContainer(TVector<NBackup::NImpl::TChangeRecord::TPtr>&& records)
-        : Records(std::move(records))
-    {}
-
-    TVector<NBackup::NImpl::TChangeRecord::TPtr> Records;
-
-    TString Out() override {
-        return TStringBuilder() << "[" << JoinSeq(",", Records) << "]";
-    }
+    using TBaseChangeRecordContainer<NBackup::NImpl::TChangeRecord>::TBaseChangeRecordContainer;
 };
 
 template <>

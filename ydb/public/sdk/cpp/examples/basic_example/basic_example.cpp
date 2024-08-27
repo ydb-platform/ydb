@@ -377,7 +377,7 @@ void ExplicitTcl(TQueryClient client, const TString& path) {
     // In most cases it's better to use transaction control settings in ExecuteDataQuery calls instead
     // to avoid additional hops to YDB cluster and allow more efficient execution of queries.
     ThrowOnError(client.RetryQuerySync([&path](TQueryClient client) -> TStatus {
-        const TInstant& airDate = TInstant::Now();
+        Instant airDate = TInstant::Now();
         auto session = client.GetSession().GetValueSync().GetSession();
         auto beginResult = session.BeginTransaction(TTxSettings::SerializableRW()).GetValueSync();
         if (!beginResult.IsSuccess()) {

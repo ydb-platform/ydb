@@ -157,7 +157,7 @@ public:
             return Build<TDqSourceWrap>(ctx, read->Pos())
                 .Input<TDqPqTopicSource>()
                     .Topic(pqReadTopic.Topic())
-                    .Columns(std::move(columnNames))    // TODO
+                    .Columns(std::move(columnNames))
                     .Settings(BuildTopicReadSettings(clusterName, dqSettings, read->Pos(), format, ctx))
                     .Token<TCoSecureParam>()
                         .Name().Build(token)
@@ -282,7 +282,6 @@ public:
                 TString predicateSql = NYql::FormatWhere(predicateProto);
                 srcDesc.SetPredicate(predicateSql);
 
-                useRowDispatcher = true; // TODO
                 protoSettings.PackFrom(srcDesc);
                 useRowDispatcher = useRowDispatcher && (format == "json_each_row");
                 if (useRowDispatcher) {

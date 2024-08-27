@@ -65,12 +65,11 @@ def wait_actor_count(kikimr, activity, expected_count):
 class TestPqRowDispatcher(TestYdsBase):
 
     @yq_v1
-    @pytest.mark.skip(reason="remove Todo")
     def test_read_raw_format_without_row_dispatcher(self, kikimr, client):
         client.create_yds_connection(
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True
         )
-        self.init_topics(Rf"test_read_raw_format_without_row_dispatcher", create_output=False)
+        self.init_topics("test_read_raw_format_without_row_dispatcher", create_output=False)
 
         output_topic = "pq_test_pq_read_write_output"
 
@@ -96,7 +95,7 @@ class TestPqRowDispatcher(TestYdsBase):
         client.create_yds_connection(
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True
         )
-        self.init_topics(Rf"test_simple_not_null")
+        self.init_topics("test_simple_not_null")
 
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
@@ -132,7 +131,7 @@ class TestPqRowDispatcher(TestYdsBase):
         client.create_yds_connection(
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True
         )
-        self.init_topics(Rf"test_simple_optional")
+        self.init_topics("test_simple_optional")
 
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
@@ -161,7 +160,7 @@ class TestPqRowDispatcher(TestYdsBase):
         client.create_yds_connection(
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True
         )
-        self.init_topics(Rf"test_scheme_error")
+        self.init_topics("test_scheme_error")
 
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
@@ -195,7 +194,7 @@ class TestPqRowDispatcher(TestYdsBase):
         client.create_yds_connection(
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True
         )
-        self.init_topics(Rf"test_filter")
+        self.init_topics("test_filter")
 
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
@@ -231,7 +230,7 @@ class TestPqRowDispatcher(TestYdsBase):
         client.create_yds_connection(
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True
         )
-        self.init_topics(Rf"test_start_new_query", create_output=False)
+        self.init_topics("test_start_new_query", create_output=False)
 
         output_topic1 = "pq_test_pq_read_write_output1"
         output_topic2 = "pq_test_pq_read_write_output2"
@@ -311,7 +310,7 @@ class TestPqRowDispatcher(TestYdsBase):
         client.create_yds_connection(
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True
         )
-        self.init_topics(Rf"test_stop_start", create_output=False)
+        self.init_topics("test_stop_start", create_output=False)
 
         output_topic = "test_stop_start"
         create_stream(output_topic, partitions_count=1)
@@ -360,7 +359,7 @@ class TestPqRowDispatcher(TestYdsBase):
         client.create_yds_connection(
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True
         )
-        self.init_topics(Rf"test_restart_compute_node")
+        self.init_topics("test_restart_compute_node")
 
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
@@ -416,7 +415,7 @@ class TestPqRowDispatcher(TestYdsBase):
         client.create_yds_connection(
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True
         )
-        self.init_topics(Rf"test_3_session", create_output=False)
+        self.init_topics("test_3_session", create_output=False)
 
         output_topic1 = "test_3_session1"
         output_topic2 = "test_3_session2"

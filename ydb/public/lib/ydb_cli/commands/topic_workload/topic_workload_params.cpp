@@ -7,6 +7,8 @@
 
 #include <ydb-cpp-sdk/client/topic/client.h>
 
+#include <util/generic/hash.h>
+
 using namespace NYdb::NConsoleClient;
 
 ui32 TCommandWorkloadTopicParams::StrToCodec(const TString& str) {

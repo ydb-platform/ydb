@@ -248,7 +248,7 @@ public:
     TIamOAuthCredentialsProvider(const TIamOAuth& params)
         : TGrpcIamCredentialsProvider<TRequest, TResponse, TService>(params,
             [token = params.OAuthToken](TRequest& req) {
-                req.set_yandex_passport_oauth_token(token);
+                req.set_yandex_passport_oauth_token(TStringType{token});
             }) {}
 };
 

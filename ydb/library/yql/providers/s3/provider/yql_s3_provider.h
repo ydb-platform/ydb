@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/yql/core/yql_data_provider.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
@@ -32,9 +33,10 @@ struct TS3State : public TThrRefBase
     IHTTPGateway::TPtr Gateway;
     IHTTPGateway::TRetryPolicy::TPtr GatewayRetryPolicy = GetHTTPDefaultRetryPolicy();
     ui32 ExecutorPoolId = 0;
+    NActors::TActorSystem* ActorSystem = nullptr;
 };
 
-TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory = nullptr, bool allowLocalFiles = false);
+TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory = nullptr, bool allowLocalFiles = false, NActors::TActorSystem* actorSystem = nullptr);
 
 TIntrusivePtr<IDataProvider> CreateS3DataSource(TS3State::TPtr state);
 TIntrusivePtr<IDataProvider> CreateS3DataSink(TS3State::TPtr state);

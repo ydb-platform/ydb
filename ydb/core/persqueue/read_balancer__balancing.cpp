@@ -1862,7 +1862,10 @@ bool TPartitionFamilyComparator::operator()(const TPartitionFamily* lhs, const T
 }
 
 bool SessionComparator::operator()(const TSession* lhs, const TSession* rhs) const {
-    return lhs->Order < rhs->Order;
+    if (lhs->Order != rhs->Order) {
+        return lhs->Order < rhs->Order;
+    }
+    return lhs->SessionName < rhs->SessionName;
 }
 
 
@@ -1879,7 +1882,10 @@ bool LowLoadSessionComparator::operator()(const TSession* lhs, const TSession* r
     if (lhs->Partitions.size() != rhs->Partitions.size()) {
         return lhs->Partitions.size() < rhs->Partitions.size();
     }
-    return lhs->Order < rhs->Order;
+    if (lhs->Order != rhs->Order) {
+        return lhs->Order < rhs->Order;
+    }
+    return lhs->SessionName < rhs->SessionName;
 }
 
 }

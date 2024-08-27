@@ -62,11 +62,11 @@ Y_UNIT_TEST(JoinSearch2Rels) {
     std::stringstream ss;
     res->Print(ss);
     TString expected = R"__(Join: (InnerJoin,MapJoin) b.1=a.1,
-Type: ManyManyJoin, Nrows: 2e+10, Ncols: 2, ByteSize: 0, Cost: 2.00112e+10
+Type: ManyManyJoin, Nrows: 2e+10, Ncols: 2, ByteSize: 0, Cost: 2.00112e+10, Storage: NA
     Rel: b
-    Type: BaseTable, Nrows: 1e+06, Ncols: 1, ByteSize: 0, Cost: 9.00001e+06
+    Type: BaseTable, Nrows: 1e+06, Ncols: 1, ByteSize: 0, Cost: 9.00001e+06, Storage: NA
     Rel: a
-    Type: BaseTable, Nrows: 100000, Ncols: 1, ByteSize: 0, Cost: 1e+06
+    Type: BaseTable, Nrows: 100000, Ncols: 1, ByteSize: 0, Cost: 1e+06, Storage: NA
 )__";
 
     UNIT_ASSERT_STRINGS_EQUAL(expected, ss.str());
@@ -114,15 +114,15 @@ Y_UNIT_TEST(JoinSearch3Rels) {
     res->Print(ss);
 
     TString expected = R"__(Join: (InnerJoin,MapJoin) a.1=b.1,a.1=c.1,
-Type: ManyManyJoin, Nrows: 4e+13, Ncols: 3, ByteSize: 0, Cost: 4.004e+13
+Type: ManyManyJoin, Nrows: 4e+13, Ncols: 3, ByteSize: 0, Cost: 4.004e+13, Storage: NA
     Join: (InnerJoin,MapJoin) b.1=a.1,
-    Type: ManyManyJoin, Nrows: 2e+10, Ncols: 2, ByteSize: 0, Cost: 2.00112e+10
+    Type: ManyManyJoin, Nrows: 2e+10, Ncols: 2, ByteSize: 0, Cost: 2.00112e+10, Storage: NA
         Rel: b
-        Type: BaseTable, Nrows: 1e+06, Ncols: 1, ByteSize: 0, Cost: 9.00001e+06
+        Type: BaseTable, Nrows: 1e+06, Ncols: 1, ByteSize: 0, Cost: 9.00001e+06, Storage: NA
         Rel: a
-        Type: BaseTable, Nrows: 100000, Ncols: 1, ByteSize: 0, Cost: 1e+06
+        Type: BaseTable, Nrows: 100000, Ncols: 1, ByteSize: 0, Cost: 1e+06, Storage: NA
     Rel: c
-    Type: BaseTable, Nrows: 10000, Ncols: 1, ByteSize: 0, Cost: 9009
+    Type: BaseTable, Nrows: 10000, Ncols: 1, ByteSize: 0, Cost: 9009, Storage: NA
 )__";
 
     UNIT_ASSERT_STRINGS_EQUAL(expected, ss.str());

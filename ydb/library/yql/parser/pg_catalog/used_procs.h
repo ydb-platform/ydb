@@ -96,6 +96,7 @@
 "bitgt",
 "bit_in",
 "bitle",
+"bit_length",
 "bitlt",
 "bitne",
 "bitnot",

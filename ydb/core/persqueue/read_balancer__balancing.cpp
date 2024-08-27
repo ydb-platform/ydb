@@ -5,10 +5,13 @@
 
 namespace NKikimr::NPQ::NBalancing {
 
-template<typename T>
-void EraseElement(std::vector<T*>& values, T* v) {
-    values.erase(std::find(values.begin(), values.end(), v));
-}
+
+struct LowLoadSessionComparator {
+    bool operator()(const TSession* lhs, const TSession* rhs) const;
+};
+
+using TLowLoadOrderedSessions = std::set<TSession*, LowLoadSessionComparator>;
+
 
 
 //
@@ -511,7 +514,7 @@ void TPartitionFamily::UpdatePartitionMapping(const std::vector<ui32>& partition
 void TPartitionFamily::UpdateSpecialSessions() {
     bool hasChanges = false;
 
-    for (auto* session : Consumer.Sessions) {
+    for (auto& [_, session] : Consumer.Sessions) {
         if (session->WithGroups() && session->AllPartitionsReadable(Partitions) && session->AllPartitionsReadable(WantedPartitions)) {
             auto [_, inserted] = SpecialSessions.try_emplace(session->Pipe, session);
             if (inserted) {
@@ -859,10 +862,7 @@ void TConsumer::RegisterReadingSession(TSession* session, const TActorContext& c
     LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
             GetPrefix() << "register reading session " << session->DebugStr());
 
-    Sessions.push_back(session);
-    std::sort(Sessions.begin(), Sessions.end(), [](auto* lhs, auto* rhs) {
-        return lhs->Order < rhs->Order;
-    });
+    Sessions[session->Pipe] = session;
 
     if (session->WithGroups()) {
         for (auto& [_, family] : Families) {
@@ -894,8 +894,7 @@ std::vector<TPartitionFamily*> Snapshot(const std::unordered_map<size_t, const s
 
 void TConsumer::UnregisterReadingSession(TSession* session, const TActorContext& ctx) {
     auto pipe = session->Pipe;
-
-    EraseElement(Sessions, session);
+    Sessions.erase(session->Pipe);
 
     for (auto* family : Snapshot(Families)) {
         auto special = family->SpecialSessions.erase(pipe);
@@ -1166,25 +1165,11 @@ void TConsumer::ScheduleBalance(const TActorContext& ctx) {
     ctx.Send(Balancer.TopicActor.SelfId(), new TEvPQ::TEvBalanceConsumer(ConsumerName));
 }
 
-TOrderedSessions OrderSessions(
-    const std::vector<TSession*>& values,
-    std::function<bool (const TSession*)> predicate = [](const TSession*) { return true; }
-) {
-    TOrderedSessions result;
-    for (auto* v : values) {
-        if (predicate(v)) {
-            result.insert(v);
-        }
-    }
-
-    return result;
-}
-
-TOrderedSessions OrderSessions(
+TLowLoadOrderedSessions OrderSessions(
     const std::unordered_map<TActorId, TSession*>& values,
     std::function<bool (const TSession*)> predicate = [](const TSession*) { return true; }
 ) {
-    TOrderedSessions result;
+    TLowLoadOrderedSessions result;
     for (auto& [_, v] : values) {
         if (predicate(v)) {
             result.insert(v);
@@ -1268,7 +1253,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
         }
     }
 
-    TOrderedSessions commonSessions = OrderSessions(Sessions, [](auto* session) {
+    TLowLoadOrderedSessions commonSessions = OrderSessions(Sessions, [](auto* session) {
         return !session->WithGroups();
     });
 
@@ -1277,7 +1262,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
         auto families = OrderFamilies(UnreadableFamilies);
         for (auto it = families.rbegin(); it != families.rend(); ++it) {
             auto* family = *it;
-            TOrderedSessions specialSessions;
+            TLowLoadOrderedSessions specialSessions;
             auto& sessions = (family->IsCommon()) ? commonSessions : (specialSessions = OrderSessions(family->SpecialSessions));
 
             auto sit = sessions.begin();
@@ -1321,11 +1306,10 @@ void TConsumer::Balance(const TActorContext& ctx) {
                 GetPrefix() << "start rebalancing. familyCount=" << familyCount << ", sessionCount=" << commonSessions.size()
                 << ", desiredFamilyCount=" << desiredFamilyCount << ", allowPlusOne=" << allowPlusOne);
 
-        for (auto it = Sessions.begin(); it != Sessions.end(); ++it) {
+        TOrderedSessions orderedSession;
+        orderedSession.insert(commonSessions.begin(), commonSessions.end());
+        for (auto it = orderedSession.begin(); it != orderedSession.end(); ++it) {
             auto* session = *it;
-            if (session->WithGroups()) {
-                continue;
-            }
             auto targerFamilyCount = desiredFamilyCount + (allowPlusOne ? 1 : 0);
             auto families = OrderFamilies(session->Families);
             for (auto it = session->Families.begin(); it != session->Families.end() && session->ActiveFamilyCount > targerFamilyCount; ++it) {
@@ -1815,7 +1799,7 @@ void TBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& ev, const TAc
             }
         }
 
-        for (auto* session : consumer->Sessions) {
+        for (auto& [_, session] : consumer->Sessions) {
             auto si = response->Record.AddReadSessions();
             si->SetSession(session->SessionName);
 
@@ -1878,6 +1862,11 @@ bool TPartitionFamilyComparator::operator()(const TPartitionFamily* lhs, const T
 }
 
 bool SessionComparator::operator()(const TSession* lhs, const TSession* rhs) const {
+    return lhs->Order < rhs->Order;
+}
+
+
+bool LowLoadSessionComparator::operator()(const TSession* lhs, const TSession* rhs) const {
     if (lhs->ActiveFamilyCount != rhs->ActiveFamilyCount) {
         return lhs->ActiveFamilyCount < rhs->ActiveFamilyCount;
     }

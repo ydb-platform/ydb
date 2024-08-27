@@ -117,11 +117,11 @@ namespace {
         }
 
         if (settings.Description_) {
-            freeText << "Description: " << settings.Description_.GetRef() << Endl;
+            freeText << "Description: " << settings.Description_.value() << Endl;
         }
 
         if (settings.NumberOfRetries_) {
-            freeText << "Number of retries: " << settings.NumberOfRetries_.GetRef() << Endl;
+            freeText << "Number of retries: " << settings.NumberOfRetries_.value() << Endl;
         }
 
         freeText << "TypeV3: " << (settings.UseTypeV3_ ? "true" : "false") << Endl;
@@ -317,14 +317,14 @@ namespace {
         switch (format) {
         case EDataFormat::Default:
         case EDataFormat::Pretty:
-            if (operations.GetList()) {
+            if (operations.GetList().empty()) {
                 auto table = MakeTable(operations.GetList().front());
                 for (const auto& operation : operations.GetList()) {
                     PrettyPrint(operation, table);
                 }
                 Cout << table;
             }
-            if (operations.NextPageToken()) {
+            if (!operations.NextPageToken().empty()) {
                 Cout << Endl << "Next page token: " << operations.NextPageToken() << Endl;
             }
             break;

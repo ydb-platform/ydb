@@ -4,20 +4,33 @@ import pathlib
 import os
 from sys import stderr
 
+
+def variant(string):
+    if string not in ["h", "ds"]:
+        raise ValueError("variant must be h or ds")
+    return string
+
+def paths(string):
+    return list(map(pathlib.Path, string.split(";")))
+
 def parse_args(passed=None):
-    YDB_ROOT = "../../../"
-    
-    def variant(string):
-        if string not in ["h", "ds"]:
-            raise ValueError("variant must be h or ds")
-        return string
     
     parser = argparse.ArgumentParser()
     
     parser.add_argument('--datasize', type=int, default=1)
     parser.add_argument('--variant', type=variant, default='h')
     parser.add_argument('--tasks', type=int, default=1)
-    parser.add_argument('--ydb-root', type=lambda path: pathlib.Path(path).resolve(), default=YDB_ROOT)
+    
+    parser.add_argument('--dqrun', type=pathlib.Path)
+    parser.add_argument('--gen-queries', type=pathlib.Path)
+    parser.add_argument('--downloaders-dir', type=pathlib.Path)
+    parser.add_argument('--udfs-dir', type=paths)
+    parser.add_argument('--fs-cfg', type=pathlib.Path)
+    parser.add_argument('--flame-graph', type=pathlib.Path)
+    parser.add_argument('--result-compare', type=pathlib.Path)
+    parser.add_argument('--gateways-cfg', type=pathlib.Path)
+    parser.add_argument('--runner-path', type=pathlib.Path)
+    
     parser.add_argument('-o', '--output', default="./results")
     parser.add_argument('--clean-old', action="store_true", default=False)
     parser.add_argument('--query-filter', action="append", default=[])
@@ -26,28 +39,30 @@ def parse_args(passed=None):
 
 class Runner:
     def prepare_queries_dir(self, custom_pragmas):
-        print("Preparing queries...")
+        print("Preparing queries...", file=stderr)
         self.queries_dir.mkdir(parents=True, exist_ok=True)
-        cmd = [self.args.gen_queries]
+        print("queries dir: ", self.queries_dir.resolve(), file=stderr)
+        cmd = [str(self.args.gen_queries)]
         cmd += ["--output", f"{self.queries_dir}"]
         cmd += ["--variant", f"{self.args.variant}"]
         cmd += ["--syntax", "yql"]
         cmd += ["--dataset-size", f"{self.args.datasize}"]
         for it in custom_pragmas:
             cmd += ["--pragma", it]
+        print(cmd, file=stderr)
         subprocess.run(cmd)
     
     def prepare_tpc_dir(self):
-        print("Preparing tpc...")
+        print("Preparing tpc...", file=stderr)
         cmd = [f"{self.args.downloaders_dir}/download_files_{self.args.variant}_{self.args.datasize}.sh"]
+        print(cmd, file=stderr)
         subprocess.run(cmd)
-        os.symlink(f"{self.args.downloaders_dir}/tpc", f"{pathlib.Path("./tpc")}", target_is_directory=True)
     
     def __init__(self, args, enable_spilling):
         self.args = args
         self.enable_spilling = enable_spilling
         
-        self.queries_dir = pathlib.Path(f"queries{"+" if self.enable_spilling else "-"}spilling-{args.datasize}-{args.tasks}")
+        self.queries_dir = pathlib.Path(f"queries{"+" if self.enable_spilling else "-"}spilling-{args.datasize}-{args.tasks}").resolve()
         if self.args.clean_old or not self.queries_dir.exists():
             self.prepare_queries_dir([
                 f"dq.MaxTasksPerStage={self.args.tasks}",
@@ -60,23 +75,26 @@ class Runner:
         self.tpc_dir = pathlib.Path(f"{self.args.downloaders_dir}/tpc/{self.args.variant}/{self.args.datasize}").resolve()
         if self.args.clean_old or not self.tpc_dir.exists():
             self.prepare_tpc_dir()
+        if not pathlib.Path("./tpc").exists():
+            os.symlink(f"{self.args.downloaders_dir}/tpc", f"{pathlib.Path("./tpc")}", target_is_directory=True)
         
         self.result_dir = pathlib.Path(f"{self.args.output}/{"with" if self.enable_spilling else "no"}-spilling/{args.variant}-{args.datasize}-{args.tasks}").resolve()
         self.result_dir.mkdir(parents=True, exist_ok=True)
 
     def run(self):
-        cmd = ["/usr/bin/time", f"{self.args.runner_path}"]
+        cmd = ["/usr/bin/time", f"{str(self.args.runner_path)}"]
         cmd += ["--perf"]
         for it in self.args.query_filter:
-            cmd += ["--query-filter", it]
-        cmd += ["--query-dir", f"{self.queries_dir}/{self.args.variant}"]
-        cmd += ["--bindings", f"{self.queries_dir}/{self.args.variant}/bindings.json"]
-        cmd += ["--result-dir", f"{self.result_dir}"]
+            cmd += ["--include-q", it]
+        cmd += ["--query-dir", f"{str(self.queries_dir)}/{self.args.variant}"]
+        cmd += ["--bindings", f"{str(self.queries_dir)}/{self.args.variant}/bindings.json"]
+        cmd += ["--result-dir", str(self.result_dir)]
+        cmd += ["--flame-graph", str(self.flame_graph)]
         cmd += [f"{self.args.dqrun}", "-s"]
         cmd += ["--enable-spilling"] if self.enable_spilling else []
-        cmd += ["--udfs-dir", f"{self.args.udfs_dir}"]
-        cmd += ["--fs-cfg", f"{self.args.fs_cfg}"]
-        cmd += ["--gateways-cfg", f"{self.args.gateways_cfg}"]
+        cmd += ["--udfs-dir", ";".join(map(str, self.args.udfs_dir))]
+        cmd += ["--fs-cfg", f"{str(self.args.fs_cfg)}"]
+        cmd += ["--gateways-cfg", f"{str(self.args.gateways_cfg)}"]
         subprocess.run(cmd)
         
         return self.result_dir
@@ -89,16 +107,8 @@ def result_compare(args, to_compare):
     with open(f"{args.output}/result-{args.variant}-{args.datasize}-{args.tasks}.htm", "w") as result_table:
         subprocess.run(cmd, stdout=result_table)
 
-def main(passed=None):
-    args, _ = parse_args(passed)
-    args.dqrun = args.ydb_root / "library" / "yql" / "tools" / "dqrun" / "dqrun"
-    args.gen_queries = args.ydb_root / "library" / "benchmarks" / "gen_queries" / "gen_queries"
-    args.downloaders_dir = args.ydb_root / "library" / "benchmarks" / "runner"
-    args.udfs_dir = args.ydb_root / "library" / "yql" / "udfs" / "common"
-    args.fs_cfg = args.ydb_root / "library" / "yql" / "tools" / "dqrun" / "examples" / "fs.conf"
-    args.result_compare = args.ydb_root / "library" / "benchmarks" / "runner" / "result_compare" / "result_compare"
-    args.gateways_cfg = args.ydb_root / "library" / "benchmarks" / "runner" / "runner" / "test-gateways.conf"
-    args.runner_path = args.ydb_root / "library" / "benchmarks" / "runner" / "runner" / "runner"
+def run(passed=None):
+    args = parse_args(passed)
     
     print(args.query_filter)
     
@@ -111,6 +121,9 @@ def main(passed=None):
     print(results, file=stderr)
     
     result_compare(args, results)
+
+def main():
+    run()
 
 if __name__ == "__main__":
     main()

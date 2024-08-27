@@ -71,12 +71,12 @@ def main():
     parser.add_argument('--result-dir', type=Path, default="result-{:%Y%m%dT%H%M%S}".format(datetime.datetime.now()))
     parser.add_argument('--timeout', type=int, default=30*60)
     parser.add_argument('--perf', action='store_true')
-    parser.add_argument('--arc-path', type=str, default='{}/arcadia'.format(os.environ['HOME']))
+    parser.add_argument('--flame-graph', type=Path, default=None)
     parser.add_argument('--include-q', default=[], action='append')
     parser.add_argument('--exclude-q', default=[], action='append')
-    parser.add_argument('--query-filter', action="append", default=[])
-            
+
     args, argv = parser.parse_known_intermixed_args()
+
     qdir = args.query_dir
     bindings = args.bindings
     outdir = args.result_dir
@@ -93,16 +93,12 @@ def main():
         }), file=outj)
         for query in sorted(querydir.glob('**/*.sql'), key=lambda x: tuple(map(lambda y: int(y) if re.match(RE_DIGITS, y) else y, re.split(RE_DIGITS, str(x))))):
             q = str(query.stem)
-            # q<num>.sql
-            num = q[1:-4]
-            if args.query_filter != [] and num not in args.query_filter:
-                continue
             print(f"{q}", end="", flush=True)
             name = str(outdir / q)
             if len(args.include_q):
                 include = False
                 for r in args.include_q:
-                    if re.search(r, name):
+                    if re.search(r, str(query)):
                         include = True
                         break
                 if not include:
@@ -110,7 +106,7 @@ def main():
             if len(args.exclude_q):
                 include = True
                 for r in args.exclude_q:
-                    if re.search(r, name):
+                    if re.search(r, str(query)):
                         include = False
                         break
                 if not include:
@@ -186,10 +182,10 @@ def main():
                     name + '-stderr-perf.txt',
                     timeout=args.timeout)
                 os.system('''
-                /usr/bin/perf script -i {2}/perf.data --header |
-                {0}/contrib/tools/flame-graph/stackcollapse-perf.pl |
-                {0}/contrib/tools/flame-graph/flamegraph.pl > {1}.svg
-                '''.format(args.arc_path, name, outdir))
+                perf script -i {2}/perf.data --header |
+                {0}/stackcollapse-perf.pl |
+                {0}/flamegraph.pl > {1}.svg
+                '''.format(args.flame_graph, name, outdir))
             print(".", flush=True)
 
 

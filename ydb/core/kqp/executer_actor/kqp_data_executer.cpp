@@ -2607,6 +2607,7 @@ private:
                 this->Become(&TThis::WaitShutdownState);
                 LOG_I("Waiting for shutdown of " << Planner->GetPendingComputeTasks().size() << " tasks and "
                     << Planner->GetPendingComputeActors().size() << " compute actors");
+                // TODO(ilezhankin): the CA awaiting timeout should be configurable.
                 TActivationContext::Schedule(TDuration::Seconds(10), new IEventHandle(SelfId(), SelfId(), new TEvents::TEvPoison));
             }
         } else {
@@ -2646,7 +2647,16 @@ private:
             YQL_ENSURE(Planner);
 
             TActorId actor = ev->Sender;
-            ui64 taskId = ev->Get()->Record.GetTaskId();
+            auto& state = ev->Get()->Record;
+            ui64 taskId = state.GetTaskId();
+
+            if (Stats) {
+                Stats->AddComputeActorStats(
+                    actor.NodeId(),
+                    std::move(*state.MutableStats()),
+                    TDuration::MilliSeconds(AggregationSettings.GetCollectLongTasksStatsTimeoutMs())
+                );
+            }
 
             Planner->CompletedCA(taskId, actor);
 

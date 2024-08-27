@@ -2620,6 +2620,87 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
+    Y_UNIT_TEST(CTASWithoutPerStatement) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        appConfig.MutableTableServiceConfig()->SetEnableAstCache(false);
+        appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(false);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting})
+            .SetWithSampleTables(false)
+            .SetEnableTempTables(true);
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
+
+        {
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE Table1 (
+                    PRIMARY KEY (Key)
+                ) AS SELECT 1u AS Key, "1" AS Value1, "1" AS Value2;
+                CREATE TABLE Table2 (
+                    PRIMARY KEY (Key)
+                ) AS SELECT 2u AS Key, "2" AS Value1, "2" AS Value2;
+                )", TTxControl::NoTx(), TExecuteQuerySettings()).ExtractValueSync();
+
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_C(
+                result.GetIssues().ToString().Contains("Several CTAS statement can't be used without per-statement mode."),
+                result.GetIssues().ToString());
+        }
+
+        {
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE Table2 (
+                    PRIMARY KEY (Key)
+                ) AS SELECT 2u AS Key, "2" AS Value1, "2" AS Value2;
+                SELECT * FROM Table1 ORDER BY Key;
+                )", TTxControl::NoTx(), TExecuteQuerySettings()).ExtractValueSync();
+
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_C(
+                result.GetIssues().ToString().Contains("CTAS statement can't be used with other statements without per-statement mode."),
+                result.GetIssues().ToString());
+        }
+
+        {
+            auto result = db.ExecuteQuery(R"(
+            SELECT * FROM Table1 ORDER BY Key;
+                CREATE TABLE Table2 (
+                    PRIMARY KEY (Key)
+                ) AS SELECT 2u AS Key, "2" AS Value1, "2" AS Value2;
+                )", TTxControl::NoTx(), TExecuteQuerySettings()).ExtractValueSync();
+
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_C(
+                result.GetIssues().ToString().Contains("CTAS statement can't be used with other statements without per-statement mode."),
+                result.GetIssues().ToString());
+        }
+
+        {
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE Table1 (
+                    PRIMARY KEY (Key)
+                ) AS SELECT 1u AS Key, "1" AS Value1, "1" AS Value2;
+                )", TTxControl::NoTx(), TExecuteQuerySettings()).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT * FROM Table1 ORDER BY Key;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+            CompareYson(R"([[[1u];["1"];["1"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
     Y_UNIT_TEST(SeveralCTAS) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);

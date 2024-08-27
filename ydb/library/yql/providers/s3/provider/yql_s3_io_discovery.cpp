@@ -83,7 +83,8 @@ public:
               State_->Configuration->MaxInflightListsPerQuery,
               State_->Configuration->ListingCallbackThreadCount,
               State_->Configuration->ListingCallbackPerThreadQueueSize,
-              State_->Configuration->RegexpCacheSize))
+              State_->Configuration->RegexpCacheSize,
+              State_->ActorSystem))
         , ListingStrategy_(MakeS3ListingStrategy(
               State_->Gateway,
               State_->GatewayRetryPolicy,
@@ -732,6 +733,10 @@ private:
         if (!FindFilePattern(settings, ctx, filePattern)) {
             return false;
         }
+        if (TString errorString = NS3::ValidateWildcards(filePattern)) {
+            ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "File pattern '" << filePattern << "' contains invalid wildcard: " << errorString));
+            return false;
+        }
         const TString effectiveFilePattern = filePattern ? filePattern : "*";
 
         TVector<TString> paths;
@@ -763,6 +768,11 @@ private:
         }
 
         for (const auto& path : paths) {
+            if (TString errorString = NS3::ValidateWildcards(path)) {
+                ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "Path '" << path << "' contains invalid wildcard: " << errorString));
+                return false;
+            }
+
             // each path in CONCAT() can generate multiple list requests for explicit partitioning
             TVector<TListRequest> reqs;
 

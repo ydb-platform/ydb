@@ -33,6 +33,7 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     std::shared_ptr<NJson::TJsonValue> OverrideStatistics{};
     std::shared_ptr<NYql::TCardinalityHints> CardinalityHints{};
     std::shared_ptr<NYql::TJoinAlgoHints> JoinAlgoHints{};
+    std::shared_ptr<NYql::TJoinOrderHints> JoinOrderHints{};
 
     std::shared_ptr<NJson::TJsonValue> GetOverrideStatistics() {
         if (Config->OptOverrideStatistics.Get()) {
@@ -67,6 +68,17 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
             return *JoinAlgoHints;
         } else {
             return NYql::TJoinAlgoHints();
+        }
+    }
+
+    NYql::TJoinOrderHints GetJoinOrderHints() {
+        if (Config->OptJoinOrderHints.Get()) {
+            if (!JoinOrderHints) {
+                JoinOrderHints = std::make_shared<NYql::TJoinOrderHints>(*Config->OptJoinOrderHints.Get());
+            }
+            return *JoinOrderHints;
+        } else {
+            return NYql::TJoinOrderHints();
         }
     }
 

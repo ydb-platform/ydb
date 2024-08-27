@@ -24,7 +24,7 @@ namespace {
 
     TReplicationLagPenaltyProviderConfig GenerateReplicationLagPenaltyProviderConfig(
             const NYPath::TYPath& path,
-            const TString& cluster,
+            const std::string& cluster,
             const ui32 maxLagInSeconds = 10,
             const bool clearPenaltiesOnErrors = false,
             const TDuration checkPeriod = CheckPeriod)
@@ -32,7 +32,7 @@ namespace {
         TReplicationLagPenaltyProviderConfig config;
 
         config.SetTablePath(path);
-        config.AddReplicaClusters(cluster);
+        config.AddReplicaClusters(TProtobufString(cluster));
         config.SetMaxTabletsWithLagFraction(0.5);
         config.SetMaxTabletLag(maxLagInSeconds);
         config.SetCheckPeriod(checkPeriod.Seconds());

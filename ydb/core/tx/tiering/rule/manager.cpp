@@ -21,6 +21,9 @@ NMetadata::NModifications::TOperationParsingResult TTieringRulesManager::DoBuild
     {
         auto fValue = settings.GetFeaturesExtractor().Extract(TTieringRule::TDecoder::DefaultColumn);
         if (fValue) {
+            if (fValue->Empty()) {
+                return TConclusionStatus::Fail("defaultColumn cannot be empty");
+            }
             result.SetColumn(TTieringRule::TDecoder::DefaultColumn, NMetadata::NInternal::TYDBValue::Utf8(*fValue));
         }
     }

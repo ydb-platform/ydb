@@ -95,17 +95,14 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
 
             importInfo->AddNotifySubscriber(Ev->Sender);
             Result = new TEvSchemeShard::TEvNotifyTxCompletionRegistered(ui64(txId));
-        } else if (Self->IndexBuilds.contains(TIndexBuildId(rawTxId))) {
-            auto txId = TIndexBuildId(rawTxId);
-
+        } else if (const auto txId = TIndexBuildId(rawTxId); const auto* indexInfoPtr = Self->IndexBuilds.FindPtr(txId)) {
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "NotifyTxCompletion"
                             << " index build in-flight"
                             << ", txId: " << txId
                             << ", at schemeshard: " << Self->TabletID());
-
-            TIndexBuildInfo::TPtr indexInfo = Self->IndexBuilds.at(txId);
-            if (indexInfo->IsFinished()) {
+            auto& indexInfo = *indexInfoPtr->Get();
+            if (indexInfo.IsFinished()) {
                 LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                            "NotifyTxCompletion"
                                << ", index build is ready to notify"
@@ -115,7 +112,7 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
                 return;
             }
 
-            indexInfo->AddNotifySubscriber(Ev->Sender);
+            indexInfo.AddNotifySubscriber(Ev->Sender);
             Result = new TEvSchemeShard::TEvNotifyTxCompletionRegistered(ui64(txId));
         } else {
             LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

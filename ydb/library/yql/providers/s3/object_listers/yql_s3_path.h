@@ -20,6 +20,7 @@ TString EscapeRegex(const TString& str);
 TString EscapeRegex(const std::string_view& str);
 
 TString RegexFromWildcards(const std::string_view& pattern);
+TString ValidateWildcards(const std::string_view& pattern);
 
 TMaybe<TString> BuildS3FilePattern(
     const TString& path,

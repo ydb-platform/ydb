@@ -334,8 +334,6 @@ runs:
             IS_LAST_RETRY=1
           fi
 
-          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
-
           if [ $FAILED_TESTS_COUNT -gt 500 ]; then 
             IS_LAST_RETRY=1
             TOO_MANY_FAILED="Too many tests failed, NOT going to retry"
@@ -351,9 +349,17 @@ runs:
               --status_report_file statusrep.txt \
               --is_retry $IS_RETRY \
               --is_last_retry $IS_LAST_RETRY \
+              --comment_color_file summary_color.txt \
+              --comment_text_file summary_text.txt \
               "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_JUNIT_XML_PATH"
           fi
-            
+
+          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
+
+          if [ "${{ inputs.run_tests }}" = "true" ]; then
+            cat summary_text.txt | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color `cat summary_color.txt`
+          fi
+          
           # upload tests results to YDB
           ydb_upload_run_name="${TESTMO_RUN_NAME// /"_"}"
           result=`.github/scripts/upload_tests_results.py --test-results-file ${CURRENT_JUNIT_XML_PATH} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull $ydb_upload_run_name --job-name "${{ github.workflow }}" --job-id "${{ github.run_id }}" --branch ${GITHUB_REF_NAME}`

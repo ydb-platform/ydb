@@ -165,9 +165,11 @@ public:
             // autocomplete database list via console request
             RequestConsoleListTenants();
         } else {
-            if (!Direct) {
+            Direct |= !Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
+            Direct |= (Database == AppData()->TenantName) || Database.empty(); // we're already on the right node or don't use database filter
+            if (Database && !Direct) {
                 // proxy request to a dynamic node of the specified database
-                RequestStateStorageEndpointsLookup(Database);
+                return RedirectToDatabase(Database);
             }
             if (Requests == 0) {
                 // perform autocomplete without proxying
@@ -194,21 +196,6 @@ public:
             SendSchemeCacheRequest(); // fallback
             RequestDone();
         }
-    }
-
-    void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
-        BLOG_TRACE("Received TEvBoardInfo");
-        if (ev->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
-            for (const auto& [actorId, infoEntry] : ev->Get()->InfoEntries) {
-                TenantDynamicNodes.emplace_back(actorId.NodeId());
-            }
-        }
-        if (TenantDynamicNodes.empty()) {
-            SendSchemeCacheRequest();
-        } else {
-            SendDynamicNodeAutocompleteRequest();
-        }
-        RequestDone();
     }
 
     void SendSchemeCacheRequest() {
@@ -249,7 +236,6 @@ public:
 
     STATEFN(StateRequestedDescribe) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvStateStorage::TEvBoardInfo, Handle);
             hFunc(NConsole::TEvConsole::TEvListTenantsResponse, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvents::TEvUndelivered, Undelivered);

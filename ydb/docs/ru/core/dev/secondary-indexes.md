@@ -12,7 +12,7 @@
 
 ## Создание вторичных индексов {#create}
 
-Вторичный индекс является объектом схемы данных и может быть определен при создании таблицы [командой YQL `CREATE TABLE`](../yql/reference/syntax/create_table.md), или добавлен к ней позднее [командой YQL `ALTER TABLE`](../yql/reference/syntax/alter_table/index.md).
+Вторичный индекс является объектом схемы данных и может быть определен при создании таблицы [командой YQL `CREATE TABLE`](../yql/reference/syntax/create_table/index.md), или добавлен к ней позднее [командой YQL `ALTER TABLE`](../yql/reference/syntax/alter_table/index.md).
 
 Команда [создания индекса `table index add`](../reference/ydb-cli/commands/secondary_index.md#add) поддерживается в YDB CLI.
 

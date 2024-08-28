@@ -646,9 +646,11 @@ private:
         VisitExpr(input, [&securityTags](const TExprNode::TPtr& node) -> bool {
             if (TYtTableBase::Match(node.Get())) {
                 const TYtTableBase table(node);
-                const auto& curTags = TYtTableStatInfo(table.Stat()).SecurityTags;
-                for (const auto& tag : curTags) {
-                    securityTags.insert(tag);
+                if (TYtStat::Match(node->ChildRef(TYtTableBase::idx_Stat).Get())) {
+                    const auto& curTags = TYtTableStatInfo(table.Stat()).SecurityTags;
+                    for (const auto& tag : curTags) {
+                        securityTags.insert(tag);
+                    }
                 }
                 return false;
             }

@@ -935,7 +935,7 @@ int RunMain(int argc, const char* argv[])
         if (!httpGateway) {
             httpGateway = IHTTPGateway::Make(gatewaysConfig.HasHttpGateway() ? &gatewaysConfig.GetHttpGateway() : nullptr);
         }
-        dataProvidersInit.push_back(GetS3DataProviderInitializer(httpGateway, nullptr, true, actorSystemManager->GetActorSystem()));
+        dataProvidersInit.push_back(GetS3DataProviderInitializer(httpGateway, nullptr, true, nullptr));
     }
 
     if (gatewaysConfig.HasPq()) {

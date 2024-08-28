@@ -41,7 +41,6 @@ class Runner:
     def prepare_queries_dir(self, custom_pragmas):
         print("Preparing queries...", file=stderr)
         self.queries_dir.mkdir(parents=True, exist_ok=True)
-        print("queries dir: ", self.queries_dir.resolve(), file=stderr)
         cmd = [str(self.args.gen_queries)]
         cmd += ["--output", f"{self.queries_dir}"]
         cmd += ["--variant", f"{self.args.variant}"]
@@ -49,13 +48,11 @@ class Runner:
         cmd += ["--dataset-size", f"{self.args.datasize}"]
         for it in custom_pragmas:
             cmd += ["--pragma", it]
-        print(cmd, file=stderr)
         subprocess.run(cmd)
     
     def prepare_tpc_dir(self):
         print("Preparing tpc...", file=stderr)
         cmd = [f"{self.args.downloaders_dir}/download_files_{self.args.variant}_{self.args.datasize}.sh"]
-        print(cmd, file=stderr)
         subprocess.run(cmd)
     
     def __init__(self, args, enable_spilling):
@@ -95,6 +92,7 @@ class Runner:
         cmd += ["--udfs-dir", ";".join(map(str, self.args.udfs_dir))]
         cmd += ["--fs-cfg", f"{str(self.args.fs_cfg)}"]
         cmd += ["--gateways-cfg", f"{str(self.args.gateways_cfg)}"]
+        print("Running runner...", file=stderr)
         subprocess.run(cmd)
         
         return self.result_dir
@@ -103,22 +101,17 @@ def result_compare(args, to_compare):
     cmd = [f"{args.result_compare}"]
     cmd += ["-v"]
     cmd += to_compare
-    print(cmd, file=stderr)
     with open(f"{args.output}/result-{args.variant}-{args.datasize}-{args.tasks}.htm", "w") as result_table:
         subprocess.run(cmd, stdout=result_table)
 
 def run(passed=None):
     args = parse_args(passed)
     
-    print(args.query_filter)
-    
     results = []
     print("With spilling...", file=stderr)
     results.append(Runner(args, True).run())
     print("No spilling...", file=stderr)
     results.append(Runner(args, False).run())
-    
-    print(results, file=stderr)
     
     result_compare(args, results)
 

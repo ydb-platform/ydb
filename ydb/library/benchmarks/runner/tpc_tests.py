@@ -4,7 +4,7 @@ import pathlib
 import sys
 
 
-class TestRunner:
+class Runner:
     DEPS = {
         "dqrun" : "ydb/library/yql/tools/dqrun",
         "gen-queries" : "ydb/library/benchmarks/gen_queries",
@@ -34,8 +34,6 @@ class TestRunner:
         self.results_path = self.output / "results"
         self.results_path.mkdir()
 
-        print(self.data["donwloaders-dir"], file=sys.stderr)
-
         self.cmd = []
         self.cmd += ["--dqrun", str(self.deps["dqrun"]) + "/dqrun"]
         self.cmd += ["--gen-queries", str(self.deps["gen-queries"]) + "/gen_queries"]
@@ -54,11 +52,11 @@ class TestRunner:
         cmd += ["--datasize", f"{datasize}"]
         cmd += ["--tasks", f"{tasks}"]
         cmd += ["--query-filter", f"{query_filter}"]
-        print(" ".join(cmd), file=sys.stderr)
         run_tests.run(cmd)
 
 
 def test_tpc():
-    runner = TestRunner()
+    runner = Runner()
     runner.wrapped_run("h", 1, 1, r"q1\.sql")
-    print("results path:", runner.results_path.resolve(), file=sys.stderr)
+    result_path = runner.results_path.resolve()
+    print("results path:", result_path, file=sys.stderr)

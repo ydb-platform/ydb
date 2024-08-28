@@ -113,11 +113,10 @@ bool TPQWriteServiceImpl::TSession::CreateActor(const TString &localCluster) {
     }
 
     auto classifier = Proxy->GetClassifier();
-    ActorId = Proxy->ActorSystem->Register(
-        new TWriteSessionActor(this, Cookie, SchemeCache, Counters, localCluster,
-                                        classifier ? classifier->ClassifyAddress(GetPeerName())
-                                                   : "unknown"), TMailboxType::Simple, 0
-    );
+    auto* actor = new TWriteSessionActor(this, Cookie, SchemeCache, Counters, localCluster,
+                    classifier ? classifier->ClassifyAddress(GetPeerName()) : "unknown");
+    ui32 poolId = Proxy->ActorSystem->AppData<::NKikimr::TAppData>()->UserPoolId;
+    ActorId = Proxy->ActorSystem->Register(actor, TMailboxType::HTSwap, poolId);
     return true;
 }
 

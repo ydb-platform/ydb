@@ -105,6 +105,19 @@ void TKqpScanComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, b
     }
 }
 
+TMaybe<google::protobuf::Any> TKqpScanComputeActor::ExtraData() {
+    NKikimrTxDataShard::TEvKqpInputActorResultInfo resultInfo;
+    for (const auto& lock : Locks) {
+        resultInfo.AddLocks()->CopyFrom(lock);
+    }
+    for (const auto& lock : BrokenLocks) {
+        resultInfo.AddLocks()->CopyFrom(lock);
+    }
+    google::protobuf::Any result;
+    result.PackFrom(resultInfo);
+    return result;
+}
+
 void TKqpScanComputeActor::HandleEvWakeup(EEvWakeupTag tag) {
     AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "HandleEvWakeup")("self_id", SelfId());
     switch (tag) {
@@ -132,6 +145,14 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvTerminateFromFetcher::TPtr
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
     ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvSendData: " << ev->Sender << "/" << SelfId();
     auto& msg = *ev->Get();
+    
+    for (const auto& lock : msg.GetLocksInfo().Locks) {
+        Locks.insert(lock);
+    }
+    for (const auto& lock : msg.GetLocksInfo().Locks) {
+        BrokenLocks.insert(lock);
+    }
+
     auto guard = TaskRunner->BindAllocator();
     if (!!msg.GetArrowBatch()) {
         ScanData->AddData(NMiniKQL::TBatchDataAccessor(msg.GetArrowBatch(), std::move(msg.MutableDataIndexes())), msg.GetTabletId(), TaskRunner->GetHolderFactory());

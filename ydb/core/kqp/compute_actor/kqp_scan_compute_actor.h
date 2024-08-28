@@ -28,6 +28,34 @@ private:
     const ui64 LockTxId;
     const ui32 LockNodeId;
 
+    struct TLockHash {
+        bool operator()(const NKikimrDataEvents::TLock& lock) {
+            return MultiHash(
+                lock.GetLockId(),
+                lock.GetDataShard(),
+                lock.GetSchemeShard(),
+                lock.GetPathId(),
+                lock.GetGeneration(),
+                lock.GetCounter());
+        }
+    };
+
+    struct TLockEqual {
+        bool operator()(const NKikimrDataEvents::TLock& lhs, const NKikimrDataEvents::TLock& rhs) {
+            return lhs.GetLockId() == rhs.GetLockId()
+                && lhs.GetDataShard() == rhs.GetDataShard()
+                && lhs.GetSchemeShard() == rhs.GetSchemeShard()
+                && lhs.GetPathId() == rhs.GetPathId()
+                && lhs.GetGeneration() == rhs.GetGeneration()
+                && lhs.GetCounter() == rhs.GetCounter();
+        }
+    };
+
+    using TLocksHashSet = THashSet<NKikimrDataEvents::TLock, TLockHash, TLockEqual>;
+
+    TLocksHashSet Locks;
+    TLocksHashSet BrokenLocks;
+
     ui64 CalcMkqlMemoryLimit() override {
         return TBase::CalcMkqlMemoryLimit() + ComputeCtx.GetTableScans().size() * MemoryLimits.ChannelBufferSize;
     }
@@ -68,6 +96,8 @@ public:
     void AcquireRateQuota();
 
     void FillExtraStats(NYql::NDqProto::TDqComputeActorStats* dst, bool last);
+
+    TMaybe<google::protobuf::Any> ExtraData() override;
 
     void HandleEvWakeup(EEvWakeupTag tag);
 

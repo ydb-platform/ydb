@@ -235,6 +235,15 @@ public:
             }
         };
 
+        auto addLocksFromCompute = [this](const auto& data) {
+            YQL_ENSURE(data.template Is<NKikimrTxDataShard::TEvKqpInputActorResultInfo>());
+            NKikimrTxDataShard::TEvKqpInputActorResultInfo info;
+            YQL_ENSURE(data.UnpackTo(&info), "Failed to unpack settings");
+            for (auto& lock : info.GetLocks()) {
+                Locks.push_back(lock);
+            }
+        };
+
         for (auto& [_, data] : ExtraData) {
             for (const auto& source : data.GetSourcesExtraData()) {
                 addLocks(source);
@@ -244,6 +253,9 @@ public:
             }
             for (const auto& sink : data.GetSinksExtraData()) {
                 addLocks(sink);
+            }
+            if (data.HasComputeExtraData()) {
+                addLocksFromCompute(data.GetComputeExtraData());
             }
         }
 

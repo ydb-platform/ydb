@@ -121,6 +121,7 @@ class TJsonNodes : public TViewerPipeClient {
     ui32 UptimeSeconds = 0;
     bool ProblemNodesOnly = false;
     TString Filter;
+    bool AllWhiteboardFields = false;
 
     enum class EWith {
         Everything,
@@ -666,6 +667,9 @@ public:
                     FieldsRequired |= itDependentFields->second;
                 }
             }
+        }
+        if (FromStringWithDefault<bool>(params.Get("all_whiteboard_fields"), false)) {
+            AllWhiteboardFields = true;
         }
     }
 
@@ -1507,6 +1511,13 @@ public:
         }
     }
 
+    template<typename TWhiteboardEvent>
+    void InitWhiteboardRequest(TWhiteboardEvent* request) {
+        if (AllWhiteboardFields) {
+            request->AddFieldsRequired(-1);
+        }
+    }
+
     void SendWhiteboardSystemAndTabletsBatch(TNodeBatch& batch) {
         TNodeId nodeId = OffloadMerge ? batch.ChooseNodeId() : 0;
         if (batch.HasStaticNodes && (FieldsNeeded(FieldsVDisks) || FieldsNeeded(FieldsPDisks))) {
@@ -1515,7 +1526,7 @@ public:
         if (nodeId) {
             if (FieldsNeeded(FieldsSystemState) && SystemViewerResponse.count(nodeId) == 0) {
                 auto viewerRequest = std::make_unique<TEvViewer::TEvViewerRequest>();
-                viewerRequest->Record.MutableSystemRequest();
+                InitWhiteboardRequest(viewerRequest->Record.MutableSystemRequest());
                 viewerRequest->Record.SetTimeout(Timeout / 2);
                 for (const TNode* node : batch.NodesToAskAbout) {
                     viewerRequest->Record.MutableLocation()->AddNodeId(node->GetNodeId());
@@ -1543,7 +1554,9 @@ public:
                 TNodeId nodeId = node->GetNodeId();
                 if (FieldsNeeded(FieldsSystemState)) {
                     if (SystemStateResponse.count(nodeId) == 0) {
-                        SystemStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, new TEvWhiteboard::TEvSystemStateRequest()));
+                        auto request = new TEvWhiteboard::TEvSystemStateRequest();
+                        InitWhiteboardRequest(&request->Record);
+                        SystemStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, request));
                         ++WhiteboardStateRequestsInFlight;
                     }
                 }
@@ -1567,13 +1580,17 @@ public:
             if (node->IsStatic()) {
                 if (FieldsNeeded(FieldsVDisks)) {
                     if (VDiskStateResponse.count(nodeId) == 0) {
-                        VDiskStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, new TEvWhiteboard::TEvVDiskStateRequest()));
+                        auto request = new TEvWhiteboard::TEvVDiskStateRequest();
+                        InitWhiteboardRequest(&request->Record);
+                        VDiskStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, request));
                         ++WhiteboardStateRequestsInFlight;
                     }
                 }
                 if (FieldsNeeded(FieldsPDisks)) {
                     if (PDiskStateResponse.count(nodeId) == 0) {
-                        PDiskStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, new TEvWhiteboard::TEvPDiskStateRequest()));
+                        auto request = new TEvWhiteboard::TEvPDiskStateRequest();
+                        InitWhiteboardRequest(&request->Record);
+                        PDiskStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, request));
                         ++WhiteboardStateRequestsInFlight;
                     }
                 }
@@ -1787,14 +1804,39 @@ public:
                 SystemViewerResponse[nodeId].Set(std::move(ev));
                 NodeBatches.erase(nodeId);
                 WhiteboardRequestDone();
-                break;
+                return;
             case NKikimrViewer::TEvViewerResponse::ResponseCase::kTabletResponse:
                 TabletViewerResponse[nodeId].Set(std::move(ev));
                 NodeBatches.erase(nodeId);
                 WhiteboardRequestDone();
-                break;
+                return;
             default:
                 break;
+        }
+        TString error("WrongResponse");
+        {
+            auto itSystemViewerResponse = SystemViewerResponse.find(nodeId);
+            if (itSystemViewerResponse != SystemViewerResponse.end()) {
+                if (itSystemViewerResponse->second.Error(error)) {
+                    if (NodeBatches.count(nodeId)) {
+                        SendWhiteboardSystemAndTabletsBatch(NodeBatches[nodeId]);
+                        NodeBatches.erase(nodeId);
+                    }
+                    WhiteboardRequestDone();
+                }
+            }
+        }
+        {
+            auto itTabletViewerResponse = TabletViewerResponse.find(nodeId);
+            if (itTabletViewerResponse != TabletViewerResponse.end()) {
+                if (itTabletViewerResponse->second.Error(error)) {
+                    if (NodeBatches.count(nodeId)) {
+                        SendWhiteboardSystemAndTabletsBatch(NodeBatches[nodeId]);
+                        NodeBatches.erase(nodeId);
+                    }
+                    WhiteboardRequestDone();
+                }
+            }
         }
     }
 

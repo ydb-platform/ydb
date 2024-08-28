@@ -143,6 +143,7 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
                 if (IntegrityCheck && !IsDataConsistent(blobState, data)) {
                     outResponse.Status = NKikimrProto::ERROR;
                     outResponse.IntegrityCheckFailed = true;
+                    outResponse.CompletenessFailed = !blobState.HasWrittenQuorum(*Info);
                     ui32 corruptedPartIdx = 0;
 
                     switch (Info->Type.GetErasure()) {
@@ -444,13 +445,16 @@ bool TGetImpl::IsDataConsistent(const TBlobState &blobState, const TRope &data) 
 bool TGetImpl::FindCorruptedPart42(const TBlobState &blobState, const TRope &data, ui32 &outPartIndex) {
     const auto &parts = blobState.PartMap;
     auto crcMode = static_cast<TErasureType::ECrcMode>(blobState.Id.CrcMode());
-    ui32 totalParts = Info->Type.TotalPartCount();
+    TStackVec<TRope, TypicalPartsInBlob> selectedParts(Info->Type.TotalPartCount());
+    TStackVec<TRope, TypicalPartsInBlob> restoredParts(Info->Type.TotalPartCount());
+    TRope restoredBlob;
 
     for (ui32 excludedPart = 0; excludedPart < parts.size(); ++excludedPart) {
         if (parts[excludedPart].Data.IsEmpty()) {
             continue;
         }
-        TStackVec<TRope, TypicalPartsInBlob> selectedParts(totalParts);
+        std::fill(selectedParts.begin(), selectedParts.end(), TRope());
+        std::fill(restoredParts.begin(), restoredParts.end(), TRope());
         ui32 restoreMask = 0;
         ui32 selectedCount = 0;
         for (ui32 i = 0; i < parts.size(); ++i) {
@@ -467,16 +471,14 @@ bool TGetImpl::FindCorruptedPart42(const TBlobState &blobState, const TRope &dat
                 break;
             }
         }
-
         if (selectedCount != 4) {
             continue;
         }
-
-        TRope restoredBlob;
+        
+        restoredBlob.clear();
         ErasureRestore(crcMode, Info->Type, data.size(), &restoredBlob, selectedParts, restoreMask);
-        TStackVec<TRope, TypicalPartsInBlob> restoredParts(totalParts);
         ErasureSplit(crcMode, Info->Type, restoredBlob, restoredParts);
-
+        
         ui32 mismatch = 0;
         for (ui32 i = 0; i < parts.size(); ++i) {
             if (i == excludedPart || parts[i].Data.IsEmpty()) {
@@ -487,7 +489,6 @@ bool TGetImpl::FindCorruptedPart42(const TBlobState &blobState, const TRope &dat
                 ++mismatch;
             }
         }
-        
         if (mismatch == 0) {
             outPartIndex = excludedPart;
             return true;
@@ -504,7 +505,6 @@ bool TGetImpl::FindCorruptedPartMirror(const TBlobState &blobState, ui32 &outPar
         if (parts[checkedPart].Data.IsEmpty()) {
             continue;
         }
-    
         ui32 mismatch = 0;
         for (ui32 i = 0; i < parts.size(); ++i) {
             if (i == checkedPart || parts[i].Data.IsEmpty()) {
@@ -514,7 +514,6 @@ bool TGetImpl::FindCorruptedPartMirror(const TBlobState &blobState, ui32 &outPar
                 ++mismatch;
             }
         }
-    
         if (mismatch > 1) {
             outPartIndex = checkedPart;
             ++corruptedParts;

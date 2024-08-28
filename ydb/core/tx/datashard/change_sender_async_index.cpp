@@ -128,9 +128,7 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
         records->Record.SetOrigin(DataShard.TabletId);
         records->Record.SetGeneration(DataShard.Generation);
 
-        auto& evRecords = std::get<std::shared_ptr<TChangeRecordContainer<NKikimr::NDataShard::TChangeRecord>>>(ev->Get()->Records)->Records;
-
-        for (auto& recordPtr : evRecords) {
+        for (auto recordPtr : ev->Get()->GetRecords<TChangeRecord>()) {
             const auto& record = *recordPtr;
 
             if (record.GetOrder() <= LastRecordOrder) {
@@ -728,8 +726,7 @@ class TAsyncIndexChangeSenderMain
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
-        auto& records = std::get<std::shared_ptr<TChangeRecordContainer<NKikimr::NDataShard::TChangeRecord>>>(ev->Get()->Records)->Records;
-        ProcessRecords(std::move(records));
+        ProcessRecords(std::move(ev->Get()->GetRecords<TChangeRecord>()));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvForgetRecords::TPtr& ev) {

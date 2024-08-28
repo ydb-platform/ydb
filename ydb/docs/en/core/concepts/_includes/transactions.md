@@ -51,4 +51,4 @@ A database [table](../datamodel/table.md) in {{ ydb-short-name }} can be sharded
 
 A [topic](../topic.md) in {{ ydb-short-name }} can be sharded into several partitions. Different topic partitions, similar to table shards, can be served by different distributed database servers.
 
-{{ ydb-short-name }} supports distributed transactions. Distributed transactions are transactions that affect more than one shard of one or more tables and topics. They require more resources and take more time. While point reads and writes may take up to 10 ms in 99 percentile, distributed transactions typically take from 20 to 500 ms.
+{{ ydb-short-name }} supports distributed transactions. Distributed transactions are transactions that affect more than one shard of one or more tables and topics. They require more resources and take more time. While point reads and writes may take up to 10 ms in the 99th percentile, distributed transactions typically take from 20 to 500 ms.

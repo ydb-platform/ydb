@@ -273,7 +273,10 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         runtime.WaitFor("TEvAnalyzeTableResponse", [&]{ return block.size(); });
         runtime.AdvanceCurrentTime(TDuration::Days(2));
 
-        runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
+        auto analyzeResponse = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
+        const auto& record = analyzeResponse->Get()->Record;
+        UNIT_ASSERT_VALUES_EQUAL(record.GetOperationId(), "operationId");
+        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
     }    
 }
 

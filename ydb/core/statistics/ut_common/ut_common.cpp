@@ -408,7 +408,9 @@ void Analyze(TTestActorRuntime& runtime, ui64 saTabletId, const std::vector<TAna
     runtime.SendToPipe(saTabletId, sender, ev.release());
     auto evResponse = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
 
-    UNIT_ASSERT_VALUES_EQUAL(evResponse->Get()->Record.GetOperationId(), operationId);
+    const auto& record = evResponse->Get()->Record;
+    UNIT_ASSERT_VALUES_EQUAL(record.GetOperationId(), operationId);
+    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
 }
 
 void AnalyzeTable(TTestActorRuntime& runtime, ui64 shardTabletId, const TAnalyzedTable& table) {

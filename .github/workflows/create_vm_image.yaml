@@ -22,6 +22,7 @@ jobs:
           YC_SA_JSON_CREDENTIALS: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
           GH_RUNNER_BUILD_IMAGE_CUSTOM_VARS_HCL: ${{ vars.GH_RUNNER_BUILD_IMAGE_CUSTOM_VARS_HCL }}
         run: |
+          set -e
           echo "$YC_SA_JSON_CREDENTIALS" > "$YC_SERVICE_ACCOUNT_KEY_FILE"
           echo "$GH_RUNNER_BUILD_IMAGE_CUSTOM_VARS_HCL" > "$CUSTOM_VARS_FILE"
           

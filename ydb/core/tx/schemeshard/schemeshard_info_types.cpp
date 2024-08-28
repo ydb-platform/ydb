@@ -1674,6 +1674,11 @@ void TTableInfo::UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats&
 }
 
 void OlapTableAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats) {
+    if (!PartitionStats.contains(datashardIdx)) {
+        PartitionStats[datashardIdx] = newStats;
+        return;
+    }
+
     TPartitionStats& oldStats = PartitionStats[datashardIdx];
 
     if (newStats.SeqNo <= oldStats.SeqNo) {

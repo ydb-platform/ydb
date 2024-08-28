@@ -47,7 +47,7 @@ protected:
         TBlobStorageGroupInfo::TSubgroupVDisks &inOutSuccess,
         TBlobStorageGroupInfo::TSubgroupVDisks &inOutError,
         bool &outIsDegraded);
-    void Prepare3dcPartPlacement(const TBlobState &state, size_t numFailRealms, size_t numFailDomainsPerFailRealm,
+    bool Prepare3dcPartPlacement(const TBlobState &state, size_t numFailRealms, size_t numFailDomainsPerFailRealm,
             ui8 preferredReplicasPerRealm, bool considerSlowAsError,
             TBlobStorageGroupType::TPartPlacement &outPartPlacement);
     // Sets IsSlow for the slow disk, resets for other disks.

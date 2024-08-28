@@ -363,10 +363,11 @@ void TStrategyBase::Evaluate3dcSituation(const TBlobState &state,
     }
 }
 
-void TStrategyBase::Prepare3dcPartPlacement(const TBlobState &state,
+bool TStrategyBase::Prepare3dcPartPlacement(const TBlobState &state,
         size_t numFailRealms, size_t numFailDomainsPerFailRealm,
         ui8 preferredReplicasPerRealm, bool considerSlowAsError,
         TBlobStorageGroupType::TPartPlacement &outPartPlacement) {
+    bool fullPlacement = true;
     for (size_t realm = 0; realm < numFailRealms; ++realm) {
         ui8 placed = 0;
         for (size_t domain = 0; placed < preferredReplicasPerRealm
@@ -385,45 +386,19 @@ void TStrategyBase::Prepare3dcPartPlacement(const TBlobState &state,
                 }
             }
         }
+        if (placed < preferredReplicasPerRealm) {
+            fullPlacement = false;
+        }
     }
+    return fullPlacement;
 }
 
 ui32 TStrategyBase::MakeSlowSubgroupDiskMask(TBlobState &state, const TBlobStorageGroupInfo &info, TBlackboard &blackboard,
         bool isPut, const TAccelerationParams& accelerationParams) {
-    if (info.GetTotalVDisksNum() < 3) {
-        // when there is less than 3 disks, we consider them not slow
-        return 0;
-    }
-    // Find the slowest disk
+    // Find slow disks
     switch (blackboard.AccelerationMode) {
-        case TBlackboard::AccelerationModeSkipOneSlowest: {
-            TDiskDelayPredictions worstDisks;
-            state.GetWorstPredictedDelaysNs(info, *blackboard.GroupQueues,
-                    (isPut ? HandleClassToQueueId(blackboard.PutHandleClass) :
-                            HandleClassToQueueId(blackboard.GetHandleClass)),
-                    &worstDisks, accelerationParams.PredictedDelayMultiplier);
-
-            // Check if two slowest disks are exceptionally slow, or just not very fast
-            ui32 slowDiskSubgroupMask = 0;
-    
-            ui64 slowThreshold = worstDisks[2].PredictedNs * accelerationParams.SlowDiskThreshold;
-            if (slowThreshold == 0) {
-                // invalid or non-initialized predicted ns, consider all disks not slow
-                return 0;
-            }
-
-            for (size_t idx = 0; idx < state.Disks.size(); ++idx) {
-                state.Disks[idx].IsSlow = false;
-            }
-
-            for (ui32 idx = 0; idx < 2; ++idx) {
-                if (worstDisks[idx].PredictedNs > slowThreshold) {
-                    slowDiskSubgroupMask |= 1 << worstDisks[idx].DiskIdx;
-                    state.Disks[worstDisks[idx].DiskIdx].IsSlow = true;
-                }
-            }
-
-            return slowDiskSubgroupMask;
+        case TBlackboard::AccelerationModeSkipTwoSlowest: {
+            return MakeSlowSubgroupDiskMaskForTwoSlowest(state, info, blackboard, isPut, accelerationParams);
         }
         case TBlackboard::AccelerationModeSkipMarked: {
             ui32 slowDiskSubgroupMask = 0;

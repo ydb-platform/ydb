@@ -172,7 +172,7 @@ ui64 TGetImpl::GetTimeToAccelerateNs(TLogContext &logCtx, NKikimrBlobStorage::EV
                 *Info, *Blackboard.GroupQueues, queueId, &worstDisks,
                 AccelerationParams.PredictedDelayMultiplier);
     }
-    return worstDisks[std::min(3u, (ui32)worstDisks.size() - 1)].PredictedNs;
+    return worstDisks[std::min(2u, (ui32)worstDisks.size() - 1)].PredictedNs;
 }
 
 ui64 TGetImpl::GetTimeToAccelerateGetNs(TLogContext &logCtx) {

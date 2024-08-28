@@ -43,7 +43,7 @@ public:
             }
             TBlobStorageGroupInfo::TSubgroupVDisks success(&info.GetTopology());
             TBlobStorageGroupInfo::TSubgroupVDisks error(&info.GetTopology());
-            Evaluate3dcSituation(state, NumFailRealms, NumFailDomainsPerFailRealm, info, true, success, error, degraded);
+            Evaluate3dcSituation(state, NumFailRealms, NumFailDomainsPerFailRealm, info, false, success, error, degraded);
             TBlobStorageGroupInfo::TSubgroupVDisks slow = TBlobStorageGroupInfo::TSubgroupVDisks::CreateFromMask(
                     &info.GetTopology(), slowDiskSubgroupMask);
             if ((success | error) & slow) {
@@ -60,10 +60,9 @@ public:
                 }
 
                 // now check every realm and check if we have to issue some write requests to it
-                Prepare3dcPartPlacement(state, NumFailRealms, NumFailDomainsPerFailRealm,
+                isDone = Prepare3dcPartPlacement(state, NumFailRealms, NumFailDomainsPerFailRealm,
                         PreferredReplicasPerRealm(degraded),
                         true, partPlacement);
-                isDone = true;
             }
         } while (false);
         if (!isDone) {
@@ -81,6 +80,7 @@ public:
             }
 
             // now check every realm and check if we have to issue some write requests to it
+            partPlacement.Records.clear();
             Prepare3dcPartPlacement(state, NumFailRealms, NumFailDomainsPerFailRealm,
                     PreferredReplicasPerRealm(degraded),
                     false, partPlacement);

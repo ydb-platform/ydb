@@ -71,30 +71,11 @@ namespace NKikimr {
             // issue request for a specific disk; returns true if the request was issued and not yet completed, otherwise
             // false
 
-            if (info.GetTotalVDisksNum() > 1) {
+            if (info.GetTotalVDisksNum() >= 3) {
                 // find the slowest disk and mark it
                 switch (blackboard.AccelerationMode) {
-                    case TBlackboard::AccelerationModeSkipOneSlowest: {
-                        TDiskDelayPredictions worstDisks;
-                        state.GetWorstPredictedDelaysNs(info, *blackboard.GroupQueues,
-                                HandleClassToQueueId(blackboard.GetHandleClass),
-                                &worstDisks, accelerationParams.PredictedDelayMultiplier);
-
-                        // Check if the slowest disk exceptionally slow, or just not very fast
-                        i32 slowDiskSubgroupIdx = -1;
-                        if (worstDisks[1].PredictedNs > 0 && worstDisks[0].PredictedNs >
-                                worstDisks[1].PredictedNs * accelerationParams.SlowDiskThreshold) {
-                            slowDiskSubgroupIdx = worstDisks[0].DiskIdx;
-                        }
-
-                        // Mark single slow disk
-                        for (size_t diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {
-                            state.Disks[diskIdx].IsSlow = false;
-                        }
-                        if (slowDiskSubgroupIdx >= 0) {
-                            state.Disks[slowDiskSubgroupIdx].IsSlow = true;
-                        }
-                        break;
+                    case TBlackboard::AccelerationModeSkipTwoSlowest: {
+                        MakeSlowSubgroupDiskMaskForTwoSlowest(state, info, blackboard, false, accelerationParams);
                     }
                     case TBlackboard::AccelerationModeSkipMarked:
                         // The slowest disk is already marked!

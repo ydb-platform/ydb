@@ -182,7 +182,7 @@ double TKqpProviderContext::ComputeJoinCost(const TOptimizerStatistics& leftStat
             return 1.5955e-2 * rightStats.Nrows;
             
         case EJoinAlgoType::MapJoin:
-            return 9.0637e-4 * leftStats.Nrows + 1.389e-3 * rightStats.Nrows + 4.9327e-5 * outputRows;
+            return 7.008e-07 * leftStats.ByteSize + 4.398e-07 * rightStats.ByteSize;
         case EJoinAlgoType::GraceJoin:
             return 2.777e-4 * leftStats.Nrows + 3.3688e-4 * rightStats.Nrows + 1.9093e-4 * outputRows;
         default:

@@ -292,7 +292,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TestJoinHint2, StreamLookupJoin, ColumnStore) {
-        CheckJoinCardinality("queries/test_join_hint2.sql", "stats/basic.json", "InnerJoin (Grace)", 1, StreamLookupJoin, ColumnStore);
+        CheckJoinCardinality("queries/test_join_hint2.sql", "stats/basic.json", "InnerJoin (MapJoin)", 1, StreamLookupJoin, ColumnStore);
     }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(FiveWayJoinWithConstantFold, StreamLookupJoin, ColumnStore) {

@@ -7,7 +7,7 @@
         "args":
           [
             {
-              "op_name":"InnerJoin (Grace)",
+              "op_name":"InnerJoin (MapJoin)",
               "args":
                 [
                   {
@@ -15,16 +15,16 @@
                     "table":"supplier"
                   },
                   {
-                    "op_name":"InnerJoin (Grace)",
+                    "op_name":"InnerJoin (MapJoin)",
                     "args":
                       [
                         {
                           "op_name":"TableFullScan",
-                          "table":"nation"
+                          "table":"region"
                         },
                         {
                           "op_name":"TableFullScan",
-                          "table":"region"
+                          "table":"nation"
                         }
                       ]
                   }
@@ -37,7 +37,7 @@
           ]
       },
       {
-        "op_name":"InnerJoin (Grace)",
+        "op_name":"InnerJoin (MapJoin)",
         "args":
           [
             {
@@ -45,7 +45,7 @@
               "args":
                 [
                   {
-                    "op_name":"InnerJoin (Grace)",
+                    "op_name":"InnerJoin (MapJoin)",
                     "args":
                       [
                         {
@@ -53,16 +53,16 @@
                           "table":"supplier"
                         },
                         {
-                          "op_name":"InnerJoin (Grace)",
+                          "op_name":"InnerJoin (MapJoin)",
                           "args":
                             [
                               {
                                 "op_name":"TableFullScan",
-                                "table":"nation"
+                                "table":"region"
                               },
                               {
                                 "op_name":"TableFullScan",
-                                "table":"region"
+                                "table":"nation"
                               }
                             ]
                         }

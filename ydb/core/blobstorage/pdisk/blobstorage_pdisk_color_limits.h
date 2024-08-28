@@ -55,12 +55,12 @@ struct TColorLimits {
         cyan = Min<i64>(130, cyan);
         cyan = Max<i64>(13, cyan);
 
-        i64 lightYellow = cyan / 130.0 * 100;
-        i64 yellow = cyan / 130.0 * 80;
-        i64 lightOrange = cyan / 130.0 * 65;
-        i64 preOrange = cyan / 130.0 * 50;
-        i64 orange = cyan / 130.0 * 30;
-        i64 red = cyan / 130.0 * 10;
+        i64 lightYellow = cyan * 100 / 130;
+        i64 yellow = cyan * 80 / 130;
+        i64 lightOrange = cyan * 65 / 130;
+        i64 preOrange = cyan * 50 / 130;
+        i64 orange = cyan * 30 / 130;
+        i64 red = cyan * 10 / 130;
 
         return {
             {1,   1000, 2}, // Black: Leave bare minimum for disaster recovery
@@ -68,9 +68,9 @@ struct TColorLimits {
             {orange,  1000, 4}, // Orange
             {preOrange,  1000, 4}, // PreOrange
             {lightOrange,  1000, 5}, // LightOrange
-            {yellow,  1000, 6}, // Yellow: Stop serving user writes at 8% free space
-            {lightYellow, 1000, 7}, // LightYellow: Ask tablets to move to another group at 10% free space
-            {cyan, 1000, 8}, // Cyan: 13% free space or less
+            {yellow,  1000, 6}, // Yellow: Stop serving user writes at 8% (by default) free space
+            {lightYellow, 1000, 7}, // LightYellow: Ask tablets to move to another group at 10% (by default) free space
+            {cyan, 1000, 8}, // Cyan: 13% (by default) free space or less
         };
     }
 

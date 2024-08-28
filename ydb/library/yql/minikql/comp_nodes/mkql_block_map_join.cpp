@@ -36,7 +36,7 @@ public:
         , LeftKeyColumns_(std::move(leftKeyColumns))
         , Flow_(flow)
         , Dict_(dict)
-        , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(ResultJoinItems_.size()))
+        , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(LeftFlowItems_.size()))
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {

@@ -356,10 +356,14 @@ bool TComputeScheduler::Disabled(TString group) {
 }
 
 
-void TComputeScheduler::Disable(TString group, TMonotonic now) {
+bool TComputeScheduler::Disable(TString group, TMonotonic now) {
     auto ptr = Impl->PoolId.FindPtr(group);
+    if (Impl->Records[*ptr]->MutableStats.Current().get()->Weight > MinEntitiesWeight) {
+        return false;
+    }
     Impl->Records[*ptr]->MutableStats.Next()->Disabled = true;
     AdvanceTime(now);
+    return true;
 }
 
 void TComputeScheduler::UpdateMaxShare(TString group, double share, TMonotonic now) {
@@ -380,6 +384,18 @@ void TComputeScheduler::UpdateMaxShare(TString group, double share, TMonotonic n
         ->GetSubgroup("NodeScheduler/Group", group)
         ->GetCounter("Usage", true);
 }
+
+
+struct TEvPingPool : public TEventLocal<TEvPingPool, TKqpComputeSchedulerEvents::EvPingPool> {
+    TString Database;
+    TString Pool;
+
+    TEvPingPool(TString database, TString pool)
+        : Database(database)
+        , Pool(pool)
+    {
+    }
+};
 
 class TSchedulerActor : public TActorBootstrapped<TSchedulerActor> {
 public:
@@ -413,6 +429,7 @@ public:
 
             hFunc(TEvSchedulerDeregister, Handle);
             hFunc(TEvSchedulerNewPool, Handle);
+            hFunc(TEvPingPool, Handle);
             hFunc(TEvents::TEvWakeup, Handle);
             default: {
                 Y_ABORT("Unexpected event 0x%x for TKqpSchedulerService", ev->GetTypeRewrite());
@@ -435,11 +452,17 @@ public:
         Opts.Scheduler->UpdateMaxShare(ev->Get()->Pool, ev->Get()->MaxShare, TlsActivationContext->Monotonic());
     }
 
+    void Handle(TEvPingPool::TPtr& ev) {
+        Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(ev->Get()->Database, ev->Get()->Pool));
+    }
+
     void Handle(NWorkload::TEvUpdatePoolInfo::TPtr& ev) {
         if (ev->Get()->Config.has_value()) {
             Opts.Scheduler->UpdateMaxShare(ev->Get()->PoolId, ev->Get()->Config->TotalCpuLimitPercentPerNode / 100.0, TlsActivationContext->Monotonic());
         } else {
-            Opts.Scheduler->Disable(ev->Get()->PoolId, TlsActivationContext->Monotonic());
+            if (!Opts.Scheduler->Disable(ev->Get()->PoolId, TlsActivationContext->Monotonic())) {
+                Schedule(Opts.ActivePoolPollingTimeout.ToDeadLine(), new TEvPingPool(ev->Get()->Database, ev->Get()->PoolId));
+            }
         }
     }
 

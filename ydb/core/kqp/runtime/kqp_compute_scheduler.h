@@ -74,7 +74,7 @@ public:
     void Deregister(TSchedulerEntity& self, TMonotonic now);
 
     bool Disabled(TString group);
-    void Disable(TString group, TMonotonic now);
+    bool Disable(TString group, TMonotonic now);
 
 private:
     struct TImpl;
@@ -96,6 +96,7 @@ struct TKqpComputeSchedulerEvents {
     enum EKqpComputeSchedulerEvents {
         EvDeregister = EventSpaceBegin(TKikimrEvents::ES_KQP) + 400,
         EvNewPool,
+        EvPingPool,
     };
 };
 
@@ -120,6 +121,7 @@ struct TEvSchedulerNewPool : public TEventLocal<TEvSchedulerNewPool, TKqpCompute
     {
     }
 };
+
 
 template<typename TDerived>
 class TSchedulableComputeActorBase : public NYql::NDq::TDqSyncComputeActorBase<TDerived> {

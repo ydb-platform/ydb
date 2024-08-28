@@ -13,6 +13,4 @@ PEERDIR(
     ydb/tests/postgres_integrations/library
 )
 
-REQUIREMENTS(ram:10)
-
 END()

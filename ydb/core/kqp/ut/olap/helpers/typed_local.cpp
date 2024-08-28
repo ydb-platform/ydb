@@ -40,30 +40,7 @@ TString TTypedLocalHelper::GetMultiColumnTestTableSchema(ui32 reps) const {
 }
 
 void TTypedLocalHelper::CreateMultiColumnOlapTableWithStore(ui32 reps,  ui32 storeShardsCount, ui32 tableShardsCount) {
-    TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
-    CreateTestOlapStore(sender, Sprintf(R"(
-            Name: "%s"
-            ColumnShardCount: %d
-            SchemaPresets {
-                Name: "default"
-                Schema {
-                    %s
-                }
-            }
-        )", StoreName.c_str(), storeShardsCount, GetMultiColumnTestTableSchema(reps).data()));
-
-    const TString shardingColumns = "[\"" + JoinSeq("\",\"", GetShardingColumns()) + "\"]";
-
-    TBase::CreateTestOlapTable(sender, StoreName, Sprintf(R"(
-        Name: "%s"
-        ColumnShardCount: %d
-        Sharding {
-            HashSharding {
-                Function: %s
-                Columns: %s
-            }
-        })", TableName.c_str(), tableShardsCount, ShardingMethod.data(), shardingColumns.c_str()));
-
+    CreateSchemaOlapTableWithStore(GetMultiColumnTestTableSchema(reps), TableName, "olapStore", storeShardsCount, tableShardsCount);
 }
 
 void TTypedLocalHelper::ExecuteSchemeQuery(const TString& alterQuery, const NYdb::EStatus expectedStatus /*= EStatus::SUCCESS*/) const {

@@ -32,6 +32,8 @@ protected:
 private:
     bool WithSomeNulls_ = false;
 protected:
+    void CreateSchemaOlapTableWithStore(const TString tableSchema, TString tableName = "olapTable", TString storeName = "olapStore",
+        ui32 storeShardsCount = 4, ui32 tableShardsCount = 3);
     void CreateOlapTableWithStore(TString tableName = "olapTable", TString storeName = "olapStore",
         ui32 storeShardsCount = 4, ui32 tableShardsCount = 3);
 public:

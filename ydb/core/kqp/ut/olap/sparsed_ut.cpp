@@ -20,11 +20,10 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         NKikimr::NYDBTest::TControllers::TGuard<NKikimr::NYDBTest::NColumnShard::TController> CSController;
         const TString StoreName;
         ui32 MultiColumnRepCount = 100;
-        static const ui32 FIELD_COUNT = 5;
         static const ui32 SKIP_GROUPS = 7;
-        const char* const FIELD_NAMES[FIELD_COUNT] = {"utf", "int", "uint", "float", "double"};
+        const TVector<TString> FIELD_NAMES{"utf", "int", "uint", "float", "double"};
     public:
-        TSparsedDataTest(const char* storeName)
+        TSparsedDataTest(const TString& storeName)
             : Kikimr(Settings)
             , CSController(NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TController>())
             , StoreName(storeName)
@@ -43,7 +42,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
             return GetUint64(rows[0].at("count"));
         }
 
-        ui32 GetDefaultsCount(const char* fieldName, const char* defValueStr) const {
+        ui32 GetDefaultsCount(const TString& fieldName, const TString& defValueStr) const {
             auto selectQueryTmpl = TString(R"(
                 SELECT
                     count(*) as count,
@@ -52,7 +51,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
             )";
 
             auto tableClient = Kikimr.GetTableClient();
-            auto rows = ExecuteScanQuery(tableClient, Sprintf(selectQueryTmpl.c_str(), fieldName, defValueStr));
+            auto rows = ExecuteScanQuery(tableClient, Sprintf(selectQueryTmpl.c_str(), fieldName.c_str(), defValueStr.c_str()));
             return GetUint64(rows[0].at("count"));
         }
 
@@ -78,7 +77,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
 
             printTime("Executing query");
 
-            Fill(&counts[0], &counts[FIELD_COUNT * groupsCount], 0);
+            Fill(&counts[0], &counts[FIELD_NAMES.size() * groupsCount], 0);
 
             for (auto& row: rows) {
                 auto incCounts = [&](ui32 i, const TString& column) {
@@ -100,10 +99,10 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
 
         void CheckAllFieldsTable(bool firstCall, ui32 countExpectation, ui32* defCountStart) {
             ui32 grCount = (MultiColumnRepCount + SKIP_GROUPS - 1) / SKIP_GROUPS;
-            ui64 defCounts[FIELD_COUNT * grCount];
+            ui64 defCounts[FIELD_NAMES.size() * grCount];
             const ui32 count = GetCount();
             GetAllDefaultsCount(defCounts, SKIP_GROUPS);
-            for (ui32 i = 0; i < FIELD_COUNT * grCount; i++) {
+            for (ui32 i = 0; i < FIELD_NAMES.size() * grCount; i++) {
                 if (firstCall) {
                     defCountStart[i] = defCounts[i];
                 } else {
@@ -115,7 +114,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
             }
         }
 
-        void CheckTable(const char* fieldName, const char* defValueStr, bool firstCall, ui32 countExpectation, ui32& defCountStart) {
+        void CheckTable(const TString& fieldName, const TString& defValueStr, bool firstCall, ui32 countExpectation, ui32& defCountStart) {
             const ui32 defCount = GetDefaultsCount(fieldName, defValueStr);
             if (firstCall) {
                 defCountStart = defCount;
@@ -177,7 +176,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
 
         void FillMultiColumnCircle(const double shiftKff, const ui32 countExpectation) {
             ui32 grCount = (MultiColumnRepCount + SKIP_GROUPS - 1) / SKIP_GROUPS;
-            ui32 defCountStart[FIELD_COUNT * grCount];
+            ui32 defCountStart[FIELD_NAMES.size() * grCount];
             FillCircleImpl([&]() {
                 TTypedLocalHelper helper("Utf8", Kikimr);
                 helper.FillMultiColumnTable(MultiColumnRepCount, shiftKff, 10000);
@@ -252,7 +251,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
             printTime("Fill");
             for (ui32 i = 0; i < MultiColumnRepCount; i += SKIP_GROUPS) {
                 TString grStr = ToString(i);
-                for (ui32 f = 0; f < FIELD_COUNT; f++) {
+                for (ui32 f = 0; f < FIELD_NAMES.size(); f++) {
                     helper.ExecuteSchemeQuery(TString("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field_") + FIELD_NAMES[f] + grStr + ", `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`, `DEFAULT_VALUE`=" + (f == 0 ? "`abcde`" : "`0`") + ");");
                 }
             }
@@ -261,7 +260,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
             printTime("Fill");
             for (ui32 i = 0; i < MultiColumnRepCount; i += SKIP_GROUPS) {
                 TString grStr = ToString(i);
-                for (ui32 f = 0; f < FIELD_COUNT; f++) {
+                for (ui32 f = 0; f < FIELD_NAMES.size(); f++) {
                     helper.ExecuteSchemeQuery(TString("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field_") + FIELD_NAMES[f] + grStr + ", `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`);");
                 }
             }
@@ -270,7 +269,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
             printTime("Fill");
             for (ui32 i = 0; i < MultiColumnRepCount; i += SKIP_GROUPS) {
                 TString grStr = ToString(i);
-                for (ui32 f = 0; f < FIELD_COUNT; f++) {
+                for (ui32 f = 0; f < FIELD_NAMES.size(); f++) {
                     helper.ExecuteSchemeQuery(TString("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field_") + FIELD_NAMES[f] + grStr + ", `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`);");
                 }
             }
@@ -279,7 +278,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
             printTime("Fill");
             for (ui32 i = 0; i < MultiColumnRepCount; i += SKIP_GROUPS) {
                 TString grStr = ToString(i);
-                for (ui32 f = 0; f < FIELD_COUNT; f++) {
+                for (ui32 f = 0; f < FIELD_NAMES.size(); f++) {
                     helper.ExecuteSchemeQuery(TString("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field_") + FIELD_NAMES[f] + grStr + ", `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`);");
                 }
             }

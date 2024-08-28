@@ -203,6 +203,7 @@ private:
         TCursor* Cursor;
         ui32 CurrentIndex = 0;
         const std::vector<TMergingContext::TAddress>* GlobalSequence = nullptr;
+        TMergingContext::TAddress CurrentAddress;
 
         bool InitPosition(const ui32 start) {
             CurrentIndex = start;
@@ -211,7 +212,9 @@ private:
                 if (CurrentIndex == GlobalSequence->size()) {
                     return false;
                 }
-                if ((*GlobalSequence)[CurrentIndex].GetGlobalPosition() != -1) {
+                auto& addr = (*GlobalSequence)[CurrentIndex];
+                if (addr.GetGlobalPosition() != -1) {
+                    CurrentAddress = addr;
                     return true;
                 }
                 if (++CurrentIndex == GlobalSequence->size()) {
@@ -242,24 +245,15 @@ private:
         }
 
         ui32 GetCurrentGlobalPosition() const {
-            AFL_VERIFY(!IsFinished());
-            const TMergingContext::TAddress& result = (*GlobalSequence)[CurrentIndex];
-            AFL_VERIFY(result.IsValid());
-            return (ui32)result.GetGlobalPosition();
+            return CurrentAddress.GetGlobalPosition();
         }
 
-        i32 GetCurrentGlobalChunkIdx() const {
-            AFL_VERIFY(!IsFinished());
-            const TMergingContext::TAddress& result = (*GlobalSequence)[CurrentIndex];
-            AFL_VERIFY(result.IsValid());
-            return result.GetChunkIdx();
+        ui32 GetCurrentGlobalChunkIdx() const {
+            return CurrentAddress.GetChunkIdx();
         }
 
         const TMergingContext::TAddress& GetCurrentAddress() const {
-            AFL_VERIFY(!IsFinished());
-            const TMergingContext::TAddress& result = (*GlobalSequence)[CurrentIndex];
-            AFL_VERIFY(result.IsValid());
-            return result;
+            return CurrentAddress;
         }
 
         bool operator<(const TCursorPosition& item) const {

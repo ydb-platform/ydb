@@ -62,15 +62,18 @@ std::vector<TColumnPortionResult> TSparsedMerger::DoExecute(const TChunkMergeCon
     while (heap.size()) {
         std::pop_heap(heap.begin(), heap.end());
         while (heap.size() == 1 || (heap.size() > 1 && heap.front() < heap.back())) {
-            AFL_VERIFY(nextGlobalPosition <= heap.back().GetCurrentGlobalPosition());
-            addSkipsToWriter(heap.back().GetCurrentGlobalPosition() - nextGlobalPosition);
+            {
+                auto& address = heap.back().GetCurrentAddress();
+                AFL_VERIFY(nextGlobalPosition <= (ui32)address.GetGlobalPosition());
+                addSkipsToWriter(address.GetGlobalPosition() - nextGlobalPosition);
 
-            heap.back().AddIndexTo(*writer);
-            if (chunkContext.GetPortionRowsCountLimit() == writer->GetCurrentSize()) {
-                result.emplace_back(writer->Flush());
-                writer = std::make_shared<TWriter>(Context);
+                heap.back().AddIndexTo(*writer);
+                if (chunkContext.GetPortionRowsCountLimit() == writer->GetCurrentSize()) {
+                    result.emplace_back(writer->Flush());
+                    writer = std::make_shared<TWriter>(Context);
+                }
+                nextGlobalPosition = address.GetGlobalPosition() + 1;
             }
-            nextGlobalPosition = heap.back().GetCurrentGlobalPosition() + 1;
             if (!heap.back().Next()) {
                 heap.pop_back();
                 break;

@@ -64,11 +64,11 @@ public:
 class TChunkMergeContext {
 private:
     YDB_READONLY(ui32, PortionRowsCountLimit, 10000);
-    YDB_READONLY(i32, BatchIdx, 0);
+    YDB_READONLY(ui32, BatchIdx, 0);
     YDB_READONLY(ui32, RecordsCount, 0);
 
 public:
-    TChunkMergeContext(const ui32 portionRowsCountLimit, const i32 batchIdx, const ui32 recordsCount)
+    TChunkMergeContext(const ui32 portionRowsCountLimit, const ui32 batchIdx, const ui32 recordsCount)
         : PortionRowsCountLimit(portionRowsCountLimit)
         , BatchIdx(batchIdx)
         , RecordsCount(recordsCount)

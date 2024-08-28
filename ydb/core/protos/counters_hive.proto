@@ -97,6 +97,7 @@ enum EPercentileCounters {
 
     COUNTER_TABLET_CHANNEL_HISTORY_SIZE = 3 [(CounterOpts) = {
         Name: "TabletChannelHistorySize",
+        Integral: true,
         Ranges: { Value: 1                       }
         Ranges: { Value: 5                       }
         Ranges: { Value: 10                      }

@@ -2647,26 +2647,10 @@ private:
     }
 
     void HandleShutdown(TEvDqCompute::TEvState::TPtr& ev) {
-        if (ev->Get()->Record.GetState() == NDqProto::COMPUTE_STATE_FAILURE) {
-            YQL_ENSURE(Planner);
+        HandleComputeState(ev);
 
-            TActorId actor = ev->Sender;
-            auto& state = ev->Get()->Record;
-            ui64 taskId = state.GetTaskId();
-
-            if (Stats) {
-                Stats->AddComputeActorStats(
-                    actor.NodeId(),
-                    std::move(*state.MutableStats()),
-                    TDuration::MilliSeconds(AggregationSettings.GetCollectLongTasksStatsTimeoutMs())
-                );
-            }
-
-            Planner->CompletedCA(taskId, actor);
-
-            if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
-                PassAway();
-            }
+        if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
+            PassAway();
         }
     }
 

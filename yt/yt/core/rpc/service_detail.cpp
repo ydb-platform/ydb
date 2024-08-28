@@ -1763,16 +1763,16 @@ void TServiceBase::HandleRequest(
 
     // NOTE: Do not use replyError() after this line.
     TAcceptedRequest acceptedRequest{
-        requestId,
-        std::move(replyBus),
-        std::move(runtimeInfo),
-        std::move(traceContext),
-        std::move(header),
-        std::move(message),
-        requestQueue,
-        maybeThrottled,
-        std::move(memoryGuard),
-        MemoryUsageTracker_,
+        .RequestId = requestId,
+        .ReplyBus = std::move(replyBus),
+        .RuntimeInfo = std::move(runtimeInfo),
+        .TraceContext = std::move(traceContext),
+        .Header = std::move(header),
+        .Message = std::move(message),
+        .RequestQueue = requestQueue,
+        .ThrottledError = maybeThrottled,
+        .MemoryGuard = std::move(memoryGuard),
+        .MemoryUsageTracker = MemoryUsageTracker_,
     };
 
     if (!IsAuthenticationNeeded(acceptedRequest)) {

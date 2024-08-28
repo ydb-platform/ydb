@@ -3896,7 +3896,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         {
             auto it = client.StreamExecuteQuery(R"sql(
-                SELECT * FROM `/Root/ColumnShard`;
+                SELECT * FROM `/Root/ColumnShard` ORDER BY Col1;
             )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
@@ -3909,7 +3909,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto it = client.StreamExecuteQuery(R"sql(
                 SELECT * FROM `/Root/DataShard`
                 UNION ALL
-                SELECT * FROM `/Root/ColumnShard`;
+                SELECT * FROM `/Root/ColumnShard`
+                ORDER BY Col1;
             )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
@@ -3920,8 +3921,9 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         {
             auto it = client.StreamExecuteQuery(R"sql(
-                SELECT r.Col3, c.Col3 FROM `/Root/DataShard` AS r
-                JOIN `/Root/ColumnShard` AS c ON r.Col1 + 1 = c.Col1;
+                SELECT r.Col3 AS a, c.Col3 AS b FROM `/Root/DataShard` AS r
+                JOIN `/Root/ColumnShard` AS c ON r.Col1 + 1 = c.Col1
+                ORDER BY a;
             )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);

@@ -89,8 +89,8 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             CompareYson(R"([[[10u];["New"]]])", FormatResultSetYson(result.GetResultSet(0)));
 
             commitResult = tx.Commit().ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
-            // TODO: UNIT_ASSERT(HasIssue(commitResult.GetIssues(), NYql::TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND));
+            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::NOT_FOUND, commitResult.GetIssues().ToString());
+            //TODO: UNIT_ASSERT_C(HasIssue(commitResult.GetIssues(), NYql::TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND), commitResult.GetIssues().ToString());
         }
     };
 

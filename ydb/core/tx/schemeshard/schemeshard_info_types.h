@@ -321,10 +321,17 @@ private:
     ui64 CPU = 0;
 };
 
+struct OlapTableAggregatedStats {
+    TPartitionStats Aggregated;
+    THashMap<TShardIdx, TPartitionStats> PartitionStats;
+
+    void UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats);
+};
+
 struct TAggregatedStats {
     TPartitionStats Aggregated;
     THashMap<TShardIdx, TPartitionStats> PartitionStats;
-    THashMap<TShardIdx, THashMap<TPathId, TPartitionStats>> TableStats;
+    THashMap<TPathId, OlapTableAggregatedStats> TableStats;
     size_t PartitionStatsUpdated = 0;
 
     void UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats);

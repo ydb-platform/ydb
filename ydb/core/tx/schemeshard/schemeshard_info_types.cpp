@@ -1673,6 +1673,32 @@ void TTableInfo::UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats&
     Stats.UpdateShardStats(datashardIdx, newStats);
 }
 
+void OlapTableAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats) {
+    TPartitionStats& oldStats = PartitionStats[datashardIdx];
+
+    if (newStats.SeqNo <= oldStats.SeqNo) {
+        // Ignore outdated message
+        return;
+    }
+
+    if (newStats.SeqNo.Generation > oldStats.SeqNo.Generation) {
+        // Reset incremental counter baselines if tablet has restarted
+        Aggregated.ImmediateTxCompleted = 0;
+        Aggregated.PlannedTxCompleted = 0;
+        Aggregated.TxRejectedByOverload = 0;
+        Aggregated.TxRejectedBySpace = 0;
+        Aggregated.RowUpdates = 0;
+        Aggregated.RowDeletes = 0;
+        Aggregated.RowReads = 0;
+        Aggregated.RangeReads = 0;
+        Aggregated.RangeReadRows = 0;
+    }
+    Aggregated.RowCount += (newStats.RowCount - oldStats.RowCount);
+    Aggregated.DataSize += (newStats.DataSize - oldStats.DataSize);
+
+    oldStats = newStats;
+}
+
 void TAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats) {
     // Ignore stats from unknown datashard (it could have been split)
     if (!PartitionStats.contains(datashardIdx))
@@ -1764,38 +1790,8 @@ void TAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartition
 }
 
 void TAggregatedStats::UpdateTableStats(TShardIdx datashardIdx, const TPathId& pathId, const TPartitionStats& newStats) {
-    // Ignore stats from unknown datashard (it could have been split)
-    if (!TableStats.contains(datashardIdx)) {
-        return;
-    }
-
     auto& tableStats = TableStats[pathId];
-    if (!tableStats.contains(pathId)) {
-        tableStats[pathId] = newStats;
-        return;
-    }
-
-    TPartitionStats& oldStats = tableStats[pathId];
-
-    if (newStats.SeqNo <= oldStats.SeqNo) {
-        // Ignore outdated message
-        return;
-    }
-
-    if (newStats.SeqNo.Generation > oldStats.SeqNo.Generation) {
-        // Reset incremental counter baselines if tablet has restarted
-        oldStats.ImmediateTxCompleted = 0;
-        oldStats.PlannedTxCompleted = 0;
-        oldStats.TxRejectedByOverload = 0;
-        oldStats.TxRejectedBySpace = 0;
-        oldStats.RowUpdates = 0;
-        oldStats.RowDeletes = 0;
-        oldStats.RowReads = 0;
-        oldStats.RangeReads = 0;
-        oldStats.RangeReadRows = 0;
-    }
-    tableStats[pathId].RowCount += (newStats.RowCount - oldStats.RowCount);
-    tableStats[pathId].DataSize += (newStats.DataSize - oldStats.DataSize);
+    tableStats.UpdateShardStats(datashardIdx, newStats);
 }
 
 void TTableInfo::RegisterSplitMergeOp(TOperationId opId, const TTxState& txState) {

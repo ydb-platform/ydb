@@ -28,11 +28,12 @@ void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEve
             }
             case TEvBlobStorage::TEvVMultiPutResult::EventType: {
                 TEvBlobStorage::TEvVMultiPutResult *event = static_cast<TEvBlobStorage::TEvVMultiPutResult *>(ev);
-                for (ui64 i = 0; i < event->Record.ItemsSize(); ++i) {
-                    const auto& item = event->Record.GetItems(i);
-                    LogOOSStatus(item.GetStatusFlags(), LogoBlobIDFromLogoBlobID(item.GetBlobID()), vCtx->VDiskLogPrefix, vCtx->CurrentOOSStatusFlag);
-                    UpdateMonOOSStatus(item.GetStatusFlags(), vCtx->OOSMonGroup);
+                if (event->Record.ItemsSize() > 0) {
+                    const auto& item = event->Record.GetItems(0);
+                    LogOOSStatus(event->Record.GetStatusFlags(), LogoBlobIDFromLogoBlobID(item.GetBlobID()), vCtx->VDiskLogPrefix, vCtx->CurrentOOSStatusFlag);
+                    UpdateMonOOSStatus(event->Record.GetStatusFlags(), vCtx->OOSMonGroup);
                 }
+                break;
             }
         }
     }
@@ -72,6 +73,9 @@ void LogOOSStatus(ui32 flags, const TLogoBlobID& blobId, const TString& vDiskLog
     if (!TlsActivationContext) {
         return;
     }
+    if (!(flags & NKikimrBlobStorage::StatusIsValid)) {
+        return;
+    }
 
     ui32 prevFlags = curFlags.exchange(flags, std::memory_order_relaxed);
     if (prevFlags == flags) {
@@ -80,11 +84,15 @@ void LogOOSStatus(ui32 flags, const TLogoBlobID& blobId, const TString& vDiskLog
 
     LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BS_VDISK_CHUNKS,
         vDiskLogPrefix << "Disk space status changed to " <<
-        TPDiskSpaceColor_Name(StatusFlagToSpaceColor(flags)) << " on blob " << blobId.ToString());
+        TPDiskSpaceColor_Name(StatusFlagToSpaceColor(flags)) << " on blob " << blobId.ToString() << "; " <<
+        "oldFlags: " << prevFlags << ", newFlags: " << flags);
 }
 
 void UpdateMonOOSStatus(ui32 flags, const std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup) {
     if (!monGroup) {
+        return;
+    }
+    if (!(flags & NKikimrBlobStorage::StatusIsValid)) {
         return;
     }
 

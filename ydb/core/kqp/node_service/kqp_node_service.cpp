@@ -491,11 +491,6 @@ private:
                 str << "Current config:" << Endl;
                 str << Config.DebugString() << Endl;
                 str << Endl;
-
-                str << Endl << "Transactions:" << Endl;
-                for (auto& bucket : State_->Buckets) {
-                    bucket.GetInfo(str);
-                }
             }
         }
 

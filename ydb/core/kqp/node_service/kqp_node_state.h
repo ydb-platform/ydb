@@ -11,6 +11,7 @@
 #include <ydb/library/actors/core/actorid.h>
 
 #include <util/str_stl.h>
+#include <util/thread/lfstack.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -31,7 +32,6 @@ struct TTasksRequest {
     TInstant Deadline;
     TActorId Executer;
     TActorId TimeoutTimer;
-    bool ExecutionCancelled = false;
     TInstant StartTime;
 
     explicit TTasksRequest(ui64 txId, TActorId executer, TInstant startTime)
@@ -49,8 +49,9 @@ struct TTasksRequest {
 
 class TState {
 public:
-    struct TRemoveTaskContext {
-        ui64 ComputeActorsNumber = 0;
+    struct TCompletedTask {
+        ui64 TxId;
+        ui64 TaskId;
     };
 
     struct TExpiredRequestContext {
@@ -59,7 +60,6 @@ public:
     };
 
     bool Exists(ui64 txId, const TActorId& requester) const {
-        TReadGuard guard(RWLock);
         return Requests.contains(std::make_pair(txId, requester));
     }
 
@@ -67,7 +67,6 @@ public:
         TTasksRequest cur(std::move(request));
         ui64 txId = cur.TxId;
         TActorId executer = cur.Executer;
-        TWriteGuard guard(RWLock);
         auto [it, requestInserted] = Requests.emplace(std::make_pair(txId, executer), std::move(cur));
         auto inserted = SenderIdsByTxId.insert(std::make_pair(txId, executer))->second;
         YQL_ENSURE(requestInserted && inserted);
@@ -77,49 +76,16 @@ public:
         }
     }
 
-    TMaybe<TRemoveTaskContext> RemoveTask(ui64 txId, ui64 taskId, bool success)
-    {
-        TWriteGuard guard(RWLock);
-        YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
-        const auto senders = SenderIdsByTxId.equal_range(txId);
-        for (auto senderIt = senders.first; senderIt != senders.second; ++senderIt) {
-            auto requestIt = Requests.find(*senderIt);
-            YQL_ENSURE(requestIt != Requests.end());
-            auto& request = requestIt->second;
-
-            auto taskIt = request.InFlyTasks.find(taskId);
-            if (taskIt != request.InFlyTasks.end()) {
-                request.InFlyTasks.erase(taskIt);
-                request.ExecutionCancelled |= !success;
-
-                auto ret = TRemoveTaskContext{request.InFlyTasks.size()};
-
-                if (request.InFlyTasks.empty()) {
-                    auto expireIt = ExpiringRequests.find(request.GetExpritationInfo());
-                    if (expireIt != ExpiringRequests.end()) {
-                        ExpiringRequests.erase(expireIt);
-                    }
-                    Requests.erase(*senderIt);
-                    SenderIdsByTxId.erase(senderIt);
-                    YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
-                }
-
-                return ret;
-            }
-        }
-
-        return Nothing();
-    }
-
-    TMaybe<TTasksRequest> RemoveRequest(ui64 txId, const TActorId& requester) {
-        TWriteGuard guard(RWLock);
-        return RemoveRequestImpl(txId, requester);
+    void RemoveTask(ui64 txId, ui64 taskId, bool) {
+        CompletedTasks.Enqueue(TCompletedTask{.TxId=txId, .TaskId=taskId});
+        return;
     }
 
     // return the vector of pairs where the first element is a taskId
     // and the second one is the compute actor id associated with this task.
     std::vector<std::pair<ui64, TActorId>> GetTasksByTxId(ui64 txId) {
-        TWriteGuard guard(RWLock);
+        CleanCompletedTasks();
+
         YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
         const auto senders = SenderIdsByTxId.equal_range(txId);
         std::vector<std::pair<ui64, TActorId>> ret;
@@ -135,7 +101,8 @@ public:
     }
 
     std::vector<TExpiredRequestContext> ClearExpiredRequests() {
-        TWriteGuard guard(RWLock);
+        CleanCompletedTasks();
+
         std::vector<TExpiredRequestContext> ret;
         auto it = ExpiringRequests.begin();
         auto now = TAppData::TimeProvider->Now();
@@ -150,58 +117,48 @@ public:
         return ret;
     }
 
-    void GetInfo(TStringStream& str) {
-        TReadGuard guard(RWLock);
-        TMap<ui64, TVector<std::pair<const TActorId, const NKqpNode::TTasksRequest*>>> byTx;
-        for (auto& [key, request] : Requests) {
-            byTx[key.first].emplace_back(key.second, &request);
-        }
-        for (auto& [txId, requests] : byTx) {
-            str << "    Requests:" << Endl;
-            for (auto& [requester, request] : requests) {
-                str << "      Requester: " << requester << Endl;
-                str << "        StartTime: " << request->StartTime << Endl;
-                str << "        Deadline: " << request->Deadline << Endl;
-                str << "        In-fly tasks:" << Endl;
-                for (auto& [taskId, task] : request->InFlyTasks) {
-                    str << "          Task: " << taskId << Endl;
-                    str << "            Compute actor: " << task.ComputeActorId << Endl;
-                }
-            }
-        }
-    }
 private:
 
-    TMaybe<TTasksRequest> RemoveRequestImpl(ui64 txId, const TActorId& requester) {
-        auto key = std::make_pair(txId, requester);
-        auto* request = Requests.FindPtr(key);
-        if (!request) {
-            return Nothing();
+    void CleanCompletedTasks() {
+        TVector<TCompletedTask> completedTasks;
+        CompletedTasks.DequeueAllSingleConsumer(&completedTasks);
+        for(const auto& c: completedTasks) {
+            RemoveTaskImpl(c.TxId, c.TaskId);
         }
+    }
 
-        TMaybe<TTasksRequest> ret = std::move(*request);
-        Requests.erase(key);
-
+    void RemoveTaskImpl(ui64 txId, ui64 taskId) {
+        YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
         const auto senders = SenderIdsByTxId.equal_range(txId);
         for (auto senderIt = senders.first; senderIt != senders.second; ++senderIt) {
-            if (senderIt->second == requester) {
-                SenderIdsByTxId.erase(senderIt);
-                break;
+            auto requestIt = Requests.find(*senderIt);
+            YQL_ENSURE(requestIt != Requests.end());
+            auto& request = requestIt->second;
+
+            auto taskIt = request.InFlyTasks.find(taskId);
+            if (taskIt != request.InFlyTasks.end()) {
+                request.InFlyTasks.erase(taskIt);
+
+                if (request.InFlyTasks.empty()) {
+                    auto expireIt = ExpiringRequests.find(request.GetExpritationInfo());
+                    if (expireIt != ExpiringRequests.end()) {
+                        ExpiringRequests.erase(expireIt);
+                    }
+                    Requests.erase(*senderIt);
+                    SenderIdsByTxId.erase(senderIt);
+                    YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
+                }
+
+                return;
             }
         }
-
-        YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
-        return ret;
     }
-
-private:
-
-    TRWMutex RWLock; // Lock for state bucket
 
     std::set<std::tuple<TInstant, ui64, TActorId>> ExpiringRequests;
 
     THashMap<std::pair<ui64, const TActorId>, TTasksRequest> Requests;
     THashMultiMap<ui64, const TActorId> SenderIdsByTxId;
+    TLockFreeStack<TCompletedTask> CompletedTasks;
 };
 
 } // namespace NKqpNode

@@ -83,7 +83,7 @@ class Runner:
 
     def run(self):
         cmd = ["/usr/bin/time", f"{str(self.args.runner_path)}"]
-        cmd += ["--perf"]
+        # cmd += ["--perf"]
         for it in self.args.query_filter:
             cmd += ["--include-q", it]
         cmd += ["--query-dir", f"{str(self.queries_dir)}/{self.args.variant}"]

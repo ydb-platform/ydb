@@ -22,20 +22,20 @@ DEPENDS(
     ydb/library/yql/udfs/common/re2
 )
 
-DATA(
-    arcadia/ydb/library/yql/tools/dqrun/examples/fs.conf
-    arcadia/ydb/library/benchmarks/runner/runner/test-gateways.conf
-    arcadia/contrib/tools/flame-graph
+DATA_FILES(
+    ydb/library/yql/tools/dqrun/examples/fs.conf
+    ydb/library/benchmarks/runner/runner/test-gateways.conf
+    contrib/tools/flame-graph
 
-    arcadia/ydb/library/benchmarks/runner/download_lib.sh
-    arcadia/ydb/library/benchmarks/runner/download_tables.sh
-    arcadia/ydb/library/benchmarks/runner/download_tpcds_tables.sh
-    arcadia/ydb/library/benchmarks/runner/download_files_ds_1.sh
-    arcadia/ydb/library/benchmarks/runner/download_files_ds_10.sh
-    arcadia/ydb/library/benchmarks/runner/download_files_ds_100.sh
-    arcadia/ydb/library/benchmarks/runner/download_files_h_1.sh
-    arcadia/ydb/library/benchmarks/runner/download_files_h_10.sh
-    arcadia/ydb/library/benchmarks/runner/download_files_h_100.sh
+    ydb/library/benchmarks/runner/download_lib.sh
+    ydb/library/benchmarks/runner/download_tables.sh
+    ydb/library/benchmarks/runner/download_tpcds_tables.sh
+    ydb/library/benchmarks/runner/download_files_ds_1.sh
+    ydb/library/benchmarks/runner/download_files_ds_10.sh
+    ydb/library/benchmarks/runner/download_files_ds_100.sh
+    ydb/library/benchmarks/runner/download_files_h_1.sh
+    ydb/library/benchmarks/runner/download_files_h_10.sh
+    ydb/library/benchmarks/runner/download_files_h_100.sh
 )
 
 END()

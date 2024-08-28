@@ -432,6 +432,28 @@ namespace NKikimr::NBsController {
                         *v, group.Topology, isSelfHealReasonDecommit, DonorMode));
                 } else {
                     ++counter; // this group can't be reassigned right now
+
+                    auto log = [&]() {
+                        TStringStream ss;
+                        ss << "[";
+                        bool first = true;
+                        for (const auto& [vdiskId, vdisk] : group.Content.VDisks) {
+                            if (!std::exchange(first, false)) {
+                                ss << ",";
+                            }
+                            ss << "{";
+                            ss << vdiskId;
+                            ss << (IsReady(vdisk, now) ? " Ready" : " NotReady");
+                            ss << (vdisk.Faulty ? " Faulty" : "");
+                            ss << (vdisk.Bad ? " IsBad" : "");
+                            ss << (vdisk.Decommitted ? " Decommitted" : "");
+                            ss << "}";
+                        }
+                        ss << "]";
+                        return ss.Str();
+                    };
+        
+                    STLOG(PRI_INFO, BS_SELFHEAL, BSS07, "group can't be reassigned right now " << log(), (GroupId, group.GroupId));
                 }
             }
 

@@ -73,6 +73,8 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
         }
     }
 
+    TMergingContext mergingContext(batchResults, Batches);
+
     for (auto&& [columnId, columnData] : columnsData) {
         const TString& columnName = resultFiltered->GetIndexInfo().GetColumnName(columnId);
         NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("field_name", columnName));
@@ -91,16 +93,15 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             IColumnMerger::TFactory::MakeHolder(commonContext.GetLoader()->GetAccessorConstructor().GetClassName(), commonContext);
         AFL_VERIFY(!!merger)("problem", "cannot create merger")(
             "class_name", commonContext.GetLoader()->GetAccessorConstructor().GetClassName());
+        merger->Start(columnData, mergingContext);
 
-        merger->Start(columnData);
         ui32 batchIdx = 0;
         for (auto&& batchResult : batchResults) {
             const ui32 portionRecordsCountLimit =
                 batchResult->num_rows() / (batchResult->num_rows() / NSplitter::TSplitSettings().GetExpectedRecordsCountOnPage() + 1) + 1;
 
-            TChunkMergeContext context(portionRecordsCountLimit);
-
-            chunkGroups[batchIdx][columnId] = merger->Execute(context, batchResult);
+            TChunkMergeContext context(portionRecordsCountLimit, batchIdx, batchResult->num_rows());
+            chunkGroups[batchIdx][columnId] = merger->Execute(context, mergingContext);
             ++batchIdx;
         }
     }

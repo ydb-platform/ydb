@@ -5,27 +5,85 @@
 
 namespace NKikimr::NOlap::NCompaction {
 
-void TSparsedMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input) {
+void TSparsedMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& mergingContext) {
+    ui32 idx = 0;
     for (auto&& p : input) {
-        Cursors.emplace_back(p, Context);
+        if (p) {
+            Cursors.emplace_back(p, Context);
+            if (mergingContext.HasRemapInfo(idx)) {
+                CursorPositions.emplace_back(TCursorPosition(&Cursors.back(), mergingContext.GetRemapPortionIndexToResultIndex(idx)));
+                if (CursorPositions.back().IsFinished()) {
+                    CursorPositions.pop_back();
+                }
+            }
+        }
+        ++idx;
     }
 }
 
-std::vector<TColumnPortionResult> TSparsedMerger::DoExecute(
-    const TChunkMergeContext& chunkContext, const arrow::UInt16Array& pIdxArray, const arrow::UInt32Array& pRecordIdxArray) {
+std::vector<TColumnPortionResult> TSparsedMerger::DoExecute(const TChunkMergeContext& chunkContext, TMergingContext& /*mergeContext*/) {
     std::vector<TColumnPortionResult> result;
     std::shared_ptr<TWriter> writer = std::make_shared<TWriter>(Context);
-    for (ui32 idx = 0; idx < pIdxArray.length(); ++idx) {
-        const ui16 portionIdx = pIdxArray.Value(idx);
-        const ui32 portionRecordIdx = pRecordIdxArray.Value(idx);
-        auto& cursor = Cursors[portionIdx];
-
-        cursor.AddIndexTo(portionRecordIdx, *writer);
-        if (writer->AddPosition() == chunkContext.GetPortionRowsCountLimit()) {
+    const auto addSkipsToWriter = [&](i64 delta) {
+        if (!delta) {
+            return;
+        }
+        AFL_VERIFY(delta >= 0);
+        if (chunkContext.GetPortionRowsCountLimit() <= writer->GetCurrentSize() + delta) {
+            const i64 diff = chunkContext.GetPortionRowsCountLimit() - writer->GetCurrentSize();
+            writer->AddPositions(diff);
             result.emplace_back(writer->Flush());
             writer = std::make_shared<TWriter>(Context);
+            delta -= diff;
+        }
+        while (chunkContext.GetPortionRowsCountLimit() <= delta) {
+            writer->AddPositions(chunkContext.GetPortionRowsCountLimit());
+            result.emplace_back(writer->Flush());
+            writer = std::make_shared<TWriter>(Context);
+            delta -= chunkContext.GetPortionRowsCountLimit();
+        }
+        if (delta) {
+            writer->AddPositions(delta);
+        }
+    };
+
+    std::vector<TCursorPosition> heap;
+    for (auto it = CursorPositions.begin(); it != CursorPositions.end();) {
+        AFL_VERIFY(chunkContext.GetBatchIdx() <= it->GetCurrentGlobalChunkIdx());
+        if (it->GetCurrentGlobalChunkIdx() == chunkContext.GetBatchIdx()) {
+            heap.emplace_back(std::move(*it));
+            it = CursorPositions.erase(it);
+        } else {
+            ++it;
         }
     }
+    std::make_heap(heap.begin(), heap.end());
+    ui32 nextGlobalPosition = 0;
+    while (heap.size()) {
+        std::pop_heap(heap.begin(), heap.end());
+        while (heap.size() == 1 || (heap.size() > 1 && heap.front() < heap.back())) {
+            AFL_VERIFY(nextGlobalPosition <= heap.back().GetCurrentGlobalPosition());
+            addSkipsToWriter(heap.back().GetCurrentGlobalPosition() - nextGlobalPosition);
+
+            heap.back().AddIndexTo(*writer);
+            if (chunkContext.GetPortionRowsCountLimit() == writer->GetCurrentSize()) {
+                result.emplace_back(writer->Flush());
+                writer = std::make_shared<TWriter>(Context);
+            }
+            nextGlobalPosition = heap.back().GetCurrentGlobalPosition() + 1;
+            if (!heap.back().Next()) {
+                heap.pop_back();
+                break;
+            } else if (heap.back().GetCurrentGlobalChunkIdx() != chunkContext.GetBatchIdx()) {
+                CursorPositions.emplace_back(std::move(heap.back()));
+                heap.pop_back();
+                break;
+            }
+        }
+        std::push_heap(heap.begin(), heap.end());
+    }
+    AFL_VERIFY(nextGlobalPosition <= chunkContext.GetRecordsCount());
+    addSkipsToWriter(chunkContext.GetRecordsCount() - nextGlobalPosition);
     if (writer->HasData()) {
         result.emplace_back(writer->Flush());
     }
@@ -37,6 +95,7 @@ void TSparsedMerger::TWriter::AddRealData(const std::shared_ptr<arrow::Array>& a
     AFL_VERIFY(NArrow::Append(*ValueBuilder, *arr, index));
     NArrow::TStatusValidator::Validate(IndexBuilderImpl->Append(CurrentRecordIdx));
     ++UsefulRecordsCount;
+    ++CurrentRecordIdx;
 }
 
 TColumnPortionResult TSparsedMerger::TWriter::Flush() {
@@ -64,61 +123,27 @@ TSparsedMerger::TWriter::TWriter(const TColumnMergeContext& context)
     IndexBuilderImpl = (arrow::UInt32Builder*)(IndexBuilder.get());
 }
 
-bool TSparsedMerger::TPlainChunkCursor::AddIndexTo(const ui32 index, TWriter& writer, const TColumnMergeContext& context) {
-    if (ChunkFinishPosition <= index) {
-        InitArrays(index);
-    }
+bool TSparsedMerger::TPlainChunkCursor::AddIndexTo(const ui32 index, TWriter& writer) {
     AFL_VERIFY(ChunkStartPosition <= index);
-    if (NArrow::ColumnEqualsScalar(ChunkAddress->GetArray(), index - ChunkStartPosition, context.GetLoader()->GetDefaultValue())) {
-        return false;
-    } else {
-        writer.AddRealData(ChunkAddress->GetArray(), index - ChunkStartPosition);
-        return true;
-    }
+    writer.AddRealData(ChunkAddress->GetArray(), index - ChunkStartPosition);
+    return true;
 }
 
-bool TSparsedMerger::TSparsedChunkCursor::AddIndexTo(const ui32 index, TWriter& writer, const TColumnMergeContext& /*context*/) {
+bool TSparsedMerger::TSparsedChunkCursor::AddIndexTo(const ui32 index, TWriter& writer) {
     AFL_VERIFY(ChunkStartGlobalPosition <= index);
-    if (index < NextGlobalPosition) {
-        return false;
-    } else {
-        if (FinishGlobalPosition <= index) {
-            InitArrays(index);
-        }
-        if (index == NextGlobalPosition) {
-            writer.AddRealData(Chunk->GetColValue(), NextLocalPosition);
-            if (++NextLocalPosition < Chunk->GetNotDefaultRecordsCount()) {
-                NextGlobalPosition = ChunkStartGlobalPosition + Chunk->GetIndexUnsafeFast(NextLocalPosition);
-                return true;
-            } else {
-                NextGlobalPosition = ChunkStartGlobalPosition + Chunk->GetRecordsCount();
-                return false;
-            }
-        } else {
-            bool found = false;
-            for (; NextLocalPosition < Chunk->GetNotDefaultRecordsCount(); ++NextLocalPosition) {
-                NextGlobalPosition = ChunkStartGlobalPosition + Chunk->GetIndexUnsafeFast(NextLocalPosition);
-                if (NextGlobalPosition == index) {
-                    writer.AddRealData(Chunk->GetColValue(), NextLocalPosition);
-                    found = true;
-                } else if (index < NextGlobalPosition) {
-                    return found;
-                }
-            }
-            NextGlobalPosition = ChunkStartGlobalPosition + Chunk->GetRecordsCount();
-            return false;
-        }
-    }
+    AFL_VERIFY(index == NextGlobalPosition);
+    writer.AddRealData(Chunk->GetColValue(), NextLocalPosition);
+    return true;
 }
 
 bool TSparsedMerger::TCursor::AddIndexTo(const ui32 index, TWriter& writer) {
-    if (Array && FinishGlobalPosition <= index) {
+    if (FinishGlobalPosition <= index) {
         InitArrays(index);
     }
     if (SparsedCursor) {
-        return SparsedCursor->AddIndexTo(index, writer, Context);
+        return SparsedCursor->AddIndexTo(index, writer);
     } else if (PlainCursor) {
-        return PlainCursor->AddIndexTo(index, writer, Context);
+        return PlainCursor->AddIndexTo(index, writer);
     } else {
         return false;
     }

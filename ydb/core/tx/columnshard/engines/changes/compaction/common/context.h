@@ -64,11 +64,17 @@ public:
 class TChunkMergeContext {
 private:
     YDB_READONLY(ui32, PortionRowsCountLimit, 10000);
+    YDB_READONLY(i32, BatchIdx, 0);
+    YDB_READONLY(ui32, RecordsCount, 0);
 
 public:
-    TChunkMergeContext(const ui32 portionRowsCountLimit)
-        : PortionRowsCountLimit(portionRowsCountLimit) {
-        Y_ABORT_UNLESS(PortionRowsCountLimit);
+    TChunkMergeContext(const ui32 portionRowsCountLimit, const i32 batchIdx, const ui32 recordsCount)
+        : PortionRowsCountLimit(portionRowsCountLimit)
+        , BatchIdx(batchIdx)
+        , RecordsCount(recordsCount)
+    {
+        AFL_VERIFY(RecordsCount);
+        AFL_VERIFY(PortionRowsCountLimit);
     }
 };
 }   // namespace NKikimr::NOlap::NCompaction

@@ -49,4 +49,4 @@ ALTER TABLE series_with_families ALTER FAMILY default SET DATA "hdd";
 
 {% endnote %}
 
-Могут быть указаны все параметры группы колонок, описанные в команде [`CREATE TABLE`](create_table#column-family)
+Могут быть указаны все параметры группы колонок, описанные в команде [`CREATE TABLE`](../create_table/secondary_index.md)

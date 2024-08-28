@@ -27,9 +27,9 @@ enum ETxTypes {
 }
 
 enum ESimpleCounters {
-    COUNTER_FORCE_TRAVERSALS_QUEUE_SIZE = 0                                      [(CounterOpts) = {Name: "ForceTraversalsQueueSize"}];
-    COUNTER_AGGREGATION_WAITING_TIME = 1                                         [(CounterOpts) = {Name: "AggregationWaitingTime"}];
-    COUNTER_IN_FLY_ANALYZE_MAXIMUM_WAITING_TIME = 2                              [(CounterOpts) = {Name: "InFlyAnalyzeMaximumWaitingTime"}];
+    COUNTER_FORCE_TRAVERSALS_INFLIGHT_SIZE = 0      [(CounterOpts) = {Name: "ForceTraversalsInflightSize"}];
+    COUNTER_AGGREGATION_TIME = 1                    [(CounterOpts) = {Name: "AggregationTime"}];
+    COUNTER_FORCE_TRAVERSAL_INFLIGHT_MAX_TIME = 2   [(CounterOpts) = {Name: "ForceTraversalsInflightMaxTime"}];
 }
 
 enum ECumulativeCounters {

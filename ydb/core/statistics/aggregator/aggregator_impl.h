@@ -395,7 +395,6 @@ private: // stored in local db
         TInstant CreatedAt;
     };
     std::list<TForceTraversalOperation> ForceTraversals;
-    std::set<ui64> ForceTraversalsCreationTime;
 
 private:
     TForceTraversalOperation* CurrentForceTraversalOperation();

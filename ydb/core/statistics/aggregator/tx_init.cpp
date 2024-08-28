@@ -204,14 +204,16 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                     .CreatedAt = TInstant::FromValue(createdAt)
                 };
                 Self->ForceTraversals.emplace_back(operation);
-                Self->ForceTraversalsCreationTime.emplace(createdAt);
 
                 if (!rowset.Next()) {
                     return false;
                 }
             }
 
-            Self->TabletCounters->Simple()[COUNTER_FORCE_TRAVERSALS_QUEUE_SIZE].Set(Self->ForceTraversals.size());
+            Self->ForceTraversals.sort([](const TForceTraversalOperation& o1, const TForceTraversalOperation& o2){
+                return o1.CreatedAt < o2.CreatedAt;
+            });
+            Self->TabletCounters->Simple()[COUNTER_FORCE_TRAVERSALS_INFLIGHT_SIZE].Set(Self->ForceTraversals.size());
 
             SA_LOG_D("[" << Self->TabletID() << "] Loaded ForceTraversalOperations: "
                 << "table count# " << Self->ForceTraversals.size());

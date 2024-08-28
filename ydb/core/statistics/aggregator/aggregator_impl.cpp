@@ -498,7 +498,7 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvAggregateKeepAlive::TPtr& e
     if (round == GlobalTraversalRound && AggregationRequestBeginTime) {
         TInstant now = AppData(TlsActivationContext->AsActorContext())->TimeProvider->Now();
         TDuration time = now - AggregationRequestBeginTime;
-        TabletCounters->Simple()[COUNTER_AGGREGATION_WAITING_TIME].Set(time.MicroSeconds());
+        TabletCounters->Simple()[COUNTER_AGGREGATION_TIME].Set(time.MicroSeconds());
     }
 
     auto ack = std::make_unique<TEvStatistics::TEvAggregateKeepAliveAck>();
@@ -796,10 +796,8 @@ void TStatisticsAggregator::DeleteForceTraversalOperation(const TString& operati
         db.Table<Schema::ForceTraversalTables>().Key(operationId, table.PathId.OwnerId, table.PathId.LocalPathId).Delete();
     }
 
-    ForceTraversalsCreationTime.erase(operation->CreatedAt.GetValue());
-
     ForceTraversals.remove_if([operationId](const TForceTraversalOperation& elem) { return elem.OperationId == operationId;});
-    TabletCounters->Simple()[COUNTER_FORCE_TRAVERSALS_QUEUE_SIZE].Set(ForceTraversals.size());
+    TabletCounters->Simple()[COUNTER_FORCE_TRAVERSALS_INFLIGHT_SIZE].Set(ForceTraversals.size());
 }
 
 TStatisticsAggregator::TForceTraversalTable* TStatisticsAggregator::ForceTraversalTable(const TString& operationId, const TPathId& pathId) {

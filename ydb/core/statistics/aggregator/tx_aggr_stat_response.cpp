@@ -28,7 +28,7 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
 
         ++Self->KeepAliveSeqNo; // cancel timeout events
 
-        Self->TabletCounters->Simple()[COUNTER_AGGREGATION_WAITING_TIME].Set(0);
+        Self->TabletCounters->Simple()[COUNTER_AGGREGATION_TIME].Set(0);
         Self->AggregationRequestBeginTime = TInstant::Zero();
 
         NIceDb::TNiceDb db(txc.DB);

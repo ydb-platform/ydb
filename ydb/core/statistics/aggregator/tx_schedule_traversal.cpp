@@ -17,12 +17,11 @@ struct TStatisticsAggregator::TTxScheduleTrasersal : public TTxBase {
             return true;
         }
 
-        ui64 time = 0;
-        if (!Self->ForceTraversalsCreationTime.empty()) {
-            const auto oldest = *Self->ForceTraversalsCreationTime.begin();
-            time = ctx.Now().GetValue() - oldest;
+        TDuration time = TDuration ::Zero();
+        if (!ForceTraversals.empty()) {
+            time = ctx.Now() - ForceTraversals.front().CreatedAt;
         }
-        Self->TabletCounters->Simple()[COUNTER_IN_FLY_ANALYZE_MAXIMUM_WAITING_TIME].Set(time);
+        TabletCounters->Simple()[COUNTER_FORCE_TRAVERSAL_INFLIGHT_MAX_TIME].Set(time.MicroSeconds());
 
         if (Self->TraversalPathId) {
             SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleTrasersal::Execute. Traverse is in progress. PathId " << Self->TraversalPathId);

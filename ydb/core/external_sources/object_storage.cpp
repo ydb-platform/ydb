@@ -337,7 +337,10 @@ struct TObjectStorageExternalSource : public IExternalSource {
             .Credentials = credentials
         };
 
-        NYql::NS3::BuildS3FilePattern(path, filePattern, partitionedBy, request);
+        auto error = NYql::NS3::BuildS3FilePattern(path, filePattern, partitionedBy, request);
+        if (error) {
+            throw yexception() << *error;
+        }
 
         auto partByData = std::make_shared<TStringBuilder>();
 
@@ -358,9 +361,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
 
             partByRef << JoinSeq(",", partitionedBy);
             for (const auto& entry : entries.Objects) {
-                if (entry.MatchedGlobs.size() != partitionedBy.size()) {
-                    continue;
-                }
+                Y_ENSURE(entry.MatchedGlobs.size() == partitionedBy.size());
                 partByRef << Endl << JoinSeq(",", entry.MatchedGlobs);
             }
             for (const auto& entry : entries.Objects) {

@@ -362,9 +362,9 @@ Apple,2,22,
 Banana|3|100|2024-01-02
 Apple|2|22|2024-03-04
 Pear|15|33|2024-05-06'''
-        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='year=10/month=5/1.csv', ContentType='text/plain')
-        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='year=10/month=5/2.csv', ContentType='text/plain')
-        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='year=10/month=5/3.csv', ContentType='text/plain')
+        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='year=10/month=5/test1.csv', ContentType='text/plain')
+        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='year=10/month=5/test2.csv', ContentType='text/plain')
+        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='year=10/month=5/test3.csv', ContentType='text/plain')
         kikimr.control_plane.wait_bootstrap(1)
         storage_connection_name = unique_prefix + "fruitbucket"
         client.create_storage_connection(storage_connection_name, "fbucket")
@@ -375,7 +375,7 @@ Pear|15|33|2024-05-06'''
             WITH (format=csv_with_names,
                 with_infer='true',
                 partitioned_by=(`year`, `month`),
-                file_pattern='*',
+                file_pattern='test*',
                 csv_delimiter='|')
             limit 3;
             '''

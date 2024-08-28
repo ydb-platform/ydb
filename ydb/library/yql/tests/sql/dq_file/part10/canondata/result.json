@@ -552,9 +552,9 @@
     ],
     "test.test[blocks-interval_add_date_scalar--Debug]": [
         {
-            "checksum": "36670bbbab19da90c6bf5e8f2cb07de3",
-            "size": 5650,
-            "uri": "https://{canondata_backend}/1784117/035863e9d5dcd47a63c8d359ae9a30ba4ceaf67b/resource.tar.gz#test.test_blocks-interval_add_date_scalar--Debug_/opt.yql_patched"
+            "checksum": "61f4983a1941c189b1eac410a99f354b",
+            "size": 5674,
+            "uri": "https://{canondata_backend}/1937424/d5d9e5b42a440866dd2b2f9da0c4923a86da8bea/resource.tar.gz#test.test_blocks-interval_add_date_scalar--Debug_/opt.yql_patched"
         }
     ],
     "test.test[blocks-interval_add_date_scalar--Plan]": [
@@ -618,9 +618,9 @@
     ],
     "test.test[column_order-select_plain_nosimple-default.txt-Debug]": [
         {
-            "checksum": "6251c1c778a50da9b004c97dce332b78",
-            "size": 3939,
-            "uri": "https://{canondata_backend}/1923547/320f607d9e9c19a93a835d3183938f1fba6dd52c/resource.tar.gz#test.test_column_order-select_plain_nosimple-default.txt-Debug_/opt.yql_patched"
+            "checksum": "451f6b607ecb2c6587b0964f45a4dea4",
+            "size": 4008,
+            "uri": "https://{canondata_backend}/1937424/d5d9e5b42a440866dd2b2f9da0c4923a86da8bea/resource.tar.gz#test.test_column_order-select_plain_nosimple-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[column_order-select_plain_nosimple-default.txt-Plan]": [
@@ -2620,9 +2620,9 @@
     ],
     "test.test[type_v3-insert_struct_v3_with_native--Debug]": [
         {
-            "checksum": "bafb7479c4d60b703c509ef3a5d162e6",
-            "size": 5262,
-            "uri": "https://{canondata_backend}/1899731/86910ab4cb76dcfc4b917458564f186e26f037d3/resource.tar.gz#test.test_type_v3-insert_struct_v3_with_native--Debug_/opt.yql_patched"
+            "checksum": "5b5b0c6d2c56717088eba7d76789e934",
+            "size": 5291,
+            "uri": "https://{canondata_backend}/1937424/d5d9e5b42a440866dd2b2f9da0c4923a86da8bea/resource.tar.gz#test.test_type_v3-insert_struct_v3_with_native--Debug_/opt.yql_patched"
         }
     ],
     "test.test[type_v3-insert_struct_v3_with_native--Plan]": [

@@ -38,7 +38,7 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
 
         Analyze(runtime, saTabletId, {{pathId}});
 
-        ValidateCountMinDatashard(runtime, pathId);
+        ValidateCountMinDatashardAbsense(runtime, pathId);
     }
 
     Y_UNIT_TEST(AnalyzeTwoTables) {
@@ -64,8 +64,8 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
 
         Analyze(runtime, saTabletId1, {pathId1, pathId2});
 
-        ValidateCountMinDatashard(runtime, pathId1);
-        ValidateCountMinDatashard(runtime, pathId2);
+        ValidateCountMinDatashardAbsense(runtime, pathId1);
+        ValidateCountMinDatashardAbsense(runtime, pathId2);
     }
 
 

@@ -532,6 +532,9 @@ void TStatisticsAggregator::Resolve() {
 }
 
 void TStatisticsAggregator::ScanNextDatashardRange() {
+    // Datashard traversal is temporary disabled
+    Y_FAIL();
+
     if (DatashardRanges.empty()) {
         SaveStatisticsToTable();
         return;
@@ -680,9 +683,17 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
     }
 
     TraversalPathId = pathId;
+    TraversalStartTime = TInstant::Now();
 
     std::optional<bool> isColumnTable = IsColumnTable(pathId);
     if (!isColumnTable){
+        DeleteStatisticsFromTable();
+        return;
+    }
+
+    // Datashard traversal is temporary disabled
+    if (!*isColumnTable) {
+        SA_LOG_D("[" << TabletID() << "] ScheduleNextTraversal. Skip traversal for datashard table " << pathId);
         DeleteStatisticsFromTable();
         return;
     }
@@ -697,7 +708,6 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
 }
 
 void TStatisticsAggregator::StartTraversal(NIceDb::TNiceDb& db) {
-    TraversalStartTime = TInstant::Now();
     PersistTraversal(db);
 
     TraversalStartKey = TSerializedCellVec();

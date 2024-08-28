@@ -1,0 +1,54 @@
+import "ydb/core/protos/counters.proto";
+
+package NKikimr.NNodeBroker;
+
+option java_package = "ru.yandex.kikimr.proto";
+
+option (NKikimr.TabletTypeName) = "NodeBroker"; // Used as prefix for all counters
+
+enum ESimpleCounters {
+    COUNTER_EPOCH_SIZE_BYTES = 0           [(CounterOpts) = {Name: "EpochSizeBytes"}];
+}
+
+enum ECumulativeCounters {
+    COUNTER_LIST_NODES_REQUESTS = 0        [(CounterOpts) = {Name: "ListNodesRequests"}];
+    COUNTER_RESOLVE_NODE_REQUESTS = 1      [(CounterOpts) = {Name: "ResolveNodeRequests"}];
+    COUNTER_REGISTRATION_REQUESTS = 2      [(CounterOpts) = {Name: "RegistrationRequests"}];
+    COUNTER_EXTEND_LEASE_REQUESTS = 3      [(CounterOpts) = {Name: "ExtendLeaseRequests"}];
+}
+
+enum EPercentileCounters {
+    COUNTER_LIST_NODES_BYTES = 0 [(CounterOpts) = {
+        Name: "ListNodesBytes",
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 128          Name: "128"         }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+        Ranges: { Value: 134217728    Name: "134217728"   }
+    }];
+}
+
+enum ETxTypes {
+    TXTYPE_EXTEND_LEASE = 0                 [(TxTypeOpts) = {Name: "TTxExtendLease"}];
+    TXTYPE_INIT_SCHEME = 1                  [(TxTypeOpts) = {Name: "TTxInitScheme"}];
+    TXTYPE_LOAD_STATE = 2                   [(TxTypeOpts) = {Name: "TTxLoadState"}];
+    TXTYPE_REGISTER_NODE = 3                [(TxTypeOpts) = {Name: "TTxRegisterNode"}];
+    TXTYPE_UPDATE_CONFIG = 4                [(TxTypeOpts) = {Name: "TTxUpdateConfig"}];
+    TXTYPE_UPDATE_CONFIG_SUBSCRIPTION = 5   [(TxTypeOpts) = {Name: "TTxUpdateConfigSubscription"}];
+    TXTYPE_UPDATE_EPOCH = 6                 [(TxTypeOpts) = {Name: "TTxUpdateEpoch"}];
+}

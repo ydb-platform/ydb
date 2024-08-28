@@ -210,9 +210,6 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 }
             }
 
-            Self->ForceTraversals.sort([](const TForceTraversalOperation& o1, const TForceTraversalOperation& o2){
-                return o1.CreatedAt < o2.CreatedAt;
-            });
             Self->TabletCounters->Simple()[COUNTER_FORCE_TRAVERSALS_INFLIGHT_SIZE].Set(Self->ForceTraversals.size());
 
             SA_LOG_D("[" << Self->TabletID() << "] Loaded ForceTraversalOperations: "

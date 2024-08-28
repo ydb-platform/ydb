@@ -3,7 +3,7 @@
  * amcmds.c
  *	  Routines for SQL commands that manipulate access methods.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -53,7 +53,7 @@ CreateAccessMethod(CreateAmStmt *stmt)
 
 	rel = table_open(AccessMethodRelationId, RowExclusiveLock);
 
-	/* Must be super user */
+	/* Must be superuser */
 	if (!superuser())
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),

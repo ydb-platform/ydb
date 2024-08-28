@@ -2,15 +2,15 @@
 #include "kqp_scan_events.h"
 
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
-#include <ydb/library/yql/dq/actors/compute/dq_sync_compute_actor_base.h>
+#include <ydb/core/kqp/runtime/kqp_compute_scheduler.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 namespace NKikimr::NKqp::NScanPrivate {
 
-class TKqpScanComputeActor: public NYql::NDq::TDqSyncComputeActorBase<TKqpScanComputeActor> {
+class TKqpScanComputeActor: public TSchedulableComputeActorBase<TKqpScanComputeActor> {
 private:
-    using TBase = NYql::NDq::TDqSyncComputeActorBase<TKqpScanComputeActor>;
+    using TBase = TSchedulableComputeActorBase<TKqpScanComputeActor>;
     NMiniKQL::TKqpScanComputeContext ComputeCtx;
     NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta Meta;
     using TBase::TaskRunner;
@@ -30,7 +30,7 @@ public:
         return NKikimrServices::TActivity::KQP_SCAN_COMPUTE_ACTOR;
     }
 
-    TKqpScanComputeActor(const TActorId& executerId, ui64 txId,
+    TKqpScanComputeActor(TComputeActorSchedulingOptions, const TActorId& executerId, ui64 txId,
         NYql::NDqProto::TDqTask* task, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NYql::NDq::TComputeRuntimeSettings& settings, const NYql::NDq::TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
         TIntrusivePtr<NActors::TProtoArenaHolder> arena);
@@ -46,10 +46,7 @@ public:
                     BaseStateFuncBody(ev);
             }
         } catch (const TMemoryLimitExceededException& e) {
-            const TString sInfo = TStringBuilder() << "Mkql memory limit exceeded, limit: " << GetMkqlMemoryLimit()
-                << ", host: " << HostName() << ", canAllocateExtraMemory: " << CanAllocateExtraMemory;
-            CA_LOG_E("ERROR:" + sInfo);
-            InternalError(NYql::NDqProto::StatusIds::PRECONDITION_FAILED, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, sInfo);
+            TBase::OnMemoryLimitExceptionHandler();
         } catch (const yexception& e) {
             InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, NYql::TIssuesIds::DEFAULT_ERROR, e.what());
         }

@@ -232,7 +232,7 @@ void TestCreateResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGat
         {"concurrent_query_limit", "10"},
         {"queue_size", "100"}
     });
-    const auto& resourcePool = TestCreateObjectCommon(runtime, gateway, settings, TStringBuilder() << "/Root/.resource_pools/" << poolId);
+    const auto& resourcePool = TestCreateObjectCommon(runtime, gateway, settings, TStringBuilder() << "/Root/.metadata/workload_manager/pools/" << poolId);
 
     UNIT_ASSERT_VALUES_EQUAL(resourcePool.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindResourcePool);
     UNIT_ASSERT(resourcePool.ResourcePoolInfo);
@@ -249,7 +249,7 @@ void TestAlterResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGate
     }, {
         "queue_size"
     });
-    const auto& resourcePool = TestAlterObjectCommon(runtime, gateway, settings, TStringBuilder() << "/Root/.resource_pools/" << poolId);
+    const auto& resourcePool = TestAlterObjectCommon(runtime, gateway, settings, TStringBuilder() << "/Root/.metadata/workload_manager/pools/" << poolId);
 
     UNIT_ASSERT_VALUES_EQUAL(resourcePool.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindResourcePool);
     UNIT_ASSERT(resourcePool.ResourcePoolInfo);
@@ -262,7 +262,7 @@ void TestAlterResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGate
 
 void TestDropResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& poolId) {
     TDropObjectSettings settings("RESOURCE_POOL", poolId, {});
-    TestDropObjectCommon(runtime, gateway, settings, TStringBuilder() << "/Root/.resource_pools/" << poolId);
+    TestDropObjectCommon(runtime, gateway, settings, TStringBuilder() << "/Root/.metadata/workload_manager/pools/" << poolId);
 }
 
 TKikimrRunner GetKikimrRunnerWithResourcePools() {
@@ -422,6 +422,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
                 LOCATION="my-bucket",
                 AUTH_METHOD="BASIC",
                 LOGIN="mylogin",
+                DATABASE_NAME="postgres",
                 PASSWORD_SECRET_NAME=")" << secretId << R"("
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -458,6 +459,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
                 SERVICE_ACCOUNT_ID="mysa",
                 SERVICE_ACCOUNT_SECRET_NAME=")" << secretSaId << R"(",
                 LOGIN="mylogin",
+                DATABASE_NAME="postgres",
                 PASSWORD_SECRET_NAME=")" << secretPasswordId << R"("
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();

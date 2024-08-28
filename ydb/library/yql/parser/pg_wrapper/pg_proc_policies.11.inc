@@ -1,14 +1,38 @@
+struct TArgs_array_agg_array_combine_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_array_agg_array_deserialize_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
 struct TArgs_array_agg_array_finalfn_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,false};
+};
+struct TArgs_array_agg_array_serialize_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
 struct TArgs_array_agg_array_transfn_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,false};
 };
+struct TArgs_array_agg_combine_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_array_agg_deserialize_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
 struct TArgs_array_agg_finalfn_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_array_agg_serialize_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
 struct TArgs_array_agg_transfn_Policy {
     static constexpr bool VarArgs = false;
@@ -37,6 +61,14 @@ struct TArgs_array_positions_Policy {
 struct TArgs_array_prepend_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,false};
+};
+struct TArgs_array_sample_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+struct TArgs_array_shuffle_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
 struct TArgs_array_typanalyze_Policy {
     static constexpr bool VarArgs = false;
@@ -654,6 +686,10 @@ struct TArgs_timestamptz_mi_interval_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,false};
 };
+struct TArgs_timestamptz_mi_interval_at_zone_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {true,false,false};
+};
 struct TArgs_timestamptz_ne_timestamp_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
@@ -669,6 +705,10 @@ struct TArgs_timestamptz_part_Policy {
 struct TArgs_timestamptz_pl_interval_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,false};
+};
+struct TArgs_timestamptz_pl_interval_at_zone_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {true,false,false};
 };
 struct TArgs_timestamptz_recv_Policy {
     static constexpr bool VarArgs = false;

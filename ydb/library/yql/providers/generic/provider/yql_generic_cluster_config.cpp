@@ -107,14 +107,12 @@ namespace NYql {
                            NYql::TGenericClusterConfig& clusterConfig) {
         auto it = properties.find("database_name");
         if (it == properties.cend()) {
-            // TODO: make this property required during https://st.yandex-team.ru/YQ-2494
-            // ythrow yexception() <<  "missing 'DATABASE_NAME' value";
+            // DATABASE_NAME is a mandatory field for the most of databases,
+            // however, managed YDB does not require it, so we have to accept empty values here.
             return;
         }
 
         if (!it->second) {
-            // TODO: make this property required during https://st.yandex-team.ru/YQ-2494
-            // ythrow yexception() << "invalid 'DATABASE_NAME' value: '" << it->second << "'";
             return;
         }
 
@@ -125,18 +123,30 @@ namespace NYql {
                      NYql::TGenericClusterConfig& clusterConfig) {
         auto it = properties.find("schema");
         if (it == properties.cend()) {
-            // TODO: make this property required during https://st.yandex-team.ru/YQ-2494
-            // ythrow yexception() <<  "missing 'SCHEMA' value";
+            // SCHEMA is optional field
             return;
         }
 
         if (!it->second) {
-            // TODO: make this property required during https://st.yandex-team.ru/YQ-2494
-            // ythrow yexception() << "invalid 'SCHEMA' value: '" << it->second << "'";
+            // SCHEMA is optional field
             return;
         }
 
         clusterConfig.mutable_datasourceoptions()->insert({TString("schema"), TString(it->second)});
+    }
+
+    void ParseServiceName(const THashMap<TString, TString>& properties,
+                          NYql::TGenericClusterConfig& clusterConfig) {
+        auto it = properties.find("service_name");
+        if (it == properties.cend()) {
+            return;
+        }
+
+        if (!it->second) {
+            return;
+        }
+
+        clusterConfig.mutable_datasourceoptions()->insert({TString("service_name"), TString(it->second)});
     }
 
     void ParseMdbClusterId(const THashMap<TString, TString>& properties,
@@ -192,7 +202,7 @@ namespace NYql {
                        NYql::TGenericClusterConfig& clusterConfig) {
         using namespace NConnector::NApi;
 
-        if (IsIn({EDataSourceKind::GREENPLUM, EDataSourceKind::YDB, EDataSourceKind::MYSQL, EDataSourceKind::MS_SQL_SERVER}, clusterConfig.GetKind())) {
+        if (IsIn({EDataSourceKind::GREENPLUM, EDataSourceKind::YDB, EDataSourceKind::MYSQL, EDataSourceKind::MS_SQL_SERVER, EDataSourceKind::ORACLE}, clusterConfig.GetKind())) {
             clusterConfig.SetProtocol(EProtocol::NATIVE);
             return;
         }
@@ -268,6 +278,7 @@ namespace NYql {
         ParseUseTLS(properties, clusterConfig);
         ParseDatabaseName(properties, clusterConfig);
         ParseSchema(properties, clusterConfig);
+        ParseServiceName(properties, clusterConfig);
         ParseMdbClusterId(properties, clusterConfig);
         ParseDatabaseId(properties, clusterConfig);
         ParseSourceType(properties, clusterConfig);
@@ -318,9 +329,25 @@ namespace NYql {
     }
 
     static const TSet<NConnector::NApi::EDataSourceKind> managedDatabaseKinds{
-        NConnector::NApi::EDataSourceKind::POSTGRESQL,
         NConnector::NApi::EDataSourceKind::CLICKHOUSE,
-        NConnector::NApi::EDataSourceKind::YDB};
+        NConnector::NApi::EDataSourceKind::GREENPLUM,
+        NConnector::NApi::EDataSourceKind::MYSQL,
+        NConnector::NApi::EDataSourceKind::POSTGRESQL,
+        NConnector::NApi::EDataSourceKind::YDB,
+    };
+
+    static const TSet<NConnector::NApi::EDataSourceKind> traditionalRelationalDatabaseKinds{
+        NConnector::NApi::EDataSourceKind::CLICKHOUSE,
+        NConnector::NApi::EDataSourceKind::GREENPLUM,
+        NConnector::NApi::EDataSourceKind::MS_SQL_SERVER,
+        NConnector::NApi::EDataSourceKind::MYSQL,
+        NConnector::NApi::EDataSourceKind::ORACLE,
+        NConnector::NApi::EDataSourceKind::POSTGRESQL,
+    };
+
+    bool DataSourceMustHaveDataBaseName(const NConnector::NApi::EDataSourceKind& sourceKind) {
+        return traditionalRelationalDatabaseKinds.contains(sourceKind) && sourceKind != NConnector::NApi::ORACLE;
+    }
 
     void ValidateGenericClusterConfig(
         const NYql::TGenericClusterConfig& clusterConfig,
@@ -393,6 +420,28 @@ namespace NYql {
                     clusterConfig,
                     context,
                     "For YDB clusters you must set either database name or database id, but you have set none of them");
+            }
+        }
+
+        // Oracle:
+        // * always set service_name for oracle;
+        if (clusterConfig.GetKind() == NConnector::NApi::ORACLE) {
+            if (!clusterConfig.GetDataSourceOptions().contains("service_name")) {
+                return ValidationError(
+                    clusterConfig,
+                    context,
+                    "For Oracle databases you must set service, but you have not set it");
+            }
+        }
+
+        // All the databases with exception to managed YDB and Oracle:
+        // * DATABASE_NAME is mandatory field
+        if (DataSourceMustHaveDataBaseName(clusterConfig.GetKind())) {
+            if (!clusterConfig.GetDatabaseName()) {
+                return ValidationError(
+                    clusterConfig,
+                    context,
+                    "You must provide database name explicitly");
             }
         }
 

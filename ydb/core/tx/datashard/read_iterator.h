@@ -205,13 +205,14 @@ public:
     TActorId SessionId;
     TMonotonic StartTs;
     bool IsFinished = false;
+    bool ReadContinuePending = false;
 
     // note that we send SeqNo's starting from 1
     ui64 SeqNo = 0;
     ui64 LastAckSeqNo = 0;
     ui32 FirstUnprocessedQuery = 0;
     TString LastProcessedKey;
-    bool LastProcessedKeyErased = false;
+    bool LastProcessedKeyErasedOrMissing = false;
 
     // Orbit used for tracking progress
     NLWTrace::TOrbit Orbit;

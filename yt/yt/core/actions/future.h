@@ -169,6 +169,9 @@ struct TFutureTimeoutOptions
     //! If set to a non-trivial error, timeout or cancelation errors
     //! are enveloped into this error.
     TError Error;
+
+    //! An invoker the timeout event is handled in (DelayedExecutor is null).
+    IInvokerPtr Invoker;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -283,23 +286,18 @@ public:
 
     //! Returns a future that is either set to an actual value (if the original one is set in timely manner)
     //! or to |EErrorCode::Timeout| (in case the deadline is reached).
-    //! The timeout event is handled in #invoker (DelayedExecutor is null).
     TFuture<T> WithDeadline(
         TInstant deadline,
-        TFutureTimeoutOptions options = {},
-        IInvokerPtr invoker = nullptr) const;
+        TFutureTimeoutOptions options = {}) const;
 
     //! Returns a future that is either set to an actual value (if the original one is set in timely manner)
     //! or to |EErrorCode::Timeout| (in case of timeout).
-    //! The timeout event is handled in #invoker (DelayedExecutor is null).
     TFuture<T> WithTimeout(
         TDuration timeout,
-        TFutureTimeoutOptions options = {},
-        IInvokerPtr invoker = nullptr) const;
+        TFutureTimeoutOptions options = {}) const;
     TFuture<T> WithTimeout(
         std::optional<TDuration> timeout,
-        TFutureTimeoutOptions options = {},
-        IInvokerPtr invoker = nullptr) const;
+        TFutureTimeoutOptions options = {}) const;
 
     //! Chains the asynchronous computation with another one.
     template <class R>

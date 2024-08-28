@@ -25,7 +25,7 @@ TString Exec(const TString& cmd) {
 
 TString GetExternalPort(const TString& service, const TString& port) {
     auto dockerComposeBin = BinaryPath("library/recipes/docker_compose/bin/docker-compose");
-    auto composeFileYml = ArcadiaSourceRoot() + "/ydb/core/external_sources/hive_metastore/ut/docker-compose.yml";
+    auto composeFileYml = ArcadiaFromCurrentLocation(__SOURCE_FILE__, "docker-compose.yml");
     auto result = StringSplitter(Exec(dockerComposeBin + " -f " + composeFileYml + " port " + service + " " + port)).Split(':').ToList<TString>();
     return result ? Strip(result.back()) : TString{};
 }

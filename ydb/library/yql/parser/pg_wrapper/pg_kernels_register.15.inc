@@ -240,3 +240,6 @@ RegisterExec(5048, arrow_numeric_gcd());
 RegisterExec(5049, arrow_numeric_lcm());
 RegisterExec(6103, arrow_numeric_pg_lsn());
 RegisterExec(6120, arrow_pg_get_replica_identity_index());
+RegisterExec(6210, arrow_pg_input_is_valid());
+RegisterExec(6211, arrow_pg_input_error_info());
+RegisterExec(6292, arrow_any_value_transfn());

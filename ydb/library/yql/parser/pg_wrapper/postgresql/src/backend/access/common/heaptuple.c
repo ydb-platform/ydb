@@ -45,7 +45,7 @@
  * and we'd like to still refer to them via C struct offsets.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -518,13 +518,13 @@ heap_attisnull(HeapTuple tup, int attnum, TupleDesc tupleDesc)
  * ----------------
  */
 Datum
-nocachegetattr(HeapTuple tuple,
+nocachegetattr(HeapTuple tup,
 			   int attnum,
 			   TupleDesc tupleDesc)
 {
-	HeapTupleHeader tup = tuple->t_data;
+	HeapTupleHeader td = tup->t_data;
 	char	   *tp;				/* ptr to data part of tuple */
-	bits8	   *bp = tup->t_bits;	/* ptr to null bitmap in tuple */
+	bits8	   *bp = td->t_bits;	/* ptr to null bitmap in tuple */
 	bool		slow = false;	/* do we have to walk attrs? */
 	int			off;			/* current offset within data */
 
@@ -539,7 +539,7 @@ nocachegetattr(HeapTuple tuple,
 
 	attnum--;
 
-	if (!HeapTupleNoNulls(tuple))
+	if (!HeapTupleNoNulls(tup))
 	{
 		/*
 		 * there's a null somewhere in the tuple
@@ -568,7 +568,7 @@ nocachegetattr(HeapTuple tuple,
 		}
 	}
 
-	tp = (char *) tup + tup->t_hoff;
+	tp = (char *) td + td->t_hoff;
 
 	if (!slow)
 	{
@@ -587,7 +587,7 @@ nocachegetattr(HeapTuple tuple,
 		 * target.  If there aren't any, it's safe to cheaply initialize the
 		 * cached offsets for these attrs.
 		 */
-		if (HeapTupleHasVarWidth(tuple))
+		if (HeapTupleHasVarWidth(tup))
 		{
 			int			j;
 
@@ -663,7 +663,7 @@ nocachegetattr(HeapTuple tuple,
 		{
 			Form_pg_attribute att = TupleDescAttr(tupleDesc, i);
 
-			if (HeapTupleHasNulls(tuple) && att_isnull(i, bp))
+			if (HeapTupleHasNulls(tup) && att_isnull(i, bp))
 			{
 				usecache = false;
 				continue;		/* this cannot be the target att */

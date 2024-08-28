@@ -590,9 +590,6 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
                 .UseSecureConnection(NYdbSslTestData::CaCrt)
                 .SetEndpoint(location));
 
-        auto& tableSettings = server.GetServer().GetSettings().AppConfig->GetTableServiceConfig();
-        bool useSchemeCacheMeta = tableSettings.GetUseSchemeCacheMetadata();
-
         {
             auto session = CreateSession(connection, "root@builtin");
             {
@@ -648,8 +645,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
                 )__",TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
 
                 UNIT_ASSERT_EQUAL(status.IsTransportError(), false);
-                UNIT_ASSERT_EQUAL(status.GetStatus(),
-                    useSchemeCacheMeta ? EStatus::SCHEME_ERROR : EStatus::UNAUTHORIZED);
+                UNIT_ASSERT_EQUAL(status.GetStatus(), EStatus::SCHEME_ERROR);
             }
         }
     }
@@ -1055,80 +1051,6 @@ R"___(<main>: Error: Transaction not found: , code: 2015
 )___";
             UNIT_ASSERT_NO_DIFF(issueString, expected);
         }
-    }
-
-    Y_UNIT_TEST(TestExecError) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
-        TKikimrWithGrpcAndRootSchema server(appConfig);
-        ui16 grpc = server.GetPort();
-
-        TString location = TStringBuilder() << "localhost:" << grpc;
-
-        auto connection = NYdb::TDriver(
-            TDriverConfig()
-                .SetEndpoint(location));
-        NYdb::NTable::TTableClient client(connection);
-        auto session = client.CreateSession().ExtractValueSync().GetSession();
-
-        {
-            auto status = session.ExecuteSchemeQuery(R"___(
-                CREATE TABLE `Root/Test` (
-                    Key Uint64,
-                    Value String,
-                    PRIMARY KEY (Key)
-                );
-            )___").ExtractValueSync();
-            UNIT_ASSERT_EQUAL(status.GetStatus(), EStatus::SUCCESS);
-        }
-
-        auto fillQueryResult = session.PrepareDataQuery(R"___(
-            DECLARE $Data AS List<Struct<Key:Uint64, Value:String>>;
-
-            REPLACE INTO `Root/Test`
-            SELECT data.Key AS Key, data.Value AS Value FROM (SELECT $Data AS data) FLATTEN BY data;
-        )___").ExtractValueSync();
-        UNIT_ASSERT_EQUAL(fillQueryResult.GetStatus(), EStatus::SUCCESS);
-        auto query = fillQueryResult.GetQuery();
-
-        const ui32 BATCH_NUM = 5;
-        const ui32 BATCH_ROWS = 100;
-        const ui32 BLOB_SIZE = 100 * 1024; // 100 Kb
-
-        for (ui64 i = 0; i < BATCH_NUM ; ++i) {
-            TParamsBuilder paramsBuilder = client.GetParamsBuilder();
-
-            auto& paramBuilder = paramsBuilder.AddParam("$Data");
-
-            paramBuilder.BeginList();
-            for (ui64 j = 0; j < BATCH_ROWS; ++j) {
-                auto key = i * BATCH_ROWS + j;
-                auto val = TString(BLOB_SIZE, '0' + key % 10);
-                paramBuilder.AddListItem()
-                    .BeginStruct()
-                        .AddMember("Key")
-                            .Uint64(key)
-                        .AddMember("Value")
-                            .String(val)
-                    .EndStruct();
-            }
-            paramBuilder.EndList();
-            paramBuilder.Build();
-
-            auto result = query.Execute(TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-                paramsBuilder.Build()).ExtractValueSync();
-            UNIT_ASSERT_EQUAL(result.GetStatus(),  EStatus::SUCCESS);
-        }
-
-        auto result = session.ExecuteDataQuery(R"___(
-            SELECT * FROM `Root/Test` WHERE Key != 1;
-        )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_EQUAL(result.GetStatus(),  EStatus::UNDETERMINED);
-
-        UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_RESULT_UNAVAILABLE,
-            "Result of Kikimr query didn't meet requirements and isn't available"sv), result.GetIssues().ToString());
-
-        UNIT_ASSERT_C(result.GetIssues().ToString().Contains("REPLY_SIZE_EXCEEDED"), result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(TestDoubleKey) {

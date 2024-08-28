@@ -11,7 +11,9 @@ namespace NKikimr {
 class TAcceleratePutStrategy : public TStrategyBase {
 public:
     EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
-            TBlackboard& /*blackboard*/, TGroupDiskRequests &groupDiskRequests) override {
+            TBlackboard& /*blackboard*/, TGroupDiskRequests &groupDiskRequests,
+            const TAccelerationParams& accelerationParams) override {
+        Y_UNUSED(accelerationParams);
         // Find the unput part and disk
         TStackVec<ui32, 2> badDiskIdxs;
         for (size_t diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {

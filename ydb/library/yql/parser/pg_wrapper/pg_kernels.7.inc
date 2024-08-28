@@ -2,13 +2,15 @@ TExecFunc arrow_bttidcmp() { return TGenericExec<TPgDirectFunc<&bttidcmp>, true,
 TExecFunc arrow_currtid_byrelname() { return TGenericExec<TPgDirectFunc<&currtid_byrelname>, true, false, TArgs_currtid_byrelname_Policy>({}); }
 TExecFunc arrow_hashtid() { return TGenericExec<TPgDirectFunc<&hashtid>, true, true, TArgs_hashtid_Policy>({}); }
 TExecFunc arrow_hashtidextended() { return TGenericExec<TPgDirectFunc<&hashtidextended>, true, true, TArgs_hashtidextended_Policy>({}); }
-TExecFunc arrow_pg_read_binary_file() { return TGenericExec<TPgDirectFunc<&pg_read_binary_file>, true, false, TArgs_pg_read_binary_file_Policy>({}); }
 TExecFunc arrow_pg_read_binary_file_all() { return TGenericExec<TPgDirectFunc<&pg_read_binary_file_all>, true, false, TArgs_pg_read_binary_file_all_Policy>({}); }
+TExecFunc arrow_pg_read_binary_file_all_missing() { return TGenericExec<TPgDirectFunc<&pg_read_binary_file_all_missing>, true, false, TArgs_pg_read_binary_file_all_missing_Policy>({}); }
 TExecFunc arrow_pg_read_binary_file_off_len() { return TGenericExec<TPgDirectFunc<&pg_read_binary_file_off_len>, true, false, TArgs_pg_read_binary_file_off_len_Policy>({}); }
+TExecFunc arrow_pg_read_binary_file_off_len_missing() { return TGenericExec<TPgDirectFunc<&pg_read_binary_file_off_len_missing>, true, false, TArgs_pg_read_binary_file_off_len_missing_Policy>({}); }
 TExecFunc arrow_pg_read_file() { return TGenericExec<TPgDirectFunc<&pg_read_file>, true, false, TArgs_pg_read_file_Policy>({}); }
 TExecFunc arrow_pg_read_file_all() { return TGenericExec<TPgDirectFunc<&pg_read_file_all>, true, false, TArgs_pg_read_file_all_Policy>({}); }
+TExecFunc arrow_pg_read_file_all_missing() { return TGenericExec<TPgDirectFunc<&pg_read_file_all_missing>, true, false, TArgs_pg_read_file_all_missing_Policy>({}); }
 TExecFunc arrow_pg_read_file_off_len() { return TGenericExec<TPgDirectFunc<&pg_read_file_off_len>, true, false, TArgs_pg_read_file_off_len_Policy>({}); }
-TExecFunc arrow_pg_read_file_v2() { return TGenericExec<TPgDirectFunc<&pg_read_file_v2>, true, false, TArgs_pg_read_file_v2_Policy>({}); }
+TExecFunc arrow_pg_read_file_off_len_missing() { return TGenericExec<TPgDirectFunc<&pg_read_file_off_len_missing>, true, false, TArgs_pg_read_file_off_len_missing_Policy>({}); }
 TExecFunc arrow_pg_stat_file() { return TGenericExec<TPgDirectFunc<&pg_stat_file>, true, false, TArgs_pg_stat_file_Policy>({}); }
 TExecFunc arrow_pg_stat_file_1arg() { return TGenericExec<TPgDirectFunc<&pg_stat_file_1arg>, true, false, TArgs_pg_stat_file_1arg_Policy>({}); }
 TExecFunc arrow_quote_ident() { return TGenericExec<TPgDirectFunc<&quote_ident>, true, false, TArgs_quote_ident_Policy>({}); }

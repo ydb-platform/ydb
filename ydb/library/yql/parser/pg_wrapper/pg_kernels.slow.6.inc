@@ -32,6 +32,8 @@ TExecFunc arrow_dcosh() { return MakeIndirectExec<true, true>(&dcosh); }
 TExecFunc arrow_dcot() { return MakeIndirectExec<true, true>(&dcot); }
 TExecFunc arrow_dcotd() { return MakeIndirectExec<true, true>(&dcotd); }
 TExecFunc arrow_degrees() { return MakeIndirectExec<true, true>(&degrees); }
+TExecFunc arrow_derf() { return MakeIndirectExec<true, true>(&derf); }
+TExecFunc arrow_derfc() { return MakeIndirectExec<true, true>(&derfc); }
 TExecFunc arrow_dexp() { return MakeIndirectExec<true, true>(&dexp); }
 TExecFunc arrow_dfloor() { return MakeIndirectExec<true, true>(&dfloor); }
 TExecFunc arrow_dlog1() { return MakeIndirectExec<true, true>(&dlog1); }
@@ -41,6 +43,7 @@ TExecFunc arrow_domain_recv() { return MakeIndirectExec<false, true>(&domain_rec
 TExecFunc arrow_dpi() { return MakeIndirectExec<true, true>(&dpi); }
 TExecFunc arrow_dpow() { return MakeIndirectExec<true, true>(&dpow); }
 TExecFunc arrow_drandom() { return MakeIndirectExec<true, true>(&drandom); }
+TExecFunc arrow_drandom_normal() { return MakeIndirectExec<true, true>(&drandom_normal); }
 TExecFunc arrow_dround() { return MakeIndirectExec<true, true>(&dround); }
 TExecFunc arrow_dsign() { return MakeIndirectExec<true, true>(&dsign); }
 TExecFunc arrow_dsin() { return MakeIndirectExec<true, true>(&dsin); }
@@ -169,6 +172,7 @@ TExecFunc arrow_pg_opclass_is_visible() { return MakeIndirectExec<true, true>(&p
 TExecFunc arrow_pg_operator_is_visible() { return MakeIndirectExec<true, true>(&pg_operator_is_visible); }
 TExecFunc arrow_pg_opfamily_is_visible() { return MakeIndirectExec<true, true>(&pg_opfamily_is_visible); }
 TExecFunc arrow_pg_stat_clear_snapshot() { return MakeIndirectExec<false, true>(&pg_stat_clear_snapshot); }
+TExecFunc arrow_pg_stat_force_next_flush() { return MakeIndirectExec<false, true>(&pg_stat_force_next_flush); }
 TExecFunc arrow_pg_stat_get_analyze_count() { return MakeIndirectExec<true, true>(&pg_stat_get_analyze_count); }
 TExecFunc arrow_pg_stat_get_archiver() { return MakeIndirectExec<false, false>(&pg_stat_get_archiver); }
 TExecFunc arrow_pg_stat_get_autoanalyze_count() { return MakeIndirectExec<true, true>(&pg_stat_get_autoanalyze_count); }
@@ -180,6 +184,7 @@ TExecFunc arrow_pg_stat_get_backend_client_port() { return MakeIndirectExec<true
 TExecFunc arrow_pg_stat_get_backend_dbid() { return MakeIndirectExec<true, true>(&pg_stat_get_backend_dbid); }
 TExecFunc arrow_pg_stat_get_backend_pid() { return MakeIndirectExec<true, true>(&pg_stat_get_backend_pid); }
 TExecFunc arrow_pg_stat_get_backend_start() { return MakeIndirectExec<true, true>(&pg_stat_get_backend_start); }
+TExecFunc arrow_pg_stat_get_backend_subxact() { return MakeIndirectExec<true, false>(&pg_stat_get_backend_subxact); }
 TExecFunc arrow_pg_stat_get_backend_userid() { return MakeIndirectExec<true, true>(&pg_stat_get_backend_userid); }
 TExecFunc arrow_pg_stat_get_backend_wait_event() { return MakeIndirectExec<true, false>(&pg_stat_get_backend_wait_event); }
 TExecFunc arrow_pg_stat_get_backend_wait_event_type() { return MakeIndirectExec<true, false>(&pg_stat_get_backend_wait_event_type); }
@@ -207,6 +212,7 @@ TExecFunc arrow_pg_stat_get_db_checksum_last_failure() { return MakeIndirectExec
 TExecFunc arrow_pg_stat_get_db_conflict_all() { return MakeIndirectExec<true, true>(&pg_stat_get_db_conflict_all); }
 TExecFunc arrow_pg_stat_get_db_conflict_bufferpin() { return MakeIndirectExec<true, true>(&pg_stat_get_db_conflict_bufferpin); }
 TExecFunc arrow_pg_stat_get_db_conflict_lock() { return MakeIndirectExec<true, true>(&pg_stat_get_db_conflict_lock); }
+TExecFunc arrow_pg_stat_get_db_conflict_logicalslot() { return MakeIndirectExec<true, true>(&pg_stat_get_db_conflict_logicalslot); }
 TExecFunc arrow_pg_stat_get_db_conflict_snapshot() { return MakeIndirectExec<true, true>(&pg_stat_get_db_conflict_snapshot); }
 TExecFunc arrow_pg_stat_get_db_conflict_startup_deadlock() { return MakeIndirectExec<true, true>(&pg_stat_get_db_conflict_startup_deadlock); }
 TExecFunc arrow_pg_stat_get_db_conflict_tablespace() { return MakeIndirectExec<true, true>(&pg_stat_get_db_conflict_tablespace); }
@@ -237,14 +243,18 @@ TExecFunc arrow_pg_stat_get_last_analyze_time() { return MakeIndirectExec<true, 
 TExecFunc arrow_pg_stat_get_last_autoanalyze_time() { return MakeIndirectExec<true, true>(&pg_stat_get_last_autoanalyze_time); }
 TExecFunc arrow_pg_stat_get_last_autovacuum_time() { return MakeIndirectExec<true, true>(&pg_stat_get_last_autovacuum_time); }
 TExecFunc arrow_pg_stat_get_last_vacuum_time() { return MakeIndirectExec<true, true>(&pg_stat_get_last_vacuum_time); }
+TExecFunc arrow_pg_stat_get_lastscan() { return MakeIndirectExec<true, true>(&pg_stat_get_lastscan); }
 TExecFunc arrow_pg_stat_get_live_tuples() { return MakeIndirectExec<true, true>(&pg_stat_get_live_tuples); }
 TExecFunc arrow_pg_stat_get_mod_since_analyze() { return MakeIndirectExec<true, true>(&pg_stat_get_mod_since_analyze); }
 TExecFunc arrow_pg_stat_get_numscans() { return MakeIndirectExec<true, true>(&pg_stat_get_numscans); }
+TExecFunc arrow_pg_stat_get_replication_slot() { return MakeIndirectExec<true, false>(&pg_stat_get_replication_slot); }
 TExecFunc arrow_pg_stat_get_snapshot_timestamp() { return MakeIndirectExec<true, true>(&pg_stat_get_snapshot_timestamp); }
+TExecFunc arrow_pg_stat_get_subscription_stats() { return MakeIndirectExec<true, false>(&pg_stat_get_subscription_stats); }
 TExecFunc arrow_pg_stat_get_tuples_deleted() { return MakeIndirectExec<true, true>(&pg_stat_get_tuples_deleted); }
 TExecFunc arrow_pg_stat_get_tuples_fetched() { return MakeIndirectExec<true, true>(&pg_stat_get_tuples_fetched); }
 TExecFunc arrow_pg_stat_get_tuples_hot_updated() { return MakeIndirectExec<true, true>(&pg_stat_get_tuples_hot_updated); }
 TExecFunc arrow_pg_stat_get_tuples_inserted() { return MakeIndirectExec<true, true>(&pg_stat_get_tuples_inserted); }
+TExecFunc arrow_pg_stat_get_tuples_newpage_updated() { return MakeIndirectExec<true, true>(&pg_stat_get_tuples_newpage_updated); }
 TExecFunc arrow_pg_stat_get_tuples_returned() { return MakeIndirectExec<true, true>(&pg_stat_get_tuples_returned); }
 TExecFunc arrow_pg_stat_get_tuples_updated() { return MakeIndirectExec<true, true>(&pg_stat_get_tuples_updated); }
 TExecFunc arrow_pg_stat_get_vacuum_count() { return MakeIndirectExec<true, true>(&pg_stat_get_vacuum_count); }
@@ -259,14 +269,17 @@ TExecFunc arrow_pg_stat_get_xact_tuples_deleted() { return MakeIndirectExec<true
 TExecFunc arrow_pg_stat_get_xact_tuples_fetched() { return MakeIndirectExec<true, true>(&pg_stat_get_xact_tuples_fetched); }
 TExecFunc arrow_pg_stat_get_xact_tuples_hot_updated() { return MakeIndirectExec<true, true>(&pg_stat_get_xact_tuples_hot_updated); }
 TExecFunc arrow_pg_stat_get_xact_tuples_inserted() { return MakeIndirectExec<true, true>(&pg_stat_get_xact_tuples_inserted); }
+TExecFunc arrow_pg_stat_get_xact_tuples_newpage_updated() { return MakeIndirectExec<true, true>(&pg_stat_get_xact_tuples_newpage_updated); }
 TExecFunc arrow_pg_stat_get_xact_tuples_returned() { return MakeIndirectExec<true, true>(&pg_stat_get_xact_tuples_returned); }
 TExecFunc arrow_pg_stat_get_xact_tuples_updated() { return MakeIndirectExec<true, true>(&pg_stat_get_xact_tuples_updated); }
+TExecFunc arrow_pg_stat_have_stats() { return MakeIndirectExec<true, true>(&pg_stat_have_stats); }
 TExecFunc arrow_pg_stat_reset() { return MakeIndirectExec<false, true>(&pg_stat_reset); }
 TExecFunc arrow_pg_stat_reset_replication_slot() { return MakeIndirectExec<false, true>(&pg_stat_reset_replication_slot); }
 TExecFunc arrow_pg_stat_reset_shared() { return MakeIndirectExec<true, true>(&pg_stat_reset_shared); }
 TExecFunc arrow_pg_stat_reset_single_function_counters() { return MakeIndirectExec<true, true>(&pg_stat_reset_single_function_counters); }
 TExecFunc arrow_pg_stat_reset_single_table_counters() { return MakeIndirectExec<true, true>(&pg_stat_reset_single_table_counters); }
 TExecFunc arrow_pg_stat_reset_slru() { return MakeIndirectExec<false, true>(&pg_stat_reset_slru); }
+TExecFunc arrow_pg_stat_reset_subscription_stats() { return MakeIndirectExec<false, true>(&pg_stat_reset_subscription_stats); }
 TExecFunc arrow_pg_statistics_obj_is_visible() { return MakeIndirectExec<true, true>(&pg_statistics_obj_is_visible); }
 TExecFunc arrow_pg_table_is_visible() { return MakeIndirectExec<true, true>(&pg_table_is_visible); }
 TExecFunc arrow_pg_trigger_depth() { return MakeIndirectExec<true, true>(&pg_trigger_depth); }

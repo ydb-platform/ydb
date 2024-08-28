@@ -105,6 +105,12 @@ inline bool HasSpillingFlag(const TCallable& callable) {
     xx(CustomPython3, 11, custompython3, true) \
     xx(SystemPython2, 12, systempython2, false) \
     xx(SystemPython3, 13, systempython3, false) \
+    xx(SystemPython3_8, 14, systempython3_8, false) \
+    xx(SystemPython3_9, 15, systempython3_9, false) \
+    xx(SystemPython3_10, 16, systempython3_10, false) \
+    xx(SystemPython3_11, 17, systempython3_11, false) \
+    xx(SystemPython3_12, 18, systempython3_12, false) \
+    xx(SystemPython3_13, 19, systempython3_13, false) \
 
 enum class EScriptType {
     MKQL_SCRIPT_TYPES(ENUM_VALUE_GEN)
@@ -249,6 +255,8 @@ public:
     TRuntimeNode BlockFromPg(TRuntimeNode input, TType* returnType);
     TRuntimeNode BlockPgResolvedCall(const std::string_view& name, ui32 id,
         const TArrayRef<const TRuntimeNode>& args, TType* returnType);
+    TRuntimeNode BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode dict,
+        EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns);
 
     //-- logical functions
     TRuntimeNode BlockNot(TRuntimeNode data);

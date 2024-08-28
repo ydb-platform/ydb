@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    cpu_quota_manager.cpp
     events.cpp
     helpers.cpp
 )
@@ -13,6 +14,8 @@ PEERDIR(
     ydb/core/tx/scheme_cache
 
     ydb/library/actors/core
+
+    ydb/public/sdk/cpp/client/ydb_types
 
     library/cpp/retry
 )

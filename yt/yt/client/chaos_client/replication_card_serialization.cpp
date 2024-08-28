@@ -348,8 +348,8 @@ void ToProto(NChaosClient::NProto::TReplicaHistoryItem* protoHistoryItem, const 
 {
     protoHistoryItem->set_era(historyItem.Era);
     protoHistoryItem->set_timestamp(ToProto<ui64>(historyItem.Timestamp));
-    protoHistoryItem->set_mode(ToProto<i32>(historyItem.Mode));
-    protoHistoryItem->set_state(ToProto<i32>(historyItem.State));
+    protoHistoryItem->set_mode(ToProto<int>(historyItem.Mode));
+    protoHistoryItem->set_state(ToProto<int>(historyItem.State));
 }
 
 void FromProto(TReplicaHistoryItem* historyItem, const NChaosClient::NProto::TReplicaHistoryItem& protoHistoryItem)
@@ -365,11 +365,11 @@ void ToProto(
     const TReplicaInfo& replicaInfo,
     const TReplicationCardFetchOptions& options)
 {
-    protoReplicaInfo->set_cluster_name(replicaInfo.ClusterName);
+    protoReplicaInfo->set_cluster_name(ToProto<TProtobufString>(replicaInfo.ClusterName));
     protoReplicaInfo->set_replica_path(replicaInfo.ReplicaPath);
-    protoReplicaInfo->set_content_type(ToProto<i32>(replicaInfo.ContentType));
-    protoReplicaInfo->set_mode(ToProto<i32>(replicaInfo.Mode));
-    protoReplicaInfo->set_state(ToProto<i32>(replicaInfo.State));
+    protoReplicaInfo->set_content_type(ToProto<int>(replicaInfo.ContentType));
+    protoReplicaInfo->set_mode(ToProto<int>(replicaInfo.Mode));
+    protoReplicaInfo->set_state(ToProto<int>(replicaInfo.State));
     protoReplicaInfo->set_enable_replicated_table_tracker(replicaInfo.EnableReplicatedTableTracker);
     if (options.IncludeProgress) {
         ToProto(protoReplicaInfo->mutable_progress(), replicaInfo.ReplicationProgress);
@@ -414,7 +414,7 @@ void ToProto(
     protoReplicationCard->set_era(replicationCard.Era);
     ToProto(protoReplicationCard->mutable_table_id(), replicationCard.TableId);
     protoReplicationCard->set_table_path(replicationCard.TablePath);
-    protoReplicationCard->set_table_cluster_name(replicationCard.TableClusterName);
+    protoReplicationCard->set_table_cluster_name(ToProto<TProtobufString>(replicationCard.TableClusterName));
     protoReplicationCard->set_current_timestamp(replicationCard.CurrentTimestamp);
     ToProto(protoReplicationCard->mutable_replication_card_collocation_id(), replicationCard.ReplicationCardCollocationId);
 }

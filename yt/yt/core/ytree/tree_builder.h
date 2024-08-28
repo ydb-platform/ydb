@@ -35,6 +35,10 @@ struct ITreeBuilder
 /*!
  *  \param factory A factory used for materializing the nodes.
  */
+std::unique_ptr<ITreeBuilder> CreateBuilderFromFactory(
+    INodeFactory* factory,
+    int treeSizeLimit);
+
 std::unique_ptr<ITreeBuilder> CreateBuilderFromFactory(INodeFactory* factory);
 
 ////////////////////////////////////////////////////////////////////////////////

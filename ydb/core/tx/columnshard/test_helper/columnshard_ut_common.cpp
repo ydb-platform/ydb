@@ -1,8 +1,9 @@
 #include "columnshard_ut_common.h"
+#include "shard_reader.h"
 
-#include <ydb/core/tx/columnshard/common/tests/shard_reader.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/portions/portions.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_resolver.h>
@@ -124,22 +125,25 @@ bool WriteDataImpl(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shar
 }
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId, const ui64 writeId, const ui64 tableId, const TString& data,
-                              const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>* writeIds, const NEvWrite::EModificationType mType) {
+    const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>* writeIds, const NEvWrite::EModificationType mType) {
     NLongTxService::TLongTxId longTxId;
     UNIT_ASSERT(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=1"));
-    return WriteDataImpl(runtime, sender, shardId, tableId, longTxId, writeId, data, NArrow::MakeArrowSchema(ydbSchema), writeIds, mType);
-
+    return WriteDataImpl(
+        runtime, sender, shardId, tableId, longTxId, writeId, data, NArrow::MakeArrowSchema(ydbSchema), writeIds, mType);
 }
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 writeId, const ui64 tableId, const TString& data,
-                              const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, bool waitResult, std::vector<ui64>* writeIds, const NEvWrite::EModificationType mType) {
+    const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, bool waitResult, std::vector<ui64>* writeIds,
+    const NEvWrite::EModificationType mType) {
     NLongTxService::TLongTxId longTxId;
     UNIT_ASSERT(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=1"));
     if (writeIds) {
-        return WriteDataImpl(runtime, sender, TTestTxConfig::TxTablet0, tableId, longTxId, writeId, data, NArrow::MakeArrowSchema(ydbSchema), writeIds, mType);
+        return WriteDataImpl(runtime, sender, TTestTxConfig::TxTablet0, tableId, longTxId, writeId, data,
+            NArrow::MakeArrowSchema(ydbSchema), writeIds, mType);
     }
     std::vector<ui64> ids;
-    return WriteDataImpl(runtime, sender, TTestTxConfig::TxTablet0, tableId, longTxId, writeId, data, NArrow::MakeArrowSchema(ydbSchema), waitResult ? &ids : nullptr, mType);
+    return WriteDataImpl(runtime, sender, TTestTxConfig::TxTablet0, tableId, longTxId, writeId, data,
+        NArrow::MakeArrowSchema(ydbSchema), waitResult ? &ids : nullptr, mType);
 }
 
 std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, const NLongTxService::TLongTxId& longTxId,
@@ -396,6 +400,35 @@ NMetadata::NFetcher::ISnapshot::TPtr TTestSchema::BuildSnapshot(const TTableSpec
     return cs;
 }
 
+void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& columns, const std::vector<NArrow::NTest::TTestColumn>& pk,
+    const TTableSpecials& specials, NKikimrSchemeOp::TColumnTableSchema* schema) {
+    schema->SetEngine(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
+
+    for (ui32 i = 0; i < columns.size(); ++i) {
+        *schema->MutableColumns()->Add() = columns[i].CreateColumn(i + 1);
+        if (!specials.NeedTestStatistics()) {
+            continue;
+        }
+        if (NOlap::NIndexes::NMax::TIndexMeta::IsAvailableType(columns[i].GetType())) {
+            *schema->AddIndexes() = NOlap::NIndexes::TIndexMetaContainer(
+                std::make_shared<NOlap::NIndexes::NMax::TIndexMeta>(1000 + i, "MAX::INDEX::" + columns[i].GetName(), "__LOCAL_METADATA", i + 1))
+                    .SerializeToProto();
+        }
+    }
+
+    Y_ABORT_UNLESS(pk.size() > 0);
+    for (auto& column : ExtractNames(pk)) {
+        schema->AddKeyColumnNames(column);
+    }
+
+    if (specials.HasCodec()) {
+        schema->MutableDefaultCompression()->SetCodec(specials.GetCodecId());
+    }
+    if (specials.CompressionLevel) {
+        schema->MutableDefaultCompression()->SetLevel(*specials.CompressionLevel);
+    }
+}
+
 }
 
 namespace NKikimr::NColumnShard {
@@ -489,7 +522,7 @@ namespace NKikimr::NColumnShard {
             fields.emplace_back(f.GetName());
         }
 
-        NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
+        NTxUT::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
         reader.SetReplyColumns(fields);
         auto rb = reader.ReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());

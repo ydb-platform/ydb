@@ -57,8 +57,12 @@ void TPortionInfoConstructor::LoadRecord(const TIndexInfo& indexInfo, const TCol
 }
 
 void TPortionInfoConstructor::LoadIndex(const TIndexChunkLoadContext& loadContext) {
-    const auto linkBlobId = RegisterBlobId(loadContext.GetBlobRange().GetBlobId());
-    AddIndex(loadContext.BuildIndexChunk(linkBlobId));
+    if (loadContext.GetBlobRange()) {
+        const TBlobRangeLink16::TLinkId linkBlobId = RegisterBlobId(loadContext.GetBlobRange()->GetBlobId());
+        AddIndex(loadContext.BuildIndexChunk(linkBlobId));
+    } else {
+        AddIndex(loadContext.BuildIndexChunk());
+    }
 }
 
 const NKikimr::NOlap::TColumnRecord& TPortionInfoConstructor::AppendOneChunkColumn(TColumnRecord&& record) {

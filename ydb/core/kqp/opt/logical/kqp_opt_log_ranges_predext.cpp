@@ -8,7 +8,6 @@
 
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
-#include <ydb/library/yql/providers/common/provider/yql_table_lookup.h>
 #include <ydb/library/yql/core/extract_predicate/extract_predicate.h>
 #include <ydb/core/protos/config.pb.h>
 
@@ -42,139 +41,6 @@ bool IsValidForRange(const NYql::TExprNode::TPtr& node) {
     }
 
     return true;
-}
-
-TMaybeNode<TExprBase> TryBuildTrivialReadTable(TCoFlatMap& flatmap, TKqlReadTableRangesBase readTable,
-    const TKqpMatchReadResult& readMatch, const TKikimrTableDescription& tableDesc, TExprContext& ctx,
-    const TKqpOptimizeContext& kqpCtx, TMaybeNode<TCoAtom> indexName)
-{
-    Y_UNUSED(kqpCtx);
-
-    switch (tableDesc.Metadata->Kind) {
-        case EKikimrTableKind::Datashard:
-        case EKikimrTableKind::SysView:
-            break;
-        case EKikimrTableKind::Olap:
-        case EKikimrTableKind::External:
-        case EKikimrTableKind::Unspecified:
-            return {};
-        case EKikimrTableKind::View:
-            YQL_ENSURE(false, "All views should have been rewritten at this stage.");
-    }
-
-    auto row = flatmap.Lambda().Args().Arg(0);
-    auto predicate = TExprBase(flatmap.Lambda().Body().Ref().ChildPtr(0));
-    TTableLookup lookup = ExtractTableLookup(row, predicate, tableDesc.Metadata->KeyColumnNames,
-        &KqpTableLookupGetValue, &KqpTableLookupCanCompare, &KqpTableLookupCompare, ctx, false);
-
-    if (lookup.IsFullScan()) {
-        return {};
-    }
-
-    if (lookup.GetKeyRanges().size() > 1) {
-        return {}; // optimize trivial cases only
-    }
-
-    auto isTrivialExpr = [](const TExprBase& expr) {
-        if (!expr.Maybe<TCoExists>()) {
-            return false;
-        }
-        auto opt = expr.Cast<TCoExists>().Optional();
-        if (opt.Maybe<TCoDataCtor>()) {
-            return true;
-        }
-        if (opt.Maybe<TCoParameter>()) {
-            return opt.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Data;
-        }
-        return false;
-    };
-
-    auto isTrivialPredicate = [&isTrivialExpr](const TExprBase& expr) {
-        if (isTrivialExpr(expr)) {
-            return true;
-        }
-        if (expr.Maybe<TCoAnd>()) {
-            for (auto& predicate : expr.Cast<TCoAnd>().Args()) {
-                if (!isTrivialExpr(TExprBase(predicate))) {
-                    return false;
-                }
-            }
-            return true;
-        }
-        return false;
-    };
-
-    TVector<TExprBase> fetches;
-    fetches.reserve(lookup.GetKeyRanges().size());
-    auto readSettings = TKqpReadTableSettings::Parse(readTable);
-
-    for (const auto& keyRange : lookup.GetKeyRanges()) {
-        if (keyRange.HasResidualPredicate()) {
-            // In trivial cases the residual predicate look like:
-            //  * (Exists <KeyValue>)
-            //  * (And (Exists <Key1Value>) (Exists Key2Value) ...)
-            // where `KeyValue` is either explicit `Data` (so `Exists` is always true)
-            //   or Parameter value (in that case we ensure that type is not optional)
-            if (!isTrivialPredicate(keyRange.GetResidualPredicate().Cast())) {
-                return {};
-            }
-        }
-
-        auto keyRangeExpr = BuildKeyRangeExpr(keyRange, tableDesc, readTable.Pos(), ctx);
-
-        TKqpReadTableSettings settings = readSettings;
-        for (size_t i = 0; i < keyRange.GetColumnRangesCount(); ++i) {
-            const auto& column = tableDesc.Metadata->KeyColumnNames[i];
-            auto& range = keyRange.GetColumnRange(i);
-            if (range.IsDefined() && !range.IsNull()) {
-                settings.AddSkipNullKey(column);
-            }
-        }
-
-        auto buildReadTable = [&] () -> TExprBase {
-            return Build<TKqlReadTable>(ctx, readTable.Pos())
-                .Table(readTable.Table())
-                .Range(keyRangeExpr)
-                .Columns(readTable.Columns())
-                .Settings(settings.BuildNode(ctx, readTable.Pos()))
-                .Done();
-        };
-
-        auto buildReadIndex = [&] () -> TExprBase {
-            return Build<TKqlReadTableIndex>(ctx, readTable.Pos())
-                .Table(readTable.Table())
-                .Range(keyRangeExpr)
-                .Columns(readTable.Columns())
-                .Settings(settings.BuildNode(ctx, readTable.Pos()))
-                .Index(indexName.Cast())
-                .Done();
-        };
-
-        TExprBase input = indexName.IsValid() ? buildReadIndex() : buildReadTable();
-
-        input = readMatch.BuildProcessNodes(input, ctx);
-
-        input = Build<TCoFlatMap>(ctx, readTable.Pos())
-            .Input(input)
-            .Lambda()
-                .Args({"item"})
-                .Body<TExprApplier>()
-                    .Apply(TExprBase(ctx.ChangeChild(flatmap.Lambda().Body().Ref(), 0, MakeBool<true>(readTable.Pos(), ctx))))
-                    .With(flatmap.Lambda().Args().Arg(0), "item")
-                    .Build()
-                .Build()
-            .Done();
-
-        if (lookup.GetKeyRanges().size() == 1) {
-            return input;
-        }
-
-        fetches.emplace_back(input);
-    }
-
-    return Build<TCoExtend>(ctx, readTable.Pos())
-        .Add(fetches)
-        .Done();
 }
 
 } // namespace
@@ -239,27 +105,12 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
     settings.MergeAdjacentPointRanges = true;
     settings.HaveNextValueCallable = true;
     settings.BuildLiteralRange = true;
+    settings.IsValidForRange = IsValidForRange;
 
     if (kqpCtx.Config->ExtractPredicateRangesLimit != 0) {
         settings.MaxRanges = kqpCtx.Config->ExtractPredicateRangesLimit;
     } else {
         settings.MaxRanges = Nothing();
-    }
-
-    if (!kqpCtx.Config->PredicateExtract20) {
-        // test for trivial cases (explicit literals or parameters)
-        auto& tableDesc = indexName
-            ? kqpCtx.Tables->ExistingTable(
-                kqpCtx.Cluster,
-                mainTableDesc.Metadata->GetIndexMetadata(TString(indexName.Cast())).first->Name)
-            : mainTableDesc;
-        YQL_ENSURE(node.Maybe<TCoFlatMap>(), "got OrderedFlatMap with disabled PredicateExtract20");
-        auto flatmap = node.Cast<TCoFlatMap>();
-        if (auto expr = TryBuildTrivialReadTable(flatmap, read, *readMatch, tableDesc, ctx, kqpCtx, indexName)) {
-            return expr.Cast();
-        }
-    } else {
-        settings.IsValidForRange = IsValidForRange;
     }
 
     auto extractor = MakePredicateRangeExtractor(settings);
@@ -373,8 +224,7 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
     YQL_CLOG(DEBUG, ProviderKqp) << "Residual lambda: " << KqpExprToPrettyString(*residualLambda, ctx);
 
     TMaybe<TExprBase> input;
-    if (kqpCtx.Config->PredicateExtract20 &&
-        (tableDesc.Metadata->Kind == EKikimrTableKind::Datashard ||
+    if ((tableDesc.Metadata->Kind == EKikimrTableKind::Datashard ||
          tableDesc.Metadata->Kind == EKikimrTableKind::SysView))
     {
             auto buildLookup = [&] (TExprNode::TPtr keys, TMaybe<TExprBase>& result) {
@@ -474,27 +324,25 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
         TMaybeNode<TExprBase> prefix;
         TMaybeNode<TCoLambda> predicateExpr;
         TMaybeNode<TCoAtomList> usedColumnsList;
-        if (kqpCtx.Config->PredicateExtract20) {
-            prefix = prefixPointsExpr;
-            if (prefix) {
-                predicateExpr = ctx.DeepCopyLambda(flatmap.Lambda().Ref());
-                TSet<TString> usedColumns;
-                if (!ExtractUsedFields(
-                    flatmap.Lambda().Body().Ptr(),
-                    flatmap.Lambda().Args().Arg(0).Ref(),
-                    usedColumns,
-                    parentsMap,
-                    true))
-                {
-                    prefix = {};
-                    predicateExpr = {};
-                } else {
-                    TVector<TCoAtom> columnAtoms;
-                    for (auto&& column : usedColumns) {
-                        columnAtoms.push_back(Build<TCoAtom>(ctx, read.Pos()).Value(column).Done());
-                    }
-                    usedColumnsList = Build<TCoAtomList>(ctx, read.Pos()).Add(columnAtoms).Done();
+        prefix = prefixPointsExpr;
+        if (prefix) {
+            predicateExpr = ctx.DeepCopyLambda(flatmap.Lambda().Ref());
+            TSet<TString> usedColumns;
+            if (!ExtractUsedFields(
+                flatmap.Lambda().Body().Ptr(),
+                flatmap.Lambda().Args().Arg(0).Ref(),
+                usedColumns,
+                parentsMap,
+                true))
+            {
+                prefix = {};
+                predicateExpr = {};
+            } else {
+                TVector<TCoAtom> columnAtoms;
+                for (auto&& column : usedColumns) {
+                    columnAtoms.push_back(Build<TCoAtom>(ctx, read.Pos()).Value(column).Done());
                 }
+                usedColumnsList = Build<TCoAtomList>(ctx, read.Pos()).Add(columnAtoms).Done();
             }
         }
 

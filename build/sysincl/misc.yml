@@ -87,11 +87,6 @@
   includes:
     - plugin-api.h # GNU linker plugin API.
 
-- source_filter: "^contrib/libs/musl"
-  includes:
-    - atomic.h:      contrib/libs/musl/src/internal/atomic.h
-    - bits/fenv.h:   contrib/libs/musl/arch/x86_64/bits/fenv.h
-
 - source_filter: "^contrib/libs/zbar"
   includes:
     - error.h:       contrib/libs/zbar/zbar/error.h
@@ -154,10 +149,22 @@
   includes:
     - mkl.h:         contrib/libs/intel/mkl/include/mkl.h
 
-# deprecated contrib with ADDINCL to libintl
-- source_filter: "^contrib/(deprecated/glib/glib|libs/gdk-pixbuf)"
+# Use gettext-stub which has a permissive license
+- source_filter: "^contrib/libs/gdk-pixbuf"
   includes:
-    - libintl.h:     contrib/deprecated/libintl/libintl.h
+    - libintl.h: contrib/restricted/gettext-stub/libintl.h
+
+- source_filter: "^contrib/restricted/glib"
+  includes:
+    - libintl.h: contrib/restricted/gettext-stub/libintl.h
+
+- source_filter: "^contrib/restricted/gst-plugins-base"
+  includes:
+    - libintl.h: contrib/restricted/gettext-stub/libintl.h
+
+- source_filter: "^contrib/restricted/gstreamer"
+  includes:
+    - libintl.h: contrib/restricted/gettext-stub/libintl.h
 
 - source_filter: "^contrib/libs/poco/Data/ODBC"
   includes:
@@ -522,7 +529,11 @@
 - source_filter: "^contrib/tools/bison/data"
   includes:
     - "]b4_location_include["
-    - "position.hh"
+
+- source_filter: "^contrib/libs/libheif"
+  includes:
+    - error.h:  contrib/libs/libheif/libheif/error.h
+    - file.h:   contrib/libs/libheif/libheif/file.h
 
 - source_filter: "^vendor/github.com/NVIDIA"
   includes:

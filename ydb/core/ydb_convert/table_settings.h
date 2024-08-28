@@ -70,7 +70,7 @@ bool FillTtlSettings(TTtlSettingsEnabled& out, const Ydb::Table::TtlSettings& in
 }
 
 bool FillIndexTablePartitioning(
-    NKikimrSchemeOp::TTableDescription& out,
+    std::vector<NKikimrSchemeOp::TTableDescription>& indexImplTableDescriptions,
     const Ydb::Table::TableIndex& index,
     Ydb::StatusIds::StatusCode& code, TString& error);
 

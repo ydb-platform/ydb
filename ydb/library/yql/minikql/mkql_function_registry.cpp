@@ -159,7 +159,7 @@ public:
             if (!abiVersionFunc) {
                 return;
             }
-            
+
             ui32 version = abiVersionFunc();
             Y_ENSURE(NUdf::IsAbiCompatible(version) && version >= NUdf::MakeAbiVersion(2, 8, 0),
                      "Non compatible ABI version of UDF library " << libraryPath

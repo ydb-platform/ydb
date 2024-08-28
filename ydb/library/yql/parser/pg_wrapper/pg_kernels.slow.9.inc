@@ -57,6 +57,9 @@ TExecFunc arrow_has_language_privilege_id_name() { return MakeIndirectExec<true,
 TExecFunc arrow_has_language_privilege_name() { return MakeIndirectExec<true, true>(&has_language_privilege_name); }
 TExecFunc arrow_has_language_privilege_name_id() { return MakeIndirectExec<true, true>(&has_language_privilege_name_id); }
 TExecFunc arrow_has_language_privilege_name_name() { return MakeIndirectExec<true, true>(&has_language_privilege_name_name); }
+TExecFunc arrow_has_parameter_privilege_id_name() { return MakeIndirectExec<true, true>(&has_parameter_privilege_id_name); }
+TExecFunc arrow_has_parameter_privilege_name() { return MakeIndirectExec<true, true>(&has_parameter_privilege_name); }
+TExecFunc arrow_has_parameter_privilege_name_name() { return MakeIndirectExec<true, true>(&has_parameter_privilege_name_name); }
 TExecFunc arrow_has_schema_privilege_id() { return MakeIndirectExec<true, true>(&has_schema_privilege_id); }
 TExecFunc arrow_has_schema_privilege_id_id() { return MakeIndirectExec<true, true>(&has_schema_privilege_id_id); }
 TExecFunc arrow_has_schema_privilege_id_name() { return MakeIndirectExec<true, true>(&has_schema_privilege_id_name); }
@@ -156,6 +159,7 @@ TExecFunc arrow_int8in() { return MakeIndirectExec<true, true>(&int8in); }
 TExecFunc arrow_int8inc() { return MakeIndirectExec<true, true>(&int8inc); }
 TExecFunc arrow_int8inc_any() { return MakeIndirectExec<true, true>(&int8inc_any); }
 TExecFunc arrow_int8inc_float8_float8() { return MakeIndirectExec<true, true>(&int8inc_float8_float8); }
+TExecFunc arrow_int8inc_support() { return MakeIndirectExec<true, true>(&int8inc_support); }
 TExecFunc arrow_int8larger() { return MakeIndirectExec<true, true>(&int8larger); }
 TExecFunc arrow_int8lcm() { return MakeIndirectExec<true, true>(&int8lcm); }
 TExecFunc arrow_int8le() { return MakeIndirectExec<true, true>(&int8le); }

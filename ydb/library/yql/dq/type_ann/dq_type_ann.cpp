@@ -270,9 +270,6 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
         }
 
         if (!sinks.empty()) {
-            for (auto sink : sinks) {
-                sink->SetTypeAnn(resultType);
-            }
             stageResultTypes.assign(programResultTypesTuple.begin(), programResultTypesTuple.end());
         } else {
             for (auto transform : transforms) {
@@ -1055,6 +1052,10 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
 
             if (TDqJoin::Match(input.Get())) {
                 return AnnotateDqJoin(input, ctx);
+            }
+
+            if (TDqPhyGraceJoin::Match(input.Get())) {
+                return AnnotateDqMapOrDictJoin(input, ctx);
             }
 
             if (TDqPhyMapJoin::Match(input.Get())) {

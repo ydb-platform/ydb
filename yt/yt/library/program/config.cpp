@@ -8,12 +8,20 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void THeapSizeLimit::Register(TRegistrar registrar)
+void THeapSizeLimitConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("container_memory_ratio", &TThis::ContainerMemoryRatio)
         .Optional();
+    registrar.Parameter("container_memory_margin", &TThis::ContainerMemoryMargin)
+        .Optional();
     registrar.Parameter("hard", &TThis::Hard)
         .Default(false);
+    registrar.Parameter("dump_memory_profile_on_violation", &TThis::DumpMemoryProfileOnViolation)
+        .Default(false);
+    registrar.Parameter("dump_memory_profile_timeout", &TThis::DumpMemoryProfileTimeout)
+        .Default(TDuration::Minutes(10));
+    registrar.Parameter("dump_memory_profile_path", &TThis::DumpMemoryProfilePath)
+        .Default();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -88,7 +96,8 @@ void TSingletonsConfig::Register(TRegistrar registrar)
     registrar.Parameter("solomon_exporter", &TThis::SolomonExporter)
         .DefaultNew();
     registrar.Parameter("logging", &TThis::Logging)
-        .DefaultCtor([] { return NLogging::TLogManagerConfig::CreateDefault(); });
+        .DefaultCtor([] { return NLogging::TLogManagerConfig::CreateDefault(); })
+        .ResetOnLoad();
     registrar.Parameter("jaeger", &TThis::Jaeger)
         .DefaultNew();
     registrar.Parameter("tracing_transport", &TThis::TracingTransport)

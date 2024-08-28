@@ -441,9 +441,10 @@ private:
             return TStatus::Error;
         }
 
-        if (initialWrite && !replaceMeta && columnGroups) {
+        if (initialWrite && !replaceMeta && columnGroups != description.ColumnGroupSpec) {
             ctx.AddError(TIssue(pos, TStringBuilder()
                 << "Insert with "
+                << (outTableInfo.Epoch.GetOrElse(0) ? "different " : "")
                 << ToString(EYtSettingType::ColumnGroups).Quote()
                 << " to existing table is not allowed"));
             return TStatus::Error;
@@ -1474,6 +1475,7 @@ private:
             | EYtSettingType::MonotonicKeys
             | EYtSettingType::MutationId
             | EYtSettingType::ColumnGroups
+            | EYtSettingType::SecurityTags
             , ctx))
         {
             return TStatus::Error;
@@ -1746,6 +1748,7 @@ private:
             | EYtSettingType::MonotonicKeys
             | EYtSettingType::MutationId
             | EYtSettingType::ColumnGroups
+            | EYtSettingType::SecurityTags
             , ctx))
         {
             return TStatus::Error;

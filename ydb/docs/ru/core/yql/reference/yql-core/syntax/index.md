@@ -5,15 +5,16 @@
 {% if feature_mapreduce %}
 * [USE](use.md)
 {% endif %}
-* [SELECT](select.md)
+* [SELECT](select/index.md)
 * [VALUES](values.md)
 {% if select_command == "SELECT STREAM" %}
 * [SELECT STREAM](select_stream.md)
 {% endif %}
-* [CREATE TABLE](create_table.md)
+* [CREATE TABLE](create_table/index.md)
 * [DROP TABLE](drop_table.md)
 * [INSERT](insert_into.md)
 {% if feature_map_tables %}
+* [ALTER TABLE](alter_table/index.md)
 * [UPDATE](update.md)
 * [DELETE](delete.md)
 {% endif %}
@@ -35,7 +36,9 @@
 {% if feature_mapreduce and process_command == "PROCESS" %}
 * [SUBQUERY](subquery.md)
 {% endif %}
+{% if backend_name != "YDB" %}
 * [DISCARD](discard.md)
+{% endif %}
 * [INTO RESULT](into_result.md)
 {% if feature_mapreduce %}
 {% if process_command == "PROCESS" %}

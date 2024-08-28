@@ -356,7 +356,7 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
         const ui64 magic = 0x123951924;
         const ui64 offset = format.SectorSize * 17;
         ui64 nonce = 1;
-        for (ui32 i = 0; i < sectors.Size(); ++i) {
+        for (ui32 i = 1; i < sectors.Size(); ++i) {
             memset(sectors[i].Begin(), 13, sectors[i].Size());
             sectors[i].SetCanary();
             auto *footer = sectors[i].GetDataFooter();
@@ -364,9 +364,6 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
             footer->Nonce = nonce++;
             NPDisk::TPDiskHashCalculator hasher;
             switch (i) {
-            case 0:
-                footer->Hash = hasher.OldHashSector(offset, magic, sectors[i].Begin(), sectors[i].Size());
-                break;
             case 1:
                 footer->Hash = hasher.T1ha0HashSector<TT1ha0NoAvxHasher>(offset, magic, sectors[i].Begin(), sectors[i].Size());
                 break;

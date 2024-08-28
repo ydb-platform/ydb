@@ -166,11 +166,17 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
             for (const auto &input : stage.GetInputs()) {
                 hasStreamLookup |= input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup;
             }
+
+            for (const auto &tableOp : stage.GetTableOps()) {
+                if (tableOp.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
+                    // always need snapshot for OLAP reads
+                    return true;
+                }
+            }
         }
     }
 
     if (txCtx.HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
-        YQL_ENSURE(txCtx.EnableImmediateEffects);
         return true;
     }
 
@@ -186,6 +192,11 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
     // degradation.
     if (hasEffects) {
         return false;
+    }
+
+    // We need snapshot for stream lookup, besause it's used for dependent reads
+    if (hasStreamLookup) {
+        return true;
     }
 
     // We need snapshot when there are multiple table read phases, most

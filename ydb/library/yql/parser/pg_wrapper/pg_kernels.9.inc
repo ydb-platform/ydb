@@ -57,6 +57,9 @@ TExecFunc arrow_has_language_privilege_id_name() { return TGenericExec<TPgDirect
 TExecFunc arrow_has_language_privilege_name() { return TGenericExec<TPgDirectFunc<&has_language_privilege_name>, true, true, TArgs_has_language_privilege_name_Policy>({}); }
 TExecFunc arrow_has_language_privilege_name_id() { return TGenericExec<TPgDirectFunc<&has_language_privilege_name_id>, true, true, TArgs_has_language_privilege_name_id_Policy>({}); }
 TExecFunc arrow_has_language_privilege_name_name() { return TGenericExec<TPgDirectFunc<&has_language_privilege_name_name>, true, true, TArgs_has_language_privilege_name_name_Policy>({}); }
+TExecFunc arrow_has_parameter_privilege_id_name() { return TGenericExec<TPgDirectFunc<&has_parameter_privilege_id_name>, true, true, TArgs_has_parameter_privilege_id_name_Policy>({}); }
+TExecFunc arrow_has_parameter_privilege_name() { return TGenericExec<TPgDirectFunc<&has_parameter_privilege_name>, true, true, TArgs_has_parameter_privilege_name_Policy>({}); }
+TExecFunc arrow_has_parameter_privilege_name_name() { return TGenericExec<TPgDirectFunc<&has_parameter_privilege_name_name>, true, true, TArgs_has_parameter_privilege_name_name_Policy>({}); }
 TExecFunc arrow_has_schema_privilege_id() { return TGenericExec<TPgDirectFunc<&has_schema_privilege_id>, true, true, TArgs_has_schema_privilege_id_Policy>({}); }
 TExecFunc arrow_has_schema_privilege_id_id() { return TGenericExec<TPgDirectFunc<&has_schema_privilege_id_id>, true, true, TArgs_has_schema_privilege_id_id_Policy>({}); }
 TExecFunc arrow_has_schema_privilege_id_name() { return TGenericExec<TPgDirectFunc<&has_schema_privilege_id_name>, true, true, TArgs_has_schema_privilege_id_name_Policy>({}); }
@@ -156,6 +159,7 @@ TExecFunc arrow_int8in() { return TGenericExec<TPgDirectFunc<&int8in>, true, tru
 TExecFunc arrow_int8inc() { return TGenericExec<TPgDirectFunc<&int8inc>, true, true, TArgs_int8inc_Policy>({}); }
 TExecFunc arrow_int8inc_any() { return TGenericExec<TPgDirectFunc<&int8inc_any>, true, true, TArgs_int8inc_any_Policy>({}); }
 TExecFunc arrow_int8inc_float8_float8() { return TGenericExec<TPgDirectFunc<&int8inc_float8_float8>, true, true, TArgs_int8inc_float8_float8_Policy>({}); }
+TExecFunc arrow_int8inc_support() { return TGenericExec<TPgDirectFunc<&int8inc_support>, true, true, TArgs_int8inc_support_Policy>({}); }
 TExecFunc arrow_int8larger() { return TGenericExec<TPgDirectFunc<&int8larger>, true, true, TArgs_int8larger_Policy>({}); }
 TExecFunc arrow_int8lcm() { return TGenericExec<TPgDirectFunc<&int8lcm>, true, true, TArgs_int8lcm_Policy>({}); }
 TExecFunc arrow_int8le() { return TGenericExec<TPgDirectFunc<&int8le>, true, true, TArgs_int8le_Policy>({}); }

@@ -15,4 +15,10 @@ NActors::IActor* CreatePoolResolverActor(TEvPlaceRequestIntoPool::TPtr event, bo
 NActors::IActor* CreatePoolFetcherActor(const NActors::TActorId& replyActorId, const TString& database, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken);
 NActors::IActor* CreatePoolCreatorActor(const NActors::TActorId& replyActorId, const TString& database, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, TIntrusiveConstPtr<NACLib::TUserToken> userToken, NACLibProto::TDiffACL diffAcl);
 
+// Checks that database is serverless
+NActors::IActor* CreateDatabaseFetcherActor(const NActors::TActorId& replyActorId, const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken = nullptr, NACLib::EAccessRights checkAccess = NACLib::EAccessRights::NoAccess);
+
+// Cpu load fetcher actor
+NActors::IActor* CreateCpuLoadFetcherActor(const NActors::TActorId& replyActorId);
+
 }  // NKikimr::NKqp::NWorkload

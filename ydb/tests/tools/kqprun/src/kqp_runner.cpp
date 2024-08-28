@@ -101,11 +101,11 @@ public:
         , CoutColors_(NColorizer::AutoColors(Cout))
     {}
 
-    bool ExecuteSchemeQuery(const TString& query, const TString& traceId) const {
+    bool ExecuteSchemeQuery(const TRequestOptions& query) const {
         StartSchemeTraceOpt();
 
         TSchemeMeta meta;
-        TRequestResult status = YdbSetup_.SchemeQueryRequest(query, traceId, meta);
+        TRequestResult status = YdbSetup_.SchemeQueryRequest(query, meta);
         TYdbSetup::StopTraceOpt();
 
         PrintSchemeQueryAst(meta.Ast);
@@ -118,10 +118,10 @@ public:
         return true;
     }
 
-    bool ExecuteScript(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId) {
+    bool ExecuteScript(const TRequestOptions& script) {
         StartScriptTraceOpt();
 
-        TRequestResult status = YdbSetup_.ScriptRequest(script, action, traceId, ExecutionOperation_);
+        TRequestResult status = YdbSetup_.ScriptRequest(script, ExecutionOperation_);
 
         if (!status.IsSuccess()) {
             Cerr << CerrColors_.Red() << "Failed to start script execution, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
@@ -131,30 +131,35 @@ public:
         return WaitScriptExecutionOperation();
     }
 
-    bool ExecuteQuery(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, EQueryType queryType) {
+    bool ExecuteQuery(const TRequestOptions& query, EQueryType queryType) {
         StartScriptTraceOpt();
+        StartTime_ = TInstant::Now();
 
+        TString queryTypeStr;
         TQueryMeta meta;
         TRequestResult status;
         switch (queryType) {
         case EQueryType::ScriptQuery:
-            status = YdbSetup_.QueryRequest(query, action, traceId, meta, ResultSets_, GetProgressCallback());
+            queryTypeStr = "Generic";
+            status = YdbSetup_.QueryRequest(query, meta, ResultSets_, GetProgressCallback());
             break;
 
         case EQueryType::YqlScriptQuery:
-            status = YdbSetup_.YqlScriptRequest(query, action, traceId, meta, ResultSets_);
+            queryTypeStr = "Yql script";
+            status = YdbSetup_.YqlScriptRequest(query, meta, ResultSets_);
             break;
 
         case EQueryType::AsyncQuery:
-            YdbSetup_.QueryRequestAsync(query, action, traceId);
+            YdbSetup_.QueryRequestAsync(query);
             return true;
         }
 
         TYdbSetup::StopTraceOpt();
 
         PrintScriptAst(meta.Ast);
-
+        PrintScriptProgress(ExecutionMeta_.Plan);
         PrintScriptPlan(meta.Plan);
+        PrintScriptFinish(meta, queryTypeStr);
 
         if (!status.IsSuccess()) {
             Cerr << CerrColors_.Red() << "Failed to execute query, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
@@ -220,6 +225,7 @@ public:
 
 private:
     bool WaitScriptExecutionOperation() {
+        StartTime_ = TInstant::Now();
         ExecutionMeta_ = TExecutionMeta();
 
         TDuration getOperationPeriod = TDuration::Seconds(1);
@@ -245,8 +251,8 @@ private:
         }
 
         PrintScriptAst(ExecutionMeta_.Ast);
-
         PrintScriptPlan(ExecutionMeta_.Plan);
+        PrintScriptFinish(ExecutionMeta_, "Script");
 
         if (!status.IsSuccess() || ExecutionMeta_.ExecutionStatus != NYdb::NQuery::EExecStatus::Completed) {
             Cerr << CerrColors_.Red() << "Failed to execute script, invalid final status, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
@@ -322,7 +328,7 @@ private:
 
             try {
                 double cpuUsage = 0.0;
-                auto fullStat = StatProcessor_->GetQueryStat(convertedPlan, cpuUsage);
+                auto fullStat = StatProcessor_->GetQueryStat(convertedPlan, cpuUsage, nullptr);
                 auto flatStat = StatProcessor_->GetFlatStat(convertedPlan);
                 auto publicStat = StatProcessor_->GetPublicStat(fullStat);
 
@@ -377,6 +383,16 @@ private:
         }
     }
 
+    void PrintScriptFinish(const TQueryMeta& meta, const TString& queryType) const {
+        Cout << CoutColors_.Cyan() << queryType << " request finished.";
+        if (meta.TotalDuration) {
+            Cout << " Total duration: " << meta.TotalDuration;
+        } else {
+            Cout << " Estimated duration: " << TInstant::Now() - StartTime_;
+        }
+        Cout << CoutColors_.Default() << Endl;
+    }
+
 private:
     TRunnerOptions Options_;
 
@@ -388,6 +404,7 @@ private:
     TString ExecutionOperation_;
     TExecutionMeta ExecutionMeta_;
     std::vector<Ydb::ResultSet> ResultSets_;
+    TInstant StartTime_;
 };
 
 
@@ -397,24 +414,24 @@ TKqpRunner::TKqpRunner(const TRunnerOptions& options)
     : Impl_(new TImpl(options))
 {}
 
-bool TKqpRunner::ExecuteSchemeQuery(const TString& query, const TString& traceId) const {
-    return Impl_->ExecuteSchemeQuery(query, traceId);
+bool TKqpRunner::ExecuteSchemeQuery(const TRequestOptions& query) const {
+    return Impl_->ExecuteSchemeQuery(query);
 }
 
-bool TKqpRunner::ExecuteScript(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId) const {
-    return Impl_->ExecuteScript(script, action, traceId);
+bool TKqpRunner::ExecuteScript(const TRequestOptions& script) const {
+    return Impl_->ExecuteScript(script);
 }
 
-bool TKqpRunner::ExecuteQuery(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const {
-    return Impl_->ExecuteQuery(query, action, traceId, TImpl::EQueryType::ScriptQuery);
+bool TKqpRunner::ExecuteQuery(const TRequestOptions& query) const {
+    return Impl_->ExecuteQuery(query, TImpl::EQueryType::ScriptQuery);
 }
 
-bool TKqpRunner::ExecuteYqlScript(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const {
-    return Impl_->ExecuteQuery(query, action, traceId, TImpl::EQueryType::YqlScriptQuery);
+bool TKqpRunner::ExecuteYqlScript(const TRequestOptions& query) const {
+    return Impl_->ExecuteQuery(query, TImpl::EQueryType::YqlScriptQuery);
 }
 
-void TKqpRunner::ExecuteQueryAsync(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const {
-    Impl_->ExecuteQuery(query, action, traceId, TImpl::EQueryType::AsyncQuery);
+void TKqpRunner::ExecuteQueryAsync(const TRequestOptions& query) const {
+    Impl_->ExecuteQuery(query, TImpl::EQueryType::AsyncQuery);
 }
 
 void TKqpRunner::WaitAsyncQueries() const {

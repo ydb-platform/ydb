@@ -256,7 +256,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
             NKqp::CompareYson(R"([
-                [[5u];[0u];["/Root/Tenant1/Table1"]]
+                [[9u];[0u];["/Root/Tenant1/Table1"]]
             ])", NKqp::StreamResultToYson(it));
         }
         {
@@ -267,7 +267,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
             NKqp::CompareYson(R"([
-                [[6u];[0u];["/Root/Tenant2/Table2"]]
+                [[10u];[0u];["/Root/Tenant2/Table2"]]
             ])", NKqp::StreamResultToYson(it));
         }
     }
@@ -297,7 +297,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
             UNIT_ASSERT(result.IsSuccess());
             NKqp::CompareYson(R"([
-                [[5u];[0u];["/Root/Tenant1/Table1"]]
+                [[9u];[0u];["/Root/Tenant1/Table1"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
         {
@@ -307,7 +307,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
             UNIT_ASSERT(result.IsSuccess());
             NKqp::CompareYson(R"([
-                [[6u];[0u];["/Root/Tenant2/Table2"]]
+                [[10u];[0u];["/Root/Tenant2/Table2"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
@@ -627,12 +627,10 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         TYsonFieldChecker check(ysonString, 29);
 
-        bool iterators = env.GetSettings()->AppConfig->GetTableServiceConfig().GetEnableKqpDataQuerySourceRead();
-
         check.Uint64GreaterOrEquals(0); // CPUTime
         check.Uint64GreaterOrEquals(0); // CompileCPUTime
         check.Int64GreaterOrEquals(0); // CompileDuration
-        check.Uint64(iterators ? 2 : 1); // ComputeNodesCount
+        check.Uint64(2); // ComputeNodesCount
         check.Uint64(0); // DeleteBytes
         check.Uint64(0); // DeleteRows
         check.Int64Greater(0); // Duration
@@ -653,7 +651,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.Uint64Greater(0); // RequestUnits
 
         // https://a.yandex-team.ru/arcadia/ydb/core/sys_view/query_stats/query_stats.cpp?rev=r9637451#L356
-        check.Uint64(iterators ? 0 : 3); // ShardCount
+        check.Uint64(0); // ShardCount
         check.Uint64GreaterOrEquals(0); // SumComputeCPUTime
         check.Uint64GreaterOrEquals(0); // SumShardCPUTime
         check.String("data"); // Type
@@ -999,7 +997,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.String("Default"); // Kind
         check.Uint64(env.GetServer().GetRuntime()->GetNodeId(0)); // NodeId
         check.Uint64(1u); // PDiskId
-        check.String("ERROR"); // Status
+        check.Null(); // Status
         check.Uint64(0u); // VDisk
         check.Uint64(1000u); // VSlotId
     }
@@ -1523,11 +1521,12 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 4);
-            UNIT_ASSERT_STRINGS_EQUAL(children[0].Name, "Table0");
-            UNIT_ASSERT_STRINGS_EQUAL(children[1].Name, "Tenant1");
-            UNIT_ASSERT_STRINGS_EQUAL(children[2].Name, "Tenant2");
-            UNIT_ASSERT_STRINGS_EQUAL(children[3].Name, ".sys");
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 5);
+            UNIT_ASSERT_STRINGS_EQUAL(children[0].Name, ".metadata");
+            UNIT_ASSERT_STRINGS_EQUAL(children[1].Name, "Table0");
+            UNIT_ASSERT_STRINGS_EQUAL(children[2].Name, "Tenant1");
+            UNIT_ASSERT_STRINGS_EQUAL(children[3].Name, "Tenant2");
+            UNIT_ASSERT_STRINGS_EQUAL(children[4].Name, ".sys");
         }
         {
             auto result = schemeClient.ListDirectory("/Root/Tenant1").GetValueSync();
@@ -1551,7 +1550,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 21);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 23);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -1569,7 +1568,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 15);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 17);
 
             THashSet<TString> names;
             for (const auto& child : children) {

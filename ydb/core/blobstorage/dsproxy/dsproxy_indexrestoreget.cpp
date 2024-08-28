@@ -11,8 +11,7 @@ namespace NKikimr {
 // GET request
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-class TBlobStorageGroupIndexRestoreGetRequest
-        : public TBlobStorageGroupRequestActor<TBlobStorageGroupIndexRestoreGetRequest> {
+class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestActor {
     const ui32 QuerySize;
     TArrayHolder<TEvBlobStorage::TEvGet::TQuery> Queries;
     const TInstant Deadline;
@@ -35,8 +34,8 @@ class TBlobStorageGroupIndexRestoreGetRequest
 
     THashMap<TLogoBlobID, std::pair<bool, bool>> KeepFlags;
 
-    void ReplyAndDie(NKikimrProto::EReplyStatus status) {
-        A_LOG_INFO_S("DSPI14", "ReplyAndDie"
+    void ReplyAndDie(NKikimrProto::EReplyStatus status) override {
+        DSP_LOG_INFO_S("DSPI14", "ReplyAndDie"
             << " Reply with status# " << NKikimrProto::EReplyStatus_Name(status)
             << " PendingResult# " << (PendingResult ? PendingResult->ToString().data() : "nullptr"));
         if (status != NKikimrProto::OK) {
@@ -54,8 +53,6 @@ class TBlobStorageGroupIndexRestoreGetRequest
         Mon->CountIndexRestoreGetResponseTime(TActivationContext::Now() - StartTime);
         SendResponseAndDie(std::move(PendingResult));
     }
-
-    friend class TBlobStorageGroupRequestActor<TBlobStorageGroupIndexRestoreGetRequest>;
 
     TString DumpBlobStatus() const {
         TStringStream str("{");
@@ -78,8 +75,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
     }
 
     void Handle(TEvBlobStorage::TEvVGetResult::TPtr &ev) {
-        ProcessReplyFromQueue(ev);
-        CountEvent(*ev->Get());
+        ProcessReplyFromQueue(ev->Get());
 
         const NKikimrBlobStorage::TEvVGetResult &record = ev->Get()->Record;
 
@@ -92,7 +88,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
         Y_ABORT_UNLESS(VGetsInFlight > 0);
         --VGetsInFlight;
 
-        A_LOG_DEBUG_S("DSPI10", "Handle TEvVGetResult"
+        DSP_LOG_DEBUG_S("DSPI10", "Handle TEvVGetResult"
             << " status# " << NKikimrProto::EReplyStatus_Name(status).data()
             << " VDiskId# " << vdisk
             << " ev# " << ev->Get()->ToString());
@@ -146,10 +142,10 @@ class TBlobStorageGroupIndexRestoreGetRequest
             Y_ABORT_UNLESS(it != KeepFlags.end());
             std::tie(a.Keep, a.DoNotKeep) = it->second;
 
-            A_LOG_DEBUG_S("DSPI11", "OnEnoughVGetResults Id# " << q.Id << " BlobStatus# " << DumpBlobStatus(idx));
+            DSP_LOG_DEBUG_S("DSPI11", "OnEnoughVGetResults Id# " << q.Id << " BlobStatus# " << DumpBlobStatus(idx));
 
             if (blobState == TBlobStorageGroupInfo::EBS_DISINTEGRATED) {
-                R_LOG_ERROR_S("DSPI04", "OnEnoughVGetResults"
+                DSP_LOG_ERROR_S("DSPI04", "OnEnoughVGetResults"
                     << " disintegrated, id# " << Queries[idx].Id.ToString()
                     << " BlobStatus# " << DumpBlobStatus(idx));
                 ReplyAndDie(NKikimrProto::ERROR);
@@ -160,7 +156,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
                 // Proove it using part bits from VDisks
                 if (lostByIngress) {
                     // The blob might actually be written! Report the error!
-                    R_LOG_ERROR_S("DSPI05", "OnEnoughVGetResults for tablet# " << TabletId
+                    DSP_LOG_ERROR_S("DSPI05", "OnEnoughVGetResults for tablet# " << TabletId
                         << " unrecoverable blob, id# " << Queries[idx].Id.ToString()
                         << " BlobStatus# " << DumpBlobStatus(idx));
                     if (IngressAsAReasonForErrorEnabled) {
@@ -176,7 +172,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
                     Queries[idx].Id, 0, 0, Deadline,
                     GetHandleClass, true));
                 get->Decommission = Decommission;
-                A_LOG_DEBUG_S("DSPI12", "OnEnoughVGetResults"
+                DSP_LOG_DEBUG_S("DSPI12", "OnEnoughVGetResults"
                         << " recoverable blob, id# " << Queries[idx].Id.ToString()
                         << " BlobStatus# " << DumpBlobStatus(idx)
                         << " sending EvGet");
@@ -192,9 +188,9 @@ class TBlobStorageGroupIndexRestoreGetRequest
             return;
         }
 
-        Become(&TThis::StateRestore);
+        Become(&TBlobStorageGroupIndexRestoreGetRequest::StateRestore);
 
-        A_LOG_DEBUG_S("DSPI13", "OnEnoughVGetResults"
+        DSP_LOG_DEBUG_S("DSPI13", "OnEnoughVGetResults"
             << " Become StateRestore RestoreQueriesStarted# " << RestoreQueriesStarted);
 
         return;
@@ -204,7 +200,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
         TEvBlobStorage::TEvGetResult &getResult = *ev->Get();
         NKikimrProto::EReplyStatus status = getResult.Status;
         if (status != NKikimrProto::OK) {
-            R_LOG_ERROR_S("DSPI06", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(status).data()
+            DSP_LOG_ERROR_S("DSPI06", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(status).data()
                 << " for tablet# " << TabletId
                 << " BlobStatus# " << DumpBlobStatus());
             ReplyAndDie(status);
@@ -215,14 +211,14 @@ class TBlobStorageGroupIndexRestoreGetRequest
         for (ui32 i = 0; i < getResult.ResponseSz; ++i) {
             TEvBlobStorage::TEvGetResult::TResponse &response = getResult.Responses[i];
             if (response.Status != NKikimrProto::OK) {
-                R_LOG_ERROR_S("DSPI07", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(status)
+                DSP_LOG_ERROR_S("DSPI07", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(status)
                     << " Response[" << i << "]# " << NKikimrProto::EReplyStatus_Name(response.Status)
                     << " for tablet# " << TabletId
                     << " BlobStatus# " << DumpBlobStatus());
                 SetPendingResultResponseStatus(response.Id, response.Status);
             }
         }
-        A_LOG_LOG_S(true, PriorityForStatusInbound(status), "DSPI08", "Result# " << getResult.Print(false)
+        DSP_LOG_LOG_S(PriorityForStatusInbound(status), "DSPI08", "Result# " << getResult.Print(false)
             << " RestoreQueriesStarted# " << RestoreQueriesStarted
             << " RestoreQueriesFinished# " << RestoreQueriesFinished);
 
@@ -244,7 +240,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
         }
     }
 
-    std::unique_ptr<IEventBase> RestartQuery(ui32 counter) {
+    std::unique_ptr<IEventBase> RestartQuery(ui32 counter) override {
         ++*Mon->NodeMon->RestartIndexRestoreGet;
         auto ev = std::make_unique<TEvBlobStorage::TEvGet>(Queries, QuerySize, Deadline, GetHandleClass,
             true /*mustRestoreFirst*/, true /*isIndexOnly*/, std::nullopt /*forceBlockTabletData*/, IsInternal);
@@ -254,35 +250,25 @@ class TBlobStorageGroupIndexRestoreGetRequest
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::BS_PROXY_INDEXRESTOREGET_ACTOR;
+    ::NMonitoring::TDynamicCounters::TCounterPtr& GetActiveCounter() const override {
+        return Mon->ActiveIndexRestoreGet;
     }
 
-    static const auto& ActiveCounter(const TIntrusivePtr<TBlobStorageGroupProxyMon>& mon) {
-        return mon->ActiveIndexRestoreGet;
-    }
-
-    static constexpr ERequestType RequestType() {
+    ERequestType GetRequestType() const override {
         return ERequestType::Get;
     }
 
-    TBlobStorageGroupIndexRestoreGetRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-            const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
-            const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvGet *ev, ui64 cookie,
-            NWilson::TSpan&& span, TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now,
-            TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
-        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
-                NKikimrServices::BS_PROXY_INDEXRESTOREGET, false, latencyQueueKind, now, storagePoolCounters,
-                ev->RestartCounter, std::move(span), std::move(ev->ExecutionRelay))
-        , QuerySize(ev->QuerySize)
-        , Queries(ev->Queries.Release())
-        , Deadline(ev->Deadline)
-        , IsInternal(ev->IsInternal)
-        , Decommission(ev->Decommission)
-        , ForceBlockTabletData(ev->ForceBlockTabletData)
+    TBlobStorageGroupIndexRestoreGetRequest(TBlobStorageGroupRestoreGetParameters& params)
+        : TBlobStorageGroupRequestActor(params)
+        , QuerySize(params.Common.Event->QuerySize)
+        , Queries(params.Common.Event->Queries.Release())
+        , Deadline(params.Common.Event->Deadline)
+        , IsInternal(params.Common.Event->IsInternal)
+        , Decommission(params.Common.Event->Decommission)
+        , ForceBlockTabletData(params.Common.Event->ForceBlockTabletData)
         , VGetsInFlight(0)
-        , StartTime(now)
-        , GetHandleClass(ev->GetHandleClass)
+        , StartTime(params.Common.Now)
+        , GetHandleClass(params.Common.Event->GetHandleClass)
         , RestoreQueriesStarted(0)
         , RestoreQueriesFinished(0)
     {
@@ -298,10 +284,10 @@ public:
         }
 
         // phantom checks are for non-index queries only
-        Y_ABORT_UNLESS(!ev->PhantomCheck);
+        Y_ABORT_UNLESS(!params.Common.Event->PhantomCheck);
     }
 
-    void Bootstrap() {
+    void Bootstrap() override {
         auto makeQueriesList = [this] {
             TStringStream str;
             str << "{";
@@ -312,7 +298,7 @@ public:
             str << "}";
             return str.Str();
         };
-        A_LOG_INFO_S("DSPI09", "bootstrap"
+        DSP_LOG_INFO_S("DSPI09", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
             << " QuerySize# " << QuerySize
@@ -330,7 +316,6 @@ public:
             auto sendQuery = [&] {
                 if (vget) {
                     const ui64 cookie = TVDiskIdShort(vd).GetRaw();
-                    CountEvent(*vget);
                     SendToQueue(std::move(vget), cookie);
                     vget.reset();
                     ++VGetsInFlight;
@@ -372,7 +357,7 @@ public:
             sendQuery();
         }
         Y_ABORT_UNLESS(VGetsInFlight);
-        Become(&TThis::StateWait);
+        Become(&TBlobStorageGroupIndexRestoreGetRequest::StateWait);
     }
 
     STATEFN(StateWait) {
@@ -394,18 +379,8 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupIndexRestoreGetRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-        const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
-        const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvGet *ev,
-        ui64 cookie, NWilson::TTraceId traceId, TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now,
-        TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
-    NWilson::TSpan span(TWilson::BlobStorage, std::move(traceId), "DSProxy.IndexRestoreGet");
-    if (span) {
-        span.Attribute("event", ev->ToString());
-    }
-
-    return new TBlobStorageGroupIndexRestoreGetRequest(info, state, source, mon, ev, cookie, std::move(span),
-        latencyQueueKind, now, storagePoolCounters);
+IActor* CreateBlobStorageGroupIndexRestoreGetRequest(TBlobStorageGroupRestoreGetParameters params) {
+    return new TBlobStorageGroupIndexRestoreGetRequest(params);
 }
 
 }//NKikimr

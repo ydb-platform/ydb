@@ -14,8 +14,6 @@ public:
     void SetCookie(TCookiePtr cookie) override;
     void* GetCookie() const override;
 
-    EPollablePriority GetPriority() const override;
-
 private:
     TCookiePtr Cookie_;
 };

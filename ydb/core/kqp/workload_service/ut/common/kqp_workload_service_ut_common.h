@@ -14,7 +14,7 @@
 
 namespace NKikimr::NKqp::NWorkload {
 
-inline constexpr TDuration FUTURE_WAIT_TIMEOUT = TDuration::Seconds(30);
+inline constexpr TDuration FUTURE_WAIT_TIMEOUT = TDuration::Seconds(60);
 
 
 // Query runner
@@ -24,7 +24,7 @@ struct TQueryRunnerSettings {
 
     // Query settings
     FLUENT_SETTING_DEFAULT(ui32, NodeIndex, 0);
-    FLUENT_SETTING_DEFAULT(TString, PoolId, "");
+    FLUENT_SETTING_DEFAULT(std::optional<TString>, PoolId, std::nullopt);
     FLUENT_SETTING_DEFAULT(TString, UserSID, "user@" BUILTIN_SYSTEM_DOMAIN);
 
     // Runner settings
@@ -74,12 +74,17 @@ struct TYdbSetupSettings {
     FLUENT_SETTING_DEFAULT(i32, QueueSize, -1);
     FLUENT_SETTING_DEFAULT(TDuration, QueryCancelAfter, FUTURE_WAIT_TIMEOUT);
     FLUENT_SETTING_DEFAULT(double, QueryMemoryLimitPercentPerNode, -1);
+    FLUENT_SETTING_DEFAULT(double, DatabaseLoadCpuThreshold, -1);
 
+    NResourcePool::TPoolSettings GetDefaultPoolSettings() const;
     TIntrusivePtr<IYdbSetup> Create() const;
 };
 
 class IYdbSetup : public TThrRefBase {
 public:
+    // Cluster helpers
+    virtual void UpdateNodeCpuInfo(double usage, ui32 threads, ui64 nodeIndex = 0) = 0;
+
     // Scheme queries helpers
     virtual NYdb::NScheme::TSchemeClient GetSchemeClient() const = 0;
     virtual void ExecuteSchemeQuery(const TString& query, NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS, const TString& expectedMessage = "") const = 0;
@@ -102,8 +107,10 @@ public:
     virtual void StopWorkloadService(ui64 nodeIndex = 0) const = 0;
     virtual void ValidateWorkloadServiceCounters(bool checkTableCounters = true, const TString& poolId = "") const = 0;
 
+    // Coomon helpers
     virtual TTestActorRuntime* GetRuntime() const = 0;
     virtual const TYdbSetupSettings& GetSettings() const = 0;
+    static void WaitFor(TDuration timeout, TString description, std::function<bool(TString&)> callback);
 };
 
 // Test queries

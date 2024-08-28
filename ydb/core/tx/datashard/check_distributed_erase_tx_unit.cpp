@@ -88,7 +88,9 @@ public:
             }
 
             if (indexCells.GetCells().size() != static_cast<ui32>(eraseTx->GetIndexColumnIds().size())) {
-                return buildUnsuccessfulResult("Cell count doesn't match row scheme");
+                return buildUnsuccessfulResult(TStringBuilder() << "Cell count doesn't match row scheme"
+                    << ": got " << indexCells.GetCells().size()
+                    << ", expected " << eraseTx->GetIndexColumnIds().size());
             }
         }
 

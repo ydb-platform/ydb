@@ -29,7 +29,13 @@ namespace NTabletFlatExecutor {
         {
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
-            return { true, Lookup(partStore->Locate(lob, ref), ref) };
+            const TSharedData* page = Lookup(partStore->Locate(lob, ref), ref);
+
+            if (!page && ReadMissingReferences) {
+                MissingReferencesSize_ += Max<ui64>(1, part->GetPageSize(lob, ref));
+            }
+
+            return { !ReadMissingReferences, page };
         }
 
         const TSharedData* TryGetPage(const TPart* part, TPageId page, TGroupId groupId) override
@@ -37,6 +43,20 @@ namespace NTabletFlatExecutor {
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
             return Lookup(partStore->PageCollections.at(groupId.Index).Get(), page);
+        }
+
+        void EnableReadMissingReferences() noexcept {
+            ReadMissingReferences = true;
+        }
+
+        void DisableReadMissingReferences() noexcept {
+            ReadMissingReferences = false;
+            MissingReferencesSize_ = 0;
+        }
+
+        ui64 MissingReferencesSize() const noexcept
+        { 
+            return MissingReferencesSize_;
         }
 
     private:
@@ -47,6 +67,11 @@ namespace NTabletFlatExecutor {
 
     public:
         TPrivatePageCache& Cache;
+    
+    private:
+        bool ReadMissingReferences = false;
+
+        ui64 MissingReferencesSize_ = 0;
     };
 
     struct TPageCollectionTxEnv : public TPageCollectionReadEnv, public IExecuting {
@@ -187,6 +212,20 @@ namespace NTabletFlatExecutor {
             LoanConfirmation.insert(std::make_pair(bundle, TLoanConfirmation{borrow}));
         }
 
+        void EnableReadMissingReferences() noexcept override
+        {
+            TPageCollectionReadEnv::EnableReadMissingReferences();
+        }
+
+        void DisableReadMissingReferences() noexcept override
+        {
+            TPageCollectionReadEnv::DisableReadMissingReferences();
+        }
+
+        ui64 MissingReferencesSize() const noexcept override
+        {
+            return TPageCollectionReadEnv::MissingReferencesSize();
+        }
     protected:
         NTable::TDatabase& DB;
 

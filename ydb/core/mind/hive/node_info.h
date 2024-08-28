@@ -132,7 +132,11 @@ public:
     ui32 GetTabletNeighboursCount(const TTabletInfo& tablet) const {
         auto it = TabletsOfObject.find(tablet.GetObjectId());
         if (it != TabletsOfObject.end()) {
-            return it->second.size();
+            auto count = it->second.size();
+            if (tablet.IsAliveOnLocal(Local)) {
+                --count;
+            }
+            return count;
         } else {
             return 0;
         }

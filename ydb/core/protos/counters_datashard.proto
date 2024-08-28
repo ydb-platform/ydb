@@ -147,6 +147,8 @@ enum ECumulativeCounters {
     COUNTER_WRITE_CANCELLED = 109                         [(CounterOpts) = {Name: "WriteCancelled"}];
     COUNTER_WRITE_ROWS = 110                              [(CounterOpts) = {Name: "WriteRows"}];
     COUNTER_WRITE_BYTES = 111                             [(CounterOpts) = {Name: "WriteBytes"}];
+    COUNTER_WRITE_DISK_SPACE_EXHAUSTED = 112              [(CounterOpts) = {Name: "WriteDiskSpaceExhausted"}];
+    COUNTER_PREPARE_DISK_SPACE_EXHAUSTED = 113            [(CounterOpts) = {Name: "PrepareSpaceExhausted"}];
 }
 
 enum EPercentileCounters {
@@ -490,4 +492,5 @@ enum ETxTypes {
     TXTYPE_CLEANUP_VOLATILE = 80                          [(TxTypeOpts) = {Name: "TxCleanupVolatile"}];
     TXTYPE_PLAN_PREDICTED_TXS = 81                        [(TxTypeOpts) = {Name: "TxPlanPredictedTxs"}];
     TXTYPE_WRITE = 82                                     [(TxTypeOpts) = {Name: "TxWrite"}];
+    TXTYPE_REMOVE_SCHEMA_SNAPSHOTS = 83                   [(TxTypeOpts) = {Name: "TxRemoveSchemaSnapshots"}];
 }

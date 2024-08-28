@@ -56,6 +56,7 @@ struct hash<NKikimrBlobStorage::TVSlotId> {
 }
 
 #define BLOG_CRIT(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::HEALTH, stream)
+#define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HEALTH, stream)
 
 namespace NKikimr {
 
@@ -186,6 +187,7 @@ public:
                     State = ETabletState::Stopped;
                 } else if (!settings.IsHiveSynchronizationPeriod
                             && info.volatilestate() != NKikimrHive::TABLET_VOLATILE_STATE_RUNNING
+                            && info.has_lastalivetimestamp()
                             && TInstant::MilliSeconds(info.lastalivetimestamp()) < settings.AliveBarrier
                             && info.tabletbootmode() == NKikimrHive::TABLET_BOOT_MODE_DEFAULT) {
                     State = ETabletState::Dead;
@@ -242,6 +244,7 @@ public:
         ui64 StorageQuota = 0;
         ui64 StorageUsage = 0;
         TMaybeServerlessComputeResourcesMode ServerlessComputeResourcesMode;
+        TNodeId MaxTimeDifferenceNodeId = 0;
         TString Path;
     };
 
@@ -566,20 +569,6 @@ public:
         return FilterDatabase && FilterDatabase != DomainPath;
     }
 
-    bool IsTimeDifferenceCheckNode(const TNodeId nodeId) const {
-        if (!IsSpecificDatabaseFilter()) {
-            return true;
-        }
-
-        auto it = DatabaseState.find(FilterDatabase);
-        if (it == DatabaseState.end()) {
-            return false;
-        }
-        auto& computeNodeIds = it->second.ComputeNodeIds;
-
-        return std::find(computeNodeIds.begin(), computeNodeIds.end(), nodeId) != computeNodeIds.end();
-    }
-
     void Bootstrap() {
         FilterDatabase = Request->Database;
         if (Request->Request.operation_params().has_operation_timeout()) {
@@ -643,7 +632,7 @@ public:
     }
 
     bool NeedWhiteboardInfoForGroup(TGroupId groupId) {
-        return !HaveAllBSControllerInfo() && IsStaticGroup(groupId);
+        return UnknownStaticGroups.contains(groupId) || (!HaveAllBSControllerInfo() && IsStaticGroup(groupId));
     }
 
     void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
@@ -678,6 +667,7 @@ public:
 
                     auto groupId = vDisk.GetVDiskID().GetGroupID();
                     if (NeedWhiteboardInfoForGroup(groupId)) {
+                        BLOG_D("Requesting whiteboard for group " << groupId);
                         RequestStorageNode(vDisk.GetVDiskLocation().GetNodeID());
                     }
                 }
@@ -1202,10 +1192,10 @@ public:
 
     void AggregateHiveInfo() {
         TNodeTabletState::TTabletStateSettings settings;
-        settings.AliveBarrier = TInstant::Now() - TDuration::Minutes(5);
         for (const auto& [hiveId, hiveResponse] : HiveInfo) {
             if (hiveResponse) {
                 settings.IsHiveSynchronizationPeriod = IsHiveSynchronizationPeriod(hiveResponse->Record);
+                settings.AliveBarrier = TInstant::MilliSeconds(hiveResponse->Record.GetResponseTimestamp()) - TDuration::Minutes(5);
                 for (const NKikimrHive::TTabletInfo& hiveTablet : hiveResponse->Record.GetTablets()) {
                     TSubDomainKey tenantId = TSubDomainKey(hiveTablet.GetObjectDomain());
                     auto itDomain = FilterDomainKey.find(tenantId);
@@ -1308,6 +1298,7 @@ public:
         // it should not be trusted
         Ydb::Monitoring::StorageGroupStatus staticGroupStatus;
         FillGroupStatus(0, staticGroupStatus, {nullptr});
+        BLOG_D("Static group status is " << staticGroupStatus.overall());
         if (staticGroupStatus.overall() != Ydb::Monitoring::StatusFlag::GREEN) {
             UnknownStaticGroups.emplace(0);
             RequestStorageConfig();
@@ -1450,7 +1441,7 @@ public:
         }
     }
 
-    void FillComputeNodeStatus(TDatabaseState& databaseState, TNodeId nodeId, Ydb::Monitoring::ComputeNodeStatus& computeNodeStatus, TSelfCheckContext context, bool reportTimeDifference) {
+    void FillComputeNodeStatus(TDatabaseState& databaseState, TNodeId nodeId, Ydb::Monitoring::ComputeNodeStatus& computeNodeStatus, TSelfCheckContext context) {
         FillNodeInfo(nodeId, context.Location.mutable_compute()->mutable_node());
 
         TSelfCheckContext rrContext(&context, "NODE_UPTIME");
@@ -1502,17 +1493,15 @@ public:
                     status = Ydb::Monitoring::StatusFlag::GREEN;
                 }
 
-                computeNodeStatus.mutable_max_time_difference()->set_peer(ToString(peerId));
-                computeNodeStatus.mutable_max_time_difference()->set_difference_ms(timeDifferenceDuration.MilliSeconds());
-                computeNodeStatus.set_overall(status);
-
-                if (reportTimeDifference) {
+                if (databaseState.MaxTimeDifferenceNodeId == nodeId) {
                     TSelfCheckContext tdContext(&context, "NODES_TIME_DIFFERENCE");
-                    FillNodeInfo(peerId, tdContext.Location.mutable_compute()->mutable_peer());
                     if (status == Ydb::Monitoring::StatusFlag::GREEN) {
                         tdContext.ReportStatus(status);
                     } else {
-                        tdContext.ReportStatus(status, TStringBuilder() << "The nodes have a time difference of " << timeDifferenceDuration.MilliSeconds() << " ms", ETags::SyncState);
+                        tdContext.ReportStatus(status, TStringBuilder() << "Node is  "
+                                                                        << timeDifferenceDuration.MilliSeconds() << " ms "
+                                                                        << (timeDifferenceUs > 0 ? "behind " : "ahead of ")
+                                                                        << "peer [" << peerId << "]", ETags::SyncState);
                     }
                 }
             }
@@ -1580,21 +1569,20 @@ public:
             if (systemStatus != Ydb::Monitoring::StatusFlag::GREEN && systemStatus != Ydb::Monitoring::StatusFlag::GREY) {
                 context.ReportStatus(systemStatus, "Compute has issues with system tablets", ETags::ComputeState, {ETags::SystemTabletState});
             }
-            long maxClockSkewUs = 0;
-            TNodeId maxClockSkewNodeId = 0;
+            long maxTimeDifferenceUs = 0;
             for (TNodeId nodeId : *computeNodeIds) {
                 auto itNodeSystemState = MergedNodeSystemState.find(nodeId);
                 if (itNodeSystemState != MergedNodeSystemState.end()) {
                     if (std::count(computeNodeIds->begin(), computeNodeIds->end(), itNodeSystemState->second->GetMaxClockSkewPeerId()) > 0
-                            && abs(itNodeSystemState->second->GetMaxClockSkewWithPeerUs()) > maxClockSkewUs) {
-                        maxClockSkewUs = abs(itNodeSystemState->second->GetMaxClockSkewWithPeerUs());
-                        maxClockSkewNodeId = nodeId;
+                            && abs(itNodeSystemState->second->GetMaxClockSkewWithPeerUs()) > maxTimeDifferenceUs) {
+                        maxTimeDifferenceUs = abs(itNodeSystemState->second->GetMaxClockSkewWithPeerUs());
+                        databaseState.MaxTimeDifferenceNodeId = nodeId;
                     }
                 }
             }
             for (TNodeId nodeId : *computeNodeIds) {
                 auto& computeNode = *computeStatus.add_nodes();
-                FillComputeNodeStatus(databaseState, nodeId, computeNode, {&context, "COMPUTE_NODE"}, maxClockSkewNodeId == nodeId);
+                FillComputeNodeStatus(databaseState, nodeId, computeNode, {&context, "COMPUTE_NODE"});
             }
             FillComputeDatabaseStatus(databaseState, computeStatus, {&context, "COMPUTE_QUOTA"});
             context.ReportWithMaxChildStatus("Some nodes are restarting too often", ETags::ComputeState, {ETags::Uptime});
@@ -1712,12 +1700,9 @@ public:
                                  ETags::PDiskState);
         }
         switch (status->number()) {
-            case NKikimrBlobStorage::ACTIVE: {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
-                break;
-            }
+            case NKikimrBlobStorage::ACTIVE:
             case NKikimrBlobStorage::INACTIVE: {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "PDisk is inactive", ETags::PDiskState);
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                 break;
             }
             case NKikimrBlobStorage::FAULTY:
@@ -1999,9 +1984,9 @@ public:
 
         switch (vDiskInfo.GetVDiskState()) {
             case NKikimrWhiteboard::EVDiskState::OK:
+            case NKikimrWhiteboard::EVDiskState::Initial:
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                 break;
-            case NKikimrWhiteboard::EVDiskState::Initial:
             case NKikimrWhiteboard::EVDiskState::SyncGuidRecovery:
                 context.IssueRecords.clear();
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW,
@@ -2169,7 +2154,7 @@ public:
         context.OverallStatus = MinStatus(context.OverallStatus, Ydb::Monitoring::StatusFlag::YELLOW);
         checker.ReportStatus(context);
 
-
+        BLOG_D("Group " << groupId << " has status " << context.GetOverallStatus());
         storageGroupStatus.set_overall(context.GetOverallStatus());
     }
 

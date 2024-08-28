@@ -89,18 +89,8 @@
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
                                                                             {
-                                                                                "Node Type": "Aggregate-TableRangeScan",
+                                                                                "Node Type": "TableRangeScan",
                                                                                 "Operators": [
-                                                                                    {
-                                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1)}",
-                                                                                        "GroupBy": "",
-                                                                                        "Inputs": [
-                                                                                            {
-                                                                                                "InternalOperatorId": 1
-                                                                                            }
-                                                                                        ],
-                                                                                        "Name": "Aggregate"
-                                                                                    },
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableRangeScan",
@@ -311,6 +301,28 @@
                                                                                                     }
                                                                                                 },
                                                                                                 {
+                                                                                                    "GroupBy": {
+                                                                                                        "Aggregates": [
+                                                                                                            {
+                                                                                                                "Column": {
+                                                                                                                    "Id": 117
+                                                                                                                },
+                                                                                                                "Function": {
+                                                                                                                    "Id": 2
+                                                                                                                }
+                                                                                                            }
+                                                                                                        ],
+                                                                                                        "KeyColumns": [
+                                                                                                            {
+                                                                                                                "Id": 6
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "Id": 104
+                                                                                                            }
+                                                                                                        ]
+                                                                                                    }
+                                                                                                },
+                                                                                                {
                                                                                                     "Projection": {
                                                                                                         "Columns": [
                                                                                                             {
@@ -318,6 +330,9 @@
                                                                                                             },
                                                                                                             {
                                                                                                                 "Id": 104
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "Id": 117
                                                                                                             }
                                                                                                         ]
                                                                                                     }
@@ -350,7 +365,10 @@
                             }
                         ]
                     }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {

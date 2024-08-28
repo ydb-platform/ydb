@@ -169,6 +169,20 @@ public:
 static_assert(sizeof(TCell) == 12, "TCell must be 12 bytes");
 using TCellsRef = TConstArrayRef<const TCell>;
 
+inline size_t EstimateSize(TCellsRef cells) {
+    size_t cellsSize = cells.size();
+
+    size_t size = sizeof(TCell) * cellsSize;
+    for (auto& cell : cells) {
+        if (!cell.IsNull() && !cell.IsInline()) {
+            const size_t cellSize = cell.Size();
+            size += AlignUp(cellSize);
+        }
+    }
+    
+    return size;
+}
+
 inline int CompareCellsAsByteString(const TCell& a, const TCell& b, bool isDescending) {
     const char* pa = (const char*)a.Data();
     const char* pb = (const char*)b.Data();
@@ -540,6 +554,14 @@ public:
     TConstArrayRef<TCell> GetCells() const {
         return Cells;
     }
+
+    explicit operator bool() const
+    {
+        return !Cells.empty();
+    }    
+
+    // read headers, assuming the buf is correct and append additional cells at the end
+    static bool UnsafeAppendCells(TConstArrayRef<TCell> cells, TString& serializedCellVec);
 
     static void Serialize(TString& res, TConstArrayRef<TCell> cells);
 

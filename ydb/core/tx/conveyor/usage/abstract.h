@@ -3,8 +3,9 @@
 #include <ydb/core/tx/columnshard/counters/common/owner.h>
 
 #include <ydb/library/accessor/accessor.h>
-
 #include <ydb/library/actors/core/actorid.h>
+#include <ydb/library/conclusion/status.h>
+
 #include <util/generic/string.h>
 
 namespace NKikimr::NConveyor {
@@ -19,8 +20,7 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr SuccessDuration;
 
     TTaskSignals(const TString& moduleId, const TString& taskClassIdentifier, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals = nullptr)
-        : TBase(moduleId, baseSignals)
-    {
+        : TBase(moduleId, baseSignals) {
         DeepSubGroup("task_class", taskClassIdentifier);
         Fails = TBase::GetDeriviative("Fails");
         FailsDuration = TBase::GetDeriviative("FailsDuration");
@@ -37,32 +37,21 @@ public:
         Low = 0
     };
 private:
-    YDB_READONLY_DEF(TString, ErrorMessage);
     YDB_ACCESSOR(EPriority, Priority, EPriority::Normal);
-    YDB_READONLY_DEF(std::optional<NActors::TActorId>, OwnerId);
     bool ExecutedFlag = false;
 protected:
-    ITask& SetErrorMessage(const TString& message) {
-        ErrorMessage = message;
-        return *this;
-    }
-    virtual bool DoExecute() = 0;
+    virtual TConclusionStatus DoExecute(const std::shared_ptr<ITask>& taskPtr) = 0;
+    virtual void DoOnCannotExecute(const TString& reason);
 public:
-    ITask(const std::optional<NActors::TActorId>& ownerId = {})
-        : OwnerId(ownerId)
-    {
-
-    }
     using TPtr = std::shared_ptr<ITask>;
     virtual ~ITask() = default;
 
     virtual TString GetTaskClassIdentifier() const = 0;
 
-    bool HasError() const {
-        return !!ErrorMessage;
+    void OnCannotExecute(const TString& reason) {
+        return DoOnCannotExecute(reason);
     }
-
-    bool Execute(std::shared_ptr<TTaskSignals> signals);
+    TConclusionStatus Execute(std::shared_ptr<TTaskSignals> signals, const std::shared_ptr<ITask>& taskPtr);
 };
 
 }

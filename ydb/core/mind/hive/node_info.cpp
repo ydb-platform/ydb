@@ -238,22 +238,6 @@ bool TNodeInfo::IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* 
         const TFollowerTabletInfo& follower = tablet.AsFollower();
         const TFollowerGroup& followerGroup = follower.FollowerGroup;
         const TLeaderTabletInfo& leader = follower.LeaderTablet;
-        if (followerGroup.RequireAllDataCenters) {
-            auto dataCenters = Hive.GetRegisteredDataCenters();
-            ui32 maxFollowersPerDataCenter = (followerGroup.GetComputedFollowerCount(Hive.GetDataCenters()) + dataCenters - 1) / dataCenters; // ceil
-            ui32 existingFollowers;
-            if (tablet.IsAlive()) {
-                existingFollowers = leader.GetFollowersAliveOnDataCenterExcludingFollower(Location.GetDataCenterId(), tablet);
-            } else {
-                existingFollowers = leader.GetFollowersAliveOnDataCenter(Location.GetDataCenterId());
-            }
-            if (maxFollowersPerDataCenter <= existingFollowers) {
-                if (debugState) {
-                    debugState->NodesFilledWithDatacenterFollowers++;
-                }
-                return false;
-            }
-        }
         if (followerGroup.RequireDifferentNodes) {
             if (leader.IsSomeoneAliveOnNode(Id)) {
                 if (debugState) {
@@ -356,7 +340,7 @@ void TNodeInfo::DeregisterInDomains() {
 void TNodeInfo::Ping() {
     Y_ABORT_UNLESS((bool)Local);
     BLOG_D("Node(" << Id << ") Ping(" << Local << ")");
-    Hive.SendPing(Local, Id);
+    Hive.QueuePing(Local);
 }
 
 void TNodeInfo::SendReconnect(const TActorId& local) {

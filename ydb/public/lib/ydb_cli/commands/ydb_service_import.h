@@ -78,7 +78,7 @@ public:
 protected:
     TString HeaderRow;
     TString Delimiter;
-    TString NullValue;
+    std::optional<TString> NullValue;
     ui32 SkipRows = 0;
     bool Header = false;
     bool NewlineDelimited = true;

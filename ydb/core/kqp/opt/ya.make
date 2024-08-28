@@ -9,10 +9,10 @@ SRCS(
     kqp_opt_phase.cpp
     kqp_opt_phy_check.cpp
     kqp_opt_phy_finalize.cpp
-    kqp_opt_range_legacy.cpp
     kqp_query_blocks_transformer.cpp
     kqp_query_plan.cpp
     kqp_statistics_transformer.cpp
+    kqp_column_statistics_requester.cpp
     kqp_constant_folding_transformer.cpp
 )
 

@@ -1,4 +1,5 @@
 #include "adapters.h"
+
 #include "row_batch.h"
 
 #include <yt/yt/client/api/table_writer.h>
@@ -11,6 +12,11 @@ namespace NYT::NTableClient {
 
 using namespace NApi;
 using namespace NConcurrency;
+using namespace NCrypto;
+
+////////////////////////////////////////////////////////////////////////////////
+
+const NLogging::TLogger Logger("TableClientAdapters");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -90,6 +96,11 @@ public:
     const NTableClient::TTableSchemaPtr& GetSchema() const override
     {
         return UnderlyingWriter_->GetSchema();
+    }
+
+    std::optional<TMD5Hash> GetDigest() const override
+    {
+        return std::nullopt;
     }
 
 private:
@@ -172,7 +183,7 @@ void PipeReaderToWriterByBatches(
     const NFormats::ISchemalessFormatWriterPtr& writer,
     const TRowBatchReadOptions& options,
     TDuration pipeDelay)
-{
+try {
     TPeriodicYielder yielder(TDuration::Seconds(1));
 
     while (auto batch = reader->Read(options)) {
@@ -196,6 +207,50 @@ void PipeReaderToWriterByBatches(
 
     WaitFor(writer->Close())
         .ThrowOnError();
+} catch (const std::exception& ex) {
+    YT_LOG_ERROR(ex, "PipeReaderToWriterByBatches failed");
+
+    THROW_ERROR_EXCEPTION(ex);
+}
+
+void PipeReaderToAdaptiveWriterByBatches(
+    const ITableReaderPtr& reader,
+    const NFormats::ISchemalessFormatWriterPtr& writer,
+    TRowBatchReadOptions options,
+    TCallback<void(TRowBatchReadOptions* mutableOptions, TDuration timeForBatch)> optionsUpdater,
+    TDuration pipeDelay)
+try {
+    TPeriodicYielder yielder(TDuration::Seconds(1));
+
+    while (auto batch = reader->Read(options)) {
+        yielder.TryYield();
+
+        if (batch->IsEmpty()) {
+            WaitFor(reader->GetReadyEvent())
+                .ThrowOnError();
+            continue;
+        }
+
+        if (!batch->IsEmpty() && pipeDelay != TDuration::Zero()) {
+            TDelayedExecutor::WaitForDuration(pipeDelay);
+        }
+
+        NProfiling::TWallTimer timer;
+
+        if (!writer->WriteBatch(batch)) {
+            WaitFor(writer->GetReadyEvent())
+                .ThrowOnError();
+        }
+
+        optionsUpdater(&options, timer.GetElapsedTime());
+    }
+
+    WaitFor(writer->Close())
+        .ThrowOnError();
+} catch (const std::exception& ex) {
+    YT_LOG_ERROR(ex, "PipeReaderToAdaptiveWriterByBatches failed");
+
+    THROW_ERROR_EXCEPTION(ex);
 }
 
 void PipeInputToOutput(

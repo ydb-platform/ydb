@@ -38,7 +38,7 @@ using namespace NNodes;
 
 namespace {
 
-bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TString* usedCluster, bool supportsReads, bool supportsDq, TNodeSet& visited) {
+bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TString* usedCluster, bool supportsDq, TNodeSet& visited) {
     if (!visited.insert(&lambdaBody).second) {
         return true;
     }
@@ -50,14 +50,14 @@ bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TSt
     if (auto maybeLength = TMaybeNode<TYtLength>(&lambdaBody)) {
         if (auto maybeRead = maybeLength.Input().Maybe<TYtReadTable>()) {
             auto read = maybeRead.Cast();
-            if (supportsReads && usedCluster && !UpdateUsedCluster(*usedCluster, TString{read.DataSource().Cluster().Value()})) {
+            if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{read.DataSource().Cluster().Value()})) {
                 return false;
             }
             syncList.emplace(read.Ptr(), syncList.size());
         }
         if (auto maybeOutput = maybeLength.Input().Maybe<TYtOutput>()) {
             auto output = maybeOutput.Cast();
-            if (supportsReads && usedCluster && !UpdateUsedCluster(*usedCluster, TString{GetOutputOp(output).DataSink().Cluster().Value()})) {
+            if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{GetOutputOp(output).DataSink().Cluster().Value()})) {
                 return false;
             }
             syncList.emplace(output.Operation().Ptr(), syncList.size());
@@ -68,14 +68,14 @@ bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TSt
     if (auto maybeContent = TMaybeNode<TYtTableContent>(&lambdaBody)) {
         if (auto maybeRead = maybeContent.Input().Maybe<TYtReadTable>()) {
             auto read = maybeRead.Cast();
-            if (supportsReads && usedCluster && !UpdateUsedCluster(*usedCluster, TString{read.DataSource().Cluster().Value()})) {
+            if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{read.DataSource().Cluster().Value()})) {
                return false;
             }
             syncList.emplace(read.Ptr(), syncList.size());
         }
         if (auto maybeOutput = maybeContent.Input().Maybe<TYtOutput>()) {
             auto output = maybeOutput.Cast();
-            if (supportsReads && usedCluster && !UpdateUsedCluster(*usedCluster, TString{GetOutputOp(output).DataSink().Cluster().Value()})) {
+            if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{GetOutputOp(output).DataSink().Cluster().Value()})) {
                 return false;
             }
             syncList.emplace(output.Operation().Ptr(), syncList.size());
@@ -83,20 +83,20 @@ bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TSt
         return true;
     }
 
-    if (auto maybeContent = TMaybeNode<TDqReadWideWrap>(&lambdaBody)) {
+    if (auto maybeContent = TMaybeNode<TDqReadWrapBase>(&lambdaBody)) {
         if (!supportsDq) {
             return false;
         }
         if (auto maybeRead = maybeContent.Input().Maybe<TYtReadTable>()) {
             auto read = maybeRead.Cast();
-            if (supportsReads && usedCluster && !UpdateUsedCluster(*usedCluster, TString{read.DataSource().Cluster().Value()})) {
+            if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{read.DataSource().Cluster().Value()})) {
                 return false;
             }
             syncList.emplace(read.Ptr(), syncList.size());
         }
         if (auto maybeOutput = maybeContent.Input().Maybe<TYtOutput>()) {
             auto output = maybeOutput.Cast();
-            if (supportsReads && usedCluster && !UpdateUsedCluster(*usedCluster, TString{GetOutputOp(output).DataSink().Cluster().Value()})) {
+            if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{GetOutputOp(output).DataSink().Cluster().Value()})) {
                 return false;
             }
             syncList.emplace(output.Operation().Ptr(), syncList.size());
@@ -108,28 +108,26 @@ bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TSt
         return false;
     }
 
-    if (supportsReads) {
-        if (auto maybeRead = TMaybeNode<TCoRight>(&lambdaBody).Input().Maybe<TYtReadTable>()) {
-            auto read = maybeRead.Cast();
-            if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{read.DataSource().Cluster().Value()})) {
-                return false;
-            }
-            syncList.emplace(read.Ptr(), syncList.size());
-            return true;
-        } else if (auto out = TMaybeNode<TYtOutput>(&lambdaBody)) {
-            auto op = GetOutputOp(out.Cast());
-            if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{op.DataSink().Cluster().Value()})) {
-                return false;
-            }
-            syncList.emplace(out.Cast().Operation().Ptr(), syncList.size());
-            return true;
+    if (auto maybeRead = TMaybeNode<TCoRight>(&lambdaBody).Input().Maybe<TYtReadTable>()) {
+        auto read = maybeRead.Cast();
+        if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{read.DataSource().Cluster().Value()})) {
+            return false;
         }
+        syncList.emplace(read.Ptr(), syncList.size());
+        return true;
+    } else if (auto out = TMaybeNode<TYtOutput>(&lambdaBody)) {
+        auto op = GetOutputOp(out.Cast());
+        if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{op.DataSink().Cluster().Value()})) {
+            return false;
+        }
+        syncList.emplace(out.Cast().Operation().Ptr(), syncList.size());
+        return true;
     }
 
     if (auto right = TMaybeNode<TCoRight>(&lambdaBody).Input()) {
         if (auto maybeCons = right.Maybe<TCoCons>()) {
             syncList.emplace(maybeCons.Cast().World().Ptr(), syncList.size());
-            return IsYtIsolatedLambdaImpl(maybeCons.Cast().Input().Ref(), syncList, usedCluster, supportsReads, supportsDq, visited);
+            return IsYtIsolatedLambdaImpl(maybeCons.Cast().Input().Ref(), syncList, usedCluster, supportsDq, visited);
         }
 
         if (right.Cast().Raw()->IsCallable("PgReadTable!")) {
@@ -148,7 +146,7 @@ bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TSt
     }
 
     for (auto& child : lambdaBody.Children()) {
-        if (!IsYtIsolatedLambdaImpl(*child, syncList, usedCluster, supportsReads, supportsDq, visited)) {
+        if (!IsYtIsolatedLambdaImpl(*child, syncList, usedCluster, supportsDq, visited)) {
             return false;
         }
     }
@@ -293,22 +291,22 @@ bool UpdateUsedCluster(TString& usedCluster, const TString& newCluster) {
     return true;
 }
 
-bool IsYtIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, bool supportsReads, bool supportsDq) {
+bool IsYtIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, bool supportsDq) {
     TNodeSet visited;
-    return IsYtIsolatedLambdaImpl(lambdaBody, syncList, nullptr, supportsReads, supportsDq, visited);
+    return IsYtIsolatedLambdaImpl(lambdaBody, syncList, nullptr, supportsDq, visited);
 }
 
-bool IsYtIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, TString& usedCluster, bool supportsReads, bool supportsDq) {
+bool IsYtIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, TString& usedCluster, bool supportsDq) {
     TNodeSet visited;
-    return IsYtIsolatedLambdaImpl(lambdaBody, syncList, &usedCluster, supportsReads, supportsDq, visited);
+    return IsYtIsolatedLambdaImpl(lambdaBody, syncList, &usedCluster, supportsDq, visited);
 }
 
-bool IsYtCompleteIsolatedLambda(const TExprNode& lambda, TSyncMap& syncList, bool supportsReads, bool supportsDq) {
-    return lambda.IsComplete() && IsYtIsolatedLambda(lambda, syncList, supportsReads, supportsDq);
+bool IsYtCompleteIsolatedLambda(const TExprNode& lambda, TSyncMap& syncList, bool supportsDq) {
+    return lambda.IsComplete() && IsYtIsolatedLambda(lambda, syncList, supportsDq);
 }
 
-bool IsYtCompleteIsolatedLambda(const TExprNode& lambda, TSyncMap& syncList, TString& usedCluster, bool supportsReads, bool supportsDq) {
-    return lambda.IsComplete() && IsYtIsolatedLambda(lambda, syncList, usedCluster, supportsReads, supportsDq);
+bool IsYtCompleteIsolatedLambda(const TExprNode& lambda, TSyncMap& syncList, TString& usedCluster, bool supportsDq) {
+    return lambda.IsComplete() && IsYtIsolatedLambda(lambda, syncList, usedCluster, supportsDq);
 }
 
 TExprNode::TPtr YtCleanupWorld(const TExprNode::TPtr& input, TExprContext& ctx, TYtState::TPtr state) {

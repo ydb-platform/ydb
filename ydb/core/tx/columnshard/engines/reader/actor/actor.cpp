@@ -80,7 +80,7 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
     ReadCoordinatorActorId = ctx.Register(new NBlobOperations::NRead::TReadCoordinatorActor(TabletId, SelfId()));
 
     std::shared_ptr<TReadContext> context = std::make_shared<TReadContext>(StoragesManager, ScanCountersPool,
-        ReadMetadataRange, SelfId(), ResourceSubscribeActorId, ReadCoordinatorActorId, ComputeShardingPolicy);
+        ReadMetadataRange, SelfId(), ResourceSubscribeActorId, ReadCoordinatorActorId, ComputeShardingPolicy, ScanId);
     ScanIterator = ReadMetadataRange->StartScan(context);
     auto startResult = ScanIterator->Start();
     StartInstant = TMonotonic::Now();
@@ -98,17 +98,18 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
     }
 }
 
-void TColumnShardScan::HandleScan(NConveyor::TEvExecution::TEvTaskProcessedResult::TPtr& ev) {
+void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResult::TPtr& ev) {
     --InFlightReads;
     auto g = Stats->MakeGuard("task_result");
-    if (ev->Get()->GetErrorMessage()) {
-        ACFL_ERROR("event", "TEvTaskProcessedResult")("error", ev->Get()->GetErrorMessage());
-        SendScanError("task_error:" + ev->Get()->GetErrorMessage());
+    auto result = ev->Get()->ExtractResult();
+    if (result.IsFail()) {
+        ACFL_ERROR("event", "TEvTaskProcessedResult")("error", result.GetErrorMessage());
+        SendScanError("task_error:" + result.GetErrorMessage());
         Finish(NColumnShard::TScanCounters::EStatusFinish::ConveyorInternalError);
     } else {
         ACFL_DEBUG("event", "TEvTaskProcessedResult");
-        auto t = static_pointer_cast<IDataTasksProcessor::ITask>(ev->Get()->GetResult());
-        Y_DEBUG_ABORT_UNLESS(dynamic_pointer_cast<IDataTasksProcessor::ITask>(ev->Get()->GetResult()));
+        auto t = static_pointer_cast<IApplyAction>(result.GetResult());
+        Y_DEBUG_ABORT_UNLESS(dynamic_pointer_cast<IDataTasksProcessor::ITask>(result.GetResult()));
         if (!ScanIterator->Finished()) {
             ScanIterator->Apply(t);
         }
@@ -208,7 +209,7 @@ bool TColumnShardScan::ProduceResults() noexcept {
         return false;
     }
 
-    std::optional<TPartialReadResult> resultOpt = resultConclusion.DetachResult();
+    std::shared_ptr<TPartialReadResult> resultOpt = resultConclusion.DetachResult();
     if (!resultOpt) {
         ACFL_DEBUG("stage", "no data is ready yet")("iterator", ScanIterator->DebugString());
         return false;
@@ -401,7 +402,7 @@ void TColumnShardScan::Finish(const NColumnShard::TScanCounters::EStatusFinish s
 
     Send(ColumnShardActorId, new NColumnShard::TEvPrivate::TEvReadFinished(RequestCookie, TxId));
     AFL_VERIFY(StartInstant);
-    ScanCountersPool.OnScanDuration(status, TMonotonic::Now() - *StartInstant);
+    ScanCountersPool.OnScanFinished(status, TMonotonic::Now() - *StartInstant);
     ReportStats();
     PassAway();
 }

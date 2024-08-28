@@ -98,10 +98,15 @@ std::shared_ptr<arrow::Scalar> GetScalar(const std::shared_ptr<arrow::Array>& ar
 bool IsGoodScalar(const std::shared_ptr<arrow::Scalar>& x);
 int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y);
 int ScalarCompare(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y);
-std::partial_ordering ColumnsCompare(const std::vector<std::shared_ptr<arrow::Array>>& x, const ui32 xRow, const std::vector<std::shared_ptr<arrow::Array>>& y, const ui32 yRow);
+int ScalarCompareNullable(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y);
+std::partial_ordering ColumnsCompare(
+    const std::vector<std::shared_ptr<arrow::Array>>& x, const ui32 xRow, const std::vector<std::shared_ptr<arrow::Array>>& y, const ui32 yRow);
+bool ColumnEqualsScalar(
+    const std::shared_ptr<arrow::Array>& c, const ui32 position, const std::shared_ptr<arrow::Scalar>& s);
 bool ScalarLess(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y);
 bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y);
 std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::RecordBatch> original);
+std::shared_ptr<arrow::Table> ReallocateBatch(const std::shared_ptr<arrow::Table>& original);
 
 bool HasNulls(const std::shared_ptr<arrow::Array>& column);
 

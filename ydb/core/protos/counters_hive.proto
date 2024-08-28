@@ -29,6 +29,8 @@ enum ESimpleCounters {
     COUNTER_IMBALANCED_OBJECTS = 19 [(CounterOpts) = {Name: "ImbalancedObjects"}];
     COUNTER_WORST_OBJECT_VARIANCE = 20 [(CounterOpts) = {Name: "WorstObjectVariance"}];
     COUNTER_STORAGE_SCATTER = 21 [(CounterOpts) = {Name: "StorageScatter"}];
+    COUNTER_TABLETS_STARTING = 22 [(CounterOpts) = {Name: "TabletsStarting"}];
+    COUNTER_PINGQUEUE_SIZE = 23 [(CounterOpts) = {Name: "PingQueueSize"}];
 }
 
 enum ECumulativeCounters {
@@ -46,6 +48,8 @@ enum ECumulativeCounters {
     COUNTER_SUGGESTED_SCALE_DOWN = 11 [(CounterOpts) = {Name: "SuggestedScaleDown"}];
     COUNTER_STORAGE_BALANCER_EXECUTED = 12 [(CounterOpts) = {Name: "StorageBalancerExecuted"}];
     COUNTER_TABLETS_STORAGE_REASSIGNED = 13 [(CounterOpts) = {Name: "TabletsStorageReassigned"}];
+    COUNTER_HISTORY_CUT = 14 [(CounterOpts) = {Name: "TabletHistoryCut"}];
+    COUNTER_HISTORY_RESTORED = 15 [(CounterOpts) = {Name: "TabletHistoryRestored"}];
 }
 
 enum EPercentileCounters {
@@ -74,6 +78,21 @@ enum EPercentileCounters {
         Ranges: { Value: 90    Name: "90%"       },
         Ranges: { Value: 95    Name: "95%"       },
         Ranges: { Value: 100   Name: "100%"      },
+    }];
+
+    COUNTER_TABLETS_START_TIME = 2 [(CounterOpts) = {
+        Name: "TabletsStartTimeMs",
+        Ranges: { Value: 1                       }
+        Ranges: { Value: 5                       }
+        Ranges: { Value: 10                      }
+        Ranges: { Value: 50                      }
+        Ranges: { Value: 100                     }
+        Ranges: { Value: 500                     }
+        Ranges: { Value: 1000                    }
+        Ranges: { Value: 5000                    }
+        Ranges: { Value: 10000                   }
+        Ranges: { Value: 30000                   }
+        Ranges: { Value: 60000                   }
     }];
 }
 
@@ -144,4 +163,5 @@ enum ETxTypes {
     TXTYPE_MON_OBJECT_STATS = 63                          [(TxTypeOpts) = {Name: "TxMonObjectStats"}];
     TXTYPE_MON_SUBACTORS = 64                             [(TxTypeOpts) = {Name: "TxMonSubactors"}];
     TXTYPE_MON_TABLET_AVAILABILITY = 65                   [(TxTypeOpts) = {Name: "TxMonTabletAvailability"}];
+    TXTYPE_UPDATE_DC_FOLLOWERS = 66                       [(TxTypeOpts) = {Name: "TxUpdateDcFollowers"}];
 }

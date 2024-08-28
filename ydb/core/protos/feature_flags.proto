@@ -9,6 +9,10 @@ message TFeatureFlags {
         VALUE_FALSE = 2;
     }
 
+    // leave removed fields below
+    reserved "SomeRemovedFeatureFlagExample";
+    reserved "AnotherRemovedFeatureFlagExample";
+
     optional bool EnableSeparateSolomonShardForPDisk = 1 [default = true];
     optional bool UseForsetiSchedulerByDefaultForPDisk = 2 [default = true];
     optional bool EnableSeparateTrimThreadForPDisk = 3 [default = true];
@@ -102,7 +106,7 @@ message TFeatureFlags {
     optional bool EnableLLVMCache = 87 [default = false];
     optional bool EnableExternalDataSources = 88 [default = false];
     optional bool EnableTopicDiskSubDomainQuota = 89 [default = true];
-    optional bool EnableSeparationComputeActorsFromRead = 90 [default = false];
+    optional bool EnableSeparationComputeActorsFromRead = 90 [default = true];
     optional bool EnablePQConfigTransactionsAtSchemeShard = 91 [default = false];
     optional bool EnableScriptExecutionOperations = 92 [default = true];
     optional bool EnableImplicitQueryParameterTypes = 93 [default = true];
@@ -116,10 +120,10 @@ message TFeatureFlags {
     optional bool EnableIcNodeCache = 101 [default = true];
     optional bool EnableTempTables = 102 [default = false];
     optional bool SuppressCompatibilityCheck = 103 [default = false];
-    optional bool EnableUniqConstraint = 104 [default = false];
+    optional bool EnableUniqConstraint = 104 [default = true];
     optional bool EnableChangefeedDebeziumJsonFormat = 105 [default = false];
     optional bool EnableStatistics = 106 [default = true];
-    optional bool EnableUuidAsPrimaryKey = 107 [default = false];
+    optional bool EnableUuidAsPrimaryKey = 107 [default = true];
     optional bool EnableTablePgTypes = 108 [default = false];
     optional bool EnableLocalDBBtreeIndex = 109 [default = true];
     optional bool EnablePDiskHighHDDInFlight = 110 [default = false];
@@ -140,8 +144,14 @@ message TFeatureFlags {
     optional bool EnableGraphShard = 125 [default = false];
     optional bool EnableExternalSourceSchemaInference = 126 [default = false];
     optional bool EnableDbMetadataCache = 127 [default = false];
-    optional bool EnableTableDatetime64 = 128 [default = false];
-    optional bool EnableResourcePools  = 129 [default = false];
+    optional bool EnableTableDatetime64 = 128 [default = true];
+    optional bool EnableResourcePools = 129 [default = false];
     optional bool EnableColumnStatistics = 130 [default = false];
     optional bool EnableSingleCompositeActionGroup = 131 [default = false];
+    optional bool EnableResourcePoolsOnServerless = 132 [default = false];
+    optional bool EnableVectorIndex = 133 [default = false];
+    optional bool EnableChangefeedsOnIndexTables = 134 [default = false];
+    optional bool EnableResourcePoolsCounters = 135 [default = false];
+    optional bool EnableOptionalColumnsInColumnShard = 136 [default = false];
+    optional bool EnableGranularTimecast = 137 [default = true];
 }

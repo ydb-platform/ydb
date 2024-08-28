@@ -85,7 +85,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
-        auto join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)");
+        auto join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter-TableFullScan");
         UNIT_ASSERT(join.IsDefined());
         auto left = FindPlanNodeByKv(join, "Table", "EightShard");
         UNIT_ASSERT(left.IsDefined());
@@ -112,7 +112,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
-        auto join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)");
+        auto join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter-TableFullScan");
         UNIT_ASSERT(join.IsDefined());
         auto left = FindPlanNodeByKv(join, "Table", "EightShard");
         UNIT_ASSERT(left.IsDefined());
@@ -202,7 +202,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         auto join = FindPlanNodeByKv(
             plan,
             "Node Type",
-            "Aggregate-InnerJoin (MapJoin)"
+            "Aggregate-InnerJoin (MapJoin)-Filter-TableFullScan"
         );
 
         UNIT_ASSERT(join.IsDefined());
@@ -278,7 +278,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         auto& rangeRead = operators[lookupMember].GetMapSafe();
         UNIT_ASSERT(rangeRead.at("Name") == "TableRangeScan");
-        UNIT_ASSERT_VALUES_EQUAL(rangeRead.at("ReadRange").GetArraySafe()[0], "App («new_app_1»)");
+        UNIT_ASSERT_VALUES_EQUAL(rangeRead.at("ReadRange").GetArraySafe()[0], "App (new_app_1)");
     }
 
     Y_UNIT_TEST(SortStage) {
@@ -365,9 +365,9 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
-        auto join1 = FindPlanNodeByKv(plan, "Node Type", "Sort-InnerJoin (MapJoin)");
+        auto join1 = FindPlanNodeByKv(plan, "Node Type", "Sort-InnerJoin (MapJoin)-Filter");
         UNIT_ASSERT(join1.IsDefined());
-        auto join2 = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)");
+        auto join2 = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter");
         UNIT_ASSERT(join2.IsDefined());
     }
 
@@ -591,7 +591,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
-        auto join = FindPlanNodeByKv(plan, "Node Type", "FullJoin (Grace)");
+        auto join = FindPlanNodeByKv(plan, "Node Type", "FullJoin (JoinDict)");
         UNIT_ASSERT(join.IsDefined());
         auto left = FindPlanNodeByKv(join, "Table", "EightShard");
         UNIT_ASSERT(left.IsDefined());
@@ -849,10 +849,9 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(IdxFullscan, Source) {
+    Y_UNIT_TEST(IdxFullscan) {
         TKikimrSettings settings;
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(Source);
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
         settings.SetAppConfig(appConfig);
 

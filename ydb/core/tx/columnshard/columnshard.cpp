@@ -5,6 +5,7 @@
 #include "engines/writer/buffer/actor.h"
 #include "engines/column_engine_logs.h"
 #include "bg_tasks/manager/manager.h"
+#include "counters/aggregation/table_stats.h"
 
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tx/columnshard/bg_tasks/adapter/adapter.h>
@@ -56,17 +57,22 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
         TryRegisterMediatorTimeCast();
         EnqueueProgressTx(ctx);
     }
-    CSCounters.OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
+    Counters.GetCSCounters().OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
     EnqueueBackgroundActivities();
     BackgroundSessionsManager->Start();
     ctx.Send(SelfId(), new TEvPrivate::TEvPeriodicWakeup());
+    ctx.Send(SelfId(), new TEvPrivate::TEvPingSnapshotsUsage());
     NYDBTest::TControllers::GetColumnShardController()->OnSwitchToWork(TabletID());
+    AFL_VERIFY(!!StartInstant);
+    Counters.GetCSCounters().Initialization.OnSwitchToWork(TMonotonic::Now() - *StartInstant, TMonotonic::Now() - CreateInstant);
 }
 
 void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
+    StartInstant = TMonotonic::Now();
+    Counters.GetCSCounters().Initialization.OnActivateExecutor(TMonotonic::Now() - CreateInstant);
     const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId());
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "OnActivateExecutor");
-    Executor()->RegisterExternalTabletCounters(TabletCountersPtr.release());
+    Executor()->RegisterExternalTabletCounters(TabletCountersHolder.release());
 
     const auto selfActorId = SelfId();
     StoragesManager->Initialize(Executor()->Generation());
@@ -144,8 +150,8 @@ void TColumnShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const 
 void TColumnShard::Handle(TEvPrivate::TEvScanStats::TPtr& ev, const TActorContext &ctx) {
     Y_UNUSED(ctx);
 
-    IncCounter(COUNTER_SCANNED_ROWS, ev->Get()->Rows);
-    IncCounter(COUNTER_SCANNED_BYTES, ev->Get()->Bytes);
+    Counters.GetTabletCounters()->IncCounter(COUNTER_SCANNED_ROWS, ev->Get()->Rows);
+    Counters.GetTabletCounters()->IncCounter(COUNTER_SCANNED_BYTES, ev->Get()->Bytes);
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorContext &ctx) {
@@ -156,15 +162,26 @@ void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorCon
     if (HasIndex()) {
         index = &GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex();
     }
-    InFlightReadsTracker.RemoveInFlightRequest(ev->Get()->RequestCookie, index);
+
+    InFlightReadsTracker.RemoveInFlightRequest(
+        ev->Get()->RequestCookie, index, TInstant::Now());
 
     ui64 txId = ev->Get()->TxId;
     if (ScanTxInFlight.contains(txId)) {
         TDuration duration = TAppData::TimeProvider->Now() - ScanTxInFlight[txId];
-        IncCounter(COUNTER_SCAN_LATENCY, duration);
+        Counters.GetTabletCounters()->IncCounter(COUNTER_SCAN_LATENCY, duration);
         ScanTxInFlight.erase(txId);
-        SetCounter(COUNTER_SCAN_IN_FLY, ScanTxInFlight.size());
+        Counters.GetTabletCounters()->SetCounter(COUNTER_SCAN_IN_FLY, ScanTxInFlight.size());
+        Counters.GetTabletCounters()->IncCounter(COUNTER_IMMEDIATE_TX_COMPLETED);
     }
+}
+
+void TColumnShard::Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& /*ev*/, const TActorContext& ctx) {
+    if (auto writeTx = InFlightReadsTracker.Ping(
+            this, NYDBTest::TControllers::GetColumnShardController()->GetPingCheckPeriod(), TInstant::Now())) {
+        Execute(writeTx.release(), ctx);
+    }
+    ctx.Schedule(0.3 * GetMaxReadStaleness(), new TEvPrivate::TEvPingSnapshotsUsage());
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx) {
@@ -176,6 +193,7 @@ void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorC
         SendWaitPlanStep(GetOutdatedStep());
 
         SendPeriodicStats();
+        EnqueueBackgroundActivities();
         ctx.Schedule(PeriodicWakeupActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
     }
 }
@@ -213,10 +231,10 @@ void TColumnShard::UpdateInsertTableCounters() {
     auto& prepared = InsertTable->GetCountersPrepared();
     auto& committed = InsertTable->GetCountersCommitted();
 
-    SetCounter(COUNTER_PREPARED_RECORDS, prepared.Rows);
-    SetCounter(COUNTER_PREPARED_BYTES, prepared.Bytes);
-    SetCounter(COUNTER_COMMITTED_RECORDS, committed.Rows);
-    SetCounter(COUNTER_COMMITTED_BYTES, committed.Bytes);
+    Counters.GetTabletCounters()->SetCounter(COUNTER_PREPARED_RECORDS, prepared.Rows);
+    Counters.GetTabletCounters()->SetCounter(COUNTER_PREPARED_BYTES, prepared.Bytes);
+    Counters.GetTabletCounters()->SetCounter(COUNTER_COMMITTED_RECORDS, committed.Rows);
+    Counters.GetTabletCounters()->SetCounter(COUNTER_COMMITTED_BYTES, committed.Bytes);
 
     LOG_S_TRACE("InsertTable. Prepared: " << prepared.Bytes << " in " << prepared.Rows
         << " records, committed: " << committed.Bytes << " in " << committed.Rows
@@ -229,33 +247,34 @@ void TColumnShard::UpdateIndexCounters() {
     }
 
     auto& stats = TablesManager.MutablePrimaryIndex().GetTotalStats();
-    SetCounter(COUNTER_INDEX_TABLES, stats.Tables);
-    SetCounter(COUNTER_INDEX_COLUMN_RECORDS, stats.ColumnRecords);
-    SetCounter(COUNTER_INSERTED_PORTIONS, stats.GetInsertedStats().Portions);
-    SetCounter(COUNTER_INSERTED_BLOBS, stats.GetInsertedStats().Blobs);
-    SetCounter(COUNTER_INSERTED_ROWS, stats.GetInsertedStats().Rows);
-    SetCounter(COUNTER_INSERTED_BYTES, stats.GetInsertedStats().Bytes);
-    SetCounter(COUNTER_INSERTED_RAW_BYTES, stats.GetInsertedStats().RawBytes);
-    SetCounter(COUNTER_COMPACTED_PORTIONS, stats.GetCompactedStats().Portions);
-    SetCounter(COUNTER_COMPACTED_BLOBS, stats.GetCompactedStats().Blobs);
-    SetCounter(COUNTER_COMPACTED_ROWS, stats.GetCompactedStats().Rows);
-    SetCounter(COUNTER_COMPACTED_BYTES, stats.GetCompactedStats().Bytes);
-    SetCounter(COUNTER_COMPACTED_RAW_BYTES, stats.GetCompactedStats().RawBytes);
-    SetCounter(COUNTER_SPLIT_COMPACTED_PORTIONS, stats.GetSplitCompactedStats().Portions);
-    SetCounter(COUNTER_SPLIT_COMPACTED_BLOBS, stats.GetSplitCompactedStats().Blobs);
-    SetCounter(COUNTER_SPLIT_COMPACTED_ROWS, stats.GetSplitCompactedStats().Rows);
-    SetCounter(COUNTER_SPLIT_COMPACTED_BYTES, stats.GetSplitCompactedStats().Bytes);
-    SetCounter(COUNTER_SPLIT_COMPACTED_RAW_BYTES, stats.GetSplitCompactedStats().RawBytes);
-    SetCounter(COUNTER_INACTIVE_PORTIONS, stats.GetInactiveStats().Portions);
-    SetCounter(COUNTER_INACTIVE_BLOBS, stats.GetInactiveStats().Blobs);
-    SetCounter(COUNTER_INACTIVE_ROWS, stats.GetInactiveStats().Rows);
-    SetCounter(COUNTER_INACTIVE_BYTES, stats.GetInactiveStats().Bytes);
-    SetCounter(COUNTER_INACTIVE_RAW_BYTES, stats.GetInactiveStats().RawBytes);
-    SetCounter(COUNTER_EVICTED_PORTIONS, stats.GetEvictedStats().Portions);
-    SetCounter(COUNTER_EVICTED_BLOBS, stats.GetEvictedStats().Blobs);
-    SetCounter(COUNTER_EVICTED_ROWS, stats.GetEvictedStats().Rows);
-    SetCounter(COUNTER_EVICTED_BYTES, stats.GetEvictedStats().Bytes);
-    SetCounter(COUNTER_EVICTED_RAW_BYTES, stats.GetEvictedStats().RawBytes);
+    const std::shared_ptr<const TTabletCountersHandle>& counters = Counters.GetTabletCounters();
+    counters->SetCounter(COUNTER_INDEX_TABLES, stats.Tables);
+    counters->SetCounter(COUNTER_INDEX_COLUMN_RECORDS, stats.ColumnRecords);
+    counters->SetCounter(COUNTER_INSERTED_PORTIONS, stats.GetInsertedStats().Portions);
+    counters->SetCounter(COUNTER_INSERTED_BLOBS, stats.GetInsertedStats().Blobs);
+    counters->SetCounter(COUNTER_INSERTED_ROWS, stats.GetInsertedStats().Rows);
+    counters->SetCounter(COUNTER_INSERTED_BYTES, stats.GetInsertedStats().Bytes);
+    counters->SetCounter(COUNTER_INSERTED_RAW_BYTES, stats.GetInsertedStats().RawBytes);
+    counters->SetCounter(COUNTER_COMPACTED_PORTIONS, stats.GetCompactedStats().Portions);
+    counters->SetCounter(COUNTER_COMPACTED_BLOBS, stats.GetCompactedStats().Blobs);
+    counters->SetCounter(COUNTER_COMPACTED_ROWS, stats.GetCompactedStats().Rows);
+    counters->SetCounter(COUNTER_COMPACTED_BYTES, stats.GetCompactedStats().Bytes);
+    counters->SetCounter(COUNTER_COMPACTED_RAW_BYTES, stats.GetCompactedStats().RawBytes);
+    counters->SetCounter(COUNTER_SPLIT_COMPACTED_PORTIONS, stats.GetSplitCompactedStats().Portions);
+    counters->SetCounter(COUNTER_SPLIT_COMPACTED_BLOBS, stats.GetSplitCompactedStats().Blobs);
+    counters->SetCounter(COUNTER_SPLIT_COMPACTED_ROWS, stats.GetSplitCompactedStats().Rows);
+    counters->SetCounter(COUNTER_SPLIT_COMPACTED_BYTES, stats.GetSplitCompactedStats().Bytes);
+    counters->SetCounter(COUNTER_SPLIT_COMPACTED_RAW_BYTES, stats.GetSplitCompactedStats().RawBytes);
+    counters->SetCounter(COUNTER_INACTIVE_PORTIONS, stats.GetInactiveStats().Portions);
+    counters->SetCounter(COUNTER_INACTIVE_BLOBS, stats.GetInactiveStats().Blobs);
+    counters->SetCounter(COUNTER_INACTIVE_ROWS, stats.GetInactiveStats().Rows);
+    counters->SetCounter(COUNTER_INACTIVE_BYTES, stats.GetInactiveStats().Bytes);
+    counters->SetCounter(COUNTER_INACTIVE_RAW_BYTES, stats.GetInactiveStats().RawBytes);
+    counters->SetCounter(COUNTER_EVICTED_PORTIONS, stats.GetEvictedStats().Portions);
+    counters->SetCounter(COUNTER_EVICTED_BLOBS, stats.GetEvictedStats().Blobs);
+    counters->SetCounter(COUNTER_EVICTED_ROWS, stats.GetEvictedStats().Rows);
+    counters->SetCounter(COUNTER_EVICTED_BYTES, stats.GetEvictedStats().Bytes);
+    counters->SetCounter(COUNTER_EVICTED_RAW_BYTES, stats.GetEvictedStats().RawBytes);
 
     LOG_S_DEBUG("Index: tables " << stats.Tables
         << " inserted " << stats.GetInsertedStats().DebugString()
@@ -274,8 +293,8 @@ ui64 TColumnShard::MemoryUsage() const {
         LongTxWrites.size() * (sizeof(TWriteId) + sizeof(TLongTxWriteInfo)) +
         LongTxWritesByUniqueId.size() * (sizeof(TULID) + sizeof(void*)) +
         (WaitingScans.size()) * (sizeof(NOlap::TSnapshot) + sizeof(void*)) +
-        TabletCounters->Simple()[COUNTER_PREPARED_RECORDS].Get() * sizeof(NOlap::TInsertedData) +
-        TabletCounters->Simple()[COUNTER_COMMITTED_RECORDS].Get() * sizeof(NOlap::TInsertedData);
+        Counters.GetTabletCounters()->GetValue(COUNTER_PREPARED_RECORDS) * sizeof(NOlap::TInsertedData) +
+        Counters.GetTabletCounters()->GetValue(COUNTER_COMMITTED_RECORDS) * sizeof(NOlap::TInsertedData);
     memory += TablesManager.GetMemoryUsage();
     return memory;
 }
@@ -286,13 +305,12 @@ void TColumnShard::UpdateResourceMetrics(const TActorContext& ctx, const TUsage&
         return;
     }
 
-    ui64 storageBytes =
-        TabletCounters->Simple()[COUNTER_PREPARED_BYTES].Get() +
-        TabletCounters->Simple()[COUNTER_COMMITTED_BYTES].Get() +
-        TabletCounters->Simple()[COUNTER_INSERTED_BYTES].Get() +
-        TabletCounters->Simple()[COUNTER_COMPACTED_BYTES].Get() +
-        TabletCounters->Simple()[COUNTER_SPLIT_COMPACTED_BYTES].Get() +
-        TabletCounters->Simple()[COUNTER_INACTIVE_BYTES].Get();
+    ui64 storageBytes = Counters.GetTabletCounters()->GetValue(COUNTER_PREPARED_BYTES) +
+                        Counters.GetTabletCounters()->GetValue(COUNTER_COMMITTED_BYTES) +
+                        Counters.GetTabletCounters()->GetValue(COUNTER_INSERTED_BYTES) +
+                        Counters.GetTabletCounters()->GetValue(COUNTER_COMPACTED_BYTES) +
+                        Counters.GetTabletCounters()->GetValue(COUNTER_SPLIT_COMPACTED_BYTES) +
+                        Counters.GetTabletCounters()->GetValue(COUNTER_INACTIVE_BYTES);
 
     ui64 memory = MemoryUsage();
 
@@ -308,36 +326,10 @@ void TColumnShard::UpdateResourceMetrics(const TActorContext& ctx, const TUsage&
     metrics->TryUpdate(ctx);
 }
 
-void TColumnShard::ConfigureStats(const NOlap::TColumnEngineStats& indexStats,
-                                  ::NKikimrTableStats::TTableStats* tabletStats) {
-    NOlap::TSnapshot lastIndexUpdate = TablesManager.GetPrimaryIndexSafe().LastUpdate();
-    auto activeIndexStats = indexStats.Active();   // data stats excluding inactive and evicted
-
-    if (activeIndexStats.Rows < 0 || activeIndexStats.Bytes < 0) {
-        LOG_S_WARN("Negative stats counter. Rows: " << activeIndexStats.Rows << " Bytes: " << activeIndexStats.Bytes
-                                                    << TabletID());
-
-        activeIndexStats.Rows = (activeIndexStats.Rows < 0) ? 0 : activeIndexStats.Rows;
-        activeIndexStats.Bytes = (activeIndexStats.Bytes < 0) ? 0 : activeIndexStats.Bytes;
-    }
-
-    tabletStats->SetRowCount(activeIndexStats.Rows);
-    tabletStats->SetDataSize(activeIndexStats.Bytes + TabletCounters->Simple()[COUNTER_COMMITTED_BYTES].Get());
-
-    // TODO: we need row/dataSize counters for evicted data (managed by tablet but stored outside)
-    // tabletStats->SetIndexSize(); // TODO: calc size of internal tables
-
-    tabletStats->SetLastAccessTime(LastAccessTime.MilliSeconds());
-    tabletStats->SetLastUpdateTime(lastIndexUpdate.GetPlanStep());
-}
-
-void TColumnShard::FillTxTableStats(::NKikimrTableStats::TTableStats* tableStats) const {
-    tableStats->SetTxRejectedByOverload(TabletCounters->Cumulative()[COUNTER_WRITE_OVERLOAD].Get());
-    tableStats->SetTxRejectedBySpace(TabletCounters->Cumulative()[COUNTER_OUT_OF_SPACE].Get());
-    tableStats->SetInFlightTxCount(Executor()->GetStats().TxInFly);
-}
-
-void TColumnShard::FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev) {
+void TColumnShard::FillOlapStats(
+    const TActorContext& ctx,
+    std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev
+) {
     ev->Record.SetShardState(2);   // NKikimrTxDataShard.EDatashardState.Ready
     ev->Record.SetGeneration(Executor()->Generation());
     ev->Record.SetRound(StatsReportRound++);
@@ -346,30 +338,27 @@ void TColumnShard::FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDa
     if (auto* resourceMetrics = Executor()->GetResourceMetrics()) {
         resourceMetrics->Fill(*ev->Record.MutableTabletMetrics());
     }
-    auto* tabletStats = ev->Record.MutableTableStats();
-    FillTxTableStats(tabletStats);
+
     if (TablesManager.HasPrimaryIndex()) {
-        const auto& indexStats = TablesManager.MutablePrimaryIndex().GetTotalStats();
-        ConfigureStats(indexStats, tabletStats);
+        TTableStatsBuilder statsBuilder(Counters, Executor(), TablesManager.MutablePrimaryIndex());
+        statsBuilder.FillTotalTableStats(*ev->Record.MutableTableStats());
     }
 }
 
-void TColumnShard::FillColumnTableStats(const TActorContext& ctx,
-                                        std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev) {
-    if (!TablesManager.HasPrimaryIndex()) {
-        return;
-    }
-    const auto& tablesIndexStats = TablesManager.MutablePrimaryIndex().GetStats();
-    LOG_S_DEBUG("There are stats for " << tablesIndexStats.size() << " tables");
-    for (const auto& [tableLocalID, columnStats] : tablesIndexStats) {
-        if (!columnStats) {
-            LOG_S_ERROR("SendPeriodicStats: empty stats");
-            continue;
-        }
+void TColumnShard::FillColumnTableStats(
+    const TActorContext& ctx,
+    std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev
+) {
+    auto tables = TablesManager.GetTables();
+    std::optional<TTableStatsBuilder> tableStatsBuilder =
+        TablesManager.HasPrimaryIndex() ? std::make_optional<TTableStatsBuilder>(Counters, Executor(), TablesManager.MutablePrimaryIndex())
+                                        : std::nullopt;
 
+    LOG_S_DEBUG("There are stats for " << tables.size() << " tables");
+    for (const auto& [pathId, _] : tables) {
         auto* periodicTableStats = ev->Record.AddTables();
         periodicTableStats->SetDatashardId(TabletID());
-        periodicTableStats->SetTableLocalId(tableLocalID);
+        periodicTableStats->SetTableLocalId(pathId);
 
         periodicTableStats->SetShardState(2);   // NKikimrTxDataShard.EDatashardState.Ready
         periodicTableStats->SetGeneration(Executor()->Generation());
@@ -381,11 +370,11 @@ void TColumnShard::FillColumnTableStats(const TActorContext& ctx,
             resourceMetrics->Fill(*periodicTableStats->MutableTabletMetrics());
         }
 
-        auto* tableStats = periodicTableStats->MutableTableStats();
-        FillTxTableStats(tableStats);
-        ConfigureStats(*columnStats, tableStats);
+        if (tableStatsBuilder) {
+            tableStatsBuilder->FillTableStats(pathId, *(periodicTableStats->MutableTableStats()));
+        }
 
-        LOG_S_TRACE("Add stats for table, tableLocalID=" << tableLocalID);
+        LOG_S_TRACE("Add stats for table, tableLocalID=" << pathId);
     }
 }
 

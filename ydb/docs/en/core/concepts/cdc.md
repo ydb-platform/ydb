@@ -78,7 +78,7 @@ A [JSON](https://en.wikipedia.org/wiki/JSON) record has the following structure:
 * `erase`: Erase flag. Present if a record matches the erase operation.
 * `newImage`: Row snapshot that results from its being changed. Present in `NEW_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values.
 * `oldImage`: Row snapshot before the change. Present in `OLD_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values.
-* `ts`: Virtual timestamp. Present if the `VIRTUAL_TIMESTAMPS` setting is enabled. Contains the value of the global coordinator time (`step`) and the unique transaction ID (`txId`).
+* `ts`: [Virtual timestamp](#virtual-timestamps). Present if the `VIRTUAL_TIMESTAMPS` setting is enabled. Contains the value of the global coordinator time (`step`) and the unique transaction ID (`txId`).
 
 > Sample record of an update in `UPDATES` mode:
 >
@@ -155,63 +155,52 @@ The record structure is the same as for [Amazon DynamoDB Streams](https://docs.a
 
 {% endif %}
 
-{% if audience == "tech" %}
-
 ### Debezium-compatible JSON format {#debezium-json-record-structure}
 
 A [Debezium](https://debezium.io)-compatible JSON record structure has the following format:
 
-Message body
 ```json
 {
     "payload": {
         "op": <op>,
         "before": {<columns>},
         "after": {<columns>},
-        "ts": [<step>, <txId>],
         "source": {
-            "version": <version>,
             "connector": <connector>,
+            "version": <version>,
             "ts_ms": <ts_ms>,
-            "txId": <txId>
+            "step": <step>,
+            "txId": <txId>,
+            "snapshot": <bool>
         }
     }
 }
 ```
 
 * `op`: Operation that was performed on a row:
-  * "u" means Update.
-  * "s" means reSet (to not confuse with Read).
-  * "d" means Delete.
-* `before`: Row snapshot before the change. Present in `OLD_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values. Present only if the row existed before the change.
-* `after`: Row snapshot after the change. Present in `NEW_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values. Present only if the row exists after the change.
-* `ts`: Virtual timestamp. Present if the `VIRTUAL_TIMESTAMPS` setting is enabled. Contains the value of the global coordinator time (`step`) and the unique transaction ID (`txId`). Note that Debezium connectors usually use a single integer `ts_ms` instead.
+  * `c` — create. Applicable only in `NEW_AND_OLD_IMAGES` mode.
+  * `u` — update.
+  * `d` — delete.
+  * `r` — read from [snapshot](#initial-scan).
+* `before`: Row snapshot before the change. Present in `OLD_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values.
+* `after`: Row snapshot after the change. Present in `NEW_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values.
 * `source`: Source metadata for the event.
-  * `version`: Connector version that was used to generate the record. Current version is `0.0.1`.
-  * `connector`: Connector name. Current name is `ydb_debezium_json`.
+  * `connector`: Connector name. Current name is `ydb`.
+  * `version`: Connector version that was used to generate the record. Current version is `1.0.0`.
   * `ts_ms`: Approximate time when the change was applied, in milliseconds.
-  * `txId`: Unique transaction ID.
+  * `step`: Global coordinator time. Part of the [virtual timestamp](#virtual-timestamps).
+  * `txId`: Unique transaction ID. Part of the [virtual timestamp](#virtual-timestamps).
+  * `snapshot`: Whether the event is part of a snapshot.
 
-{% note warning %}
+When reading using Kafka API, the Debezium-compatible primary key of the modified row is specified as the message key:
 
-Currently debezium json format doesn't have `schema` field. Other Debezium connectors have it.
-
-{% endnote %}
-
-If you use kafka API to read a topic, you will see debezium-compatible kafka key as well, in the following format:
 ```json
 {
-    "payload": {
-        <columns>
-    }
+    "payload": {<columns>}
 }
 ```
 
-* `payload`: Key of a row that was changed. Always present.
-
-You can read more in kafka integration documentation about details on how it is stored and how to access it directly.
-
-{% endif %}
+* `payload`: Key of a row that was changed. Contains names and values of the columns that are components of the primary key.
 
 ## Record retention period {#retention-period}
 

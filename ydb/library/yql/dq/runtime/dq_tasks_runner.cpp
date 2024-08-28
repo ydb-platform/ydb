@@ -1,5 +1,6 @@
 #include "dq_tasks_runner.h"
 
+#include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_multihopping.h>
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
@@ -146,14 +147,14 @@ NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, con
             Y_ABORT_UNLESS(inputs.size() == 1);
             [[fallthrough]];
         case NYql::NDqProto::TTaskInput::kUnionAll:
-            return CreateInputUnionValue(std::move(inputs), holderFactory, stats);
+            return CreateInputUnionValue(type, std::move(inputs), holderFactory, stats);
         case NYql::NDqProto::TTaskInput::kMerge: {
             const auto& protoSortCols = inputDesc.GetMerge().GetSortColumns();
             TVector<TSortColumnInfo> sortColsInfo;
             GetSortColumnsInfo(type, protoSortCols, sortColsInfo);
             YQL_ENSURE(!sortColsInfo.empty());
 
-            return CreateInputMergeValue(std::move(inputs), std::move(sortColsInfo), holderFactory, stats);
+            return CreateInputMergeValue(type, std::move(inputs), std::move(sortColsInfo), holderFactory, stats);
         }
         default:
             YQL_ENSURE(false, "Unknown input type: " << (ui32) inputDesc.GetTypeCase());
@@ -269,7 +270,7 @@ public:
     }
 
     void SetSpillerFactory(std::shared_ptr<ISpillerFactory> spillerFactory) override {
-        AllocatedHolder->ProgramParsed.CompGraph->GetContext().SpillerFactory = std::move(spillerFactory);
+        SpillerFactory = spillerFactory;
     }
 
     bool UseSeparatePatternAlloc(const TDqTaskSettings& taskSettings) const {
@@ -457,7 +458,7 @@ public:
         auto opts = CreatePatternOpts(task, Alloc(), TypeEnv());
 
         AllocatedHolder->ProgramParsed.CompGraph = AllocatedHolder->ProgramParsed.GetPattern()->Clone(
-            opts.ToComputationOptions(*Context.RandomProvider, *Context.TimeProvider, &TypeEnv()));
+            opts.ToComputationOptions(*Context.RandomProvider, *Context.TimeProvider));
 
         TBindTerminator term(AllocatedHolder->ProgramParsed.CompGraph->GetTerminator());
 
@@ -511,6 +512,12 @@ public:
         TBindTerminator term(AllocatedHolder->ProgramParsed.CompGraph->GetTerminator());
 
         auto& typeEnv = TypeEnv();
+
+        SpillingTaskCounters = execCtx.GetSpillingTaskCounters();
+        if (SpillerFactory) {
+            SpillerFactory->SetTaskCounters(SpillingTaskCounters);
+        }
+        AllocatedHolder->ProgramParsed.CompGraph->GetContext().SpillerFactory = std::move(SpillerFactory);
 
         for (ui32 i = 0; i < task.InputsSize(); ++i) {
             auto& inputDesc = task.GetInputs(i);
@@ -576,7 +583,7 @@ public:
                 inputs.clear();
                 inputs.emplace_back(transform->TransformOutput);
                 entryNode->SetValue(AllocatedHolder->ProgramParsed.CompGraph->GetContext(),
-                    CreateInputUnionValue(std::move(inputs), holderFactory,
+                    CreateInputUnionValue(transform->TransformOutput->GetInputType(), std::move(inputs), holderFactory,
                         {&inputStats, transform->TransformOutputType}));
             } else {
                 entryNode->SetValue(AllocatedHolder->ProgramParsed.CompGraph->GetContext(),
@@ -716,6 +723,15 @@ public:
         auto runStatus = FetchAndDispatch();
 
         if (Y_UNLIKELY(CollectFull())) {
+            if (SpillingTaskCounters) {
+                Stats->SpillingComputeWriteBytes = SpillingTaskCounters->ComputeWriteBytes.load();
+                Stats->SpillingChannelWriteBytes = SpillingTaskCounters->ChannelWriteBytes.load();
+                Stats->SpillingComputeReadTime = TDuration::MilliSeconds(SpillingTaskCounters->ComputeReadTime.load());
+                Stats->SpillingComputeWriteTime = TDuration::MilliSeconds(SpillingTaskCounters->ComputeWriteTime.load());
+                Stats->SpillingChannelReadTime = TDuration::MilliSeconds(SpillingTaskCounters->ChannelReadTime.load());
+                Stats->SpillingChannelWriteTime = TDuration::MilliSeconds(SpillingTaskCounters->ChannelWriteTime.load());
+            }
+
             Stats->ComputeCpuTimeByRun->Collect(RunComputeTime.MilliSeconds());
 
             if (AllocatedHolder->ProgramParsed.StatsRegistry) {
@@ -928,6 +944,9 @@ private:
     }
 
 private:
+    std::shared_ptr<ISpillerFactory> SpillerFactory;
+    TIntrusivePtr<TSpillingTaskCounters> SpillingTaskCounters;
+
     ui64 TaskId = 0;
     TDqTaskRunnerContext Context;
     TDqTaskRunnerSettings Settings;

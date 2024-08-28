@@ -233,7 +233,6 @@ public:
         , HttpGateway(std::move(httpGateway))
     {
         Config->EnableKqpScanQueryStreamLookup = true;
-        Config->PredicateExtract20 = true;
         Config->EnablePreparedDdl = true;
     }
 
@@ -588,6 +587,8 @@ private:
             }
         }
 
+        QueryId = ReplayDetails["query_id"].GetStringSafe();
+
         TKqpQuerySettings settings(queryType);
         Query = std::make_unique<NKikimr::NKqp::TKqpQueryId>(
             ReplayDetails["query_cluster"].GetStringSafe(),
@@ -623,9 +624,9 @@ private:
 
         Gateway = CreateKikimrIcGateway(Query->Cluster, queryType, Query->Database, std::move(loader),
             TlsActivationContext->ExecutorThread.ActorSystem, SelfId().NodeId(), counters);
-        auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({HttpGateway, nullptr, nullptr, nullptr, {}, {}, {}, nullptr, nullptr});
+        auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({HttpGateway, nullptr, nullptr, nullptr, {}, {}, {}, nullptr, nullptr, {}});
         KqpHost = CreateKqpHost(Gateway, Query->Cluster, Query->Database, Config, ModuleResolverState->ModuleResolver,
-            federatedQuerySetup, nullptr, GUCSettings, Nothing(), FunctionRegistry, false);
+            federatedQuerySetup, nullptr, GUCSettings, NKikimrConfig::TQueryServiceConfig(), Nothing(), FunctionRegistry, false);
 
         StartCompilation();
         Continue();
@@ -661,6 +662,7 @@ private:
 private:
     TActorId Owner;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
+    TString QueryId;
     std::unique_ptr<TKqpQueryId> Query;
     TGUCSettings::TPtr GUCSettings = std::make_shared<TGUCSettings>();
     TKqpSettings KqpSettings;

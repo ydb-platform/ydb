@@ -138,3 +138,9 @@ TExecFunc arrow_timetz_time() { return MakeIndirectExec<true, true>(&timetz_time
 TExecFunc arrow_timetz_zone() { return MakeIndirectExec<true, false>(&timetz_zone); }
 TExecFunc arrow_timetztypmodin() { return MakeIndirectExec<true, true>(&timetztypmodin); }
 TExecFunc arrow_timetztypmodout() { return MakeIndirectExec<true, false>(&timetztypmodout); }
+TExecFunc arrow_window_cume_dist_support() { return MakeIndirectExec<true, true>(&window_cume_dist_support); }
+TExecFunc arrow_window_dense_rank_support() { return MakeIndirectExec<true, true>(&window_dense_rank_support); }
+TExecFunc arrow_window_ntile_support() { return MakeIndirectExec<true, true>(&window_ntile_support); }
+TExecFunc arrow_window_percent_rank_support() { return MakeIndirectExec<true, true>(&window_percent_rank_support); }
+TExecFunc arrow_window_rank_support() { return MakeIndirectExec<true, true>(&window_rank_support); }
+TExecFunc arrow_window_row_number_support() { return MakeIndirectExec<true, true>(&window_row_number_support); }

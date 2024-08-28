@@ -21,8 +21,7 @@ namespace NActors {
         , PeerNodeId(node)
         , DynamicPtr(dynamicPtr)
         , Common(std::move(common))
-        , SecureContext(new NInterconnect::TSecureSocketContext(Common->Settings.Certificate, Common->Settings.PrivateKey,
-                Common->Settings.CaFilePath, Common->Settings.CipherList))
+        , SecureContext(new NInterconnect::TSecureSocketContext(Common))
     {
         Y_ABORT_UNLESS(Common);
         Y_ABORT_UNLESS(Common->NameserviceId);

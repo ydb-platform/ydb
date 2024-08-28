@@ -1,0 +1,14 @@
+{
+  "op_name":"InnerJoin (MapJoin)",
+  "args":
+    [
+      {
+        "op_name":"TableLookup",
+        "table":"test\/tpcc\/stock"
+      },
+      {
+        "op_name":"TableRangeScan",
+        "table":"test\/tpcc\/order_line"
+      }
+    ]
+}

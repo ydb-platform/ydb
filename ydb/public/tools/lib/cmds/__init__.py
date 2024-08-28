@@ -8,6 +8,8 @@ import random
 import string
 import typing  # noqa: F401
 import sys
+import yaml
+import copy
 from six.moves.urllib.parse import urlparse
 
 from ydb.library.yql.providers.common.proto.gateways_config_pb2 import TGenericConnectorConfig
@@ -310,6 +312,54 @@ def enable_pqcd(arguments):
     return (getattr(arguments, 'enable_pqcd', False) or os.getenv('YDB_ENABLE_PQCD') == 'true')
 
 
+def merge_two_yaml_configs(data_1, data_2):
+    _check_types_for_merge(data_1, data_2)
+    if isinstance(data_1, dict) and isinstance(data_2, dict):
+        data_1, data_2 = data_1.copy(), data_2.copy()
+        new_dict = {}
+        d2_keys = list(data_2.keys())
+        for d1k in data_1.keys():
+            if d1k in d2_keys:
+                d2_keys.remove(d1k)
+                new_dict[d1k] = merge_two_yaml_configs(data_1.get(d1k), data_2.get(d1k))
+            else:
+                new_dict[d1k] = copy.deepcopy(data_1.get(d1k))
+
+        for d2k in d2_keys:
+            new_dict[d2k] = copy.deepcopy(data_2.get(d2k))
+
+        return new_dict
+    else:
+        if data_2 is None:
+            return copy.deepcopy(data_1)
+        else:
+            return copy.deepcopy(data_2)
+
+
+def _check_types_for_merge(data_1, data_2):
+    if isinstance(data_1, dict) and isinstance(data_2, dict):
+        return
+    if isinstance(data_1, list) and isinstance(data_2, list):
+        return
+    if data_1 is None and data_2 is None:
+        return
+    if (data_1 is None and isinstance(data_2, list)) or (data_2 is None and isinstance(data_1, list)):
+        return
+    if (data_1 is None and isinstance(data_2, dict)) or (data_2 is None and isinstance(data_1, dict)):
+        return
+    raise TypeError("Type mismatch - " + str(type(data_1)) + " data_1 cannot be merged with " + str(type(data_2)) + " data_2")
+
+
+def get_additional_yaml_config(arguments, path):
+    if arguments.ydb_working_dir:
+        with open(os.path.join(arguments.ydb_working_dir, path)) as fh:
+            additional_yaml_config = yaml.load(fh, Loader=yaml.FullLoader)
+    else:
+        raise Exception("No working directory")
+
+    return additional_yaml_config
+
+
 def deploy(arguments):
     initialize_working_dir(arguments)
     recipe = Recipe(arguments)
@@ -374,6 +424,10 @@ def deploy(arguments):
         **optionals
     )
 
+    if os.getenv("YDB_CONFIG_PATCH") is not None:
+        additional_yaml_config = get_additional_yaml_config(arguments, os.getenv("YDB_CONFIG_PATCH"))
+        configuration.yaml_config = merge_two_yaml_configs(configuration.yaml_config, additional_yaml_config)
+
     cluster = kikimr_cluster_factory(configuration)
     cluster.start()
 
@@ -388,7 +442,6 @@ def deploy(arguments):
             'mon_port': node.mon_port,
             'command': node.command,
             'cwd': node.cwd,
-            'stdin_file': node.stdin_file_name,
             'stderr_file': node.stderr_file_name,
             'stdout_file': node.stdout_file_name,
             'pdisks': [
@@ -471,7 +524,6 @@ def start(arguments):
         files = {}
         if node_meta['stderr_file'] is not None and os.path.exists(node_meta['stderr_file']):
             files = {
-                'stdin_file': node_meta['stdin_file'],
                 'stderr_file': node_meta['stderr_file'],
                 'stdout_file': node_meta['stdout_file'],
             }

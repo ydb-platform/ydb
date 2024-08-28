@@ -55,6 +55,7 @@ SRCS(
     pattern_formatter_ut.cpp
     persistent_queue_ut.cpp
     phoenix_ut.cpp
+    phoenix_compatibility_ut.cpp
     pool_allocator_ut.cpp
     proc_ut.cpp
     random_ut.cpp
@@ -65,6 +66,7 @@ SRCS(
     sliding_window_ut.cpp
     sync_cache_ut.cpp
     spsc_queue_ut.cpp
+    statistic_path_ut.cpp
     statistics_ut.cpp
     string_ut.cpp
     sync_expiring_cache_ut.cpp

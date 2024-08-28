@@ -216,7 +216,6 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
                 "WHERE NameHash = $name_hash AND Name = $name";
 
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         TKikimrWithGrpcAndRootSchema server(appConfig);
         DoTestSplitByLoad(server, query, /* fill with data */ true, /* at least two splits */ 2);
     }
@@ -368,7 +367,6 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         NKikimr::TAppData::TimeProvider = testTimeProvider;
 
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
         TKikimrWithGrpcAndRootSchema server(appConfig);
 
@@ -404,15 +402,16 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         UNIT_ASSERT_VALUES_UNEQUAL(shardsBefore, 1);
 
         // Fast forward time a bit multiple time and check that merge doesn't happen
-        for (int i = 0; i < 8; ++i) {
+        /*
+        for (int i = 0; i < 7; ++i) {
             Cerr << "Fast forward 1h" << Endl;
             testTimeProvider->AddShift(TDuration::Hours(1));
             Sleep(TDuration::Seconds(3));
             UNIT_ASSERT_VALUES_EQUAL(oldClient.GetTablePartitions("/Root/Foo").size(), shardsBefore);
-        }
+        }*/
 
         Cerr << "Fast forward > 10h to trigger the merge" << Endl;
-        testTimeProvider->AddShift(TDuration::Hours(8));
+        testTimeProvider->AddShift(TDuration::Hours(16));
 
         // Wait for merge to happen
         size_t shardsAfter = shardsBefore;
@@ -437,7 +436,10 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         TIntrusivePtr<TTestTimeProvider> testTimeProvider = new TTestTimeProvider(originalTimeProvider);
         NKikimr::TAppData::TimeProvider = testTimeProvider;
 
-        TKikimrWithGrpcAndRootSchemaNoSystemViews server;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableResourcePools(true);
+
+        TKikimrWithGrpcAndRootSchemaNoSystemViews server(appConfig);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_NOTICE);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_NOTICE);
@@ -587,8 +589,12 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
             UNIT_ASSERT_EQUAL(entry.Type, NYdb::NScheme::ESchemeEntryType::Directory);
 
             auto children = val.GetChildren();
-            UNIT_ASSERT_EQUAL_C(children.size(), 1, children.size());
+            UNIT_ASSERT_EQUAL_C(children.size(), 2, children.size());
             for (const auto& child: children) {
+                if (child.Name == ".metadata") {
+                    continue;
+                }
+
                 UNIT_ASSERT_EQUAL(child.Type, NYdb::NScheme::ESchemeEntryType::Table);
 
                 auto result = session.DropTable(TStringBuilder() << "Root" << "/" <<  child.Name).ExtractValueSync();

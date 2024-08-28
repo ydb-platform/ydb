@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(TEST_SUITE_NAME) {
             auto program = CREATE_PROGRAM(
                 inputSpec,
                 outputSpec,
-                "SELECT `int64`, `bool`, `string` FROM Input",
+                "SELECT int64, bool, string FROM Input",
                 ETranslationMode::SQL, 1
             );
 
@@ -134,9 +134,9 @@ Y_UNIT_TEST_SUITE(TEST_SUITE_NAME) {
                 inputSpec,
                 outputSpec,
                 R"(
-SELECT `int64`, `uint64` FROM Input0
+SELECT int64, uint64 FROM Input0
 UNION ALL
-SELECT `bool`, `yson` FROM Input1
+SELECT bool, yson FROM Input1
                 )",
                 ETranslationMode::SQL, 1
             );
@@ -182,7 +182,7 @@ SELECT `bool`, `yson` FROM Input1
             auto program = CREATE_PROGRAM(
                 INPUT_SPEC {schema},
             OUTPUT_SPEC {someOptionalSchema},
-            "SELECT `int64`, `bool`, Nothing(String?) as `string` FROM Input",
+            "SELECT int64, bool, Nothing(String?) as string FROM Input",
             ETranslationMode::SQL, 1
             );
 
@@ -208,7 +208,7 @@ SELECT `bool`, `yson` FROM Input1
             CREATE_PROGRAM(
                 INPUT_SPEC {schema},
             OUTPUT_SPEC {someSchema},
-            "SELECT `int64`, `bool`, Nothing(String?) as `string` FROM Input",
+            "SELECT int64, bool, Nothing(String?) as string FROM Input",
             ETranslationMode::SQL, 1
             );
         }(), TCompileError, "Failed to optimize");
@@ -234,7 +234,7 @@ SELECT `bool`, `yson` FROM Input1
             auto program = CREATE_PROGRAM(
                 inputSpec,
                 outputSpec,
-                "SELECT `int64`, `bool`, `string` FROM Input",
+                "SELECT int64, bool, string FROM Input",
                 ETranslationMode::SQL, 1
             );
 
@@ -286,17 +286,17 @@ SELECT `bool`, `yson` FROM Input1
                 outputSpec,
                 R"(
 SELECT
-    t0.`int64` AS `int64`,
-    t0.`uint64` AS `uint64`,
-    t0.`double` AS `double`,
-    t1.`bool` AS `bool`,
-    t1.`string` AS `string`
+    t0.int64 AS int64,
+    t0.uint64 AS uint64,
+    t0.double AS double,
+    t1.bool AS bool,
+    t1.string AS string
 FROM
     Input0 AS t0
 INNER JOIN
     Input1 AS t1
-ON t0.`int64` == t1.`int64`
-ORDER BY `int64`
+ON t0.int64 == t1.int64
+ORDER BY int64
                 )",
                 ETranslationMode::SQL, 1
             );
@@ -660,7 +660,7 @@ ORDER BY `int64`
             auto program = CREATE_PROGRAM(
                 INPUT_SPEC(inputSchema),
                 OUTPUT_SPEC(NYT::TNode::CreateEntity()),
-                "SELECT `int64`, TableName() AS `tname` FROM Input",
+                "SELECT int64, TableName() AS tname FROM Input",
                 ETranslationMode::SQL
             );
             
@@ -688,7 +688,7 @@ ORDER BY `int64`
             auto program = CREATE_PROGRAM(
                 INPUT_SPEC(inputSchema).SetTableNames(tableNames),
                 OUTPUT_SPEC(NYT::TNode::CreateEntity()),
-                "SELECT `int64`, TableName() AS `tname` FROM TABLES()",
+                "SELECT int64, TableName() AS tname FROM TABLES()",
                 ETranslationMode::SQL
             );
             
@@ -724,7 +724,7 @@ $union = (
     UNION ALL
     SELECT * FROM Input1
 );
-SELECT TableName() AS `tname`, `int64` FROM $union
+SELECT TableName() AS tname, int64 FROM $union
                 )"
             );
             
@@ -762,7 +762,7 @@ $union = (
     UNION ALL
     SELECT * FROM $input1
 );
-SELECT TableName() AS `tname`, `int64` FROM $union
+SELECT TableName() AS tname, int64 FROM $union
                 )"
             );
             

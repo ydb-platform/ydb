@@ -47,3 +47,4 @@ RegisterExec(3438, arrow_prefixjoinsel());
 RegisterExec(3740, arrow_thesaurus_init());
 RegisterExec(3741, arrow_thesaurus_lexize());
 RegisterExec(3920, arrow_ginarraytriconsistent());
+RegisterExec(6242, arrow_text_starts_with_support());

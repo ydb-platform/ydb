@@ -10,6 +10,7 @@
 
 import importlib
 import math
+import textwrap
 import time
 from collections import defaultdict
 from contextlib import contextmanager
@@ -30,6 +31,7 @@ from typing import (
     Set,
     Tuple,
     Union,
+    cast,
     overload,
 )
 
@@ -38,7 +40,12 @@ import attr
 from hypothesis import HealthCheck, Phase, Verbosity, settings as Settings
 from hypothesis._settings import local_settings
 from hypothesis.database import ExampleDatabase
-from hypothesis.errors import InvalidArgument, StopTest
+from hypothesis.errors import (
+    FlakyReplay,
+    HypothesisException,
+    InvalidArgument,
+    StopTest,
+)
 from hypothesis.internal.cache import LRUReusedCache
 from hypothesis.internal.compat import (
     NotRequired,
@@ -56,6 +63,7 @@ from hypothesis.internal.conjecture.data import (
     Example,
     HypothesisProvider,
     InterestingOrigin,
+    IRKWargsType,
     IRNode,
     Overrun,
     PrimitiveProvider,
@@ -295,7 +303,7 @@ class ConjectureRunner:
 
     def __stoppable_test_function(self, data: ConjectureData) -> None:
         """Run ``self._test_function``, but convert a ``StopTest`` exception
-        into a normal return and avoid raising Flaky for RecursionErrors.
+        into a normal return and avoid raising anything flaky for RecursionErrors.
         """
         # We ensure that the test has this much stack space remaining, no
         # matter the size of the stack when called, to de-flake RecursionErrors
@@ -453,6 +461,33 @@ class ConjectureRunner:
                     ),
                 }
                 self.stats_per_test_case.append(call_stats)
+                if self.settings.backend != "hypothesis":
+                    for node in data.examples.ir_tree_nodes:
+                        value = data.provider.realize(node.value)
+                        expected_type = {
+                            "string": str,
+                            "float": float,
+                            "integer": int,
+                            "boolean": bool,
+                            "bytes": bytes,
+                        }[node.ir_type]
+                        if type(value) is not expected_type:
+                            raise HypothesisException(
+                                f"expected {expected_type} from "
+                                f"{data.provider.realize.__qualname__}, "
+                                f"got {type(value)}"
+                            )
+
+                        kwargs = cast(
+                            IRKWargsType,
+                            {
+                                k: data.provider.realize(v)
+                                for k, v in node.kwargs.items()
+                            },
+                        )
+                        node.value = value
+                        node.kwargs = kwargs
+
                 self._cache(data)
                 if data.invalid_at is not None:  # pragma: no branch # coverage bug?
                     self.misaligned_count += 1
@@ -496,18 +531,29 @@ class ConjectureRunner:
 
         if data.status == Status.INTERESTING:
             if self.settings.backend != "hypothesis":
-                for node in data.examples.ir_tree_nodes:
-                    value = data.provider.post_test_case_hook(node.value)
-                    # require providers to return something valid here.
-                    assert (
-                        value is not None
-                    ), "providers must return a non-null value from post_test_case_hook"
-                    node.value = value
-
                 # drive the ir tree through the test function to convert it
                 # to a buffer
+                initial_origin = data.interesting_origin
+                initial_traceback = data.extra_information._expected_traceback  # type: ignore
                 data = ConjectureData.for_ir_tree(data.examples.ir_tree_nodes)
                 self.__stoppable_test_function(data)
+                data.freeze()
+                # TODO: Convert to FlakyFailure on the way out. Should same-origin
+                #       also be checked?
+                if data.status != Status.INTERESTING:
+                    desc_new_status = {
+                        data.status.VALID: "passed",
+                        data.status.INVALID: "failed filters",
+                        data.status.OVERRUN: "overran",
+                    }[data.status]
+                    wrapped_tb = textwrap.indent(initial_traceback, "  | ")
+                    raise FlakyReplay(
+                        f"Inconsistent results from replaying a failing test case!\n"
+                        f"{wrapped_tb}on backend={self.settings.backend!r} but "
+                        f"{desc_new_status} under backend='hypothesis'",
+                        interesting_origins=[initial_origin],
+                    )
+
                 self._cache(data)
 
             key = data.interesting_origin
@@ -529,7 +575,7 @@ class ConjectureRunner:
             if changed:
                 self.save_buffer(data.buffer)
                 self.interesting_examples[key] = data.as_result()  # type: ignore
-                self.__data_cache.pin(data.buffer)
+                self.__data_cache.pin(data.buffer, data.as_result())
                 self.shrunk_examples.discard(key)
 
             if self.shrinks >= MAX_SHRINKS:
@@ -876,7 +922,9 @@ class ConjectureRunner:
         zero_data = self.cached_test_function(bytes(BUFFER_SIZE))
         if zero_data.status > Status.OVERRUN:
             assert isinstance(zero_data, ConjectureResult)
-            self.__data_cache.pin(zero_data.buffer)
+            self.__data_cache.pin(
+                zero_data.buffer, zero_data.as_result()
+            )  # Pin forever
 
         if zero_data.status == Status.OVERRUN or (
             zero_data.status == Status.VALID
@@ -951,7 +999,10 @@ class ConjectureRunner:
 
             self._current_phase = "generate"
             prefix = self.generate_novel_prefix()
-            assert len(prefix) <= BUFFER_SIZE
+            # it is possible, if unlikely, to generate a > BUFFER_SIZE novel prefix,
+            # as nodes in the novel tree may be variable sized due to eg integer
+            # probe retries.
+            prefix = prefix[:BUFFER_SIZE]
             if (
                 self.valid_examples <= small_example_cap
                 and self.call_count <= 5 * small_example_cap

@@ -54,7 +54,7 @@ libossp-uuid-dev
 
 9. Make sure that resulting pg_wrapper library compiles and passes minimal tests
 
-   yag make --build=relwithdebinfo -tA -C ut -C test
+   yag make --build=relwithdebinfo -tA -C ut -C test -C ../../sql/pg/ut
 
 10. Verify that all global variables in PostgreSQL-originated sources are accounted for
 

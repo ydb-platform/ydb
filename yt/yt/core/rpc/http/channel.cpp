@@ -27,8 +27,8 @@ class THttpChannel
     : public IChannel
 {
 public:
-    explicit THttpChannel(
-        const TString& address,
+    THttpChannel(
+        const std::string& address,
         const NConcurrency::IPollerPtr& poller,
         bool isHttps,
         NHttps::TClientCredentialsConfigPtr credentials)
@@ -111,7 +111,7 @@ public:
     }
 
     // Custom methods.
-    const TString& GetEndpointAddress() const
+    const std::string& GetEndpointAddress() const
     {
         return EndpointAddress_;
     }
@@ -121,6 +121,11 @@ public:
         YT_UNIMPLEMENTED();
     }
 
+    const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override
+    {
+        return MemoryUsageTracker_;
+    }
+
 private:
     IClientPtr Client_;
     std::optional<TDuration> ClientTimeout_;
@@ -128,6 +133,8 @@ private:
     const TString EndpointAddress_;
     const IAttributeDictionaryPtr EndpointAttributes_;
     const NConcurrency::IPollerPtr Poller_;
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_ = GetNullMemoryUsageTracker();
+
     bool IsHttps_;
     NHttps::TClientCredentialsConfigPtr Credentials_;
 
@@ -337,7 +344,7 @@ DEFINE_REFCOUNTED_TYPE(THttpChannel)
 } // namespace
 
 IChannelPtr CreateHttpChannel(
-    const TString& address,
+    const std::string& address,
     const NConcurrency::IPollerPtr& poller,
     bool isHttps,
     NHttps::TClientCredentialsConfigPtr credentials)

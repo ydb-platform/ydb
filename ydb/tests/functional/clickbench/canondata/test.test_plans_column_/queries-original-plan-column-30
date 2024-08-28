@@ -60,18 +60,8 @@
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "Aggregate-TableFullScan",
+                                                                "Node Type": "TableFullScan",
                                                                 "Operators": [
-                                                                    {
-                                                                        "Aggregation": "{_yql_agg_1: SUM(state._yql_agg_1,1),_yql_agg_2: SUM(item.IsRefresh,state._yql_agg_2)}",
-                                                                        "GroupBy": "",
-                                                                        "Inputs": [
-                                                                            {
-                                                                                "InternalOperatorId": 1
-                                                                            }
-                                                                        ],
-                                                                        "Name": "Aggregate"
-                                                                    },
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TableFullScan",
@@ -130,19 +120,86 @@
                                                                                     }
                                                                                 },
                                                                                 {
+                                                                                    "GroupBy": {
+                                                                                        "Aggregates": [
+                                                                                            {
+                                                                                                "Column": {
+                                                                                                    "Id": 108
+                                                                                                },
+                                                                                                "Function": {
+                                                                                                    "Arguments": [
+                                                                                                        {
+                                                                                                            "Id": 21
+                                                                                                        }
+                                                                                                    ],
+                                                                                                    "Id": 5
+                                                                                                }
+                                                                                            },
+                                                                                            {
+                                                                                                "Column": {
+                                                                                                    "Id": 109
+                                                                                                },
+                                                                                                "Function": {
+                                                                                                    "Arguments": [
+                                                                                                        {
+                                                                                                            "Id": 21
+                                                                                                        }
+                                                                                                    ],
+                                                                                                    "Id": 2
+                                                                                                }
+                                                                                            },
+                                                                                            {
+                                                                                                "Column": {
+                                                                                                    "Id": 110
+                                                                                                },
+                                                                                                "Function": {
+                                                                                                    "Id": 2
+                                                                                                }
+                                                                                            },
+                                                                                            {
+                                                                                                "Column": {
+                                                                                                    "Id": 111
+                                                                                                },
+                                                                                                "Function": {
+                                                                                                    "Arguments": [
+                                                                                                        {
+                                                                                                            "Id": 16
+                                                                                                        }
+                                                                                                    ],
+                                                                                                    "Id": 5
+                                                                                                }
+                                                                                            }
+                                                                                        ],
+                                                                                        "KeyColumns": [
+                                                                                            {
+                                                                                                "Id": 8
+                                                                                            },
+                                                                                            {
+                                                                                                "Id": 39
+                                                                                            }
+                                                                                        ]
+                                                                                    }
+                                                                                },
+                                                                                {
                                                                                     "Projection": {
                                                                                         "Columns": [
                                                                                             {
                                                                                                 "Id": 8
                                                                                             },
                                                                                             {
-                                                                                                "Id": 16
-                                                                                            },
-                                                                                            {
-                                                                                                "Id": 21
-                                                                                            },
-                                                                                            {
                                                                                                 "Id": 39
+                                                                                            },
+                                                                                            {
+                                                                                                "Id": 109
+                                                                                            },
+                                                                                            {
+                                                                                                "Id": 108
+                                                                                            },
+                                                                                            {
+                                                                                                "Id": 110
+                                                                                            },
+                                                                                            {
+                                                                                                "Id": 111
                                                                                             }
                                                                                         ]
                                                                                     }
@@ -171,7 +228,10 @@
                             }
                         ]
                     }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {

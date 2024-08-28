@@ -19,23 +19,31 @@ public:
         : EndChunkIdx(endChunkIdx)
         , EndSectorIdx(endSectorIdx)
         , CommonLogger(commonLogger)
-        , CompletionLogWrite(completionLogWrite) { }
+        , CompletionLogWrite(completionLogWrite)
+    {
+        Orbit = std::move(completionLogWrite->Orbit);
+    }
+
+    void SetUpCompletionLogWrite() {
+        CompletionLogWrite->SubmitTime = SubmitTime;
+        CompletionLogWrite->GetTime = GetTime;
+        CompletionLogWrite->SetResult(Result);
+        CompletionLogWrite->SetErrorReason(ErrorReason);
+        CompletionLogWrite->Orbit = std::move(Orbit);
+    }
 
     void Exec(TActorSystem *actorSystem) override {
         CommonLogger->FirstUncommitted = TFirstUncommitted(EndChunkIdx, EndSectorIdx);
         
-        CompletionLogWrite->SetResult(Result);
-        CompletionLogWrite->SetErrorReason(ErrorReason);
+        SetUpCompletionLogWrite();
         CompletionLogWrite->Exec(actorSystem);
 
         delete this;
     }
 
     void Release(TActorSystem *actorSystem) override {
-        CompletionLogWrite->SetResult(Result);
-        CompletionLogWrite->SetErrorReason(ErrorReason);
+        SetUpCompletionLogWrite();
         CompletionLogWrite->Release(actorSystem);
-
         delete this;
     }
 };
@@ -1389,6 +1397,8 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                             "Error while parsing common log at booting state"));
                 return;
             }
+            // Initialize metadata.
+            InitFormattedMetadata();
             // Prepare the FreeChunks list
             InitFreeChunks();
             // Actualize LogChunks counters according to OwnerData
@@ -1498,6 +1508,9 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
             auto completion = MakeHolder<TCompletionEventSender>(this, pDiskActor, new TEvLogInitResult(true, "OK"));
             ReleaseUnusedLogChunks(completion.Get());
             WriteSysLogRestorePoint(completion.Release(), TReqId(TReqId::AfterInitCommonLoggerSysLog, 0), {});
+
+            // Start reading metadata.
+            ReadFormattedMetadataIfNeeded();
 
             // Output the fully initialized state for each owner and each chunk.
             LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId

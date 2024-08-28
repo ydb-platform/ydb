@@ -7,6 +7,8 @@
 #include <ydb/library/yql/core/yql_join.h>
 #include <ydb/library/yql/utils/log/profile.h>
 
+#include <library/cpp/yson/node/node_io.h>
+
 #include <util/generic/scope.h>
 #include <util/generic/utility.h>
 #include <util/generic/algorithm.h>
@@ -85,6 +87,7 @@ public:
         Functions["AssumeDistinct"] = &TCallableConstraintTransformer::AssumeUniqueWrap<true, true>;
         Functions["AssumeUniqueHint"] = &TCallableConstraintTransformer::AssumeUniqueWrap<false, false>;
         Functions["AssumeDistinctHint"] = &TCallableConstraintTransformer::AssumeUniqueWrap<true, false>;
+        Functions["AssumeConstraints"] = &TCallableConstraintTransformer::AssumeConstraintsWrap;
         Functions["AssumeChopped"] = &TCallableConstraintTransformer::AssumeChoppedWrap;
         Functions["AssumeColumnOrder"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["AssumeAllMembersNullableAtOnce"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
@@ -385,6 +388,31 @@ private:
         }
 
         return FromFirst<TEmptyConstraintNode, TUniqueConstraintNode, TDistinctConstraintNode, TVarIndexConstraintNode>(input, output, ctx);
+    }
+
+    TStatus AssumeConstraintsWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
+        TConstraintSet set;
+        try {
+            set = ctx.MakeConstraintSet(NYT::NodeFromYsonString(input->Tail().Content()));
+        } catch (...) {
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() <<
+                "Bad constraints yson-value: " << CurrentExceptionMessage()));
+            return IGraphTransformer::TStatus::Error;
+        }
+        for (auto constraint: set.GetAllConstraints()) {
+            if (!constraint->IsApplicableToType(*input->GetTypeAnn())) {
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << *constraint
+                    << " is not applicable to " << *input->GetTypeAnn()));
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+        for (auto constr: input->Head().GetAllConstraints()) {
+            if (!constr->GetName().starts_with("PartOf") && !set.GetConstraint(constr->GetName())) {
+                set.AddConstraint(constr);
+            }
+        }
+        input->SetConstraints(set);
+        return IGraphTransformer::TStatus::Ok;
     }
 
     template<bool Distinct, bool Strict>

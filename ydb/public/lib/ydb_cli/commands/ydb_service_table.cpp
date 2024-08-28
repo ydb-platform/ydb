@@ -868,9 +868,15 @@ int TCommandExplain::Run(TConfig& config) {
 
     TString planJson;
     TString ast;
+    std::optional<TDuration> timeout;
+    if (OperationTimeout) {
+        timeout = TDuration::MilliSeconds(FromString<ui64>(OperationTimeout));
+    }
+
     if (QueryType == "scan") {
         NTable::TTableClient client(CreateDriver(config));
         NTable::TStreamExecScanQuerySettings settings;
+        settings.ClientTimeout(timeout.value_or(TDuration()));
 
         if (Analyze) {
             settings.CollectQueryStats(NTable::ECollectQueryStatsMode::Full);
@@ -916,6 +922,7 @@ int TCommandExplain::Run(TConfig& config) {
     } else if (QueryType == "generic") {
         NQuery::TQueryClient client(CreateDriver(config));
         NQuery::TExecuteQuerySettings settings;
+        settings.ClientTimeout(timeout.value_or(TDuration()));
 
         if (Analyze) {
             settings.StatsMode(NQuery::EStatsMode::Full);
@@ -955,7 +962,7 @@ int TCommandExplain::Run(TConfig& config) {
         auto result = GetSession(config).ExecuteDataQuery(
             Query,
             NTable::TTxControl::BeginTx(NTable::TTxSettings::SerializableRW()).CommitTx(),
-            settings
+            FillSettings(settings)
         ).ExtractValueSync();
         ThrowOnError(result);
         planJson = result.GetQueryPlan();

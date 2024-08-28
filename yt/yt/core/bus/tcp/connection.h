@@ -83,8 +83,8 @@ public:
         const TString& endpointDescription,
         const NYTree::IAttributeDictionary& endpointAttributes,
         const NNet::TNetworkAddress& endpointNetworkAddress,
-        const std::optional<TString>& endpointAddress,
-        const std::optional<TString>& unixDomainSocketPath,
+        const std::optional<std::string>& endpointAddress,
+        const std::optional<std::string>& unixDomainSocketPath,
         IMessageHandlerPtr handler,
         NConcurrency::IPollerPtr poller,
         IPacketTranscoderFactory* packetTranscoderFactory,
@@ -99,7 +99,6 @@ public:
     TBusNetworkStatistics GetBusStatistics() const;
 
     // IPollable implementation.
-    NConcurrency::EPollablePriority GetPriority() const override;
     const TString& GetLoggingTag() const override;
     void OnEvent(NConcurrency::EPollControl control) override;
     void OnShutdown() override;
@@ -107,7 +106,7 @@ public:
     // IBus implementation.
     const TString& GetEndpointDescription() const override;
     const NYTree::IAttributeDictionary& GetEndpointAttributes() const override;
-    const TString& GetEndpointAddress() const override;
+    const std::string& GetEndpointAddress() const override;
     const NNet::TNetworkAddress& GetEndpointNetworkAddress() const override;
     bool IsEndpointLocal() const override;
     bool IsEncrypted() const override;
@@ -289,7 +288,7 @@ private:
     void Close();
     void CloseSslSession(ESslState newSslState);
 
-    void Abort(const TError& error);
+    void Abort(const TError& error, NLogging::ELogLevel logLevel = NLogging::ELogLevel::Debug);
     bool AbortIfNetworkingDisabled();
     void AbortSslSession();
 

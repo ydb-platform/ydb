@@ -72,12 +72,17 @@ public:
     bool SendStartKqpTasksRequest(ui32 requestId, const TActorId& target);
     std::unique_ptr<IEventHandle> PlanExecution();
     std::unique_ptr<IEventHandle> AssignTasksToNodes();
+    bool AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::NDqProto::TEvComputeActorState* state);
+    void CompletedCA(ui64 taskId, TActorId computeActor);
+    void TaskNotStarted(ui64 taskId);
+    TProgressStat::TEntry CalculateConsumptionUpdate();
+    void ShiftConsumption();
     void Submit();
     ui32 GetCurrentRetryDelay(ui32 requestId);
     void Unsubscribe();
 
-    THashMap<TActorId, TProgressStat>& GetPendingComputeActors();
-    THashSet<ui64>& GetPendingComputeTasks();
+    const THashMap<TActorId, TProgressStat>& GetPendingComputeActors();
+    const THashSet<ui64>& GetPendingComputeTasks();
 
     ui32 GetnScanTasks();
     ui32 GetnComputeTasks();
@@ -85,7 +90,7 @@ public:
 private:
 
     const IKqpGateway::TKqpSnapshot& GetSnapshot() const;
-    void ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize);
+    TString ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize);
     void PrepareToProcess();
     TString GetEstimationsInfo() const;
 
@@ -133,6 +138,8 @@ private:
     TString SerializedGUCSettings;
     std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;
     std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
+    TIntrusivePtr<NRm::TTxState> TxInfo;
+    TVector<TProgressStat> LastStats;
 
 public:
     static bool UseMockEmptyPlanner;  // for tests: if true then use TKqpMockEmptyPlanner that leads to the error

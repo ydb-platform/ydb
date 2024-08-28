@@ -13,8 +13,12 @@
 #include <yt/cpp/mapreduce/interface/config.h>
 
 #include <yt/cpp/mapreduce/interface/logging/logger.h>
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/logger/backend.h>
+#include <ydb/library/yql/utils/actor_log/log.h>
 
 #include <util/string/split.h>
+#include <util/system/fs.h>
 
 using namespace NActors;
 
@@ -41,6 +45,9 @@ class TQueryReplayMapper
 {
 
     THolder<NActors::TActorSystem> ActorSystem;
+    TAutoPtr<TLogBackend> LogBackend;
+    std::unique_ptr<NYql::NLog::YqlLoggerScope> YqlLogger;
+    TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
     THolder<NKikimr::TAppData> AppData;
     TIntrusivePtr<NKikimr::NScheme::TKikimrTypeRegistry> TypeRegistry;
     TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
@@ -49,8 +56,10 @@ class TQueryReplayMapper
     NYql::IHTTPGateway::TPtr HttpGateway;
     TVector<TString> UdfFiles;
     ui32 ActorSystemThreadsCount = 5;
+    NActors::NLog::EPriority YqlLogPriority = NActors::NLog::EPriority::PRI_ERROR;
 
-    TString GetFailReason(const TQueryReplayEvents::TCheckQueryPlanStatus& status) {
+public:
+    static TString GetFailReason(const TQueryReplayEvents::TCheckQueryPlanStatus& status) {
         switch (status) {
             case TQueryReplayEvents::CompileError:
                 return "compile_error";
@@ -84,23 +93,36 @@ class TQueryReplayMapper
 public:
     TQueryReplayMapper() = default;
 
-    Y_SAVELOAD_JOB(UdfFiles, ActorSystemThreadsCount);
+    Y_SAVELOAD_JOB(UdfFiles, ActorSystemThreadsCount, YqlLogPriority);
 
-    TQueryReplayMapper(TVector<TString> udfFiles, ui32 actorSystemThreadsCount)
+    TQueryReplayMapper(TVector<TString> udfFiles, ui32 actorSystemThreadsCount,
+        NActors::NLog::EPriority yqlLogPriority = NActors::NLog::EPriority::PRI_ERROR)
         : UdfFiles(udfFiles)
         , ActorSystemThreadsCount(actorSystemThreadsCount)
+        , YqlLogPriority(yqlLogPriority)
     {}
 
     void Start(NYT::TTableWriter<NYT::TNode>*) override {
+        YqlLogger = std::make_unique<NYql::NLog::YqlLoggerScope>(&Cerr);
+        NYql::NDq::SetYqlLogLevels(YqlLogPriority);
+
         TypeRegistry.Reset(new NKikimr::NScheme::TKikimrTypeRegistry());
         FunctionRegistry.Reset(NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry())->Clone());
         NKikimr::NMiniKQL::FillStaticModules(*FunctionRegistry);
         NKikimr::NMiniKQL::TUdfModuleRemappings remappings;
         THashSet<TString> usedUdfPaths;
 
-        for(const auto& [_, udfPath]: GetJobFiles(UdfFiles)) {
+        for(const auto& [realPath, udfPath]: GetJobFiles(UdfFiles)) {
             if (usedUdfPaths.insert(udfPath).second) {
-                FunctionRegistry->LoadUdfs(udfPath, remappings, 0);
+                if (NFs::Exists(udfPath)) {
+                    FunctionRegistry->LoadUdfs(udfPath, remappings, 0);
+                    continue;
+                }
+
+                if (NFs::Exists(realPath)) {
+                    FunctionRegistry->LoadUdfs(realPath, remappings, 0);
+                    continue;
+                }
             }
         }
 
@@ -115,6 +137,26 @@ public:
         Y_ABORT_UNLESS(GetYqlDefaultModuleResolver(ModuleResolverState->ExprCtx, ModuleResolverState->ModuleResolver));
     }
 
+    THolder<TQueryReplayEvents::TEvCompileResponse> RunReplay(NJson::TJsonValue&& json) {
+        TString queryType = json["query_type"].GetStringSafe();
+        if (queryType == "QUERY_TYPE_AST_SCAN") {
+            return nullptr;
+        }
+
+        if (queryType == "QUERY_TYPE_SQL_GENERIC_SCRIPT") {
+            return nullptr;
+        }
+
+        auto compileActorId = ActorSystem->Register(CreateQueryCompiler(ModuleResolverState, FunctionRegistry.Get(), HttpGateway));
+
+        auto future = ActorSystem->Ask<TQueryReplayEvents::TEvCompileResponse>(
+            compileActorId,
+            THolder(new TQueryReplayEvents::TEvCompileRequest(std::move(json))),
+            TDuration::Seconds(100));
+
+        return future.ExtractValueSync();
+    }
+
     void Do(NYT::TTableReader<NYT::TNode>* in, NYT::TTableWriter<NYT::TNode>* out) override {
         for (; in->IsValid(); in->Next()) {
             const auto& row = in->GetRow();
@@ -125,23 +167,10 @@ public:
                 json.InsertValue(key, NJson::TJsonValue(child.AsString()));
             }
 
-            TString queryType = row["query_type"].AsString();
-            if (queryType == "QUERY_TYPE_AST_SCAN") {
+            auto response = RunReplay(std::move(json));
+            if (response == nullptr)
                 continue;
-            }
 
-            if (queryType == "QUERY_TYPE_SQL_GENERIC_SCRIPT") {
-                continue;
-            }
-
-            auto compileActorId = ActorSystem->Register(CreateQueryCompiler(ModuleResolverState, FunctionRegistry.Get(), HttpGateway));
-
-            auto future = ActorSystem->Ask<TQueryReplayEvents::TEvCompileResponse>(
-                compileActorId,
-                THolder(new TQueryReplayEvents::TEvCompileRequest(std::move(json))),
-                TDuration::Seconds(100));
-
-            auto response = future.ExtractValueSync();
             auto status = response.Get()->Status;
 
             TString failReason = GetFailReason(status);
@@ -206,6 +235,32 @@ int main(int argc, const char** argv) {
 
     TQueryReplayConfig config;
     config.ParseConfig(argc, argv);
+    if (config.QueryFile) {
+        auto fakeMapper = TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.YqlLogLevel);
+        fakeMapper.Start(nullptr);
+        Y_DEFER {
+            fakeMapper.Finish(nullptr);
+        };
+
+        NJson::TJsonValue queryJson;
+        {
+            static NJson::TJsonReaderConfig readConfig;
+            TFileInput in(config.QueryFile);
+            NJson::ReadJsonTree(&in, &readConfig, &queryJson, false);
+        }
+
+        auto result = fakeMapper.RunReplay(std::move(queryJson));
+
+        auto status = result.Get()->Status;
+        TString failReason = TQueryReplayMapper::GetFailReason(status);
+        Cerr << failReason << Endl;
+        return 0;
+    }
+
+    if (config.Cluster.empty() || config.SrcPath.empty() || config.DstPath.empty()) {
+        Cerr << "Non local execution requires Cluster and SrcPath and DstPath options to be specified.";
+        return EXIT_FAILURE;
+    }
 
     auto client = NYT::CreateClient(config.Cluster);
     NYT::SetLogger(NYT::CreateStdErrLogger(NYT::ILogger::ELevel::INFO));
@@ -215,15 +270,18 @@ int main(int argc, const char** argv) {
     spec.AddOutput<NYT::TNode>(NYT::TRichYPath(config.DstPath).Schema(OutputSchema()));
 
     auto userJobSpec = NYT::TUserJobSpec();
-    userJobSpec.MemoryLimit(1_GB);
+    userJobSpec.MemoryLimit(5_GB);
 
     for(const auto& [udf, udfInJob]: GetJobFiles(config.UdfFiles)) {
         userJobSpec.AddLocalFile(udf, NYT::TAddLocalFileOptions().PathInJob(udfInJob));
     }
 
     spec.MapperSpec(userJobSpec);
+    if (!config.CoreTablePath.empty()) {
+        spec.CoreTablePath(config.CoreTablePath);
+    }
 
-    client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount));
+    client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.YqlLogLevel));
 
     return EXIT_SUCCESS;
 }

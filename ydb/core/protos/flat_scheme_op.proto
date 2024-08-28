@@ -13,15 +13,17 @@ import "ydb/core/protos/follower_group.proto";
 import "ydb/core/protos/blob_depot_config.proto";
 import "ydb/public/api/protos/ydb_coordination.proto";
 import "ydb/public/api/protos/ydb_export.proto";
+import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/library/actors/protos/actors.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/core/protos/index_builder.proto";
-import "ydb/core/tx/columnshard/engines/scheme/statistics/protos/data.proto";
 import "ydb/core/tx/columnshard/engines/scheme/defaults/protos/data.proto";
 import "ydb/core/tx/columnshard/common/protos/snapshot.proto";
+import "ydb/core/formats/arrow/protos/accessor.proto";
 
 import "google/protobuf/empty.proto";
+import "google/protobuf/struct.proto";
 
 package NKikimrSchemeOp;
 option java_package = "ru.yandex.kikimr.proto";
@@ -90,6 +92,7 @@ message TColumnDescription {
     oneof DefaultValue {
         string DefaultFromSequence = 7; // Path to sequence for default values
         Ydb.TypedValue DefaultFromLiteral = 10; // Literal default value
+        google.protobuf.NullValue EmptyDefault = 12; // Drop default case
     }
     optional bool NotNull = 8;
     // flag that indicates that column is currently under the build
@@ -357,6 +360,22 @@ message TTableReplicationConfig {
     optional EConsistency Consistency = 2;
 }
 
+message TTableIncrementalBackupConfig {
+    enum ERestoreMode {
+        RESTORE_MODE_NONE = 0;
+        RESTORE_MODE_INCREMENTAL_BACKUP = 1;
+    }
+
+    enum EConsistency {
+        CONSISTENCY_UNKNOWN = 0;
+        CONSISTENCY_STRONG = 1;
+        CONSISTENCY_WEAK = 2;
+    }
+
+    optional ERestoreMode Mode = 1;
+    optional EConsistency Consistency = 2;
+}
+
 message TTableDescription {
     optional string Name = 1;
     optional uint64 Id_Deprecated = 2; // LocalPathId, deprecated
@@ -393,9 +412,17 @@ message TTableDescription {
     repeated TCdcStreamDescription CdcStreams = 38;
     repeated TSequenceDescription Sequences = 39;
 
-    optional TTableReplicationConfig ReplicationConfig = 40;
+    oneof IncomingStreamConfig {
+        TTableReplicationConfig ReplicationConfig = 40;
+        TTableIncrementalBackupConfig IncrementalBackupConfig = 43;
+    }
 
     optional bool Temporary = 41;
+
+    // This flag is create-only, and has to be set up
+    // on table creation to allow system column names (started with __ydb_)
+    // It won't be present on describes and won't be preserved
+    optional bool SystemColumnNamesAllowed = 42;
 }
 
 message TDictionaryEncodingSettings {
@@ -423,6 +450,7 @@ message TOlapColumnDiff {
     optional TOlapColumn.TSerializer Serializer = 5;
     optional string StorageId = 6;
     optional string DefaultValue = 7;
+    optional NKikimrArrowAccessorProto.TRequestedConstructor DataAccessorConstructor = 8;
 }
 
 message TOlapColumnDescription {
@@ -442,11 +470,21 @@ message TOlapColumnDescription {
     optional TOlapColumn.TSerializer Serializer = 10;
     optional string StorageId = 11;
     optional NKikimrColumnShardColumnDefaults.TColumnDefault DefaultValue = 12;
+    optional NKikimrArrowAccessorProto.TConstructor DataAccessorConstructor = 13;
 }
 
 message TRequestedBloomFilter {
     optional double FalsePositiveProbability = 1 [default = 0.1];
     repeated string ColumnNames = 3;
+}
+
+message TRequestedMaxIndex {
+    optional string ColumnName = 1;
+}
+
+message TRequestedCountMinSketch {
+    // sketch built on the combined data from the set of columns
+    repeated string ColumnNames = 1;
 }
 
 message TOlapIndexRequested {
@@ -457,6 +495,8 @@ message TOlapIndexRequested {
     optional string ClassName = 39;
     oneof Implementation {
         TRequestedBloomFilter BloomFilter = 40;
+        TRequestedMaxIndex MaxIndex = 41;
+        TRequestedCountMinSketch CountMinSketch = 42;
     }
 }
 
@@ -464,6 +504,14 @@ message TBloomFilter {
     optional double FalsePositiveProbability = 1 [default = 0.1];
     optional uint64 MaxBytesCount = 2 [default = 8196];
     repeated uint32 ColumnIds = 3;
+}
+
+message TMaxIndex {
+    optional uint32 ColumnId = 1;
+}
+
+message TCountMinSketch {
+    repeated uint32 ColumnIds = 1;
 }
 
 message TOlapIndexDescription {
@@ -478,6 +526,8 @@ message TOlapIndexDescription {
     optional string ClassName = 40;
     oneof Implementation {
         TBloomFilter BloomFilter = 41;
+        TMaxIndex MaxIndex = 42;
+        TCountMinSketch CountMinSketch = 43;
     }
 }
 
@@ -541,7 +591,6 @@ message TColumnTableSchema {
 
     optional bool CompositeMarksDeprecated = 9 [ default = false ];
     repeated TOlapIndexDescription Indexes = 10;
-    repeated NKikimrColumnShardStatisticsProto.TOperatorContainer Statistics = 11;
     optional TColumnTableSchemeOptions Options = 12;
 }
 
@@ -558,8 +607,6 @@ message TAlterColumnTableSchema {
     repeated TOlapColumnDiff AlterColumns = 7;
     repeated TOlapIndexRequested UpsertIndexes = 8;
     repeated string DropIndexes = 9;
-    repeated NKikimrColumnShardStatisticsProto.TConstructorContainer UpsertStatistics = 10;
-    repeated string DropStatistics = 11;
     optional TColumnTableRequestedOptions Options = 12;
 }
 
@@ -877,6 +924,7 @@ enum ECdcStreamMode {
     ECdcStreamModeNewImage = 3;
     ECdcStreamModeOldImage = 4;
     ECdcStreamModeNewAndOldImages = 5;
+    ECdcStreamModeRestoreIncrBackup = 106;
 }
 
 enum ECdcStreamFormat {
@@ -913,10 +961,6 @@ message TCreateCdcStream {
     optional TCdcStreamDescription StreamDescription = 2;
     optional uint64 RetentionPeriodSeconds = 3 [default = 86400]; // 1d by default
     optional uint32 TopicPartitions = 4;
-    oneof IndexMode {
-        google.protobuf.Empty AllIndexes = 5; // Create topic per each index
-        string IndexName = 6;
-    }
 }
 
 message TAlterCdcStream {
@@ -956,6 +1000,7 @@ message TAlterContinuousBackup {
     }
 
     message TTakeIncrementalBackup {
+        optional string DstPath = 1;
     }
 
     oneof Action {
@@ -968,11 +1013,17 @@ message TDropContinuousBackup {
     optional string TableName = 1;
 }
 
+message TRestoreIncrementalBackup {
+    optional string SrcTableName = 1;
+    optional string DstTableName = 2;
+}
+
 enum EIndexType {
     EIndexTypeInvalid = 0;
     EIndexTypeGlobal = 1;
     EIndexTypeGlobalAsync = 2;
     EIndexTypeGlobalUnique = 3;
+    EIndexTypeGlobalVectorKmeansTree = 4;
 }
 
 enum EIndexState {
@@ -980,6 +1031,10 @@ enum EIndexState {
     EIndexStateReady = 1;
     EIndexStateNotReady = 2;
     EIndexStateWriteOnly = 3;
+}
+
+message TVectorIndexKmeansTreeDescription {
+    optional Ydb.Table.VectorIndexSettings Settings = 1;
 }
 
 message TIndexDescription {
@@ -1000,6 +1055,10 @@ message TIndexDescription {
     // DataSize + IndexSize of indexImplTable
     optional uint64 DataSize = 9;
     repeated TTableDescription IndexImplTableDescriptions = 10;
+
+    oneof SpecializedIndexDescription {
+        TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 11;
+    }
 }
 
 message TIndexCreationConfig {
@@ -1009,6 +1068,9 @@ message TIndexCreationConfig {
     repeated TTableDescription IndexImplTableDescriptions = 4; //description for index impl tables
     optional EIndexState State = 5; //state of index at the creation time
     repeated string DataColumnNames = 6; //columns to be denormalized to read data just from index
+    oneof SpecializedIndexDescription {
+        TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 7;
+    }
 }
 
 message TIndexAlteringConfig {
@@ -1420,6 +1482,7 @@ message TSequenceDescription {
     optional sint64 Increment = 9; // increment at each call, defaults to 1
     optional bool Cycle = 10; // true when cycle on overflow is allowed
     optional TSetVal SetVal = 11; // SetVal(NextValue, NextUsed) is executed atomically when creating
+    optional string DataType = 12; // data type of the sequence: Int64/pgint8, Int32/pgint4, Int16/pgint2, defaults to Int64/pgint8
 }
 
 message TSequenceSharding {
@@ -1596,6 +1659,8 @@ enum EOperationType {
     ESchemeOpCreateResourcePool = 100;
     ESchemeOpDropResourcePool = 101;
     ESchemeOpAlterResourcePool = 102;
+
+    ESchemeOpRestoreIncrementalBackup = 103;
 }
 
 message TApplyIf {
@@ -1625,13 +1690,12 @@ message TIndexBuildConfig {
 message TIndexBuildControl {
     optional string TablePath = 1;
     optional string IndexName = 2;
-    optional uint64 SnaphotTxId = 3;
+    optional uint64 SnapshotTxId = 3;
     optional uint64 BuildIndexId = 4;
 }
 
 message TLockConfig {
     optional string Name = 1;
-    optional bool AllowIndexImplLock = 2;
 }
 
 message TLockGuard {
@@ -1778,6 +1842,8 @@ message TModifyScheme {
     optional bool AllowCreateInTempDir = 71 [default = false];
 
     optional TResourcePoolDescription CreateResourcePool = 72;
+
+    optional TRestoreIncrementalBackup RestoreIncrementalBackup = 73;
 }
 
 message TCopySequence {
@@ -1800,6 +1866,7 @@ message TDescribeOptions {
     optional bool ReturnChannelsBinding = 8 [default = false];
     optional bool ReturnRangeKey = 9 [default = true];
     optional bool ReturnSetVal = 10 [default = false];
+    optional bool ReturnIndexTableBoundaries = 11 [default = false];
 }
 
 // Request to read scheme for a specific path
@@ -1849,6 +1916,7 @@ enum EPathSubType {
     EPathSubTypeSyncIndexImplTable = 1;
     EPathSubTypeAsyncIndexImplTable = 2;
     EPathSubTypeStreamImpl = 3;
+    EPathSubTypeVectorKmeansTreeIndexImplTable = 4;
 }
 
 enum EPathState {

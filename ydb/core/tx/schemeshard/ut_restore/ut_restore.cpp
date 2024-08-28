@@ -20,8 +20,10 @@
 
 #include <ydb/public/api/protos/ydb_import.pb.h>
 
+#include <aws/core/Aws.h>
 #include <contrib/libs/zstd/include/zstd.h>
 #include <library/cpp/string_utils/quote/quote.h>
+#include <library/cpp/testing/hook/hook.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/size_literals.h>
@@ -36,6 +38,16 @@ using namespace NKikimr::NSchemeShard;
 using namespace NKikimr::NWrappers::NTestHelpers;
 
 namespace {
+
+    Aws::SDKOptions Options;
+
+    Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
+        Aws::InitAPI(Options);
+    }
+
+    Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
+        Aws::ShutdownAPI(Options);
+    }
 
     const TString EmptyYsonStr = R"([[[[];%false]]])";
 
@@ -315,7 +327,6 @@ namespace {
 
         runtime.SetObserverFunc(prevObserver);
     }
-
 
 } // anonymous
 
@@ -2703,6 +2714,28 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         });
     }
 
+    Y_UNIT_TEST(ShouldRestoreIncrementalBackupFlag) {
+        ShouldRestoreSettings(R"(
+            attributes {
+              key: "__incremental_backup"
+              value: "{}"
+            }
+        )", {
+            NLs::IncrementalBackup(true),
+        });
+    }
+
+    Y_UNIT_TEST(ShouldRestoreIncrementalBackupFlagNullAsFalse) {
+        ShouldRestoreSettings(R"(
+            attributes {
+              key: "__incremental_backup"
+              value: "null"
+            }
+        )", {
+            NLs::IncrementalBackup(false),
+        });
+    }
+
     // Skip compaction_policy (not supported)
     // Skip uniform_partitions (has no effect)
 
@@ -3428,6 +3461,48 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT(entry.HasStartTime());
         UNIT_ASSERT(entry.HasEndTime());
         UNIT_ASSERT_LT(entry.GetStartTime().seconds(), entry.GetEndTime().seconds());
+    }
+
+    Y_UNIT_TEST(UserSID) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        const auto data = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )", {{"a", 1}});
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        const TString request = Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )", port);
+        const TString userSID = "user@builtin";
+        TestImport(runtime, ++txId, "/MyRoot", request, userSID);
+
+        const auto desc = TestGetImport(runtime, txId, "/MyRoot");
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Import::ImportProgress::PROGRESS_PREPARING);
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetUserSID(), userSID);
     }
 }
 

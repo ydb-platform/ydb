@@ -167,6 +167,7 @@ namespace NKikimr {
         TBlobIdQueuePtr BlobsToReplicatePtr;
         TBlobIdQueuePtr UnreplicatedBlobsPtr = std::make_shared<TBlobIdQueue>();
         TUnreplicatedBlobRecords UnreplicatedBlobRecords;
+        TMilestoneQueue MilestoneQueue;
         TActorId ReplJobActorId;
         std::list<std::optional<TDonorQueueItem>> DonorQueue;
         std::deque<std::pair<TVDiskID, TActorId>> Donors;
@@ -207,7 +208,7 @@ namespace NKikimr {
             CreateQueuesForVDisks(*QueueActorMapPtr, SelfId(), ReplCtx->GInfo, ReplCtx->VCtx,
                     ReplCtx->GInfo->GetVDisks(), ReplCtx->MonGroup.GetGroup(),
                     replQueueClientId, NKikimrBlobStorage::EVDiskQueueId::GetAsyncRead,
-                    "PeerRepl", replInterconnectChannel);
+                    "PeerRepl", replInterconnectChannel, false);
 
             for (const auto& [vdiskId, vdiskActorId] : ReplCtx->VDiskCfg->BaseInfo.DonorDiskIds) {
                 TIntrusivePtr<NBackpressure::TFlowRecord> flowRecord(new NBackpressure::TFlowRecord);
@@ -356,6 +357,7 @@ namespace NKikimr {
 
             UnrecoveredNonphantomBlobs |= info->UnrecoveredNonphantomBlobs;
             UnreplicatedBlobRecords = std::move(info->UnreplicatedBlobRecords);
+            MilestoneQueue = std::move(info->MilestoneQueue);
 
             if (info->ItemsRecovered > 0) {
                 ResetReplProgressTimer(false);
@@ -367,15 +369,15 @@ namespace NKikimr {
                 BlobsToReplicatePtr = std::exchange(UnreplicatedBlobsPtr, std::make_shared<TBlobIdQueue>());
 
 #ifndef NDEBUG
-                Y_VERIFY_DEBUG_S(BlobsToReplicatePtr->size() == UnreplicatedBlobRecords.size(),
-                    "BlobsToReplicatePtr->size# " << BlobsToReplicatePtr->size()
+                Y_VERIFY_DEBUG_S(BlobsToReplicatePtr->GetNumItems() == UnreplicatedBlobRecords.size(),
+                    "BlobsToReplicatePtr->size# " << BlobsToReplicatePtr->GetNumItems()
                     << " UnreplicatedBlobRecords.size# " << UnreplicatedBlobRecords.size());
-                for (const TLogoBlobID& id : *BlobsToReplicatePtr) {
+                for (const TLogoBlobID& id : BlobsToReplicatePtr->Queue) {
                     Y_DEBUG_ABORT_UNLESS(UnreplicatedBlobRecords.contains(id));
                 }
 #endif
 
-                if (BlobsToReplicatePtr->empty()) {
+                if (BlobsToReplicatePtr->IsEmpty()) {
                     // no more blobs to replicate -- consider replication finished
                     finished = true;
                     for (const auto& donor : std::exchange(DonorQueue, {})) {
@@ -402,7 +404,7 @@ namespace NKikimr {
 
             if (finished) {
                 STLOG(PRI_DEBUG, BS_REPL, BSVR17, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "REPL COMPLETED"),
-                    (BlobsToReplicate, BlobsToReplicatePtr->size()));
+                    (BlobsToReplicate, BlobsToReplicatePtr->GetNumItems()));
                 LastReplEnd = now;
 
                 if (State == WaitQueues || State == Replication) {
@@ -412,7 +414,7 @@ namespace NKikimr {
                 ResetReplProgressTimer(true);
 
                 Become(&TThis::StateRelax);
-                if (!BlobsToReplicatePtr->empty()) {
+                if (!BlobsToReplicatePtr->IsEmpty()) {
                     // try again for unreplicated blobs in some future
                     State = Relaxation;
                     Schedule(ReplCtx->VDiskCfg->ReplTimeInterval, new TEvents::TEvWakeup);
@@ -453,7 +455,8 @@ namespace NKikimr {
                 donor->NodeId << ":" << donor->PDiskId << ":" << donor->VSlotId << "}") : "generic"));
             ReplJobActorId = Register(CreateReplJobActor(ReplCtx, SelfId(), from, QueueActorMapPtr,
                 BlobsToReplicatePtr, UnreplicatedBlobsPtr, donor ? std::make_optional(std::make_pair(
-                donor->VDiskId, donor->QueueActorId)) : std::nullopt, std::move(UnreplicatedBlobRecords)));
+                donor->VDiskId, donor->QueueActorId)) : std::nullopt, std::move(UnreplicatedBlobRecords),
+                std::move(MilestoneQueue)));
         }
 
         template<typename Iter>

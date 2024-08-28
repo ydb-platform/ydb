@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
     Y_UNIT_TEST(TierDraftsGC) {
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TController>();
         csController->SetIndexWriteControllerEnabled(false);
-        csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->ResetWriteCounters();
 
         auto settings = TKikimrSettings()
@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
     Y_UNIT_TEST(TierDraftsGCWithRestart) {
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TController>();
         csController->SetIndexWriteControllerEnabled(false);
-        csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1000));
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1000));
         csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::GC);
         Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->ResetWriteCounters();
 
@@ -129,6 +129,63 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         auto tableClient = kikimr.GetTableClient();
         auto rows = ExecuteScanQuery(tableClient, selectQuery);
         UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("count")), 800000);
+    }
+
+    Y_UNIT_TEST(WriteDeleteCleanGC) {
+        auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::MilliSeconds(100));
+        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::GC);
+        Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->ResetWriteCounters();
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+
+        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        Tests::NCommon::TLoggerInit(kikimr).SetComponents({ NKikimrServices::TX_COLUMNSHARD, NKikimrServices::TX_COLUMNSHARD_BLOBS }, "CS").SetPriority(NActors::NLog::PRI_DEBUG).Initialize();
+        auto tableClient = kikimr.GetTableClient();
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto it = client.ExecuteQuery(R"(
+                INSERT INTO `/Root/olapStore/olapTable` (timestamp, uid, resource_id) VALUES (Timestamp('1970-01-01T00:00:00Z'), 'a', '0');
+                INSERT INTO `/Root/olapStore/olapTable` (timestamp, uid, resource_id) VALUES (Timestamp('1970-01-01T00:00:01Z'), 'a', 'test');
+                INSERT INTO `/Root/olapStore/olapTable` (timestamp, uid, resource_id) VALUES (Timestamp('1970-01-01T00:00:02Z'), 'a', 't');
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+
+        while (csController->GetInsertStartedCounter().Val() == 0) {
+            Cerr << "Wait indexation..." << Endl;
+            Sleep(TDuration::Seconds(2));
+        }
+        {
+            const TInstant start = TInstant::Now();
+            while (!Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize() && TInstant::Now() - start < TDuration::Seconds(10)) {
+                Cerr << "Wait size in memory... " << Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize() << Endl;
+                Sleep(TDuration::Seconds(2));
+            }
+            AFL_VERIFY(Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
+        }
+        {
+            auto it = client.ExecuteQuery(R"(
+                DELETE FROM `/Root/olapStore/olapTable` ON SELECT CAST(0u AS Timestamp) AS timestamp, Unwrap(CAST('a' AS Utf8)) AS uid;
+                DELETE FROM `/Root/olapStore/olapTable`;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+        csController->SetOverrideReadTimeoutClean(TDuration::Zero());
+        csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::GC);
+        {
+            const TInstant start = TInstant::Now();
+            while (Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize() && TInstant::Now() - start < TDuration::Seconds(10)) {
+                Cerr << "Wait empty... " << Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize() << Endl;
+                Sleep(TDuration::Seconds(2));
+            }
+            AFL_VERIFY(!Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
+        }
     }
 
 }

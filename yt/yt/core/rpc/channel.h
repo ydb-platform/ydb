@@ -123,6 +123,8 @@ struct IChannel
     DECLARE_INTERFACE_SIGNAL(void(const TError&), Terminated);
 
     virtual int GetInflightRequestCount() = 0;
+
+    virtual const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IChannel)
@@ -133,7 +135,7 @@ DEFINE_REFCOUNTED_TYPE(IChannel)
 struct IChannelFactory
     : public virtual TRefCounted
 {
-    virtual IChannelPtr CreateChannel(const TString& address) = 0;
+    virtual IChannelPtr CreateChannel(const std::string& address) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IChannelFactory)

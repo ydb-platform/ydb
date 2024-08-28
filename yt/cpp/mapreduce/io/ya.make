@@ -20,7 +20,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/protobuf
+    library/cpp/protobuf/runtime
     library/cpp/yson
     library/cpp/yson/node
     yt/cpp/mapreduce/common

@@ -12,6 +12,8 @@
 #include <yt/yt/core/misc/property.h>
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
+#include <yt/yt/core/misc/memory_usage_tracker.h>
+
 #include <yt/yt/core/rpc/helpers.h>
 #include <yt/yt/core/rpc/message.h>
 #include <yt/yt_proto/yt/core/rpc/proto/rpc.pb.h>
@@ -104,6 +106,7 @@ public:
     DEFINE_BYVAL_RO_PROPERTY(bool, ResponseHeavy);
     DEFINE_BYVAL_RO_PROPERTY(TAttachmentsOutputStreamPtr, RequestAttachmentsStream);
     DEFINE_BYVAL_RO_PROPERTY(TAttachmentsInputStreamPtr, ResponseAttachmentsStream);
+    DEFINE_BYVAL_RO_PROPERTY(IMemoryUsageTrackerPtr, MemoryUsageTracker);
 
 public:
     TClientContext(
@@ -114,7 +117,8 @@ public:
         TFeatureIdFormatter featureIdFormatter,
         bool heavy,
         TAttachmentsOutputStreamPtr requestAttachmentsStream,
-        TAttachmentsInputStreamPtr responseAttachmentsStream);
+        TAttachmentsInputStreamPtr responseAttachmentsStream,
+        IMemoryUsageTrackerPtr memoryUsageTracker);
 };
 
 DEFINE_REFCOUNTED_TYPE(TClientContext)
@@ -137,6 +141,7 @@ public:
     DEFINE_BYVAL_RW_PROPERTY(NCompression::ECodec, ResponseCodec, NCompression::ECodec::None);
     DEFINE_BYVAL_RW_PROPERTY(bool, EnableLegacyRpcCodecs, true);
     DEFINE_BYVAL_RW_PROPERTY(bool, GenerateAttachmentChecksums, true);
+    DEFINE_BYVAL_RW_PROPERTY(IMemoryUsageTrackerPtr, MemoryUsageTracker);
     // Field is used on client side only. So it is never serialized.
     DEFINE_BYREF_RW_PROPERTY(NTracing::TTraceContext::TTagList, TracingTags);
     // For testing purposes only.
@@ -289,7 +294,7 @@ struct IClientResponseHandler
      *  \param message A message containing the response.
      *  \param address Address of the response sender. Empty if it is not supported by the underlying RPC stack.
      */
-    virtual void HandleResponse(TSharedRefArray message, TString address) = 0;
+    virtual void HandleResponse(TSharedRefArray message, const std::string& address) = 0;
 
     //! Called if the request fails.
     /*!
@@ -348,7 +353,7 @@ protected:
     // IClientResponseHandler implementation.
     void HandleError(TError error) override;
     void HandleAcknowledgement() override;
-    void HandleResponse(TSharedRefArray message, TString address) override;
+    void HandleResponse(TSharedRefArray message, const std::string& address) override;
     void HandleStreamingPayload(const TStreamingPayload& payload) override;
     void HandleStreamingFeedback(const TStreamingFeedback& feedback) override;
 
@@ -366,7 +371,7 @@ private:
     void TraceResponse();
     void DoHandleError(TError error);
 
-    void DoHandleResponse(TSharedRefArray message, TString address);
+    void DoHandleResponse(TSharedRefArray message, const std::string& address);
     void Deserialize(TSharedRefArray responseMessage);
 };
 
@@ -467,6 +472,7 @@ public:
     DEFINE_BYVAL_RW_PROPERTY(std::optional<TDuration>, DefaultAcknowledgementTimeout);
     DEFINE_BYVAL_RW_PROPERTY(NCompression::ECodec, DefaultRequestCodec, NCompression::ECodec::None);
     DEFINE_BYVAL_RW_PROPERTY(NCompression::ECodec, DefaultResponseCodec, NCompression::ECodec::None);
+    DEFINE_BYVAL_RW_PROPERTY(IMemoryUsageTrackerPtr, DefaultMemoryUsageTracker);
     DEFINE_BYVAL_RW_PROPERTY(bool, DefaultEnableLegacyRpcCodecs, true);
 
     DEFINE_BYREF_RW_PROPERTY(TStreamingParameters, DefaultClientAttachmentsStreamingParameters);

@@ -271,6 +271,12 @@ inline TTraceContextGuard::TTraceContextGuard(TTraceContextPtr traceContext)
     , FinishGuard_(TryGetCurrentTraceContext())
 { }
 
+inline void TTraceContextGuard::Release(
+    std::optional<NProfiling::TCpuInstant> finishTime)
+{
+    FinishGuard_.Release(finishTime);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 inline bool TChildTraceContextGuard::IsRecorded(const TTraceContextPtr& traceContext)
@@ -280,17 +286,26 @@ inline bool TChildTraceContextGuard::IsRecorded(const TTraceContextPtr& traceCon
 
 inline TChildTraceContextGuard::TChildTraceContextGuard(
     const TTraceContextPtr& traceContext,
-    TString spanName)
-    : TraceContextGuard_(IsRecorded(traceContext) ? traceContext->CreateChild(spanName) : nullptr)
+    TString spanName,
+    std::optional<NProfiling::TCpuInstant> startTime)
+    : TraceContextGuard_(IsRecorded(traceContext) ? traceContext->CreateChild(spanName, startTime) : nullptr)
     , FinishGuard_(IsRecorded(traceContext) ? TryGetCurrentTraceContext() : nullptr)
 { }
 
 inline TChildTraceContextGuard::TChildTraceContextGuard(
-    TString spanName)
+    TString spanName,
+    std::optional<NProfiling::TCpuInstant> startTime)
     : TChildTraceContextGuard(
         TryGetCurrentTraceContext(),
-        std::move(spanName))
+        std::move(spanName),
+        startTime)
 { }
+
+inline void TChildTraceContextGuard::Finish(
+    std::optional<NProfiling::TCpuInstant> finishTime)
+{
+    FinishGuard_.Release(finishTime);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -312,10 +327,11 @@ inline TTraceContextFinishGuard& TTraceContextFinishGuard::operator=(TTraceConte
     return *this;
 }
 
-inline void TTraceContextFinishGuard::Release()
+inline void TTraceContextFinishGuard::Release(
+    std::optional<NProfiling::TCpuInstant> finishTime)
 {
     if (TraceContext_) {
-        TraceContext_->Finish();
+        TraceContext_->Finish(finishTime);
         TraceContext_ = {};
     }
 }

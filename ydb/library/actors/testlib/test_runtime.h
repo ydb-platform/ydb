@@ -618,8 +618,8 @@ namespace NActors {
 
         THolder<TActorSystemSetup> MakeActorSystemSetup(ui32 nodeIndex, TNodeDataBase* node);
         THolder<TActorSystem> MakeActorSystem(ui32 nodeIndex, TNodeDataBase* node);
-        virtual void InitActorSystemSetup(TActorSystemSetup& setup) {
-            Y_UNUSED(setup);
+        virtual void InitActorSystemSetup(TActorSystemSetup& setup, TNodeDataBase* node) {
+            Y_UNUSED(setup, node);
         }
 
    private:
@@ -701,8 +701,9 @@ namespace NActors {
             std::shared_ptr<void> AppData0;
             THolder<TActorSystem> ActorSystem;
             THolder<IExecutorPool> SchedulerPool;
-            TVector<IExecutorPool*> ExecutorPools;
+            THashMap<ui32, IExecutorPool*> ExecutorPools;
             THolder<TExecutorThread> ExecutorThread;
+            std::unique_ptr<IHarmonizer> Harmonizer;
         };
 
         struct INodeFactory {

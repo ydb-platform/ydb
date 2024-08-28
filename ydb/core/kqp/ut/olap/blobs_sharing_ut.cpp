@@ -93,8 +93,8 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
             , Controller(NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>()) {
             Controller->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Disable);
             Controller->SetExpectedShardsCount(ShardsCount);
-            Controller->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
-            Controller->SetReadTimeoutClean(TDuration::Seconds(1));
+            Controller->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+            Controller->SetOverrideReadTimeoutClean(TDuration::Seconds(1));
 
             Tests::NCommon::TLoggerInit(Kikimr).SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS").Initialize();
 
@@ -111,6 +111,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
         }
 
         void WaitNormalization() {
+            Controller->SetOverrideReadTimeoutClean(TDuration::Seconds(1));
             Controller->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Force);
             const auto start = TInstant::Now();
             while (!Controller->IsTrivialLinks() && TInstant::Now() - start < TDuration::Seconds(30)) {
@@ -119,9 +120,11 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
             }
             AFL_VERIFY(Controller->IsTrivialLinks());
             Controller->CheckInvariants();
+            Controller->SetOverrideReadTimeoutClean(TDuration::Minutes(5));
         }
 
         void Execute(const ui64 destinationIdx, const std::vector<ui64>& sourceIdxs, const bool move, const NOlap::TSnapshot& snapshot, const std::set<ui64>& pathIdxs) {
+            Controller->SetOverrideReadTimeoutClean(TDuration::Seconds(1));
             AFL_VERIFY(destinationIdx < ShardIds.size());
             const ui64 destination = ShardIds[destinationIdx];
             std::vector<ui64> sources;
@@ -189,6 +192,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
             CSTransferStatus->Reset();
             AFL_VERIFY(!Controller->IsTrivialLinks());
             Controller->CheckInvariants();
+            Controller->SetOverrideReadTimeoutClean(TDuration::Minutes(5));
         }
     };
     Y_UNIT_TEST(BlobsSharingSplit1_1) {
@@ -314,18 +318,14 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
 
         void Execute() {
             auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-            csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
-            csController->SetLagForCompactionBeforeTierings(TDuration::Seconds(1));
+            csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+            csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
             csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
 
             TLocalHelper(Kikimr).SetShardingMethod(ShardingType).CreateTestOlapTable("olapTable", "olapStore", 24, 4);
             auto tableClient = Kikimr.GetTableClient();
 
-            Tests::NCommon::TLoggerInit(Kikimr).SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS").SetPriority(NActors::NLog::PRI_DEBUG).Initialize();
-
-            std::vector<TString> uids;
-            std::vector<TString> resourceIds;
-            std::vector<ui32> levels;
+            Tests::NCommon::TLoggerInit(Kikimr).SetComponents({ NKikimrServices::TX_COLUMNSHARD, NKikimrServices::TX_COLUMNSHARD_SCAN }, "CS").SetPriority(NActors::NLog::PRI_DEBUG).Initialize();
 
             {
                 WriteTestData(Kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
@@ -335,23 +335,6 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
                 WriteTestData(Kikimr, "/Root/olapStore/olapTable", 1400000, 300400000, 10000);
                 WriteTestData(Kikimr, "/Root/olapStore/olapTable", 2000000, 200000000, 70000);
                 WriteTestData(Kikimr, "/Root/olapStore/olapTable", 3000000, 100000000, 110000);
-
-                const auto filler = [&](const ui32 startRes, const ui32 startUid, const ui32 count) {
-                    for (ui32 i = 0; i < count; ++i) {
-                        uids.emplace_back("uid_" + ::ToString(startUid + i));
-                        resourceIds.emplace_back(::ToString(startRes + i));
-                        levels.emplace_back(i % 5);
-                    }
-                };
-
-                filler(1000000, 300000000, 10000);
-                filler(1100000, 300100000, 10000);
-                filler(1200000, 300200000, 10000);
-                filler(1300000, 300300000, 10000);
-                filler(1400000, 300400000, 10000);
-                filler(2000000, 200000000, 70000);
-                filler(3000000, 100000000, 110000);
-
             }
 
             CheckCount(230000);
@@ -372,9 +355,19 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
             CheckCount(230000);
             i64 count = csController->GetShardingFiltersCount().Val();
             AFL_VERIFY(count >= 16)("count", count);
+            csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
+            csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+            csController->WaitIndexation(TDuration::Seconds(3));
+            csController->WaitCompactions(TDuration::Seconds(3));
             WriteTestData(Kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
+            CheckCount(230000);
+            csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
             csController->WaitIndexation(TDuration::Seconds(5));
+            CheckCount(230000);
+            csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
             csController->WaitCompactions(TDuration::Seconds(5));
+            count = csController->GetShardingFiltersCount().Val();
+            CheckCount(230000);
 
             csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Disable);
 

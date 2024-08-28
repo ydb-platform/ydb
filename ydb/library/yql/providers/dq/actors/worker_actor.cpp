@@ -82,6 +82,10 @@ class TDummyMemoryQuotaManager: public IMemoryQuotaManager {
         return std::numeric_limits<ui64>::max();
     }
 
+    TString MemoryConsumptionDetails() const override {
+        return TString();
+    }
+
     bool IsReasonableToUseSpilling() const override {
         return false;
     }
@@ -276,8 +280,9 @@ private:
         limits.ChannelBufferSize = 20_MB;
         limits.OutputChunkMaxSize = 2_MB;
 
-        auto wakeup = [this]{ ResumeExecution(EResumeSource::Default); };
-        std::shared_ptr<IDqTaskRunnerExecutionContext> execCtx = std::make_shared<TDqTaskRunnerExecutionContext>(TraceId, std::move(wakeup));
+        auto wakeupCallback = [this]{ ResumeExecution(EResumeSource::Default); };
+        auto errorCallback = [this](const TString& error){ this->Send(this->SelfId(), new TEvDqFailure(StatusIds::INTERNAL_ERROR, error)); };
+        std::shared_ptr<IDqTaskRunnerExecutionContext> execCtx = std::make_shared<TDqTaskRunnerExecutionContext>(TraceId, std::move(wakeupCallback), std::move(errorCallback));
 
         Send(TaskRunnerActor, new TEvTaskRunnerCreate(std::move(ev->Get()->Record.GetTask()), limits, NDqProto::DQ_STATS_MODE_BASIC, execCtx));
     }

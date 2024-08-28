@@ -16,9 +16,9 @@ You can generate two types of load:
 | `PDiskId` | ID of the Pdisk being loaded on the node. |
 | `PDiskGuid` | Globally unique ID of the PDisk being loaded. |
 | `VDiskId` | The load is generated on behalf of a VDisk with the following parameters:<ul><li>`GroupID`: Group ID.</li><li>`GroupGeneration`: Group generation.</li><li>`Ring`: Group ring ID.</li><li>`Domain`: Ring fail domain ID.</li><li>`VDisk`: Index of the VDisk in the fail domain.</li></ul> |
-| `Chunks` | Chunk parameters.<br>`Slots`: Number of slots per chunk, determines the write size.<br>You can specify multiple `Chunks`, in which case a specific chunk to write data to is selected based on its `Weight`. |
+| `Chunks` | Chunk parameters.<br/>`Slots`: Number of slots per chunk, determines the write size.<br/>You can specify multiple `Chunks`, in which case a specific chunk to write data to is selected based on its `Weight`. |
 | `DurationSeconds` | Load duration in seconds. |
-| `IntervalMsMin`,<br>`IntervalMsMax` | Minimum and maximum intervals between requests under interval load, in milliseconds. The interval value is selected randomly from the specified range. |
+| `IntervalMsMin`,<br/>`IntervalMsMax` | Minimum and maximum intervals between requests under interval load, in milliseconds. The interval value is selected randomly from the specified range. |
 | `InFlightWrites` | Number of simultaneously processed write requests. |
 | `LogMode` | Logging mode. In `LOG_SEQUENTIAL` mode, data is first written to a chunk and then, once the write is committed, to a log. |
 | `Sequential` | Type of writes.<ul><li>`True`: Sequential.</li><li>`False`: Random.</li></ul> |

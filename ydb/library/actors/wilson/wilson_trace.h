@@ -208,6 +208,10 @@ namespace NWilson {
             return Verbosity;
         }
 
+        ui32 GetTimeToLive() const {
+            return TimeToLive;
+        }
+
         const void *GetTraceIdPtr() const { return TraceId.data(); }
         static constexpr size_t GetTraceIdSize() { return sizeof(TTrace); }
         const void *GetSpanIdPtr() const { return &SpanId; }

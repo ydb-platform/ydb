@@ -3,7 +3,7 @@
  * gistxlog.h
  *	  gist xlog routines
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/access/gistxlog.h
@@ -49,15 +49,16 @@ typedef struct gistxlogPageUpdate
  */
 typedef struct gistxlogDelete
 {
-	TransactionId latestRemovedXid;
+	TransactionId snapshotConflictHorizon;
 	uint16		ntodelete;		/* number of deleted offsets */
+	bool		isCatalogRel;	/* to handle recovery conflict during logical
+								 * decoding on standby */
 
-	/*
-	 * In payload of blk 0 : todelete OffsetNumbers
-	 */
+	/* TODELETE OFFSET NUMBERS */
+	OffsetNumber offsets[FLEXIBLE_ARRAY_MEMBER];
 } gistxlogDelete;
 
-#define SizeOfGistxlogDelete	(offsetof(gistxlogDelete, ntodelete) + sizeof(uint16))
+#define SizeOfGistxlogDelete	offsetof(gistxlogDelete, offsets)
 
 /*
  * Backup Blk 0: If this operation completes a page split, by inserting a
@@ -97,12 +98,14 @@ typedef struct gistxlogPageDelete
  */
 typedef struct gistxlogPageReuse
 {
-	RelFileNode node;
+	RelFileLocator locator;
 	BlockNumber block;
-	FullTransactionId latestRemovedFullXid;
+	FullTransactionId snapshotConflictHorizon;
+	bool		isCatalogRel;	/* to handle recovery conflict during logical
+								 * decoding on standby */
 } gistxlogPageReuse;
 
-#define SizeOfGistxlogPageReuse	(offsetof(gistxlogPageReuse, latestRemovedFullXid) + sizeof(FullTransactionId))
+#define SizeOfGistxlogPageReuse	(offsetof(gistxlogPageReuse, isCatalogRel) + sizeof(bool))
 
 extern void gist_redo(XLogReaderState *record);
 extern void gist_desc(StringInfo buf, XLogReaderState *record);

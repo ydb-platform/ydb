@@ -62,11 +62,6 @@ struct TEvStateStorage {
         EvReplicaBoardInfo,
         EvReplicaBoardInfoUpdate,
 
-        EvReplicaProbeSubscribe = EvLock + 6 * 512,
-        EvReplicaProbeUnsubscribe,
-        EvReplicaProbeConnected,
-        EvReplicaProbeDisconnected,
-
         EvEnd
     };
 
@@ -385,10 +380,6 @@ struct TEvStateStorage {
     struct TEvListStateStorageResult;
     struct TEvPublishActorGone;
     struct TEvUpdateGroupConfig;
-    struct TEvReplicaProbeSubscribe;
-    struct TEvReplicaProbeUnsubscribe;
-    struct TEvReplicaProbeConnected;
-    struct TEvReplicaProbeDisconnected;
 
     struct TEvReplicaShutdown : public TEventPB<TEvStateStorage::TEvReplicaShutdown, NKikimrStateStorage::TEvReplicaShutdown, TEvStateStorage::EvReplicaShutdown> {
     };
@@ -556,7 +547,7 @@ IActor* CreateStateStorageBoardReplica(const TIntrusivePtr<TStateStorageInfo> &,
 IActor* CreateSchemeBoardReplica(const TIntrusivePtr<TStateStorageInfo>&, ui32);
 IActor* CreateBoardLookupActor(
     const TString &path, const TActorId &owner, EBoardLookupMode mode,
-    TBoardRetrySettings boardRetrySettings = {});
+    TBoardRetrySettings boardRetrySettings = {}, ui64 cookie = 0);
 IActor* CreateBoardPublishActor(
     const TString &path, const TString &payload, const TActorId &owner, ui32 ttlMs, bool reg,
     TBoardRetrySettings boardRetrySettings = {});

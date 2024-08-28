@@ -12,14 +12,40 @@
 #include <util/string/printf.h>
 #include <util/system/env.h>
 
+#include <library/cpp/testing/hook/hook.h>
+
+#include <aws/core/Aws.h>
+
 using namespace NSchemeShardUT_Private;
 using namespace NKikimr::NWrappers::NTestHelpers;
 
+using TTablesWithAttrs = TVector<std::pair<TString, TMap<TString, TString>>>;
+
 namespace {
 
-    void Run(TTestBasicRuntime& runtime, TTestEnv& env, const TVector<TString>& tables, const TString& request,
+    Aws::SDKOptions Options;
+
+    Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
+        Aws::InitAPI(Options);
+    }
+
+    Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
+        Aws::ShutdownAPI(Options);
+    }
+
+    void Run(TTestBasicRuntime& runtime, TTestEnv& env, const std::variant<TVector<TString>, TTablesWithAttrs>& tablesVar, const TString& request,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
             const TString& dbName = "/MyRoot", bool serverless = false, const TString& userSID = "") {
+
+        TTablesWithAttrs tables;
+
+        if (std::holds_alternative<TVector<TString>>(tablesVar)) {
+            for (const auto& table : std::get<TVector<TString>>(tablesVar)) {
+                tables.emplace_back(table, TMap<TString, TString>{});
+            }
+        } else {
+            tables = std::get<TTablesWithAttrs>(tablesVar);
+        }
 
         ui64 txId = 100;
 
@@ -90,11 +116,14 @@ namespace {
             });
         }
 
-        for (const auto& table : tables) {
+        for (const auto& [table, attrs] : tables) {
+            TVector<std::pair<TString, TString>> attrsVec;
+            attrsVec.assign(attrs.begin(), attrs.end());
+            const auto userAttrs = AlterUserAttrs(attrsVec);
             TestCreateTable(runtime, schemeshardId, ++txId, dbName, table, {
                 NKikimrScheme::StatusAccepted,
                 NKikimrScheme::StatusAlreadyExists,
-            });
+            }, userAttrs);
             env.TestWaitNotification(runtime, txId, schemeshardId);
         }
 
@@ -212,6 +241,15 @@ namespace {
         fieldChecker(fieldGetter(proto));
     }
 
+    void CheckPermissions(const TString& permissions, auto&& fieldChecker) {
+        Ydb::Scheme::ModifyPermissionsRequest proto;
+        UNIT_ASSERT_C(
+            google::protobuf::TextFormat::ParseFromString(permissions, &proto),
+            permissions
+        );
+        fieldChecker(proto);
+    }
+
 } // anonymous
 
 Y_UNIT_TEST_SUITE(TExportToS3Tests) {
@@ -232,6 +270,8 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
             auto it = s3Mock.GetData().find(canonPath + "/metadata.json");
             UNIT_ASSERT(it != s3Mock.GetData().end());
             it = s3Mock.GetData().find(canonPath + "/scheme.pb");
+            UNIT_ASSERT(it != s3Mock.GetData().end());
+            it = s3Mock.GetData().find(canonPath + "/permissions.pb");
             UNIT_ASSERT(it != s3Mock.GetData().end());
         }
     }
@@ -454,6 +494,139 @@ storage_settings {
 column_families {
   name: "default"
   compression: COMPRESSION_NONE
+}
+partitioning_settings {
+  partitioning_by_size: DISABLED
+  partitioning_by_load: DISABLED
+  min_partitions_count: 1
+}
+)");
+    }
+
+    Y_UNIT_TEST(ShouldPreserveIncrBackupFlag) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        const TTablesWithAttrs tables{
+            {
+                R"(
+                Name: "Table"
+                Columns {
+                    Name: "key"
+                    Type: "Utf8"
+                    DefaultFromLiteral {
+                        type {
+                            optional_type {
+                                item {
+                                    type_id: UTF8
+                                }
+                            }
+                        }
+                        value {
+                            items {
+                                text_value: "b"
+                            }
+                        }
+                    }
+                }
+                Columns {
+                    Name: "value"
+                    Type: "Utf8"
+                    DefaultFromLiteral {
+                        type {
+                            optional_type {
+                                item {
+                                    type_id: UTF8
+                                }
+                            }
+                        }
+                        value {
+                            items {
+                                text_value: "a"
+                            }
+                        }
+                    }
+                }
+                KeyColumnNames: ["key"]
+                )",
+                {{"__incremental_backup", "{}"}},
+            },
+        };
+
+        Run(runtime, env, tables, Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+
+        auto schemeIt = s3Mock.GetData().find("/scheme.pb");
+        UNIT_ASSERT(schemeIt != s3Mock.GetData().end());
+
+        TString scheme = schemeIt->second;
+
+        UNIT_ASSERT_NO_DIFF(scheme, R"(columns {
+  name: "key"
+  type {
+    optional_type {
+      item {
+        type_id: UTF8
+      }
+    }
+  }
+  from_literal {
+    type {
+      optional_type {
+        item {
+          type_id: UTF8
+        }
+      }
+    }
+    value {
+      items {
+        text_value: "b"
+      }
+    }
+  }
+}
+columns {
+  name: "value"
+  type {
+    optional_type {
+      item {
+        type_id: UTF8
+      }
+    }
+  }
+  from_literal {
+    type {
+      optional_type {
+        item {
+          type_id: UTF8
+        }
+      }
+    }
+    value {
+      items {
+        text_value: "a"
+      }
+    }
+  }
+}
+primary_key: "key"
+attributes {
+  key: "__incremental_backup"
+  value: "{}"
 }
 partitioning_settings {
   partitioning_by_size: DISABLED
@@ -1650,7 +1823,7 @@ partitioning_settings {
             return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
                 .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpBackup;
         };
-        
+
         THolder<IEventHandle> delayed;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (delayFunc(ev)) {
@@ -1718,7 +1891,7 @@ partitioning_settings {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
-        Run(runtime, env, {
+        Run(runtime, env, TVector<TString>{
                 R"(
                     Name: "Table"
                     Columns { Name: "key" Type: "Uint32" }
@@ -1818,4 +1991,92 @@ partitioning_settings {
         )"));
     }
 
+    Y_UNIT_TEST(UserSID) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        const TString request = Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port);
+        const TString userSID = "user@builtin";
+        TestExport(runtime, ++txId, "/MyRoot", request, userSID);
+
+        const auto desc = TestGetExport(runtime, txId, "/MyRoot");
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_PREPARING);
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetUserSID(), userSID);
+    }
+
+    Y_UNIT_TEST(TablePermissions) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        NACLib::TDiffACL diffACL;
+        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user@builtin", NACLib::InheritNone);
+        TestModifyACL(runtime, ++txId, "/MyRoot", "Table", diffACL.SerializeAsString(), "user@builtin");
+        env.TestWaitNotification(runtime, txId);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+
+        auto* permissions = s3Mock.GetData().FindPtr("/permissions.pb");
+        UNIT_ASSERT(permissions);
+        CheckPermissions(*permissions, CreateProtoComparator(R"(
+            actions {
+                change_owner: "user@builtin"
+            }
+            actions {
+                grant {
+                    subject: "user@builtin"
+                    permission_names: "ydb.generic.use"
+                }
+            }
+        )"));
+    }
 }

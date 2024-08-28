@@ -1,25 +1,13 @@
 #pragma once
-
-#pragma once
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/interconnect.h>
-#include <ydb/library/actors/core/mon.h>
-
-#include <ydb/library/services/services.pb.h>
-#include <ydb/core/node_whiteboard/node_whiteboard.h>
-#include <ydb/core/viewer/json/json.h>
-#include <ydb/core/base/nameservice.h>
-#include <ydb/library/actors/interconnect/interconnect.h>
-#include <library/cpp/time_provider/time_provider.h>
-#include "viewer.h"
 #include "json_pipe_req.h"
-#include "wb_merge.h"
-#include "wb_group.h"
-#include "wb_filter.h"
 #include "log.h"
+#include "viewer.h"
+#include "wb_filter.h"
+#include "wb_group.h"
+#include "wb_merge.h"
+#include <ydb/library/actors/interconnect/interconnect.h>
 
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 using namespace NActors;
 using namespace NNodeWhiteboard;
@@ -41,33 +29,33 @@ struct TEvPrivate {
     };
 };
 
-template<typename TDerived, typename TRequestEventType, typename TResponseEventType>
-class TWhiteboardRequest : public TViewerPipeClient<TDerived> {
+template<typename TRequestEventType, typename TResponseEventType>
+class TWhiteboardRequest : public TViewerPipeClient {
 protected:
-    using TThis = TWhiteboardRequest<TDerived, TRequestEventType, TResponseEventType>;
-    using TBase = TViewerPipeClient<TDerived>;
+    using TThis = TWhiteboardRequest<TRequestEventType, TResponseEventType>;
+    using TBase = TViewerPipeClient;
     using TResponseType = typename TResponseEventType::ProtoRecordType;
     TRequestSettings RequestSettings;
     THolder<TRequestEventType> Request;
-    std::unordered_set<TNodeId> NodeIds;
-    TMap<TNodeId, TResponseType> PerNodeStateInfo; // map instead of unordered_map only for sorting reason
-    std::unordered_map<TNodeId, TString> NodeErrors;
+    std::unordered_map<TNodeId, TRequestResponse<TResponseEventType>> NodeResponses;
     TInstant NodesRequestedTime;
     std::unordered_map<TNodeId, ui32> NodeRetries;
     TString LogPrefix;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     TString GetLogPrefix() {
         return LogPrefix;
     }
 
-    TWhiteboardRequest() = default;
+    TWhiteboardRequest(NWilson::TTraceId traceId)
+        : TBase(std::move(traceId))
+    {}
 
-    THolder<TRequestEventType> BuildRequest() {
+    TWhiteboardRequest(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+        : TBase(viewer, ev)
+    {}
+
+    virtual THolder<TRequestEventType> BuildRequest() {
         THolder<TRequestEventType> request = MakeHolder<TRequestEventType>();
         constexpr bool hasFormat = requires(const TRequestEventType* r) {r->Record.GetFormat();};
         if constexpr (hasFormat) {
@@ -75,6 +63,14 @@ public:
                 request->Record.SetFormat(RequestSettings.Format);
             }
         }
+
+        constexpr bool hasFieldsRequired = requires(const TRequestEventType* r) {r->Record.GetFieldsRequired();};
+        if constexpr (hasFieldsRequired) {
+            if (!RequestSettings.FieldsRequired.empty()) {
+                request->Record.MutableFieldsRequired()->Add(RequestSettings.FieldsRequired.begin(), RequestSettings.FieldsRequired.end());
+            }
+        }
+
         if (RequestSettings.ChangedSince != 0) {
             request->Record.SetChangedSince(RequestSettings.ChangedSince);
         }
@@ -88,11 +84,7 @@ public:
     }
 
     void SendNodeRequestToWhiteboard(TNodeId nodeId) {
-        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
-        THolder<TRequestEventType> request = CloneRequest();
-        BLOG_TRACE("Sent WhiteboardRequest to " << nodeId << " Request: " << request->Record.ShortDebugString());
-        TBase::SendRequest(whiteboardServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
-        NodeIds.insert(nodeId);
+        NodeResponses[nodeId] = MakeWhiteboardRequest(nodeId, CloneRequest().Release());
     }
 
     void SendNodeRequest(const std::vector<TNodeId> nodeIds) {
@@ -101,14 +93,7 @@ public:
         }
     }
 
-    void PassAway() override {
-        for (const TNodeId nodeId : NodeIds) {
-            TBase::Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe());
-        }
-        TBase::PassAway();
-    }
-
-    virtual void Bootstrap() {
+    void Bootstrap() override {
         std::replace(RequestSettings.FilterNodeIds.begin(),
                      RequestSettings.FilterNodeIds.end(),
                      (ui32)0,
@@ -172,7 +157,7 @@ public:
         if (TBase::Requests > 0) {
             TBase::Become(&TThis::StateRequestedNodeInfo);
         } else {
-            static_cast<TDerived*>(this)->ReplyAndPassAway();
+            ReplyAndPassAway();
         }
     }
 
@@ -208,7 +193,7 @@ public:
         if (TBase::Requests > 0) {
             TBase::Become(&TThis::StateRequestedNodeInfo);
         } else {
-            static_cast<TDerived*>(this)->ReplyAndPassAway();
+            ReplyAndPassAway();
         }
     }
 
@@ -225,16 +210,9 @@ public:
     void Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
         static const TString error = "Undelivered";
         TNodeId nodeId = ev.Get()->Cookie;
-        if (PerNodeStateInfo.emplace(nodeId, TResponseType{}).second) {
-            NodeErrors[nodeId] = error;
+        if (NodeResponses[nodeId].Error(error)) {
             if (!RetryRequest(nodeId)) {
-                TBase::RequestDone();
-            }
-        } else {
-            if (NodeErrors[nodeId] == error) {
-                if (!RetryRequest(nodeId)) {
-                    TBase::RequestDone();
-                }
+                RequestDone();
             }
         }
     }
@@ -242,16 +220,9 @@ public:
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         static const TString error = "Node disconnected";
         TNodeId nodeId = ev->Get()->NodeId;
-        if (PerNodeStateInfo.emplace(nodeId, TResponseType{}).second) {
-            NodeErrors[nodeId] = error;
+        if (NodeResponses[nodeId].Error(error)) {
             if (!RetryRequest(nodeId)) {
-                TBase::RequestDone();
-            }
-        } else {
-            if (NodeErrors[nodeId] == error) {
-                if (!RetryRequest(nodeId)) {
-                    TBase::RequestDone();
-                }
+                RequestDone();
             }
         }
     }
@@ -276,29 +247,35 @@ public:
         }
     }
 
-    template<typename ResponseRecordType>
-    void OnRecordReceived(ResponseRecordType& record, TNodeId nodeId) {
-        record.SetResponseDuration((AppData()->TimeProvider->Now() - NodesRequestedTime).MicroSeconds());
-        BLOG_TRACE("Received " << typeid(TResponseEventType).name() << " from " << nodeId << GetResponseDuration(record) << GetProcessDuration(record));
-    }
-
     void HandleNodeInfo(typename TResponseEventType::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
-        OnRecordReceived(ev->Get()->Record, nodeId);
-        PerNodeStateInfo[nodeId] = std::move(ev->Get()->Record);
-        NodeErrors.erase(nodeId);
+        ev->Get()->Record.SetResponseDuration((AppData()->TimeProvider->Now() - NodesRequestedTime).MicroSeconds());
+        NodeResponses[nodeId].Set(std::move(ev));
+        //PerNodeStateInfo[nodeId] = std::move(ev->Get()->Record);
         TBase::RequestDone();
     }
 
     void HandleRetryNode(TEvPrivate::TEvRetryNodeRequest::TPtr& ev) {
+        NodeResponses.erase(ev->Get()->NodeId);
         SendNodeRequest({ev->Get()->NodeId});
         TBase::RequestDone(); // previous, failed one
     }
 
     void HandleTimeout() {
-        static_cast<TDerived*>(this)->ReplyAndPassAway();
+        ReplyAndPassAway();
+    }
+
+    TMap<TNodeId, TResponseType> GetPerNodeStateInfo() { // map instead of unordered_map only for sorting reason
+        TMap<TNodeId, TResponseType> perNodeStateInfo;
+        for (const auto& [nodeId, response] : NodeResponses) {
+            if (response.IsOk()) {
+                perNodeStateInfo.emplace(nodeId, std::move(response->Record));
+            } else {
+                perNodeStateInfo[nodeId]; // empty data for failed requests
+            }
+        }
+        return perNodeStateInfo;
     }
 };
 
-}
 }

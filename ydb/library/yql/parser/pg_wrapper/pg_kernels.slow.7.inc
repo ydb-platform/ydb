@@ -2,13 +2,15 @@ TExecFunc arrow_bttidcmp() { return MakeIndirectExec<true, true>(&bttidcmp); }
 TExecFunc arrow_currtid_byrelname() { return MakeIndirectExec<true, false>(&currtid_byrelname); }
 TExecFunc arrow_hashtid() { return MakeIndirectExec<true, true>(&hashtid); }
 TExecFunc arrow_hashtidextended() { return MakeIndirectExec<true, true>(&hashtidextended); }
-TExecFunc arrow_pg_read_binary_file() { return MakeIndirectExec<true, false>(&pg_read_binary_file); }
 TExecFunc arrow_pg_read_binary_file_all() { return MakeIndirectExec<true, false>(&pg_read_binary_file_all); }
+TExecFunc arrow_pg_read_binary_file_all_missing() { return MakeIndirectExec<true, false>(&pg_read_binary_file_all_missing); }
 TExecFunc arrow_pg_read_binary_file_off_len() { return MakeIndirectExec<true, false>(&pg_read_binary_file_off_len); }
+TExecFunc arrow_pg_read_binary_file_off_len_missing() { return MakeIndirectExec<true, false>(&pg_read_binary_file_off_len_missing); }
 TExecFunc arrow_pg_read_file() { return MakeIndirectExec<true, false>(&pg_read_file); }
 TExecFunc arrow_pg_read_file_all() { return MakeIndirectExec<true, false>(&pg_read_file_all); }
+TExecFunc arrow_pg_read_file_all_missing() { return MakeIndirectExec<true, false>(&pg_read_file_all_missing); }
 TExecFunc arrow_pg_read_file_off_len() { return MakeIndirectExec<true, false>(&pg_read_file_off_len); }
-TExecFunc arrow_pg_read_file_v2() { return MakeIndirectExec<true, false>(&pg_read_file_v2); }
+TExecFunc arrow_pg_read_file_off_len_missing() { return MakeIndirectExec<true, false>(&pg_read_file_off_len_missing); }
 TExecFunc arrow_pg_stat_file() { return MakeIndirectExec<true, false>(&pg_stat_file); }
 TExecFunc arrow_pg_stat_file_1arg() { return MakeIndirectExec<true, false>(&pg_stat_file_1arg); }
 TExecFunc arrow_quote_ident() { return MakeIndirectExec<true, false>(&quote_ident); }

@@ -42,7 +42,7 @@
  * where memory fragmentation is very severe, only a tiny fraction of
  * the pages under management are consumed by this btree.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -285,7 +285,7 @@ sum_free_pages(FreePageManager *fpm)
 		if (!relptr_is_null(fpm->freelist[list]))
 		{
 			FreePageSpanLeader *candidate =
-			relptr_access(base, fpm->freelist[list]);
+				relptr_access(base, fpm->freelist[list]);
 
 			do
 			{

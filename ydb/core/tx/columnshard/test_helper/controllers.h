@@ -21,31 +21,28 @@ protected:
     virtual bool NeedForceCompactionBacketsConstruction() const override {
         return true;
     }
-    virtual ui64 GetSmallPortionSizeDetector(const ui64 /*def*/) const override {
+    virtual ui64 DoGetSmallPortionSizeDetector(const ui64 /*def*/) const override {
         return SmallSizeDetector.value_or(0);
     }
-    virtual TDuration GetOptimizerFreshnessCheckDuration(const TDuration /*defaultValue*/) const override {
+    virtual TDuration DoGetOptimizerFreshnessCheckDuration(const TDuration /*defaultValue*/) const override {
         return TDuration::Zero();
     }
-    virtual TDuration GetLagForCompactionBeforeTierings(const TDuration /*def*/) const override {
+    virtual TDuration DoGetLagForCompactionBeforeTierings(const TDuration /*def*/) const override {
         return TDuration::Zero();
     }
-    virtual TDuration GetCompactionActualizationLag(const TDuration /*def*/) const override {
+    virtual TDuration DoGetCompactionActualizationLag(const TDuration /*def*/) const override {
         return TDuration::Zero();
-    }
-    virtual TDuration GetTTLDefaultWaitingDuration(const TDuration /*defaultValue*/) const override {
-        return TDuration::Seconds(1);
     }
 public:
     TWaitCompactionController() {
-        SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
     }
 
     ui32 GetFinishedExportsCount() const {
         return ExportsFinishedCount.Val();
     }
 
-    virtual void OnStatisticsUsage(const NKikimr::NOlap::NStatistics::TOperatorContainer& /*statOperator*/) override {
+    virtual void OnStatisticsUsage(const NKikimr::NOlap::NIndexes::TIndexMetaContainer& /*statOperator*/) override {
         StatisticsUsageCount.Inc();
     }
     virtual void OnMaxValueUsage() override {

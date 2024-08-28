@@ -192,28 +192,14 @@ public:
     [[nodiscard]]
     NThreading::TFuture<void> Abort();
 
-    inline TIssues Issues() {
-        if (ExprCtx_) {
-            return ExprCtx_->IssueManager.GetIssues();
-        } else {
-            return {};
-        }
-    }
-
-    inline TIssues CompletedIssues() const {
-        if (ExprCtx_) {
-            return ExprCtx_->IssueManager.GetCompletedIssues();
-        } else {
-            return {};
-        }
-    }
+    TIssues Issues() const;
+    TIssues CompletedIssues() const;
+    void FinalizeIssues();
 
     void Print(IOutputStream* exprOut, IOutputStream* planOut, bool cleanPlan = false);
 
     inline void PrintErrorsTo(IOutputStream& out) const {
-        if (ExprCtx_) {
-            ExprCtx_->IssueManager.GetIssues().PrintWithProgramTo(out, Filename_, SourceCode_);
-        }
+        Issues().PrintWithProgramTo(out, Filename_, SourceCode_);
     }
 
     inline const TAstNode* AstRoot() const {
@@ -383,7 +369,6 @@ private:
 
     bool FillParseResult(NYql::TAstParseResult&& astRes, NYql::TWarningRules* warningRules = nullptr);
     TString GetSessionId() const;
-    TString TakeSessionId();
 
     NThreading::TFuture<IGraphTransformer::TStatus> AsyncTransformWithFallback(bool applyAsyncChanges);
     void SaveExprRoot();
@@ -398,6 +383,13 @@ private:
     const TIntrusivePtr<IRandomProvider> RandomProvider_;
     const TIntrusivePtr<ITimeProvider> TimeProvider_;
     const ui64 NextUniqueId_;
+
+    TAstNode* AstRoot_;
+    std::unique_ptr<TMemoryPool> AstPool_;
+    const IModuleResolver::TPtr Modules_;
+    TAutoPtr<TExprContext> ExprCtx_;
+    TTypeAnnotationContextPtr TypeCtx_;
+
     TVector<TDataProviderInitializer> DataProvidersInit_;
     TAdaptiveLock DataProvidersLock_;
     TVector<TDataProviderInfo> DataProviders_;
@@ -417,15 +409,11 @@ private:
     ESourceSyntax SourceSyntax_;
     ui16 SyntaxVersion_;
 
-    TAstNode* AstRoot_;
-    std::unique_ptr<TMemoryPool> AstPool_;
-    TAutoPtr<TExprContext> ExprCtx_;
-    const IModuleResolver::TPtr Modules_;
     TExprNode::TPtr ExprRoot_;
     TExprNode::TPtr SavedExprRoot_;
     mutable TAdaptiveLock SessionIdLock_;
     TString SessionId_;
-    TTypeAnnotationContextPtr TypeCtx_;
+    NThreading::TFuture<void> CloseLastSessionFuture_;
     TAutoPtr<IPlanBuilder> PlanBuilder_;
     TAutoPtr<IGraphTransformer> Transformer_;
     TIntrusivePtr<TResultProviderConfig> ResultProviderConfig_;
@@ -455,6 +443,7 @@ private:
     TMaybe<TString> LineageStr_;
 
     TQContext QContext_;
+    TIssues FinalIssues_;
 };
 
 } // namspace NYql

@@ -25,6 +25,10 @@
 
 #include <optional>
 
+namespace NWilson {
+    class TSpan;
+} // NWilson
+
 namespace NKikimr {
 
 static constexpr ui32 MaxProtobufSize = 67108000;
@@ -488,6 +492,8 @@ struct TEvBlobStorage {
         EvInplacePatch,
         EvAssimilate,
 
+        EvGetQueuesInfo,     // for debugging purposes
+
         //
         EvPutResult = EvPut + 512,                              /// 268 632 576
         EvGetResult,
@@ -501,6 +507,8 @@ struct TEvBlobStorage {
         EvPatchResult,
         EvInplacePatchResult,
         EvAssimilateResult,
+
+        EvQueuesInfo,  // for debugging purposes
 
         // proxy <-> vdisk interface
         EvVPut = EvPut + 2 * 512,                               /// 268 633 088
@@ -728,6 +736,7 @@ struct TEvBlobStorage {
         EvMinHugeBlobSizeUpdate,
         EvHugePreCompact,
         EvHugePreCompactResult,
+        EvPDiskMetadataLoaded,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -864,11 +873,16 @@ struct TEvBlobStorage {
         EvNodeWardenBaseConfig,
         EvNodeWardenDynamicConfigSubscribe,
         EvNodeWardenDynamicConfigPush,
+        EvNodeWardenReadMetadata,
+        EvNodeWardenReadMetadataResult,
+        EvNodeWardenWriteMetadata,
+        EvNodeWardenWriteMetadataResult,
 
         // Other
         EvRunActor = EvPut + 15 * 512,
         EvVMockCtlRequest,
         EvVMockCtlResponse,
+        EvDelayedMessageWrapper,
 
         // incremental huge blob keeper
         EvIncrHugeInit = EvPut + 17 * 512,
@@ -992,6 +1006,8 @@ struct TEvBlobStorage {
         ui32 CalculateSize() const {
             return sizeof(*this) + Buffer.GetSize();
         }
+
+        void ToSpan(NWilson::TSpan& span) const;
 
         std::unique_ptr<TEvPutResult> MakeErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
             TGroupId groupId);
@@ -1196,6 +1212,8 @@ struct TEvBlobStorage {
             return sizeof(*this) + QuerySize * sizeof(TQuery);
         }
 
+        void ToSpan(NWilson::TSpan& span) const;
+
         std::unique_ptr<TEvGetResult> MakeErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
             TGroupId groupId);
 
@@ -1348,6 +1366,8 @@ struct TEvBlobStorage {
         ui32 CalculateSize() const {
             return sizeof(*this);
         }
+
+        void ToSpan(NWilson::TSpan& span) const;
 
         std::unique_ptr<TEvBlockResult> MakeErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
             TGroupId groupId);
@@ -1546,6 +1566,8 @@ struct TEvBlobStorage {
             return sizeof(*this) + sizeof(TDiff) * DiffCount;
         }
 
+        void ToSpan(NWilson::TSpan& span) const;
+
         std::unique_ptr<TEvPatchResult> MakeErrorResponse(NKikimrProto::EReplyStatus status,
                 const TString& errorReason, TGroupId groupId);
     };
@@ -1636,6 +1658,8 @@ struct TEvBlobStorage {
             return sizeof(*this) + sizeof(TDiff) * DiffCount;
         }
 
+        void ToSpan(NWilson::TSpan& span) const;
+
         std::unique_ptr<TEvInplacePatchResult> MakeErrorResponse(NKikimrProto::EReplyStatus status,
                 const TString& errorReason);
     };
@@ -1722,6 +1746,8 @@ struct TEvBlobStorage {
         ui32 CalculateSize() const {
             return sizeof(*this);
         }
+
+        void ToSpan(NWilson::TSpan& span) const;
 
         std::unique_ptr<TEvDiscoverResult> MakeErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
             TGroupId groupId);
@@ -1827,6 +1853,8 @@ struct TEvBlobStorage {
         ui32 CalculateSize() const {
             return sizeof(*this);
         }
+
+        void ToSpan(NWilson::TSpan& span) const;
 
         std::unique_ptr<TEvRangeResult> MakeErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
             TGroupId groupId);
@@ -2023,6 +2051,8 @@ struct TEvBlobStorage {
             return sizeof(*this) + ((Keep ? Keep->size() : 0) + (DoNotKeep ? DoNotKeep->size() : 0)) * sizeof(TLogoBlobID);
         }
 
+        void ToSpan(NWilson::TSpan& span) const;
+
         std::unique_ptr<TEvCollectGarbageResult> MakeErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
             TGroupId groupId);
     };
@@ -2090,6 +2120,8 @@ struct TEvBlobStorage {
         ui32 CalculateSize() const {
             return sizeof(*this);
         }
+
+        void ToSpan(NWilson::TSpan& span) const;
 
         std::unique_ptr<TEvStatusResult> MakeErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
             TGroupId groupId);
@@ -2165,6 +2197,8 @@ struct TEvBlobStorage {
         ui32 CalculateSize() const {
             return sizeof(*this);
         }
+
+        void ToSpan(NWilson::TSpan& span) const;
 
         std::unique_ptr<TEvAssimilateResult> MakeErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
             TGroupId groupId);

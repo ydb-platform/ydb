@@ -7,7 +7,6 @@ on:
       - 'stream-nb-*'
     paths-ignore:
       - 'ydb/docs/**'
-      - '*'
 jobs:
   build_and_test:
     if: ${{vars.CHECKS_SWITCH != '' && fromJSON(vars.CHECKS_SWITCH).postcommit_relwithdebinfo == true}}
@@ -15,7 +14,7 @@ jobs:
     name: Build and test relwithdebinfo
     steps:
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         fetch-depth: 2
     - name: Setup ydb access

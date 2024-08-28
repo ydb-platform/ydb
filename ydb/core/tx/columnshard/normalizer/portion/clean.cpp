@@ -76,6 +76,7 @@ INormalizerTask::TPtr TCleanPortionsNormalizer::BuildTask(std::vector<std::share
             for (auto&& blobId : blobs) {
                 blobIds.emplace_back(blobId);
             }
+        } else if (storageId == NBlobOperations::TGlobal::LocalMetadataStorageId) {
         } else {
             AFL_VERIFY(false)("details", "Invalid storage for normalizer");
         }

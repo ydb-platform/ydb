@@ -79,7 +79,7 @@ NKikimr::NKqp::TTypedLocalHelper::TDistribution TTypedLocalHelper::GetDistributi
 }
 
 void TTypedLocalHelper::GetVolumes(ui64& rawBytes, ui64& bytes, const bool verbose /*= false*/, const std::vector<TString> columnNames /*= {}*/) {
-    TString selectQuery = "SELECT * FROM `" + TablePath + "/.sys/primary_index_stats` WHERE Activity = true";
+    TString selectQuery = "SELECT * FROM `" + TablePath + "/.sys/primary_index_stats` WHERE Activity == 1";
     if (columnNames.size()) {
         selectQuery += " AND EntityName IN ('" + JoinSeq("','", columnNames) + "')";
     }
@@ -143,16 +143,16 @@ void TTypedLocalHelper::FillPKOnly(const double pkKff /*= 0*/, const ui32 numRow
     TBase::SendDataViaActorSystem(TablePath, batch);
 }
 
-void TTypedLocalHelper::GetStats(std::vector<NKikimrColumnShardStatisticsProto::TPortionStorage>& stats, const bool verbose /*= false*/) {
-    TString selectQuery = "SELECT * FROM `" + TablePath + "/.sys/primary_index_portion_stats` WHERE Activity = true";
+void TTypedLocalHelper::GetStats(std::vector<NJson::TJsonValue>& stats, const bool verbose /*= false*/) {
+    TString selectQuery = "SELECT * FROM `" + TablePath + "/.sys/primary_index_portion_stats` WHERE Activity == 1";
     auto tableClient = KikimrRunner.GetTableClient();
     auto rows = ExecuteScanQuery(tableClient, selectQuery, verbose);
     for (auto&& r : rows) {
         for (auto&& c : r) {
             if (c.first == "Stats") {
-                NKikimrColumnShardStatisticsProto::TPortionStorage store;
-                AFL_VERIFY(google::protobuf::TextFormat::ParseFromString(GetUtf8(c.second), &store));
-                stats.emplace_back(store);
+                NJson::TJsonValue jsonStore;
+                AFL_VERIFY(NJson::ReadJsonFastTree(GetUtf8(c.second), &jsonStore));
+                stats.emplace_back(jsonStore);
             }
         }
     }

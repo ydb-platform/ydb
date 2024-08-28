@@ -698,6 +698,16 @@ auto MakePgAgg_min_2245() {
                      false, false, false, false
                      >({}, {}, nullptr, nullptr, nullptr);
 }
+auto MakePgAgg_array_agg_2335() {
+    return TGenericAgg<
+                     TPgDirectFunc<&array_agg_transfn>, false, TArgs_array_agg_transfn_Policy,
+                     TPgDirectFunc<&array_agg_combine>, false, TArgs_array_agg_combine_Policy,
+                     true, TPgDirectFunc<&array_agg_serialize>, TArgs_array_agg_serialize_Policy,
+                     true, TPgDirectFunc<&array_agg_deserialize>, TArgs_array_agg_deserialize_Policy,
+                     true, TPgDirectFunc<&array_agg_finalfn>, false, TArgs_array_agg_finalfn_Policy,
+                     true, false, false, false
+                     >({}, {}, {}, {}, {});
+}
 auto MakePgAgg_bool_and_2517() {
     return TGenericAgg<
                      TPgDirectFunc<&booland_statefunc>, true, TArgs_booland_statefunc_Policy,
@@ -1138,6 +1148,26 @@ auto MakePgAgg_min_3527() {
                      true, true, true, false
                      >({}, {}, nullptr, nullptr, nullptr);
 }
+auto MakePgAgg_string_agg_3538() {
+    return TGenericAgg<
+                     TPgDirectFunc<&string_agg_transfn>, false, TArgs_string_agg_transfn_Policy,
+                     TPgDirectFunc<&string_agg_combine>, false, TArgs_string_agg_combine_Policy,
+                     true, TPgDirectFunc<&string_agg_serialize>, TArgs_string_agg_serialize_Policy,
+                     true, TPgDirectFunc<&string_agg_deserialize>, TArgs_string_agg_deserialize_Policy,
+                     true, TPgDirectFunc<&string_agg_finalfn>, false, TArgs_string_agg_finalfn_Policy,
+                     true, false, false, false
+                     >({}, {}, {}, {}, {});
+}
+auto MakePgAgg_string_agg_3545() {
+    return TGenericAgg<
+                     TPgDirectFunc<&bytea_string_agg_transfn>, false, TArgs_bytea_string_agg_transfn_Policy,
+                     TPgDirectFunc<&string_agg_combine>, false, TArgs_string_agg_combine_Policy,
+                     true, TPgDirectFunc<&string_agg_serialize>, TArgs_string_agg_serialize_Policy,
+                     true, TPgDirectFunc<&string_agg_deserialize>, TArgs_string_agg_deserialize_Policy,
+                     true, TPgDirectFunc<&bytea_string_agg_finalfn>, false, TArgs_bytea_string_agg_finalfn_Policy,
+                     true, false, false, false
+                     >({}, {}, {}, {}, {});
+}
 auto MakePgAgg_max_3564() {
     return TGenericAgg<
                      TPgDirectFunc<&network_larger>, true, TArgs_network_larger_Policy,
@@ -1157,6 +1187,16 @@ auto MakePgAgg_min_3565() {
                      false, TPgIndirectFunc, false, TDefaultArgsPolicy,
                      false, false, false, false
                      >({}, {}, nullptr, nullptr, nullptr);
+}
+auto MakePgAgg_array_agg_4053() {
+    return TGenericAgg<
+                     TPgDirectFunc<&array_agg_array_transfn>, false, TArgs_array_agg_array_transfn_Policy,
+                     TPgDirectFunc<&array_agg_array_combine>, false, TArgs_array_agg_array_combine_Policy,
+                     true, TPgDirectFunc<&array_agg_array_serialize>, TArgs_array_agg_array_serialize_Policy,
+                     true, TPgDirectFunc<&array_agg_array_deserialize>, TArgs_array_agg_array_deserialize_Policy,
+                     true, TPgDirectFunc<&array_agg_array_finalfn>, false, TArgs_array_agg_array_finalfn_Policy,
+                     true, false, false, false
+                     >({}, {}, {}, {}, {});
 }
 auto MakePgAgg_max_4189() {
     return TGenericAgg<
@@ -1198,6 +1238,26 @@ auto MakePgAgg_range_intersect_agg_4450() {
                      false, false, false, false
                      >({}, {}, nullptr, nullptr, nullptr);
 }
+auto MakePgAgg_max_5099() {
+    return TGenericAgg<
+                     TPgDirectFunc<&xid8_larger>, true, TArgs_xid8_larger_Policy,
+                     TPgDirectFunc<&xid8_larger>, true, TArgs_xid8_larger_Policy,
+                     false, TPgIndirectFunc, TDefaultArgsPolicy,
+                     false, TPgIndirectFunc, TDefaultArgsPolicy,
+                     false, TPgIndirectFunc, false, TDefaultArgsPolicy,
+                     true, true, true, false
+                     >({}, {}, nullptr, nullptr, nullptr);
+}
+auto MakePgAgg_min_5100() {
+    return TGenericAgg<
+                     TPgDirectFunc<&xid8_smaller>, true, TArgs_xid8_smaller_Policy,
+                     TPgDirectFunc<&xid8_smaller>, true, TArgs_xid8_smaller_Policy,
+                     false, TPgIndirectFunc, TDefaultArgsPolicy,
+                     false, TPgIndirectFunc, TDefaultArgsPolicy,
+                     false, TPgIndirectFunc, false, TDefaultArgsPolicy,
+                     true, true, true, false
+                     >({}, {}, nullptr, nullptr, nullptr);
+}
 auto MakePgAgg_bit_xor_6164() {
     return TGenericAgg<
                      TPgDirectFunc<&int2xor>, true, TArgs_int2xor_Policy,
@@ -1236,5 +1296,15 @@ auto MakePgAgg_bit_xor_6167() {
                      false, TPgIndirectFunc, TDefaultArgsPolicy,
                      false, TPgIndirectFunc, false, TDefaultArgsPolicy,
                      false, false, false, false
+                     >({}, {}, nullptr, nullptr, nullptr);
+}
+auto MakePgAgg_any_value_6291() {
+    return TGenericAgg<
+                     TPgDirectFunc<&any_value_transfn>, true, TArgs_any_value_transfn_Policy,
+                     TPgDirectFunc<&any_value_transfn>, true, TArgs_any_value_transfn_Policy,
+                     false, TPgIndirectFunc, TDefaultArgsPolicy,
+                     false, TPgIndirectFunc, TDefaultArgsPolicy,
+                     false, TPgIndirectFunc, false, TDefaultArgsPolicy,
+                     true, true, true, false
                      >({}, {}, nullptr, nullptr, nullptr);
 }

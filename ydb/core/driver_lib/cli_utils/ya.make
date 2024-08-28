@@ -29,6 +29,8 @@ SRCS(
     cli_minikql_compile_and_exec.cpp
     cli_scheme_cache_append.cpp
     cli_scheme_initroot.cpp
+    melancholic_gopher.cpp
+    melancholic_gopher.h
 )
 
 PEERDIR(

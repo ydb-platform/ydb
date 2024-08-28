@@ -869,6 +869,38 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
             }
             break;
         }
+        case EYtSettingType::SecurityTags: {
+            if (!EnsureTupleSize(*setting, 2, ctx)) {
+                return false;
+            }
+            if (!EnsureAtom(setting->Tail(), ctx)) {
+                return false;
+            }
+            NYT::TNode securityTagsNode;
+            try {
+                securityTagsNode = NYT::NodeFromYsonString(setting->Tail().Content());
+            } catch (const std::exception& e) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
+                    << "Failed to parse Yson: " << e.what()));
+                return false;
+            }
+            if (!securityTagsNode.IsList()) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
+                    << "Expected YSON list of strings"));
+                return false;
+            }
+            for (const auto &child : securityTagsNode.AsList()) {
+                if (!child.IsString()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
+                        << "Expected YSON list of strings"));
+                    return false;
+                }
+            }
+            return true;
+        }
+        case EYtSettingType::LAST: {
+            YQL_ENSURE(false, "Unexpected EYtSettingType");
+        }
         }
     }
 
@@ -1217,6 +1249,18 @@ ui32 GetMinChildrenForIndexedKeyFilter(EYtSettingType type) {
     }
     YQL_ENSURE(type == EYtSettingType::KeyFilter2);
     return 3u;
+}
+
+EYtSettingTypes operator|(EYtSettingTypes left, const EYtSettingTypes& right) {
+    return left |= right;
+}
+
+EYtSettingTypes operator&(EYtSettingTypes left, const EYtSettingTypes& right) {
+    return left &= right;
+}
+
+EYtSettingTypes operator|(EYtSettingType left, EYtSettingType right) {
+    return EYtSettingTypes(left) | EYtSettingTypes(right);
 }
 
 } // NYql

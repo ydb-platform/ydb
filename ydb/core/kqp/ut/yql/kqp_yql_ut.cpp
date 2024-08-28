@@ -613,6 +613,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
+            .SetEnableUuidAsPrimaryKey(false)
             .SetAppConfig(appConfig)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
@@ -684,7 +685,6 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
-            .SetEnableUuidAsPrimaryKey(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
 
@@ -833,7 +833,6 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
-            .SetEnableUuidAsPrimaryKey(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
 
@@ -890,7 +889,6 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
-            .SetEnableUuidAsPrimaryKey(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
 
@@ -917,7 +915,6 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
     Y_UNIT_TEST(UuidPrimaryKeyBulkUpsert) {
         auto settings = TKikimrSettings()
-            .SetEnableUuidAsPrimaryKey(true)
             .SetWithSampleTables(false);
         auto kikimr = TKikimrRunner{settings};
         auto db = kikimr.GetTableClient();

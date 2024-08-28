@@ -1,14 +1,19 @@
 #pragma once
-#include "loader.h"
 
+#include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/formats/arrow/save_load/loader.h>
+#include <ydb/core/formats/arrow/save_load/saver.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 
 namespace NKikimr::NOlap {
 
+using TColumnLoader = NArrow::NAccessor::TColumnLoader;
+using TColumnSaver = NArrow::NAccessor::TColumnSaver;
+
 class IIndexInfo {
 public:
-    enum class ESpecialColumn: ui32 {
+    enum class ESpecialColumn : ui32 {
         PLAN_STEP = NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP_INDEX,
         TX_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_TX_ID_INDEX,
         DELETE_FLAG = NOlap::NPortion::TSpecialColumns::SPEC_COL_DELETE_FLAG_INDEX
@@ -16,7 +21,7 @@ public:
 
     using TSystemColumnsSet = ui64;
 
-    enum class ESystemColumnsSet: ui64 {
+    enum class ESystemColumnsSet : ui64 {
         Snapshot = 1,
         Deletion = 1 << 1,
     };
@@ -27,6 +32,11 @@ public:
 
     static const char* GetDeleteFlagColumnName() {
         return SPEC_COL_DELETE_FLAG;
+    }
+
+    static const std::set<ui32>& GetNecessarySystemColumnIdsSet() {
+        static const std::set<ui32> result = { (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID };
+        return result;
     }
 
     static const std::vector<std::string>& GetSnapshotColumnNames() {
@@ -61,12 +71,6 @@ public:
         return std::make_shared<arrow::Schema>(std::move(fields));
     }
 
-    void AddSpecialFieldIds(std::vector<ui32>& result) const {
-        result.emplace_back((ui32)ESpecialColumn::PLAN_STEP);
-        result.emplace_back((ui32)ESpecialColumn::TX_ID);
-        result.emplace_back((ui32)ESpecialColumn::DELETE_FLAG);
-    }
-
     static void AddSpecialFields(std::vector<std::shared_ptr<arrow::Field>>& fields) {
         AddSnapshotFields(fields);
         fields.push_back(arrow::field(SPEC_COL_DELETE_FLAG, arrow::boolean()));
@@ -82,21 +86,42 @@ public:
         fields.push_back(arrow::field(SPEC_COL_TX_ID, arrow::uint64()));
     }
 
+    static void AddDeleteFields(std::vector<std::shared_ptr<arrow::Field>>& fields) {
+        fields.push_back(arrow::field(SPEC_COL_DELETE_FLAG, arrow::boolean()));
+    }
+
     static const std::set<ui32>& GetSnapshotColumnIdsSet() {
         static const std::set<ui32> result = { (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID };
         return result;
     }
 
     static const std::vector<std::string>& GetSystemColumnNames() {
-        static const std::vector<std::string> result = { std::string(SPEC_COL_PLAN_STEP), std::string(SPEC_COL_TX_ID), std::string(SPEC_COL_DELETE_FLAG) };
+        static const std::vector<std::string> result = { std::string(SPEC_COL_PLAN_STEP), std::string(SPEC_COL_TX_ID),
+            std::string(SPEC_COL_DELETE_FLAG) };
         return result;
     }
 
     static const std::vector<ui32>& GetSystemColumnIds() {
-        static const std::vector<ui32> result = { (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID, (ui32)ESpecialColumn::DELETE_FLAG };
+        static const std::vector<ui32> result = { (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID,
+            (ui32)ESpecialColumn::DELETE_FLAG };
         return result;
     }
 
+    [[nodiscard]] static std::vector<ui32> AddSpecialFieldIds(const std::vector<ui32>& baseColumnIds) {
+        std::vector<ui32> result = baseColumnIds;
+        for (auto&& i : GetSystemColumnIds()) {
+            result.emplace_back(i);
+        }
+        return result;
+    }
+
+    [[nodiscard]] static std::vector<ui32> AddSnapshotFieldIds(const std::vector<ui32>& baseColumnIds) {
+        std::vector<ui32> result = baseColumnIds;
+        for (auto&& i : GetSnapshotColumnIds()) {
+            result.emplace_back(i);
+        }
+        return result;
+    }
 
     std::optional<ui32> GetColumnIdOptional(const std::string& name) const;
     TString GetColumnName(ui32 id, bool required) const;
@@ -106,27 +131,24 @@ public:
     virtual std::shared_ptr<TColumnLoader> GetColumnLoaderOptional(const ui32 columnId) const = 0;
     std::shared_ptr<TColumnLoader> GetColumnLoaderVerified(const ui32 columnId) const;
 
-    static std::shared_ptr<arrow::RecordBatch> NormalizeDeletionColumn(const std::shared_ptr<arrow::RecordBatch>& batch);
+    static void NormalizeDeletionColumn(NArrow::TGeneralContainer& batch);
 
-    static std::shared_ptr<arrow::RecordBatch> AddSnapshotColumns(const std::shared_ptr<arrow::RecordBatch>& batch, const TSnapshot& snapshot);
-    static std::shared_ptr<arrow::RecordBatch> AddDeleteFlagsColumn(const std::shared_ptr<arrow::RecordBatch>& batch, const bool isDelete);
+    static void AddSnapshotColumns(NArrow::TGeneralContainer& batch, const TSnapshot& snapshot);
+    static void AddDeleteFlagsColumn(NArrow::TGeneralContainer& batch, const bool isDelete);
 
     static ui64 GetSpecialColumnsRecordSize() {
         return sizeof(ui64) + sizeof(ui64) + sizeof(bool);
     }
 
     static std::shared_ptr<arrow::Schema> ArrowSchemaSnapshot() {
-        static std::shared_ptr<arrow::Schema> result = std::make_shared<arrow::Schema>(arrow::FieldVector{
-                arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()),
-                arrow::field(SPEC_COL_TX_ID, arrow::uint64())
-            });
+        static std::shared_ptr<arrow::Schema> result = std::make_shared<arrow::Schema>(
+            arrow::FieldVector{ arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()), arrow::field(SPEC_COL_TX_ID, arrow::uint64()) });
         return result;
     }
 
     static std::shared_ptr<arrow::Schema> ArrowSchemaDeletion() {
-        static std::shared_ptr<arrow::Schema> result = std::make_shared<arrow::Schema>(arrow::FieldVector{
-                arrow::field(SPEC_COL_DELETE_FLAG, arrow::boolean())
-            });
+        static std::shared_ptr<arrow::Schema> result =
+            std::make_shared<arrow::Schema>(arrow::FieldVector{ arrow::field(SPEC_COL_DELETE_FLAG, arrow::boolean()) });
         return result;
     }
 
@@ -135,15 +157,16 @@ public:
     }
 
     static bool IsSpecialColumn(const std::string& fieldName) {
-        return fieldName == SPEC_COL_PLAN_STEP
-            || fieldName == SPEC_COL_TX_ID
-            || fieldName == SPEC_COL_DELETE_FLAG;
+        return fieldName == SPEC_COL_PLAN_STEP || fieldName == SPEC_COL_TX_ID || fieldName == SPEC_COL_DELETE_FLAG;
     }
 
     static bool IsSpecialColumn(const ui32 fieldId) {
-        return fieldId == (ui32)ESpecialColumn::PLAN_STEP
-            || fieldId == (ui32)ESpecialColumn::TX_ID
-            || fieldId == (ui32)ESpecialColumn::DELETE_FLAG;
+        return fieldId == (ui32)ESpecialColumn::PLAN_STEP || fieldId == (ui32)ESpecialColumn::TX_ID ||
+               fieldId == (ui32)ESpecialColumn::DELETE_FLAG;
+    }
+
+    static bool IsNullableVerified(const ui32 /*fieldId*/) {
+        return false;
     }
 
     static ui32 GetSpecialColumnByteWidth(const ui32 field) {
@@ -164,4 +187,4 @@ public:
     virtual ~IIndexInfo() = default;
 };
 
-} // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap

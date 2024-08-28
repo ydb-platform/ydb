@@ -23,6 +23,8 @@ INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
 SIZE(MEDIUM)
 
-REQUIREMENTS(ram:16)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:16)
+ENDIF()
 
 END()

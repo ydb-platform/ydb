@@ -4,6 +4,7 @@
 
 #include <yt/yt/core/ytree/helpers.h>
 
+#include <yt/yt/core/misc/memory_usage_tracker.h>
 #include <yt/yt/core/misc/singleton.h>
 
 namespace NYT::NRpc {
@@ -16,8 +17,8 @@ class TNullChannel
     : public NRpc::IChannel
 {
 public:
-    explicit TNullChannel(TString address)
-        : Address_(std::move(address))
+    explicit TNullChannel(const std::string& address)
+        : Address_(address)
     { }
 
     const TString& GetEndpointDescription() const override
@@ -48,13 +49,19 @@ public:
         return 0;
     }
 
+    const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override
+    {
+        return MemoryUsageTracker_;
+    }
+
 private:
     const TString Address_;
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_ = GetNullMemoryUsageTracker();
 };
 
-IChannelPtr CreateNullChannel(TString address)
+IChannelPtr CreateNullChannel(const std::string& address)
 {
-    return New<TNullChannel>(std::move(address));
+    return New<TNullChannel>(address);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -63,7 +70,7 @@ class TNullChannelFactory
     : public IChannelFactory
 {
 public:
-    IChannelPtr CreateChannel(const TString& address) override
+    IChannelPtr CreateChannel(const std::string& address) override
     {
         return CreateNullChannel(address);
     }

@@ -5,6 +5,7 @@
 #include "helpers/get_value.h"
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 
@@ -229,7 +230,9 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         helper.CreateTestOlapTable();
         NArrow::NConstruction::TStringPoolFiller sPool(3, 52);
         helper.FillTable(sPool, 0, 800000);
-        csController->WaitCompactions(TDuration::Seconds(10));
+        csController->WaitCompactions(TDuration::Seconds(5));
+        helper.FillTable(sPool, 0.5, 800000);
+        csController->WaitCompactions(TDuration::Seconds(5));
 
         helper.GetVolumes(rawBytes1, bytes1, false, {"new_column_ui64"});
         AFL_VERIFY(rawBytes1 == 0);
@@ -241,9 +244,9 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             csController->WaitActualization(TDuration::Seconds(10));
             ui64 rawBytes2;
             ui64 bytes2;
-            helper.GetVolumes(rawBytes2, bytes2, false, {"new_column_ui64"});
-            AFL_VERIFY(rawBytes2 == 6500041)("real", rawBytes2);
-            AFL_VERIFY(bytes2 == 45360)("b", bytes2);
+            helper.GetVolumes(rawBytes2, bytes2, false, { "new_column_ui64", NOlap::IIndexInfo::SPEC_COL_DELETE_FLAG });
+            AFL_VERIFY(rawBytes2 == 0)("real", rawBytes2);
+            AFL_VERIFY(bytes2 == 0)("b", bytes2);
         }
     }
 
@@ -302,63 +305,61 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         auto tableClient = kikimr.GetTableClient();
         {
             helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `ENCODING.DICTIONARY.ENABLED`=`true`);");
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_STAT, NAME=field_var, TYPE=variability, FEATURES=`{\"column_name\" : \"field\"}`);");
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_STAT, NAME=pk_int_max, TYPE=max, FEATURES=`{\"column_name\" : \"pk_int\"}`);");
+            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=pk_int_max, TYPE=MAX, FEATURES=`{\"column_name\" : \"pk_int\"}`);");
             helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
-            csController->WaitCondition(TDuration::Seconds(10), [&]() {
+            csController->WaitActualization(TDuration::Seconds(40));
+            {
                 ui64 rawBytes2;
                 ui64 bytes2;
-                helper.GetVolumes(rawBytes2, bytes2, false, {"field"});
+                helper.GetVolumes(rawBytes2, bytes2, false, { "field" });
                 AFL_VERIFY(rawBytes2 == rawBytes1)("f1", rawBytes1)("f2", rawBytes2);
                 AFL_VERIFY(bytes2 < bytes1 * 0.5)("f1", bytes1)("f2", bytes2);
-                std::vector<NKikimrColumnShardStatisticsProto::TPortionStorage> stats;
+                std::vector<NJson::TJsonValue> stats;
                 helper.GetStats(stats, true);
+                AFL_VERIFY(stats.size() == 3);
                 for (auto&& i : stats) {
-                    if (i.ScalarsSize() != 2) {
-                        return false;
-                    }
-                    if (i.GetScalars()[0].GetUint32() != 3) {
-                        return false;
-                    }
+                    AFL_VERIFY(i.IsArray());
+                    AFL_VERIFY(i.GetArraySafe().size() == 1);
+                    AFL_VERIFY(i.GetArraySafe()[0]["chunk_idx"].GetInteger() == 0);
+                    AFL_VERIFY(i.GetArraySafe()[0]["entity_id"].GetInteger() == 4);
+                    AFL_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() >= 799992);
+                    AFL_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() <= 799999);
+                    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("json", i);
                 }
-                return true;
-                }
-            );
+            }
         }
         {
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=DROP_STAT, NAME=pk_int_max);");
+            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=DROP_INDEX, NAME=pk_int_max);");
             helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
-            csController->WaitCondition(TDuration::Seconds(10), [&]() {
-                std::vector<NKikimrColumnShardStatisticsProto::TPortionStorage> stats;
+            csController->WaitActualization(TDuration::Seconds(30));
+            {
+                std::vector<NJson::TJsonValue> stats;
                 helper.GetStats(stats, true);
+                AFL_VERIFY(stats.size() == 3);
                 for (auto&& i : stats) {
-                    if (i.ScalarsSize() != 1) {
-                        return false;
-                    }
-                    if (i.GetScalars()[0].GetUint32() != 3) {
-                        return false;
-                    }
+                    AFL_VERIFY(i.IsArray());
+                    AFL_VERIFY(i.GetArraySafe().size() == 0)("json", i);
                 }
-                return true;
-                });
+            }
         }
         {
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_STAT, NAME=pk_int_max, TYPE=max, FEATURES=`{\"column_name\" : \"pk_int\"}`);");
+            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=pk_int_max, TYPE=MAX, FEATURES=`{\"column_name\" : \"pk_int\"}`);");
             helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
-            csController->WaitCondition(TDuration::Seconds(10), [&]() {
-                std::vector<NKikimrColumnShardStatisticsProto::TPortionStorage> stats;
+            csController->WaitActualization(TDuration::Seconds(40));
+            {
+                std::vector<NJson::TJsonValue> stats;
                 helper.GetStats(stats, true);
+                AFL_VERIFY(stats.size() == 3);
                 for (auto&& i : stats) {
-                    if (i.ScalarsSize() != 2) {
-                        return false;
-                    }
-                    if (i.GetScalars()[0].GetUint32() != 3) {
-                        return false;
-                    }
+                    AFL_VERIFY(i.IsArray());
+                    AFL_VERIFY(i.GetArraySafe().size() == 1);
+                    AFL_VERIFY(i.GetArraySafe()[0]["chunk_idx"].GetInteger() == 0);
+                    AFL_VERIFY(i.GetArraySafe()[0]["entity_id"].GetInteger() == 5)("json", i);
+                    AFL_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() >= 799992);
+                    AFL_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() <= 799999);
+                    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("json", i);
                 }
-                return true;
-                }
-            );
+            }
         }
     }
 
@@ -452,7 +453,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
                 SELECT PathId, Kind, TabletId
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
-                    PathId == UInt64("3") AND Activity = true
+                    PathId == UInt64("3") AND Activity == 1
                 GROUP BY TabletId, PathId, Kind
                 ORDER BY TabletId, Kind
             )");

@@ -30,7 +30,7 @@
 #include <ydb/core/tx/scheme_board/cache.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
-#include <ydb/core/statistics/stat_service.h>
+#include <ydb/core/statistics/service/service.h>
 
 #include <util/system/env.h>
 
@@ -158,14 +158,14 @@ namespace NPDisk {
     void SetupSharedPageCache(TTestActorRuntime& runtime, ui32 nodeIndex, NFake::TCaches caches)
     {
         auto pageCollectionCacheConfig = MakeHolder<TSharedPageCacheConfig>();
-        pageCollectionCacheConfig->CacheConfig = new TCacheCacheConfig(caches.Shared, nullptr, nullptr, nullptr);
+        pageCollectionCacheConfig->LimitBytes = caches.Shared;
         pageCollectionCacheConfig->TotalAsyncQueueInFlyLimit = caches.AsyncQueue;
         pageCollectionCacheConfig->TotalScanQueueInFlyLimit = caches.ScanQueue;
         pageCollectionCacheConfig->Counters = MakeIntrusive<TSharedPageCacheCounters>(runtime.GetDynamicCounters(nodeIndex));
 
         runtime.AddLocalService(MakeSharedPageCacheId(0),
             TActorSetupCmd(
-                CreateSharedPageCache(std::move(pageCollectionCacheConfig), runtime.GetMemObserver(nodeIndex)),
+                CreateSharedPageCache(std::move(pageCollectionCacheConfig)),
                 TMailboxType::ReadAsFilled,
                 0),
             nodeIndex);

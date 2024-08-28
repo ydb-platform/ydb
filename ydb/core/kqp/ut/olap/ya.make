@@ -23,6 +23,8 @@ SRCS(
     clickbench_ut.cpp
     aggregations_ut.cpp
     write_ut.cpp
+    sparsed_ut.cpp
+    tiering_ut.cpp
 )
 
 PEERDIR(

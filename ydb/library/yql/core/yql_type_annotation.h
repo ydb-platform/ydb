@@ -150,7 +150,74 @@ struct TYqlOperationOptions {
     TMaybe<NYT::TNode> ParametersYson;
 };
 
-using TColumnOrder = TVector<TString>;
+class TColumnOrder {
+public:
+    struct TOrderedItem {
+        TString LogicalName;
+        TString PhysicalName;
+        TOrderedItem(const TString& logical, const TString& physical) : LogicalName(logical), PhysicalName(physical) {}
+        TOrderedItem(TOrderedItem&&) = default;
+        TOrderedItem(const TOrderedItem&) = default;
+        TOrderedItem& operator=(const TOrderedItem&) = default;
+        bool operator==(const TOrderedItem& other) const {
+            return LogicalName == other.LogicalName && PhysicalName == other.PhysicalName;
+        }
+    };
+    TColumnOrder() = default;
+    TColumnOrder(const TColumnOrder&) = default;
+    TColumnOrder(TColumnOrder&&) = default;
+    TColumnOrder& operator=(const TColumnOrder&);
+    explicit TColumnOrder(const TVector<TString>& order);
+    TString AddColumn(const TString& name);
+
+    bool IsDuplicatedIgnoreCase(const TString& name) const;
+
+    void Shrink(size_t remain);
+
+    void Reserve(size_t);
+    void EraseIf(const std::function<bool(const TString&)>& fn);
+    void EraseIf(const std::function<bool(const TOrderedItem&)>& fn);
+    void Clear();
+
+    size_t Size() const;
+
+    TString Find(const TString&) const;
+
+    TVector<TOrderedItem>::const_pointer begin() const {
+        return Order_.cbegin();
+    }
+
+    TVector<TOrderedItem>::const_pointer end() const {
+        return Order_.cend();
+    }
+
+    const TOrderedItem& operator[](size_t i) const {
+        return Order_[i];
+    }
+
+    bool operator==(const TColumnOrder& other) const {
+        return Order_ == other.Order_;
+    }
+
+    const TOrderedItem& at(size_t i) const {
+        return Order_[i];
+    }
+
+    const TOrderedItem& front() const {
+        return Order_.front();
+    }
+
+    const TOrderedItem& back() const {
+        return Order_.back();
+    }
+private:
+    THashMap<TString, TString> GeneratedToOriginal_;
+    THashMap<TString, uint64_t> UseCount_;
+    THashMap<TString, uint64_t> UseCountLcase_;
+    // (name, generated_name)
+    TVector<TOrderedItem> Order_;
+};
+
 TString FormatColumnOrder(const TMaybe<TColumnOrder>& columnOrder, TMaybe<size_t> maxColumns = {});
 ui64 AddColumnOrderHash(const TMaybe<TColumnOrder>& columnOrder, ui64 hash);
 
@@ -214,6 +281,7 @@ struct TUdfCachedInfo {
 };
 
 struct TTypeAnnotationContext: public TThrRefBase {
+    THashMap<TString, TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>> ColumnStatisticsByTableName;
     THashMap<const TExprNode*, std::shared_ptr<TOptimizerStatistics>> StatisticsMap;
     TIntrusivePtr<ITimeProvider> TimeProvider;
     TIntrusivePtr<IRandomProvider> RandomProvider;
@@ -268,6 +336,8 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui32 FolderSubDirsLimit = 1000;
     bool UseBlocks = false;
     EBlockEngineMode BlockEngineMode = EBlockEngineMode::Disable;
+    THashMap<TString, size_t> NoBlockRewriteCallableStats;
+    THashMap<TString, size_t> NoBlockRewriteTypeStats;
     TMaybe<bool> PgEmitAggApply;
     IArrowResolver::TPtr ArrowResolver;
     TFileStoragePtr FileStorage;
@@ -375,6 +445,14 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool IsBlockEngineEnabled() const {
         return BlockEngineMode != EBlockEngineMode::Disable || UseBlocks;
     }
+
+    void IncNoBlockCallable(TStringBuf callableName);
+    void IncNoBlockType(const TTypeAnnotationNode& type);
+    void IncNoBlockType(ETypeAnnotationKind kind);
+    void IncNoBlockType(NUdf::EDataSlot slot);
+
+    TVector<TString> GetTopNoBlocksCallables(size_t maxCount) const;
+    TVector<TString> GetTopNoBlocksTypes(size_t maxCount) const;
 };
 
 template <> inline

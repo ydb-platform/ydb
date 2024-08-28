@@ -81,27 +81,6 @@ namespace NKikimr {
                     return flowRecord ? flowRecord->GetPredictedDelayNs() : 0;
                 }
 
-                template<typename T>
-                static void ValidateEvent(TQueue& /*queue*/, const T& /*event*/)
-                {}
-
-                static void ValidateEvent(TQueue& queue, const TEvBlobStorage::TEvVPut& event) {
-                    Y_ABORT_UNLESS(!event.Record.ExtraBlockChecksSize() || queue.ExtraBlockChecksSupport.value_or(true));
-                }
-
-                static void ValidateEvent(TQueue& queue, const TEvBlobStorage::TEvVMultiPut& event) {
-                    for (const auto& item : event.Record.GetItems()) {
-                        Y_ABORT_UNLESS(!item.ExtraBlockChecksSize() || queue.ExtraBlockChecksSupport.value_or(true));
-                    }
-                }
-
-                template<typename TEvent>
-                TActorId QueueForEvent(const TEvent& event) {
-                    TQueue& queue = GetQueue(VDiskQueueId(event));
-                    ValidateEvent(queue, event);
-                    return queue.ActorId;
-                }
-
                 TString ToString() const {
                     TStringStream s;
                     s << "{PutTabletLog# " << PutTabletLog.ActorId
@@ -178,31 +157,14 @@ namespace NKikimr {
             }
         }
 
-        template<typename TEvent>
-        void SetUpSubmitTimestamp(TEvent& event) {
-            TInstant now = TAppData::TimeProvider->Now();
-            auto& record = event.Record;
-            auto& msgQoS = *record.MutableMsgQoS();
-            auto& execTimeStats = *msgQoS.MutableExecTimeStats();
-            execTimeStats.SetSubmitTimestamp(now.GetValue());
-        }
-
-        void SetUpSubmitTimestamp(TEvBlobStorage::TEvVStatus& /*event*/) {}
-        void SetUpSubmitTimestamp(TEvBlobStorage::TEvVAssimilate& /*event*/) {}
-
-        template<typename TEvent>
-        TActorId Send(const IActor& actor, const TBlobStorageGroupInfo::TTopology& topology, std::unique_ptr<TEvent> event,
-                ui64 cookie, NWilson::TTraceId traceId, bool timeStatsEnabled) {
-            if (timeStatsEnabled) {
-                SetUpSubmitTimestamp(*event);
-            }
-            const TVDiskID& vdiskId = VDiskIDFromVDiskID(event->Record.GetVDiskID());
+        void Send(const IActor& actor, const TBlobStorageGroupInfo::TTopology& topology, std::unique_ptr<IEventBase> event,
+                ui64 cookie, NWilson::TTraceId traceId, const TVDiskID vdiskId, NKikimrBlobStorage::EVDiskQueueId queueId) {
             auto& queues = FailDomains[topology.GetFailDomainOrderNumber(vdiskId)].VDisks[vdiskId.VDisk].Queues;
-            TActorId queueId = queues.QueueForEvent(*event);
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Send to queueId# " << queueId
-                << " " << TypeName<TEvent>() << "# " << event->ToString() << " cookie# " << cookie);
-            TActivationContext::Send(new IEventHandle(queueId, actor.SelfId(), event.release(), 0, cookie, nullptr, std::move(traceId)));
-            return queueId;
+            TActorId queueActorId = queues.GetQueue(queueId).ActorId;
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Send to queueActorId# " << queueActorId
+                << " " << TypeName(*event) << "# " << event->ToString() << " cookie# " << cookie);
+            TActivationContext::Send(new IEventHandle(queueActorId, actor.SelfId(), event.release(), 0, cookie, nullptr,
+                std::move(traceId)));
         }
 
         ui64 GetPredictedDelayNsByOrderNumber(ui32 orderNumber, NKikimrBlobStorage::EVDiskQueueId queueId) {
@@ -242,7 +204,7 @@ namespace NKikimr {
         TActorId ProxyActor;
 
         TGroupSessions(const TIntrusivePtr<TBlobStorageGroupInfo>& info, const TBSProxyContextPtr& bspctx,
-            const TActorId& monActor, const TActorId& proxyActor);
+            const TActorId& monActor, const TActorId& proxyActor, bool useActorSystemTimeInBSQueue);
         void Poison();
         bool GoodToGo(const TBlobStorageGroupInfo::TTopology& topology, bool waitForAllVDisks);
         void QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EVDiskQueueId queueId, bool connected,
@@ -260,6 +222,51 @@ namespace NKikimr {
         TEvProxySessionsState(const TIntrusivePtr<TGroupQueues>& groupQueues)
             : GroupQueues(groupQueues)
         {}
+    };
+
+    struct TEvGetQueuesInfo : public TEventLocal<TEvGetQueuesInfo, TEvBlobStorage::EvGetQueuesInfo> {
+        NKikimrBlobStorage::EVDiskQueueId QueueId;
+
+        TEvGetQueuesInfo(NKikimrBlobStorage::EVDiskQueueId queueId)
+            : QueueId(queueId)
+        {}
+    };
+
+    struct TEvQueuesInfo : public TEventLocal<TEvQueuesInfo, TEvBlobStorage::EvQueuesInfo> {
+        struct TQueueInfo {
+            TActorId ActorId;
+            TIntrusivePtr<NBackpressure::TFlowRecord> FlowRecord;
+        };
+
+        TEvQueuesInfo(ui32 groupSize) {
+            Queues.resize(groupSize);
+        }
+
+        void AddInfoForQueue(ui32 orderNumber, TActorId actorId, const TIntrusivePtr<NBackpressure::TFlowRecord>& flowRecord) {
+            Queues[orderNumber].emplace(TQueueInfo{
+                .ActorId = actorId,
+                .FlowRecord = flowRecord
+            });
+        }
+
+        TString ToString() const override {
+            TStringStream str;
+            str << "{ TEvQueuesInfo";
+            str << " Queues [";
+            for (ui32 orderNum = 0; orderNum < Queues.size(); ++orderNum) {
+                const std::optional<TQueueInfo>& queue = Queues[orderNum];
+                if (queue) {
+                    str << " { OrderNumber# " << orderNum
+                        << " ActorId# " << queue->ActorId.ToString() << " },";
+                } else {
+                    str << " {}";
+                }
+            }
+            str << " ] }";
+            return str.Str();
+        }
+
+        TStackVec<std::optional<TQueueInfo>, TypicalDisksInGroup> Queues;
     };
 
 } // NKikimr

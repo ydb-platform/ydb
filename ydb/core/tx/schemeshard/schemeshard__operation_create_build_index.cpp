@@ -4,11 +4,14 @@
 #include "schemeshard_path_element.h"
 #include "schemeshard_utils.h"
 
+#include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/ydb_convert/table_description.h>
 
 namespace NKikimr::NSchemeShard {
+
+using namespace NTableIndex;
 
 TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild);
@@ -30,7 +33,6 @@ TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId opId, const TTxTrans
     }
 
     return result;
-
 }
 
 TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
@@ -111,18 +113,38 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         result.push_back(CreateInitializeBuildIndexMainTable(NextPartId(opId, result), outTx));
     }
 
-    {
+    auto createImplTable = [&](NKikimrSchemeOp::TTableDescription&& implTableDesc) {
+        implTableDesc.MutablePartitionConfig()->SetShadowData(true);
+
         auto outTx = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexImplTable);
-        auto& indexImplTableDescription = *outTx.MutableCreateTable();
+        *outTx.MutableCreateTable() = std::move(implTableDesc);
 
-        // This description provided by user to override partition policy
-        const auto& userIndexDesc = indexDesc.GetIndexImplTableDescriptions(0);
-        indexImplTableDescription = CalcImplTableDesc(tableInfo, implTableColumns, userIndexDesc);
+        return CreateInitializeBuildIndexImplTable(NextPartId(opId, result), outTx);
+    };
 
-        indexImplTableDescription.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
-        indexImplTableDescription.MutablePartitionConfig()->SetShadowData(true);
-
-        result.push_back(CreateInitializeBuildIndexImplTable(NextPartId(opId, result), outTx));
+    if (indexDesc.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+        NKikimrSchemeOp::TTableDescription indexLevelTableDesc, indexPostingTableDesc;
+        // TODO After IndexImplTableDescriptions are persisted, this should be replaced with Y_ABORT_UNLESS
+        if (indexDesc.IndexImplTableDescriptionsSize() == 2) {
+            indexLevelTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
+            indexPostingTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
+        }
+        result.push_back(createImplTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), indexLevelTableDesc)));
+        result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPostingTableDesc)));
+        // TODO Maybe better to use partition from main table
+        // This tables are temporary and handled differently in apply_build_index
+        result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPostingTableDesc, NTableVectorKmeansTreeIndex::TmpPostingTableSuffix0)));
+        result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPostingTableDesc, NTableVectorKmeansTreeIndex::TmpPostingTableSuffix1)));
+    } else {
+        NKikimrSchemeOp::TTableDescription indexTableDesc;
+        // TODO After IndexImplTableDescriptions are persisted, this should be replaced with Y_ABORT_UNLESS
+        if (indexDesc.IndexImplTableDescriptionsSize() == 1) {
+            indexTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
+        }
+        auto implTableDesc = CalcImplTableDesc(tableInfo, implTableColumns, indexTableDesc);
+        // TODO if keep erase markers also speedup compaction or something else we can enable it for other impl tables too
+        implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
+        result.push_back(createImplTable(std::move(implTableDesc)));
     }
 
     return result;

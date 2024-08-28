@@ -354,11 +354,11 @@ RelOptInfo* TPgOptimizer::JoinSearchInternal() {
     for (auto* ri : LeftRestriction) {
         root.left_join_clauses = lappend(root.left_join_clauses, ri);
         root.hasJoinRTEs = 1;
-        root.nullable_baserels = bms_add_members(root.nullable_baserels, ri->right_relids);
+        root.outer_join_rels = bms_add_members(root.outer_join_rels, ri->right_relids);
 
         SpecialJoinInfo* ji = makeNode(SpecialJoinInfo);
-        ji->min_lefthand = bms_add_member(ji->min_lefthand, bms_first_member(ri->left_relids));
-        ji->min_righthand = bms_add_member(ji->min_righthand, bms_first_member(ri->right_relids));
+        ji->min_lefthand = bms_add_member(ji->min_lefthand, bms_next_member(ri->left_relids, -1));
+        ji->min_righthand = bms_add_member(ji->min_righthand, bms_next_member(ri->right_relids, -1));
 
         ji->syn_lefthand = bms_add_members(ji->min_lefthand, ri->left_relids);
         ji->syn_righthand = bms_add_members(ji->min_righthand, ri->right_relids);
@@ -371,11 +371,11 @@ RelOptInfo* TPgOptimizer::JoinSearchInternal() {
     for (auto* ri : RightRestriction) {
         root.right_join_clauses = lappend(root.right_join_clauses, ri);
         root.hasJoinRTEs = 1;
-        root.nullable_baserels = bms_add_members(root.nullable_baserels, ri->left_relids);
+        root.outer_join_rels = bms_add_members(root.outer_join_rels, ri->left_relids);
 
         SpecialJoinInfo* ji = makeNode(SpecialJoinInfo);
-        ji->min_lefthand = bms_add_member(ji->min_lefthand, bms_first_member(ri->right_relids));
-        ji->min_righthand = bms_add_member(ji->min_righthand, bms_first_member(ri->left_relids));
+        ji->min_lefthand = bms_add_member(ji->min_lefthand, bms_next_member(ri->right_relids, -1));
+        ji->min_righthand = bms_add_member(ji->min_righthand, bms_next_member(ri->left_relids, -1));
 
         ji->syn_lefthand = bms_add_members(ji->min_lefthand, ri->right_relids);
         ji->syn_righthand = bms_add_members(ji->min_righthand, ri->left_relids);
@@ -690,8 +690,11 @@ public:
         , Log(log)
     { }
 
-    std::shared_ptr<TJoinOptimizerNode> JoinSearch(const std::shared_ptr<TJoinOptimizerNode>& joinTree) override
+    std::shared_ptr<TJoinOptimizerNode> JoinSearch(
+        const std::shared_ptr<TJoinOptimizerNode>& joinTree, 
+        const TOptimizerHints& hints = {}) override
     {
+        Y_UNUSED(hints);
         return TPgOptimizerImpl(joinTree, Ctx, Log).Do();
     }
 

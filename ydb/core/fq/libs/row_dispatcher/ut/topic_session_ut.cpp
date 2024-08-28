@@ -36,8 +36,7 @@ public:
         RowDispatcherActorId = Runtime.AllocateEdgeActor();
     }
 
-    void Init(const TString& topic, ui64 maxSessionUsedMemory = std::numeric_limits<ui64>::max()) {
-        Settings = BuildPqTopicSourceSettings(topic);
+    void Init(ui64 maxSessionUsedMemory = std::numeric_limits<ui64>::max()) {
         Config.SetTimeoutBeforeStartSessionSec(TimeoutBeforeStartSessionSec);
         Config.SetMaxSessionUsedMemory(maxSessionUsedMemory);
 
@@ -58,9 +57,9 @@ public:
     void TearDown(NUnitTest::TTestContext& /* context */) override {
     }
 
-    void StartSession(TActorId readActorId, TMaybe<ui64> readOffset = Nothing()) {
+    void StartSession(TActorId readActorId, const NYql::NPq::NProto::TDqPqTopicSource& source, TMaybe<ui64> readOffset = Nothing()) {
         auto event = new NFq::TEvRowDispatcher::TEvStartSession(
-            Settings,
+            source,
             PartitionId,
             "Token",
             true,       // AddBearerToToken
@@ -70,7 +69,7 @@ public:
         Runtime.Send(new IEventHandle(TopicSession, readActorId, event));
     }
 
-    NYql::NPq::NProto::TDqPqTopicSource BuildPqTopicSourceSettings(TString topic) {
+    NYql::NPq::NProto::TDqPqTopicSource BuildSource(TString topic, bool emptyPredicate = false) {
         NYql::NPq::NProto::TDqPqTopicSource settings;
         settings.SetEndpoint(GetDefaultPqEndpoint());
         settings.SetTopicPath(topic);
@@ -81,12 +80,15 @@ public:
         settings.AddColumns("value");
         settings.AddColumnTypes("UInt64");
         settings.AddColumnTypes("String");
+        if (!emptyPredicate) {
+            settings.SetPredicate("WHERE true");
+        }
         return settings;
     }
 
-    void StopSession(NActors::TActorId readActorId) {
+    void StopSession(NActors::TActorId readActorId, const NYql::NPq::NProto::TDqPqTopicSource& source) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStopSession>();
-        event->Record.MutableSource()->CopyFrom(Settings);
+        event->Record.MutableSource()->CopyFrom(source);
         event->Record.SetPartitionId(PartitionId);
         Runtime.Send(new IEventHandle(TopicSession, readActorId, event.release()));
     }
@@ -110,10 +112,14 @@ public:
         UNIT_ASSERT(TString(eventHolder->Get()->Record.GetMessage()).Contains(message));
     }
 
-    void ExpectNewDataArrived(NActors::TActorId readActorId) {
-        auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvNewDataArrived>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
-        UNIT_ASSERT(eventHolder.Get() != nullptr);
-        UNIT_ASSERT(eventHolder->Get()->ReadActorId == readActorId);
+    void ExpectNewDataArrived(TSet<NActors::TActorId> readActorIds) {
+        size_t count = readActorIds.size();
+        for (size_t i = 0; i < count; ++i) {
+            auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvNewDataArrived>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
+            UNIT_ASSERT(eventHolder.Get() != nullptr);
+            UNIT_ASSERT(readActorIds.contains(eventHolder->Get()->ReadActorId));
+            readActorIds.erase(eventHolder->Get()->ReadActorId);
+        }
     }
 
     size_t ReadMessages(NActors::TActorId readActorId) {
@@ -130,12 +136,12 @@ public:
     NActors::TActorId RowDispatcherActorId;
     NYdb::TDriver Driver = NYdb::TDriver(NYdb::TDriverConfig().SetLog(CreateLogBackend("cerr")));
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
-    NYql::NPq::NProto::TDqPqTopicSource Settings;
+    //NYql::NPq::NProto::TDqPqTopicSource Settings;
     NActors::TActorId ReadActorId1;
     NActors::TActorId ReadActorId2;
     ui64 PartitionId = 0;
     NConfig::TRowDispatcherConfig Config;
-    
+
     const TString Json1 = "{\"dt\":100,\"value\":\"value1\"}";
     const TString Json2 = "{\"dt\":200,\"value\":\"value2\"}";
     const TString Json3 = "{\"dt\":300,\"value\":\"value3\"}";
@@ -146,63 +152,84 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
     Y_UNIT_TEST_F(TwoSessionsWithoutOffsets, TFixture) {
         const TString topicName = "topic1";
         PQCreateStream(topicName);
-        Init(topicName);
-        StartSession(ReadActorId1);
-        StartSession(ReadActorId2);
+        Init();
+        auto source = BuildSource(topicName);
+        StartSession(ReadActorId1, source);
+        StartSession(ReadActorId2, source);
 
         const std::vector<TString> data = { Json1 };
         PQWrite(data, topicName);
-        ExpectNewDataArrived(ReadActorId1);
-        ExpectNewDataArrived(ReadActorId2);
+        ExpectNewDataArrived({ReadActorId1, ReadActorId2});
         Runtime.Send(new IEventHandle(TopicSession, ReadActorId1, new TEvRowDispatcher::TEvGetNextBatch()));
         Runtime.Send(new IEventHandle(TopicSession, ReadActorId2, new TEvRowDispatcher::TEvGetNextBatch()));
         ExpectMessageBatch(ReadActorId1, { Json1 });
         ExpectMessageBatch(ReadActorId2, { Json1 });
 
-        StopSession(ReadActorId1);
-        StopSession(ReadActorId2);
+        StopSession(ReadActorId1, source);
+        StopSession(ReadActorId2, source);
     }
 
-    Y_UNIT_TEST_F(SecondSessionWithoutOffsetsAfterSessionConnected, TFixture) {
+    Y_UNIT_TEST_F(SessionWithPredicateAndSessionWithoutPredicate, TFixture) {
         const TString topicName = "topic2";
         PQCreateStream(topicName);
-        Init(topicName);
-        StartSession(ReadActorId1);
+        Init();
+        auto source1 = BuildSource(topicName, false);
+        auto source2 = BuildSource(topicName, true);
+        StartSession(ReadActorId1, source1);
+        StartSession(ReadActorId2, source2);
 
         const std::vector<TString> data = { Json1 };
         PQWrite(data, topicName);
-        ExpectNewDataArrived(ReadActorId1);
+        ExpectNewDataArrived({ReadActorId1, ReadActorId2});
+        Runtime.Send(new IEventHandle(TopicSession, ReadActorId1, new TEvRowDispatcher::TEvGetNextBatch()));
+        Runtime.Send(new IEventHandle(TopicSession, ReadActorId2, new TEvRowDispatcher::TEvGetNextBatch()));
+        ExpectMessageBatch(ReadActorId1, { Json1 });
+        ExpectMessageBatch(ReadActorId2, { Json1 });
+
+        StopSession(ReadActorId1, source1);
+        StopSession(ReadActorId2, source2);
+    }
+
+    Y_UNIT_TEST_F(SecondSessionWithoutOffsetsAfterSessionConnected, TFixture) {
+        const TString topicName = "topic3";
+        PQCreateStream(topicName);
+        Init();
+        auto source = BuildSource(topicName);
+        StartSession(ReadActorId1, source);
+
+        const std::vector<TString> data = { Json1 };
+        PQWrite(data, topicName);
+        ExpectNewDataArrived({ReadActorId1});
         Runtime.Send(new IEventHandle(TopicSession, ReadActorId1, new TEvRowDispatcher::TEvGetNextBatch()));
         ExpectMessageBatch(ReadActorId1, data);
 
-        StartSession(ReadActorId2);
+        StartSession(ReadActorId2, source);
 
         const std::vector<TString> data2 = { Json2 };
         PQWrite(data2, topicName);
-        ExpectNewDataArrived(ReadActorId1);
-        ExpectNewDataArrived(ReadActorId2);
+        ExpectNewDataArrived({ReadActorId1, ReadActorId2});
         
         Runtime.Send(new IEventHandle(TopicSession, ReadActorId1, new TEvRowDispatcher::TEvGetNextBatch()));
         ExpectMessageBatch(ReadActorId1, data2);
         Runtime.Send(new IEventHandle(TopicSession, ReadActorId2, new TEvRowDispatcher::TEvGetNextBatch()));
         ExpectMessageBatch(ReadActorId2, data2);
 
-        StopSession(ReadActorId1);
-        StopSession(ReadActorId2);
+        StopSession(ReadActorId1, source);
+        StopSession(ReadActorId2, source);
     }
 
     Y_UNIT_TEST_F(TwoSessionsWithOffsets, TFixture) {
-        const TString topicName = "topic3";
+        const TString topicName = "topic4";
         PQCreateStream(topicName);
-        Init(topicName);
+        Init();
+        auto source = BuildSource(topicName);
         const std::vector<TString> data = { Json1, Json2, Json3};
         PQWrite(data, topicName);
 
-        StartSession(ReadActorId1, 1);
-        StartSession(ReadActorId2, 2);
+        StartSession(ReadActorId1, source, 1);
+        StartSession(ReadActorId2, source, 2);
 
-        ExpectNewDataArrived(ReadActorId1);
-        ExpectNewDataArrived(ReadActorId2);
+        ExpectNewDataArrived({ReadActorId1, ReadActorId2});
         Runtime.Send(new IEventHandle(TopicSession, ReadActorId1, new TEvRowDispatcher::TEvGetNextBatch()));
         std::vector<TString> expected1 = { Json2, Json3};
         ExpectMessageBatch(ReadActorId1, expected1);
@@ -213,49 +240,50 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
 
         const std::vector<TString> data2 = { Json4 };
         PQWrite(data2, topicName);
-        ExpectNewDataArrived(ReadActorId1);
-        ExpectNewDataArrived(ReadActorId2);
+        ExpectNewDataArrived({ReadActorId1, ReadActorId2});
         Runtime.Send(new IEventHandle(TopicSession, ReadActorId1, new TEvRowDispatcher::TEvGetNextBatch()));
         ExpectMessageBatch(ReadActorId1, data2);
 
         Runtime.Send(new IEventHandle(TopicSession, ReadActorId2, new TEvRowDispatcher::TEvGetNextBatch()));
         ExpectMessageBatch(ReadActorId2, data2);
 
-        StopSession(ReadActorId1);
-        StopSession(ReadActorId2);
+        StopSession(ReadActorId1, source);
+        StopSession(ReadActorId2, source);
     }
 
     Y_UNIT_TEST_F(BadDataSessionError, TFixture) {
-        const TString topicName = "topic4";
+        const TString topicName = "topic5";
         PQCreateStream(topicName);
-        Init(topicName);
-        StartSession(ReadActorId1);
+        Init();
+        auto source = BuildSource(topicName);
+        StartSession(ReadActorId1, source);
 
-        const std::vector<TString> data = { "not json" };
+        const std::vector<TString> data = { "not json", "noch einmal / nicht json" };
         PQWrite(data, topicName);
 
         ExpectSessionError(ReadActorId1, "Failed to unwrap empty optional");
-        StopSession(ReadActorId1);
+        StopSession(ReadActorId1, source);
     }
 
     Y_UNIT_TEST_F(RestartSessionIfNewClientWithOffset, TFixture) {
-        const TString topicName = "topic5";
+        const TString topicName = "topic6";
         PQCreateStream(topicName);
-        Init(topicName);
-        StartSession(ReadActorId1);
+        Init();
+        auto source = BuildSource(topicName);
+        StartSession(ReadActorId1, source);
 
         const std::vector<TString> data = { Json1, Json2 }; // offset 0, 1
         PQWrite(data, topicName);
-        ExpectNewDataArrived(ReadActorId1);
+        ExpectNewDataArrived({ReadActorId1});
         Runtime.Send(new IEventHandle(TopicSession, ReadActorId1, new TEvRowDispatcher::TEvGetNextBatch()));
         ExpectMessageBatch(ReadActorId1, data);
 
         // Restart topic session.
-        StartSession(ReadActorId2, 1);
-        ExpectNewDataArrived(ReadActorId2);
+        StartSession(ReadActorId2, source, 1);
+        ExpectNewDataArrived({ReadActorId2});
 
         PQWrite({ Json3 }, topicName);
-        ExpectNewDataArrived(ReadActorId1);
+        ExpectNewDataArrived({ReadActorId1});
 
         Runtime.Send(new IEventHandle(TopicSession, ReadActorId1, new TEvRowDispatcher::TEvGetNextBatch()));
         ExpectMessageBatch(ReadActorId1, { Json3 });
@@ -263,32 +291,33 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         Runtime.Send(new IEventHandle(TopicSession, ReadActorId2, new TEvRowDispatcher::TEvGetNextBatch()));
         ExpectMessageBatch(ReadActorId2, { Json2, Json3 });
 
-        StopSession(ReadActorId1);
-        StopSession(ReadActorId2);
+        StopSession(ReadActorId1, source);
+        StopSession(ReadActorId2, source);
     }
 
     Y_UNIT_TEST_F(ReadNonExistentTopic, TFixture) {
-        const TString topicName = "topic6";
-        Init(topicName);
-        StartSession(ReadActorId1);
+        const TString topicName = "topic7";
+        Init();
+        auto source = BuildSource(topicName);
+        StartSession(ReadActorId1, source);
         ExpectSessionError(ReadActorId1, "no path");
-        StopSession(ReadActorId1);
+        StopSession(ReadActorId1, source);
     }
 
     Y_UNIT_TEST_F(SlowSession, TFixture) {
-        const TString topicName = "topic7";
+        const TString topicName = "topic8";
         PQCreateStream(topicName);
-        Init(topicName, 50);
-        StartSession(ReadActorId1);
-        StartSession(ReadActorId2);
+        Init(50);
+        auto source = BuildSource(topicName);
+        StartSession(ReadActorId1, source);
+        StartSession(ReadActorId2, source);
 
         size_t messagesSize = 5;
         for (size_t i = 0; i < messagesSize; ++i) {
             const std::vector<TString> data = { Json1 };
             PQWrite(data, topicName);
         }
-        ExpectNewDataArrived(ReadActorId1);
-        ExpectNewDataArrived(ReadActorId2);
+        ExpectNewDataArrived({ReadActorId1, ReadActorId2});
 
         auto readMessages = ReadMessages(ReadActorId1);
         UNIT_ASSERT(readMessages == messagesSize);
@@ -317,9 +346,9 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         readMessages = ReadMessages(ReadActorId2);
         UNIT_ASSERT(readMessages == messagesSize);
 
-        StopSession(ReadActorId1);
-        StopSession(ReadActorId2);
-    } 
+        StopSession(ReadActorId1, source);
+        StopSession(ReadActorId2, source);
+    }
 }
 
 }

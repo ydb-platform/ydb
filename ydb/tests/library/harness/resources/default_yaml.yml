@@ -244,7 +244,7 @@ federated_query_config:
       endpoint: ""
   row_dispatcher:
     enabled: false
-    timeout_before_start_session_sec: 0
+    timeout_before_start_session_sec: 2
     max_session_used_memory: 1000000
     coordinator:
       enabled: true

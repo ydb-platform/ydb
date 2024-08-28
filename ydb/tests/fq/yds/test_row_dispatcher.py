@@ -170,7 +170,7 @@ class TestPqRowDispatcher(TestYdsBase):
         query_id = start_yds_query(kikimr, client, sql)
         wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 1)
 
-        data = ['{"this": "is", not json}']
+        data = ['{"this": "is", not json}', '{"noch einmal / nicht json"}']
         self.write_stream(data)
 
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
@@ -224,6 +224,60 @@ class TestPqRowDispatcher(TestYdsBase):
 
         issues = str(client.describe_query(query_id).result.query.transient_issue)
         assert "Row dispatcher will use the predicate: WHERE (time > 101" in issues, "Incorrect Issues: " + issues
+
+    @yq_v1
+    def test_filter_with_mr(self, kikimr, client):
+        client.create_yds_connection(
+            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True
+        )
+        self.init_topics("test_filter_with_mr")
+
+        sql = Rf'''
+            pragma FeatureR010="prototype";
+            pragma config.flags("TimeOrderRecoverDelay", "-10");
+            pragma config.flags("TimeOrderRecoverAhead", "10");
+
+            $data = 
+                SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}`
+                    WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, event_class String NOT NULL, event_type UInt64 NOT NULL))
+                    WHERE event_class = "event_class2";
+          
+            $match =
+                SELECT * FROM $data
+                MATCH_RECOGNIZE(
+                    ORDER BY CAST(time as Timestamp)
+                    MEASURES 
+                        LAST(M1.event_type) as event_type
+                    ONE ROW PER MATCH
+                    PATTERN ( M1 )
+                    DEFINE
+                        M1 as 
+                            M1.event_class = "event_class2"
+                );
+
+            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+            SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $match;
+            '''
+
+        query_id = start_yds_query(kikimr, client, sql)
+        wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 1)
+
+        data = [
+            '{"time": 100, "event_class": "event_class1", "event_type": 1}',
+            '{"time": 105, "event_class": "event_class2", "event_type": 2}',
+            '{"time": 110, "event_class": "event_class2", "event_type": 3}',
+            '{"time": 116, "event_class": "event_class2", "event_type": 4}'
+        ]
+
+        self.write_stream(data)
+        expected = ['{"event_type":2}']
+        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+
+        stop_yds_query(client, query_id)
+
+        issues = str(client.describe_query(query_id).result.query.transient_issue)
+        assert "Row dispatcher will use the predicate: WHERE event_class =" in issues, "Incorrect Issues: " + issues
+
 
     @yq_v1
     def test_start_new_query(self, kikimr, client):
@@ -411,7 +465,7 @@ class TestPqRowDispatcher(TestYdsBase):
         wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 0)
 
     @yq_v1
-    def test_3_session(self, kikimr, client):
+    def test_3_sessions(self, kikimr, client):
         client.create_yds_connection(
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True
         )

@@ -294,9 +294,16 @@ void TGetImpl::PrepareRequests(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBl
 
     for (auto& vget : gets) {
         if (vget) {
+            ui32 orderNumber = Info->GetTopology().GetOrderNumber(VDiskIDFromVDiskID(vget->Record.GetVDiskID()));
             R_LOG_DEBUG_SX(logCtx, "BPG14", "Send get to orderNumber# "
-                << Info->GetTopology().GetOrderNumber(VDiskIDFromVDiskID(vget->Record.GetVDiskID()))
+                << orderNumber
                 << " vget# " << vget->ToString());
+            if (vget->Record.ExtremeQueriesSize() > 0) {
+                TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(vget->Record.GetExtremeQueries(0).GetId());
+                History.AddVGet(blobId.PartId(), vget->Record.ExtremeQueriesSize(), orderNumber);
+            } else {
+                History.AddVGet(THistory::InvalidPartId, 0, orderNumber);
+            }
             outVGets.push_back(std::move(vget));
             ++RequestIndex;
         }
@@ -313,6 +320,7 @@ void TGetImpl::PrepareVPuts(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBlobS
         auto vput = std::make_unique<TEvBlobStorage::TEvVPut>(put.Id, put.Buffer, vdiskId, true, nullptr, Deadline,
             Blackboard.PutHandleClass);
         R_LOG_DEBUG_SX(logCtx, "BPG15", "Send put to orderNumber# " << put.OrderNumber << " vput# " << vput->ToString());
+        History.AddVPut(put.Id.PartId(), 1, put.OrderNumber);
         outVPuts.push_back(std::move(vput));
         ++VPutRequests;
     }
@@ -366,7 +374,7 @@ EStrategyOutcome TGetImpl::RunStrategies(TLogContext &logCtx) {
 void TGetImpl::OnVPutResult(TLogContext &logCtx, TEvBlobStorage::TEvVPutResult &ev,
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &outVGets, TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> &outVPuts,
         TAutoPtr<TEvBlobStorage::TEvGetResult> &outGetResult) {
-    const NKikimrBlobStorage::TEvVPutResult &record = ev.Record;
+    NKikimrBlobStorage::TEvVPutResult &record = ev.Record;
     Y_ABORT_UNLESS(record.HasVDiskID());
     TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
     TVDiskIdShort shortId(vdisk);
@@ -389,6 +397,7 @@ void TGetImpl::OnVPutResult(TLogContext &logCtx, TEvBlobStorage::TEvVPutResult &
         Y_ABORT("Unexpected status# %s", NKikimrProto::EReplyStatus_Name(status).data());
     }
     Step(logCtx, outVGets, outVPuts, outGetResult);
+    History.AddVPutResult(orderNumber, status, record.GetErrorReason());
 }
 
 }//NKikimr

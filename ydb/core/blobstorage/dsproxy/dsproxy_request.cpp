@@ -112,7 +112,7 @@ namespace NKikimr {
                         },
                         .NodeLayout = TNodeLayoutInfoPtr(NodeLayoutInfo),
                         .AccelerationParams = GetAccelerationParams(),
-                        .LongRequestThreshold = LongRequestThreshold,
+                        .LongRequestThreshold = TDuration::MilliSeconds(LongRequestThresholdMs.Update(TActivationContext::Now())),
                     }),
                     ev->Get()->Deadline
                 );
@@ -226,7 +226,7 @@ namespace NKikimr {
                     .Stats = PerDiskStats,
                     .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
                     .AccelerationParams = GetAccelerationParams(),
-                    .LongRequestThreshold = LongRequestThreshold,
+                    .LongRequestThreshold = TDuration::MilliSeconds(LongRequestThresholdMs.Update(TActivationContext::Now())),
                 }),
                 ev->Get()->Deadline
             );
@@ -501,7 +501,7 @@ namespace NKikimr {
                             .Stats = PerDiskStats,
                             .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
                             .AccelerationParams = GetAccelerationParams(),
-                            .LongRequestThreshold = LongRequestThreshold,
+                            .LongRequestThreshold = TDuration::MilliSeconds(LongRequestThresholdMs.Update(TActivationContext::Now())),
                         }),
                         ev->Get()->Deadline
                     );
@@ -524,7 +524,7 @@ namespace NKikimr {
                             .Tactic = tactic,
                             .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
                             .AccelerationParams = GetAccelerationParams(),
-                            .LongRequestThreshold = LongRequestThreshold,
+                            .LongRequestThreshold = TDuration::MilliSeconds(LongRequestThresholdMs.Update(TActivationContext::Now())),
                         }),
                         TInstant::Max()
                     );

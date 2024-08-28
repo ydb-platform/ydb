@@ -79,6 +79,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         }
         GetsAccelerated++;
 
+        GetImpl.RegisterGetAcceleration();
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;
         GetImpl.AccelerateGet(LogCtx, GetUnresponsiveDisksMask(), vGets, vPuts);
@@ -94,6 +95,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         }
         PutsAccelerated++;
 
+        GetImpl.RegisterPutAcceleration();
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;
         GetImpl.AcceleratePut(LogCtx, GetUnresponsiveDisksMask(), vGets, vPuts);
@@ -363,7 +365,8 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
     void SendReplyAndDie(TAutoPtr<TEvBlobStorage::TEvGetResult> &evResult) {
         const TInstant now = TActivationContext::Now();
         const TDuration duration = (now > StartTime) ? (now - StartTime) : TDuration::MilliSeconds(0);
-        Mon->CountGetResponseTime(Info->GetDeviceType(), GetImpl.GetHandleClass(), evResult->PayloadSizeBytes(), duration);
+        NKikimrBlobStorage::EGetHandleClass handleClass = GetImpl.GetHandleClass();
+        Mon->CountGetResponseTime(Info->GetDeviceType(), handleClass, evResult->PayloadSizeBytes(), duration);
         *Mon->ActiveGetCapacity -= ReportedBytes;
         ReportedBytes = 0;
         bool success = evResult->Status == NKikimrProto::OK;
@@ -379,14 +382,19 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         LWTRACK(DSProxyGetReply, Orbit);
         evResult->Orbit = std::move(Orbit);
         LWPROBE(DSProxyRequestDuration, TEvBlobStorage::EvGet, requestSize, duration.SecondsFloat() * 1000.0, tabletId,
-                evResult->GroupId, channel, NKikimrBlobStorage::EGetHandleClass_Name(GetImpl.GetHandleClass()),
+                evResult->GroupId, channel, NKikimrBlobStorage::EGetHandleClass_Name(handleClass),
                 success);
         A_LOG_LOG_S(true, success ? NLog::PRI_INFO : NLog::PRI_NOTICE, "BPG68", "Result# " << evResult->Print(false));
 
         if (TActivationContext::Now() - StartTime >= LongRequestThreshold) {
             if (AllowToReport(GetImpl.GetHandleClass())) {
                 R_LOG_WARN_S("BPG71", "TEvGet Request was being processed for more than " << LongRequestThreshold
-                        << ", serialized RootCause# " << RootCauseTrack.ToString());
+                        << " GroupId# " << Info->GroupID
+                        << " SubrequestsCount# " << evResult->ResponseSz
+                        << " RequestTotalSize# " << requestSize
+                        << " HandleClass# " << NKikimrBlobStorage::EGetHandleClass_Name(handleClass)
+                        << " RestartCounter# " << RestartCounter
+                        << " History# " << GetImpl.PrintHistory());
             }
         }
         return SendResponseAndDie(std::unique_ptr<TEvBlobStorage::TEvGetResult>(evResult.Release()));

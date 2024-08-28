@@ -1326,6 +1326,16 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1000000,
             DefaultValue: 1000 }];
+        optional uint64 LongRequestThresholdMs = 3 [(ControlOptions) = {
+            Description: "The amount of time (ms) to process DSProxy request, beyond which request is considered long and being reported to log",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 50000 }];
+        optional uint64 LongRequestReportingDelayMs = 4 [(ControlOptions) = {
+            Description: "Delay (ms) between reports of long requests for one handle class",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 60000 }];
     }
 
     optional TDataShardControls DataShardControls = 1;

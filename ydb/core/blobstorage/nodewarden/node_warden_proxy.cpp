@@ -38,8 +38,6 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                         TIntrusivePtr<TBlobStorageGroupInfo>(info), false, DsProxyNodeMon, getCounters(info),
                         TBlobStorageProxyParameters{
                             .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
-                            .RequestReportingThrottlerDelay = Cfg->RequestReportingThrottlerDelay,
-                            .LongRequestThreshold = Cfg->LongRequestThreshold,
                             .EnablePutBatching = EnablePutBatching,
                             .EnableVPatch = EnableVPatch,
                             .SlowDiskThreshold = SlowDiskThreshold,
@@ -60,8 +58,6 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
             proxy.reset(CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>(info), false, 
                 DsProxyNodeMon, getCounters(info), TBlobStorageProxyParameters{
                         .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
-                        .RequestReportingThrottlerDelay = Cfg->RequestReportingThrottlerDelay,
-                        .LongRequestThreshold = Cfg->LongRequestThreshold,
                         .EnablePutBatching = EnablePutBatching,
                         .EnableVPatch = EnableVPatch,
                         .SlowDiskThreshold = SlowDiskThreshold,
@@ -74,8 +70,6 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
         // create proxy without configuration
         proxy.reset(CreateBlobStorageGroupProxyUnconfigured(groupId, DsProxyNodeMon, TBlobStorageProxyParameters{
             .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
-            .RequestReportingThrottlerDelay = Cfg->RequestReportingThrottlerDelay,
-            .LongRequestThreshold = Cfg->LongRequestThreshold,
             .EnablePutBatching = EnablePutBatching,
             .EnableVPatch = EnableVPatch,
             .SlowDiskThreshold = SlowDiskThreshold,

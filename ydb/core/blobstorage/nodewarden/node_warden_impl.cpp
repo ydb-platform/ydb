@@ -133,7 +133,7 @@ void TNodeWarden::StopInvalidGroupProxy() {
 
 void TNodeWarden::StartRequestReportingThrottler() {
     STLOG(PRI_DEBUG, BS_NODE, NW27, "StartRequestReportingThrottler");
-    Register(CreateRequestReportingThrottler(Cfg->RequestReportingThrottlerDelay));
+    Register(CreateRequestReportingThrottler(LongRequestReportingDelayMs));
 }
 
 void TNodeWarden::PassAway() {
@@ -202,6 +202,8 @@ void TNodeWarden::Bootstrap() {
 
         icb->RegisterSharedControl(SlowDiskThreshold, "DSProxyControls.SlowDiskThreshold");
         icb->RegisterSharedControl(PredictedDelayMultiplier, "DSProxyControls.PredictedDelayMultiplier");
+        icb->RegisterSharedControl(LongRequestThresholdMs, "DSProxyControls.LongRequestThresholdMs");
+        icb->RegisterSharedControl(LongRequestReportingDelayMs, "DSProxyControls.LongRequestReportingDelayMs");
     }
 
     // start replication broker

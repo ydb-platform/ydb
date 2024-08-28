@@ -57,6 +57,8 @@ constexpr bool DefaultEnableVPatch = false;
 
 constexpr float DefaultSlowDiskThreshold = 2;
 constexpr float DefaultPredictedDelayMultiplier = 1;
+constexpr TDuration DefaultLongRequestThreshold = TDuration::Seconds(50);
+constexpr TDuration DefaultLongRequestReportingDelay = TDuration::Seconds(60);
 
 constexpr bool WithMovingPatchRequestToStaticNode = true;
 
@@ -513,13 +515,12 @@ IActor* CreateBlobStorageGroupEjectedProxy(ui32 groupId, TIntrusivePtr<TDsProxyN
 
 struct TBlobStorageProxyParameters {
     bool UseActorSystemTimeInBSQueue = false;
-    TDuration RequestReportingThrottlerDelay = TDuration::Seconds(60);
-    TDuration LongRequestThreshold = TDuration::Seconds(50);
 
     const TControlWrapper& EnablePutBatching;
     const TControlWrapper& EnableVPatch;
     const TControlWrapper& SlowDiskThreshold;
     const TControlWrapper& PredictedDelayMultiplier;
+    const TControlWrapper& LongRequestThresholdMs = TControlWrapper(DefaultLongRequestThreshold.MilliSeconds(), 1, 1'000'000);
 };
 
 IActor* CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>&& info,

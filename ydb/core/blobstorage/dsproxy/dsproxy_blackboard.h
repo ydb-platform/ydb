@@ -2,6 +2,7 @@
 #include "defs.h"
 
 #include "dsproxy.h"
+#include "request_history.h"
 
 #include <ydb/core/blobstorage/base/batched_vec.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>

@@ -15,8 +15,8 @@ bool AllowToReport(NKikimrBlobStorage::EGetHandleClass handleClass) {
 
 class TRequestReportingThrottler : public TActorBootstrapped<TRequestReportingThrottler> {
 public:
-    TRequestReportingThrottler(TDuration updatePermissionsDelay)
-        : UpdatePermissionsDelay(updatePermissionsDelay)
+    TRequestReportingThrottler(const TControlWrapper& reportingDelayMs)
+        : ReportingDelayMs(reportingDelayMs)
     {}
 
     void Bootstrap() {
@@ -36,15 +36,15 @@ private:
         for (std::atomic<bool>& permission : ReportGetPermissions) {
             permission.store(true);
         }
-        Schedule(UpdatePermissionsDelay, new TEvents::TEvWakeup);
+        Schedule(TDuration::MilliSeconds(ReportingDelayMs.Update(TActivationContext::Now())), new TEvents::TEvWakeup);
     }   
 
 private:
-    TDuration UpdatePermissionsDelay;
+    TMemorizableControlWrapper ReportingDelayMs;
 };
 
-IActor* CreateRequestReportingThrottler(TDuration updatePermissionsDelay) {
-    return new TRequestReportingThrottler(updatePermissionsDelay);
+IActor* CreateRequestReportingThrottler(const TControlWrapper& reportingDelayMs) {
+    return new TRequestReportingThrottler(reportingDelayMs);
 }
 
 } // namespace NKikimr

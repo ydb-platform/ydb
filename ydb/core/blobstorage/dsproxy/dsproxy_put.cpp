@@ -151,6 +151,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         if (AccelerateRequestsSent == 2) {
             return;
         }
+        PutImpl.RegisterAcceleration();
         ++AccelerateRequestsSent;
         Action(true);
         TryToScheduleNextAcceleration();
@@ -480,7 +481,11 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
             bool allowToReport = AllowToReport(HandleClass);
             if (allowToReport) {
                 R_LOG_WARN_S("BPP71", "TEvPut Request was being processed for more than " << LongRequestThreshold
-                        << ", serialized RootCause# " << RootCauseTrack.ToString());
+                        << " GroupId# " << Info->GroupID
+                        << " HandleClass# " << NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)
+                        << " Tactic# " << TEvBlobStorage::TEvPut::TacticName(Tactic)
+                        << " RestartCounter# " << RestartCounter
+                        << " History# " << PutImpl.PrintHistory());
             }
         }
     }

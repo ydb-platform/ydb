@@ -16,16 +16,14 @@ struct TRootCause {
         ui64 TransferCycles;
         ui64 VDiskReplyCycles;
         bool IsAccelerate;
-        TInstant Timestamp;
 
         TRootCauseItem(ui64 causeIdx, ui64 startCycles, bool isAccelerate)
-                : CauseIdx(causeIdx)
-                , StartCycles(startCycles)
-                , TransferCycles(startCycles)
-                , VDiskReplyCycles(startCycles)
-                , IsAccelerate(isAccelerate)
-                , Timestamp(TActivationContext::Now()) {
-        }
+            : CauseIdx(causeIdx)
+            , StartCycles(startCycles)
+            , TransferCycles(startCycles)
+            , VDiskReplyCycles(startCycles)
+            , IsAccelerate(isAccelerate)
+        {}
     };
     static constexpr ui64 InvalidCauseIdx = 255;
 
@@ -61,22 +59,8 @@ struct TRootCause {
 #endif //LWTRACE_DISABLE
     }
 
-    TString ToString() {
-        TStringStream str("TRootCause {");
-        str << " CurrentCauseIdx# " << CurrentCauseIdx;
-        str << " Items# [";
-        for (const TRootCauseItem& item : Items) {
-            str << " { Timestamp# " << item.Timestamp
-                << " IsAccelerate# " << item.IsAccelerate
-                << " CauseIdx# " << item.CauseIdx
-                << " }";
-        }
-        str << " ] }";
-        return str.Str();
-    }
-
     ui64 RegisterCause() {
-        if (Items.size() < InvalidCauseIdx - 1) {
+        if (IsOn && Items.size() < InvalidCauseIdx - 1) {
             Items.emplace_back(CurrentCauseIdx, GetCycleCountFast(), false);
             return Items.size() - 1;
         } else {
@@ -85,7 +69,7 @@ struct TRootCause {
     }
 
     ui64 RegisterAccelerate() {
-        if (Items.size() < InvalidCauseIdx - 1) {
+        if (IsOn && Items.size() < InvalidCauseIdx - 1) {
             Items.emplace_back(CurrentCauseIdx, GetCycleCountFast(), true);
             return Items.size() - 1;
         } else {

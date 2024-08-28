@@ -123,8 +123,7 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
 
     TMemorizableControlWrapper SlowDiskThreshold;
     TMemorizableControlWrapper PredictedDelayMultiplier;
-
-    TDuration LongRequestThreshold;
+    TMemorizableControlWrapper LongRequestThresholdMs;
 
     TAccelerationParams GetAccelerationParams();
 

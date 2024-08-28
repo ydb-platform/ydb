@@ -1,6 +1,9 @@
 import yatest.common
 import pathlib
 import sys
+import os
+import shutil
+import json
 
 
 class Runner:
@@ -55,8 +58,89 @@ class Runner:
         yatest.common.execute(cmd)
 
 
+class RunParams:
+    def __init__(self, is_spilling, variant, datasize, tasks):
+        self.is_spilling = is_spilling
+        self.variant = variant
+        self.datasize = datasize
+        self.tasks = tasks
+
+    def __repr__(self):
+        result = []
+        for key, value in self.__dict__.items():
+            result.append(f"{key}: {value}")
+        return "RunParams(" + ", ".join(result) + "})"
+
+
+class RunQueryData:
+    def __init__(self, json, perf_files_map):
+        self.query = json["q"]
+        self.exitcode = json["exitcode"]
+        io_info = json["io"]
+        self.read_bytes = io_info["read_bytes"]
+        self.write_bytes = io_info["write_bytes"]
+        resourse_usage = json["rusage"]
+        self.user_time = resourse_usage["utime"]
+        self.system_time = resourse_usage["stime"]
+        self.rss = resourse_usage["maxrss"]
+
+        self.perf_file = perf_files_map.get(self.query)
+
+    def __repr__(self):
+        result = []
+        for key, value in self.__dict__.items():
+            result.append(f"{key}: {value}")
+        return "RunQueryData(" + ", ".join(result) + "})"
+
+
+def upload_results(result_path, s3_folder, ydb):
+    results_map = {}
+    for entry in result_path.glob("*/*"):
+        if not entry.is_dir():
+            continue
+        suffix = entry.relative_to(result_path)
+        # {no|with}-spilling/<variant>-<datasize>-<tasks>
+        is_spilling = suffix.parts[0].split("-")[0] == "with"
+        variant, datasize, tasks = suffix.parts[1].split("-")
+        params = RunParams(is_spilling, variant, int(datasize), int(tasks))
+
+        perf_files_map = {}
+        for file in entry.iterdir():
+            if not file.is_file():
+                continue
+            if file.suffix == ".svg":
+                query = file.stem
+                dst = file.relative_to(result_path)
+                perf_files_map[query] = dst
+                # copying files to folder that will be synced with s3
+                dst = (s3_folder / dst).resolve()
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                res = shutil.copy2(str(file.resolve()), str(dst))
+                print(res, file=sys.stderr)
+
+        summary_file = entry / "summary.json"
+        this_result = []
+        with open(summary_file, "r") as res_file:
+            for line in res_file.readlines()[1:]:
+                this_result.append(RunQueryData(json.loads(line), perf_files_map))
+        results_map[params] = this_result
+
+    print(results_map, file=sys.stderr)
+    # store those to ydb
+
+
 def test_tpc():
+    is_ci = os.environ.get("OUTPUT_DIR") is not None
+
     runner = Runner()
     runner.wrapped_run("h", 1, 1, r"q1\.sql")
     result_path = runner.results_path.resolve()
     print("results path:", result_path, file=sys.stderr)
+
+    if is_ci:
+        s3_folder = pathlib.Path(os.environ["OUTPUT_DIR"]).resolve()
+        tmp = s3_folder / "CREATE_ME"
+        tmp.mkdir()
+        print(f"s3 folder: {s3_folder}", file=sys.stderr)
+
+        upload_results(result_path, s3_folder, "")

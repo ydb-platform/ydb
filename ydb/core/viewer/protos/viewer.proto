@@ -444,7 +444,10 @@ message TStorageGroupInfo {
     uint64 Read = 17;
     uint64 Write = 18;
     float DiskSpaceUsage = 19;
-    repeated TStorageVDisk VDisks = 20;
+    uint64 LatencyPutTabletLog = 20;
+    uint64 LatencyPutUserData = 21;
+    uint64 LatencyGetFast = 22;
+    repeated TStorageVDisk VDisks = 30;
 }
 
 message TStorageGroupGroup {
@@ -479,8 +482,8 @@ message TStorageGroupsInfo {
     uint32 Version = 1;
     optional uint32 TotalGroups = 2;
     optional uint32 FoundGroups = 3;
-    optional uint32 FieldsAvailable = 4;
-    optional uint32 FieldsRequired = 5;
+    optional string FieldsAvailable = 4;
+    optional string FieldsRequired = 5;
     optional bool NeedFilter = 6;
     optional bool NeedGroup = 7;
     optional bool NeedSort = 8;

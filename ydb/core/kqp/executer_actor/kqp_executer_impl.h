@@ -1872,6 +1872,9 @@ protected:
 
     void PassAway() override {
         YQL_ENSURE(AlreadyReplied && ResponseEv);
+
+        // Actualize stats with the last stats from terminated CAs, but keep the status.
+        FillResponseStats(ResponseEv->Record.GetResponse().GetStatus());
         this->Send(Target, ResponseEv.release());
 
         for (auto channelPair: ResultChannelProxies) {

@@ -1225,7 +1225,6 @@
 
 - source_filter: "^contrib/libs/openthread"
   includes:
-    - MBEDTLS_CONFIG_FILE: contrib/libs/openthread/third_party/mbedtls/openthread-mbedtls-config.h
     - OPENTHREAD_CONFIG_FILE
 
 - source_filter: "^smart_devices/platforms/yandexmidi/zigbee/firmware/ncp"

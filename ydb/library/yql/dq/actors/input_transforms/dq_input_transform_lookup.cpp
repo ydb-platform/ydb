@@ -111,7 +111,7 @@ private: //events
                         outputRowItems[i] = wideInputRow[index];
                         break;
                     case EOutputRowItemSource::LookupKey:
-                        outputRowItems[i] = lookupKey.GetElement(index);
+                        outputRowItems[i] = lookupPayload && *lookupPayload ? lookupKey.GetElement(index) : NUdf::TUnboxedValue {};
                         break;
                     case EOutputRowItemSource::LookupOther:
                         if (lookupPayload && *lookupPayload) {

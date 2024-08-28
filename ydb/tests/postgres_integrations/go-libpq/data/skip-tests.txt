@@ -1,0 +1,2 @@
+golang-lib-pq/TestBinaryByteSlicetoUUID
+golang-lib-pq/TestIssue494

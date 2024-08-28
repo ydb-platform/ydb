@@ -148,7 +148,8 @@ private:
             NKikimrLdap::BerFree(ber, 0);
         }
         std::vector<TString> allUserGroups;
-        if (Settings.GetEnableNestedGroups() && !directUserGroups.empty()) {
+        auto& extendedSettings = Settings.GetExtendedSettings();
+        if (extendedSettings.GetEnableNestedGroupsSearch() && !directUserGroups.empty()) {
             // Active Directory has special matching rule to fetch nested groups in one request it is MatchingRuleInChain
             // We don`t know what is ldap server. Is it Active Directory or OpenLdap or other server?
             // If using MatchingRuleInChain return empty list of groups it means that ldap server isn`t Active Directory

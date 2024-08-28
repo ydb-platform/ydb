@@ -47,7 +47,8 @@ void InitLdapSettings(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldap
     ldapSettings->SetBindDn("cn=robouser,dc=search,dc=yandex,dc=net");
     ldapSettings->SetBindPassword("robouserPassword");
     ldapSettings->SetSearchFilter("uid=$username");
-    ldapSettings->SetEnableNestedGroups(true);
+    auto extendedSettings = ldapSettings->MutableExtendedSettings();
+    extendedSettings->SetEnableNestedGroupsSearch(true);
 
     const auto setCertificate = [&ldapSettings] (bool useStartTls, TTempFileHandle& certificateFile) {
         auto useTls = ldapSettings->MutableUseTls();
@@ -67,7 +68,8 @@ void InitLdapSettings(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldap
 
 void InitLdapSettingsDisableSearchNestedGroups(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile, const ESecurityConnectionType& securityConnectionType) {
     InitLdapSettings(ldapSettings, ldapPort, certificateFile, securityConnectionType);
-    ldapSettings->SetEnableNestedGroups(false);
+    auto extendedSettings = ldapSettings->MutableExtendedSettings();
+    extendedSettings->SetEnableNestedGroupsSearch(false);
 }
 
 void InitLdapSettingsWithInvalidRobotUserLogin(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile, const ESecurityConnectionType& securityConnectionType) {

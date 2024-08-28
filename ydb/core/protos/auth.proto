@@ -101,6 +101,10 @@ message TLdapAuthentication {
         optional TCertRequire CertRequire = 3 [default = DEMAND];
     }
 
+    message TExtendedSettings {
+        optional bool EnableNestedGroupsSearch = 1 [default = false];
+    }
+
     optional string Host = 1; // DEPRECATED: Use Hosts instead it
     optional uint32 Port = 2;
     required string BaseDn = 3;
@@ -112,5 +116,5 @@ message TLdapAuthentication {
     optional string RequestedGroupAttribute = 9;
     repeated string Hosts = 10;
     optional string Scheme = 11 [default = "ldap"];
-    optional bool EnableNestedGroups = 12 [default = false];
+    optional TExtendedSettings ExtendedSettings = 12;
 }

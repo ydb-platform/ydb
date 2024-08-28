@@ -72,11 +72,15 @@ message TExtraOutputData {
     optional google.protobuf.Any Data = 2;
 }
 
+message TExtraComputeData {
+    optional google.protobuf.Any Data = 1;
+}
+
 message TComputeActorExtraData {
     repeated TExtraInputData SourcesExtraData = 1;
     repeated TExtraInputData InputTransformsData = 2;
     repeated TExtraOutputData SinksExtraData = 3;
-    optional google.protobuf.Any ComputeExtraData = 4;
+    optional TExtraComputeData ComputeExtraData = 4;
 }
 
 message TEvComputeActorState {

@@ -36,7 +36,8 @@ private:
                 lock.GetSchemeShard(),
                 lock.GetPathId(),
                 lock.GetGeneration(),
-                lock.GetCounter());
+                lock.GetCounter(),
+                lock.GetHasWrites());
         }
     };
 
@@ -47,7 +48,8 @@ private:
                 && lhs.GetSchemeShard() == rhs.GetSchemeShard()
                 && lhs.GetPathId() == rhs.GetPathId()
                 && lhs.GetGeneration() == rhs.GetGeneration()
-                && lhs.GetCounter() == rhs.GetCounter();
+                && lhs.GetCounter() == rhs.GetCounter()
+                && lhs.GetHasWrites() == rhs.GetHasWrites();
         }
     };
 

@@ -559,7 +559,7 @@ protected:
 
         if (auto data = static_cast<TDerived*>(this)->ExtraData()) {
             auto* entry = extraData->MutableComputeExtraData();
-            entry->CopyFrom(*data);
+            entry->MutableData()->CopyFrom(*data);
         }
     }
 

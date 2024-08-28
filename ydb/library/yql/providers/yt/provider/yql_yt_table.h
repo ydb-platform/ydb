@@ -56,7 +56,7 @@ struct TYtTableStatInfo: public TThrRefBase {
     ui64 ChunkCount = 0;
     ui64 ModifyTime = 0;
     ui64 Revision = 0;
-    THashSet<TString> SecurityTags = {};
+    TSet<TString> SecurityTags = {};
     ui64 TableRevision = 0; // Not serializable
 };
 

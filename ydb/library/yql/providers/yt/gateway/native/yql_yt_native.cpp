@@ -5045,7 +5045,7 @@ private:
         const TExecParamsPtr& execCtx,
         const TString& cluster,
         bool createTable,
-        const THashSet<TString>& securityTags = {})
+        const TSet<TString>& securityTags = {})
     {
         PrepareCommonAttributes<TExecParamsPtr>(attrs, execCtx, cluster, createTable);
 
@@ -5059,7 +5059,7 @@ private:
         if (!securityTags.empty()) {
             auto tagsAttrNode = NYT::TNode::CreateList();
             for (const auto& tag : securityTags) {
-                tagsAttrNode.AsList().emplace_back(tag);
+                tagsAttrNode.Add(tag);
             }
             attrs["security_tags"] = std::move(tagsAttrNode);
         }
@@ -5071,7 +5071,7 @@ private:
         const TExecParamsPtr& execCtx,
         const TTransactionCache::TEntry::TPtr& entry,
         bool createTables,
-        const THashSet<TString>& securityTags = {})
+        const TSet<TString>& securityTags = {})
     {
         auto cluster = execCtx->Cluster_;
 

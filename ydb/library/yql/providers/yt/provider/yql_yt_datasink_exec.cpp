@@ -642,7 +642,7 @@ private:
             YQL_CLOG(DEBUG, ProviderYt) << "Operation hash: " << HexEncode(operationHash).Quote() << ", cache mode: " << queryCacheMode;
         }
 
-        THashSet<TString> securityTags;
+        TSet<TString> securityTags;
         VisitExpr(input, [&securityTags](const TExprNode::TPtr& node) -> bool {
             if (TYtTableBase::Match(node.Get())) {
                 const TYtTableBase table(node);

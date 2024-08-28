@@ -376,21 +376,12 @@ TExprBase TYtTableStatInfo::ToExprNode(TExprContext& ctx, const TPositionHandle&
 #undef ADD_FIELD
 
     if (!SecurityTags.empty()) {
-        auto secTagsBuilder = Build<TCoAtomList>(ctx, pos);
-        for (const auto& tag : SecurityTags) {
-            secTagsBuilder
-                .Add<TCoAtom>()
-                    .Value(tag)
-                .Build();
-        }
-        auto secTagsListExpr = secTagsBuilder.Done();
-        
         statBuilder
             .Add()
                 .Name()
                     .Value("SecurityTags")
                 .Build()
-                .Value(secTagsListExpr)
+                .Value(ToAtomList(SecurityTags, pos, ctx))
             .Build();
     }
 

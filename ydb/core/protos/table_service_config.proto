@@ -306,24 +306,13 @@ message TTableServiceConfig {
 
     optional string EnableSpillingNodes = 67 [ default = "All" ];
 
-    message TSubPoolsConfiguration {
-        repeated TComputePoolConfiguration SubPools = 1;
-    }
-
-    message TComputePoolConfiguration {
-        optional double MaxCpuShare = 1;
-        oneof ResourceConfiguration {
-            string Name = 2;
-            TSubPoolsConfiguration SubPoolsConfiguration = 3;
-        }
-    }
-
     message TComputeSchedulerSettings {
         optional uint64 AdvanceTimeIntervalUsec = 1 [default = 50000];
         optional uint64 ForgetOverflowTimeoutUsec = 2 [default = 2000000];
+        optional uint64 ActivePoolPollingSec = 3 [default = 10];
     }
 
-    optional TComputePoolConfiguration PoolsConfiguration = 68;
+    reserved 68;
     optional TComputeSchedulerSettings ComputeSchedulerSettings = 70;
 
     optional bool EnableRowsDuplicationCheck = 69 [ default = false ];

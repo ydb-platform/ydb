@@ -236,6 +236,11 @@ struct TKqpLocalNodeResources {
     std::array<ui64, EKqpMemoryPool::Count> Memory;
 };
 
+struct TPlannerPlacingOptions {
+    ui64 MaxNonParallelTasksExecutionLimit = 8;
+    ui64 MaxNonParallelTopStageExecutionLimit = 1;
+};
+
 /// per node singleton with instant API
 class IKqpResourceManager : private TNonCopyable {
 public:
@@ -245,6 +250,7 @@ public:
 
     virtual TKqpRMAllocateResult AllocateResources(TIntrusivePtr<TTxState>& tx, TIntrusivePtr<TTaskState>& task, const TKqpResourcesRequest& resources) = 0;
 
+    virtual TPlannerPlacingOptions GetPlacingOptions() = 0;
     virtual TTaskResourceEstimation EstimateTaskResources(const NYql::NDqProto::TDqTask& task, const ui32 tasksCount) = 0;
     virtual void EstimateTaskResources(TTaskResourceEstimation& result, const ui32 tasksCount) = 0;
 

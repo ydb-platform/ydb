@@ -46,6 +46,9 @@ message TTableServiceConfig {
 
         optional uint64 MinMemAllocSize = 23 [default = 8388608]; // 8 MiB
         optional uint64 MinMemFreeSize = 24  [default = 33554432]; // 32 MiB
+
+        optional uint64 MaxNonParallelTasksExecutionLimit = 25 [default = 8];
+        optional uint64 MaxNonParallelTopStageExecutionLimit = 26 [default = 1];
     }
 
     message TSpillingServiceConfig {

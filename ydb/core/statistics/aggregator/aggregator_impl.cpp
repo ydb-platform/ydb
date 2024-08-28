@@ -577,8 +577,8 @@ void TStatisticsAggregator::SaveStatisticsToTable() {
         data.push_back(strSketch);
     }
 
-    Register(CreateSaveStatisticsQuery(TraversalPathId, EStatType::COUNT_MIN_SKETCH,
-        std::move(columnTags), std::move(data)));
+    Register(CreateSaveStatisticsQuery(SelfId(),
+        TraversalPathId, EStatType::COUNT_MIN_SKETCH, std::move(columnTags), std::move(data)));
 }
 
 void TStatisticsAggregator::DeleteStatisticsFromTable() {
@@ -589,7 +589,7 @@ void TStatisticsAggregator::DeleteStatisticsFromTable() {
 
     PendingDeleteStatistics = false;
 
-    Register(CreateDeleteStatisticsQuery(TraversalPathId));
+    Register(CreateDeleteStatisticsQuery(SelfId(), TraversalPathId));
 }
 
 void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db) {

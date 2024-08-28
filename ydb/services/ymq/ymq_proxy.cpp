@@ -730,9 +730,44 @@ namespace NKikimr::NYmq::V1 {
     private:
         NKikimr::NSQS::TSetQueueAttributesRequest* GetRequest(THolder<TSqsRequest>& requestHolder) override {
             auto result = requestHolder->MutableSetQueueAttributes();
+            result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url())->second);
             for (auto& [name, value]: GetProtoRequest()->Getattributes()) {
                 AddAttribute(requestHolder, name, value);
             }
+            return result;
+        }
+    };
+
+    class TListDeadLetterSourceQueuesReplyCallback : public TReplyCallback<
+            NKikimr::NSQS::TListDeadLetterSourceQueuesResponse,
+            Ydb::Ymq::V1::ListDeadLetterSourceQueuesResult> {
+    public:
+        using TReplyCallback::TReplyCallback;
+
+    private:
+        const NKikimr::NSQS::TListDeadLetterSourceQueuesResponse& GetResponse(const NKikimrClient::TSqsResponse& resp) override {
+            return resp.GetListDeadLetterSourceQueues();
+        }
+
+        Ydb::Ymq::V1::ListDeadLetterSourceQueuesResult GetResult(const NKikimrClient::TSqsResponse& response) override {
+            Ydb::Ymq::V1::ListDeadLetterSourceQueuesResult result;
+            for (const auto& queue : response.GetListDeadLetterSourceQueues().GetQueues()) {
+                result.Mutablequeue_urls()->Add()->assign(queue.GetQueueUrl());
+            }
+            return result;
+        }
+    };
+
+    class TListDeadLetterSourceQueuesActor : public TRpcRequestActor<
+            TEvYmqListDeadLetterSourceQueuesRequest,
+            NKikimr::NSQS::TListDeadLetterSourceQueuesRequest,
+            TListDeadLetterSourceQueuesReplyCallback> {
+    public:
+        using TRpcRequestActor::TRpcRequestActor;
+
+    private:
+        NKikimr::NSQS::TListDeadLetterSourceQueuesRequest* GetRequest(THolder<TSqsRequest>& requestHolder) override {
+            auto result = requestHolder->MutableListDeadLetterSourceQueues();
             result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url())->second);
             return result;
         }
@@ -933,5 +968,6 @@ DECLARE_RPC(SetQueueAttributes);
 DECLARE_RPC(SendMessageBatch);
 DECLARE_RPC(DeleteMessageBatch);
 DECLARE_RPC(ChangeMessageVisibilityBatch);
+DECLARE_RPC(ListDeadLetterSourceQueues);
 
 }

@@ -1996,4 +1996,50 @@ Y_UNIT_TEST_SUITE(TestHttpProxy) {
 
     }
 
+    Y_UNIT_TEST_F(TestListDeadLetterSourceQueues, THttpProxyTestMock) {
+        auto createQueueReq = CreateSqsCreateQueueRequest();
+        auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+
+        TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        auto createDlqReq = CreateSqsCreateQueueRequest();
+        createQueueReq["QueueName"] = "DlqName";
+        res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+
+        TString dlqUrl = GetByPath<TString>(json, "QueueUrl");
+
+        NJson::TJsonValue getQueueAttributes;
+        getQueueAttributes["QueueUrl"] = dlqUrl;
+        NJson::TJsonArray attributeNames = {"QueueArn"};
+        getQueueAttributes["AttributeNames"] = attributeNames;
+        res = SendHttpRequest("/Root", "AmazonSQS.GetQueueAttributes", std::move(getQueueAttributes), FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+
+        TString dlqArn = GetByPath<TString>(json["Attributes"], "QueueArn");
+
+        NJson::TJsonValue setQueueAttributes;
+        setQueueAttributes["QueueUrl"] = resultQueueUrl;
+        NJson::TJsonValue attributes = {};
+        auto redrivePolicy = TStringBuilder()
+            << "{\"deadLetterTargetArn\" : \"" << dlqArn << "\", \"maxReceiveCount\" : 100}";
+        attributes["RedrivePolicy"] = redrivePolicy;
+        setQueueAttributes["Attributes"] = attributes;
+
+        res = SendHttpRequest("/Root", "AmazonSQS.SetQueueAttributes", std::move(setQueueAttributes), FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
+
+        NJson::TJsonValue listDeadLetterSourceQueues;
+        listDeadLetterSourceQueues["QueueUrl"] = dlqUrl;
+        res = SendHttpRequest("/Root", "AmazonSQS.ListDeadLetterSourceQueues", std::move(listDeadLetterSourceQueues), FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        UNIT_ASSERT_VALUES_EQUAL(json["QueueUrls"][0], resultQueueUrl);
+    }
+
 } // Y_UNIT_TEST_SUITE(TestHttpProxy)

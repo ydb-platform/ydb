@@ -6,7 +6,6 @@ TIMEOUT(600)
 IF (AUTOCHECK)
     # copy from https://docs.yandex-team.ru/devtools/test/environment#docker-compose
     INCLUDE(${ARCADIA_ROOT}/library/recipes/docker_compose/recipe.inc)
-    SIZE(LARGE) # Docker можно запускать только в Sandbox, т.е. в LARGE тестах
 
     TAG(
         ya:external
@@ -22,6 +21,8 @@ ENDIF()
 
 IF(OPENSOURCE)
     SIZE(MEDIUM) # for run per PR
+ELSE()
+    SIZE(LARGE) # run in sandbox with timeout more than a minute
 ENDIF()
 
 

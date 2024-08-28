@@ -346,7 +346,7 @@ test'''
         kikimr.control_plane.wait_bootstrap(1)
         connection_response = client.create_storage_connection(unique_prefix + "_decc", "decimal_binding")
 
-        dType = ydb.Column(name="a", type=ydb.Type(decimal_type=ydb.DecimalType(precision=22,scale=9)))
+        dType = ydb.Column(name="a", type=ydb.Type(decimal_type=ydb.DecimalType(precision=22, scale=9)))
 
         storage_binding_name = unique_prefix + "_decb"
         client.create_object_storage_binding(

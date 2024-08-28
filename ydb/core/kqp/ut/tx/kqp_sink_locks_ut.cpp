@@ -253,6 +253,47 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
         tester.SetIsOlap(false);
         tester.Execute();
     }
+
+    class TUncommittedRead : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+
+            auto session1 = client.GetSession().GetValueSync().GetSession();
+
+            auto result = session1.ExecuteQuery(Q1_(R"(
+                INSERT INTO Test (Group, Name, Amount) VALUES
+                    (11, "TEST", 2);
+            )"), TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+
+            auto tx1 = result.GetTransaction();
+            UNIT_ASSERT(tx1);
+
+            {
+                result = client.ExecuteQuery(Q1_(R"(
+                    SELECT * FROM Test WHERE Group = 11;
+                )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+
+            {
+                result = session1.ExecuteQuery(Q1_(R"(
+                    SELECT * FROM Test WHERE Group = 11;
+                )"), TTxControl::Tx(tx1->GetId())).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[[2u];#;[11u];["TEST"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+        }
+    };
+
+    Y_UNIT_TEST(UncommittedRead) {
+        TUncommittedRead tester;
+        tester.SetIsOlap(false);
+        tester.Execute();
+    }
 }
 
 } // namespace NKqp

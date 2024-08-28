@@ -133,6 +133,7 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
 
         auto setting = NKikimrKqp::TKqpSetting();
         TKikimrSettings settings;
+        settings.SetAppConfig(appConfig);
         settings.SetUseRealThreads(false);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();

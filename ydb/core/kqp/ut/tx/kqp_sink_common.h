@@ -17,14 +17,17 @@ protected:
     NKikimrConfig::TAppConfig AppConfig;
     std::unique_ptr<TKikimrRunner> Kikimr;
     YDB_ACCESSOR(bool, IsOlap, false);
-    YDB_ACCESSOR(bool, WithSampleTables, false);
+    YDB_ACCESSOR(bool, FastSnapshotExpiration, false);
     virtual void DoExecute() = 0;
 public:
     void Execute() {
         AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
-        auto settings = TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(WithSampleTables);
+        auto settings = TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false);
+        if (FastSnapshotExpiration) {
+            settings.SetKeepSnapshotTimeout(TDuration::Seconds(1));
+        }
 
         Kikimr = std::make_unique<TKikimrRunner>(settings);
         Tests::NCommon::TLoggerInit(*Kikimr).Initialize();

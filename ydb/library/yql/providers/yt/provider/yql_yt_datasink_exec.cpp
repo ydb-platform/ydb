@@ -643,9 +643,8 @@ private:
         }
 
         TSet<TString> securityTags;
-        VisitExpr(input->ChildPtr(TYtDqProcessWrite::idx_Input), [&securityTags](const TExprNode::TPtr& node) -> bool {
+        VisitExpr(optimizedNode->ChildPtr(TYtDqProcessWrite::idx_Input), [&securityTags](const TExprNode::TPtr& node) -> bool {
             if (TYtTableBase::Match(node.Get())) {
-                const TYtTableBase table(node);
                 if (auto stat = TYtTableBaseInfo::GetStat(TExprBase(node))) {
                     for (const auto& tag : stat->SecurityTags) {
                         securityTags.insert(tag);

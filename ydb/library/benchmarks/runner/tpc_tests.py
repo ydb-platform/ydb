@@ -1,4 +1,3 @@
-import run_tests.run_tests as run_tests
 import yatest.common
 import pathlib
 import sys
@@ -6,6 +5,7 @@ import sys
 
 class Runner:
     DEPS = {
+        "run_tests" : "ydb/library/benchmarks/runner/run_tests",
         "dqrun" : "ydb/library/yql/tools/dqrun",
         "gen-queries" : "ydb/library/benchmarks/gen_queries",
         "result-compare" : "ydb/library/benchmarks/runner/result_compare",
@@ -34,7 +34,7 @@ class Runner:
         self.results_path = self.output / "results"
         self.results_path.mkdir()
 
-        self.cmd = []
+        self.cmd = [str(self.deps["run_tests"]) + "/run_tests"]
         self.cmd += ["--dqrun", str(self.deps["dqrun"]) + "/dqrun"]
         self.cmd += ["--gen-queries", str(self.deps["gen-queries"]) + "/gen_queries"]
         self.cmd += ["--result-compare", str(self.deps["result-compare"]) + "/result_compare"]
@@ -52,7 +52,7 @@ class Runner:
         cmd += ["--datasize", f"{datasize}"]
         cmd += ["--tasks", f"{tasks}"]
         cmd += ["--query-filter", f"{query_filter}"]
-        run_tests.run(cmd)
+        yatest.common.execute(cmd)
 
 
 def test_tpc():

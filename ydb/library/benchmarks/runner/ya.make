@@ -2,15 +2,12 @@ PY3TEST()
 
 SIZE(MEDIUM)
 
-PY_SRCS(
-    run_tests/run_tests.py
-)
-
 TEST_SRCS(
     tpc_tests.py
 )
 
 DEPENDS(
+    ydb/library/benchmarks/runner/run_tests
     ydb/library/yql/tools/dqrun
     ydb/library/benchmarks/gen_queries
     ydb/library/benchmarks/runner/result_compare

@@ -321,13 +321,6 @@ private:
     ui64 CPU = 0;
 };
 
-struct OlapTableAggregatedStats {
-    TPartitionStats Aggregated;
-    THashMap<TShardIdx, TPartitionStats> PartitionStats;
-
-    void UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats);
-};
-
 struct TTableAggregatedStats {
     TPartitionStats Aggregated;
     THashMap<TShardIdx, TPartitionStats> PartitionStats;

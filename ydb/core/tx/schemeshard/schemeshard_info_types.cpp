@@ -1673,37 +1673,6 @@ void TTableInfo::UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats&
     Stats.UpdateShardStats(datashardIdx, newStats);
 }
 
-void OlapTableAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats) {
-    if (!PartitionStats.contains(datashardIdx)) {
-        PartitionStats[datashardIdx] = newStats;
-        return;
-    }
-
-    TPartitionStats& oldStats = PartitionStats[datashardIdx];
-
-    if (newStats.SeqNo <= oldStats.SeqNo) {
-        // Ignore outdated message
-        return;
-    }
-
-    if (newStats.SeqNo.Generation > oldStats.SeqNo.Generation) {
-        // Reset incremental counter baselines if tablet has restarted
-        Aggregated.ImmediateTxCompleted = 0;
-        Aggregated.PlannedTxCompleted = 0;
-        Aggregated.TxRejectedByOverload = 0;
-        Aggregated.TxRejectedBySpace = 0;
-        Aggregated.RowUpdates = 0;
-        Aggregated.RowDeletes = 0;
-        Aggregated.RowReads = 0;
-        Aggregated.RangeReads = 0;
-        Aggregated.RangeReadRows = 0;
-    }
-    Aggregated.RowCount += (newStats.RowCount - oldStats.RowCount);
-    Aggregated.DataSize += (newStats.DataSize - oldStats.DataSize);
-
-    oldStats = newStats;
-}
-
 void TTableAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats) {
     // Ignore stats from unknown datashard (it could have been split)
     if (!PartitionStats.contains(datashardIdx))

@@ -25,7 +25,6 @@
 namespace NKikimr {
 namespace NStat {
 
-
 struct TAggregationStatistics {
     using TColumnsStatistics = ::google::protobuf::RepeatedPtrField<::NKikimrStat::TColumnStatistics>;
 
@@ -128,6 +127,7 @@ public:
             EvDispatchKeepAlive,
             EvKeepAliveTimeout,
             EvKeepAliveAckTimeout,
+            EvStatisticsRequestTimeout,
 
             EvEnd
         };
@@ -154,6 +154,13 @@ public:
 
             ui64 Round;
             ui32 NodeId;
+        };
+
+        struct TEvStatisticsRequestTimeout: public NActors::TEventLocal<TEvStatisticsRequestTimeout, EvStatisticsRequestTimeout> {
+            TEvStatisticsRequestTimeout(ui64 round, ui64 tabletId): Round(round), TabletId(tabletId) {}
+
+            ui64 Round;
+            ui64 TabletId;
         };
     };
 
@@ -195,6 +202,7 @@ public:
             hFunc(TEvStatistics::TEvAggregateKeepAlive, Handle);
             hFunc(TEvPrivate::TEvDispatchKeepAlive, Handle);
             hFunc(TEvPrivate::TEvKeepAliveTimeout, Handle);
+            hFunc(TEvPrivate::TEvStatisticsRequestTimeout, Handle);
             hFunc(TEvStatistics::TEvStatisticsResponse, Handle);
             hFunc(TEvStatistics::TEvAggregateStatisticsResponse, Handle);
 
@@ -902,7 +910,31 @@ private:
         }
     }
 
-    void SendStatisticsRequest(const TActorId& clientId) {
+    void Handle(TEvPrivate::TEvStatisticsRequestTimeout::TPtr& ev) {
+        const auto round = ev->Get()->Round;
+        if (IsNotCurrentRound(round)) {
+            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                "Skip TEvStatisticsRequestTimeout");
+            return;
+        }
+
+        const auto tabletId = ev->Get()->TabletId;
+        auto tabletPipe = AggregationStatistics.LocalTablets.TabletsPipes.find(tabletId);
+        if (tabletPipe == AggregationStatistics.LocalTablets.TabletsPipes.end()) {
+            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                "Tablet " << tabletId << " has already been processed");
+            return;
+        }
+
+        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                "No result was received from the tablet " << tabletId);
+
+        auto clientId = tabletPipe->second;
+        OnTabletError(tabletId);
+        NTabletPipe::CloseClient(SelfId(), clientId);
+    }
+
+    void SendStatisticsRequest(const TActorId& clientId, ui64 tabletId) {
         auto request = std::make_unique<TEvStatistics::TEvStatisticsRequest>();
         auto& record = request->Record;
         record.MutableTypes()->Add(NKikimrStat::TYPE_COUNT_MIN_SKETCH);
@@ -916,7 +948,9 @@ private:
             columnTags->Add(tag);
         }
 
-        NTabletPipe::SendData(SelfId(), clientId, request.release(), AggregationStatistics.Round);
+        const auto round = AggregationStatistics.Round;
+        NTabletPipe::SendData(SelfId(), clientId, request.release(), round);
+        Schedule(Settings.StatisticsRequestTimeout, new TEvPrivate::TEvStatisticsRequestTimeout(round, tabletId));
 
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
             "TEvStatisticsRequest send"
@@ -928,7 +962,7 @@ private:
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
             "Tablet " << tabletId << " is not local.");
 
-        constexpr auto error = NKikimrStat::TEvAggregateStatisticsResponse::TYPE_NON_LOCAL_TABLET;
+        const auto error = NKikimrStat::TEvAggregateStatisticsResponse::TYPE_NON_LOCAL_TABLET;
         AggregationStatistics.FailedTablets.emplace_back(tabletId, 0, error);
 
         AggregationStatistics.LocalTablets.TabletsPipes.erase(tabletId);
@@ -966,7 +1000,7 @@ private:
 
         if (tabletPipe != tabletsPipes.end() && clientId == tabletPipe->second) {
             if (ev->Get()->Status == NKikimrProto::OK) {
-                SendStatisticsRequest(clientId);
+                SendStatisticsRequest(clientId, tabletId);
             } else {
                 OnTabletError(tabletId);
             }

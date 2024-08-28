@@ -519,9 +519,9 @@
     ],
     "test.test[bigdate-table_arithmetic_mul_div-default.txt-Debug]": [
         {
-            "checksum": "1491822b38492114abf81faa61617ed7",
+            "checksum": "e4b3b10b8e5b4327fbf645fdd5d954ef",
             "size": 30172,
-            "uri": "https://{canondata_backend}/1881367/9f7e60d9f0b51c840a9c35afc7adcd160edd3a99/resource.tar.gz#test.test_bigdate-table_arithmetic_mul_div-default.txt-Debug_/opt.yql_patched"
+            "uri": "https://{canondata_backend}/1946324/f50f0ddca01e8f702eb5a24b0934473d036b5007/resource.tar.gz#test.test_bigdate-table_arithmetic_mul_div-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[bigdate-table_arithmetic_mul_div-default.txt-Plan]": [

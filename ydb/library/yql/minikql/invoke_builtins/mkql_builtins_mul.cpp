@@ -43,19 +43,20 @@ struct TNumMulInterval {
         if (rv == 0 || lv == 0) {
             return NUdf::TUnboxedValuePod(ret);
         }
+        i64 i64Max = std::numeric_limits<i64>::max();
         if constexpr (std::is_same_v<ui64, typename TLeft::TLayout>) {
-            if (left.Get<ui64>() > static_cast<ui64>(std::numeric_limits<i64>::max())) {
+            if (left.Get<ui64>() >= static_cast<ui64>(i64Max)) {
                 return NUdf::TUnboxedValuePod();
             }
         }
         if constexpr (std::is_same_v<ui64, typename TRight::TLayout>) {
-            if (right.Get<ui64>() > static_cast<ui64>(std::numeric_limits<i64>::max())) {
+            if (right.Get<ui64>() >= static_cast<ui64>(i64Max)) {
                 return NUdf::TUnboxedValuePod();
             }
         }
-        i64 lvAbs = (lv >= 0) ? lv : -lv;
-        i64 rvAbs = (rv >= 0) ? rv : -rv;
-        if (rvAbs != 0 && (std::numeric_limits<i64>::max() / rvAbs < lvAbs)) {
+        auto div = i64Max / rv;
+        auto divAbs = (div >= 0) ? div : -div;
+        if ((lv >= 0) ? (lv > divAbs) : (lv < -divAbs)) {
             return NUdf::TUnboxedValuePod();
         }
         return IsBadInterval<TOutput>(ret) ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(ret);
@@ -85,23 +86,26 @@ struct TNumMulInterval {
 
         block = bbMain;
 
-        const auto lhsAbs = SelectInst::Create(
-                CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGE, lhs, zero, "lhsPos", block),
-                lhs,
-                BinaryOperator::CreateNeg(lhs, "lhsNeg", block),
-                "lhsAbs", block);
-        const auto rhsAbs = SelectInst::Create(
-                CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGE, rhs, zero, "rhsPos", block),
-                rhs,
-                BinaryOperator::CreateNeg(rhs, "rhsNeg", block),
-                "rhsAbs", block);
         const auto i64Max = ConstantInt::get(Type::getInt64Ty(context), std::numeric_limits<i64>::max());
-        const auto div = BinaryOperator::CreateSDiv(i64Max, rhsAbs, "div", block);
-        const auto mulOverflow = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, lhsAbs, div, "mulOverflow", block);
+        const auto div = BinaryOperator::CreateSDiv(i64Max, rhs, "div", block);
+        const auto divAbs = SelectInst::Create(
+                CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGE, div, zero, "divPos", block),
+                div,
+                BinaryOperator::CreateNeg(div, "divNeg", block),
+                "divAbs", block);
+        const auto divAbsNeg = BinaryOperator::CreateNeg(divAbs, "divAbsNeg", block);
+
+        const auto mulOverflow = SelectInst::Create(
+                CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGE, lhs, zero, "lhsPos", block),
+                CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, lhs, divAbs, "lhsDiv", block),
+                CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLT, lhs, divAbsNeg, "lhsDivAbsNeg", block),
+                "mulOverflow", block);
+
         const auto i64Overflow = BinaryOperator::CreateOr(
                 GenIsInt64Overflow<typename TLeft::TLayout>(lv, context, block),
                 GenIsInt64Overflow<typename TRight::TLayout>(rv, context, block),
                 "i64Overflow", block);
+
         const auto bad = BinaryOperator::CreateOr(
                 BinaryOperator::CreateOr(i64Overflow, mulOverflow, "overflow", block),
                 GenIsBadInterval<TOutput>(mul, context, block),

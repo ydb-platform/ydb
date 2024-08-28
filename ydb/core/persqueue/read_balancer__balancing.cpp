@@ -1873,12 +1873,6 @@ bool LowLoadSessionComparator::operator()(const TSession* lhs, const TSession* r
     if (lhs->ActiveFamilyCount != rhs->ActiveFamilyCount) {
         return lhs->ActiveFamilyCount < rhs->ActiveFamilyCount;
     }
-    if (lhs->ActivePartitionCount != rhs->ActivePartitionCount) {
-        return lhs->ActivePartitionCount < rhs->ActivePartitionCount;
-    }
-    if (lhs->InactivePartitionCount != rhs->InactivePartitionCount) {
-        return lhs->InactivePartitionCount < rhs->InactivePartitionCount;
-    }
     if (lhs->Partitions.size() != rhs->Partitions.size()) {
         return lhs->Partitions.size() < rhs->Partitions.size();
     }

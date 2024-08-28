@@ -1,6 +1,0 @@
-items:
-- name: Обзор
-  href: index.md
-- include:
-    mode: merge
-    path: toc_p.yaml

@@ -1,7 +1,6 @@
 RECURSE(
     apps
     docs
-    docs/ru/core/yql/reference/tests
     core
     library
     mvp
@@ -9,4 +8,5 @@ RECURSE(
     services
     tests
     tools
+    yql_docs
 )

@@ -53,6 +53,10 @@ void BuildInitialTaskResources(const TKqpTasksGraph& graph, ui64 taskId, TTaskRe
     ret.HeavyProgram = opts.GetHasMapJoin();
 }
 
+bool LimitCPU(TIntrusivePtr<TUserRequestContext> ctx) {
+    return ctx->PoolId && ctx->PoolConfig.has_value() && ctx->PoolConfig->TotalCpuLimitPercentPerNode > 0;
+}
+
 }
 
 bool TKqpPlanner::UseMockEmptyPlanner = false;
@@ -101,6 +105,10 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
             Database = TStringBuilder() << '/' << domain->Name;
             LOG_E("Database not set, use " << Database);
         }
+    }
+
+    if (LimitCPU(UserRequestContext)) {
+        AllowSinglePartitionOpt = false;
     }
 }
 
@@ -229,6 +237,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     request.SetDatabase(Database);
     if (UserRequestContext->PoolConfig.has_value()) {
         request.SetMemoryPoolPercent(UserRequestContext->PoolConfig->QueryMemoryLimitPercentPerNode);
+        request.SetMaxCpuShare(UserRequestContext->PoolConfig->TotalCpuLimitPercentPerNode / 100.0);
     }
 
     return result;
